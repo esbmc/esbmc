@@ -9,18 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_typecheck.h>
 #include <util/location.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
 {
   // save the scope
@@ -38,7 +26,6 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
   irep_idt final_name(name);
 
   std::string identifier=
-    cpp_identifier_prefix(current_mode)+"::"+
     cpp_scopes.current_scope().prefix+id2string(final_name);
 
   symbolt* s = context.find_symbol(identifier);
@@ -95,10 +82,7 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
   else
   {*/
     // do the declarations
-    for(cpp_namespace_spect::itemst::iterator
-        it=namespace_spec.items().begin();
-        it!=namespace_spec.items().end();
-        it++)
-      convert(*it);
+    for(auto & it : namespace_spec.items())
+      convert(it);
 //  }
 }

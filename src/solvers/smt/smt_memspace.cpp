@@ -228,7 +228,7 @@ smt_convt::renumber_symbol_address(
 }
 
 smt_astt
-smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
+smt_convt::convert_identifier_pointer(const expr2tc &expr, const std::string& symbol)
 {
   smt_astt a;
   std::string cte, identifier;
@@ -381,7 +381,7 @@ smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
     // through malloc will be marked dynamic.
 
     type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
-                                     expr2tc((expr2t*)NULL), true));
+                                     expr2tc((expr2t*)nullptr), true));
     symbol2tc allocarr(arrtype, dyn_info_arr_name);
     constant_int2tc objid(machine_uint, BigInt(obj_num));
     index2tc idx(get_bool_type(), allocarr, objid);
@@ -423,8 +423,6 @@ smt_convt::finalize_pointer_chain(unsigned int objnum)
     or2tc or1(lt1, gt1);
     assert_expr(or1);
   }
-
-  return;
 }
 
 smt_astt
@@ -502,7 +500,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
 
 
 void
-smt_convt::init_addr_space_array(void)
+smt_convt::init_addr_space_array()
 {
   addr_space_sym_num.back() = 1;
 
@@ -594,11 +592,10 @@ smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   symbol2tc newname(addr_space_arr_type, ss2.str());
   equality2tc eq(newname, store);
   convert_assign(eq);
-  return;
 }
 
 std::string
-smt_convt::get_cur_addrspace_ident(void)
+smt_convt::get_cur_addrspace_ident()
 {
   std::stringstream ss;
   ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();

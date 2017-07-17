@@ -41,30 +41,29 @@ public:
 #define array_downcast(x) static_cast<const array_ast*>(x)
 
   array_ast(array_convt *actx, smt_convt *ctx, const smt_sort *_s)
-    : smt_ast(ctx, _s), symname(""), array_fields(), array_ctx(actx)
+    : smt_ast(ctx, _s), symname(""), array_ctx(actx)
   {
   }
 
   array_ast(array_convt *actx, smt_convt *ctx, const smt_sort *_s,
-            const std::vector<smt_astt> &_a)
-    : smt_ast(ctx, _s), symname(""), array_fields(_a), array_ctx(actx)
+            std::vector<smt_astt> _a)
+    : smt_ast(ctx, _s), symname(""), array_fields(std::move(_a)), array_ctx(actx)
   {
   }
 
-  virtual
-  ~array_ast(void) {
-  }
+  
+  ~array_ast() override = default;
 
-  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-  virtual smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const;
-  virtual void assign(smt_convt *ctx, smt_astt sym) const;
-  virtual smt_astt update(smt_convt *ctx, smt_astt value, unsigned int idx,
-                          expr2tc idx_expr = expr2tc()) const;
-  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
+  smt_astt eq(smt_convt *ctx, smt_astt other) const override;
+  smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const override;
+  void assign(smt_convt *ctx, smt_astt sym) const override;
+  smt_astt update(smt_convt *ctx, smt_astt value, unsigned int idx,
+                          expr2tc idx_expr = expr2tc()) const override;
+  smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
 
   smt_astt eq_fixedsize(smt_convt *ctx, const array_ast *other) const;
 
-  virtual void dump() const { return; }
+  void dump() const override { }
 
   std::string symname; // Only if this was produced from mk_smt_symbol.
 
@@ -105,21 +104,21 @@ public:
   > index_map_containert;
 
   array_convt(smt_convt *_ctx);
-  ~array_convt();
+  ~array_convt() = default;
 
   // Public api
   smt_ast *mk_array_symbol(const std::string &name, const smt_sort *ms,
-                           smt_sortt subtype);
+                           smt_sortt subtype) override;
   expr2tc get_array_elem(smt_astt a, uint64_t index,
-                         const type2tc &subtype);
-  virtual smt_astt convert_array_of(smt_astt init_val,
-                                          unsigned long domain_width);
-  void add_array_constraints_for_solving(void);
+                         const type2tc &subtype) override;
+  smt_astt convert_array_of(smt_astt init_val,
+                                          unsigned long domain_width) override;
+  void add_array_constraints_for_solving() override;
 
   // Heavy lifters
   virtual smt_astt convert_array_of_wsort(
     smt_astt init_val, unsigned long domain_width, smt_sortt arr_sort);
-  unsigned int new_array_id(void);
+  unsigned int new_array_id();
   void convert_array_assign(const array_ast *src, smt_astt sym);
   smt_astt mk_select(const array_ast *array, const expr2tc &idx,
                            const smt_sort *ressort);
@@ -146,8 +145,8 @@ public:
 
   // Array constraint beating
 
-  void join_array_indexes(void);
-  void add_array_equalities(void);
+  void join_array_indexes();
+  void add_array_equalities();
   void add_array_equality(unsigned int arr1_id, unsigned int arr2_id,
                           unsigned int arr1_update, unsigned int arr2_update,
                           smt_astt result, unsigned int start_pos = 0);
@@ -180,7 +179,7 @@ public:
                             unsigned int array_update_no,
                             const smt_sort *subtype,
                             unsigned int start_point,
-                            smt_astt init_val = NULL);
+                            smt_astt init_val = nullptr);
   void add_initial_ackerman_constraints(const ast_vect &vals,
       const index_map_containert &idx_map, unsigned int start_point);
   void add_new_indexes();
@@ -197,8 +196,8 @@ public:
     return new array_ast(this, ctx, _s, _a);
   }
 
-  void push_array_ctx(void);
-  void pop_array_ctx(void);
+  void push_array_ctx() override;
+  void pop_array_ctx() override;
 
   // Members
 

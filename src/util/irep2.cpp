@@ -1,12 +1,12 @@
 #include <ac_config.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/functional/hash.hpp>
-#include <boost/static_assert.hpp>
-#include <cstdarg>
-#include <cstring>
-#include <sstream>
+#include <util/fixedbv.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <util/ieee_float.h>
+#include <util/irep2_type.h>
+#include <util/irep2_expr.h>
+#include <util/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
 
@@ -158,7 +158,7 @@ pretty_print_func(unsigned int indent, std::string ident, T obj)
   list_of_memberst memb = obj.tostring(indent+2);
 
   std::string indentstr = indent_str(indent);
-  std::string exprstr = ident;
+  std::string exprstr = std::move(ident);
 
   for (list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
        it++) {
@@ -190,8 +190,8 @@ static const char *type_names[] = {
 };
 // If this fires, you've added/removed a type id, and need to update the list
 // above (which is ordered according to the enum list)
-BOOST_STATIC_ASSERT(sizeof(type_names) ==
-                    (type2t::end_type_id * sizeof(char *)));
+static_assert(sizeof(type_names) == (type2t::end_type_id * sizeof(char *)),
+  "Missing type name");
 
 std::string
 get_type_id(const type2t &type)
@@ -199,16 +199,9 @@ get_type_id(const type2t &type)
   return std::string(type_names[type.type_id]);
 }
 
-
 type2t::type2t(type_ids id)
   : type_id(id),
     crc_val(0)
-{
-}
-
-type2t::type2t(const type2t &ref)
-  : type_id(ref.type_id),
-    crc_val(ref.crc_val)
 {
 }
 
@@ -277,14 +270,13 @@ type2t::pretty(unsigned int indent) const
 }
 
 void
-type2t::dump(void) const
+type2t::dump() const
 {
   std::cout << pretty(0) << std::endl;
-  return;
 }
 
 uint32_t
-type2t::crc(void) const
+type2t::crc() const
 {
   size_t seed = 0;
   do_crc(seed);
@@ -301,27 +293,26 @@ type2t::do_crc(size_t seed) const
 void
 type2t::hash(crypto_hash &hash) const
 {
-  BOOST_STATIC_ASSERT(type2t::end_type_id < 256);
+  static_assert(type2t::end_type_id < 256, "Type id overflow");
   uint8_t tid = type_id;
   hash.ingest(&tid, sizeof(tid));
-  return;
 }
 
 unsigned int
-bool_type2t::get_width(void) const
+bool_type2t::get_width() const
 {
   // For the purpose of the byte representating memory model
   return 8;
 }
 
 unsigned int
-bv_data::get_width(void) const
+bv_data::get_width() const
 {
   return width;
 }
 
 unsigned int
-array_type2t::get_width(void) const
+array_type2t::get_width() const
 {
   // Two edge cases: the array can have infinite size, or it can have a dynamic
   // size that's determined by the solver.
@@ -337,40 +328,40 @@ array_type2t::get_width(void) const
   const expr2t *elem_size = array_size.get();
   const constant_int2t *const_elem_size = dynamic_cast<const constant_int2t*>
                                                       (elem_size);
-  assert(const_elem_size != NULL);
+  assert(const_elem_size != nullptr);
   unsigned long num_elems = const_elem_size->as_ulong();
 
   return num_elems * sub_width;
 }
 
 unsigned int
-pointer_type2t::get_width(void) const
+pointer_type2t::get_width() const
 {
   return config.ansi_c.pointer_width;
 }
 
 unsigned int
-empty_type2t::get_width(void) const
+empty_type2t::get_width() const
 {
   throw new symbolic_type_excp();
 }
 
 unsigned int
-symbol_type2t::get_width(void) const
+symbol_type2t::get_width() const
 {
   std::cerr <<"Fetching width of symbol type - invalid operation" << std::endl;
   abort();
 }
 
 unsigned int
-cpp_name_type2t::get_width(void) const
+cpp_name_type2t::get_width() const
 {
   std::cerr << "Fetching width of cpp_name type - invalid operation" << std::endl;
   abort();
 }
 
 unsigned int
-struct_type2t::get_width(void) const
+struct_type2t::get_width() const
 {
   // Iterate over members accumulating width.
   std::vector<type2tc>::const_iterator it;
@@ -382,7 +373,7 @@ struct_type2t::get_width(void) const
 }
 
 unsigned int
-union_type2t::get_width(void) const
+union_type2t::get_width() const
 {
   // Iterate over members accumulating width.
   std::vector<type2tc>::const_iterator it;
@@ -394,43 +385,49 @@ union_type2t::get_width(void) const
 }
 
 unsigned int
-fixedbv_type2t::get_width(void) const
+fixedbv_type2t::get_width() const
 {
   return width;
 }
 
 unsigned int
-floatbv_type2t::get_width(void) const
+floatbv_type2t::get_width() const
 {
   return fraction + exponent + 1;
 }
 
 unsigned int
-code_data::get_width(void) const
+code_data::get_width() const
 {
   throw new symbolic_type_excp();
 }
 
 unsigned int
-string_type2t::get_width(void) const
+string_type2t::get_width() const
 {
   return width * 8;
 }
 
+unsigned int
+string_type2t::get_length() const
+{
+  return width;
+}
+
 const std::vector<type2tc> &
-struct_union_data::get_structure_members(void) const
+struct_union_data::get_structure_members() const
 {
   return members;
 }
 
 const std::vector<irep_idt> &
-struct_union_data::get_structure_member_names(void) const
+struct_union_data::get_structure_member_names() const
 {
   return member_names;
 }
 
 const irep_idt &
-struct_union_data::get_structure_name(void) const
+struct_union_data::get_structure_name() const
 {
   return name;
 }
@@ -438,10 +435,10 @@ struct_union_data::get_structure_name(void) const
 unsigned int
 struct_union_data::get_component_number(const irep_idt &name) const
 {
-
   unsigned int i = 0;
-  forall_names(it, member_names) {
-    if (*it == name)
+  for(auto const &it : member_names)
+  {
+    if (it == name)
       return i;
     i++;
   }
@@ -534,17 +531,18 @@ auto
 type2t_traits<Args...>::make_contained(typename Args::result_type... args) -> irep_container<base2t> {
   return irep_container<base2t>(new derived(args...));
 }
-}
+} // namespace esbmct
 
 /*************************** Base expr2t definitions **************************/
 
-expr2t::expr2t(const type2tc _type, expr_ids id)
+expr2t::expr2t(const type2tc& _type, expr_ids id)
   : std::enable_shared_from_this<expr2t>(), expr_id(id), type(_type), crc_val(0)
 {
 }
 
 expr2t::expr2t(const expr2t &ref)
-  : std::enable_shared_from_this<expr2t>(), expr_id(ref.expr_id),
+  : std::enable_shared_from_this<expr2t>(),
+    expr_id(ref.expr_id),
     type(ref.type),
     crc_val(ref.crc_val)
 {
@@ -578,7 +576,7 @@ expr2t::operator<(const expr2t &ref) const
 }
 
 unsigned long
-expr2t::depth(void) const
+expr2t::depth() const
 {
   unsigned long num_nodes = 0;
 
@@ -595,7 +593,7 @@ expr2t::depth(void) const
 }
 
 unsigned long
-expr2t::num_nodes(void) const
+expr2t::num_nodes() const
 {
   unsigned long count = 0;
 
@@ -644,7 +642,7 @@ expr2t::lt(const expr2t &ref) const
 }
 
 uint32_t
-expr2t::crc(void) const
+expr2t::crc() const
 {
   size_t seed = 0;
   return do_crc(seed);
@@ -660,15 +658,14 @@ expr2t::do_crc(size_t seed) const
 void
 expr2t::hash(crypto_hash &hash) const
 {
-  BOOST_STATIC_ASSERT(expr2t::end_expr_id < 256);
+  static_assert(expr2t::end_expr_id < 256, "Expr id overflow");
   uint8_t eid = expr_id;
   hash.ingest(&eid, sizeof(eid));
   type->hash(hash);
-  return;
 }
 
 expr2tc
-expr2t::simplify(void) const
+expr2t::simplify() const
 {
   try {
 
@@ -726,7 +723,7 @@ expr2t::simplify(void) const
   expr2tc new_us = clone();
   std::list<expr2tc>::iterator it2 = newoperands.begin();
   new_us.get()->Foreach_operand([this, &it2] (expr2tc &e) {
-      if ((*it2) == NULL)
+      if ((*it2) == nullptr)
         ; // No change in operand;
       else
         e = *it2; // Operand changed; overwrite with new one.
@@ -795,6 +792,7 @@ static const char *expr_names[] = {
   "ieee_mul",
   "ieee_div",
   "ieee_fma",
+  "ieee_sqrt",
   "modulus",
   "shl",
   "ashr",
@@ -849,8 +847,8 @@ static const char *expr_names[] = {
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
-BOOST_STATIC_ASSERT(sizeof(expr_names) ==
-                    (expr2t::end_expr_id * sizeof(char *)));
+static_assert(sizeof(expr_names) == (expr2t::end_expr_id * sizeof(char *)),
+  "Missing expr name");
 
 std::string
 get_expr_id(const expr2t &expr)
@@ -872,10 +870,9 @@ expr2t::pretty(unsigned int indent) const
 }
 
 void
-expr2t::dump(void) const
+expr2t::dump() const
 {
   std::cout << pretty(0) << std::endl;
-  return;
 }
 
 // Map a base type to it's list of names
@@ -1032,12 +1029,12 @@ auto
 expr2t_traits_always_construct<Args...>::make_contained(typename Args::result_type... args) -> irep_container<base2t> {
   return irep_container<base2t>(new derived(args...));
 }
-}
+} // namespace esbmct
 
 /**************************** Expression constructors *************************/
 
 unsigned long
-constant_int2t::as_ulong(void) const
+constant_int2t::as_ulong() const
 {
   // XXXjmorse - add assertion that we don't exceed machine word width?
   assert(!value.is_negative());
@@ -1045,26 +1042,26 @@ constant_int2t::as_ulong(void) const
 }
 
 long
-constant_int2t::as_long(void) const
+constant_int2t::as_long() const
 {
   // XXXjmorse - add assertion that we don't exceed machine word width?
   return value.to_long();
 }
 
 bool
-constant_bool2t::is_true(void) const
+constant_bool2t::is_true() const
 {
   return value;
 }
 
 bool
-constant_bool2t::is_false(void) const
+constant_bool2t::is_false() const
 {
   return !value;
 }
 
 std::string
-symbol_data::get_symbol_name(void) const
+symbol_data::get_symbol_name() const
 {
   switch (rlevel) {
   case level0:
@@ -1091,7 +1088,7 @@ symbol_data::get_symbol_name(void) const
 }
 
 expr2tc
-constant_string2t::to_array(void) const
+constant_string2t::to_array() const
 {
   std::vector<expr2tc> contents;
   unsigned int length = value.as_string().size(), i;
@@ -1121,7 +1118,7 @@ constant_string2t::to_array(void) const
 }
 
 const expr2tc &
-object_descriptor2t::get_root_object(void) const
+object_descriptor2t::get_root_object() const
 {
   const expr2tc *tmp = &object;
 
@@ -1135,7 +1132,7 @@ object_descriptor2t::get_root_object(void) const
   } while (1);
 }
 
-type_poolt::type_poolt(void)
+type_poolt::type_poolt()
 {
   // This space is deliberately left blank
 }
@@ -1172,8 +1169,6 @@ type_poolt::type_poolt(bool yolo __attribute__((unused)))
   int16 = &signedbv_map[signedbv_typet(16)];
   int32 = &signedbv_map[signedbv_typet(32)];
   int64 = &signedbv_map[signedbv_typet(64)];
-
-  return;
 }
 
 type_poolt &
@@ -1330,8 +1325,8 @@ type_poolt type_pool;
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr
 // crcing code has to change.
-BOOST_STATIC_ASSERT(type2t::end_type_id <= 256);
-BOOST_STATIC_ASSERT(expr2t::end_expr_id <= 256);
+static_assert(type2t::end_type_id <= 256, "Type id overflow");
+static_assert(expr2t::end_expr_id <= 256, "Expr id overflow");
 
 static inline __attribute__((always_inline)) std::string
 type_to_string(const bool &thebool, int indent __attribute__((unused)))
@@ -1412,10 +1407,10 @@ type_to_string(const std::vector<expr2tc> &theval, int indent)
   int i;
 
   i = 0;
-  forall_exprs(it, theval) {
+  for(auto const &it : theval) {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring += indent_str(indent) + std::string(buffer) + ": " + (*it)->pretty(indent + 2) + "\n";
+    astring += indent_str(indent) + std::string(buffer) + ": " + it->pretty(indent + 2) + "\n";
     i++;
   }
 
@@ -1430,10 +1425,11 @@ type_to_string(const std::vector<type2tc> &theval, int indent)
   int i;
 
   i = 0;
-  forall_types(it, theval) {
+  for(auto const &it : theval) {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring += indent_str(indent) + std::string(buffer) + ": " + (*it)->pretty(indent + 2) + "\n";
+    astring +=
+      indent_str(indent) + std::string(buffer) + ": " + it->pretty(indent + 2) + "\n";
     i++;
   }
 
@@ -1449,10 +1445,12 @@ type_to_string(const std::vector<irep_idt> &theval,
   int i;
 
   i = 0;
-  forall_names(it, theval) {
+  for(auto const &it : theval)
+  {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring += indent_str(indent) + std::string(buffer) + ": " + (*it).as_string() + "\n";
+    astring +=
+      indent_str(indent) + std::string(buffer) + ": " + it.as_string() + "\n";
     i++;
   }
 
@@ -1463,7 +1461,7 @@ static inline __attribute__((always_inline)) std::string
 type_to_string(const expr2tc &theval, int indent)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
    return theval->pretty(indent + 2);
   return "";
 }
@@ -1472,7 +1470,7 @@ static inline __attribute__((always_inline)) std::string
 type_to_string(const type2tc &theval, int indent)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
     return theval->pretty(indent + 2);
   else
     return "";
@@ -1555,7 +1553,7 @@ do_type_cmp(const expr2tc &side1, const expr2tc &side2)
 {
   if (side1.get() == side2.get())
     return true; // Catch null
-  else if (side1.get() == NULL || side2.get() == NULL)
+  else if (side1.get() == nullptr || side2.get() == nullptr)
     return false;
   else
     return (side1 == side2);
@@ -1566,7 +1564,7 @@ do_type_cmp(const type2tc &side1, const type2tc &side2)
 {
   if (side1.get() == side2.get())
     return true; // both null ptr check
-  if (side1.get() == NULL || side2.get() == NULL)
+  if (side1.get() == nullptr || side2.get() == nullptr)
     return false; // One of them is null, the other isn't
   return (side1 == side2);
 }
@@ -1671,8 +1669,8 @@ do_type_lt(const std::vector<expr2tc> &side1, const std::vector<expr2tc> &side2)
 
   int tmp = 0;
   std::vector<expr2tc>::const_iterator it2 = side2.begin();
-  forall_exprs(it, side1) {
-    tmp = (*it)->ltchecked(**it2);
+  for(auto const &it : side1) {
+    tmp = it->ltchecked(**it2);
     if (tmp != 0)
       return tmp;
     it2++;
@@ -1691,8 +1689,8 @@ do_type_lt(const std::vector<type2tc> &side1, const std::vector<type2tc> &side2)
 
   int tmp = 0;
   std::vector<type2tc>::const_iterator it2 = side2.begin();
-  forall_types(it, side1) {
-    tmp = (*it)->ltchecked(**it2);
+  for(auto const &it : side1) {
+    tmp = it->ltchecked(**it2);
     if (tmp != 0)
       return tmp;
     it2++;
@@ -1716,9 +1714,9 @@ do_type_lt(const expr2tc &side1, const expr2tc &side2)
 {
   if (side1.get() == side2.get())
     return 0; // Catch nulls
-  else if (side1.get() == NULL)
+  else if (side1.get() == nullptr)
     return -1;
-  else if (side2.get() == NULL)
+  else if (side2.get() == nullptr)
     return 1;
   else
     return side1->ltchecked(*side2.get());
@@ -1729,9 +1727,9 @@ do_type_lt(const type2tc &side1, const type2tc &side2)
 {
   if (*side1.get() == *side2.get())
     return 0; // Both may be null;
-  else if (side1.get() == NULL)
+  else if (side1.get() == nullptr)
     return -1;
-  else if (side2.get() == NULL)
+  else if (side2.get() == nullptr)
     return 1;
   else
     return side1->ltchecked(*side2.get());
@@ -1780,7 +1778,6 @@ do_type_hash(const bool &thebool, crypto_hash &hash)
     uint8_t tval = 0;
     hash.ingest(&tval, sizeof(tval));
   }
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1796,7 +1793,6 @@ do_type_hash(const unsigned int &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)&theval, sizeof(theval));
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1812,7 +1808,6 @@ do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)&theval, sizeof(theval));
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1828,7 +1823,6 @@ do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)&theval, sizeof(theval));
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1875,7 +1869,6 @@ do_type_hash(const BigInt &theint, crypto_hash &hash)
     // at the price of possible crc collisions.
     ;
   }
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1890,7 +1883,6 @@ do_type_hash(const fixedbvt &theval, crypto_hash &hash)
 {
 
   do_type_hash(theval.to_integer(), hash);
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1905,14 +1897,13 @@ do_type_hash(const ieee_floatt &theval, crypto_hash &hash)
 {
 
   do_type_hash(theval.to_integer(), hash);
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const std::vector<expr2tc> &theval, size_t seed)
 {
-  forall_exprs(it, theval)
-    (*it)->do_crc(seed);
+  for(auto const &it : theval)
+    it->do_crc(seed);
 
   return seed;
 }
@@ -1920,15 +1911,15 @@ do_type_crc(const std::vector<expr2tc> &theval, size_t seed)
 static inline __attribute__((always_inline)) void
 do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash)
 {
-  forall_exprs(it, theval)
-    (*it)->hash(hash);
+  for(auto const &it : theval)
+    it->hash(hash);
 }
 
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const std::vector<type2tc> &theval, size_t seed)
 {
-  forall_types(it, theval)
-    (*it)->do_crc(seed);
+  for(auto const &it : theval)
+    it->do_crc(seed);
 
   return seed;
 }
@@ -1936,30 +1927,30 @@ do_type_crc(const std::vector<type2tc> &theval, size_t seed)
 static inline __attribute__((always_inline)) void
 do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
 {
-  forall_types(it, theval)
-    (*it)->hash(hash);
+  for(auto const &it : theval)
+    it->hash(hash);
 }
 
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const std::vector<irep_idt> &theval, size_t seed)
 {
-  forall_names(it, theval)
-    boost::hash_combine(seed, (*it).as_string());
+  for(auto const &it : theval)
+    boost::hash_combine(seed, it.as_string());
   return seed;
 }
 
 static inline __attribute__((always_inline)) void
 do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
 {
-  forall_names(it, theval)
-    hash.ingest((void*)(*it).as_string().c_str(), (*it).as_string().size());
+  for(auto const &it : theval)
+    hash.ingest((void*)it.as_string().c_str(), it.as_string().size());
 }
 
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const expr2tc &theval, size_t seed)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
     return theval->do_crc(seed);
   return seed;
 }
@@ -1968,16 +1959,15 @@ static inline __attribute__((always_inline)) void
 do_type_hash(const expr2tc &theval, crypto_hash &hash)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
     theval->hash(hash);
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const type2tc &theval, size_t seed)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
     return theval->do_crc(seed);
   return seed;
 }
@@ -1986,9 +1976,8 @@ static inline __attribute__((always_inline)) void
 do_type_hash(const type2tc &theval, crypto_hash &hash)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
     theval->hash(hash);
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -2004,7 +1993,6 @@ do_type_hash(const irep_idt &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)theval.as_string().c_str(), theval.as_string().size());
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -2017,7 +2005,7 @@ static inline __attribute__((always_inline)) void
 do_type_hash(const type2t::type_ids &i __attribute__((unused)),
              crypto_hash &hash __attribute__((unused)))
 {
-  return; // Dummy field crc
+  // Dummy field crc
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -2030,7 +2018,7 @@ static inline __attribute__((always_inline)) void
 do_type_hash(const expr2t::expr_ids &i __attribute__((unused)),
              crypto_hash &hash __attribute__((unused)))
 {
-  return; // Dummy field crc
+  // Dummy field crc
 }
 
 template <typename T>
@@ -2183,7 +2171,6 @@ call_expr_delegate(T &ref, U &f)
   // Don't do anything normally.
   (void)ref;
   (void)f;
-  return;
 }
 
 template <>
@@ -2192,7 +2179,6 @@ call_expr_delegate<const expr2tc,expr2t::const_op_delegate>
                   (const expr2tc &ref, expr2t::const_op_delegate &f)
 {
   f(ref);
-  return;
 }
 
 template <>
@@ -2201,7 +2187,6 @@ call_expr_delegate<expr2tc, expr2t::op_delegate>
                   (expr2tc &ref, expr2t::op_delegate &f)
 {
   f(ref);
-  return;
 }
 
 template <>
@@ -2211,8 +2196,6 @@ call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>
 {
   for (const expr2tc &r : ref)
     f(r);
-
-  return;
 }
 
 template <>
@@ -2222,8 +2205,6 @@ call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>
 {
   for (expr2tc &r : ref)
     f(r);
-
-  return;
 }
 
 // Repeat of call_expr_delegate, but for types
@@ -2234,7 +2215,6 @@ call_type_delegate(T &ref, U &f)
   // Don't do anything normally.
   (void)ref;
   (void)f;
-  return;
 }
 
 template <>
@@ -2243,7 +2223,6 @@ call_type_delegate<const type2tc,type2t::const_subtype_delegate>
                   (const type2tc &ref, type2t::const_subtype_delegate &f)
 {
   f(ref);
-  return;
 }
 
 template <>
@@ -2252,7 +2231,6 @@ call_type_delegate<type2tc, type2t::subtype_delegate>
                   (type2tc &ref, type2t::subtype_delegate &f)
 {
   f(ref);
-  return;
 }
 
 template <>
@@ -2262,8 +2240,6 @@ call_type_delegate<const std::vector<type2tc>, type2t::const_subtype_delegate>
 {
   for (const type2tc &r : ref)
     f(r);
-
-  return;
 }
 
 template <>
@@ -2273,8 +2249,6 @@ call_type_delegate<std::vector<type2tc>, type2t::subtype_delegate>
 {
   for (type2tc &r : ref)
     f(r);
-
-  return;
 }
 
 /************************ Second attempt at irep templates ********************/
@@ -2300,7 +2274,7 @@ esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::ge
 
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 unsigned int
-esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::get_num_sub_exprs(void) const
+esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::get_num_sub_exprs() const
 {
   return superclass::get_num_sub_exprs_rec(); // Skips expr_id
 }
@@ -2373,7 +2347,7 @@ esbmct::type_methods2<derived, baseclass, traits, container, enable, fields>::fo
 
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 auto
-esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::clone(void) const -> base_container2tc
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::clone() const -> base_container2tc
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
@@ -2433,7 +2407,6 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::ha
 {
 
   hash_rec(hash); // _includes_ type_id / expr_id
-  return;
 }
 
 // The, *actual* recursive defs
@@ -2546,7 +2519,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::ge
 
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 unsigned int
-esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::get_num_sub_exprs_rec(void) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::get_num_sub_exprs_rec() const
 {
   unsigned int num = 0;
   const derived *derived_this = static_cast<const derived*>(this);
@@ -2775,15 +2748,17 @@ std::string mul2t::field_names [esbmct::num_type_fields]  =
 std::string div2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string ieee_add2t::field_names [esbmct::num_type_fields]  =
-{ "side_1", "side_2", "rounding_mode", "", "", ""};
+{ "rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_sub2t::field_names [esbmct::num_type_fields]  =
-{ "side_1", "side_2", "rounding_mode", "", "", ""};
+{ "rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_mul2t::field_names [esbmct::num_type_fields]  =
-{ "side_1", "side_2", "rounding_mode", "", "", ""};
+{ "rounding_mode",  "side_1", "side_2", "", "", ""};
 std::string ieee_div2t::field_names [esbmct::num_type_fields]  =
-{ "side_1", "side_2", "rounding_mode", "", "", ""};
+{ "rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_fma2t::field_names [esbmct::num_type_fields]  =
-{ "value_1", "value_2", "value_3", "rounding_mode", "", ""};
+{ "rounding_mode", "value_1", "value_2", "value_3", "", ""};
+std::string ieee_sqrt2t::field_names [esbmct::num_type_fields]  =
+{ "rounding_mode", "value", "", "", ""};
 std::string modulus2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string shl2t::field_names [esbmct::num_type_fields]  =
@@ -3082,6 +3057,7 @@ expr_typedefs3(ieee_sub, ieee_arith_2ops);
 expr_typedefs3(ieee_mul, ieee_arith_2ops);
 expr_typedefs3(ieee_div, ieee_arith_2ops);
 expr_typedefs4(ieee_fma, ieee_arith_3ops);
+expr_typedefs2(ieee_sqrt, ieee_arith_1op);
 expr_typedefs2(modulus, arith_2ops);
 expr_typedefs2(shl, arith_2ops);
 expr_typedefs2(ashr, arith_2ops);

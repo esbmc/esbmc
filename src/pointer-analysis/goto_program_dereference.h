@@ -42,9 +42,7 @@ public:
     goto_programt::const_targett target,
     expr2tc &expr);
 
-  virtual ~goto_program_dereferencet()
-  {
-  }
+  ~goto_program_dereferencet() override = default;
 
 protected:
   const optionst &options;
@@ -52,18 +50,18 @@ protected:
   value_setst &value_sets;
   dereferencet dereference;
 
-  virtual bool is_valid_object(const irep_idt &identifier);
+  bool is_valid_object(const irep_idt &identifier) override ;
 
-  virtual bool has_failed_symbol(
+  bool has_failed_symbol(
     const expr2tc &expr,
-    const symbolt *&symbol);
+    const symbolt *&symbol) override ;
 
-  virtual void dereference_failure(
+  void dereference_failure(
     const std::string &property,
     const std::string &msg,
-    const guardt &guard);
+    const guardt &guard) override ;
 
-  virtual void get_value_set(const expr2tc &expr, value_setst::valuest &dest);
+  void get_value_set(const expr2tc &expr, value_setst::valuest &dest) override ;
 
   void dereference_instruction(
     goto_programt::targett target,

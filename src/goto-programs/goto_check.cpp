@@ -20,7 +20,13 @@ class goto_checkt
 {
 public:
   goto_checkt(const namespacet &_ns, optionst &_options)
-      : ns(_ns), options(_options)
+    : ns(_ns),
+      options(_options),
+      disable_bounds_check(options.get_bool_option("no-bounds-check")),
+      disable_pointer_check(options.get_bool_option("no-pointer-check")),
+      disable_div_by_zero_check(options.get_bool_option("no-div-by-zero-check")),
+      enable_overflow_check(options.get_bool_option("overflow-check")),
+      enable_nan_check(options.get_bool_option("nan-check"))
   {
   }
 
@@ -30,607 +36,595 @@ protected:
   const namespacet &ns;
   optionst &options;
 
-  void check_rec(const exprt &expr, guardt &guard, bool address);
-  void check(const exprt &expr);
+  void check(const expr2tc &expr, const locationt &location);
 
-  void bounds_check(const exprt &expr, const guardt &guard);
-  void div_by_zero_check(const exprt &expr, const guardt &guard);
-  void pointer_rel_check(const exprt &expr, const guardt &guard);
-  void overflow_check(const exprt &expr, const guardt &guard);
-  void float_overflow_check(const exprt &expr, const guardt &guard);
-  void nan_check(const exprt &expr, const guardt &guard);
-  std::string array_name(const exprt &expr);
+  void check_rec(
+    const expr2tc &expr,
+    guardt &guard,
+    const locationt &loc,
+    bool address);
 
-  void add_guarded_claim(const exprt &expr, const std::string &comment,
-      const std::string &property, const locationt &location,
-      const guardt &guard);
+  void div_by_zero_check(
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
+
+  void bounds_check(
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
+
+  void pointer_rel_check(
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
+
+  void overflow_check(
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
+
+  void float_overflow_check(
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
+
+  void nan_check(
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
+
+  void add_guarded_claim(
+    const expr2tc &expr,
+    const std::string &comment,
+    const std::string &property,
+    const locationt &location,
+    const guardt &guard);
 
   goto_programt new_code;
-  std::set<exprt> assertions;
+  std::set<expr2tc> assertions;
+
+  bool disable_bounds_check;
+  bool disable_pointer_check;
+  bool disable_div_by_zero_check;
+  bool enable_overflow_check;
+  bool enable_nan_check;
 };
 
-void goto_checkt::div_by_zero_check(const exprt &expr, const guardt &guard)
+void goto_checkt::div_by_zero_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
 {
-  if (options.get_bool_option("no-div-by-zero-check"))
+  if(disable_div_by_zero_check)
     return;
 
-  if (expr.operands().size() != 2)
-    throw expr.id_string() + " takes two arguments";
+  assert(is_div2t(expr) || is_modulus2t(expr));
 
   // add divison by zero subgoal
+  expr2tc side_2;
+  if(is_div2t(expr))
+    side_2 = to_div2t(expr).side_2;
+  else
+    side_2 = to_modulus2t(expr).side_2;
 
-  exprt zero = gen_zero(expr.op1().type());
+  expr2tc zero = gen_zero(side_2->type);
+  assert(!is_nil_expr(zero));
 
-  if (zero.is_nil())
-    throw "no zero of argument type of operator " + expr.id_string();
-
-  exprt inequality("notequal", bool_typet());
-  inequality.copy_to_operands(expr.op1(), zero);
-
-  add_guarded_claim(inequality, "division by zero", "division-by-zero",
-      expr.find_location(), guard);
+  add_guarded_claim(
+    notequal2tc(side_2, zero),
+    "division by zero",
+    "division-by-zero",
+    loc,
+    guard);
 }
 
-void goto_checkt::float_overflow_check(const exprt &expr, const guardt &guard)
+void goto_checkt::float_overflow_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
 {
-  if (!options.get_bool_option("overflow-check"))
-    return;
-
-  // first, check type
-  if (!expr.type().is_floatbv())
-    return;
-
-  if(expr.is_typecast())
-  {
-    // Can overflow if casting from larger
-    // to smaller type.
-    assert(expr.operands().size()==1);
-
-    if(ns.follow(expr.op0().type()).is_typecast())
-    {
-      // float-to-float
-      unary_exprt op0_inf("isinf", expr.op0(), bool_typet());
-      unary_exprt new_inf("isinf", expr, bool_typet());
-
-      or_exprt overflow_check(op0_inf, not_exprt(new_inf));
-
-      add_guarded_claim(
-        overflow_check,
-        "arithmetic overflow on floating-point typecast",
-        "overflow",
-        expr.find_location(),
-        guard);
-    }
-    else
-    {
-      // non-float-to-float
-      unary_exprt new_inf("isinf", expr, bool_typet());
-
-      add_guarded_claim(
-        not_exprt(new_inf),
-        "arithmetic overflow on floating-point typecast",
-        "overflow",
-        expr.find_location(),
-        guard);
-    }
-  }
-  else if(expr.id()=="ieee_div")
-  {
-    assert(expr.operands().size()==2);
-
-    // Can overflow if dividing by something small
-    unary_exprt new_inf("isinf", expr, bool_typet());
-    unary_exprt op0_inf("isinf", expr.op0(), bool_typet());
-
-    or_exprt overflow_check(op0_inf, not_exprt(new_inf));
-
-    add_guarded_claim(
-        overflow_check,
-        "arithmetic overflow on floating-point division",
-        "overflow",
-        expr.find_location(),
-        guard);
-
-    return;
-  }
-  else if(expr.id()=="ieee_add" || expr.id()=="ieee_mul" || expr.id()=="ieee_sub")
-  {
-    if(expr.operands().size()==2)
-    {
-      // Can overflow
-      unary_exprt new_inf("isinf", expr, bool_typet());
-      unary_exprt op0_inf("isinf", expr.op0(), bool_typet());
-      unary_exprt op1_inf("isinf", expr.op1(), bool_typet());
-
-      or_exprt overflow_check(op0_inf, op1_inf, not_exprt(new_inf));
-
-      std::string kind=
-          expr.id()=="+"?"addition":
-          expr.id()=="-"?"subtraction":
-          expr.id()=="+"?"multiplication":"";
-
-      add_guarded_claim(
-          overflow_check,
-          "arithmetic overflow on floating-point "+kind,
-          "overflow",
-          expr.find_location(),
-          guard);
-
-      return;
-    }
-    else if(expr.operands().size()>=3)
-    {
-      assert(expr.id()!="-");
-
-      // break up
-      exprt tmp=make_binary(expr);
-      float_overflow_check(tmp, guard);
-      return;
-    }
-  }
-}
-
-void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
-{
-  if (!options.get_bool_option("overflow-check"))
+  if(!enable_overflow_check)
     return;
 
   // First, check type.
-  const typet &type=ns.follow(expr.type());
+  const type2tc &type = ns.follow(expr->type);
+  if(!is_floatbv_type(type))
+    return;
 
-  if (!type.is_signedbv())
+  // We could use get_sub_expr(idx) instead of this switch case,
+  // but the documentation states that the order is not guaranteed
+  expr2tc side_1, side_2;
+  switch(expr->expr_id)
+  {
+    case expr2t::ieee_add_id:
+      side_1 = to_ieee_add2t(expr).side_1;
+      side_2 = to_ieee_add2t(expr).side_2;
+      break;
+
+    case expr2t::ieee_sub_id:
+      side_1 = to_ieee_sub2t(expr).side_1;
+      side_2 = to_ieee_sub2t(expr).side_2;
+      break;
+
+    case expr2t::ieee_mul_id:
+      side_1 = to_ieee_mul2t(expr).side_1;
+      side_2 = to_ieee_mul2t(expr).side_2;
+      break;
+
+    case expr2t::ieee_div_id:
+      side_1 = to_ieee_div2t(expr).side_1;
+      side_2 = to_ieee_div2t(expr).side_2;
+      break;
+
+    default:
+      abort();
+  }
+
+  if(is_ieee_div2t(expr))
+  {
+    // Can overflow if dividing by something small
+    expr2tc op0_inf = expr2tc(new isinf2t(side_1));
+    expr2tc new_inf = expr2tc(new isinf2t(expr));
+    make_not(new_inf);
+
+    or2tc overflow_check(op0_inf, new_inf);
+
+    add_guarded_claim(
+      overflow_check,
+      "arithmetic overflow on floating-point " + get_expr_id(expr),
+      "overflow",
+      loc,
+      guard);
+  }
+  else if(is_ieee_add2t(expr) || is_ieee_sub2t(expr) || is_ieee_mul2t(expr))
+  {
+    // Can overflow
+    expr2tc op0_inf = expr2tc(new isinf2t(side_1));
+    expr2tc op1_inf = expr2tc(new isinf2t(side_2));
+    or2tc operands_or(op0_inf, op1_inf);
+
+    expr2tc new_inf = expr2tc(new isinf2t(expr));
+    make_not(new_inf);
+
+    or2tc overflow_check(operands_or, new_inf);
+
+    add_guarded_claim(
+      overflow_check,
+      "arithmetic overflow on floating-point " + get_expr_id(expr),
+      "overflow",
+      loc,
+      guard);
+  }
+}
+
+void goto_checkt::overflow_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
+{
+  if (!enable_overflow_check)
+    return;
+
+  // First, check type.
+  const type2tc &type = ns.follow(expr->type);
+  if(!is_signedbv_type(type))
+    return;
+
+  // Don't check pointer overflow
+  if(is_pointer_type(*expr->get_sub_expr(0)))
     return;
 
   // add overflow subgoal
+  expr2tc overflow =
+    is_neg2t(expr) ?
+      expr2tc(new overflow_neg2t(to_neg2t(expr).value)) :
+      expr2tc(new overflow2t(expr));
+  make_not(overflow);
 
-  exprt overflow("overflow-" + expr.id_string(), bool_typet());
-  overflow.operands() = expr.operands();
-
-  if (expr.is_typecast())
-  {
-    if (expr.operands().size() != 1)
-      throw "typecast takes one operand";
-
-    const typet &old_type = expr.op0().type();
-
-    unsigned new_width = atoi(expr.type().width().c_str());
-    unsigned old_width = atoi(old_type.width().c_str());
-
-    if (old_type.is_unsignedbv())
-      new_width--;
-    if (new_width >= old_width)
-      return;
-
-    overflow.id(overflow.id_string() + "-" + i2string(new_width));
-  }
-
-  overflow.make_not();
-
-  add_guarded_claim(overflow, "arithmetic overflow on " + expr.id_string(),
-      "overflow", expr.find_location(), guard);
+  add_guarded_claim(
+    overflow,
+    "arithmetic overflow on " + get_expr_id(expr),
+    "overflow",
+    loc,
+    guard);
 }
 
-void goto_checkt::nan_check(const exprt &expr, const guardt &guard)
+void goto_checkt::nan_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
 {
-  if (!options.get_bool_option("nan-check"))
+  if (!enable_nan_check)
     return;
 
-  // first, check type
-  if (!expr.type().is_floatbv())
-    return;
-
-  if (expr.id() != "+" && expr.id() != "*" && expr.id() != "/"
-      && expr.id() != "-")
+  // First, check type.
+  const type2tc &type = ns.follow(expr->type);
+  if(!is_floatbv_type(type))
     return;
 
   // add nan subgoal
+  expr2tc isnan = expr2tc(new isnan2t(expr));
+  make_not(isnan);
 
-  exprt isnan("isnan", bool_typet());
-  isnan.copy_to_operands(expr);
-
-  isnan.make_not();
-
-  add_guarded_claim(isnan, "NaN on " + expr.id_string(), "NaN",
-      expr.find_location(), guard);
+  add_guarded_claim(
+    isnan,
+    "NaN on " + get_expr_id(expr),
+    "NaN",
+    loc,
+    guard);
 }
 
-void goto_checkt::pointer_rel_check(const exprt &expr, const guardt &guard)
+void goto_checkt::pointer_rel_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
 {
-  if (expr.operands().size() != 2)
-    throw expr.id_string() + " takes one argument";
+  if(disable_pointer_check)
+    return;
 
-  if (expr.op0().type().id() == "pointer"
-      && expr.op1().type().id() == "pointer")
+  assert(expr->get_num_sub_exprs() == 2);
+
+  if(is_pointer_type(*expr->get_sub_expr(0))
+     && is_pointer_type(*expr->get_sub_expr(1)))
   {
     // add same-object subgoal
+    expr2tc side_1 = *expr->get_sub_expr(0);
+    expr2tc side_2 = *expr->get_sub_expr(1);
 
-    if (!options.get_bool_option("no-pointer-check"))
-    {
-      exprt same_object("same-object", bool_typet());
-      same_object.copy_to_operands(expr.op0(), expr.op1());
-      add_guarded_claim(same_object, "same object violation", "pointer",
-          expr.find_location(), guard);
-    }
+    same_object2tc same_object(side_1, side_2);
+    add_guarded_claim(
+      same_object,
+      "Same bject violation",
+      "pointer",
+      loc,
+      guard);
   }
 }
 
-std::string goto_checkt::array_name(const exprt &expr)
+static bool has_dereference(const expr2tc &expr)
 {
-  return ::array_name(ns, expr);
-}
-
-static bool has_dereference(const exprt &expr)
-{
-  if (expr.id() == "dereference")
+  if(is_dereference2t(expr))
     return true;
-  else if (expr.id() == "index" && expr.op0().type().id() == "pointer")
+
+  if(is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
     // This is an index of a pointer, which is a dereference
     return true;
-  else if (expr.operands().size() > 0 && expr.op0().is_not_nil())
-    // Recurse through all subsequent source objects, which are always operand
-    // zero.
-    return has_dereference(expr.op0());
-  else
-    return false;
+
+  // Recurse through all subsequent source objects, which are always operand
+  // zero.
+  bool found = false;
+  expr->foreach_operand(
+    [&found] (const expr2tc &e)
+    {
+      found |= has_dereference(e);
+    }
+  );
+
+  return found;
 }
 
-void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
+void goto_checkt::bounds_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
 {
-  if (options.get_bool_option("no-bounds-check"))
+  (void) guard;
+  (void) loc;
+
+  if(disable_bounds_check)
     return;
 
-  if (!expr.is_index())
+  if(!is_index2t(expr))
     return;
 
-  if (expr.operands().size() != 2)
-    throw "index takes two operands";
+  index2t ind = to_index2t(expr);
 
   // Don't bounds check the initial index of argv in the "main" function; it's
   // always correct, and just adds needless claims. In the past a "no bounds
   // check" attribute in old irep handled this.
-  if (expr.op0().id_string() == "symbol"
-      && expr.op0().identifier() == "c::argv'"
-      && expr.op1().id_string() == "symbol"
-      && expr.op1().identifier() == "c::argc'")
+  if(is_symbol2t(ind.source_value)
+     && to_symbol2t(ind.source_value).thename == "argv'"
+     && is_symbol2t(ind.index)
+     && to_symbol2t(ind.index).thename == "argc'")
     return;
 
-  if (expr.op0().id_string() == "symbol"
-      && expr.op0().identifier() == "c::envp'"
-      && expr.op1().id_string() == "symbol"
-      && expr.op1().identifier() == "c::envp_size'")
+  if(is_symbol2t(ind.source_value)
+     && to_symbol2t(ind.source_value).thename == "envp'"
+     && is_symbol2t(ind.index)
+     && to_symbol2t(ind.index).thename == "envp_size'")
     return;
 
-  typet array_type = ns.follow(expr.op0().type());
-
-  if (array_type.id() == "pointer")
+  const type2tc &t = ns.follow(ind.source_value->type);
+  if(is_pointer_type(t))
     return;  // done by the pointer code
-  else if (array_type.id() == "incomplete_array")
-  {
-    expr.dump();
-    throw "index got incomplete array";
-  }
-  else if (!array_type.is_array())
-    throw "bounds check expected array type, got " + array_type.id_string();
 
   // Otherwise, if there's a dereference in the array source, this bounds check
   // should be performed by the symex-time dereferencing code, as the base thing
   // being accessed may be anything.
-  if (has_dereference(expr.op0()))
+  if (has_dereference(ind.source_value))
     return;
 
-  std::string name = "array bounds violated: " + array_name(expr.op0());
-  const exprt &index = expr.op1();
+  std::string name = "array bounds violated: " + array_name(ns, ind.source_value);
+  const expr2tc &the_index = ind.index;
 
-  if (!index.type().is_unsignedbv())
-  {
-    // we undo typecasts to signedbv
-    if (index.is_typecast()
-        && index.operands().size() == 1
-        && index.op0().type().is_unsignedbv())
-    {
-      // ok
-    }
-    else
-    {
-      mp_integer i;
+  // Lower bound access should be greather than zero
+  expr2tc zero = gen_zero(the_index->type);
+  assert(!is_nil_expr(zero));
 
-      if (!to_integer(index, i) && i >= 0)
-      {
-        // ok
-      }
-      else
-      {
-        exprt zero = gen_zero(index.type());
+  greaterthanequal2tc lower(the_index, zero);
+  add_guarded_claim(
+    lower,
+    name + " lower bound",
+    "array bounds",
+    loc,
+    guard);
 
-        if (zero.is_nil())
-          throw "no zero constant of index type " + index.type().to_string();
+  assert(is_array_type(t) || is_string_type(t));
 
-        exprt inequality(">=", bool_typet());
-        inequality.copy_to_operands(index, zero);
+  // We can't check the upper bound of an infinite sized array
+  if(is_array_type(t) && to_array_type(t).size_is_infinite)
+    return;
 
-        add_guarded_claim(inequality, name + " lower bound", "array bounds",
-          expr.find_location(), guard);
-      }
-    }
-  }
+  const expr2tc &array_size =
+    is_array_type(t) ?
+      to_array_type(t).array_size :
+      constant_int2tc(get_uint64_type(), to_string_type(t).get_length());
 
-  {
-    if (array_type.size_irep().is_nil())
-      throw "index array operand of wrong type";
-
-    const exprt &size = (const exprt &) array_type.size_irep();
-
-    if (size.id() != "infinity")
-    {
-      exprt inequality("<", bool_typet());
-      inequality.copy_to_operands(index, size);
-
-      // typecast size
-      if(inequality.op1().type() != inequality.op0().type())
-        inequality.op1().make_typecast(inequality.op0().type());
-
-      add_guarded_claim(
-        inequality, name + " upper bound", "array bounds",
-        expr.find_location(), guard);
-    }
-  }
+  // Cast size to index type
+  typecast2tc casted_size(the_index->type, array_size);
+  lessthan2tc upper(the_index, casted_size);
+  add_guarded_claim(
+    upper,
+    name + " upper bound",
+    "array bounds",
+    loc,
+    guard);
 }
 
-void goto_checkt::add_guarded_claim(const exprt &_expr,
-    const std::string &comment, const std::string &property,
-    const locationt &location, const guardt &guard)
+void goto_checkt::add_guarded_claim(
+  const expr2tc &expr,
+  const std::string &comment,
+  const std::string &property,
+  const locationt &location,
+  const guardt &guard)
 {
-  bool all_claims = options.get_bool_option("all-claims");
-  exprt expr(_expr);
+  expr2tc e = expr;
 
   // first try simplifier on it
-  if (!options.get_bool_option("no-simplify"))
-  {
-    expr2tc tmpexpr;
-    migrate_expr(expr, tmpexpr);
-    base_type(tmpexpr, ns);
-    expr = migrate_expr_back(tmpexpr);
-    simplify(expr);
-  }
+  base_type(e, ns);
+  simplify(e);
 
-  if (!all_claims && expr.is_true())
+  if (!options.get_bool_option("all-claims") && is_true(e))
     return;
 
   // add the guard
-  exprt guard_expr = migrate_expr_back(guard.as_expr());
+  expr2tc new_expr = guard.is_true() ? e : implies2tc(guard.as_expr(), e);
 
-  exprt new_expr;
-
-  if (guard_expr.is_true())
-    new_expr.swap(expr);
-  else
-  {
-    new_expr = exprt("=>", bool_typet());
-    new_expr.move_to_operands(guard_expr, expr);
-  }
-
+  // Check if we're not adding the same assertion twice
   if (assertions.insert(new_expr).second)
   {
     goto_programt::targett t = new_code.add_instruction(ASSERT);
-    migrate_expr(new_expr, t->guard);
-
+    t->guard = new_expr;
     t->location = location;
     t->location.comment(comment);
     t->location.property(property);
   }
 }
 
-void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
+void goto_checkt::check_rec(
+  const expr2tc &expr,
+  guardt &guard,
+  const locationt &loc,
+  bool address)
 {
-  if (address)
+  if(is_nil_expr(expr))
+    return;
+
+  if(address)
   {
-    if (expr.is_dereference())
+    switch(expr->expr_id)
     {
-      assert(expr.operands().size() == 1);
-      check_rec(expr.op0(), guard, false);
+      case expr2t::dereference_id:
+        check_rec(to_dereference2t(expr).value, guard, loc, false);
+        break;
+
+      case expr2t::index_id:
+        check_rec(to_index2t(expr).source_value, guard, loc, true);
+        check_rec(to_index2t(expr).index, guard, loc, false);
+        break;
+
+      default:
+        expr->foreach_operand(
+          [this, &guard, &loc] (const expr2tc &e)
+          {
+            check_rec(e, guard, loc, true);
+          }
+        );
     }
-    else if (expr.is_index())
-    {
-      assert(expr.operands().size() == 2);
-      check_rec(expr.op0(), guard, true);
-      check_rec(expr.op1(), guard, false);
-    }
-    else
-    {
-      forall_operands(it, expr)
-        check_rec(*it, guard, true);
-    }
+
     return;
   }
 
-  if (expr.is_address_of())
+  switch(expr->expr_id)
   {
-    assert(expr.operands().size() == 1);
-    check_rec(expr.op0(), guard, true);
-    return;
-  }
-  else if (expr.is_and() || expr.is_or())
-  {
-    if (!expr.is_boolean())
-      throw expr.id_string() + " must be Boolean, but got " + expr.pretty();
+    case expr2t::address_of_id:
+      check_rec(to_address_of2t(expr).ptr_obj, guard, loc, true);
+      return;
 
-    guardt old_guards(guard);
-
-    for (unsigned i = 0; i < expr.operands().size(); i++)
+    case expr2t::and_id:
+    case expr2t::or_id:
     {
-      const exprt &op = expr.operands()[i];
+      assert(is_bool_type(expr));
 
-      if (!op.is_boolean())
-        throw expr.id_string() + " takes Boolean operands only, but got "
-            + op.pretty();
+      guardt old_guards(guard);
 
-      check_rec(op, guard, false);
+      bool is_or = is_or2t(expr);
+      expr->foreach_operand(
+        [this, &is_or, &guard, &loc] (const expr2tc &e)
+        {
+          assert(is_bool_type(e));
+          check_rec(e, guard, loc, false);
 
-      if (expr.is_or())
+          if(is_or)
+          {
+            expr2tc tmp = e;
+            make_not(tmp);
+            guard.add(tmp);
+          }
+          else
+            guard.add(e);
+        }
+      );
+
+      guard.swap(old_guards);
+      return;
+    }
+
+    case expr2t::if_id:
+    {
+      auto i = to_if2t(expr);
+      assert(is_bool_type(i.cond));
+
+      // Check cond
+      check_rec(i.cond, guard, loc, false);
+
+      // Check true path
       {
-        exprt tmp(op);
-        tmp.make_not();
-        expr2tc tmp_expr;
-        migrate_expr(tmp, tmp_expr);
-        guard.add(tmp_expr);
+        guardt old_guards(guard);
+        guard.add(i.cond);
+        check_rec(i.true_value, guard, loc, false);
+        guard.swap(old_guards);
       }
-      else
+
+      // Check false path, the guard is negated
       {
-        expr2tc tmp;
-        migrate_expr(op, tmp);
+        guardt old_guards(guard);
+        expr2tc tmp = i.cond;
+        make_not(tmp);
         guard.add(tmp);
+        check_rec(i.false_value, guard, loc, false);
+        guard.swap(old_guards);
       }
+
+      return;
     }
 
-    guard.swap(old_guards);
-
-    return;
-  }
-  else if (expr.id() == "if")
-  {
-    if (expr.operands().size() != 3)
-      throw "if takes three arguments";
-
-    if (!expr.op0().is_boolean())
-    {
-      std::string msg = "first argument of if must be boolean, but got "
-          + expr.op0().to_string();
-      throw msg;
-    }
-
-    check_rec(expr.op0(), guard, false);
-
-    {
-      guardt old_guards(guard);
-      expr2tc tmp;
-      migrate_expr(expr.op0(), tmp);
-      guard.add(tmp);
-      check_rec(expr.op1(), guard, false);
-      guard.swap(old_guards);
-    }
-
-    {
-      guardt old_guards(guard);
-      exprt tmp(expr.op0());
-      tmp.make_not();
-      expr2tc tmp_expr;
-      migrate_expr(tmp, tmp_expr);
-      guard.add(tmp_expr);
-      check_rec(expr.op2(), guard, false);
-      guard.swap(old_guards);
-    }
-
-    return;
+    default:
+      break;
   }
 
-  forall_operands(it, expr)
-    check_rec(*it, guard, false);
+  expr->foreach_operand(
+    [this, &guard, &loc] (const expr2tc &e)
+    {
+      check_rec(e, guard, loc, false);
+    }
+  );
 
-  if (expr.is_index())
+  switch(expr->expr_id)
   {
-    bounds_check(expr, guard);
-  }
-  else if (expr.id() == "+" || expr.id() == "-"
-    || expr.id() == "*" || expr.id() == "unary-"
-    || expr.id() == "/" || expr.id() == "mod")
-  {
-    // Don't check pointers
-    if(expr.op0().type().is_pointer())
+    case expr2t::index_id:
+      bounds_check(expr, guard, loc);
       return;
 
-    if(expr.operands().size() == 2 && expr.op1().type().is_pointer())
-      return;
+    case expr2t::neg_id:
+    case expr2t::add_id:
+    case expr2t::sub_id:
+    case expr2t::mul_id:
+    case expr2t::div_id:
+    case expr2t::modulus_id:
+    {
+      if(is_div2t(expr) || is_modulus2t(expr))
+        div_by_zero_check(expr, guard, loc);
 
-    if(expr.id() == "/" || expr.id() == "mod")
-      div_by_zero_check(expr, guard);
+      overflow_check(expr, guard, loc);
+      break;
+    }
 
-    overflow_check(expr, guard);
-  }
-  else if (expr.id() == "ieee_add" || expr.id() == "ieee_sub"
-    || expr.id() == "ieee_mul" || expr.id() == "ieee_div")
-  {
-    float_overflow_check(expr, guard);
-    nan_check(expr, guard);
-  }
-  else if (expr.id() == "<=" || expr.id() == "<" || expr.id() == ">="
-      || expr.id() == ">")
-  {
-    pointer_rel_check(expr, guard);
+    case expr2t::ieee_add_id:
+    case expr2t::ieee_sub_id:
+    case expr2t::ieee_mul_id:
+    case expr2t::ieee_div_id:
+    {
+      // No division by zero for ieee_div, as it's defined behaviour
+      float_overflow_check(expr, guard, loc);
+      nan_check(expr, guard, loc);
+      break;
+    }
+
+    case expr2t::lessthan_id:
+    case expr2t::lessthanequal_id:
+    case expr2t::greaterthan_id:
+    case expr2t::greaterthanequal_id:
+      pointer_rel_check(expr, guard, loc);
+      break;
+
+    default:
+      break;
   }
 }
 
-void goto_checkt::check(const exprt &expr)
+void goto_checkt::check(const expr2tc &expr, const locationt &loc)
 {
   guardt guard;
-  check_rec(expr, guard, false);
+  check_rec(expr, guard, loc, false);
 }
 
 void goto_checkt::goto_check(goto_programt &goto_program)
 {
+  // Not a ranged loop because we need it to be an iterator :/
   for (goto_programt::instructionst::iterator it =
-      goto_program.instructions.begin(); it != goto_program.instructions.end();
-      it++)
+       goto_program.instructions.begin();
+       it != goto_program.instructions.end();
+       it++)
   {
     goto_programt::instructiont &i = *it;
+    const locationt& loc = i.location;
 
     new_code.clear();
     assertions.clear();
 
-    check(migrate_expr_back(i.guard));
+    check(i.guard, loc);
 
-    if (i.is_other())
+    if(i.is_other())
     {
-      if (is_code_expression2t(i.code))
+      if(is_code_expression2t(i.code))
       {
-        check(migrate_expr_back(i.code));
+        check(i.code, loc);
       }
-      else if (is_code_printf2t(i.code))
+      else if(is_code_printf2t(i.code))
       {
-        i.code->foreach_operand([this] (const expr2tc &e) {
-          check(migrate_expr_back(e));
+        i.code->foreach_operand(
+          [this, &loc] (const expr2tc &e)
+          {
+            check(e, loc);
           }
         );
       }
     }
-    else if (i.is_assign())
+    else if(i.is_assign())
     {
       const code_assign2t &assign = to_code_assign2t(i.code);
-      check(migrate_expr_back(assign.target));
-      check(migrate_expr_back(assign.source));
+      check(assign.target, loc);
+      check(assign.source, loc);
     }
-    else if (i.is_function_call())
+    else if(i.is_function_call())
     {
-      i.code->foreach_operand([this] (const expr2tc &e) {
-        check(migrate_expr_back(e));
+      i.code->foreach_operand(
+        [this, &loc] (const expr2tc &e)
+        {
+          check(e, loc);
         }
       );
     }
-    else if (i.is_return())
+    else if(i.is_return())
     {
       const code_return2t &ret = to_code_return2t(i.code);
-      check(migrate_expr_back(ret.operand));
-    }
-
-    for (auto i_it : new_code.instructions)
-    {
-      if (i_it.location.is_nil())
-      {
-        if (!i_it.location.comment().as_string().empty())
-          it->location.comment(i_it.location.comment());
-        if (!i_it.location.property().as_string().empty())
-          it->location.property(i_it.location.property());
-
-        i_it.location = it->location;
-      }
-      if (i_it.function == "")
-        i_it.function = it->function;
-      if (i_it.function == "")
-        i_it.function = it->function;
+      check(ret.operand, loc);
     }
 
     // insert new instructions -- make sure targets are not moved
-
-    while (!new_code.instructions.empty())
+    while(!new_code.instructions.empty())
     {
       goto_program.insert_swap(it, new_code.instructions.front());
       new_code.instructions.pop_front();
@@ -639,23 +633,25 @@ void goto_checkt::goto_check(goto_programt &goto_program)
   }
 }
 
-void goto_check(const namespacet &ns, optionst &options,
-    goto_programt &goto_program)
+void goto_check(
+  const namespacet &ns,
+  optionst &options,
+  goto_programt &goto_program)
 {
   goto_checkt goto_check(ns, options);
   goto_check.goto_check(goto_program);
 }
 
-void goto_check(const namespacet &ns, optionst &options,
-    goto_functionst &goto_functions)
+void goto_check(
+  const namespacet &ns,
+  optionst &options,
+  goto_functionst &goto_functions)
 {
   goto_checkt goto_check(ns, options);
 
-  for (goto_functionst::function_mapt::iterator it =
-      goto_functions.function_map.begin();
-      it != goto_functions.function_map.end(); it++)
+  for (auto &it : goto_functions.function_map)
   {
-    goto_check.goto_check(it->second.body);
+    if(!it.second.body.empty())
+      goto_check.goto_check(it.second.body);
   }
-
 }

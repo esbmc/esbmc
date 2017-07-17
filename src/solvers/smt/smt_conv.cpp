@@ -12,13 +12,13 @@
 // Helpers extracted from z3_convt.
 
 static std::string
-extract_magnitude(std::string v, unsigned width)
+extract_magnitude(const std::string& v, unsigned width)
 {
     return integer2string(binary2integer(v.substr(0, width / 2), true), 10);
 }
 
 static std::string
-extract_fraction(std::string v, unsigned width)
+extract_fraction(const std::string& v, unsigned width)
 {
     return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
 }
@@ -45,8 +45,9 @@ smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
   unsigned int idx = 0;
   const struct_union_data &data_ref = get_type_def(t);
 
-  forall_names(it, data_ref.member_names) {
-    if (*it == name)
+  for(auto const &it : data_ref.member_names)
+  {
+    if (it == name)
       break;
     idx++;
   }
@@ -64,35 +65,35 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 }
 
 smt_convt::smt_convt(bool intmode, const namespacet &_ns)
-  : ctx_level(0), boolean_sort(NULL), int_encoding(intmode), ns(_ns)
+  : ctx_level(0), boolean_sort(nullptr), int_encoding(intmode), ns(_ns)
 {
-  tuple_api = NULL;
-  array_api = NULL;
+  tuple_api = nullptr;
+  array_api = nullptr;
 
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
-  names.push_back(irep_idt("pointer_object"));
-  names.push_back(irep_idt("pointer_offset"));
+  names.emplace_back("pointer_object");
+  names.emplace_back("pointer_offset");
 
   struct_type2t *tmp = new struct_type2t(members, names, names, "pointer_struct");
   pointer_type_data = tmp;
   pointer_struct = type2tc(tmp);
 
-  pointer_logic.push_back(pointer_logict());
+  pointer_logic.emplace_back();
 
   addr_space_sym_num.push_back(0);
 
-  renumber_map.push_back(renumber_mapt());
+  renumber_map.emplace_back();
 
   members.clear();
   names.clear();
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
-  names.push_back(irep_idt("start"));
-  names.push_back(irep_idt("end"));
+  names.emplace_back("start");
+  names.emplace_back("end");
   tmp = new struct_type2t(members, names, names, "addr_space_type");
   addr_space_type_data = tmp;
   addr_space_type = type2tc(tmp);
@@ -100,7 +101,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   addr_space_arr_type = type2tc(new array_type2t(addr_space_type,
                                                  expr2tc(), true)) ;
 
-  addr_space_data.push_back(std::map<unsigned, unsigned>());
+  addr_space_data.emplace_back();
 
   machine_int = type2tc(new signedbv_type2t(config.ansi_c.int_width));
   machine_uint = type2tc(new unsignedbv_type2t(config.ansi_c.int_width));
@@ -111,26 +112,22 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   // this is the one modelling array that absolutely _has_ to be initialized
   // to false for each element, which is going to be shoved into
   // convert_identifier_pointer.
-  dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
+  dyn_info_arr_name = "__ESBMC_is_dynamic&0#1";
 
   ptr_foo_inited = false;
-}
-
-smt_convt::~smt_convt(void)
-{
 }
 
 void
 smt_convt::set_tuple_iface(tuple_iface *iface)
 {
-  assert(tuple_api == NULL && "set_tuple_iface should only be called once");
+  assert(tuple_api == nullptr && "set_tuple_iface should only be called once");
   tuple_api = iface;
 }
 
 void
 smt_convt::set_array_iface(array_iface *iface)
 {
-  assert(array_api == NULL && "set_array_iface should only be called once");
+  assert(array_api == nullptr && "set_array_iface should only be called once");
   array_api = iface;
 }
 
@@ -145,7 +142,7 @@ smt_convt::delete_all_asts()
 }
 
 void
-smt_convt::smt_post_init(void)
+smt_convt::smt_post_init()
 {
   if (int_encoding) {
     machine_int_sort = mk_sort(SMT_SORT_INT, false);
@@ -178,7 +175,7 @@ smt_convt::smt_post_init(void)
 }
 
 void
-smt_convt::push_ctx(void)
+smt_convt::push_ctx()
 {
   tuple_api->push_tuple_ctx();
   array_api->push_array_ctx();
@@ -194,7 +191,7 @@ smt_convt::push_ctx(void)
 }
 
 void
-smt_convt::pop_ctx(void)
+smt_convt::pop_ctx()
 {
 
   // Erase everything in caches added in the current context level. Everything
@@ -225,7 +222,7 @@ smt_astt
 smt_convt::make_disjunct(const ast_vec &v)
 {
   smt_astt args[v.size()];
-  smt_astt result = NULL;
+  smt_astt result = nullptr;
   unsigned int i = 0;
 
   // This is always true.
@@ -589,6 +586,13 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = mk_smt_bvfloat_arith_ops(expr);
     break;
   }
+  case expr2t::ieee_sqrt_id:
+  {
+    assert(is_floatbv_type(expr));
+    assert(expr->get_num_sub_exprs() == 2);
+    a = mk_smt_bvfloat_arith_ops(expr);
+    break;
+  }
   case expr2t::modulus_id:
   {
     assert(expr->get_num_sub_exprs() == 2);
@@ -877,10 +881,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     } else if(is_floatbv_type(abs.value)) {
       a = mk_func_app(sort, SMT_FUNC_FABS, &args[0], 1);
     } else {
-      expr2tc zero;
-      migrate_expr(gen_zero(migrate_type_back(abs.value->type)), zero);
-
-      lessthan2tc lt(abs.value, zero);
+      lessthan2tc lt(abs.value, gen_zero(abs.value->type));
       neg2tc neg(abs.value->type, abs.value);
       if2tc ite(abs.type, lt, neg, abs.value);
 
@@ -1201,7 +1202,6 @@ void
 smt_convt::assert_expr(const expr2tc &e)
 {
   assert_ast(convert_ast(e));
-  return;
 }
 
 smt_sortt
@@ -1213,7 +1213,7 @@ smt_convt::convert_sort(const type2tc &type)
     return it->second;
   }
 
-  smt_sortt result = NULL;
+  smt_sortt result = nullptr;
   switch (type->type_id) {
   case type2t::bool_id:
     result = boolean_sort;
@@ -1264,20 +1264,17 @@ smt_convt::convert_sort(const type2tc &type)
   }
   case type2t::array_id:
   {
-    const array_type2t &arr = to_array_type(type);
-
     // Index arrays by the smallest integer required to represent its size.
     // Unless it's either infinite or dynamic in size, in which case use the
     // machine int size. Also, faff about if it's an array of arrays, extending
     // the domain.
-    smt_sortt d = make_array_domain_sort(arr);
+    smt_sortt d = make_array_domain_sort(to_array_type(flatten_array_type(type)));
 
     // Determine the range if we have arrays of arrays.
-    type2tc range = arr.subtype;
-    while (is_array_type(range))
-      range = to_array_type(range).subtype;
+    type2tc range = get_flattened_array_subtype(type);
 
-    if (is_tuple_ast_type(range)) {
+    if (is_tuple_ast_type(range))
+    {
       type2tc thetype = flatten_array_type(type);
       rewrite_ptrs_to_structs(thetype);
       result = tuple_api->mk_struct_sort(thetype);
@@ -1306,7 +1303,7 @@ smt_convt::convert_sort(const type2tc &type)
 }
 
 static std::string
-fixed_point(std::string v, unsigned width)
+fixed_point(const std::string& v, unsigned width)
 {
   const int precision = 1000000;
   std::string i, f, b, result;
@@ -1369,8 +1366,8 @@ smt_convt::convert_terminal(const expr2tc &expr)
 
       m = extract_magnitude(theval, bitwidth);
       f = extract_fraction(theval, bitwidth);
-      magnitude = strtoll(m.c_str(), NULL, 10);
-      fraction = strtoll(f.c_str(), NULL, 10);
+      magnitude = strtoll(m.c_str(), nullptr, 10);
+      fraction = strtoll(f.c_str(), nullptr, 10);
 
       magnitude <<= (bitwidth / 2);
       fin = magnitude | fraction;
@@ -1407,36 +1404,39 @@ smt_convt::convert_terminal(const expr2tc &expr)
   case expr2t::symbol_id:
   {
     // Special case for tuple symbols
-    if (is_tuple_ast_type(expr)) {
+    if (is_tuple_ast_type(expr))
+    {
       const symbol2t &sym = to_symbol2t(expr);
-      return tuple_api->mk_tuple_symbol(sym.get_symbol_name(),
-                                        convert_sort(sym.type));
-    } else if (is_array_type(expr)) {
+      return tuple_api->mk_tuple_symbol(
+        sym.get_symbol_name(),
+        convert_sort(sym.type));
+    }
+
+    if (is_array_type(expr))
+    {
       // Determine the range if we have arrays of arrays.
-      const array_type2t &arr = to_array_type(expr->type);
-      type2tc range = arr.subtype;
-      while (is_array_type(range))
-        range = to_array_type(range).subtype;
+      type2tc range = get_flattened_array_subtype(expr->type);
 
       // If this is an array of structs, we have a tuple array sym.
-      if (is_structure_type(range) || is_pointer_type(range)) {
+      if (is_structure_type(range) || is_pointer_type(range))
         return tuple_api->mk_tuple_array_symbol(expr);
-      } else {
-        ; // continue onwards;
-      }
     }
 
     // Just a normal symbol. Possibly an array symbol.
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
+
     smt_sortt sort = convert_sort(sym.type);
-    if (is_array_type(expr)) {
+
+    if (is_array_type(expr))
+    {
       smt_sortt subtype = convert_sort(get_flattened_array_subtype(sym.type));
       return array_api->mk_array_symbol(name, sort, subtype);
-    } else {
-      return mk_smt_symbol(name, sort);
     }
+
+    return mk_smt_symbol(name, sort);
   }
+
   default:
     std::cerr << "Converting unrecognized terminal expr to SMT" << std::endl;
     expr->dump();
@@ -1462,7 +1462,7 @@ smt_convt::mk_fresh(smt_sortt s, const std::string &tag,
   if (s->id == SMT_SORT_UNION || s->id == SMT_SORT_STRUCT) {
     return tuple_api->mk_tuple_symbol(newname, s);
   } else if (s->id == SMT_SORT_ARRAY) {
-    assert(array_subtype != NULL && "Must call mk_fresh for arrays with a subtype");
+    assert(array_subtype != nullptr && "Must call mk_fresh for arrays with a subtype");
     return array_api->mk_array_symbol(newname, s, array_subtype);
   } else {
     return mk_smt_symbol(newname, s);
@@ -1546,21 +1546,21 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
     is_neg = mk_func_app(boolean_sort, SMT_FUNC_ISNEG, value);
   else
   {
-    expr2tc zero_expr;
-    migrate_expr(gen_zero(migrate_type_back(signbit.operand->type)), zero_expr);
-
-    is_neg = mk_func_app(boolean_sort, SMT_FUNC_LT, value, convert_ast(zero_expr));
+    is_neg =
+      mk_func_app(
+        boolean_sort,
+        SMT_FUNC_LT,
+        value,
+        convert_ast(gen_zero(signbit.operand->type)));
   }
-
-  expr2tc zero_expr;
-  migrate_expr(gen_zero(migrate_type_back(signbit.type)), zero_expr);
-
-  expr2tc one_expr;
-  migrate_expr(gen_one(migrate_type_back(signbit.type)), one_expr);
 
   // If it's true, return 1. Return 0, othewise.
   return mk_func_app(
-    sort, SMT_FUNC_ITE, is_neg, convert_ast(one_expr), convert_ast(zero_expr));
+    sort,
+    SMT_FUNC_ITE,
+    is_neg,
+    convert_ast(gen_one(signbit.type)),
+    convert_ast(gen_zero(signbit.type)));
 }
 
 smt_astt
@@ -1586,7 +1586,7 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)
 
   assert(is_symbol2t(expr));
 
-  // Bad, we have to select given the result of c::__ESBMC_rounding_mode:
+  // Bad, we have to select given the result of __ESBMC_rounding_mode:
   // 0 is round to Nearest/even
   // 1 is round to -oo
   // 2 is round to +oo
@@ -1841,12 +1841,13 @@ smt_convt::make_array_domain_sort_exp(const array_type2t &arr)
 {
 
   // Start special casing if this is an array of arrays.
-  if (!is_array_type(arr.subtype)) {
+  if (!is_array_type(arr.subtype))
+  {
     // Normal array, work out what the domain sort is.
     if (int_encoding)
       return get_uint_type(config.ansi_c.int_width);
-    else
-      return get_uint_type(calculate_array_domain_width(arr));
+
+    return get_uint_type(calculate_array_domain_width(arr));
   }
   else
   {
@@ -1875,36 +1876,39 @@ smt_convt::array_domain_to_width(const type2tc &type)
 }
 
 expr2tc
-smt_convt::twiddle_index_width(const expr2tc &expr, const type2tc &type)
-{
-  const array_type2t &arrtype = to_array_type(type);
-  unsigned int width = calculate_array_domain_width(arrtype);
-  typecast2tc t(type2tc(new unsignedbv_type2t(width)), expr);
-  expr2tc tmp = t->simplify();
-  if (is_nil_expr(tmp))
-    return t;
-  else
-    return tmp;
-}
-
-expr2tc
 smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 {
-  // So: some series of index exprs will occur here, with some symbol or
-  // other expression at the bottom that's actually some symbol, or whatever.
-  // So, extract all the indexes, and concat them, with the first (lowest)
-  // index at the top, then descending.
-
-  unsigned long accuml_size = 0;
   index2tc idx = expr;
-  expr2tc output = twiddle_index_width(idx->index, idx->source_value->type);
-  accuml_size += output->type->get_width();
-  while (is_index2t(idx->source_value)) {
+
+  // First we need to find the flatten_array_type, to cast symbols/constants
+  // with different types during the addition and multiplication. They'll be
+  // casted to the flattened array index type
+  while (is_index2t(idx->source_value))
     idx = idx->source_value;
-    expr2tc tmp = twiddle_index_width(idx->index, idx->source_value->type);
-    accuml_size += tmp->type->get_width();
-    output = concat2tc(get_uint_type(accuml_size), output, tmp);
+
+  type2tc subtype =
+    make_array_domain_sort_exp(
+      to_array_type(flatten_array_type(idx->source_value->type)));
+
+  // Rewrite the store chain as additions and multiplications
+  idx = expr;
+  expr2tc output = typecast2tc(subtype, idx->index);
+  while (is_index2t(idx->source_value))
+  {
+    idx = idx->source_value;
+
+    type2tc t = flatten_array_type(idx->type);
+    output = add2tc(
+      subtype,
+      mul2tc(
+        subtype,
+        typecast2tc(subtype, to_array_type(t).array_size),
+        typecast2tc(subtype, idx->index)),
+      output);
   }
+
+  // Try to simplify the expression
+  simplify(output);
 
   // Give the caller the base array object / thing. So that it can actually
   // select out of the right piece of data.
@@ -1915,24 +1919,49 @@ smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 expr2tc
 smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
 {
-  // Just like handle_select_chain, we have some kind of multidimensional
-  // array, which we're representing as a single array with an extended domain,
-  // and using different segments of the domain to represent different
-  // dimensions of it. Concat all of the indexs into one index; also give the
-  // caller the base object that this is being applied to.
-
-  unsigned long accuml_size = 0;
   with2tc with = expr;
-  expr2tc output = twiddle_index_width(with->update_field, with->type);
-  accuml_size += output->type->get_width();
-  while (is_with2t(with->update_value)) {
-    with = with->update_value;
-    expr2tc tmp = twiddle_index_width(with->update_field, with->type);
-    accuml_size += tmp->type->get_width();
 
-    // NB: order is reversed from indexes.
-    output = concat2tc(get_uint_type(accuml_size), tmp, output);
+  // First we need to find the flatten_array_type, to cast symbols/constants
+  // with different types during the addition and multiplication. They'll be
+  // casted to the flattened array index type
+  type2tc subtype =
+    make_array_domain_sort_exp(
+      to_array_type(flatten_array_type(with->source_value->type)));
+
+  // Rewrite the store chain as multiplications and additions
+  // TODO: this is a mess, improve it
+  expr2tc output;
+  if(is_with2t(with->update_value))
+  {
+    std::vector<expr2tc> multiplications;
+
+    // Multiply all indexes by the next dimension's flatten type
+    while (is_with2t(with->update_value))
+    {
+      type2tc t = flatten_array_type(with->update_value->type);
+
+      expr2tc mult =
+        mul2tc(
+          subtype,
+          typecast2tc(subtype, to_array_type(t).array_size),
+          typecast2tc(subtype, with->update_field));
+
+      multiplications.push_back(mult);
+
+      with = with->update_value;
+    }
+
+    // Add them together
+    output = typecast2tc(subtype, with->update_field);
+    while(multiplications.size())
+    {
+      output = add2tc(subtype, output, multiplications.back());
+      multiplications.pop_back();
+    }
   }
+
+  // Try to simplify the expression
+  simplify(output);
 
   // Give the caller the actual value we're updating with.
   base = with->update_value;
@@ -1945,20 +1974,17 @@ smt_convt::convert_array_index(const expr2tc &expr)
   smt_astt a;
   const index2t &index = to_index2t(expr);
   expr2tc src_value = index.source_value;
-  expr2tc newidx;
 
+  expr2tc newidx;
   if (is_index2t(index.source_value)) {
     newidx = decompose_select_chain(expr, src_value);
   } else {
     newidx = fix_array_idx(index.index, index.source_value->type);
   }
 
-  expr2tc tmp_idx = newidx->simplify();
-  if (!is_nil_expr(tmp_idx))
-    newidx = tmp_idx;
-
   // Firstly, if it's a string, shortcircuit.
-  if (is_string_type(index.source_value)) {
+  if (is_string_type(index.source_value))
+  {
     smt_astt tmp = convert_ast(src_value);
     return tmp->select(this, newidx);
   }
@@ -1967,11 +1993,10 @@ smt_convt::convert_array_index(const expr2tc &expr)
   a = a->select(this, newidx);
 
   const array_type2t &arrtype = to_array_type(index.source_value->type);
-  if (is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays) {
+  if (is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays)
     return make_bit_bool(a);
-  } else {
-    return a;
-  }
+
+  return a;
 }
 
 smt_astt
@@ -1988,10 +2013,6 @@ smt_convt::convert_array_store(const expr2tc &expr)
   } else {
     newidx = fix_array_idx(with.update_field, with.type);
   }
-
-  expr2tc tmp_idx = newidx->simplify();
-  if (!is_nil_expr(tmp_idx))
-    newidx = tmp_idx;
 
   assert(is_array_type(expr->type));
   smt_astt src, update;
@@ -2012,25 +2033,29 @@ smt_convt::convert_array_store(const expr2tc &expr)
 type2tc
 smt_convt::flatten_array_type(const type2tc &type)
 {
-  unsigned long arrbits = 0;
-
+  // Don't touch these
   if (to_array_type(type).size_is_infinite)
-    // Don't touch these
     return type;
 
+  // No need to handle one dimensional arrays
+  if (!is_array_type(to_array_type(type).subtype))
+    return type;
+
+  type2tc subtype = get_flattened_array_subtype(type);
+
+  unsigned long arr_size = 1;
   // Otherwise, accumulate sufficient domain bits to represent all dimensions
   // of the given array, in one dimension.
   type2tc type_rec = type;
-  while (is_array_type(type_rec)) {
-    arrbits += calculate_array_domain_width(to_array_type(type_rec));
+  while (is_array_type(type_rec))
+  {
+    arr_size *= to_constant_int2t(to_array_type(type_rec).array_size).value.to_long();
     type_rec = to_array_type(type_rec).subtype;
   }
 
   // type_rec is now the base type.
-  uint64_t arr_size = 1ULL << arrbits;
   constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
-
-  return type2tc(new array_type2t(type_rec, arr_size_expr, false));
+  return array_type2tc(subtype, arr_size_expr, false);
 }
 
 expr2tc
@@ -2038,9 +2063,15 @@ smt_convt::flatten_array_body(const expr2tc &expr)
 {
   assert(is_constant_array2t(expr));
   const constant_array2t &the_array = to_constant_array2t(expr);
+  const array_type2t &arr_type = to_array_type(the_array.type);
 
+  // inner most level, just return the array
+  if(!is_array_type(arr_type.subtype))
+    return expr;
+
+  // This should be an array of arrays, glue the sub arrays together
 #ifndef NDEBUG
-  for (const auto &elem : the_array.datatype_members)
+  for (auto const &elem : the_array.datatype_members)
     // Must only contain constant arrays, for now. No indirection should be
     // expressable at this level.
     assert(is_constant_array2t(elem) && "Sub-member of constant array must be "
@@ -2048,22 +2079,17 @@ smt_convt::flatten_array_body(const expr2tc &expr)
 #endif
 
   std::vector<expr2tc> sub_expr_list;
-  for (const auto &elem : the_array.datatype_members) {
-    expr2tc tmp_container;
-    const constant_array2t *sub_array = &to_constant_array2t(elem);
+  for (auto const &elem : the_array.datatype_members)
+  {
+    expr2tc flatten_elem = flatten_array_body(elem);
 
-    // Possibly flatten an inner layer
-    if (is_array_type(get_array_subtype(elem->type))) {
-      tmp_container = flatten_array_body(elem);
-      sub_array = &to_constant_array2t(tmp_container);
-    }
-
-    sub_expr_list.insert(sub_expr_list.end(),
-                         sub_array->datatype_members.begin(),
-                         sub_array->datatype_members.end());
+    sub_expr_list.insert(
+      sub_expr_list.end(),
+      to_constant_array2t(flatten_elem).datatype_members.begin(),
+      to_constant_array2t(flatten_elem).datatype_members.end());
   }
 
-  return constant_array2tc(expr->type, sub_expr_list);
+  return constant_array2tc(flatten_array_type(expr->type), sub_expr_list);
 }
 
 type2tc
@@ -2192,11 +2218,12 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "is_neg",
   "is_pos",
   "ieee_eq",
-  "ieee_neq",
   "ieee_add",
   "ieee_sub",
   "ieee_mul",
   "ieee_div",
+  "ieee_fma",
+  "ieee_sqrt",
   "ieee_rm_ne",
   "ieee_rm_zr",
   "ieee_rm_pi",
@@ -2213,7 +2240,6 @@ smt_convt::pre_solve()
   // the array api class.
   tuple_api->add_tuple_constraints_for_solving();
   array_api->add_array_constraints_for_solving();
-  return;
 }
 
 expr2tc
@@ -2240,7 +2266,7 @@ smt_convt::get(const expr2tc &expr)
     value_expr.set_value(get_fixed_point(expr->type->get_width(), ss.str()));
     fixedbvt fbv;
     fbv.from_expr(value_expr);
-    return constant_fixedbv2tc(expr->type, fbv);
+    return constant_fixedbv2tc(fbv);
   }
   case type2t::floatbv_id:
   {
@@ -2316,10 +2342,13 @@ smt_convt::array_create(const expr2tc &expr)
 
   // Check size
   const array_type2t &arr_type = to_array_type(expr->type);
-  if (arr_type.size_is_infinite) {
-    // Guarentee nothing, this is modelling only.
+
+  // Guarentee nothing, this is modelling only.
+  if (arr_type.size_is_infinite)
     return convert_ast(newsym);
-  } else if (!is_constant_int2t(arr_type.array_size)) {
+
+  if (!is_constant_int2t(arr_type.array_size))
+  {
     std::cerr << "Non-constant sized array of type constant_array_of2t"
               << std::endl;
     abort();
@@ -2333,7 +2362,8 @@ smt_convt::array_create(const expr2tc &expr)
 
   // Repeatedly store things into this.
   smt_astt newsym_ast = convert_ast(newsym);
-  for (unsigned int i = 0; i < sz; i++) {
+  for (unsigned int i = 0; i < sz; i++)
+  {
     expr2tc init = array.datatype_members[i];
 
     // Workaround for bools-in-arrays
@@ -2391,12 +2421,12 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
             constarray.datatype_members.end());
 
       // Create new expression, convert and return that.
-      mul2tc newsize(arrtype.array_size->type, arrtype.array_size,
-          constarray_type.array_size);
-      expr2tc simplified = newsize->simplify();
-      assert(!is_nil_expr(simplified));
-      type2tc new_arr_type(new array_type2t(constarray_type.subtype,
-            simplified,false));
+      mul2tc newsize(
+        arrtype.array_size->type, arrtype.array_size, constarray_type.array_size);
+      simplify(newsize);
+
+      type2tc new_arr_type(
+        new array_type2t(constarray_type.subtype, newsize, false));
       constant_array2tc new_const_array(new_arr_type, new_contents);
       return convert_ast(new_const_array);
     }
@@ -2487,8 +2517,8 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
     const constant_array2t &arr = to_constant_array2t(expr);
     smt_astt args[arr.datatype_members.size()];
     unsigned int i = 0;
-    forall_exprs(it, arr.datatype_members) {
-      args[i] = convert_ast(*it);
+    for(auto const &it : arr.datatype_members) {
+      args[i] = convert_ast(it);
       i++;
     }
 
@@ -2504,7 +2534,7 @@ smt_convt::rewrite_ptrs_to_structs(type2tc &type)
   // Create a delegate that recurses over all subtypes, replacing pointers
   // as we go. Extra scaffolding is to work around the fact we can't refer
   // to replace_w_ptr until after it's been defined, ho hum.
-  type2t::subtype_delegate *delegate = NULL;
+  type2t::subtype_delegate *delegate = nullptr;
   auto replace_w_ptr = [this, &delegate](type2tc &e) {
     if (is_pointer_type(e)) {
       // Replace this field of the expr with a pointer struct :O:O:O:O
@@ -2518,8 +2548,6 @@ smt_convt::rewrite_ptrs_to_structs(type2tc &type)
   type2t::subtype_delegate del_wrap(std::ref(replace_w_ptr));
   delegate = &del_wrap;
   type.get()->Foreach_subtype(replace_w_ptr);
-
-  return;
 }
 
 // Default behaviours for SMT AST's
@@ -2574,7 +2602,7 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   // Just apply a select operation to the current array. Index should be fixed.
 
   // Guess the resulting sort. This could be a lot, lot better.
-  smt_sortt range_sort = NULL;
+  smt_sortt range_sort = nullptr;
   if (sort->data_width == 1 && ctx->array_api->supports_bools_in_arrays)
     range_sort = ctx->boolean_sort;
   else

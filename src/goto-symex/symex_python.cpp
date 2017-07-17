@@ -57,7 +57,7 @@ get_execution_states(reachability_treet &art)
   using namespace boost::python;
 
   list l;
-  for (auto &ex : art.execution_states)
+  for (auto const &ex : art.execution_states)
     l.append(object(ex));
 
   return l;
@@ -748,7 +748,7 @@ get_insns(symex_target_equationt *eq)
 
   list l;
 
-  for (auto &step : eq->SSA_steps)
+  for (auto const &step : eq->SSA_steps)
     l.append(object(&step));
 
   return l;
@@ -825,7 +825,7 @@ get_goto_trace_steps(const goto_tracet &trace)
   using namespace boost::python;
 
   list l;
-  for (const auto &step : trace.steps) {
+  for (auto const &step : trace.steps) {
     l.append(object(step));
   }
 

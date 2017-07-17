@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_ANSI_C_CONVERT_TYPE_H
 #define CPROVER_ANSI_C_CONVERT_TYPE_H
 
-#include <ansi-c/c_qualifiers.h>
 #include <ansi-c/c_storage_spec.h>
+#include <util/c_qualifiers.h>
 #include <util/c_types.h>
 #include <util/message_stream.h>
 

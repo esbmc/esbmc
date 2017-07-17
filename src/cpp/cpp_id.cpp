@@ -9,18 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_id.h>
 #include <cpp/cpp_scope.h>
 
-/*******************************************************************\
-
-Function: cpp_idt::cpp_idt
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 cpp_idt::cpp_idt():
   is_member(false),
   is_method(false),
@@ -31,21 +19,9 @@ cpp_idt::cpp_idt():
   this_expr(static_cast<const exprt &>(get_nil_irep())),
   compound_counter(0),
   use_parent(false),
-  original_scope(NULL)
+  original_scope(nullptr)
 {
 }
-
-/*******************************************************************\
-
-Function: cpp_idt::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_idt::print(std::ostream &out, unsigned indent) const
 {
@@ -53,26 +29,12 @@ void cpp_idt::print(std::ostream &out, unsigned indent) const
 
   if(!sub.empty())
   {
-    for(cpp_id_mapt::const_iterator it=sub.begin();
-        it!=sub.end();
-        it++)
-      it->second.print(out, indent+2);
+    for(const auto & it : sub)
+      it.second.print(out, indent+2);
 
     out << std::endl;
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_idt::print_fields
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_idt::print_fields(std::ostream &out, unsigned indent) const
 {
@@ -88,7 +50,7 @@ void cpp_idt::print_fields(std::ostream &out, unsigned indent) const
   for(unsigned i=0; i<indent; i++) out << ' ';
   out << "  method=" << is_method << std::endl;
 
-  if(original_scope!=NULL)
+  if(original_scope!=nullptr)
   {
     for(unsigned i=0; i<indent; i++) out << ' ';
     out << "  original_scope=" << original_scope->identifier << std::endl;
@@ -110,35 +72,11 @@ void cpp_idt::print_fields(std::ostream &out, unsigned indent) const
   out << "  id_class=" << id_class << std::endl;
 }
 
-/*******************************************************************\
-
-Function: operator<<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::ostream &operator<<(std::ostream &out, const cpp_idt &cpp_id)
 {
   cpp_id.print(out, 0);
   return out;
 }
-
-/*******************************************************************\
-
-Function: operator<<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::ostream &operator<<(std::ostream &out, const cpp_idt::id_classt &id_class)
 {

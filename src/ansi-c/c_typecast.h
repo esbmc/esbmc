@@ -42,9 +42,7 @@ public:
   {
   }
 
-  virtual ~c_typecastt()
-  {
-  }
+  virtual ~c_typecastt() = default;
 
   virtual void implicit_typecast(
     exprt &expr,

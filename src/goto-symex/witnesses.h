@@ -49,7 +49,7 @@ typedef struct edge_props
 int generate_sha1_hash_for_file(const char * path, std::string & output);
 
 void map_line_number_to_content(
-  std::string source_code_file,
+  const std::string& source_code_file,
   std::map<int, std::string> & line_content_map);
 
 void create_node(boost::property_tree::ptree & node, node_p & node_props);
@@ -62,7 +62,7 @@ void create_edge(
 
 void create_graphml(
   boost::property_tree::ptree & graphml,
-  std::string file_path);
+  const std::string& file_path);
 
 void create_graph(
   boost::property_tree::ptree & graph,
@@ -86,7 +86,7 @@ bool is_valid_witness_expr(
 	const irep_container<expr2t> & exp);
 
 void get_relative_line_in_programfile(
-  const std::string relative_file_path,
+  const std::string& relative_file_path,
   const int relative_line_number,
-  const std::string program_file_path,
+  const std::string& program_file_path,
   int & programfile_line_number);

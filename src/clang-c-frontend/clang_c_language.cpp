@@ -15,6 +15,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
+#include <clang-c-frontend/expr2c.h>
 #include <fstream>
 #include <sstream>
 
@@ -35,15 +36,15 @@ clang_c_languaget::clang_c_languaget()
   }
 
   // Build the compile arguments
-  build_compiler_args(p.string());
+  build_compiler_args(std::move(p.string()));
 
   // Dump clang headers on the temporary folder
   dump_clang_headers(p.string());
 }
 
-void clang_c_languaget::build_compiler_args(std::string tmp_dir)
+void clang_c_languaget::build_compiler_args(const std::string&& tmp_dir)
 {
-  compiler_args.push_back("clang-tool");
+  compiler_args.emplace_back("clang-tool");
 
   compiler_args.push_back("-I" + tmp_dir);
 
@@ -51,15 +52,15 @@ void clang_c_languaget::build_compiler_args(std::string tmp_dir)
   switch(config.ansi_c.word_size)
   {
     case 16:
-      compiler_args.push_back("-m16");
+      compiler_args.emplace_back("-m16");
       break;
 
     case 32:
-      compiler_args.push_back("-m32");
+      compiler_args.emplace_back("-m32");
       break;
 
     case 64:
-      compiler_args.push_back("-m64");
+      compiler_args.emplace_back("-m64");
       break;
 
     default:
@@ -69,38 +70,38 @@ void clang_c_languaget::build_compiler_args(std::string tmp_dir)
   }
 
   if(config.ansi_c.char_is_unsigned)
-    compiler_args.push_back("-funsigned-char");
+    compiler_args.emplace_back("-funsigned-char");
 
   if(config.options.get_bool_option("deadlock-check"))
   {
-    compiler_args.push_back("-Dpthread_join=pthread_join_switch");
-    compiler_args.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_check");
-    compiler_args.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
-    compiler_args.push_back("-Dpthread_cond_wait=pthread_cond_wait_check");
+    compiler_args.emplace_back("-Dpthread_join=pthread_join_switch");
+    compiler_args.emplace_back("-Dpthread_mutex_lock=pthread_mutex_lock_check");
+    compiler_args.emplace_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
+    compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {
-    compiler_args.push_back("-Dpthread_join=pthread_join_noswitch");
-    compiler_args.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_nocheck");
-    compiler_args.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_nocheck");
-    compiler_args.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
+    compiler_args.emplace_back("-Dpthread_join=pthread_join_noswitch");
+    compiler_args.emplace_back("-Dpthread_mutex_lock=pthread_mutex_lock_nocheck");
+    compiler_args.emplace_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_nocheck");
+    compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
   else
   {
-    compiler_args.push_back("-Dpthread_join=pthread_join_noswitch");
-    compiler_args.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_noassert");
-    compiler_args.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_noassert");
-    compiler_args.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
+    compiler_args.emplace_back("-Dpthread_join=pthread_join_noswitch");
+    compiler_args.emplace_back("-Dpthread_mutex_lock=pthread_mutex_lock_noassert");
+    compiler_args.emplace_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_noassert");
+    compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
-  for(auto def : config.ansi_c.defines)
+  for(auto const &def : config.ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
-  for(auto inc : config.ansi_c.include_paths)
+  for(auto const &inc : config.ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
 
   // Ignore ctype defined by the system
-  compiler_args.push_back("-D__NO_CTYPE");
+  compiler_args.emplace_back("-D__NO_CTYPE");
 
 #ifdef __APPLE__
   compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
@@ -111,15 +112,15 @@ void clang_c_languaget::build_compiler_args(std::string tmp_dir)
   // Force clang see all files as .c
   // This forces the preprocessor to be called even in preprocessed files
   // which allow us to perform transformations using -D
-  compiler_args.push_back("-x");
-  compiler_args.push_back("c");
+  compiler_args.emplace_back("-x");
+  compiler_args.emplace_back("c");
 
   // Add -Wunknown-attributes, preprocessed files with GCC generate a bunch
   // of __leaf__ attributes that we don't care about
-  compiler_args.push_back("-Wno-unknown-attributes");
+  compiler_args.emplace_back("-Wno-unknown-attributes");
 
   // Option to avoid creating a linking command
-  compiler_args.push_back("-fsyntax-only");
+  compiler_args.emplace_back("-fsyntax-only");
 }
 
 bool clang_c_languaget::parse(
@@ -145,7 +146,7 @@ bool clang_c_languaget::parse(
   ASTs.push_back(std::move(AST));
 
   // Use diagnostics to find errors, rather than the return code.
-  for (const auto &astunit : ASTs)
+  for (auto const &astunit : ASTs)
     if (astunit->getDiagnostics().hasErrorOccurred())
       return true;
 
@@ -179,7 +180,7 @@ bool clang_c_languaget::typecheck(
 
 void clang_c_languaget::show_parse(std::ostream& out __attribute__((unused)))
 {
-  for (auto &translation_unit : ASTs)
+  for (auto const &translation_unit : ASTs)
     (*translation_unit).getASTContext().getTranslationUnitDecl()->dump();
 }
 
@@ -198,13 +199,13 @@ bool clang_c_languaget::preprocess(
 bool clang_c_languaget::final(contextt& context, message_handlert& message_handler)
 {
   add_cprover_library(context, message_handler);
-  return clang_main(context, "c::", "c::main", message_handler);
+  return clang_main(context, "main", message_handler);
 }
 
 std::string clang_c_languaget::internal_additions()
 {
   std::string intrinsics =
-    "# 1 \"<esbmc_intrinsics.h>\" 1\n"
+    "# 1 \"esbmc_intrinsics.h\" 1\n"
     "void __ESBMC_assume(_Bool assumption);\n"
     "void assert(_Bool assertion);\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"
@@ -234,18 +235,8 @@ std::string clang_c_languaget::internal_additions()
     "unsigned long __ESBMC_alloc_size[1];\n"
 
     // float stuff
-    "_Bool __ESBMC_isnan(double f);\n"
-    "_Bool __ESBMC_isfinite(double f);\n"
-    "_Bool __ESBMC_isinf(double f);\n"
-    "_Bool __ESBMC_isnormal(double f);\n"
     "int __ESBMC_rounding_mode = 0;\n"
-
-    // absolute value
-    "int __ESBMC_abs(int x);\n"
-    "long int __ESBMC_labs(long int x);\n"
-    "double __ESBMC_fabs(double x);\n"
-    "long double __ESBMC_fabsl(long double x);\n"
-    "float __ESBMC_fabsf(float x);\n"
+    "_Bool __ESBMC_floatbv_mode();\n"
 
     // Digital controllers code
     "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
@@ -286,7 +277,7 @@ std::string clang_c_languaget::internal_additions()
     "signed char __VERIFIER_nondet_schar();\n"
     "_Bool __VERIFIER_nondet_bool();\n"
     "float __VERIFIER_nondet_float();\n"
-    "double __VERIFIER_nondet_double();"
+    "double __VERIFIER_nondet_double();\n"
 
     "void __VERIFIER_error();\n"
     "void __VERIFIER_assume(int);\n"
@@ -299,23 +290,23 @@ std::string clang_c_languaget::internal_additions()
 }
 
 bool clang_c_languaget::from_expr(
-  const exprt &expr __attribute__((unused)),
-  std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)))
+  const exprt &expr,
+  std::string &code,
+  const namespacet &ns,
+  bool fullname)
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  code=expr2c(expr, ns, fullname);
+  return false;
 }
 
 bool clang_c_languaget::from_type(
-  const typet &type __attribute__((unused)),
-  std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)))
+  const typet &type,
+  std::string &code,
+  const namespacet &ns,
+  bool fullname)
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  code=type2c(type, ns, fullname);
+  return false;
 }
 
 bool clang_c_languaget::to_expr(

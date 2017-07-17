@@ -42,9 +42,7 @@ public:
     locationt from,
     locationt to)=0;
 
-  virtual ~abstract_domain_baset()
-  {
-  }
+  virtual ~abstract_domain_baset() = default;
   
   virtual void output(
     const namespacet &ns __attribute__((unused)),
@@ -123,9 +121,7 @@ public:
   virtual void operator()(
     const goto_functionst &goto_functions);
 
-  virtual ~static_analysis_baset()
-  {
-  }
+  virtual ~static_analysis_baset() = default;
 
   virtual void clear()
   {
@@ -268,13 +264,13 @@ public:
     return it->second;
   }
   
-  virtual void clear()
+  void clear() override 
   {
     state_map.clear();
     static_analysis_baset::clear();
   }
 
-  virtual bool has_location(locationt l) const
+  bool has_location(locationt l) const override 
   {
     return state_map.count(l)!=0;
   }
@@ -283,39 +279,39 @@ protected:
   typedef std::map<locationt, T> state_mapt;
   state_mapt state_map;
 
-  virtual statet &get_state(locationt l)
+  statet &get_state(locationt l) override 
   {
     typename state_mapt::iterator it=state_map.find(l);
     if(it==state_map.end()) throw "failed to find state";
     return it->second;
   }
 
-  virtual const statet &get_state(locationt l) const
+  const statet &get_state(locationt l) const override 
   {
     typename state_mapt::const_iterator it=state_map.find(l);
     if(it==state_map.end()) throw "failed to find state";
     return it->second;
   }
 
-  virtual bool merge(statet &a, const statet &b, bool keepnew=false)
+  bool merge(statet &a, const statet &b, bool keepnew=false) override 
   {
     return static_cast<T &>(a).merge(static_cast<const T &>(b), keepnew);
   }
   
-  virtual statet* make_temporary_state(statet &s)
+  statet* make_temporary_state(statet &s) override 
   {
     return new T(static_cast<T &>(s));
   }
 
-  virtual void generate_state(locationt l)
+  void generate_state(locationt l) override 
   {
     state_map[l].initialize(ns, l);
   }
 
-  virtual void get_reference_set(
+  void get_reference_set(
     locationt l,
     const expr2tc &expr,
-    std::list<expr2tc> &dest)
+    std::list<expr2tc> &dest) override 
   {
     state_map[l].get_reference_set(ns, expr, dest);
   }

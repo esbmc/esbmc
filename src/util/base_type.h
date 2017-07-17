@@ -45,14 +45,6 @@ bool
 is_subclass_of(const type2tc &subclass, const type2tc &superclass,
                const namespacet &ns);
 
-/*******************************************************************\
-
-   Class: base_type_eqt
-
- Purpose:
-
-\*******************************************************************/
-
 class base_type_eqt
 {
 public:
@@ -84,7 +76,7 @@ public:
     return base_type_eq_rec(expr1, expr2);
   }
 
-  virtual ~base_type_eqt() { }
+  virtual ~base_type_eqt() = default;
 
 protected:
   const namespacet &ns;

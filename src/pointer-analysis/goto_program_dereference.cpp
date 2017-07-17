@@ -150,11 +150,8 @@ void goto_program_dereferencet::dereference_program(
   goto_functionst &goto_functions,
   bool checks_only)
 {
-  for(goto_functionst::function_mapt::iterator
-      it=goto_functions.function_map.begin();
-      it!=goto_functions.function_map.end();
-      it++)
-    dereference_program(it->second.body, checks_only);
+  for(auto & it : goto_functions.function_map)
+    dereference_program(it.second.body, checks_only);
 }
 
 void goto_program_dereferencet::dereference_instruction(
@@ -180,7 +177,7 @@ void goto_program_dereferencet::dereference_instruction(
     if (!is_nil_expr(func_call.ret))
       dereference_expr(func_call.ret, checks_only, dereferencet::WRITE);
 
-    for (auto it : func_call.operands)
+    for (auto &it : func_call.operands)
       dereference_expr(it, checks_only, dereferencet::READ);
 
     if (is_dereference2t(func_call.function)) {

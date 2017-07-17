@@ -18,9 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class value_setst
 {
 public:
-  value_setst()
-  {
-  }
+  value_setst() = default;
 
   typedef std::list<expr2tc> valuest;
 
@@ -31,8 +29,7 @@ public:
     valuest &dest)=0;
     
   virtual ~value_setst()
-  {
-  }
+  = default;
 };
 
 #endif

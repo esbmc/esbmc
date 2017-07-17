@@ -16,18 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-/*******************************************************************\
-
-Function: static_lifetime_init
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void
 init_variable(codet &dest, const symbolt &sym)
 {
@@ -76,21 +64,8 @@ void static_lifetime_init(
   );
 }
 
-/*******************************************************************\
-
-Function: c_main
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool c_main(
   contextt &context,
-  const std::string &default_prefix __attribute__((unused)),
   const std::string &standard_main,
   message_handlert &message_handler)
 {
@@ -174,8 +149,8 @@ bool c_main(
     {
       namespacet ns(context);
 
-      const symbolt &argc_symbol=ns.lookup("c::argc'");
-      const symbolt &argv_symbol=ns.lookup("c::argv'");
+      const symbolt &argc_symbol=ns.lookup("argc'");
+      const symbolt &argv_symbol=ns.lookup("argv'");
 
       {
         // assume argc is at least one
@@ -214,7 +189,7 @@ bool c_main(
 
       if(arguments.size()==3)
       {
-        const symbolt &envp_size_symbol=ns.lookup("c::envp_size'");
+        const symbolt &envp_size_symbol=ns.lookup("envp_size'");
         // assume envp_size is at most MAX-1
         mp_integer max;
 
@@ -255,8 +230,8 @@ bool c_main(
 
       if(arguments.size()==3)
       {
-        const symbolt &envp_symbol=ns.lookup("c::envp'");
-        const symbolt &envp_size_symbol=ns.lookup("c::envp_size'");
+        const symbolt &envp_symbol=ns.lookup("envp'");
+        const symbolt &envp_size_symbol=ns.lookup("envp_size'");
 
         // assume envp[envp_size] is NULL
         exprt null("constant", envp_symbol.type.subtype());
@@ -310,7 +285,7 @@ bool c_main(
         // do we need envp?
         if(arguments.size()==3)
         {
-          const symbolt &envp_symbol=ns.lookup("c::envp'");
+          const symbolt &envp_symbol=ns.lookup("envp'");
           exprt &op2=operands[2];
 
           const exprt &arg2=arguments[2];
@@ -337,10 +312,10 @@ bool c_main(
 
   code_function_callt thread_start_call;
   thread_start_call.location()=symbol.location;
-  thread_start_call.function()=symbol_exprt("c::pthread_start_main_hook");
+  thread_start_call.function()=symbol_exprt("pthread_start_main_hook");
   code_function_callt thread_end_call;
   thread_end_call.location()=symbol.location;
-  thread_end_call.function()=symbol_exprt("c::pthread_end_main_hook");
+  thread_end_call.function()=symbol_exprt("pthread_end_main_hook");
 
   init_code.move_to_operands(thread_start_call);
   init_code.move_to_operands(call);
@@ -352,7 +327,7 @@ bool c_main(
   code_typet main_type;
   main_type.return_type()=empty_typet();
 
-  new_symbol.name="main";
+  new_symbol.name="__ESBMC_main";
   new_symbol.type.swap(main_type);
   new_symbol.value.swap(init_code);
 

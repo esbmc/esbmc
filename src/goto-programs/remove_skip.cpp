@@ -87,16 +87,13 @@ void remove_skip(goto_programt &goto_program)
   Forall_goto_program_instructions(i_it, goto_program)
     if(i_it->is_goto())
     {
-      for(goto_programt::instructiont::targetst::iterator
-          t_it=i_it->targets.begin();
-          t_it!=i_it->targets.end();
-          t_it++)
+      for(auto & target : i_it->targets)
       {
         new_targetst::const_iterator
-          result=new_targets.find(*t_it);
+          result=new_targets.find(target);
 
         if(result!=new_targets.end())
-          *t_it=result->second;
+          target=result->second;
       }
     }
 

@@ -37,47 +37,70 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/location.h>
 #include <util/message_stream.h>
 #include <util/migrate.h>
+#include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
 
-/*******************************************************************\
-
-Function: bmct::do_cbmc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmct::do_cbmc(smt_convt &solver, symex_target_equationt &equation)
+bmct::bmct(const goto_functionst &funcs,
+  optionst &opts,
+  contextt &_context,
+  message_handlert &_message_handler)
+  : messaget(_message_handler),
+    options(opts),
+    context(_context),
+    ns(context),
+    ui(ui_message_handlert::PLAIN)
 {
-  solver.set_message_handler(message_handler);
+  interleaving_number = 0;
+  interleaving_failed = 0;
 
-  equation.convert(solver);
+  ltl_results_seen[ltl_res_bad] = 0;
+  ltl_results_seen[ltl_res_failing] = 0;
+  ltl_results_seen[ltl_res_succeeding] = 0;
+  ltl_results_seen[ltl_res_good] = 0;
+
+  if(options.get_bool_option("smt-during-symex"))
+  {
+    runtime_solver =
+      boost::shared_ptr<smt_convt>(
+        create_solver_factory(
+          "",
+          opts.get_bool_option("int-encoding"),
+          ns,
+          options));
+
+    symex =
+      std::make_shared<reachability_treet>(
+        funcs, ns, options,
+        boost::shared_ptr<runtime_encoded_equationt>(
+          new runtime_encoded_equationt(ns, *runtime_solver)),
+        _context,
+        _message_handler);
+  }
+  else
+  {
+    symex =
+      std::make_shared<reachability_treet>(
+        funcs,
+        ns,
+        options,
+        boost::shared_ptr<symex_target_equationt>(
+          new symex_target_equationt(ns)),
+        _context,
+        _message_handler);
+  }
 }
 
-/*******************************************************************\
 
-Function: bmct::successful_trace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmct::successful_trace(symex_target_equationt &equation __attribute__((unused)))
+void bmct::do_cbmc(
+  boost::shared_ptr<smt_convt> &smt_conv,
+  boost::shared_ptr<symex_target_equationt> &eq)
 {
-  if(options.get_bool_option("base-case"))
-  {
-    status("No bug has been found in the base case");
-    return ;
-  }
+  smt_conv->set_message_handler(message_handler);
+  eq->convert(*smt_conv.get());
+}
 
+void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq)
+{
   if(options.get_bool_option("result-only"))
     return;
 
@@ -91,7 +114,7 @@ void bmct::successful_trace(symex_target_equationt &equation __attribute__((unus
   {
     case ui_message_handlert::GRAPHML:
       status("Building successful trace");
-      build_successful_goto_trace(equation, ns, goto_trace);
+      build_successful_goto_trace(eq, ns, goto_trace);
       specification += options.get_bool_option("overflow-check") ? 1 : 0;
       specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
       generate_goto_trace_in_correctness_graphml_format(
@@ -101,9 +124,6 @@ void bmct::successful_trace(symex_target_equationt &equation __attribute__((unus
         ns,
         goto_trace
       );
-      std::cout << "The correctness witness in GraphML format is available at: "
-                << options.get_option("witness-output")
-                << std::endl;
     break;
 
     case ui_message_handlert::OLD_GUI:
@@ -132,20 +152,9 @@ void bmct::successful_trace(symex_target_equationt &equation __attribute__((unus
   }
 }
 
-/*******************************************************************\
-
-Function: bmct::error_trace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmct::error_trace(smt_convt &smt_conv,
-                       symex_target_equationt &equation)
+void bmct::error_trace(
+  boost::shared_ptr<smt_convt> &smt_conv,
+  boost::shared_ptr<symex_target_equationt> &eq)
 {
   if(options.get_bool_option("result-only"))
     return;
@@ -154,7 +163,7 @@ void bmct::error_trace(smt_convt &smt_conv,
 
   goto_tracet goto_trace;
   int specification = 0;
-  build_goto_trace(equation, smt_conv, goto_trace);
+  build_goto_trace(eq, smt_conv, goto_trace);
 
   std::string witness_output = options.get_option("witness-output");
   if(!witness_output.empty())
@@ -174,13 +183,6 @@ void bmct::error_trace(smt_convt &smt_conv,
         ns,
         goto_trace
       );
-      std::cout
-        << "The violation witness in GraphML format is available at: "
-        << options.get_option("witness-output")
-        << std::endl;
-      std::cout << std::endl << "Counterexample:" << std::endl;
-      show_goto_trace(std::cout, ns, goto_trace);
-    break;
 
     case ui_message_handlert::PLAIN:
       std::cout << std::endl << "Counterexample:" << std::endl;
@@ -205,23 +207,28 @@ void bmct::error_trace(smt_convt &smt_conv,
 }
 
 smt_convt::resultt
-bmct::run_decision_procedure(smt_convt &smt_conv,
-                             symex_target_equationt &equation)
+bmct::run_decision_procedure(
+  boost::shared_ptr<smt_convt> &smt_conv,
+  boost::shared_ptr<symex_target_equationt> &eq)
 {
   std::string logic;
 
   if (!options.get_bool_option("int-encoding"))
-    logic = "bit-vector arithmetic";
+  {
+    logic = "bit-vector";
+    logic += (!config.ansi_c.use_fixed_for_float) ? "/floating-point " : " ";
+    logic += "arithmetic";
+  }
   else
     logic = "integer/real arithmetic";
 
   std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
 
-  smt_conv.set_message_handler(message_handler);
-  smt_conv.set_verbosity(get_verbosity());
+  smt_conv->set_message_handler(message_handler);
+  smt_conv->set_verbosity(get_verbosity());
 
   fine_timet encode_start = current_time();
-  do_cbmc(smt_conv, equation);
+  do_cbmc(smt_conv, eq);
   fine_timet encode_stop = current_time();
 
   std::ostringstream str;
@@ -233,16 +240,16 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
   if(options.get_bool_option("smt-formula-too")
      || options.get_bool_option("smt-formula-only"))
   {
-    smt_conv.dump_smt();
+    smt_conv->dump_smt();
     if(options.get_bool_option("smt-formula-only")) return smt_convt::P_SMTLIB;
   }
 
   std::stringstream ss;
-  ss << "Solving with solver " << smt_conv.solver_text();
+  ss << "Solving with solver " << smt_conv->solver_text();
   status(ss.str());
 
   fine_timet sat_start=current_time();
-  smt_convt::resultt dec_result=smt_conv.dec_solve();
+  smt_convt::resultt dec_result = smt_conv->dec_solve();
   fine_timet sat_stop=current_time();
 
   // output runtime
@@ -255,28 +262,9 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
   return dec_result;
 }
 
-/*******************************************************************\
-
-Function: bmct::report_success
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void bmct::report_success()
 {
-
-  if(options.get_bool_option("base-case"))
-  {
-    status("No bug has been found in the base case");
-    return ;
-  }
-
-  status("VERIFICATION SUCCESSFUL");
+  status("\nVERIFICATION SUCCESSFUL");
 
   switch(ui)
   {
@@ -310,21 +298,9 @@ void bmct::report_success()
 
 }
 
-/*******************************************************************\
-
-Function: bmct::report_failure
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void bmct::report_failure()
 {
-  status("VERIFICATION FAILED");
+  status("\nVERIFICATION FAILED");
 
   switch(ui)
   {
@@ -351,37 +327,34 @@ void bmct::report_failure()
   }
 }
 
-/*******************************************************************\
-
-Function: bmct::show_program
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmct::show_program(symex_target_equationt &equation)
+void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
 {
-  unsigned count=1;
+  unsigned int count=1;
+
+  if(config.options.get_bool_option("ssa-symbol-table"))
+    ::show_symbol_table_plain(ns, std::cout);
 
   languagest languages(ns, MODE_C);
+  std::cout << "\n" << "Program constraints: " << "\n";
 
-  std::cout << "\n" << "Program constraints: " << equation.SSA_steps.size() << "\n";
+  bool print_guard = config.options.get_bool_option("ssa-guards");
+  bool sparse = config.options.get_bool_option("ssa-no-location");
+  bool no_sliced = config.options.get_bool_option("ssa-no-sliced");
+  bool fullname = config.options.get_bool_option("ssa-full-names");
 
-  bool print_guard = config.options.get_bool_option("show-guards");
-  bool sparse = config.options.get_bool_option("simple-ssa-printing");
-
-  for(const auto &it : equation.SSA_steps)
+  for(auto const &it : eq->SSA_steps)
   {
     if(!(it.is_assert() || it.is_assignment() || it.is_assume()))
       continue;
 
-    if (!sparse) {
+    if(it.ignore && no_sliced)
+      continue;
+
+    if(!sparse) {
       std::cout << "// " << it.source.pc->location_number << " ";
-      std::cout << it.source.pc->location.as_string() << "\n";
+      std::cout << it.source.pc->location.as_string() << " ";
+      if(!it.comment.empty()) std::cout << "(" << it.comment << ")";
+      std::cout << '\n';
     }
 
     std::cout <<   "(" << count << ") ";
@@ -389,7 +362,7 @@ void bmct::show_program(symex_target_equationt &equation)
     std::string string_value;
 
     exprt cond = migrate_expr_back(it.cond);
-    languages.from_expr(cond, string_value);
+    languages.from_expr(cond, string_value, fullname);
 
     if(it.is_assignment())
     {
@@ -423,26 +396,97 @@ void bmct::show_program(symex_target_equationt &equation)
   }
 }
 
-/*******************************************************************\
-
-Function: bmct::run
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool bmct::run(void)
+void bmct::report_trace(
+  smt_convt::resultt &res,
+  boost::shared_ptr<symex_target_equationt> &eq)
 {
+  bool bs = options.get_bool_option("base-case");
+  bool fc = options.get_bool_option("forward-condition");
+  bool is = options.get_bool_option("inductive-step");
+  bool show_cex = options.get_bool_option("show-counter-example");
 
+  switch(res)
+  {
+    case smt_convt::P_UNSATISFIABLE:
+      if(!bs) {
+        successful_trace(eq);
+      }
+      break;
+
+    case smt_convt::P_SATISFIABLE:
+      if(!bs && show_cex) {
+        error_trace(runtime_solver, eq);
+      } else if(!is && !fc) {
+        error_trace(runtime_solver, eq);
+      }
+      break;
+
+    default:
+      break;
+  }
+}
+
+void bmct::report_result(smt_convt::resultt &res)
+{
+  bool bs = options.get_bool_option("base-case");
+  bool fc = options.get_bool_option("forward-condition");
+  bool is = options.get_bool_option("inductive-step");
+
+  switch(res)
+  {
+    case smt_convt::P_UNSATISFIABLE:
+      if(!bs) {
+        report_success();
+      } else {
+        status("No bug has been found in the base case");
+      }
+      break;
+
+    case smt_convt::P_SATISFIABLE:
+      if(!is && !fc) {
+        report_failure();
+      } else if (fc) {
+        status("The forward condition is unable to prove the property");
+      } else if (is) {
+        status("The inductive step is unable to prove the property");
+      }
+      break;
+
+    // Return failure if we didn't actually check anything, we just emitted the
+    // test information to an SMTLIB formatted file. Causes esbmc to quit
+    // immediately (with no error reported)
+    case smt_convt::P_SMTLIB:
+      return;
+
+    default:
+      error("decision procedure failed");
+      break;
+  }
+
+  if((interleaving_number > 0) && options.get_bool_option("all-runs"))
+  {
+    status("Number of generated interleavings: " + integer2string((interleaving_number)));
+    status("Number of failed interleavings: " + integer2string((interleaving_failed)));
+  }
+}
+
+smt_convt::resultt bmct::start_bmc()
+{
+  boost::shared_ptr<symex_target_equationt> eq;
+  smt_convt::resultt res = run(eq);
+  report_result(res);
+  return res;
+}
+
+smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
+{
   symex->options.set_option("unwind", options.get_option("unwind"));
   symex->setup_for_new_explore();
 
   if(options.get_bool_option("schedule"))
-    return run_thread();
+    return run_thread(eq);
+
+  smt_convt::resultt res;
 
   do
   {
@@ -453,11 +497,16 @@ bool bmct::run(void)
     }
 
     fine_timet bmc_start = current_time();
-    if(run_thread())
+    res = run_thread(eq);
+    if(res)
     {
-      ++interleaving_failed;
+      report_trace(res, eq);
+
+      if(res == smt_convt::P_SATISFIABLE)
+        ++interleaving_failed;
+
       if(!options.get_bool_option("all-runs"))
-        return true;
+        return res;
     }
     fine_timet bmc_stop = current_time();
 
@@ -469,40 +518,33 @@ bool bmct::run(void)
 
     // Only run for one run
     if (options.get_bool_option("interactive-ileaves"))
-      return false;
+      return res;
 
   } while(symex->setup_next_formula());
 
-  if(options.get_bool_option("all-runs"))
+  if (options.get_bool_option("ltl"))
   {
-    std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
-    std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
-  }
-
-  if (options.get_bool_option("ltl")) {
     // So, what was the lowest value ltl outcome that we saw?
     if (ltl_results_seen[ltl_res_bad]) {
       std::cout << "Final lowest outcome: LTL_BAD" << std::endl;
-      return false;
     } else if (ltl_results_seen[ltl_res_failing]) {
       std::cout << "Final lowest outcome: LTL_FAILING" << std::endl;
-      return false;
     } else if (ltl_results_seen[ltl_res_succeeding]) {
       std::cout << "Final lowest outcome: LTL_SUCCEEDING" << std::endl;
-      return false;
     } else if (ltl_results_seen[ltl_res_good]) {
       std::cout << "Final lowest outcome: LTL_GOOD" << std::endl;
-      return false;
-    } else {
+    }  else {
       std::cout << "No traces seen, apparently" << std::endl;
-      return false;
     }
   }
 
-  return false;
+  if(interleaving_failed > 0)
+    return smt_convt::P_SATISFIABLE;
+
+  return res;
 }
 
-bool bmct::run_thread()
+smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &eq)
 {
   boost::shared_ptr<goto_symext::symex_resultt> result;
 
@@ -523,143 +565,155 @@ bool bmct::run_thread()
   {
     message_streamt message_stream(*get_message_handler());
     message_stream.error(error_str);
-    return true;
+    return smt_convt::P_ERROR;
   }
 
   catch(const char *error_str)
   {
     message_streamt message_stream(*get_message_handler());
     message_stream.error(error_str);
-    return true;
+    return smt_convt::P_ERROR;
   }
 
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    return true;
+    return smt_convt::P_ERROR;
   }
 
   fine_timet symex_stop = current_time();
 
-  auto equation =
-    boost::dynamic_pointer_cast<symex_target_equationt>(result->target);
+  eq = boost::dynamic_pointer_cast<symex_target_equationt>(result->target);
 
-  std::ostringstream str;
-  str << "Symex completed in: ";
-  output_time(symex_stop - symex_start, str);
-  str << "s";
-  str << " (" << equation.get()->SSA_steps.size() << " assignments)";
-  status(str.str());
+  {
+    std::ostringstream str;
+    str << "Symex completed in: ";
+    output_time(symex_stop - symex_start, str);
+    str << "s";
+    str << " (" << eq->SSA_steps.size() << " assignments)";
+    status(str.str());
+  }
 
   if (options.get_bool_option("double-assign-check"))
-    equation.get()->check_for_duplicate_assigns();
+    eq->check_for_duplicate_assigns();
 
   try
   {
     fine_timet slice_start = current_time();
+    u_int64_t ignored;
     if(!options.get_bool_option("no-slice"))
     {
-      slice(*equation);
+      ignored = slice(eq);
     }
     else
     {
-      simple_slice(*equation);
+      ignored = simple_slice(eq);
     }
     fine_timet slice_stop = current_time();
 
-    std::ostringstream str;
-    str << "Slicing time: ";
-    output_time(slice_stop - slice_start, str);
-    str << "s";
-    status(str.str());
+    {
+      std::ostringstream str;
+      str << "Slicing time: ";
+      output_time(slice_stop - slice_start, str);
+      str << "s";
+      str << " (removed " << ignored << " assignments)";
+      status(str.str());
+    }
 
     if (options.get_bool_option("program-only") ||
         options.get_bool_option("program-too"))
-      show_program(*equation);
+      show_program(eq);
 
     if (options.get_bool_option("program-only"))
-      return false;
+      return smt_convt::P_SMTLIB;
 
     {
-      std::string msg;
-      msg="Generated "+i2string(result->total_claims)+
-          " VCC(s), "+i2string(result->remaining_claims)+
-          " remaining after simplification";
-      print(8, msg);
+      std::ostringstream str;
+      str << "Generated " << result->total_claims << " VCC(s), ";
+      str << result->remaining_claims << " remaining after simplification ";
+      str << "(" << eq->SSA_steps.size() - ignored << " assignments)";
+      status(str.str());
     }
 
     if(options.get_bool_option("document-subgoals"))
     {
-      document_subgoals(*equation, std::cout);
-      return false;
+      document_subgoals(*eq.get(), std::cout);
+      return smt_convt::P_SMTLIB;
     }
 
     if(options.get_bool_option("show-vcc"))
     {
-      show_vcc(*equation);
-      return false;
+      show_vcc(eq);
+      return smt_convt::P_SMTLIB;
     }
 
     if(result->remaining_claims==0)
     {
-      successful_trace(*equation);
-      report_success();
-      return false;
+      if(options.get_bool_option("smt-formula-too")
+         || options.get_bool_option("smt-formula-only"))
+      {
+        std::cout << "No VCC remaining, no SMT formula will be generated for"
+                  << " the program\n";
+        return smt_convt::P_SMTLIB;
+      }
+
+      return smt_convt::P_UNSATISFIABLE;
     }
 
     if (options.get_bool_option("ltl")) {
-      int res = ltl_run_thread(equation.get());
+      int res = ltl_run_thread(eq);
       // Record that we've seen this outcome; later decide what the least
       // outcome was.
       ltl_results_seen[res]++;
-      return false;
+      return smt_convt::P_UNSATISFIABLE;
     }
 
     if (!options.get_bool_option("smt-during-symex")) {
-      runtime_solver = std::shared_ptr<smt_convt>(
-        create_solver_factory("", options.get_bool_option("int-encoding"), ns,options));
+      runtime_solver =
+        boost::shared_ptr<smt_convt>(
+          create_solver_factory(
+            "",
+            options.get_bool_option("int-encoding"),
+            ns,
+            options));
     }
 
-    return run_solver(*equation, runtime_solver.get());
+    return run_decision_procedure(runtime_solver, eq);
   }
 
   catch(std::string &error_str)
   {
     error(error_str);
-    return true;
+    return smt_convt::P_ERROR;
   }
 
   catch(const char *error_str)
   {
     error(error_str);
-    return true;
+    return smt_convt::P_ERROR;
   }
 
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    return true;
+    return smt_convt::P_ERROR;
   }
 }
 
 int
-bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
+bmct::ltl_run_thread(boost::shared_ptr<symex_target_equationt> &equation)
 {
-  smt_convt *solver;
-  bool ret;
   unsigned int num_asserts = 0;
   // LTL checking - first check for whether we have an indeterminate prefix,
   // and then check for all others.
 
   // Start by turning all assertions that aren't the negative prefix
   // assertion into skips.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->is_assert()) {
-      if (it->comment != "LTL_BAD") {
-        it->type = goto_trace_stept::SKIP;
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_BAD") {
+        SSA_step.type = goto_trace_stept::SKIP;
       } else {
         num_asserts++;
       }
@@ -668,12 +722,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_BAD" << std::endl;
   if (num_asserts != 0) {
-    solver = create_solver_factory("z3",
-                                   options.get_bool_option("int-encoding"),
-                                   ns, options);
-    ret = run_solver(*equation, solver);
-    delete solver;
-    if (ret) {
+    if (run(equation)) {
       std::cout << "Found trace satisfying LTL_BAD" << std::endl;
       return ltl_res_bad;
     }
@@ -682,23 +731,19 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
   }
 
   // Didn't find it; turn skip steps back into assertions.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->type == goto_trace_stept::SKIP)
-      it->type = goto_trace_stept::ASSERT;
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
   }
 
   // Try again, with LTL_FAILING
   num_asserts = 0;
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->is_assert()) {
-      if (it->comment != "LTL_FAILING") {
-        it->type = goto_trace_stept::SKIP;
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_FAILING") {
+        SSA_step.type = goto_trace_stept::SKIP;
       } else {
         num_asserts++;
       }
@@ -707,12 +752,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_FAILING" << std::endl;
   if (num_asserts != 0) {
-    solver = create_solver_factory("z3",
-                                   options.get_bool_option("int-encoding"),
-                                   ns, options);
-    ret = run_solver(*equation, solver);
-    delete solver;
-    if (ret) {
+    if (run(equation)) {
       std::cout << "Found trace satisfying LTL_FAILING" << std::endl;
       return ltl_res_failing;
     }
@@ -721,23 +761,19 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
   }
 
   // Didn't find it; turn skip steps back into assertions.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->type == goto_trace_stept::SKIP)
-      it->type = goto_trace_stept::ASSERT;
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
   }
 
   // Try again, with LTL_SUCCEEDING
   num_asserts = 0;
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->is_assert()) {
-      if (it->comment != "LTL_SUCCEEDING") {
-        it->type = goto_trace_stept::SKIP;
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_SUCCEEDING") {
+        SSA_step.type = goto_trace_stept::SKIP;
       } else {
         num_asserts++;
       }
@@ -746,12 +782,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
   if (num_asserts != 0) {
-    solver = create_solver_factory("z3",
-                                   options.get_bool_option("int-encoding"),
-                                   ns, options);
-    ret = run_solver(*equation, solver);
-    delete solver;
-    if (ret) {
+    if (run(equation)) {
       std::cout << "Found trace satisfying LTL_SUCCEEDING" << std::endl;
       return ltl_res_succeeding;
     }
@@ -761,59 +792,11 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
   }
 
   // Otherwise, we just got a good prefix.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->type == goto_trace_stept::SKIP)
-      it->type = goto_trace_stept::ASSERT;
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
   }
 
   return ltl_res_good;
-}
-
-bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
-{
-
-  switch(run_decision_procedure(*solver, equation))
-  {
-    case smt_convt::P_UNSATISFIABLE:
-      if(!options.get_bool_option("base-case"))
-      {
-        successful_trace(equation);
-        report_success();
-      }
-      else
-        status("No bug has been found in the base case");
-      return false;
-
-    case smt_convt::P_SATISFIABLE:
-      if (!options.get_bool_option("base-case") &&
-          options.get_bool_option("show-counter-example"))
-      {
-        error_trace(*solver, equation);
-      }
-      else if(!options.get_bool_option("inductive-step")
-    		  && !options.get_bool_option("forward-condition"))
-      {
-        error_trace(*solver, equation);
-   	    report_failure();
-      }
-      else if (options.get_bool_option("forward-condition"))
-        status("The forward condition is unable to prove the property");
-      else
-        status("The inductive step is unable to prove the property");
-
-      return true;
-
-    // Return failure if we didn't actually check anything, we just emitted the
-    // test information to an SMTLIB formatted file. Causes esbmc to quit
-    // immediately (with no error reported)
-    case smt_convt::P_SMTLIB:
-      return true;
-
-    default:
-      error("decision procedure failed");
-      return true;
-  }
 }

@@ -95,8 +95,6 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
       generate_symbol_deps(name, irep_it->second, deps);
     }
   }
-
-  return;
 }
 
 void
@@ -114,8 +112,6 @@ ingest_symbol(irep_idt name, std::multimap<irep_idt, irep_idt> &deps, std::list<
     to_include.push_back(it->second);
 
   deps.erase(name);
-
-  return;
 }
 
 #ifdef NO_CPROVER_LIBRARY
@@ -124,7 +120,6 @@ add_cprover_library(
   contextt &context __attribute__((unused)),
   message_handlert &message_handler __attribute__((unused)))
 {
-  return;
 }
 
 #else
@@ -211,18 +206,18 @@ void add_cprover_library(
   // Add two hacks; we migth use either pthread_mutex_lock or the checked
   // variety; so if one version is used, pull in the other too.
   std::pair<irep_idt,irep_idt>
-    lockcheck(dstring("c::pthread_mutex_lock"),
-              dstring("c::pthread_mutex_lock_check"));
+    lockcheck(dstring("pthread_mutex_lock"),
+              dstring("pthread_mutex_lock_check"));
   symbol_deps.insert(lockcheck);
 
   std::pair<irep_idt,irep_idt>
-    condcheck(dstring("c::pthread_cond_wait"),
-              dstring("c::pthread_cond_wait_check"));
+    condcheck(dstring("pthread_cond_wait"),
+              dstring("pthread_cond_wait_check"));
   symbol_deps.insert(condcheck);
 
   std::pair<irep_idt,irep_idt>
-    joincheck(dstring("c::pthread_join"),
-              dstring("c::pthread_join_noswitch"));
+    joincheck(dstring("pthread_join"),
+              dstring("pthread_join_noswitch"));
   symbol_deps.insert(joincheck);
 
   /* The code just pulled into store_ctx might use other symbols in the C

@@ -12,18 +12,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/c_types.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::cpp_constructor
-
-  Inputs: non-typchecked object, non-typechecked operands
-
- Outputs: typechecked code
-
- Purpose:
-
-\*******************************************************************/
-
 codet cpp_typecheckt::cpp_constructor(
   const locationt &location,
   const exprt &object,
@@ -143,13 +131,10 @@ codet cpp_typecheckt::cpp_constructor(
     code_expressiont new_code;
     exprt::operandst operands_tc=operands;
 
-    for(exprt::operandst::iterator
-      it=operands_tc.begin();
-      it!=operands_tc.end();
-      it++)
+    for(auto & it : operands_tc)
     {
-      typecheck_expr(*it);
-      add_implicit_dereference(*it);
+      typecheck_expr(it);
+      add_implicit_dereference(it);
     }
 
     if(operands_tc.size()==0)
@@ -186,13 +171,10 @@ codet cpp_typecheckt::cpp_constructor(
   {
     exprt::operandst operands_tc=operands;
 
-    for(exprt::operandst::iterator
-      it=operands_tc.begin();
-      it!=operands_tc.end();
-      it++)
+    for(auto & it : operands_tc)
     {
-      typecheck_expr(*it);
-      add_implicit_dereference(*it);
+      typecheck_expr(it);
+      add_implicit_dereference(it);
     }
 
     const struct_typet &struct_type=
@@ -200,9 +182,8 @@ codet cpp_typecheckt::cpp_constructor(
 
     // set most-derived bits
     codet block("block");
-    for(unsigned i=0; i < struct_type.components().size(); i++)
+    for(const auto & component : struct_type.components())
     {
-      const irept &component = struct_type.components()[i];
       if(component.base_name() != "@most_derived")
         continue;
 
@@ -237,18 +218,15 @@ codet cpp_typecheckt::cpp_constructor(
 
     irep_idt constructor_name;
 
-    for(struct_typet::componentst::const_iterator
-        it=components.begin();
-        it!=components.end();
-        it++)
+    for(const auto & component : components)
     {
-      const typet &type=it->type();
+      const typet &type=component.type();
 
-      if(!it->get_bool("from_base") &&
+      if(!component.get_bool("from_base") &&
          type.id()=="code" &&
          type.return_type().id()=="constructor")
       {
-        constructor_name=it->base_name();
+        constructor_name=component.base_name();
         break;
       }
     }
@@ -257,7 +235,7 @@ codet cpp_typecheckt::cpp_constructor(
     assert(constructor_name!="");
 
     irept cpp_name("cpp-name");
-    cpp_name.get_sub().push_back(irept("name"));
+    cpp_name.get_sub().emplace_back("name");
     cpp_name.get_sub().back().identifier(constructor_name);
     cpp_name.get_sub().back().set("#location", location);
 
@@ -266,11 +244,8 @@ codet cpp_typecheckt::cpp_constructor(
     function_call.function().swap(static_cast<exprt&>(cpp_name));
     function_call.arguments().reserve(operands_tc.size());
 
-    for(exprt::operandst::iterator
-        it=operands_tc.begin();
-        it!=operands_tc.end();
-        it++)
-      function_call.op1().copy_to_operands(*it);
+    for(auto & it : operands_tc)
+      function_call.op1().copy_to_operands(it);
 
     // Decorate function call with the 'this' object. Important so that
     // constructor overloading works. Would add as an argument, but due to
@@ -344,18 +319,6 @@ codet cpp_typecheckt::cpp_constructor(
   return nil;
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::new_temporary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::new_temporary(
   const locationt &location,
   const typet &type,
@@ -387,18 +350,6 @@ void cpp_typecheckt::new_temporary(
 
   temporary.swap(tmp_object_expr);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::new_temporary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::new_temporary(
   const locationt &location,

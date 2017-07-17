@@ -21,10 +21,9 @@
 #include <util/std_expr.h>
 
 bool
-goto_symext::get_unwind_recursion(
-  const irep_idt &identifier, unsigned unwind)
+goto_symext::get_unwind_recursion(const irep_idt &identifier, BigInt unwind)
 {
-  unsigned long this_loop_max_unwind = max_unwind;
+  BigInt this_loop_max_unwind = max_unwind;
 
   if (unwind != 0)
   {
@@ -34,10 +33,10 @@ goto_symext::get_unwind_recursion(
     const symbolt &symbol = ns.lookup(identifier);
 
     std::string msg = "Unwinding recursion " + id2string(symbol.display_name())
-      + " iteration " + i2string(unwind);
+      + " iteration " + integer2string(unwind);
 
     if (this_loop_max_unwind != 0)
-      msg += " (" + i2string(this_loop_max_unwind) + " max)";
+      msg += " (" + integer2string(this_loop_max_unwind) + " max)";
 
     std::cout << msg << std::endl;
   }
@@ -121,7 +120,7 @@ goto_symext::argument_assignments(
       }
 
       guardt guard;
-      symex_assign_symbol(lhs, rhs, guard);
+      symex_assign_symbol(lhs, rhs, guard, symex_targett::STATE);
     }
 
     it1++;
@@ -206,7 +205,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
 
   const goto_functiont &goto_function = it->second;
 
-  unsigned &unwinding_counter = cur_state->function_unwind[identifier];
+  BigInt &unwinding_counter = cur_state->function_unwind[identifier];
 
   // see if it's too much
   if (get_unwind_recursion(identifier, unwinding_counter)) {
@@ -236,7 +235,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
       symbol2tc rhs(call.ret->type, "nondet$symex::"+i2string(nondet_count++));
 
       guardt guard;
-      symex_assign_rec(call.ret, rhs, guard);
+      symex_assign_rec(call.ret, rhs, guard, symex_targett::STATE);
     }
 
     cur_state->source.pc++;
@@ -245,10 +244,8 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
 
   // read the arguments -- before the locality renaming
   std::vector<expr2tc> arguments = call.operands;
-  for (unsigned i = 0; i < arguments.size(); i++)
-  {
-    cur_state->rename(arguments[i]);
-  }
+  for (auto & argument : arguments)
+    cur_state->rename(argument);
 
   // Rename the return value to level1, identifying the data object / storage
   // to which the return value should be written. This is important in the case
@@ -259,7 +256,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     cur_state->rename_address(ret_value);
 
   // increase unwinding counter
-  unwinding_counter++;
+  ++unwinding_counter;
 
   // produce a new frame
   assert(!cur_state->call_stack.empty());
@@ -293,6 +290,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;
   frame.function_identifier = identifier;
+  frame.hidden = goto_function.body.hide;
 
   cur_state->source.is_set = true;
   cur_state->source.pc = goto_function.body.instructions.begin();
@@ -312,14 +310,12 @@ get_function_list(const expr2tc &expr)
 
     // Get sub items, them iterate over adding the relevant guard
     l1 = get_function_list(ifexpr.true_value);
-    for (std::list<std::pair<guardt, symbol2tc> >::iterator it = l1.begin();
-         it != l1.end(); it++)
-      it->first.add(guardexpr);
+    for (auto & it : l1)
+      it.first.add(guardexpr);
 
     l2 = get_function_list(ifexpr.false_value);
-    for (std::list<std::pair<guardt, symbol2tc> >::iterator it = l2.begin();
-         it != l2.end(); it++)
-      it->first.add(notguardexpr);
+    for (auto & it : l2)
+      it.first.add(notguardexpr);
 
     l1.splice(l1.begin(), l2);
     return l1;
@@ -379,15 +375,14 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
   std::list<std::pair<guardt, symbol2tc> > l = get_function_list(func_ptr);
 
   // Store.
-  for (std::list<std::pair<guardt, symbol2tc> >::iterator it = l.begin();
-       it != l.end(); it++) {
+  for (auto & it : l) {
 
     goto_functionst::function_mapt::const_iterator fit =
-      goto_functions.function_map.find(it->second->thename);
+      goto_functions.function_map.find(it.second->thename);
     if (fit == goto_functions.function_map.end()) {
-      if (body_warnings.insert(it->second->thename).second) {
+      if (body_warnings.insert(it.second->thename).second) {
         std::string msg = "**** WARNING: no body for function " + id2string(
-          it->second->thename);
+          it.second->thename);
         std::cerr << msg << std::endl;
       }
 
@@ -396,9 +391,9 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
       // Where it probably shouldn't, as that var is defined. Module name
       // difference?
     } else if (!fit->second.body_available) {
-      if (body_warnings.insert(it->second->thename).second) {
+      if (body_warnings.insert(it.second->thename).second) {
         std::string msg = "**** WARNING: no body for function " + id2string(
-          it->second->thename);
+          it.second->thename);
         std::cerr << msg << std::endl;
       }
 
@@ -410,14 +405,13 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
     statet::goto_state_listt &goto_state_list =
       cur_state->top().goto_state_map[fit->second.body.instructions.begin()];
 
-    cur_state->top().cur_function_ptr_targets.push_back(
-      std::pair<goto_programt::const_targett, symbol2tc>(
-        fit->second.body.instructions.begin(), it->second)
+    cur_state->top().cur_function_ptr_targets.emplace_back(
+        fit->second.body.instructions.begin(), it.second
       );
 
-    goto_state_list.push_back(statet::goto_statet(*cur_state));
+    goto_state_list.emplace_back(*cur_state);
     statet::goto_statet &new_state = goto_state_list.back();
-    expr2tc guardexpr = it->first.as_expr();
+    expr2tc guardexpr = it.first.as_expr();
     cur_state->rename(guardexpr);
     new_state.guard.add(guardexpr);
   }
@@ -448,7 +442,7 @@ goto_symext::run_next_function_ptr_target(bool first)
   if (!first) {
     statet::goto_state_listt &goto_state_list =
       cur_state->top().goto_state_map[cur_state->top().function_ptr_combine_target];
-    goto_state_list.push_back(statet::goto_statet(*cur_state));
+    goto_state_list.emplace_back(*cur_state);
   }
 
   // Take one function ptr target out of the list and jump to it. A previously
@@ -484,7 +478,7 @@ goto_symext::run_next_function_ptr_target(bool first)
 }
 
 void
-goto_symext::pop_frame(void)
+goto_symext::pop_frame()
 {
   assert(!cur_state->call_stack.empty());
 
@@ -512,8 +506,8 @@ goto_symext::pop_frame(void)
   }
 
   // decrease recursion unwinding counter
-  if (frame.function_identifier != "")
-    cur_state->function_unwind[frame.function_identifier]--;
+  if (!frame.function_identifier.empty())
+    --cur_state->function_unwind[frame.function_identifier];
 
   cur_state->pop_frame();
 }
@@ -539,7 +533,7 @@ goto_symext::locality(const goto_functiont &goto_function)
 
   // For each local variable, set its frame number to frame_nr, ensuring all new
   // references to it look up a new variable.
-  for (auto it : local_identifiers)
+  for (auto const &it : local_identifiers)
   {
     // Temporary, for symbol migration,
     symbol2tc tmp_sym(get_empty_type(), it);
@@ -583,7 +577,7 @@ goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
 }
 
 void
-goto_symext::symex_return(void)
+goto_symext::symex_return()
 {
 
   // we treat this like an unconditional
@@ -593,7 +587,7 @@ goto_symext::symex_return(void)
   statet::goto_state_listt &goto_state_list =
     cur_state->top().goto_state_map[cur_state->top().end_of_function];
 
-  goto_state_list.push_back(statet::goto_statet(*cur_state));
+  goto_state_list.emplace_back(*cur_state);
 
   // kill this one
   cur_state->guard.make_false();

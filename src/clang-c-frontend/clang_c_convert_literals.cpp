@@ -10,6 +10,7 @@
 #include <util/bitvector.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/ieee_float.h>
 #include <util/string_constant.h>
 
 bool clang_c_convertert::convert_character_literal(
@@ -87,7 +88,7 @@ static void parse_float(
   unsigned p = 0;
 
   // get whole number
-  std::string str_whole_number = "";
+  std::string str_whole_number;
   str_whole_number += src[p++];
 
   // skip dot
@@ -95,7 +96,7 @@ static void parse_float(
   p++;
 
   // get fraction part
-  std::string str_fraction_part = "";
+  std::string str_fraction_part;
   while (src[p] != 'E')
     str_fraction_part += src[p++];
 
@@ -110,7 +111,7 @@ static void parse_float(
   if(src[p] == '+')
     p++;
 
-  std::string str_exponent = "";
+  std::string str_exponent;
   str_exponent += src[p++];
 
   while (p < src.size())

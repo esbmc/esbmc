@@ -10,8 +10,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_IEEE_FLOAT_H
 
 #include <util/format_spec.h>
+#include <util/irep2_type.h>
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
+#include <util/std_types.h>
 
 class ieee_float_spect
 {
@@ -20,18 +22,14 @@ public:
 
   mp_integer bias() const;
 
-  ieee_float_spect(const class floatbv_typet &type)
-  {
-    from_type(type);
-  }
+  ieee_float_spect(const floatbv_typet &type);
+  ieee_float_spect(const floatbv_type2tc &type);
 
-  void from_type(const class floatbv_typet &type);
-
-  ieee_float_spect():f(0), e(0)
+  ieee_float_spect() : f(0), e(0)
   {
   }
 
-  ieee_float_spect(unsigned _f, unsigned _e):f(_f), e(_e)
+  ieee_float_spect(unsigned _f, unsigned _e) : f(_f), e(_e)
   {
   }
 
@@ -40,10 +38,12 @@ public:
     return f+e+1;
   }
 
+  const floatbv_type2tc get_type() const;
+
   mp_integer max_exponent() const;
   mp_integer max_fraction() const;
 
-  class floatbv_typet to_type() const;
+  floatbv_typet to_type() const;
   inline static ieee_float_spect single_precision()
   {
     // 32 bits in total
@@ -74,6 +74,7 @@ public:
     return !(a==b);
   }
 };
+
 bool operator == (const ieee_float_spect &a, const ieee_float_spect &b);
 bool operator != (const ieee_float_spect &a, const ieee_float_spect &b);
 
@@ -81,34 +82,20 @@ class ieee_floatt
 {
 public:
   typedef enum {
-    ROUND_TO_EVEN=0, ROUND_TO_MINUS_INF=1,
-    ROUND_TO_PLUS_INF=2,  ROUND_TO_ZERO=3,
-    UNKNOWN, NONDETERMINISTIC }
-    rounding_modet;
+    ROUND_TO_EVEN = 0,
+    ROUND_TO_MINUS_INF = 1,
+    ROUND_TO_PLUS_INF = 2,
+    ROUND_TO_ZERO = 3,
+    UNKNOWN,
+    NONDETERMINISTIC
+  } rounding_modet;
 
   rounding_modet rounding_mode;
-
   ieee_float_spect spec;
 
-  explicit ieee_floatt(const ieee_float_spect &_spec):
-    rounding_mode(ROUND_TO_EVEN),
-    spec(_spec), sign_flag(false), exponent(0), fraction(0),
-    NaN_flag(false), infinity_flag(false)
-  {
-  }
-
-  ieee_floatt():
-    rounding_mode(ROUND_TO_EVEN),
-    sign_flag(false), exponent(0), fraction(0),
-    NaN_flag(false), infinity_flag(false)
-  {
-  }
-
-  explicit ieee_floatt(const constant_exprt &expr):
-    rounding_mode(ROUND_TO_EVEN)
-  {
-    from_expr(expr);
-  }
+  explicit ieee_floatt();
+  explicit ieee_floatt(const ieee_float_spect &s);
+  explicit ieee_floatt(const constant_exprt &expr);
 
   void negate()
   {

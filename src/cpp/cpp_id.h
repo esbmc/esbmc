@@ -87,7 +87,7 @@ public:
 
     it->second.base_name=base_name;
     it->second.add_parent(*this);
-    it->second.original_scope=NULL;
+    it->second.original_scope=nullptr;
 
     return it->second;
   }
@@ -95,7 +95,7 @@ public:
   cpp_idt &get_parent(unsigned i=0) const
   {
     assert(i<parents_size());
-    assert(parents[i]!=NULL);
+    assert(parents[i]!=nullptr);
     return *parents[i];
   }
 

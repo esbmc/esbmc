@@ -46,7 +46,7 @@ static const char *cpp_defines_16[] ={
 "__INTMAX_TYPE__=long long int",
 "__UINTMAX_TYPE__=long long unsigned int",
 "__WORDSIZE=16",
-NULL
+nullptr
 };
 
 static const char *cpp_defines_32[] ={
@@ -72,7 +72,7 @@ static const char *cpp_defines_32[] ={
 "__WORDSIZE=32",
 "_X86_",
 "__i386__",
-NULL
+nullptr
 };
 
 static const char *cpp_defines_64[] ={
@@ -102,7 +102,7 @@ static const char *cpp_defines_64[] ={
 "__WORDSIZE=64",
 "__x86_64",
 "__x86_64__",
-NULL
+nullptr
 };
 
 static const char *cpp_normal_defs[] = {
@@ -120,7 +120,7 @@ static const char *cpp_normal_defs[] = {
 "__VERIFIER_assume=__ESBMC_assume",
 "__VERIFIER_atomic_begin=__ESBMC_atomic_begin",
 "__VERIFIER_atomic_end=__ESBMC_atomic_end",
-NULL
+nullptr
 };
 
 #if !defined(WIN32) && !defined(__APPLE__)
@@ -138,7 +138,7 @@ static const char *cpp_linux_defs[] = {
 "__null=0",
 "__restrict__=/**/",
 "__restrict=/**/",
-NULL
+nullptr
 };
 #endif
 
@@ -166,26 +166,24 @@ static const char *cpp_ansic_defs[] = {
 "__STDC_IEC_559__=1",
 "__STDC_IEC_559_COMPLEX__=1",
 "__STDC__",
-NULL
+nullptr
 };
 
 static const char *cpp_cpp_defs[] = {
 "__cplusplus=1",
-NULL
+nullptr
 };
 
-int configure_and_run_cpp(const char *out_file_buf, std::string path,
+int configure_and_run_cpp(const char *out_file_buf, const std::string& path,
 		          const char **platformdefs, bool is_cpp);
 
 void setup_cpp_defs(const char **defs)
 {
 
-  while (*defs != NULL) {
+  while (*defs != nullptr) {
     record_define(*defs);
     defs++;
   }
-
-  return;
 }
 
 #ifndef _WIN32
@@ -308,7 +306,7 @@ bool c_preprocess(
 #endif
 
 int
-configure_and_run_cpp(const char *out_file_buf, std::string path,
+configure_and_run_cpp(const char *out_file_buf, const std::string& path,
 		      const char **platform_defs, bool is_cpp)
 {
   int ret;
@@ -366,7 +364,7 @@ configure_and_run_cpp(const char *out_file_buf, std::string path,
     exit(1);
   }
 
-  ret = pushfile2(path.c_str(), path.c_str(), 0, NULL);
+  ret = pushfile2(path.c_str(), path.c_str(), 0, nullptr);
   fin();
 
   return ret;

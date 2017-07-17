@@ -37,7 +37,7 @@ public:
       _goto_function,
       _message_handler),
     unwind(_unwind),
-    tmp_goto_program(goto_programt())
+    tmp_goto_program()
   {
     // unwind loops
     if(function_loops.size())
@@ -51,7 +51,7 @@ protected:
   void goto_unwind();
   void unwind_program(
     goto_programt &goto_program,
-    function_loopst::reverse_iterator loop);
+    const function_loopst::reverse_iterator& loop);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_UNWIND_H_ */

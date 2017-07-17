@@ -16,7 +16,7 @@ template<typename T>
 class reference_counting
 {
 public:
-  inline reference_counting():d(NULL)
+  inline reference_counting():d(nullptr)
   {
   }
   
@@ -28,7 +28,7 @@ public:
   // copy constructor
   inline reference_counting(const reference_counting &other):d(other.d)
   {
-    if(d!=NULL)
+    if(d!=nullptr)
     {
       assert(d->ref_count!=0);
       d->ref_count++;
@@ -47,7 +47,7 @@ public:
   ~reference_counting()
   {
     remove_ref(d);
-    d=NULL;
+    d=nullptr;
   }
 
   void swap(reference_counting &other)
@@ -63,7 +63,7 @@ public:
   
   inline const T &read() const
   {
-    if(d==NULL) return T::empty;
+    if(d==nullptr) return T::empty;
     return *d;
   }
 
@@ -100,7 +100,7 @@ protected:
 
     remove_ref(d);
     d=other.d;
-    if(d!=NULL) d->ref_count++;
+    if(d!=nullptr) d->ref_count++;
   }
   
 public:
@@ -113,7 +113,7 @@ public:
 template<class T>
 void reference_counting<T>::remove_ref(dt *old_d)
 {
-  if(old_d==NULL) return;
+  if(old_d==nullptr) return;
 
   assert(old_d->ref_count!=0);
 
@@ -145,7 +145,7 @@ void reference_counting<T>::detatch()
   std::cout << "DETATCH1: " << d << std::endl;
   #endif
 
-  if(d==NULL)
+  if(d==nullptr)
   {
     d=new dt;
 

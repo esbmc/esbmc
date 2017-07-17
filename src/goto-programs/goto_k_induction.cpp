@@ -36,16 +36,13 @@ void goto_k_induction(
 void goto_k_inductiont::goto_k_induction()
 {
   // Full unwind the program
-  for(function_loopst::iterator
-    it = function_loops.begin();
-    it != function_loops.end();
-    ++it)
+  for(auto & function_loop : function_loops)
   {
     // TODO: Can we check if the loop is infinite? If so, we should
     // disable the forward condition
 
     // Start the loop conversion
-    convert_finite_loop(*it);
+    convert_finite_loop(function_loop);
   }
 }
 
@@ -273,18 +270,15 @@ void goto_k_inductiont::duplicate_loop_body(
   {
     goto_programt::targett t = target_vector[i];
 
-    for(goto_programt::instructiont::targetst::iterator
-        t_it = t->targets.begin();
-        t_it != t->targets.end();
-        t_it++)
+    for(auto & target : t->targets)
     {
       std::map<goto_programt::targett, unsigned>::const_iterator m_it =
-        target_map.find(*t_it);
+        target_map.find(target);
 
       if(m_it != target_map.end()) // intra-loop?
       {
         assert(m_it->second < target_vector.size());
-        *t_it = target_vector[m_it->second];
+        target = target_vector[m_it->second];
       }
     }
   }
@@ -369,11 +363,11 @@ void goto_k_inductiont::fill_state(loopst &loop)
 void goto_k_inductiont::create_symbols()
 {
   // Create symbol for the state$vector
-  symbolt *symbol_ptr=NULL;
+  symbolt *symbol_ptr=nullptr;
   unsigned int i = state_counter;
 
   symbolt state_symbol;
-  state_symbol.name="c::state$vector"+i2string(i);
+  state_symbol.name="state$vector"+i2string(i);
   state_symbol.base_name="state$vector"+i2string(i);
   state_symbol.is_type=true;
   state_symbol.type=state;
@@ -805,7 +799,7 @@ symbol_exprt goto_k_inductiont::gen_current_state()
   return symbol_exprt("cs$"+i2string(state_counter), state);
 }
 
-exprt goto_k_inductiont::gen_state_vector_indexed(exprt index)
+exprt goto_k_inductiont::gen_state_vector_indexed(const exprt& index)
 {
   exprt state_vector_indexed(exprt::index, state);
 

@@ -54,7 +54,7 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
   else if(type_id=="struct")
   {
     result=struct_exprt(type);
-    for(auto comp : to_struct_type(type).components())
+    for(auto const &comp : to_struct_type(type).components())
       result.copy_to_operands(gen_zero(comp.type(), array_as_array_of));
   }
   else if(type_id=="array")

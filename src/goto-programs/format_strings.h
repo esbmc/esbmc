@@ -39,7 +39,7 @@ public:
   typedef enum { LEN_h, LEN_l, LEN_L, LEN_j, LEN_t } length_modifierst;
   
   format_tokent(token_typet _type) : type(_type) {}
-  format_tokent(void) : type(UNKNOWN) {}
+  format_tokent() : type(UNKNOWN) {}
   
   token_typet type;  
   std::list<flag_typet> flags;  

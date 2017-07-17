@@ -16,9 +16,7 @@ class literalt
 {
 public:
   // constructors
-  literalt()
-  {
-  }
+  literalt() = default;
 
   literalt(unsigned v, bool sign)
   {

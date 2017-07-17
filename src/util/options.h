@@ -30,8 +30,8 @@ public:
 
   virtual void cmdline(cmdlinet &cmds);
   
-  optionst() { }
-  virtual ~optionst() { }
+  optionst() = default;
+  virtual ~optionst() = default;
 };
 
 #endif

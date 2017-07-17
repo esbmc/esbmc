@@ -175,19 +175,16 @@ void goto_functionst::output(
   const namespacet &ns,
   std::ostream& out) const
 {
-  for(typename function_mapt::const_iterator
-      it=function_map.begin();
-      it!=function_map.end();
-      it++)
+  for(const auto & it : function_map)
   {
-    if(it->second.body_available)
+    if(it.second.body_available)
     {
       out << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
       out << std::endl;
 
-      const symbolt &symbol=ns.lookup(it->first);
+      const symbolt &symbol=ns.lookup(it.first);
       out << symbol.display_name() << " (" << symbol.name << "):" << std::endl;
-      it->second.body.output(ns, symbol.name, out);
+      it.second.body.output(ns, symbol.name, out);
     }
   }
 }
@@ -196,28 +193,19 @@ void goto_functionst::compute_location_numbers()
 {
   unsigned nr=0;
 
-  for(typename function_mapt::iterator
-      it=function_map.begin();
-      it!=function_map.end();
-      it++)
-    it->second.body.compute_location_numbers(nr);
+  for(auto & it : function_map)
+    it.second.body.compute_location_numbers(nr);
 }
 
 void goto_functionst::compute_target_numbers()
 {
-  for(typename function_mapt::iterator
-      it=function_map.begin();
-      it!=function_map.end();
-      it++)
-    it->second.body.compute_target_numbers();
+  for(auto & it : function_map)
+    it.second.body.compute_target_numbers();
 }
 
 void goto_functionst::compute_loop_numbers()
 {
   unsigned int num = 1;
-  for(typename function_mapt::iterator
-      it=function_map.begin();
-      it!=function_map.end();
-      it++)
-    it->second.body.compute_loop_numbers(num);
+  for(auto & it : function_map)
+    it.second.body.compute_loop_numbers(num);
 }

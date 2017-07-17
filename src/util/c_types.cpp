@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/std_types.h>
+#include <util/irep2_type.h>
 
 typet build_float_type(unsigned width)
 {
@@ -41,7 +42,7 @@ typet index_type()
   return signedbv_typet(config.ansi_c.int_width);
 }
 
-type2tc index_type2(void)
+type2tc index_type2()
 {
   return type_pool.get_int(config.ansi_c.int_width);
 }

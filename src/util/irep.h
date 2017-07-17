@@ -62,13 +62,13 @@ public:
   explicit irept(const irep_idt &_id);
 
   #ifdef SHARING
-  inline irept():data(NULL)
+  inline irept():data(nullptr)
   {
   }
 
   inline irept(const irept &irep):data(irep.data)
   {
-    if(data!=NULL)
+    if(data!=nullptr)
     {
       assert(data->ref_count!=0);
       data->ref_count++;
@@ -89,7 +89,7 @@ public:
 
     tmp = data;
     data=irep.data;
-    if(data!=NULL) data->ref_count++;
+    if(data!=nullptr) data->ref_count++;
     remove_ref(tmp);
     return *this;
   }
@@ -97,7 +97,7 @@ public:
   ~irept()
   {
     remove_ref(data);
-    data=NULL;
+    data=nullptr;
   }
   #else
   irept()
@@ -144,372 +144,372 @@ public:
   inline typet &type() { return (typet &)(add(s_type)); }
   inline const typet &type() const { return (typet &)(find(s_type)); }
 
-  inline bool is_identifier_set(void) const {
+  inline bool is_identifier_set() const {
     return (get(a_identifier) != "");
   }
 
-  inline const irep_idt &identifier(void) const {
+  inline const irep_idt &identifier() const {
     return get(a_identifier);
   }
 
-  inline const irep_idt &width(void) const {
+  inline const irep_idt &width() const {
     return get(a_width);
   }
 
-  inline const irep_idt &statement(void) const {
+  inline const irep_idt &statement() const {
     return get(a_statement);
   }
 
-  inline const irep_idt &name(void) const {
+  inline const irep_idt &name() const {
     return get(a_name);
   }
 
-  inline const irep_idt &component_name(void) const {
+  inline const irep_idt &component_name() const {
     return get(a_comp_name);
   }
 
-  inline const irep_idt &tag(void) const {
+  inline const irep_idt &tag() const {
     return get(a_tag);
   }
 
-  inline const irep_idt &from(void) const {
+  inline const irep_idt &from() const {
     return get(a_from);
   }
 
-  inline const irep_idt &file(void) const {
+  inline const irep_idt &file() const {
     return get(a_file);
   }
 
-  inline const irep_idt &line(void) const {
+  inline const irep_idt &line() const {
     return get(a_line);
   }
 
-  inline const irep_idt &function(void) const {
+  inline const irep_idt &function() const {
     return get(a_function);
   }
 
-  inline const irept &function_irep(void) const {
+  inline const irept &function_irep() const {
     return find(a_function);
   }
 
-  inline const irep_idt &column(void) const {
+  inline const irep_idt &column() const {
     return get(a_column);
   }
 
-  inline const irep_idt &destination(void) const {
+  inline const irep_idt &destination() const {
     return get(a_destination);
   }
 
-  inline const irep_idt &access(void) const {
+  inline const irep_idt &access() const {
     return get(a_access);
   }
 
-  inline const irep_idt &base_name(void) const {
+  inline const irep_idt &base_name() const {
     return get(a_base_name);
   }
 
-  inline const irep_idt &comment(void) const {
+  inline const irep_idt &comment() const {
     return get(a_comment);
   }
 
-  inline const irep_idt &event(void) const {
+  inline const irep_idt &event() const {
     return get(a_event);
   }
 
-  inline const irept &event_irep(void) const {
+  inline const irept &event_irep() const {
     return find(a_event);
   }
 
-  inline const irep_idt &literal(void) const {
+  inline const irep_idt &literal() const {
     return get(a_literal);
   }
 
-  inline const irep_idt &loopid(void) const {
+  inline const irep_idt &loopid() const {
     return get(a_loopid);
   }
 
-  inline const irep_idt &mode(void) const {
+  inline const irep_idt &mode() const {
     return get(a_mode);
   }
 
-  inline const irep_idt &module(void) const {
+  inline const irep_idt &module() const {
     return get(a_module);
   }
 
-  inline const irep_idt &pretty_name(void) const {
+  inline const irep_idt &pretty_name() const {
     return get(a_pretty_name);
   }
 
-  inline const irep_idt &property(void) const {
+  inline const irep_idt &property() const {
     return get(a_property);
   }
 
-  inline const irep_idt &size(void) const {
+  inline const irep_idt &size() const {
     return get(a_size);
   }
 
-  inline const irept &size_irep(void) const {
+  inline const irept &size_irep() const {
     return find(a_size);
   }
 
-  inline const irep_idt &integer_bits(void) const {
+  inline const irep_idt &integer_bits() const {
     return get(a_integer_bits);
   }
 
-  inline const irep_idt &to(void) const {
+  inline const irep_idt &to() const {
     return get(a_to);
   }
 
-  inline const irep_idt &failed_symbol(void) const {
+  inline const irep_idt &failed_symbol() const {
     return get(a_failed_symbol);
   }
 
-  inline const irep_idt &type_id(void) const {
+  inline const irep_idt &type_id() const {
     return get(a_type_id);
   }
 
-  inline const irept &arguments(void) const {
+  inline const irept &arguments() const {
     return find(s_arguments);
   }
 
-  inline const irept &components(void) const {
+  inline const irept &components() const {
     return find(s_components);
   }
 
-  inline const irept &cmt_type(void) const {
+  inline const irept &cmt_type() const {
     return find(a_cmt_type);
   }
 
-  inline const irept &return_type(void) const {
+  inline const irept &return_type() const {
     return find(s_return_type);
   }
 
-  inline const irept &body(void) const {
+  inline const irept &body() const {
     return find(s_body);
   }
 
-  inline const irept &member_irep(void) const {
+  inline const irept &member_irep() const {
     return find(s_member);
   }
 
-  inline const irept &labels_irep(void) const {
+  inline const irept &labels_irep() const {
     return find(s_labels);
   }
 
-  inline const irept &c_sizeof_type(void) const {
+  inline const irept &c_sizeof_type() const {
     return find(a_c_sizeof_type);
   }
 
-  inline const irept &bv(void) const {
+  inline const irept &bv() const {
     return find(s_bv);
   }
 
-  inline const irept &targets(void) const {
+  inline const irept &targets() const {
     return find(s_targets);
   }
 
-  inline const irept &variables(void) const {
+  inline const irept &variables() const {
     return find(s_variables);
   }
 
-  inline const irept &object_type(void) const {
+  inline const irept &object_type() const {
     return find(a_object_type);
   }
 
-  inline const irept &initializer(void) const {
+  inline const irept &initializer() const {
     return find(s_initializer);
   }
 
-  inline const irept &cmt_size(void) const {
+  inline const irept &cmt_size() const {
     return find(a_cmt_size);
   }
 
-  inline const irept &code(void) const {
+  inline const irept &code() const {
     return find(a_code);
   }
 
-  inline const irept &guard(void) const {
+  inline const irept &guard() const {
     return find(a_guard);
   }
 
-  inline const irept &location(void) const {
+  inline const irept &location() const {
     return find(a_location);
   }
 
-  inline const irept &declaration_type(void) const {
+  inline const irept &declaration_type() const {
     return find(s_declaration_type);
   }
 
-  inline const irept &decl_value(void) const {
+  inline const irept &decl_value() const {
     return find(s_decl_value);
   }
 
-  inline const irept &end_location(void) const {
+  inline const irept &end_location() const {
     return find(a_end_location);
   }
 
-  inline const irept &symvalue(void) const {
+  inline const irept &symvalue() const {
     return find(s_symvalue);
   }
 
-  inline const irept &cmt_location(void) const {
+  inline const irept &cmt_location() const {
     return find(s_cmt_location);
   }
 
-  inline const irept &decl_ident(void) const {
+  inline const irept &decl_ident() const {
     return find(s_decl_ident);
   }
 
-  inline bool is_decl_ident_set(void) const {
+  inline bool is_decl_ident_set() const {
     return (get(s_decl_ident) != "");
   }
 
-  inline const irept &elements(void) const {
+  inline const irept &elements() const {
     return find(s_elements);
   }
 
-  inline bool is_dynamic_set(void) const {
+  inline bool is_dynamic_set() const {
     const irep_idt &c = get(a_dynamic);
     return (c != "");
   }
 
-  inline bool dynamic(void) const {
+  inline bool dynamic() const {
     return get_bool(a_dynamic);
   }
 
-  inline const irep_idt &cmt_base_name(void) const {
+  inline const irep_idt &cmt_base_name() const {
     return get(a_cmt_base_name);
   }
 
-  inline const irep_idt &id_class(void) const {
+  inline const irep_idt &id_class() const {
     return get(a_id_class);
   }
 
-  inline const irep_idt &cmt_identifier(void) const {
+  inline const irep_idt &cmt_identifier() const {
     return get(a_cmt_identifier);
   }
 
-  inline const irep_idt &cformat(void) const {
+  inline const irep_idt &cformat() const {
     return get(a_cformat);
   }
 
-  inline const irep_idt &cmt_width(void) const {
+  inline const irep_idt &cmt_width() const {
     return get(a_cmt_width);
   }
 
-  inline const irept &offsetof_type(void) const {
+  inline const irept &offsetof_type() const {
     return find(s_offsetof_type);
   }
 
-  inline bool axiom(void) const {
+  inline bool axiom() const {
     return get_bool(a_axiom);
   }
 
-  inline bool cmt_constant(void) const {
+  inline bool cmt_constant() const {
     return get_bool(a_cmt_constant);
   }
 
-  inline bool dfault(void) const {
+  inline bool dfault() const {
     return get_bool(a_default);
   }
 
-  inline bool ellipsis(void) const {
+  inline bool ellipsis() const {
     return get_bool(a_ellipsis);
   }
 
-  inline bool explict(void) const {
+  inline bool explict() const {
     return get_bool(a_explicit);
   }
 
-  inline bool file_local(void) const {
+  inline bool file_local() const {
     return get_bool(a_file_local);
   }
 
-  inline bool hex_or_oct(void) const {
+  inline bool hex_or_oct() const {
     return get_bool(a_hex_or_oct);
   }
 
-  inline bool hide(void) const {
+  inline bool hide() const {
     return get_bool(a_hide);
   }
 
-  inline bool implicit(void) const {
+  inline bool implicit() const {
     return get_bool(a_implicit);
   }
 
-  inline bool incomplete(void) const {
+  inline bool incomplete() const {
     return get_bool(a_incomplete);
   }
 
-  inline bool initialization(void) const {
+  inline bool initialization() const {
     return get_bool(a_initialization);
   }
 
-  inline bool inlined(void) const {
+  inline bool inlined() const {
     return get_bool(a_inlined);
   }
 
-  inline bool invalid_object(void) const {
+  inline bool invalid_object() const {
     return get_bool(a_invalid_object);
   }
 
-  inline bool is_parameter(void) const {
+  inline bool is_parameter() const {
     return get_bool(a_is_parameter);
   }
 
-  inline bool is_expression(void) const {
+  inline bool is_expression() const {
     return get_bool(a_is_expression);
   }
 
-  inline bool is_extern(void) const {
+  inline bool is_extern() const {
     return get_bool(a_is_extern);
   }
 
-  inline bool is_macro(void) const {
+  inline bool is_macro() const {
     return get_bool(a_is_macro);
   }
 
-  inline bool is_type(void) const {
+  inline bool is_type() const {
     return get_bool(a_is_type);
   }
 
-  inline bool cmt_lvalue(void) const {
+  inline bool cmt_lvalue() const {
     return get_bool(a_cmt_lvalue);
   }
 
-  inline bool lvalue(void) const {
+  inline bool lvalue() const {
     return get_bool(a_lvalue);
   }
 
-  inline bool reference(void) const {
+  inline bool reference() const {
     return get_bool(a_reference);
   }
 
-  inline bool restricted(void) const {
+  inline bool restricted() const {
     return get_bool(a_restricted);
   }
 
-  inline bool static_lifetime(void) const {
+  inline bool static_lifetime() const {
     return get_bool(a_static_lifetime);
   }
 
-  inline bool theorem(void) const {
+  inline bool theorem() const {
     return get_bool(a_theorem);
   }
 
-  inline bool cmt_unsigned(void) const {
+  inline bool cmt_unsigned() const {
     return get_bool(a_cmt_unsigned);
   }
 
-  inline bool user_provided(void) const {
+  inline bool user_provided() const {
     return get_bool(a_user_provided);
   }
 
-  inline bool cmt_volatile(void) const {
+  inline bool cmt_volatile() const {
     return get_bool(a_cmt_volatile);
   }
 
-  inline bool zero_initializer(void) const {
+  inline bool zero_initializer() const {
     return get_bool(a_zero_initializer);
   }
 

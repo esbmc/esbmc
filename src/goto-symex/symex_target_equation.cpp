@@ -28,7 +28,7 @@ void symex_target_equationt::assignment(
 {
   assert(!is_nil_expr(lhs));
 
-  SSA_steps.push_back(SSA_stept());
+  SSA_steps.emplace_back();
   SSA_stept &SSA_step=SSA_steps.back();
 
   SSA_step.guard = guard;
@@ -51,7 +51,7 @@ void symex_target_equationt::output(
   const std::string &fmt,
   const std::list<expr2tc> &args)
 {
-  SSA_steps.push_back(SSA_stept());
+  SSA_steps.emplace_back();
   SSA_stept &SSA_step=SSA_steps.back();
 
   SSA_step.guard = guard;
@@ -69,7 +69,7 @@ void symex_target_equationt::assumption(
   const expr2tc &cond,
   const sourcet &source)
 {
-  SSA_steps.push_back(SSA_stept());
+  SSA_steps.emplace_back();
   SSA_stept &SSA_step=SSA_steps.back();
 
   SSA_step.guard = guard;
@@ -88,7 +88,7 @@ void symex_target_equationt::assertion(
   std::vector<stack_framet> stack_trace,
   const sourcet &source)
 {
-  SSA_steps.push_back(SSA_stept());
+  SSA_steps.emplace_back();
   SSA_stept &SSA_step=SSA_steps.back();
 
   SSA_step.guard = guard;
@@ -111,7 +111,7 @@ symex_target_equationt::renumber(
 {
   assert(is_symbol2t(symbol));
   assert(is_bv_type(size));
-  SSA_steps.push_back(SSA_stept());
+  SSA_steps.emplace_back();
   SSA_stept &SSA_step=SSA_steps.back();
 
   SSA_step.guard = guard;
@@ -129,13 +129,11 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
   smt_convt::ast_vec assertions;
   const smt_ast *assumpt_ast = smt_conv.convert_ast(gen_true_expr());
 
-  for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
-    convert_internal_step(smt_conv, assumpt_ast, assertions, *it);
+  for (auto & SSA_step : SSA_steps)
+    convert_internal_step(smt_conv, assumpt_ast, assertions, SSA_step);
 
   if (!assertions.empty())
     smt_conv.assert_ast(smt_conv.make_disjunct(assertions));
-
-  return;
 }
 
 void symex_target_equationt::convert_internal_step(
@@ -201,18 +199,13 @@ void symex_target_equationt::convert_internal_step(
     v.push_back(step.cond_ast);
     assumpt_ast = smt_conv.make_conjunct(v);
   }
-
-  return;
 }
 
 void symex_target_equationt::output(std::ostream &out) const
 {
-  for(SSA_stepst::const_iterator
-      it=SSA_steps.begin();
-      it!=SSA_steps.end();
-      it++)
+  for(const auto & SSA_step : SSA_steps)
   {
-    it->output(ns, out);
+    SSA_step.output(ns, out);
     out << "--------------" << std::endl;
   }
 }
@@ -220,12 +213,9 @@ void symex_target_equationt::output(std::ostream &out) const
 void symex_target_equationt::short_output(std::ostream &out,
                                           bool show_ignored) const
 {
-  for(SSA_stepst::const_iterator
-      it=SSA_steps.begin();
-      it!=SSA_steps.end();
-      it++)
+  for(const auto & SSA_step : SSA_steps)
   {
-    it->short_output(ns, out, show_ignored);
+    SSA_step.short_output(ns, out, show_ignored);
   }
 }
 
@@ -289,12 +279,12 @@ void symex_target_equationt::SSA_stept::short_output(
 }
 
 void
-symex_target_equationt::push_ctx(void)
+symex_target_equationt::push_ctx()
 {
 }
 
 void
-symex_target_equationt::pop_ctx(void)
+symex_target_equationt::pop_ctx()
 {
 }
 
@@ -312,13 +302,12 @@ symex_target_equationt::check_for_duplicate_assigns() const
   std::map<std::string, unsigned int> countmap;
   unsigned int i = 0;
 
-  for (SSA_stepst::const_iterator it = SSA_steps.begin();
-      it != SSA_steps.end(); it++) {
+  for (const auto & SSA_step : SSA_steps) {
     i++;
-    if (!it->is_assignment())
+    if (!SSA_step.is_assignment())
       continue;
 
-    const equality2t &ref = to_equality2t(it->cond);
+    const equality2t &ref = to_equality2t(SSA_step.cond);
     const symbol2t &sym = to_symbol2t(ref.side_1);
     countmap[sym.get_symbol_name()]++;
   }
@@ -332,12 +321,10 @@ symex_target_equationt::check_for_duplicate_assigns() const
   }
 
   std::cerr << "Checked " << i << " insns" << std::endl;
-
-  return;
 }
 
 unsigned int
-symex_target_equationt::clear_assertions(void)
+symex_target_equationt::clear_assertions()
 {
   unsigned int num_asserts = 0;
 
@@ -359,13 +346,13 @@ runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
   : symex_target_equationt(_ns),
     conv(_conv)
 {
-  assert_vec_list.push_back(smt_convt::ast_vec());
+  assert_vec_list.emplace_back();
   assumpt_chain.push_back(conv.convert_ast(gen_true_expr()));
   cvt_progress = SSA_steps.end();
 }
 
 void
-runtime_encoded_equationt::flush_latest_instructions(void)
+runtime_encoded_equationt::flush_latest_instructions()
 {
 
   if (SSA_steps.size() == 0)
@@ -398,7 +385,7 @@ runtime_encoded_equationt::flush_latest_instructions(void)
 }
 
 void
-runtime_encoded_equationt::push_ctx(void)
+runtime_encoded_equationt::push_ctx()
 {
 
   flush_latest_instructions();
@@ -411,7 +398,7 @@ runtime_encoded_equationt::push_ctx(void)
 }
 
 void
-runtime_encoded_equationt::pop_ctx(void)
+runtime_encoded_equationt::pop_ctx()
 {
 
   SSA_stepst::iterator it = scoped_end_points.back();
@@ -441,12 +428,10 @@ runtime_encoded_equationt::convert(smt_convt &smt_conv)
   // Finally, we also want to assert the set of assertions.
   if(!assert_vec_list.back().empty())
     smt_conv.assert_ast(smt_conv.make_disjunct(assert_vec_list.back()));
-
-  return;
 }
 
 boost::shared_ptr<symex_targett>
-runtime_encoded_equationt::clone(void) const
+runtime_encoded_equationt::clone() const
 {
   // Only permit cloning at the start of a run - there should never be any data
   // in this formula when it happens. Cloning needs to be supported so that a

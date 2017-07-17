@@ -95,42 +95,34 @@ void contextt::erase_symbol(irep_idt name)
 
 void contextt::foreach_operand_impl_const(const_symbol_delegate& expr) const
 {
-  for(symbolst::const_iterator it = symbols.begin();
-      it != symbols.end();
-      it++)
+  for(const auto & symbol : symbols)
   {
-    expr(it->second);
+    expr(symbol.second);
   }
 }
 
 void contextt::foreach_operand_impl(symbol_delegate& expr)
 {
-  for(symbolst::iterator it = symbols.begin();
-      it != symbols.end();
-      it++)
+  for(auto & symbol : symbols)
   {
-    expr(it->second);
+    expr(symbol.second);
   }
 }
 
 void contextt::foreach_operand_impl_in_order_const(
     const_symbol_delegate& expr) const
 {
-  for(ordered_symbolst::const_iterator it = ordered_symbols.begin();
-      it != ordered_symbols.end();
-      it++)
+  for(auto ordered_symbol : ordered_symbols)
   {
-    expr(**it);
+    expr(*ordered_symbol);
   }
 }
 
 void contextt::foreach_operand_impl_in_order(symbol_delegate& expr)
 {
-  for(ordered_symbolst::iterator it = ordered_symbols.begin();
-      it != ordered_symbols.end();
-      it++)
+  for(auto & ordered_symbol : ordered_symbols)
   {
-    expr(**it);
+    expr(*ordered_symbol);
   }
 }
 

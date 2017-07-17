@@ -13,7 +13,7 @@ Date: May 2007
 
 void symbol_serializationt::convert(const symbolt& sym, std::ostream &out)
 {
-  irepcache.push_back(irept());
+  irepcache.emplace_back();
   sym.to_irep(irepcache.back());  
   irepconverter.reference_convert(irepcache.back(), out);
 }

@@ -20,19 +20,6 @@ Date: June 2006
 
 #define BINARY_VERSION 1
 
-/*******************************************************************\
-
-Function: read_goto_object
-
-  Inputs: input stream, context, functions
-
- Outputs: true on error, false otherwise
-
- Purpose: reads a goto object xml file back into a symbol and a
-          function table
-
-\*******************************************************************/
-
 bool read_bin_goto_object(
   std::istream &in,
   const std::string &filename,
@@ -96,14 +83,12 @@ bool read_bin_goto_object(
     symbolt symbol;
     symbol.from_irep(t);
 
-    if(!symbol.is_type &&
-       symbol.type.is_code())
+    if(!symbol.is_type && symbol.type.is_code())
     {
       // makes sure there is an empty function
       // for every function symbol and fixes
       // the function types.
-      code_typet type = functions.function_map[symbol.name].type=
-        to_code_type(symbol.type);
+      functions.function_map[symbol.name].type = to_code_type(symbol.type);
     }
     context.add(symbol);
   }

@@ -7,56 +7,20 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <ansi-c/c_typecheck_base.h>
-#include <ansi-c/expr2c.h>
 #include <ansi-c/type2name.h>
+#include <clang-c-frontend/expr2c.h>
 #include <util/prefix.h>
 #include <util/std_types.h>
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::to_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string c_typecheck_baset::to_string(const exprt &expr)
 {
   return expr2c(expr, *this);
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::to_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string c_typecheck_baset::to_string(const typet &type)
 {
   return type2c(type, *this);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::replace_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::replace_symbol(irept &symbol)
 {
@@ -67,36 +31,12 @@ void c_typecheck_baset::replace_symbol(irept &symbol)
     symbol.identifier(it->second);
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::move_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool c_typecheck_baset::move_symbol(symbolt &symbol, symbolt *&new_symbol)
 {
   symbol.mode=mode;
   symbol.module=module;
   return context.move(symbol, new_symbol);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
 {
@@ -108,20 +48,19 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   // set a few flags
   symbol.lvalue=!symbol.is_type && !symbol.is_macro;
 
-  std::string prefix="c::";
-  std::string root_name=prefix+id2string(symbol.base_name);
+  std::string root_name=id2string(symbol.base_name);
   std::string new_name=id2string(symbol.name);
 
   // do anon-tags first
   if(symbol.is_type &&
-     has_prefix(id2string(symbol.name), prefix+"tag-#anon"))
+     has_prefix(id2string(symbol.name), "tag-#anon"))
   {
     // used to be file local:
     // new_name=prefix+module+"::tag-"+id2string(symbol.base_name);
 
     // now: rename them
     std::string typestr = type2name(symbol.type);
-    new_name = prefix+"tag-#anon#" + typestr;
+    new_name = "tag-#anon#" + typestr;
     id_replace_map[symbol.name]=new_name;
 
     symbolt* s = context.find_symbol(new_name);
@@ -133,11 +72,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   }
   else if(symbol.file_local) // rename file-local stuff
   {
-    // strip prefix
-    assert(has_prefix(id2string(symbol.name), prefix));
-
-    new_name=prefix+module+"::"+
-      std::string(id2string(symbol.name), prefix.size(), std::string::npos);
+    new_name=module+"::"+id2string(symbol.name);
   }
   else if(symbol.is_extern && !final_type.is_code())
   {
@@ -181,9 +116,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   }
   else
   {
-    // just strip the c::
-    symbol.pretty_name=
-      std::string(new_name, prefix.size(), std::string::npos);
+    symbol.pretty_name=new_name;
   }
 
   // see if we have it already
@@ -202,18 +135,6 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     typecheck_symbol_redefinition(*s, symbol);
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_new_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
 {
   if(symbol.is_parameter)
@@ -229,11 +150,8 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
     {
       // we don't need the identifiers
       code_typet &code_type=to_code_type(symbol.type);
-      for(code_typet::argumentst::iterator
-          it=code_type.arguments().begin();
-          it!=code_type.arguments().end();
-          it++)
-        it->set_identifier("");
+      for(auto & it : code_type.arguments())
+        it.set_identifier("");
     }
   }
   else if(symbol.type.id()=="incomplete_array" ||
@@ -265,18 +183,6 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
     do_initializer(symbol);
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_symbol_redefinition
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_symbol_redefinition(
   symbolt &old_symbol,
@@ -514,36 +420,21 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
   }
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_function_body
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_function_body(symbolt &symbol)
 {
   code_typet &code_type=to_code_type(symbol.type);
 
   // adjust the function identifiers
-  for(code_typet::argumentst::iterator
-      a_it=code_type.arguments().begin();
-      a_it!=code_type.arguments().end();
-      a_it++)
+  for(auto & a_it : code_type.arguments())
   {
-    irep_idt identifier=a_it->get_identifier();
+    irep_idt identifier=a_it.get_identifier();
     if(identifier!="")
     {
       id_replace_mapt::const_iterator
         m_it=id_replace_map.find(identifier);
 
       if(m_it!=id_replace_map.end())
-        a_it->set_identifier(m_it->second);
+        a_it.set_identifier(m_it->second);
     }
   }
 
@@ -557,6 +448,6 @@ void c_typecheck_baset::typecheck_function_body(symbolt &symbol)
 
   typecheck_code(to_code(symbol.value));
 
-  if(symbol.name=="c::main")
+  if(symbol.name=="main")
     add_argc_argv(symbol);
 }

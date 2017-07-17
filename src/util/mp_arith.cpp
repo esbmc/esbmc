@@ -84,8 +84,8 @@ const std::string integer2binary(const mp_integer &n, std::size_t width)
     result=result.substr(result.size()-width, width);
 
   if(neg)
-    for(std::size_t i=0; i<result.size(); i++)
-      result[i]=(result[i]=='0')?'1':'0';
+    for(char & i : result)
+      i=(i=='0')?'1':'0';
 
   return result;
 }

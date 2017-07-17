@@ -3,18 +3,12 @@
 
 #include <boost/functional/hash.hpp>
 #include <boost/shared_ptr.hpp>
-#include <cstdint>
-#include <cstring>
-#include <set>
-#include <stack>
-#include <string>
 #include <util/crypto_hash.h>
 #include <util/expr_util.h>
 #include <util/guard.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <util/irep2_expr.h>
 #include <util/std_expr.h>
-#include <vector>
 
 namespace renaming {
 
@@ -27,7 +21,7 @@ namespace renaming {
 
     virtual void get_ident_name(expr2tc &symbol) const=0;
 
-    virtual ~renaming_levelt() { }
+    virtual ~renaming_levelt() = default;
 //  protected:
 //  XXX: should leave protected enabled, but g++ 5.4 on ubuntu 16.04 does not
 //  appear to honour the following friend directive?
@@ -97,9 +91,9 @@ namespace renaming {
     current_namest current_names;
     unsigned int thread_id;
 
-    virtual void rename(expr2tc &expr);
-    virtual void get_ident_name(expr2tc &symbol) const;
-    virtual void remove(const expr2tc &symbol)
+    void rename(expr2tc &expr) override ;
+    void get_ident_name(expr2tc &symbol) const override ;
+    void remove(const expr2tc &symbol) override 
     {
       current_names.erase(name_record(to_symbol2t(symbol)));
     }
@@ -112,15 +106,15 @@ namespace renaming {
       frameno = frame;
     }
 
-    virtual void get_original_name(expr2tc &expr) const
+    void get_original_name(expr2tc &expr) const override 
     {
       renaming_levelt::get_original_name(expr, symbol2t::level0);
     }
 
     unsigned int current_number(const irep_idt &name) const;
 
-    level1t() {}
-    virtual ~level1t() { }
+    level1t() = default;
+    ~level1t() override = default;
 
     virtual void print(std::ostream &out) const;
   };
@@ -135,7 +129,7 @@ namespace renaming {
     class name_record {
     public:
       // Appease boost python error paths
-      name_record() {}
+      name_record() = default;
 
       name_record(const symbol2t &sym)
         : base_name(sym.thename), lev(sym.rlevel), l1_num(sym.level1_num),
@@ -220,12 +214,12 @@ namespace renaming {
                                  const expr2tc &constant_value,
                                  const expr2tc &assigned_value);
 
-    virtual void rename(expr2tc &expr);
+    void rename(expr2tc &expr) override ;
     virtual void rename(expr2tc &expr, unsigned count)=0;
 
-    virtual void get_ident_name(expr2tc &symbol) const;
+    void get_ident_name(expr2tc &symbol) const override ;
 
-    virtual void remove(const expr2tc &symbol)
+    void remove(const expr2tc &symbol) override 
     {
         current_names.erase(name_record(to_symbol2t(symbol)));
     }
@@ -235,7 +229,7 @@ namespace renaming {
       current_names.erase(rec);
     }
 
-    virtual void get_original_name(expr2tc &expr) const
+    void get_original_name(expr2tc &expr) const override 
     {
       renaming_levelt::get_original_name(expr, symbol2t::level1);
     }
@@ -247,7 +241,6 @@ namespace renaming {
       unsigned node_id;
       valuet():
         count(0),
-        constant(),
         node_id(0)
       {
       }
@@ -255,11 +248,9 @@ namespace renaming {
 
     void get_variables(std::set<name_record> &vars) const
     {
-      for(current_namest::const_iterator it=current_names.begin();
-          it!=current_names.end();
-          it++)
+      for(const auto & current_name : current_names)
       {
-        vars.insert(it->first);
+        vars.insert(current_name.first);
       }
     }
 
@@ -274,22 +265,22 @@ namespace renaming {
     // specific level2t object.
     static void rename_to_record(expr2tc &sym, const name_record &rec);
 
-    level2t() { };
-    virtual ~level2t() { };
-    virtual boost::shared_ptr<level2t> clone(void) const = 0;
+    level2t() = default;
+    ~level2t() override = default;
+    virtual boost::shared_ptr<level2t> clone() const = 0;
 
     virtual void print(std::ostream &out) const;
     virtual void dump() const;
 
     friend void build_goto_symex_classes();
     // Repeat of the above ignored friend directive.
-    typedef hash_map_cont<const name_record, valuet, name_rec_hash> current_namest;
+    typedef hash_map_cont<name_record, valuet, name_rec_hash> current_namest;
 
     current_namest current_names;
     typedef std::map<const expr2tc, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
   };
 
-}
+} // namespace renaming
 
 #endif /* _GOTO_SYMEX_RENAMING_H_ */

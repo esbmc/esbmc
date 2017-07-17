@@ -80,6 +80,6 @@ void MetaChar(std::string &out, char c, bool inString)
 
 void MetaString(std::string &out, const std::string &in)
 {
-  for(unsigned i=0; i<in.size(); i++)
-    MetaChar(out, in[i], true);
+  for(char i : in)
+    MetaChar(out, i, true);
 }

@@ -93,7 +93,7 @@ class execution_statet : public goto_symext
   /**
    *  Default destructor.
    */
-  virtual ~execution_statet();
+  virtual ~execution_statet() = default;
 
   // Types
 
@@ -108,10 +108,10 @@ class execution_statet : public goto_symext
   {
   public:
     ex_state_level2t(execution_statet &ref);
-    virtual ~ex_state_level2t();
-    virtual boost::shared_ptr<renaming::level2t> clone(void) const;
-    virtual void rename(expr2tc &lhs_symbol, unsigned count);
-    virtual void rename(expr2tc &identifier);
+    ~ex_state_level2t() override = default;
+    boost::shared_ptr<renaming::level2t> clone() const override ;
+    void rename(expr2tc &lhs_symbol, unsigned count) override ;
+    void rename(expr2tc &identifier) override ;
 
     execution_statet *owner;
   };
@@ -125,11 +125,11 @@ class execution_statet : public goto_symext
   {
   public:
     state_hashing_level2t(execution_statet &ref);
-    virtual ~state_hashing_level2t(void);
-    virtual boost::shared_ptr<renaming::level2t> clone(void) const;
-    virtual void make_assignment(expr2tc &lhs_symbol,
+    ~state_hashing_level2t() override = default;
+    boost::shared_ptr<renaming::level2t> clone() const override ;
+    void make_assignment(expr2tc &lhs_symbol,
                                      const expr2tc &const_value,
-                                     const expr2tc &assigned_value);
+                                     const expr2tc &assigned_value) override ;
     crypto_hash generate_l2_state_hash() const;
     typedef std::map<irep_idt, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
@@ -220,7 +220,7 @@ class execution_statet : public goto_symext
    *  @see dfs_execution_statet
    *  @return New, duplicated execution state
    */
-  virtual boost::shared_ptr<execution_statet> clone(void) const = 0;
+  virtual boost::shared_ptr<execution_statet> clone() const = 0;
 
   /**
    *  Make one symbolic execution step.
@@ -229,7 +229,7 @@ class execution_statet : public goto_symext
    *  a thread being created, and so forth.
    *  @param art reachability_treet we're operating with (defunct?)
    */
-  virtual void symex_step(reachability_treet &art);
+  void symex_step(reachability_treet &art) override ;
 
   /**
    *  Symbolically assign a value.
@@ -238,7 +238,7 @@ class execution_statet : public goto_symext
    *  see whether the assignment should be generating a context switch.
    *  @param code Code representing assignment we're making.
    */
-  virtual void symex_assign(const expr2tc &code);
+  void symex_assign(const expr2tc &code) override ;
 
   /**
    *  Symbolically assert something.
@@ -249,7 +249,7 @@ class execution_statet : public goto_symext
    *  @param expr Expression that we're asserting is true.
    *  @param msg Textual message explaining this assertion.
    */
-  virtual void claim(const expr2tc &expr, const std::string &msg);
+  void claim(const expr2tc &expr, const std::string &msg) override ;
 
   /**
    *  Perform a jump across GOTO code.
@@ -260,7 +260,7 @@ class execution_statet : public goto_symext
    *  too.
    *  @param old_guard Guard of the goto jump being performed.
    */
-  virtual void symex_goto(const expr2tc &old_guard);
+  void symex_goto(const expr2tc &old_guard) override ;
 
   /**
    *  Assume some expression is true.
@@ -269,7 +269,7 @@ class execution_statet : public goto_symext
    *  function.
    *  @param assumption Expression of the thing we're assuming to be true.
    */
-  virtual void assume(const expr2tc &assumption);
+  void assume(const expr2tc &assumption) override ;
 
   /**
    *  Fetch reference to count of dynamic objects in this state.
@@ -278,10 +278,10 @@ class execution_statet : public goto_symext
    *  to the true counter.
    *  @return Reference to the count of global dynamic objects.
    */
-  virtual unsigned int &get_dynamic_counter(void);
+  unsigned int &get_dynamic_counter() override ;
 
   /** Like get_dynamic_counter, but with nondet symbols. */
-  virtual unsigned int &get_nondet_counter(void);
+  unsigned int &get_nondet_counter() override ;
 
   /**
    *  Fetch name of current execution guard.
@@ -328,7 +328,7 @@ class execution_statet : public goto_symext
    *  --smt-thread-guard is enabled, we ask the solver.
    *  @return True when state guard is false
    */
-  bool is_cur_state_guard_false(void);
+  bool is_cur_state_guard_false();
 
   /**
    *  Generates execution guard that's true if this interleaving can be reached.
@@ -344,7 +344,7 @@ class execution_statet : public goto_symext
    *  means that any assertion after a context switch is guarded by the
    *  conditions on all the previous switches that have happened.
    */
-  void execute_guard(void);
+  void execute_guard();
 
   /**
    *  Attempt to explore a thread.
@@ -364,7 +364,7 @@ class execution_statet : public goto_symext
    *  have reached our context bound.
    *  @return True if the current state prohibits context switches.
    */
-  bool check_if_ileaves_blocked(void);
+  bool check_if_ileaves_blocked();
 
   /**
    *  Create a new thread.
@@ -383,17 +383,17 @@ class execution_statet : public goto_symext
    *  followed by forcing a context switch So, always ensure end_thread is
    *  followed by forcing a context switch.
    */
-  void end_thread(void);
+  void end_thread();
 
   /**
    *  Perform any necessary steps after a context switch point. Whether or not
    *  it was taken. Resets DFS record, POR records, executes thread guard.
    */
-  void update_after_switch_point(void);
+  void update_after_switch_point();
 
-  void preserve_last_paths(void);
-  void cull_all_paths(void);
-  void restore_last_paths(void);
+  void preserve_last_paths();
+  void cull_all_paths();
+  void restore_last_paths();
 
   /**
    *  Analyze the contents of an assignment for threading.
@@ -436,17 +436,17 @@ class execution_statet : public goto_symext
    *  Calculate MPOR schedulable threads. I.E. what threads we can schedule
    *  right now without violating the "quasi-monotonic" property.
    */
-  void calculate_mpor_constraints(void);
+  void calculate_mpor_constraints();
 
   /** Accessor method for mpor_schedulable. Ensures its access is within bounds
    *  and is read-only. */
-  bool is_transition_blocked_by_mpor(void) const
+  bool is_transition_blocked_by_mpor() const
   {
     return mpor_says_no;
   }
 
   /** Accessor method for cswitch_forced. Sets it to true. */
-  void force_cswitch(void)
+  void force_cswitch()
   {
     cswitch_forced = true;
   }
@@ -458,14 +458,14 @@ class execution_statet : public goto_symext
    *   2. Global data read/written.
    *  @return True if context switch is now triggered
    */
-  bool has_cswitch_point_occured(void) const;
+  bool has_cswitch_point_occured() const;
 
   /**
    *  Can execution continue in this thread?
    *  Answer is no if the thread has ended or there's nothing on the call stack
    *  @return False if there are no further instructions to execute.
    */
-  bool can_execution_continue(void) const;
+  bool can_execution_continue() const;
 
   /**
    *  Generate hash of entire execution state.
@@ -475,7 +475,7 @@ class execution_statet : public goto_symext
    *  in a full hash of the current execution state.
    *  @return Hash of entire current execution state.
    */
-  crypto_hash generate_hash(void) const;
+  crypto_hash generate_hash() const;
 
   /**
    *  Generate hash of an expression.
@@ -498,20 +498,20 @@ class execution_statet : public goto_symext
    *  previously registered. This does not result in the context switch counter
    *  being incremented. Stores which thread ID we switched from for a future
    *  switch back. */
-  void switch_to_monitor(void);
+  void switch_to_monitor();
 
   /** Switch away from registered monitor thread.
    *  Switches away from the registered monitor thread, to whatever thread
    *  caused switch_to_monitor to be called in the past
    *  @see switch_to_monitor
    */
-  void switch_away_from_monitor(void);
+  void switch_away_from_monitor();
 
   /** Makr registered monitor thread as ended. Designed to be used by ltl2ba
    *  produced code when the monitor is to be ended. */
-  void kill_monitor_thread(void);
+  void kill_monitor_thread();
 
-  void init_property_monitors(void);
+  void init_property_monitors();
 
   public:
 
@@ -632,7 +632,7 @@ class execution_statet : public goto_symext
   public:
   static unsigned int node_count;
 
-  friend void build_goto_symex_classes(void);
+  friend void build_goto_symex_classes();
 };
 
 /**
@@ -656,7 +656,7 @@ class dfs_execution_statet : public execution_statet
                    contextt &context,
                    optionst &options,
                    message_handlert &_message_handler)
-      : execution_statet(goto_functions, ns, art, _target, context,
+      : execution_statet(goto_functions, ns, art, std::move(_target), context,
                          options.get_bool_option("state-hashing")
                              ? boost::shared_ptr<state_hashing_level2t>(
                                  new state_hashing_level2t(*this))
@@ -666,9 +666,9 @@ class dfs_execution_statet : public execution_statet
   {
   };
 
-  dfs_execution_statet(const dfs_execution_statet &ref);
-  virtual boost::shared_ptr<execution_statet> clone(void) const;
-  virtual ~dfs_execution_statet(void);
+  dfs_execution_statet(const dfs_execution_statet &ref) = default;
+  boost::shared_ptr<execution_statet> clone() const override ;
+  ~dfs_execution_statet() override ;
 };
 
 /**
@@ -690,7 +690,7 @@ class schedule_execution_statet : public execution_statet
                    unsigned int *ptotal_claims,
                    unsigned int *premaining_claims,
                    message_handlert &_message_handler)
-      : execution_statet(goto_functions, ns, art, _target, context,
+      : execution_statet(goto_functions, ns, art, std::move(_target), context,
                          boost::shared_ptr<ex_state_level2t>(
                            new ex_state_level2t(*this)),
                          options, _message_handler)
@@ -701,10 +701,10 @@ class schedule_execution_statet : public execution_statet
     *premaining_claims = 0;
   };
 
-  schedule_execution_statet(const schedule_execution_statet &ref);
-  virtual boost::shared_ptr<execution_statet> clone(void) const;
-  virtual ~schedule_execution_statet(void);
-  virtual void claim(const expr2tc &expr, const std::string &msg);
+  schedule_execution_statet(const schedule_execution_statet &ref) = default;
+  boost::shared_ptr<execution_statet> clone() const override ;
+  ~schedule_execution_statet() override ;
+  void claim(const expr2tc &expr, const std::string &msg) override ;
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;

@@ -68,7 +68,7 @@ void irep_serializationt::read_irep(
   while (in.peek()=='S')
   {
     in.get();
-    irep.get_sub().push_back(irept());
+    irep.get_sub().emplace_back();
     reference_convert(in, irep.get_sub().back());
   }
   
@@ -133,10 +133,10 @@ unsigned irep_serializationt::read_long( std::istream& in )
 
 void write_string( std::ostream& out, const std::string& s)
 {
-  for (unsigned i=0; i<s.size(); i++)
+  for (char i : s)
   {
-    if (s[i]==0 || s[i]=='\\') out.put('\\'); // escape specials 
-    out << s[i];
+    if (i==0 || i=='\\') out.put('\\'); // escape specials 
+    out << i;
   }
 
   out.put(0);

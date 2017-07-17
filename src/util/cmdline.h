@@ -42,7 +42,7 @@ public:
   argst args;
   std::string failing_option;
   
-  cmdlinet();
+  cmdlinet() = default;
   ~cmdlinet();
   
 protected:

@@ -21,7 +21,7 @@ bool check_var_name(const exprt &expr)
   if(found != std::string::npos)
     return false;
 
-  found = expr.identifier().as_string().find("c::pthread_lib");
+  found = expr.identifier().as_string().find("pthread_lib");
   if(found != std::string::npos)
     return false;
 
@@ -30,9 +30,9 @@ bool check_var_name(const exprt &expr)
   if(found != std::string::npos)
     return false;
 
-  if(expr.identifier().as_string() == "c::__func__"
-     || expr.identifier().as_string() == "c::__PRETTY_FUNCTION__"
-     || expr.identifier().as_string() == "c::__LINE__")
+  if(expr.identifier().as_string() == "__func__"
+     || expr.identifier().as_string() == "__PRETTY_FUNCTION__"
+     || expr.identifier().as_string() == "__LINE__")
     return false;
 
   if(expr.location().file().as_string() == "<built-in>"

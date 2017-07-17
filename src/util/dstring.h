@@ -100,8 +100,7 @@ public:
   inline void swap(dstring &b)
   { unsigned t=no; no=b.no; b.no=t; }
 
-  inline dstring &operator=(const dstring &b)
-  { no=b.no; return *this; }
+  inline dstring &operator=(const dstring &b) = default;
   
   inline friend std::ostream &operator<<(std::ostream &out, const dstring &a)
   {

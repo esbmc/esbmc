@@ -40,7 +40,7 @@ int generate_sha1_hash_for_file(const char * path, std::string & output)
 int node_count;
 int edge_count;
 
-std::string execute_cmd(std::string command)
+std::string execute_cmd(const std::string& command)
 {
   /* add ./ for linux execution */
   std::string initial = command.substr(0, 1);
@@ -48,17 +48,17 @@ std::string execute_cmd(std::string command)
   if (!pipe)
     return "ERROR";
   char buffer[128];
-  std::string result = "";
+  std::string result;
   while (!feof(pipe))
   {
-    if (fgets(buffer, 128, pipe) != NULL)
+    if (fgets(buffer, 128, pipe) != nullptr)
       result += buffer;
   }
   pclose(pipe);
   return result;
 }
 
-std::string read_file(std::string path)
+std::string read_file(const std::string& path)
 {
   std::ifstream t(path.c_str());
   std::string str((std::istreambuf_iterator<char>(t)),
@@ -66,7 +66,7 @@ std::string read_file(std::string path)
   return str;
 }
 
-std::string trim(std::string str)
+std::string trim(const std::string& str)
 {
   const std::string whitespace_characters = " \t\r\n";
   size_t first_non_whitespace = str.find_first_not_of(whitespace_characters);
@@ -77,7 +77,7 @@ std::string trim(std::string str)
   return str.substr(first_non_whitespace, length);
 }
 
-void map_line_number_to_content(std::string source_code_file,
+void map_line_number_to_content(const std::string& source_code_file,
     std::map<int, std::string> & line_content_map)
 {
   std::ifstream sfile(source_code_file);
@@ -86,7 +86,7 @@ void map_line_number_to_content(std::string source_code_file,
     return;
   }
   std::string source_content = read_file(source_code_file);
-  std::istringstream source_stream(source_content.c_str());
+  std::istringstream source_stream(source_content);
   std::string line;
   int line_count = 0;
   while (std::getline(source_stream, line))
@@ -215,7 +215,7 @@ void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
 }
 
 void create_graphml(boost::property_tree::ptree & graphml,
-    std::string file_path)
+    const std::string& file_path)
 {
   graphml.add("graphml.<xmlattr>.xmlns",
     "http://graphml.graphdrawing.org/xmlns");
@@ -658,9 +658,9 @@ bool is_valid_witness_expr(
 }
 
 void get_relative_line_in_programfile(
-  const std::string relative_file_path,
+  const std::string& relative_file_path,
   const int relative_line_number,
-  const std::string program_file_path,
+  const std::string& program_file_path,
   int & programfile_line_number)
 {
   /* check if it is necessary to get the relative line */

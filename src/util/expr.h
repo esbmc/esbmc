@@ -49,7 +49,7 @@ public:
   #endif
 
   // constructors
-  exprt() { }
+  exprt() = default;
   explicit exprt(const irep_idt &_id):irept(_id) { }
   exprt(const irep_idt &_id, const typet &_type):irept(_id) { type()=_type; }
  
@@ -62,7 +62,7 @@ public:
   const operandst &operands() const
   { return (const operandst &)(find(o_operands).get_sub()); }
 
-  const irep_idt &value(void) const {
+  const irep_idt &value() const {
     return get(a_value);
   }
 

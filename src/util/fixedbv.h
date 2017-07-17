@@ -10,30 +10,35 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_FIXEDBV_UTIL_H
 
 #include <util/format_spec.h>
+#include <util/irep2_type.h>
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
+#include <util/std_types.h>
 
 class fixedbv_spect
 {
 public:
   unsigned integer_bits, width;
 
-  fixedbv_spect():integer_bits(0), width(0)
+  fixedbv_spect() : integer_bits(0), width(0)
   {
   }
 
-  fixedbv_spect(unsigned _width, unsigned _integer_bits):
-    integer_bits(_integer_bits), width(_width)
+  fixedbv_spect(unsigned _width, unsigned _integer_bits)
+    : integer_bits(_integer_bits), width(_width)
   {
     assert(width >= integer_bits);
   }
 
-  fixedbv_spect(const class fixedbv_typet &type);
+  fixedbv_spect(const fixedbv_typet &type);
+  fixedbv_spect(const fixedbv_type2tc &type);
 
   inline unsigned get_fraction_bits() const
   {
     return width-integer_bits;
   }
+
+  const fixedbv_type2tc get_type() const;
 };
 
 class fixedbvt
@@ -41,9 +46,8 @@ class fixedbvt
 public:
   fixedbv_spect spec;
 
-  fixedbvt():v(0)
-  {
-  }
+  fixedbvt();
+  fixedbvt(const fixedbv_spect &s);
 
   explicit fixedbvt(const constant_exprt &expr);
 

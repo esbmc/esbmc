@@ -184,7 +184,7 @@ public:
   // read back from such a representation. Return success.
   bool dump (unsigned char *, unsigned) _fast const;
   void load (unsigned char const *, unsigned) _fast;
-  unsigned int get_len(void) const { return length; }
+  unsigned int get_len() const { return length; }
 
   // Conversions to elementary types.
 

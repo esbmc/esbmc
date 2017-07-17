@@ -150,7 +150,7 @@ public:
   class object_map_dt:public std::map<unsigned, objectt>
   {
   public:
-    object_map_dt() : std::map<unsigned, objectt>() { }
+    object_map_dt() = default;
     const static object_map_dt empty;
   };
 
@@ -182,12 +182,10 @@ public:
      *  track each individual element, only the array of them. */
     std::string suffix;
 
-    entryt()
-    {
-    }
+    entryt() = default;
 
-    entryt(const std::string &_identifier, const std::string _suffix):
-      identifier(_identifier),
+    entryt(std::string _identifier, const std::string& _suffix):
+      identifier(std::move(_identifier)),
       suffix(_suffix)
     {
     }
@@ -197,8 +195,6 @@ public:
    *  to an entryt, storing the value set of objects a variable might point
    *  at. */
   typedef hash_map_cont<string_wrapper, entryt, string_wrap_hash> valuest;
-
-//********************************** Methods ***********************************
 
   /** Get the natural alignment unit of a reference to e. I don't know a more
    *  appropriate term, but if we were to have an offset into e, then what is
@@ -432,11 +428,8 @@ public:
   /** Add a value set for each variable in the given list. */
   void add_vars(const std::list<entryt> &vars)
   {
-    for(std::list<entryt>::const_iterator
-        it=vars.begin();
-        it!=vars.end();
-        it++)
-      add_var(*it);
+    for(const auto & var : vars)
+      add_var(var);
   }
 
   /** Dump the value set's textual representation to the given iostream.
@@ -444,7 +437,7 @@ public:
   void output(std::ostream &out) const;
 
   /** Write a textual representation of the value set to stderr. */
-  void dump(void) const;
+  void dump() const;
 
   /** Join the two given object maps. Takes all the pointer records from src
    *  and stores them into the dest object map.
@@ -467,7 +460,7 @@ public:
   }
 
   /** When using value_sett for static analysis, takes a code statement and
-   *  sends any assignments contained within to the assign method. 
+   *  sends any assignments contained within to the assign method.
    *  @param code The statement to interpret. */
   void apply_code(const expr2tc &code);
 

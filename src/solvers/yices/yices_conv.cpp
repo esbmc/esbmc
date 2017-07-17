@@ -33,7 +33,7 @@ create_new_yices_solver(bool int_encoding, const namespacet &ns,
 
 yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
   : smt_convt(int_encoding, ns), array_iface(false, false),
-    sat_model(NULL)
+    sat_model(nullptr)
 {
   yices_init();
 
@@ -89,16 +89,16 @@ yices_convt::dec_solve()
   clear_model();
   pre_solve();
 
-  smt_status_t result = yices_check_context(yices_ctx, NULL);
+  smt_status_t result = yices_check_context(yices_ctx, nullptr);
 
   if (result == STATUS_SAT) {
     sat_model = yices_get_model(yices_ctx, 1);
     return smt_convt::P_SATISFIABLE;
   } else if (result == STATUS_UNSAT) {
-    sat_model = NULL;
+    sat_model = nullptr;
     return smt_convt::P_UNSATISFIABLE;
   } else {
-    sat_model = NULL;
+    sat_model = nullptr;
     return smt_convt::P_ERROR;
   }
 }
@@ -470,19 +470,16 @@ yices_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 void
 yices_convt::add_array_constraints_for_solving()
 {
-  return;
 }
 
 void
-yices_convt::push_array_ctx(void)
+yices_convt::push_array_ctx()
 {
-  return;
 }
 
 void
-yices_convt::pop_array_ctx(void)
+yices_convt::pop_array_ctx()
 {
-  return;
 }
 
 expr2tc
@@ -565,8 +562,7 @@ yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   } else {
     smt_ast::assign(ctx, sym);
   }
-  return;
-}
+  }
 
 smt_astt
 yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
@@ -621,8 +617,9 @@ yices_convt::mk_struct_sort(const type2tc &type)
 
   std::vector<type_t> sorts;
   const struct_union_data &def = get_type_def(type);
-  forall_types(it, def.members) {
-    smt_sortt s = convert_sort(*it);
+  for(auto const &it : def.members)
+  {
+    smt_sortt s = convert_sort(it);
     const yices_smt_sort *sort = yices_sort_downcast(s);
     sorts.push_back(sort->type);
   }
@@ -639,8 +636,8 @@ yices_convt::tuple_create(const expr2tc &structdef)
   const struct_union_data &type = get_type_def(strct.type);
 
   std::vector<term_t> terms;
-  forall_exprs(it, strct.datatype_members) {
-    smt_astt a = convert_ast(*it);
+  for(auto const &it : strct.datatype_members) {
+    smt_astt a = convert_ast(it);
     const yices_smt_ast *yast = yices_ast_downcast(a);
     terms.push_back(yast->term);
   }
@@ -760,29 +757,30 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
   const struct_union_data &ref = get_type_def(type);
   std::vector<expr2tc> members;
   unsigned int i = 0;
-  forall_types(it, ref.members) {
+  for(auto const &it : ref.members)
+  {
     expr2tc res;
     term_t elem = yices_select(i + 1, term);
-    smt_astt a = new_ast(convert_sort(*it), elem);
+    smt_astt a = new_ast(convert_sort(it), elem);
 
-    switch ((*it)->type_id) {
+    switch (it->type_id) {
     case type2t::bool_id:
       res = get_bool(a);
       break;
     case type2t::pointer_id:
     case type2t::struct_id:
-      res = tuple_get_rec(elem, *it);
+      res = tuple_get_rec(elem, it);
       break;
     case type2t::array_id:
-      res = get_array(a, *it);
+      res = get_array(a, it);
       break;
     case type2t::unsignedbv_id:
     case type2t::signedbv_id:
     case type2t::fixedbv_id:
-      res = get_bv(*it, a);
+      res = get_bv(it, a);
       break;
     default:
-      std::cerr << "Unexpected sort " << (*it)->type_id << " in tuple_get_rec"
+      std::cerr << "Unexpected sort " << it->type_id << " in tuple_get_rec"
                 << std::endl;
       abort();
     }
@@ -804,17 +802,14 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
 void
 yices_convt::add_tuple_constraints_for_solving()
 {
-  return;
 }
 
 void
 yices_convt::push_tuple_ctx()
 {
-  return;
 }
 
 void
 yices_convt::pop_tuple_ctx()
 {
-  return;
 }

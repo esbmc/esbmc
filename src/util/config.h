@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_UTIL_CONFIG_H
 
 #include <util/cmdline.h>
-#include <util/ieee_float.h>
 #include <util/options.h>
 
 class configt
@@ -35,8 +34,6 @@ public:
 
     bool char_is_unsigned;
     bool use_fixed_for_float;
-
-    ieee_floatt::rounding_modet rounding_mode;
 
     void set_16();
     void set_32();

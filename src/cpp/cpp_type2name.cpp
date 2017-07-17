@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/std_types.h>
 #include <util/type.h>
 
-/*******************************************************************\
-
-Function: do_prefix
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static std::string do_prefix(const std::string &s)
 {
   if(s.find(',')!=std::string::npos ||
@@ -31,18 +19,6 @@ static std::string do_prefix(const std::string &s)
 
   return s;
 }
-
-/*******************************************************************\
-
-Function: irep2name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void irep2name(const irept &irep, std::string &result)
 {
@@ -97,18 +73,6 @@ static void irep2name(const irept &irep, std::string &result)
 
   result+=")";
 }
-
-/*******************************************************************\
-
-Function: cpp_type2name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string cpp_type2name(const typet &type)
 {
@@ -191,18 +155,6 @@ std::string cpp_type2name(const typet &type)
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: cpp_expr2name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string cpp_expr2name(const exprt &expr)
 {

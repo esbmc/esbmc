@@ -1,3 +1,3 @@
 main.c
---incremental-bmc --unlimited-k-steps --floatbv --z3 --no-pointer-check --no-bounds-check --clang-frontend --error-label ERROR
+--incremental-bmc --unlimited-k-steps --floatbv --z3 --no-pointer-check --no-bounds-check --error-label ERROR
 ^VERIFICATION SUCCESSFUL$

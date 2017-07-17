@@ -51,7 +51,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
       abort();
     }
 
-    in_stream = NULL;
+    in_stream = nullptr;
     solver_name = "Text output";
     solver_version = "";
     solver_proc_pid = 0;
@@ -319,7 +319,7 @@ smtlib_convt::dec_solve()
   fflush(out_stream);
 
   // If we're just outputing to a file, this is where we terminate.
-  if (in_stream == NULL)
+  if (in_stream == nullptr)
     return smt_convt::P_SMTLIB;
 
   // And read in the output
@@ -413,7 +413,7 @@ smtlib_convt::get_bv(const type2tc &t, smt_astt a)
     fixedbvt fbt;
     fbt.spec = spec;
     fbt.from_integer(m);
-    result = constant_fixedbv2tc(t, fbt);
+    result = constant_fixedbv2tc(fbt);
   } else if (is_bool_type(t)) {
     if (respval.token == TOK_KW_TRUE) {
       result = constant_bool2tc(true);
@@ -505,7 +505,7 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
     fixedbvt fbt;
     fbt.spec = spec;
     fbt.from_integer(m);
-    result = constant_fixedbv2tc(t, fbt);
+    result = constant_fixedbv2tc(fbt);
   } else if (is_bool_type(t)) {
     if (respval.token == TOK_KW_TRUE) {
       result = constant_bool2tc(true);
@@ -613,7 +613,7 @@ smtlib_convt::l_get(const smt_ast *a)
 const std::string
 smtlib_convt::solver_text()
 {
-  if (in_stream == NULL) {
+  if (in_stream == nullptr) {
     // Text output
     return solver_name;
   }
@@ -666,7 +666,7 @@ smt_sort *
 smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
 {
   va_list ap;
-  smtlib_smt_sort *s = NULL, *dom, *range;
+  smtlib_smt_sort *s = nullptr, *dom, *range;
   unsigned long uint;
   int thebool;
 
@@ -809,7 +809,7 @@ smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   symbol_table.insert(record);
 
   if (s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
-    return a;;
+    return a;
 
   // As this is the first time, declare that symbol to the solver.
   fprintf(out_stream, "(declare-fun |%s| () %s)\n", name.c_str(),
@@ -877,19 +877,16 @@ void
 smtlib_convt::add_array_constraints_for_solving()
 {
   // None required
-  return;
 }
 
 void
-smtlib_convt::push_array_ctx(void)
+smtlib_convt::push_array_ctx()
 {
-  return;
 }
 
 void
-smtlib_convt::pop_array_ctx(void)
+smtlib_convt::pop_array_ctx()
 {
-  return;
 }
 
 const std::string smtlib_convt::temp_prefix = "?x";

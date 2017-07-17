@@ -13,18 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/format_constant.h>
 #include <util/simplify_expr.h>
 
-/*******************************************************************\
-
-Function: printf_formattert::make_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const exprt printf_formattert::make_type(
   const exprt &src, const typet &dest)
 {
@@ -35,18 +23,6 @@ const exprt printf_formattert::make_type(
   return tmp;
 }
 
-/*******************************************************************\
-
-Function: printf_formattert::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void printf_formattert::operator()(
   const std::string &_format,
   const std::list<exprt> &_operands)
@@ -54,18 +30,6 @@ void printf_formattert::operator()(
   format=_format;
   operands=_operands;
 }
-
-/*******************************************************************\
-
-Function: printf_formattert::print()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void printf_formattert::print(std::ostream &out)
 {
@@ -82,36 +46,12 @@ void printf_formattert::print(std::ostream &out)
   }
 }
 
-/*******************************************************************\
-
-Function: printf_formattert::as_string()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string printf_formattert::as_string()
 {
   std::ostringstream stream;
   print(stream);
   return stream.str();
 }
-
-/*******************************************************************\
-
-Function: printf_formattert::process_format
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void printf_formattert::process_format(std::ostream &out)
 {
@@ -213,18 +153,6 @@ void printf_formattert::process_format(std::ostream &out)
     out << '%' << ch;
   }
 }
-
-/*******************************************************************\
-
-Function: printf_formattert::process_char
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void printf_formattert::process_char(std::ostream &out)
 {

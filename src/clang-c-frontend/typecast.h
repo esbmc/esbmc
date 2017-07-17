@@ -12,21 +12,21 @@
 #include <util/std_expr.h>
 
 extern void gen_typecast(
-  namespacet ns,
+  const namespacet& ns,
   exprt &dest,
-  typet type);
+  const typet& type);
 
 extern void gen_typecast_bool(
-  namespacet ns,
+  const namespacet& ns,
   exprt &dest);
 
 extern void gen_typecast_arithmetic(
-  namespacet ns,
+  const namespacet& ns,
   exprt &expr1,
   exprt &expr2);
 
 extern void gen_typecast_arithmetic(
-  namespacet ns,
+  const namespacet& ns,
   exprt &expr);
 
 #endif /* TYPECAST_H_ */

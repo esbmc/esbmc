@@ -12,36 +12,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/arith_tools.h>
 #include <util/config.h>
 
-/*******************************************************************\
-
-Function: ansi_c_convert_typet::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ansi_c_convert_typet::read(const typet &type)
 {
   clear();
   location=type.location();
   read_rec(type);
 }
-
-/*******************************************************************\
-
-Function: ansi_c_convert_typet::read_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ansi_c_convert_typet::read_rec(const typet &type)
 {
@@ -107,18 +83,6 @@ void ansi_c_convert_typet::read_rec(const typet &type)
   else 
     other.push_back(type);
 }
-
-/*******************************************************************\
-
-Function: ansi_c_convert_typet::write
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ansi_c_convert_typet::write(typet &type)
 {

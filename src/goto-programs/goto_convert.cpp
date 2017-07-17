@@ -15,8 +15,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/c_types.h>
 #include <util/cprover_prefix.h>
 #include <util/i2string.h>
+#include <util/irep2_utils.h>
 #include <util/prefix.h>
 #include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 //#define DEBUG
 
@@ -29,11 +31,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void goto_convertt::finish_gotos()
 {
-  for(gotost::const_iterator it=targets.gotos.begin();
-      it!=targets.gotos.end();
-      it++)
+  for(auto it : targets.gotos)
   {
-    goto_programt::instructiont &i=**it;
+    goto_programt::instructiont &i=*it;
 
     if (is_code_goto2t(i.code))
     {
@@ -260,13 +260,12 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   // the THROW_DECL instruction is annotated with a list of IDs,
   // one per target
   irept::subt &throw_list = c.add("throw_list").get_sub();
-  for(unsigned i=0; i<expr.operands().size(); i++)
+  for(const auto & block : expr.operands())
   {
-    const exprt &block=expr.operands()[i];
     irept type = irept(block.get("throw_decl_id"));
 
     // grab the ID and add to THROW_DECL instruction
-    throw_list.push_back(irept(type));
+    throw_list.emplace_back(type);
   }
 
   throw_decl_instruction->make_throw_decl();
@@ -341,7 +340,7 @@ void goto_convertt::convert_block(
   scoped_variables.clear();
 
   // Convert each expression
-  for(auto it : code.operands())
+  for(auto const &it : code.operands())
   {
     const codet &code_it = to_code(it);
 
@@ -352,7 +351,7 @@ void goto_convertt::convert_block(
   }
 
   // see if we need to call any destructors
-  for(auto local : scoped_variables)
+  for(auto const &local : scoped_variables)
   {
     const symbolt &symbol = ns.lookup(local);
 
@@ -651,6 +650,109 @@ void goto_convertt::convert_expression(
   }
 }
 
+bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
+{
+  // Remove side effect
+  if(has_sideeffect(size))
+  {
+    goto_programt sideeffects;
+    remove_sideeffects(size, sideeffects);
+    dest.destructive_append(sideeffects);
+    return true;
+  }
+
+  // We have to replace the symbol by a temporary, because it might
+  // change its value in the future
+  // Don't create a symbol for temporary symbols
+  if(size.is_symbol() &&
+     size.identifier().as_string().find("tmp$") == std::string::npos)
+  {
+    // Old size symbol
+    exprt old_size = size;
+
+    // Replace the size by a new variable, to avoid wrong results
+    // when the symbol used to create the VLA is changed
+    size = symbol_expr(new_tmp_symbol(size.type()));
+
+    codet assignment("assign");
+    assignment.reserve_operands(2);
+    assignment.copy_to_operands(size);
+    assignment.copy_to_operands(old_size);
+    assignment.location() = size.location();
+    copy(assignment, ASSIGN, dest);
+
+    return true;
+  }
+
+  // A constant array
+  return false;
+}
+
+bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
+{
+  // Not an array, don't care
+  if(!var_type.is_array())
+    return false;
+
+  array_typet &arr_type = to_array_type(var_type);
+
+  // Rewrite size
+  bool res = rewrite_vla_decl_size(arr_type.size(), dest);
+
+  // It's a multidimensional array, apply the transformations recursively.
+  // res is the second operand because it can be short-circuited and the
+  // side-effect will not be evaluated
+  if(arr_type.subtype().is_array())
+    return rewrite_vla_decl(to_array_type(arr_type.subtype()), dest) || res;
+
+  // Now rewrite the size expression
+  return res;
+}
+
+void goto_convertt::generate_dynamic_size_vla(exprt &var, goto_programt &dest)
+{
+  assert(var.type().is_array());
+
+  array_typet arr_type = to_array_type(var.type());
+  exprt size = to_array_type(var.type()).size();
+
+  // First, if it's a multidimensional vla, the size will be the
+  // multiplication of the dimensions
+  while(arr_type.subtype().is_array())
+  {
+    array_typet arr_subtype = to_array_type(arr_type.subtype());
+
+    exprt mult(exprt::mult, size.type());
+    mult.copy_to_operands(size, arr_subtype.size());
+    size.swap(mult);
+
+    arr_type = arr_subtype;
+  }
+
+  // Now, calculate the array size, which are the dimensions times the
+  // elements' size
+  const typet &subtype = arr_type.subtype();
+
+  type2tc tmp;
+  migrate_type(subtype, tmp);
+  auto st_size = type_byte_size(tmp);
+
+  exprt st_size_expr = from_integer(st_size, size.type());
+  exprt mult(exprt::mult, size.type());
+  mult.copy_to_operands(size, st_size_expr);
+
+  // Set the array to have a dynamic size
+  address_of_exprt addrof(var);
+  exprt dynamic_size("dynamic_size", int_type());
+  dynamic_size.copy_to_operands(addrof);
+  dynamic_size.location() = var.location();
+
+  goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
+  exprt assign = code_assignt(dynamic_size, mult);
+  migrate_expr(assign, t_s_s->code);
+  t_s_s->location = var.location();
+}
+
 void goto_convertt::convert_decl(
   const codet &code,
   goto_programt &dest)
@@ -684,36 +786,13 @@ void goto_convertt::convert_decl(
   // Local variable, add to locals
   scoped_variables.push_front(identifier);
 
-  // We need to check if there an sideeffect on the array size
-  if(var.type().is_array())
+  // Check if is an VLA declaration and rewrite the declaration
+  bool is_vla = rewrite_vla_decl(var.type(), dest);
+  if(is_vla)
   {
-    exprt &size = to_array_type(var.type()).size();
-    if(has_sideeffect(size))
-    {
-      // Remove side effect
-      goto_programt sideeffects;
-      remove_sideeffects(size, sideeffects);
-      dest.destructive_append(sideeffects);
-
-      // Update symbol
-      to_array_type(s->type).size() = size;
-    }
-    else if(size.is_symbol())
-    {
-      // Replace the size by a new variable, to avoid wrong results
-      // when the symbol used to create the VLA is changed
-      size = symbol_expr(new_tmp_symbol(size.type()));
-
-      codet assignment("assign");
-      assignment.reserve_operands(2);
-      assignment.copy_to_operands(size);
-      assignment.copy_to_operands(to_array_type(s->type).size());
-      assignment.location() = code.location();
-      copy(assignment, ASSIGN, dest);
-
-      // Update symbol
-      to_array_type(s->type).size() = size;
-    }
+    // This means that it was a VLA declaration and we need to
+    // to rewrite the symbol as well
+    s->type = var.type();
   }
 
   exprt initializer = nil_exprt();
@@ -730,47 +809,33 @@ void goto_convertt::convert_decl(
       if(globals > 0)
         break_globals2assignments(initializer, dest, new_code.location());
     }
-
-    goto_programt sideeffects;
-    remove_sideeffects(initializer, sideeffects);
-    dest.destructive_append(sideeffects);
   }
+  else
+  {
+    initializer = side_effect_expr_nondett(var.type());
+    initializer.location() = var.location();
+  }
+
+  goto_programt sideeffects;
+  remove_sideeffects(initializer, sideeffects);
+  dest.destructive_append(sideeffects);
 
   // break up into decl and assignment
   copy(new_code, OTHER, dest);
 
-  if(var.type().is_array())
-  {
-    exprt &size = to_array_type(var.type()).size();
-    if(size.is_symbol())
-    {
-      // Set the array to have a dynamic size
-      address_of_exprt addrof(var);
-      exprt dynamic_size("dynamic_size", int_type());
-      dynamic_size.copy_to_operands(addrof);
-      dynamic_size.location() = code.location();
+  if(is_vla)
+    generate_dynamic_size_vla(var, dest);
 
-      goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
-      exprt assign = code_assignt(dynamic_size, size);
-      migrate_expr(assign, t_s_s->code);
-      t_s_s->location = code.location();
-    }
-  }
-
-  if(initializer.is_not_nil())
-  {
-    // initializer is without sideeffect now
-    code_assignt assign(var, initializer);
-    assign.location() = new_code.location();
-    copy(assign, ASSIGN, dest);
-  }
+  code_assignt assign(var, initializer);
+  assign.location() = new_code.location();
+  copy(assign, ASSIGN, dest);
 }
 
 void goto_convertt::convert_decl_block(
   const codet& code,
   goto_programt& dest)
 {
-  for(auto it : code.operands())
+  for(auto const &it : code.operands())
     convert(to_code(it), dest);
 }
 
@@ -964,7 +1029,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 
     const symbolt &symbol=ns.lookup(identifier);
 
-    if (!(identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
+    if (!(identifier == "__ESBMC_alloc" || identifier == "__ESBMC_alloc_size")
           && (symbol.static_lifetime || symbol.type.is_dynamic_set()))
     {
 	  // make new assignment to temp for each global symbol
@@ -1040,8 +1105,8 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
     const irep_idt &identifier=expr.identifier();
   	const symbolt &symbol=ns.lookup(identifier);
 
-    if (identifier == "c::__ESBMC_alloc"
-    	|| identifier == "c::__ESBMC_alloc_size")
+    if (identifier == "__ESBMC_alloc"
+    	|| identifier == "__ESBMC_alloc_size")
     {
       return 0;
     }
@@ -1078,8 +1143,8 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
     irep_idt identifier = to_symbol2t(expr).get_symbol_name();
     const symbolt &symbol = ns.lookup(identifier);
 
-    if (identifier == "c::__ESBMC_alloc"
-    	|| identifier == "c::__ESBMC_alloc_size")
+    if (identifier == "__ESBMC_alloc"
+    	|| identifier == "__ESBMC_alloc_size")
     {
       return 0;
     }
@@ -1228,7 +1293,7 @@ void goto_convertt::convert_skip(
   t->location=code.location();
   expr2tc tmp_code;
   migrate_expr(code, tmp_code);
-  t->code = tmp_code;;
+  t->code = tmp_code;
 }
 
 void goto_convertt::convert_assume(
@@ -1574,11 +1639,9 @@ void goto_convertt::convert_switch(
 
   goto_programt tmp_cases;
 
-  for(casest::iterator it=targets.cases.begin();
-      it!=targets.cases.end();
-      it++)
+  for(auto & it : targets.cases)
   {
-    const caset &case_ops=it->second;
+    const caset &case_ops=it.second;
 
     assert(!case_ops.empty());
 
@@ -1593,7 +1656,7 @@ void goto_convertt::convert_switch(
     }
 
     goto_programt::targett x=tmp_cases.add_instruction();
-    x->make_goto(it->first);
+    x->make_goto(it.first);
     migrate_expr(guard_expr, x->guard);
     x->location=case_ops.front().find_location();
   }

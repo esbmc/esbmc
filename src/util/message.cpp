@@ -34,7 +34,7 @@ void message_handlert::print(
 
 void messaget::print(unsigned level, const std::string &message)
 {
-  if(message_handler!=NULL && verbosity>=level)
+  if(message_handler!=nullptr && verbosity>=level)
     message_handler->print(level, message);
 }
   
@@ -43,7 +43,7 @@ void messaget::print(
   const std::string &message,
   const locationt &location)
 {
-  if(message_handler!=NULL && verbosity>=level)
+  if(message_handler!=nullptr && verbosity>=level)
     message_handler->print(level, message, location);
 }
   

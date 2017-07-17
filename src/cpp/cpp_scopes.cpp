@@ -9,18 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_scopes.h>
 #include <util/i2string.h>
 
-/*******************************************************************\
-
-Function: cpp_scopest::new_block_scope
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 cpp_scopet &cpp_scopest::new_block_scope()
 {
   unsigned prefix=++current_scope().compound_counter;
@@ -28,18 +16,6 @@ cpp_scopet &cpp_scopest::new_block_scope()
   n.id_class=cpp_idt::BLOCK_SCOPE;
   return n;
 }
-
-/*******************************************************************\
-
-Function: cpp_scopest::get_ids
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_scopest::get_ids(
   const irep_idt &base_name,
@@ -57,18 +33,6 @@ void cpp_scopest::get_ids(
   current_scope().recursive_lookup(base_name, id_set);
 }
 
-/*******************************************************************\
-
-Function: cpp_scopest::get_ids
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_scopest::get_ids(
   const irep_idt &base_name,
   cpp_idt::id_classt id_class,
@@ -85,18 +49,6 @@ void cpp_scopest::get_ids(
 
   current_scope().recursive_lookup(base_name, id_class, id_set);
 }
-
-/*******************************************************************\
-
-Function: cpp_scopest::put_into_scope
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 cpp_idt &cpp_scopest::put_into_scope(
   const symbolt &symbol,
@@ -145,17 +97,6 @@ cpp_idt &cpp_scopest::put_into_scope(
     return id;
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_scopest::print_current
-
-  Inputs:
-
- Outputs:
- Purpose:
-
-\*******************************************************************/
 
 void cpp_scopest::print_current(std::ostream &out) const
 {

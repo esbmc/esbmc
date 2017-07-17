@@ -32,10 +32,7 @@ void goto_inlinet::parameter_assignments(
     code_type.arguments();
 
   // iterates over the types of the arguments
-  for(code_typet::argumentst::const_iterator
-      it2=argument_types.begin();
-      it2!=argument_types.end();
-      it2++)
+  for(const auto & argument_type : argument_types)
   {
     // if you run out of actual arguments there was a mismatch
     if(it1==arguments.end())
@@ -44,7 +41,7 @@ void goto_inlinet::parameter_assignments(
       throw "function call: not enough arguments";
     }
 
-    const exprt &argument=static_cast<const exprt &>(*it2);
+    const exprt &argument=static_cast<const exprt &>(argument_type);
 
     // this is the type the n-th argument should be
     const typet &arg_type=ns.follow(argument.type());
@@ -258,9 +255,8 @@ void goto_inlinet::expand_function_call(
   if(f.body_available)
   {
     inlined_funcs.insert(identifier.as_string());
-    for (std::set<std::string>::const_iterator it2 = f.inlined_funcs.begin();
-         it2 != f.inlined_funcs.end(); it2++) {
-      inlined_funcs.insert(*it2);
+    for (const auto & inlined_func : f.inlined_funcs) {
+      inlined_funcs.insert(inlined_func);
     }
 
     recursion_sett::iterator recursion_it=
@@ -278,7 +274,7 @@ void goto_inlinet::expand_function_call(
     parameter_assignments(tmp2.instructions.front().location, f.type, arguments, tmp);
     tmp.destructive_append(tmp2);
 
-    if(f.type.hide())
+    if(f.body.hide)
     {
       const locationt &new_location=function.find_location();
 
@@ -310,6 +306,9 @@ void goto_inlinet::expand_function_call(
     target=next_target;
 
     recursion_set.erase(recursion_it);
+
+    // Copy local variables
+    dest.add_local_variables(f.body.local_variables);
   }
   else
   {
@@ -410,9 +409,8 @@ bool goto_inlinet::inline_instruction(
       exprt tmp_lhs = migrate_expr_back(call.ret);
       exprt tmp_func = migrate_expr_back(call.function);
       exprt::operandst args;
-      for (std::vector<expr2tc>::const_iterator it2 = call.operands.begin();
-           it2 != call.operands.end(); it2++)
-        args.push_back(migrate_expr_back(*it2));
+      for (const auto & operand : call.operands)
+        args.push_back(migrate_expr_back(operand));
 
       expand_function_call(
         dest, it, tmp_lhs, tmp_func, args,
@@ -441,7 +439,7 @@ void goto_inline(
   {
     // find main
     goto_functionst::function_mapt::const_iterator it=
-      goto_functions.function_map.find("main");
+      goto_functions.function_map.find("__ESBMC_main");
 
     if(it==goto_functions.function_map.end())
     {
@@ -476,14 +474,11 @@ void goto_inline(
     throw 0;
 
   // clean up
-  for(goto_functionst::function_mapt::iterator
-      it=goto_functions.function_map.begin();
-      it!=goto_functions.function_map.end();
-      it++)
-    if(it->first!="main")
+  for(auto & it : goto_functions.function_map)
+    if(it.first!="__ESBMC_main")
     {
-      it->second.body_available=false;
-      it->second.body.clear();
+      it.second.body_available=false;
+      it.second.body.clear();
     }
 }
 
@@ -499,7 +494,7 @@ void goto_inline(
   {
     // find main
     goto_functionst::function_mapt::iterator it=
-      goto_functions.function_map.find("main");
+      goto_functions.function_map.find("__ESBMC_main");
 
     if(it==goto_functions.function_map.end())
       return;
@@ -526,14 +521,11 @@ void goto_inline(
     throw 0;
 
   // clean up
-  for(goto_functionst::function_mapt::iterator
-      it=goto_functions.function_map.begin();
-      it!=goto_functions.function_map.end();
-      it++)
-    if(it->first!="main")
+  for(auto & it : goto_functions.function_map)
+    if(it.first!="main")
     {
-      it->second.body_available=false;
-      it->second.body.clear();
+      it.second.body_available=false;
+      it.second.body.clear();
     }
 }
 
@@ -554,14 +546,11 @@ void goto_partial_inline(
 
   try
   {
-    for(goto_functionst::function_mapt::iterator
-        it=goto_functions.function_map.begin();
-        it!=goto_functions.function_map.end();
-        it++) {
+    for(auto & it : goto_functions.function_map) {
       goto_inline.inlined_funcs.clear();
-      if(it->second.body_available)
-        goto_inline.goto_inline_rec(it->second.body, false);
-      it->second.inlined_funcs = goto_inline.inlined_funcs;
+      if(it.second.body_available)
+        goto_inline.goto_inline_rec(it.second.body, false);
+      it.second.inlined_funcs = goto_inline.inlined_funcs;
     }
   }
 

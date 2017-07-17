@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/i2string.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: type2name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string type2name(const typet &type)
 {
   std::string result;
@@ -65,12 +53,10 @@ std::string type2name(const typet &type)
     const code_typet &t = to_code_type(type);
     const code_typet::argumentst arguments = t.arguments();
     result+="P(";
-    for (code_typet::argumentst::const_iterator it = arguments.begin();
-         it!=arguments.end();
-         it++)
+    for (const auto & argument : arguments)
     {
-      result+=type2name(it->type());
-      result+="'" + it->get_identifier().as_string() + "'|";
+      result+=type2name(argument.type());
+      result+="'" + argument.get_identifier().as_string() + "'|";
     }
     result.resize(result.size()-1);
     result+=')';
@@ -95,7 +81,7 @@ std::string type2name(const typet &type)
     if(type.id()=="union") result +="UN";
 
     result+='[';
-    for(auto it : to_struct_type(type).components())
+    for(auto const &it : to_struct_type(type).components())
       result+=type2name(it.type()) + "'" + it.name().as_string() + "'|";
     result.resize(result.size()-1);
     result+=']';

@@ -370,11 +370,11 @@ extern "C" {
     { "xsavesintrin.h", clang_xsavesintrin_buf, &clang_xsavesintrin_buf_size},
     { "xtestintrin.h", clang_xtestintrin_buf, &clang_xtestintrin_buf_size},
 
-    { NULL, NULL, NULL}
+    { nullptr, nullptr, nullptr}
   };
 }
 
-void clang_c_languaget::dump_clang_headers(std::string tmp_dir)
+void clang_c_languaget::dump_clang_headers(const std::string& tmp_dir)
 {
   for (struct hooked_header *h = &clang_headers[0]; h->basename != nullptr; h++)
   {

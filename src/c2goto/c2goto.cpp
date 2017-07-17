@@ -1,11 +1,8 @@
-#include <cstdio>
-#include <cwchar>
 #include <fstream>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/write_goto_binary.h>
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>
-#include <ostream>
 #include <util/cmdline.h>
 #include <util/config.h>
 #include <util/irep2.h>
@@ -32,7 +29,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
   {
   }
 
-  int doit() {
+  int doit() override {
     goto_functionst goto_functions;
 
     config.set(cmdline);
@@ -74,7 +71,7 @@ const mode_table_et mode_table[] =
 #endif
   LANGAPI_HAVE_MODE_C,
 #ifndef WITHOUT_CLANG
-  LANGAPI_HAVE_MODE_CLANG_CPP,
+  LANGAPI_HAVE_MODE_CPP,
 #endif
   LANGAPI_HAVE_MODE_CPP,
   LANGAPI_HAVE_MODE_END

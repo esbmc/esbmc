@@ -29,27 +29,27 @@ protected:
   goto_symext::statet &state;
 
   // overloads from dereference_callbackt
-  virtual bool is_valid_object(const irep_idt &identifier __attribute__((unused)))
+  bool is_valid_object(const irep_idt &identifier __attribute__((unused))) override
   {
     return true;
   }
 
-  virtual void dereference_failure(
+  void dereference_failure(
     const std::string &property,
     const std::string &msg,
-    const guardt &guard);
+    const guardt &guard) override;
 
-  virtual void get_value_set(
+  void get_value_set(
     const expr2tc &expr,
-    value_setst::valuest &value_set);
+    value_setst::valuest &value_set) override;
 
-  virtual bool has_failed_symbol(
+  bool has_failed_symbol(
     const expr2tc &expr,
-    const symbolt *&symbol);
+    const symbolt *&symbol) override;
 
-  virtual void rename(expr2tc &expr);
+  void rename(expr2tc &expr) override;
 
-  virtual void dump_internal_state(const std::list<struct internal_item> &data);
+  void dump_internal_state(const std::list<struct internal_item> &data) override;
 };
 
 void symex_dereference_statet::dereference_failure(
@@ -98,7 +98,6 @@ void symex_dereference_statet::get_value_set(
 void symex_dereference_statet::rename(expr2tc &expr)
 {
   goto_symex.cur_state->rename(expr);
-  return;
 }
 
 void
@@ -108,7 +107,6 @@ symex_dereference_statet::dump_internal_state(
   goto_symex.internal_deref_items.insert(
                           goto_symex.internal_deref_items.begin(),
                           data.begin(), data.end());
-  return;
 }
 
 void goto_symext::dereference(expr2tc &expr, const bool write, bool free,

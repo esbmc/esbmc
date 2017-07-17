@@ -119,7 +119,7 @@ public:
     while(!current_scope().is_global_scope())
     {
       current_scope_ptr=&current_scope().get_parent();
-      assert(current_scope_ptr!=NULL);
+      assert(current_scope_ptr!=nullptr);
     }
   }
 

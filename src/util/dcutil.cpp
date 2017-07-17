@@ -3,12 +3,6 @@
 #include <cstdlib>
 #include <util/dcutil.h>
 
-dcutil::dcutil() {
-}
-
-dcutil::~dcutil() {
-}
-
 void dcutil::generate_delta_coefficients(float vetor[], float out[], int n, float delta){
 	init_array(out,n);
 	float a_invertido[n];

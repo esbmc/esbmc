@@ -36,3 +36,7 @@ long double __ESBMC_nearbyintld(long double d);
 float __ESBMC_fmaf(float x, float y, float z);
 double __ESBMC_fmad(double x, double y, double z);
 long double __ESBMC_fmald(long double x, long double y, long double z);
+
+float __ESBMC_sqrtf(float n);
+double __ESBMC_sqrtd(double n);
+long double __ESBMC_sqrtld(long double n);
