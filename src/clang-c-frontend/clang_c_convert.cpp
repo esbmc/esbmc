@@ -253,25 +253,21 @@ bool clang_c_convertert::get_decl(
 bool clang_c_convertert::get_struct_union_class(
   const clang::RecordDecl& recordd)
 {
-  if(recordd.isClass())
+  if(recordd.isInterface())
   {
-    std::cerr << "Class is not supported yet" << std::endl;
-    return true;
-  }
-  else if(recordd.isInterface())
-  {
-    std::cerr << "Interface is not supported yet" << std::endl;
+    std::cerr << "Interface is not supported" << std::endl;
     return true;
   }
 
+  // Only convert instantiated functions/methods
+  if(recordd.isDependentContext())
+    return false;
+
   struct_union_typet t;
-  if(recordd.isStruct())
-    t = struct_typet();
-  else if(recordd.isUnion())
+  if(recordd.isUnion())
     t = union_typet();
   else
-    // This should never be reached
-    abort();
+    t = struct_typet();
 
   std::string identifier;
   if(get_tag_name(recordd, identifier))
@@ -327,6 +323,8 @@ bool clang_c_convertert::get_struct_union_class(
     added_symbol.pretty_name = "struct " + identifier;
   else if(recordd.isUnion())
     added_symbol.pretty_name = "union " + identifier;
+  else
+    added_symbol.pretty_name = "class " + identifier;
 
   return false;
 }
@@ -851,12 +849,6 @@ bool clang_c_convertert::get_type(
     {
       const clang::RecordDecl &rd =
         *(static_cast<const clang::RecordType &>(the_type)).getDecl();
-
-      if(rd.isClass())
-      {
-        std::cerr << "Class Type is not supported yet" << std::endl;
-        return true;
-      }
 
       // Search for the type on the type map
       type_mapt::iterator it;

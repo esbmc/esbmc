@@ -42,6 +42,17 @@ bool clang_cpp_convertert::get_decl(
       break;
     }
 
+    case clang::Decl::CXXRecord:
+    {
+      const clang::CXXRecordDecl &cxxrd =
+        static_cast<const clang::CXXRecordDecl&>(decl);
+
+      if(get_struct_union_class(cxxrd))
+        return true;
+
+      break;
+    }
+
     default:
       return clang_c_convertert::get_decl(decl, new_expr);
   }
