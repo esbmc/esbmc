@@ -1,0 +1,3 @@
+main.cpp
+--clang-frontend
+^VERIFICATION SUCCESSFUL$
