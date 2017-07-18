@@ -23,7 +23,7 @@ public:
 
   bool convert();
 
-private:
+protected:
   clang::ASTContext *ASTContext;
   contextt &context;
   namespacet ns;
@@ -43,7 +43,7 @@ private:
   bool convert_builtin_types();
   bool convert_top_level_decl();
 
-  bool get_decl(const clang::Decl &decl, exprt &new_expr);
+  virtual bool get_decl(const clang::Decl &decl, exprt &new_expr);
 
   bool get_var(const clang::VarDecl &vd, exprt &new_expr);
 
