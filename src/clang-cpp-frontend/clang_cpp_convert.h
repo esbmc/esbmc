@@ -25,6 +25,10 @@ protected:
   bool get_decl(
     const clang::Decl &decl,
     exprt &new_expr) override;
+
+  bool get_struct_union_class_fields(
+    const clang::RecordDecl &recordd,
+    struct_union_typet &type) override;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
