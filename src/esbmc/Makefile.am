@@ -10,7 +10,11 @@ ESBMC_SOLVER_LIBS = @ESBMC_SOLVER_LIBS@
 libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la \
       ../langapi/liblangapi.la ../ansi-c/libansic.la ../c2goto/libclib.la \
       ../ansi-c/cpp/libcpp.la ../c2goto/headers/libheaders.la \
-      ../goto-programs/libgotoprograms.la @ESBMC_CLANG_ARCHIVES@ \
+      ../goto-programs/libgotoprograms.la \
+      ../clang-c-frontend/libclangcfrontend.la \
+      ../clang-cpp-frontend/libclangcppfrontend.la \
+      ../clang-c-frontend/headers/libclangheaders.la \
+      ../clang-c-frontend/AST/libclangcfrontendast.la \
       ../pointer-analysis/libpointeranalysis.la ../util/libutil.la \
       ../big-int/libbigint.la ../solvers/libsolvers.la
 

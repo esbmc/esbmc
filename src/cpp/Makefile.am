@@ -9,7 +9,7 @@ libcxxscanner_la_SOURCES = scanner.lpp
 libcxxscanner_la_CXXFLAGS = -Wno-error $(ESBMC_CXXFLAGS_WARNINGS) \
       -I$(top_srcdir)
 
-libcxx_la_SOURCES = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
+libcxx_la_SOURCES = cpp_id.cpp cpp_language.cpp cpp_parser.cpp \
       cpp_typecheck.cpp cpp_convert_type.cpp \
       cpp_typecheck_expr.cpp cpp_typecheck_code.cpp \
       cpp_typecheck_type.cpp parse.cpp cpp_parse_tree.cpp \
@@ -40,7 +40,7 @@ cppinclude_HEADERS = cpp_class_type.h cpp_convert_type.h cpp_declaration.h \
       cpp_storage_spec.h cpp_template_args.h cpp_template_type.h \
       cpp_token.h cpp_token_buffer.h cpp_type2name.h cpp_typecast.h \
       cpp_typecheck.h cpp_typecheck_fargs.h cpp_typecheck_resolve.h \
-      cpp_using.h cpp_util.h expr2cpp.h template_map.h tokens.h
+      cpp_using.h cpp_util.h template_map.h tokens.h
 
 clean-local:
 	-rm scanner.cpp scanner.hpp

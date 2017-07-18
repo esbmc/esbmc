@@ -66,7 +66,7 @@ public:
     message_handlert &message_handler,
     const namespacet &ns) override ;
 
-  languaget *new_language() override 
+  languaget *new_language() override
   { return new clang_c_languaget; }
 
   // constructor, destructor
@@ -74,7 +74,8 @@ public:
   clang_c_languaget();
 
 protected:
-  std::string internal_additions();
+  virtual std::string internal_additions();
+  virtual void force_file_type();
 
   void dump_clang_headers(const std::string& tmp_dir);
   void build_compiler_args(const std::string&& tmp_dir);

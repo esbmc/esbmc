@@ -8,7 +8,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <cassert>
 #include <clang-c-frontend/expr2c.h>
-#include <cpp/expr2cpp.h>
+#include <clang-cpp-frontend/expr2cpp.h>
 #include <util/std_types.h>
 #include <util/symbol.h>
 

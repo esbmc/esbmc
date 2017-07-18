@@ -10,11 +10,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <ansi-c/c_main.h>
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/gcc_builtin_headers.h>
+#include <clang-cpp-frontend/expr2cpp.h>
 #include <cpp/cpp_final.h>
 #include <cpp/cpp_language.h>
 #include <cpp/cpp_parser.h>
 #include <cpp/cpp_typecheck.h>
-#include <cpp/expr2cpp.h>
 #include <cstring>
 #include <fstream>
 #include <sstream>

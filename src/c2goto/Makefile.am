@@ -4,12 +4,17 @@ noinst_LTLIBRARIES = libclib.la
 
 noinst_PROGRAMS = c2goto
 c2goto_SOURCES = c2goto.cpp cprover_blank_library.cpp
-c2goto_LDADD = ../ansi-c/libansic.la ../ansi-c/libansicscanner.la \
-      @ESBMC_CLANG_ARCHIVES@ ../big-int/libbigint.la ../cpp/libcxx.la \
-      ../goto-programs/libgotoprograms.la ../langapi/liblangapi.la \
-      ../util/libutil.la ../ansi-c/cpp/libcpp.la headers/libheaders.la \
-       @ESBMC_LDFLAGS@
-c2goto_DEPENDENCIES = @ESBMC_CLANG_ARCHIVES@
+c2goto_LDADD = ../clang-c-frontend/libclangcfrontend.la \
+      ../clang-c-frontend/headers/libclangheaders.la \
+      ../clang-c-frontend/AST/libclangcfrontendast.la \
+      ../ansi-c/libansic.la ../ansi-c/libansicscanner.la \
+      ../ansi-c/cpp/libcpp.la ../goto-programs/libgotoprograms.la \
+      ../langapi/liblangapi.la ../util/libutil.la \
+      ../big-int/libbigint.la headers/libheaders.la \
+      @ESBMC_LDFLAGS@
+c2goto_DEPENDENCIES = ../clang-c-frontend/libclangcfrontend.la \
+      ../clang-c-frontend/headers/libclangheaders.la \
+      ../clang-c-frontend/AST/libclangcfrontendast.la
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir)
 
 libclib_la_SOURCES = cprover_library.cpp clib32.c clib64.c clib32_fp.c \

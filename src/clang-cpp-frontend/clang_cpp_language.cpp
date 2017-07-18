@@ -6,14 +6,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <clang/Tooling/CommonOptionsParser.h>
-#include <clang/Tooling/Tooling.h>
 #include <ansi-c/c_link.h>
-#include <ansi-c/c_preprocess.h>
-#include <c2goto/cprover_library.h>
+#include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
-#include <fstream>
-#include <sstream>
+#include <clang-cpp-frontend/expr2cpp.h>
+#include <regex>
 
 languaget *new_clang_cpp_language()
 {
@@ -21,95 +19,73 @@ languaget *new_clang_cpp_language()
 }
 
 clang_cpp_languaget::clang_cpp_languaget()
+  : clang_c_languaget()
 {
-  std::cout << "ESBMC currently does not support parsing C++ programs using clang" << std::endl;
-  abort();
 }
 
-bool clang_cpp_languaget::parse(
-  const std::string &path __attribute__((unused)),
-  message_handlert &message_handler __attribute__((unused)))
+void clang_cpp_languaget::force_file_type()
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  // Force clang see all files as .cpp
+  // This forces the preprocessor to be called even in preprocessed files
+  // which allow us to perform transformations using -D
+  compiler_args.emplace_back("-x");
+  compiler_args.emplace_back("c++");
+
+  // We also force the standard to be c++98
+  compiler_args.push_back("-std=c++98");
+}
+
+std::string clang_cpp_languaget::internal_additions()
+{
+  std::string intrinsics = "extern \"C\" {\n";
+  intrinsics.append(clang_c_languaget::internal_additions());
+  intrinsics.append("}\n");
+
+  // Replace _Bool by bool and return
+  return std::regex_replace(intrinsics, std::regex("_Bool"), "bool");
 }
 
 bool clang_cpp_languaget::typecheck(
-  contextt& context __attribute__((unused)),
-  const std::string& module __attribute__((unused)),
-  message_handlert& message_handler __attribute__((unused)))
+  contextt& context,
+  const std::string& module,
+  message_handlert& message_handler)
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
-}
+  contextt new_context;
 
-void clang_cpp_languaget::show_parse(std::ostream& out __attribute__((unused)))
-{
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-}
+  clang_cpp_convertert converter(new_context, ASTs);
+  if(converter.convert())
+    return true;
 
-bool clang_cpp_languaget::convert(
-  contextt &context __attribute__((unused)),
-  const std::string &module __attribute__((unused)),
-  message_handlert &message_handler __attribute__((unused)))
-{
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
-}
+  clang_cpp_adjust adjuster(new_context);
+  if(adjuster.adjust())
+    return true;
 
-bool clang_cpp_languaget::preprocess(
-  const std::string &path __attribute__((unused)),
-  std::ostream &outstream __attribute__((unused)),
-  message_handlert &message_handler __attribute__((unused)))
-{
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
-}
+  if(c_link(context, new_context, message_handler, module))
+    return true;
 
-bool clang_cpp_languaget::final(
-  contextt& context __attribute__((unused)),
-  message_handlert& message_handler __attribute__((unused)))
-{
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  // Remove unused
+  if(!config.options.get_bool_option("keep-unused"))
+    context.remove_unused();
+
+  return false;
 }
 
 bool clang_cpp_languaget::from_expr(
-  const exprt &expr __attribute__((unused)),
-  std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)),
-  bool fullname __attribute__((unused)))
+  const exprt &expr,
+  std::string &code,
+  const namespacet &ns,
+  bool fullname)
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  code=expr2cpp(expr, ns, fullname);
+  return false;
 }
 
 bool clang_cpp_languaget::from_type(
-  const typet &type __attribute__((unused)),
-  std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)),
-  bool fullname __attribute__((unused)))
+  const typet &type,
+  std::string &code,
+  const namespacet &ns,
+  bool fullname)
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
-}
-
-bool clang_cpp_languaget::to_expr(
-  const std::string &code __attribute__((unused)),
-  const std::string &module __attribute__((unused)),
-  exprt &expr __attribute__((unused)),
-  message_handlert &message_handler __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)))
-{
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  code=type2cpp(type, ns, fullname);
+  return false;
 }
