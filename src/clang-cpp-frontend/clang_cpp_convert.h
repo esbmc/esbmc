@@ -13,6 +13,11 @@ public:
     contextt &_context,
     std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs);
   virtual ~clang_cpp_convertert() = default;
+
+protected:
+  bool get_decl(
+    const clang::Decl &decl,
+    exprt &new_expr) override;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
