@@ -239,25 +239,21 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
 bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
-  if(rd.isClass())
+  if(rd.isInterface())
   {
-    std::cerr << "Class is not supported yet" << std::endl;
-    return true;
-  }
-  else if(rd.isInterface())
-  {
-    std::cerr << "Interface is not supported yet" << std::endl;
+    std::cerr << "Interface is not supported" << std::endl;
     return true;
   }
 
+  // Only convert instantiated functions/methods
+  if(rd.isDependentContext())
+    return false;
+
   struct_union_typet t;
-  if(rd.isStruct())
-    t = struct_typet();
-  else if(rd.isUnion())
+  if(rd.isUnion())
     t = union_typet();
   else
-    // This should never be reached
-    abort();
+    t = struct_typet();
 
   std::string id, name;
   get_decl_name(rd, name, id);
