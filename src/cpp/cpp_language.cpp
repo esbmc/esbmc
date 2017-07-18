@@ -189,8 +189,6 @@ bool cpp_languaget::typecheck(
   const std::string &module,
   message_handlert &message_handler)
 {
-  if(module=="") return false;
-
   contextt new_context;
 
   if(cpp_typecheck(cpp_parse_tree, new_context, module, message_handler))
