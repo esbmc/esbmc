@@ -28,7 +28,7 @@ public:
 
   bool convert();
 
-private:
+protected:
   clang::ASTContext *ASTContext;
   contextt &context;
   namespacet ns;
@@ -52,70 +52,70 @@ private:
   bool convert_builtin_types();
   bool convert_top_level_decl();
 
-  bool get_decl(
+  virtual bool get_decl(
     const clang::Decl &decl,
     exprt &new_expr);
 
-  bool get_var(
+  virtual bool get_var(
     const clang::VarDecl &vd,
     exprt &new_expr);
 
-  bool get_function(
+  virtual bool get_function(
     const clang::FunctionDecl &fd,
     exprt &new_expr);
 
-  bool get_function_params(
+  virtual bool get_function_params(
     const clang::ParmVarDecl &pdecl,
     exprt &param);
 
-  bool get_struct_union_class(
+  virtual bool get_struct_union_class(
     const clang::RecordDecl &recordd);
 
-  bool get_struct_union_class_fields(
+  virtual bool get_struct_union_class_fields(
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
-  bool get_struct_union_class_methods(
+  virtual bool get_struct_union_class_methods(
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
-  bool get_type(
+  virtual bool get_type(
     const clang::QualType &type,
     typet &new_type);
 
-  bool get_type(
+  virtual bool get_type(
     const clang::Type &the_type,
     typet &new_type);
 
-  bool get_builtin_type(
+  virtual bool get_builtin_type(
     const clang::BuiltinType &bt,
     typet &new_type);
 
-  bool get_expr(
+  virtual bool get_expr(
     const clang::Stmt &stmt,
     exprt &new_expr);
 
-  bool get_decl_ref(
+  virtual bool get_decl_ref(
     const clang::Decl &decl,
     exprt &new_expr);
 
-  bool get_binary_operator_expr(
+  virtual bool get_binary_operator_expr(
     const clang::BinaryOperator &binop,
     exprt &new_expr);
 
-  bool get_compound_assign_expr(
+  virtual bool get_compound_assign_expr(
     const clang::CompoundAssignOperator& compop,
     exprt& new_expr);
 
-  bool get_unary_operator_expr(
+  virtual bool get_unary_operator_expr(
     const clang::UnaryOperator &uniop,
     exprt &new_expr);
 
-  bool get_cast_expr(
+  virtual bool get_cast_expr(
     const clang::CastExpr &cast,
     exprt &new_expr);
 
-  void get_default_symbol(
+  virtual void get_default_symbol(
     symbolt &symbol,
     std::string module_name,
     typet type,
@@ -124,46 +124,46 @@ private:
     locationt location,
     bool is_used);
 
-  void get_field_name(
+  virtual void get_field_name(
     const clang::FieldDecl &fd,
     std::string &name,
     std::string &pretty_name);
 
-  void get_var_name(
+  virtual void get_var_name(
     const clang::VarDecl &vd,
     std::string &name);
 
-  void get_function_param_name(
+  virtual void get_function_param_name(
     const clang::ParmVarDecl &pd,
     std::string &name);
 
-  void get_function_name(
+  virtual void get_function_name(
     const clang::FunctionDecl& fd,
     std::string &base_name,
     std::string &pretty_name);
 
-  bool get_tag_name(
+  virtual bool get_tag_name(
     const clang::RecordDecl& recordd,
     std::string &identifier);
 
-  void get_start_location_from_stmt(
+  virtual void get_start_location_from_stmt(
     const clang::Stmt& stmt,
     locationt &location);
 
-  void get_final_location_from_stmt(
+  virtual void get_final_location_from_stmt(
     const clang::Stmt& stmt,
     locationt &location);
 
-  void get_location_from_decl(
+  virtual void get_location_from_decl(
     const clang::Decl& decl,
     locationt &location);
 
-  void set_location(
+  virtual void set_location(
     clang::PresumedLoc &PLoc,
     std::string &function_name,
     locationt &location);
 
-  void get_presumed_location(
+  virtual void get_presumed_location(
     const clang::SourceLocation &loc,
     clang::PresumedLoc &PLoc);
 
@@ -178,23 +178,23 @@ private:
     symbolt &old_symbol,
     symbolt &new_symbol);
 
-  bool convert_character_literal(
+  virtual bool convert_character_literal(
     const clang::CharacterLiteral &char_literal,
     exprt &dest);
 
-  bool convert_string_literal(
+  virtual bool convert_string_literal(
     const clang::StringLiteral &string_literal,
     exprt &dest);
 
-  bool convert_integer_literal(
+  virtual bool convert_integer_literal(
     const clang::IntegerLiteral &integer_literal,
     exprt &dest);
 
-  bool convert_float_literal(
+  virtual bool convert_float_literal(
     const clang::FloatingLiteral &floating_literal,
     exprt &dest);
 
-  bool search_add_type_map(
+  virtual bool search_add_type_map(
     const clang::TagDecl &tag,
     type_mapt::iterator &type_it);
 
