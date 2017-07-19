@@ -91,10 +91,6 @@ bool clang_c_convertert::get_decl(
     // Label declaration
     case clang::Decl::Label:
     {
-      std::cerr << "ESBMC does not support label declaration"
-                << std::endl;
-      return true;
-
       const clang::LabelDecl &ld =
         static_cast<const clang::LabelDecl&>(decl);
 
@@ -1886,11 +1882,6 @@ bool clang_c_convertert::get_expr(
 
     case clang::Stmt::IndirectGotoStmtClass:
     {
-      std::cerr << "ESBMC currently does not support indirect gotos"
-                << std::endl;
-      stmt.dumpColor();
-      return true;
-
       const clang::IndirectGotoStmt &goto_stmt =
         static_cast<const clang::IndirectGotoStmt &>(stmt);
 
@@ -1905,6 +1896,11 @@ bool clang_c_convertert::get_expr(
       }
       else
       {
+        std::cerr << "ESBMC currently does not support indirect gotos"
+                  << std::endl;
+        stmt.dumpColor();
+        return true;
+
         exprt target;
         if(get_expr(*goto_stmt.getTarget(), target))
           return true;
