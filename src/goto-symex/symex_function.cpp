@@ -77,13 +77,7 @@ goto_symext::argument_assignments(
       abort();
     }
 
-    const symbolt *symbol = ns.get_context().find_symbol(identifier);
-    assert(symbol != nullptr);
-
-    exprt tmp_lhs = symbol_expr(*symbol);
-    expr2tc lhs;
-    migrate_expr(tmp_lhs, lhs);
-
+    symbol2tc lhs(function_type.arguments[name_idx], identifier);
     if(is_nil_expr(*it1))
     {
       ; // XXX jmorse, is this valid?
