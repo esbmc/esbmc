@@ -99,8 +99,8 @@ bool clang_c_convertert::get_decl(
         static_cast<const clang::LabelDecl&>(decl);
 
       exprt label("label", empty_typet());
-      label.identifier(ld.getName().str());
-      label.cmt_base_name(ld.getName().str());
+      label.identifier(get_decl_name(ld));
+      label.cmt_base_name(get_decl_name(ld));
 
       new_expr = label;
       break;
@@ -395,7 +395,7 @@ bool clang_c_convertert::get_var(
     symbol,
     get_modulename_from_path(location_begin.file().as_string()),
     t,
-    vd.getName().str(),
+    get_decl_name(vd),
     identifier,
     location_begin,
     true);
@@ -494,7 +494,7 @@ bool clang_c_convertert::get_function(
 
   // special case for is_used: we'll always convert the entry point,
   // either the main function or the user defined entry point
-  bool is_used = fd.isMain() || (fd.getName().str() == config.main) || fd.isUsed();
+  bool is_used = fd.isMain() || (get_decl_name(fd) == config.main) || fd.isUsed();
 
   symbolt symbol;
   get_default_symbol(
@@ -555,7 +555,7 @@ bool clang_c_convertert::get_function_params(
   const clang::ParmVarDecl &pdecl,
   exprt &param)
 {
-  std::string name = pdecl.getName().str();
+  std::string name = get_decl_name(pdecl);
 
   typet param_type;
   if(get_type(pdecl.getOriginalType(), param_type))
@@ -2419,7 +2419,7 @@ void clang_c_convertert::get_start_location_from_stmt(
   std::string function_name;
 
   if(current_functionDecl)
-    function_name = current_functionDecl->getName().str();
+    function_name = get_decl_name(*current_functionDecl);
 
   clang::PresumedLoc PLoc;
   get_presumed_location(stmt.getSourceRange().getBegin(), PLoc);
@@ -2436,7 +2436,7 @@ void clang_c_convertert::get_final_location_from_stmt(
   std::string function_name;
 
   if(current_functionDecl)
-    function_name = current_functionDecl->getName().str();
+    function_name = get_decl_name(*current_functionDecl);
 
   clang::PresumedLoc PLoc;
   get_presumed_location(stmt.getSourceRange().getEnd(), PLoc);
@@ -2457,7 +2457,7 @@ void clang_c_convertert::get_location_from_decl(
     const clang::FunctionDecl &funcd =
       static_cast<const clang::FunctionDecl &>(*decl.getDeclContext());
 
-    function_name = funcd.getName().str();
+    function_name = get_decl_name(funcd);
   }
 
   clang::PresumedLoc PLoc;

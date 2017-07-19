@@ -124,6 +124,9 @@ protected:
     locationt location,
     bool is_used);
 
+  std::string get_decl_name(
+    const clang::NamedDecl &decl);
+
   virtual void get_field_name(
     const clang::FieldDecl &fd,
     std::string &name,

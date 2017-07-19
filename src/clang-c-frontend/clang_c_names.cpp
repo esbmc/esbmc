@@ -2,12 +2,24 @@
 #include <ansi-c/type2name.h>
 #include <clang-c-frontend/clang_c_convert.h>
 
+std::string clang_c_convertert::get_decl_name(
+  const clang::NamedDecl &decl)
+{
+  if(const clang::IdentifierInfo *identifier = decl.getIdentifier())
+    return identifier->getName().str();
+
+  std::string name;
+  llvm::raw_string_ostream rso(name);
+  decl.printName(rso);
+  return rso.str();
+}
+
 void clang_c_convertert::get_field_name(
   const clang::FieldDecl& fd,
   std::string &name,
   std::string &pretty_name)
 {
-  name = pretty_name = fd.getName().str();
+  name = pretty_name = get_decl_name(fd);
 
   if(name.empty())
   {
@@ -43,11 +55,11 @@ void clang_c_convertert::get_var_name(
     const clang::FunctionDecl &funcd =
       static_cast<const clang::FunctionDecl &>(*vd.getDeclContext());
 
-    name += funcd.getName().str() + "::";
+    name += get_decl_name(funcd) + "::";
     name += integer2string(current_scope_var_num++) + "::";
   }
 
-  name += vd.getName().str();
+  name += get_decl_name(vd);
 }
 
 void clang_c_convertert::get_function_param_name(
@@ -61,8 +73,8 @@ void clang_c_convertert::get_function_param_name(
     static_cast<const clang::FunctionDecl &>(*pd.getParentFunctionOrMethod());
 
   name = get_modulename_from_path(pd_location.file().as_string()) + "::";
-  name += fd.getName().str() + "::";
-  name += pd.getName().str();
+  name += get_decl_name(fd) + "::";
+  name += get_decl_name(pd);
 }
 
 void clang_c_convertert::get_function_name(
@@ -70,7 +82,7 @@ void clang_c_convertert::get_function_name(
   std::string &base_name,
   std::string &pretty_name)
 {
-  base_name = pretty_name = fd.getName().str();
+  base_name = pretty_name = get_decl_name(fd);
 
   if(!fd.isExternallyVisible())
   {
@@ -86,7 +98,7 @@ bool clang_c_convertert::get_tag_name(
   const clang::RecordDecl& rd,
   std::string &name)
 {
-  name = rd.getName().str();
+  name = get_decl_name(rd);
   if(!name.empty())
     return false;
 
@@ -95,24 +107,21 @@ bool clang_c_convertert::get_tag_name(
   {
     if (const clang::TypedefNameDecl *tnd = rd.getTypedefNameForAnonDecl())
     {
-      name = tnd->getName().str();
+      name = get_decl_name(*tnd);
       return false;
     }
     else if (tag->getIdentifier())
     {
-      name = tag->getName().str();
+      name = get_decl_name(*tag);
       return false;
     }
   }
 
   struct_union_typet t;
-  if(rd.isStruct())
-    t = struct_typet();
-  else if(rd.isUnion())
+  if(rd.isUnion())
     t = union_typet();
   else
-    // This should never be reached
-    abort();
+    t = struct_typet();
 
   clang::RecordDecl *record_def = rd.getDefinition();
   if(get_struct_union_class_fields(*record_def, t))
