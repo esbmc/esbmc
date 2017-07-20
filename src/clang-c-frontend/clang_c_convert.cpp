@@ -303,6 +303,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
         t.set("packed", "true");
   }
 
+  if(get_struct_union_class_methods(*rd_def, t))
+    return true;
+
   added_symbol.type = has_bitfields(t) ? fix_bitfields(t) : t;
 
   return false;
@@ -315,6 +318,10 @@ bool clang_c_convertert::get_struct_union_class_fields(
   // First, parse the fields
   for(auto const &field : recordd.fields())
   {
+    // We don't add if private
+    if(field->getAccess() >= clang::AS_private)
+      continue;
+
     struct_typet::componentt comp;
     if(get_decl(*field, comp))
       return true;
