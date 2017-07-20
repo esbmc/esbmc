@@ -677,7 +677,6 @@ bool clang_c_convertert::get_type(
 
       // Special case, pointers to structs/unions/classes must not
       // have a copy of it, but a reference to the type
-      // TODO: classes
       if(sub_type.is_struct() || sub_type.is_union())
       {
         struct_union_typet t = to_struct_union_type(sub_type);
@@ -1985,7 +1984,10 @@ bool clang_c_convertert::get_decl_ref(
   exprt& new_expr)
 {
   std::string identifier;
+
   typet type;
+  if(get_type(static_cast<const clang::ValueDecl&>(decl).getType(), type))
+    return true;
 
   switch(decl.getKind())
   {
@@ -1996,10 +1998,6 @@ bool clang_c_convertert::get_decl_ref(
 
       std::size_t address = reinterpret_cast<std::size_t>(vd.getFirstDecl());
       identifier = object_map.find(address)->second;
-
-      if(get_type(vd.getType(), type))
-        return true;
-
       break;
     }
 
@@ -2010,10 +2008,6 @@ bool clang_c_convertert::get_decl_ref(
 
       std::size_t address = reinterpret_cast<std::size_t>(vd.getFirstDecl());
       identifier = object_map.find(address)->second;
-
-      if(get_type(vd.getType(), type))
-        return true;
-
       break;
     }
 
@@ -2026,10 +2020,19 @@ bool clang_c_convertert::get_decl_ref(
       get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
 
       identifier = pretty_name;
+      break;
+    }
 
-      if(get_type(fd.getType(), type))
-        return true;
+    // Field inside a struct/union
+    case clang::Decl::Field:
+    {
+      const clang::FieldDecl &fd =
+        static_cast<const clang::FieldDecl&>(decl);
 
+      std::string name, pretty_name;
+      get_field_name(fd, name, pretty_name);
+
+      identifier = pretty_name;
       break;
     }
 
