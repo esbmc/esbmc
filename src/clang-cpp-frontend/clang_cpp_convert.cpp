@@ -50,6 +50,27 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
+bool clang_cpp_convertert::get_function(
+  const clang::FunctionDecl &fd,
+  exprt &new_expr)
+{
+  // Only convert instantiated functions/methods
+  if(fd.isDependentContext())
+    return false;
+
+  return clang_c_convertert::get_function(fd, new_expr);
+}
+
+bool clang_cpp_convertert::get_struct_union_class(
+  const clang::RecordDecl& rd)
+{
+  // Only convert instantiated functions/methods
+  if(rd.isDependentContext())
+    return false;
+
+  return clang_c_convertert::get_struct_union_class(rd);
+}
+
 bool clang_cpp_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &recordd,
   struct_union_typet &type)
