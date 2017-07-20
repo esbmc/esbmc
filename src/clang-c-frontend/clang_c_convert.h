@@ -47,13 +47,13 @@ protected:
 
   bool get_var(const clang::VarDecl &vd, exprt &new_expr);
 
-  bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
+  virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
 
   bool get_function_params(const clang::ParmVarDecl &pd, exprt &param);
 
-  bool get_struct_union_class(const clang::RecordDecl &recordd);
+  virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
 
-  bool get_struct_union_class_fields(
+  virtual bool get_struct_union_class_fields(
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 

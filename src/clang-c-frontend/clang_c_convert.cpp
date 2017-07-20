@@ -245,10 +245,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     return true;
   }
 
-  // Only convert instantiated functions/methods
-  if(rd.isDependentContext())
-    return false;
-
   struct_union_typet t;
   if(rd.isUnion())
     t = union_typet();
