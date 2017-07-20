@@ -57,7 +57,7 @@ protected:
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
-  bool get_struct_union_class_methods(
+  virtual bool get_struct_union_class_methods(
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
