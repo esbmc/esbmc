@@ -36,6 +36,10 @@ protected:
   bool get_struct_union_class_fields(
     const clang::RecordDecl &recordd,
     struct_union_typet &type) override;
+
+  bool get_struct_union_class_methods(
+    const clang::RecordDecl &recordd,
+    struct_union_typet &type) override;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

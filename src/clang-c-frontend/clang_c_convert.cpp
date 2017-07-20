@@ -307,6 +307,9 @@ bool clang_c_convertert::get_struct_union_class(
   if(get_struct_union_class_fields(*record_def, t))
     return true;
 
+  if(get_struct_union_class_methods(*record_def, t))
+    return true;
+
   added_symbol.type = t;
 
   // This change on the pretty_name is just to beautify the output
@@ -327,6 +330,10 @@ bool clang_c_convertert::get_struct_union_class_fields(
   // First, parse the fields
   for(auto const &field : recordd.fields())
   {
+    // We don't add if private
+    if(field->getAccess() >= clang::AS_private)
+      continue;
+
     struct_typet::componentt comp;
     if(get_decl(*field, comp))
       return true;
