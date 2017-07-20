@@ -65,11 +65,11 @@ protected:
     exprt &new_expr);
 
   virtual bool get_function_params(
-    const clang::ParmVarDecl &pdecl,
+    const clang::ParmVarDecl &pd,
     exprt &param);
 
   virtual bool get_struct_union_class(
-    const clang::RecordDecl &recordd);
+    const clang::RecordDecl &rd);
 
   virtual bool get_struct_union_class_fields(
     const clang::RecordDecl &recordd,

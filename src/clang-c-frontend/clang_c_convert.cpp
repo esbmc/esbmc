@@ -246,9 +246,9 @@ bool clang_c_convertert::get_decl(
 }
 
 bool clang_c_convertert::get_struct_union_class(
-  const clang::RecordDecl& recordd)
+  const clang::RecordDecl& rd)
 {
-  if(recordd.isInterface())
+  if(rd.isInterface())
   {
     std::cerr << "Interface is not supported" << std::endl;
     return true;
@@ -259,19 +259,19 @@ bool clang_c_convertert::get_struct_union_class(
     return false;
 
   struct_union_typet t;
-  if(recordd.isUnion())
+  if(rd.isUnion())
     t = union_typet();
   else
     t = struct_typet();
 
   std::string identifier;
-  if(get_tag_name(recordd, identifier))
+  if(get_tag_name(rd, identifier))
     return true;
 
   t.tag(identifier);
 
   locationt location_begin;
-  get_location_from_decl(recordd, location_begin);
+  get_location_from_decl(rd, location_begin);
 
   symbolt symbol;
   get_default_symbol(
@@ -287,7 +287,7 @@ bool clang_c_convertert::get_struct_union_class(
   std::string symbol_name = symbol.name.as_string();
 
   std::size_t address =
-    reinterpret_cast<std::size_t>(recordd.getFirstDecl());
+    reinterpret_cast<std::size_t>(rd.getFirstDecl());
   type_map[address] = symbol_name;
 
   symbol.is_type = true;
@@ -301,7 +301,7 @@ bool clang_c_convertert::get_struct_union_class(
 
   // Don't continue to parse if it doesn't have a complete definition
   // Try to get the definition
-  clang::RecordDecl *record_def = recordd.getDefinition();
+  clang::RecordDecl *record_def = rd.getDefinition();
   if(!record_def)
     return false;
 
@@ -314,9 +314,9 @@ bool clang_c_convertert::get_struct_union_class(
   added_symbol.type = t;
 
   // This change on the pretty_name is just to beautify the output
-  if(recordd.isStruct())
+  if(rd.isStruct())
     added_symbol.pretty_name = "struct " + identifier;
-  else if(recordd.isUnion())
+  else if(rd.isUnion())
     added_symbol.pretty_name = "union " + identifier;
   else
     added_symbol.pretty_name = "class " + identifier;
@@ -516,10 +516,10 @@ bool clang_c_convertert::get_function(
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
-  for (auto const &pdecl : fd.parameters())
+  for (auto const &pd : fd.parameters())
   {
     code_typet::argumentt param;
-    if(get_function_params(*pdecl, param))
+    if(get_function_params(*pd, param))
       return true;
 
     type.arguments().push_back(param);
@@ -548,13 +548,13 @@ bool clang_c_convertert::get_function(
 }
 
 bool clang_c_convertert::get_function_params(
-  const clang::ParmVarDecl &pdecl,
+  const clang::ParmVarDecl &pd,
   exprt &param)
 {
-  std::string name = get_decl_name(pdecl);
+  std::string name = get_decl_name(pd);
 
   typet param_type;
-  if(get_type(pdecl.getOriginalType(), param_type))
+  if(get_type(pd.getOriginalType(), param_type))
     return true;
 
   if(param_type.is_array())
@@ -576,10 +576,10 @@ bool clang_c_convertert::get_function_params(
     return false;
 
   locationt location_begin;
-  get_location_from_decl(pdecl, location_begin);
+  get_location_from_decl(pd, location_begin);
 
   std::string pretty_name;
-  get_function_param_name(pdecl, pretty_name);
+  get_function_param_name(pd, pretty_name);
 
   symbolt param_symbol;
   get_default_symbol(
@@ -599,11 +599,11 @@ bool clang_c_convertert::get_function_params(
   param.location() = param_symbol.location;
 
   // Save the function's param address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(pdecl.getFirstDecl());
+  std::size_t address = reinterpret_cast<std::size_t>(pd.getFirstDecl());
   object_map[address] = param_symbol.name.as_string();
 
   const clang::FunctionDecl &fd =
-    static_cast<const clang::FunctionDecl &>(*pdecl.getParentFunctionOrMethod());
+    static_cast<const clang::FunctionDecl &>(*pd.getParentFunctionOrMethod());
 
   // If the function is not defined, we don't need to add it's parameter
   // to the context, they will never be used
