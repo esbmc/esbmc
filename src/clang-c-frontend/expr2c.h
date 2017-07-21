@@ -37,7 +37,8 @@ protected:
 
   virtual std::string convert_rec(
     const typet &src,
-    const c_qualifierst &qualifiers);
+    const c_qualifierst &qualifiers,
+    const std::string &declarator);
 
   static std::string indent_str(unsigned indent);
 
@@ -47,6 +48,11 @@ protected:
 
   void get_symbols(const exprt &expr);
   std::string id_shorthand(const exprt &expr) const;
+
+  std::string convert_struct_type(
+    const typet &src,
+    const std::string &qualifiers_str,
+    const std::string &declarator_str);
 
   std::string convert_typecast(
     const exprt &src, unsigned &precedence);
