@@ -371,14 +371,13 @@ bool clang_c_convertert::get_var(
   {
     for(auto const &attr : vd.getAttrs())
     {
-      if (!llvm::isa<clang::AnnotateAttr>(attr))
-        continue;
-
-      const auto *a = llvm::cast<clang::AnnotateAttr>(attr);
-      if(a->getAnnotation().str() == "__ESBMC_inf_size")
+      if(const auto *a = llvm::dyn_cast<clang::AnnotateAttr>(attr))
       {
-        assert(t.is_array());
-        t.size(exprt("infinity", uint_type()));
+        if(a->getAnnotation().str() == "__ESBMC_inf_size")
+        {
+          assert(t.is_array());
+          t.size(exprt("infinity", uint_type()));
+        }
       }
     }
   }
