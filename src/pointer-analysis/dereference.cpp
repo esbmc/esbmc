@@ -512,14 +512,14 @@ dereferencet::make_failed_symbol(const type2tc &out_type)
 
   get_new_name(symbol, ns);
 
-  exprt tmp_sym_expr = symbol_expr(symbol);
-
-  new_context.move(symbol);
+  symbolt *s = nullptr;
+  new_context.move(symbol, s);
+  assert(s != nullptr);
 
   // Due to migration hiccups, migration must occur after the symbol
   // appears in the symbol table.
   expr2tc value;
-  migrate_expr(tmp_sym_expr, value);
+  migrate_expr(symbol_expr(*s), value);
   return value;
 }
 

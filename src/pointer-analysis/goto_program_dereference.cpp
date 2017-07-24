@@ -28,8 +28,7 @@ bool goto_program_dereferencet::has_failed_symbol(
         to_symbol2t(expr).thename == "INVALID")
       return false;
 
-    exprt tmp_sym = migrate_expr_back(expr);
-    const symbolt &ptr_symbol = ns.lookup(tmp_sym);
+    const symbolt &ptr_symbol = ns.lookup(migrate_expr_back(expr));
 
     const irep_idt &failed_symbol = ptr_symbol.type.failed_symbol();
 
