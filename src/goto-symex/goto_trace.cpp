@@ -8,7 +8,6 @@
 
 \*******************************************************************/
 
-#include <ansi-c/printf_formatter.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
@@ -16,6 +15,7 @@
 #include <cassert>
 #include <cstring>
 #include <goto-symex/goto_trace.h>
+#include <goto-symex/printf_formatter.h>
 #include <goto-symex/witnesses.h>
 #include <iostream>
 #include <langapi/language_util.h>

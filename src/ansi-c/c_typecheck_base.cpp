@@ -7,10 +7,10 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <ansi-c/c_typecheck_base.h>
-#include <ansi-c/type2name.h>
 #include <clang-c-frontend/expr2c.h>
 #include <util/prefix.h>
 #include <util/std_types.h>
+#include <util/type2name.h>
 
 std::string c_typecheck_baset::to_string(const exprt &expr)
 {

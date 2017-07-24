@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <util/c_qualifiers.h>
-#include <ansi-c/c_sizeof.h>
 #include <cpp/cpp_class_type.h>
 #include <cpp/cpp_convert_type.h>
 #include <cpp/cpp_exception_id.h>
@@ -16,6 +15,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/expr2cpp.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
+#include <util/c_sizeof.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>

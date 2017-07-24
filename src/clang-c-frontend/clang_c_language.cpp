@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <AST/build_ast.h>
-#include <ansi-c/c_link.h>
 #include <ansi-c/c_preprocess.h>
 #include <boost/filesystem.hpp>
 #include <c2goto/cprover_library.h>
@@ -18,6 +17,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <clang-c-frontend/expr2c.h>
 #include <fstream>
 #include <sstream>
+#include <util/c_link.h>
 
 languaget *new_clang_c_language()
 {

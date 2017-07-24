@@ -6,7 +6,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/c_typecast.h>
 #include <cassert>
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
@@ -16,6 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/array_name.h>
 #include <util/base_type.h>
 #include <util/c_misc.h>
+#include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/cprover_prefix.h>

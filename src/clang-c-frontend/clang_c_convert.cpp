@@ -6,7 +6,6 @@
  */
 
 #include <clang/AST/Attr.h>
-#include <ansi-c/type2name.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -17,6 +16,7 @@
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/type2name.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,

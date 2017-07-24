@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/ansi_c_parser.h>
 #include <ansi-c/ansi_c_typecheck.h>
 #include <ansi-c/c_final.h>
-#include <ansi-c/c_link.h>
 #include <ansi-c/c_main.h>
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/gcc_builtin_headers.h>
@@ -20,6 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <util/c_link.h>
 #include <util/config.h>
 #include <util/expr_util.h>
 

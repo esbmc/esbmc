@@ -7,12 +7,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <algorithm>
-#include <ansi-c/c_typecast.h>
 #include <cpp/cpp_convert_type.h>
 #include <cpp/cpp_declarator.h>
 #include <cpp/cpp_typecheck.h>
 #include <cpp/expr2cpp.h>
 #include <util/arith_tools.h>
+#include <util/c_typecast.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/location.h>
