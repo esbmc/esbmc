@@ -2,7 +2,6 @@ Release Notes of the ESBMC model checker
 
 *** Version 4.4.1
 * Remove option to disable clang
-* Support for label declarations
 * Improvements to ax_clang to support Ubuntu/Debian/Fedora
 * Fix struct/union symbol dump
 * Fix a number of status messages
