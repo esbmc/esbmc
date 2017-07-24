@@ -938,8 +938,7 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
     // Might read from more than one element, legitimately. Requires stitching.
     // Alignment assertion / guarantee ensures we don't do something silly.
     // This will construct from whatever the subtype is...
-    unsigned int num_bytes = type->get_width() / 8;
-    expr2tc *bytes = extract_bytes_from_array(value, num_bytes, div);
+    expr2tc *bytes = extract_bytes_from_array(value, type->get_width() / 8, div);
     stitch_together_from_byte_array(value, type, bytes);
     delete[] bytes;
   }
@@ -1496,6 +1495,14 @@ expr2tc*
 dereferencet::extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
     const expr2tc &offset)
 {
+  if(!bytes)
+  {
+    std::cerr << "**** ERROR: "
+              << "Zero byte when extracting from an array.\n"
+              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
+    abort();
+  }
+
   expr2tc *exprs = new expr2tc[bytes];
 
   assert(bytes <= 8 && "Too many bytes for extraction/stitching in deref");
@@ -1519,6 +1526,15 @@ expr2tc *
 dereferencet::extract_bytes_from_scalar(const expr2tc &object,
     unsigned int num_bytes, const expr2tc &offset)
 {
+  if(!num_bytes)
+  {
+    std::cerr << "**** ERROR: "
+              << "Zero byte when extracting from scalar.\n"
+              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
+    abort();
+  }
+
+
   assert(is_scalar_type(object) && "Can't extract bytes out of non-scalars");
   const type2tc &bytetype = get_uint8_type();
 
@@ -1539,6 +1555,14 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
                                               const expr2tc *bytes)
 {
   int num_bytes = type->get_width() / 8;
+
+  if(!num_bytes)
+  {
+    std::cerr << "**** ERROR: "
+              << "Zero byte when stitching from byte array.\n"
+              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
+    abort();
+  }
 
   // We are composing a larger data type out of bytes -- we must consider
   // what byte order we are giong to stitch it together out of.
