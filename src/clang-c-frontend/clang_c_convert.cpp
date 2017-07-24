@@ -422,10 +422,7 @@ bool clang_c_convertert::get_var(
   // We have to add the symbol before converting the initial assignment
   // because we might have something like 'int x = x + 1;' which is
   // completely wrong but allowed by the language
-  move_symbol_to_context(symbol);
-
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
 
   code_declt decl;
   decl.operands().push_back(symbol_exprt(identifier, t));
@@ -511,10 +508,7 @@ bool clang_c_convertert::get_function(
                      || fd.getStorageClass() == clang::SC_PrivateExtern;
   symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
-  move_symbol_to_context(symbol);
-
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
@@ -2636,13 +2630,13 @@ std::string clang_c_convertert::get_filename_from_path(std::string path)
   return path;
 }
 
-void clang_c_convertert::move_symbol_to_context(
+symbolt* clang_c_convertert::move_symbol_to_context(
   symbolt& symbol)
 {
   symbolt* s = context.find_symbol(symbol.name);
   if(s == nullptr)
   {
-    if (context.move(symbol))
+    if (context.move(symbol, s))
     {
       std::cerr << "Couldn't add symbol " << symbol.name
           << " to symbol table" << std::endl;
@@ -2652,8 +2646,23 @@ void clang_c_convertert::move_symbol_to_context(
   }
   else
   {
-    check_symbol_redefinition(*s, symbol);
+    // types that are code means functions
+    if(s->type.is_code())
+    {
+      if(symbol.value.is_not_nil() && !s->value.is_not_nil())
+        s->swap(symbol);
+    }
+    else if(s->is_type)
+    {
+      if(symbol.type.is_not_nil() && !s->type.is_not_nil())
+        s->swap(symbol);
+    }
+
+    // Update is_used
+    s->is_used |= symbol.is_used;
   }
+
+  return s;
 }
 
 void clang_c_convertert::dump_type_map()
@@ -2668,30 +2677,6 @@ void clang_c_convertert::dump_object_map()
   std::cout << "Object_map:" << std::endl;
   for (auto const &it : object_map)
     std::cout << it.first << ": " << it.second << std::endl;
-}
-
-void clang_c_convertert::check_symbol_redefinition(
-  symbolt& old_symbol,
-  symbolt& new_symbol)
-{
-  // types that are code means functions
-  if(old_symbol.type.is_code())
-  {
-    if(new_symbol.value.is_not_nil() && !old_symbol.value.is_not_nil())
-    {
-      old_symbol.swap(new_symbol);
-    }
-  }
-  else if(old_symbol.is_type)
-  {
-    if(new_symbol.type.is_not_nil() && !old_symbol.type.is_not_nil())
-    {
-      old_symbol.swap(new_symbol);
-    }
-  }
-
-  // Update is_used
-  old_symbol.is_used |= new_symbol.is_used;
 }
 
 void clang_c_convertert::convert_expression_to_code(exprt& expr)
