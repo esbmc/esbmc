@@ -1361,11 +1361,6 @@ bool clang_c_convertert::get_expr(
 
     case clang::Stmt::AddrLabelExprClass:
     {
-      std::cerr << "ESBMC currently does not support label as values"
-                << std::endl;
-      stmt.dumpColor();
-      return true;
-
       const clang::AddrLabelExpr &addrlabelExpr =
         static_cast<const clang::AddrLabelExpr &>(stmt);
 
