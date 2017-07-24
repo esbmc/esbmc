@@ -51,42 +51,30 @@ protected:
   optionst &options;
 
   void goto_k_induction();
-  void convert_infinite_loop(loopst &loop);
+
   void fill_state(loopst &loop);
-  void create_symbols();
-  void make_nondet_state_assign(goto_programt::targett &loop_head);
-  void init_k_indice(goto_programt::targett &loop_head);
-  void update_state_vector(goto_programt::targett &loop_head);
-  void assign_current_state(goto_programt::targett &loop_exit);
-  void assume_state_vector(goto_programt::targett &loop_exit);
-  void assume_all_state_vector(goto_programt::targett &loop_exit);
-  void convert_loop_body(loopst &loop);
-  void convert_instruction(
-    loopst &loop,
-    goto_programt::targett loop_head,
-    const irep_idt &_function_name);
-  void replace_guard(loopst &loop, exprt &expr);
-  void replace_by_cs_member(exprt &expr);
-  void replace_ternary(
-    loopst &loop,
-    exprt &expr,
-    bool is_if_cond = false);
 
   void convert_finite_loop(loopst &loop);
+
   void get_loop_cond(
     goto_programt::targett &loop_head,
     goto_programt::targett &loop_exit,
     exprt &loop_cond);
+
   void make_nondet_assign(goto_programt::targett &loop_head);
+
   void assume_loop_cond_before_loop(
     goto_programt::targett &loop_head,
     exprt &loop_cond);
+
   void assume_neg_loop_cond_after_loop(
     goto_programt::targett &loop_exit,
     exprt &loop_cond);
+
   void duplicate_loop_body(
     goto_programt::targett &loop_head,
     goto_programt::targett &loop_exit);
+
   void convert_assert_to_assume(
     goto_programt::targett &loop_head,
     goto_programt::targett &loop_exit);
@@ -102,14 +90,6 @@ protected:
   void assume_cond(
     const exprt &cond,
     goto_programt &dest);
-
-  void kindice_incr(goto_programt &dest);
-
-  symbol_exprt gen_kindice();
-  symbol_exprt gen_state_vector();
-  symbol_exprt gen_current_state();
-
-  exprt gen_state_vector_indexed(const exprt& index);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */
