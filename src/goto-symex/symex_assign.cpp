@@ -129,12 +129,6 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   return *this;
 }
 
-void goto_symext::do_simplify(exprt &expr)
-{
-  if(!no_simplify)
-    simplify(expr);
-}
-
 void goto_symext::do_simplify(expr2tc &expr)
 {
   if(!no_simplify)

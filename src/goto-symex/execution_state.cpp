@@ -653,7 +653,6 @@ execution_statet::execute_guard()
 
   node_id = node_count++;
   expr2tc guard_expr = get_guard_identifier();
-  exprt new_rhs, const_prop_val;
   expr2tc parent_guard;
 
   // Parent guard of this context switch - if a assign/claim/assume, just use

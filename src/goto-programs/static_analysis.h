@@ -49,9 +49,7 @@ public:
     std::ostream &out __attribute__((unused))) const
   {
   }
-  
-  typedef hash_set_cont<exprt, irep_hash> expr_sett;
-  
+
   virtual void get_reference_set(
     const namespacet &ns __attribute__((unused)),
     const expr2tc &expr __attribute__((unused)),
@@ -228,8 +226,6 @@ protected:
   virtual statet &get_state(locationt l)=0;
   virtual const statet &get_state(locationt l) const=0;
   virtual statet* make_temporary_state(statet &s)=0;
-
-  typedef abstract_domain_baset::expr_sett expr_sett;
 
   virtual void get_reference_set(
     locationt l,
