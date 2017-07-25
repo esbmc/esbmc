@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/c_link.h>
-#include <ansi-c/fix_symbol.h>
 #include <clang-c-frontend/expr2c.h>
 #include <util/base_type.h>
+#include <util/c_link.h>
+#include <util/fix_symbol.h>
 #include <util/i2string.h>
 #include <util/location.h>
 #include <util/namespace.h>

@@ -38,7 +38,8 @@ protected:
 
   std::string convert_rec(
     const typet &src,
-    const c_qualifierst &qualifiers) override;
+    const c_qualifierst &qualifiers,
+    const std::string &declarator) override;
 
   typedef hash_set_cont<std::string, string_hash> id_sett;
 };
@@ -122,55 +123,62 @@ std::string expr2cppt::convert_constant(
 
 std::string expr2cppt::convert_rec(
   const typet &src,
-  const c_qualifierst &qualifiers)
+  const c_qualifierst &qualifiers,
+  const std::string &declarator)
 {
   c_qualifierst new_qualifiers(qualifiers);
   new_qualifiers.read(src);
 
+  const std::string d=
+    declarator==""?declarator:(" "+declarator);
+
+  const std::string q=
+    new_qualifiers.as_string();
+
   if(is_reference(src))
   {
-    return new_qualifiers.as_string()+convert(src.subtype())+" &";
+    return new_qualifiers.as_string()+convert(src.subtype())+" &"+d;
   }
   else if(is_rvalue_reference(src))
   {
-    return new_qualifiers.as_string()+convert(src.subtype())+" &&";
+    return new_qualifiers.as_string()+convert(src.subtype())+" &&"+d;
   }
   else if(src.get("#cpp_type")!="")
   {
     const irep_idt cpp_type=src.get("#cpp_type");
 
     if(cpp_type=="signed_char")
-      return new_qualifiers.as_string()+"signed char";
+      return new_qualifiers.as_string()+"signed char"+d;
     else if(cpp_type=="unsigned_char")
-      return new_qualifiers.as_string()+"unsigned char";
+      return new_qualifiers.as_string()+"unsigned char"+d;
     else if(cpp_type=="char")
-      return new_qualifiers.as_string()+"char";
+      return new_qualifiers.as_string()+"char"+d;
     else if(cpp_type=="signed_short_int")
-      return new_qualifiers.as_string()+"short";
+      return new_qualifiers.as_string()+"short"+d;
     else if(cpp_type=="signed_short_int")
-      return new_qualifiers.as_string()+"unsigned short";
+      return new_qualifiers.as_string()+"unsigned short"+d;
     else if(cpp_type=="signed_int")
-      return new_qualifiers.as_string()+"int";
+      return new_qualifiers.as_string()+"int"+d;
     else if(cpp_type=="unsigned_int")
-      return new_qualifiers.as_string()+"unsigned";
+      return new_qualifiers.as_string()+"unsigned"+d;
     else if(cpp_type=="signed_long_int")
-      return new_qualifiers.as_string()+"long";
+      return new_qualifiers.as_string()+"long"+d;
     else if(cpp_type=="unsigned_long_int")
-      return new_qualifiers.as_string()+"unsigned long";
+      return new_qualifiers.as_string()+"unsigned long"+d;
     else if(cpp_type=="signed_long_long_int")
-      return new_qualifiers.as_string()+"long long";
+      return new_qualifiers.as_string()+"long long"+d;
     else if(cpp_type=="unsigned_long_long_int")
-      return new_qualifiers.as_string()+"unsigned long long";
+      return new_qualifiers.as_string()+"unsigned long long"+d;
     else if(cpp_type=="wchar_t")
-      return new_qualifiers.as_string()+"wchar_t";
+      return new_qualifiers.as_string()+"wchar_t"+d;
     else if(cpp_type=="float")
-      return new_qualifiers.as_string()+"float";
+      return new_qualifiers.as_string()+"float"+d;
     else if(cpp_type=="double")
-      return new_qualifiers.as_string()+"double";
+      return new_qualifiers.as_string()+"double"+d;
     else if(cpp_type=="long_double")
-      return new_qualifiers.as_string()+"long double";
+      return new_qualifiers.as_string()+"long double"+d;
     else
-      return expr2ct::convert_rec(src, qualifiers);
+      return expr2ct::convert_rec(src, qualifiers, declarator);
   }
   else if(src.id()=="symbol")
   {
@@ -193,6 +201,8 @@ std::string expr2cppt::convert_rec(
       if(symbol.pretty_name!=irep_idt())
         dest+=" "+id2string(symbol.pretty_name);
 
+      dest+=d;
+
       return dest;
     }
     else if(symbol.type.id()=="c_enum")
@@ -204,10 +214,12 @@ std::string expr2cppt::convert_rec(
       if(symbol.pretty_name!=irep_idt())
         dest+=" "+id2string(symbol.pretty_name);
 
+      dest+=d;
+
       return dest;
     }
     else
-      return expr2ct::convert_rec(src, qualifiers);
+      return expr2ct::convert_rec(src, qualifiers, declarator);
   }
   else if(src.id()=="struct" ||
           src.id()=="incomplete_struct")
@@ -220,6 +232,8 @@ std::string expr2cppt::convert_rec(
       dest+="__interface"; // MS-specific
     else
       dest+="struct";
+
+    dest+=d;
 
     return dest;
   }
@@ -267,34 +281,35 @@ std::string expr2cppt::convert_rec(
     typet member;
     member.swap(tmp.add("to-member"));
 
-    std::string dest = "(" + convert_rec(member, c_qualifierst()) + ":: *)";
+    std::string dest = "(" + convert_rec(member, c_qualifierst(), "") + ":: *)";
 
     if(src.subtype().id()=="code")
     {
       const code_typet& code_type = to_code_type(src.subtype());
       const typet& return_type = code_type.return_type();
-      dest = convert_rec(return_type, c_qualifierst()) +" " + dest;
+      dest = convert_rec(return_type, c_qualifierst(), "") +" " + dest;
 
       const code_typet::argumentst& args = code_type.arguments();
       dest += "(";
 
       if(args.size() > 0)
-        dest += convert_rec(args[0].type(), c_qualifierst());
+        dest += convert_rec(args[0].type(), c_qualifierst(), "");
 
       for(unsigned i = 1; i < args.size();i++)
-        dest += ", " + convert_rec(args[i].type(), c_qualifierst());
+        dest += ", " + convert_rec(args[i].type(), c_qualifierst(), "");
       dest += ")";
+      dest+=d;
     }
     else
     {
-      dest = convert_rec(src.subtype(),c_qualifierst()) + " " + dest;
+      dest = convert_rec(src.subtype(),c_qualifierst(), "") + " " + dest+d;
     }
     return dest;
   }
   else if(src.id()=="unassigned")
     return "?";
   else
-    return expr2ct::convert_rec(src, qualifiers);
+    return expr2ct::convert_rec(src, qualifiers, declarator);
 }
 
 std::string expr2cppt::convert_cpp_this(

@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <ansi-c/type2name.h>
 #include <cctype>
 #include <util/i2string.h>
 #include <util/std_types.h>
+#include <util/type2name.h>
 
 std::string type2name(const typet &type)
 {
@@ -45,7 +45,14 @@ std::string type2name(const typet &type)
   else if(type.id()=="fixedbv")
     result+='X' + type.width().as_string();
   else if(type.id()=="pointer")
-    result+='*';
+  {
+    if(is_reference(type))
+      result+='&';
+    else if(is_rvalue_reference(type))
+      result+="&&";
+    else
+      result+='*';
+  }
   else if(type.id()=="reference")
     result+='&';
   else if(type.is_code())
@@ -74,8 +81,7 @@ std::string type2name(const typet &type)
   {
     result+="SYM#" + type.identifier().as_string() + "#";
   }
-  else if(type.id()=="struct" ||
-          type.id()=="union")
+  else if(type.is_struct() || type.is_union())
   {
     if(type.id()=="struct") result +="ST";
     if(type.id()=="union") result +="UN";

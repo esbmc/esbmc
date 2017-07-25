@@ -5,7 +5,6 @@
  *      Author: mramalho
  */
 
-#include <ansi-c/c_sizeof.h>
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/bitvector.h>

@@ -37,16 +37,14 @@ void goto_convertt::finish_gotos()
 
     if (is_code_goto2t(i.code))
     {
-      exprt tmp = migrate_expr_back(i.code);
-
-      const irep_idt &goto_label = tmp.destination();
+      const irep_idt &goto_label = to_code_goto2t(i.code).target;
 
       labelst::const_iterator l_it = targets.labels.find(goto_label);
 
       if(l_it==targets.labels.end())
       {
-        err_location(tmp);
         std::cerr << "goto label " << goto_label << " not found";
+        i.code->dump();
         abort();
       }
 

@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/c_typecast.h>
 #include <ansi-c/c_typecheck_base.h>
+#include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 

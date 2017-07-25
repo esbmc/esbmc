@@ -126,8 +126,6 @@ public:
     const std::string &msg,
     const guardt &guard)=0;
 
-  typedef hash_set_cont<exprt, irep_hash> expr_sett;
-
   /** Fetch the set of values that the given pointer variable can point at.
    *  @param expr Pointer symbol to get the value set of.
    *  @param value_set A value set to store the output of this call into.
@@ -230,8 +228,6 @@ public:
    *  @return True when the given expression does have a dereference.
    */
   bool has_dereference(const expr2tc &expr) const;
-
-  typedef hash_set_cont<exprt, irep_hash> expr_sett;
 
 private:
   /** Namespace to perform type lookups against. */

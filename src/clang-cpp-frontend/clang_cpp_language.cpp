@@ -6,12 +6,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <ansi-c/c_link.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
 #include <clang-cpp-frontend/expr2cpp.h>
 #include <regex>
+#include <util/c_link.h>
 
 languaget *new_clang_cpp_language()
 {

@@ -16,6 +16,7 @@
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/type2name.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -425,7 +426,7 @@ bool clang_c_convertert::get_var(
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
   code_declt decl;
-  decl.operands().push_back(symbol_expr(added_symbol));
+  decl.operands().push_back(symbol_exprt(identifier, t));
 
   if(vd.hasInit())
   {
@@ -577,6 +578,14 @@ bool clang_c_convertert::get_function_params(
   std::string pretty_name;
   get_function_param_name(pd, pretty_name);
 
+  param.cmt_identifier(pretty_name);
+  param.location() = location_begin;
+
+  // TODO: we can remove the following code once irep1 is dead, there
+  // is no need to add the function argument to the symbol table,
+  // as nothing relies on it. However, if we remove this now, the migrate
+  // code will wrongly assume the symbol to be level1, as it generates
+  // level0 symbol only if they are already on the context
   symbolt param_symbol;
   get_default_symbol(
     param_symbol,
@@ -590,9 +599,6 @@ bool clang_c_convertert::get_function_params(
   param_symbol.lvalue = true;
   param_symbol.is_parameter = true;
   param_symbol.file_local = true;
-
-  param.cmt_identifier(param_symbol.name.as_string());
-  param.location() = param_symbol.location;
 
   // Save the function's param address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(pd.getFirstDecl());
@@ -1342,11 +1348,6 @@ bool clang_c_convertert::get_expr(
 
     case clang::Stmt::AddrLabelExprClass:
     {
-      std::cerr << "ESBMC currently does not support label as values"
-                << std::endl;
-      stmt.dumpColor();
-      return true;
-
       const clang::AddrLabelExpr &addrlabelExpr =
         static_cast<const clang::AddrLabelExpr &>(stmt);
 

@@ -8,7 +8,6 @@
 
 \*******************************************************************/
 
-#include <ansi-c/printf_formatter.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
@@ -16,6 +15,7 @@
 #include <cassert>
 #include <cstring>
 #include <goto-symex/goto_trace.h>
+#include <goto-symex/printf_formatter.h>
 #include <goto-symex/witnesses.h>
 #include <iostream>
 #include <langapi/language_util.h>
@@ -245,32 +245,6 @@ show_state_header(
   }
 
   out << "----------------------------------------------------" << std::endl;
-}
-
-std::string
-get_varname_from_guard (
-  goto_tracet::stepst::const_iterator &it,
-  const goto_tracet &goto_trace __attribute__((unused)))
-{
-  std::string varname;
-  exprt old_irep_guard = migrate_expr_back(it->pc->guard);
-  exprt guard_operand = old_irep_guard.op0();
-  if (!guard_operand.operands().empty()) {
-    if (!guard_operand.op0().identifier().as_string().empty()) {
-      char identstr[guard_operand.op0().identifier().as_string().length()];
-      strcpy(identstr, guard_operand.op0().identifier().c_str());
-      int j = 0;
-      char * tok;
-      tok = strtok(identstr, "::");
-      while (tok != nullptr) {
-	if (j == 4)
-	  varname = tok;
-	tok = strtok(nullptr, "::");
-	j++;
-      }
-    }
-  }
-  return varname;
 }
 
 void generate_goto_trace_in_violation_graphml_format(

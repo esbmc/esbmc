@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_TYPECAST_H
 #define CPROVER_CPP_TYPECAST_H
 
-#include <ansi-c/c_typecast.h>
+#include <util/c_typecast.h>
 
 class cpp_typecheckt;
 

@@ -6,7 +6,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <ansi-c/c_link.h>
 #include <ansi-c/c_main.h>
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/gcc_builtin_headers.h>
@@ -18,6 +17,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <util/c_link.h>
 #include <util/config.h>
 #include <util/replace_symbol.h>
 

@@ -8,8 +8,8 @@ Author: Daniel Kroening
 
 \*******************************************************************/
 
-#include <ansi-c/printf_formatter.h>
 #include <cassert>
+#include <goto-symex/printf_formatter.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <util/i2string.h>

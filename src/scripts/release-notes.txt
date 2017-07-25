@@ -1,5 +1,13 @@
 Release Notes of the ESBMC model checker
 
+*** Version 4.4.1
+* Remove option to disable clang
+* Improvements to ax_clang to support Ubuntu/Debian/Fedora
+* Fix struct/union symbol dump
+* Fix a number of status messages
+* Fix cex when using z3 in fp mode
+* Fix old c++ frontend not finding a program entry point
+
 *** Version 4.4
 * Fix crash with --smt-during-symex due to equations being shared_ptr
 * Fix a double increment when encoding tuples

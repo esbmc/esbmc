@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/printf_formatter.h>
 #include <cassert>
+#include <goto-symex/printf_formatter.h>
 #include <sstream>
 #include <util/c_types.h>
 #include <util/format_constant.h>

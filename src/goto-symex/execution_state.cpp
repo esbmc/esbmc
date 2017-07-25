@@ -155,7 +155,6 @@ execution_statet::operator=(const execution_statet &ex)
   pre_goto_guard = ex.pre_goto_guard;
   mon_thread_warning = ex.mon_thread_warning;
   check_ltl = ex.check_ltl;
-  property_monitor_strings = ex.property_monitor_strings;
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
@@ -653,7 +652,6 @@ execution_statet::execute_guard()
 
   node_id = node_count++;
   expr2tc guard_expr = get_guard_identifier();
-  exprt new_rhs, const_prop_val;
   expr2tc parent_guard;
 
   // Parent guard of this context switch - if a assign/claim/assume, just use

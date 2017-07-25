@@ -1,6 +1,6 @@
 
-#include <ansi-c/type2name.h>
 #include <clang-c-frontend/clang_c_convert.h>
+#include <util/type2name.h>
 
 std::string clang_c_convertert::get_decl_name(
   const clang::NamedDecl &decl)

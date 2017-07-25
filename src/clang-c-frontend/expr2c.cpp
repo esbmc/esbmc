@@ -67,25 +67,29 @@ void expr2ct::get_shorthands(const exprt &expr)
 
 std::string expr2ct::convert(const typet &src)
 {
-  return convert_rec(src, c_qualifierst());
+  return convert_rec(src, c_qualifierst(), "");
 }
 
 std::string expr2ct::convert_rec(
   const typet &src,
-  const c_qualifierst &qualifiers)
+  const c_qualifierst &qualifiers,
+  const std::string &declarator)
 {
   c_qualifierst new_qualifiers(qualifiers);
   new_qualifiers.read(src);
 
   std::string q=new_qualifiers.as_string();
 
+  std::string d=
+    declarator==""?declarator:" "+declarator;
+
   if(src.is_bool())
   {
-    return q+"_Bool";
+    return q+"_Bool"+d;
   }
   else if(src.id()=="empty")
   {
-    return q+"void";
+    return q+"void"+d;
   }
   else if(src.id()=="signedbv" || src.id()=="unsignedbv")
   {
@@ -96,23 +100,23 @@ std::string expr2ct::convert_rec(
 
     if(width==config.ansi_c.int_width)
     {
-      return q+sign_str+"int";
+      return q+sign_str+"int"+d;
     }
     else if(width==config.ansi_c.long_int_width)
     {
-      return q+sign_str+"long int";
+      return q+sign_str+"long int"+d;
     }
     else if(width==config.ansi_c.char_width)
     {
-      return q+sign_str+"char";
+      return q+sign_str+"char"+d;
     }
     else if(width==config.ansi_c.short_int_width)
     {
-      return q+sign_str+"short int";
+      return q+sign_str+"short int"+d;
     }
     else if(width==config.ansi_c.long_long_int_width)
     {
-      return q+sign_str+"long long int";
+      return q+sign_str+"long long int"+d;
     }
   }
   else if(src.id()=="floatbv" ||
@@ -121,45 +125,42 @@ std::string expr2ct::convert_rec(
     mp_integer width=string2integer(src.width().as_string());
 
     if(width==config.ansi_c.single_width)
-      return q+"float";
+      return q+"float"+d;
     else if(width==config.ansi_c.double_width)
-      return q+"double";
+      return q+"double"+d;
     else if(width==config.ansi_c.long_double_width)
-      return q+"long double";
+      return q+"long double"+d;
   }
-  else if(src.id()=="struct" ||
-          src.id()=="incomplete_struct")
+  else if(src.id()=="struct")
+  {
+    return convert_struct_type(src, q, d);
+  }
+  else if(src.id()=="incomplete_struct")
   {
     std::string dest=q+"struct";
-
     const std::string &tag=src.tag().as_string();
     if(tag!="") dest+=" "+tag;
-
-    /*
-    const irept &components=type.components();
-
-    forall_irep(it, components.get_sub())
-    {
-      typet &subtype=(typet &)it->type();
-      base_type(subtype, ns);
-    }
-    */
-
+    dest+=d;
     return dest;
   }
   else if(src.id()=="union")
   {
-    std::string dest=q+"union ";
-    /*
-    const irept &components=type.components();
+    const union_typet &union_type=to_union_type(src);
 
-    forall_irep(it, components.get_sub())
+    std::string dest=q+"union";
+
+    const irep_idt &tag=union_type.tag().as_string();
+    if(tag!="")
+      dest+=" "+id2string(tag);
+    dest+=" {";
+    for(auto const &it : union_type.components())
     {
-      typet &subtype=(typet &)it->type();
-      base_type(subtype, ns);
+      dest+=' ';
+      dest+=convert_rec(it.type(), c_qualifierst(), id2string(it.get_name()));
+      dest+=';';
     }
-    */
-
+    dest+=" }";
+    dest+=d;
     return dest;
   }
   else if(src.id()=="c_enum" ||
@@ -167,6 +168,7 @@ std::string expr2ct::convert_rec(
   {
     std::string result=q+"enum";
     if(src.name()!="") result+=" "+src.tag().as_string();
+    result+=d;
     return result;
   }
   else if(src.id()=="pointer")
@@ -219,7 +221,26 @@ std::string expr2ct::convert_rec(
   }
   else if(src.id()=="symbol")
   {
-    return convert_rec(ns.follow(src), new_qualifiers);
+    const typet &followed=ns.follow(src);
+    if(followed.id()=="struct")
+    {
+      std::string dest=q+"struct";
+      const std::string &tag=followed.tag().as_string();
+      if(tag!="") dest+=" "+tag;
+      dest+=d;
+      return dest;
+    }
+
+    if(followed.id()=="union")
+    {
+      std::string dest=q+"union";
+      const std::string &tag=followed.tag().as_string();
+      if(tag!="") dest+=" "+tag;
+      dest+=d;
+      return dest;
+    }
+
+    return convert_rec(ns.follow(src), new_qualifiers, declarator);
   }
   else if(src.is_code())
   {
@@ -246,6 +267,36 @@ std::string expr2ct::convert_rec(
 
   unsigned precedence;
   return convert_norep((exprt&)src, precedence);
+}
+
+std::string expr2ct::convert_struct_type(
+  const typet &src,
+  const std::string &qualifiers,
+  const std::string &declarator)
+{
+  const struct_typet &struct_type=to_struct_type(src);
+
+  std::string dest=qualifiers+"struct";
+
+  const irep_idt &tag=struct_type.tag().as_string();
+  if(tag!="")
+    dest+=" "+id2string(tag);
+
+  dest+=" {";
+
+  for(const auto &component : struct_type.components())
+  {
+    dest+=' ';
+    dest+=convert_rec(
+      component.type(),
+      c_qualifierst(),
+      id2string(component.get_name()));
+    dest+=';';
+  }
+
+  dest+=" }";
+  dest+=declarator;
+  return dest;
 }
 
 std::string expr2ct::convert_typecast(
@@ -1483,19 +1534,44 @@ std::string expr2ct::convert_code_decl(
     return convert_norep(src, precedence);
   }
 
+  std::string declarator=convert(src.op0());
+
   std::string dest=indent_str(indent);
 
+  const symbolt *symbol=NULL;
+  if(!ns.lookup(to_symbol_expr(src.op0()).get_identifier(), symbol))
   {
-    dest+=convert(src.op0().type());
-    dest+=" ";
+    if(symbol->file_local && (src.op0().type().is_code() || symbol->static_lifetime))
+      dest+="static ";
+    else if(symbol->is_extern)
+      dest+="extern ";
+
+    if(symbol->type.is_code() && to_code_type(symbol->type).get_inlined())
+      dest+="inline ";
   }
 
-  dest+=convert(src.op0());
+  const typet &followed=ns.follow(src.op0().type());
+  if(followed.id()=="struct")
+  {
+    dest+="struct ";
+    const std::string &tag=followed.tag().as_string();
+    if(tag!="") dest+=tag+" ";
+    dest+=declarator;
+  }
+  else if(followed.id()=="union")
+  {
+    dest+="union ";
+    const std::string &tag=followed.tag().as_string();
+    if(tag!="") dest+=tag+" ";
+    dest+=declarator;
+  }
+  else
+    dest+=convert_rec(src.op0().type(), c_qualifierst(), declarator);
 
   if(src.operands().size()==2)
-    dest+=" = "+convert(src.op1());
+    dest+="="+convert(src.op1());
 
-  dest+=";";
+  dest+=';';
 
   return dest;
 }

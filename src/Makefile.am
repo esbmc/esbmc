@@ -1,7 +1,7 @@
 ACLOCAL_AMFLAGS = -I scripts/build-aux/m4
 
 SUBDIRS = big-int util langapi clang-c-frontend ansi-c goto-programs \
-          c2goto clang-cpp-frontend  cpp solvers goto-symex \
+          c2goto clang-cpp-frontend cpp solvers goto-symex \
           pointer-analysis esbmc
 
 licensedir = $(prefix)/license

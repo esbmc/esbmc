@@ -143,14 +143,6 @@ protected:
    *  --no-simplify option being turned off.
    *  @param expr Expression to simplify, in place.
    */
-  virtual void do_simplify(exprt &expr);
-
-  /**
-   *  Perform simplification on an expression.
-   *  Essentially is just a call to simplify, but is guarded by the
-   *  --no-simplify option being turned off.
-   *  @param expr Expression to simplify, in place.
-   */
   virtual void do_simplify(expr2tc &expr);
 
   /**

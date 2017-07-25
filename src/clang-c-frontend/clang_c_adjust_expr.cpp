@@ -5,12 +5,12 @@
  *      Author: mramalho
  */
 
-#include <ansi-c/c_sizeof.h>
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
 #include <util/c_types.h>
+#include <util/c_sizeof.h>
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/ieee_float.h>
