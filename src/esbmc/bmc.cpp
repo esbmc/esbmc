@@ -352,8 +352,8 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
 
     if(!sparse) {
       std::cout << "// " << it.source.pc->location_number << " ";
-      std::cout << it.source.pc->location.as_string() << " ";
-      if(!it.comment.empty()) std::cout << "(" << it.comment << ")";
+      std::cout << it.source.pc->location.as_string();
+      if(!it.comment.empty()) std::cout << " (" << it.comment << ")";
       std::cout << '\n';
     }
 
