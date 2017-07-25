@@ -101,22 +101,3 @@ const typet &namespacet::follow(const typet &src) const
     symbol=&lookup(symbol->type);
   }
 }
-
-void namespacet::follow_macros(exprt &expr) const
-{
-  if(expr.is_symbol())
-  {
-    const symbolt &symbol=lookup(expr);
-
-    if(symbol.is_macro && !symbol.value.is_nil())
-    {
-      expr=symbol.value;
-      follow_macros(expr);
-    }
-
-    return;
-  }
-
-  Forall_operands(it, expr)
-    follow_macros(*it);
-}

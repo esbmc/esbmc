@@ -360,9 +360,7 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
     std::cout <<   "(" << count << ") ";
 
     std::string string_value;
-
-    exprt cond = migrate_expr_back(it.cond);
-    languages.from_expr(cond, string_value, fullname);
+    languages.from_expr(migrate_expr_back(it.cond), string_value, fullname);
 
     if(it.is_assignment())
     {

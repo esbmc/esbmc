@@ -583,8 +583,6 @@ class execution_statet : public goto_symext
   bool check_ltl;
   /** Have we warned of an ended monitor thread already?. */
   bool mon_thread_warning;
-  /** List of monitored properties. */
-  std::map<std::string, exprt> property_monitor_strings;
   /** Message handler object */
   message_handlert &message_handler;
   /** Minimum number of threads to exist to consider a context switch.
