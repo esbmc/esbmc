@@ -15,7 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 #include <sstream>
 #include <util/expr_util.h>
-#include <util/global.h>
 #include <util/i2string.h>
 #include <util/irep2.h>
 #include <util/migrate.h>
