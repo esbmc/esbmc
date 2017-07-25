@@ -27,7 +27,7 @@ utilinclude_HEADERS = arith_tools.h array_name.h base_type.h bitvector.h \
       language.h language_file.h location.h message.h message_stream.h \
       migrate.h mp_arith.h namespace.h numbering.h options.h \
       parseoptions.h parser.h prefix.h c_qualifiers.h \
-      reference_counting.h rename.h replace_symbol.h signal_catcher.h \
+      rename.h replace_symbol.h signal_catcher.h \
       simplify_expr.h simplify_expr_class.h simplify_utils.h std_code.h \
       std_expr.h std_types.h string2array.h string_constant.h \
       string_container.h string_hash.h symbol.h symbol_serialization.h \
