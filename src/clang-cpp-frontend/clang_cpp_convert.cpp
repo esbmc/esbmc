@@ -5,6 +5,7 @@
 #include <clang/AST/DeclTemplate.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/StmtCXX.h>
+#include <util/expr_util.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
@@ -122,6 +123,64 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
   default:
     return clang_c_convertert::get_decl(decl, new_expr);
+  }
+
+  return false;
+}
+
+bool clang_cpp_convertert::get_type(
+  const clang::QualType &q_type,
+  typet &new_type)
+{
+  return clang_c_convertert::get_type(q_type, new_type);
+}
+
+bool clang_cpp_convertert::get_type(
+  const clang::Type &the_type,
+  typet &new_type)
+{
+  switch(the_type.getTypeClass())
+  {
+  case clang::Type::SubstTemplateTypeParm:
+  {
+    const clang::SubstTemplateTypeParmType &substmpltt =
+      static_cast<const clang::SubstTemplateTypeParmType &>(the_type);
+
+    if(get_type(substmpltt.getReplacementType(), new_type))
+      return true;
+    break;
+  }
+
+  case clang::Type::TemplateSpecialization:
+  {
+    const clang::TemplateSpecializationType &templSpect =
+      static_cast<const clang::TemplateSpecializationType &>(the_type);
+
+    if(get_type(templSpect.desugar(), new_type))
+      return true;
+    break;
+  }
+
+  case clang::Type::MemberPointer:
+  {
+    const clang::MemberPointerType &mpt =
+      static_cast<const clang::MemberPointerType &>(the_type);
+
+    typet sub_type;
+    if(get_type(mpt.getPointeeType(), sub_type))
+      return true;
+
+    typet class_type;
+    if(get_type(*mpt.getClass(), class_type))
+      return true;
+
+    new_type = gen_pointer_type(sub_type);
+    new_type.set("to-member", class_type);
+    break;
+  }
+
+  default:
+    return clang_c_convertert::get_type(the_type, new_type);
   }
 
   return false;
