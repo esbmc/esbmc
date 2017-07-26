@@ -53,6 +53,21 @@ bool clang_cpp_convertert::get_decl(
       break;
     }
 
+    case clang::Decl::CXXConstructor:
+    case clang::Decl::CXXMethod:
+    case clang::Decl::CXXDestructor:
+    case clang::Decl::CXXConversion:
+    {
+      const clang::CXXMethodDecl &cxxmd =
+        static_cast<const clang::CXXMethodDecl&>(decl);
+
+      assert(llvm::dyn_cast<clang::TemplateDecl>(&cxxmd) == nullptr);
+      if(get_function(cxxmd, new_expr))
+        return true;
+
+      break;
+    }
+
     default:
       return clang_c_convertert::get_decl(decl, new_expr);
   }
