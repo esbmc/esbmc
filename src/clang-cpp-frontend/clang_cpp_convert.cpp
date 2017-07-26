@@ -251,6 +251,267 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   return false;
 }
 
+bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
+{
+  locationt location;
+  get_start_location_from_stmt(stmt, location);
+
+  switch(stmt.getStmtClass())
+  {
+  case clang::Stmt::CXXReinterpretCastExprClass:
+    // TODO: ReinterpretCast should actually generate a bitcast
+  case clang::Stmt::CXXFunctionalCastExprClass:
+  case clang::Stmt::CXXStaticCastExprClass:
+  case clang::Stmt::CXXConstCastExprClass:
+  {
+    const clang::CastExpr &cast = static_cast<const clang::CastExpr &>(stmt);
+
+    if(get_cast_expr(cast, new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::CXXDefaultArgExprClass:
+  {
+    const clang::CXXDefaultArgExpr &cxxdarg =
+      static_cast<const clang::CXXDefaultArgExpr &>(stmt);
+
+    if(get_expr(*cxxdarg.getExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::CXXDynamicCastExprClass:
+  {
+    const clang::CXXDynamicCastExpr &cast =
+      static_cast<const clang::CXXDynamicCastExpr &>(stmt);
+
+    if(cast.isAlwaysNull())
+    {
+      typet t;
+      if(get_type(cast.getType(), t))
+        return true;
+
+      new_expr = gen_zero(gen_pointer_type(t));
+    }
+    else if(get_cast_expr(cast, new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::CXXBoolLiteralExprClass:
+  {
+    const clang::CXXBoolLiteralExpr &bool_literal =
+      static_cast<const clang::CXXBoolLiteralExpr &>(stmt);
+
+    if(bool_literal.getValue())
+      new_expr = true_exprt();
+    else
+      new_expr = false_exprt();
+    break;
+  }
+
+  case clang::Stmt::CXXMemberCallExprClass:
+  {
+    const clang::CXXMemberCallExpr &member_call =
+      static_cast<const clang::CXXMemberCallExpr &>(stmt);
+
+    const clang::Stmt *callee = member_call.getCallee();
+
+    exprt callee_expr;
+    if(get_expr(*callee, callee_expr))
+      return true;
+
+    typet type;
+    if(get_type(member_call.getType(), type))
+      return true;
+
+    side_effect_expr_function_callt call;
+    call.function() = callee_expr;
+    call.type() = type;
+
+    // Add implicit object call: a this pointer or an object
+    exprt implicit_object;
+    if(get_expr(*member_call.getImplicitObjectArgument(), implicit_object))
+      return true;
+
+    call.arguments().push_back(implicit_object);
+
+    // Do args
+    for(const clang::Expr *arg : member_call.arguments())
+    {
+      exprt single_arg;
+      if(get_expr(*arg, single_arg))
+        return true;
+
+      call.arguments().push_back(single_arg);
+    }
+
+    new_expr = call;
+    break;
+  }
+
+  case clang::Stmt::CXXOperatorCallExprClass:
+  {
+    const clang::CXXOperatorCallExpr &operator_call =
+      static_cast<const clang::CXXOperatorCallExpr &>(stmt);
+
+    const clang::Stmt *callee = operator_call.getCallee();
+
+    exprt callee_expr;
+    if(get_expr(*callee, callee_expr))
+      return true;
+
+    typet type;
+    if(get_type(operator_call.getType(), type))
+      return true;
+
+    side_effect_expr_function_callt call;
+    call.function() = callee_expr;
+    call.type() = type;
+
+    // Do args
+    for(const clang::Expr *arg : operator_call.arguments())
+    {
+      exprt single_arg;
+      if(get_expr(*arg, single_arg))
+        return true;
+
+      call.arguments().push_back(single_arg);
+    }
+
+    new_expr = call;
+    break;
+  }
+
+  case clang::Stmt::ExprWithCleanupsClass:
+  {
+    const clang::ExprWithCleanups &ewc =
+      static_cast<const clang::ExprWithCleanups &>(stmt);
+
+    if(get_expr(*ewc.getSubExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::CXXBindTemporaryExprClass:
+  {
+    const clang::CXXBindTemporaryExpr &cxxbtmp =
+      static_cast<const clang::CXXBindTemporaryExpr &>(stmt);
+
+    if(get_expr(*cxxbtmp.getSubExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::SubstNonTypeTemplateParmExprClass:
+  {
+    const clang::SubstNonTypeTemplateParmExpr &substnttp =
+      static_cast<const clang::SubstNonTypeTemplateParmExpr &>(stmt);
+
+    if(get_expr(*substnttp.getReplacement(), new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::MaterializeTemporaryExprClass:
+  {
+    const clang::MaterializeTemporaryExpr &mtemp =
+      static_cast<const clang::MaterializeTemporaryExpr &>(stmt);
+
+    if(get_expr(*mtemp.GetTemporaryExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::CXXNewExprClass:
+  {
+    const clang::CXXNewExpr &ne = static_cast<const clang::CXXNewExpr &>(stmt);
+
+    typet t;
+    if(get_type(ne.getType(), t))
+      return true;
+
+    if(ne.isArray())
+    {
+      new_expr = side_effect_exprt("cpp_new[]", t);
+
+      // TODO: Implement support when the array size is empty
+      assert(ne.getArraySize().hasValue());
+      exprt size;
+      if(get_expr(*(ne.getArraySize().getValue()), size))
+        return true;
+
+      new_expr.size(size);
+    }
+    else
+    {
+      new_expr = side_effect_exprt("cpp_new", t);
+    }
+
+    if(ne.hasInitializer())
+    {
+      exprt lhs("new_object", t);
+      lhs.cmt_lvalue(true);
+
+      exprt init;
+      if(get_expr(*ne.getInitializer(), init))
+        return true;
+
+      convert_expression_to_code(init);
+
+      new_expr.initializer(init);
+    }
+
+    break;
+  }
+
+  case clang::Stmt::CXXPseudoDestructorExprClass:
+  {
+    new_expr = exprt("pseudo_destructor");
+    break;
+  }
+
+  case clang::Stmt::CXXScalarValueInitExprClass:
+  {
+    const clang::CXXScalarValueInitExpr &cxxsvi =
+      static_cast<const clang::CXXScalarValueInitExpr &>(stmt);
+
+    typet t;
+    if(get_type(cxxsvi.getType(), t))
+      return true;
+
+    new_expr = gen_zero(t);
+    break;
+  }
+
+  case clang::Stmt::TypeTraitExprClass:
+  {
+    const clang::TypeTraitExpr &tt =
+      static_cast<const clang::TypeTraitExpr &>(stmt);
+
+    if(tt.getValue())
+      new_expr = true_exprt();
+    else
+      new_expr = false_exprt();
+    break;
+  }
+
+  default:
+    return clang_c_convertert::get_expr(stmt, new_expr);
+  }
+
+  new_expr.location() = location;
+  return false;
+}
+
 template <typename SpecializationDecl>
 bool clang_cpp_convertert::get_template_decl_specialization(
   const SpecializationDecl *D,
