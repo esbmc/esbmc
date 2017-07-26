@@ -894,10 +894,22 @@ bool clang_c_convertert::get_type(
     {
       const clang::LValueReferenceType &lvrt =
         static_cast<const clang::LValueReferenceType &>(the_type);
+      const clang::QualType &pointee = lvrt.getPointeeTypeAsWritten();
 
-      if(get_type(lvrt.getPointeeTypeAsWritten(), new_type))
+      typet sub_type;
+      if(get_type(pointee, sub_type))
         return true;
 
+      // Special case, pointers to structs/unions/classes must not
+      // have a copy of it, but a reference to the type
+      if(sub_type.is_struct() || sub_type.is_union())
+      {
+        struct_union_typet t = to_struct_union_type(sub_type);
+        sub_type = symbol_typet("tag-" + t.tag().as_string());
+      }
+
+      new_type = gen_pointer_type(sub_type);
+      new_type.set("#reference", true);
       break;
     }
 
