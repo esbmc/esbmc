@@ -134,20 +134,23 @@ protected:
 
   virtual void get_var_name(
     const clang::VarDecl &vd,
-    std::string &name);
+    std::string &name,
+    std::string &pretty_name);
 
   virtual void get_function_param_name(
     const clang::ParmVarDecl &pd,
-    std::string &name);
+    std::string &name,
+    std::string &pretty_name);
 
   virtual void get_function_name(
     const clang::FunctionDecl& fd,
-    std::string &base_name,
+    std::string &name,
     std::string &pretty_name);
 
-  virtual bool get_tag_name(
+  virtual void get_tag_name(
     const clang::RecordDecl& recordd,
-    std::string &identifier);
+    std::string &name,
+    std::string &pretty_name);
 
   virtual void get_start_location_from_stmt(
     const clang::Stmt& stmt,

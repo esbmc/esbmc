@@ -260,11 +260,10 @@ bool clang_c_convertert::get_struct_union_class(
   else
     t = struct_typet();
 
-  std::string identifier;
-  if(get_tag_name(rd, identifier))
-    return true;
+  std::string name, pretty_name;
+  get_tag_name(rd, name, pretty_name);
 
-  t.tag(identifier);
+  t.tag(pretty_name);
 
   locationt location_begin;
   get_location_from_decl(rd, location_begin);
@@ -274,16 +273,15 @@ bool clang_c_convertert::get_struct_union_class(
     symbol,
     get_modulename_from_path(location_begin.file().as_string()),
     t,
-    identifier,
-    "tag-" + identifier,
+    name,
+    pretty_name,
     location_begin,
     true);
 
   // Save the struct/union/class type address and name to the type map
   std::string symbol_name = symbol.name.as_string();
 
-  std::size_t address =
-    reinterpret_cast<std::size_t>(rd.getFirstDecl());
+  std::size_t address = reinterpret_cast<std::size_t>(rd.getFirstDecl());
   type_map[address] = symbol_name;
 
   symbol.is_type = true;
@@ -311,15 +309,6 @@ bool clang_c_convertert::get_struct_union_class(
     return true;
 
   added_symbol.type = t;
-
-  // This change on the pretty_name is just to beautify the output
-  if(rd.isStruct())
-    added_symbol.pretty_name = "struct " + identifier;
-  else if(rd.isUnion())
-    added_symbol.pretty_name = "union " + identifier;
-  else
-    added_symbol.pretty_name = "class " + identifier;
-
   return false;
 }
 
@@ -382,8 +371,8 @@ bool clang_c_convertert::get_var(
     }
   }
 
-  std::string identifier;
-  get_var_name(vd, identifier);
+  std::string name, pretty_name;
+  get_var_name(vd, name, pretty_name);
 
   locationt location_begin;
   get_location_from_decl(vd, location_begin);
@@ -393,8 +382,8 @@ bool clang_c_convertert::get_var(
     symbol,
     get_modulename_from_path(location_begin.file().as_string()),
     t,
-    get_decl_name(vd),
-    identifier,
+    name,
+    pretty_name,
     location_begin,
     true);
 
@@ -425,7 +414,7 @@ bool clang_c_convertert::get_var(
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
   code_declt decl;
-  decl.operands().push_back(symbol_exprt(identifier, t));
+  decl.operands().push_back(symbol_exprt(name, t));
 
   if(vd.hasInit())
   {
@@ -543,7 +532,8 @@ bool clang_c_convertert::get_function_params(
   const clang::ParmVarDecl &pd,
   exprt &param)
 {
-  std::string name = get_decl_name(pd);
+  std::string name, pretty_name;
+  get_function_param_name(pd, name, pretty_name);
 
   typet param_type;
   if(get_type(pd.getOriginalType(), param_type))
@@ -569,9 +559,6 @@ bool clang_c_convertert::get_function_params(
 
   locationt location_begin;
   get_location_from_decl(pd, location_begin);
-
-  std::string pretty_name;
-  get_function_param_name(pd, pretty_name);
 
   param.cmt_identifier(pretty_name);
   param.location() = location_begin;
@@ -1984,12 +1971,11 @@ bool clang_c_convertert::get_decl_ref(
   const clang::Decl& decl,
   exprt& new_expr)
 {
-  std::string identifier;
-
   typet type;
   if(get_type(static_cast<const clang::ValueDecl&>(decl).getType(), type))
     return true;
 
+  std::string name, pretty_name;
   switch(decl.getKind())
   {
     case clang::Decl::Var:
@@ -1998,17 +1984,17 @@ bool clang_c_convertert::get_decl_ref(
         static_cast<const clang::VarDecl&>(decl);
 
       std::size_t address = reinterpret_cast<std::size_t>(vd.getFirstDecl());
-      identifier = object_map.find(address)->second;
+      name = object_map.find(address)->second;
       break;
     }
 
     case clang::Decl::ParmVar:
     {
-      const clang::ParmVarDecl &vd =
+      const clang::ParmVarDecl &pd =
         static_cast<const clang::ParmVarDecl&>(decl);
 
-      std::size_t address = reinterpret_cast<std::size_t>(vd.getFirstDecl());
-      identifier = object_map.find(address)->second;
+      std::size_t address = reinterpret_cast<std::size_t>(pd.getFirstDecl());
+      name = object_map.find(address)->second;
       break;
     }
 
@@ -2021,10 +2007,7 @@ bool clang_c_convertert::get_decl_ref(
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
 
-      std::string base_name, pretty_name;
-      get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
-
-      identifier = pretty_name;
+      get_function_name(fd, name, pretty_name);
       break;
     }
 
@@ -2034,10 +2017,7 @@ bool clang_c_convertert::get_decl_ref(
       const clang::FieldDecl &fd =
         static_cast<const clang::FieldDecl&>(decl);
 
-      std::string name, pretty_name;
       get_field_name(fd, name, pretty_name);
-
-      identifier = pretty_name;
       break;
     }
 
@@ -2053,7 +2033,6 @@ bool clang_c_convertert::get_decl_ref(
             bv_width(int_type())),
           integer2string(enumcd.getInitVal().getSExtValue()),
           int_type());
-
       return false;
     }
 
@@ -2065,10 +2044,9 @@ bool clang_c_convertert::get_decl_ref(
   }
 
   new_expr = exprt("symbol", type);
-  new_expr.identifier(identifier);
+  new_expr.identifier(name);
   new_expr.cmt_lvalue(true);
-  new_expr.name(identifier);
-
+  new_expr.name(name);
   return false;
 }
 
@@ -2417,7 +2395,7 @@ void clang_c_convertert::get_default_symbol(
   symbol.type = std::move(type);
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
-  symbol.name = pretty_name;
+  symbol.name = base_name;
   symbol.is_used = is_used;
 }
 

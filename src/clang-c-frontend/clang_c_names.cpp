@@ -40,8 +40,11 @@ void clang_c_convertert::get_field_name(
 
 void clang_c_convertert::get_var_name(
   const clang::VarDecl& vd,
-  std::string& name)
+  std::string &name,
+  std::string &pretty_name)
 {
+  pretty_name = get_decl_name(vd);
+
   if(!vd.isExternallyVisible())
   {
     locationt vd_location;
@@ -64,8 +67,11 @@ void clang_c_convertert::get_var_name(
 
 void clang_c_convertert::get_function_param_name(
   const clang::ParmVarDecl& pd,
-  std::string& name)
+  std::string &name,
+  std::string &pretty_name)
 {
+  pretty_name = get_decl_name(pd);
+
   locationt pd_location;
   get_location_from_decl(pd, pd_location);
 
@@ -79,28 +85,30 @@ void clang_c_convertert::get_function_param_name(
 
 void clang_c_convertert::get_function_name(
   const clang::FunctionDecl& fd,
-  std::string &base_name,
+  std::string &name,
   std::string &pretty_name)
 {
-  base_name = pretty_name = get_decl_name(fd);
+  name = pretty_name = get_decl_name(fd);
 
   if(!fd.isExternallyVisible())
   {
     locationt fd_location;
     get_location_from_decl(fd, fd_location);
 
-    pretty_name = get_modulename_from_path(fd_location.file().as_string());
-    pretty_name += "::" + base_name;
+    name = get_modulename_from_path(fd_location.file().as_string());
+    name += "::" + pretty_name;
   }
 }
 
-bool clang_c_convertert::get_tag_name(
+void clang_c_convertert::get_tag_name(
   const clang::RecordDecl& rd,
-  std::string &name)
+  std::string &name,
+  std::string &pretty_name)
 {
-  name =
+  pretty_name =
     clang::TypeName::getFullyQualifiedName(
       ASTContext->getTagDeclType(&rd),
       *ASTContext);
-    return false;
+
+  name = "tag-" + pretty_name;
 }
