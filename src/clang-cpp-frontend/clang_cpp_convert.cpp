@@ -43,6 +43,21 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
+  case clang::Decl::CXXConstructor:
+  case clang::Decl::CXXMethod:
+  case clang::Decl::CXXDestructor:
+  case clang::Decl::CXXConversion:
+  {
+    const clang::CXXMethodDecl &cxxmd =
+      static_cast<const clang::CXXMethodDecl &>(decl);
+
+    assert(llvm::dyn_cast<clang::TemplateDecl>(&cxxmd) == nullptr);
+    if(get_function(cxxmd, new_expr))
+      return true;
+
+    break;
+  }
+
   default:
     return clang_c_convertert::get_decl(decl, new_expr);
   }
@@ -61,8 +76,7 @@ bool clang_cpp_convertert::get_function(
   return clang_c_convertert::get_function(fd, new_expr);
 }
 
-bool clang_cpp_convertert::get_struct_union_class(
-  const clang::RecordDecl& rd)
+bool clang_cpp_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
   // Only convert instantiated functions/methods
   if(rd.isDependentContext())
@@ -76,7 +90,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   struct_union_typet &type)
 {
   // If a struct is defined inside a extern C, it will be a RecordDecl
-  const clang::CXXRecordDecl* cxxrd =
+  const clang::CXXRecordDecl *cxxrd =
     llvm::dyn_cast<clang::CXXRecordDecl>(&recordd);
   if(cxxrd != nullptr)
   {
@@ -84,7 +98,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     for(const auto &decl : cxxrd->bases())
     {
       // The base class is always a CXXRecordDecl
-      const clang::CXXRecordDecl* base =
+      const clang::CXXRecordDecl *base =
         decl.getType().getTypePtr()->getAsCXXRecordDecl();
       assert(base != nullptr);
 
@@ -101,7 +115,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   struct_union_typet &type)
 {
   // If a struct is defined inside a extern C, it will be a RecordDecl
-  const clang::CXXRecordDecl* cxxrd =
+  const clang::CXXRecordDecl *cxxrd =
     llvm::dyn_cast<clang::CXXRecordDecl>(&recordd);
   if(cxxrd == nullptr)
     return false;
