@@ -61,6 +61,10 @@ protected:
     bool DumpExplicitInst,
     bool DumpRefOnly,
     exprt &new_expr);
+
+  virtual bool get_expr(
+    const clang::Stmt &stmt,
+    exprt &new_expr) override;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
