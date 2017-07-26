@@ -58,6 +58,18 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
+  case clang::Decl::Namespace:
+  {
+    const clang::NamespaceDecl &namesd =
+      static_cast<const clang::NamespaceDecl &>(decl);
+
+    for(auto decl : namesd.decls())
+      if(get_decl(*decl, new_expr))
+        return true;
+
+    break;
+  }
+
   default:
     return clang_c_convertert::get_decl(decl, new_expr);
   }
