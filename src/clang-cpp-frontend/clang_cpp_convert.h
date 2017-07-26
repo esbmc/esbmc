@@ -33,6 +33,19 @@ protected:
   bool get_struct_union_class_methods(
     const clang::RecordDecl &recordd,
     struct_union_typet &type) override;
+
+  template<typename TemplateDecl>
+  bool get_template_decl(
+    const TemplateDecl *D,
+    bool DumpExplicitInst,
+    exprt &new_expr);
+
+  template<typename SpecializationDecl>
+  bool get_template_decl_specialization(
+    const SpecializationDecl *D,
+    bool DumpExplicitInst,
+    bool DumpRefOnly,
+    exprt &new_expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
