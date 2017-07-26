@@ -1253,7 +1253,7 @@ bool clang_c_convertert::get_expr(
       if(unary.getKind() == clang::UETT_AlignOf)
       {
         llvm::APSInt val;
-        if(unary.EvaluateAsInt(val, *ASTContext))
+        if(!unary.EvaluateAsInt(val, *ASTContext))
           return true;
 
         new_expr =
