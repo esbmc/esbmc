@@ -25,16 +25,14 @@ protected:
 
   bool get_struct_union_class(const clang::RecordDecl &rd) override;
 
-  bool get_var(
-    const clang::VarDecl &vd,
-    exprt &new_expr) override;
+  bool get_var(const clang::VarDecl &vd, exprt &new_expr) override;
 
   bool get_struct_union_class_fields(
-    const clang::RecordDecl &recordd,
+    const clang::RecordDecl &rd,
     struct_union_typet &type) override;
 
   bool get_struct_union_class_methods(
-    const clang::RecordDecl &recordd,
+    const clang::RecordDecl &rd,
     struct_union_typet &type) override;
 
   template <typename TemplateDecl>

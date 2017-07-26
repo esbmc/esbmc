@@ -318,10 +318,6 @@ bool clang_c_convertert::get_struct_union_class_fields(
   // First, parse the fields
   for(auto const &field : recordd.fields())
   {
-    // We don't add if private
-    if(field->getAccess() >= clang::AS_private)
-      continue;
-
     struct_typet::componentt comp;
     if(get_decl(*field, comp))
       return true;
