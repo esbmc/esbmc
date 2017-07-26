@@ -2013,6 +2013,10 @@ bool clang_c_convertert::get_decl_ref(
     }
 
     case clang::Decl::Function:
+    case clang::Decl::CXXMethod:
+    case clang::Decl::CXXConstructor:
+    case clang::Decl::CXXConversion:
+    case clang::Decl::CXXDestructor:
     {
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
