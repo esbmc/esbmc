@@ -1228,8 +1228,7 @@ bool clang_c_convertert::get_expr(
 
       // Use clang to calculate offsetof
       llvm::APSInt val;
-      bool res = offset.EvaluateAsInt(val, *ASTContext);
-      if(!res)
+      if(!offset.EvaluateAsInt(val, *ASTContext))
       {
         std::cerr << "Clang could not calculate offset"
                   << std::endl;
