@@ -6,6 +6,7 @@
  */
 
 #include <clang/AST/Attr.h>
+#include <clang/Tooling/Core/QualTypeNames.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -16,7 +17,6 @@
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
-#include <util/type2name.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -2427,7 +2427,7 @@ void clang_c_convertert::get_field_name(
       t.width(width.cformat());
     }
 
-    name = type2name(t);
+    name = clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext);
     pretty_name = "anon";
   }
 }
@@ -2492,39 +2492,10 @@ bool clang_c_convertert::get_tag_name(
   const clang::RecordDecl& rd,
   std::string &name)
 {
-  name = rd.getName().str();
-  if(!name.empty())
-    return false;
-
-  // Try to get the name from typedef (if one exists)
-  if (const clang::TagDecl *tag = llvm::dyn_cast<clang::TagDecl>(&rd))
-  {
-    if (const clang::TypedefNameDecl *tnd = rd.getTypedefNameForAnonDecl())
-    {
-      name = tnd->getName().str();
-      return false;
-    }
-    else if (tag->getIdentifier())
-    {
-      name = tag->getName().str();
-      return false;
-    }
-  }
-
-  struct_union_typet t;
-  if(rd.isStruct())
-    t = struct_typet();
-  else if(rd.isUnion())
-    t = union_typet();
-  else
-    // This should never be reached
-    abort();
-
-  clang::RecordDecl *record_def = rd.getDefinition();
-  if(get_struct_union_class_fields(*record_def, t))
-    return true;
-
-  name = type2name(t);
+  name =
+    clang::TypeName::getFullyQualifiedName(
+      ASTContext->getTagDeclType(&rd),
+      *ASTContext);
   return false;
 }
 
