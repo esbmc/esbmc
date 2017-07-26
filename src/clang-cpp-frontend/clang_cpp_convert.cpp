@@ -70,6 +70,16 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
+  // We can ignore any these declarations
+  case clang::Decl::ClassTemplatePartialSpecialization:
+  case clang::Decl::Using:
+  case clang::Decl::UsingShadow:
+  case clang::Decl::UsingDirective:
+  case clang::Decl::TypeAlias:
+  case clang::Decl::NamespaceAlias:
+  case clang::Decl::AccessSpec:
+    break;
+
   default:
     return clang_c_convertert::get_decl(decl, new_expr);
   }
