@@ -67,7 +67,7 @@ protected:
 
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 
-  bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
+  virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
   bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
 
