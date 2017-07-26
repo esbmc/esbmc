@@ -556,48 +556,20 @@ void clang_c_adjust::adjust_side_effect_function_call(
 
   if(f_op.is_symbol())
   {
-    const irep_idt &identifier = f_op.identifier();
-    symbolt* s = context.find_symbol(identifier);
-    if(s == nullptr)
-    {
-      // maybe this is an undeclared function
-      // let's just add it
-      symbolt new_symbol;
+    symbolt* s = context.find_symbol(f_op.identifier());
 
-      new_symbol.name = identifier;
-      new_symbol.base_name = f_op.name();
-      new_symbol.location = expr.location();
-      new_symbol.type = f_op.type();
-      new_symbol.mode = "C";
-      new_symbol.is_used = true;
+    // Pull symbol information: parameter types and location
+    // Save previous location
+    locationt location = f_op.location();
 
-      // Adjust type
-      to_code_type(new_symbol.type).make_ellipsis();
-      to_code_type(f_op.type()).make_ellipsis();
+    const symbolt &symbol = *s;
+    f_op = symbol_expr(symbol);
 
-      symbolt *symbol_ptr;
-      bool res = context.move(new_symbol, symbol_ptr);
-      assert(!res);
-      (void)res; // ndebug
+    // Restore location
+    f_op.location() = location;
 
-      // clang will complain about this already, no need for us to do the same!
-    }
-    else
-    {
-      // Pull symbol informations, like parameter types and location
-
-      // Save previous location
-      locationt location = f_op.location();
-
-      const symbolt &symbol = *s;
-      f_op = symbol_expr(symbol);
-
-      // Restore location
-      f_op.location() = location;
-
-      if(symbol.lvalue)
-        f_op.cmt_lvalue(true);
-    }
+    if(symbol.lvalue)
+      f_op.cmt_lvalue(true);
   }
   else
     adjust_expr(f_op);

@@ -449,10 +449,6 @@ bool clang_c_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
-  // Don't convert if clang thinks that the functions was implicitly converted
-  if(fd.isImplicit())
-    return false;
-
   // If the function is not defined but this is not the definition, skip it
   if(fd.isDefined() && !fd.isThisDeclarationADefinition())
     return false;
@@ -1281,8 +1277,6 @@ bool clang_c_convertert::get_expr(
     }
 
     // A function call expr
-    // It can be undefined here, the symbol will be added in
-    // adjust_expr::adjust_side_effect_function_call
     case clang::Stmt::CallExprClass:
     {
       const clang::CallExpr &function_call =
