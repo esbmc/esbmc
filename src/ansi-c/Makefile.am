@@ -14,7 +14,7 @@ libansic_la_SOURCES = parser.ypp \
       ansi_c_parser.cpp \
       ansi_c_language.cpp c_main.cpp \
       c_final.cpp trans_unit.cpp ansi_c_typecheck.cpp \
-      c_preprocess.cpp \
+      c_preprocess.cpp type2name.cpp \
       c_typecheck_base.cpp c_typecheck_initializer.cpp \
       c_typecheck_typecast.cpp c_typecheck_code.cpp \
       c_typecheck_expr.cpp c_typecheck_type.cpp \
@@ -35,7 +35,7 @@ ansicinclude_HEADERS = ansi_c_convert.h ansi_c_convert_type.h \
       convert_integer_literal.h convert_string_literal.h \
       gcc_builtin_headers.h headers.h parse_float.h \
       preprocessor_line.h trans_unit.h \
-      unescape_string.h
+      unescape_string.h type2name.h
 
 clean-local:
 	-rm scanner.cpp scanner.hpp parser.hpp parser.cpp

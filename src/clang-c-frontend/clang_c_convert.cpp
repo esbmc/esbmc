@@ -16,7 +16,6 @@
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
-#include <util/type2name.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -1247,7 +1246,7 @@ bool clang_c_convertert::get_expr(
       if(unary.getKind() == clang::UETT_AlignOf)
       {
         llvm::APSInt val;
-        if(unary.EvaluateAsInt(val, *ASTContext))
+        if(!unary.EvaluateAsInt(val, *ASTContext))
           return true;
 
         new_expr =

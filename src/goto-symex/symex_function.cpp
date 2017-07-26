@@ -93,12 +93,8 @@ goto_symext::argument_assignments(
         const type2tc &f_rhs_type = rhs->type;
 
         // we are willing to do some limited conversion
-        if ((is_number_type(f_arg_type) ||
-             is_bool_type(f_arg_type) ||
-             is_pointer_type(f_arg_type)) &&
-            (is_number_type(f_rhs_type) ||
-             is_bool_type(f_rhs_type) ||
-             is_pointer_type(f_rhs_type)))
+        if ((is_number_type(f_arg_type) || is_pointer_type(f_arg_type)) &&
+            (is_number_type(f_rhs_type) || is_pointer_type(f_rhs_type)))
         {
           rhs = typecast2tc(arg_type, rhs);
         }

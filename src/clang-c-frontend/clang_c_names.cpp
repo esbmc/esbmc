@@ -1,6 +1,6 @@
 
 #include <clang-c-frontend/clang_c_convert.h>
-#include <util/type2name.h>
+#include <clang/Tooling/Core/QualTypeNames.h>
 
 std::string clang_c_convertert::get_decl_name(
   const clang::NamedDecl &decl)
@@ -33,7 +33,7 @@ void clang_c_convertert::get_field_name(
       t.width(width.cformat());
     }
 
-    name = type2name(t);
+    name = clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext);
     pretty_name = "anon";
   }
 }
@@ -98,35 +98,9 @@ bool clang_c_convertert::get_tag_name(
   const clang::RecordDecl& rd,
   std::string &name)
 {
-  name = get_decl_name(rd);
-  if(!name.empty())
+  name =
+    clang::TypeName::getFullyQualifiedName(
+      ASTContext->getTagDeclType(&rd),
+      *ASTContext);
     return false;
-
-  // Try to get the name from typedef (if one exists)
-  if (const clang::TagDecl *tag = llvm::dyn_cast<clang::TagDecl>(&rd))
-  {
-    if (const clang::TypedefNameDecl *tnd = rd.getTypedefNameForAnonDecl())
-    {
-      name = get_decl_name(*tnd);
-      return false;
-    }
-    else if (tag->getIdentifier())
-    {
-      name = get_decl_name(*tag);
-      return false;
-    }
-  }
-
-  struct_union_typet t;
-  if(rd.isUnion())
-    t = union_typet();
-  else
-    t = struct_typet();
-
-  clang::RecordDecl *record_def = rd.getDefinition();
-  if(get_struct_union_class_fields(*record_def, t))
-    return true;
-
-  name = type2name(t);
-  return false;
 }
