@@ -593,8 +593,7 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
       index2tc idx(get_uint8_type(), cast, gen_ulong(i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
     }
-  } else if (is_number_type(new_expr) || is_bool_type(new_expr) ||
-             is_pointer_type(new_expr)) {
+  } else if (is_number_type(new_expr) || is_pointer_type(new_expr)) {
     BigInt size = type_byte_size(new_expr->type);
 
     bool is_big_endian =
