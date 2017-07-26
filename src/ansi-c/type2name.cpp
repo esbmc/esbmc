@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <ansi-c/type2name.h>
 #include <cctype>
 #include <util/i2string.h>
 #include <util/std_types.h>
-#include <util/type2name.h>
 
 std::string type2name(const typet &type)
 {
