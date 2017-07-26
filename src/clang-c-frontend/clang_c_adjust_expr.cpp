@@ -557,6 +557,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
   if(f_op.is_symbol())
   {
     symbolt* s = context.find_symbol(f_op.identifier());
+    assert(s != nullptr);
 
     // Pull symbol information: parameter types and location
     // Save previous location
