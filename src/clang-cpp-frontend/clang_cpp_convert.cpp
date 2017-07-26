@@ -70,6 +70,36 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
+  case clang::Decl::FunctionTemplate:
+  {
+    const clang::FunctionTemplateDecl &fd =
+      static_cast<const clang::FunctionTemplateDecl &>(decl);
+
+    if(get_template_decl(&fd, true, new_expr))
+      return true;
+    break;
+  }
+
+  case clang::Decl::ClassTemplate:
+  {
+    const clang::ClassTemplateDecl &cd =
+      static_cast<const clang::ClassTemplateDecl &>(decl);
+
+    if(get_template_decl(&cd, false, new_expr))
+      return true;
+    break;
+  }
+
+  case clang::Decl::ClassTemplateSpecialization:
+  {
+    const clang::ClassTemplateSpecializationDecl &cd =
+      static_cast<const clang::ClassTemplateSpecializationDecl &>(decl);
+
+    if(get_struct_union_class(cd))
+      return true;
+    break;
+  }
+
   // We can ignore any these declarations
   case clang::Decl::ClassTemplatePartialSpecialization:
   case clang::Decl::Using:
@@ -148,6 +178,57 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
     if(get_decl(*decl, dummy))
       return true;
   }
+
+  return false;
+}
+
+template <typename SpecializationDecl>
+bool clang_cpp_convertert::get_template_decl_specialization(
+  const SpecializationDecl *D,
+  bool DumpExplicitInst,
+  bool DumpRefOnly,
+  exprt &new_expr)
+{
+  for(auto *redecl_with_bad_type : D->redecls())
+  {
+    auto *redecl = llvm::dyn_cast<SpecializationDecl>(redecl_with_bad_type);
+    if(!redecl)
+    {
+      assert(
+        llvm::isa<clang::CXXRecordDecl>(redecl_with_bad_type) &&
+        "expected an injected-class-name");
+      continue;
+    }
+
+    switch(redecl->getTemplateSpecializationKind())
+    {
+    case clang::TSK_ExplicitInstantiationDeclaration:
+    case clang::TSK_ExplicitInstantiationDefinition:
+    case clang::TSK_ExplicitSpecialization:
+      if(!DumpExplicitInst)
+        break;
+      // Fall through.
+    case clang::TSK_Undeclared:
+    case clang::TSK_ImplicitInstantiation:
+      if(get_decl(*redecl, new_expr))
+        return true;
+      break;
+    }
+  }
+
+  return false;
+}
+
+template <typename TemplateDecl>
+bool clang_cpp_convertert::get_template_decl(
+  const TemplateDecl *D,
+  bool DumpExplicitInst,
+  exprt &new_expr)
+{
+  for(auto *Child : D->specializations())
+    if(get_template_decl_specialization(
+         Child, DumpExplicitInst, !D->isCanonicalDecl(), new_expr))
+      return true;
 
   return false;
 }
