@@ -61,9 +61,9 @@ protected:
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
-  bool get_type(const clang::QualType &type, typet &new_type);
+  virtual bool get_type(const clang::QualType &type, typet &new_type);
 
-  bool get_type(const clang::Type &the_type, typet &new_type);
+  virtual bool get_type(const clang::Type &the_type, typet &new_type);
 
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 
