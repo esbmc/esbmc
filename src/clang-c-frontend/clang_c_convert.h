@@ -45,7 +45,7 @@ protected:
 
   virtual bool get_decl(const clang::Decl &decl, exprt &new_expr);
 
-  bool get_var(const clang::VarDecl &vd, exprt &new_expr);
+  virtual bool get_var(const clang::VarDecl &vd, exprt &new_expr);
 
   virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
 

@@ -186,6 +186,17 @@ bool clang_cpp_convertert::get_type(
   return false;
 }
 
+bool clang_cpp_convertert::get_var(
+  const clang::VarDecl &vd,
+  exprt &new_expr)
+{
+  // Only convert instantiated variables
+  if(vd.getDeclContext()->isDependentContext())
+    return false;
+
+  return clang_c_convertert::get_var(vd, new_expr);
+}
+
 bool clang_cpp_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
