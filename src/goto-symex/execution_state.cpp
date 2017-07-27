@@ -287,11 +287,14 @@ execution_statet::symex_step(reachability_treet &art)
 }
 
 void
-execution_statet::symex_assign(const expr2tc &code)
+execution_statet::symex_assign(
+  const expr2tc &code,
+  const guardt &guard = guardt(),
+  symex_targett::assignment_typet type)
 {
   pre_goto_guard = guardt();
 
-  goto_symext::symex_assign(code);
+  goto_symext::symex_assign(code, guard, type);
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_assign(code);

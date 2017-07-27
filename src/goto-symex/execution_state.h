@@ -237,8 +237,13 @@ class execution_statet : public goto_symext
    *  also passes the assignment to a reachability_treet analysis function to
    *  see whether the assignment should be generating a context switch.
    *  @param code Code representing assignment we're making.
+   *  @param guard A guard for the assignment, true by default
+   *  @param type Assignment type, visible by default
    */
-  void symex_assign(const expr2tc &code) override ;
+  void symex_assign(
+    const expr2tc &code,
+    const guardt &guard,
+    symex_targett::assignment_typet type = symex_targett::STATE) override ;
 
   /**
    *  Symbolically assert something.

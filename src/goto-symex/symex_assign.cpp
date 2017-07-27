@@ -135,11 +135,11 @@ void goto_symext::do_simplify(expr2tc &expr)
     simplify(expr);
 }
 
-void goto_symext::symex_assign(const expr2tc &code_assign)
+void goto_symext::symex_assign(
+  const expr2tc &code_assign,
+  const guardt &guard,
+  symex_targett::assignment_typet type)
 {
-  //replace_dynamic_allocation(state, lhs);
-  //replace_dynamic_allocation(state, rhs);
-
   const code_assign2t &code = to_code_assign2t(code_assign);
 
   // Sanity check: if the target has zero size, then we've ended up assigning
@@ -192,21 +192,19 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
   }
   else
   {
-    symex_targett::assignment_typet t = symex_targett::STATE;
-
     if(cur_state->top().hidden)
     {
-      t = symex_targett::HIDDEN;
+      type = symex_targett::HIDDEN;
     }
     else if(is_symbol2t(lhs))
     {
       symbol2t s = to_symbol2t(lhs);
       if(s.thename.as_string().find("return_value!") != std::string::npos)
-        t = symex_targett::HIDDEN;
+        type = symex_targett::HIDDEN;
     }
 
-    guardt guard; // NOT the state guard!
-    symex_assign_rec(lhs, lhs, rhs, guard, t);
+    guardt g(guard) ; // NOT the state guard!
+    symex_assign_rec(lhs, lhs, rhs, g, type);
   }
 }
 
