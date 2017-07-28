@@ -739,3 +739,4 @@ void goto_symext::symex_va_arg(const expr2tc& lhs, const sideeffect2t &code)
 
   symex_assign(code_assign2tc(lhs, va_rhs));
 }
+
