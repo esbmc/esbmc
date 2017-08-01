@@ -205,15 +205,15 @@ std::string expr2ct::convert_rec(
       std::string tmp=convert(src.subtype());
 
       if(q=="")
-        return tmp+" *";
+        return tmp+" *"+d;
       else
-        return q+" ("+tmp+" *)";
+        return q+" ("+tmp+" *)"+d;
     }
   }
   else if(src.is_array())
   {
     std::string size_string=convert(static_cast<const exprt &>(src.size_irep()));
-    return convert(src.subtype())+" ["+size_string+"]";
+    return convert(src.subtype())+d+" ["+size_string+"]";
   }
   else if(src.id()=="incomplete_array")
   {
