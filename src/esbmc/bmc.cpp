@@ -381,7 +381,7 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
 
     if(!migrate_expr_back(it.guard).is_true() && print_guard)
     {
-      languages.from_expr(migrate_expr_back(it.guard), string_value);
+      languages.from_expr(migrate_expr_back(it.guard), string_value, fullname);
       std::cout << std::string(i2string(count).size()+3, ' ');
       std::cout << "guard: " << string_value << "\n";
     }
