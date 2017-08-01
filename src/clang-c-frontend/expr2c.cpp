@@ -317,7 +317,24 @@ std::string expr2ct::convert_typecast(
      src.op0().is_zero())
     return "NULL";
 
-  std::string dest="("+convert(type)+")";
+  std::string dest;
+  if(type.id()=="struct")
+  {
+    std::string dest="struct";
+    const std::string &tag=type.tag().as_string();
+    assert(tag!="");
+    dest+=" "+tag;
+    return dest;
+  }
+  else if(type.id()=="union")
+  {
+    std::string dest="union";
+    const std::string &tag=type.tag().as_string();
+    assert(tag!="");
+    dest+=" "+tag;
+  }
+  else
+    dest="("+convert(type)+")";
 
   std::string tmp=convert(src.op0(), precedence);
 
