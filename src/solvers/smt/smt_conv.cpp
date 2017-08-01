@@ -1875,6 +1875,26 @@ smt_convt::array_domain_to_width(const type2tc &type)
   return constant_int2tc(index_type2(), BigInt(sz));
 }
 
+static expr2tc
+gen_additions(const type2tc &type, std::vector<expr2tc> &exprs)
+{
+  // Reached end of recursion
+  if(exprs.size() == 2)
+    return add2tc(type, exprs[0], exprs[1]);
+
+  // Remove last two exprs
+  expr2tc side1 = exprs.back();
+  exprs.pop_back();
+
+  expr2tc side2 = exprs.back();
+  exprs.pop_back();
+
+  // Add them together, push back to the vector and recurse
+  exprs.push_back(add2tc(type, side1, side2));
+
+  return gen_additions(type, exprs);
+}
+
 expr2tc
 smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 {
@@ -1892,20 +1912,31 @@ smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 
   // Rewrite the store chain as additions and multiplications
   idx = expr;
-  expr2tc output = typecast2tc(subtype, idx->index);
+
+  // Multiplications will hold of the mult2tc terms, we have to
+  // add them together in the end
+  std::vector<expr2tc> multiplications;
+  multiplications.push_back(typecast2tc(subtype, idx->index));
+
   while (is_index2t(idx->source_value))
   {
     idx = idx->source_value;
 
     type2tc t = flatten_array_type(idx->type);
-    output = add2tc(
-      subtype,
+    assert(is_array_type(t));
+
+    multiplications.push_back(
       mul2tc(
         subtype,
         typecast2tc(subtype, to_array_type(t).array_size),
-        typecast2tc(subtype, idx->index)),
-      output);
+        typecast2tc(subtype, idx->index)));
   }
+
+  // We should only enter this method when handling multidimensional arrays
+  assert(multiplications.size() != 1);
+
+  // Add them together
+  expr2tc output = gen_additions(subtype, multiplications);
 
   // Try to simplify the expression
   simplify(output);
@@ -1917,7 +1948,7 @@ smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 }
 
 expr2tc
-smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
+smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &update_val)
 {
   with2tc with = expr;
 
@@ -1928,43 +1959,42 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
     make_array_domain_sort_exp(
       to_array_type(flatten_array_type(with->source_value->type)));
 
-  // Rewrite the store chain as multiplications and additions
-  // TODO: this is a mess, improve it
-  expr2tc output;
-  if(is_with2t(with->update_value))
+  // Multiplications will hold of the mult2tc terms, we have to
+  // add them together in the end
+  std::vector<expr2tc> multiplications;
+
+  assert(is_array_type(with->update_value));
+  multiplications.push_back(
+    mul2tc(
+      subtype,
+      typecast2tc(subtype,
+        to_array_type(flatten_array_type(with->update_value->type)).array_size),
+      typecast2tc(subtype, with->update_field)));
+
+  while (is_with2t(with->update_value) && is_array_type(with->update_value))
   {
-    std::vector<expr2tc> multiplications;
+    with = with->update_value;
 
-    // Multiply all indexes by the next dimension's flatten type
-    while (is_with2t(with->update_value))
-    {
-      type2tc t = flatten_array_type(with->update_value->type);
+    type2tc t = flatten_array_type(with->update_value->type);
 
-      expr2tc mult =
-        mul2tc(
-          subtype,
-          typecast2tc(subtype, to_array_type(t).array_size),
-          typecast2tc(subtype, with->update_field));
-
-      multiplications.push_back(mult);
-
-      with = with->update_value;
-    }
-
-    // Add them together
-    output = typecast2tc(subtype, with->update_field);
-    while(multiplications.size())
-    {
-      output = add2tc(subtype, output, multiplications.back());
-      multiplications.pop_back();
-    }
+    multiplications.push_back(
+      mul2tc(
+        subtype,
+        typecast2tc(subtype, to_array_type(t).array_size),
+        typecast2tc(subtype, with->update_field)));
   }
+
+  // We should only enter this method when handling multidimensional arrays
+  assert(multiplications.size() != 1);
+
+  // Add them together
+  expr2tc output = gen_additions(subtype, multiplications);
 
   // Try to simplify the expression
   simplify(output);
 
-  // Give the caller the actual value we're updating with.
-  base = with->update_value;
+  // Fix base expr
+  update_val = with->update_value;
   return output;
 }
 
@@ -2007,8 +2037,7 @@ smt_convt::convert_array_store(const expr2tc &expr)
   expr2tc newidx;
 
   if (is_array_type(with.type) &&
-      is_array_type(to_array_type(with.type).subtype) &&
-      is_with2t(with.update_value)) {
+      is_array_type(to_array_type(with.type).subtype)) {
     newidx = decompose_store_chain(expr, update_val);
   } else {
     newidx = fix_array_idx(with.update_field, with.type);
@@ -2033,6 +2062,10 @@ smt_convt::convert_array_store(const expr2tc &expr)
 type2tc
 smt_convt::flatten_array_type(const type2tc &type)
 {
+  // If this is not an array, we return an array of size 1
+  if (!is_array_type(type))
+    return array_type2tc(type, gen_one(int_type2()), false);
+
   // Don't touch these
   if (to_array_type(type).size_is_infinite)
     return type;
@@ -2042,20 +2075,25 @@ smt_convt::flatten_array_type(const type2tc &type)
     return type;
 
   type2tc subtype = get_flattened_array_subtype(type);
+  assert(is_array_type(to_array_type(type).subtype));
 
-  unsigned long arr_size = 1;
-  // Otherwise, accumulate sufficient domain bits to represent all dimensions
-  // of the given array, in one dimension.
   type2tc type_rec = type;
-  while (is_array_type(type_rec))
+  expr2tc arr_size1 = to_array_type(type_rec).array_size;
+
+  type_rec = to_array_type(type_rec).subtype;
+  expr2tc arr_size2 = to_array_type(type_rec).array_size;
+
+  assert(arr_size1->type == arr_size2->type);
+
+  expr2tc arr_size = mul2tc(arr_size1->type, arr_size1, arr_size2);
+
+  while (is_array_type(to_array_type(type_rec).subtype))
   {
-    arr_size *= to_constant_int2t(to_array_type(type_rec).array_size).value.to_long();
+    arr_size = mul2tc(arr_size1->type, to_array_type(type_rec).array_size, arr_size);
     type_rec = to_array_type(type_rec).subtype;
   }
-
-  // type_rec is now the base type.
-  constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
-  return array_type2tc(subtype, arr_size_expr, false);
+  simplify(arr_size);
+  return array_type2tc(subtype, arr_size, false);
 }
 
 expr2tc
