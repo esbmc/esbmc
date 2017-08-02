@@ -299,7 +299,7 @@ typedef std::list<member_entryt> list_of_memberst;
  *  Contains only a type identifier enumeration - for some types (such as bool,
  *  or empty,) there's no need for any significant amount of data to be stored.
  */
-class type2t
+class type2t : public std::enable_shared_from_this<type2t>
 {
 public:
   /** Enumeration identifying each sort of type. */
