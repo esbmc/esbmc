@@ -52,7 +52,7 @@ goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
 
   internal_deref_items.clear();
   dereference2tc deref(get_empty_type(), src_ptr);
-  dereference(deref, false, false, true);
+  dereference(deref, dereferencet::INTERNAL);
   // src_ptr is now invalidated.
 
   // Free the given pointer. This just uses the pointer object from the pointer
@@ -72,7 +72,7 @@ goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     target->renumber(guard, item.object, realloc_size, cur_state->source);
     type2tc new_ptr = type2tc(new pointer_type2t(item.object->type));
     address_of2tc addrof(new_ptr, item.object);
-    result_list.push_back(std::pair<expr2tc,expr2tc>(addrof, item.guard));
+    result_list.emplace_back(addrof, item.guard);
 
     // Bump the realloc-numbering of the object. This ensures that, after
     // renaming, the address_of we just generated compares differently to
@@ -223,14 +223,14 @@ goto_symext::symex_mem(
   pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
 
-  dynamic_memory.push_back(allocated_obj(rhs_copy, alloc_guard, !is_malloc));
+  dynamic_memory.emplace_back(rhs_copy, alloc_guard, !is_malloc);
 
   return rhs_addrof->ptr_obj;
 }
 
 void
 goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
-                               expr2tc size)
+                               const expr2tc& size)
 {
   guardt guard;
 
@@ -274,7 +274,6 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
   }
 
   symex_assign_rec(sz_index_expr, sz_index_expr, object_size_exp, guard, symex_targett::STATE);
-  return;
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
@@ -284,16 +283,18 @@ void goto_symext::symex_free(const expr2tc &expr)
   // Trigger 'free'-mode dereference of this pointer. Should generate various
   // dereference failure callbacks.
   expr2tc tmp = code.operand;
-  dereference(tmp, false, true);
+  dereference(tmp, dereferencet::FREE);
 
   // Don't rely on the output of dereference in free mode; instead fetch all
   // the internal dereference state for pointed at objects, and creates claims
   // that if pointed at, their offset is zero.
   internal_deref_items.clear();
   tmp = code.operand;
+
   // Create temporary, dummy, dereference
   tmp = dereference2tc(get_uint8_type(), tmp);
-  dereference(tmp, false, false, true); // 'internal' dereference
+  dereference(tmp, dereferencet::INTERNAL);
+
   for (auto const &item : internal_deref_items) {
     guardt g = cur_state->guard;
     g.add(item.guard);
@@ -308,7 +309,7 @@ void goto_symext::symex_free(const expr2tc &expr)
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code.operand);
-  dereference(ptr_obj, false);
+  dereference(ptr_obj, dereferencet::READ);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
@@ -429,7 +430,7 @@ void goto_symext::symex_cpp_new(
 
   symex_assign_rec(idx, idx, truth, guard, symex_targett::STATE);
 
-  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard, false));
+  dynamic_memory.emplace_back(rhs_copy, cur_state->guard, false);
 }
 
 // XXX - implement as a call to free?
@@ -443,7 +444,6 @@ goto_symext::intrinsic_yield(reachability_treet &art)
 {
 
   art.get_cur_state().force_cswitch();
-  return;
 }
 
 
@@ -464,8 +464,6 @@ goto_symext::intrinsic_switch_to(const code_function_call2t &call,
   unsigned int tid = thread_num.value.to_long();
   if (tid != art.get_cur_state().get_active_state_number())
     art.get_cur_state().switch_to_thread(tid);
-
-  return;
 }
 
 void
@@ -477,7 +475,6 @@ goto_symext::intrinsic_switch_from(reachability_treet &art)
 
   // And force a context switch.
   art.get_cur_state().force_cswitch();
-  return;
 }
 
 void
@@ -493,7 +490,6 @@ goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
 
   code_assign2tc assign(call.ret, tid);
   symex_assign(assign);
-  return;
 }
 
 void
@@ -546,7 +542,6 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
 
   state.value_set.assign(call.ret, startdata);
   symex_assign(assign);
-  return;
 }
 
 void
@@ -591,18 +586,14 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
   // blocked, but a context switch will be forced when we exit the atomic block.
   // Otherwise, this will cause the required context switch.
   art.get_cur_state().force_cswitch();
-
-  return;
 }
 
 void
 goto_symext::intrinsic_terminate_thread(reachability_treet &art)
 {
-
   art.get_cur_state().end_thread();
   // No need to force a context switch; an ended thread will cause the run to
   // end and the switcher to be invoked.
-  return;
 }
 
 void
@@ -633,7 +624,6 @@ goto_symext::intrinsic_get_thread_state(const code_function_call2t &call, reacha
   constant_int2tc flag_expr(get_uint_type(config.ansi_c.int_width), flags);
   code_assign2tc assign(call.ret, flag_expr);
   symex_assign(assign);
-  return;
 }
 
 void
@@ -641,7 +631,6 @@ goto_symext::intrinsic_really_atomic_begin(reachability_treet &art)
 {
 
   art.get_cur_state().increment_active_atomic_number();
-  return;
 }
 
 void
@@ -649,7 +638,6 @@ goto_symext::intrinsic_really_atomic_end(reachability_treet &art)
 {
 
   art.get_cur_state().decrement_active_atomic_number();
-  return;
 }
 
 void
@@ -662,7 +650,6 @@ goto_symext::intrinsic_switch_to_monitor(reachability_treet &art)
     return;
 
   ex_state.switch_to_monitor();
-  return;
 }
 
 void

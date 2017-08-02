@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <set>
 #include <stack>
 
-/*******************************************************************\
-
-Function: remove_unreachable
-
-  Inputs:
-
- Outputs:
-
- Purpose: remove unreachable code
-
-\*******************************************************************/
-
 void remove_unreachable(goto_programt &goto_program)
 {
   std::set<goto_programt::targett> reachable;

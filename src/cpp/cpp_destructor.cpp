@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::cpp_destructor
-
-  Inputs:
-
- Outputs: NOT typechecked code
-
- Purpose:
-
-\*******************************************************************/
-
 codet cpp_typecheckt::cpp_destructor(
   const locationt &location,
   const typet &type,
@@ -95,18 +83,15 @@ codet cpp_typecheckt::cpp_destructor(
 
     irep_idt dtor_name;
 
-    for(struct_typet::componentst::const_iterator
-        it=components.begin();
-        it!=components.end();
-        it++)
+    for(const auto & component : components)
     {
-      const typet &type=it->type();
+      const typet &type=component.type();
 
-      if(!it->get_bool("from_base") &&
+      if(!component.get_bool("from_base") &&
          type.id()=="code" &&
          type.return_type().id()=="destructor")
       {
-        dtor_name=it->base_name();
+        dtor_name=component.base_name();
         break;
       }
     }
@@ -118,13 +103,13 @@ codet cpp_typecheckt::cpp_destructor(
 
     irept cpp_name("cpp-name");
 
-    cpp_name.get_sub().push_back(irept("name"));
+    cpp_name.get_sub().emplace_back("name");
     cpp_name.get_sub().back().identifier(symb.base_name);
     cpp_name.get_sub().back().set("#location", location);
 
-    cpp_name.get_sub().push_back(irept("::"));
+    cpp_name.get_sub().emplace_back("::");
 
-    cpp_name.get_sub().push_back(irept("name"));
+    cpp_name.get_sub().emplace_back("name");
     cpp_name.get_sub().back().identifier(dtor_name);
     cpp_name.get_sub().back().set("#location", location);
 

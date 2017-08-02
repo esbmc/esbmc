@@ -18,7 +18,7 @@
 // Why is this a global? Because there are over three hundred call sites to
 // migrate_expr, and it's a huge task to fix them all up to pass a namespace
 // down.
-namespacet *migrate_namespace_lookup = NULL;
+namespacet *migrate_namespace_lookup = nullptr;
 
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 
@@ -66,12 +66,12 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     new_type_ref = type2tc(b);
   } else if (type.id() == typet::t_signedbv) {
     irep_idt width = type.width();
-    unsigned int iwidth = strtol(width.as_string().c_str(), NULL, 10);
+    unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
     signedbv_type2t *s = new signedbv_type2t(iwidth);
     new_type_ref = type2tc(s);
   } else if (type.id() == typet::t_unsignedbv) {
     irep_idt width = type.width();
-    unsigned int iwidth = strtol(width.as_string().c_str(), NULL, 10);
+    unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
     unsignedbv_type2t *s = new unsignedbv_type2t(iwidth);
     new_type_ref = type2tc(s);
   } else if (type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
@@ -80,7 +80,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     new_type_ref = type2tc(s);
   } else if (type.id() == typet::t_array) {
     type2tc subtype;
-    expr2tc size((expr2t *)NULL);
+    expr2tc size((expr2t *)nullptr);
     bool is_infinite = false;
 
     migrate_type(type.subtype(), subtype, ns, cache);
@@ -100,7 +100,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     type2tc subtype;
 
     // Don't recursively look up anything through pointers.
-    migrate_type(type.subtype(), subtype, NULL, true);
+    migrate_type(type.subtype(), subtype, nullptr, true);
 
     pointer_type2t *p = new pointer_type2t(subtype);
     new_type_ref = type2tc(p);
@@ -122,14 +122,13 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     const struct_typet &strct = to_struct_type(type);
     const struct_union_typet::componentst comps = strct.components();
 
-    for (struct_union_typet::componentst::const_iterator it = comps.begin();
-         it != comps.end(); it++) {
+    for (const auto & comp : comps) {
       type2tc ref;
 
       // Hacks: due to SFINAE, we might have a templated instantiation in
       // here that's invalid. Try to detect those and avoid converting them.
       // As that's just going to cause grief.
-      const irep_idt &this_name = it->get("name");
+      const irep_idt &this_name = comp.get("name");
       if (this_name != "" && ns) {
         const symbolt *component_sym;
         bool failed = ns->lookup(this_name, component_sym);
@@ -140,11 +139,11 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
           continue;
       }
 
-      migrate_type((const typet&)it->type(), ref, ns, cache);
+      migrate_type((const typet&)comp.type(), ref, ns, cache);
 
       members.push_back(ref);
-      names.push_back(it->get(typet::a_name));
-      pretty_names.push_back(it->get(typet::a_pretty_name));
+      names.push_back(comp.get(typet::a_name));
+      pretty_names.push_back(comp.get(typet::a_pretty_name));
     }
 
     irep_idt name = type.get("tag");
@@ -160,14 +159,13 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     const struct_union_typet &strct = to_union_type(type);
     const struct_union_typet::componentst comps = strct.components();
 
-    for (struct_union_typet::componentst::const_iterator it = comps.begin();
-         it != comps.end(); it++) {
+    for (const auto & comp : comps) {
       type2tc ref;
-      migrate_type((const typet&)it->type(), ref, ns, cache);
+      migrate_type((const typet&)comp.type(), ref, ns, cache);
 
       members.push_back(ref);
-      names.push_back(it->get(typet::a_name));
-      pretty_names.push_back(it->get(typet::a_pretty_name));
+      names.push_back(comp.get(typet::a_name));
+      pretty_names.push_back(comp.get(typet::a_pretty_name));
     }
 
     irep_idt name = type.get("tag");
@@ -198,12 +196,11 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
       ellipsis = true;
 
     const code_typet::argumentst &old_args = ref.arguments();
-    for (code_typet::argumentst::const_iterator it = old_args.begin();
-         it != old_args.end(); it++) {
+    for (const auto & old_arg : old_args) {
       type2tc tmp;
-      migrate_type(it->type(), tmp, ns, cache);
+      migrate_type(old_arg.type(), tmp, ns, cache);
       args.push_back(tmp);
-      arg_names.push_back(it->get_identifier());
+      arg_names.push_back(old_arg.get_identifier());
     }
 
     // Don't migrate return type if it's a symbol. There are a variety of C++
@@ -267,7 +264,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     new_type_ref = type2tc(new array_type2t(get_uint8_type(), expr2tc(), true));
   } else if (type.id() == "string") {
     irep_idt width = type.width();
-    unsigned int iwidth = strtol(width.as_string().c_str(), NULL, 10);
+    unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
     new_type_ref = type2tc(new string_type2t(iwidth));
   } else {
     type.dump();
@@ -448,11 +445,10 @@ splice_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   exprt newexpr = splice_expr(expr);
   migrate_expr(newexpr, new_expr_ref);
-  return;
 }
 
 static void
-convert_operand_pair(const exprt expr, expr2tc &arg1, expr2tc &arg2)
+convert_operand_pair(const exprt& expr, expr2tc &arg1, expr2tc &arg2)
 {
 
   migrate_expr(expr.op0(), arg1);
@@ -597,8 +593,7 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
       index2tc idx(get_uint8_type(), cast, gen_ulong(i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
     }
-  } else if (is_number_type(new_expr) || is_bool_type(new_expr) ||
-             is_pointer_type(new_expr)) {
+  } else if (is_number_type(new_expr) || is_pointer_type(new_expr)) {
     BigInt size = type_byte_size(new_expr->type);
 
     bool is_big_endian =
@@ -613,8 +608,6 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     std::cerr << " when flattening union literal" << std::endl;
     abort();
   }
-
-  return;
 }
 
 static expr2tc
@@ -1472,7 +1465,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (t == sideeffect2t::function_call) {
       const exprt &arguments = expr.op1();
       forall_operands(it, arguments) {
-        args.push_back(expr2tc());
+        args.emplace_back();
         migrate_expr(*it, args.back());
       }
     }
@@ -1568,12 +1561,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     const irept::subt &exceptions_thrown =expr.find("exception_list").get_sub();
 
     std::vector<irep_idt> expr_list;
-    for(irept::subt::const_iterator
-        e_it=exceptions_thrown.begin();
-        e_it!=exceptions_thrown.end();
-        e_it++)
+    for(const auto & e_it : exceptions_thrown)
     {
-      expr_list.push_back(e_it->id());
+      expr_list.push_back(e_it.id());
     }
 
     expr2tc operand;
@@ -1587,12 +1577,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == "code" && expr.statement() == "throw-decl") {
     std::vector<irep_idt> expr_list;
     const irept::subt &exceptions_thrown =expr.find("throw_list").get_sub();
-    for(irept::subt::const_iterator
-        e_it=exceptions_thrown.begin();
-        e_it!=exceptions_thrown.end();
-        e_it++)
+    for(const auto & e_it : exceptions_thrown)
     {
-      expr_list.push_back(e_it->id());
+      expr_list.push_back(e_it.id());
     }
 
     new_expr_ref = expr2tc(new code_cpp_throw_decl2t(expr_list));
@@ -1703,7 +1690,7 @@ migrate_type_back(const type2tc &ref)
     unsigned int i = 0;
     for(auto const &it :ref2.arguments)
     {
-      args.push_back(code_typet::argumentt(migrate_type_back(it)));
+      args.emplace_back(migrate_type_back(it));
       args.back().set_identifier(ref2.argument_names[i]);
       i++;
     }
@@ -1810,7 +1797,7 @@ exprt
 migrate_expr_back(const expr2tc &ref)
 {
 
-  if (ref.get() == NULL)
+  if (ref.get() == nullptr)
     return nil_exprt();
 
   switch (ref->expr_id) {
@@ -2494,9 +2481,8 @@ migrate_expr_back(const expr2tc &ref)
       exprt operand = migrate_expr_back(ref2.operand);
       // 2nd op is "arguments".
       exprt args("arguments");
-      for (std::vector<expr2tc>::const_iterator it = ref2.arguments.begin();
-           it != ref2.arguments.end(); it++)
-        args.copy_to_operands(migrate_expr_back(*it));
+      for (const auto & argument : ref2.arguments)
+        args.copy_to_operands(migrate_expr_back(argument));
       theexpr.copy_to_operands(operand, args);
     } else if (ref2.kind == sideeffect2t::nondet) {
       ; // Do nothing
@@ -2679,7 +2665,7 @@ migrate_expr_back(const expr2tc &ref)
     irept::subt &exceptions_thrown = codeexpr.add("exception_list").get_sub();
 
     for(auto const &it : ref2.exception_list)
-      exceptions_thrown.push_back(irept(it));
+      exceptions_thrown.emplace_back(it);
 
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;

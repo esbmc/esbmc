@@ -122,7 +122,7 @@ uint64_t cbmc_parseoptionst::read_time_spec(const char *str)
     mult = 1;
   }
 
-  uint64_t timeout = strtol(str, NULL, 10);
+  uint64_t timeout = strtol(str, nullptr, 10);
   timeout *= mult;
   return timeout;
 }
@@ -154,7 +154,7 @@ uint64_t cbmc_parseoptionst::read_mem_spec(const char *str)
     mult = 1024*1024;
   }
 
-  uint64_t size = strtol(str, NULL, 10);
+  uint64_t size = strtol(str, nullptr, 10);
   size *= mult;
   return size;
 }
@@ -386,14 +386,10 @@ int cbmc_parseoptionst::doit()
   if (opts.get_bool_option("skip-bmc"))
     return 0;
 
-  bool res = false;
-
   // do actual BMC
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
-  res = do_bmc(bmc);
-
-  return res;
+  return do_bmc(bmc);
 }
 
 int cbmc_parseoptionst::doit_k_induction_parallel()
@@ -662,8 +658,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         }
       }
 
-      for(short i = 0; i < 3; ++i)
-        kill(children_pid[i], SIGKILL);
+      for(int i : children_pid)
+        kill(i, SIGKILL);
 
       // Check if a solution was found by the base case
       if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
@@ -749,7 +745,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         }
 
         // Send information to parent if no bug was found
-        if(res)
+        if(res == smt_convt::P_SATISFIABLE)
         {
           r.k = k_step;
 
@@ -861,7 +857,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         }
 
         // Send information to parent if no bug was found
-        if(!res)
+        if(res == smt_convt::P_UNSATISFIABLE)
         {
           r.k = k_step;
 
@@ -933,7 +929,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         }
 
         // Send information to parent if no bug was found
-        if(!res)
+        if(res == smt_convt::P_UNSATISFIABLE)
         {
           r.k = k_step;
 
@@ -997,10 +993,10 @@ int cbmc_parseoptionst::doit_k_induction()
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
     std::cout << "\n*** K-Induction Loop Iteration ";
-    std::cout << i2string((unsigned long) k_step);
+    std::cout << integer2string(k_step);
     std::cout << " ***\n";
     std::cout << "*** Checking base case\n";
 
@@ -1008,7 +1004,7 @@ int cbmc_parseoptionst::doit_k_induction()
       return true;
 
     std::cout << "\n*** K-Induction Loop Iteration ";
-    std::cout << i2string((unsigned long) k_step);
+    std::cout << integer2string(k_step);
     std::cout << " ***\n";
     std::cout << "*** Checking forward condition\n";
 
@@ -1018,7 +1014,7 @@ int cbmc_parseoptionst::doit_k_induction()
     if(k_step > 1)
     {
       std::cout << "\n*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
+      std::cout << integer2string( k_step);
       std::cout << " ***\n";
       std::cout << "*** Checking inductive step\n";
     }
@@ -1064,10 +1060,10 @@ int cbmc_parseoptionst::doit_falsification()
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
     std::cout << "\n*** Iteration number ";
-    std::cout << i2string((unsigned long) k_step);
+    std::cout << integer2string(k_step);
     std::cout << " ***\n";
 
     if(do_base_case(opts, goto_functions, k_step))
@@ -1110,10 +1106,10 @@ int cbmc_parseoptionst::doit_incremental()
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
     std::cout << "\n*** Iteration number ";
-    std::cout << i2string((unsigned long) k_step);
+    std::cout << k_step;
     std::cout << " ***\n";
 
     if(do_base_case(opts, goto_functions, k_step))
@@ -1130,7 +1126,7 @@ int cbmc_parseoptionst::doit_incremental()
 }
 
 int cbmc_parseoptionst::do_base_case(
-  optionst &opts, goto_functionst &goto_functions, int k_step)
+  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
 {
   opts.set_option("base-case", true);
   opts.set_option("forward-condition", false);
@@ -1139,19 +1135,29 @@ int cbmc_parseoptionst::do_base_case(
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
-  bmc.options.set_option("unwind", i2string(k_step));
+  bmc.options.set_option("unwind", integer2string(k_step));
 
-  if(do_bmc(bmc))
+  switch(do_bmc(bmc))
   {
-    std::cout << "\nBug found at k = " << k_step << "\n";
-    return true;
+    case smt_convt::P_UNSATISFIABLE:
+    case smt_convt::P_SMTLIB:
+    case smt_convt::P_ERROR:
+      break;
+
+    case smt_convt::P_SATISFIABLE:
+      std::cout << "\nBug found at k = " << k_step << "\n";
+      return true;
+
+    default:
+      std::cout << "Unknown BMC result\n";
+      abort();
   }
 
   return false;
 }
 
 int cbmc_parseoptionst::do_forward_condition(
-  optionst &opts, goto_functionst &goto_functions, int k_step)
+  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
 {
   if(opts.get_bool_option("disable-forward-condition"))
     return true;
@@ -1163,20 +1169,30 @@ int cbmc_parseoptionst::do_forward_condition(
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
-  bmc.options.set_option("unwind", i2string(k_step));
+  bmc.options.set_option("unwind", integer2string(k_step));
 
-  if(!do_bmc(bmc))
+  switch(do_bmc(bmc))
   {
-    std::cout << "\nSolution found by the forward condition; "
-        << "all states are reachable (k = " << k_step << ")\n";
-    return false;
+    case smt_convt::P_SATISFIABLE:
+    case smt_convt::P_SMTLIB:
+    case smt_convt::P_ERROR:
+      break;
+
+    case smt_convt::P_UNSATISFIABLE:
+      std::cout << "\nSolution found by the forward condition; "
+                << "all states are reachable (k = " << k_step << ")\n";
+      return false;
+
+    default:
+      std::cout << "Unknown BMC result\n";
+      abort();
   }
 
   return true;
 }
 
 int cbmc_parseoptionst::do_inductive_step(
-  optionst &opts, goto_functionst &goto_functions, int k_step)
+  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
 {
   // Don't run inductive step for k_step == 1
   if(k_step == 1)
@@ -1192,14 +1208,24 @@ int cbmc_parseoptionst::do_inductive_step(
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
-  bmc.options.set_option("unwind", i2string(k_step));
+  bmc.options.set_option("unwind", integer2string(k_step));
 
   try {
-    if(!do_bmc(bmc))
+    switch(do_bmc(bmc))
     {
-      std::cout << "\nSolution found by the inductive step "
-        << "(k = " << k_step << ")\n";
-      return false;
+      case smt_convt::P_SATISFIABLE:
+      case smt_convt::P_SMTLIB:
+      case smt_convt::P_ERROR:
+        break;
+
+      case smt_convt::P_UNSATISFIABLE:
+        std::cout << "\nSolution found by the inductive step "
+                  << "(k = " << k_step << ")\n";
+        return false;
+
+      default:
+        std::cout << "Unknown BMC result\n";
+        abort();
     }
   }
   catch(...)
@@ -1385,9 +1411,9 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
       if (s.name.as_string().find("__ESBMC_property_") != std::string::npos)
       {
         // Munge back into the shape of an actual string
-        std::string str = "";
+        std::string str;
         forall_operands(iter2, s.value) {
-          char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
+          char c = (char)strtol(iter2->value().as_string().c_str(), nullptr, 2);
           if (c != 0)
             str += c;
           else
@@ -1406,7 +1432,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
       std::set<std::string> used_syms;
       expr2tc main_expr;
       std::string prop_name = str_it->first.substr(20, std::string::npos);
-      main_expr = calculate_a_property_monitor(prop_name, strings, used_syms);
+      main_expr = calculate_a_property_monitor(std::move(prop_name), strings, used_syms);
       monitors[prop_name] = std::pair<std::set<std::string>, expr2tc>
                                       (used_syms, main_expr);
     }
@@ -1455,8 +1481,6 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
       break;
     }
   }
-
-  return;
 }
 
 static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
@@ -1475,11 +1499,9 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
       }
     );
   }
-
-  return;
 }
 
-expr2tc cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+expr2tc cbmc_parseoptionst::calculate_a_property_monitor(const std::string&& name, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
   exprt main_expr;
   std::map<std::string, std::string>::const_iterator it;
@@ -1488,7 +1510,7 @@ expr2tc cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::
   languagest languages(ns, MODE_C);
 
   std::string expr_str = strings["__ESBMC_property_" + name];
-  std::string dummy_str = "";
+  std::string dummy_str;
 
   languages.to_expr(expr_str, dummy_str, main_expr, ui_message_handler);
 
@@ -1563,8 +1585,6 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   new_insn.type = ATOMIC_END;
   new_insn.function = insn->function;
   insn_list.insert(insn, new_insn);
-
-  return;
 }
 
 static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
@@ -1634,8 +1654,6 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
         pit->output_instruction(ns, pit->function, std::cout);
     }
   }
-
-  return;
 }
 
 bool cbmc_parseoptionst::read_goto_binary(
@@ -1831,7 +1849,7 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc)
 #ifdef HAVE_SENDFILE_ESBMC
   if (bmc.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
-    sendfile(2, fd, NULL, 100000);
+    sendfile(2, fd, nullptr, 100000);
     close(fd);
   }
 #endif
@@ -1861,8 +1879,11 @@ void cbmc_parseoptionst::help()
     " --goto-functions-too         show goto program and verify\n"
     " --program-only               only show program expression\n"
     " --program-too                show program expression and verify\n"
-    " --show-guards                print SSA's guards, if any\n"
-    " --simple-ssa-printing        do not print the SSA's original location\n"
+    " --ssa-symbol-table           show symbol table along with SSA\n"
+    " --ssa-guards                 print SSA's guards, if any\n"
+    " --ssa-no-location            do not print the SSA's original location\n"
+    " --ssa-no-sliced              do not print the sliced SSAs\n"
+    " --ssa-full-names             print SSAs with full variable names\n"
     " --smt-formula-only           only show SMT formula (not supported by all solvers)\n"
     " --smt-formula-too            show SMT formula (not supported by all solvers) and verify\n"
     " --show-smt-model             show SMT model (not supported by all solvers), if the formula is SAT\n"

@@ -78,12 +78,9 @@ void w_guardst::add_initialization(goto_programt &goto_program) const
   goto_programt::targett t=goto_program.instructions.begin();
   const namespacet ns(context);
 
-  for(std::list<irep_idt>::const_iterator
-      it=w_guards.begin();
-      it!=w_guards.end();
-      it++)
+  for(const auto & w_guard : w_guards)
   {
-    exprt symbol=symbol_expr(ns.lookup(*it));
+    exprt symbol=symbol_expr(ns.lookup(w_guard));
     expr2tc new_sym;
     migrate_expr(symbol, new_sym);
 

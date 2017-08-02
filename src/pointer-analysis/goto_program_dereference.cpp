@@ -28,8 +28,7 @@ bool goto_program_dereferencet::has_failed_symbol(
         to_symbol2t(expr).thename == "INVALID")
       return false;
 
-    exprt tmp_sym = migrate_expr_back(expr);
-    const symbolt &ptr_symbol = ns.lookup(tmp_sym);
+    const symbolt &ptr_symbol = ns.lookup(migrate_expr_back(expr));
 
     const irep_idt &failed_symbol = ptr_symbol.type.failed_symbol();
 
@@ -150,11 +149,8 @@ void goto_program_dereferencet::dereference_program(
   goto_functionst &goto_functions,
   bool checks_only)
 {
-  for(goto_functionst::function_mapt::iterator
-      it=goto_functions.function_map.begin();
-      it!=goto_functions.function_map.end();
-      it++)
-    dereference_program(it->second.body, checks_only);
+  for(auto & it : goto_functions.function_map)
+    dereference_program(it.second.body, checks_only);
 }
 
 void goto_program_dereferencet::dereference_instruction(

@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/i2string.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: type2name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string type2name(const typet &type)
 {
   std::string result;
@@ -57,7 +45,14 @@ std::string type2name(const typet &type)
   else if(type.id()=="fixedbv")
     result+='X' + type.width().as_string();
   else if(type.id()=="pointer")
-    result+='*';
+  {
+    if(is_reference(type))
+      result+='&';
+    else if(is_rvalue_reference(type))
+      result+="&&";
+    else
+      result+='*';
+  }
   else if(type.id()=="reference")
     result+='&';
   else if(type.is_code())
@@ -65,12 +60,10 @@ std::string type2name(const typet &type)
     const code_typet &t = to_code_type(type);
     const code_typet::argumentst arguments = t.arguments();
     result+="P(";
-    for (code_typet::argumentst::const_iterator it = arguments.begin();
-         it!=arguments.end();
-         it++)
+    for (const auto & argument : arguments)
     {
-      result+=type2name(it->type());
-      result+="'" + it->get_identifier().as_string() + "'|";
+      result+=type2name(argument.type());
+      result+="'" + argument.get_identifier().as_string() + "'|";
     }
     result.resize(result.size()-1);
     result+=')';
@@ -88,8 +81,7 @@ std::string type2name(const typet &type)
   {
     result+="SYM#" + type.identifier().as_string() + "#";
   }
-  else if(type.id()=="struct" ||
-          type.id()=="union")
+  else if(type.is_struct() || type.is_union())
   {
     if(type.id()=="struct") result +="ST";
     if(type.id()=="union") result +="UN";

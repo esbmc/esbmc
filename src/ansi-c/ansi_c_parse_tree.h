@@ -23,13 +23,10 @@ public:
   
   void output(std::ostream &out) const
   {
-    for(declarationst::const_iterator
-        it=declarations.begin();
-        it!=declarations.end();
-        it++)
+    for(const auto & declaration : declarations)
     {
       symbolt tmp;
-      it->to_symbol(tmp);
+      declaration.to_symbol(tmp);
       out << tmp;
     }
   }

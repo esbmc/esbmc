@@ -52,7 +52,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
       abort();
     }
 
-    in_stream = NULL;
+    in_stream = nullptr;
     solver_name = "Text output";
     solver_version = "";
     solver_proc_pid = 0;
@@ -322,7 +322,7 @@ smtlib_convt::dec_solve()
   fflush(out_stream);
 
   // If we're just outputing to a file, this is where we terminate.
-  if (in_stream == NULL)
+  if (in_stream == nullptr)
     return smt_convt::P_SMTLIB;
 
   // And read in the output
@@ -576,7 +576,7 @@ smtlib_convt::get_bool(smt_astt a)
 const std::string
 smtlib_convt::solver_text()
 {
-  if (in_stream == NULL) {
+  if (in_stream == nullptr) {
     // Text output
     return solver_name;
   }
@@ -625,11 +625,11 @@ smtlib_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   return a;
 }
 
-smt_sortt
-smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
+smt_sort *
+smtlib_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
-  smtlib_smt_sort *s = NULL;
+  smtlib_smt_sort *s = nullptr;
 
   va_start(ap, k);
   switch (k) {
@@ -724,7 +724,7 @@ smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   symbol_table.insert(record);
 
   if (s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
-    return a;;
+    return a;
 
   // As this is the first time, declare that symbol to the solver.
   fprintf(out_stream, "(declare-fun |%s| () %s)\n", name.c_str(),
@@ -792,19 +792,16 @@ void
 smtlib_convt::add_array_constraints_for_solving()
 {
   // None required
-  return;
 }
 
 void
-smtlib_convt::push_array_ctx(void)
+smtlib_convt::push_array_ctx()
 {
-  return;
 }
 
 void
-smtlib_convt::pop_array_ctx(void)
+smtlib_convt::pop_array_ctx()
 {
-  return;
 }
 
 const std::string smtlib_convt::temp_prefix = "?x";

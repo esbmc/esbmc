@@ -9,18 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_exception_id.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: cpp_exception_list_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose: turns a type into a list of relevant exception IDs
-
-\*******************************************************************/
-
 #include <iostream>
 
 void cpp_exception_list_rec(
@@ -43,7 +31,7 @@ void cpp_exception_list_rec(
     else if(src.subtype().id()=="empty") // throwing void*
     {
       irep_idt identifier = "void_ptr";
-      dest.push_back(id2string(identifier)+suffix);
+      dest.emplace_back(id2string(identifier)+suffix);
     }
     else
     {
@@ -70,51 +58,33 @@ void cpp_exception_list_rec(
          && bases.get_sub().size())
       {
         // Save the derived class
-        dest.push_back(id2string(identifier)+suffix);
+        dest.emplace_back(id2string(identifier)+suffix);
 
         // Save all the base classes
-        for(unsigned int i=0; i<bases.get_sub().size(); ++i)
+        for(const auto & i : bases.get_sub())
         {
-          typet base_type = bases.get_sub()[i].type();
+          typet base_type = i.type();
           identifier = base_type.identifier();
-          dest.push_back(id2string(identifier)+suffix);
+          dest.emplace_back(id2string(identifier)+suffix);
         }
       }
       else // Throwing a base class
-        dest.push_back(id2string(identifier)+suffix);
+        dest.emplace_back(id2string(identifier)+suffix);
     }
     else
-      dest.push_back(id2string(identifier)+suffix);
+      dest.emplace_back(id2string(identifier)+suffix);
   }
   else if(src.id()=="ellipsis")
   {
     irep_idt identifier = "ellipsis";
-    dest.push_back(id2string(identifier)+suffix);
+    dest.emplace_back(id2string(identifier)+suffix);
   }
 
   // grab C++ type
   irep_idt cpp_type=src.get("#cpp_type");
-
   if(cpp_type!=irep_idt())
-  {
-    dest.push_back(id2string(cpp_type)+suffix);
-    return;
-  }
-
-  return;
+    dest.emplace_back(id2string(cpp_type)+suffix);
 }
-
-/*******************************************************************\
-
-Function: cpp_exception_list
-
-  Inputs:
-
- Outputs:
-
- Purpose: turns a type into a list of relevant exception IDs
-
-\*******************************************************************/
 
 irept cpp_exception_list(const typet &src, const namespacet &ns)
 {
@@ -129,18 +99,6 @@ irept cpp_exception_list(const typet &src, const namespacet &ns)
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: cpp_exception_id
-
-  Inputs:
-
- Outputs:
-
- Purpose: turns a type into an exception ID
-
-\*******************************************************************/
 
 irep_idt cpp_exception_id(const typet &src, const namespacet &ns)
 {

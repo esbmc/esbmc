@@ -10,43 +10,17 @@ Author: Daniel Kroening, kroening@kroening.com
 
 ansi_c_parsert ansi_c_parser;
 
-/*******************************************************************\
-
-Function: ansi_c_parsert::scopet::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ansi_c_parsert::scopet::print(std::ostream &out) const
 {
   out << "Prefix: " << prefix << std::endl;
 
-  for(scopet::name_mapt::const_iterator n_it=name_map.begin();
-      n_it!=name_map.end();
-      n_it++)
+  for(const auto & n_it : name_map)
   {
-    out << "  ID: " << n_it->first
-        << " CLASS: " << n_it->second.id_class
+    out << "  ID: " << n_it.first
+        << " CLASS: " << n_it.second.id_class
         << std::endl;
   }
 }
-
-/*******************************************************************\
-
-Function: ansi_c_parsert::lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 ansi_c_id_classt ansi_c_parsert::lookup(std::string &name, bool tag) const
 {
@@ -66,18 +40,6 @@ ansi_c_id_classt ansi_c_parsert::lookup(std::string &name, bool tag) const
   return ANSI_C_UNKNOWN;
 }
 
-/*******************************************************************\
-
-Function: yyansi_cerror
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 extern char *yyansi_ctext;
 
 int yyansi_cerror(const std::string &error)
@@ -85,18 +47,6 @@ int yyansi_cerror(const std::string &error)
   ansi_c_parser.parse_error(error, yyansi_ctext);
   return 0;
 }
-
-/*******************************************************************\
-
-Function: ansi_c_parsert::convert_declarator
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void
 insert_base_type(typet &dest, const typet &base_type)
@@ -121,7 +71,7 @@ insert_base_type(typet &dest, const typet &base_type)
       p=&(t.subtypes().back());
       if (p->id() != "pointer" && p->id() != "merged_type" &&
           !p->is_array() && p->id() !=  "incomplete_array") {
-        t.subtypes().push_back(typet());
+        t.subtypes().emplace_back();
         p=&(t.subtypes().back());
         p->make_nil();
       }
@@ -129,8 +79,6 @@ insert_base_type(typet &dest, const typet &base_type)
     else
       p=&t.subtype();
   }
-
-  return;
 }
 
 void ansi_c_parsert::convert_declarator(
@@ -193,18 +141,6 @@ void ansi_c_parsert::convert_declarator(
   }
 }
 
-/*******************************************************************\
-
-Function: ansi_c_parsert::new_declaration
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ansi_c_parsert::new_declaration(
   const irept &type,
   irept &declarator,
@@ -264,18 +200,6 @@ void ansi_c_parsert::new_declaration(
   dest.swap(declaration);
 }
 
-/*******************************************************************\
-
-Function: ansi_c_parsert::get_class
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
- 
 ansi_c_id_classt ansi_c_parsert::get_class(const typet &type)
 {
   if(type.id()=="typedef")

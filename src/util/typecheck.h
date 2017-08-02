@@ -17,7 +17,7 @@ class typecheckt:public message_streamt
 public:
   typecheckt(message_handlert &_message_handler):
     message_streamt(_message_handler) { }
-  virtual ~typecheckt() { }
+  ~typecheckt() override = default;
   
 protected:
   // main function -- overload this one

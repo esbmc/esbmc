@@ -23,7 +23,7 @@ class constant2t : public expr2t
 {
 public:
   constant2t(const type2tc &t, expr2t::expr_ids id) : expr2t(t, id) { }
-  constant2t(const constant2t &ref) : expr2t(ref) { }
+  constant2t(const constant2t &ref) = default;
 };
 
 class constant_int_data : public constant2t
@@ -31,8 +31,7 @@ class constant_int_data : public constant2t
 public:
   constant_int_data(const type2tc &t, expr2t::expr_ids id, const BigInt &bint)
     : constant2t(t, id), value(bint) { }
-  constant_int_data(const constant_int_data &ref)
-    : constant2t(ref), value(ref.value) { }
+  constant_int_data(const constant_int_data &ref) = default;
 
   BigInt value;
 
@@ -45,10 +44,9 @@ class constant_fixedbv_data : public constant2t
 {
 public:
   constant_fixedbv_data(const type2tc &t, expr2t::expr_ids id,
-                        const fixedbvt &fbv)
-    : constant2t(t, id), value(fbv) { }
-  constant_fixedbv_data(const constant_fixedbv_data &ref)
-    : constant2t(ref), value(ref.value) { }
+                        const fixedbvt& fbv)
+    : constant2t(t, id), value(std::move(fbv)) { }
+  constant_fixedbv_data(const constant_fixedbv_data &ref) = default;
 
   fixedbvt value;
 
@@ -61,10 +59,9 @@ class constant_floatbv_data : public constant2t
 {
 public:
   constant_floatbv_data(const type2tc &t, expr2t::expr_ids id,
-                        const ieee_floatt &ieeebv)
-    : constant2t(t, id), value(ieeebv) { }
-  constant_floatbv_data(const constant_floatbv_data &ref)
-    : constant2t(ref), value(ref.value) { }
+                        const ieee_floatt& ieeebv)
+    : constant2t(t, id), value(std::move(ieeebv)) { }
+  constant_floatbv_data(const constant_floatbv_data &ref) = default;
 
   ieee_floatt value;
 
@@ -77,10 +74,9 @@ class constant_datatype_data : public constant2t
 {
 public:
   constant_datatype_data(const type2tc &t, expr2t::expr_ids id,
-                         const std::vector<expr2tc> &m)
-    : constant2t(t, id), datatype_members(m) { }
-  constant_datatype_data(const constant_datatype_data &ref)
-    : constant2t(ref), datatype_members(ref.datatype_members) { }
+                         std::vector<expr2tc> m)
+    : constant2t(t, id), datatype_members(std::move(m)) { }
+  constant_datatype_data(const constant_datatype_data &ref) = default;
 
   std::vector<expr2tc> datatype_members;
 
@@ -94,8 +90,7 @@ class constant_bool_data : public constant2t
 public:
   constant_bool_data(const type2tc &t, expr2t::expr_ids id, bool value)
     : constant2t(t, id), value(value) { }
-  constant_bool_data(const constant_bool_data &ref)
-    : constant2t(ref), value(ref.value) { }
+  constant_bool_data(const constant_bool_data &ref) = default;
 
   bool value;
 
@@ -107,10 +102,9 @@ public:
 class constant_array_of_data : public constant2t
 {
 public:
-  constant_array_of_data(const type2tc &t, expr2t::expr_ids id, expr2tc value)
+  constant_array_of_data(const type2tc &t, expr2t::expr_ids id, const expr2tc& value)
     : constant2t(t, id), initializer(value) { }
-  constant_array_of_data(const constant_array_of_data &ref)
-    : constant2t(ref), initializer(ref.initializer) { }
+  constant_array_of_data(const constant_array_of_data &ref) = default;
 
   expr2tc initializer;
 
@@ -124,8 +118,7 @@ class constant_string_data : public constant2t
 public:
   constant_string_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
     : constant2t(t, id), value(v) { }
-  constant_string_data(const constant_string_data &ref)
-    : constant2t(ref), value(ref.value) { }
+  constant_string_data(const constant_string_data &ref) = default;
 
   irep_idt value;
 
@@ -150,12 +143,9 @@ public:
               unsigned int tr, unsigned int node)
     : expr2t(t, id), thename(v), rlevel(lev), level1_num(l1), level2_num(l2),
       thread_num(tr), node_num(node) { }
-  symbol_data(const symbol_data &ref)
-    : expr2t(ref), thename(ref.thename), rlevel(ref.rlevel),
-      level1_num(ref.level1_num), level2_num(ref.level2_num),
-      thread_num(ref.thread_num), node_num(ref.node_num) { }
+  symbol_data(const symbol_data &ref) = default;
 
-  virtual std::string get_symbol_name(void) const;
+  virtual std::string get_symbol_name() const;
 
   // So: I want to make this private, however then all the templates accessing
   // it can't access it; and the typedef for symbol_expr_methods further down
@@ -182,8 +172,7 @@ class typecast_data : public expr2t
 public:
   typecast_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v, const expr2tc &r)
     : expr2t(t, id), from(v), rounding_mode(r) { }
-  typecast_data(const typecast_data &ref)
-    : expr2t(ref), from(ref.from), rounding_mode(ref.rounding_mode) { }
+  typecast_data(const typecast_data &ref) = default;
 
   expr2tc from;
   expr2tc rounding_mode;
@@ -200,9 +189,7 @@ public:
   if_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &c,
                 const expr2tc &tv, const expr2tc &fv)
     : expr2t(t, id), cond(c), true_value(tv), false_value(fv) { }
-  if_data(const if_data &ref)
-    : expr2t(ref), cond(ref.cond), true_value(ref.true_value),
-      false_value(ref.false_value) { }
+  if_data(const if_data &ref) = default;
 
   expr2tc cond;
   expr2tc true_value;
@@ -221,8 +208,7 @@ class relation_data : public expr2t
   relation_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &s1,
                 const expr2tc &s2)
     : expr2t(t, id), side_1(s1), side_2(s2) { }
-  relation_data(const relation_data &ref)
-    : expr2t(ref), side_1(ref.side_1), side_2(ref.side_2) { }
+  relation_data(const relation_data &ref) = default;
 
   expr2tc side_1;
   expr2tc side_2;
@@ -238,8 +224,7 @@ class logical_ops : public expr2t
 public:
   logical_ops(const type2tc &t, expr2t::expr_ids id)
     : expr2t(t, id) { }
-  logical_ops(const logical_ops &ref)
-    : expr2t(ref) { }
+  logical_ops(const logical_ops &ref) = default;
 };
 
 class bool_1op : public logical_ops
@@ -247,8 +232,7 @@ class bool_1op : public logical_ops
 public:
   bool_1op(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
     : logical_ops(t, id), value(v) { }
-  bool_1op(const bool_1op &ref)
-    : logical_ops(ref), value(ref.value) { }
+  bool_1op(const bool_1op &ref) = default;
 
   expr2tc value;
 
@@ -263,8 +247,7 @@ public:
   logic_2ops(const type2tc &t, expr2t::expr_ids id, const expr2tc &s1,
              const expr2tc &s2)
     : logical_ops(t, id), side_1(s1), side_2(s2) { }
-  logic_2ops(const logic_2ops &ref)
-    : logical_ops(ref), side_1(ref.side_1), side_2(ref.side_2) { }
+  logic_2ops(const logic_2ops &ref) = default;
 
   expr2tc side_1;
   expr2tc side_2;
@@ -280,8 +263,7 @@ class bitops : public expr2t
 public:
   bitops(const type2tc &t, expr2t::expr_ids id)
     : expr2t(t, id) { }
-  bitops(const bitops &ref)
-    : expr2t(ref) { }
+  bitops(const bitops &ref) = default;
 };
 
 class bitnot_data : public bitops
@@ -289,8 +271,7 @@ class bitnot_data : public bitops
 public:
   bitnot_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
     : bitops(t, id), value(v) { }
-  bitnot_data(const bitnot_data &ref)
-    : bitops(ref), value(ref.value) { }
+  bitnot_data(const bitnot_data &ref) = default;
 
   expr2tc value;
 
@@ -305,8 +286,7 @@ public:
   bit_2ops(const type2tc &t, expr2t::expr_ids id, const expr2tc &s1,
            const expr2tc &s2)
     : bitops(t, id), side_1(s1), side_2(s2) { }
-  bit_2ops(const bit_2ops &ref)
-    : bitops(ref), side_1(ref.side_1), side_2(ref.side_2) { }
+  bit_2ops(const bit_2ops &ref) = default;
 
   expr2tc side_1;
   expr2tc side_2;
@@ -322,8 +302,7 @@ class arith_ops : public expr2t
 public:
   arith_ops(const type2tc &t, expr2t::expr_ids id)
     : expr2t(t, id) { }
-  arith_ops(const arith_ops &ref)
-    : expr2t(ref) { }
+  arith_ops(const arith_ops &ref) = default;
 };
 
 class arith_1op : public arith_ops
@@ -331,8 +310,7 @@ class arith_1op : public arith_ops
 public:
   arith_1op(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v)
     : arith_ops(t, id), value(v) { }
-  arith_1op(const arith_1op &ref)
-    : arith_ops(ref), value(ref.value) { }
+  arith_1op(const arith_1op &ref) = default;
 
   expr2tc value;
 
@@ -347,8 +325,7 @@ public:
   arith_2ops(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v1,
              const expr2tc &v2)
     : arith_ops(t, id), side_1(v1), side_2(v2) { }
-  arith_2ops(const arith_2ops &ref)
-    : arith_ops(ref), side_1(ref.side_1), side_2(ref.side_2) { }
+  arith_2ops(const arith_2ops &ref) = default;
 
   expr2tc side_1;
   expr2tc side_2;
@@ -365,8 +342,7 @@ public:
   ieee_arith_1op(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v,
                   const expr2tc &rm)
     : arith_ops(t, id), rounding_mode(rm), value(v) { }
-  ieee_arith_1op(const ieee_arith_1op &ref)
-    : arith_ops(ref), rounding_mode(ref.rounding_mode), value(ref.value) { }
+  ieee_arith_1op(const ieee_arith_1op &ref) = default;
 
   expr2tc rounding_mode;
   expr2tc value;
@@ -383,8 +359,7 @@ public:
   ieee_arith_2ops(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v1,
                   const expr2tc &v2, const expr2tc &rm)
     : arith_ops(t, id), rounding_mode(rm), side_1(v1), side_2(v2) { }
-  ieee_arith_2ops(const ieee_arith_2ops &ref)
-    : arith_ops(ref), rounding_mode(ref.rounding_mode), side_1(ref.side_1), side_2(ref.side_2) { }
+  ieee_arith_2ops(const ieee_arith_2ops &ref) = default;
 
   expr2tc rounding_mode;
   expr2tc side_1;
@@ -403,9 +378,7 @@ public:
   ieee_arith_3ops(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v1,
                   const expr2tc &v2, const expr2tc &v3, const expr2tc &rm)
     : arith_ops(t, id), rounding_mode(rm), value_1(v1), value_2(v2), value_3(v3) { }
-  ieee_arith_3ops(const ieee_arith_3ops &ref)
-    : arith_ops(ref), rounding_mode(ref.rounding_mode), value_1(ref.value_1),
-      value_2(ref.value_2), value_3(ref.value_3) { }
+  ieee_arith_3ops(const ieee_arith_3ops &ref) = default;
 
   expr2tc rounding_mode;
   expr2tc value_1;
@@ -426,8 +399,7 @@ public:
   same_object_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v1,
                    const expr2tc &v2)
     : expr2t(t, id), side_1(v1), side_2(v2) { }
-  same_object_data(const same_object_data &ref)
-    : expr2t(ref), side_1(ref.side_1), side_2(ref.side_2) { }
+  same_object_data(const same_object_data &ref) = default;
 
   expr2tc side_1;
   expr2tc side_2;
@@ -443,8 +415,7 @@ class pointer_ops : public expr2t
 public:
   pointer_ops(const type2tc &t, expr2t::expr_ids id, const expr2tc &p)
     : expr2t(t, id), ptr_obj(p) { }
-  pointer_ops(const pointer_ops &ref)
-    : expr2t(ref), ptr_obj(ref.ptr_obj) { }
+  pointer_ops(const pointer_ops &ref) = default;
 
   expr2tc ptr_obj;
 
@@ -460,8 +431,7 @@ public:
   // Forward constructors downwards
   invalid_pointer_ops(const type2tc &t, expr2t::expr_ids id, const expr2tc &p)
     : pointer_ops(t, id, p) { }
-  invalid_pointer_ops(const invalid_pointer_ops &ref)
-    : pointer_ops(ref) { }
+  invalid_pointer_ops(const invalid_pointer_ops &ref) = default;
 
 // Type mangling:
   typedef esbmct::expr2t_traits_always_construct<ptr_obj_field> traits;
@@ -472,8 +442,7 @@ class byte_ops : public expr2t
 public:
   byte_ops(const type2tc &t, expr2t::expr_ids id)
     : expr2t(t, id){ }
-  byte_ops(const byte_ops &ref)
-    : expr2t(ref) { }
+  byte_ops(const byte_ops &ref) = default;
 };
 
 class byte_extract_data : public byte_ops
@@ -482,9 +451,7 @@ public:
   byte_extract_data(const type2tc &t, expr2t::expr_ids id,
                     const expr2tc &s, const expr2tc &o, bool be)
     : byte_ops(t, id), source_value(s), source_offset(o), big_endian(be) { }
-  byte_extract_data(const byte_extract_data &ref)
-    : byte_ops(ref), source_value(ref.source_value),
-      source_offset(ref.source_offset), big_endian(ref.big_endian) { }
+  byte_extract_data(const byte_extract_data &ref) = default;
 
   expr2tc source_value;
   expr2tc source_offset;
@@ -504,10 +471,7 @@ public:
                    const expr2tc &o, const expr2tc &v, bool be)
     : byte_ops(t, id), source_value(s), source_offset(o), update_value(v),
       big_endian(be) { }
-  byte_update_data(const byte_update_data &ref)
-    : byte_ops(ref), source_value(ref.source_value),
-      source_offset(ref.source_offset), update_value(ref.update_value),
-      big_endian(ref.big_endian) { }
+  byte_update_data(const byte_update_data &ref) = default;
 
   expr2tc source_value;
   expr2tc source_offset;
@@ -527,8 +491,7 @@ class datatype_ops : public expr2t
 public:
   datatype_ops(const type2tc &t, expr2t::expr_ids id)
     : expr2t(t, id) { }
-  datatype_ops(const datatype_ops &ref)
-    : expr2t(ref) { }
+  datatype_ops(const datatype_ops &ref) = default;
 };
 
 class with_data : public datatype_ops
@@ -538,10 +501,7 @@ public:
             const expr2tc &uf, const expr2tc &uv)
     : datatype_ops(t, id), source_value(sv), update_field(uf), update_value(uv)
       { }
-  with_data(const with_data &ref)
-    : datatype_ops(ref), source_value(ref.source_value),
-      update_field(ref.update_field), update_value(ref.update_value)
-      { }
+  with_data(const with_data &ref) = default;
 
   expr2tc source_value;
   expr2tc update_field;
@@ -560,8 +520,7 @@ public:
   member_data(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &sv,
               const irep_idt &m)
     : datatype_ops(t, id), source_value(sv), member(m) { }
-  member_data(const member_data &ref)
-    : datatype_ops(ref), source_value(ref.source_value), member(ref.member) { }
+  member_data(const member_data &ref) = default;
 
   expr2tc source_value;
   irep_idt member;
@@ -578,8 +537,7 @@ public:
   index_data(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &sv,
               const expr2tc &i)
     : datatype_ops(t, id), source_value(sv), index(i) { }
-  index_data(const index_data &ref)
-    : datatype_ops(ref), source_value(ref.source_value), index(ref.index) { }
+  index_data(const index_data &ref) = default;
 
   expr2tc source_value;
   expr2tc index;
@@ -595,8 +553,7 @@ class string_ops : public expr2t
 public:
   string_ops(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &s)
     : expr2t(t, id), string(s) { }
-  string_ops(const string_ops &ref)
-    : expr2t(ref), string(ref.string) { }
+  string_ops(const string_ops &ref) = default;
 
   expr2tc string;
 
@@ -610,8 +567,7 @@ class overflow_ops : public expr2t
 public:
   overflow_ops(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &v)
     : expr2t(t, id), operand(v) { }
-  overflow_ops(const overflow_ops &ref)
-    : expr2t(ref), operand(ref.operand) { }
+  overflow_ops(const overflow_ops &ref) = default;
 
   expr2tc operand;
 
@@ -626,8 +582,7 @@ public:
   overflow_cast_data(const type2tc &t, datatype_ops::expr_ids id,
                      const expr2tc &v, unsigned int b)
     : overflow_ops(t, id, v), bits(b) { }
-  overflow_cast_data(const overflow_cast_data &ref)
-    : overflow_ops(ref), bits(ref.bits) { }
+  overflow_cast_data(const overflow_cast_data &ref) = default;
 
   unsigned int bits;
 
@@ -643,9 +598,7 @@ public:
   dynamic_object_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &i,
                       bool inv, bool unk)
     : expr2t(t, id), instance(i), invalid(inv), unknown(unk) { }
-  dynamic_object_data(const dynamic_object_data &ref)
-    : expr2t(ref), instance(ref.instance), invalid(ref.invalid),
-      unknown(ref.unknown) { }
+  dynamic_object_data(const dynamic_object_data &ref) = default;
 
   expr2tc instance;
   bool invalid;
@@ -663,8 +616,7 @@ class dereference_data : public expr2t
 public:
   dereference_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
     : expr2t(t, id), value(v) { }
-  dereference_data(const dereference_data &ref)
-    : expr2t(ref), value(ref.value) { }
+  dereference_data(const dereference_data &ref) = default;
 
   expr2tc value;
 
@@ -678,8 +630,7 @@ class object_ops : public expr2t
 public:
   object_ops(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
     : expr2t(t, id), value(v) { }
-  object_ops(const object_ops &ref)
-    : expr2t(ref), value(ref.value) { }
+  object_ops(const object_ops &ref) = default;
 
   expr2tc value;
 
@@ -705,13 +656,11 @@ public:
   };
 
   sideeffect_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &op,
-                  const expr2tc &sz, const std::vector<expr2tc> &args,
+                  const expr2tc &sz, std::vector<expr2tc> args,
                   const type2tc &tp, allockind k)
-    : expr2t(t, id), operand(op), size(sz), arguments(args), alloctype(tp),
+    : expr2t(t, id), operand(op), size(sz), arguments(std::move(args)), alloctype(tp),
                      kind(k) { }
-  sideeffect_data(const sideeffect_data &ref)
-    : expr2t(ref), operand(ref.operand), size(ref.size),
-      arguments(ref.arguments), alloctype(ref.alloctype), kind(ref.kind) { }
+  sideeffect_data(const sideeffect_data &ref) = default;
 
   expr2tc operand;
   expr2tc size;
@@ -733,18 +682,16 @@ class code_base : public expr2t
 public:
   code_base(const type2tc &t, expr2t::expr_ids id)
     : expr2t(t, id) { }
-  code_base(const code_base &ref)
-    : expr2t(ref) { }
+  code_base(const code_base &ref) = default;
 };
 
 class code_block_data : public code_base
 {
 public:
   code_block_data(const type2tc &t, expr2t::expr_ids id,
-                  const std::vector<expr2tc> &v)
-    : code_base(t, id), operands(v) { }
-  code_block_data(const code_block_data &ref)
-    : code_base(ref), operands(ref.operands) { }
+                  std::vector<expr2tc> v)
+    : code_base(t, id), operands(std::move(v)) { }
+  code_block_data(const code_block_data &ref) = default;
 
   std::vector<expr2tc> operands;
 
@@ -759,8 +706,7 @@ public:
   code_assign_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &ta,
                    const expr2tc &s)
     : code_base(t, id), target(ta), source(s) { }
-  code_assign_data(const code_assign_data &ref)
-    : code_base(ref), target(ref.target), source(ref.source) { }
+  code_assign_data(const code_assign_data &ref) = default;
 
   expr2tc target;
   expr2tc source;
@@ -776,8 +722,7 @@ class code_decl_data : public code_base
 public:
   code_decl_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
     : code_base(t, id), value(v) { }
-  code_decl_data(const code_decl_data &ref)
-    : code_base(ref), value(ref.value) { }
+  code_decl_data(const code_decl_data &ref) = default;
 
   irep_idt value;
 
@@ -790,10 +735,9 @@ class code_printf_data : public code_base
 {
 public:
   code_printf_data(const type2tc &t, expr2t::expr_ids id,
-                   const std::vector<expr2tc> &v)
-    : code_base(t, id), operands(v) { }
-  code_printf_data(const code_printf_data &ref)
-    : code_base(ref), operands(ref.operands) { }
+                   std::vector<expr2tc> v)
+    : code_base(t, id), operands(std::move(v)) { }
+  code_printf_data(const code_printf_data &ref) = default;
 
   std::vector<expr2tc> operands;
 
@@ -807,8 +751,7 @@ class code_expression_data : public code_base
 public:
   code_expression_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o)
     : code_base(t, id), operand(o) { }
-  code_expression_data(const code_expression_data &ref)
-    : code_base(ref), operand(ref.operand) { }
+  code_expression_data(const code_expression_data &ref) = default;
 
   expr2tc operand;
 
@@ -822,8 +765,7 @@ class code_goto_data : public code_base
 public:
   code_goto_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &tg)
     : code_base(t, id), target(tg) { }
-  code_goto_data(const code_goto_data &ref)
-    : code_base(ref), target(ref.target) { }
+  code_goto_data(const code_goto_data &ref) = default;
 
   irep_idt target;
 
@@ -838,9 +780,7 @@ class object_desc_data : public expr2t
     object_desc_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
                      const expr2tc &offs, unsigned int align)
       : expr2t(t, id), object(o), offset(offs), alignment(align) { }
-    object_desc_data(const object_desc_data &ref)
-      : expr2t(ref), object(ref.object), offset(ref.offset),
-        alignment(ref.alignment) { }
+    object_desc_data(const object_desc_data &ref) = default;
 
     expr2tc object;
     expr2tc offset;
@@ -857,11 +797,9 @@ class code_funccall_data : public code_base
 {
 public:
   code_funccall_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &r,
-                     const expr2tc &func, const std::vector<expr2tc> &ops)
-    : code_base(t, id), ret(r), function(func), operands(ops) { }
-  code_funccall_data(const code_funccall_data &ref)
-    : code_base(ref), ret(ref.ret), function(ref.function),
-      operands(ref.operands) { }
+                     const expr2tc &func, std::vector<expr2tc> ops)
+    : code_base(t, id), ret(r), function(func), operands(std::move(ops)) { }
+  code_funccall_data(const code_funccall_data &ref) = default;
 
   expr2tc ret;
   expr2tc function;
@@ -880,8 +818,7 @@ public:
   code_comma_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &s1,
                   const expr2tc &s2)
     : code_base(t, id), side_1(s1), side_2(s2) { }
-  code_comma_data(const code_comma_data &ref)
-    : code_base(ref), side_1(ref.side_1), side_2(ref.side_2) { }
+  code_comma_data(const code_comma_data &ref) = default;
 
   expr2tc side_1;
   expr2tc side_2;
@@ -897,8 +834,7 @@ class code_asm_data : public code_base
 public:
   code_asm_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
     : code_base(t, id), value(v) { }
-  code_asm_data(const code_asm_data &ref)
-    : code_base(ref), value(ref.value) { }
+  code_asm_data(const code_asm_data &ref) = default;
 
   irep_idt value;
 
@@ -911,10 +847,9 @@ class code_cpp_catch_data : public code_base
 {
 public:
   code_cpp_catch_data(const type2tc &t, expr2t::expr_ids id,
-                      const std::vector<irep_idt> &el)
-    : code_base(t, id), exception_list(el) { }
-  code_cpp_catch_data(const code_cpp_catch_data &ref)
-    : code_base(ref), exception_list(ref.exception_list) { }
+                      std::vector<irep_idt> el)
+    : code_base(t, id), exception_list(std::move(el)) { }
+  code_cpp_catch_data(const code_cpp_catch_data &ref) = default;
 
   std::vector<irep_idt> exception_list;
 
@@ -927,11 +862,9 @@ class code_cpp_throw_data : public code_base
 {
 public:
   code_cpp_throw_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
-                      const std::vector<irep_idt> &l)
-    : code_base(t, id), operand(o), exception_list(l) { }
-  code_cpp_throw_data(const code_cpp_throw_data &ref)
-    : code_base(ref), operand(ref.operand), exception_list(ref.exception_list)
-      { }
+                      std::vector<irep_idt> l)
+    : code_base(t, id), operand(o), exception_list(std::move(l)) { }
+  code_cpp_throw_data(const code_cpp_throw_data &ref) = default;
 
   expr2tc operand;
   std::vector<irep_idt> exception_list;
@@ -946,11 +879,9 @@ class code_cpp_throw_decl_data : public code_base
 {
 public:
   code_cpp_throw_decl_data(const type2tc &t, expr2t::expr_ids id,
-                           const std::vector<irep_idt> &l)
-    : code_base(t, id), exception_list(l) { }
-  code_cpp_throw_decl_data(const code_cpp_throw_decl_data &ref)
-    : code_base(ref), exception_list(ref.exception_list)
-      { }
+                           std::vector<irep_idt> l)
+    : code_base(t, id), exception_list(std::move(l)) { }
+  code_cpp_throw_decl_data(const code_cpp_throw_decl_data &ref) = default;
 
   std::vector<irep_idt> exception_list;
 
@@ -963,11 +894,9 @@ class concat_data : public expr2t
 {
 public:
   concat_data(const type2tc &t, expr2t::expr_ids id,
-              const std::vector<expr2tc> &d)
-    : expr2t(t, id), data_items(d) { }
-  concat_data(const concat_data &ref)
-    : expr2t(ref), data_items(ref.data_items)
-      { }
+              std::vector<expr2tc> d)
+    : expr2t(t, id), data_items(std::move(d)) { }
+  concat_data(const concat_data &ref) = default;
 
   std::vector<expr2tc> data_items;
 
@@ -1115,13 +1044,12 @@ public:
    */
   constant_int2t(const type2tc &type, const BigInt &input)
     : constant_int_expr_methods(type, constant_int_id, input) { }
-  constant_int2t(const constant_int2t &ref)
-    : constant_int_expr_methods(ref) { }
+  constant_int2t(const constant_int2t &ref) = default;
 
   /** Accessor for fetching machine-word unsigned integer of this constant */
-  unsigned long as_ulong(void) const;
+  unsigned long as_ulong() const;
   /** Accessor for fetching machine-word integer of this constant */
-  long as_long(void) const;
+  long as_long() const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1140,8 +1068,7 @@ public:
    */
   constant_fixedbv2t(const fixedbvt &value)
     : constant_fixedbv_expr_methods(value.spec.get_type(), constant_fixedbv_id, value) { }
-  constant_fixedbv2t(const constant_fixedbv2t &ref)
-    : constant_fixedbv_expr_methods(ref) { }
+  constant_fixedbv2t(const constant_fixedbv2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1159,8 +1086,7 @@ public:
    */
   constant_floatbv2t(const ieee_floatt &value)
     : constant_floatbv_expr_methods(value.spec.get_type(), constant_floatbv_id, value) { }
-  constant_floatbv2t(const constant_floatbv2t &ref)
-    : constant_floatbv_expr_methods(ref) { }
+  constant_floatbv2t(const constant_floatbv2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1176,13 +1102,12 @@ public:
   constant_bool2t(bool value)
     : constant_bool_expr_methods(type_pool.get_bool(), constant_bool_id, value)
       { }
-  constant_bool2t(const constant_bool2t &ref)
-    : constant_bool_expr_methods(ref) { }
+  constant_bool2t(const constant_bool2t &ref) = default;
 
   /** Return whether contained boolean is true. */
-  bool is_true(void) const;
+  bool is_true() const;
   /** Return whether contained boolean is false. */
-  bool is_false(void) const;
+  bool is_false() const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1200,11 +1125,10 @@ public:
    */
   constant_string2t(const type2tc &type, const irep_idt &stringref)
     : constant_string_expr_methods(type, constant_string_id, stringref) { }
-  constant_string2t(const constant_string2t &ref)
-    : constant_string_expr_methods(ref) { }
+  constant_string2t(const constant_string2t &ref) = default;
 
   /** Convert string to a constant length array of characters */
-  expr2tc to_array(void) const;
+  expr2tc to_array() const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1224,8 +1148,7 @@ public:
    */
   constant_struct2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_struct_expr_methods (type, constant_struct_id, members) { }
-  constant_struct2t(const constant_struct2t &ref)
-    : constant_struct_expr_methods(ref) { }
+  constant_struct2t(const constant_struct2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1246,8 +1169,7 @@ public:
    */
   constant_union2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_union_expr_methods (type, constant_union_id, members) { }
-  constant_union2t(const constant_union2t &ref)
-    : constant_union_expr_methods(ref) { }
+  constant_union2t(const constant_union2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1267,8 +1189,7 @@ public:
    */
   constant_array2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_array_expr_methods(type, constant_array_id, members) { }
-  constant_array2t(const constant_array2t &ref)
-    : constant_array_expr_methods(ref){}
+  constant_array2t(const constant_array2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1287,8 +1208,7 @@ public:
    */
   constant_array_of2t(const type2tc &type, const expr2tc &init)
     : constant_array_of_expr_methods(type, constant_array_of_id, init) { }
-  constant_array_of2t(const constant_array_of2t &ref)
-    : constant_array_of_expr_methods(ref){}
+  constant_array_of2t(const constant_array_of2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1310,8 +1230,7 @@ public:
            unsigned int l2 = 0, unsigned int trd = 0, unsigned int node = 0)
     : symbol_expr_methods(type, symbol_id, init, lev, l1, l2, trd, node) { }
 
-  symbol2t(const symbol2t &ref)
-    : symbol_expr_methods(ref){}
+  symbol2t(const symbol2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1343,10 +1262,9 @@ public:
   {
   }
 
-  nearbyint2t(const nearbyint2t &ref)
-    : nearbyint_expr_methods(ref){}
+  nearbyint2t(const nearbyint2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1378,9 +1296,8 @@ public:
   {
   }
 
-  typecast2t(const typecast2t &ref)
-    : typecast_expr_methods(ref){}
-  virtual expr2tc do_simplify(bool second) const;
+  typecast2t(const typecast2t &ref) = default;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1408,8 +1325,7 @@ public:
   bitcast2t(const type2tc &type, const expr2tc &from, const expr2tc &roundsym)
     : bitcast_expr_methods(type, bitcast_id, from, roundsym) { }
 
-  bitcast2t(const bitcast2t &ref)
-    : bitcast_expr_methods(ref){}
+  bitcast2t(const bitcast2t &ref) = default;
   // No simplification at this time
 
   static std::string field_names[esbmct::num_type_fields];
@@ -1431,10 +1347,9 @@ public:
   if2t(const type2tc &type, const expr2tc &cond, const expr2tc &trueval,
        const expr2tc &falseval)
     : if_expr_methods(type, if_id, cond, trueval, falseval) {}
-  if2t(const if2t &ref)
-    : if_expr_methods(ref) {}
+  if2t(const if2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1446,10 +1361,9 @@ class equality2t : public equality_expr_methods
 public:
   equality2t(const expr2tc &v1, const expr2tc &v2)
     : equality_expr_methods(type_pool.get_bool(), equality_id, v1, v2) {}
-  equality2t(const equality2t &ref)
-    : equality_expr_methods(ref) {}
+  equality2t(const equality2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1461,10 +1375,9 @@ class notequal2t : public notequal_expr_methods
 public:
   notequal2t(const expr2tc &v1, const expr2tc &v2)
     : notequal_expr_methods(type_pool.get_bool(), notequal_id, v1, v2) {}
-  notequal2t(const notequal2t &ref)
-    : notequal_expr_methods(ref) {}
+  notequal2t(const notequal2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1476,10 +1389,9 @@ class lessthan2t : public lessthan_expr_methods
 public:
   lessthan2t(const expr2tc &v1, const expr2tc &v2)
     : lessthan_expr_methods(type_pool.get_bool(), lessthan_id, v1, v2) {}
-  lessthan2t(const lessthan2t &ref)
-    : lessthan_expr_methods(ref) {}
+  lessthan2t(const lessthan2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1491,10 +1403,9 @@ class greaterthan2t : public greaterthan_expr_methods
 public:
   greaterthan2t(const expr2tc &v1, const expr2tc &v2)
     : greaterthan_expr_methods(type_pool.get_bool(), greaterthan_id, v1, v2) {}
-  greaterthan2t(const greaterthan2t &ref)
-    : greaterthan_expr_methods(ref) {}
+  greaterthan2t(const greaterthan2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1506,10 +1417,9 @@ class lessthanequal2t : public lessthanequal_expr_methods
 public:
   lessthanequal2t(const expr2tc &v1, const expr2tc &v2)
   : lessthanequal_expr_methods(type_pool.get_bool(), lessthanequal_id, v1, v2){}
-  lessthanequal2t(const lessthanequal2t &ref)
-  : lessthanequal_expr_methods(ref) {}
+  lessthanequal2t(const lessthanequal2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1522,10 +1432,9 @@ public:
   greaterthanequal2t(const expr2tc &v1, const expr2tc &v2)
     : greaterthanequal_expr_methods(type_pool.get_bool(), greaterthanequal_id,
                                     v1, v2) {}
-  greaterthanequal2t(const greaterthanequal2t &ref)
-    : greaterthanequal_expr_methods(ref) {}
+  greaterthanequal2t(const greaterthanequal2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1538,10 +1447,9 @@ public:
   /** Primary constructor. @param val Boolean typed operand to invert. */
   not2t(const expr2tc &val)
   : not_expr_methods(type_pool.get_bool(), not_id, val) {}
-  not2t(const not2t &ref)
-  : not_expr_methods(ref) {}
+  not2t(const not2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1554,10 +1462,9 @@ public:
   /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   and2t(const expr2tc &s1, const expr2tc &s2)
   : and_expr_methods(type_pool.get_bool(), and_id, s1, s2) {}
-  and2t(const and2t &ref)
-  : and_expr_methods(ref) {}
+  and2t(const and2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1570,10 +1477,9 @@ public:
   /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   or2t(const expr2tc &s1, const expr2tc &s2)
   : or_expr_methods(type_pool.get_bool(), or_id, s1, s2) {}
-  or2t(const or2t &ref)
-  : or_expr_methods(ref) {}
+  or2t(const or2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1586,10 +1492,9 @@ public:
   /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   xor2t(const expr2tc &s1, const expr2tc &s2)
   : xor_expr_methods(type_pool.get_bool(), xor_id, s1, s2) {}
-  xor2t(const xor2t &ref)
-  : xor_expr_methods(ref) {}
+  xor2t(const xor2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1602,10 +1507,9 @@ public:
   /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   implies2t(const expr2tc &s1, const expr2tc &s2)
   : implies_expr_methods(type_pool.get_bool(), implies_id, s1, s2) {}
-  implies2t(const implies2t &ref)
-  : implies_expr_methods(ref) {}
+  implies2t(const implies2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1621,10 +1525,9 @@ public:
    *  @param s2 Operand 2. */
   bitand2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitand_expr_methods(t, bitand_id, s1, s2) {}
-  bitand2t(const bitand2t &ref)
-  : bitand_expr_methods(ref) {}
+  bitand2t(const bitand2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1640,10 +1543,9 @@ public:
    *  @param s2 Operand 2. */
   bitor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitor_expr_methods(t, bitor_id, s1, s2) {}
-  bitor2t(const bitor2t &ref)
-  : bitor_expr_methods(ref) {}
+  bitor2t(const bitor2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1659,10 +1561,9 @@ public:
    *  @param s2 Operand 2. */
   bitxor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitxor_expr_methods(t, bitxor_id, s1, s2) {}
-  bitxor2t(const bitxor2t &ref)
-  : bitxor_expr_methods(ref) {}
+  bitxor2t(const bitxor2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1678,10 +1579,9 @@ public:
    *  @param s2 Operand 2. */
   bitnand2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitnand_expr_methods(t, bitnand_id, s1, s2) {}
-  bitnand2t(const bitnand2t &ref)
-  : bitnand_expr_methods(ref) {}
+  bitnand2t(const bitnand2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1697,10 +1597,9 @@ public:
    *  @param s2 Operand 2. */
   bitnor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitnor_expr_methods(t, bitnor_id, s1, s2) {}
-  bitnor2t(const bitnor2t &ref)
-  : bitnor_expr_methods(ref) {}
+  bitnor2t(const bitnor2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1716,10 +1615,9 @@ public:
    *  @param s2 Operand 2. */
   bitnxor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitnxor_expr_methods(t, bitnxor_id, s1, s2) {}
-  bitnxor2t(const bitnxor2t &ref)
-  : bitnxor_expr_methods(ref) {}
+  bitnxor2t(const bitnxor2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1736,10 +1634,9 @@ public:
     : bitnot_expr_methods(type, bitnot_id, v) {}
   bitnot2t(const type2tc &type, const expr2tc &v, const expr2tc& __attribute__((unused)))
     : bitnot_expr_methods(type, bitnot_id, v) {}
-  bitnot2t(const bitnot2t &ref)
-    : bitnot_expr_methods(ref) {}
+  bitnot2t(const bitnot2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1757,10 +1654,9 @@ public:
    *  @param s2 Number of bits to shift by, potentially nondeterministic. */
   lshr2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : lshr_expr_methods(t, lshr_id, s1, s2) {}
-  lshr2t(const lshr2t &ref)
-  : lshr_expr_methods(ref) {}
+  lshr2t(const lshr2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1775,10 +1671,9 @@ public:
    *  @param val Value to negate. */
   neg2t(const type2tc &type, const expr2tc &val)
     : neg_expr_methods(type, neg_id, val) {}
-  neg2t(const neg2t &ref)
-    : neg_expr_methods(ref) {}
+  neg2t(const neg2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1793,10 +1688,9 @@ public:
    *  @param val Value to abs. */
   abs2t(const type2tc &type, const expr2tc &val)
     : abs_expr_methods(type, abs_id, val) {}
-  abs2t(const abs2t &ref)
-    : abs_expr_methods(ref) {}
+  abs2t(const abs2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1812,10 +1706,9 @@ public:
    *  @param v2 Second operand. */
   add2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : add_expr_methods(type, add_id, v1, v2) {}
-  add2t(const add2t &ref)
-    : add_expr_methods(ref) {}
+  add2t(const add2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1832,10 +1725,9 @@ public:
    *  @param v2 Second operand. */
   sub2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : sub_expr_methods(type, sub_id, v1, v2) {}
-  sub2t(const sub2t &ref)
-    : sub_expr_methods(ref) {}
+  sub2t(const sub2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1852,10 +1744,9 @@ public:
    *  @param v2 Second operand. */
   mul2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : mul_expr_methods(type, mul_id, v1, v2) {}
-  mul2t(const mul2t &ref)
-    : mul_expr_methods(ref) {}
+  mul2t(const mul2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1872,10 +1763,9 @@ public:
    *  @param v2 Second operand. */
   div2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : div_expr_methods(type, div_id, v1, v2) {}
-  div2t(const div2t &ref)
-    : div_expr_methods(ref) {}
+  div2t(const div2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1892,10 +1782,9 @@ public:
    *  @param rm rounding mode. */
   ieee_add2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
     : ieee_add_expr_methods(type, ieee_add_id, v1, v2, rm) {}
-  ieee_add2t(const ieee_add2t &ref)
-    : ieee_add_expr_methods(ref) {}
+  ieee_add2t(const ieee_add2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1913,10 +1802,9 @@ public:
    *  @param rm rounding mode. */
   ieee_sub2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
     : ieee_sub_expr_methods(type, ieee_sub_id, v1, v2, rm) {}
-  ieee_sub2t(const ieee_sub2t &ref)
-    : ieee_sub_expr_methods(ref) {}
+  ieee_sub2t(const ieee_sub2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1934,10 +1822,9 @@ public:
    *  @param rm rounding mode. */
  ieee_mul2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
     : ieee_mul_expr_methods(type, ieee_mul_id, v1, v2, rm) {}
-  ieee_mul2t(const ieee_mul2t &ref)
-    : ieee_mul_expr_methods(ref) {}
+  ieee_mul2t(const ieee_mul2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1955,10 +1842,9 @@ public:
    *  @param rm rounding mode. */
   ieee_div2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
     : ieee_div_expr_methods(type, ieee_div_id, v1, v2, rm) {}
-  ieee_div2t(const ieee_div2t &ref)
-    : ieee_div_expr_methods(ref) {}
+  ieee_div2t(const ieee_div2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1979,8 +1865,7 @@ public:
   ieee_fma2t(
     const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &v3, const expr2tc &rm)
     : ieee_fma_expr_methods(type, ieee_fma_id, v1, v2, v3, rm) {}
-  ieee_fma2t(const ieee_fma2t &ref)
-    : ieee_fma_expr_methods(ref) {}
+  ieee_fma2t(const ieee_fma2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1998,8 +1883,7 @@ public:
    *  @param rm rounding mode. */
   ieee_sqrt2t(const type2tc &type, const expr2tc &v1, const expr2tc &rm)
     : ieee_sqrt_expr_methods(type, ieee_sqrt_id, v1, rm) {}
-  ieee_sqrt2t(const ieee_sqrt2t &ref)
-    : ieee_sqrt_expr_methods(ref) {}
+  ieee_sqrt2t(const ieee_sqrt2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2016,10 +1900,9 @@ public:
    *  @param v2 Second operand. */
   modulus2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : modulus_expr_methods(type, modulus_id, v1, v2) {}
-  modulus2t(const modulus2t &ref)
-    : modulus_expr_methods(ref) {}
+  modulus2t(const modulus2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2036,10 +1919,9 @@ public:
    *  @param v2 Number of bits to to shift by. */
   shl2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : shl_expr_methods(type, shl_id, v1, v2) {}
-  shl2t(const shl2t &ref)
-    : shl_expr_methods(ref) {}
+  shl2t(const shl2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2057,10 +1939,9 @@ public:
    *  @param v2 Number of bits to to shift by. */
   ashr2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : ashr_expr_methods(type, ashr_id, v1, v2) {}
-  ashr2t(const ashr2t &ref)
-    : ashr_expr_methods(ref) {}
+  ashr2t(const ashr2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2074,10 +1955,9 @@ public:
   /** Primary constructor. @param v1 First object. @param v2 Second object. */
   same_object2t(const expr2tc &v1, const expr2tc &v2)
     : same_object_expr_methods(type_pool.get_bool(), same_object_id, v1, v2) {}
-  same_object2t(const same_object2t &ref)
-    : same_object_expr_methods(ref) {}
+  same_object2t(const same_object2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2093,10 +1973,9 @@ public:
    *  @param ptrobj Pointer object to get offset from. */
   pointer_offset2t(const type2tc &type, const expr2tc &ptrobj)
     : pointer_offset_expr_methods(type, pointer_offset_id, ptrobj) {}
-  pointer_offset2t(const pointer_offset2t &ref)
-    : pointer_offset_expr_methods(ref) {}
+  pointer_offset2t(const pointer_offset2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2111,8 +1990,7 @@ public:
    *  @param ptrobj Pointer object to get object from. */
   pointer_object2t(const type2tc &type, const expr2tc &ptrobj)
     : pointer_object_expr_methods(type, pointer_object_id, ptrobj) {}
-  pointer_object2t(const pointer_object2t &ref)
-    : pointer_object_expr_methods(ref) {}
+  pointer_object2t(const pointer_object2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2132,10 +2010,9 @@ public:
   address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
     : address_of_expr_methods(type2tc(new pointer_type2t(subtype)),
                               address_of_id, ptrobj) {}
-  address_of2t(const address_of2t &ref)
-    : address_of_expr_methods(ref) {}
+  address_of2t(const address_of2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2157,8 +2034,7 @@ public:
                  const expr2tc &offset, bool is_big_endian)
     : byte_extract_expr_methods(type, byte_extract_id,
                                source, offset, is_big_endian) {}
-  byte_extract2t(const byte_extract2t &ref)
-    : byte_extract_expr_methods(ref) {}
+  byte_extract2t(const byte_extract2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2180,8 +2056,7 @@ public:
                  bool is_big_endian)
     : byte_update_expr_methods(type, byte_update_id, source, offset,
                                updateval, is_big_endian) {}
-  byte_update2t(const byte_update2t &ref)
-    : byte_update_expr_methods(ref) {}
+  byte_update2t(const byte_update2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2201,10 +2076,9 @@ public:
   with2t(const type2tc &type, const expr2tc &source, const expr2tc &field,
          const expr2tc &value)
     : with_expr_methods(type, with_id, source, field, value) {}
-  with2t(const with2t &ref)
-    : with_expr_methods(ref) {}
+  with2t(const with2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2220,10 +2094,9 @@ public:
    *  @param memb Name of member to extract.  */
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
     : member_expr_methods(type, member_id, source, memb) {}
-  member2t(const member2t &ref)
-    : member_expr_methods(ref) {}
+  member2t(const member2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2239,10 +2112,9 @@ public:
    *  @param index Element in source to extract from. */
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &index)
     : index_expr_methods(type, index_id, source, index) {}
-  index2t(const index2t &ref)
-    : index_expr_methods(ref) {}
+  index2t(const index2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2255,10 +2127,9 @@ public:
   /** Primary constructor. @param value Number value to test for nan */
   isnan2t(const expr2tc &value)
     : isnan_expr_methods(type_pool.get_bool(), isnan_id, value) {}
-  isnan2t(const isnan2t &ref)
-    : isnan_expr_methods(ref) {}
+  isnan2t(const isnan2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2278,10 +2149,9 @@ public:
    *         multiply. */
   overflow2t(const expr2tc &operand)
     : overflow_expr_methods(type_pool.get_bool(), overflow_id, operand) {}
-  overflow2t(const overflow2t &ref)
-    : overflow_expr_methods(ref) {}
+  overflow2t(const overflow2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2298,10 +2168,9 @@ public:
   overflow_cast2t(const expr2tc &operand, unsigned int bits)
     : overflow_cast_expr_methods(type_pool.get_bool(), overflow_cast_id,
                                  operand, bits) {}
-  overflow_cast2t(const overflow_cast2t &ref)
-    : overflow_cast_expr_methods(ref) {}
+  overflow_cast2t(const overflow_cast2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2316,8 +2185,7 @@ public:
   overflow_neg2t(const expr2tc &operand)
     : overflow_neg_expr_methods(type_pool.get_bool(), overflow_neg_id,
                                 operand) {}
-  overflow_neg2t(const overflow_neg2t &ref)
-    : overflow_neg_expr_methods(ref) {}
+  overflow_neg2t(const overflow_neg2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2330,8 +2198,7 @@ public:
   /** Primary constructor. @param type Type of unknown data item */
   unknown2t(const type2tc &type)
     : unknown_expr_methods(type, unknown_id) {}
-  unknown2t(const unknown2t &ref)
-    : unknown_expr_methods(ref) {}
+  unknown2t(const unknown2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2344,8 +2211,7 @@ class invalid2t : public invalid_expr_methods
 public:
   invalid2t(const type2tc &type)
     : invalid_expr_methods(type, invalid_id) {}
-  invalid2t(const invalid2t &ref)
-    : invalid_expr_methods(ref) {}
+  invalid2t(const invalid2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2357,8 +2223,7 @@ class null_object2t : public null_object_expr_methods
 public:
   null_object2t(const type2tc &type)
     : null_object_expr_methods(type, null_object_id) {}
-  null_object2t(const null_object2t &ref)
-    : null_object_expr_methods(ref) {}
+  null_object2t(const null_object2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2368,11 +2233,10 @@ public:
 class dynamic_object2t : public dynamic_object_expr_methods
 {
 public:
-  dynamic_object2t(const type2tc &type, const expr2tc inst,
+  dynamic_object2t(const type2tc &type, const expr2tc& inst,
                    bool inv, bool uknown)
     : dynamic_object_expr_methods(type, dynamic_object_id, inst, inv, uknown) {}
-  dynamic_object2t(const dynamic_object2t &ref)
-    : dynamic_object_expr_methods(ref) {}
+  dynamic_object2t(const dynamic_object2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2390,8 +2254,7 @@ public:
    *  @param operand Pointer to dereference. */
   dereference2t(const type2tc &type, const expr2tc &operand)
     : dereference_expr_methods(type, dereference_id, operand) {}
-  dereference2t(const dereference2t &ref)
-    : dereference_expr_methods(ref) {}
+  dereference2t(const dereference2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2406,8 +2269,7 @@ public:
   valid_object2t(const expr2tc &operand)
     : valid_object_expr_methods(type_pool.get_bool(), valid_object_id, operand)
       {}
-  valid_object2t(const valid_object2t &ref)
-    : valid_object_expr_methods(ref) {}
+  valid_object2t(const valid_object2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2423,8 +2285,7 @@ public:
   deallocated_obj2t(const expr2tc &operand)
     : deallocated_obj_expr_methods(type_pool.get_bool(), deallocated_obj_id,
                                    operand) {}
-  deallocated_obj2t(const deallocated_obj2t &ref)
-    : deallocated_obj_expr_methods(ref) {}
+  deallocated_obj2t(const deallocated_obj2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2441,8 +2302,7 @@ public:
   dynamic_size2t(const expr2tc &operand)
     : dynamic_size_expr_methods(type_pool.get_uint32(), dynamic_size_id,
         operand) {}
-  dynamic_size2t(const dynamic_size2t &ref)
-    : dynamic_size_expr_methods(ref) {}
+  dynamic_size2t(const dynamic_size2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2471,8 +2331,7 @@ public:
                const std::vector<expr2tc> &a,
                const type2tc &alloct, allockind k)
     : sideeffect_expr_methods(t, sideeffect_id, oper, sz, a, alloct, k) {}
-  sideeffect2t(const sideeffect2t &ref)
-    : sideeffect_expr_methods(ref) {}
+  sideeffect2t(const sideeffect2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2482,8 +2341,7 @@ class code_block2t : public code_block_expr_methods
 public:
   code_block2t(const std::vector<expr2tc> &operands)
     : code_block_expr_methods(type_pool.get_empty(), code_block_id, operands) {}
-  code_block2t(const code_block2t &ref)
-    : code_block_expr_methods(ref) {}
+  code_block2t(const code_block2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2494,8 +2352,7 @@ public:
   code_assign2t(const expr2tc &target, const expr2tc &source)
     : code_assign_expr_methods(type_pool.get_empty(), code_assign_id,
                                target, source) {}
-  code_assign2t(const code_assign2t &ref)
-    : code_assign_expr_methods(ref) {}
+  code_assign2t(const code_assign2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2507,8 +2364,7 @@ public:
   code_init2t(const expr2tc &target, const expr2tc &source)
     : code_init_expr_methods(type_pool.get_empty(), code_init_id,
                                target, source) {}
-  code_init2t(const code_init2t &ref)
-    : code_init_expr_methods(ref) {}
+  code_init2t(const code_init2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2518,8 +2374,7 @@ class code_decl2t : public code_decl_expr_methods
 public:
   code_decl2t(const type2tc &t, const irep_idt &name)
     : code_decl_expr_methods(t, code_decl_id, name){}
-  code_decl2t(const code_decl2t &ref)
-    : code_decl_expr_methods(ref) {}
+  code_decl2t(const code_decl2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2529,8 +2384,7 @@ class code_printf2t : public code_printf_expr_methods
 public:
   code_printf2t(const std::vector<expr2tc> &opers)
     : code_printf_expr_methods(type_pool.get_empty(), code_printf_id, opers) {}
-  code_printf2t(const code_printf2t &ref)
-    : code_printf_expr_methods(ref) {}
+  code_printf2t(const code_printf2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2541,8 +2395,7 @@ public:
   code_expression2t(const expr2tc &oper)
     : code_expression_expr_methods(type_pool.get_empty(), code_expression_id,
                                    oper) {}
-  code_expression2t(const code_expression2t &ref)
-    : code_expression_expr_methods(ref) {}
+  code_expression2t(const code_expression2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2552,8 +2405,7 @@ class code_return2t : public code_return_expr_methods
 public:
   code_return2t(const expr2tc &oper)
     : code_return_expr_methods(type_pool.get_empty(), code_return_id, oper) {}
-  code_return2t(const code_return2t &ref)
-    : code_return_expr_methods(ref) {}
+  code_return2t(const code_return2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2563,8 +2415,7 @@ class code_skip2t : public code_skip_expr_methods
 public:
   code_skip2t(const type2tc &type)
     : code_skip_expr_methods(type, code_skip_id) {}
-  code_skip2t(const code_skip2t &ref)
-    : code_skip_expr_methods(ref) {}
+  code_skip2t(const code_skip2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2574,8 +2425,7 @@ class code_free2t : public code_free_expr_methods
 public:
   code_free2t(const expr2tc &oper)
     : code_free_expr_methods(type_pool.get_empty(), code_free_id, oper) {}
-  code_free2t(const code_free2t &ref)
-    : code_free_expr_methods(ref) {}
+  code_free2t(const code_free2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2585,8 +2435,7 @@ class code_goto2t : public code_goto_expr_methods
 public:
   code_goto2t(const irep_idt &targ)
     : code_goto_expr_methods(type_pool.get_empty(), code_goto_id, targ) {}
-  code_goto2t(const code_goto2t &ref)
-    : code_goto_expr_methods(ref) {}
+  code_goto2t(const code_goto2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2598,10 +2447,9 @@ public:
                       unsigned int alignment)
     : object_descriptor_expr_methods(t, object_descriptor_id, root, offs,
                                      alignment) {}
-  object_descriptor2t(const object_descriptor2t &ref)
-    : object_descriptor_expr_methods(ref) {}
+  object_descriptor2t(const object_descriptor2t &ref) = default;
 
-  const expr2tc &get_root_object(void) const;
+  const expr2tc &get_root_object() const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2610,11 +2458,10 @@ class code_function_call2t : public code_function_call_expr_methods
 {
 public:
   code_function_call2t(const expr2tc &r, const expr2tc &func,
-                       const std::vector<expr2tc> args)
+                       const std::vector<expr2tc>& args)
     : code_function_call_expr_methods(type_pool.get_empty(),
                                       code_function_call_id, r, func, args) {}
-  code_function_call2t(const code_function_call2t &ref)
-    : code_function_call_expr_methods(ref) { }
+  code_function_call2t(const code_function_call2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2624,8 +2471,7 @@ class code_comma2t : public code_comma_expr_methods
 public:
   code_comma2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
     : code_comma_expr_methods(t, code_comma_id, s1, s2) {}
-  code_comma2t(const code_comma2t &ref)
-    : code_comma_expr_methods(ref) { }
+  code_comma2t(const code_comma2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2636,8 +2482,7 @@ public:
   invalid_pointer2t(const expr2tc &obj)
     : invalid_pointer_expr_methods(type_pool.get_bool(), invalid_pointer_id,
                                    obj) {}
-  invalid_pointer2t(const invalid_pointer2t &ref)
-    : invalid_pointer_expr_methods(ref) { }
+  invalid_pointer2t(const invalid_pointer2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2647,8 +2492,7 @@ class code_asm2t : public code_asm_expr_methods
 public:
   code_asm2t(const type2tc &type, const irep_idt &stringref)
     : code_asm_expr_methods(type, code_asm_id, stringref) { }
-  code_asm2t(const code_asm2t &ref)
-    : code_asm_expr_methods(ref) { }
+  code_asm2t(const code_asm2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2659,8 +2503,7 @@ public:
   code_cpp_del_array2t(const expr2tc &v)
     : code_cpp_del_array_expr_methods(type_pool.get_empty(),
                                       code_cpp_del_array_id, v) { }
-  code_cpp_del_array2t(const code_cpp_del_array2t &ref)
-    : code_cpp_del_array_expr_methods(ref) { }
+  code_cpp_del_array2t(const code_cpp_del_array2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2671,8 +2514,7 @@ public:
   code_cpp_delete2t(const expr2tc &v)
     : code_cpp_delete_expr_methods(type_pool.get_empty(),
                                    code_cpp_delete_id, v) { }
-  code_cpp_delete2t(const code_cpp_delete2t &ref)
-    : code_cpp_delete_expr_methods(ref) { }
+  code_cpp_delete2t(const code_cpp_delete2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2683,8 +2525,7 @@ public:
   code_cpp_catch2t(const std::vector<irep_idt> &el)
     : code_cpp_catch_expr_methods(type_pool.get_empty(),
                                    code_cpp_catch_id, el) { }
-  code_cpp_catch2t(const code_cpp_catch2t &ref)
-    : code_cpp_catch_expr_methods(ref) { }
+  code_cpp_catch2t(const code_cpp_catch2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2695,8 +2536,7 @@ public:
   code_cpp_throw2t(const expr2tc &o, const std::vector<irep_idt> &l)
     : code_cpp_throw_expr_methods(type_pool.get_empty(), code_cpp_throw_id,
                                   o, l){}
-  code_cpp_throw2t(const code_cpp_throw2t &ref)
-    : code_cpp_throw_expr_methods(ref) { }
+  code_cpp_throw2t(const code_cpp_throw2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2707,8 +2547,7 @@ public:
   code_cpp_throw_decl2t(const std::vector<irep_idt> &l)
     : code_cpp_throw_decl_expr_methods(type_pool.get_empty(),
                                        code_cpp_throw_decl_id, l){}
-  code_cpp_throw_decl2t(const code_cpp_throw_decl2t &ref)
-    : code_cpp_throw_decl_expr_methods(ref) { }
+  code_cpp_throw_decl2t(const code_cpp_throw_decl2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2719,8 +2558,7 @@ public:
   code_cpp_throw_decl_end2t(const std::vector<irep_idt> &exl)
     : code_cpp_throw_decl_end_expr_methods(type_pool.get_empty(),
                                            code_cpp_throw_decl_end_id, exl) { }
-  code_cpp_throw_decl_end2t(const code_cpp_throw_decl_end2t &ref)
-    : code_cpp_throw_decl_end_expr_methods(ref) { }
+  code_cpp_throw_decl_end2t(const code_cpp_throw_decl_end2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2730,10 +2568,9 @@ class isinf2t : public isinf_expr_methods
 public:
   isinf2t(const expr2tc &val)
     : isinf_expr_methods(type_pool.get_bool(), isinf_id, val) { }
-  isinf2t(const isinf2t &ref)
-    : isinf_expr_methods(ref) { }
+  isinf2t(const isinf2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2743,10 +2580,9 @@ class isnormal2t : public isnormal_expr_methods
 public:
   isnormal2t(const expr2tc &val)
     : isnormal_expr_methods(type_pool.get_bool(), isnormal_id, val) { }
-  isnormal2t(const isnormal2t &ref)
-    : isnormal_expr_methods(ref) { }
+  isnormal2t(const isnormal2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2756,10 +2592,9 @@ class isfinite2t : public isfinite_expr_methods
 public:
   isfinite2t(const expr2tc &val)
     : isfinite_expr_methods(type_pool.get_bool(), isfinite_id, val) { }
-  isfinite2t(const isfinite2t &ref)
-    : isfinite_expr_methods(ref) { }
+  isfinite2t(const isfinite2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2769,10 +2604,9 @@ class signbit2t : public signbit_expr_methods
 public:
   signbit2t(const expr2tc &val)
     : signbit_expr_methods(type_pool.get_int32(), signbit_id, val) { }
-  signbit2t(const signbit2t &ref)
-    : signbit_expr_methods(ref) { }
+  signbit2t(const signbit2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2782,10 +2616,9 @@ class concat2t : public concat_expr_methods
 public:
   concat2t(const type2tc &type, const expr2tc &forward, const expr2tc &aft)
     : concat_expr_methods(type, concat_id, forward, aft) { }
-  concat2t(const concat2t &ref)
-    : concat_expr_methods(ref) { }
+  concat2t(const concat2t &ref) = default;
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };

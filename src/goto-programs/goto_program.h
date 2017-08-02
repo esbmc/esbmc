@@ -75,7 +75,6 @@ public:
       \param[in] src an empty goto program
   */
   inline goto_programt &operator=(const goto_programt &src)
-
   {
     // DO NOT COPY ME! I HAVE POINTERS IN ME!
     instructions.clear();
@@ -243,11 +242,8 @@ public:
     {
       if(!is_goto()) return false;
 
-      for(targetst::const_iterator
-          it=targets.begin();
-          it!=targets.end();
-          it++)
-        if((*it)->location_number<=location_number)
+      for(auto target : targets)
+        if(target->location_number<=location_number)
           return true;
 
       return false;
@@ -341,7 +337,7 @@ public:
   //! \return The newly added instruction.
   inline targett add_instruction()
   {
-    instructions.push_back(instructiont());
+    instructions.emplace_back();
     targett tmp = instructions.end();
     return --tmp;
   }
@@ -350,7 +346,7 @@ public:
   //! \return The newly added instruction.
   inline targett add_instruction(instructiont &instruction)
   {
-    instructions.push_back(instructiont(instruction));
+    instructions.emplace_back(instruction);
     targett tmp = instructions.end();
     return --tmp;
   }
@@ -359,7 +355,7 @@ public:
   //! \return The newly added instruction.
   inline targett add_instruction(goto_program_instruction_typet type)
   {
-    instructions.push_back(instructiont(type));
+    instructions.emplace_back(type);
     targett tmp = instructions.end();
     return --tmp;
   }
@@ -379,11 +375,8 @@ public:
   //! Compute location numbers
   void compute_location_numbers(unsigned &nr)
   {
-    for(instructionst::iterator
-        it=instructions.begin();
-        it!=instructions.end();
-        it++)
-      it->location_number=nr++;
+    for(auto & instruction : instructions)
+      instruction.location_number=nr++;
   }
 
   //! Compute location numbers
@@ -410,9 +403,7 @@ public:
   {
   }
 
-  virtual ~goto_programt()
-  {
-  }
+  virtual ~goto_programt() = default;
 
   //! Swap the goto program
   inline void swap(goto_programt &program)
@@ -509,8 +500,6 @@ goto_programt::extract_instructions(OutList &list, ListAppender listappend,
     }
     i++;
   }
-
-  return;
 }
 
 template <typename InList, typename InElem, typename FetchElem,
@@ -573,8 +562,6 @@ goto_programt::inject_instructions(InList list,
       it->targets.push_back(target_list_it);
     }
   }
-
-  return;
 }
 
 #endif

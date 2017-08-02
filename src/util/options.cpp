@@ -77,6 +77,4 @@ void optionst::cmdline(cmdlinet &cmds)
       }
     }
   }
-
-  return;
 }

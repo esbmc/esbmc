@@ -36,12 +36,9 @@ void goto_programt::instructiont::output_instruction(
   if(!labels.empty())
   {
     out << "        // Labels:";
-    for(instructiont::labelst::const_iterator
-        l_it = labels.begin();
-        l_it != labels.end();
-        l_it++)
+    for(const auto & label : labels)
     {
-      out << " " << *l_it;
+      out << " " << label;
     }
 
     out << std::endl;
@@ -87,7 +84,7 @@ void goto_programt::instructiont::output_instruction(
 
   case RETURN:
     {
-    std::string arg = "";
+    std::string arg;
     const code_return2t &ref = to_code_return2t(code);
     if (!is_nil_expr(ref.operand))
       arg = from_expr(ns, "", ref.operand);
@@ -233,14 +230,11 @@ bool operator<(const goto_programt::const_targett i1,
 
 void goto_programt::compute_loop_numbers(unsigned int &num)
 {
-  for(instructionst::iterator
-      it=instructions.begin();
-      it!=instructions.end();
-      it++)
-    if(it->is_backwards_goto())
+  for(auto & instruction : instructions)
+    if(instruction.is_backwards_goto())
     {
-      (*it->targets.begin())->loop_number = num;
-      it->loop_number = num++;
+      (*instruction.targets.begin())->loop_number = num;
+      instruction.loop_number = num++;
     }
 }
 
@@ -258,11 +252,8 @@ void goto_programt::get_successors(
 
   if(i.is_goto())
   {
-    for(targetst::const_iterator
-        t_it=i.targets.begin();
-        t_it!=i.targets.end();
-        t_it++)
-      successors.push_back(*t_it);
+    for(auto target : i.targets)
+      successors.push_back(target);
 
     if(!is_true(i.guard))
       successors.push_back(next);
@@ -299,11 +290,8 @@ void goto_programt::get_successors(
 
   if(i.is_goto())
   {
-    for(targetst::const_iterator
-        t_it=i.targets.begin();
-        t_it!=i.targets.end();
-        t_it++)
-      successors.push_back(*t_it);
+    for(auto target : i.targets)
+      successors.emplace_back(target);
 
     if(!is_true(i.guard))
       successors.push_back(next);
@@ -335,11 +323,8 @@ std::ostream& goto_programt::output(
 {
   // output program
 
-  for(instructionst::const_iterator
-      it=instructions.begin();
-      it!=instructions.end();
-      it++)
-    it->output_instruction(ns, identifier, out);
+  for(const auto & instruction : instructions)
+    instruction.output_instruction(ns, identifier, out);
 
   return out;
 }
@@ -348,11 +333,8 @@ void goto_programt::compute_target_numbers()
 {
   // reset marking
 
-  for(instructionst::iterator
-      it=instructions.begin();
-      it!=instructions.end();
-      it++)
-    it->target_number=-1;
+  for(auto & instruction : instructions)
+    instruction.target_number=-1;
 
   // mark the goto targets
 
@@ -361,12 +343,8 @@ void goto_programt::compute_target_numbers()
       it!=instructions.end();
       it++)
   {
-    for(instructiont::targetst::const_iterator
-        t_it=it->targets.begin();
-        t_it!=it->targets.end();
-        t_it++)
+    for(auto t : it->targets)
     {
-      targett t=*t_it;
       if(t!=instructions.end())
         t->target_number=0;
     }
@@ -395,12 +373,8 @@ void goto_programt::compute_target_numbers()
       it!=instructions.end();
       it++)
   {
-    for(instructiont::targetst::const_iterator
-        t_it=it->targets.begin();
-        t_it!=it->targets.end();
-        t_it++)
+    for(auto t : it->targets)
     {
-      targett t=*t_it;
       if(t!=instructions.end())
       {
         assert(t->target_number!=0);
@@ -442,23 +416,17 @@ void goto_programt::copy_from(const goto_programt &src)
 
   // Loop over program - 2nd time updates targets
 
-  for(instructionst::iterator
-      it=instructions.begin();
-      it!=instructions.end();
-      it++)
+  for(auto & instruction : instructions)
   {
-    for(instructiont::targetst::iterator
-        t_it=it->targets.begin();
-        t_it!=it->targets.end();
-        t_it++)
+    for(auto & target : instruction.targets)
     {
       targets_mappingt::iterator
-        m_target_it=targets_mapping.find(*t_it);
+        m_target_it=targets_mapping.find(target);
 
       if(m_target_it==targets_mapping.end())
         throw "copy_from: target not found";
 
-      *t_it=m_target_it->second;
+      target=m_target_it->second;
     }
   }
 

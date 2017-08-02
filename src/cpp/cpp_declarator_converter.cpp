@@ -13,18 +13,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/location.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: cpp_declarator_convertert::cpp_declarator_convertert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 cpp_declarator_convertert::cpp_declarator_convertert(
   class cpp_typecheckt &_cpp_typecheck):
   is_typedef(false),
@@ -35,18 +23,6 @@ cpp_declarator_convertert::cpp_declarator_convertert(
   cpp_typecheck(_cpp_typecheck)
 {
 }
-
-/*******************************************************************\
-
-Function: cpp_declarator_convertert::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 symbolt &cpp_declarator_convertert::convert(
   const typet &type,
@@ -243,18 +219,6 @@ symbolt &cpp_declarator_convertert::convert(
   }
 }
 
-/*******************************************************************\
-
-Function: cpp_declarator_convertert::combine_types
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_declarator_convertert::combine_types(
   const locationt &location,
   const typet &decl_type,
@@ -330,18 +294,6 @@ void cpp_declarator_convertert::combine_types(
   throw 0;
 }
 
-/*******************************************************************\
-
-Function: cpp_declarator_convertert::enforce_rules
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_declarator_convertert::enforce_rules(const symbolt &symbol)
 {
   // enforce rules for operator overloading
@@ -350,18 +302,6 @@ void cpp_declarator_convertert::enforce_rules(const symbolt &symbol)
   // enforce rules about main()
   main_function_rules(symbol);
 }
-
-/*******************************************************************\
-
-Function: cpp_declarator_convertert::handle_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_declarator_convertert::handle_initializer(
   symbolt &symbol,
@@ -415,18 +355,6 @@ void cpp_declarator_convertert::handle_initializer(
   }
 }
 
-/*******************************************************************\
-
-Function: cpp_declarator_convertert::get_final_identifier
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_declarator_convertert::get_final_identifier()
 {
   std::string identifier=base_name;
@@ -447,18 +375,6 @@ void cpp_declarator_convertert::get_final_identifier()
     scope->prefix+
     identifier;
 }
-
-/*******************************************************************\
-
-Function: cpp_declarator_convertert::convert_new_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 symbolt &cpp_declarator_convertert::convert_new_symbol(
   const cpp_storage_spect &storage_spec,
@@ -551,12 +467,9 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
     cpp_typecheck.cpp_scopes.current_scope().lookup(
       base_name, cpp_scopet::SYMBOL, id_set);
 
-    for(cpp_scopest::id_sett::const_iterator
-        id_it=id_set.begin();
-        id_it!=id_set.end();
-        id_it++)
+    for(auto id_it : id_set)
     {
-      const cpp_idt &id=**id_it;
+      const cpp_idt &id=*id_it;
       // the name is already in the scope
       // this is ok if they belong to different categories
 
@@ -597,18 +510,6 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   return *new_symbol;
 }
 
-/*******************************************************************\
-
-Function: cpp_declarator_convertert::get_pretty_name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 irep_idt cpp_declarator_convertert::get_pretty_name()
 {
   if(is_code)
@@ -636,35 +537,11 @@ irep_idt cpp_declarator_convertert::get_pretty_name()
   return scope->prefix+base_name;
 }
 
-/*******************************************************************\
-
-Function: cpp_declarator_convertert::operator_overloading_rules
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_declarator_convertert::operator_overloading_rules(
   const symbolt &symbol __attribute__((unused)))
 {
   // TODO
 }
-
-/*******************************************************************\
-
-Function: cpp_declarator_convertert::main_function_rules
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_declarator_convertert::main_function_rules(
   const symbolt &symbol)

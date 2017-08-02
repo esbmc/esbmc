@@ -6,7 +6,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <ansi-c/c_link.h>
 #include <ansi-c/c_main.h>
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/gcc_builtin_headers.h>
@@ -18,6 +17,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <util/c_link.h>
 #include <util/config.h>
 #include <util/replace_symbol.h>
 
@@ -32,7 +32,7 @@ bool cpp_languaget::preprocess(
   // check extension
 
   const char *ext=strrchr(path.c_str(), '.');
-  if(ext!=NULL && std::string(ext)==".ipp")
+  if(ext!=nullptr && std::string(ext)==".ipp")
   {
     std::ifstream infile(path.c_str());
 
@@ -189,8 +189,6 @@ bool cpp_languaget::typecheck(
   const std::string &module,
   message_handlert &message_handler)
 {
-  if(module=="") return false;
-
   contextt new_context;
 
   if(cpp_typecheck(cpp_parse_tree, new_context, module, message_handler))
@@ -227,11 +225,8 @@ void cpp_languaget::show_parse(
     const cpp_linkage_spect &linkage_spec=
       item.get_linkage_spec();
 
-    for(cpp_linkage_spect::itemst::const_iterator
-        it=linkage_spec.items().begin();
-        it!=linkage_spec.items().end();
-        it++)
-      show_parse(out, *it);
+    for(const auto & it : linkage_spec.items())
+      show_parse(out, it);
 
     out << std::endl;
   }
@@ -243,11 +238,8 @@ void cpp_languaget::show_parse(
     out << "NAMESPACE " << namespace_spec.get_namespace()
         << ":" << std::endl;
 
-    for(cpp_namespace_spect::itemst::const_iterator
-        it=namespace_spec.items().begin();
-        it!=namespace_spec.items().end();
-        it++)
-      show_parse(out, *it);
+    for(const auto & it : namespace_spec.items())
+      show_parse(out, it);
 
     out << std::endl;
   }
@@ -277,18 +269,20 @@ languaget *new_cpp_language()
 bool cpp_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  bool fullname)
 {
-  code=expr2cpp(expr, ns);
+  code=expr2cpp(expr, ns, fullname);
   return false;
 }
 
 bool cpp_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  bool fullname)
 {
-  code=type2cpp(type, ns);
+  code=type2cpp(type, ns, fullname);
   return false;
 }
 
@@ -331,8 +325,4 @@ bool cpp_languaget::to_expr(
   cpp_parser.clear();
 
   return result;
-}
-
-cpp_languaget::~cpp_languaget()
-{
 }

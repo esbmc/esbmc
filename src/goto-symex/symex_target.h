@@ -22,7 +22,7 @@ class stack_framet;
 class symex_targett
 {
 public:
-  virtual ~symex_targett() { }
+  virtual ~symex_targett() = default;
 
   struct sourcet
   {
@@ -31,7 +31,7 @@ public:
     const goto_programt *prog;
     bool is_set;
 
-    sourcet():thread_nr(0), prog(NULL), is_set(false)
+    sourcet():thread_nr(0), prog(nullptr), is_set(false)
     {
     }
 
@@ -87,10 +87,10 @@ public:
 
   // Abstract method, with the purpose of duplicating a symex_targett from the
   // subclass.
-  virtual boost::shared_ptr<symex_targett> clone(void) const = 0;
+  virtual boost::shared_ptr<symex_targett> clone() const = 0;
 
-  virtual void push_ctx(void) = 0;
-  virtual void pop_ctx(void) = 0;
+  virtual void push_ctx() = 0;
+  virtual void pop_ctx() = 0;
 };
 
 class stack_framet
@@ -99,19 +99,19 @@ public:
   stack_framet(const irep_idt &func, const symex_targett::sourcet &__src)
     : function(func), _src(__src), src(&_src) { }
   stack_framet(const irep_idt &func)
-    : function(func), _src(), src(NULL) { }
+    : function(func), src(nullptr) { }
   stack_framet(const stack_framet &ref) {
     *this = ref;
-    if (src != NULL)
+    if (src != nullptr)
       src = &_src;
   }
 
   bool _cmp(const stack_framet &ref) const {
     if (function != ref.function)
       return false;
-    else if (src == NULL && ref.src == src)
+    else if (src == nullptr && ref.src == src)
       return true;
-    else if (src == NULL || ref.src == NULL)
+    else if (src == nullptr || ref.src == nullptr)
       return false;
     else 
       return src->pc->location_number == ref.src->pc->location_number;

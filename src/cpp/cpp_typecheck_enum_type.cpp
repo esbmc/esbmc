@@ -12,18 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/arith_tools.h>
 #include <util/i2string.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_enum_body
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
 {
   typet &type=enum_symbol.type;
@@ -76,18 +64,6 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
     ++i;
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_enum_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::typecheck_enum_type(typet &type)
 {

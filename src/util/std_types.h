@@ -86,9 +86,7 @@ extern inline symbol_typet &to_symbol_type(typet &type)
 class struct_union_typet:public typet
 {
 public:
-  inline explicit struct_union_typet()
-  {
-  }
+  inline explicit struct_union_typet() = default;
 
   inline explicit struct_union_typet(const irep_idt &_id):typet(_id)
   {

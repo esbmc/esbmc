@@ -19,7 +19,7 @@
 class esbmc_action : public clang::ASTFrontendAction
 {
 public:
-  esbmc_action(std::string esbmc_instrinsics) : intrinsics(esbmc_instrinsics) {};
+  esbmc_action(const std::string&& esbmc_instrinsics) : intrinsics(esbmc_instrinsics) {};
 
   bool BeginSourceFileAction(
     clang::CompilerInstance &CI,

@@ -31,24 +31,20 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void goto_convertt::finish_gotos()
 {
-  for(gotost::const_iterator it=targets.gotos.begin();
-      it!=targets.gotos.end();
-      it++)
+  for(auto it : targets.gotos)
   {
-    goto_programt::instructiont &i=**it;
+    goto_programt::instructiont &i=*it;
 
     if (is_code_goto2t(i.code))
     {
-      exprt tmp = migrate_expr_back(i.code);
-
-      const irep_idt &goto_label = tmp.destination();
+      const irep_idt &goto_label = to_code_goto2t(i.code).target;
 
       labelst::const_iterator l_it = targets.labels.find(goto_label);
 
       if(l_it==targets.labels.end())
       {
-        err_location(tmp);
         std::cerr << "goto label " << goto_label << " not found";
+        i.code->dump();
         abort();
       }
 
@@ -262,13 +258,12 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   // the THROW_DECL instruction is annotated with a list of IDs,
   // one per target
   irept::subt &throw_list = c.add("throw_list").get_sub();
-  for(unsigned i=0; i<expr.operands().size(); i++)
+  for(const auto & block : expr.operands())
   {
-    const exprt &block=expr.operands()[i];
     irept type = irept(block.get("throw_decl_id"));
 
     // grab the ID and add to THROW_DECL instruction
-    throw_list.push_back(irept(type));
+    throw_list.emplace_back(type);
   }
 
   throw_decl_instruction->make_throw_decl();
@@ -1296,7 +1291,7 @@ void goto_convertt::convert_skip(
   t->location=code.location();
   expr2tc tmp_code;
   migrate_expr(code, tmp_code);
-  t->code = tmp_code;;
+  t->code = tmp_code;
 }
 
 void goto_convertt::convert_assume(
@@ -1642,11 +1637,9 @@ void goto_convertt::convert_switch(
 
   goto_programt tmp_cases;
 
-  for(casest::iterator it=targets.cases.begin();
-      it!=targets.cases.end();
-      it++)
+  for(auto & it : targets.cases)
   {
-    const caset &case_ops=it->second;
+    const caset &case_ops=it.second;
 
     assert(!case_ops.empty());
 
@@ -1661,7 +1654,7 @@ void goto_convertt::convert_switch(
     }
 
     goto_programt::targett x=tmp_cases.add_instruction();
-    x->make_goto(it->first);
+    x->make_goto(it.first);
     migrate_expr(guard_expr, x->guard);
     x->location=case_ops.front().find_location();
   }

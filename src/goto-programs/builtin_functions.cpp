@@ -560,10 +560,11 @@ void goto_convertt::do_function_call_symbol(
   std::string base_name = symbol->base_name.as_string();
 
   // Replace __VERIFIER by __ESBMC
-  base_name = std::regex_replace(base_name, std::regex("VERIFIER"), "ESBMC");
+  base_name =
+    std::regex_replace(base_name, std::regex("VERIFIER_assume"), "ESBMC_assume");
 
   bool is_assume = (base_name == "__ESBMC_assume");
-  bool is_assert = (base_name == "assert");
+  bool is_assert = (base_name == "assert") || (base_name == "__VERIFIER_assert");
 
   if(is_assume || is_assert)
   {
@@ -631,16 +632,18 @@ void goto_convertt::do_function_call_symbol(
   {
     do_printf(lhs, function, arguments, dest);
   }
-  else if(base_name == "__ESBMC_atomic_begin")
+  else if((base_name == "__ESBMC_atomic_begin")
+          || (base_name == "__VERIFIER_atomic_begin"))
   {
     do_atomic_begin(lhs, function, arguments, dest);
   }
-  else if(base_name == "__ESBMC_atomic_end")
+  else if((base_name == "__ESBMC_atomic_end")
+          || (base_name == "__VERIFIER_atomic_end"))
   {
     do_atomic_end(lhs, function, arguments, dest);
   }
   else if(has_prefix(id2string(base_name), "nondet_")
-          || has_prefix(id2string(base_name), "__ESBMC_nondet_"))
+          || has_prefix(id2string(base_name), "__VERIFIER_nondet_"))
   {
     // make it a side effect if there is an LHS
     if(lhs.is_nil()) return;

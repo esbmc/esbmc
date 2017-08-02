@@ -34,13 +34,10 @@ public:
     return lookup(irep.identifier());
   }
 
-  virtual ~namespacet()
-  {
-  }
+  virtual ~namespacet() = default;
 
   virtual bool lookup(const irep_idt &name, const symbolt *&symbol) const;
   void follow_symbol(irept &irep) const;
-  void follow_macros(exprt &expr) const;
 
   const typet &follow(const typet &src) const;
   const type2tc follow(const type2tc &src) const

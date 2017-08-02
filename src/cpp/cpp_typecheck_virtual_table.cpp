@@ -1,15 +1,3 @@
-/*******************************************************************\
-
-Function: cpp_typecheckt::do_virtual_table
-
-Inputs:
-
-Outputs:
-
-Purpose:
-
-\*******************************************************************/
-
 #include <cpp/cpp_typecheck.h>
 #include <util/expr_util.h>
 #include <util/std_expr.h>
@@ -22,9 +10,8 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
   std::map<irep_idt, std::map<irep_idt,exprt> > vt_value_maps;
 
   const struct_typet &struct_type = to_struct_type(symbol.type);
-  for(unsigned i = 0; i < struct_type.components().size(); i++)
+  for(const auto & compo : struct_type.components())
   {
-    const struct_typet::componentt& compo = struct_type.components()[i];
     if(!compo.get_bool("is_virtual"))
       continue;
 
@@ -78,9 +65,8 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
     // do the values
     const struct_typet &vt_type = to_struct_type(vt_symb_type.type);
     exprt values("struct",symbol_typet(vt_symb_type.name));
-    for(unsigned i=0; i < vt_type.components().size(); i++)
+    for(const auto & compo : vt_type.components())
     {
-      const struct_typet::componentt& compo = vt_type.components()[i];
       std::map<irep_idt,exprt>::const_iterator cit2 =
         value_map.find( compo.base_name());
       assert(cit2 != value_map.end());

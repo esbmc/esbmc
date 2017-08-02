@@ -29,7 +29,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
   {
   }
 
-  int doit() {
+  int doit() override {
     goto_functionst goto_functions;
 
     config.set(cmdline);
@@ -66,13 +66,8 @@ int main(int argc, const char **argv)
 
 const mode_table_et mode_table[] =
 {
-#ifndef WITHOUT_CLANG
   LANGAPI_HAVE_MODE_CLANG_C,
-#endif
   LANGAPI_HAVE_MODE_C,
-#ifndef WITHOUT_CLANG
-  LANGAPI_HAVE_MODE_CPP,
-#endif
   LANGAPI_HAVE_MODE_CPP,
   LANGAPI_HAVE_MODE_END
 };

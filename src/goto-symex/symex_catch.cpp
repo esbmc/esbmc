@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/simplify_expr.h>
 
-/*******************************************************************\
-
-Function: goto_symext::symex_catch
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_catch()
 {
   // there are two variants: 'push' and 'pop'
@@ -67,22 +55,10 @@ void goto_symext::symex_catch()
   }
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_throw
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool goto_symext::symex_throw()
 {
   irep_idt catch_name = "missing";
-  const goto_programt::const_targett *catch_insn = NULL;
+  const goto_programt::const_targett *catch_insn = nullptr;
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
   // get the list of exceptions thrown
@@ -231,18 +207,6 @@ bool goto_symext::symex_throw()
   return true;
 }
 
-/*******************************************************************\
-
-Function: goto_symext::terminate_handler
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool goto_symext::terminate_handler()
 {
   // We must look on the context if the user included exception lib
@@ -269,18 +233,6 @@ bool goto_symext::terminate_handler()
   // shown to the user as there is a throw without catch.
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_symext::unexpected
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool goto_symext::unexpected_handler()
 {
@@ -318,18 +270,6 @@ bool goto_symext::unexpected_handler()
   // shown to the user as there is a throw without catch.
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_symext::update_throw_target
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
                                       __attribute__((unused)),
@@ -374,7 +314,7 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
       if (i->function_identifier == target->function) {
         statet::goto_state_listt &goto_state_list = i->goto_state_map[target];
 
-        goto_state_list.push_back(statet::goto_statet(*cur_state));
+        goto_state_list.emplace_back(*cur_state);
         cur_state->guard.make_false();
         break;
       }
@@ -384,18 +324,6 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
            "handler not in any function frame on the stack");
   }
 }
-
-/*******************************************************************\
-
-Function: goto_symext::handle_throw_decl
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 int goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
   const irep_idt &id)
@@ -416,11 +344,8 @@ int goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
         msg += "  Exception type: " + id.as_string();
         msg += "\n  Allowed exceptions:";
 
-        for(goto_symex_statet::exceptiont::throw_list_sett::iterator
-            s_it1=except->throw_list_set.begin();
-            s_it1!=except->throw_list_set.end();
-            ++s_it1)
-          msg+= "\n   - " + std::string((*s_it1).c_str());
+        for(const auto & s_it1 : except->throw_list_set)
+          msg+= "\n   - " + std::string(s_it1.c_str());
 
         claim(gen_false_expr(), msg);
         return 0;
@@ -432,25 +357,13 @@ int goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
   return 2;
 }
 
-/*******************************************************************\
-
-Function: goto_symext::handle_rethrow
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool goto_symext::handle_rethrow(const expr2tc &operand,
   const goto_programt::instructiont &instruction)
 {
   // throw without argument, we must rethrow last exception
   if(is_nil_expr(operand))
   {
-    if(last_throw != NULL && to_code_cpp_throw2t(last_throw->code).exception_list.size())
+    if(last_throw != nullptr && to_code_cpp_throw2t(last_throw->code).exception_list.size())
     {
       // get exception from last throw
       std::vector<irep_idt>::const_iterator e_it =
@@ -472,18 +385,6 @@ bool goto_symext::handle_rethrow(const expr2tc &operand,
   }
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_throw_decl
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::symex_throw_decl()
 {
@@ -507,7 +408,7 @@ void goto_symext::symex_throw_decl()
     except->throw_list_set.clear();
 
     // Copy throw list to the set
-    for(unsigned i=0; i<throw_decl_list.size(); ++i)
-      except->throw_list_set.insert(throw_decl_list[i]);
+    for(const auto & i : throw_decl_list)
+      except->throw_list_set.insert(i);
   }
 }

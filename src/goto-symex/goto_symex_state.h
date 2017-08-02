@@ -122,9 +122,7 @@ public:
     }
 
   public:
-    ~goto_statet() {
-      return;
-    }
+    ~goto_statet() = default;
   };
 
   /**
@@ -193,7 +191,7 @@ public:
     /** Record of how many loop unwinds we've performed. For each target in the
      *  program that contains a loop, record how many times we've unwound round
      *  it. */
-    typedef hash_map_cont<unsigned, unsigned> loop_iterationst;
+    typedef hash_map_cont<unsigned, BigInt> loop_iterationst;
     loop_iterationst loop_iterations;
 
     /** Record the first va_args index used in this function call, if any,
@@ -301,7 +299,7 @@ public:
    */
   inline framet &
   new_frame(unsigned int thread_id) {
-    call_stack.push_back(framet(thread_id));
+    call_stack.emplace_back(thread_id);
     return call_stack.back();
   }
 
@@ -406,7 +404,7 @@ public:
    *  current function invocations on the stack, and returns them.
    *  @return Vector of strings describing the current function calls in state.
    */
-  std::vector<stack_framet> gen_stack_trace(void) const;
+  std::vector<stack_framet> gen_stack_trace() const;
 
   /**
    *  Fixup types after renaming: we might rename a symbol that we
@@ -442,7 +440,7 @@ public:
    *  re-naming out of step with function invocations. */
   std::map<irep_idt, unsigned> variable_instance_nums;
   /** Record of how many times we've unwound function recursion. */
-  std::map<irep_idt, unsigned> function_unwind;
+  std::map<irep_idt, BigInt> function_unwind;
 
   /** Flag saying whether to maintain pointer value set tracking. */
   bool use_value_set;

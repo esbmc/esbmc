@@ -6,22 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/c_typecast.h>
 #include <ansi-c/c_typecheck_base.h>
+#include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::implicit_typecast
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::implicit_typecast(
   exprt &expr,
@@ -64,18 +52,6 @@ void c_typecheck_baset::implicit_typecast(
   }
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::implicit_typecast_arithmetic
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::implicit_typecast_arithmetic(
   exprt &expr1,
   exprt &expr2)
@@ -83,18 +59,6 @@ void c_typecheck_baset::implicit_typecast_arithmetic(
   c_typecastt c_typecast(*this);
   c_typecast.implicit_typecast_arithmetic(expr1, expr2);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::implicit_typecast_arithmetic
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::implicit_typecast_arithmetic(exprt &expr)
 {

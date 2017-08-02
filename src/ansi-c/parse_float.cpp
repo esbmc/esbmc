@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/parse_float.h>
 
-/*******************************************************************\
-
-Function: convert_ct::parse_float
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void parse_float(
   const std::string &src,
   mp_integer &significand,

@@ -6,12 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/c_sizeof.h>
-#include <ansi-c/c_typecast.h>
 #include <util/arith_tools.h>
+#include <util/c_sizeof.h>
 #include <util/c_types.h>
-#include <util/config.h>
-#include <util/irep2.h>
 #include <util/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/simplify_expr.h>

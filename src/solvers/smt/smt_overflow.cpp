@@ -152,7 +152,7 @@ smt_convt::overflow_arith(const expr2tc &expr)
     }
   }
 
-  return NULL;
+  return nullptr;
 }
 
 smt_astt

@@ -38,9 +38,9 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    boost::shared_ptr<ex_state_level2t> l2init,
                                    optionst &options,
                                    message_handlert &_message_handler) :
-  goto_symext(ns, context, goto_functions, _target, options),
+  goto_symext(ns, context, goto_functions, std::move(_target), options),
   owning_rt(art),
-  state_level2(l2init),
+  state_level2(std::move(l2init)),
   global_value_set(ns),
   message_handler(_message_handler)
 {
@@ -74,7 +74,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
              goto_program, 0);
 
   threads_state.push_back(state);
-  preserved_paths.push_back(std::list<std::pair<goto_programt::const_targett, goto_statet> >());
+  preserved_paths.emplace_back();
   cur_state = &threads_state.front();
   cur_state->global_guard.make_true();
   cur_state->global_guard.add(get_guard_identifier());
@@ -87,20 +87,20 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
     DFS_traversed[state.source.thread_nr] = false;
   }
 
-  thread_start_data.push_back(expr2tc());
+  thread_start_data.emplace_back();
 
   // Initial mpor tracking.
-  thread_last_reads.push_back(std::set<expr2tc>());
-  thread_last_writes.push_back(std::set<expr2tc>());
+  thread_last_reads.emplace_back();
+  thread_last_writes.emplace_back();
   // One thread with one dependancy relation.
-  dependancy_chain.push_back(std::vector<int>());
+  dependancy_chain.emplace_back();
   dependancy_chain.back().push_back(0);
   mpor_says_no = false;
 
   cswitch_forced = false;
   active_thread = 0;
   last_active_thread = 0;
-  last_insn = NULL;
+  last_insn = nullptr;
   node_count = 0;
   nondet_count = 0;
   DFS_traversed.reserve(1);
@@ -155,7 +155,6 @@ execution_statet::operator=(const execution_statet &ex)
   pre_goto_guard = ex.pre_goto_guard;
   mon_thread_warning = ex.mon_thread_warning;
   check_ltl = ex.check_ltl;
-  property_monitor_strings = ex.property_monitor_strings;
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
@@ -179,14 +178,12 @@ execution_statet::operator=(const execution_statet &ex)
   // updating their ex_state references. There isn't an elegant way of updating
   // them, it seems, while keeping the symex stuff ignorant of ex_state.
   // Oooooo, so this is where auto types would be useful...
-  for (std::vector<goto_symex_statet>::iterator it = threads_state.begin();
-       it != threads_state.end(); it++) {
-    for (goto_symex_statet::call_stackt::iterator it2 = it->call_stack.begin();
-         it2 != it->call_stack.end(); it2++) {
-      for (goto_symex_statet::goto_state_mapt::iterator it3 = it2->goto_state_map.begin();
-           it3 != it2->goto_state_map.end(); it3++) {
-        for (goto_symex_statet::goto_state_listt::iterator it4 = it3->second.begin();
-             it4 != it3->second.begin(); it4++) {
+  for (auto & it : threads_state) {
+    for (goto_symex_statet::call_stackt::iterator it2 = it.call_stack.begin();
+         it2 != it.call_stack.end(); it2++) {
+      for (auto & it3 : it2->goto_state_map) {
+        for (goto_symex_statet::goto_state_listt::iterator it4 = it3.second.begin();
+             it4 != it3.second.begin(); it4++) {
           ex_state_level2t &l2 = dynamic_cast<ex_state_level2t&>(it4->level2);
           l2.owner = this;
         }
@@ -198,10 +195,6 @@ execution_statet::operator=(const execution_statet &ex)
 
   return *this;
 }
-
-execution_statet::~execution_statet()
-{
-};
 
 void trap_to_python(reachability_treet *art);
 
@@ -291,8 +284,6 @@ execution_statet::symex_step(reachability_treet &art)
     default:
       goto_symext::symex_step(art);
   }
-
-  return;
 }
 
 void
@@ -304,8 +295,6 @@ execution_statet::symex_assign(const expr2tc &code)
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_assign(code);
-
-  return;
 }
 
 void
@@ -317,8 +306,6 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(expr);
-
-  return;
 }
 
 void
@@ -333,8 +320,6 @@ execution_statet::symex_goto(const expr2tc &old_guard)
       analyze_read(old_guard);
     }
   }
-
-  return;
 }
 
 void
@@ -346,19 +331,17 @@ execution_statet::assume(const expr2tc &assumption)
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(assumption);
-
-  return;
 }
 
 unsigned int &
-execution_statet::get_dynamic_counter(void)
+execution_statet::get_dynamic_counter()
 {
 
   return dynamic_counter;
 }
 
 unsigned int &
-execution_statet::get_nondet_counter(void)
+execution_statet::get_nondet_counter()
 {
 
   return nondet_count;
@@ -432,7 +415,7 @@ execution_statet::dfs_explore_thread(unsigned int tid)
 }
 
 bool
-execution_statet::check_if_ileaves_blocked(void)
+execution_statet::check_if_ileaves_blocked()
 {
 
   if(owning_rt->get_CS_bound() != -1 && CS_number >= owning_rt->get_CS_bound())
@@ -454,7 +437,7 @@ execution_statet::check_if_ileaves_blocked(void)
 }
 
 void
-execution_statet::end_thread(void)
+execution_statet::end_thread()
 {
 
   get_active_state().thread_ended = true;
@@ -465,7 +448,7 @@ execution_statet::end_thread(void)
 }
 
 void
-execution_statet::update_after_switch_point(void)
+execution_statet::update_after_switch_point()
 {
 
   execute_guard();
@@ -491,7 +474,7 @@ execution_statet::update_after_switch_point(void)
 }
 
 void
-execution_statet::preserve_last_paths(void)
+execution_statet::preserve_last_paths()
 {
   // If the thread terminated, there are no paths to preserve: this is the final
   // switching away.
@@ -507,7 +490,7 @@ execution_statet::preserve_last_paths(void)
   auto &pp = preserved_paths[last_active_thread];
   auto &ls = threads_state[last_active_thread];
   assert(pp.size() == 0 && "Unmerged preserved paths in ex_state");
-  assert(last_insn != NULL && "Last insn unset in preserve_last_paths");
+  assert(last_insn != nullptr && "Last insn unset in preserve_last_paths");
 
   // Add the current path to the set of paths to be preserved. Don't do this
   // if the current guard is false, though.
@@ -536,7 +519,7 @@ execution_statet::preserve_last_paths(void)
     // Second where the current-path guard plus the to-be-merged guard is equal
     // to the pre-goto guard: in that case, these can only be the two descendent
     // paths from the pre-goto state.
-    const goto_statet *tomerge = NULL;
+    const goto_statet *tomerge = nullptr;
     for (const goto_statet &gs : statelist) {
       bool merge = false;
 
@@ -557,17 +540,17 @@ execution_statet::preserve_last_paths(void)
 
       // Select merging this goto_statet with a sanity check
       if (merge) {
-        assert(tomerge == NULL && "Multiple branching to-preserve paths?");
+        assert(tomerge == nullptr && "Multiple branching to-preserve paths?");
         tomerge = &gs;
       }
     }
 
     // We _must_ have found a path to merge, or the current-state guard would
     // have matched pre_goto_guard earlier
-    assert(tomerge != NULL);
+    assert(tomerge != nullptr);
 
     // Alas, copies.
-    pp.push_back(std::make_pair(target_insn_it, goto_statet(*tomerge)));
+    pp.emplace_back(std::make_pair(target_insn_it, goto_statet(*tomerge)));
   }
 
   // We must have picked up at least one path to merge
@@ -586,12 +569,10 @@ execution_statet::preserve_last_paths(void)
     threads_state[last_active_thread].thread_ended = true;
     atomic_numbers[last_active_thread] = 0;
   }
-
-  return;
 }
 
 void
-execution_statet::cull_all_paths(void)
+execution_statet::cull_all_paths()
 {
   // Walk through _all_ symbolic paths in the program and wipe them out.
   // Current path is easy: set the guard to false. phi_function will overwrite
@@ -603,12 +584,10 @@ execution_statet::cull_all_paths(void)
   for (auto &frame : cur_state->call_stack) {
     frame.goto_state_map.clear();
   }
-
-  return;
 }
 
 void
-execution_statet::restore_last_paths(void)
+execution_statet::restore_last_paths()
 {
   // For each preserved path: create a fresh new goto_statet with data values
   // created from the present values of l2-renaming and value set, as we
@@ -624,7 +603,7 @@ execution_statet::restore_last_paths(void)
 
     // Create a fresh new goto_statet to be merged in at the target insn
     assert(cur_state->top().goto_state_map[loc].size() == 0);
-    cur_state->top().goto_state_map[loc].push_back(goto_statet(*cur_state));
+    cur_state->top().goto_state_map[loc].emplace_back(*cur_state);
     // Get ref to it
     auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
 
@@ -637,12 +616,10 @@ execution_statet::restore_last_paths(void)
   }
 
   list.clear();
-
-  return;
 }
 
 bool
-execution_statet::is_cur_state_guard_false(void)
+execution_statet::is_cur_state_guard_false()
 {
 
   // So, can the assumption actually be true? If enabled, ask the solver.
@@ -670,12 +647,11 @@ execution_statet::is_cur_state_guard_false(void)
 }
 
 void
-execution_statet::execute_guard(void)
+execution_statet::execute_guard()
 {
 
   node_id = node_count++;
   expr2tc guard_expr = get_guard_identifier();
-  exprt new_rhs, const_prop_val;
   expr2tc parent_guard;
 
   // Parent guard of this context switch - if a assign/claim/assume, just use
@@ -707,10 +683,10 @@ execution_statet::execute_guard(void)
   if (is_false(parent_guard))
     guard_expr = parent_guard;
 
-  for (unsigned int i = 0; i < threads_state.size(); i++)
+  for (auto & i : threads_state)
   {
-    threads_state.at(i).global_guard.make_true();
-    threads_state.at(i).global_guard.add(get_guard_identifier());
+    i.global_guard.make_true();
+    i.global_guard.add(get_guard_identifier());
   }
 
   // Check to see whether or not the state guard is false, indicating we've
@@ -735,7 +711,7 @@ execution_statet::add_thread(const goto_programt *prog)
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
-  preserved_paths.push_back(std::list<std::pair<goto_programt::const_targett, goto_statet> >());
+  preserved_paths.emplace_back();
   atomic_numbers.push_back(0);
 
   if (DFS_traversed.size() <= new_state.source.thread_nr) {
@@ -744,23 +720,22 @@ execution_statet::add_thread(const goto_programt *prog)
     DFS_traversed[new_state.source.thread_nr] = false;
   }
 
-  thread_start_data.push_back(expr2tc());
+  thread_start_data.emplace_back();
 
   // We invalidated all threads_state refs, so reset cur_state ptr.
   cur_state = &threads_state[active_thread];
 
   // Update MPOR tracking data with newly initialized thread
-  thread_last_reads.push_back(std::set<expr2tc>());
-  thread_last_writes.push_back(std::set<expr2tc>());
+  thread_last_reads.emplace_back();
+  thread_last_writes.emplace_back();
   // Unfortunately as each thread has a depenancy relation with every other
   // thread we have to do a lot of work to initialize a new one. And initially
   // all relations are '0', no transitions yet.
-  for (std::vector<std::vector<int> >::iterator it = dependancy_chain.begin();
-       it != dependancy_chain.end(); it++) {
-    it->push_back(0);
+  for (auto & it : dependancy_chain) {
+    it.push_back(0);
   }
   // And the new threads dependancies,
-  dependancy_chain.push_back(std::vector<int>());
+  dependancy_chain.emplace_back();
   for (unsigned int i = 0; i < dependancy_chain.size(); i++)
     dependancy_chain.back().push_back(0);
 
@@ -788,8 +763,6 @@ execution_statet::analyze_assign(const expr2tc &code)
     thread_last_writes[active_thread].insert(global_writes.begin(),
                                              global_writes.end());
   }
-
-  return;
 }
 
 void
@@ -804,8 +777,6 @@ execution_statet::analyze_read(const expr2tc &code)
     thread_last_reads[active_thread].insert(global_reads.begin(),
                                             global_reads.end());
   }
-
-  return;
 }
 
 void
@@ -940,7 +911,7 @@ execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l) const
 }
 
 void
-execution_statet::calculate_mpor_constraints(void)
+execution_statet::calculate_mpor_constraints()
 {
   // Primary bit of MPOR logic - to be executed at the end of a transition to
   // update dependancy tracking and suchlike.
@@ -1037,7 +1008,7 @@ execution_statet::calculate_mpor_constraints(void)
 }
 
 bool
-execution_statet::has_cswitch_point_occured(void) const
+execution_statet::has_cswitch_point_occured() const
 {
 
   // Context switches can occur due to being forced, or by global state access
@@ -1053,7 +1024,7 @@ execution_statet::has_cswitch_point_occured(void) const
 }
 
 bool
-execution_statet::can_execution_continue(void) const
+execution_statet::can_execution_continue() const
 {
 
   if (threads_state[active_thread].thread_ended)
@@ -1066,7 +1037,7 @@ execution_statet::can_execution_continue(void) const
 }
 
 crypto_hash
-execution_statet::generate_hash(void) const
+execution_statet::generate_hash() const
 {
 
   auto l2 =
@@ -1076,9 +1047,8 @@ execution_statet::generate_hash(void) const
   crypto_hash state = l2->generate_l2_state_hash();
   std::string str = state.to_string();
 
-  for (std::vector<goto_symex_statet>::const_iterator it = threads_state.begin();
-       it != threads_state.end(); it++) {
-    goto_programt::const_targett pc = it->source.pc;
+  for (const auto & it : threads_state) {
+    goto_programt::const_targett pc = it.source.pc;
     int id = pc->location_number;
     std::stringstream s;
     s << id;
@@ -1118,12 +1088,10 @@ execution_statet::print_stack_traces(unsigned int indent) const
     it->print_stack_trace(indent + 2);
     std::cout << std::endl;
   }
-
-  return;
 }
 
 void
-execution_statet::switch_to_monitor(void)
+execution_statet::switch_to_monitor()
 {
 
   if (threads_state[monitor_tid].thread_ended) {
@@ -1154,7 +1122,7 @@ execution_statet::switch_to_monitor(void)
 }
 
 void
-execution_statet::switch_away_from_monitor(void)
+execution_statet::switch_away_from_monitor()
 {
 
   // Occurs when we rerun the automata to discover whether or not the property
@@ -1180,16 +1148,15 @@ execution_statet::switch_away_from_monitor(void)
 }
 
 void
-execution_statet::kill_monitor_thread(void)
+execution_statet::kill_monitor_thread()
 {
   assert(monitor_tid != active_thread &&
          "You cannot kill monitor thread _from_ the monitor thread\n");
 
   threads_state[monitor_tid].thread_ended = true;
-  return;
 }
 
-static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+static void replace_symbol_names(exprt &e, const std::string&& prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
 
   if (e.id() ==  "symbol") {
@@ -1197,14 +1164,12 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
     used_syms.insert(sym);
   } else {
     Forall_operands(it, e)
-      replace_symbol_names(*it, prefix, strings, used_syms);
+      replace_symbol_names(*it, std::move(prefix), strings, used_syms);
   }
-
-  return;
 }
 
 void
-execution_statet::init_property_monitors(void)
+execution_statet::init_property_monitors()
 {
   std::map<std::string, std::string> strings;
 
@@ -1213,9 +1178,9 @@ execution_statet::init_property_monitors(void)
     {
       if (s.name.as_string().find("__ESBMC_property_") != std::string::npos) {
         // Munge back into the shape of an actual string
-        std::string str = "";
+        std::string str;
         forall_operands(iter2, s.value) {
-          char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
+          char c = (char)strtol(iter2->value().as_string().c_str(), nullptr, 2);
           if (c != 0)
             str += c;
           else
@@ -1239,11 +1204,11 @@ execution_statet::init_property_monitors(void)
       languagest languages(ns, MODE_C);
 
       std::string expr_str = strings["__ESBMC_property_" + prop_name];
-      std::string dummy_str = "";
+      std::string dummy_str;
 
       languages.to_expr(expr_str, dummy_str, main_expr, message_handler);
 
-      replace_symbol_names(main_expr, prop_name, strings, used_syms);
+      replace_symbol_names(main_expr, std::move(prop_name), strings, used_syms);
 
       monitors[prop_name] = std::pair<std::set<std::string>, exprt>
                                       (used_syms, main_expr);
@@ -1253,17 +1218,12 @@ execution_statet::init_property_monitors(void)
 
 execution_statet::ex_state_level2t::ex_state_level2t(
     execution_statet &ref)
-  : renaming::level2t(),
-    owner(&ref)
-{
-}
-
-execution_statet::ex_state_level2t::~ex_state_level2t(void)
+  : owner(&ref)
 {
 }
 
 boost::shared_ptr<renaming::level2t>
-execution_statet::ex_state_level2t::clone(void) const
+execution_statet::ex_state_level2t::clone() const
 {
 
   return boost::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this));
@@ -1281,7 +1241,7 @@ execution_statet::ex_state_level2t::rename(expr2tc &identifier)
   renaming::level2t::rename(identifier);
 }
 
-dfs_execution_statet::~dfs_execution_statet(void)
+dfs_execution_statet::~dfs_execution_statet()
 {
 
   // Delete target; or if we're encoding at runtime, pop a context.
@@ -1289,7 +1249,7 @@ dfs_execution_statet::~dfs_execution_statet(void)
     target->pop_ctx();
 }
 
-boost::shared_ptr<execution_statet> dfs_execution_statet::clone(void) const
+boost::shared_ptr<execution_statet> dfs_execution_statet::clone() const
 {
   boost::shared_ptr<dfs_execution_statet> d =
     boost::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
@@ -1305,17 +1265,12 @@ boost::shared_ptr<execution_statet> dfs_execution_statet::clone(void) const
   return d;
 }
 
-dfs_execution_statet::dfs_execution_statet(const dfs_execution_statet &ref)
-  :  execution_statet(ref)
-{
-}
-
-schedule_execution_statet::~schedule_execution_statet(void)
+schedule_execution_statet::~schedule_execution_statet()
 {
   // Don't delete equation. Schedule requires all this data.
 }
 
-boost::shared_ptr<execution_statet> schedule_execution_statet::clone(void) const
+boost::shared_ptr<execution_statet> schedule_execution_statet::clone() const
 {
   boost::shared_ptr<schedule_execution_statet> s =
     boost::shared_ptr<schedule_execution_statet>(new schedule_execution_statet(*this));
@@ -1323,13 +1278,6 @@ boost::shared_ptr<execution_statet> schedule_execution_statet::clone(void) const
   // Don't duplicate target equation.
   s.get()->target = target;
   return s;
-}
-
-schedule_execution_statet::schedule_execution_statet(const schedule_execution_statet &ref)
-  :  execution_statet(ref),
-     ptotal_claims(ref.ptotal_claims),
-     premaining_claims(ref.premaining_claims)
-{
 }
 
 void
@@ -1347,7 +1295,6 @@ schedule_execution_statet::claim(const expr2tc &expr, const std::string &msg)
 
   *ptotal_claims += tmp_total;
   *premaining_claims += tmp_remaining;
-  return;
 }
 
 execution_statet::state_hashing_level2t::state_hashing_level2t(
@@ -1356,12 +1303,8 @@ execution_statet::state_hashing_level2t::state_hashing_level2t(
 {
 }
 
-execution_statet::state_hashing_level2t::~state_hashing_level2t(void)
-{
-}
-
 boost::shared_ptr<renaming::level2t>
-execution_statet::state_hashing_level2t::clone(void) const
+execution_statet::state_hashing_level2t::clone() const
 {
 
   return boost::shared_ptr<state_hashing_level2t>(new state_hashing_level2t(*this));
@@ -1394,9 +1337,8 @@ execution_statet::state_hashing_level2t::generate_l2_state_hash() const
   uint8_t *data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE * sizeof(uint8_t));
 
   total = 0;
-  for (current_state_hashest::const_iterator it = current_hashes.begin();
-        it != current_hashes.end(); it++) {
-    memcpy(&data[total * CRYPTO_HASH_SIZE], it->second.hash, CRYPTO_HASH_SIZE);
+  for (const auto & current_hashe : current_hashes) {
+    memcpy(&data[total * CRYPTO_HASH_SIZE], current_hashe.second.hash, CRYPTO_HASH_SIZE);
     total++;
   }
 

@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 language_filet::~language_filet()
 {
-  if(language!=NULL) delete language;
+  if(language!=nullptr) delete language;
 }
 
 void language_filet::get_modules()
@@ -23,39 +23,37 @@ void language_filet::get_modules()
 
 void language_filest::show_parse(std::ostream &out)
 {
-  for(filemapt::iterator it=filemap.begin();
-      it!=filemap.end(); it++)
-    it->second.language->show_parse(out);
+  for(auto & it : filemap)
+    it.second.language->show_parse(out);
 }
 
 bool language_filest::parse()
 {
-  for(filemapt::iterator it=filemap.begin();
-      it!=filemap.end(); it++)
+  for(auto & it : filemap)
   {
     // Check that file exists
 
-    std::ifstream infile(it->first.c_str());
+    std::ifstream infile(it.first.c_str());
 
     if(!infile)
     {
-      error("Failed to open "+it->first);
+      error("Failed to open "+it.first);
       return true;
     }
 
     // parse it
 
-    languaget &language=*(it->second.language);
+    languaget &language=*(it.second.language);
 
-    if(language.parse(it->first, *get_message_handler()))
+    if(language.parse(it.first, *get_message_handler()))
     {
-      error("Parsing of "+it->first+" failed");
+      error("Parsing of "+it.first+" failed");
       return true;
     }
 
     // what is provided?
 
-    it->second.get_modules();
+    it.second.get_modules();
   }
 
   return false;
@@ -74,37 +72,33 @@ bool language_filest::typecheck(contextt &context)
 #endif
   // build module map
 
-  for(filemapt::iterator fm_it=filemap.begin();
-      fm_it!=filemap.end(); fm_it++)
+  for(auto & fm_it : filemap)
   {
-    std::set<std::string> &modules=fm_it->second.modules;
+    std::set<std::string> &modules=fm_it.second.modules;
 
-    for(std::set<std::string>::const_iterator mo_it=modules.begin();
-        mo_it!=modules.end(); mo_it++)
+    for(const auto & mo_it : modules)
     {
       language_modulet module;
-      module.file=&fm_it->second;
-      module.name=*mo_it;
+      module.file=&fm_it.second;
+      module.name=mo_it;
       modulemap.insert(std::pair<std::string, language_modulet>(module.name, module));
     }
   }
 
   // typecheck files
 
-  for(filemapt::iterator it=filemap.begin();
-      it!=filemap.end(); it++)
+  for(auto & it : filemap)
   {
-    if(it->second.modules.empty())
-      if(it->second.language->typecheck(context, "", *get_message_handler()))
+    if(it.second.modules.empty())
+      if(it.second.language->typecheck(context, "", *get_message_handler()))
         return true;
   }
 
   // typecheck modules
 
-  for(modulemapt::iterator it=modulemap.begin();
-      it!=modulemap.end(); it++)
+  for(auto & it : modulemap)
   {
-    if(typecheck_module(context, it->second))
+    if(typecheck_module(context, it.second))
       return true;
   }
 
@@ -119,11 +113,10 @@ bool language_filest::final(
 #if 1
   std::set<std::string> languages;
 
-  for(filemapt::iterator it=filemap.begin();
-      it!=filemap.end(); it++)
+  for(auto & it : filemap)
   {
-    if(languages.insert(it->second.language->id()).second)
-      if(it->second.language->final(context, *get_message_handler()))
+    if(languages.insert(it.second.language->id()).second)
+      if(it.second.language->final(context, *get_message_handler()))
         return true;
   }
 #endif
@@ -187,12 +180,9 @@ bool language_filest::typecheck_module(
 
   //module.file->language->dependencies();
 
-  for(std::set<std::string>::const_iterator it=
-      dependency_set.begin();
-      it!=dependency_set.end();
-      it++)
+  for(const auto & it : dependency_set)
   {
-    if(typecheck_module(context, *it))
+    if(typecheck_module(context, it))
     {
       module.in_progress=false;
       return true;
@@ -226,16 +216,13 @@ void language_filest::typecheck_virtual_methods(contextt &context)
         const struct_typet &struct_type = to_struct_type(s.type);
         const struct_typet::componentst &components = struct_type.methods();
 
-        for(struct_typet::componentst::const_iterator
-            c_it = components.begin();
-            c_it != components.end();
-            c_it++)
+        for(const auto & component : components)
         {
-          if(c_it->get_bool("is_virtual")
-             && !(c_it->get_bool("is_pure_virtual")))
+          if(component.get_bool("is_virtual")
+             && !(component.get_bool("is_pure_virtual")))
           {
             const symbolt &member_function =
-              namespacet(context).lookup(c_it->get_name());
+              namespacet(context).lookup(component.get_name());
 
             if (member_function.value.is_nil())
             {

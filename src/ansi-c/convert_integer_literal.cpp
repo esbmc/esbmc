@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/arith_tools.h>
 #include <util/config.h>
 
-/*******************************************************************\
-
-Function: convert_integer_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert_integer_literal(
   const std::string &src,
   exprt &dest)

@@ -12,38 +12,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/config.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: ansi_c_convertt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ansi_c_convertt::convert(ansi_c_parse_treet &ansi_c_parse_tree)
 {
-  for(ansi_c_parse_treet::declarationst::iterator
-      it=ansi_c_parse_tree.declarations.begin();
-      it!=ansi_c_parse_tree.declarations.end();
-      ++it)
-    convert_declaration(*it);
+  for(auto & declaration : ansi_c_parse_tree.declarations)
+    convert_declaration(declaration);
 }
-
-/*******************************************************************\
-
-Function: ansi_c_convertt::convert_declaration
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ansi_c_convertt::convert_declaration(ansi_c_declarationt &declaration)
 {
@@ -72,18 +45,6 @@ void ansi_c_convertt::convert_declaration(ansi_c_declarationt &declaration)
       convert_expr(declaration.decl_value());
   }
 }
-
-/*******************************************************************\
-
-Function: ansi_c_convertt::convert_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ansi_c_convertt::convert_expr(exprt &expr)
 {
@@ -120,18 +81,6 @@ void ansi_c_convertt::convert_expr(exprt &expr)
     convert_type(expr.type());
   }
 }
-
-/*******************************************************************\
-
-Function: ansi_c_convertt::convert_code
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ansi_c_convertt::convert_code(codet &code)
 {
@@ -257,35 +206,11 @@ void ansi_c_convertt::convert_code(codet &code)
   }
 }
 
-/*******************************************************************\
-
-Function: ansi_c_convertt::convert_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ansi_c_convertt::convert_type(typet &type)
 {
   c_storage_spect c_storage_spec;
   convert_type(type, c_storage_spec);
 }
-
-/*******************************************************************\
-
-Function: ansi_c_convertt::convert_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ansi_c_convertt::convert_type(
   typet &type,
@@ -353,17 +278,14 @@ void ansi_c_convertt::convert_type(
       arguments.pop_back();
     }
 
-    for(code_typet::argumentst::iterator
-        it=arguments.begin();
-        it!=arguments.end();
-        ++it)
+    for(auto & it : arguments)
     {
-      if(it->id()=="declaration")
+      if(it.id()=="declaration")
       {
         code_typet::argumentt argument;
 
         ansi_c_declarationt &declaration=
-          to_ansi_c_declaration(*it);
+          to_ansi_c_declaration(it);
 
         convert_type(declaration.type());
 
@@ -375,12 +297,12 @@ void ansi_c_convertt::convert_type(
 
         argument.set_identifier(id2string(declaration.get_name()));
 
-        it->swap(argument);
+        it.swap(argument);
       }
-      else if(it->id()=="ansi_c_ellipsis")
+      else if(it.id()=="ansi_c_ellipsis")
         throw "ellipsis only allowed as last argument";
       else
-        throw "unexpected argument: "+it->id_string();
+        throw "unexpected argument: "+it.id_string();
     }
   }
   else if(type.is_array())
@@ -452,18 +374,6 @@ void ansi_c_convertt::convert_type(
   }
 }
 
-/*******************************************************************\
-
-Function: ansi_c_convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool ansi_c_convert(
   ansi_c_parse_treet &ansi_c_parse_tree,
   const std::string &module,
@@ -493,18 +403,6 @@ bool ansi_c_convert(
 
   return ansi_c_convert.get_error_found();
 }
-
-/*******************************************************************\
-
-Function: ansi_c_convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool ansi_c_convert(
   exprt &expr,

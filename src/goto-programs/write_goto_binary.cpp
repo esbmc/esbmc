@@ -43,16 +43,13 @@ bool write_goto_binary(
 
   write_long( out, cnt );
 
-  for ( goto_functionst::function_mapt::iterator it=
-          functions.function_map.begin();
-        it != functions.function_map.end();
-        it++)
+  for (auto & it : functions.function_map)
   {
-    if (it->second.body_available)
+    if (it.second.body_available)
     {
-      it->second.body.compute_location_numbers();
-      write_string(out, it->first.as_string());
-      gfconverter.convert(it->second, out);
+      it.second.body.compute_location_numbers();
+      write_string(out, it.first.as_string());
+      gfconverter.convert(it.second, out);
     }
   }
 

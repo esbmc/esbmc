@@ -38,8 +38,8 @@ class replace_symbolt
   virtual bool replace(exprt &dest);
   virtual bool replace(typet &dest);
 
-  replace_symbolt();
-  virtual ~replace_symbolt();
+  replace_symbolt() = default;
+  virtual ~replace_symbolt() = default;
   
  protected:
   expr_mapt expr_map;

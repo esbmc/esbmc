@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cctype>
 #include <cstdio>
 
-/*******************************************************************\
-
-Function: cpp_convert_string_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void unescape_string(const std::string &src, std::string &dest)
 {
   dest="";

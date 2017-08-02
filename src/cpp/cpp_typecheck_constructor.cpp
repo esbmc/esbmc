@@ -14,21 +14,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-/*******************************************************************\
-
-Function: copy_parent
-
-  Inputs:
-    parent_base_name: base name of typechecked parent
-    block: non-typechecked block
-
- Outputs:
-    generate code to copy the parent
-
- Purpose:
-
-\*******************************************************************/
-
 static void copy_parent(
   const locationt &location,
   const irep_idt &parent_base_name,
@@ -41,52 +26,37 @@ static void copy_parent(
   code.location()=location;
 
   code.set_statement("assign");
-  code.operands().push_back(exprt("dereference"));
+  code.operands().emplace_back("dereference");
 
-  code.op0().operands().push_back(exprt("explicit-typecast"));
+  code.op0().operands().emplace_back("explicit-typecast");
 
   exprt &op0=code.op0().op0();
 
-  op0.operands().push_back(exprt("cpp-this"));
+  op0.operands().emplace_back("cpp-this");
   op0.type().id("pointer");
   op0.type().subtype().id("cpp-name");
-  op0.type().subtype().get_sub().push_back(irept("name"));
+  op0.type().subtype().get_sub().emplace_back("name");
   op0.type().subtype().get_sub().back().identifier(parent_base_name);
   op0.type().subtype().get_sub().back().set("#location", location);
   op0.location() = location;
 
-  code.operands().push_back(exprt("explicit-typecast"));
+  code.operands().emplace_back("explicit-typecast");
   exprt &op1 = code.op1();
 
   op1.type().id("pointer");
   op1.type().set("#reference", true);
   op1.type().subtype().set("#constant",true);
   op1.type().subtype().id("cpp-name");
-  op1.type().subtype().get_sub().push_back(irept("name"));
+  op1.type().subtype().get_sub().emplace_back("name");
   op1.type().subtype().get_sub().back().identifier(parent_base_name);
   op1.type().subtype().get_sub().back().set("#location", location);
 
-  op1.operands().push_back(exprt("cpp-name"));
-  op1.op0().get_sub().push_back(irept("name"));
+  op1.operands().emplace_back("cpp-name");
+  op1.op0().get_sub().emplace_back("name");
   op1.op0().get_sub().back().identifier(arg_name);
   op1.op0().get_sub().back().set("#location", location);
   op1.location() = location;
 }
-
-/*******************************************************************\
-
-Function: copy_member
-
-  Inputs:
-    member_base_name: name of a member
-    block: non-typechecked block
-
- Outputs:
-    generate code to copy the member
-
- Purpose:
-
-\*******************************************************************/
 
 static void copy_member(
   const locationt &location,
@@ -94,94 +64,78 @@ static void copy_member(
   const irep_idt &arg_name,
   exprt &block)
 {
-  block.operands().push_back(exprt("code"));
+  block.operands().emplace_back("code");
   exprt &code=block.operands().back();
 
   code.statement("expression");
   code.type()=typet("code");
-  code.operands().push_back(exprt("sideeffect"));
+  code.operands().emplace_back("sideeffect");
   code.op0().statement("assign");
-  code.op0().operands().push_back(exprt("cpp-name"));
+  code.op0().operands().emplace_back("cpp-name");
   code.location() = location;
 
   exprt& op0 = code.op0().op0();
   op0.location() = location;
 
-  op0.get_sub().push_back(irept("name"));
+  op0.get_sub().emplace_back("name");
   op0.get_sub().back().identifier(member_base_name);
   op0.get_sub().back().set("#location", location);
 
-  code.op0().operands().push_back(exprt("member"));
+  code.op0().operands().emplace_back("member");
 
   exprt& op1 = code.op0().op1();
 
   op1.add("component_cpp_name").id("cpp-name");
-  op1.add("component_cpp_name").get_sub().push_back(irept("name"));
+  op1.add("component_cpp_name").get_sub().emplace_back("name");
   op1.add("component_cpp_name").get_sub().back().identifier(member_base_name);
   op1.add("component_cpp_name").get_sub().back().set("#location", location);
 
-  op1.operands().push_back(exprt("cpp-name"));
-  op1.op0().get_sub().push_back(irept("name"));
+  op1.operands().emplace_back("cpp-name");
+  op1.op0().get_sub().emplace_back("name");
   op1.op0().get_sub().back().identifier(arg_name);
   op1.op0().get_sub().back().set("#location", location);
   op1.location() = location;
 }
 
-/*******************************************************************\
-
-Function: copy_array
-
-  Inputs:
-    member_base_name: name of array member
-    index: index to copy
-    block: non-typechecked block
-
- Outputs:
-    generate code to copy the member
-
- Purpose:
-
-\*******************************************************************/
-
 static void copy_array(
   const locationt& location,
   const irep_idt &member_base_name,
-  mp_integer i,
+  const mp_integer& i,
   const irep_idt &arg_name,
   exprt &block)
 {
   // Build the index expression
   exprt constant=from_integer(i, int_type());
 
-  block.operands().push_back(exprt("code"));
+  block.operands().emplace_back("code");
   exprt& code = block.operands().back();
   code.location() = location;
 
   code.statement("expression");
   code.type()=typet("code");
-  code.operands().push_back(exprt("sideeffect"));
+  code.operands().emplace_back("sideeffect");
   code.op0().statement("assign");
-  code.op0().operands().push_back(exprt("index"));
+  code.op0().operands().emplace_back("index");
   exprt& op0 = code.op0().op0();
-  op0.operands().push_back(exprt("cpp-name"));
+  op0.operands().emplace_back("cpp-name");
   op0.location() = location;
 
-  op0.op0().get_sub().push_back(irept("name"));
+  op0.op0().get_sub().emplace_back("name");
   op0.op0().get_sub().back().identifier(member_base_name);
   op0.op0().get_sub().back().set("#location", location);
   op0.copy_to_operands(constant);
 
-  code.op0().operands().push_back(exprt("index"));
+  code.op0().operands().emplace_back("index");
 
   exprt& op1 = code.op0().op1();
-  op1.operands().push_back(exprt("member"));
+  op1.operands().emplace_back("member");
   op1.op0().add("component_cpp_name").id("cpp-name");
-  op1.op0().add("component_cpp_name").get_sub().push_back(irept("name"));
+  op1.op0().add("component_cpp_name").get_sub().emplace_back("name");
   op1.op0().add("component_cpp_name").get_sub().back().identifier(member_base_name);
   op1.op0().add("component_cpp_name").get_sub().back().set("#location", location);
 
-  op1.op0().operands().push_back(exprt("cpp-name"));
-  op1.op0().op0().get_sub().push_back(irept("name"));
+  op1.op0().operands().emplace_back("cpp-name");
+  op1.op0().op0().get_sub().emplace_back("name");
   op1.op0().op0().get_sub().back().identifier(arg_name);
   op1.op0().op0().get_sub().back().set("#location", location);
   op1.copy_to_operands(constant);
@@ -189,18 +143,6 @@ static void copy_array(
   op1.location() = location;
 }
 
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::default_ctor
-
-  Inputs:
-
- Outputs:
-
- Purpose: Generate code for implicit default constructors
-
-\*******************************************************************/
 
 void cpp_typecheckt::default_ctor(
   const locationt &location,
@@ -230,18 +172,6 @@ void cpp_typecheckt::default_ctor(
   ctor.move_to_operands(decl);
   ctor.location() = location;
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::default_cpctor
-
-  Inputs:
-
- Outputs:
-
- Purpose: Generate code for implicit default copy constructor
-
-\*******************************************************************/
 
 void cpp_typecheckt::default_cpctor(
   const symbolt& symbol,
@@ -365,7 +295,7 @@ void cpp_typecheckt::default_cpctor(
 
       exprt ptrmember("ptrmember");
       ptrmember.set("component_name",mem_it->name());
-      ptrmember.operands().push_back(exprt("cpp-this"));
+      ptrmember.operands().emplace_back("cpp-this");
 
       code_assignt assign(ptrmember, address);
       initializers.move_to_sub(assign);
@@ -406,19 +336,6 @@ void cpp_typecheckt::default_cpctor(
   cpctor.type().set("#default_copy_cons", "1");
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::default_assignop
-
-  Inputs:
-
- Outputs:
-
- Purpose: Generate declarartion of the implicit default assignment
- operator
-
-\*******************************************************************/
-
 void cpp_typecheckt::default_assignop(
   const symbolt& symbol,
   cpp_declarationt& cpctor)
@@ -436,7 +353,7 @@ void cpp_typecheckt::default_assignop(
   cpctor.add("storage_spec").id("cpp-storage-spec");
   cpctor.type().id("symbol");
   cpctor.type().add("identifier").id(symbol.name);
-  cpctor.operands().push_back(exprt("cpp-declarator"));
+  cpctor.operands().emplace_back("cpp-declarator");
   cpctor.location() = location;
 
   cpp_declaratort &declarator = (cpp_declaratort&) cpctor.op0();
@@ -448,8 +365,8 @@ void cpp_typecheckt::default_assignop(
   declarator_type.location() = location;
 
   declarator_name.id("cpp-name");
-  declarator_name.get_sub().push_back(irept("operator"));
-  declarator_name.get_sub().push_back(irept("="));
+  declarator_name.get_sub().emplace_back("operator");
+  declarator_name.get_sub().emplace_back("=");
 
   declarator_type.id("function_type");
   declarator_type.subtype()=reference_typet();
@@ -459,27 +376,27 @@ void cpp_typecheckt::default_assignop(
   exprt& args = (exprt&) declarator.type().add("arguments");
   args.location() = location;
 
-  args.get_sub().push_back(irept("cpp-declaration"));
+  args.get_sub().emplace_back("cpp-declaration");
 
   cpp_declarationt& args_decl = (cpp_declarationt&) args.get_sub().back();
 
   irept& args_decl_type_sub = args_decl.type().add("subtypes");
 
   args_decl.type().id("merged_type");
-  args_decl_type_sub.get_sub().push_back(irept("cpp-name"));
-  args_decl_type_sub.get_sub().back().get_sub().push_back(irept("name"));
+  args_decl_type_sub.get_sub().emplace_back("cpp-name");
+  args_decl_type_sub.get_sub().back().get_sub().emplace_back("name");
   args_decl_type_sub.get_sub().back().get_sub().back().identifier(symbol.base_name);
   args_decl_type_sub.get_sub().back().get_sub().back().set("#location", location);
 
-  args_decl_type_sub.get_sub().push_back(irept("const"));
-  args_decl.operands().push_back(exprt("cpp-declarator"));
+  args_decl_type_sub.get_sub().emplace_back("const");
+  args_decl.operands().emplace_back("cpp-declarator");
   args_decl.location() = location;
 
   cpp_declaratort &args_decl_declor=
     (cpp_declaratort&) args_decl.operands().back();
 
   args_decl_declor.name().id("cpp-name");
-  args_decl_declor.name().get_sub().push_back(irept("name"));
+  args_decl_declor.name().get_sub().emplace_back("name");
   args_decl_declor.name().get_sub().back().add("identifier").id(arg_name);
   args_decl_declor.location() = location;
 
@@ -489,18 +406,6 @@ void cpp_typecheckt::default_assignop(
   args_decl_declor.type().subtype().make_nil();
   args_decl_declor.value().make_nil();
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::default_assignop
-
-  Inputs:
-
- Outputs:
-
- Purpose: Generate code for the implicit default assignment operator
-
-\*******************************************************************/
 
 void cpp_typecheckt::default_assignop_value(
   const symbolt &symbol,
@@ -575,31 +480,13 @@ void cpp_typecheckt::default_assignop_value(
   }
 
   // Finally we add the return statement
-  block.operands().push_back(exprt("code"));
+  block.operands().emplace_back("code");
   exprt &ret_code = declarator.value().operands().back();
-  ret_code.operands().push_back(exprt("dereference"));
-  ret_code.op0().operands().push_back(exprt("cpp-this"));
+  ret_code.operands().emplace_back("dereference");
+  ret_code.op0().operands().emplace_back("cpp-this");
   ret_code.statement("return");
   ret_code.type()=code_typet();
 }
-
-/*******************************************************************\
-
-Function: check_member_initializers
-
-Inputs:   bases: the parents of the class
-          components: the components of the class
-          initializers: the constructor initializers
-
- Outputs: If an invalid initializer is found, then
-          the method outputs an error message and
-          throws a 0 exception.
-
- Purpose: Check a constructor initialization-list.
-          An initalizer has to be a data member declared
-          in this class or a direct-parent constructor.
-
-\*******************************************************************/
 
 void cpp_typecheckt::check_member_initializers(
   const irept &bases,
@@ -654,26 +541,23 @@ void cpp_typecheckt::check_member_initializers(
     member_name.convert(identifier, base_name);
     bool ok = false;
 
-    for(struct_typet::componentst::const_iterator
-        c_it=components.begin();
-        c_it!=components.end();
-        c_it++)
+    for(const auto & component : components)
     {
-      if(c_it->base_name()!=base_name) continue;
+      if(component.base_name()!=base_name) continue;
 
       // Data member
-      if(!c_it->get_bool("from_base") &&
-         !c_it->get_bool("is_static") &&
-         c_it->get("type") != "code")
+      if(!component.get_bool("from_base") &&
+         !component.get_bool("is_static") &&
+         component.get("type") != "code")
       {
         ok = true;
         break;
       }
 
       // Maybe it is a parent constructor?
-      if(c_it->is_type())
+      if(component.is_type())
       {
-        typet type = static_cast<const typet&>(c_it->type());
+        typet type = static_cast<const typet&>(component.type());
         if(type.id() != "symbol")
           continue;
 
@@ -695,11 +579,11 @@ void cpp_typecheckt::check_member_initializers(
       }
 
       // Parent constructor
-      if(c_it->get_bool("from_base")
-        && !c_it->is_type()
-        && !c_it->get_bool("is_static")
-        && c_it->get("type") == "code"
-        && c_it->type().get("return_type") == "constructor")
+      if(component.get_bool("from_base")
+        && !component.is_type()
+        && !component.get_bool("is_static")
+        && component.get("type") == "code"
+        && component.type().get("return_type") == "constructor")
       {
         typet member_type = (typet&) initializer.member_irep();
         typecheck_type(member_type);
@@ -748,24 +632,6 @@ void cpp_typecheckt::check_member_initializers(
   }
 }
 
-/*******************************************************************\
-
-Function: full_member_initialization
-
-  Inputs: bases: the class base types
-          components: the class components
-          initializers: the constructor initializers
-
- Outputs: initializers is updated.
-
- Purpose: Build the full initialization list of the constructor.
-          First, all the direct-parent constructors are called.
-          Second, all the non-pod data members are initialized.
-
- Note: The initialization order follows the declaration order.
-
-\*******************************************************************/
-
 void cpp_typecheckt::full_member_initialization(
   const struct_typet &struct_type,
   irept &initializers)
@@ -790,7 +656,7 @@ void cpp_typecheckt::full_member_initialization(
 
     {
       cpp_namet most_derived;
-      most_derived.get_sub().push_back(irept("name"));
+      most_derived.get_sub().emplace_back("name");
       most_derived.get_sub().back().identifier("@most_derived");
 
       exprt tmp;
@@ -860,12 +726,11 @@ void cpp_typecheckt::full_member_initialization(
         // check if the initializer is a data
         bool is_data = false;
 
-        for(struct_typet::componentst::const_iterator c_it =
-            components.begin(); c_it != components.end(); c_it++)
+        for(const auto & component : components)
         {
-          if(c_it->base_name()==base_name
-             && c_it->get("type")!="code"
-             && !c_it->is_type())
+          if(component.base_name()==base_name
+             && component.get("type")!="code"
+             && !component.is_type())
           {
             is_data = true;
             break;
@@ -931,7 +796,7 @@ void cpp_typecheckt::full_member_initialization(
 
       {
         cpp_namet most_derived;
-        most_derived.get_sub().push_back(irept("name"));
+        most_derived.get_sub().emplace_back("name");
         most_derived.get_sub().back().identifier("@most_derived");
 
         exprt tmp;
@@ -977,7 +842,7 @@ void cpp_typecheckt::full_member_initialization(
 
       exprt ptrmember("ptrmember");
       ptrmember.set("component_name",mem_it->name());
-      ptrmember.operands().push_back(exprt("cpp-this"));
+      ptrmember.operands().emplace_back("cpp-this");
 
       code_assignt assign(ptrmember, address);
       final_initializers.move_to_sub(assign);
@@ -1047,35 +912,14 @@ void cpp_typecheckt::full_member_initialization(
   initializers.swap(final_initializers);
 }
 
-/*******************************************************************\
-
-Function: find_cpctor
-
-  Inputs: typechecked compound symbol
-  Outputs: return true if a copy constructor is found
-
-  Note:
-    "A non-template constructor for class X is a copy constructor
-    if its first parameter is of type X&, const X&, volatile X&
-    or const volatile X&, and either there are no other parameters
-    or else all other parameters have default arguments (8.3.6).106)
-    [Example: X::X(const X&) and X::X(X&, int=1) are copy constructors."
-
-\*******************************************************************/
-
 bool cpp_typecheckt::find_cpctor(const symbolt &symbol) const
 {
   const struct_typet &struct_type = to_struct_type(symbol.type);
   const struct_typet::componentst &components = struct_type.components();
 
-  for(struct_typet::componentst::const_iterator
-      cit=components.begin();
-      cit!=components.end();
-      cit++)
+  for(const auto & component : components)
   {
     // Skip non-ctor
-    const struct_typet::componentt& component = *cit;
-
     if(component.type().id() != "code"
       || to_code_type(component.type()).return_type().id()!="constructor")
       continue;
@@ -1119,27 +963,13 @@ bool cpp_typecheckt::find_cpctor(const symbolt &symbol) const
   return false;
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::find_assignop
-
-  Inputs:
-
-  Outputs:
-
-  Note:
-
-\*******************************************************************/
-
 bool cpp_typecheckt::find_assignop(const symbolt& symbol) const
 {
   const struct_typet& struct_type = to_struct_type(symbol.type);
   const struct_typet::componentst& components = struct_type.components();
 
-  for(unsigned i = 0; i < components.size(); i++)
+  for(const auto & component : components)
   {
-    const struct_typet::componentt& component = components[i];
-
     if(component.base_name()!="operator=")
       continue;
 
@@ -1172,17 +1002,6 @@ bool cpp_typecheckt::find_assignop(const symbolt& symbol) const
   return false;
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::find_dtor
-
-  Inputs:
-  Outputs:
-
-  Note:
-
-\*******************************************************************/
-
 bool cpp_typecheckt::find_dtor(const symbolt& symbol) const
 {
   const irept &components=
@@ -1196,20 +1015,6 @@ bool cpp_typecheckt::find_dtor(const symbolt& symbol) const
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: default_dtor
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- Note:
-
-\*******************************************************************/
 
 void cpp_typecheckt::default_dtor(
   const symbolt &symb,
@@ -1238,20 +1043,6 @@ void cpp_typecheckt::default_dtor(
   dtor.add("storage_spec").id("cpp-storage-spec");
   dtor.add("operands").move_to_sub(decl);
 }
-
-/*******************************************************************\
-
-Function: dtor
-
- Inputs:
-
- Outputs:
-
- Purpose: produces destructor code for a class object
-
- Note:
-
-\*******************************************************************/
 
 void cpp_typecheckt::dtor(const symbolt &symb, code_blockt &vtables, code_blockt &dtors)
 {
@@ -1296,7 +1087,7 @@ void cpp_typecheckt::dtor(const symbolt &symb, code_blockt &vtables, code_blockt
 
       exprt ptrmember("ptrmember");
       ptrmember.component_name(cit->name());
-      ptrmember.operands().push_back(exprt("cpp-this"));
+      ptrmember.operands().emplace_back("cpp-this");
 
       code_assignt assign(ptrmember, address);
       vtables.operands().push_back(assign);
@@ -1331,7 +1122,7 @@ void cpp_typecheckt::dtor(const symbolt &symb, code_blockt &vtables, code_blockt
 
     exprt member("ptrmember");
     member.set("component_cpp_name", cppname);
-    member.operands().push_back(exprt("cpp-this"));
+    member.operands().emplace_back("cpp-this");
     member.location() = location;
 
     codet dtor_code =
@@ -1354,7 +1145,7 @@ void cpp_typecheckt::dtor(const symbolt &symb, code_blockt &vtables, code_blockt
     const symbolt& psymb = lookup(bit->type().identifier());
 
     exprt object("dereference");
-    object.operands().push_back(exprt("cpp-this"));
+    object.operands().emplace_back("cpp-this");
     object.location() = location;
 
     exprt dtor_code =

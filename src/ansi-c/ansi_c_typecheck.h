@@ -48,9 +48,9 @@ public:
   {
   }
 
-  virtual ~ansi_c_typecheckt() { }
+  ~ansi_c_typecheckt() override = default;
 
-  virtual void typecheck();
+  void typecheck() override;
 
 protected:
   ansi_c_parse_treet &parse_tree;

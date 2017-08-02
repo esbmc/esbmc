@@ -62,12 +62,14 @@ public:
   virtual bool from_expr(
     const exprt &expr,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false) = 0;
 
   virtual bool from_type(
     const typet &type,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false) = 0;
 
   virtual bool to_expr(
     const std::string &code,
@@ -80,7 +82,7 @@ public:
 
   // constructor / destructor
 
-  languaget() { }
-  virtual ~languaget() { }
+  languaget() = default;
+  virtual ~languaget() = default;
 };
 #endif

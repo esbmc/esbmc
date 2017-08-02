@@ -14,18 +14,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/expr_util.h>
 #include <util/i2string.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert_argument
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::convert_argument(
   const irep_idt &mode,
   code_typet::argumentt &argument)
@@ -69,18 +57,6 @@ void cpp_typecheckt::convert_argument(
   cpp_scopes.put_into_scope(*new_symbol);
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert_arguments
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::convert_arguments(
   const irep_idt &mode,
   code_typet &function_type)
@@ -88,24 +64,9 @@ void cpp_typecheckt::convert_arguments(
   code_typet::argumentst &arguments=
     function_type.arguments();
 
-  for(code_typet::argumentst::iterator
-      it=arguments.begin();
-      it!=arguments.end();
-      it++)
-    convert_argument(mode, *it);
+  for(auto & argument : arguments)
+    convert_argument(mode, argument);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert_function
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::convert_function(symbolt &symbol)
 {
@@ -188,18 +149,6 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
 
   return_type = old_return_type;
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::function_identifier
-
-  Inputs:
-
- Outputs:
-
- Purpose: for function overloading
-
-\*******************************************************************/
 
 irep_idt cpp_typecheckt::function_identifier(const typet &type)
 {

@@ -460,7 +460,7 @@ is_subclass_of_rec(const std::string &supername, const std::string &subname,
                    const namespacet &ns)
 {
 
-  const symbolt *symbol = NULL;
+  const symbolt *symbol = nullptr;
   if (!ns.lookup(supername, symbol)) {
     // look at the list of bases; see if the subclass name is a base of this
     // object. Currently, old-irep.

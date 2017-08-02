@@ -11,7 +11,7 @@
 
 class sexpr {
 public:
-  sexpr() : token(0), sexpr_list(), data() { sexpr_list.clear(); }
+  sexpr() : token(0) { sexpr_list.clear(); }
   unsigned int token; // If zero, then an sexpr list
   std::list<sexpr> sexpr_list;
   std::string data; // Text rep of parsed token.
@@ -36,8 +36,8 @@ class smtlib_smt_ast : public smt_ast {
 public:
   smtlib_smt_ast(smt_convt *ctx, const smt_sort *s, smt_func_kind k)
     : smt_ast(ctx, s), kind(k) { }
-  ~smtlib_smt_ast() { }
-  virtual void dump() const { abort(); }
+  ~smtlib_smt_ast() override = default;
+  void dump() const override { abort(); }
 
   smt_func_kind kind;
   std::string symname;
@@ -55,46 +55,58 @@ class smtlib_convt : public smt_convt, public array_iface, public fp_convt
 public:
   smtlib_convt(bool int_encoding, const namespacet &_ns,
                const optionst &_options);
-  ~smtlib_convt();
+  ~smtlib_convt() override;
 
-  virtual resultt dec_solve();
-  virtual const std::string solver_text();
+  resultt dec_solve() override;
+  const std::string solver_text() override;
 
-  virtual void assert_ast(const smt_ast *a);
-  virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
-                               const smt_ast * const *args,
-                               unsigned int numargs);
-  virtual smt_sortt mk_sort(const smt_sort_kind k, ...);
-  virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign);
-  virtual smt_ast *mk_smt_real(const std::string &str);
-  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
-                                unsigned int w);
-  virtual smt_ast *mk_smt_bool(bool val);
-  virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);
-  virtual smt_ast *mk_array_symbol(const std::string &name, const smt_sort *s,
-                                   smt_sortt array_subtype);
-  virtual smt_sort *mk_struct_sort(const type2tc &type);
-  virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
-                              unsigned int low, const smt_sort *s);
+  void assert_ast(const smt_ast *a) override;
+  smt_ast *mk_func_app(
+    const smt_sort *s, 
+    smt_func_kind k,
+    const smt_ast * const *args,
+    unsigned int numargs) override;
+  smt_sort *mk_sort(const smt_sort_kind k, ...) override;
+  smt_ast *mk_smt_int(const mp_integer &theint, bool sign) override;
+  smt_ast *mk_smt_real(const std::string &str) override;
+  smt_ast *mk_smt_bvint(
+    const mp_integer &theint,
+    bool sign,
+    unsigned int w) override;
+  smt_ast *mk_smt_bool(bool val) override;
+  smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_ast *mk_array_symbol(
+    const std::string &name,
+    const smt_sort *s,
+    smt_sortt array_subtype) override;
+  smt_sort *mk_struct_sort(const type2tc &type);
+  smt_ast *mk_extract(
+    const smt_ast *a,
+    unsigned int high,
+    unsigned int low,
+    const smt_sort *s) override;
 
-  virtual void add_array_constraints_for_solving();
+  void add_array_constraints_for_solving() override;
 
-  const smt_ast *convert_array_of(smt_astt init_val,
-                                  unsigned long domain_width);
-  void push_array_ctx(void);
-  void pop_array_ctx(void);
+  const smt_ast *convert_array_of(
+    smt_astt init_val,
+    unsigned long domain_width) override;
+  void push_array_ctx() override;
+  void pop_array_ctx() override;
 
-  virtual expr2tc get_bool(const smt_ast *a);
-  virtual expr2tc get_bv(const type2tc &type, smt_astt a);
-  virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
-                                 const type2tc &type);
+  expr2tc get_bool(const smt_ast *a) override;
+  expr2tc get_bv(const type2tc &type, smt_astt a) override;
+  expr2tc get_array_elem(
+    const smt_ast *array,
+    uint64_t index,
+    const type2tc &type) override;
 
   std::string sort_to_string(const smt_sort *s) const;
   unsigned int emit_terminal_ast(const smtlib_smt_ast *a, std::string &output);
   unsigned int emit_ast(const smtlib_smt_ast *ast, std::string &output);
 
-  void push_ctx();
-  void pop_ctx();
+  void push_ctx() override;
+  void pop_ctx() override;
 
   // Members
   const optionst &options;

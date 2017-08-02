@@ -11,9 +11,8 @@
 class dcutil {
 public:
 
-	dcutil();
-
-	virtual ~dcutil();
+	dcutil() = default;
+	virtual ~dcutil() = default;
 
 	/**
 	 * Method to generate delta binomial.

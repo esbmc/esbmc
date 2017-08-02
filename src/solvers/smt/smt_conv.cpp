@@ -12,13 +12,13 @@
 // Helpers extracted from z3_convt.
 
 static std::string
-extract_magnitude(std::string v, unsigned width)
+extract_magnitude(const std::string& v, unsigned width)
 {
     return integer2string(binary2integer(v.substr(0, width / 2), true), 10);
 }
 
 static std::string
-extract_fraction(std::string v, unsigned width)
+extract_fraction(const std::string& v, unsigned width)
 {
     return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
 }
@@ -65,36 +65,36 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 }
 
 smt_convt::smt_convt(bool intmode, const namespacet &_ns)
-  : ctx_level(0), boolean_sort(NULL), int_encoding(intmode), ns(_ns)
+  : ctx_level(0), boolean_sort(nullptr), int_encoding(intmode), ns(_ns)
 {
-  tuple_api = NULL;
-  array_api = NULL;
-  fp_api = NULL;
+  tuple_api = nullptr;
+  array_api = nullptr;
+  fp_api = nullptr;
 
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
-  names.push_back(irep_idt("pointer_object"));
-  names.push_back(irep_idt("pointer_offset"));
+  names.emplace_back("pointer_object");
+  names.emplace_back("pointer_offset");
 
   struct_type2t *tmp = new struct_type2t(members, names, names, "pointer_struct");
   pointer_type_data = tmp;
   pointer_struct = type2tc(tmp);
 
-  pointer_logic.push_back(pointer_logict());
+  pointer_logic.emplace_back();
 
   addr_space_sym_num.push_back(0);
 
-  renumber_map.push_back(renumber_mapt());
+  renumber_map.emplace_back();
 
   members.clear();
   names.clear();
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
-  names.push_back(irep_idt("start"));
-  names.push_back(irep_idt("end"));
+  names.emplace_back("start");
+  names.emplace_back("end");
   tmp = new struct_type2t(members, names, names, "addr_space_type");
   addr_space_type_data = tmp;
   addr_space_type = type2tc(tmp);
@@ -102,7 +102,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   addr_space_arr_type = type2tc(new array_type2t(addr_space_type,
                                                  expr2tc(), true)) ;
 
-  addr_space_data.push_back(std::map<unsigned, unsigned>());
+  addr_space_data.emplace_back();
 
   machine_int = type2tc(new signedbv_type2t(config.ansi_c.int_width));
   machine_uint = type2tc(new unsignedbv_type2t(config.ansi_c.int_width));
@@ -118,21 +118,17 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   ptr_foo_inited = false;
 }
 
-smt_convt::~smt_convt(void)
-{
-}
-
 void
 smt_convt::set_tuple_iface(tuple_iface *iface)
 {
-  assert(tuple_api == NULL && "set_tuple_iface should only be called once");
+  assert(tuple_api == nullptr && "set_tuple_iface should only be called once");
   tuple_api = iface;
 }
 
 void
 smt_convt::set_array_iface(array_iface *iface)
 {
-  assert(array_api == NULL && "set_array_iface should only be called once");
+  assert(array_api == nullptr && "set_array_iface should only be called once");
   array_api = iface;
 }
 
@@ -154,7 +150,7 @@ smt_convt::delete_all_asts()
 }
 
 void
-smt_convt::smt_post_init(void)
+smt_convt::smt_post_init()
 {
   if (int_encoding) {
     machine_int_sort = mk_sort(SMT_SORT_INT, false);
@@ -187,7 +183,7 @@ smt_convt::smt_post_init(void)
 }
 
 void
-smt_convt::push_ctx(void)
+smt_convt::push_ctx()
 {
   tuple_api->push_tuple_ctx();
   array_api->push_array_ctx();
@@ -203,7 +199,7 @@ smt_convt::push_ctx(void)
 }
 
 void
-smt_convt::pop_ctx(void)
+smt_convt::pop_ctx()
 {
 
   // Erase everything in caches added in the current context level. Everything
@@ -234,7 +230,7 @@ smt_astt
 smt_convt::make_disjunct(const ast_vec &v)
 {
   smt_astt args[v.size()];
-  smt_astt result = NULL;
+  smt_astt result = nullptr;
   unsigned int i = 0;
 
   // This is always true.
@@ -1214,7 +1210,6 @@ void
 smt_convt::assert_expr(const expr2tc &e)
 {
   assert_ast(convert_ast(e));
-  return;
 }
 
 smt_sortt
@@ -1226,7 +1221,7 @@ smt_convt::convert_sort(const type2tc &type)
     return it->second;
   }
 
-  smt_sortt result = NULL;
+  smt_sortt result = nullptr;
   switch (type->type_id) {
   case type2t::bool_id:
     result = boolean_sort;
@@ -1325,7 +1320,7 @@ smt_convt::convert_sort(const type2tc &type)
 }
 
 static std::string
-fixed_point(std::string v, unsigned width)
+fixed_point(const std::string& v, unsigned width)
 {
   const int precision = 1000000;
   std::string i, f, b, result;
@@ -1388,8 +1383,8 @@ smt_convt::convert_terminal(const expr2tc &expr)
 
       m = extract_magnitude(theval, bitwidth);
       f = extract_fraction(theval, bitwidth);
-      magnitude = strtoll(m.c_str(), NULL, 10);
-      fraction = strtoll(f.c_str(), NULL, 10);
+      magnitude = strtoll(m.c_str(), nullptr, 10);
+      fraction = strtoll(f.c_str(), nullptr, 10);
 
       magnitude <<= (bitwidth / 2);
       fin = magnitude | fraction;
@@ -1484,7 +1479,7 @@ smt_convt::mk_fresh(smt_sortt s, const std::string &tag,
   if (s->id == SMT_SORT_UNION || s->id == SMT_SORT_STRUCT) {
     return tuple_api->mk_tuple_symbol(newname, s);
   } else if (s->id == SMT_SORT_ARRAY) {
-    assert(array_subtype != NULL && "Must call mk_fresh for arrays with a subtype");
+    assert(array_subtype != nullptr && "Must call mk_fresh for arrays with a subtype");
     return array_api->mk_array_symbol(newname, s, array_subtype);
   } else {
     return mk_smt_symbol(newname, s);
@@ -1898,6 +1893,26 @@ smt_convt::array_domain_to_width(const type2tc &type)
   return constant_int2tc(index_type2(), BigInt(sz));
 }
 
+static expr2tc
+gen_additions(const type2tc &type, std::vector<expr2tc> &exprs)
+{
+  // Reached end of recursion
+  if(exprs.size() == 2)
+    return add2tc(type, exprs[0], exprs[1]);
+
+  // Remove last two exprs
+  expr2tc side1 = exprs.back();
+  exprs.pop_back();
+
+  expr2tc side2 = exprs.back();
+  exprs.pop_back();
+
+  // Add them together, push back to the vector and recurse
+  exprs.push_back(add2tc(type, side1, side2));
+
+  return gen_additions(type, exprs);
+}
+
 expr2tc
 smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 {
@@ -1915,20 +1930,31 @@ smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 
   // Rewrite the store chain as additions and multiplications
   idx = expr;
-  expr2tc output = typecast2tc(subtype, idx->index);
+
+  // Multiplications will hold of the mult2tc terms, we have to
+  // add them together in the end
+  std::vector<expr2tc> multiplications;
+  multiplications.push_back(typecast2tc(subtype, idx->index));
+
   while (is_index2t(idx->source_value))
   {
     idx = idx->source_value;
 
     type2tc t = flatten_array_type(idx->type);
-    output = add2tc(
-      subtype,
+    assert(is_array_type(t));
+
+    multiplications.push_back(
       mul2tc(
         subtype,
         typecast2tc(subtype, to_array_type(t).array_size),
-        typecast2tc(subtype, idx->index)),
-      output);
+        typecast2tc(subtype, idx->index)));
   }
+
+  // We should only enter this method when handling multidimensional arrays
+  assert(multiplications.size() != 1);
+
+  // Add them together
+  expr2tc output = gen_additions(subtype, multiplications);
 
   // Try to simplify the expression
   simplify(output);
@@ -1940,7 +1966,7 @@ smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 }
 
 expr2tc
-smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
+smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &update_val)
 {
   with2tc with = expr;
 
@@ -1951,43 +1977,42 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
     make_array_domain_sort_exp(
       to_array_type(flatten_array_type(with->source_value->type)));
 
-  // Rewrite the store chain as multiplications and additions
-  // TODO: this is a mess, improve it
-  expr2tc output;
-  if(is_with2t(with->update_value))
+  // Multiplications will hold of the mult2tc terms, we have to
+  // add them together in the end
+  std::vector<expr2tc> multiplications;
+
+  assert(is_array_type(with->update_value));
+  multiplications.push_back(
+    mul2tc(
+      subtype,
+      typecast2tc(subtype,
+        to_array_type(flatten_array_type(with->update_value->type)).array_size),
+      typecast2tc(subtype, with->update_field)));
+
+  while (is_with2t(with->update_value) && is_array_type(with->update_value))
   {
-    std::vector<expr2tc> multiplications;
+    with = with->update_value;
 
-    // Multiply all indexes by the next dimension's flatten type
-    while (is_with2t(with->update_value))
-    {
-      type2tc t = flatten_array_type(with->update_value->type);
+    type2tc t = flatten_array_type(with->update_value->type);
 
-      expr2tc mult =
-        mul2tc(
-          subtype,
-          typecast2tc(subtype, to_array_type(t).array_size),
-          typecast2tc(subtype, with->update_field));
-
-      multiplications.push_back(mult);
-
-      with = with->update_value;
-    }
-
-    // Add them together
-    output = typecast2tc(subtype, with->update_field);
-    while(multiplications.size())
-    {
-      output = add2tc(subtype, output, multiplications.back());
-      multiplications.pop_back();
-    }
+    multiplications.push_back(
+      mul2tc(
+        subtype,
+        typecast2tc(subtype, to_array_type(t).array_size),
+        typecast2tc(subtype, with->update_field)));
   }
+
+  // We should only enter this method when handling multidimensional arrays
+  assert(multiplications.size() != 1);
+
+  // Add them together
+  expr2tc output = gen_additions(subtype, multiplications);
 
   // Try to simplify the expression
   simplify(output);
 
-  // Give the caller the actual value we're updating with.
-  base = with->update_value;
+  // Fix base expr
+  update_val = with->update_value;
   return output;
 }
 
@@ -2030,8 +2055,7 @@ smt_convt::convert_array_store(const expr2tc &expr)
   expr2tc newidx;
 
   if (is_array_type(with.type) &&
-      is_array_type(to_array_type(with.type).subtype) &&
-      is_with2t(with.update_value)) {
+      is_array_type(to_array_type(with.type).subtype)) {
     newidx = decompose_store_chain(expr, update_val);
   } else {
     newidx = fix_array_idx(with.update_field, with.type);
@@ -2056,6 +2080,10 @@ smt_convt::convert_array_store(const expr2tc &expr)
 type2tc
 smt_convt::flatten_array_type(const type2tc &type)
 {
+  // If this is not an array, we return an array of size 1
+  if (!is_array_type(type))
+    return array_type2tc(type, gen_one(int_type2()), false);
+
   // Don't touch these
   if (to_array_type(type).size_is_infinite)
     return type;
@@ -2065,20 +2093,25 @@ smt_convt::flatten_array_type(const type2tc &type)
     return type;
 
   type2tc subtype = get_flattened_array_subtype(type);
+  assert(is_array_type(to_array_type(type).subtype));
 
-  unsigned long arr_size = 1;
-  // Otherwise, accumulate sufficient domain bits to represent all dimensions
-  // of the given array, in one dimension.
   type2tc type_rec = type;
-  while (is_array_type(type_rec))
+  expr2tc arr_size1 = to_array_type(type_rec).array_size;
+
+  type_rec = to_array_type(type_rec).subtype;
+  expr2tc arr_size2 = to_array_type(type_rec).array_size;
+
+  assert(arr_size1->type == arr_size2->type);
+
+  expr2tc arr_size = mul2tc(arr_size1->type, arr_size1, arr_size2);
+
+  while (is_array_type(to_array_type(type_rec).subtype))
   {
-    arr_size *= to_constant_int2t(to_array_type(type_rec).array_size).value.to_long();
+    arr_size = mul2tc(arr_size1->type, to_array_type(type_rec).array_size, arr_size);
     type_rec = to_array_type(type_rec).subtype;
   }
-
-  // type_rec is now the base type.
-  constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
-  return array_type2tc(subtype, arr_size_expr, false);
+  simplify(arr_size);
+  return array_type2tc(subtype, arr_size, false);
 }
 
 expr2tc
@@ -2263,7 +2296,6 @@ smt_convt::pre_solve()
   // the array api class.
   tuple_api->add_tuple_constraints_for_solving();
   array_api->add_array_constraints_for_solving();
-  return;
 }
 
 expr2tc
@@ -2559,7 +2591,7 @@ smt_convt::rewrite_ptrs_to_structs(type2tc &type)
   // Create a delegate that recurses over all subtypes, replacing pointers
   // as we go. Extra scaffolding is to work around the fact we can't refer
   // to replace_w_ptr until after it's been defined, ho hum.
-  type2t::subtype_delegate *delegate = NULL;
+  type2t::subtype_delegate *delegate = nullptr;
   auto replace_w_ptr = [this, &delegate](type2tc &e) {
     if (is_pointer_type(e)) {
       // Replace this field of the expr with a pointer struct :O:O:O:O
@@ -2573,8 +2605,6 @@ smt_convt::rewrite_ptrs_to_structs(type2tc &type)
   type2t::subtype_delegate del_wrap(std::ref(replace_w_ptr));
   delegate = &del_wrap;
   type.get()->Foreach_subtype(replace_w_ptr);
-
-  return;
 }
 
 // Default behaviours for SMT AST's
@@ -2628,7 +2658,7 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 
   // Just apply a select operation to the current array. Index should be fixed.
   // Guess the resulting sort. This could be a lot, lot better.
-  smt_sortt range_sort = NULL;
+  smt_sortt range_sort = nullptr;
   if (sort->get_data_width() == 1 && ctx->array_api->supports_bools_in_arrays)
     range_sort = ctx->boolean_sort;
   else

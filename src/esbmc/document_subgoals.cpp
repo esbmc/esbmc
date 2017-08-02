@@ -19,18 +19,6 @@ struct linet
   int line_number;
 };
 
-/*******************************************************************\
-
-Function: strip_space
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void strip_space(std::list<linet> &lines)
 {
   unsigned strip=50;
@@ -48,62 +36,37 @@ void strip_space(std::list<linet> &lines)
 
   if(strip!=0)
   {
-    for(std::list<linet>::iterator it=lines.begin();
-        it!=lines.end(); it++)
+    for(auto & line : lines)
     {
-      if(it->text.size()>=strip)
-        it->text=std::string(it->text, strip, std::string::npos);
+      if(line.text.size()>=strip)
+        line.text=std::string(line.text, strip, std::string::npos);
 
-      if(it->text.size()>=MAXWIDTH)
-        it->text=std::string(it->text, 0, MAXWIDTH);
+      if(line.text.size()>=MAXWIDTH)
+        line.text=std::string(line.text, 0, MAXWIDTH);
     }
   }
 }
-
-/*******************************************************************\
-
-Function: escape_latex
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string escape_latex(const std::string &s, bool alltt)
 {
   std::string dest;
 
-  for(unsigned i=0; i<s.size(); i++)
+  for(char i : s)
   {
-    if(s[i]=='\\' || s[i]=='{' || s[i]=='}')
+    if(i=='\\' || i=='{' || i=='}')
       dest+="\\";
 
     if(!alltt &&
-       (s[i]=='_' || s[i]=='$' || s[i]=='~' ||
-        s[i]=='^' || s[i]=='%' || s[i]=='#' ||
-        s[i]=='&'))
+       (i=='_' || i=='$' || i=='~' ||
+        i=='^' || i=='%' || i=='#' ||
+        i=='&'))
       dest+="\\";
 
-    dest+=s[i];
+    dest+=i;
   }
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: emphasize
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string emphasize(const std::string &s)
 {
@@ -138,38 +101,14 @@ std::string emphasize(const std::string &s)
   #endif
 }
 
-/*******************************************************************\
-
-Function: is_empty
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool is_empty_str(const std::string &s)
 {
-  for(unsigned i=0; i<s.size(); i++)
-    if(isgraph(s[i]))
+  for(char i : s)
+    if(isgraph(i))
       return false;
 
   return true;
 }
-
-/*******************************************************************\
-
-Function: get_code
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void get_code(const irept &location, std::string &dest)
 {
@@ -205,7 +144,7 @@ void get_code(const irept &location, std::string &dest)
 
   for(int l=line_start; l<=line_end && in; l++)
   {
-    lines.push_back(linet());
+    lines.emplace_back();
 
     std::string &line=lines.back().text;
     std::getline(in, line);
@@ -243,34 +182,21 @@ void get_code(const irept &location, std::string &dest)
 
   // build dest
 
-  for(std::list<linet>::iterator it=lines.begin();
-      it!=lines.end(); it++)
+  for(auto & line : lines)
   {
-    std::string line_no=i2string(it->line_number);
+    std::string line_no=i2string(line.line_number);
 
     while(line_no.size()<4)
       line_no=" "+line_no;
 
-    std::string tmp=line_no+"  "+escape_latex(it->text, true);
+    std::string tmp=line_no+"  "+escape_latex(line.text, true);
 
-    if(it->line_number==line_int)
+    if(line.line_number==line_int)
       tmp=emphasize(tmp);
 
     dest+=tmp+"\n";
   }
 }
-
-/*******************************************************************\
-
-Function: symex_bmct::document_subgoals
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 struct doc_claimt
 {
@@ -284,19 +210,16 @@ void document_subgoals(
   typedef std::map<irept, doc_claimt> claim_sett;
   claim_sett claim_set;
 
-  for(symex_target_equationt::SSA_stepst::const_iterator
-      it=equation.SSA_steps.begin();
-      it!=equation.SSA_steps.end();
-      it++)
-    if(it->is_assert())
+  for(const auto & SSA_step : equation.SSA_steps)
+    if(SSA_step.is_assert())
     {
       locationt new_location;
 
-      new_location.file(it->source.pc->location.file());
-      new_location.line(it->source.pc->location.line());
-      new_location.function(it->source.pc->location.function());
+      new_location.file(SSA_step.source.pc->location.file());
+      new_location.line(SSA_step.source.pc->location.line());
+      new_location.function(SSA_step.source.pc->location.function());
 
-      claim_set[new_location].comment_set.insert(it->comment);
+      claim_set[new_location].comment_set.insert(SSA_step.comment);
     }
 
   for(claim_sett::const_iterator it=claim_set.begin();
@@ -315,11 +238,8 @@ void document_subgoals(
 
     out << std::endl;
 
-    for(std::set<std::string>::const_iterator
-        s_it=it->second.comment_set.begin();
-        s_it!=it->second.comment_set.end();
-        s_it++)
-      out << "\\claim{" << escape_latex(*s_it, false)
+    for(const auto & s_it : it->second.comment_set)
+      out << "\\claim{" << escape_latex(s_it, false)
           << "}" << std::endl;
 
     out << std::endl;

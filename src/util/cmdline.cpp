@@ -13,10 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 std::string verification_file;
 
-cmdlinet::cmdlinet()
-{
-}
-
 cmdlinet::~cmdlinet()
 {
   clear();
@@ -51,8 +47,8 @@ const char *cmdlinet::getval(char option) const
   int i;
 
   i=getoptnr(option);
-  if(i<0) return (const char *)NULL;
-  if(options[i].values.empty()) return (const char *)NULL;
+  if(i<0) return (const char *)nullptr;
+  if(options[i].values.empty()) return (const char *)nullptr;
   return options[i].values.front().c_str();
 }
 
@@ -70,8 +66,8 @@ const char *cmdlinet::getval(const char *option) const
   int i;
 
   i=getoptnr(option);
-  if(i<0) return (const char *)NULL;
-  if(options[i].values.empty()) return (const char *)NULL;
+  if(i<0) return (const char *)nullptr;
+  if(options[i].values.empty()) return (const char *)nullptr;
   return options[i].values.front().c_str();
 }
 
@@ -134,7 +130,7 @@ bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
   {
     if(argv[i][0]!='-')
     {
-      args.push_back(argv[i]);
+      args.emplace_back(argv[i]);
       verification_file = argv[i];
     }
     else
@@ -160,10 +156,10 @@ bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
           i++;
           if(i==argc) return true;
           if(argv[i][0]=='-') return true;
-          options[optnr].values.push_back(argv[i]);
+          options[optnr].values.emplace_back(argv[i]);
         }
         else
-          options[optnr].values.push_back(argv[i]+2);
+          options[optnr].values.emplace_back(argv[i]+2);
       }
     }
   }

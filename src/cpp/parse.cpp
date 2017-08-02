@@ -563,7 +563,7 @@ bool Parser::rNamespaceSpec(cpp_namespace_spect &namespace_spec)
     return rName(namespace_spec.alias());
 
   default:
-    namespace_spec.items().push_back(cpp_itemt());
+    namespace_spec.items().emplace_back();
     return rDefinition(namespace_spec.items().back());
   }
 
@@ -1264,9 +1264,9 @@ bool Parser::rOtherDeclaration(
 
     assert(!type_name.get_sub().empty());
 
-    for(unsigned i=0; i < type_name.get_sub().size(); i++)
+    for(auto & i : type_name.get_sub())
     {
-      if(type_name.get_sub()[i].id() == "operator")
+      if(i.id() == "operator")
       {
         is_operator = true;
         break;
@@ -2305,7 +2305,7 @@ bool Parser::optPtrOperator(typet &ptrs)
       optCvQualify(cv);
       op.add("#qualifier").swap(cv);
 
-      t_list.push_back(typet());
+      t_list.emplace_back();
       t_list.back().swap(op);
     }
   }
@@ -2470,7 +2470,7 @@ bool Parser::rName(irept &name)
         if(!rTemplateArgs(args))
           return false;
 
-        components.push_back(irept("template_args"));
+        components.emplace_back("template_args");
         components.back().add("arguments").swap(args);
 
         // done unless scope is next
@@ -2480,7 +2480,7 @@ bool Parser::rName(irept &name)
 
     case TOK_IDENTIFIER:
       lex->GetToken(tk);
-      components.push_back(irept("name"));
+      components.emplace_back("name");
       components.back().identifier(tk.text);
       set_location(components.back(), tk);
 
@@ -2493,7 +2493,7 @@ bool Parser::rName(irept &name)
 
     case TOK_SCOPE:
       lex->GetToken(tk);
-      components.push_back(irept("::"));
+      components.emplace_back("::");
       set_location(components.back(), tk);
       break;
 
@@ -2504,17 +2504,17 @@ bool Parser::rName(irept &name)
       if(lex->LookAhead(0)!=TOK_IDENTIFIER)
         return false;
 
-      components.push_back(irept("~"));
+      components.emplace_back("~");
       set_location(components.back(), tk);
       break;
 
     case TOK_OPERATOR:
       lex->GetToken(tk);
       {
-        components.push_back(irept("operator"));
+        components.emplace_back("operator");
         set_location(components.back(), tk);
 
-        components.push_back(irept());
+        components.emplace_back();
 
         if(!rOperatorName(components.back()))
           return false;
@@ -2713,7 +2713,7 @@ bool Parser::rPtrToMember(irept &ptr_to_mem)
         if(!rTemplateArgs(args))
           return false;
 
-        components.push_back(irept("template_args"));
+        components.emplace_back("template_args");
         components.back().add("arguments").swap(args);
 
         if(lex->LookAhead(0)!=TOK_SCOPE) return false;
@@ -2722,7 +2722,7 @@ bool Parser::rPtrToMember(irept &ptr_to_mem)
 
     case TOK_IDENTIFIER:
       lex->GetToken(tk);
-      components.push_back(irept("name"));
+      components.emplace_back("name");
       components.back().identifier(tk.text);
       set_location(components.back(), tk);
 
@@ -2734,7 +2734,7 @@ bool Parser::rPtrToMember(irept &ptr_to_mem)
 
     case TOK_SCOPE:
       lex->GetToken(tk);
-      components.push_back(irept("::"));
+      components.emplace_back("::");
       set_location(components.back(), tk);
 
       // done if next token is '*'
@@ -2850,7 +2850,7 @@ bool Parser::rTemplateArgs(irept &template_args)
     std::cout << "Parser::rTemplateArgs 6\n";
     #endif
 
-    template_args.get_sub().push_back(irept(irep_idt()));
+    template_args.get_sub().emplace_back(irep_idt());
     template_args.get_sub().back().swap(exp);
 
     Token tk2;
@@ -2948,14 +2948,14 @@ bool Parser::rArgDeclList(irept &arglist)
       Token tk;
       lex->GetToken(tk);
       arglist.swap(list);
-      arglist.get_sub().push_back(irept("ellipsis"));
+      arglist.get_sub().emplace_back("ellipsis");
       break;
     }
     else if(rArgDeclaration(declaration))
     {
       Token tk;
 
-      list.get_sub().push_back(irept(irep_idt()));
+      list.get_sub().emplace_back(irep_idt());
       list.get_sub().back().swap(declaration);
       t=lex->LookAhead(0);
       if(t==',')
@@ -3195,7 +3195,7 @@ bool Parser::rEnumBody(irept &body)
     if(lex->GetToken(tk)!=TOK_IDENTIFIER)
       return false;
 
-    body.get_sub().push_back(irept());
+    body.get_sub().emplace_back();
     irept &n=body.get_sub().back();
     set_location(n, tk);
     n.name(tk.text);
@@ -3388,7 +3388,7 @@ bool Parser::rBaseSpecifiers(irept &bases)
     if(!rName(base.add("name")))
       return false;
 
-    bases.get_sub().push_back(irept());
+    bases.get_sub().emplace_back();
     bases.get_sub().back().swap(base);
 
     if(lex->LookAhead(0)!=',')
@@ -5324,7 +5324,7 @@ bool Parser::rVarNameCore(exprt &name)
       #endif
 
       lex->GetToken(tk);
-      components.push_back(irept("name"));
+      components.emplace_back("name");
       components.back().identifier(tk.text);
       set_location(components.back(), tk);
 
@@ -5339,7 +5339,7 @@ bool Parser::rVarNameCore(exprt &name)
         if(!rTemplateArgs(args))
           return false;
 
-        components.push_back(irept("template_args"));
+        components.emplace_back("template_args");
         components.back().add("arguments").swap(args);
       }
 
@@ -5352,7 +5352,7 @@ bool Parser::rVarNameCore(exprt &name)
       #endif
 
       lex->GetToken(tk);
-      components.push_back(irept("::"));
+      components.emplace_back("::");
       set_location(components.back(), tk);
       break;
 
@@ -5366,7 +5366,7 @@ bool Parser::rVarNameCore(exprt &name)
       if(lex->LookAhead(0)!=TOK_IDENTIFIER)
         return false;
 
-      components.push_back(irept("~"));
+      components.emplace_back("~");
       set_location(components.back(), tk);
       break;
 
@@ -5377,7 +5377,7 @@ bool Parser::rVarNameCore(exprt &name)
 
       lex->GetToken(tk);
 
-      components.push_back(irept("operator"));
+      components.emplace_back("operator");
       set_location(components.back(), tk);
 
       {
@@ -6638,18 +6638,6 @@ void Parser::SkipTo(int token)
   }
 }
 
-/*******************************************************************\
-
-Function: Parser::parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool Parser::parse()
 {
   number_of_errors=0;
@@ -6658,24 +6646,12 @@ bool Parser::parse()
 
   while(rProgram(item))
   {
-    parser->parse_tree.items.push_back(cpp_itemt());
+    parser->parse_tree.items.emplace_back();
     parser->parse_tree.items.back().swap(item);
   }
 
   return number_of_errors!=0;
 }
-
-/*******************************************************************\
-
-Function: cpp_parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_parse()
 {

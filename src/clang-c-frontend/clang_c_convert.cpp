@@ -6,7 +6,7 @@
  */
 
 #include <clang/AST/Attr.h>
-#include <ansi-c/type2name.h>
+#include <clang/Tooling/Core/QualTypeNames.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -92,10 +92,6 @@ bool clang_c_convertert::get_decl(
     // Label declaration
     case clang::Decl::Label:
     {
-      std::cerr << "ESBMC does not support label declaration"
-                << std::endl;
-      return true;
-
       const clang::LabelDecl &ld =
         static_cast<const clang::LabelDecl&>(decl);
 
@@ -371,16 +367,18 @@ bool clang_c_convertert::get_var(
     return true;
 
   // Check if we annotated it to be have an infinity size
-  for(auto const &attr : vd.getAttrs())
+  if(vd.hasAttrs())
   {
-    if (!llvm::isa<clang::AnnotateAttr>(attr))
-      continue;
-
-    const auto *a = llvm::cast<clang::AnnotateAttr>(attr);
-    if(a->getAnnotation().str() == "__ESBMC_inf_size")
+    for(auto const &attr : vd.getAttrs())
     {
-      assert(t.is_array());
-      t.size(exprt("infinity", uint_type()));
+      if(const auto *a = llvm::dyn_cast<clang::AnnotateAttr>(attr))
+      {
+        if(a->getAnnotation().str() == "__ESBMC_inf_size")
+        {
+          assert(t.is_array());
+          t.size(exprt("infinity", uint_type()));
+        }
+      }
     }
   }
 
@@ -424,13 +422,10 @@ bool clang_c_convertert::get_var(
   // We have to add the symbol before converting the initial assignment
   // because we might have something like 'int x = x + 1;' which is
   // completely wrong but allowed by the language
-  move_symbol_to_context(symbol);
-
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
 
   code_declt decl;
-  decl.operands().push_back(symbol_expr(added_symbol));
+  decl.operands().push_back(symbol_exprt(identifier, t));
 
   if(vd.hasInit())
   {
@@ -513,10 +508,7 @@ bool clang_c_convertert::get_function(
                      || fd.getStorageClass() == clang::SC_PrivateExtern;
   symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
-  move_symbol_to_context(symbol);
-
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
@@ -585,6 +577,14 @@ bool clang_c_convertert::get_function_params(
   std::string pretty_name;
   get_function_param_name(pdecl, pretty_name);
 
+  param.cmt_identifier(pretty_name);
+  param.location() = location_begin;
+
+  // TODO: we can remove the following code once irep1 is dead, there
+  // is no need to add the function argument to the symbol table,
+  // as nothing relies on it. However, if we remove this now, the migrate
+  // code will wrongly assume the symbol to be level1, as it generates
+  // level0 symbol only if they are already on the context
   symbolt param_symbol;
   get_default_symbol(
     param_symbol,
@@ -598,9 +598,6 @@ bool clang_c_convertert::get_function_params(
   param_symbol.lvalue = true;
   param_symbol.is_parameter = true;
   param_symbol.file_local = true;
-
-  param.cmt_identifier(param_symbol.name.as_string());
-  param.location() = param_symbol.location;
 
   // Save the function's param address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(pdecl.getFirstDecl());
@@ -794,7 +791,7 @@ bool clang_c_convertert::get_type(
         if(get_type(ptype, param_type))
           return true;
 
-        type.arguments().push_back(param_type);
+        type.arguments().emplace_back(param_type);
       }
 
       // Apparently, if the type has no arguments, we assume ellipsis
@@ -1256,7 +1253,7 @@ bool clang_c_convertert::get_expr(
       if(unary.getKind() == clang::UETT_AlignOf)
       {
         llvm::APSInt val;
-        if(unary.EvaluateAsInt(val, *ASTContext))
+        if(!unary.EvaluateAsInt(val, *ASTContext))
           return true;
 
         new_expr =
@@ -1357,11 +1354,6 @@ bool clang_c_convertert::get_expr(
 
     case clang::Stmt::AddrLabelExprClass:
     {
-      std::cerr << "ESBMC currently does not support label as values"
-                << std::endl;
-      stmt.dumpColor();
-      return true;
-
       const clang::AddrLabelExpr &addrlabelExpr =
         static_cast<const clang::AddrLabelExpr &>(stmt);
 
@@ -1601,13 +1593,10 @@ bool clang_c_convertert::get_expr(
       const auto &declgroup = decl.getDeclGroup();
 
       codet decls("decl-block");
-      for (clang::DeclGroupRef::const_iterator
-        it = declgroup.begin();
-        it != declgroup.end();
-        ++it)
+      for (auto it : declgroup)
       {
         exprt single_decl;
-        if(get_decl(**it, single_decl))
+        if(get_decl(*it, single_decl))
           return true;
 
         decls.operands().push_back(single_decl);
@@ -1895,11 +1884,6 @@ bool clang_c_convertert::get_expr(
 
     case clang::Stmt::IndirectGotoStmtClass:
     {
-      std::cerr << "ESBMC currently does not support indirect gotos"
-                << std::endl;
-      stmt.dumpColor();
-      return true;
-
       const clang::IndirectGotoStmt &goto_stmt =
         static_cast<const clang::IndirectGotoStmt &>(stmt);
 
@@ -1914,6 +1898,11 @@ bool clang_c_convertert::get_expr(
       }
       else
       {
+        std::cerr << "ESBMC currently does not support indirect gotos"
+                  << std::endl;
+        stmt.dumpColor();
+        return true;
+
         exprt target;
         if(get_expr(*goto_stmt.getTarget(), target))
           return true;
@@ -2411,8 +2400,8 @@ void clang_c_convertert::get_default_symbol(
 {
   symbol.mode = "C";
   symbol.module = module_name;
-  symbol.location = location;
-  symbol.type = type;
+  symbol.location = std::move(location);
+  symbol.type = std::move(type);
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
   symbol.name = pretty_name;
@@ -2438,7 +2427,7 @@ void clang_c_convertert::get_field_name(
       t.width(width.cformat());
     }
 
-    name = type2name(t);
+    name = clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext);
     pretty_name = "anon";
   }
 }
@@ -2503,39 +2492,10 @@ bool clang_c_convertert::get_tag_name(
   const clang::RecordDecl& rd,
   std::string &name)
 {
-  name = rd.getName().str();
-  if(!name.empty())
-    return false;
-
-  // Try to get the name from typedef (if one exists)
-  if (const clang::TagDecl *tag = llvm::dyn_cast<clang::TagDecl>(&rd))
-  {
-    if (const clang::TypedefNameDecl *tnd = rd.getTypedefNameForAnonDecl())
-    {
-      name = tnd->getName().str();
-      return false;
-    }
-    else if (tag->getIdentifier())
-    {
-      name = tag->getName().str();
-      return false;
-    }
-  }
-
-  struct_union_typet t;
-  if(rd.isStruct())
-    t = struct_typet();
-  else if(rd.isUnion())
-    t = union_typet();
-  else
-    // This should never be reached
-    abort();
-
-  clang::RecordDecl *record_def = rd.getDefinition();
-  if(get_struct_union_class_fields(*record_def, t))
-    return true;
-
-  name = type2name(t);
+  name =
+    clang::TypeName::getFullyQualifiedName(
+      ASTContext->getTagDeclType(&rd),
+      *ASTContext);
   return false;
 }
 
@@ -2545,7 +2505,7 @@ void clang_c_convertert::get_start_location_from_stmt(
 {
   sm = &ASTContext->getSourceManager();
 
-  std::string function_name = "";
+  std::string function_name;
 
   if(current_functionDecl)
     function_name = current_functionDecl->getName().str();
@@ -2562,7 +2522,7 @@ void clang_c_convertert::get_final_location_from_stmt(
 {
   sm = &ASTContext->getSourceManager();
 
-  std::string function_name = "";
+  std::string function_name;
 
   if(current_functionDecl)
     function_name = current_functionDecl->getName().str();
@@ -2579,7 +2539,7 @@ void clang_c_convertert::get_location_from_decl(
 {
   sm = &ASTContext->getSourceManager();
 
-  std::string function_name = "";
+  std::string function_name;
 
   if(decl.getDeclContext()->isFunctionOrMethod())
   {
@@ -2641,13 +2601,13 @@ std::string clang_c_convertert::get_filename_from_path(std::string path)
   return path;
 }
 
-void clang_c_convertert::move_symbol_to_context(
+symbolt* clang_c_convertert::move_symbol_to_context(
   symbolt& symbol)
 {
   symbolt* s = context.find_symbol(symbol.name);
   if(s == nullptr)
   {
-    if (context.move(symbol))
+    if (context.move(symbol, s))
     {
       std::cerr << "Couldn't add symbol " << symbol.name
           << " to symbol table" << std::endl;
@@ -2657,8 +2617,23 @@ void clang_c_convertert::move_symbol_to_context(
   }
   else
   {
-    check_symbol_redefinition(*s, symbol);
+    // types that are code means functions
+    if(s->type.is_code())
+    {
+      if(symbol.value.is_not_nil() && !s->value.is_not_nil())
+        s->swap(symbol);
+    }
+    else if(s->is_type)
+    {
+      if(symbol.type.is_not_nil() && !s->type.is_not_nil())
+        s->swap(symbol);
+    }
+
+    // Update is_used
+    s->is_used |= symbol.is_used;
   }
+
+  return s;
 }
 
 void clang_c_convertert::dump_type_map()
@@ -2673,30 +2648,6 @@ void clang_c_convertert::dump_object_map()
   std::cout << "Object_map:" << std::endl;
   for (auto const &it : object_map)
     std::cout << it.first << ": " << it.second << std::endl;
-}
-
-void clang_c_convertert::check_symbol_redefinition(
-  symbolt& old_symbol,
-  symbolt& new_symbol)
-{
-  // types that are code means functions
-  if(old_symbol.type.is_code())
-  {
-    if(new_symbol.value.is_not_nil() && !old_symbol.value.is_not_nil())
-    {
-      old_symbol.swap(new_symbol);
-    }
-  }
-  else if(old_symbol.is_type)
-  {
-    if(new_symbol.type.is_not_nil() && !old_symbol.type.is_not_nil())
-    {
-      old_symbol.swap(new_symbol);
-    }
-  }
-
-  // Update is_used
-  old_symbol.is_used |= new_symbol.is_used;
 }
 
 void clang_c_convertert::convert_expression_to_code(exprt& expr)

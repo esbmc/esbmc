@@ -20,12 +20,8 @@ array_indexes_are_same(
   return true;
 }
 
-array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true),
-  array_indexes(), array_selects(), array_updates(), ctx(_ctx)
-{
-}
-
-array_convt::~array_convt()
+array_convt::array_convt(smt_convt *_ctx)
+ : array_iface(true, true), ctx(_ctx)
 {
 }
 
@@ -46,11 +42,10 @@ array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
   destination->array_fields = source->array_fields;
   destination->base_array_id = source->base_array_id;
   destination->array_update_num = source->array_update_num;
-  return;
 }
 
 unsigned int
-array_convt::new_array_id(void)
+array_convt::new_array_id()
 {
   unsigned int new_base_array_id = array_indexes.size();
 
@@ -86,8 +81,8 @@ array_convt::new_array_id(void)
 
   array_relations.push_back(touched);
 
-  array_valuation.push_back(array_update_vect());
-  array_valuation.back().push_back(ast_vect());
+  array_valuation.emplace_back();
+  array_valuation.back().emplace_back();
 
   return new_base_array_id;
 }
@@ -303,7 +298,7 @@ array_convt::mk_unbounded_store(const array_ast *ma,
   array_updates[ma->base_array_id].insert(w);
 
   // Add storage for the eventual collation of all these values
-  array_valuation[ma->base_array_id].push_back(ast_vect());
+  array_valuation[ma->base_array_id].emplace_back();
 
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
@@ -367,7 +362,7 @@ array_convt::unbounded_array_ite(smt_astt cond,
   array_updates[new_arr_id].insert(w);
 
   // Add storage for the eventual collation of all these values
-  array_valuation[new_arr_id].push_back(ast_vect());
+  array_valuation[new_arr_id].emplace_back();
 
   return newarr;
 }
@@ -505,7 +500,7 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
 }
 
 void
-array_convt::add_array_constraints_for_solving(void)
+array_convt::add_array_constraints_for_solving()
 {
 
   join_array_indexes();
@@ -513,12 +508,10 @@ array_convt::add_array_constraints_for_solving(void)
   execute_new_updates();
   apply_new_selects();
   add_array_equalities();
-
-  return;
 }
 
 void
-array_convt::push_array_ctx(void)
+array_convt::push_array_ctx()
 {
   // The most important factor in this process is to make sure that new indexes
   // in arrays are accounted for, as everything else is straightforwards. Thus,
@@ -548,7 +541,7 @@ array_convt::push_array_ctx(void)
 }
 
 void
-array_convt::pop_array_ctx(void)
+array_convt::pop_array_ctx()
 {
   // Order of service:
   //  * Erase old array IDs
@@ -721,7 +714,6 @@ array_convt::join_array_indexes()
   }
 
   // Le fin
-  return;
 }
 
 void
@@ -827,7 +819,7 @@ array_convt::add_new_indexes()
 }
 
 void
-array_convt::execute_new_updates(void)
+array_convt::execute_new_updates()
 {
   // Identify new array updates, and execute them.
 
@@ -864,7 +856,7 @@ array_convt::execute_new_updates(void)
 }
 
 void
-array_convt::apply_new_selects(void)
+array_convt::apply_new_selects()
 {
   // In the push context procedure, two kinds of new selects have already been
   // encoded. They're ones that either apply to a new index expr (through the
@@ -905,7 +897,7 @@ array_convt::apply_new_selects(void)
 }
 
 void
-array_convt::add_array_equalities(void)
+array_convt::add_array_equalities()
 {
   // Precondition: all constraints have already been added and constrained into
   // the array_valuation vectors. Also that the array ID's being used all share
@@ -981,7 +973,6 @@ array_convt::add_array_equality(unsigned int arr1_id, unsigned int arr2_id,
 
   smt_astt conj = ctx->make_conjunct(lits);
   ctx->assert_ast(result->eq(ctx, conj));
-  return;
 }
 
 void
@@ -1073,8 +1064,7 @@ array_convt::execute_array_update(ast_vect &dest_data,
     ctx->assert_ast(dest_data[it2.vec_idx]->eq(ctx, dest_ite));
   }
 
-  return;
-}
+  }
 
 void
 array_convt::execute_array_ite(ast_vect &dest,
@@ -1090,8 +1080,6 @@ array_convt::execute_array_ite(ast_vect &dest,
     smt_astt updated_elem = true_vals[i]->ite(ctx, cond, false_vals[i]);
     ctx->assert_ast(dest[i]->eq(ctx, updated_elem));
   }
-
-  return;
 }
 
 void
@@ -1134,8 +1122,6 @@ array_convt::execute_array_joining_ite(ast_vect &dest,
 
   execute_array_ite(dest, *true_vals, *false_vals, idx_map, cond,
       start_point);
-
-  return;
 }
 
 void
@@ -1157,7 +1143,7 @@ array_convt::collate_array_values(ast_vect &vals,
 
   // First, make everything null,
   for (unsigned int i = start_point; i < vals.size(); i++)
-    vals[i] = NULL;
+    vals[i] = nullptr;
 
   // Get the range of values with this update array num.
   array_select_containert &idxs = array_selects[base_array_id];
@@ -1176,11 +1162,11 @@ array_convt::collate_array_values(ast_vect &vals,
   }
 
   // Initialize everything else to either a free variable or the initial value.
-  if (init_val == NULL) {
+  if (init_val == nullptr) {
     // Free variables, except where free variables tied to selects have occurred
-    for (unsigned int vec_idx = 0; vec_idx < vals.size(); vec_idx++) {
-      if (vals[vec_idx] == NULL)
-        vals[vec_idx] = ctx->mk_fresh(subtype, "collate_array_vals::");
+    for (auto & val : vals) {
+      if (val == nullptr)
+        val = ctx->mk_fresh(subtype, "collate_array_vals::");
     }
   } else {
     // We need to assign the initial value in, except where there's already

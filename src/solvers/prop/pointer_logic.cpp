@@ -16,18 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-/*******************************************************************\
-
-Function: pointer_logict::add_object
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 unsigned pointer_logict::add_object(const expr2tc &expr)
 {
   // remove any index/member
@@ -54,18 +42,6 @@ unsigned pointer_logict::add_object(const expr2tc &expr)
   return objects.size() - 1 + obj_num_offset;
 }
 
-/*******************************************************************\
-
-Function: pointer_logict::pointer_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 expr2tc pointer_logict::pointer_expr(
   unsigned object,
   const type2tc &type) const
@@ -73,18 +49,6 @@ expr2tc pointer_logict::pointer_expr(
   pointert pointer(object, 0);
   return pointer_expr(pointer, type);
 }
-
-/*******************************************************************\
-
-Function: pointer_logict::pointer_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 expr2tc pointer_logict::pointer_expr(
   const pointert &pointer,
@@ -113,18 +77,6 @@ expr2tc pointer_logict::pointer_expr(
   assert(type->type_id == type2t::pointer_id);
   return address_of2tc(type, deep_object);
 }
-
-/*******************************************************************\
-
-Function: pointer_logict::object_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 expr2tc pointer_logict::object_rec(
   const mp_integer &offset,
@@ -194,18 +146,6 @@ expr2tc pointer_logict::object_rec(
   return src;
 }
 
-/*******************************************************************\
-
-Function: pointer_logict::pointer_logict
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 pointer_logict::pointer_logict()
 {
   obj_num_offset = 0;
@@ -222,18 +162,3 @@ pointer_logict::pointer_logict()
 
 }
 
-/*******************************************************************\
-
-Function: pointer_logict::~pointer_logict
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-pointer_logict::~pointer_logict()
-{
-}

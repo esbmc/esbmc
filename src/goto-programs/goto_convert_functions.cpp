@@ -34,10 +34,6 @@ goto_convert_functionst::goto_convert_functionst(
 	  inlining=true;
 }
 
-goto_convert_functionst::~goto_convert_functionst()
-{
-}
-
 void goto_convert_functionst::goto_convert()
 {
   // warning! hash-table iterators are not stable
@@ -51,12 +47,9 @@ void goto_convert_functionst::goto_convert()
     }
   );
 
-  for(symbol_listt::iterator
-      it=symbol_list.begin();
-      it!=symbol_list.end();
-      it++)
+  for(auto & it : symbol_list)
   {
-    convert_function(**it);
+    convert_function(*it);
   }
 
   functions.compute_location_numbers();
@@ -64,17 +57,11 @@ void goto_convert_functionst::goto_convert()
 
 bool goto_convert_functionst::hide(const goto_programt &goto_program)
 {
-  for(goto_programt::instructionst::const_iterator
-      i_it=goto_program.instructions.begin();
-      i_it!=goto_program.instructions.end();
-      i_it++)
+  for(const auto & instruction : goto_program.instructions)
   {
-    for(goto_programt::instructiont::labelst::const_iterator
-        l_it=i_it->labels.begin();
-        l_it!=i_it->labels.end();
-        l_it++)
+    for(const auto & label : instruction.labels)
     {
-      if(*l_it=="__ESBMC_HIDE")
+      if(label=="__ESBMC_HIDE")
         return true;
     }
   }
@@ -287,7 +274,6 @@ goto_convert_functionst::collect_type(const irept &type, typename_sett &deps)
   }
 
   collect_expr(type, deps);
-  return;
 }
 
 void
@@ -311,8 +297,6 @@ goto_convert_functionst::collect_expr(const irept &expr, typename_sett &deps)
   forall_named_irep(it, expr.get_comments()) {
     collect_type(it->second, deps);
   }
-
-  return;
 }
 
 void
@@ -377,7 +361,6 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
   }
 
   rename_exprs(type, cur_name_sym, sname);
-  return;
 }
 
 void
@@ -401,8 +384,6 @@ goto_convert_functionst::rename_exprs(irept &expr, const symbolt &cur_name_sym,
 
   Forall_named_irep(it, expr.get_comments())
     rename_exprs(it->second, cur_name_sym, sname);
-
-  return;
 }
 
 void
@@ -417,18 +398,17 @@ goto_convert_functionst::wallop_type(irep_idt name,
     return;
 
   // Iterate over our dependancies ensuring they're resolved.
-  for (std::set<irep_idt>::iterator it = deps.begin(); it != deps.end(); it++)
-    wallop_type(*it, typenames, sname);
+  for (const auto & dep : deps)
+    wallop_type(dep, typenames, sname);
 
   // And finally perform renaming.
   symbolt* s = context.find_symbol(name);
   rename_types(s->type, *s, sname);
   deps.clear();
-  return;
 }
 
 void
-goto_convert_functionst::thrash_type_symbols(void)
+goto_convert_functionst::thrash_type_symbols()
 {
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and
@@ -464,8 +444,8 @@ goto_convert_functionst::thrash_type_symbols(void)
     }
   );
 
-  for (typename_mapt::iterator it = typenames.begin(); it != typenames.end(); it++)
-    it->second.erase(it->first);
+  for (auto & it : typenames)
+    it.second.erase(it.first);
 
   // Now, repeatedly rename all types. When we encounter a type that contains
   // unresolved symbols, resolve it first, then include it into this type.
@@ -483,12 +463,10 @@ goto_convert_functionst::thrash_type_symbols(void)
       rename_exprs(s.value, s, s.name);
     }
   );
-
-  return;
 }
 
 void
-goto_convert_functionst::fixup_unions(void)
+goto_convert_functionst::fixup_unions()
 {
   // Iterate over all types and expressions, replacing:
   //  * Non-pointer union types with byte arrays of corresponding size

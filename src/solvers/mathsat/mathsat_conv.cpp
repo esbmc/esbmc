@@ -25,7 +25,7 @@ static const char* mathsat_config =
   "theory.arr.enable_witness = true";
 
 // Ahem
-msat_env* _env = NULL;
+msat_env* _env = nullptr;
 
 void print_mathsat_formula()
 {
@@ -70,7 +70,7 @@ mathsat_convt::mathsat_convt(bool int_encoding, const namespacet &ns)
   _env = &env;
 }
 
-mathsat_convt::~mathsat_convt(void)
+mathsat_convt::~mathsat_convt()
 {
   msat_destroy_env(env);
   _env = nullptr;
@@ -135,6 +135,8 @@ mathsat_convt::get_bool(const smt_ast *a)
 expr2tc
 mathsat_convt::get_bv(const type2tc &type, smt_astt a)
 {
+  (void) type;
+  (void) a;
 //  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
 //
 //  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
@@ -557,7 +559,7 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
   abort();
 }
 
-smt_ast *
+smt_astt
 mathsat_convt::mk_smt_int(const mp_integer &theint, bool sign __attribute__((unused)))
 {
   char buffer[256], *n = nullptr;
@@ -581,19 +583,19 @@ mathsat_convt::mk_smt_real(const std::string &str)
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_ast *
-mathsat_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
+smt_astt
+mathsat_convt:: mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 {
   std::stringstream ss;
 
   // MathSAT refuses to parse negative integers. So, feed it binary.
-  std::string str = integer2binary(theint, width);
+  std::string str = integer2binary(theint, w);
 
   // Make bv int from textual representation.
-  msat_term t = msat_make_bv_number(env, str.c_str(), width, 2);
+  msat_term t = msat_make_bv_number(env, str.c_str(), w, 2);
   check_msat_error(t);
 
-  smt_sortt s = mk_sort(ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
+  smt_sortt s = mk_sort(ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV, w);
   return new mathsat_smt_ast(this, s, t);
 }
 
@@ -678,7 +680,7 @@ smt_astt mathsat_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
   const mathsat_smt_ast *mfrom = mathsat_ast_downcast(from);
 
   msat_term t;
-  smt_sortt s;
+  smt_sortt s = nullptr;
   if(is_bv_type(cast.type)) {
     s = mk_sort(is_signedbv_type(cast.type) ? SMT_SORT_SBV : SMT_SORT_UBV, cast.type->get_width());
 
@@ -703,7 +705,7 @@ smt_astt mathsat_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
     abort();
 
   check_msat_error(t);
-  assert(s != NULL);
+  assert(s != nullptr);
 
   return new mathsat_smt_ast(this, s, t);
 }
@@ -727,8 +729,8 @@ smt_astt mathsat_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
     // transformed into fpa = b ? 1 : 0;
     const smt_ast *args[3];
     args[0] = from;
-    args[1] = convert_ast(gen_true_expr());
-    args[2] = convert_ast(gen_false_expr());
+    args[1] = convert_ast(gen_one(cast.type));
+    args[2] = convert_ast(gen_zero(cast.type));
 
     return mk_func_app(s, SMT_FUNC_ITE, args, 3);
   }
@@ -884,19 +886,16 @@ mathsat_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 void
 mathsat_convt::add_array_constraints_for_solving()
 {
-  return;
 }
 
 void
-mathsat_convt::push_array_ctx(void)
+mathsat_convt::push_array_ctx()
 {
-  return;
 }
 
 void
-mathsat_convt::pop_array_ctx(void)
+mathsat_convt::pop_array_ctx()
 {
-  return;
 }
 
 const smt_ast* mathsat_smt_ast::select(smt_convt* ctx, const expr2tc& idx) const

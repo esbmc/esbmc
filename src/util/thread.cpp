@@ -2,7 +2,7 @@
 
 Thread::Thread()
 {
-  pthread_mutex_init(&_mutex, NULL);
+  pthread_mutex_init(&_mutex, nullptr);
 
   pthread_attr_init(&_attr);
   pthread_attr_setdetachstate(&_attr, PTHREAD_CREATE_DETACHED);
@@ -20,12 +20,12 @@ Thread::~Thread()
 void* Thread::function(void* ptr)
 {
   if (!ptr) {
-    return NULL;
+    return nullptr;
   }
 
   static_cast<Thread*>(ptr)->run();
   pthread_exit(ptr);
-  return NULL;
+  return nullptr;
 }
 
 void Thread::start()

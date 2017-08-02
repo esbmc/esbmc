@@ -16,18 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-/*******************************************************************\
-
-Function: static_lifetime_init
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void
 init_variable(codet &dest, const symbolt &sym)
 {
@@ -76,18 +64,6 @@ void static_lifetime_init(
   );
 }
 
-/*******************************************************************\
-
-Function: c_main
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool c_main(
   contextt &context,
   const std::string &standard_main,
@@ -96,46 +72,41 @@ bool c_main(
   irep_idt main_symbol;
 
   // find main symbol
-  if(config.main!="")
+  std::string themain = config.main.empty() ? standard_main : config.main;
+
+  std::list<irep_idt> matches;
+
+  forall_symbol_base_map(it, context.symbol_base_map, themain)
   {
-    std::list<irep_idt> matches;
+    // look it up
+    symbolt* s = context.find_symbol(it->second);
 
-    forall_symbol_base_map(it, context.symbol_base_map, config.main)
-    {
-      // look it up
-      symbolt* s = context.find_symbol(it->second);
+    if(s == nullptr) continue;
 
-      if(s == nullptr) continue;
-
-      if(s->type.is_code())
-        matches.push_back(it->second);
-    }
-
-    if(matches.empty())
-    {
-      messaget message(message_handler);
-      message.error("main symbol `"+config.main+"' not found");
-      return true; // give up
-    }
-
-
-    if(matches.size()>=2)
-    {
-      messaget message(message_handler);
-      if (matches.size()==2)
-        std::cerr << "warning: main symbol `" << config.main << "' is ambiguous" << std::endl;
-      else
-      {
-    	message.error("main symbol `"+config.main+"' is ambiguous");
-        return true;
-      }
-    }
-
-    main_symbol=matches.front();
-
+    if(s->type.is_code())
+      matches.push_back(it->second);
   }
-  else
-    main_symbol=standard_main;
+
+  if(matches.empty())
+  {
+    messaget message(message_handler);
+    message.error("main symbol `" + themain + "' not found");
+    return true; // give up
+  }
+
+  if(matches.size()>=2)
+  {
+    messaget message(message_handler);
+    if (matches.size()==2)
+      std::cerr << "warning: main symbol `" + themain + "' is ambiguous" << std::endl;
+    else
+    {
+      message.error("main symbol `" + themain +"' is ambiguous");
+      return true;
+    }
+  }
+
+  main_symbol = matches.front();
 
   // look it up
   symbolt* s = context.find_symbol(main_symbol);

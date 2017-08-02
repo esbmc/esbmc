@@ -40,11 +40,11 @@ public:
   int ltl_results_seen[4];
 
   BigInt interleaving_number;
-  unsigned int interleaving_failed;
+  BigInt interleaving_failed;
 
   virtual smt_convt::resultt start_bmc();
   virtual smt_convt::resultt run(boost::shared_ptr<symex_target_equationt> &eq);
-  virtual ~bmct() { }
+  ~bmct() override = default;
 
   void set_ui(language_uit::uit _ui) { ui=_ui; }
 
@@ -80,6 +80,12 @@ protected:
   virtual void show_vcc(
     std::ostream &out,
     boost::shared_ptr<symex_target_equationt> &eq);
+
+  virtual void report_trace(
+      smt_convt::resultt &res,
+      boost::shared_ptr<symex_target_equationt> &eq);
+
+  virtual void report_result(smt_convt::resultt &res);
 
   smt_convt::resultt run_thread(boost::shared_ptr<symex_target_equationt> &eq);
   int ltl_run_thread(boost::shared_ptr<symex_target_equationt> &eq);

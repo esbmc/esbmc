@@ -37,6 +37,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/location.h>
 #include <util/message_stream.h>
 #include <util/migrate.h>
+#include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
 
 bmct::bmct(const goto_functionst &funcs,
@@ -328,31 +329,38 @@ void bmct::report_failure()
 
 void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
 {
-  unsigned count=1;
+  unsigned int count=1;
+
+  if(config.options.get_bool_option("ssa-symbol-table"))
+    ::show_symbol_table_plain(ns, std::cout);
 
   languagest languages(ns, MODE_C);
+  std::cout << "\n" << "Program constraints: " << "\n";
 
-  std::cout << "\n" << "Program constraints: " << eq->SSA_steps.size() << "\n";
-
-  bool print_guard = config.options.get_bool_option("show-guards");
-  bool sparse = config.options.get_bool_option("simple-ssa-printing");
+  bool print_guard = config.options.get_bool_option("ssa-guards");
+  bool sparse = config.options.get_bool_option("ssa-no-location");
+  bool no_sliced = config.options.get_bool_option("ssa-no-sliced");
+  bool fullname = config.options.get_bool_option("ssa-full-names");
 
   for(auto const &it : eq->SSA_steps)
   {
     if(!(it.is_assert() || it.is_assignment() || it.is_assume()))
       continue;
 
-    if (!sparse) {
+    if(it.ignore && no_sliced)
+      continue;
+
+    if(!sparse) {
       std::cout << "// " << it.source.pc->location_number << " ";
-      std::cout << it.source.pc->location.as_string() << "\n";
+      std::cout << it.source.pc->location.as_string();
+      if(!it.comment.empty()) std::cout << " (" << it.comment << ")";
+      std::cout << '\n';
     }
 
     std::cout <<   "(" << count << ") ";
 
     std::string string_value;
-
-    exprt cond = migrate_expr_back(it.cond);
-    languages.from_expr(cond, string_value);
+    languages.from_expr(migrate_expr_back(it.cond), string_value, fullname);
 
     if(it.is_assignment())
     {
@@ -373,7 +381,7 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
 
     if(!migrate_expr_back(it.guard).is_true() && print_guard)
     {
-      languages.from_expr(migrate_expr_back(it.guard), string_value);
+      languages.from_expr(migrate_expr_back(it.guard), string_value, fullname);
       std::cout << std::string(i2string(count).size()+3, ' ');
       std::cout << "guard: " << string_value << "\n";
     }
@@ -386,52 +394,85 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
   }
 }
 
-smt_convt::resultt bmct::start_bmc()
+void bmct::report_trace(
+  smt_convt::resultt &res,
+  boost::shared_ptr<symex_target_equationt> &eq)
 {
-  boost::shared_ptr<symex_target_equationt> eq;
+  bool bs = options.get_bool_option("base-case");
+  bool fc = options.get_bool_option("forward-condition");
+  bool is = options.get_bool_option("inductive-step");
+  bool show_cex = options.get_bool_option("show-counter-example");
 
-  auto res = run(eq);
   switch(res)
   {
     case smt_convt::P_UNSATISFIABLE:
-      if(!options.get_bool_option("base-case"))
-      {
+      if(!bs) {
         successful_trace(eq);
-        report_success();
       }
-      else
-        status("No bug has been found in the base case");
       break;
 
     case smt_convt::P_SATISFIABLE:
-      if (!options.get_bool_option("base-case") &&
-          options.get_bool_option("show-counter-example"))
-      {
+      if(!bs && show_cex) {
+        error_trace(runtime_solver, eq);
+      } else if(!is && !fc) {
         error_trace(runtime_solver, eq);
       }
-      else if(!options.get_bool_option("inductive-step")
-          && !options.get_bool_option("forward-condition"))
-      {
-        error_trace(runtime_solver, eq);
+      break;
+
+    default:
+      break;
+  }
+}
+
+void bmct::report_result(smt_convt::resultt &res)
+{
+  bool bs = options.get_bool_option("base-case");
+  bool fc = options.get_bool_option("forward-condition");
+  bool is = options.get_bool_option("inductive-step");
+
+  switch(res)
+  {
+    case smt_convt::P_UNSATISFIABLE:
+      if(!bs) {
+        report_success();
+      } else {
+        status("No bug has been found in the base case");
+      }
+      break;
+
+    case smt_convt::P_SATISFIABLE:
+      if(!is && !fc) {
         report_failure();
-      }
-      else if (options.get_bool_option("forward-condition"))
+      } else if (fc) {
         status("The forward condition is unable to prove the property");
-      else
+      } else if (is) {
         status("The inductive step is unable to prove the property");
+      }
       break;
 
     // Return failure if we didn't actually check anything, we just emitted the
     // test information to an SMTLIB formatted file. Causes esbmc to quit
     // immediately (with no error reported)
     case smt_convt::P_SMTLIB:
-      break;
+      return;
 
     default:
       error("decision procedure failed");
       break;
   }
 
+  if((interleaving_number > 0) && options.get_bool_option("all-runs"))
+  {
+    status("Number of generated interleavings: " + integer2string((interleaving_number)));
+    status("Number of failed interleavings: " + integer2string((interleaving_failed)));
+  }
+}
+
+smt_convt::resultt bmct::start_bmc()
+{
+  boost::shared_ptr<symex_target_equationt> eq;
+  smt_convt::resultt res = run(eq);
+  report_result(res);
   return res;
 }
 
@@ -443,6 +484,8 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
   if(options.get_bool_option("schedule"))
     return run_thread(eq);
 
+  smt_convt::resultt res;
+
   do
   {
     if(++interleaving_number > 1)
@@ -452,10 +495,14 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
     }
 
     fine_timet bmc_start = current_time();
-    smt_convt::resultt res = run_thread(eq);
+    res = run_thread(eq);
     if(res)
     {
-      ++interleaving_failed;
+      report_trace(res, eq);
+
+      if(res == smt_convt::P_SATISFIABLE)
+        ++interleaving_failed;
+
       if(!options.get_bool_option("all-runs"))
         return res;
     }
@@ -469,37 +516,30 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
 
     // Only run for one run
     if (options.get_bool_option("interactive-ileaves"))
-      return smt_convt::P_UNSATISFIABLE;
+      return res;
 
   } while(symex->setup_next_formula());
 
-  if(options.get_bool_option("all-runs"))
+  if (options.get_bool_option("ltl"))
   {
-    std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
-    std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
-  }
-
-  if (options.get_bool_option("ltl")) {
     // So, what was the lowest value ltl outcome that we saw?
     if (ltl_results_seen[ltl_res_bad]) {
       std::cout << "Final lowest outcome: LTL_BAD" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_failing]) {
       std::cout << "Final lowest outcome: LTL_FAILING" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_succeeding]) {
       std::cout << "Final lowest outcome: LTL_SUCCEEDING" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_good]) {
       std::cout << "Final lowest outcome: LTL_GOOD" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
-    } else {
+    }  else {
       std::cout << "No traces seen, apparently" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     }
   }
 
-  return smt_convt::P_UNSATISFIABLE;
+  if(interleaving_failed > 0)
+    return smt_convt::P_SATISFIABLE;
+
+  return res;
 }
 
 smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &eq)
@@ -606,7 +646,17 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
     }
 
     if(result->remaining_claims==0)
+    {
+      if(options.get_bool_option("smt-formula-too")
+         || options.get_bool_option("smt-formula-only"))
+      {
+        std::cout << "No VCC remaining, no SMT formula will be generated for"
+                  << " the program\n";
+        return smt_convt::P_SMTLIB;
+      }
+
       return smt_convt::P_UNSATISFIABLE;
+    }
 
     if (options.get_bool_option("ltl")) {
       int res = ltl_run_thread(eq);
@@ -657,13 +707,11 @@ bmct::ltl_run_thread(boost::shared_ptr<symex_target_equationt> &equation)
 
   // Start by turning all assertions that aren't the negative prefix
   // assertion into skips.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->is_assert()) {
-      if (it->comment != "LTL_BAD") {
-        it->type = goto_trace_stept::SKIP;
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_BAD") {
+        SSA_step.type = goto_trace_stept::SKIP;
       } else {
         num_asserts++;
       }
@@ -681,23 +729,19 @@ bmct::ltl_run_thread(boost::shared_ptr<symex_target_equationt> &equation)
   }
 
   // Didn't find it; turn skip steps back into assertions.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->type == goto_trace_stept::SKIP)
-      it->type = goto_trace_stept::ASSERT;
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
   }
 
   // Try again, with LTL_FAILING
   num_asserts = 0;
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->is_assert()) {
-      if (it->comment != "LTL_FAILING") {
-        it->type = goto_trace_stept::SKIP;
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_FAILING") {
+        SSA_step.type = goto_trace_stept::SKIP;
       } else {
         num_asserts++;
       }
@@ -715,23 +759,19 @@ bmct::ltl_run_thread(boost::shared_ptr<symex_target_equationt> &equation)
   }
 
   // Didn't find it; turn skip steps back into assertions.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->type == goto_trace_stept::SKIP)
-      it->type = goto_trace_stept::ASSERT;
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
   }
 
   // Try again, with LTL_SUCCEEDING
   num_asserts = 0;
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->is_assert()) {
-      if (it->comment != "LTL_SUCCEEDING") {
-        it->type = goto_trace_stept::SKIP;
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_SUCCEEDING") {
+        SSA_step.type = goto_trace_stept::SKIP;
       } else {
         num_asserts++;
       }
@@ -750,12 +790,10 @@ bmct::ltl_run_thread(boost::shared_ptr<symex_target_equationt> &equation)
   }
 
   // Otherwise, we just got a good prefix.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->type == goto_trace_stept::SKIP)
-      it->type = goto_trace_stept::ASSERT;
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
   }
 
   return ltl_res_good;

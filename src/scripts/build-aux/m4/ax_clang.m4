@@ -15,21 +15,82 @@
 
 AC_DEFUN([AX_CLANG],
 [
-        AC_ARG_WITH([clang],
-                AS_HELP_STRING([--with-clang=LIB_DIR],
-                [Force given directory for clang libraries. Note that this will override library path detection, so use this parameter only if default library detection fails and you know exactly where your clang libraries are located.]),
-                [
+    AC_ARG_WITH([clang],
+        AS_HELP_STRING([--with-clang=PATH],
+            [Force given directory for clang. Note that this will override library path detection, so use this parameter only if default library detection fails and you know exactly where your clang libraries are located.]),
+            [
                 if test -d "$withval"
                 then
-                        ac_clang_lib_path="$withval"
+                    ac_clang_path="$withval"
+                    AC_PATH_PROGS([CLANG],[clang],[],[$ac_clang_path/bin])
                 else
-                        AC_MSG_ERROR(--with-clang expected directory name)
+                    AC_MSG_ERROR(--with-clang expected directory name)
                 fi
-                ],
-                [ac_clang_lib_path=""]
-        )
+            ],
+            dnl defaults to $PATH
+            [
+                AC_PATH_PROGS([CLANG],[clang],[],[$PATH])
+            ]
+    )
 
-    AC_MSG_CHECKING(for clang >= $1)
+    if test "x$CLANG" = "x"; then
+        ifelse([$3], , :, [$3])
+    fi
+
+    dnl check clang version
+    AC_MSG_CHECKING(if clang > $1)
+
+    clangversion=0
+    _version=$1
+    clangversion=`$CLANG --version 2>/dev/null`
+    if test "x$?" = "x0"; then
+        clangversion=`echo "$clangversion" | tr '\n' ' ' | sed 's/^[[^0-9]]*\([[0-9]][[0-9.]]*[[0-9]]\).*$/\1/g'`
+        clangversion=`echo "$clangversion" | sed 's/\([[0-9]]*\.[[0-9]]*\)\.[[0-9]]*/\1/g'`
+        V_CHECK=`expr $clangversion \>= $_version`
+        if test "$V_CHECK" != "1" ; then
+            AC_MSG_WARN([Failure: ESBMC requires clang >= $1 but only found clang $clangversion.])
+            ax_clang_ok='no'
+        else
+            ax_clang_ok='yes'
+        fi
+    else
+        ax_clang_ok='no'
+    fi
+
+    if test "x$ax_clang_ok" = "xyes"; then
+        AC_MSG_RESULT(yes ($clangversion))
+    else
+        AC_MSG_RESULT(no)
+        ifelse([$3], , :, [$3])
+    fi
+
+    clang_base=/usr
+    if test "$ac_clang_path" != ""; then
+        clang_base=$ac_clang_path
+    fi
+
+    dnl Search for the includes
+    AC_MSG_CHECKING(clang include directory)
+    succeeded=no
+
+    includesubdirs="$clang_base $clang_base/lib64/llvm-$clangversion $clang_base/lib/llvm-$clangversion"
+    for includesubdir in $includesubdirs ; do
+        if ls "$includesubdir/include/clang/Tooling/Tooling.h" >/dev/null 2>&1 ; then
+            succeeded=yes
+            clang_includes_path=$includesubdir/include
+            break;
+        fi
+    done
+
+    if test "$succeeded" != "yes" ; then
+        AC_MSG_RESULT(no)
+        ifelse([$3], , :, [$3])
+    else
+        AC_MSG_RESULT($clang_includes_path)
+    fi
+
+    dnl Now search for the libraries
+    AC_MSG_CHECKING(clang library directory)
     succeeded=no
 
     dnl On 64-bit systems check for system libraries in both lib64 and lib.
@@ -41,22 +102,10 @@ AC_DEFUN([AX_CLANG],
     ax_arch=`uname -m`
     case $ax_arch in
       x86_64)
-        libsubdirs="lib64 libx32 lib lib64"
+        libsubdirs="lib64 libx32 lib lib64 lib64/llvm-$clangversion/lib libx32/llvm-$clangversion/lib lib/llvm-$clangversion/lib lib64/llvm-$clangversion/lib"
         ;;
       ppc64|s390x|sparc64|aarch64|ppc64le)
-        libsubdirs="lib64 lib lib64 ppc64le"
-        ;;
-    esac
-
-    dnl allow for real multi-arch paths e.g. /usr/lib/x86_64-linux-gnu. Give
-    dnl them priority over the other paths since, if libs are found there, they
-    dnl are almost assuredly the ones desired.
-    AC_REQUIRE([AC_CANONICAL_HOST])
-    libsubdirs="lib/${host_cpu}-${host_os} $libsubdirs"
-
-    case ${host_cpu} in
-      i?86)
-        libsubdirs="lib/i386-${host_os} $libsubdirs"
+        libsubdirs="lib64 lib lib64 ppc64le lib64/llvm-$clangversion/lib lib/llvm-$clangversion/lib lib64/llvm-$clangversion/lib ppc64le/llvm-$clangversion/lib"
         ;;
     esac
 
@@ -65,57 +114,20 @@ AC_DEFUN([AX_CLANG],
         lib_ext="so"
     fi
 
-    _version=0
-    dnl first we check the system location for clang libraries and version
-    if test "$ac_clang_lib_path" != ""; then
-        clang_includes_path=$ac_clang_lib_path/include/clang
-        for libsubdir in $libsubdirs ; do
-            if ls "$ac_clang_lib_path/$libsubdir/libclang"* >/dev/null 2>&1 ; then break; fi
-        done
-
-        for i in `ls -d $ac_clang_lib_path/$libsubdir/libclang.$lib_ext.* 2>/dev/null`; do
-            _version_tmp=`echo $i | sed "s#$ac_clang_lib_path/$libsubdir/##" | sed "s/libclang.$lib_ext.//"`
-            V_CHECK=`expr $_version_tmp \> $_version`
-            if test "$V_CHECK" != "1" ; then
-                    continue
-            fi
-
-            _version=$_version_tmp
+    dnl Check the system location for clang libraries
+    for libsubdir in $libsubdirs ; do
+        if ls "$clang_base/$libsubdir/libclang"* >/dev/null 2>&1 ; then
             succeeded=yes
-
-            clang_libs_path=$ac_clang_lib_path/$libsubdir
+            clang_libs_path=$clang_base/$libsubdir
             break;
-        done
-    elif test "$cross_compiling" != yes; then
-        for ac_clang_lib_path_tmp in /usr /usr/local /opt /opt/local ; do
-            if test -d "$ac_clang_lib_path_tmp/include/clang" && test -r "$ac_clang_lib_path_tmp/include/clang"; then
-                for libsubdir in $libsubdirs ; do
-                    if ls "$ac_clang_lib_path_tmp/$libsubdir/libclang"* >/dev/null 2>&1 ; then break; fi
-                done
-
-                for i in `ls -d $ac_clang_lib_path_tmp/$libsubdir/libclang.$lib_ext.* 2>/dev/null`; do
-                    _version_tmp=`echo $i | sed "s#$ac_clang_lib_path_tmp/$libsubdir/##" | sed "s/libclang.$lib_ext.//"`
-                    V_CHECK=`expr $_version_tmp \> $_version`
-                    if test "$V_CHECK" != "1" ; then
-                            continue
-                    fi
-
-                    _version=$_version_tmp
-                    succeeded=yes
-
-                    clang_libs_path=$ac_clang_lib_path_tmp/$libsubdir
-                    clang_includes_path=$ac_clang_lib_path_tmp/include
-                    break;
-                done
-            fi
-        done
-    fi
+        fi
+    done
 
     if test "$succeeded" != "yes" ; then
         AC_MSG_RESULT(no)
         ifelse([$3], , :, [$3])
     else
-        AC_MSG_RESULT(yes)
+        AC_MSG_RESULT($clang_libs_path)
     fi
 
     dnl Look for clang libs
@@ -133,11 +145,13 @@ AC_DEFUN([AX_CLANG],
 
     dnl Search if clang was shipped with a symbolic link call libgomp.so
     dnl We actually link with libgomp.so and this link breaks the old frontend
-    AC_MSG_CHECKING(if $clang_libs_path/libgomp.so is present)
-    if ls -L "$clang_libs_path/libgomp.so" >/dev/null 2>&1 ; then
-        AC_MSG_ERROR([Found libgomp.so on $clang_libs_path. ESBMC is linked against the GNU libgomp and the one shipped with clang is known to cause issues on our tool. Please, remove it before continuing.])
+    if test -d "$withval" ; then
+        AC_MSG_CHECKING(if $clang_libs_path/libgomp.so is present)
+        if ls -L "$clang_libs_path/libgomp.so" >/dev/null 2>&1 ; then
+            AC_MSG_ERROR([Found libgomp.so on $clang_libs_path. ESBMC is linked against the GNU libgomp and the one shipped with clang is known to cause issues on our tool. Please, remove it before continuing.])
+        fi
+        AC_MSG_RESULT(no)
     fi
-    AC_MSG_RESULT(no)
 
     clang_CPPFLAGS="-I$clang_includes_path"
     clang_LDFLAGS="-L$clang_libs_path"
@@ -155,22 +169,18 @@ AC_DEFUN([AX_CLANG],
     export LIBS
 
     if test "$succeeded" != "yes" ; then
-        if test "$_version" = "0" ; then
-            AC_MSG_NOTICE([[We could not detect the clang libraries (version $clang_lib_version_req or higher). If you have a staged clang library (still not installed) please specify \$CLANG_ROOT in your environment and do not give a PATH to --with-clang option.]])
-        else
-            CPPFLAGS="$CPPFLAGS_SAVED"
-            LDFLAGS="$LDFLAGS_SAVED"
-            LIBS="$LIBS_SAVED"
+        CPPFLAGS="$CPPFLAGS_SAVED"
+        LDFLAGS="$LDFLAGS_SAVED"
+        LIBS="$LIBS_SAVED"
 
-            # execute ACTION-IF-NOT-FOUND (if present):
-            ifelse([$3], , :, [$3])
-        fi
+        dnl execute ACTION-IF-NOT-FOUND (if present):
+        ifelse([$3], , :, [$3])
     else
         AC_SUBST(clang_CPPFLAGS)
         AC_SUBST(clang_LDFLAGS)
         AC_SUBST(clang_LIBS)
         AC_DEFINE(HAVE_clang,,[define if the clang library is available])
-        # execute ACTION-IF-FOUND (if present):
+        dnl execute ACTION-IF-FOUND (if present):
         ifelse([$2], , :, [$2])
     fi
 ])

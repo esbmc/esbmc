@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/ansi_c_parser.h>
 #include <ansi-c/ansi_c_typecheck.h>
 #include <ansi-c/c_final.h>
-#include <ansi-c/c_link.h>
 #include <ansi-c/c_main.h>
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/gcc_builtin_headers.h>
@@ -20,6 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <util/c_link.h>
 #include <util/config.h>
 #include <util/expr_util.h>
 
@@ -228,18 +228,20 @@ languaget *new_ansi_c_language()
 bool ansi_c_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  bool fullname)
 {
-  code=expr2c(expr, ns);
+  code=expr2c(expr, ns, fullname);
   return false;
 }
 
 bool ansi_c_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  bool fullname)
 {
-  code=type2c(type, ns);
+  code=type2c(type, ns, fullname);
   return false;
 }
 
@@ -285,10 +287,6 @@ bool ansi_c_languaget::to_expr(
   ansi_c_parser.clear();
 
   return result;
-}
-
-ansi_c_languaget::~ansi_c_languaget()
-{
 }
 
 bool ansi_c_languaget::merge_context(

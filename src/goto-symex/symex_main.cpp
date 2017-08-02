@@ -61,11 +61,10 @@ goto_symext::assume(const expr2tc &assumption)
   // Irritatingly, assumption destroys its expr argument
   expr2tc tmp_guard = cur_state->guard.as_expr();
   target->assumption(tmp_guard, assumption, cur_state->source);
-  return;
 }
 
 boost::shared_ptr<goto_symext::symex_resultt>
-goto_symext::get_symex_result(void)
+goto_symext::get_symex_result()
 {
 
   return boost::shared_ptr<goto_symext::symex_resultt>(
@@ -108,7 +107,7 @@ goto_symext::symex_step(reachability_treet & art)
     expr2tc tmp(instruction.guard);
     replace_nondet(tmp);
 
-    dereference(tmp, false);
+    dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
 
     symex_goto(tmp);
@@ -162,8 +161,8 @@ goto_symext::symex_step(reachability_treet & art)
 
       code_assign2t &assign = to_code_assign2t(deref_code);
 
-      dereference(assign.target, true);
-      dereference(assign.source, false);
+      dereference(assign.target, dereferencet::WRITE);
+      dereference(assign.source, dereferencet::READ);
       replace_dynamic_allocation(deref_code);
 
       symex_assign(deref_code);
@@ -180,15 +179,14 @@ goto_symext::symex_step(reachability_treet & art)
     code_function_call2t &call = to_code_function_call2t(deref_code);
 
     if (!is_nil_expr(call.ret)) {
-      dereference(call.ret, true);
+      dereference(call.ret, dereferencet::WRITE);
     }
 
     replace_dynamic_allocation(deref_code);
 
-    for (std::vector<expr2tc>::iterator it = call.operands.begin();
-         it != call.operands.end(); it++)
-      if (!is_nil_expr(*it))
-        dereference(*it, false);
+    for (auto & operand : call.operands)
+      if (!is_nil_expr(operand))
+        dereference(operand, dereferencet::READ);
 
     // Always run intrinsics, whether guard is false or not. This is due to the
     // unfortunate circumstance where a thread starts with false guard due to
@@ -258,7 +256,7 @@ goto_symext::symex_step(reachability_treet & art)
   }
 }
 
-void goto_symext::symex_assume(void)
+void goto_symext::symex_assume()
 {
   if (cur_state->guard.is_false())
     return;
@@ -266,7 +264,7 @@ void goto_symext::symex_assume(void)
   expr2tc cond = cur_state->source.pc->guard;
 
   replace_nondet(cond);
-  dereference(cond, false);
+  dereference(cond, dereferencet::READ);
   replace_dynamic_allocation(cond);
 
   cur_state->rename(cond);
@@ -283,7 +281,7 @@ void goto_symext::symex_assume(void)
     cur_state->guard.make_false();
 }
 
-void goto_symext::symex_assert(void)
+void goto_symext::symex_assert()
 {
   if (cur_state->guard.is_false())
     return;
@@ -293,7 +291,7 @@ void goto_symext::symex_assert(void)
      && inductive_step)
   {
     statet::framet &frame = cur_state->top();
-    unsigned unwind = frame.loop_iterations[loop_numbers.top()];
+    BigInt unwind = frame.loop_iterations[loop_numbers.top()];
 
     if(unwind < (max_unwind - 1))
     {
@@ -316,7 +314,7 @@ void goto_symext::symex_assert(void)
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
 
-  dereference(tmp, false);
+  dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
 
   claim(tmp, msg);
@@ -324,7 +322,7 @@ void goto_symext::symex_assert(void)
 
 void
 goto_symext::run_intrinsic(const code_function_call2t &func_call,
-                           reachability_treet &art, const std::string symname)
+                           reachability_treet &art, const std::string& symname)
 {
 
   if (symname == "__ESBMC_yield") {
@@ -365,12 +363,10 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
               << std::endl;
     abort();
   }
-
-  return;
 }
 
 void
-goto_symext::finish_formula(void)
+goto_symext::finish_formula()
 {
 
   if (!memory_leak_check)

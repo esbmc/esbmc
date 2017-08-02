@@ -7,28 +7,16 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <algorithm>
-#include <ansi-c/c_typecast.h>
 #include <cpp/cpp_convert_type.h>
 #include <cpp/cpp_declarator.h>
 #include <cpp/cpp_typecheck.h>
 #include <cpp/expr2cpp.h>
 #include <util/arith_tools.h>
+#include <util/c_typecast.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/location.h>
 #include <util/symbol.h>
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::this_struct_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 const struct_typet &cpp_typecheckt::this_struct_type()
 {
@@ -42,51 +30,15 @@ const struct_typet &cpp_typecheckt::this_struct_type()
   return to_struct_type(t);
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::to_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string cpp_typecheckt::to_string(const exprt &expr)
 {
   return expr2cpp(expr, *this);
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::to_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string cpp_typecheckt::to_string(const typet &type)
 {
   return type2cpp(type, *this);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::convert(cpp_itemt &item)
 {
@@ -105,28 +57,13 @@ void cpp_typecheckt::convert(cpp_itemt &item)
   }
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::typecheck()
 {
   // default linkage is C++
   current_mode="C++";
 
-  for(cpp_parse_treet::itemst::iterator
-      it=cpp_parse_tree.items.begin();
-      it!=cpp_parse_tree.items.end();
-      it++)
-    convert(*it);
+  for(auto & item : cpp_parse_tree.items)
+    convert(item);
 
   static_initialization();
 
@@ -134,18 +71,6 @@ void cpp_typecheckt::typecheck()
 
   clean_up();
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_typecheck(
   cpp_parse_treet &cpp_parse_tree,
@@ -156,18 +81,6 @@ bool cpp_typecheck(
   cpp_typecheckt cpp_typecheck(cpp_parse_tree, context, module, message_handler);
   return cpp_typecheck.typecheck_main();
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_typecheck(
   exprt &expr,
@@ -202,31 +115,6 @@ bool cpp_typecheck(
 
   return cpp_typecheck.get_error_found();
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::static_initialization
-
-  Inputs:
-
- Outputs:
-
- Purpose: Initialization of static objects:
-
- "Objects with static storage duration (3.7.1) shall be zero-initialized
- (8.5) before any other initialization takes place. Zero-initialization
- and initialization with a constant expression are collectively called
- static initialization; all other initialization is dynamic
- initialization. Objects of POD types (3.9) with static storage duration
- initialized with constant expressions (5.19) shall be initialized before
- any dynamic initialization takes place. Objects with static storage
- duration defined in namespace scope in the same translation unit and
- dynamically initialized shall be initialized in the order in which their
- definition appears in the translation unit. [Note: 8.5.1 describes the
- order in which aggregate members are initialized. The initialization
- of local static objects is described in 6.7. ]"
-
-\*******************************************************************/
 
 void cpp_typecheckt::static_initialization()
 {
@@ -340,18 +228,6 @@ void cpp_typecheckt::static_initialization()
   disable_access_control=false;
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::do_not_typechecked
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::do_not_typechecked()
 {
   bool cont;
@@ -407,18 +283,6 @@ void cpp_typecheckt::do_not_typechecked()
   );
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::clean_up
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::clean_up()
 {
   context.Foreach_operand(
@@ -445,23 +309,20 @@ void cpp_typecheckt::clean_up()
 
         function_members.reserve(components.size());
 
-        for(struct_typet::componentst::const_iterator
-            compo_it = components.begin();
-            compo_it != components.end();
-            compo_it++)
+        for(const auto & component : components)
         {
-          if(compo_it->get_bool("is_static") ||
-             compo_it->is_type())
+          if(component.get_bool("is_static") ||
+             component.is_type())
           {
             // skip it
           }
-          else if(compo_it->type().id()=="code")
+          else if(component.type().id()=="code")
           {
-            function_members.push_back(*compo_it);
+            function_members.push_back(component);
           }
           else
           {
-            data_members.push_back(*compo_it);
+            data_members.push_back(component);
           }
         }
 

@@ -16,14 +16,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/namespace.h>
 #include <util/std_code.h>
 
-std::string expr2c(const exprt &expr, const namespacet &ns);
-std::string type2c(const typet &type, const namespacet &ns);
+std::string expr2c(const exprt &expr, const namespacet &ns, bool fullname = false);
+std::string type2c(const typet &type, const namespacet &ns, bool fullname = false);
 
 class expr2ct
 {
 public:
-  expr2ct(const namespacet &_ns):ns(_ns) { }
-  virtual ~expr2ct() { }
+  expr2ct(const namespacet &_ns, const bool _fullname) : ns(_ns), fullname(_fullname) { }
+  virtual ~expr2ct() = default;
 
   virtual std::string convert(const typet &src);
   virtual std::string convert(const exprt &src);
@@ -33,9 +33,12 @@ public:
 protected:
   const namespacet &ns;
 
+  const bool fullname;
+
   virtual std::string convert_rec(
     const typet &src,
-    const c_qualifierst &qualifiers);
+    const c_qualifierst &qualifiers,
+    const std::string &declarator);
 
   static std::string indent_str(unsigned indent);
 
@@ -45,6 +48,11 @@ protected:
 
   void get_symbols(const exprt &expr);
   std::string id_shorthand(const exprt &expr) const;
+
+  std::string convert_struct_type(
+    const typet &src,
+    const std::string &qualifiers_str,
+    const std::string &declarator_str);
 
   std::string convert_typecast(
     const exprt &src, unsigned &precedence);

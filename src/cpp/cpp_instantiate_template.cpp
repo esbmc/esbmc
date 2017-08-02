@@ -14,18 +14,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/simplify_expr.h>
 #include <util/simplify_expr_class.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::template_suffix
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string cpp_typecheckt::template_suffix(
   const cpp_template_args_tct &template_args)
 {
@@ -36,14 +24,11 @@ std::string cpp_typecheckt::template_suffix(
   const cpp_template_args_tct::argumentst &arguments=
     template_args.arguments();
 
-  for(cpp_template_args_tct::argumentst::const_iterator
-      it=arguments.begin();
-      it!=arguments.end();
-      it++)
+  for(const auto & argument : arguments)
   {
     if(first) first=false; else result+=",";
 
-    const exprt expr=*it;
+    const exprt expr=argument;
 
     assert(expr.id()!="ambiguous");
 
@@ -77,7 +62,7 @@ std::string cpp_typecheckt::template_suffix(
         i=0;
       else if(to_integer(e, i))
       {
-        err_location(*it);
+        err_location(argument);
         str << "template argument expression expected to be "
                "scalar constant, but got `"
             << to_string(e) << "'";
@@ -92,18 +77,6 @@ std::string cpp_typecheckt::template_suffix(
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::show_instantiation_stack
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::show_instantiation_stack(std::ostream &out)
 {
@@ -153,7 +126,7 @@ cpp_typecheckt::is_template_instantiated(
     }
   }
 
-  return NULL;
+  return nullptr;
 }
 
 void cpp_typecheckt::mark_template_instantiated(
@@ -168,7 +141,6 @@ void cpp_typecheckt::mark_template_instantiated(
   // instantiated, and what the instantiated things symbol is.
   irept &new_instances = s->value.add("template_instances");
   new_instances.set(template_pattern_name, instantiated_symbol_name);
-  return;
 }
 
 const symbolt *
@@ -248,7 +220,7 @@ cpp_typecheckt::handle_recursive_template_instance(
     }
   }
 
-  return NULL;
+  return nullptr;
 }
 
 bool cpp_typecheckt::has_incomplete_args(
@@ -257,10 +229,9 @@ bool cpp_typecheckt::has_incomplete_args(
   const cpp_template_args_tct::argumentst &_arguments =
     template_args_tc.arguments();
 
-  for (cpp_template_args_tct::argumentst::const_iterator it =
-    _arguments.begin(); it != _arguments.end(); it++)
+  for (const auto & _argument : _arguments)
   {
-    const typet& e = it->type();
+    const typet& e = _argument.type();
 
     symbolt* arg_sym = context.find_symbol(e.identifier());
     if(arg_sym != nullptr)
@@ -276,21 +247,6 @@ bool cpp_typecheckt::has_incomplete_args(
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::instantiate_template
-
-  Inputs: location of the instantiation,
-          the identifier of the template symbol,
-          typechecked template arguments,
-          an (optional) specialization
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 const symbolt &cpp_typecheckt::instantiate_template(
   const locationt &location,
@@ -341,14 +297,14 @@ const symbolt &cpp_typecheckt::instantiate_template(
   cpp_scopet *template_scope=
     static_cast<cpp_scopet *>(cpp_scopes.id_map[template_symbol.name]);
 
-  if(template_scope==NULL)
+  if(template_scope==nullptr)
   {
     err_location(location);
     str << "identifier: " << template_symbol.name << std::endl;
     throw "template instantiation error: scope not found";
   }
 
-  assert(template_scope!=NULL);
+  assert(template_scope!=nullptr);
 
   // produce new declaration
   cpp_declarationt new_decl=to_cpp_declaration(template_symbol.type);
@@ -485,13 +441,13 @@ const symbolt &cpp_typecheckt::instantiate_template(
       static_cast<const exprt &>(
         template_symbol.value.find("template_methods"));
 
-    for(unsigned i=0; i<template_methods.operands().size(); i++)
+    for(const auto & i : template_methods.operands())
     {
       cpp_saved_scope.restore();
 
       cpp_declarationt method_decl=
         static_cast<const cpp_declarationt &>(
-          static_cast<const irept &>(template_methods.operands()[i]));
+          static_cast<const irept &>(i));
 
       // copy the type of the template method
       template_typet method_type=

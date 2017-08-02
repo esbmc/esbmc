@@ -28,8 +28,6 @@ round_up_to_word(mp_integer &mp)
   } else if (mp.to_ulong() & align_mask) {
     mp += word_bytes - (mp.to_ulong() & align_mask);
   }
-
-  return;
 }
 
 static inline void
@@ -46,8 +44,6 @@ round_up_to_int64(mp_integer &mp)
   } else if (mp.to_ulong() & align_mask) {
     mp += word_bytes - (mp.to_ulong() & align_mask);
   }
-
-  return;
 }
 
 mp_integer
@@ -92,7 +88,7 @@ member_offset(const type2tc &type, const irep_idt &member)
 }
 
 mp_integer
-type_byte_size_default(const type2tc &type, mp_integer defaultval)
+type_byte_size_default(const type2tc &type, const mp_integer& defaultval)
 {
   try {
     return type_byte_size(type);

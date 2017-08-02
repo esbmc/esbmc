@@ -14,6 +14,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 class template_parametert:public exprt
 {
 public:
+  inline template_parametert(const irep_idt &_id, const typet &_type)
+   : exprt(_id, _type)
+  {
+  }
+
   inline exprt &default_parameter()
   {
     return static_cast<exprt &>(add("#default"));

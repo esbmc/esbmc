@@ -9,18 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_scope.h>
 #include <cpp/cpp_typecheck.h>
 
-/*******************************************************************\
-
-Function: cpp_scopet::lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_scopet::lookup(
   const irep_idt &base_name,
   id_sett &id_set)
@@ -49,12 +37,11 @@ void cpp_scopet::lookup(
   }
 
   // using directives
-  for(id_sett::iterator it = using_set.begin();
-      it != using_set.end(); it++)
+  for(auto it : using_set)
   {
-    cpp_idt& using_id = **it;
+    cpp_idt& using_id = *it;
     if(using_id.base_name == base_name)
-      id_set.insert(*it);
+      id_set.insert(it);
 
     if(using_id.is_scope)
     {
@@ -62,18 +49,6 @@ void cpp_scopet::lookup(
     }
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_scopet::recursive_lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_scopet::recursive_lookup(
   const irep_idt &base_name,
@@ -90,18 +65,6 @@ void cpp_scopet::recursive_lookup(
 }
 
 
-
-/*******************************************************************\
-
-Function: cpp_scopet::lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_scopet::lookup(
   const irep_idt &base_name,
@@ -137,12 +100,11 @@ void cpp_scopet::lookup(
   }
 
   // using directives
-  for(id_sett::iterator it = using_set.begin();
-      it != using_set.end(); it++)
+  for(auto it : using_set)
   {
-    cpp_idt& using_id = **it;
+    cpp_idt& using_id = *it;
     if(using_id.base_name == base_name && using_id.id_class == id_class)
-      id_set.insert(*it);
+      id_set.insert(it);
 
     if(using_id.is_scope)
     {
@@ -150,18 +112,6 @@ void cpp_scopet::lookup(
     }
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_scopet::recursive_lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_scopet::recursive_lookup(
   const irep_idt &base_name,
@@ -175,29 +125,16 @@ void cpp_scopet::recursive_lookup(
       get_parent().recursive_lookup(base_name, id_class, id_set); // recursive call
 }
 
-/*******************************************************************\
-
-Function: cpp_scopet::lookup_id
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_scopet::lookup_id(
   const irep_idt &identifier,
   cpp_idt::id_classt id_class,
   id_sett &id_set)
 {
-  for(cpp_id_mapt::iterator n_it=sub.begin();
-      n_it!=sub.end(); n_it++)
+  for(auto & n_it : sub)
   {
-    if(n_it->second.identifier == identifier
-       && n_it->second.id_class == id_class)
-          id_set.insert(&n_it->second);
+    if(n_it.second.identifier == identifier
+       && n_it.second.id_class == id_class)
+          id_set.insert(&n_it.second);
   }
 
   if(this->identifier == identifier
@@ -215,18 +152,6 @@ void cpp_scopet::lookup_id(
 
 
 
-/*******************************************************************\
-
-Function: cpp_scopet::new_scope
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 cpp_scopet &cpp_scopet::new_scope(const irep_idt &new_scope_name)
 {
   cpp_idt &id=insert(new_scope_name);
@@ -238,18 +163,6 @@ cpp_scopet &cpp_scopet::new_scope(const irep_idt &new_scope_name)
   return (cpp_scopet &)id;
 }
 
-
-/*******************************************************************\
-
-Function: cpp_scopet::contains
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_scopet::contains(const irep_idt& base_name)
 {

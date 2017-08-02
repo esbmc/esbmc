@@ -13,13 +13,13 @@ class boolector_smt_sort : public smt_sort
 public:
 #define boolector_sort_downcast(x) static_cast<const boolector_smt_sort *>(x)
   boolector_smt_sort(smt_sort_kind i, BoolectorSort _s)
-    : smt_sort(i), s(_s), rangesort(NULL) { }
+    : smt_sort(i), s(_s), rangesort(nullptr) { }
 
   boolector_smt_sort(smt_sort_kind i, BoolectorSort _s, size_t w)
-    : smt_sort(i, w), s(_s), rangesort(NULL) { }
+    : smt_sort(i, w), s(_s), rangesort(nullptr) { }
 
   boolector_smt_sort(smt_sort_kind i, BoolectorSort _s, size_t w, size_t sw)
-    : smt_sort(i, w, sw), s(_s), rangesort(NULL) { }
+    : smt_sort(i, w, sw), s(_s), rangesort(nullptr) { }
 
   boolector_smt_sort(smt_sort_kind i, BoolectorSort  _s, size_t w, size_t dw,
                      const smt_sort *_rangesort)
@@ -39,10 +39,10 @@ public:
   btor_smt_ast(smt_convt *ctx, const smt_sort *_s, BoolectorNode *_e)
     : smt_ast(ctx, _s), e(_e) { }
 
-  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
+  const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const override;
 
-  virtual ~btor_smt_ast() { }
-  virtual void dump() const;
+  ~btor_smt_ast() override = default;
+  void dump() const override;
 
   BoolectorNode *e;
 };
@@ -55,44 +55,48 @@ public:
 
   boolector_convt(bool int_encoding, const namespacet &ns,
                   const optionst &options);
-  virtual ~boolector_convt();
+  ~boolector_convt() override;
 
-  virtual resultt dec_solve();
-  virtual const std::string solver_text();
+  resultt dec_solve() override;
+  const std::string solver_text() override;
 
-  virtual void assert_ast(const smt_ast *a);
+  void assert_ast(const smt_ast *a) override;
 
-  virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
+  smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
                                const smt_ast * const *args,
-                               unsigned int numargs);
-  virtual smt_sortt mk_sort(const smt_sort_kind k, ...);
-  virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign);
-  virtual smt_ast *mk_smt_real(const std::string &str);
-  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
-                                unsigned int w);
-  virtual smt_ast *mk_smt_bool(bool val);
-  virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);
-  virtual smt_ast *mk_array_symbol(const std::string &name, const smt_sort *s,
-                                   smt_sortt array_subtype);
+                               unsigned int numargs) override;
+  smt_sortt mk_sort(const smt_sort_kind k, ...) override;
+  smt_ast *mk_smt_int(const mp_integer &theint, bool sign) override;
+  smt_ast *mk_smt_real(const std::string &str) override;
+  smt_ast *mk_smt_bvint(
+    const mp_integer &theint,
+    bool sign,
+    unsigned int w) override;
+  smt_ast *mk_smt_bool(bool val) override;
+  smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_ast *mk_array_symbol(
+    const std::string &name,
+    const smt_sort *s,
+    smt_sortt array_subtype) override;
   virtual smt_sort *mk_struct_sort(const type2tc &type);
-  virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
-                              unsigned int low, const smt_sort *s);
+  smt_ast *mk_extract(const smt_ast *a, unsigned int high,
+                              unsigned int low, const smt_sort *s) override;
 
   const smt_ast *convert_array_of(smt_astt init_val,
-                                  unsigned long domain_width);
+                                  unsigned long domain_width) override;
 
-  virtual void add_array_constraints_for_solving();
-  void push_array_ctx(void);
-  void pop_array_ctx(void);
+  void add_array_constraints_for_solving() override;
+  void push_array_ctx() override;
+  void pop_array_ctx() override;
 
-  virtual expr2tc get_bool(const smt_ast *a);
-  virtual expr2tc get_bv(const type2tc &type, smt_astt a);
-  virtual expr2tc get_array_elem(
+  expr2tc get_bool(const smt_ast *a) override;
+  expr2tc get_bv(const type2tc &type, smt_astt a) override;
+  expr2tc get_array_elem(
     const smt_ast *array,
     uint64_t index,
-    const type2tc &subtype);
+    const type2tc &subtype) override;
 
-  virtual const smt_ast *overflow_arith(const expr2tc &expr);
+  const smt_ast *overflow_arith(const expr2tc &expr) override;
 
   inline btor_smt_ast *new_ast(const smt_sort *_s, BoolectorNode *_e) {
     return new btor_smt_ast(this, _s, _e);
@@ -103,7 +107,7 @@ public:
   smt_ast *fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
       const btor_smt_ast *op1, smt_sortt res_sort);
 
-  virtual void dump_smt();
+  void dump_smt() override;
 
   // Members
 

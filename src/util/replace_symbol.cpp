@@ -9,14 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/replace_symbol.h>
 #include <util/std_types.h>
 
-replace_symbolt::replace_symbolt()
-{
-}
-
-replace_symbolt::~replace_symbolt()
-{
-}
-
 bool replace_symbolt::replace(exprt &dest)
 {
   if(dest.id()=="symbol")
@@ -54,19 +46,15 @@ bool replace_symbolt::replace(typet &dest)
   {
     struct_typet &struct_type = to_struct_type(dest);    
     struct_typet::componentst &components = struct_type.components();
-    for (struct_typet::componentst::iterator it = components.begin();
-         it!=components.end();
-         it++)
-      replace(*it);
+    for (auto & component : components)
+      replace(component);
   } 
   else if(dest.is_code())
   {
     code_typet &code_type=to_code_type(dest);
     code_typet::argumentst &arguments=code_type.arguments();
-    for (code_typet::argumentst::iterator it = arguments.begin();
-         it!=arguments.end();
-         it++)
-      replace(*it);
+    for (auto & argument : arguments)
+      replace(argument);
   }
   
   if(dest.id()=="symbol")

@@ -6,12 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/c_sizeof.h>
-#include <ansi-c/c_typecast.h>
 #include <ansi-c/c_typecheck_base.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/bitvector.h>
+#include <util/c_sizeof.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/cprover_prefix.h>
@@ -22,18 +21,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/std_types.h>
 #include <util/string_constant.h>
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr(exprt &expr)
 {
@@ -52,18 +39,6 @@ void c_typecheck_baset::typecheck_expr(exprt &expr)
   // now do case-split
   typecheck_expr_main(expr);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_main
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_main(exprt &expr)
 {
@@ -151,18 +126,6 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
   }
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_comma
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_expr_comma(exprt &expr)
 {
   if(expr.operands().size()!=2)
@@ -179,18 +142,6 @@ void c_typecheck_baset::typecheck_expr_comma(exprt &expr)
   if(expr.op1().cmt_lvalue())
     expr.cmt_lvalue(true);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_builtin_va_arg
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_builtin_va_arg(exprt &expr)
 {
@@ -236,18 +187,6 @@ void c_typecheck_baset::typecheck_expr_builtin_va_arg(exprt &expr)
 
   context.move(symbol);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_builtin_offsetof
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
 {
@@ -313,18 +252,6 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   expr.swap(value_expr);
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_operands
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
 {
   if(expr.id()=="sideeffect" &&
@@ -346,18 +273,6 @@ void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
       typecheck_expr(*it);
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
 {
@@ -434,18 +349,6 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   }
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_side_effect_statement_expression
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_side_effect_statement_expression(
   side_effect_exprt &expr)
 {
@@ -514,18 +417,6 @@ void c_typecheck_baset::typecheck_side_effect_statement_expression(
     expr.type()=typet("empty");
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_sizeof
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
 {
   typet type;
@@ -561,18 +452,6 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
 
   expr.c_sizeof_type(type);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_typecast
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
 {
@@ -687,34 +566,10 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   }
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::make_index_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::make_index_type(exprt &expr)
 {
   implicit_typecast(expr, index_type());
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_index
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_index(exprt &expr)
 {
@@ -773,18 +628,6 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
   expr.type()=final_array_type.subtype();
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::adjust_float_arith
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::adjust_float_arith(exprt &expr)
 {
   // equality and disequality on float is not mathematical equality!
@@ -809,18 +652,6 @@ void c_typecheck_baset::adjust_float_arith(exprt &expr)
       symbol_exprt(CPROVER_PREFIX "rounding_mode", int_type()));
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_rel
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
 {
@@ -925,18 +756,6 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
   throw 0;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_ptrmember
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_expr_ptrmember(exprt &expr)
 {
   if(expr.operands().size()!=1)
@@ -971,18 +790,6 @@ void c_typecheck_baset::typecheck_expr_ptrmember(exprt &expr)
   expr.id("member");
   typecheck_expr_member(expr);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_member
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_member(exprt &expr)
 {
@@ -1068,18 +875,6 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
     expr.cmt_identifier(identifier);
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_trinary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_expr_trinary(exprt &expr)
 {
   exprt::operandst &operands=expr.operands();
@@ -1137,18 +932,6 @@ void c_typecheck_baset::typecheck_expr_trinary(exprt &expr)
   throw 0;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_side_effect_gcc_conditional_expresssion
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_side_effect_gcc_conditional_expression(
   side_effect_exprt &expr)
 {
@@ -1177,18 +960,6 @@ void c_typecheck_baset::typecheck_side_effect_gcc_conditional_expression(
   expr.op1()=if_expr.op2();
   expr.type()=if_expr.type();
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_address_of
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
 {
@@ -1243,18 +1014,6 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
   expr.type().subtype()=op.type();
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_expr_dereference(exprt &expr)
 {
   if(expr.operands().size()!=1)
@@ -1305,18 +1064,6 @@ void c_typecheck_baset::typecheck_expr_dereference(exprt &expr)
   typecheck_expr_function_identifier(expr);
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_function_identifier
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_expr_function_identifier(exprt &expr)
 {
   if(expr.type().is_code())
@@ -1329,18 +1076,6 @@ void c_typecheck_baset::typecheck_expr_function_identifier(exprt &expr)
     expr.swap(tmp);
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_side_effect
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
 {
@@ -1408,18 +1143,6 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
     throw 0;
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_side_effect_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_side_effect_function_call(
   side_effect_expr_function_callt &expr)
@@ -1512,18 +1235,6 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
 
   do_special_functions(expr);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_special_functions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::do_special_functions(
   side_effect_expr_function_callt &expr)
@@ -1914,18 +1625,6 @@ void c_typecheck_baset::do_special_functions(
   expr.location() = location;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_function_call_arguments
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_function_call_arguments(
   side_effect_expr_function_callt &expr)
 {
@@ -1991,34 +1690,10 @@ void c_typecheck_baset::typecheck_function_call_arguments(
   }
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_constant
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_expr_constant(exprt &expr __attribute__((unused)))
 {
   // Do nothing
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_unary_arithmetic
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_unary_arithmetic(exprt &expr)
 {
@@ -2047,18 +1722,6 @@ void c_typecheck_baset::typecheck_expr_unary_arithmetic(exprt &expr)
   throw 0;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_unary_boolean
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_expr_unary_boolean(exprt &expr)
 {
   if(expr.operands().size()!=1)
@@ -2074,18 +1737,6 @@ void c_typecheck_baset::typecheck_expr_unary_boolean(exprt &expr)
   implicit_typecast_bool(operand);
   expr.type()=typet("bool");
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_binary_arithmetic
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_expr_binary_arithmetic(exprt &expr)
 {
@@ -2190,18 +1841,6 @@ void c_typecheck_baset::typecheck_expr_binary_arithmetic(exprt &expr)
   throw 0;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_pointer_arithmetic
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
 {
   exprt &op0=expr.op0();
@@ -2263,18 +1902,6 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
   throw 0;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_expr_binary_boolean
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_expr_binary_boolean(exprt &expr)
 {
   if(expr.operands().size()!=2)
@@ -2290,18 +1917,6 @@ void c_typecheck_baset::typecheck_expr_binary_boolean(exprt &expr)
 
   expr.type()=typet("bool");
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_side_effect_assignment
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
 {
@@ -2421,18 +2036,6 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
   throw 0;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::make_constant
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::make_constant(exprt &expr)
 {
   make_constant_rec(expr);
@@ -2448,18 +2051,6 @@ void c_typecheck_baset::make_constant(exprt &expr)
     throw 0;
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::make_constant_index
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::make_constant_index(exprt &expr)
 {
@@ -2477,18 +2068,6 @@ void c_typecheck_baset::make_constant_index(exprt &expr)
     }
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::make_constant_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::make_constant_rec(exprt &expr __attribute__((unused)))
 {

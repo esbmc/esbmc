@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/trans_unit.h>
 
-/*******************************************************************\
-
-Function: translation_unit
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string translation_unit(const std::string &path)
 {
   // convert path into a suggestion for a translation unit name

@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::add_argc_argv
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
 {
   const irept &arguments=main_symbol.type.arguments();

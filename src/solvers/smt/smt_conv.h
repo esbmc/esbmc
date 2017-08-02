@@ -341,7 +341,7 @@ public:
   smt_sortt sort;
 
   smt_ast(smt_convt *ctx, smt_sortt s);
-  virtual ~smt_ast() { }
+  virtual ~smt_ast() = default;
 
   // "this" is the true operand.
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
@@ -441,14 +441,14 @@ public:
    *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
    *  @param _ns Namespace for looking up the type of certain symbols. */
   smt_convt(bool int_encoding, const namespacet &_ns);
-  ~smt_convt();
+  ~smt_convt() override = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
    *  model data for tracking, however can't do it from the constructor because
    *  the solver converter itself won't have been initialized itself at that
    *  point. So, once it's ready, the solver converter should call this from
    *  it's constructor. */
-  void smt_post_init(void);
+  void smt_post_init();
 
   // The API that we provide to the rest of the world:
   /** @{
@@ -459,9 +459,9 @@ public:
   typedef enum { P_UNSATISFIABLE, P_SATISFIABLE, P_ERROR, P_SMTLIB } resultt;
 
   /** Push one context on the SMT assertion stack. */
-  virtual void push_ctx(void);
+  virtual void push_ctx();
   /** Pop one context on the SMT assertion stack. */
-  virtual void pop_ctx(void);
+  virtual void pop_ctx();
 
   /** Main interface to SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
@@ -753,7 +753,7 @@ public:
   /** Create a free variable with the given sort, and a unique name, with the
    *  prefix given in 'tag' */
   virtual smt_astt mk_fresh(smt_sortt s, const std::string &tag,
-                            smt_sortt st = NULL);
+                            smt_sortt st = nullptr);
   /** Create a previously un-used variable name with the prefix given in tag */
   std::string mk_fresh_name(const std::string &tag);
 
@@ -802,7 +802,7 @@ public:
    *  @param sym The textual representation of this symbol.
    *  @return A pointer-typed AST representing the address of this symbol. */
   smt_astt convert_identifier_pointer(const expr2tc &expr,
-                                            std::string sym);
+                                            const std::string& sym);
 
   smt_astt init_pointer_obj(unsigned int obj_num, const expr2tc &size);
 
@@ -848,7 +848,7 @@ public:
 
   /** Initialize tracking data for the address space records. This also sets
    *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */
-  void init_addr_space_array(void);
+  void init_addr_space_array();
   /** Stores handle for the tuple interface. */
   void set_tuple_iface(tuple_iface *iface);
   /** Stores handle for the array interface. */
@@ -859,7 +859,7 @@ public:
    *  idx indicates the object number of this record. */
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
-  std::string get_cur_addrspace_ident(void);
+  std::string get_cur_addrspace_ident();
   /** Create and assert address space constraints on the given object ID
    *  number. Essentially, this asserts that all the objects to date don't
    *  overlap with /this/ one. */
@@ -1087,7 +1087,7 @@ public:
 // Define here to enable inlining
 extern inline
 smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s) {
-  assert(sort != NULL);
+  assert(sort != nullptr);
   ctx->live_asts.push_back(this);
 }
 

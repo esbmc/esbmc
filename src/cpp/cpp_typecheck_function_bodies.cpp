@@ -9,18 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_typecheck.h>
 #include <util/i2string.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_function_bodies
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::typecheck_function_bodies()
 {
   instantiation_stackt old_instantiation_stack;

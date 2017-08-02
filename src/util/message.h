@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <iostream>
 #include <string>
-#include <util/global.h>
 #include <util/location.h>
 
 class message_handlert
@@ -25,25 +24,11 @@ public:
     const std::string &message,
     const locationt &location);
 
-  virtual ~message_handlert()
-  {
-  }
+  virtual ~message_handlert() = default;
 };
 
 class nul_message_handlert:public message_handlert
 {
-public:
-  //virtual void print(unsigned level, const std::string &message)
-  //{
-  //}
-#if 0
-  virtual void print(
-    unsigned level,
-    const std::string &message,
-    const locationt &location)
-  {
-  }
-#endif
 };
 
 class stream_message_handlert:public message_handlert
@@ -53,7 +38,7 @@ public:
   {
   }
 
-  virtual void print(unsigned level __attribute__((unused)), const std::string &message)
+  void print(unsigned level __attribute__((unused)), const std::string &message) override
   { out << message << std::endl; }
 
 protected:
@@ -114,7 +99,7 @@ public:
 
   messaget()
   {
-    message_handler=(message_handlert *)NULL;
+    message_handler=(message_handlert *)nullptr;
     verbosity=10;
   }
 
@@ -124,7 +109,7 @@ public:
     verbosity=10;
   }
 
-  virtual ~messaget() {  }
+  virtual ~messaget() = default;
 
   // Levels:
   //

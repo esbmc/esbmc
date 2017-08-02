@@ -83,15 +83,13 @@ public:
   /**
    *  Default destructor.
    */
-  virtual ~reachability_treet()
-  {
-  };
+  virtual ~reachability_treet() = default;
 
   /** Reinitialize for making new exploration of given functions.
    *  Sets up the flags and fields of the object to start a new exploration of
    *  the goto functions we're operating over. To be called when the previous
    *  exploration using this object has been completed. */
-  void setup_for_new_explore(void);
+  void setup_for_new_explore();
 
   /**
    *  Return current execution_statet being explored / symex'd.
@@ -130,7 +128,7 @@ public:
    *  again if that switch is blocked somehow.
    *  @return Thread ID user desires us to switch to
    */
-  int get_ileave_direction_from_user(void) const;
+  int get_ileave_direction_from_user() const;
 
   /**
    *  Decide context switch from --round-robin.
@@ -138,7 +136,7 @@ public:
    *  switch to take on that basis.
    *  @return Thread ID to switch to according to scheduling
    */
-  int get_ileave_direction_from_scheduling(void) const;
+  int get_ileave_direction_from_scheduling() const;
 
   /**
    *  Determine if a thread can be run.
@@ -155,18 +153,18 @@ public:
    *  Check whether current ex_state is a state hash collision.
    *  @return True if this state has already been visited
    */
-  bool check_for_hash_collision(void) const;
+  bool check_for_hash_collision() const;
 
   /**
    *  Perform various pieces of accounting after a hash collision - primarily,
    *  ensuring that no further paths from this cswitch are explored.
    */
-  void post_hash_collision_cleanup(void);
+  void post_hash_collision_cleanup();
 
   /**
    *  Update seen state hashes to contain current state.
    */
-  void update_hash_collision_set(void);
+  void update_hash_collision_set();
 
   /**
    *  Perform context switch operation triggered elsewhere.
@@ -177,7 +175,7 @@ public:
    *  As referred to in the reachability_treet algorithm, this makes up steps
    *  four and five.
    */
-  void create_next_state(void);
+  void create_next_state();
 
   /**
    *  Force a context switch, and take it.
@@ -187,7 +185,7 @@ public:
    *  the reachability_treet algorithm.
    *  @return True if context switch was generated and taken
    */
-  bool step_next_state(void);
+  bool step_next_state();
 
   /**
    *  Pick a context switch to take.
@@ -206,7 +204,7 @@ public:
    *  switch was caused in each state. Gives you a good idea of how the current
    *  interleaving of ex_state shas been reached.
    */
-  void print_ileave_trace(void) const;
+  void print_ileave_trace() const;
 
   /**
    *  Have we generated a full program trace.
@@ -251,7 +249,7 @@ public:
    *  This is just a wrapper around reset_to_unexplored_state
    *  @return True if there is another state to be explored
    */
-  bool setup_next_formula(void);
+  bool setup_next_formula();
 
   /**
    *  Class recording a reachability checkpoint.
@@ -263,10 +261,10 @@ public:
   class dfs_position {
 public:
     dfs_position(const reachability_treet &rt);
-    dfs_position(const std::string filename);
-    bool write_to_file(const std::string filename) const;
+    dfs_position(const std::string&& filename);
+    bool write_to_file(const std::string&& filename) const;
 protected:
-    bool read_from_file(const std::string filename);
+    bool read_from_file(const std::string&& filename);
 public:
     struct dfs_state {
       unsigned int location_number;
@@ -314,7 +312,7 @@ public:
    *  Save RT reachability state to file.
    *  @param fname Name of file to save to.
    */
-  void save_checkpoint(const std::string fname) const;
+  void save_checkpoint(const std::string&& fname) const;
 
   /** GOTO functions we're operating over. */
   const goto_functionst &goto_functions;

@@ -41,10 +41,6 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
     equality2tc question(gen_true_expr(), new_guard);
     try {
-      symex_slicet slicer;
-      auto eq = boost::dynamic_pointer_cast<symex_target_equationt>(target);
-      slicer.slice_for_symbols(eq, question);
-
       tvt res = rte.get()->ask_solver_question(question);
 
       if (res.is_false())
@@ -102,8 +98,8 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   // backwards?
   if (!forward)
   {
-    unsigned &unwind = frame.loop_iterations[instruction.loop_number];
-    unwind++;
+    BigInt &unwind = frame.loop_iterations[instruction.loop_number];
+    ++unwind;
 
     if (get_unwind(cur_state->source, unwind)) {
       loop_bound_exceeded(new_guard);
@@ -140,7 +136,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   statet::goto_state_listt &goto_state_list =
     cur_state->top().goto_state_map[new_state_pc];
 
-  goto_state_list.push_back(statet::goto_statet(*cur_state));
+  goto_state_list.emplace_back(*cur_state);
   statet::goto_statet &new_state = goto_state_list.back();
 
   // adjust guards
@@ -187,7 +183,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 }
 
 void
-goto_symext::merge_gotos(void)
+goto_symext::merge_gotos()
 {
   statet::framet &frame = cur_state->top();
 
@@ -255,23 +251,20 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     tmp_guard -= cur_state->guard;
   }
 
-  for (std::set<renaming::level2t::name_record>::const_iterator
-       it = variables.begin();
-       it != variables.end();
-       it++)
+  for (const auto & variable : variables)
   {
-    if (goto_state.level2.current_number(*it) ==
-        cur_state->level2.current_number(*it))
+    if (goto_state.level2.current_number(variable) ==
+        cur_state->level2.current_number(variable))
       continue;  // not changed
 
-    if (it->base_name == guard_identifier_s)
+    if (variable.base_name == guard_identifier_s)
       continue;  // just a guard
 
-    if (has_prefix(it->base_name.as_string(),"symex::invalid_object"))
+    if (has_prefix(variable.base_name.as_string(),"symex::invalid_object"))
       continue;
 
     // changed!
-    const symbolt &symbol = ns.lookup(it->base_name);
+    const symbolt &symbol = ns.lookup(variable.base_name);
 
     type2tc type;
     typet old_type = symbol.type;
@@ -283,7 +276,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       rhs = symbol2tc(type, symbol.name);
 
       // Try to get the value
-      renaming::level2t::rename_to_record(rhs, *it);
+      renaming::level2t::rename_to_record(rhs, variable);
       goto_state.level2.rename(rhs);
     } else {
       symbol2tc true_val(type, symbol.name);
@@ -292,8 +285,8 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       // Semi-manually rename these symbols: we may be referring to an l1
       // variable not in the current scope, thus we need to directly specify
       // which l1 variable we're dealing with.
-      renaming::level2t::rename_to_record(true_val, *it);
-      renaming::level2t::rename_to_record(false_val, *it);
+      renaming::level2t::rename_to_record(true_val, variable);
+      renaming::level2t::rename_to_record(false_val, variable);
 
       // Try to get the symbol's value
       goto_state.level2.rename(true_val);
@@ -308,7 +301,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     // Again, specifiy which l1 data object we're going to make the assignment
     // to.
-    renaming::level2t::rename_to_record(new_lhs, *it);
+    renaming::level2t::rename_to_record(new_lhs, variable);
 
     cur_state->assignment(new_lhs, rhs, true);
 
@@ -374,11 +367,10 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
 }
 
 bool
-goto_symext::get_unwind(
-  const symex_targett::sourcet &source, unsigned unwind)
+goto_symext::get_unwind(const symex_targett::sourcet &source, BigInt unwind)
 {
   unsigned id = source.pc->loop_number;
-  unsigned long this_loop_max_unwind = max_unwind;
+  BigInt this_loop_max_unwind = max_unwind;
 
   if (unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
@@ -386,13 +378,12 @@ goto_symext::get_unwind(
   if (!options.get_bool_option("quiet"))
   {
     std::string msg =
-      "Unwinding loop " + i2string(id) + " iteration " + i2string(unwind) +
+      "Unwinding loop " + i2string(id) + " iteration " + integer2string(unwind) +
       " " + source.pc->location.as_string();
     std::cout << msg << std::endl;
   }
 
-  return this_loop_max_unwind != 0 &&
-         unwind >= this_loop_max_unwind;
+  return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
 }
 
 hash_set_cont<irep_idt, irep_id_hash> goto_symext::body_warnings;

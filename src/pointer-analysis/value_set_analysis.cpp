@@ -87,15 +87,12 @@ void value_set_analysist::get_entries_rec(
 
     const struct_typet::componentst &c=struct_type.components();
 
-    for(struct_typet::componentst::const_iterator
-        it=c.begin();
-        it!=c.end();
-        it++)
+    for(const auto & it : c)
     {
       get_entries_rec(
         identifier,
-        suffix+"."+it->name().as_string(),
-        it->type(),
+        suffix+"."+it.name().as_string(),
+        it.type(),
         dest);
     }
   }
@@ -105,7 +102,7 @@ void value_set_analysist::get_entries_rec(
   }
   else if(check_type(t))
   {
-    dest.push_back(value_sett::entryt(identifier, suffix));
+    dest.emplace_back(identifier, std::move(suffix));
   }
 }
 
@@ -162,12 +159,9 @@ bool value_set_analysist::check_type(const typet &type)
     const struct_typet::componentst &components=
       struct_type.components();
 
-    for(struct_typet::componentst::const_iterator
-        it=components.begin();
-        it!=components.end();
-        it++)
+    for(const auto & component : components)
     {
-      if(check_type(it->type())) return true;
+      if(check_type(component.type())) return true;
     }
   }
   else if(type.is_array())
@@ -202,13 +196,10 @@ void value_set_analysist::convert(
     ::convert(location, xml_location);
     xml_location.name="location";
 
-    for(value_sett::valuest::const_iterator
-        v_it=value_set.values.begin();
-        v_it!=value_set.values.end();
-        v_it++)
+    for(const auto & value : value_set.values)
     {
       xmlt &var=i.new_element("variable");
-      var.new_element("identifier").data = v_it->first.the_string;
+      var.new_element("identifier").data = value.first.the_string;
 
       #if 0
       const value_sett::expr_sett &expr_set=
@@ -237,16 +228,13 @@ void convert(
 {
   dest=xmlt("value_set_analysis");
 
-  for(goto_functionst::function_mapt::const_iterator
-      f_it=goto_functions.function_map.begin();
-      f_it!=goto_functions.function_map.end();
-      f_it++)
+  for(const auto & f_it : goto_functions.function_map)
   {
     xmlt &f=dest.new_element("function");
 
-    f.new_element("identifier").data=xmlt::escape(id2string(f_it->first));
+    f.new_element("identifier").data=xmlt::escape(id2string(f_it.first));
 
-    value_set_analysis.convert(f_it->second.body, f_it->first, f);
+    value_set_analysis.convert(f_it.second.body, f_it.first, f);
   }
 }
 

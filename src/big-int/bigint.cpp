@@ -1309,8 +1309,6 @@ BigInt::setPower2 (unsigned exponent) {
   }
   digit[i] = 1;
   digit[i] <<= bitOffset;
-
-  return;
 }
 
 #ifdef WITH_PYTHON

@@ -9,18 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_typecheck.h>
 #include <set>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::typcheck_compound_bases
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
 {
   std::set<irep_idt> bases;
@@ -115,18 +103,6 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
   }
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::add_base_components
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::add_base_components(
   const struct_typet &from,
   const irep_idt &access,
@@ -197,16 +173,13 @@ void cpp_typecheckt::add_base_components(
   const struct_typet::componentst &src_c=from.components();
   struct_typet::componentst &dest_c=to.components();
 
-  for(struct_typet::componentst::const_iterator
-      it=src_c.begin();
-      it!=src_c.end();
-      it++)
+  for(const auto & it : src_c)
   {
-    if(it->get_bool("from_base"))
+    if(it.get_bool("from_base"))
       continue;
 
     // copy the component
-    dest_c.push_back(*it);
+    dest_c.push_back(it);
 
     // now twiddle the copy
     struct_typet::componentt &component=dest_c.back();

@@ -35,7 +35,7 @@ create_new_yices_solver(bool int_encoding, const namespacet &ns,
 
 yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
   : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this),
-    sat_model(NULL)
+    sat_model(nullptr)
 {
   yices_init();
 
@@ -91,16 +91,16 @@ yices_convt::dec_solve()
   clear_model();
   pre_solve();
 
-  smt_status_t result = yices_check_context(yices_ctx, NULL);
+  smt_status_t result = yices_check_context(yices_ctx, nullptr);
 
   if (result == STATUS_SAT) {
     sat_model = yices_get_model(yices_ctx, 1);
     return smt_convt::P_SATISFIABLE;
   } else if (result == STATUS_UNSAT) {
-    sat_model = NULL;
+    sat_model = nullptr;
     return smt_convt::P_UNSATISFIABLE;
   } else {
-    sat_model = NULL;
+    sat_model = nullptr;
     return smt_convt::P_ERROR;
   }
 }
@@ -416,19 +416,16 @@ yices_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 void
 yices_convt::add_array_constraints_for_solving()
 {
-  return;
 }
 
 void
-yices_convt::push_array_ctx(void)
+yices_convt::push_array_ctx()
 {
-  return;
 }
 
 void
-yices_convt::pop_array_ctx(void)
+yices_convt::pop_array_ctx()
 {
-  return;
 }
 
 expr2tc
@@ -509,8 +506,7 @@ yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   } else {
     smt_ast::assign(ctx, sym);
   }
-  return;
-}
+  }
 
 smt_astt
 yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
@@ -722,17 +718,14 @@ yices_convt::tuple_get(const expr2tc &expr)
 void
 yices_convt::add_tuple_constraints_for_solving()
 {
-  return;
 }
 
 void
 yices_convt::push_tuple_ctx()
 {
-  return;
 }
 
 void
 yices_convt::pop_tuple_ctx()
 {
-  return;
 }

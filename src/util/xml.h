@@ -17,10 +17,9 @@ Author: Daniel Kroening, kroening@kroening.com
 class xmlt
 {
 public:
-  xmlt()
-  {}
+  xmlt() = default;
 
-  xmlt(const std::string &_name):name(_name)
+  xmlt(std::string _name):name(std::move(_name))
   {}
 
   typedef std::list<xmlt> elementst;
@@ -78,14 +77,14 @@ public:
 
   xmlt &new_element(const std::string &name)
   {
-    elements.push_back(xmlt());
+    elements.emplace_back();
     elements.back().name=name;
     return elements.back();
   }
 
   xmlt &new_element()
   {
-    elements.push_back(xmlt());
+    elements.emplace_back();
     return elements.back();
   }
 

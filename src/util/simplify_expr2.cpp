@@ -66,7 +66,7 @@ static bool
 rebalance_associative_tree(
   const expr2t &expr,
   std::list<expr2tc> &ops,
-  std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> op_wrapper)
+  const std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)>& op_wrapper)
 {
 
   // So the purpose of this is to take a tree of all-the-same-operation and
@@ -158,7 +158,7 @@ rebalance_associative_tree(
 expr2tc
 attempt_associative_simplify(
   const expr2t &expr,
-  std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> op_wrapper)
+  const std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)>& op_wrapper)
 {
 
   std::list<expr2tc> operands;
@@ -273,7 +273,7 @@ struct Addtor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
@@ -325,7 +325,7 @@ struct Subtor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
@@ -372,7 +372,7 @@ struct Multor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
@@ -425,7 +425,7 @@ struct Divtor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
@@ -1003,7 +1003,7 @@ struct Andtor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
@@ -1043,7 +1043,7 @@ struct Ortor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
@@ -1098,7 +1098,7 @@ struct Xortor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
@@ -1140,7 +1140,7 @@ struct Impliestor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // False => * evaluate to true, always
@@ -1173,7 +1173,7 @@ implies2t::do_simplify(bool second __attribute__((unused))) const
 template<typename constructor>
 static expr2tc
 do_bit_munge_operation(
-  std::function<int64_t(int64_t, int64_t)> opfunc,
+  const std::function<int64_t(int64_t, int64_t)>& opfunc,
   const type2tc &type,
   const expr2tc &side_1,
   const expr2tc &side_2)
@@ -1763,7 +1763,7 @@ struct IEEE_equalitytor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // Two constants? Simplify to result of the comparison
@@ -1791,7 +1791,7 @@ struct Equalitytor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1) && is_constant(op2))
@@ -1821,7 +1821,7 @@ struct Notequaltor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1) && is_constant(op2))
@@ -1846,7 +1846,7 @@ struct Lessthantor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // op1 < zero and op2 is unsigned: always true
@@ -1879,7 +1879,7 @@ struct Greaterthantor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // op2 < zero and op1 is unsigned: always true
@@ -1912,7 +1912,7 @@ struct Lessthanequaltor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // op1 <= zero and op2 is unsigned: always true
@@ -1945,7 +1945,7 @@ struct Greaterthanequaltor
   static expr2tc simplify(
     const expr2tc &op1,
     const expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // op2 <= zero and op1 is unsigned: always true
@@ -2279,7 +2279,7 @@ struct IEEE_addtor
     const expr2tc &op1,
     const expr2tc &op2,
     const expr2tc &rm,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // Two constants? Simplify to result of the addition
@@ -2316,7 +2316,7 @@ struct IEEE_subtor
     const expr2tc &op1,
     const expr2tc &op2,
     const expr2tc &rm,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // Two constants? Simplify to result of the subtraction
@@ -2353,7 +2353,7 @@ struct IEEE_multor
     const expr2tc &op1,
     const expr2tc &op2,
     const expr2tc &rm,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // Two constants? Simplify to result of the multiplication
@@ -2390,7 +2390,7 @@ struct IEEE_divtor
     const expr2tc &op1,
     const expr2tc &op2,
     const expr2tc &rm,
-    std::function<bool(const expr2tc&)> is_constant,
+    const std::function<bool(const expr2tc&)>& is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // Two constants? Simplify to result of the division

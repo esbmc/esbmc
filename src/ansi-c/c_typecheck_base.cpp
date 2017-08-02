@@ -12,51 +12,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/prefix.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::to_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string c_typecheck_baset::to_string(const exprt &expr)
 {
   return expr2c(expr, *this);
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::to_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string c_typecheck_baset::to_string(const typet &type)
 {
   return type2c(type, *this);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::replace_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::replace_symbol(irept &symbol)
 {
@@ -67,36 +31,12 @@ void c_typecheck_baset::replace_symbol(irept &symbol)
     symbol.identifier(it->second);
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::move_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool c_typecheck_baset::move_symbol(symbolt &symbol, symbolt *&new_symbol)
 {
   symbol.mode=mode;
   symbol.module=module;
   return context.move(symbol, new_symbol);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
 {
@@ -195,18 +135,6 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     typecheck_symbol_redefinition(*s, symbol);
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_new_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
 {
   if(symbol.is_parameter)
@@ -222,11 +150,8 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
     {
       // we don't need the identifiers
       code_typet &code_type=to_code_type(symbol.type);
-      for(code_typet::argumentst::iterator
-          it=code_type.arguments().begin();
-          it!=code_type.arguments().end();
-          it++)
-        it->set_identifier("");
+      for(auto & it : code_type.arguments())
+        it.set_identifier("");
     }
   }
   else if(symbol.type.id()=="incomplete_array" ||
@@ -258,18 +183,6 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
     do_initializer(symbol);
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_symbol_redefinition
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_symbol_redefinition(
   symbolt &old_symbol,
@@ -507,36 +420,21 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
   }
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_function_body
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_function_body(symbolt &symbol)
 {
   code_typet &code_type=to_code_type(symbol.type);
 
   // adjust the function identifiers
-  for(code_typet::argumentst::iterator
-      a_it=code_type.arguments().begin();
-      a_it!=code_type.arguments().end();
-      a_it++)
+  for(auto & a_it : code_type.arguments())
   {
-    irep_idt identifier=a_it->get_identifier();
+    irep_idt identifier=a_it.get_identifier();
     if(identifier!="")
     {
       id_replace_mapt::const_iterator
         m_it=id_replace_map.find(identifier);
 
       if(m_it!=id_replace_map.end())
-        a_it->set_identifier(m_it->second);
+        a_it.set_identifier(m_it->second);
     }
   }
 

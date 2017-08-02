@@ -172,11 +172,7 @@ private:
 
   void convert_expression_to_code(exprt& expr);
 
-  void move_symbol_to_context(symbolt &symbol);
-
-  void check_symbol_redefinition(
-    symbolt &old_symbol,
-    symbolt &new_symbol);
+  symbolt* move_symbol_to_context(symbolt &symbol);
 
   bool convert_character_literal(
     const clang::CharacterLiteral &char_literal,

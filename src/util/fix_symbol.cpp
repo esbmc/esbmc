@@ -6,19 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/fix_symbol.h>
-
-/*******************************************************************\
-
-Function: fix_symbolt::fix_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <util/fix_symbol.h>
 
 void fix_symbolt::fix_symbol(symbolt &symbol)
 {
@@ -31,18 +19,6 @@ void fix_symbolt::fix_symbol(symbolt &symbol)
   replace(symbol.type);
   replace(symbol.value);
 }
-
-/*******************************************************************\
-
-Function: fix_symbolt::fix_context
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void fix_symbolt::fix_context(contextt &context)
 {

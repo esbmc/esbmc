@@ -6,7 +6,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/c_typecast.h>
 #include <cassert>
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
@@ -16,6 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/array_name.h>
 #include <util/base_type.h>
 #include <util/c_misc.h>
+#include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/cprover_prefix.h>
@@ -512,14 +512,14 @@ dereferencet::make_failed_symbol(const type2tc &out_type)
 
   get_new_name(symbol, ns);
 
-  exprt tmp_sym_expr = symbol_expr(symbol);
-
-  new_context.move(symbol);
+  symbolt *s = nullptr;
+  new_context.move(symbol, s);
+  assert(s != nullptr);
 
   // Due to migration hiccups, migration must occur after the symbol
   // appears in the symbol table.
   expr2tc value;
-  migrate_expr(tmp_sym_expr, value);
+  migrate_expr(symbol_expr(*s), value);
   return value;
 }
 
@@ -685,18 +685,35 @@ dereferencet::build_reference_to(
 void
 dereferencet::deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode)
 {
-  // constraint that it actually is an invalid pointer
 
+  if (mode == INTERNAL)
+    // The caller just wants a list of references -- ensuring that the correct
+    // assertions fire is a problem for something or someone else
+    return;
+
+  // constraint that it actually is an invalid pointer
   invalid_pointer2tc invalid_pointer_expr(deref_expr);
+
+  expr2tc validity_test;
+  std::string foo;
+
+  // Adjust error message and test depending on the context
+  if (mode == FREE) {
+    // You're allowed to free NULL.
+    symbol2tc null_ptr(type2tc(new pointer_type2t(get_empty_type())), "NULL");
+    notequal2tc neq(null_ptr, deref_expr);
+    and2tc and_(neq, invalid_pointer_expr);
+    validity_test = and_;
+    foo = "invalid pointer freed";
+  } else {
+    validity_test = invalid_pointer_expr;
+    foo = "invalid pointer";
+  }
 
   // produce new guard
 
   guardt tmp_guard(guard);
-  tmp_guard.add(invalid_pointer_expr);
-
-  // Adjust error message depending on the context
-  std::string foo =
-    (mode == FREE) ? "invalid pointer freed" : "invalid pointer";
+  tmp_guard.add(validity_test);
 
   dereference_failure("pointer dereference", foo, tmp_guard);
 }
@@ -909,9 +926,8 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
   bool overflows_boundaries = (deref_size > subtype_size);
 
   // No alignment guarantee: assert that it's correct.
-  if (!is_correctly_aligned) {
-    check_alignment(deref_size, mod, guard);
-  }
+  if (!is_correctly_aligned)
+    check_alignment(deref_size, std::move(mod), guard);
 
   if (!overflows_boundaries) {
     // Just extract an element and apply other standard extraction stuff.
@@ -922,13 +938,10 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
     // Might read from more than one element, legitimately. Requires stitching.
     // Alignment assertion / guarantee ensures we don't do something silly.
     // This will construct from whatever the subtype is...
-    unsigned int num_bytes = type->get_width() / 8;
-    expr2tc *bytes = extract_bytes_from_array(value, num_bytes, div);
+    expr2tc *bytes = extract_bytes_from_array(value, type->get_width() / 8, div);
     stitch_together_from_byte_array(value, type, bytes);
     delete[] bytes;
   }
-
-  return;
 }
 
 void
@@ -1047,7 +1060,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
   unsigned int access_sz = type->get_width() / 8;
 
   expr2tc failed_container;
-  if (failed_symbol == NULL)
+  if (failed_symbol == nullptr)
     failed_container = make_failed_symbol(type);
   else
     failed_container = *failed_symbol;
@@ -1077,12 +1090,12 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       construct_from_dyn_struct_offset(field, new_offset, type, guard,
                                        alignment, mode, &failed_container);
-      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+      extract_list.emplace_back(field_guard, field);
     } else if (is_array_type(it)) {
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       build_reference_rec(field, new_offset, type, guard, mode, alignment);
-      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+      extract_list.emplace_back(field_guard, field);
     } else if (access_sz > (it->get_width() / 8)) {
       guardt newguard(guard);
       newguard.add(field_guard);
@@ -1096,7 +1109,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       if (!base_type_eq(field->type, type, ns))
         field = bitcast2tc(type, field);
-      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+      extract_list.emplace_back(field_guard, field);
     } else {
       // Not fully aligned; devolve to byte extract.
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
@@ -1107,7 +1120,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       stitch_together_from_byte_array(field, type, bytes);
       delete[] bytes;
 
-      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+      extract_list.emplace_back(field_guard, field);
     }
 
     i++;
@@ -1226,7 +1239,6 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
 
   // We now have a vector of fields reconstructed from the byte array
   value = constant_struct2tc(type, fields);
-  return;
 }
 
 void
@@ -1287,8 +1299,6 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
     std::cerr << " argument to construct_struct_ref" << std::endl;
     abort();
   }
-
-  return;
 }
 
 void
@@ -1380,7 +1390,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     if (dereference_type_compare(tmp, type)) {
       // Excellent. Guard that the offset is zero and finish.
       expr2tc offs_is_zero = and2tc(accuml_guard, equality2tc(offs, gen_ulong(0)));
-      output.push_back(std::pair<expr2tc, expr2tc>(offs_is_zero, tmp));
+      output.emplace_back(offs_is_zero, tmp);
       return;
     }
 
@@ -1442,7 +1452,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
 
     // We now have a vector of fields reconstructed from the byte array
     constant_struct2tc the_struct(type, fields);
-    output.push_back(std::pair<expr2tc, expr2tc>(accuml_guard, the_struct));
+    output.emplace_back(accuml_guard, the_struct);
   } else {
     // Not legal
     return;
@@ -1485,6 +1495,14 @@ expr2tc*
 dereferencet::extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
     const expr2tc &offset)
 {
+  if(!bytes)
+  {
+    std::cerr << "**** ERROR: "
+              << "Zero byte when extracting from an array.\n"
+              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
+    abort();
+  }
+
   expr2tc *exprs = new expr2tc[bytes];
 
   assert(bytes <= 8 && "Too many bytes for extraction/stitching in deref");
@@ -1508,6 +1526,15 @@ expr2tc *
 dereferencet::extract_bytes_from_scalar(const expr2tc &object,
     unsigned int num_bytes, const expr2tc &offset)
 {
+  if(!num_bytes)
+  {
+    std::cerr << "**** ERROR: "
+              << "Zero byte when extracting from scalar.\n"
+              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
+    abort();
+  }
+
+
   assert(is_scalar_type(object) && "Can't extract bytes out of non-scalars");
   const type2tc &bytetype = get_uint8_type();
 
@@ -1528,6 +1555,14 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
                                               const expr2tc *bytes)
 {
   int num_bytes = type->get_width() / 8;
+
+  if(!num_bytes)
+  {
+    std::cerr << "**** ERROR: "
+              << "Zero byte when stitching from byte array.\n"
+              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
+    abort();
+  }
 
   // We are composing a larger data type out of bytes -- we must consider
   // what byte order we are giong to stitch it together out of.
@@ -1734,7 +1769,6 @@ dereferencet::check_code_access(expr2tc &value, const expr2tc &offset,
   // As for setting the 'value', it's currently already set to the base code
   // object. There's nothing we can actually change it to to mean anything, so
   // don't fiddle with it.
-  return;
 }
 
 void
@@ -1764,13 +1798,12 @@ dereferencet::check_data_obj_access(const expr2tc &value,
                       "Access to object out of bounds", tmp_guard);
 
   // Also, if if it's a scalar, check that the access being made is aligned.
-  if (is_scalar_type(type)) {
-    check_alignment(access_sz, offset, guard);
-  }
+  if (is_scalar_type(type))
+    check_alignment(access_sz, std::move(offset), guard);
 }
 
 void
-dereferencet::check_alignment(unsigned long minwidth, const expr2tc offset,
+dereferencet::check_alignment(unsigned long minwidth, const expr2tc&& offset,
                               const guardt &guard)
 {
   expr2tc mask_expr = gen_ulong(minwidth - 1);

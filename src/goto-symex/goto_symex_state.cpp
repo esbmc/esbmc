@@ -15,7 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 #include <sstream>
 #include <util/expr_util.h>
-#include <util/global.h>
 #include <util/i2string.h>
 #include <util/irep2.h>
 #include <util/migrate.h>
@@ -23,7 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,
                                      const namespacet &_ns)
-    : guard(), level2(l2), value_set(vs), ns(_ns)
+    : level2(l2), value_set(vs), ns(_ns)
 {
   use_value_set = true;
   depth = 0;
@@ -394,8 +393,6 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
     std::cout << spaces << "Next instruction to be executed:" << std::endl;
     source.pc->output_instruction(ns, "", std::cout);
   }
-
-  return;
 }
 
 std::vector<stack_framet>
@@ -415,9 +412,9 @@ goto_symex_statet::gen_stack_trace() const
       break;
     } else if (it->function_identifier == "main" &&
                src.pc->location == get_nil_irep()) {
-      trace.push_back(stack_framet(it->function_identifier));
+      trace.emplace_back(it->function_identifier);
     } else {
-      trace.push_back(stack_framet(irep_idt(it->function_identifier), src));
+      trace.emplace_back(irep_idt(it->function_identifier), src);
     }
   }
 

@@ -23,17 +23,18 @@ Author: Daniel Kroening, kroening@kroening.com
 goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
                          const goto_functionst &_goto_functions,
                          boost::shared_ptr<symex_targett> _target, optionst &opts) :
+  options(opts),
   guard_identifier_s("goto_symex::guard"),
   total_claims(0),
   remaining_claims(0),
+  max_unwind(options.get_option("unwind").c_str()),
   constant_propagation(true),
   ns(_ns),
-  options(opts),
   new_context(_new_context),
   goto_functions(_goto_functions),
-  target(_target),
-  cur_state(NULL),
-  last_throw(NULL),
+  target(std::move(_target)),
+  cur_state(nullptr),
+  last_throw(nullptr),
   inside_unexpected(false),
   unwinding_recursion_assumption(false),
   depth_limit(atol(options.get_option("depth").c_str())),
@@ -57,15 +58,13 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
     std::string::size_type next = set.find(",", idx);
     std::string val = set.substr(idx, next - idx);
     unsigned long id = atoi(val.substr(0, val.find(":", 0)).c_str());
-    unsigned long uw = atol(val.substr(val.find(":", 0) + 1).c_str());
+    BigInt uw(val.substr(val.find(":", 0) + 1).c_str());
     unwind_set[id] = uw;
     if(next == std::string::npos) break;
     idx = next;
   }
 
-  max_unwind=atol(options.get_option("unwind").c_str());
-
-  art1 = NULL;
+  art1 = nullptr;
 
   valid_ptr_arr_name = "__ESBMC_alloc";
   alloc_size_arr_name = "__ESBMC_alloc_size";
@@ -80,11 +79,11 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
 }
 
 goto_symext::goto_symext(const goto_symext &sym) :
-  ns(sym.ns),
   options(sym.options),
+  ns(sym.ns),
   new_context(sym.new_context),
   goto_functions(sym.goto_functions),
-  last_throw(NULL),
+  last_throw(nullptr),
   inside_unexpected(false),
   unwinding_recursion_assumption(false)
 {
@@ -125,15 +124,9 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
 
   // Symex target is another matter; a higher up class needs to decide
   // whether we're duplicating it or using the same one.
-  target = NULL;
+  target = nullptr;
 
   return *this;
-}
-
-void goto_symext::do_simplify(exprt &expr)
-{
-  if(!no_simplify)
-    simplify(expr);
 }
 
 void goto_symext::do_simplify(expr2tc &expr)
@@ -530,8 +523,6 @@ void goto_symext::symex_assign_concat(
     lhs_it++;
     rhs_it++;
   }
-
-  return;
 }
 
 void goto_symext::replace_nondet(expr2tc &expr)
