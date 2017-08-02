@@ -750,19 +750,21 @@ bool clang_c_convertert::get_type(
       const clang::VariableArrayType &arr =
         static_cast<const clang::VariableArrayType &>(the_type);
 
-      exprt size_expr;
-      if(get_expr(*arr.getSizeExpr(), size_expr))
-        return true;
+      // If the size expression is null, we assume empty
+      if(auto const *s = arr.getSizeExpr())
+      {
+        exprt size_expr;
+        if(get_expr(*s, size_expr))
+          return true;
 
-      typet the_type;
-      if(get_type(arr.getElementType(), the_type))
-        return true;
+        typet subtype;
+        if(get_type(arr.getElementType(), subtype))
+          return true;
 
-      array_typet type;
-      type.size() = size_expr;
-      type.subtype() = the_type;
-
-      new_type = type;
+        new_type = array_typet(subtype, size_expr);
+      }
+      else
+        new_type = empty_typet();
       break;
     }
 
