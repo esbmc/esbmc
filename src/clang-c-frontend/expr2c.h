@@ -49,11 +49,6 @@ protected:
   void get_symbols(const exprt &expr);
   std::string id_shorthand(const exprt &expr) const;
 
-  std::string convert_struct_type(
-    const typet &src,
-    const std::string &qualifiers_str,
-    const std::string &declarator_str);
-
   std::string convert_typecast(
     const exprt &src, unsigned &precedence);
 
