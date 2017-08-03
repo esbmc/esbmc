@@ -135,39 +135,36 @@ mathsat_convt::get_bool(const smt_ast *a)
 expr2tc
 mathsat_convt::get_bv(const type2tc &type, smt_astt a)
 {
-  (void) type;
-  (void) a;
-//  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
-//
-//  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
-//  msat_term t = msat_get_model_value(env, mast->t);
-//  check_msat_error(t);
-//
-//  // GMP rational value object.
-//  mpq_t val;
-//  mpq_init(val);
-//
-//  msat_term_to_number(env, t, val);
-//  check_msat_error(t);
-//  msat_free(msat_term_repr(t));
-//
-//  mpz_t num;
-//  mpz_init(num);
-//  mpz_set(num, mpq_numref(val));
-//  char buffer[mpz_sizeinbase(num, 10) + 2];
-//  mpz_get_str(buffer, 10, num);
-//
-//  char *foo = buffer;
-//  int64_t finval = strtoll(buffer, &foo, 10);
-//
-//  if (buffer[0] != '\0' && (foo == buffer || *foo != '\0')) {
-//    std::cerr << "Couldn't parse string representation of number \""
-//              << buffer << "\"" << std::endl;
-//    abort();
-//  }
-//
-//  return BigInt(finval);
-  return expr2tc();
+  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
+
+  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
+  msat_term t = msat_get_model_value(env, mast->t);
+  check_msat_error(t);
+
+  // GMP rational value object.
+  mpq_t val;
+  mpq_init(val);
+
+  msat_term_to_number(env, t, val);
+  check_msat_error(t);
+  msat_free(msat_term_repr(t));
+
+  mpz_t num;
+  mpz_init(num);
+  mpz_set(num, mpq_numref(val));
+  char buffer[mpz_sizeinbase(num, 10) + 2];
+  mpz_get_str(buffer, 10, num);
+
+  char *foo = buffer;
+  int64_t finval = strtoll(buffer, &foo, 10);
+
+  if (buffer[0] != '\0' && (foo == buffer || *foo != '\0')) {
+    std::cerr << "Couldn't parse string representation of number \""
+              << buffer << "\"" << std::endl;
+    abort();
+  }
+
+  return smt_convt::get_bv(type, BigInt(finval));
 }
 
 expr2tc mathsat_convt::get_fpbv(const type2tc& _t, smt_astt a)
@@ -208,27 +205,22 @@ mathsat_convt::get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  (void) array;
-  (void) index;
-  (void) subtype;
-//  size_t orig_w = array->sort->get_domain_width();
-//  const mathsat_smt_ast *mast = mathsat_ast_downcast(array);
-//
-//  smt_ast *tmpast = mk_smt_bvint(BigInt(idx), false, orig_w);
-//  const mathsat_smt_ast *tmpa = mathsat_ast_downcast(tmpast);
-//
-//  msat_term t = msat_make_array_read(env, mast->t, tmpa->t);
-//  check_msat_error(t);
-//  free(tmpast);
-//
-//  mathsat_smt_ast *tmpb = new mathsat_smt_ast(this, convert_sort(elem_sort), t);
-//  expr2tc result = get_bv(elem_sort, tmpb);
-//  free(tmpb);
-//
-//  msat_free(msat_term_repr(t));
+  size_t orig_w = array->sort->get_domain_width();
+  const mathsat_smt_ast *mast = mathsat_ast_downcast(array);
 
-//  return result;
-  return expr2tc();
+  smt_astt tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
+  const mathsat_smt_ast *tmpa = mathsat_ast_downcast(tmpast);
+
+  msat_term t = msat_make_array_read(env, mast->t, tmpa->t);
+  check_msat_error(t);
+
+  mathsat_smt_ast *tmpb = new mathsat_smt_ast(this, convert_sort(subtype), t);
+  expr2tc result = get_bv(subtype, tmpb);
+  free(tmpb);
+
+  msat_free(msat_term_repr(t));
+
+  return result;
 }
 
 const std::string

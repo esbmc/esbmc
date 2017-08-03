@@ -442,20 +442,21 @@ yices_convt::get_bool(smt_astt a)
   return gen_false_expr();
 }
 
-BigInt
-yices_convt::get_bv(smt_astt a)
+expr2tc
+yices_convt::get_bv(const type2tc &type, smt_astt a)
 {
-  int32_t data[64];
   const yices_smt_ast *ast = yices_ast_downcast(a);
 
   int64_t val = 0;
   if (int_encoding) {
     yices_get_int64_value(sat_model, ast->term, &val);
-    return BigInt(val);
+    return smt_convt::get_bv(type, BigInt(val));
   }
 
   unsigned int width = a->sort->get_data_width();
   assert(width <= 64);
+
+  int32_t data[64];
   yices_get_bv_value(sat_model, ast->term, data);
 
   int i;
@@ -464,32 +465,28 @@ yices_convt::get_bv(smt_astt a)
     val |= data[i];
   }
 
-  return BigInt(val);
+  return smt_convt::get_bv(type, BigInt(val));
 }
 
 expr2tc
 yices_convt::get_array_elem(
-  smt_astt array,
+  const smt_ast *array,
   uint64_t index,
   const type2tc &subtype)
 {
-  (void) array;
-  (void) index;
-  (void) subtype;
-//  // Construct a term accessing that element, and get_bv it.
-//  const yices_smt_ast *ast = yices_ast_downcast(array);
-//  term_t idx;
-//  if (int_encoding) {
-//    idx = yices_int64(index);
-//  } else {
-//    idx = yices_bvconst_uint64(array->sort->get_domain_width(), index);
-//  }
-//
-//  term_t app = yices_application(ast->term, 1, &idx);
-//  smt_sortt subsort = convert_sort(subtype);
-//  smt_astt container = new_ast(subsort, app);
-//  return get(container);
-  return expr2tc();
+  // Construct a term accessing that element, and get_bv it.
+  const yices_smt_ast *ast = yices_ast_downcast(array);
+  term_t idx;
+  if (int_encoding) {
+    idx = yices_int64(index);
+  } else {
+    idx = yices_bvconst_uint64(array->sort->get_domain_width(), index);
+  }
+
+  term_t app = yices_application(ast->term, 1, &idx);
+  smt_sortt subsort = convert_sort(subtype);
+  smt_astt container = new_ast(subsort, app);
+  return get_by_ast(subtype, container);
 }
 
 void
@@ -696,8 +693,8 @@ yices_convt::tuple_get(const expr2tc &expr)
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  forall_types(it, strct.members) {
-    member2tc memb(*it, expr, strct.member_names[i]);
+  for(auto const &it : strct.members) {
+    member2tc memb(it, expr, strct.member_names[i]);
     outstruct.get()->datatype_members.push_back(get(memb));
     i++;
   }

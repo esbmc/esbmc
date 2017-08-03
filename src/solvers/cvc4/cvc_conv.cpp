@@ -52,38 +52,34 @@ cvc_convt::get_bool(const smt_ast *a)
   return constant_bool2tc(foo);
 }
 
-BigInt
-cvc_convt::get_bv(const smt_ast *a)
+expr2tc
+cvc_convt::get_bv(const type2tc &type, smt_astt a)
 {
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::Expr e = smt.getValue(ca->e);
   CVC4::BitVector foo = e.getConst<CVC4::BitVector>();
-  // XXX, might croak on 32 bit machines. I'm not aware of a fixed-width api
-  // for CVC right now.
-  return BigInt(foo.toInteger().getUnsignedLong());
+  return smt_convt::get_bv(type, BigInt(foo.toInteger().getUnsignedLong()));
 }
 
 expr2tc
 cvc_convt::get_array_elem(
-    const smt_ast *array,
-    uint64_t index,
-    const type2tc &subtype)
+  const smt_ast *array,
+  uint64_t index,
+  const type2tc &subtype)
 {
-  (void) array;
-  (void) index;
-  (void) subtype;
-//  const cvc_smt_ast *carray = cvc_ast_downcast(array);
-//  size_t orig_w = array->sort->get_domain_width();
-//
-//  smt_ast *tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
-//  const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
-//  CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->e, tmpa->e);
-//  free(tmpast);
-//
-//  cvc_smt_ast *tmpb = new cvc_smt_ast(this, convert_sort(elem_sort), e);
-//  expr2tc result = get_bv(elem_sort, tmpb);
-//  free(tmpb);
-  return expr2tc();
+  const cvc_smt_ast *carray = cvc_ast_downcast(array);
+  size_t orig_w = array->sort->get_domain_width();
+
+  smt_ast *tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
+  const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
+  CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->e, tmpa->e);
+  free(tmpast);
+
+  cvc_smt_ast *tmpb = new cvc_smt_ast(this, convert_sort(subtype), e);
+  expr2tc result = get_bv(subtype, tmpb);
+  free(tmpb);
+
+  return result;
 }
 
 const std::string

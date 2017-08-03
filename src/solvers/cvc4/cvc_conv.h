@@ -55,7 +55,7 @@ public:
     smt_func_kind k,
     const smt_ast * const *args,
     unsigned int numargs) override;
-  smt_sort *mk_sort(const smt_sort_kind k, ...) override;
+  smt_sortt mk_sort(const smt_sort_kind k, ...) override;
   smt_ast *mk_smt_int(const mp_integer &theint, bool sign) override;
   smt_ast *mk_smt_real(const std::string &str) override;
   smt_ast *mk_smt_bvint(
@@ -84,7 +84,7 @@ public:
   void pop_array_ctx() override;
 
   expr2tc get_bool(const smt_ast *a) override;
-  BigInt get_bv(const smt_ast *a) override;
+  expr2tc get_bv(const type2tc &type, smt_astt a) override;
   expr2tc get_array_elem(
     const smt_ast *array,
     uint64_t index,

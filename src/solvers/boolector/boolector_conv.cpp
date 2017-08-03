@@ -382,37 +382,6 @@ boolector_convt::get_bool(const smt_ast *a)
   return res;
 }
 
-static int64_t read_btor_string(const char *result, unsigned int len)
-{
-  assert(result != nullptr && "Boolector returned null bv assignment string");
-
-  // Assume first bit is the most significant for the moment.
-  int64_t res = 0;
-
-  for (unsigned int i = 0; i < len; i++) {
-    res <<= 1;
-
-    assert(result[i] != '\0' && "Premature end of boolector bv assignment str");
-    switch (result[i]) {
-    case '1':
-      res |= 1;
-      break;
-    case '0':
-    case 'x':
-      break;
-    default:
-      std::cerr << "Boolector bv model string \"" << result << "\" not of the "
-                << "expected format" << std::endl;
-      abort();
-    }
-
-    if (i == 0 && res == 1)
-      res = -1;
-  }
-
-  return res;
-}
-
 expr2tc
 boolector_convt::get_bv(const type2tc &type, smt_astt a)
 {
@@ -420,20 +389,10 @@ boolector_convt::get_bv(const type2tc &type, smt_astt a)
   const btor_smt_ast *ast = btor_ast_downcast(a);
 
   const char *result = boolector_bv_assignment(btor, ast->e);
-  int64_t val = read_btor_string(result, a->sort->get_data_width());
+  BigInt val = string2integer(result, 2);
   boolector_free_bv_assignment(btor, result);
 
-  BigInt m(val);
-  if(is_fixedbv_type(type))
-  {
-    fixedbvt fbv(
-      constant_exprt(
-        integer2binary(m, type->get_width()),
-        integer2string(m),
-        migrate_type_back(type)));
-    return constant_fixedbv2tc(fbv);
-  }
-  return constant_int2tc(type, m);
+  return smt_convt::get_bv(type, val);
 }
 
 expr2tc
@@ -442,37 +401,20 @@ boolector_convt::get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  (void) array;
-  (void) index;
-  (void) subtype;
+  const btor_smt_ast *ast = btor_ast_downcast(array);
 
-//  // Super inefficient, but never mind.
-//  assert(array->sort->id == SMT_SORT_ARRAY);
-//  const btor_smt_ast *ast = btor_ast_downcast(array);
-//
-//  int size;
-//  char **indicies, **values;
-//  boolector_array_assignment(btor, ast->e, &indicies, &values, &size);
-//
-//  if (size == 0)
-//    // Presumably no allocation occurred either.
-//    return expr2tc();
-//
-//  expr2tc final_result;
-//
-//  for (int i = 0; i < size; i++) {
-//    int64_t idx = read_btor_string(indicies[i], array->sort->get_domain_width());
-//    if (idx == (int64_t)index) {
-//      int64_t value = read_btor_string(values[i], array->sort->get_data_width());
-//      final_result =
-//        constant_int2tc(get_int_type(array->sort->get_data_width()), BigInt(value));
-//      break;
-//    }
-//  }
-//
-//  boolector_free_array_assignment(btor, indicies, values, size);
-//  return final_result;
-  return expr2tc();
+  unsigned long array_bound = array->sort->get_domain_width();
+
+  int size;
+  char **indicies, **values;
+  boolector_array_assignment(btor, ast->e, &indicies, &values, &size);
+  assert(size);
+
+  BigInt val = string2integer(values[index], 2);
+  boolector_free_array_assignment(btor, indicies, values, size);
+
+  // TODO: floatbv
+  return smt_convt::get_bv(subtype, val);
 }
 
 const smt_ast *
