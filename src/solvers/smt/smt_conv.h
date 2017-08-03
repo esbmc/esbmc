@@ -538,6 +538,14 @@ public:
    *          reason. */
   virtual expr2tc get_by_type(const expr2tc &expr);
 
+  /** Get the satisfying assignment using the ast.
+   *  @param a Variable to get the value of.
+   *  @param type The variable type.
+   *  @return Explicit assigned value of expr in the solver. May be nil, in
+   *          which case the solver did not assign a value to it for some
+   *          reason. */
+  virtual expr2tc get_by_ast(const type2tc &type, smt_astt a);
+
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the
@@ -689,8 +697,14 @@ public:
 
   /** Extract the assignment to a bitvector from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
-   *  @return Expression representation of a's value, as a constant_int2tc */
+   *  @return Expression representation of a's value */
   virtual expr2tc get_bv(const type2tc &type, smt_astt a) = 0;
+
+  /** Builds the bitvector based on the value retrieved from the solver.
+   *  @param type the type (fixedbv or (un)signedbv),
+   *  @param value the value retrieved from the solver.
+   *  @return Expression representation of a's value */
+  expr2tc get_bv(const type2tc &type, BigInt value);
 
   /** @} */
 

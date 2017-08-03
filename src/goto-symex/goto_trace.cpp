@@ -614,7 +614,7 @@ show_goto_trace(
             prev_step_nr = step.step_nr;
             show_state_header(out, step, step.pc->location, step.step_nr);
           }
-          counterexample_value(out, ns, step.original_lhs, step.value);
+          counterexample_value(out, ns, step.lhs, step.value);
         }
         break;
 

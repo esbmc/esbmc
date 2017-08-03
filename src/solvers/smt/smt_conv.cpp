@@ -2301,7 +2301,81 @@ smt_convt::pre_solve()
 expr2tc
 smt_convt::get(const expr2tc &expr)
 {
+  if(is_constant_number(expr))
+    return expr;
+
   expr2tc res = expr;
+
+  // Special cases:
+  if(is_index2t(res))
+  {
+    // If we try to get an index from the solver, it will first
+    // return the whole array and then get the index, we can
+    // do better and call get_array_element directly
+    index2t index = to_index2t(res);
+    expr2tc src_value = index.source_value;
+
+    expr2tc newidx;
+    if (is_index2t(index.source_value)) {
+      newidx = decompose_select_chain(expr, src_value);
+    } else {
+      newidx = fix_array_idx(index.index, index.source_value->type);
+    }
+
+    // if the source value is a constant, there's no need to
+    // call the array api
+    if(is_constant_number(src_value))
+      return src_value;
+
+    // Convert the idx, it must be an integer
+    newidx = get(newidx);
+    assert(is_constant_int2t(newidx));
+
+    // Convert the array so we can call the array api
+    smt_astt array = convert_ast(src_value);
+
+    // Retrieve the element
+    res = array_api->get_array_elem(
+      array,
+      to_constant_int2t(newidx).value.to_uint64(),
+      get_flattened_array_subtype(res->type));
+  }
+  else if(is_with2t(res))
+  {
+    // This will be converted
+    with2t with = to_with2t(res);
+    expr2tc update_val = with.update_value;
+    expr2tc newidx;
+
+    if (is_array_type(with.type) &&
+        is_array_type(to_array_type(with.type).subtype)) {
+      newidx = decompose_store_chain(expr, update_val);
+    } else {
+      newidx = fix_array_idx(with.update_field, with.type);
+    }
+
+    // if the update value is a constant, there's no need to
+    // call the array api
+    if(is_constant_number(update_val))
+      return update_val;
+
+    // Convert the idx, it must be an integer
+    newidx = get(newidx);
+    assert(is_constant_int2t(newidx));
+
+    // Convert the array so we can call the array api
+    smt_astt array = convert_ast(with.source_value);
+
+    // Retrieve the element
+    res = array_api->get_array_elem(
+      array,
+      to_constant_int2t(newidx).value.to_uint64(),
+      get_flattened_array_subtype(res->type));
+  }
+  else if(is_symbol2t(res))
+    return get_by_type(res); // Query symbol value from the solver
+
+  // Recurse on operands
   res.get()->Foreach_operand(
     [this] (expr2tc &e)
     {
@@ -2310,14 +2384,32 @@ smt_convt::get(const expr2tc &expr)
     }
   );
 
-  if(is_constant_expr(expr))
-    return expr;
-
-  if(is_symbol2t(expr))
-    return get_by_type(expr);
-
+  // And simplify
   simplify(res);
   return res;
+}
+
+expr2tc
+smt_convt::get_by_ast(const type2tc &type, smt_astt a)
+{
+  switch (type->type_id)
+  {
+    case type2t::bool_id:
+      return get_bool(a);
+
+    case type2t::unsignedbv_id:
+    case type2t::signedbv_id:
+    case type2t::fixedbv_id:
+      return get_bv(type, a);
+
+    case type2t::floatbv_id:
+      return fp_api->get_fpbv(type, a);
+
+    default:
+      std::cerr << "Unimplemented type'd expression (" << type->type_id
+          << ") in smt get" << std::endl;
+      abort();
+  }
 }
 
 expr2tc
@@ -2326,15 +2418,11 @@ smt_convt::get_by_type(const expr2tc &expr)
   switch (expr->type->type_id)
   {
     case type2t::bool_id:
-      return get_bool(convert_ast(expr));
-
     case type2t::unsignedbv_id:
     case type2t::signedbv_id:
     case type2t::fixedbv_id:
-      return get_bv(expr->type, convert_ast(expr));
-
     case type2t::floatbv_id:
-      return fp_api->get_fpbv(expr->type, convert_ast(expr));
+      return get_by_ast(expr->type, convert_ast(expr));
 
     case type2t::array_id:
       return get_array(expr);
@@ -2691,4 +2779,18 @@ tvt smt_convt::l_get(smt_astt a)
     return tvt(false);
 
   return tvt(tvt::TV_UNKNOWN);
+}
+
+expr2tc smt_convt::get_bv(const type2tc& type, BigInt value)
+{
+  if(is_fixedbv_type(type))
+  {
+    fixedbvt fbv(
+      constant_exprt(
+        integer2binary(value, type->get_width()),
+        integer2string(value),
+        migrate_type_back(type)));
+    return constant_fixedbv2tc(fbv);
+  }
+  return constant_int2tc(type, value);
 }
