@@ -221,7 +221,7 @@ goto_symext::symex_mem(
   pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
 
-  dynamic_memory.emplace_back(rhs_copy, alloc_guard, !is_malloc);
+  dynamic_memory.emplace_back(rhs_copy, alloc_guard, !is_malloc, symbol.base_name.as_string());
 
   return rhs_addrof->ptr_obj;
 }
@@ -424,7 +424,7 @@ void goto_symext::symex_cpp_new(
 
   symex_assign(code_assign2tc(idx, truth));
 
-  dynamic_memory.emplace_back(rhs_copy, cur_state->guard, false);
+  dynamic_memory.emplace_back(rhs_copy, cur_state->guard, false, symbol.base_name.as_string());
 }
 
 // XXX - implement as a call to free?

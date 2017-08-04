@@ -380,13 +380,16 @@ goto_symext::finish_formula()
 
     // Assert that the allocated object was freed.
     deallocated_obj2tc deallocd(it.obj);
+
     equality2tc eq(deallocd, gen_true_expr());
     replace_dynamic_allocation(eq);
     it.alloc_guard.guard_expr(eq);
     cur_state->rename(eq);
-    target->assertion(it.alloc_guard.as_expr(), eq,
-                      "dereference failure: forgotten memory",
-                      std::vector<stack_framet>(), cur_state->source);
+    target->assertion(
+      it.alloc_guard.as_expr(), eq,
+      "dereference failure: forgotten memory: " + it.name,
+      cur_state->gen_stack_trace(), cur_state->source);
+
     total_claims++;
     remaining_claims++;
   }

@@ -58,14 +58,16 @@ public:
   /** Records for dynamically allocated blobs of memory. */
   class allocated_obj {
   public:
-    allocated_obj(const expr2tc &s, const guardt &g, const bool a)
-      : obj(s), alloc_guard(g), auto_deallocd(a) { }
+    allocated_obj(const expr2tc &s, const guardt &g, const bool a, const std::string n)
+      : obj(s), alloc_guard(g), auto_deallocd(a), name(n) { }
     /** Symbol identifying the pointer that was allocated. Must have ptr type */
     expr2tc obj;
     /** Guard when allocation occured. */
     guardt alloc_guard;
     /** Record if the object is automatically desallocated (allocated with alloca). */
     bool auto_deallocd;
+    /** The object name */
+    std::string name;
   };
 
   friend class symex_dereference_statet;
