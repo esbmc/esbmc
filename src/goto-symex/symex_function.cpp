@@ -109,8 +109,7 @@ goto_symext::argument_assignments(
         }
       }
 
-      guardt guard;
-      symex_assign_symbol(lhs, lhs, rhs, guard, symex_targett::STATE);
+      symex_assign(code_assign2tc(lhs, rhs));
     }
 
     it1++;

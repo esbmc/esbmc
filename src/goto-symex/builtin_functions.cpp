@@ -482,8 +482,7 @@ goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
 
   state.value_set.assign(call.ret, tid);
 
-  code_assign2tc assign(call.ret, tid);
-  symex_assign(assign);
+  symex_assign(code_assign2tc(call.ret, tid));
 }
 
 void
@@ -531,11 +530,10 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
   unsigned int tid = to_constant_int2t(threadid).value.to_ulong();
   const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
 
-  code_assign2tc assign(call.ret, startdata);
   assert(base_type_eq(call.ret->type, startdata->type, ns));
 
   state.value_set.assign(call.ret, startdata);
-  symex_assign(assign);
+  symex_assign(code_assign2tc(call.ret, startdata));
 }
 
 void
@@ -573,8 +571,7 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
 
   state.value_set.assign(call.ret, thread_id_exp);
 
-  code_assign2tc assign(call.ret, thread_id_exp);
-  symex_assign(assign);
+  symex_assign(code_assign2tc(call.ret, thread_id_exp));
 
   // Force a context switch point. If the caller is in an atomic block, it'll be
   // blocked, but a context switch will be forced when we exit the atomic block.
@@ -616,8 +613,7 @@ goto_symext::intrinsic_get_thread_state(const code_function_call2t &call, reacha
 
   // Reuse threadid
   constant_int2tc flag_expr(get_uint_type(config.ansi_c.int_width), flags);
-  code_assign2tc assign(call.ret, flag_expr);
-  symex_assign(assign);
+  symex_assign(code_assign2tc(call.ret, flag_expr));
 }
 
 void
