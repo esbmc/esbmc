@@ -460,13 +460,13 @@ protected:
    *  equivalent uses of WITH, or byte_update, and so forth. The end result is
    *  a single new value to be bound to a new symbol.
    *  @param code Code to assign; with lhs and rhs.
-   *  @param guard A guard for the assignment, true by default
    *  @param type Assignment type, visible by default
+   *  @param guard A guard for the assignment, true by default
    */
   virtual void symex_assign(
     const expr2tc &code,
-    const guardt &guard = guardt(),
-    symex_targett::assignment_typet type = symex_targett::STATE);
+    symex_targett::assignment_typet type = symex_targett::STATE,
+    const guardt &guard = guardt());
 
   /** Recursively perform symex assign. @see symex_assign */
   void symex_assign_rec(

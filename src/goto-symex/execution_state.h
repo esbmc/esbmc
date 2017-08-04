@@ -242,8 +242,8 @@ class execution_statet : public goto_symext
    */
   void symex_assign(
     const expr2tc &code,
-    const guardt &guard,
-    symex_targett::assignment_typet type = symex_targett::STATE) override ;
+    symex_targett::assignment_typet type,
+    const guardt &guard) override ;
 
   /**
    *  Symbolically assert something.

@@ -239,17 +239,17 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
 
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = gen_true_expr();
-  symex_assign(code_assign2tc(idx, truth));
+  symex_assign(code_assign2tc(idx, truth), symex_targett::HIDDEN);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
   truth = gen_true_expr();
-  symex_assign(code_assign2tc(valid_index_expr, truth));
+  symex_assign(code_assign2tc(valid_index_expr, truth), symex_targett::HIDDEN);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
   expr2tc falseity = gen_false_expr();
-  symex_assign(code_assign2tc(dealloc_index_expr, falseity));
+  symex_assign(code_assign2tc(dealloc_index_expr, falseity), symex_targett::HIDDEN);
 
   type2tc sz_sym_type =
     type2tc(new array_type2t(pointer_type2(), expr2tc(),true));
@@ -269,7 +269,7 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
     object_size_exp = size;
   }
 
-  symex_assign(code_assign2tc(sz_index_expr, object_size_exp));
+  symex_assign(code_assign2tc(sz_index_expr, object_size_exp), symex_targett::HIDDEN);
 }
 
 void goto_symext::symex_free(const expr2tc &expr)

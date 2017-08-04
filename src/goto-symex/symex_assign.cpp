@@ -137,8 +137,8 @@ void goto_symext::do_simplify(expr2tc &expr)
 
 void goto_symext::symex_assign(
   const expr2tc &code_assign,
-  const guardt &guard,
-  symex_targett::assignment_typet type)
+  symex_targett::assignment_typet type,
+  const guardt &guard)
 {
   const code_assign2t &code = to_code_assign2t(code_assign);
 
