@@ -514,7 +514,7 @@ smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
     std::stringstream ss;
     ss << name << "." << strct.member_names[i];
     symbol2tc sym(it, ss.str());
-    outstruct.get()->datatype_members.push_back(ctx->get(sym));
+    outstruct->datatype_members.push_back(ctx->get(sym));
     i++;
   }
 

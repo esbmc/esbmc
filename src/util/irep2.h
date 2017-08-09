@@ -233,6 +233,12 @@ public:
     return *this;
   }
 
+  irep_container simplify() const
+  {
+    const T *foo = std::shared_ptr<T>::get();
+    return foo->simplify();
+  }
+
   const T &operator*() const
   {
     return *std::shared_ptr<T>::get();
@@ -249,6 +255,14 @@ public:
   }
 
   T * get() // never throws
+  {
+    detach();
+    T *tmp = std::shared_ptr<T>::get();
+    tmp->crc_val = 0;
+    return tmp;
+  }
+
+  T * operator-> () // never throws
   {
     detach();
     T *tmp = std::shared_ptr<T>::get();
@@ -1282,6 +1296,12 @@ namespace esbmct {
     {
       base2tc::detach();
       return static_cast<contained*>(base2tc::get());
+    }
+
+    contained * operator-> () // never throws
+    {
+      base2tc::detach();
+      return static_cast<contained*>(base2tc::operator->());
     }
 
     // Forward all constructors down to the contained type.

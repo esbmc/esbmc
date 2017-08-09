@@ -1167,7 +1167,7 @@ z3_convt::tuple_get(const expr2tc &expr)
   for(auto const &it : strct.members)
   {
     member2tc memb(it, expr, strct.member_names[i]);
-    outstruct.get()->datatype_members.push_back(get(memb));
+    outstruct->datatype_members.push_back(get(memb));
     i++;
   }
 

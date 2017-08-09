@@ -101,7 +101,7 @@ mp_integer
 type_byte_size(const type2tc &type)
 {
 
-  switch (type.get()->type_id) {
+  switch (type->type_id) {
   case type2t::bool_id:
     return 1;
   case type2t::empty_id:
@@ -109,7 +109,7 @@ type_byte_size(const type2tc &type)
     abort();
   case type2t::symbol_id:
     std::cerr << "Symbolic type id in type_byte_size" <<std::endl;
-    type.get()->dump();
+    type->dump();
     abort();
   case type2t::code_id:
     // In C++, methods are struct fields.
@@ -117,13 +117,13 @@ type_byte_size(const type2tc &type)
     abort();
   case type2t::cpp_name_id:
     std::cerr << "C++ symbolic type id in type_byte_size" <<std::endl;
-    type.get()->dump();
+    type->dump();
     abort();
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
-    return mp_integer(type.get()->get_width() / 8);
+    return mp_integer(type->get_width() / 8);
   case type2t::pointer_id:
     return mp_integer(config.ansi_c.pointer_width / 8);
   case type2t::string_id:
@@ -213,7 +213,7 @@ type_byte_size(const type2tc &type)
   }
   default:
     std::cerr << "Unrecognised type in type_byte_size:" << std::endl;
-    type.get()->dump();
+    type->dump();
     abort();
   }
 }

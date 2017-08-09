@@ -18,7 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
 
-  expr.get()->Foreach_operand([this] (expr2tc &e) {
+  expr->Foreach_operand([this] (expr2tc &e) {
     if (!is_nil_expr(e))
       default_replace_dynamic_allocation(e);
      }

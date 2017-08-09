@@ -146,7 +146,7 @@ dereferencet::dereference_expr(
     default:
     {
       // Recurse over the operands
-      expr.get()->Foreach_operand([this, &guard, &mode] (expr2tc &e)
+      expr->Foreach_operand([this, &guard, &mode] (expr2tc &e)
         {
           if (is_nil_expr(e)) return;
           dereference_expr(e, guard, mode);
@@ -171,7 +171,7 @@ dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode)
     // Take the current size of the guard, so that we can reset it later.
     guardt old_guards(guard);
 
-    expr.get()->Foreach_operand([this, &guard, &expr] (expr2tc &op) {
+    expr->Foreach_operand([this, &guard, &expr] (expr2tc &op) {
       assert(is_bool_type(op));
 
       // Handle any derererences in this operand
@@ -1726,7 +1726,7 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
     for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();
          it != scalar_step_list->end(); it++) {
       expr2tc tmp = *it;
-      *tmp.get()->get_sub_expr_nc(0) = accuml;
+      *tmp->get_sub_expr_nc(0) = accuml;
       accuml = tmp;
     }
     value = accuml;

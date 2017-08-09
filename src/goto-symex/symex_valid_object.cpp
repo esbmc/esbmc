@@ -34,7 +34,7 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
-  expr.get()->Foreach_operand([this] (expr2tc &e) {
+  expr->Foreach_operand([this] (expr2tc &e) {
       replace_dynamic_allocation(e);
     }
   );

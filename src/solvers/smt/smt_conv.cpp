@@ -2579,13 +2579,13 @@ smt_convt::rewrite_ptrs_to_structs(type2tc &type)
       e = pointer_struct;
     } else {
       // Recurse
-      e.get()->Foreach_subtype(*delegate);
+      e->Foreach_subtype(*delegate);
     }
   };
 
   type2t::subtype_delegate del_wrap(std::ref(replace_w_ptr));
   delegate = &del_wrap;
-  type.get()->Foreach_subtype(replace_w_ptr);
+  type->Foreach_subtype(replace_w_ptr);
 }
 
 // Default behaviours for SMT AST's

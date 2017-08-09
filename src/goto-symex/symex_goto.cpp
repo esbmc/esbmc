@@ -41,7 +41,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
     equality2tc question(gen_true_expr(), new_guard);
     try {
-      tvt res = rte.get()->ask_solver_question(question);
+      tvt res = rte->ask_solver_question(question);
 
       if (res.is_false())
         new_guard_false = true;

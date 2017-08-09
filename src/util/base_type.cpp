@@ -87,9 +87,9 @@ void base_type(typet &type, const namespacet &ns)
 
 void base_type(expr2tc &expr, const namespacet &ns)
 {
-  base_type(expr.get()->type, ns);
+  base_type(expr->type, ns);
 
-  expr.get()->Foreach_operand([&ns] (expr2tc &e) {
+  expr->Foreach_operand([&ns] (expr2tc &e) {
       base_type(e, ns);
     }
   );

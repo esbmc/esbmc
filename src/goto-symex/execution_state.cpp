@@ -1256,10 +1256,10 @@ boost::shared_ptr<execution_statet> dfs_execution_statet::clone() const
 
   // Duplicate target equation; or if we're encoding at runtime, push a context.
   if (smt_during_symex) {
-    d.get()->target = target;
-    d.get()->target->push_ctx();
+    d->target = target;
+    d->target->push_ctx();
   } else {
-    d.get()->target = target.get()->clone();
+    d->target = target->clone();
   }
 
   return d;
@@ -1276,7 +1276,7 @@ boost::shared_ptr<execution_statet> schedule_execution_statet::clone() const
     boost::shared_ptr<schedule_execution_statet>(new schedule_execution_statet(*this));
 
   // Don't duplicate target equation.
-  s.get()->target = target;
+  s->target = target;
   return s;
 }
 

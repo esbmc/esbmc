@@ -181,8 +181,8 @@ goto_symext::symex_mem(
 
   if(size_is_one)
   {
-    rhs_addrof.get()->type = get_pointer_type(pointer_typet(symbol.type));
-    rhs_addrof.get()->ptr_obj = symbol2tc(new_type, symbol.name);
+    rhs_addrof->type = get_pointer_type(pointer_typet(symbol.type));
+    rhs_addrof->ptr_obj = symbol2tc(new_type, symbol.name);
   }
   else
   {
@@ -191,9 +191,9 @@ goto_symext::symex_mem(
     expr2tc sym = symbol2tc(new_type, symbol.name);
     expr2tc idx_val = gen_ulong(0);
     expr2tc idx = index2tc(subtype, sym, idx_val);
-    rhs_addrof.get()->type =
+    rhs_addrof->type =
       get_pointer_type(pointer_typet(symbol.type.subtype()));
-    rhs_addrof.get()->ptr_obj = idx;
+    rhs_addrof->ptr_obj = idx;
   }
 
   expr2tc rhs = rhs_addrof;
@@ -408,10 +408,10 @@ void goto_symext::symex_cpp_new(
   {
     symbol2tc sym(newtype, symbol.name);
     index2tc idx(renamedtype2, sym, gen_ulong(0));
-    rhs.get()->ptr_obj = idx;
+    rhs->ptr_obj = idx;
   }
   else
-    rhs.get()->ptr_obj = symbol2tc(newtype, symbol.name);
+    rhs->ptr_obj = symbol2tc(newtype, symbol.name);
 
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);

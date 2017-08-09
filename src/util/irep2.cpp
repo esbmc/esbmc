@@ -704,7 +704,7 @@ expr2t::simplify() const
     expr2tc tmp;
 
     if (!is_nil_expr(*e)) {
-      tmp = e->get()->simplify();
+      tmp = e->simplify();
       if (!is_nil_expr(tmp))
         changed = true;
     }
@@ -722,7 +722,7 @@ expr2t::simplify() const
   // An operand has been changed; clone ourselves and update.
   expr2tc new_us = clone();
   std::list<expr2tc>::iterator it2 = newoperands.begin();
-  new_us.get()->Foreach_operand([this, &it2] (expr2tc &e) {
+  new_us->Foreach_operand([this, &it2] (expr2tc &e) {
       if ((*it2) == nullptr)
         ; // No change in operand;
       else

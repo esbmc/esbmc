@@ -441,7 +441,7 @@ runtime_encoded_equationt::clone() const
          "cloned when it contains data");
   auto nthis =
     boost::shared_ptr<runtime_encoded_equationt>(new runtime_encoded_equationt(*this));
-  nthis.get()->cvt_progress = nthis.get()->SSA_steps.end();
+  nthis->cvt_progress = nthis->SSA_steps.end();
   return nthis;
 }
 

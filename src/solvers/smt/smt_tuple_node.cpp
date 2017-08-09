@@ -312,7 +312,7 @@ smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
   if (tuple->elements.size() == 0)
   {
     for(unsigned int i = 0; i < strct.members.size(); i++)
-      outstruct.get()->datatype_members.emplace_back();
+      outstruct->datatype_members.emplace_back();
     return outstruct;
   }
 
@@ -338,7 +338,7 @@ smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
       abort();
     }
 
-    outstruct.get()->datatype_members.push_back(res);
+    outstruct->datatype_members.push_back(res);
     i++;
   }
 

@@ -1492,7 +1492,7 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
 
     used_syms.insert(sym);
   } else {
-    e.get()->Foreach_operand([&prefix, &strings, &used_syms] (expr2tc &e)
+    e->Foreach_operand([&prefix, &strings, &used_syms] (expr2tc &e)
       {
         if (!is_nil_expr(e))
           replace_symbol_names(e, prefix, strings, used_syms);

@@ -634,7 +634,7 @@ with2t::do_simplify(bool second __attribute__((unused))) const
 
     // Clone constant struct, update its field according to this "with".
     constant_struct2tc s = c_struct;
-    s.get()->datatype_members[no] = update_value;
+    s->datatype_members[no] = update_value;
     return expr2tc(s);
   } else if (is_constant_union2t(source_value)) {
     const constant_union2t &c_union = to_constant_union2t(source_value);
@@ -667,7 +667,7 @@ with2t::do_simplify(bool second __attribute__((unused))) const
       return expr2tc();
 
     constant_array2tc arr = array;
-    arr.get()->datatype_members[index.as_ulong()] = update_value;
+    arr->datatype_members[index.as_ulong()] = update_value;
     return arr;
   } else if (is_constant_array_of2t(source_value)) {
     const constant_array_of2t &array = to_constant_array_of2t(source_value);
@@ -1563,10 +1563,10 @@ typecast2t::do_simplify(bool second) const
 
     // Now clone the expression and update its operands.
     expr2tc newobj = simp;
-    newobj.get()->type = type;
+    newobj->type = type;
 
     std::list<expr2tc>::const_iterator it2 = set2.begin();
-    newobj.get()->Foreach_operand([this, &it2] (expr2tc &e) {
+    newobj->Foreach_operand([this, &it2] (expr2tc &e) {
         e= *it2;
         it2++;
       }
