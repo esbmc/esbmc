@@ -275,7 +275,7 @@ type2t::dump() const
   std::cout << pretty(0) << std::endl;
 }
 
-uint32_t
+size_t
 type2t::crc() const
 {
   size_t seed = 0;
@@ -641,7 +641,7 @@ expr2t::lt(const expr2t &ref) const
   return type->ltchecked(*ref.type.get());
 }
 
-uint32_t
+size_t
 expr2t::crc() const
 {
   size_t seed = 0;
@@ -2155,13 +2155,6 @@ do_count_sub_exprs<const std::vector<expr2tc>>(const std::vector<expr2tc> &item)
   return item.size();
 }
 
-typedef std::size_t lolnoop;
-inline std::size_t
-hash_value(lolnoop val)
-{
-  return val;
-}
-
 // Local template for implementing delegate calling, with type dependency.
 // Can't easily extend to cover types because field type is _already_ abstracted
 template <typename T, typename U>
@@ -2384,7 +2377,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container,  enable, fields>::d
 {
 
   if (this->crc_val != 0) {
-    boost::hash_combine(seed, (lolnoop)this->crc_val);
+    boost::hash_combine(seed, this->crc_val);
     return seed;
   }
 
@@ -2397,7 +2390,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container,  enable, fields>::d
   do_crc_rec(); // _includes_ type_id / expr_id
 
   // Finally, combine the crc of this expr with the input seed, and return
-  boost::hash_combine(seed, (lolnoop)this->crc_val);
+  boost::hash_combine(seed, this->crc_val);
   return seed;
 }
 
@@ -2471,7 +2464,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::do
   auto m_ptr = membr_ptr::value;
 
   size_t tmp = do_type_crc(derived_this->*m_ptr, this->crc_val);
-  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  boost::hash_combine(this->crc_val, tmp);
 
   superclass::do_crc_rec();
 }

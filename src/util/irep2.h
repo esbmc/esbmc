@@ -282,7 +282,7 @@ public:
     *this = foo->clone();
   }
 
-  uint32_t crc() const
+  size_t crc() const
   {
     const T *foo = std::shared_ptr<T>::get();
     if (foo->crc_val != 0)
@@ -401,7 +401,7 @@ public:
    *  @see do_crc
    *  @return Digest of the current type.
    */
-  uint32_t crc() const;
+  size_t crc() const;
 
   /** Perform checked invocation of cmp method.
    *  Takes reference to another type - if they have the same type id, invoke
@@ -616,7 +616,7 @@ public:
    *  distribution properties, but is at least fast.
    *  @return Hash value of this expr
    */
-  uint32_t crc() const;
+  size_t crc() const;
 
   /** Perform comparison operation between this and another expr.
    *  Overridden by subclasses of expr2t to compare different members of this
