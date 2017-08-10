@@ -288,8 +288,7 @@ public:
     if (foo->crc_val != 0)
       return foo->crc_val;
 
-    foo->do_crc(0);
-    return foo->crc_val;
+    return foo->do_crc();
   }
 };
 
@@ -455,7 +454,7 @@ public:
    *  @param seed Hash to accumulate hash data into.
    *  @return Hash value
    */
-  virtual size_t do_crc(size_t seed) const;
+  virtual size_t do_crc() const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
@@ -656,7 +655,7 @@ public:
    *  @param seed Hash to accumulate expression data into.
    *  @return Hash value
    */
-  virtual size_t do_crc(size_t seed) const;
+  virtual size_t do_crc() const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
@@ -1059,7 +1058,7 @@ namespace esbmct {
     list_of_memberst tostring(unsigned int indent) const override;
     bool cmp(const base2t &ref) const override;
     int lt(const base2t &ref) const override;
-    size_t do_crc(size_t seed) const override;
+    size_t do_crc() const override;
     void hash(crypto_hash &hash) const override;
 
     static void build_python_class(const typename container::id_field_type id);
