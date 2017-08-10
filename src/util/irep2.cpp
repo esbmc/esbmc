@@ -278,16 +278,14 @@ type2t::dump() const
 size_t
 type2t::crc() const
 {
-  size_t seed = 0;
-  do_crc(seed);
-  return seed;
+  return do_crc();
 }
 
 size_t
-type2t::do_crc(size_t seed) const
+type2t::do_crc() const
 {
-  boost::hash_combine(seed, (uint8_t)type_id);
-  return seed;
+  boost::hash_combine(this->crc_val, (uint8_t)type_id);
+  return this->crc_val;
 }
 
 void
@@ -644,15 +642,15 @@ expr2t::lt(const expr2t &ref) const
 size_t
 expr2t::crc() const
 {
-  size_t seed = 0;
-  return do_crc(seed);
+  return do_crc();
 }
 
 size_t
-expr2t::do_crc(size_t seed) const
+expr2t::do_crc() const
 {
-  boost::hash_combine(seed, (uint8_t)expr_id);
-  return type->do_crc(seed);
+  boost::hash_combine(this->crc_val, type->do_crc());
+  boost::hash_combine(this->crc_val, (uint8_t)expr_id);
+  return this->crc_val;
 }
 
 void
@@ -1760,11 +1758,9 @@ do_type_lt(const expr2t::expr_ids &id __attribute__((unused)),
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const bool &thebool, size_t seed)
+do_type_crc(const bool &theval)
 {
-
-  boost::hash_combine(seed, thebool);
-  return seed;
+  return boost::hash<bool>()(theval);
 }
 
 static inline __attribute__((always_inline)) void
@@ -1781,11 +1777,9 @@ do_type_hash(const bool &thebool, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const unsigned int &theval, size_t seed)
+do_type_crc(const unsigned int &theval)
 {
-
-  boost::hash_combine(seed, theval);
-  return seed;
+  return boost::hash<unsigned int>()(theval);
 }
 
 static inline __attribute__((always_inline)) void
@@ -1796,11 +1790,9 @@ do_type_hash(const unsigned int &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const sideeffect_data::allockind &theval, size_t seed)
+do_type_crc(const sideeffect_data::allockind &theval)
 {
-
-  boost::hash_combine(seed, (uint8_t)theval);
-  return seed;
+  return boost::hash<uint8_t>()(theval);
 }
 
 static inline __attribute__((always_inline)) void
@@ -1811,11 +1803,9 @@ do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const symbol_data::renaming_level &theval, size_t seed)
+do_type_crc(const symbol_data::renaming_level &theval)
 {
-
-  boost::hash_combine(seed, (uint8_t)theval);
-  return seed;
+  return boost::hash<uint8_t>()(theval);
 }
 
 static inline __attribute__((always_inline)) void
@@ -1826,20 +1816,22 @@ do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const BigInt &theint, size_t seed)
+do_type_crc(const BigInt &theint)
 {
+  size_t crc = 0;
+
   unsigned char buffer[256];
 
   if (theint.dump(buffer, sizeof(buffer))) {
     // Zero has no data in bigints.
     if (theint.is_zero()) {
-      boost::hash_combine(seed, 0);
+      crc = boost::hash<uint8_t>()(0);
     } else {
       unsigned int thelen = theint.get_len();
       thelen *= 4; // words -> bytes
       unsigned int start = 256 - thelen;
       for (unsigned int i = 0; i < thelen; i++)
-        boost::hash_combine(seed, buffer[start + i]);
+        boost::hash_combine(crc, buffer[start + i]);
     }
   } else {
     // bigint is too large to fit in that static buffer. This is insane; but
@@ -1847,7 +1839,7 @@ do_type_crc(const BigInt &theint, size_t seed)
     // at the price of possible crc collisions.
     ;
   }
-  return seed;
+  return crc;
 }
 
 static inline __attribute__((always_inline)) void
@@ -1872,40 +1864,39 @@ do_type_hash(const BigInt &theint, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const fixedbvt &theval, size_t seed)
+do_type_crc(const fixedbvt &theval)
 {
-
-  return do_type_crc(theval.get_value(), seed);
+  return do_type_crc(BigInt(theval.to_ansi_c_string().c_str()));
 }
 
 static inline __attribute__((always_inline)) void
 do_type_hash(const fixedbvt &theval, crypto_hash &hash)
 {
 
-  do_type_hash(theval.to_integer(), hash);
+  do_type_hash(BigInt(theval.to_ansi_c_string().c_str()), hash);
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const ieee_floatt &theval, size_t seed)
+do_type_crc(const ieee_floatt &theval)
 {
-  // TODO: Check if this is correct
-  return do_type_crc(theval.to_integer(), seed);
+  return do_type_crc(BigInt(theval.to_ansi_c_string().c_str()));
 }
 
 static inline __attribute__((always_inline)) void
 do_type_hash(const ieee_floatt &theval, crypto_hash &hash)
 {
 
-  do_type_hash(theval.to_integer(), hash);
+  do_type_hash(BigInt(theval.to_ansi_c_string().c_str()), hash);
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const std::vector<expr2tc> &theval, size_t seed)
+do_type_crc(const std::vector<expr2tc> &theval)
 {
+  size_t crc = 0;
   for(auto const &it : theval)
-    it->do_crc(seed);
+    boost::hash_combine(crc, it->do_crc());
 
-  return seed;
+  return crc;
 }
 
 static inline __attribute__((always_inline)) void
@@ -1916,12 +1907,13 @@ do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const std::vector<type2tc> &theval, size_t seed)
+do_type_crc(const std::vector<type2tc> &theval)
 {
+  size_t crc = 0;
   for(auto const &it : theval)
-    it->do_crc(seed);
+    boost::hash_combine(crc, it->do_crc());
 
-  return seed;
+  return crc;
 }
 
 static inline __attribute__((always_inline)) void
@@ -1932,11 +1924,13 @@ do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const std::vector<irep_idt> &theval, size_t seed)
+do_type_crc(const std::vector<irep_idt> &theval)
 {
+  size_t crc = 0;
   for(auto const &it : theval)
-    boost::hash_combine(seed, it.as_string());
-  return seed;
+    boost::hash_combine(crc, it.as_string());
+
+  return crc;
 }
 
 static inline __attribute__((always_inline)) void
@@ -1947,12 +1941,11 @@ do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const expr2tc &theval, size_t seed)
+do_type_crc(const expr2tc &theval)
 {
-
   if (theval.get() != nullptr)
-    return theval->do_crc(seed);
-  return seed;
+    return theval->do_crc();
+  return boost::hash<uint8_t>()(0);
 }
 
 static inline __attribute__((always_inline)) void
@@ -1964,12 +1957,11 @@ do_type_hash(const expr2tc &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const type2tc &theval, size_t seed)
+do_type_crc(const type2tc &theval)
 {
-
   if (theval.get() != nullptr)
-    return theval->do_crc(seed);
-  return seed;
+    return theval->do_crc();
+  return boost::hash<uint8_t>()(0);
 }
 
 static inline __attribute__((always_inline)) void
@@ -1981,11 +1973,9 @@ do_type_hash(const type2tc &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const irep_idt &theval, size_t seed)
+do_type_crc(const irep_idt &theval)
 {
-
-  boost::hash_combine(seed, theval.as_string());
-  return seed;
+  return boost::hash<std::string>()(theval.as_string());
 }
 
 static inline __attribute__((always_inline)) void
@@ -1996,9 +1986,9 @@ do_type_hash(const irep_idt &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const type2t::type_ids &i __attribute__((unused)), size_t seed)
+do_type_crc(const type2t::type_ids &i)
 {
-  return seed; // Dummy field crc
+  return boost::hash<uint8_t>()(i);
 }
 
 static inline __attribute__((always_inline)) void
@@ -2009,9 +1999,9 @@ do_type_hash(const type2t::type_ids &i __attribute__((unused)),
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const expr2t::expr_ids &i __attribute__((unused)), size_t seed)
+do_type_crc(const expr2t::expr_ids &i __attribute__((unused)))
 {
-  return seed; // Dummy field crc
+  return boost::hash<uint8_t>()(i);
 }
 
 static inline __attribute__((always_inline)) void
@@ -2373,25 +2363,20 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::lt
 
 template <class derived, class baseclass, typename traits, typename container,  typename enable, typename fields>
 size_t
-esbmct::irep_methods2<derived, baseclass, traits, container,  enable, fields>::do_crc(size_t seed) const
+esbmct::irep_methods2<derived, baseclass, traits, container,  enable, fields>::do_crc() const
 {
 
-  if (this->crc_val != 0) {
-    boost::hash_combine(seed, this->crc_val);
-    return seed;
-  }
+  if (this->crc_val != 0)
+    return this->crc_val;
 
   // Starting from 0, pass a crc value through all the sub-fields of this
-  // expression. Store it into crc_val. Don't allow the input seed to affect
-  // this calculation, as the crc value needs to uniquely identify _this_
-  // expression.
+  // expression. Store it into crc_val.
   assert(this->crc_val == 0);
 
   do_crc_rec(); // _includes_ type_id / expr_id
 
-  // Finally, combine the crc of this expr with the input seed, and return
-  boost::hash_combine(seed, this->crc_val);
-  return seed;
+  // Finally, combine the crc of this expr with the input , and return
+  return this->crc_val;
 }
 
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
@@ -2463,7 +2448,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::do
   const derived *derived_this = static_cast<const derived*>(this);
   auto m_ptr = membr_ptr::value;
 
-  size_t tmp = do_type_crc(derived_this->*m_ptr, this->crc_val);
+  size_t tmp = do_type_crc(derived_this->*m_ptr);
   boost::hash_combine(this->crc_val, tmp);
 
   superclass::do_crc_rec();
