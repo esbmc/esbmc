@@ -424,8 +424,7 @@ bool clang_c_convertert::get_var(
   // completely wrong but allowed by the language
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
-  code_declt decl;
-  decl.operands().push_back(symbol_exprt(identifier, t));
+  code_declt decl(symbol_exprt(identifier, t));
 
   if(vd.hasInit())
   {
