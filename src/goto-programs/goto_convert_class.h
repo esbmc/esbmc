@@ -63,8 +63,6 @@ protected:
   //
   // side effect removal
   //
-  void make_temp_symbol(exprt &expr,goto_programt &dest);
-  void read(exprt &expr, goto_programt &dest);
   unsigned int get_expr_number_globals(const exprt & expr);
   unsigned int get_expr_number_globals(const expr2tc & expr);
   void break_globals2assignments(exprt & rhs, goto_programt & dest,const locationt & location);
@@ -77,10 +75,6 @@ protected:
     const guardt &guard,
     goto_programt &dest);
 
-  void remove_sideeffects(exprt &expr, guardt &guard,
-                          goto_programt &dest,
-                          bool result_is_used=true);
-
   void remove_sideeffects(exprt &expr, goto_programt &dest,
                           bool result_is_used=true);
 
@@ -91,16 +85,14 @@ protected:
   void generate_dynamic_size_vla(exprt &var, goto_programt &dest);
 
   bool has_sideeffect(const exprt &expr);
-  bool has_function_call(const exprt &expr);
 
-  void remove_assignment(exprt &expr, guardt &guard, goto_programt &dest);
-  void remove_pre(exprt &expr, guardt &guard, goto_programt &dest);
-  void remove_post(exprt &expr, guardt &guard, goto_programt &dest, bool result_is_used);
-  void remove_function_call(exprt &expr, guardt &guard, goto_programt &dest, bool result_is_used);
-  void remove_cpp_new(exprt &expr, guardt &guard, goto_programt &dest, bool result_is_used);
-  void remove_temporary_object(exprt &expr, guardt &guard, goto_programt &dest, bool result_is_used);
-  void remove_statement_expression(exprt &expr, guardt &guard, goto_programt &dest, bool result_is_used);
-  void remove_gcc_conditional_expression(exprt &expr, guardt &guard, goto_programt &dest);
+  void remove_assignment(exprt &expr, goto_programt &dest, bool result_is_used);
+  void remove_increment(exprt &expr, goto_programt &dest, bool result_is_used);
+  void remove_function_call(exprt &expr, goto_programt &dest, bool result_is_used);
+  void remove_cpp_new(exprt &expr, goto_programt &dest, bool result_is_used);
+  void remove_temporary_object(exprt &expr, goto_programt &dest);
+  void remove_statement_expression(exprt &expr, goto_programt &dest, bool result_is_used);
+  void remove_gcc_conditional_expression(exprt &expr, goto_programt &dest);
 
   virtual void do_cpp_new(const exprt &lhs, const exprt &rhs, goto_programt &dest);
 
@@ -146,7 +138,6 @@ protected:
   //
   // conversion
   //
-  void convert_sideeffect(exprt &expr, goto_programt &dest);
   void convert_block(const codet &code, goto_programt &dest);
   void convert_decl(const codet &code, goto_programt &dest);
   void convert_decl_block(const codet &code, goto_programt &dest);
