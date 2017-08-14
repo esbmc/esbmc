@@ -906,19 +906,6 @@ namespace esbmct {
     static constexpr membr_ptr value = v;
   };
 
-  // Field traits specialization for const fields, i.e. expr_id. These become
-  // landmines for future mutable methods, i.e. get_sub_expr, which may get
-  // it's consts mixed up.
-  template <typename R, typename C, R C::* v>
-    class field_traits<const R, C, v>
-  {
-  public:
-    typedef R result_type;
-    typedef C source_class;
-    typedef const R C::* membr_ptr;
-    static constexpr membr_ptr value = v;
-  };
-
   template <typename R, typename C, R C::* v>
   constexpr typename field_traits<R, C, v>::membr_ptr field_traits<R, C, v>::value;
 
