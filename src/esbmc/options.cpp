@@ -139,7 +139,6 @@ const struct opt_templ esbmc_options[] = {
   // Concurrency checking
   { 0, "context-bound", number, "-1" },
   { 0, "state-hashing", switc, "" },
-  { 0, "control-flow-test", switc, "" },
   { 0, "no-por", switc, "" },
   { 0, "all-runs", switc, "" },
 
