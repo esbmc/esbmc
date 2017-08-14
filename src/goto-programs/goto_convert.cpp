@@ -1497,6 +1497,11 @@ void goto_convertt::convert_return(
       err_location(new_code);
       throw "function must return value";
     }
+
+    goto_programt::targett t = dest.add_instruction();
+    t->make_return();
+    migrate_expr(new_code, t->code);
+    t->location = new_code.location();
   }
   else
   {
@@ -1507,11 +1512,6 @@ void goto_convertt::convert_return(
       throw "function must not return value";
     }
   }
-
-  goto_programt::targett t=dest.add_instruction();
-  t->make_return();
-  migrate_expr(new_code, t->code);
-  t->location=new_code.location();
 }
 
 void goto_convertt::convert_continue(

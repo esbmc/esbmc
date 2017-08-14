@@ -504,7 +504,7 @@ void goto_convertt::remove_function_call(
   goto_programt &dest,
   bool result_is_used)
 {
-  if(!result_is_used)
+  if(!result_is_used || expr.type().id() == "empty")
   {
     assert(expr.operands().size() == 2);
     code_function_callt call;
