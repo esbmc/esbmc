@@ -52,7 +52,7 @@ reachability_treet::reachability_treet(
   round_robin = options.get_bool_option("round-robin");
   schedule = options.get_bool_option("schedule");
 
-  if (options.get_bool_option("no-por") || options.get_bool_option("control-flow-test"))
+  if (options.get_bool_option("no-por"))
     por = false;
   else
     por = true;
