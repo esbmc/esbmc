@@ -140,7 +140,7 @@ public:
     copy_to_operands(lhs);
   }
 
-  code_declt(const exprt &lhs, const exprt &rhs):codet("decl")
+  explicit code_declt(const exprt &lhs, const exprt &rhs):codet("decl")
   {
     copy_to_operands(lhs, rhs);
   }
