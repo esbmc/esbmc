@@ -201,7 +201,7 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
     else if(is_symbol2t(lhs))
     {
       symbol2t s = to_symbol2t(lhs);
-      if(s.thename.as_string().find("return_value!") != std::string::npos)
+      if(s.thename.as_string().find("return_value$") != std::string::npos)
         t = symex_targett::HIDDEN;
     }
 
