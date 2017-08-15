@@ -10,16 +10,6 @@
   }*/
 
 
-void error(void) 
-{ 
-
-  {
-  goto ERROR;
-  ERROR: ;
-  return;
-}
-}
-
 int c  ;
 int c_t  ;
 int c_req_up  ;
@@ -120,7 +110,7 @@ void write_loop(void)
 
       } else {
         {
-        error();
+        assert(0);
         }
       }
     }

@@ -13,6 +13,6 @@ int main() {
 	}
 	if (s >= 4) {
 		// Invalid safety property (s may be 4)
-		ERROR: return 1;
+		assert(0);
 	}
 }

@@ -8,9 +8,7 @@ extern void __VERIFIER_error() __attribute__ ((__noreturn__));
  * 
  */
 
-extern int __VERIFIER_nondet_int(void);
-
-int addition(int m, int n) {
+long long addition(long long m, long long n) {
     if (n == 0) {
         return m;
     }
@@ -26,10 +24,10 @@ int addition(int m, int n) {
 int main() {
     int m = __VERIFIER_nondet_int();
     int n = __VERIFIER_nondet_int();
-    int result = addition(m,n);
+    long long result = addition(m,n);
     if (m < 100 || n < 100 || result >= 200) {
         return 0;
     } else {
-        ERROR: __VERIFIER_error();
+        assert(0);
     }
 }

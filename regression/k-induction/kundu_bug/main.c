@@ -1,14 +1,4 @@
 
-void error(void) 
-{ 
-
-  {
-  goto ERROR;
-  ERROR: ;
-  return;
-}
-}
-
 void immediate_notify(void) ;
 int max_loop ;
 int num ;
@@ -31,7 +21,7 @@ char read_data(int i___0 )
       goto return_label;
     } else {
       {
-	error();
+	assert(0);
       }
     }
   }
@@ -51,7 +41,7 @@ void write_data(int i___0 , char c )
       data_1 = c;
     } else {
       {
-	error();
+	assert(0);
       }
     }
   }
@@ -157,7 +147,7 @@ void C_1(void)
     num -= 1;
     if (! (num >= 0)) {
       {
-	error();
+	assert(0);
       }
     } else {
 

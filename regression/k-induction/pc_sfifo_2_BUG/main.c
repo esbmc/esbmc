@@ -7,16 +7,6 @@
   }*/
 
 
-void error(void) 
-{ 
-
-  {
-  goto ERROR;
-  ERROR: ;
-  return;
-}
-}
-
 int q_buf_0  ;
 int q_free  ;
 int q_read_ev  ;
@@ -196,12 +186,12 @@ void do_read_c(void)
 
       } else {
         {
-        error();
+        assert(0);
         }
       }
     } else {
       {
-      error();
+      assert(0);
       }
     }
   }
@@ -353,7 +343,7 @@ void eval(void)
         do_write_p();
         }
       } else {
-	error();
+	assert(0);
       }
     } else {
 

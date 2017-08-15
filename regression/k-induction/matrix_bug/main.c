@@ -10,18 +10,10 @@
 
 #define NULL 0
 
-
-//#define N_LIN 10
-//#define N_COL 10
-
-unsigned int nondet_uint();
-int nondet_int();
-
-unsigned int N_LIN=nondet_uint();
-unsigned int N_COL=nondet_uint();
-
-main()
+int main()
 {
+  unsigned int N_LIN;
+  unsigned int N_COL;
       
   unsigned int j,k;
   int matriz[N_COL][N_LIN], maior;
