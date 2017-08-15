@@ -1,16 +1,10 @@
 #!/bin/sh
 
 if test ! -e esbmc; then
-  echo "Please run2 from src/ dir";
+  echo "Please run from src/ dir";
   exit 1
 fi
 
-libtoolize
-
-aclocal -I scripts/build-aux/m4
-
-automake --add-missing --foreign
-
-autoconf
+autoreconf -fi
 
 rm -rf autom4te.cache

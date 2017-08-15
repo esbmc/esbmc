@@ -9,11 +9,10 @@ Author: CM Wintersteiger
 #ifndef CPROVER_GOTO_PROGRAMS_FORMAT_STRINGS_H_
 #define CPROVER_GOTO_PROGRAMS_FORMAT_STRINGS_H_
 
-#include <string>
 #include <list>
-
-#include <expr.h>
-#include <mp_arith.h>
+#include <string>
+#include <util/expr.h>
+#include <util/mp_arith.h>
 
 class format_tokent 
 {
@@ -40,7 +39,7 @@ public:
   typedef enum { LEN_h, LEN_l, LEN_L, LEN_j, LEN_t } length_modifierst;
   
   format_tokent(token_typet _type) : type(_type) {}
-  format_tokent(void) : type(UNKNOWN) {}
+  format_tokent() : type(UNKNOWN) {}
   
   token_typet type;  
   std::list<flag_typet> flags;  
@@ -50,7 +49,7 @@ public:
   irep_idt value; // for text and pattern matching
 };
 
-class format_token_listt : public std::list<format_tokent> {};
+typedef std::list<format_tokent> format_token_listt;
 
 bool parse_format_string(
   const exprt &format_arg,

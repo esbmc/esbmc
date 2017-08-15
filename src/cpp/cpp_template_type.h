@@ -9,11 +9,16 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_TEMPLATE_TYPE_H
 #define CPROVER_CPP_TEMPLATE_TYPE_H
 
-#include <type.h>
+#include <util/std_types.h>
 
 class template_parametert:public exprt
 {
 public:
+  inline template_parametert(const irep_idt &_id, const typet &_type)
+   : exprt(_id, _type)
+  {
+  }
+
   inline exprt &default_parameter()
   {
     return static_cast<exprt &>(add("#default"));

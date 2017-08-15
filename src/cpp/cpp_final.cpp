@@ -7,21 +7,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <ansi-c/c_final.h>
-#include <ansi-c/cprover_library.h>
-
-#include "cpp_final.h"
-
-/*******************************************************************\
-
-Function: cpp_final
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <c2goto/cprover_library.h>
+#include <cpp/cpp_final.h>
 
 bool cpp_final(
   contextt &context,

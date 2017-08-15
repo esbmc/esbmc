@@ -6,21 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <location.h>
-
-#include "cpp_typecheck.h"
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <cpp/cpp_typecheck.h>
+#include <util/location.h>
 
 void cpp_typecheckt::convert(cpp_usingt &cpp_using)
 {
@@ -55,11 +42,8 @@ void cpp_typecheckt::convert(cpp_usingt &cpp_using)
   // go back to where we used to be
   save_scope.restore();
 
-  for(cpp_scopest::id_sett::iterator
-      it=id_set.begin();
-      it!=id_set.end();
-      it++)
+  for(auto it : id_set)
   {
-    cpp_scopes.current_scope().using_set.insert(*it);
+    cpp_scopes.current_scope().using_set.insert(it);
   }
 }

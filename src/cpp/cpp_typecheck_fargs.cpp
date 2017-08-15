@@ -6,14 +6,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <std_types.h>
-
-#include <ansi-c/c_qualifiers.h>
-
-#include "cpp_typecheck_fargs.h"
-#include "cpp_typecheck.h"
+#include <util/c_qualifiers.h>
+#include <cassert>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/cpp_typecheck_fargs.h>
+#include <util/std_types.h>
 
 std::ostream &operator<<(std::ostream &out,
   const cpp_typecheck_fargst &fargs)
@@ -32,42 +29,16 @@ std::ostream &operator<<(std::ostream &out,
   return out;
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheck_fargst::has_class_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cpp_typecheck_fargst::has_class_type() const
 {
-  for(exprt::operandst::const_iterator it=operands.begin();
-      it!=operands.end();
-      it++)
+  for(const auto & operand : operands)
   {
-    if(it->type().id()=="struct")
+    if(operand.type().id()=="struct")
       return true;
   }
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheck_fargst::build
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheck_fargst::build(
   const side_effect_expr_function_callt &function_call)
@@ -77,21 +48,9 @@ void cpp_typecheck_fargst::build(
   operands.clear();
   operands.reserve(function_call.op1().operands().size());
 
-  for(unsigned i=0; i<function_call.op1().operands().size(); i++)
-    operands.push_back(function_call.op1().operands()[i]);
+  for(const auto & i : function_call.op1().operands())
+    operands.push_back(i);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheck_fargst::exact_match
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_typecheck_fargst::match(
   const code_typet &code_type,

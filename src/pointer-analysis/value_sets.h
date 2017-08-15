@@ -9,19 +9,16 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_VALUE_SETS_H
 #define CPROVER_POINTER_ANALYSIS_VALUE_SETS_H
 
-#include <irep2.h>
-#include <set>
-
 #include <goto-programs/goto_program.h>
+#include <set>
+#include <util/irep2.h>
 
 // an abstract base class
 
 class value_setst
 {
 public:
-  value_setst()
-  {
-  }
+  value_setst() = default;
 
   typedef std::list<expr2tc> valuest;
 
@@ -32,8 +29,7 @@ public:
     valuest &dest)=0;
     
   virtual ~value_setst()
-  {
-  }
+  = default;
 };
 
 #endif

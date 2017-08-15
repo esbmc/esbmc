@@ -6,28 +6,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-#include <stdlib.h>
-
-#include <arith_tools.h>
-#include <config.h>
-#include <std_types.h>
-
-#include "c_types.h"
-#include "parse_float.h"
-#include "convert_float_literal.h"
-
-/*******************************************************************\
-
-Function: convert_float_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <ansi-c/convert_float_literal.h>
+#include <ansi-c/parse_float.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/ieee_float.h>
+#include <util/std_types.h>
 
 void convert_float_literal(
   const std::string &src,

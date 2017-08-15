@@ -8,19 +8,17 @@ Date: June 2003
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <base_type.h>
-#include <prefix.h>
-#include <std_code.h>
-#include <std_expr.h>
-#include <type_byte_size.h>
-#include <c_types.h>
-
-#include "goto_convert_functions.h"
-#include "goto_inline.h"
-#include "remove_skip.h"
-#include "i2string.h"
+#include <cassert>
+#include <goto-programs/goto_convert_functions.h>
+#include <goto-programs/goto_inline.h>
+#include <goto-programs/remove_skip.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,
@@ -36,10 +34,6 @@ goto_convert_functionst::goto_convert_functionst(
 	  inlining=true;
 }
 
-goto_convert_functionst::~goto_convert_functionst()
-{
-}
-
 void goto_convert_functionst::goto_convert()
 {
   // warning! hash-table iterators are not stable
@@ -53,12 +47,9 @@ void goto_convert_functionst::goto_convert()
     }
   );
 
-  for(symbol_listt::iterator
-      it=symbol_list.begin();
-      it!=symbol_list.end();
-      it++)
+  for(auto & it : symbol_list)
   {
-    convert_function(**it);
+    convert_function(*it);
   }
 
   functions.compute_location_numbers();
@@ -66,17 +57,11 @@ void goto_convert_functionst::goto_convert()
 
 bool goto_convert_functionst::hide(const goto_programt &goto_program)
 {
-  for(goto_programt::instructionst::const_iterator
-      i_it=goto_program.instructions.begin();
-      i_it!=goto_program.instructions.end();
-      i_it++)
+  for(const auto & instruction : goto_program.instructions)
   {
-    for(goto_programt::instructiont::labelst::const_iterator
-        l_it=i_it->labels.begin();
-        l_it!=i_it->labels.end();
-        l_it++)
+    for(const auto & label : instruction.labels)
     {
-      if(*l_it=="__ESBMC_HIDE")
+      if(label=="__ESBMC_HIDE")
         return true;
     }
   }
@@ -122,18 +107,6 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
   convert_function(*s);
 }
 
-/*******************************************************************\
-
-Function: goto_convert_functionst::convert_function
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convert_functionst::convert_function(symbolt &symbol)
 {
   irep_idt identifier = symbol.name;
@@ -159,19 +132,14 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     throw "got invalid code for function `"+id2string(identifier)+"'";
   }
 
+  // Get parameter names
+  goto_programt::local_variablest arg_ids;
   const code_typet::argumentst &arguments=f.type.arguments();
-
-  std::list<irep_idt> arg_ids;
-
-  // add as local variables
-  for(code_typet::argumentst::const_iterator
-      it=arguments.begin();
-      it!=arguments.end();
-      it++)
+  for(auto const &it : arguments)
   {
-    const irep_idt &identifier=it->get_identifier();
-    assert(identifier!="");
-    arg_ids.push_back(identifier);
+    const irep_idt &identifier = it.get_identifier();
+    assert(!identifier.empty());
+    arg_ids.push_front(identifier);
   }
 
   if(!symbol.value.is_code())
@@ -185,17 +153,16 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   locationt end_location;
 
   if(to_code(symbol.value).get_statement()=="block")
-    end_location=static_cast<const locationt &>(
-        symbol.value.end_location());
+    end_location=static_cast<const locationt &>(symbol.value.end_location());
   else
     end_location.make_nil();
 
   targets=targetst();
   targets.return_set=true;
   targets.return_value=
-      f.type.return_type().id()!="empty" &&
-      f.type.return_type().id()!="constructor" &&
-      f.type.return_type().id()!="destructor";
+    f.type.return_type().id()!="empty" &&
+    f.type.return_type().id()!="constructor" &&
+    f.type.return_type().id()!="destructor";
 
   goto_convert_rec(tmp, f.body);
 
@@ -207,17 +174,41 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   goto_programt::targett t=f.body.add_instruction();
   t->type=END_FUNCTION;
   t->location=end_location;
-  //t->code.identifier(identifier);
-  //XXXjmorse, disabled in migration, don't think this does anything
 
   if(to_code(symbol.value).get_statement()=="block")
-    t->location=static_cast<const locationt &>(
-        symbol.value.end_location());
+    t->location=static_cast<const locationt &>(symbol.value.end_location());
+
+  // Wrap the body of functions name __VERIFIER_atomic_* with atomic_bengin
+  // and atomic_end
+  if(!f.body.instructions.empty() &&
+      has_prefix(id2string(identifier), "__VERIFIER_atomic_"))
+  {
+    goto_programt::instructiont a_begin;
+    a_begin.make_atomic_begin();
+    a_begin.location = f.body.instructions.front().location;
+    f.body.insert_swap(f.body.instructions.begin(), a_begin);
+
+    goto_programt::targett a_end = f.body.add_instruction();
+    a_end->make_atomic_end();
+    a_end->location = end_location;
+
+    Forall_goto_program_instructions(i_it, f.body)
+    {
+      if(i_it->is_goto() && i_it->targets.front()->is_end_function())
+      {
+        i_it->targets.clear();
+        i_it->targets.push_back(a_end);
+      }
+    }
+  }
+
+  // Add parameter and local variables
+  f.body.add_local_variables(arg_ids);
+  f.body.add_local_variables(local_variables);
 
   // do local variables
   Forall_goto_program_instructions(i_it, f.body)
   {
-    i_it->add_local_variables(arg_ids);
     i_it->function=identifier;
   }
 
@@ -229,7 +220,10 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   f.body.update();
 
   if(hide(f.body))
-    f.type.hide(true);
+    f.body.hide = true;
+
+  if(f.type.inlined())
+    f.set_inlined(true);
 }
 
 void goto_convert(
@@ -280,7 +274,6 @@ goto_convert_functionst::collect_type(const irept &type, typename_sett &deps)
   }
 
   collect_expr(type, deps);
-  return;
 }
 
 void
@@ -304,8 +297,6 @@ goto_convert_functionst::collect_expr(const irept &expr, typename_sett &deps)
   forall_named_irep(it, expr.get_comments()) {
     collect_type(it->second, deps);
   }
-
-  return;
 }
 
 void
@@ -318,12 +309,12 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
 
   // Some type symbols aren't entirely correct. This is because (in the current
   // 27_exStbFb test) some type symbols get the module name inserted into the
-  // name -- so c::int32_t becomes c::main::int32_t.
+  // name -- so int32_t becomes main::int32_t.
   //
   // Now this makes entire sense, because int32_t could be something else in
   // some other file. However, because type symbols aren't squashed at type
   // checking time (which, you know, might make sense) we now don't know what
-  // type symbol to link "c::int32_t" up to. So; instead we test to see whether
+  // type symbol to link "int32_t" up to. So; instead we test to see whether
   // a type symbol is linked correctly, and if it isn't we look up what module
   // the current block of code came from and try to guess what type symbol it
   // should have.
@@ -349,23 +340,13 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
       type2 = ns.follow((typet&)type);
     } else {
       // Otherwise, try to guess the namespaced type symbol
-      std::string ident = type.identifier().as_string();
-      std::string ident2;
-
-      // Detect module prefix, then insert module name after it.
-      if (ident.c_str()[0] == 'c' && ident.c_str()[1] == 'p' &&
-          ident.c_str()[2] == 'p') {
-        ident2 = "cpp::" + cur_name_sym.module.as_string() + "::" +
-                 ident.substr(5, std::string::npos);
-      } else {
-        ident2 = "c::" + cur_name_sym.module.as_string() + "::"  +
-                 ident.substr(3, std::string::npos);
-      }
+      std::string ident =
+        cur_name_sym.module.as_string() + type.identifier().as_string();
 
       // Try looking that up.
-      if (!ns.lookup(irep_idt(ident2), sym)) {
+      if (!ns.lookup(irep_idt(ident), sym)) {
         irept tmptype = type;
-        tmptype.identifier(irep_idt(ident2));
+        tmptype.identifier(irep_idt(ident));
         type2 = ns.follow((typet&)tmptype);
       } else {
         // And if we fail
@@ -380,7 +361,6 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
   }
 
   rename_exprs(type, cur_name_sym, sname);
-  return;
 }
 
 void
@@ -404,8 +384,6 @@ goto_convert_functionst::rename_exprs(irept &expr, const symbolt &cur_name_sym,
 
   Forall_named_irep(it, expr.get_comments())
     rename_exprs(it->second, cur_name_sym, sname);
-
-  return;
 }
 
 void
@@ -420,18 +398,17 @@ goto_convert_functionst::wallop_type(irep_idt name,
     return;
 
   // Iterate over our dependancies ensuring they're resolved.
-  for (std::set<irep_idt>::iterator it = deps.begin(); it != deps.end(); it++)
-    wallop_type(*it, typenames, sname);
+  for (const auto & dep : deps)
+    wallop_type(dep, typenames, sname);
 
   // And finally perform renaming.
   symbolt* s = context.find_symbol(name);
   rename_types(s->type, *s, sname);
   deps.clear();
-  return;
 }
 
 void
-goto_convert_functionst::thrash_type_symbols(void)
+goto_convert_functionst::thrash_type_symbols()
 {
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and
@@ -467,8 +444,8 @@ goto_convert_functionst::thrash_type_symbols(void)
     }
   );
 
-  for (typename_mapt::iterator it = typenames.begin(); it != typenames.end(); it++)
-    it->second.erase(it->first);
+  for (auto & it : typenames)
+    it.second.erase(it.first);
 
   // Now, repeatedly rename all types. When we encounter a type that contains
   // unresolved symbols, resolve it first, then include it into this type.
@@ -486,12 +463,10 @@ goto_convert_functionst::thrash_type_symbols(void)
       rename_exprs(s.value, s, s.name);
     }
   );
-
-  return;
 }
 
 void
-goto_convert_functionst::fixup_unions(void)
+goto_convert_functionst::fixup_unions()
 {
   // Iterate over all types and expressions, replacing:
   //  * Non-pointer union types with byte arrays of corresponding size
@@ -519,7 +494,7 @@ goto_convert_functionst::fix_union_type(typet &type, bool is_pointer)
     // one authorative type_byte_size function
     type2tc new_type;
     migrate_type(type, new_type);
-    auto size = type_byte_size(*new_type);
+    auto size = type_byte_size(new_type);
     new_type = type2tc(new array_type2t(get_uint8_type(),
                                         gen_ulong(size.to_uint64()), false));
     type = migrate_type_back(new_type);
@@ -552,7 +527,7 @@ goto_convert_functionst::fix_union_expr(exprt &expr)
       expr2tc dataobj;
       migrate_expr(expr.op0(), dataobj);
       type2tc union_type = dataobj->type;
-      auto size = type_byte_size(*union_type);
+      auto size = type_byte_size(union_type);
       type2tc array_type = type2tc(new array_type2t(get_uint8_type(),
             gen_ulong(size.to_uint64()), false));
       type2tc union_pointer(new pointer_type2t(union_type));

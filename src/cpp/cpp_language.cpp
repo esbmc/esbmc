@@ -6,81 +6,20 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <string.h>
-
-#include <sstream>
-#include <fstream>
-
-#include <config.h>
-#include <replace_symbol.h>
-
-#include <ansi-c/c_preprocess.h>
-#include <ansi-c/c_link.h>
 #include <ansi-c/c_main.h>
+#include <ansi-c/c_preprocess.h>
 #include <ansi-c/gcc_builtin_headers.h>
-
-#include "cpp_language.h"
-#include "expr2cpp.h"
-#include "cpp_parser.h"
-#include "cpp_typecheck.h"
-#include "cpp_final.h"
-
-/*******************************************************************\
-
-Function: cpp_languaget::extensions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-std::set<std::string> cpp_languaget::extensions() const
-{
-  std::set<std::string> s;
-
-  s.insert("cpp");
-  s.insert("cc");
-  s.insert("ipp");
-  s.insert("cxx");
-
-  #ifndef _WIN32
-  s.insert("C");
-  #endif
-
-  return s;
-}
-
-/*******************************************************************\
-
-Function: cpp_languaget::modules_provided
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void cpp_languaget::modules_provided(std::set<std::string> &modules)
-{
-  modules.insert(parse_path);
-}
-
-/*******************************************************************\
-
-Function: cpp_languaget::preprocess
-
-  Inputs:
-
- Outputs:
-
- Purpose: ANSI-C preprocessing
-
-\*******************************************************************/
+#include <cpp/cpp_final.h>
+#include <cpp/cpp_language.h>
+#include <cpp/cpp_parser.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/expr2cpp.h>
+#include <cstring>
+#include <fstream>
+#include <sstream>
+#include <util/c_link.h>
+#include <util/config.h>
+#include <util/replace_symbol.h>
 
 bool cpp_languaget::preprocess(
   const std::string &path,
@@ -93,7 +32,7 @@ bool cpp_languaget::preprocess(
   // check extension
 
   const char *ext=strrchr(path.c_str(), '.');
-  if(ext!=NULL && std::string(ext)==".ipp")
+  if(ext!=nullptr && std::string(ext)==".ipp")
   {
     std::ifstream infile(path.c_str());
 
@@ -108,33 +47,24 @@ bool cpp_languaget::preprocess(
   return c_preprocess(path, outstream, true, message_handler);
 }
 
-/*******************************************************************\
-
-Function: cpp_languaget::internal_additions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_languaget::internal_additions(std::ostream &out)
 {
-  out << "# 1 \"<built-in>\"" << std::endl;
+  out << "# 1 \"esbmc_intrinsics.h" << std::endl;
 
   out << "void *operator new(unsigned int size);" << std::endl;
 
-  // assume/assert
-  out << "extern \"C\" void assert(bool assertion);" << std::endl;
-  out << "extern \"C\" void __ESBMC_assume(bool assumption);" << std::endl;
-  out << "extern \"C\" void __ESBMC_assert("
-         "bool assertion, const char *description);" << std::endl;
+  out << "extern \"C\" {" << std::endl;
 
-  // __ESBMC_atomic_{begin,end}
-  out << "extern \"C\" void __ESBMC_atomic_begin();" << std::endl;
-  out << "extern \"C\" void __ESBMC_atomic_end();" << std::endl;
+  // assume/assert
+  out << "void __ESBMC_assume(bool assumption);" << std::endl;
+  out << "void assert(bool assertion);" << std::endl;
+  out << "void __ESBMC_assert("
+         "bool assertion, const char *description);" << std::endl;
+  out << "bool __ESBMC_same_object(const void *, const void *);" << std::endl;
+
+  // pointers
+  out << "unsigned __ESBMC_POINTER_OBJECT(const void *p);" << std::endl;
+  out << "signed __ESBMC_POINTER_OFFSET(const void *p);" << std::endl;
 
   out << "extern \"C\" int __ESBMC_rounding_mode = 0;" << std::endl;
 
@@ -145,12 +75,27 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "unsigned __CPROVER::constant_infinity_uint;" << std::endl;
   out << "bool __ESBMC_alloc[__CPROVER::constant_infinity_uint];" << std::endl;
   out << "unsigned __ESBMC_alloc_size[__CPROVER::constant_infinity_uint];" << std::endl;
-  out << " bool __ESBMC_deallocated[__CPROVER::constant_infinity_uint];" << std::endl;
+  out << "bool __ESBMC_deallocated[__CPROVER::constant_infinity_uint];" << std::endl;
   out << "bool __ESBMC_is_dynamic[__CPROVER::constant_infinity_uint];" << std::endl;
 
-  // GCC stuff
-  out << "extern \"C\" {" << std::endl;
-  out << GCC_BUILTIN_HEADERS;
+  // float stuff
+  out << "bool __ESBMC_isnan(double f);" << std::endl;
+  out << "bool __ESBMC_isfinite(double f);" << std::endl;
+  out << "bool __ESBMC_isinf(double f);" << std::endl;
+  out << "bool __ESBMC_isnormal(double f);" << std::endl;
+  out << "int __ESBMC_rounding_mode;" << std::endl;
+
+  // absolute value
+  out << "int __ESBMC_abs(int x);" << std::endl;
+  out << "long int __ESBMC_labs(long int x);" << std::endl;
+  out << "double __ESBMC_fabs(double x);" << std::endl;
+  out << "long double __ESBMC_fabsl(long double x);" << std::endl;
+  out << "float __ESBMC_fabsf(float x);" << std::endl;
+
+  // Digital controllers code
+  out << "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, bool isDenominator);" << std::endl;
+  out << "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);" << std::endl;
+  out << "bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);" << std::endl;
 
   // Forward decs for pthread main thread begin/end hooks. Because they're
   // pulled in from the C library, they need to be declared prior to pulling
@@ -158,24 +103,41 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "void pthread_start_main_hook(void);" << std::endl;
   out << "void pthread_end_main_hook(void);" << std::endl;
 
-  //  Empty __FILE__ and __LINE__ definitions.
+  // GCC stuff
+  out << GCC_BUILTIN_HEADERS;
+
+  // Forward declarations for nondeterministic types.
+  out << "int nondet_int();" << std::endl;
+  out << "unsigned int nondet_uint();" << std::endl;
+  out << "long nondet_long();" << std::endl;
+  out << "unsigned long nondet_ulong();" << std::endl;
+  out << "short nondet_short();" << std::endl;
+  out << "unsigned short nondet_ushort();" << std::endl;
+  out << "short nondet_short();" << std::endl;
+  out << "unsigned short nondet_ushort();" << std::endl;
+  out << "char nondet_char();" << std::endl;
+  out << "unsigned char nondet_uchar();" << std::endl;
+  out << "signed char nondet_schar();" << std::endl;
+
+  // And again, for TACAS VERIFIER versions,
+  out << "int __VERIFIER_nondet_int();" << std::endl;
+  out << "unsigned int __VERIFIER_nondet_uint();" << std::endl;
+  out << "long __VERIFIER_nondet_long();" << std::endl;
+  out << "unsigned long __VERIFIER_nondet_ulong();" << std::endl;
+  out << "short __VERIFIER_nondet_short();" << std::endl;
+  out << "unsigned short __VERIFIER_nondet_ushort();" << std::endl;
+  out << "short __VERIFIER_nondet_short();" << std::endl;
+  out << "unsigned short __VERIFIER_nondet_ushort();" << std::endl;
+  out << "char __VERIFIER_nondet_char();" << std::endl;
+  out << "unsigned char __VERIFIER_nondet_uchar();" << std::endl;
+  out << "signed char __VERIFIER_nondet_schar();" << std::endl;
+
+  out << "const char *__PRETTY_FUNCTION__;" << std::endl;
   out << "const char *__FILE__ = \"\";" << std::endl;
   out << "unsigned int __LINE__ = 0;" << std::endl;
 
   out << "}" << std::endl;
 }
-
-/*******************************************************************\
-
-Function: cpp_languaget::parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_languaget::parse(
   const std::string &path,
@@ -222,25 +184,11 @@ bool cpp_languaget::parse(
   return result;
 }
 
-/*******************************************************************\
-
-Function: cpp_languaget::typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cpp_languaget::typecheck(
   contextt &context,
   const std::string &module,
   message_handlert &message_handler)
 {
-  if(module=="") return false;
-
   contextt new_context;
 
   if(cpp_typecheck(cpp_parse_tree, new_context, module, message_handler))
@@ -249,39 +197,15 @@ bool cpp_languaget::typecheck(
   return c_link(context, new_context, message_handler, module);
 }
 
-/*******************************************************************\
-
-Function: cpp_languaget::final
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cpp_languaget::final(
   contextt &context,
   message_handlert &message_handler)
 {
   if(cpp_final(context, message_handler)) return true;
-  if(c_main(context, "c::", "c::main", message_handler)) return true;
+  if(c_main(context, "main", message_handler)) return true;
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: cpp_languaget::show_parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_languaget::show_parse(std::ostream &out)
 {
@@ -292,18 +216,6 @@ void cpp_languaget::show_parse(std::ostream &out)
     show_parse(out, *it);
 }
 
-/*******************************************************************\
-
-Function: cpp_languaget::show_parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_languaget::show_parse(
   std::ostream &out,
   const cpp_itemt &item)
@@ -313,11 +225,8 @@ void cpp_languaget::show_parse(
     const cpp_linkage_spect &linkage_spec=
       item.get_linkage_spec();
 
-    for(cpp_linkage_spect::itemst::const_iterator
-        it=linkage_spec.items().begin();
-        it!=linkage_spec.items().end();
-        it++)
-      show_parse(out, *it);
+    for(const auto & it : linkage_spec.items())
+      show_parse(out, it);
 
     out << std::endl;
   }
@@ -329,11 +238,8 @@ void cpp_languaget::show_parse(
     out << "NAMESPACE " << namespace_spec.get_namespace()
         << ":" << std::endl;
 
-    for(cpp_namespace_spect::itemst::const_iterator
-        it=namespace_spec.items().begin();
-        it!=namespace_spec.items().end();
-        it++)
-      show_parse(out, *it);
+    for(const auto & it : namespace_spec.items())
+      show_parse(out, it);
 
     out << std::endl;
   }
@@ -355,76 +261,30 @@ void cpp_languaget::show_parse(
     out << "UNKNOWN: " << item << std::endl;
 }
 
-/*******************************************************************\
-
-Function: new_cpp_language
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 languaget *new_cpp_language()
 {
   return new cpp_languaget;
 }
 
-/*******************************************************************\
-
-Function: cpp_languaget::from_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cpp_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  bool fullname)
 {
-  code=expr2cpp(expr, ns);
+  code=expr2cpp(expr, ns, fullname);
   return false;
 }
-
-/*******************************************************************\
-
-Function: cpp_languaget::from_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  bool fullname)
 {
-  code=type2cpp(type, ns);
+  code=type2cpp(type, ns, fullname);
   return false;
 }
-
-/*******************************************************************\
-
-Function: cpp_languaget::to_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_languaget::to_expr(
   const std::string &code,
@@ -465,20 +325,4 @@ bool cpp_languaget::to_expr(
   cpp_parser.clear();
 
   return result;
-}
-
-/*******************************************************************\
-
-Function: cpp_languaget::~cpp_languaget
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-cpp_languaget::~cpp_languaget()
-{
 }

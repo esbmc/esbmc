@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_SMT_SMT_ARRAY_H_
 #define _ESBMC_SOLVERS_SMT_SMT_ARRAY_H_
 
-#include "smt_conv.h"
+#include <solvers/smt/smt_conv.h>
 
 // Interface definition for array manipulation
 
@@ -45,8 +45,8 @@ public:
 
   virtual void add_array_constraints_for_solving() = 0;
 
-  virtual void push_array_ctx(void) = 0;
-  virtual void pop_array_ctx(void) = 0;
+  virtual void push_array_ctx() = 0;
+  virtual void pop_array_ctx() = 0;
 
   // And everything else goes through the ast methods!
 

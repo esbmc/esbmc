@@ -14,8 +14,8 @@ Author: Daniel Kroening, kroening@kroening.com
 // false: replaced something
 //
 
-#include "hash_cont.h"
-#include "expr.h"
+#include <util/expr.h>
+#include <util/hash_cont.h>
 
 class replace_symbolt
 {
@@ -38,8 +38,8 @@ class replace_symbolt
   virtual bool replace(exprt &dest);
   virtual bool replace(typet &dest);
 
-  replace_symbolt();
-  virtual ~replace_symbolt();
+  replace_symbolt() = default;
+  virtual ~replace_symbolt() = default;
   
  protected:
   expr_mapt expr_map;

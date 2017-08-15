@@ -6,19 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "cpp_declaration.h"
-
-/*******************************************************************\
-
-Function: cpp_declarationt::output
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <cpp/cpp_declaration.h>
 
 void cpp_declarationt::output(std::ostream &out) const
 {

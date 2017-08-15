@@ -1,10 +1,8 @@
-#include <irep2.h>
-#include <migrate.h>
-#include <prefix.h>
-
+#include <goto-symex/renaming.h>
 #include <langapi/language_util.h>
-
-#include "renaming.h"
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
 
 unsigned renaming::level2t::current_number(const expr2tc &symbol) const
 {
@@ -44,7 +42,6 @@ renaming::level1t::get_ident_name(expr2tc &sym) const
   symbol.rlevel = symbol2t::level1;
   symbol.level1_num = it->second;
   symbol.thread_num = thread_id;
-  return;
 }
 
 void
@@ -69,7 +66,6 @@ renaming::level2t::get_ident_name(expr2tc &sym) const
   symbol.rlevel = lev;
   symbol.level2_num = it->second.count;
   symbol.node_num = it->second.node_id;
-  return;
 }
 
 void renaming::level1t::rename(expr2tc &expr)
@@ -106,7 +102,7 @@ void renaming::level1t::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    expr.get()->Foreach_operand([this] (expr2tc &e) {
+    expr->Foreach_operand([this] (expr2tc &e) {
         rename(e);
       }
     );
@@ -173,7 +169,7 @@ void renaming::level2t::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    expr.get()->Foreach_operand([this] (expr2tc &e) {
+    expr->Foreach_operand([this] (expr2tc &e) {
         if (!is_nil_expr(e))
           rename(e);
       }
@@ -202,7 +198,7 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr,
   if (is_nil_expr(expr))
     return;
 
-  expr.get()->Foreach_operand([this] (expr2tc &e) {
+  expr->Foreach_operand([this] (expr2tc &e) {
       get_original_name(e);
     }
   );
@@ -247,31 +243,25 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr,
 
 void renaming::level1t::print(std::ostream &out) const
 {
-  for(current_namest::const_iterator
-      it=current_names.begin();
-      it!=current_names.end();
-      it++)
-    out << it->first.base_name << " --> "
-        << "thread " << thread_id << " count " << it->second << std::endl;
+  for(const auto & current_name : current_names)
+    out << current_name.first.base_name << " --> "
+        << "thread " << thread_id << " count " << current_name.second << std::endl;
 }
 
 void renaming::level2t::print(std::ostream &out) const
 {
-  for(current_namest::const_iterator
-      it=current_names.begin();
-      it!=current_names.end();
-      it++) {
-    out << it->first.base_name;
+  for(const auto & current_name : current_names) {
+    out << current_name.first.base_name;
 
-    if (it->first.lev == symbol2t::level1)
-      out << "@" << it->first.l1_num <<  "!" << it->first.t_num;
+    if (current_name.first.lev == symbol2t::level1)
+      out << "@" << current_name.first.l1_num <<  "!" << current_name.first.t_num;
 
     out <<  " --> ";
 
-    if (!is_nil_expr(it->second.constant)) {
-      out << from_expr(it->second.constant) << std::endl;
+    if (!is_nil_expr(current_name.second.constant)) {
+      out << from_expr(current_name.second.constant) << std::endl;
     } else {
-      out << "node " << it->second.node_id << " num " << it->second.count;
+      out << "node " << current_name.second.node_id << " num " << current_name.second.count;
       out  << std::endl;
     }
   }
@@ -305,4 +295,16 @@ renaming::level2t::make_assignment(expr2tc &lhs_symbol,
   symbol.node_num = entry.node_id;
 
   entry.constant = const_value;
+}
+
+void renaming::level2t::rename_to_record(expr2tc &expr, const name_record &rec)
+{
+  assert(expr->expr_id == expr2t::symbol_id);
+  symbol2t &sym = to_symbol2t(expr);
+  assert(sym.thename == rec.base_name);
+  assert(sym.rlevel == symbol2t::level0);
+
+  sym.level1_num = rec.l1_num;
+  sym.thread_num = rec.t_num;
+  sym.rlevel = rec.lev;
 }

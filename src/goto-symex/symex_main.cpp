@@ -7,25 +7,23 @@
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-#include <assert.h>
+#include <boost/shared_ptr.hpp>
+#include <cassert>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/goto_symex_state.h>
+#include <goto-symex/reachability_tree.h>
+#include <goto-symex/symex_target_equation.h>
 #include <iostream>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_expr.h>
 #include <vector>
-
-#include <prefix.h>
-#include <std_expr.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <c_types.h>
-#include <simplify_expr.h>
-#include <config.h>
-
-#include "goto_symex.h"
-#include "goto_symex_state.h"
-#include "execution_state.h"
-#include "symex_target_equation.h"
-#include "reachability_tree.h"
 
 void
 goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
@@ -62,16 +60,14 @@ goto_symext::assume(const expr2tc &assumption)
 
   // Irritatingly, assumption destroys its expr argument
   expr2tc tmp_guard = cur_state->guard.as_expr();
-  cur_state->global_guard.guard_expr(tmp_guard);
   target->assumption(tmp_guard, assumption, cur_state->source);
-  return;
 }
 
-std::shared_ptr<goto_symext::symex_resultt>
-goto_symext::get_symex_result(void)
+boost::shared_ptr<goto_symext::symex_resultt>
+goto_symext::get_symex_result()
 {
 
-  return std::shared_ptr<goto_symext::symex_resultt>(
+  return boost::shared_ptr<goto_symext::symex_resultt>(
     new goto_symext::symex_resultt(target, total_claims, remaining_claims));
 }
 
@@ -85,7 +81,7 @@ goto_symext::symex_step(reachability_treet & art)
   // depth exceeded?
   {
     if (depth_limit != 0 && cur_state->depth > depth_limit)
-      cur_state->guard.add(false_expr);
+      cur_state->guard.add(gen_false_expr());
     cur_state->depth++;
   }
 
@@ -109,6 +105,7 @@ goto_symext::symex_step(reachability_treet & art)
   // actually do instruction
   switch (instruction.type) {
   case SKIP:
+  case LOCATION:
     // really ignore
     cur_state->source.pc++;
     break;
@@ -127,7 +124,7 @@ goto_symext::symex_step(reachability_treet & art)
     expr2tc tmp(instruction.guard);
     replace_nondet(tmp);
 
-    dereference(tmp, false);
+    dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
 
     symex_goto(tmp);
@@ -165,14 +162,14 @@ goto_symext::symex_step(reachability_treet & art)
       if (thrown_obj_map.find(cur_state->source.pc) != thrown_obj_map.end()) {
         symbol2tc thrown_obj = thrown_obj_map[cur_state->source.pc];
 
-        if (is_pointer_type(deref_code.get()->target.get()->type)
-            && !is_pointer_type(thrown_obj.get()->type))
+        if (is_pointer_type(deref_code->target->type)
+            && !is_pointer_type(thrown_obj->type))
         {
-          expr2tc new_thrown_obj(new address_of2t(thrown_obj.get()->type, thrown_obj));
-          deref_code.get()->source = new_thrown_obj;
+          expr2tc new_thrown_obj(new address_of2t(thrown_obj->type, thrown_obj));
+          deref_code->source = new_thrown_obj;
         }
         else
-          deref_code.get()->source = thrown_obj;
+          deref_code->source = thrown_obj;
 
         thrown_obj_map.erase(cur_state->source.pc);
       }
@@ -181,8 +178,8 @@ goto_symext::symex_step(reachability_treet & art)
 
       code_assign2t &assign = to_code_assign2t(deref_code);
 
-      dereference(assign.target, true);
-      dereference(assign.source, false);
+      dereference(assign.target, dereferencet::WRITE);
+      dereference(assign.source, dereferencet::READ);
       replace_dynamic_allocation(deref_code);
 
       symex_assign(deref_code);
@@ -199,15 +196,14 @@ goto_symext::symex_step(reachability_treet & art)
     code_function_call2t &call = to_code_function_call2t(deref_code);
 
     if (!is_nil_expr(call.ret)) {
-      dereference(call.ret, true);
+      dereference(call.ret, dereferencet::WRITE);
     }
 
     replace_dynamic_allocation(deref_code);
 
-    for (std::vector<expr2tc>::iterator it = call.operands.begin();
-         it != call.operands.end(); it++)
-      if (!is_nil_expr(*it))
-        dereference(*it, false);
+    for (auto & operand : call.operands)
+      if (!is_nil_expr(operand))
+        dereference(operand, dereferencet::READ);
 
     // Always run intrinsics, whether guard is false or not. This is due to the
     // unfortunate circumstance where a thread starts with false guard due to
@@ -215,16 +211,9 @@ goto_symext::symex_step(reachability_treet & art)
     // terminate intrinsic _has_ to run, or we explode.
     if (is_symbol2t(call.function)) {
       const irep_idt &id = to_symbol2t(call.function).thename;
-      if (has_prefix(id.as_string(), "c::__ESBMC")) {
+      if (has_prefix(id.as_string(), "__ESBMC")) {
         cur_state->source.pc++;
-        std::string name = id.as_string().substr(3);
-        run_intrinsic(call, art, name);
-        return;
-      } else if (has_prefix(id.as_string(), "cpp::__ESBMC")) {
-        cur_state->source.pc++;
-        std::string name = id.as_string().substr(5);
-        name = name.substr(0, name.find("("));
-        run_intrinsic(call, art, name);
+        run_intrinsic(call, art, id.as_string());
         return;
       }
     }
@@ -284,36 +273,32 @@ goto_symext::symex_step(reachability_treet & art)
   }
 }
 
-void goto_symext::symex_assume(void)
+void goto_symext::symex_assume()
 {
   if (cur_state->guard.is_false())
     return;
 
-  const goto_programt::instructiont &instruction=*cur_state->source.pc;
+  expr2tc cond = cur_state->source.pc->guard;
 
-  expr2tc tmp = instruction.guard;
-  replace_nondet(tmp);
+  replace_nondet(cond);
+  dereference(cond, dereferencet::READ);
+  replace_dynamic_allocation(cond);
 
-  dereference(tmp, false);
-  replace_dynamic_allocation(tmp);
+  cur_state->rename(cond);
+  do_simplify(cond);
 
-  cur_state->rename(tmp);
-  do_simplify(tmp);
+  if (is_true(cond))
+    return;
 
-  if (!is_true(tmp))
-  {
-    expr2tc tmp2 = tmp;
-    expr2tc tmp3 = tmp2;
-    cur_state->guard.guard_expr(tmp2);
+  cur_state->guard.guard_expr(cond);
+  assume(cond);
 
-    assume(tmp2);
-
-    // we also add it to the state guard
-    cur_state->guard.add(tmp3);
-  }
+  // If we're assuming false, make the guard for the following statement false
+  if(is_false(cond))
+    cur_state->guard.make_false();
 }
 
-void goto_symext::symex_assert(void)
+void goto_symext::symex_assert()
 {
   if (cur_state->guard.is_false())
     return;
@@ -323,7 +308,7 @@ void goto_symext::symex_assert(void)
      && inductive_step)
   {
     statet::framet &frame = cur_state->top();
-    unsigned unwind = frame.loop_iterations[loop_numbers.top()];
+    BigInt unwind = frame.loop_iterations[loop_numbers.top()];
 
     if(unwind < (max_unwind - 1))
     {
@@ -346,7 +331,7 @@ void goto_symext::symex_assert(void)
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
 
-  dereference(tmp, false);
+  dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
 
   claim(tmp, msg);
@@ -354,7 +339,7 @@ void goto_symext::symex_assert(void)
 
 void
 goto_symext::run_intrinsic(const code_function_call2t &func_call,
-                           reachability_treet &art, const std::string symname)
+                           reachability_treet &art, const std::string& symname)
 {
 
   if (symname == "__ESBMC_yield") {
@@ -387,8 +372,6 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
     intrinsic_register_monitor(func_call, art);
   } else if (symname == "__ESBMC_kill_monitor") {
     intrinsic_kill_monitor(art);
-  } else if (symname == "__ESBMC_realloc") {
-    intrinsic_realloc(func_call, art);
   } else {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
     std::cerr << std::endl << "The name in question: " << symname << std::endl;
@@ -397,33 +380,30 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
               << std::endl;
     abort();
   }
-
-  return;
 }
 
 void
-goto_symext::finish_formula(void)
+goto_symext::finish_formula()
 {
 
   if (!memory_leak_check)
     return;
 
-  std::list<allocated_obj>::const_iterator it;
-  for (it = dynamic_memory.begin(); it != dynamic_memory.end(); it++) {
-
+  for (auto const &it : dynamic_memory)
+  {
     // Don't check memory leak if the object is automatically deallocated
-    if(it->auto_deallocd)
+    if(it.auto_deallocd)
       continue;
 
     // Assert that the allocated object was freed.
-    deallocated_obj2tc deallocd(it->obj);
-    equality2tc eq(deallocd, true_expr);
+    deallocated_obj2tc deallocd(it.obj);
+    equality2tc eq(deallocd, gen_true_expr());
     replace_dynamic_allocation(eq);
-    it->alloc_guard.guard_expr(eq);
+    it.alloc_guard.guard_expr(eq);
     cur_state->rename(eq);
-    target->assertion(it->alloc_guard.as_expr(), eq,
+    target->assertion(it.alloc_guard.as_expr(), eq,
                       "dereference failure: forgotten memory",
-                      std::vector<dstring>(), cur_state->source);
+                      std::vector<stack_framet>(), cur_state->source);
     total_claims++;
     remaining_claims++;
   }

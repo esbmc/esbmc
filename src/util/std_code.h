@@ -9,9 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_STD_CODE_H
 #define CPROVER_STD_CODE_H
 
-#include <assert.h>
-
-#include <expr.h>
+#include <cassert>
+#include <util/expr.h>
 
 class codet:public exprt
 {
@@ -133,7 +132,7 @@ class code_declt:public codet
 public:
   code_declt():codet("decl")
   {
-    operands().reserve(2);
+    operands().resize(1);
   }
 
   explicit code_declt(const exprt &lhs):codet("decl")
@@ -141,7 +140,7 @@ public:
     copy_to_operands(lhs);
   }
 
-  code_declt(const exprt &lhs, const exprt &rhs):codet("decl")
+  explicit code_declt(const exprt &lhs, const exprt &rhs):codet("decl")
   {
     copy_to_operands(lhs, rhs);
   }
@@ -165,30 +164,26 @@ public:
   {
     return op1();
   }
-
-  friend inline const code_declt &to_code_decl(const codet &code)
-  {
-    assert(code.get_statement()=="decl");
-    return static_cast<const code_declt &>(code);
-  }
-
-  friend inline code_declt &to_code_decl(codet &code)
-  {
-    assert(code.get_statement()=="decl");
-    return static_cast<code_declt &>(code);
-  }
-
 };
 
-const code_declt &to_code_decl(const codet &code);
-code_declt &to_code_decl(codet &code);
+extern inline const code_declt &to_code_decl(const codet &code)
+{
+  assert(code.get_statement()=="decl");
+  return static_cast<const code_declt &>(code);
+}
+
+extern inline code_declt &to_code_decl(codet &code)
+{
+  assert(code.get_statement()=="decl");
+  return static_cast<code_declt &>(code);
+}
 
 class code_assumet:public codet
 {
 public:
   code_assumet():codet("assume")
   {
-    operands().reserve(1);
+    operands().resize(1);
   }
 
   inline explicit code_assumet(const exprt &expr):codet("assume")
@@ -224,7 +219,7 @@ class code_assertt:public codet
 public:
   code_assertt():codet("assert")
   {
-    operands().reserve(1);
+    operands().resize(1);
   }
 
   inline explicit code_assertt(const exprt &expr):codet("assert")
@@ -260,12 +255,44 @@ class code_ifthenelset:public codet
 public:
   code_ifthenelset():codet("ifthenelse")
   {
-    operands().reserve(3);
+    operands().resize(3);
+    op1().make_nil();
+    op2().make_nil();
   }
 
   const exprt &cond() const
   {
     return op0();
+  }
+
+  exprt &cond()
+  {
+    return op0();
+  }
+
+  const codet &then_case() const
+  {
+    return static_cast<const codet &>(op1());
+  }
+
+  bool has_else_case() const
+  {
+    return op2().is_not_nil();
+  }
+
+  const codet &else_case() const
+  {
+    return static_cast<const codet &>(op2());
+  }
+
+  codet &then_case()
+  {
+    return static_cast<codet &>(op1());
+  }
+
+  codet &else_case()
+  {
+    return static_cast<codet &>(op2());
   }
 };
 
@@ -588,7 +615,8 @@ class code_returnt:public codet
 public:
   code_returnt():codet("return")
   {
-    operands().reserve(1);
+    operands().resize(1);
+    op0().make_nil();
   }
 
   const exprt &return_value() const
@@ -598,13 +626,12 @@ public:
 
   exprt &return_value()
   {
-    operands().resize(1);
     return op0();
   }
 
   bool has_return_value() const
   {
-    return operands().size()==1;
+    return return_value().is_not_nil();
   }
 };
 
@@ -628,14 +655,14 @@ public:
     operands().resize(1);
   }
 
-  inline bool is_default() const
+  codet &code()
   {
-    return dfault();
+    return static_cast<codet &>(op0());
   }
 
-  const exprt::operandst &case_op() const
+  const codet &code() const
   {
-    return static_cast<const exprt &>(case_irep()).operands();
+    return static_cast<const codet &>(op0());
   }
 
   const irep_idt &get_label() const
@@ -659,6 +686,65 @@ extern inline code_labelt &to_code_label(codet &code)
 {
   assert(code.get_statement()=="label");
   return static_cast<code_labelt &>(code);
+}
+
+/*! \brief A switch-case
+*/
+class code_switch_caset:public codet
+{
+public:
+  inline code_switch_caset():codet("switch_case")
+  {
+    operands().resize(2);
+  }
+
+  inline code_switch_caset(
+    const exprt &_case_op, const codet &_code) : codet("switch_case")
+  {
+    copy_to_operands(_case_op, _code);
+  }
+
+  inline bool is_default() const
+  {
+    return dfault();
+  }
+
+  inline void set_default(bool value)
+  {
+    return dfault(value);
+  }
+
+  inline const exprt &case_op() const
+  {
+    return op0();
+  }
+
+  inline exprt &case_op()
+  {
+    return op0();
+  }
+
+  codet &code()
+  {
+    return static_cast<codet &>(op1());
+  }
+
+  const codet &code() const
+  {
+    return static_cast<const codet &>(op1());
+  }
+};
+
+static inline const code_switch_caset &to_code_switch_case(const codet &code)
+{
+  assert(code.get_statement()=="switch_case" && code.operands().size()==2);
+  return static_cast<const code_switch_caset &>(code);
+}
+
+static inline code_switch_caset &to_code_switch_case(codet &code)
+{
+  assert(code.get_statement()=="switch_case" && code.operands().size()==2);
+  return static_cast<code_switch_caset &>(code);
 }
 
 class code_breakt:public codet
@@ -706,19 +792,12 @@ class code_expressiont:public codet
 public:
   code_expressiont():codet("expression")
   {
-    operands().reserve(1);
+    operands().resize(1);
   }
 
-  friend code_expressiont &to_code_expression(codet &code)
+  explicit code_expressiont(const exprt &expr):codet("expression")
   {
-    assert(code.get_statement()=="expression");
-    return static_cast<code_expressiont &>(code);
-  }
-
-  friend const code_expressiont &to_code_expression(const codet &code)
-  {
-    assert(code.get_statement()=="expression");
-    return static_cast<const code_expressiont &>(code);
+    copy_to_operands(expr);
   }
 
   inline const exprt &expression() const
@@ -732,8 +811,17 @@ public:
   }
 };
 
-code_expressiont &to_code_expression(codet &code);
-const code_expressiont &to_code_expression(const codet &code);
+extern inline code_expressiont &to_code_expression(codet &code)
+{
+  assert(code.get_statement()=="expression");
+  return static_cast<code_expressiont &>(code);
+}
+
+extern inline const code_expressiont &to_code_expression(const codet &code)
+{
+  assert(code.get_statement()=="expression");
+  return static_cast<const code_expressiont &>(code);
+}
 
 class side_effect_exprt:public exprt
 {
@@ -749,18 +837,6 @@ public:
     set_statement(statement);
   }
 
-  friend side_effect_exprt &to_side_effect_expr(exprt &expr)
-  {
-    assert(expr.id()=="sideeffect");
-    return static_cast<side_effect_exprt &>(expr);
-  }
-
-  friend const side_effect_exprt &to_side_effect_expr(const exprt &expr)
-  {
-    assert(expr.id()=="sideeffect");
-    return static_cast<const side_effect_exprt &>(expr);
-  }
-
   const irep_idt &get_statement() const
   {
     return get("statement");
@@ -772,8 +848,17 @@ public:
   }
 };
 
-side_effect_exprt &to_side_effect_expr(exprt &expr);
-const side_effect_exprt &to_side_effect_expr(const exprt &expr);
+extern inline side_effect_exprt &to_side_effect_expr(exprt &expr)
+{
+  assert(expr.id()=="sideeffect");
+  return static_cast<side_effect_exprt &>(expr);
+}
+
+extern inline const side_effect_exprt &to_side_effect_expr(const exprt &expr)
+{
+  assert(expr.id()=="sideeffect");
+  return static_cast<const side_effect_exprt &>(expr);
+}
 
 class side_effect_expr_nondett:public side_effect_exprt
 {
@@ -792,6 +877,13 @@ class side_effect_expr_function_callt:public side_effect_exprt
 {
 public:
   side_effect_expr_function_callt():side_effect_exprt("function_call")
+  {
+    operands().resize(2);
+    op1().id("arguments");
+  }
+
+  side_effect_expr_function_callt(const typet &_type)
+    : side_effect_exprt("function_call", _type)
   {
     operands().resize(2);
     op1().id("arguments");
@@ -816,23 +908,20 @@ public:
   {
     return op1().operands();
   }
-
-  friend side_effect_expr_function_callt &to_side_effect_expr_function_call(exprt &expr)
-  {
-    assert(expr.id()=="sideeffect");
-    assert(expr.statement()=="function_call");
-    return static_cast<side_effect_expr_function_callt &>(expr);
-  }
-
-  friend const side_effect_expr_function_callt &to_side_effect_expr_function_call(const exprt &expr)
-  {
-    assert(expr.id()=="sideeffect");
-    assert(expr.statement()=="function_call");
-    return static_cast<const side_effect_expr_function_callt &>(expr);
-  }
 };
 
-side_effect_expr_function_callt &to_side_effect_expr_function_call(exprt &expr);
-const side_effect_expr_function_callt &to_side_effect_expr_function_call(const exprt &expr);
+extern inline side_effect_expr_function_callt &to_side_effect_expr_function_call(exprt &expr)
+{
+  assert(expr.id()=="sideeffect");
+  assert(expr.statement()=="function_call");
+  return static_cast<side_effect_expr_function_callt &>(expr);
+}
+
+extern inline const side_effect_expr_function_callt &to_side_effect_expr_function_call(const exprt &expr)
+{
+  assert(expr.id()=="sideeffect");
+  assert(expr.statement()=="function_call");
+  return static_cast<const side_effect_expr_function_callt &>(expr);
+}
 
 #endif

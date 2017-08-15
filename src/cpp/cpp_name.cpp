@@ -6,23 +6,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <assert.h>
-
+#include <cassert>
+#include <cpp/cpp_name.h>
 #include <sstream>
-
-#include "cpp_name.h"
-
-/*******************************************************************\
-
-Function: cpp_namet::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_namet::convert(
   std::string &identifier,
@@ -54,18 +40,6 @@ void cpp_namet::convert(
       base_name+=name_component;
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_namet::to_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string cpp_namet::to_string() const
 {

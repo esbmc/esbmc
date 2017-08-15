@@ -1,14 +1,14 @@
-#include "smt_conv.h"
+#include <solvers/smt/smt_conv.h>
 
-smt_astt 
+smt_astt
 smt_convt::convert_byte_extract(const expr2tc &expr)
 {
   const byte_extract2t &data = to_byte_extract2t(expr);
   expr2tc source = data.source_value;
   unsigned int src_width = source->type->get_width();
 
-  if (!is_number_type(source))
-    source = typecast2tc(get_uint_type(src_width), source);
+  if (!is_bv_type(source->type) && !is_fixedbv_type(source->type))
+    source = bitcast2tc(get_uint_type(src_width), source);
 
   assert(is_scalar_type(data.source_value) && "Byte extract now only works on "
          "scalar variables");
@@ -21,7 +21,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
     // offset distance. The rest of these calculations will still apply.
     if (data.big_endian) {
-      auto data_size = type_byte_size(*source->type);
+      auto data_size = type_byte_size(source->type);
       constant_int2tc data_size_expr(source->type, data_size - 1);
       sub2tc sub(source->type, data_size_expr, offs);
       offs = sub;
@@ -30,6 +30,8 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     if (offs->type->get_width() != src_width)
       // Z3 requires these two arguments to be the same width
       offs = typecast2tc(source->type, data.source_offset);
+
+    offs = mul2tc(offs->type, offs, gen_ulong(8));
 
     lshr2tc shr(source->type, source, offs);
     smt_astt ext = convert_ast(shr);
@@ -69,7 +71,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
   }
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_byte_update(const expr2tc &expr)
 {
   const byte_update2t &data = to_byte_update2t(expr);
@@ -78,15 +80,15 @@ smt_convt::convert_byte_update(const expr2tc &expr)
          "scalar variables now");
   assert(data.type == data.source_value->type);
 
-  if (!is_number_type(data.type)) {
+  if (!is_bv_type(data.type) && !is_fixedbv_type(data.type)) {
     // This is a pointer or a bool, or something. We don't want to handle
     // casting of it in the body of this function, so wrap it up as a bitvector
     // and re-apply.
     type2tc bit_type = get_uint_type(data.type->get_width());
-    typecast2tc src_obj(bit_type, data.source_value);
+    bitcast2tc src_obj(bit_type, data.source_value);
     byte_update2tc new_update(bit_type, src_obj, data.source_offset,
         data.update_value, data.big_endian);
-    typecast2tc cast_back(data.type, new_update);
+    bitcast2tc cast_back(data.type, new_update);
     return convert_ast(cast_back);
   }
 
@@ -101,7 +103,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
     // offset distance. The rest of these calculations will still apply.
     if (data.big_endian) {
-      auto data_size = type_byte_size(*source->type);
+      auto data_size = type_byte_size(source->type);
       constant_int2tc data_size_expr(source->type, data_size - 1);
       sub2tc sub(source->type, data_size_expr, offs);
       offs = sub;
@@ -145,7 +147,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   // Flip location if we're in big-endian mode
   if (data.big_endian) {
     unsigned int data_size =
-      type_byte_size(*data.source_value->type).to_ulong() - 1;
+      type_byte_size(data.source_value->type).to_ulong() - 1;
     src_offset = data_size - src_offset;
   }
 
@@ -186,13 +188,13 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   }
 
   if (top == value) {
-    middle = NULL;
+    middle = nullptr;
   } else {
     middle = value;
   }
 
   if (src_offset == 0) {
-    middle = NULL;
+    middle = nullptr;
     bottom = value;
   } else {
     smt_sortt s = mk_sort(SMT_SORT_BV, bottom_of_update, false);
@@ -202,7 +204,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   // Concatenate the top and bottom, and possible middle, together.
   smt_astt concat;
 
-  if (middle != NULL) {
+  if (middle != nullptr) {
     smt_sortt s = mk_sort(SMT_SORT_BV, width_op0 - bottom_of_update, false);
     concat = mk_func_app(s, SMT_FUNC_CONCAT, top, middle);
   } else {

@@ -1,8 +1,8 @@
+#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple_flat.h>
 #include <sstream>
-#include <c_types.h>
-#include <base_type.h>
-#include "smt_conv.h"
-#include "smt_tuple_flat.h"
+#include <util/base_type.h>
+#include <util/c_types.h>
 
 /** @file smt_tuple.cpp
  * So, the SMT-encoding-with-no-tuple-support. SMT itself doesn't support
@@ -21,9 +21,9 @@
  *    the symbol we're dealing with, corresponding to the field name. So a tuple
  *    with fields a, b, and c, with the symbol name "faces" would create:
  *
- *      c::main::1::faces.a
- *      c::main::1::faces.b
- *      c::main::1::faces.c
+ *      main::1::faces.a
+ *      main::1::faces.b
+ *      main::1::faces.c
  *
  *    As variables with the appropriate type. Project / update redirects
  *    expressions to deal with those symbols. Equality is similar.
@@ -72,10 +72,9 @@ tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 
   const struct_union_data &data = ctx->get_type_def(thissort->thetype);
 
-
   // Iterate through each field and encode an ite.
-  unsigned int i = 0;
-  forall_types(it, data.members) {
+  for(unsigned int i = 0; i < data.members.size(); i++)
+  {
     smt_astt truepart = true_val->project(ctx, i);
     smt_astt falsepart = false_val->project(ctx, i);
 
@@ -83,8 +82,6 @@ tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 
     smt_astt result_sym_ast = result_sym->project(ctx, i);
     ctx->assert_ast(result_sym_ast->eq(ctx, result_ast));
-
-    i++;
   }
 
   return ctx->convert_ast(result);
@@ -107,9 +104,10 @@ array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 
   // Iterate through each field and encode an ite.
   unsigned int i = 0;
-  forall_types(it, data.members) {
-    type2tc arrtype(new array_type2t(*it, array_type.array_size,
-          array_type.size_is_infinite));
+  for(auto const &it : data.members)
+  {
+    type2tc arrtype(
+      new array_type2t(it, array_type.array_size, array_type.size_is_infinite));
 
     smt_astt truepart = true_val->project(ctx, i);
     smt_astt falsepart = false_val->project(ctx, i);
@@ -140,12 +138,11 @@ tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   eqs.reserve(data.members.size());
 
   // Iterate through each field and encode an equality.
-  unsigned int i = 0;
-  forall_types(it, data.members) {
+  for(unsigned int i = 0; i < data.members.size(); i++)
+  {
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
     eqs.push_back(side1->eq(ctx, side2));
-    i++;
   }
 
   // Create an ast representing the fact that all the members are equal.
@@ -171,9 +168,10 @@ array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 
   // Iterate through each field and encode an equality.
   unsigned int i = 0;
-  forall_types(it, data.members) {
-    type2tc tmparrtype(new array_type2t(*it, arrtype.array_size,
-          arrtype.size_is_infinite));
+  for(auto const &it : data.members)
+  {
+    type2tc tmparrtype(
+      new array_type2t(it, arrtype.array_size, arrtype.size_is_infinite));
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
     eqs.push_back(side1->eq(ctx, side2));
@@ -200,8 +198,8 @@ tuple_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, sort, name);
 
   // Iterate over all members, deciding what to do with them.
-  unsigned int j = 0;
-  forall_types(it, data.members) {
+  for(unsigned int j = 0; j < data.members.size(); j++)
+  {
     if (j == idx) {
       // This is the updated field -- generate the name of its variable with
       // tuple project and assign it in.
@@ -215,8 +213,6 @@ tuple_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
       smt_astt field2 = result->project(ctx, j);
       eqs.push_back(field1->eq(ctx, field2));
     }
-
-    j++;
   }
 
   ctx->assert_ast(ctx->make_conjunct(eqs));
@@ -245,9 +241,10 @@ array_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
 
   // Iterate over all members. They are _all_ indexed and updated.
   unsigned int i = 0;
-  forall_types(it, data.members) {
-    type2tc arrtype(new array_type2t(*it, array_type.array_size,
-          array_type.size_is_infinite));
+  for(auto const &it : data.members)
+  {
+    type2tc arrtype(
+      new array_type2t(it, array_type.array_size, array_type.size_is_infinite));
 
     // Project and update a field in 'this'
     smt_astt field = project(ctx, i);
@@ -284,9 +281,10 @@ array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, result_sort, name);
 
   unsigned int i = 0;
-  forall_types(it, data.members) {
-    type2tc arrtype(new array_type2t(*it, array_type.array_size,
-          array_type.size_is_infinite));
+  for(auto const &it : data.members)
+  {
+    type2tc arrtype(
+      new array_type2t(it, array_type.array_size, array_type.size_is_infinite));
 
     smt_astt result_field = result->project(ctx, i);
     smt_astt sub_array = project(ctx, i);
@@ -378,16 +376,15 @@ array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   const struct_union_data &data = ctx->get_type_def(arrtype.subtype);
 
   unsigned int i = 0;
-  forall_types(it, data.members) {
-    type2tc tmparrtype(new array_type2t(*it, arrtype.array_size,
-          arrtype.size_is_infinite));
+  for(auto const &it : data.members)
+  {
+    type2tc tmparrtype(
+      new array_type2t(it, arrtype.array_size, arrtype.size_is_infinite));
     smt_astt source = src->project(ctx, i);
     smt_astt destination = dst->project(ctx, i);
     source->assign(ctx, destination);
     i++;
   }
-
-  return;
 }
 
 smt_astt
@@ -512,11 +509,12 @@ smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  forall_types(it, strct.members) {
+  for(auto const &it : strct.members)
+  {
     std::stringstream ss;
     ss << name << "." << strct.member_names[i];
-    symbol2tc sym(*it, ss.str());
-    outstruct.get()->datatype_members.push_back(ctx->get(sym));
+    symbol2tc sym(it, ss.str());
+    outstruct->datatype_members.push_back(ctx->get(sym));
     i++;
   }
 
@@ -588,17 +586,14 @@ smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
 void
 smt_tuple_sym_flattener::add_tuple_constraints_for_solving()
 {
-  return;
 }
 
 void
 smt_tuple_sym_flattener::push_tuple_ctx()
 {
-  return;
 }
 
 void
 smt_tuple_sym_flattener::pop_tuple_ctx()
 {
-  return;
 }

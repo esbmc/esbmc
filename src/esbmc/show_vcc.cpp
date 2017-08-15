@@ -6,30 +6,15 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <migrate.h>
-
-#include <iostream>
+#include <esbmc/bmc.h>
 #include <fstream>
-
-#include <langapi/mode.h>
-#include <langapi/languages.h>
+#include <iostream>
 #include <langapi/language_util.h>
+#include <langapi/languages.h>
+#include <langapi/mode.h>
+#include <util/migrate.h>
 
-#include "bmc.h"
-
-/*******************************************************************\
-
-Function: bmct::show_vcc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
+void bmct::show_vcc(std::ostream &out, boost::shared_ptr<symex_target_equationt> &eq)
 {
   switch(ui)
   {
@@ -37,33 +22,33 @@ void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
   case ui_message_handlert::XML_UI:
     error("not supported");
     return;
-    
+
   case ui_message_handlert::PLAIN:
     break;
-    
+
   default:
     assert(false);
-  }   
-    
+  }
+
   out << std::endl << "VERIFICATION CONDITIONS:" << std::endl << std::endl;
 
   languagest languages(ns, MODE_C);
 
   for(symex_target_equationt::SSA_stepst::iterator
-      it=equation.SSA_steps.begin();
-      it!=equation.SSA_steps.end(); it++)
+      it=eq->SSA_steps.begin();
+      it!=eq->SSA_steps.end(); it++)
   {
     if(!it->is_assert()) continue;
 
     if(it->source.pc->location.is_not_nil())
       out << it->source.pc->location << std::endl;
-    
+
     if(it->comment!="")
       out << it->comment << std::endl;
-      
+
     symex_target_equationt::SSA_stepst::const_iterator
-      p_it=equation.SSA_steps.begin();
-      
+      p_it=eq->SSA_steps.begin();
+
     for(unsigned count=1; p_it!=it; p_it++)
       if(p_it->is_assume() || p_it->is_assignment())
         if(!p_it->ignore)
@@ -79,36 +64,24 @@ void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
     std::string string_value;
     languages.from_expr(migrate_expr_back(it->cond), string_value);
     out << "{" << 1 << "} " << string_value << std::endl;
-    
+
     out << std::endl;
   }
 }
 
-/*******************************************************************\
-
-Function: bmct::show_vcc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmct::show_vcc(symex_target_equationt &equation)
+void bmct::show_vcc(boost::shared_ptr<symex_target_equationt> &eq)
 {
-  const std::string &filename=options.get_option("outfile");
-  
+  const std::string &filename=options.get_option("output");
+
   if(filename.empty() || filename=="-")
-    show_vcc(std::cout, equation);
+    show_vcc(std::cout, eq);
   else
   {
     std::ofstream out(filename.c_str());
     if(!out)
       std::cerr << "failed to open " << filename << std::endl;
     else
-      show_vcc(out, equation);
+      show_vcc(out, eq);
   }
 }
 

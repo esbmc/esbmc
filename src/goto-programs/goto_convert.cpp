@@ -7,19 +7,18 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <i2string.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <std_expr.h>
-#include <c_types.h>
-
-#include "goto_convert_class.h"
-#include "remove_skip.h"
-#include "destructor.h"
-
-#include <arith_tools.h>
+#include <cassert>
+#include <goto-programs/destructor.h>
+#include <goto-programs/goto_convert_class.h>
+#include <goto-programs/remove_skip.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/i2string.h>
+#include <util/irep2_utils.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 //#define DEBUG
 
@@ -32,24 +31,20 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void goto_convertt::finish_gotos()
 {
-  for(gotost::const_iterator it=targets.gotos.begin();
-      it!=targets.gotos.end();
-      it++)
+  for(auto it : targets.gotos)
   {
-    goto_programt::instructiont &i=**it;
+    goto_programt::instructiont &i=*it;
 
     if (is_code_goto2t(i.code))
     {
-      exprt tmp = migrate_expr_back(i.code);
-
-      const irep_idt &goto_label = tmp.destination();
+      const irep_idt &goto_label = to_code_goto2t(i.code).target;
 
       labelst::const_iterator l_it = targets.labels.find(goto_label);
 
       if(l_it==targets.labels.end())
       {
-        err_location(tmp);
         std::cerr << "goto label " << goto_label << " not found";
+        i.code->dump();
         abort();
       }
 
@@ -116,7 +111,7 @@ void goto_convertt::convert_label(
   if(error_label!="" && label==error_label)
   {
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard = false_expr;
+    t->guard = gen_false_expr();
     t->location=code.location();
     t->location.property("error label");
     t->location.comment("error label");
@@ -137,25 +132,35 @@ void goto_convertt::convert_label(
                           (label, target));
     target->labels.push_back(label);
   }
+}
 
-  // cases?
-
-  const exprt::operandst &case_op=code.case_op();
-
-  if(!case_op.empty())
+void goto_convertt::convert_switch_case(
+  const code_switch_caset &code,
+  goto_programt &dest)
+{
+  if(code.operands().size()!=2)
   {
-    exprt::operandst &case_op_dest=targets.cases[target];
-
-    case_op_dest.reserve(case_op_dest.size()+case_op.size());
-
-    forall_expr(it, case_op)
-      case_op_dest.push_back(*it);
+    err_location(code);
+    throw "switch-case statement expected to have two operands";
   }
+
+  goto_programt tmp;
+  convert(code.code(), tmp);
+
+  goto_programt::targett target=tmp.instructions.begin();
+  dest.destructive_append(tmp);
 
   // default?
 
   if(code.is_default())
     targets.set_default(target);
+  else
+  {
+    // cases?
+
+    const exprt &case_op = code.case_op();
+    targets.cases[target].push_back(case_op);
+  }
 }
 
 void goto_convertt::convert(
@@ -184,6 +189,8 @@ void goto_convertt::convert(
     convert_function_call(to_code_function_call(code), dest);
   else if(statement=="label")
     convert_label(to_code_label(code), dest);
+  else if(statement=="switch_case")
+    convert_switch_case(to_code_switch_case(code), dest);
   else if(statement=="for")
     convert_for(code, dest);
   else if(statement=="while")
@@ -251,13 +258,12 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   // the THROW_DECL instruction is annotated with a list of IDs,
   // one per target
   irept::subt &throw_list = c.add("throw_list").get_sub();
-  for(unsigned i=0; i<expr.operands().size(); i++)
+  for(const auto & block : expr.operands())
   {
-    const exprt &block=expr.operands()[i];
     irept type = irept(block.get("throw_decl_id"));
 
     // grab the ID and add to THROW_DECL instruction
-    throw_list.push_back(irept(type));
+    throw_list.emplace_back(type);
   }
 
   throw_decl_instruction->make_throw_decl();
@@ -327,328 +333,50 @@ void goto_convertt::convert_block(
   const codet &code,
   goto_programt &dest)
 {
-  std::list<irep_idt> locals;
-  //extract all the local variables from the block
+  // Save local symbols
+  goto_programt::local_variablest old_scoped_vars = scoped_variables;
+  scoped_variables.clear();
 
-  forall_operands(it, code)
+  // Convert each expression
+  for(auto const &it : code.operands())
   {
-    const codet &code_it=to_code(*it);
-
-    if(code_it.get_statement()=="decl")
-    {
-      // TODO: This should be removed when the clang frontend
-      // is enable by default, as all the decl are wrapped
-      // inside a decl-block
-      const exprt &op0=code_it.op0();
-      assert(op0.id()=="symbol");
-      const irep_idt &identifier=op0.identifier();
-      const symbolt &symbol=lookup(identifier);
-
-      if(!symbol.static_lifetime &&
-         !symbol.type.is_code())
-        locals.push_back(identifier);
-    }
-    else if(code_it.get_statement()=="decl-block")
-    {
-      forall_operands(it, code_it)
-      {
-        if(it->statement() == "skip")
-          continue;
-
-        const exprt &op0=it->op0();
-        assert(op0.id()=="symbol");
-        const irep_idt &identifier=op0.identifier();
-        const symbolt &symbol=lookup(identifier);
-
-        if(!symbol.static_lifetime &&
-           !symbol.type.is_code())
-          locals.push_back(identifier);
-      }
-    }
+    const codet &code_it = to_code(it);
 
     goto_programt tmp;
     convert(code_it, tmp);
-
-    // all the temp symbols are also local variables and they are gotten
-    // via the convert process
-    for(tmp_symbolst::const_iterator
-        it=tmp_symbols.begin();
-        it!=tmp_symbols.end();
-        it++)
-      locals.push_back(*it);
-
-    tmp_symbols.clear();
-
-    //add locals to instructions
-    if(!locals.empty())
-      Forall_goto_program_instructions(i_it, tmp)
-        i_it->add_local_variables(locals);
 
     dest.destructive_append(tmp);
   }
 
   // see if we need to call any destructors
-
-  while(!locals.empty())
+  for(auto const &local : scoped_variables)
   {
-    const symbolt &symbol=ns.lookup(locals.back());
+    const symbolt &symbol = ns.lookup(local);
 
-    code_function_callt destructor=get_destructor(ns, symbol.type);
-
+    code_function_callt destructor = get_destructor(ns, symbol.type);
     if(destructor.is_not_nil())
     {
       // add "this"
       exprt this_expr("address_of", pointer_typet());
-      this_expr.type().subtype()=symbol.type;
+      this_expr.type().subtype() = symbol.type;
       this_expr.copy_to_operands(symbol_expr(symbol));
       destructor.arguments().push_back(this_expr);
 
       goto_programt tmp;
       convert(destructor, tmp);
 
-      Forall_goto_program_instructions(i_it, tmp)
-        i_it->add_local_variables(locals);
-
       dest.destructive_append(tmp);
     }
-
-    locals.pop_back();
   }
-}
 
-void goto_convertt::convert_sideeffect(
-  exprt &expr,
-  goto_programt &dest)
-{
-  const irep_idt &statement=expr.statement();
+  // Add scoped variables to the list of function variables
+  local_variables.insert(
+    local_variables.begin(),
+    scoped_variables.begin(),
+    scoped_variables.end());
 
-  if(statement=="postincrement" ||
-     statement=="postdecrement" ||
-     statement=="preincrement" ||
-     statement=="predecrement")
-  {
-    if(expr.operands().size()!=1)
-    {
-      err_location(expr);
-      str << statement << " takes one argument";
-      throw 0;
-    }
-
-    exprt rhs;
-
-    if(statement == "postincrement" || statement == "preincrement")
-    {
-      if(expr.type().is_floatbv())
-        rhs.id("ieee_add");
-      else
-        rhs.id("+");
-    }
-    else
-    {
-      if(expr.type().is_floatbv())
-        rhs.id("ieee_sub");
-      else
-        rhs.id("-");
-    }
-
-    const typet &op_type=ns.follow(expr.op0().type());
-
-    if(op_type.is_bool())
-    {
-      rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
-      rhs.op0().make_typecast(int_type());
-      rhs.type()=int_type();
-      rhs.make_typecast(typet("bool"));
-    }
-    else if(op_type.id()=="c_enum" ||
-            op_type.id()=="incomplete_c_enum")
-    {
-      rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
-      rhs.op0().make_typecast(int_type());
-      rhs.type()=int_type();
-      rhs.make_typecast(op_type);
-    }
-    else
-    {
-      typet constant_type;
-
-      if(op_type.id()=="pointer")
-        constant_type=index_type();
-      else if(is_number(op_type))
-        constant_type=op_type;
-      else
-      {
-        err_location(expr);
-        throw "no constant one of type "+op_type.to_string();
-      }
-
-      exprt constant=gen_one(constant_type);
-
-      rhs.copy_to_operands(expr.op0());
-      rhs.move_to_operands(constant);
-      rhs.type()=expr.op0().type();
-    }
-
-    codet assignment("assign");
-    assignment.copy_to_operands(expr.op0());
-    assignment.move_to_operands(rhs);
-
-    assignment.location()=expr.find_location();
-
-    convert(assignment, dest);
-  }
-  else if(statement=="assign")
-  {
-    exprt tmp;
-    tmp.swap(expr);
-    tmp.id("code");
-    convert(to_code(tmp), dest);
-  }
-  else if(statement=="assign+" ||
-          statement=="assign-" ||
-          statement=="assign*" ||
-          statement=="assign_div" ||
-          statement=="assign_mod" ||
-          statement=="assign_shl" ||
-          statement=="assign_ashr" ||
-          statement=="assign_lshr" ||
-          statement=="assign_bitand" ||
-          statement=="assign_bitxor" ||
-          statement=="assign_bitor")
-  {
-    if(expr.operands().size()!=2)
-    {
-      err_location(expr);
-      str << statement << " takes two arguments";
-      throw 0;
-    }
-
-    exprt rhs;
-
-    if(statement == "assign+") {
-      if(expr.type().is_floatbv()) {
-        rhs.id("ieee_add");
-      } else {
-        rhs.id("+");
-      }
-    } else if(statement == "assign-") {
-      if(expr.type().is_floatbv()) {
-        rhs.id("ieee_sub");
-      } else {
-        rhs.id("-");
-      }
-    } else if(statement == "assign*") {
-      if(expr.type().is_floatbv()) {
-        rhs.id("ieee_mul");
-      } else {
-        rhs.id("*");
-      }
-    } else if(statement == "assign_div") {
-      if(expr.type().is_floatbv()) {
-        rhs.id("ieee_div");
-      } else {
-        rhs.id("/");
-      }
-    } else if(statement == "assign_mod") {
-      rhs.id("mod");
-    } else if(statement == "assign_shl") {
-      rhs.id("shl");
-    } else if(statement == "assign_ashr") {
-      rhs.id("ashr");
-    } else if(statement == "assign_lshr") {
-      rhs.id("lshr");
-    } else if(statement == "assign_bitand") {
-      rhs.id("bitand");
-    } else if(statement == "assign_bitxor") {
-      rhs.id("bitxor");
-    } else if(statement == "assign_bitor") {
-      rhs.id("bitor");
-    } else {
-      err_location(expr);
-      str << statement << " not yet supproted";
-      throw 0;
-    }
-
-    rhs.copy_to_operands(expr.op0(), expr.op1());
-    rhs.type()=expr.op0().type();
-
-    if(rhs.op0().type().is_bool())
-    {
-      rhs.op0().make_typecast(int_type());
-      rhs.op1().make_typecast(int_type());
-      rhs.type()=int_type();
-      rhs.make_typecast(typet("bool"));
-    }
-
-    exprt lhs(expr.op0());
-
-    code_assignt assignment(lhs, rhs);
-    assignment.location()=expr.location();
-
-    convert(assignment, dest);
-  }
-  else if(statement=="cpp_delete" ||
-          statement=="cpp_delete[]")
-  {
-    exprt tmp;
-    tmp.swap(expr);
-    tmp.id("code");
-    convert(to_code(tmp), dest);
-  }
-  else if(statement=="function_call")
-  {
-    if(expr.operands().size()!=2)
-    {
-      err_location(expr);
-      str << "function_call sideeffect takes two arguments, but got "
-          << expr.operands().size();
-      throw 0;
-    }
-
-    code_function_callt function_call;
-    function_call.location()=expr.location();
-    function_call.function()=expr.op0();
-    function_call.arguments()=expr.op1().operands();
-    convert_function_call(function_call, dest);
-  }
-  else if(statement=="statement_expression")
-  {
-    if(expr.operands().size()!=1)
-    {
-      err_location(expr);
-      str << "statement_expression sideeffect takes one argument";
-      throw 0;
-    }
-
-    convert(to_code(expr.op0()), dest);
-  }
-  else if(statement=="gcc_conditional_expression")
-  {
-    remove_sideeffects(expr, dest, false);
-  }
-  else if(statement=="temporary_object")
-  {
-    remove_sideeffects(expr, dest, false);
-  }
-  else if(statement=="cpp-throw")
-  {
-    goto_programt::targett t=dest.add_instruction(THROW);
-    codet tmp("cpp-throw");
-    tmp.operands().swap(expr.operands());
-    tmp.location()=expr.location();
-    tmp.set("exception_list", expr.find("exception_list"));
-    migrate_expr(tmp, t->code);
-    t->location=expr.location();
-
-    // the result can't be used, these are void
-    expr.make_nil();
-  }
-  else
-  {
-    err_location(expr);
-    str << "sideeffect " << statement << " not supported";
-    throw 0;
-  }
+  // Add old symbols to the list of locals
+  scoped_variables = old_scoped_vars;
 }
 
 void goto_convertt::convert_expression(
@@ -663,14 +391,17 @@ void goto_convertt::convert_expression(
 
   exprt expr=code.op0();
 
-  if(expr.id()=="sideeffect")
+  if(expr.id()=="if")
   {
-    Forall_operands(it, expr)
-      remove_sideeffects(*it, dest);
-
-    goto_programt tmp;
-    convert_sideeffect(expr, tmp);
-    dest.destructive_append(tmp);
+    const if_exprt &if_expr = to_if_expr(expr);
+    code_ifthenelset tmp_code;
+    tmp_code.location() = expr.location();
+    tmp_code.cond() = if_expr.cond();
+    tmp_code.then_case() = code_expressiont(if_expr.true_case());
+    tmp_code.then_case().location() = expr.location();
+    tmp_code.else_case() = code_expressiont(if_expr.false_case());
+    tmp_code.else_case().location() = expr.location();
+    convert_ifthenelse(tmp_code, dest);
   }
   else
   {
@@ -680,76 +411,199 @@ void goto_convertt::convert_expression(
     {
       codet tmp(code);
       tmp.op0()=expr;
+      tmp.location() = expr.location();
       copy(tmp, OTHER, dest);
     }
   }
+}
+
+bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
+{
+  // Remove side effect
+  if(has_sideeffect(size))
+  {
+    goto_programt sideeffects;
+    remove_sideeffects(size, sideeffects);
+    dest.destructive_append(sideeffects);
+    return true;
+  }
+
+  // We have to replace the symbol by a temporary, because it might
+  // change its value in the future
+  // Don't create a symbol for temporary symbols
+  if(size.is_symbol() &&
+     size.identifier().as_string().find("tmp$") == std::string::npos)
+  {
+    // Old size symbol
+    exprt old_size = size;
+
+    // Replace the size by a new variable, to avoid wrong results
+    // when the symbol used to create the VLA is changed
+    size = symbol_expr(new_tmp_symbol(size.type()));
+
+    codet assignment("assign");
+    assignment.reserve_operands(2);
+    assignment.copy_to_operands(size);
+    assignment.copy_to_operands(old_size);
+    assignment.location() = size.location();
+    copy(assignment, ASSIGN, dest);
+
+    return true;
+  }
+
+  // A constant array
+  return false;
+}
+
+bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
+{
+  // Not an array, don't care
+  if(!var_type.is_array())
+    return false;
+
+  array_typet &arr_type = to_array_type(var_type);
+
+  // Rewrite size
+  bool res = rewrite_vla_decl_size(arr_type.size(), dest);
+
+  // It's a multidimensional array, apply the transformations recursively.
+  // res is the second operand because it can be short-circuited and the
+  // side-effect will not be evaluated
+  if(arr_type.subtype().is_array())
+    return rewrite_vla_decl(to_array_type(arr_type.subtype()), dest) || res;
+
+  // Now rewrite the size expression
+  return res;
+}
+
+void goto_convertt::generate_dynamic_size_vla(exprt &var, goto_programt &dest)
+{
+  assert(var.type().is_array());
+
+  array_typet arr_type = to_array_type(var.type());
+  exprt size = to_array_type(var.type()).size();
+
+  // First, if it's a multidimensional vla, the size will be the
+  // multiplication of the dimensions
+  while(arr_type.subtype().is_array())
+  {
+    array_typet arr_subtype = to_array_type(arr_type.subtype());
+
+    exprt mult(exprt::mult, size.type());
+    mult.copy_to_operands(size, arr_subtype.size());
+    size.swap(mult);
+
+    arr_type = arr_subtype;
+  }
+
+  // Now, calculate the array size, which are the dimensions times the
+  // elements' size
+  const typet &subtype = arr_type.subtype();
+
+  type2tc tmp;
+  migrate_type(subtype, tmp);
+  auto st_size = type_byte_size(tmp);
+
+  exprt st_size_expr = from_integer(st_size, size.type());
+  exprt mult(exprt::mult, size.type());
+  mult.copy_to_operands(size, st_size_expr);
+
+  // Set the array to have a dynamic size
+  address_of_exprt addrof(var);
+  exprt dynamic_size("dynamic_size", int_type());
+  dynamic_size.copy_to_operands(addrof);
+  dynamic_size.location() = var.location();
+
+  goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
+  exprt assign = code_assignt(dynamic_size, mult);
+  migrate_expr(assign, t_s_s->code);
+  t_s_s->location = var.location();
 }
 
 void goto_convertt::convert_decl(
   const codet &code,
   goto_programt &dest)
 {
-  if(code.operands().size()!=1 &&
-     code.operands().size()!=2)
+  if(code.operands().size() != 1 && code.operands().size() != 2)
   {
     err_location(code);
     throw "decl statement takes one or two operands";
   }
 
-  const exprt &op0=code.op0();
+  // We might change the symbol
+  codet new_code(code);
 
-  if(op0.id()!="symbol")
+  exprt &var = new_code.op0();
+  if(!var.is_symbol())
   {
-    err_location(op0);
+    err_location(var);
     throw "decl statement expects symbol as first operand";
   }
 
-  const irep_idt &identifier=op0.identifier();
+  const irep_idt &identifier = var.identifier();
 
-  const symbolt &symbol=lookup(identifier);
-  if(symbol.static_lifetime ||
-     symbol.type.is_code())
-	  return; // this is a SKIP!
+  symbolt* s = context.find_symbol(identifier);
+  assert(s != nullptr);
 
-  if(code.operands().size()==1)
+  // A static variable will be declared in the global scope and
+  // a code type means a function declaration, we ignore both
+  if(s->static_lifetime || s->type.is_code())
+    return; // this is a SKIP!
+
+  // Local variable, add to locals
+  scoped_variables.push_front(identifier);
+
+  // Check if is an VLA declaration and rewrite the declaration
+  bool is_vla = rewrite_vla_decl(var.type(), dest);
+  if(is_vla)
   {
-    copy(code, OTHER, dest);
+    // This means that it was a VLA declaration and we need to
+    // to rewrite the symbol as well
+    s->type = var.type();
   }
-  else
+
+  exprt initializer = nil_exprt();
+  if(new_code.operands().size() == 2)
   {
-    exprt initializer;
+    initializer = new_code.op1();
 
-    codet tmp(code);
-    initializer=code.op1();
-    tmp.operands().resize(1); // just resize the vector, this will get rid of op1
-
-    goto_programt sideeffects;
+    // just resize the vector, this will get rid of op1
+    new_code.operands().pop_back();
 
     if(options.get_bool_option("atomicity-check"))
     {
       unsigned int globals = get_expr_number_globals(initializer);
       if(globals > 0)
-        break_globals2assignments(initializer, dest,code.location());
+        break_globals2assignments(initializer, dest, new_code.location());
     }
-
-    remove_sideeffects(initializer, sideeffects);
-    dest.destructive_append(sideeffects);
-
-    // break up into decl and assignment
-    copy(tmp, OTHER, dest);
-
-    code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
-    assign.location()=tmp.location();
-    copy(assign, ASSIGN, dest);
   }
+  else
+  {
+    initializer = side_effect_expr_nondett(var.type());
+    initializer.location() = var.location();
+  }
+
+  goto_programt sideeffects;
+  remove_sideeffects(initializer, sideeffects);
+  dest.destructive_append(sideeffects);
+
+  // break up into decl and assignment
+  copy(new_code, OTHER, dest);
+
+  if(is_vla)
+    generate_dynamic_size_vla(var, dest);
+
+  code_assignt assign(var, initializer);
+  assign.location() = new_code.location();
+  copy(assign, ASSIGN, dest);
 }
 
 void goto_convertt::convert_decl_block(
   const codet& code,
   goto_programt& dest)
 {
-  forall_operands(it, code)
-    convert(to_code(*it), dest);
+  for(auto const &it : code.operands())
+    convert(to_code(it), dest);
 }
 
 void goto_convertt::convert_assign(
@@ -762,13 +616,11 @@ void goto_convertt::convert_assign(
     throw "assignment statement takes two operands";
   }
 
-  exprt lhs=code.lhs(),
-        rhs=code.rhs();
+  exprt lhs=code.lhs(), rhs=code.rhs();
 
   remove_sideeffects(lhs, dest);
 
-  if(rhs.id()=="sideeffect" &&
-     rhs.statement()=="function_call")
+  if(rhs.id()=="sideeffect" && rhs.statement()=="function_call")
   {
     if(rhs.operands().size()!=2)
     {
@@ -835,7 +687,12 @@ void goto_convertt::convert_assign(
   }
 }
 
-void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rhs, goto_programt &dest, const locationt &location)
+void goto_convertt::break_globals2assignments(
+  int &atomic,
+  exprt &lhs,
+  exprt &rhs,
+  goto_programt &dest,
+  const locationt &location)
 {
 
   if(!options.get_bool_option("atomicity-check"))
@@ -937,9 +794,9 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
     if (identifier.empty())
 	  return;
 
-	const symbolt &symbol=lookup(identifier);
+    const symbolt &symbol=ns.lookup(identifier);
 
-    if (!(identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
+    if (!(identifier == "__ESBMC_alloc" || identifier == "__ESBMC_alloc_size")
           && (symbol.static_lifetime || symbol.type.is_dynamic_set()))
     {
 	  // make new assignment to temp for each global symbol
@@ -967,7 +824,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
   else if(rhs.id() == "symbol")
   {
 	const irep_idt &identifier=rhs.identifier();
-	const symbolt &symbol=lookup(identifier);
+	const symbolt &symbol=ns.lookup(identifier);
 	if(symbol.static_lifetime || symbol.type.is_dynamic_set())
 	{
 	  // make new assignment to temp for each global symbol
@@ -1013,10 +870,10 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
   else if(expr.id() == "symbol")
   {
     const irep_idt &identifier=expr.identifier();
-  	const symbolt &symbol=lookup(identifier);
+  	const symbolt &symbol=ns.lookup(identifier);
 
-    if (identifier == "c::__ESBMC_alloc"
-    	|| identifier == "c::__ESBMC_alloc_size")
+    if (identifier == "__ESBMC_alloc"
+    	|| identifier == "__ESBMC_alloc_size")
     {
       return 0;
     }
@@ -1051,10 +908,10 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
   else if (is_symbol2t(expr))
   {
     irep_idt identifier = to_symbol2t(expr).get_symbol_name();
-    const symbolt &symbol = lookup(identifier);
+    const symbolt &symbol = ns.lookup(identifier);
 
-    if (identifier == "c::__ESBMC_alloc"
-    	|| identifier == "c::__ESBMC_alloc_size")
+    if (identifier == "__ESBMC_alloc"
+    	|| identifier == "__ESBMC_alloc_size")
     {
       return 0;
     }
@@ -1203,7 +1060,7 @@ void goto_convertt::convert_skip(
   t->location=code.location();
   expr2tc tmp_code;
   migrate_expr(code, tmp_code);
-  t->code = tmp_code;;
+  t->code = tmp_code;
 }
 
 void goto_convertt::convert_assume(
@@ -1322,7 +1179,7 @@ void goto_convertt::convert_for(
   goto_programt tmp_y;
   goto_programt::targett y=tmp_y.add_instruction();
   y->make_goto(u);
-  y->guard = true_expr;
+  y->guard = gen_true_expr();
   y->location=code.location();
 
   dest.destructive_append(sideeffects);
@@ -1386,7 +1243,7 @@ void goto_convertt::convert_while(
 
   // y: if(c) goto v;
   y->make_goto(v);
-  y->guard = true_expr;
+  y->guard = gen_true_expr();
   y->location=code.location();
 
   dest.destructive_append(tmp_branch);
@@ -1549,11 +1406,9 @@ void goto_convertt::convert_switch(
 
   goto_programt tmp_cases;
 
-  for(casest::iterator it=targets.cases.begin();
-      it!=targets.cases.end();
-      it++)
+  for(auto & it : targets.cases)
   {
-    const caset &case_ops=it->second;
+    const caset &case_ops=it.second;
 
     assert(!case_ops.empty());
 
@@ -1568,7 +1423,7 @@ void goto_convertt::convert_switch(
     }
 
     goto_programt::targett x=tmp_cases.add_instruction();
-    x->make_goto(it->first);
+    x->make_goto(it.first);
     migrate_expr(guard_expr, x->guard);
     x->location=case_ops.front().find_location();
   }
@@ -1613,8 +1468,7 @@ void goto_convertt::convert_return(
     throw "return without target";
   }
 
-  if(code.operands().size()!=0 &&
-     code.operands().size()!=1)
+  if(code.operands().size()!=0 && code.operands().size()!=1)
   {
     err_location(code);
     throw "return takes none or one operand";
@@ -1654,10 +1508,10 @@ void goto_convertt::convert_return(
     }
   }
 
-  goto_programt::targett t=dest.add_instruction();
+  goto_programt::targett t = dest.add_instruction();
   t->make_return();
   migrate_expr(new_code, t->code);
-  t->location=new_code.location();
+  t->location = new_code.location();
 }
 
 void goto_convertt::convert_continue(
@@ -1833,47 +1687,9 @@ void goto_convertt::convert_ifthenelse(
   if(has_else)
     convert(to_code(code.op2()), tmp_op2);
 
-  exprt tmp_guard;
-  if (options.get_bool_option("control-flow-test")
-    && code.op0().id() != "notequal" && code.op0().id() != "symbol"
-    && code.op0().id() != "typecast" && code.op0().id() != "="
-    && !options.get_bool_option("deadlock-check"))
-  {
-    symbolt &new_symbol=new_cftest_symbol(code.op0().type());
-    irept irep;
-    new_symbol.to_irep(irep);
-
-    codet assignment("assign");
-    assignment.reserve_operands(2);
-    assignment.copy_to_operands(symbol_expr(new_symbol));
-    assignment.copy_to_operands(code.op0());
-    assignment.location() = code.op0().find_location();
-    copy(assignment, ASSIGN, dest);
-
-    tmp_guard=symbol_expr(new_symbol);
-  }
-  else if (code.op0().statement() == "block")
-  {
-    exprt lhs(code.op0().op0().op0());
-    lhs.location()=code.op0().op0().location();
-    exprt rhs(code.op0().op0().op1());
-
-    rhs.type()=code.op0().op0().op1().type();
-
-    codet assignment("assign");
-    assignment.copy_to_operands(lhs);
-    assignment.move_to_operands(rhs);
-    assignment.location()=lhs.location();
-    convert(assignment, dest);
-
-    tmp_guard=assignment.op0();
-    if (!tmp_guard.type().is_bool())
-      tmp_guard.make_typecast(bool_typet());
-  }
-  else
-    tmp_guard=code.op0();
-
+  exprt tmp_guard = code.op0();
   remove_sideeffects(tmp_guard, dest);
+
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 }
 
@@ -1966,7 +1782,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_false=dest.add_instruction();
     t_false->make_goto(target_false);
-    t_false->guard = true_expr;
+    t_false->guard = gen_true_expr();
     t_false->location=location;
     return;
   }
@@ -1989,7 +1805,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_true=dest.add_instruction();
     t_true->make_goto(target_true);
-    t_true->guard = true_expr;
+    t_true->guard = gen_true_expr();
     t_true->location=location;
 
     return;
@@ -2012,7 +1828,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_false=dest.add_instruction();
     t_false->make_goto(target_false);
-    t_false->guard = true_expr;
+    t_false->guard = gen_true_expr();
     t_false->location=guard.location();
 
     return;
@@ -2035,29 +1851,8 @@ void goto_convertt::generate_conditional_branch(
 
   goto_programt::targett t_false=dest.add_instruction();
   t_false->make_goto(target_false);
-  t_false->guard = true_expr;
+  t_false->guard = gen_true_expr();
   t_false->location=guard.location();
-}
-
-const std::string &goto_convertt::get_string_constant(
-  const exprt &expr)
-{
-  if(expr.id()=="typecast" &&
-     expr.operands().size()==1)
-    return get_string_constant(expr.op0());
-
-  if(!expr.is_address_of()
-     || expr.operands().size()!=1
-     || !expr.op0().is_index()
-     || expr.op0().operands().size()!=2)
-  {
-    err_location(expr);
-    str << "expected string constant, but got: "
-          << expr.pretty() << std::endl;
-    abort();
-  }
-
-  return expr.op0().op0().value().as_string();
 }
 
 symbolt &goto_convertt::new_tmp_symbol(const typet &type)
@@ -2072,45 +1867,7 @@ symbolt &goto_convertt::new_tmp_symbol(const typet &type)
     new_symbol.type=type;
   } while (context.move(new_symbol, symbol_ptr));
 
-  tmp_symbols.push_back(symbol_ptr->name);
+  scoped_variables.push_front(symbol_ptr->name);
 
   return *symbol_ptr;
-}
-
-symbolt &goto_convertt::new_cftest_symbol(const typet &type)
-{
-  static int cftest_counter=0;
-  symbolt new_symbol;
-  symbolt *symbol_ptr;
-
-  do {
-    new_symbol.base_name="cftest$"+i2string(++cftest_counter);
-    new_symbol.name=tmp_symbol_prefix+id2string(new_symbol.base_name);
-    new_symbol.lvalue=true;
-    new_symbol.type=type;
-  } while (context.move(new_symbol, symbol_ptr));
-
-  tmp_symbols.push_back(symbol_ptr->name);
-
-  return *symbol_ptr;
-}
-
-void goto_convertt::guard_program(
-  const guardt &guard,
-  goto_programt &dest)
-{
-  if(guard.is_true()) return;
-
-  // the target for the GOTO
-  goto_programt::targett t=dest.add_instruction(SKIP);
-
-  goto_programt tmp;
-  tmp.add_instruction(GOTO);
-  tmp.instructions.front().targets.push_back(t);
-  exprt guardexpr = migrate_expr_back(guard.as_expr());
-  guardexpr.make_not();
-  migrate_expr(guardexpr, tmp.instructions.front().guard);
-  tmp.destructive_append(dest);
-
-  tmp.swap(dest);
 }

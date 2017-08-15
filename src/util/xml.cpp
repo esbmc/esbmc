@@ -6,11 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <stdlib.h>
-
-#include <i2string.h>
-
-#include "xml.h"
+#include <cstdlib>
+#include <util/i2string.h>
+#include <util/xml.h>
 
 void xmlt::clear()
 {
@@ -34,13 +32,10 @@ void xmlt::output(std::ostream &out, unsigned indent) const
 
   out << '<' << name;
 
-  for(attributest::const_iterator
-      it=attributes.begin();
-      it!=attributes.end();
-      it++)
-    out << ' ' << it->first
+  for(const auto & attribute : attributes)
+    out << ' ' << attribute.first
     << '=' << '"'
-    << it->second
+    << attribute.second
     << '"';
 
   out << '>';
@@ -51,11 +46,8 @@ void xmlt::output(std::ostream &out, unsigned indent) const
   {
     out << std::endl;
 
-    for(elementst::const_iterator
-        it=elements.begin();
-        it!=elements.end();
-        it++)
-      it->output(out, indent+2);
+    for(const auto & element : elements)
+      element.output(out, indent+2);
 
     do_indent(out, indent);
   }
@@ -67,10 +59,8 @@ std::string xmlt::escape(const std::string &s)
 {
   std::string result;
 
-  for(unsigned i=0; i<s.size(); i++)
+  for(char ch : s)
   {
-    const char ch=s[i];
-
     switch(ch)
     {
     case '&':
@@ -100,10 +90,8 @@ std::string xmlt::escape_attribute(const std::string &s)
 {
   std::string result;
 
-  for(unsigned i=0; i<s.size(); i++)
+  for(char ch : s)
   {
-    const char ch=s[i];
-
     switch(ch)
     {
     case '&':
@@ -182,7 +170,7 @@ void xmlt::set_attribute(
 
 std::string xmlt::unescape(const std::string &str)
 {
-  std::string result("");
+  std::string result;
 
   result.reserve(str.size());
 

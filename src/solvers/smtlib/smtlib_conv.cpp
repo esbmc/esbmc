@@ -1,14 +1,12 @@
 // "Standards" workaround
 #define __STDC_FORMAT_MACROS
 
-#include <unistd.h>
-#include <inttypes.h>
-
+#include <cinttypes>
+#include <smtlib_conv.h>
+#include <smtlib.hpp>
+#include <smtlib_tok.hpp>
 #include <sstream>
-
-#include "smtlib_conv.h"
-#include "smtlib.hpp"
-#include "smtlib_tok.hpp"
+#include <unistd.h>
 
 // Dec of external lexer input stream
 int smtlibparse(int startval);
@@ -16,19 +14,19 @@ extern int smtlib_send_start_code;
 extern sexpr *smtlib_output;
 
 smt_convt *
-create_new_smtlib_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+create_new_smtlib_solver(bool int_encoding, const namespacet &ns,
                           const optionst &opts __attribute__((unused)),
                           tuple_iface **tuple_api __attribute__((unused)),
                           array_iface **array_api)
 {
-  smtlib_convt *conv = new smtlib_convt(int_encoding, ns, is_cpp, opts);
+  smtlib_convt *conv = new smtlib_convt(int_encoding, ns, opts);
   *array_api = static_cast<array_iface*>(conv);
   return conv;
 }
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
-                           bool is_cpp, const optionst &_opts)
-  : smt_convt(int_encoding, _ns, is_cpp), array_iface(false, false),
+                           const optionst &_opts)
+  : smt_convt(int_encoding, _ns), array_iface(false, false),
     options(_opts)
 {
 
@@ -53,7 +51,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
       abort();
     }
 
-    in_stream = NULL;
+    in_stream = nullptr;
     solver_name = "Text output";
     solver_version = "";
     solver_proc_pid = 0;
@@ -321,7 +319,7 @@ smtlib_convt::dec_solve()
   fflush(out_stream);
 
   // If we're just outputing to a file, this is where we terminate.
-  if (in_stream == NULL)
+  if (in_stream == nullptr)
     return smt_convt::P_SMTLIB;
 
   // And read in the output
@@ -415,7 +413,7 @@ smtlib_convt::get_bv(const type2tc &t, smt_astt a)
     fixedbvt fbt;
     fbt.spec = spec;
     fbt.from_integer(m);
-    result = constant_fixedbv2tc(t, fbt);
+    result = constant_fixedbv2tc(fbt);
   } else if (is_bool_type(t)) {
     if (respval.token == TOK_KW_TRUE) {
       result = constant_bool2tc(true);
@@ -507,7 +505,7 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
     fixedbvt fbt;
     fbt.spec = spec;
     fbt.from_integer(m);
-    result = constant_fixedbv2tc(t, fbt);
+    result = constant_fixedbv2tc(fbt);
   } else if (is_bool_type(t)) {
     if (respval.token == TOK_KW_TRUE) {
       result = constant_bool2tc(true);
@@ -519,9 +517,9 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
 
       std::string data = respval.data.substr(2);
       if (data[0] == '0')
-        result = false_expr;
+        result = gen_false_expr();
       else if (data[0] == '1')
-        result = true_expr;
+        result = gen_true_expr();
       else {
         std::cerr << "Unrecognized boolean-typed binary number format";
         std::cerr << std::endl;
@@ -545,9 +543,9 @@ smtlib_convt::get_bool(smt_astt a)
 {
   tvt res = l_get(a);
   if (res.is_true())
-    return true_expr;
+    return gen_true_expr();
   else if (res.is_false())
-    return false_expr;
+    return gen_false_expr();
   else {
     std::cerr << "Non-true, non-false value read from smtlib model" <<std::endl;
     abort();
@@ -615,7 +613,7 @@ smtlib_convt::l_get(const smt_ast *a)
 const std::string
 smtlib_convt::solver_text()
 {
-  if (in_stream == NULL) {
+  if (in_stream == nullptr) {
     // Text output
     return solver_name;
   }
@@ -668,7 +666,7 @@ smt_sort *
 smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
 {
   va_list ap;
-  smtlib_smt_sort *s = NULL, *dom, *range;
+  smtlib_smt_sort *s = nullptr, *dom, *range;
   unsigned long uint;
   int thebool;
 
@@ -773,6 +771,12 @@ smt_astt smtlib_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   abort();
 }
 
+smt_astt smtlib_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  std::cerr << "Can't create floating point nearbyint expression on smtlibt yet" << std::endl;
+  abort();
+}
+
 smt_ast *
 smtlib_convt::mk_smt_bool(bool val)
 {
@@ -805,7 +809,7 @@ smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   symbol_table.insert(record);
 
   if (s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
-    return a;;
+    return a;
 
   // As this is the first time, declare that symbol to the solver.
   fprintf(out_stream, "(declare-fun |%s| () %s)\n", name.c_str(),
@@ -873,19 +877,16 @@ void
 smtlib_convt::add_array_constraints_for_solving()
 {
   // None required
-  return;
 }
 
 void
-smtlib_convt::push_array_ctx(void)
+smtlib_convt::push_array_ctx()
 {
-  return;
 }
 
 void
-smtlib_convt::pop_array_ctx(void)
+smtlib_convt::pop_array_ctx()
 {
-  return;
 }
 
 const std::string smtlib_convt::temp_prefix = "?x";

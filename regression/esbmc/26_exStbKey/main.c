@@ -5124,7 +5124,7 @@ char const * getKeyName(DFBInputEvent event)
 static void getRCInput( IDirectFB *dfb )
 {
      DFBResult ret;
-     __CPROVER_assume(dfb!=((void *)0));
+     __ESBMC_assume(dfb!=((void *)0));
      IDirectFBEventBuffer *eventBuffer;
 
   if (dfb != ((void *)0))

@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <std_types.h>
-#include <config.h>
-
-#include "c_types.h"
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/std_types.h>
+#include <util/irep2_utils.h>
 
 typet build_float_type(unsigned width)
 {
@@ -37,12 +37,35 @@ typet build_float_type(unsigned width)
   }
 }
 
+type2tc build_float_type2(unsigned width)
+{
+  if(config.ansi_c.use_fixed_for_float)
+  {
+    fixedbv_type2tc result(width, width/2);
+    return result;
+  }
+  else
+  {
+    unsigned fraction;
+    switch(width)
+    {
+    case 32: fraction = 23; break;
+    case 64: fraction = 52; break;
+    case 128: fraction = 112; break;
+    default: assert(false);
+    }
+
+    floatbv_type2tc result(fraction, width - fraction - 1);
+    return result;
+  }
+}
+
 typet index_type()
 {
   return signedbv_typet(config.ansi_c.int_width);
 }
 
-type2tc index_type2(void)
+type2tc index_type2()
 {
   return type_pool.get_int(config.ansi_c.int_width);
 }
@@ -83,9 +106,19 @@ typet long_int_type()
   return signedbv_typet(config.ansi_c.long_int_width);
 }
 
+type2tc long_int_type2()
+{
+  return get_int_type(config.ansi_c.long_int_width);
+}
+
 typet long_long_int_type()
 {
   return signedbv_typet(config.ansi_c.long_long_int_width);
+}
+
+type2tc long_long_int_type2()
+{
+  return get_int_type(config.ansi_c.long_long_int_width);
 }
 
 typet long_uint_type()
@@ -93,9 +126,19 @@ typet long_uint_type()
   return unsignedbv_typet(config.ansi_c.long_int_width);
 }
 
+type2tc long_uint_type2()
+{
+  return get_uint_type(config.ansi_c.long_int_width);
+}
+
 typet long_long_uint_type()
 {
   return unsignedbv_typet(config.ansi_c.long_long_int_width);
+}
+
+type2tc long_long_uint_type2()
+{
+  return get_uint_type(config.ansi_c.long_long_int_width);
 }
 
 typet signed_short_int_type()
@@ -141,6 +184,11 @@ typet wchar_type()
   return signedbv_typet(config.ansi_c.int_width);
 }
 
+typet unsigned_wchar_type()
+{
+  return unsignedbv_typet(config.ansi_c.int_width);
+}
+
 type2tc char_type2()
 {
   if (config.ansi_c.char_is_unsigned)
@@ -154,14 +202,29 @@ typet float_type()
   return build_float_type(config.ansi_c.single_width);
 }
 
+type2tc float_type2()
+{
+  return build_float_type2(config.ansi_c.single_width);
+}
+
 typet double_type()
 {
   return build_float_type(config.ansi_c.double_width);
 }
 
+type2tc double_type2()
+{
+  return build_float_type2(config.ansi_c.double_width);
+}
+
 typet long_double_type()
 {
   return build_float_type(config.ansi_c.long_double_width);
+}
+
+type2tc long_double_type2()
+{
+  return build_float_type2(config.ansi_c.long_double_width);
 }
 
 typet size_type()

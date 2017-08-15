@@ -7,22 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <algorithm>
-
-#include "simplify_utils.h"
-
-/*******************************************************************\
-
-Function: simplify_exprt::sort_operands
-
-  Inputs: operand list
-
- Outputs: modifies operand list
-          returns true iff nothing was changed
-
- Purpose: sort operands of an expression according to ordering
-          defined by operator<
-
-\*******************************************************************/
+#include <util/simplify_utils.h>
 
 bool sort_operands(exprt::operandst &operands)
 {

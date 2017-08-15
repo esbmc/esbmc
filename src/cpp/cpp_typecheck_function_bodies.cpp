@@ -6,21 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <i2string.h>
-
-#include "cpp_typecheck.h"
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_function_bodies
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <cpp/cpp_typecheck.h>
+#include <util/i2string.h>
 
 void cpp_typecheckt::typecheck_function_bodies()
 {
@@ -35,7 +22,7 @@ void cpp_typecheckt::typecheck_function_bodies()
 
     function_bodies.pop_front();
 
-    if(function_symbol.name=="c::main")
+    if(function_symbol.name=="main")
       add_argc_argv(function_symbol);
 
     exprt &body=function_symbol.value;

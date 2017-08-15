@@ -1,20 +1,19 @@
-#include <c_types.h>
-
-#include "cvc_conv.h"
+#include <util/c_types.h>
+#include <cvc_conv.h>
 
 smt_convt *
-create_new_cvc_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+create_new_cvc_solver(bool int_encoding, const namespacet &ns,
                       const optionst &opts __attribute__((unused)),
                       tuple_iface **tuple_api __attribute__((unused)),
                       array_iface **array_api)
 {
-  cvc_convt *conv = new cvc_convt(is_cpp, int_encoding, ns);
+  cvc_convt *conv = new cvc_convt(int_encoding, ns);
   *array_api = static_cast<array_iface*>(conv);
   return conv;
 }
 
-cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
-   : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false),
+cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
+   : smt_convt(int_encoding, ns), array_iface(false, false),
      em(), smt(&em), sym_tab()
 {
   // Already initialized stuff in the constructor list,
@@ -23,10 +22,6 @@ cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
   smt.setLogic("QF_AUFBV");
 
   assert(!int_encoding && "Integer encoding mode for CVC unimplemented");
-}
-
-cvc_convt::~cvc_convt()
-{
 }
 
 smt_convt::resultt
@@ -301,7 +296,7 @@ cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv = CVC4::BitVector(w, (uint64_t)theint.to_int64());
+  CVC4::BitVector bv = CVC4::BitVector(w, (unsigned long int)theint.to_int64());
   CVC4::Expr e = em.mkConst(bv);
   return new cvc_smt_ast(this, s, e);
 }
@@ -349,6 +344,12 @@ smt_astt cvc_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   abort();
 }
 
+smt_astt cvc_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
+  abort();
+}
+
 smt_ast *
 cvc_convt::mk_smt_bool(bool val)
 {
@@ -372,7 +373,7 @@ cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   // If someone's making a tuple-symbol, wave our hands and do nothing. It's
   // the tuple modelling code doing some symbol sillyness.
   if (s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
-    return NULL;
+    return nullptr;
 
   // Standard arrangement: if we already have the name, return the expression
   // from the symbol table. If not, time for a new name.
@@ -413,17 +414,14 @@ cvc_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 void
 cvc_convt::add_array_constraints_for_solving()
 {
-  return;
 }
 
 void
-cvc_convt::push_array_ctx(void)
+cvc_convt::push_array_ctx()
 {
-  return;
 }
 
 void
-cvc_convt::pop_array_ctx(void)
+cvc_convt::pop_array_ctx()
 {
-  return;
 }

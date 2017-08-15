@@ -1,7 +1,7 @@
 #include <pthread.h>
 
 int g;
-pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex;
 
 void *t1(void *arg)
 {
@@ -10,6 +10,7 @@ void *t1(void *arg)
   g=1;              
   g=0;        
   pthread_mutex_unlock(&mutex);
+  pthread_exit(NULL);
 }
 
 void *t2(void *arg)
@@ -18,6 +19,7 @@ void *t2(void *arg)
   // this holds due to the lock
   assert(g==0);              
   pthread_mutex_unlock(&mutex);
+  pthread_exit(NULL);
 }
 
 void *t3(void *arg)
@@ -25,6 +27,7 @@ void *t3(void *arg)
   pthread_mutex_lock(&mutex);
   assert(g==0);              
   pthread_mutex_unlock(&mutex);
+  pthread_exit(NULL);
 }
 
 int main()
@@ -34,4 +37,6 @@ int main()
   pthread_create(&id1, NULL, t1, NULL);
   pthread_create(&id2, NULL, t2, NULL);
   pthread_create(&id3, NULL, t3, NULL);
+
+  return 0;
 }

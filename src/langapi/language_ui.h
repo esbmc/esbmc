@@ -9,11 +9,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_LANGUAGE_UI_H
 #define CPROVER_LANGUAGE_UI_H
 
-#include <message.h>
+#include <util/language.h>
+#include <util/language_file.h>
+#include <util/message.h>
 #include <util/parseoptions.h>
-#include <language_file.h>
-#include <language.h>
-#include <ui_message.h>
+#include <util/ui_message.h>
 
 class language_uit:public messaget
 {
@@ -22,7 +22,7 @@ public:
   contextt context;
 
   language_uit(const cmdlinet &__cmdline);
-  virtual ~language_uit();
+  ~language_uit() override = default;
 
   virtual bool parse();
   virtual bool parse(const std::string &filename);

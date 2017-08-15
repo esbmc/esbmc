@@ -6,43 +6,36 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-
-#include <assert.h>
-
-#include <config.h>
-#include <context.h>
-#include <simplify_expr.h>
-#include <expr_util.h>
-#include <base_type.h>
-#include <std_expr.h>
-#include <i2string.h>
-#include <prefix.h>
-#include <std_code.h>
-#include <arith_tools.h>
-#include <type_byte_size.h>
-#include <c_types.h>
-
+#include <cassert>
 #include <langapi/language_util.h>
+#include <pointer-analysis/value_set.h>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/context.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
-#include "value_set.h"
-
-const value_sett::object_map_dt value_sett::object_map_dt::empty = { };
 object_numberingt value_sett::object_numbering;
+object_number_numberingt value_sett::obj_numbering_refset;
 
 void value_sett::output(std::ostream &out) const
 {
   // Iterate over all tracked variables, dumping a list of all the things it
   // might point at.
-  for(valuest::const_iterator
-      v_it=values.begin();
-      v_it!=values.end();
-      v_it++)
+  for(const auto & value : values)
   {
     std::string identifier, display_name;
 
-    const entryt &e=v_it->second;
+    const entryt &e=value.second;
 
     if(has_prefix(e.identifier, "value_set::dynamic_object"))
     {
@@ -70,13 +63,11 @@ void value_sett::output(std::ostream &out) const
 
     out << " = { ";
 
-    const object_map_dt &object_map=e.object_map.read();
-
     unsigned width=0;
 
-    for(object_map_dt::const_iterator
-        o_it=object_map.begin();
-        o_it!=object_map.end();
+    for(object_mapt::const_iterator
+        o_it=e.object_map.begin();
+        o_it!=e.object_map.end();
         o_it++)
     {
       const expr2tc &o = object_numbering[o_it->first];
@@ -106,10 +97,10 @@ void value_sett::output(std::ostream &out) const
 
       width+=result.size();
 
-      object_map_dt::const_iterator next(o_it);
+      object_mapt::const_iterator next(o_it);
       next++;
 
-      if(next!=object_map.end())
+      if(next!=e.object_map.end())
       {
         out << ", ";
         if(width>=40) out << "\n      ";
@@ -121,7 +112,7 @@ void value_sett::output(std::ostream &out) const
 }
 
 expr2tc
-value_sett::to_expr(object_map_dt::const_iterator it) const
+value_sett::to_expr(object_mapt::const_iterator it) const
 {
   const expr2tc &object = object_numbering[it->first];
 
@@ -145,12 +136,9 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 
   // Iterate over all new values; if they're in the current value set, merge
   // them. If not, only merge it in if keepnew is true.
-  for(valuest::const_iterator
-      it=new_values.begin();
-      it!=new_values.end();
-      it++)
+  for(const auto & new_value : new_values)
   {
-    valuest::iterator it2=values.find(it->first);
+    valuest::iterator it2=values.find(new_value.first);
 
     // If the new variable isnt in this' set,
     if(it2==values.end())
@@ -158,12 +146,12 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
       // We always track these when merging value sets, as these store data
       // that's transfered back and forth between function calls. So, the
       // variables not existing in the state we're merging into is irrelevant.
-      if(has_prefix(id2string(it->second.identifier),
+      if(has_prefix(id2string(new_value.second.identifier),
            "value_set::dynamic_object") ||
-         it->second.identifier=="value_set::return_value" ||
+         new_value.second.identifier=="value_set::return_value" ||
          keepnew)
       {
-        values.insert(*it);
+        values.insert(new_value);
         result=true;
       }
 
@@ -172,7 +160,7 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 
     // The variable was in this' set, merge the values.
     entryt &e=it2->second;
-    const entryt &new_e=it->second;
+    const entryt &new_e=new_value.second;
 
     if(make_union(e.object_map, new_e.object_map))
       result=true;
@@ -186,8 +174,8 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
   bool result=false;
 
   // Merge the pointed at objects in src into dest.
-  for(object_map_dt::const_iterator it=src.read().begin();
-      it!=src.read().end();
+  for(object_mapt::const_iterator it=src.begin();
+      it!=src.end();
       it++)
   {
     if(insert(dest, it))
@@ -206,9 +194,9 @@ void value_sett::get_value_set(
   get_value_set(expr, object_map);
 
   // Convert values into expressions to return.
-  for(object_map_dt::const_iterator
-      it=object_map.read().begin();
-      it!=object_map.read().end();
+  for(object_mapt::const_iterator
+      it=object_map.begin();
+      it!=object_map.end();
       it++)
     dest.push_back(to_expr(it));
 }
@@ -216,9 +204,8 @@ void value_sett::get_value_set(
 void value_sett::get_value_set(const expr2tc &expr, object_mapt &dest) const
 {
   // Simplify expr if possible,
-  expr2tc new_expr = expr->simplify();
-  if (is_nil_expr(new_expr))
-    new_expr = expr;
+  expr2tc new_expr = expr;
+  simplify(new_expr);
 
   // Then, start fetching values.
   get_value_set_rec(new_expr, dest, "", new_expr->type);
@@ -339,22 +326,15 @@ void value_sett::get_value_set_rec(
     object_mapt reference_set;
     // Get reference set of dereference; this evaluates the dereference itself.
     get_reference_set(expr, reference_set);
-    const object_map_dt &object_map=reference_set.read();
 
     // Then get the value set of all the pointers we might dereference to.
-    if(object_map.begin()!=object_map.end())
+    for(const auto & it1 : reference_set)
     {
-      for(object_map_dt::const_iterator
-          it1=object_map.begin();
-          it1!=object_map.end();
-          it1++)
-      {
-        const expr2tc &object = object_numbering[it1->first];
-        get_value_set_rec(object, dest, suffix, original_type);
-      }
-
-      return;
+      const expr2tc &object = object_numbering[it1.first];
+      get_value_set_rec(object, dest, suffix, original_type);
     }
+
+    return;
   }
   else if(is_constant_expr(expr))
   {
@@ -366,6 +346,13 @@ void value_sett::get_value_set_rec(
   {
     // Push straight through typecasts.
     const typecast2t &cast = to_typecast2t(expr);
+    get_value_set_rec(cast.from, dest, suffix, original_type);
+    return;
+  }
+  else if (is_bitcast2t(expr))
+  {
+    // Bitcasts are just typecasts with additional semantics
+    const bitcast2t &cast = to_bitcast2t(expr);
     get_value_set_rec(cast.from, dest, suffix, original_type);
     return;
   }
@@ -412,7 +399,7 @@ void value_sett::get_value_set_rec(
 
             // Potentially rename,
             const type2tc renamed = ns.follow(subtype);
-            mp_integer elem_size = type_byte_size(*renamed);
+            mp_integer elem_size = type_byte_size(renamed);
             const mp_integer &val =to_constant_int2t(non_ptr_op).value;
             total_offs = val * elem_size;
             if (is_sub2t(expr))
@@ -442,15 +429,12 @@ void value_sett::get_value_set_rec(
       // For each object, update its offset data according to the integer
       // offset to this expr. Potential outcomes are keeping it nondet, making
       // it nondet, or calculating a new static offset.
-      for(object_map_dt::const_iterator
-          it=pointer_expr_set.read().begin();
-          it!=pointer_expr_set.read().end();
-          it++)
+      for(const auto & it : pointer_expr_set)
       {
-        objectt object=it->second;
+        objectt object=it.second;
 
         unsigned int nat_align =
-          get_natural_alignment(object_numbering[it->first]);
+          get_natural_alignment(object_numbering[it.first]);
         unsigned int ptr_align = get_natural_alignment(ptr_op);
 
         if (is_const && object.offset_is_set) {
@@ -488,7 +472,7 @@ void value_sett::get_value_set_rec(
         }
 
         // Once updated, store object reference into destination map.
-        insert(dest, it->first, object);
+        insert(dest, it.first, object);
       }
 
       return;
@@ -590,11 +574,42 @@ void value_sett::get_value_set_rec(
       return;
     }
   }
+  else if (is_concat2t(expr))
+  {
+    get_byte_stitching_value_set(expr, dest, suffix, original_type);
+    return;
+  }
 
   // If none of those expressions matched, then we don't really know what this
   // expression evaluates to. So just record it as being unknown.
   unknown2tc tmp(original_type);
   insert(dest, tmp, mp_integer(0));
+}
+
+void
+value_sett::get_byte_stitching_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const
+{
+
+  if (is_concat2t(expr)) {
+    const concat2t &ref = to_concat2t(expr);
+
+    get_byte_stitching_value_set(ref.side_1, dest, suffix, original_type);
+    get_byte_stitching_value_set(ref.side_2, dest, suffix, original_type);
+  } else if (is_lshr2t(expr)) {
+    const lshr2t &ref = to_lshr2t(expr);
+
+    get_byte_stitching_value_set(ref.side_1, dest, suffix, original_type);
+  } else if (is_byte_extract2t(expr)) {
+    const byte_extract2t &ref = to_byte_extract2t(expr);
+    // XXX XXX XXX this knackers offsets
+    get_value_set_rec(ref.source_value, dest, suffix, original_type);
+  } else {
+    get_value_set_rec(expr, dest, suffix, original_type);
+  }
 }
 
 void value_sett::get_reference_set(
@@ -606,9 +621,9 @@ void value_sett::get_reference_set(
   get_reference_set(expr, object_map);
 
   // Then convert to expressions into the destination list.
-  for(object_map_dt::const_iterator
-      it=object_map.read().begin();
-      it!=object_map.read().end();
+  for(object_mapt::const_iterator
+      it=object_map.begin();
+      it!=object_map.end();
       it++)
     dest.push_back(to_expr(it));
 }
@@ -647,23 +662,22 @@ void value_sett::get_reference_set_rec(
     // Compute the offset introduced by this index.
     mp_integer index_offset;
     bool has_const_index_offset = false;
-    if (is_constant_int2t(index.index)) {
-      index_offset = to_constant_int2t(index.index).value *
-                         type_byte_size(*index.type);
-      has_const_index_offset = true;
+    try {
+      if (is_constant_int2t(index.index)) {
+        index_offset = to_constant_int2t(index.index).value *
+                           type_byte_size(index.type);
+        has_const_index_offset = true;
+      }
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      // Not a constant index offset then.
     }
 
     object_mapt array_references;
     get_reference_set(index.source_value, array_references);
 
-    const object_map_dt &object_map=array_references.read();
-
-    for(object_map_dt::const_iterator
-        a_it=object_map.begin();
-        a_it!=object_map.end();
-        a_it++)
+    for(const auto & a_it : array_references)
     {
-      expr2tc object = object_numbering[a_it->first];
+      expr2tc object = object_numbering[a_it.first];
 
       if (is_unknown2t(object)) {
         // Once an unknown, always an unknown.
@@ -672,7 +686,7 @@ void value_sett::get_reference_set_rec(
       } else {
         // Whatever the base object is, apply the offset represented by this
         // index expression.
-        objectt o = a_it->second;
+        objectt o = a_it.second;
 
         if (has_const_index_offset && index_offset == 0) {
           ;
@@ -681,8 +695,7 @@ void value_sett::get_reference_set_rec(
         } else {
           // Non constant offset -- work out what the lowest alignment is.
           // Fetch the type size of the array index element.
-          const array_type2t &a = to_array_type(index.source_value->type);
-          mp_integer m = type_byte_size(a);
+          mp_integer m = type_byte_size_default(index.source_value->type, 1);
 
           // This index operation, whatever the offset, will always multiply
           // by the size of the element type.
@@ -715,21 +728,15 @@ void value_sett::get_reference_set_rec(
     if (is_union_type(memb.source_value->type)) {
       offset_in_bytes = mp_integer(0);
     } else {
-      offset_in_bytes =
-        member_offset(to_struct_type(memb.source_value->type), memb.member);
+      offset_in_bytes = member_offset(memb.source_value->type, memb.member);
     }
 
     object_mapt struct_references;
     get_reference_set(memb.source_value, struct_references);
 
-    const object_map_dt &object_map=struct_references.read();
-
-    for(object_map_dt::const_iterator
-        it=object_map.begin();
-        it!=object_map.end();
-        it++)
+    for(const auto & it : struct_references)
     {
-      expr2tc object = object_numbering[it->first];
+      expr2tc object = object_numbering[it.first];
 
       // An unknown or null base is /always/ unknown or null.
       if (is_unknown2t(object) || is_null_object2t(object) ||
@@ -738,7 +745,7 @@ void value_sett::get_reference_set_rec(
         unknown2tc unknown(memb.type);
         insert(dest, unknown, mp_integer(0));
       } else {
-        objectt o=it->second;
+        objectt o=it.second;
 
         // XXX -- in terms of alignment, I believe this doesn't require
         // anything, as we're constructing an expression that takes account
@@ -783,6 +790,13 @@ void value_sett::get_reference_set_rec(
     insert(dest, extract.source_value, o);
     return;
   }
+  else if (is_concat2t(expr))
+  {
+    const concat2t &concat = to_concat2t(expr);
+    get_reference_set_rec(concat.side_1, dest);
+    get_reference_set_rec(concat.side_2, dest);
+    return;
+  }
 
   // If we didn't recognize the expression, then we have no idea what this
   // refers to, so store an unknown expr.
@@ -800,10 +814,19 @@ void value_sett::assign(
   if (is_if2t(rhs))
   {
     // If the rhs could be either side of this if, perform the assigment of
-    // either side.
+    // either side. In case it refers to itself, assign to a temporary first,
+    // then assign back.
     const if2t &ifref = to_if2t(rhs);
-    assign(lhs, ifref.true_value, add_to_sets);
-    assign(lhs, ifref.false_value, true);
+
+    // Build a sym specific to this type. Give l1 number to guard against
+    // recursively entering this code path
+    symbol2tc xchg_sym(lhs->type, xchg_name, symbol2t::level1, xchg_num++, 0, 0, 0);
+
+    assign(xchg_sym, ifref.true_value, false);
+    assign(xchg_sym, ifref.false_value, true);
+    assign(lhs, xchg_sym, add_to_sets);
+
+    erase(xchg_sym->get_symbol_name());
     return;
   }
 
@@ -931,17 +954,12 @@ void value_sett::do_free(const expr2tc &op)
   object_mapt value_set;
   get_value_set(op, value_set);
 
-  const object_map_dt &object_map=value_set.read();
-
   // find out which *instances* interest us
   expr_sett to_mark;
 
-  for(object_map_dt::const_iterator
-      it=object_map.begin();
-      it!=object_map.end();
-      it++)
+  for(const auto & it : value_set)
   {
-    const expr2tc &object = object_numbering[it->first];
+    const expr2tc &object = object_numbering[it.first];
 
     if (is_dynamic_object2t(object))
     {
@@ -955,20 +973,15 @@ void value_sett::do_free(const expr2tc &op)
 
   // mark these as 'may be invalid'
   // this, unfortunately, destroys the sharing
-  for(valuest::iterator v_it=values.begin();
-      v_it!=values.end();
-      v_it++)
+  for(auto & value : values)
   {
     object_mapt new_object_map;
 
-    const object_map_dt &old_object_map=
-      v_it->second.object_map.read();
-
     bool changed=false;
 
-    for(object_map_dt::const_iterator
-        o_it=old_object_map.begin();
-        o_it!=old_object_map.end();
+    for(object_mapt::const_iterator
+        o_it=value.second.object_map.begin();
+        o_it!=value.second.object_map.end();
         o_it++)
     {
       const expr2tc &object = object_numbering[o_it->first];
@@ -984,8 +997,8 @@ void value_sett::do_free(const expr2tc &op)
           // adjust
           objectt o=o_it->second;
           dynamic_object2tc new_dyn(object);
-          new_dyn.get()->invalid = false;
-          new_dyn.get()->unknown = true;
+          new_dyn->invalid = false;
+          new_dyn->unknown = true;
           insert(new_object_map, new_dyn, o);
           changed=true;
         }
@@ -995,7 +1008,7 @@ void value_sett::do_free(const expr2tc &op)
     }
 
     if(changed)
-      v_it->second.object_map=new_object_map;
+      value.second.object_map=new_object_map;
   }
 }
 
@@ -1033,15 +1046,12 @@ void value_sett::assign_rec(
     object_mapt reference_set;
     get_reference_set(lhs, reference_set);
 
-    if(reference_set.read().size()!=1)
+    if(reference_set.size()!=1)
       add_to_sets=true;
 
-    for(object_map_dt::const_iterator
-        it=reference_set.read().begin();
-        it!=reference_set.read().end();
-        it++)
+    for(const auto & it : reference_set)
     {
-      const expr2tc obj = object_numbering[it->first];
+      const expr2tc obj = object_numbering[it.first];
 
       if (!is_unknown2t(obj))
         assign_rec(obj, values_rhs, suffix, add_to_sets);
@@ -1177,8 +1187,8 @@ void value_sett::apply_code(const expr2tc &code)
   if (is_code_block2t(code))
   {
     const code_block2t &ref = to_code_block2t(code);
-    forall_exprs(it, ref.operands)
-      apply_code(*it);
+    for(auto const &it : ref.operands)
+      apply_code(it);
   }
   else if (is_code_assign2t(code))
   {
@@ -1281,7 +1291,144 @@ expr2tc value_sett::make_member(
 }
 
 void
-value_sett::dump(void) const
+value_sett::dump() const
 {
   output(std::cout);
 }
+
+void
+value_sett::obj_numbering_ref(unsigned int num)
+{
+  obj_numbering_refset[num]++;
+}
+
+void
+value_sett::obj_numbering_deref(unsigned int num)
+{
+  unsigned int refcount = --obj_numbering_refset[num];
+  if (refcount == 0) {
+    object_numbering.erase(num);
+    obj_numbering_refset.erase(num);
+  }
+}
+
+#ifdef WITH_PYTHON
+#include <boost/python.hpp>
+#include <boost/python/class.hpp>
+#include <boost/python/init.hpp>
+#include <boost/python/suite/indexing/map_indexing_suite.hpp>
+#include <boost/python/suite/indexing/vector_indexing_suite.hpp>
+#include <boost/python/return_internal_reference.hpp>
+#include <boost/python/operators.hpp>
+
+const value_sett::object_mapt &
+read_object_map(const value_sett::object_mapt &map)
+{
+  return map.read();
+}
+
+void
+write_object_map(value_sett::object_mapt &map, const value_sett::object_mapt &value)
+{
+  map.write() = value;
+}
+
+// Wrap call to get_value_set to just return a python list: otherwise we wind
+// up having the caller spuriously allocate a value_setst::valuest, which is
+// a list.
+boost::python::object
+get_value_set_wrapper(value_sett &vs, const expr2tc &expr)
+{
+  using namespace boost::python;
+  value_setst::valuest v;
+  vs.get_value_set(expr, v);
+  // Convert resulting list to a python list
+
+  list l;
+  for (const expr2tc &e : v)
+    l.append(e);
+
+  return l;
+}
+
+void
+build_value_set_classes()
+{
+  using namespace boost::python;
+  {
+  bool (value_sett::*insert)(value_sett::object_mapt &, unsigned, const value_sett::objectt &) const =
+    &value_sett::insert;
+  bool (value_sett::*insert_expr)(value_sett::object_mapt &, const expr2tc &, const mp_integer &) const =
+    &value_sett::insert;
+  value_sett::entryt &(value_sett::*get_entry)(const value_sett::entryt &) =
+    &value_sett::get_entry;
+  value_sett::entryt &(value_sett::*get_entry_named)(const std::string &, const std::string &) =
+    &value_sett::get_entry;
+  bool (value_sett::*make_union_objs)(value_sett::object_mapt &, const value_sett::object_mapt &) const =
+    &value_sett::make_union;
+  bool (value_sett::*make_union_values)(const value_sett::valuest &, bool) =
+    &value_sett::make_union;
+  bool (value_sett::*make_union_value_set)(const value_sett &, bool keepnew) =
+    &value_sett::make_union;
+  void (value_sett::*get_reference_set)(const expr2tc &, value_setst::valuest &) const =
+    &value_sett::get_reference_set;
+
+
+  scope foo = class_<value_sett>("value_set", init<namespacet>())
+    .def("get_natural_alignment", &value_sett::get_natural_alignment)
+    .def("offset2align", &value_sett::offset2align)
+    .def("to_expr", &value_sett::to_expr)
+    .def("set", &value_sett::set)
+    .def("insert", insert)
+    .def("insert_expr", insert_expr)
+    .def("erase", &value_sett::erase)
+    .def("get_value_set", get_value_set_wrapper)
+    .def("clear", &value_sett::clear)
+    .def("del_var", &value_sett::del_var)
+    .def("get_entry", get_entry, return_internal_reference<>())
+    .def("get_entry_named", get_entry_named, return_internal_reference<>())
+    .def("dump", &value_sett::dump)
+    .def("make_union_objs", make_union_objs)
+    .def("make_union_values", make_union_values)
+    .def("make_union_value_set", make_union_value_set)
+    .def("apply_code", &value_sett::apply_code)
+    .def("assign", &value_sett::assign)
+    .def("do_function_call", &value_sett::do_function_call)
+    .def("do_end_function", &value_sett::do_end_function)
+    .def("get_reference_set", get_reference_set)
+    .def_readwrite("object_numbering", &value_sett::object_numbering)
+    .def_readwrite("values", &value_sett::values);
+  // XXX object numberingt?
+
+  class_<value_sett::valuest>("valuest")
+    .def(map_indexing_suite<value_sett::valuest>());
+
+  class_<value_sett::objectt>("objectt", init<bool, unsigned int>())
+    .def(init<bool, BigInt>())
+    .def("offset_is_zero", &value_sett::objectt::offset_is_zero)
+    .def_readwrite("offset", &value_sett::objectt::offset)
+    .def_readwrite("offset_is_set", &value_sett::objectt::offset_is_set)
+    .def_readwrite("offset_alignment", &value_sett::objectt::offset_alignment);
+
+  // Hurrrrr, extending an std::map
+  class_<value_sett::object_mapt>("object_mapt")
+    .def(map_indexing_suite<value_sett::object_mapt>());
+//    .def_readwrite("empty", &value_sett::object_mapt::empty); // is static
+
+  class_<value_sett::entryt>("entryt")
+    .def(init<std::string, std::string>())
+    .def_readwrite("identifier", &value_sett::entryt::identifier)
+    .def_readwrite("suffix", &value_sett::entryt::suffix)
+    .def_readwrite("object_map", &value_sett::entryt::object_map);
+
+  class_<value_sett::object_mapt>("object_mapt")
+    .def("get", make_function(read_object_map, return_internal_reference<>()))
+    .def("set", make_function(write_object_map));
+
+  class_<object_numberingt>("object_numberingt")
+    .def(vector_indexing_suite<object_numberingt>())
+    .def("number", &object_numberingt::get_number);
+
+  }
+}
+#endif

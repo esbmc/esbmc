@@ -1,5 +1,73 @@
 Release Notes of the ESBMC model checker
 
+*** Version 4.4.1
+* Remove option to disable clang
+* Improvements to ax_clang to support Ubuntu/Debian/Fedora
+* Fix struct/union symbol dump
+* Fix a number of status messages
+* Fix cex when using z3 in fp mode
+* Fix old c++ frontend not finding a program entry point
+
+*** Version 4.4
+* Fix crash with --smt-during-symex due to equations being shared_ptr
+* Fix a double increment when encoding tuples
+* Fix crash when building ESBMC with an assertions enabled clang build
+* Fix a bug when trying to verify a program with a free(NULL) statement
+* New --ssa-* options to add information and/or change SSA printing format
+* A number of improvements to the code base thanks to clang-tidy
+* Improved clang detection in autotools
+
+*** Version 4.3
+* New support to encode square root operations using fp.sqrt
+* Improvements to cex generation
+* Improvements to status messages
+* Clang is now the default frontend
+* Fix VLA bounds check
+* Fix verification of programs with envp
+* Fix wrong message when using __ESBMC_assert
+* Fix wrong index generation when using multidimensional arrays
+
+*** Version 4.2.1
++ Fix bug when inlining functions and esbmc would assume that
+the variables from the inlined function were global
++ Fix python compilation on MacOS
+
+*** Version 4.2
++ Full support for va_args
++ Dropped openssl dependency
++ Update clang headers to clang 4.0
++ Cleanup ESBMC options
++ Fix build on MacOS
++ Fix creation of multidimensional arrays
+
+*** Version 4.1
++ Support for Boolector 2.4.1
++ Fix static libesbmc not being built
++ Fix a static initialization order fiasco
++ Removed the need for ac_config.h when using libesbmc
+
+*** Version 4.0
++ 100% more python: new python API for faster prototyping
++ Support to build ESBMC as library
++ Improved guards generation: greatly decrease in memory usage
++ Fix support for addition, subtraction and multiplication for
+  MathSAT, when running in integer/real mode (no division for now)
++ Memory leak fixes in a number of places
++ General bug fixes
+
+*** Version 3.2
++ Support for integer/real arithmetic when using MathSAT
++ New option to dump the SMT formula (only Z3)
++ Partial support for va_args
+
+*** Version 3.1
++ Rewritten k-induction (should greatly reduce false positives)
++ Support for floating point with Z3 and Mathsat (use --floatbv)
++ Improved witness generation (no need for tokenizer anymore)
++ Correctness witness generation
++ Shipping with Mathsat 5.3.14, Z3 4.5.0 and Boolector 2.2.0
++ General bug fixes
+
 *** Version 3.0.2
 + Fix bug on deadlock verification
 + Fix an off-by-allthenumbers when dealing with dynamic structs

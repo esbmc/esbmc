@@ -1,10 +1,8 @@
-#include <stddef.h>
-#include <stdarg.h>
-#include <stdint.h>
-
+#include <cstddef>
+#include <cstdarg>
+#include <cstdint>
 #include <sstream>
-
-#include "yices_conv.h"
+#include <yices_conv.h>
 
 // From yices 2.3 (I think) various API calls have had new non-binary
 // operand versions added. The maintainers have chosen to break backwards
@@ -19,12 +17,12 @@
 #endif
 
 smt_convt *
-create_new_yices_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+create_new_yices_solver(bool int_encoding, const namespacet &ns,
                               const optionst &opts __attribute__((unused)),
                               tuple_iface **tuple_api __attribute__((unused)),
                               array_iface **array_api)
 {
-  yices_convt *conv = new yices_convt(int_encoding, ns, is_cpp);
+  yices_convt *conv = new yices_convt(int_encoding, ns);
   *array_api = static_cast<array_iface*>(conv);
   // As illustrated by 01_cbmc_Pointer4, there is something broken in yices
   // tuples. Specifically, the implication of (p != NULL) doesn't seem to feed
@@ -33,9 +31,9 @@ create_new_yices_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
   return conv;
 }
 
-yices_convt::yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp)
-  : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false),
-    sat_model(NULL)
+yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
+  : smt_convt(int_encoding, ns), array_iface(false, false),
+    sat_model(nullptr)
 {
   yices_init();
 
@@ -56,7 +54,6 @@ yices_convt::yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp)
 yices_convt::~yices_convt()
 {
   yices_free_context(yices_ctx);
-  yices_garbage_collect(NULL, 0, NULL, 0, false);
 }
 
 void
@@ -92,16 +89,16 @@ yices_convt::dec_solve()
   clear_model();
   pre_solve();
 
-  smt_status_t result = yices_check_context(yices_ctx, NULL);
+  smt_status_t result = yices_check_context(yices_ctx, nullptr);
 
   if (result == STATUS_SAT) {
     sat_model = yices_get_model(yices_ctx, 1);
     return smt_convt::P_SATISFIABLE;
   } else if (result == STATUS_UNSAT) {
-    sat_model = NULL;
+    sat_model = nullptr;
     return smt_convt::P_UNSATISFIABLE;
   } else {
-    sat_model = NULL;
+    sat_model = nullptr;
     return smt_convt::P_ERROR;
   }
 }
@@ -113,9 +110,9 @@ yices_convt::l_get(smt_astt l)
   if (is_nil_expr(b))
     return tvt(tvt::TV_UNKNOWN);
 
-  if (b == true_expr)
+  if (b == gen_true_expr())
     return tvt(true);
-  else if (b == false_expr)
+  else if (b == gen_false_expr())
     return tvt(false);
   else
     return tvt(tvt::TV_UNKNOWN);
@@ -410,6 +407,12 @@ smt_astt yices_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   abort();
 }
 
+smt_astt yices_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  std::cerr << "Yices can't create floating point sorts" << std::endl;
+  abort();
+}
+
 smt_astt
 yices_convt::mk_smt_bool(bool val)
 {
@@ -467,19 +470,16 @@ yices_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 void
 yices_convt::add_array_constraints_for_solving()
 {
-  return;
 }
 
 void
-yices_convt::push_array_ctx(void)
+yices_convt::push_array_ctx()
 {
-  return;
 }
 
 void
-yices_convt::pop_array_ctx(void)
+yices_convt::pop_array_ctx()
 {
-  return;
 }
 
 expr2tc
@@ -491,9 +491,9 @@ yices_convt::get_bool(smt_astt a)
     return expr2tc();
 
   if (val)
-    return true_expr;
+    return gen_true_expr();
   else
-    return false_expr;
+    return gen_false_expr();
 }
 
 expr2tc
@@ -562,8 +562,7 @@ yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   } else {
     smt_ast::assign(ctx, sym);
   }
-  return;
-}
+  }
 
 smt_astt
 yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
@@ -618,8 +617,9 @@ yices_convt::mk_struct_sort(const type2tc &type)
 
   std::vector<type_t> sorts;
   const struct_union_data &def = get_type_def(type);
-  forall_types(it, def.members) {
-    smt_sortt s = convert_sort(*it);
+  for(auto const &it : def.members)
+  {
+    smt_sortt s = convert_sort(it);
     const yices_smt_sort *sort = yices_sort_downcast(s);
     sorts.push_back(sort->type);
   }
@@ -636,8 +636,8 @@ yices_convt::tuple_create(const expr2tc &structdef)
   const struct_union_data &type = get_type_def(strct.type);
 
   std::vector<term_t> terms;
-  forall_exprs(it, strct.datatype_members) {
-    smt_astt a = convert_ast(*it);
+  for(auto const &it : strct.datatype_members) {
+    smt_astt a = convert_ast(it);
     const yices_smt_ast *yast = yices_ast_downcast(a);
     terms.push_back(yast->term);
   }
@@ -757,29 +757,30 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
   const struct_union_data &ref = get_type_def(type);
   std::vector<expr2tc> members;
   unsigned int i = 0;
-  forall_types(it, ref.members) {
+  for(auto const &it : ref.members)
+  {
     expr2tc res;
     term_t elem = yices_select(i + 1, term);
-    smt_astt a = new_ast(convert_sort(*it), elem);
+    smt_astt a = new_ast(convert_sort(it), elem);
 
-    switch ((*it)->type_id) {
+    switch (it->type_id) {
     case type2t::bool_id:
       res = get_bool(a);
       break;
     case type2t::pointer_id:
     case type2t::struct_id:
-      res = tuple_get_rec(elem, *it);
+      res = tuple_get_rec(elem, it);
       break;
     case type2t::array_id:
-      res = get_array(a, *it);
+      res = get_array(a, it);
       break;
     case type2t::unsignedbv_id:
     case type2t::signedbv_id:
     case type2t::fixedbv_id:
-      res = get_bv(*it, a);
+      res = get_bv(it, a);
       break;
     default:
-      std::cerr << "Unexpected sort " << (*it)->type_id << " in tuple_get_rec"
+      std::cerr << "Unexpected sort " << it->type_id << " in tuple_get_rec"
                 << std::endl;
       abort();
     }
@@ -801,17 +802,14 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
 void
 yices_convt::add_tuple_constraints_for_solving()
 {
-  return;
 }
 
 void
 yices_convt::push_tuple_ctx()
 {
-  return;
 }
 
 void
 yices_convt::pop_tuple_ctx()
 {
-  return;
 }

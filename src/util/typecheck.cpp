@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "typecheck.h"
+#include <util/typecheck.h>
 
 bool typecheckt::typecheck_main()
 {

@@ -5,19 +5,16 @@
 // The copyright at this source is owned Dirk Zoller.
 // You may however use and modify this without restriction.
 
-#include "bigint.hh"
-#include "allocainc.h"
-
-#include <iostream>
+#include <big-int/allocainc.h>
+#include <big-int/bigint.hh>
 #include <cctype>
 #include <climits>
-#include <cstring>
-
-// How to report errors.
 #include <cstdio>
 #include <cstdlib>
-#define error(x) fprintf (stderr, "%s\n", x)
+#include <cstring>
+#include <iostream>
 
+#define error(x) fprintf (stderr, "%s\n", x)
 
 // Shortcut access to BigInt scoped things.
 typedef BigInt::llong_t  llong_t;
@@ -1312,6 +1309,26 @@ BigInt::setPower2 (unsigned exponent) {
   }
   digit[i] = 1;
   digit[i] <<= bitOffset;
+}
 
+#ifdef WITH_PYTHON
+#undef error
+#include <boost/python.hpp>
+
+// Build simplest BigInt wrapper: can construct, can get value. Nothing more.
+using namespace boost::python;
+void
+build_bigint_python_class()
+{
+  using boost::python::self_ns::self;
+
+  init<long signed int> init;
+  class_<BigInt>("BigInt", init)
+    .def("to_long", &BigInt::to_long)
+    .def(self == self)
+    .def(self != self)
+    .def(self < self);
   return;
 }
+#endif
+

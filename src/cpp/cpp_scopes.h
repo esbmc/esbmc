@@ -9,13 +9,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_SCOPES_H
 #define CPROVER_CPP_SCOPES_H
 
+#include <cpp/cpp_scope.h>
 #include <set>
-
-#include <hash_cont.h>
-#include <symbol.h>
-#include <string_hash.h>
-
-#include "cpp_scope.h"
+#include <util/hash_cont.h>
+#include <util/string_hash.h>
+#include <util/symbol.h>
 
 class cpp_scopest
 {
@@ -121,7 +119,7 @@ public:
     while(!current_scope().is_global_scope())
     {
       current_scope_ptr=&current_scope().get_parent();
-      assert(current_scope_ptr!=NULL);
+      assert(current_scope_ptr!=nullptr);
     }
   }
 

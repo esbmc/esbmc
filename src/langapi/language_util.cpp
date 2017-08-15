@@ -6,27 +6,15 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <langapi/language_util.h>
+#include <langapi/mode.h>
 #include <memory>
-
-#include "language_util.h"
-#include "mode.h"
-
-/*******************************************************************\
-
-Function: from_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string from_expr(
   const namespacet &ns,
   const irep_idt &identifier,
-  const exprt &expr)
+  const exprt &expr,
+  const bool fullname)
 {
   int mode;
 
@@ -51,26 +39,15 @@ std::string from_expr(
 
   std::unique_ptr<languaget> p(mode_table[mode].new_language());
   std::string result;
-  p->from_expr(expr, result, ns);
+  p->from_expr(expr, result, ns, fullname);
   return result;
 }
-
-/*******************************************************************\
-
-Function: from_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string from_type(
   const namespacet &ns,
   const irep_idt &identifier,
-  const typet &type)
+  const typet &type,
+  const bool fullname)
 {
   int mode;
 
@@ -95,39 +72,15 @@ std::string from_type(
 
   std::unique_ptr<languaget> p(mode_table[mode].new_language());
   std::string result;
-  p->from_type(type, result, ns);
+  p->from_type(type, result, ns, fullname);
   return result;
 }
-
-/*******************************************************************\
-
-Function: from_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string from_expr(const exprt &expr)
 {
   contextt context;
   return from_expr(namespacet(context), "", expr);
 }
-
-/*******************************************************************\
-
-Function: from_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string from_type(const typet &type)
 {

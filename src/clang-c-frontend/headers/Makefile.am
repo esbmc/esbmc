@@ -1,52 +1,45 @@
-noinst_LIBRARIES = libclangheaders.a
-libclangheaders_a_SOURCES = clang_Intrin.hs clang___clang_cuda_cmath.hs \
-                            clang___clang_cuda_intrinsics.hs \
-                            clang___clang_cuda_math_forward_declares.hs \
-                            clang___clang_cuda_runtime_wrapper.hs \
-                            clang___stddef_max_align_t.hs \
-                            clang___wmmintrin_aes.hs \
-                            clang___wmmintrin_pclmul.hs clang_adxintrin.hs \
-                            clang_ammintrin.hs clang_arm_acle.hs \
-                            clang_bmi2intrin.hs clang_bmiintrin.hs \
-                            clang_clflushoptintrin.hs clang_cpuid.hs \
-                            clang_cuda_builtin_vars.hs clang_emmintrin.hs \
-                            clang_f16cintrin.hs clang_float.hs \
-                            clang_fma4intrin.hs clang_fmaintrin.hs \
-                            clang_fxsrintrin.hs clang_htmintrin.hs \
-                            clang_htmxlintrin.hs clang_ia32intrin.hs \
-                            clang_immintrin.hs clang_intrin.hs \
-                            clang_inttypes.hs clang_iso646.hs clang_limits.hs \
-                            clang_lzcntintrin.hs clang_mm3dnow.hs \
-                            clang_mm_malloc.hs clang_mmintrin.hs \
-                            clang_mwaitxintrin.hs clang_nmmintrin.hs \
-                            clang_omp.hs clang_opencl_c.hs clang_pkuintrin.hs \
-                            clang_pmmintrin.hs clang_popcntintrin.hs \
-                            clang_prfchwintrin.hs clang_rdseedintrin.hs \
-                            clang_rtmintrin.hs clang_s390intrin.hs \
-                            clang_shaintrin.hs clang_smmintrin.hs \
-                            clang_stdalign.hs clang_stdarg.hs \
-                            clang_stdatomic.hs clang_stdbool.hs \
-                            clang_stddef.hs clang_stdint.hs \
-                            clang_stdnoreturn.hs clang_tbmintrin.hs \
-                            clang_tgmath.hs clang_tmmintrin.hs \
-                            clang_unwind.hs clang_vadefs.hs clang_varargs.hs \
-                            clang_wmmintrin.hs clang_x86intrin.hs \
-                            clang_xmmintrin.hs clang_xopintrin.hs \
-                            clang_xsavecintrin.hs clang_xsaveintrin.hs \
-                            clang_xsaveoptintrin.hs clang_xsavesintrin.hs \
-                            clang_xtestintrin.hs \
-                            sanitizer/clang_allocator_interface.hs \
-                            sanitizer/clang_asan_interface.hs \
-                            sanitizer/clang_common_interface_defs.hs \
-                            sanitizer/clang_coverage_interface.hs \
-                            sanitizer/clang_dfsan_interface.hs \
-                            sanitizer/clang_esan_interface.hs \
-                            sanitizer/clang_linux_syscall_hooks.hs \
-                            sanitizer/clang_lsan_interface.hs \
-                            sanitizer/clang_msan_interface.hs \
-                            sanitizer/clang_tsan_interface_atomic.hs
+AUTOMAKE_OPTIONS=subdir-objects
+
+noinst_LTLIBRARIES = libclangheaders.la
+libclangheaders_la_SOURCES = clang___clang_cuda_builtin_vars.c \
+      clang___clang_cuda_cmath.c clang___clang_cuda_complex_builtins.c \
+      clang___clang_cuda_intrinsics.c \
+      clang___clang_cuda_math_forward_declares.c \
+      clang___clang_cuda_runtime_wrapper.c clang___stddef_max_align_t.c \
+      clang___wmmintrin_aes.c clang___wmmintrin_pclmul.c \
+      clang_adxintrin.c clang_altivec.c clang_ammintrin.c \
+      clang_arm_acle.c clang_arm_neon.c clang_armintr.c \
+      clang_avx2intrin.c clang_avx512bwintrin.c clang_avx512cdintrin.c \
+      clang_avx512dqintrin.c clang_avx512erintrin.c clang_avx512fintrin.c \
+      clang_avx512ifmaintrin.c clang_avx512ifmavlintrin.c \
+      clang_avx512pfintrin.c clang_avx512vbmiintrin.c \
+      clang_avx512vbmivlintrin.c clang_avx512vlbwintrin.c \
+      clang_avx512vlcdintrin.c clang_avx512vldqintrin.c \
+      clang_avx512vlintrin.c clang_avxintrin.c clang_bmi2intrin.c \
+      clang_bmiintrin.c clang_clflushoptintrin.c clang_cpuid.c \
+      clang_emmintrin.c clang_f16cintrin.c clang_float.c \
+      clang_fma4intrin.c clang_fmaintrin.c clang_fxsrintrin.c \
+      clang_htmintrin.c clang_htmxlintrin.c clang_ia32intrin.c \
+      clang_immintrin.c clang_intrin.c clang_inttypes.c clang_iso646.c \
+      clang_limits.c clang_lzcntintrin.c clang_mm3dnow.c clang_mm_malloc.c \
+      clang_mmintrin.c clang_msa.c clang_mwaitxintrin.c clang_nmmintrin.c \
+      clang_omp.c clang_opencl_c.c clang_pkuintrin.c clang_pmmintrin.c \
+      clang_popcntintrin.c clang_prfchwintrin.c clang_rdseedintrin.c \
+      clang_rtmintrin.c clang_s390intrin.c clang_shaintrin.c \
+      clang_smmintrin.c clang_stdalign.c clang_stdarg.c clang_stdatomic.c \
+      clang_stdbool.c clang_stddef.c clang_stdint.c clang_stdnoreturn.c \
+      clang_tbmintrin.c clang_tgmath.c clang_tmmintrin.c clang_unwind.c \
+      clang_vadefs.c clang_varargs.c clang_vecintrin.c clang_wmmintrin.c \
+      clang_x86intrin.c clang_xmmintrin.c clang_xopintrin.c \
+      clang_xsavecintrin.c clang_xsaveintrin.c clang_xsaveoptintrin.c \
+      clang_xsavesintrin.c clang_xtestintrin.c
 
 SUFFIXES = .hs
 
-.hs.o:
-	$(top_srcdir)/ansi-c/headers/flail.sh $< $< | $(CC) $(CFLAGS) -x c - -c -o $@
+.hs.c:
+	$(top_srcdir)/c2goto/headers/flail.sh $< $< > $@
+
+clean-local:
+	-rm -rf *.c
+
+.NOTPARALLEL: all

@@ -6,29 +6,14 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <expr_util.h>
-#include <arith_tools.h>
-#include <std_expr.h>
-#include <c_types.h>
-
-#include <ansi-c/c_sizeof.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/cpp_util.h>
+#include <util/arith_tools.h>
+#include <util/c_sizeof.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
 #include <util/simplify_expr_class.h>
-
-#include "cpp_typecheck.h"
-#include "cpp_util.h"
-#include <std_expr.h>
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose: Initialize an object with a value
-
-\*******************************************************************/
+#include <util/std_expr.h>
 
 void cpp_typecheckt::convert_initializer(symbolt &symbol)
 {
@@ -97,19 +82,16 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
 
       const code_typet &code_type=to_code_type(symbol.type.subtype());
 
-      for(code_typet::argumentst::const_iterator
-          ait=code_type.arguments().begin();
-          ait!=code_type.arguments().end();
-          ait++)
+      for(const auto & ait : code_type.arguments())
       {
         exprt new_object("new_object");
         new_object.set("#lvalue", true);
-        new_object.type() = ait->type();
+        new_object.type() = ait.type();
 
-        if(ait->cmt_base_name()=="this")
+        if(ait.cmt_base_name()=="this")
         {
           fargs.has_object = true;
-          new_object.type() = ait->type().subtype();
+          new_object.type() = ait.type().subtype();
         }
 
         fargs.operands.push_back(new_object);
@@ -179,18 +161,6 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
       ops);
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::zero_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::zero_initializer(
   const exprt &object,

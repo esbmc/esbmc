@@ -9,9 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_ANSI_C_LANGUAGE_H
 #define CPROVER_ANSI_C_LANGUAGE_H
 
-#include <language.h>
-
-#include "ansi_c_parse_tree.h"
+#include <ansi-c/ansi_c_parse_tree.h>
+#include <util/language.h>
 
 class ansi_c_languaget:public languaget
 {
@@ -21,60 +20,61 @@ public:
     std::ostream &outstream,
     message_handlert &message_handler);
 
-  virtual bool parse(
+  bool parse(
     const std::string &path,
-    message_handlert &message_handler);
-             
-  virtual bool typecheck(
+    message_handlert &message_handler) override;
+
+  bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override;
 
-  virtual bool final(
+  bool final(
     contextt &context,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override;
 
-  virtual bool merge_context( 
+  virtual bool merge_context(
     contextt &dest,
-    contextt &src, 
+    contextt &src,
     message_handlert &message_handler,
     const std::string &module) const;
 
-  virtual void show_parse(std::ostream &out);
-  
-  virtual ~ansi_c_languaget();
-  ansi_c_languaget() { }
-  
-  virtual bool from_expr(
+  void show_parse(std::ostream &out) override;
+
+  ~ansi_c_languaget() override = default;
+  ansi_c_languaget() = default;
+
+  // conversion from expression into string
+  bool from_expr(
     const exprt &expr,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false) override;
 
-  virtual bool from_type(
+  // conversion from type into string
+  bool from_type(
     const typet &type,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false) override;
 
-  virtual bool to_expr(
+  bool to_expr(
     const std::string &code,
     const std::string &module,
     exprt &expr,
     message_handlert &message_handler,
-    const namespacet &ns);
-                       
-  virtual languaget *new_language()
-  { return new ansi_c_languaget; }
-   
-  virtual std::string id() const { return "C"; }
-  virtual std::string description() const { return "ANSI-C 99"; }
+    const namespacet &ns) override;
 
-  virtual void modules_provided(std::set<std::string> &modules);  
-  
+  languaget *new_language() override
+  { return new ansi_c_languaget; }
+
+  std::string id() const override { return "C"; }
+
 protected:
   ansi_c_parse_treet parse_tree;
   std::string parse_path;
 };
- 
+
 languaget *new_ansi_c_language();
- 
+
 #endif

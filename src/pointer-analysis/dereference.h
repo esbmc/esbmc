@@ -9,15 +9,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_DEREFERENCE_H
 #define CPROVER_POINTER_ANALYSIS_DEREFERENCE_H
 
+#include <pointer-analysis/value_sets.h>
 #include <set>
-
-#include <expr.h>
-#include <hash_cont.h>
-#include <guard.h>
-#include <namespace.h>
-#include <options.h>
-
-#include "value_sets.h"
+#include <util/expr.h>
+#include <util/guard.h>
+#include <util/hash_cont.h>
+#include <util/namespace.h>
+#include <util/options.h>
 
 /** @file dereference.h
  *  The dereferencing code's purpose is to take a symbol with pointer type that
@@ -71,7 +69,7 @@ Author: Daniel Kroening, kroening@kroening.com
  *  all struct fields (and that trailing padding exists). This is so that we
  *  can avoid all scenarios where dereferences cross field boundries, as that
  *  will ultimately be an alignment violation.
- *  
+ *
  *  The value set tracking code also maintains a 'minimum alignment' piece of
  *  data when the offset is nondeterministic, guarenteeing that the offset used
  *  will be aligned to at least that many bytes. This allows for reducing the
@@ -108,9 +106,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class dereference_callbackt
 {
 public:
-  virtual ~dereference_callbackt()
-  {
-  }
+  virtual ~dereference_callbackt() = default;
 
   /** Triggers a 'valid object' check when accessing a dynamically allocated
    *  object. This is legacy, and will be deleted at some point. */
@@ -130,8 +126,6 @@ public:
     const std::string &msg,
     const guardt &guard)=0;
 
-  typedef hash_set_cont<exprt, irep_hash> expr_sett;
-
   /** Fetch the set of values that the given pointer variable can point at.
    *  @param expr Pointer symbol to get the value set of.
    *  @param value_set A value set to store the output of this call into.
@@ -139,7 +133,7 @@ public:
   virtual void get_value_set(
     const expr2tc &expr,
     value_setst::valuest &value_set)=0;
-  
+
   /** Check whether a failed symbol already exists for the given symbol.
    *  This is legacy, and will be removed at some point soon. */
   virtual bool has_failed_symbol(
@@ -152,7 +146,6 @@ public:
    */
   virtual void rename(expr2tc &expr __attribute__((unused)))
   {
-    return;
   }
 
   struct internal_item {
@@ -164,7 +157,6 @@ public:
   virtual void dump_internal_state(const std::list<struct internal_item> &data
                                    __attribute__((unused)))
   {
-    return;
   }
 };
 
@@ -199,8 +191,8 @@ public:
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
   }
 
-  virtual ~dereferencet() { }
-  
+  virtual ~dereferencet() = default;
+
   /** The different ways in which a pointer may be accessed. */
   typedef enum {
     READ,  /// The result of the expression is only read.
@@ -236,8 +228,6 @@ public:
    *  @return True when the given expression does have a dereference.
    */
   bool has_dereference(const expr2tc &expr) const;
-
-  typedef hash_set_cont<exprt, irep_hash> expr_sett;
 
 private:
   /** Namespace to perform type lookups against. */
@@ -362,6 +352,8 @@ private:
     const expr2tc &lexical_offset,
     expr2tc &pointer_guard);
 
+  void deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode);
+
   static const expr2tc &get_symbol(const expr2tc &object);
   void bounds_check(const expr2tc &expr, const expr2tc &offset,
                     const type2tc &type, const guardt &guard);
@@ -386,7 +378,7 @@ private:
                          const type2tc &type, const guardt &guard, modet mode);
   void check_data_obj_access(const expr2tc &value, const expr2tc &offset,
                              const type2tc &type, const guardt &guard);
-  void check_alignment(unsigned long minwidth, const expr2tc offset,
+  void check_alignment(unsigned long minwidth, const expr2tc&& offset,
                        const guardt &guard);
 
   void build_reference_rec(expr2tc &value, const expr2tc &offset,
@@ -407,7 +399,7 @@ private:
                                            const guardt &guard,
                                            unsigned long alignment,
                                            modet mode,
-                                           const expr2tc *failed_symbol = NULL);
+                                           const expr2tc *failed_symbol = nullptr);
   void construct_from_multidir_array(expr2tc &value, const expr2tc &offset,
                                         const type2tc &type,
                                         const guardt &guard,

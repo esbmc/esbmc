@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#ifndef CPROVER_CPP_LANGUAGE_H
-#define CPROVER_CPP_LANGUAGE_H
+#ifndef CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
+#define CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
 
-#include <language.h>
+#include <util/language.h>
 
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -17,7 +17,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 // Forward dec, to avoid bringing in clang headers
 namespace clang {
   class ASTUnit;
-}
+} // namespace clang
 
 class clang_c_languaget: public languaget
 {
@@ -27,64 +27,60 @@ public:
     std::ostream &outstream,
     message_handlert &message_handler);
 
-  virtual bool parse(
+  bool parse(
     const std::string &path,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override ;
 
-  virtual bool final(
+  bool final(
     contextt &context,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override ;
 
-  virtual bool typecheck(
+  bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override ;
 
-  std::string id() const { return "c"; }
-  std::string description() const { return "C"; }
+  std::string id() const override { return "c"; }
 
-  virtual void show_parse(std::ostream &out);
+  void show_parse(std::ostream &out) override ;
 
   // conversion from expression into string
-  virtual bool from_expr(
+  bool from_expr(
     const exprt &expr,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false) override ;
 
   // conversion from type into string
-  virtual bool from_type(
+  bool from_type(
     const typet &type,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false) override ;
 
   // conversion from string into expression
-  virtual bool to_expr(
+  bool to_expr(
     const std::string &code,
     const std::string &module,
     exprt &expr,
     message_handlert &message_handler,
-    const namespacet &ns);
+    const namespacet &ns) override ;
 
-  virtual languaget *new_language()
+  languaget *new_language() override 
   { return new clang_c_languaget; }
 
   // constructor, destructor
-  virtual ~clang_c_languaget() = default;
+  ~clang_c_languaget() override = default;
   clang_c_languaget();
 
 protected:
-  void internal_additions();
-  void add_clang_headers();
+  std::string internal_additions();
 
-  void build_compiler_string(std::vector<std::string> &compiler_string);
+  void dump_clang_headers(const std::string& tmp_dir);
+  void build_compiler_args(const std::string&& tmp_dir);
 
-  std::string intrinsics;
+  std::vector<std::string> compiler_args;
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
-
-  // For some reason clang can't understand the string when we use
-  // a vector of pairs strings (name, content)
-  std::vector<std::string> clang_headers_name;
-  std::vector<std::string> clang_headers_content;
 };
 
 languaget *new_clang_c_language();

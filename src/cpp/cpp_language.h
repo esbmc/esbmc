@@ -9,9 +9,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_LANGUAGE_H
 #define CPROVER_CPP_LANGUAGE_H
 
-#include <language.h>
-
-#include "cpp_parse_tree.h"
+#include <cpp/cpp_parse_tree.h>
+#include <util/language.h>
 
 class cpp_languaget:public languaget
 {
@@ -21,14 +20,14 @@ public:
     std::ostream &outstream,
     message_handlert &message_handler);
 
-  virtual bool parse(
+  bool parse(
     const std::string &path,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override;
 
-  virtual bool typecheck(
+  bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override;
 
   bool merge_context(
     contextt &dest,
@@ -37,44 +36,40 @@ public:
     const std::string &module,
     class replace_symbolt &replace_symbol) const;
 
-  virtual bool final(
+  bool final(
     contextt &context,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override;
 
-  virtual void show_parse(std::ostream &out);
+  void show_parse(std::ostream &out) override;
 
   // constructor, destructor
-  virtual ~cpp_languaget();
-  cpp_languaget() { }
+  ~cpp_languaget() override = default;
+  cpp_languaget() = default;
 
   // conversion from expression into string
-  virtual bool from_expr(
+  bool from_expr(
     const exprt &expr,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false) override;
 
   // conversion from type into string
-  virtual bool from_type(
+  bool from_type(
     const typet &type,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false) override;
 
   // conversion from string into expression
-  virtual bool to_expr(
+  bool to_expr(
     const std::string &code,
     const std::string &module,
     exprt &expr,
     message_handlert &message_handler,
-    const namespacet &ns);
+    const namespacet &ns) override;
 
-  virtual languaget *new_language()
+  languaget *new_language() override
   { return new cpp_languaget; }
-
-  virtual std::string id() const { return "cpp"; }
-  virtual std::string description() const { return "C++"; }
-  virtual std::set<std::string> extensions() const;
-
-  virtual void modules_provided(std::set<std::string> &modules);
 
 protected:
   cpp_parse_treet cpp_parse_tree;
@@ -85,7 +80,7 @@ protected:
 
   virtual std::string main_symbol()
   {
-    return "c::main";
+    return "main";
   }
 };
 

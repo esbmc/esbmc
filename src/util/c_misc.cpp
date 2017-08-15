@@ -6,9 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <stdio.h>
-
-#include <c_misc.h>
+#include <cstdio>
+#include <util/c_misc.h>
 
 void MetaChar(std::string &out, char c, bool inString)
 {
@@ -81,6 +80,6 @@ void MetaChar(std::string &out, char c, bool inString)
 
 void MetaString(std::string &out, const std::string &in)
 {
-  for(unsigned i=0; i<in.size(); i++)
-    MetaChar(out, in[i], true);
+  for(char i : in)
+    MetaChar(out, i, true);
 }

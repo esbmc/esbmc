@@ -9,34 +9,10 @@ Author:
 #ifndef CPROVER_CPP_UTIL_H
 #define CPROVER_CPP_UTIL_H
 
-#include <expr.h>
-#include <symbol.h>
-
-/*******************************************************************\
-
-Function: cpp_symbol_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <util/expr.h>
+#include <util/symbol.h>
 
 exprt cpp_symbol_expr(const symbolt &symbol);
-
-/*******************************************************************\
-
-Function: already_typechecked
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 extern inline void already_typechecked(irept &irep)
 {

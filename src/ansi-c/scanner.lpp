@@ -17,24 +17,24 @@
 static int isatty(int) { return 0; }
 #endif
 
-#include <expr.h>
-#include <arith_tools.h>
-#include <c_types.h>
-#include <ansi-c/preprocessor_line.h>
+#include <ansi-c/convert_character_literal.h>
 #include <ansi-c/convert_float_literal.h>
 #include <ansi-c/convert_integer_literal.h>
-#include <ansi-c/convert_character_literal.h>
 #include <ansi-c/convert_string_literal.h>
-#include <config.h>
-#include "ansi_c_declaration.h"
-#include <parser.hpp>
+#include <ansi_c_declaration.h>
+#include <ansi-c/parser.hpp>
+#include <ansi-c/preprocessor_line.h>
+#include <util/arith_tools.h>
+#include <util/config.h>
+#include <util/c_types.h>
+#include <util/expr.h>
 
 #define PARSER ansi_c_parser
 #undef	ECHO
 #define ECHO
 
-#include "ansi_c_parser.h"
-#include "parser.h"
+#include <ansi-c/ansi_c_parser.h>
+#include <util/parser.h>
 
 static void init(exprt **e)
 {

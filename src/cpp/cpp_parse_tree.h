@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_PARSE_TREE_H
 #define CPROVER_CPP_PARSE_TREE_H
 
-#include "cpp_item.h"
+#include <cpp/cpp_item.h>
 
 class cpp_parse_treet
 {

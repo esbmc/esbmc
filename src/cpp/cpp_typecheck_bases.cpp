@@ -6,21 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <cpp/cpp_typecheck.h>
 #include <set>
-
-#include "cpp_typecheck.h"
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typcheck_compound_bases
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
 {
@@ -107,8 +94,7 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
     most_derived.type()=bool_typet();
     most_derived.set("access", "public");
     most_derived.base_name("@most_derived");
-    most_derived.set_name(cpp_identifier_prefix(current_mode)+"::"+
-                     cpp_scopes.current_scope().prefix+"::"+"@most_derived");
+    most_derived.set_name(cpp_scopes.current_scope().prefix+"::"+"@most_derived");
     most_derived.pretty_name("@most_derived");
     most_derived.location()=type.location();
     put_compound_into_scope(most_derived);
@@ -116,18 +102,6 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
     to_struct_type(type).components().push_back(most_derived);
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::add_base_components
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::add_base_components(
   const struct_typet &from,
@@ -199,16 +173,13 @@ void cpp_typecheckt::add_base_components(
   const struct_typet::componentst &src_c=from.components();
   struct_typet::componentst &dest_c=to.components();
 
-  for(struct_typet::componentst::const_iterator
-      it=src_c.begin();
-      it!=src_c.end();
-      it++)
+  for(const auto & it : src_c)
   {
-    if(it->get_bool("from_base"))
+    if(it.get_bool("from_base"))
       continue;
 
     // copy the component
-    dest_c.push_back(*it);
+    dest_c.push_back(it);
 
     // now twiddle the copy
     struct_typet::componentt &component=dest_c.back();

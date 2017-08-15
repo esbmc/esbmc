@@ -9,15 +9,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_SPECC_PARSER_H
 #define CPROVER_SPECC_PARSER_H
 
-#include <assert.h>
-
+#include <ansi-c/ansi_c_parse_tree.h>
+#include <cassert>
+#include <util/expr.h>
+#include <util/hash_cont.h>
+#include <util/i2string.h>
 #include <util/parser.h>
-#include <expr.h>
-#include <hash_cont.h>
-#include <string_hash.h>
-#include <i2string.h>
-
-#include "ansi_c_parse_tree.h"
+#include <util/string_hash.h>
 
 typedef enum { ANSI_C_UNKNOWN, ANSI_C_SYMBOL, ANSI_C_TYPEDEF,
                ANSI_C_TAG } ansi_c_id_classt;
@@ -29,16 +27,14 @@ class ansi_c_parsert:public parsert
 public:
   ansi_c_parse_treet parse_tree;
   
-  ansi_c_parsert()
-  {
-  }
+  ansi_c_parsert() = default;
   
-  virtual bool parse()
+  bool parse() override
   {
     return yyansi_cparse();
   }
 
-  virtual void clear()
+  void clear() override
   {
     parsert::clear();
     parse_tree.clear();
@@ -53,7 +49,7 @@ public:
     scopes.clear();
 
     // this is the global scope
-    scopes.push_back(scopet());
+    scopes.emplace_back();
   }
 
   // internal state scanner
@@ -132,7 +128,7 @@ public:
    
   void move_declaration(exprt &expr)
   {
-    parse_tree.declarations.push_back(ansi_c_declarationt());
+    parse_tree.declarations.emplace_back();
     parse_tree.declarations.back().swap(expr);
   }
    
@@ -144,7 +140,7 @@ public:
   void new_scope(const std::string &prefix)
   {
     const scopet &current=current_scope();
-    scopes.push_back(scopet());
+    scopes.emplace_back();
     scopes.back().prefix=current.prefix+prefix;
   }
 

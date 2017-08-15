@@ -6,21 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <type_eq.h>
-
-#include "cpp_typecheck.h"
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::find_constructor
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <cpp/cpp_typecheck.h>
+#include <util/type_eq.h>
 
 void cpp_typecheckt::find_constructor(
   const typet &start_dest_type,
@@ -38,12 +25,8 @@ void cpp_typecheckt::find_constructor(
   const struct_typet::componentst &components=
     to_struct_type(dest_type).components();
 
-  for(struct_typet::componentst::const_iterator
-      it=components.begin();
-      it!=components.end();
-      it++)
+  for(const auto & component : components)
   {
-    const struct_typet::componentt &component=*it;
     const typet &type=component.type();
 
     if(type.return_type().id()=="constructor")

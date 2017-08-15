@@ -6,28 +6,15 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <i2string.h>
-#include <expr_util.h>
-#include <location.h>
-
-#include "cpp_typecheck.h"
-#include "cpp_convert_type.h"
-#include "cpp_declarator_converter.h"
-#include "cpp_template_type.h"
-#include "cpp_util.h"
-#include "cpp_exception_id.h"
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_code
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_declarator_converter.h>
+#include <cpp/cpp_exception_id.h>
+#include <cpp/cpp_template_type.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/cpp_util.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/location.h>
 
 void cpp_typecheckt::typecheck_code(codet &code)
 {
@@ -60,28 +47,13 @@ void cpp_typecheckt::typecheck_code(codet &code)
     c_typecheck_baset::typecheck_code(code);
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_throw_decl
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::typecheck_throw_decl(codet &code)
 {
   codet::operandst &operands=code.operands();
 
-  for(codet::operandst::iterator
-      it=operands.begin();
-      it!=operands.end();
-      it++)
+  for(auto & operand : operands)
   {
-    codet &op=to_code(*it);
+    codet &op=to_code(operand);
 
     if(op.operands().size()!=1)
     {
@@ -98,21 +70,9 @@ void cpp_typecheckt::typecheck_throw_decl(codet &code)
     assert(type.is_not_nil());
 
     // annotate exception ID
-    it->set("throw_decl_id", cpp_exception_id(op.op0().type(), *this));
+    operand.set("throw_decl_id", cpp_exception_id(op.op0().type(), *this));
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_catch
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::typecheck_catch(codet &code)
 {
@@ -152,18 +112,6 @@ void cpp_typecheckt::typecheck_catch(codet &code)
   }
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_ifthenelse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::typecheck_ifthenelse(codet &code)
 {
   // In addition to the C syntax, C++ also allows a declaration
@@ -192,18 +140,6 @@ void cpp_typecheckt::typecheck_ifthenelse(codet &code)
     c_typecheck_baset::typecheck_ifthenelse(code);
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_while
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::typecheck_while(codet &code)
 {
   // In addition to the C syntax, C++ also allows a declaration
@@ -230,18 +166,6 @@ void cpp_typecheckt::typecheck_while(codet &code)
   else
     c_typecheck_baset::typecheck_while(code);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_switch
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::typecheck_switch(codet &code)
 {
@@ -270,18 +194,6 @@ void cpp_typecheckt::typecheck_switch(codet &code)
   else
     c_typecheck_baset::typecheck_switch(code);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_member_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::typecheck_member_initializer(codet &code)
 {
@@ -448,18 +360,6 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
   }
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_decl
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::typecheck_decl(codet &code)
 {
   if(code.operands().size()!=1)
@@ -493,7 +393,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     return;
   }
 
-  codet new_code("block");
+  codet new_code("decl-block");
   new_code.reserve_operands(declaration.declarators().size());
 
   // Do the declarators (optional).
@@ -554,18 +454,6 @@ void cpp_typecheckt::typecheck_decl(codet &code)
   code.swap(new_code);
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheck_codet::typecheck_block
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::typecheck_block(codet &code)
 {
   cpp_save_scopet saved_scope(cpp_scopes);
@@ -573,18 +461,6 @@ void cpp_typecheckt::typecheck_block(codet &code)
 
   c_typecheck_baset::typecheck_block(code);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_assign
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::typecheck_assign(codet &code)
 {

@@ -9,9 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_STD_EXPR_H
 #define CPROVER_STD_EXPR_H
 
-#include <assert.h>
-
-#include <expr.h>
+#include <cassert>
+#include <util/expr.h>
 
 class transt:public exprt
 {

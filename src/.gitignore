@@ -9,7 +9,6 @@
 .cproject
 .ctags
 .cscope
-config.*
 configure
 Makefile
 Makefile.in
@@ -22,3 +21,4 @@ ac_config.h*
 stamp-h1
 libltdl
 debian
+*.*~

@@ -6,17 +6,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "clang_cpp_language.h"
-
-#include <sstream>
-#include <fstream>
-
-#include <ansi-c/cprover_library.h>
-#include <ansi-c/c_preprocess.h>
-#include <ansi-c/c_link.h>
-
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
+#include <c2goto/cprover_library.h>
+#include <clang-cpp-frontend/clang_cpp_language.h>
+#include <fstream>
+#include <sstream>
 
 languaget *new_clang_cpp_language()
 {
@@ -86,7 +81,8 @@ bool clang_cpp_languaget::final(
 bool clang_cpp_languaget::from_expr(
   const exprt &expr __attribute__((unused)),
   std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)))
+  const namespacet &ns __attribute__((unused)),
+  bool fullname __attribute__((unused)))
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
@@ -96,7 +92,8 @@ bool clang_cpp_languaget::from_expr(
 bool clang_cpp_languaget::from_type(
   const typet &type __attribute__((unused)),
   std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)))
+  const namespacet &ns __attribute__((unused)),
+  bool fullname __attribute__((unused)))
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();

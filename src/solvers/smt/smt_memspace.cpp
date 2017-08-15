@@ -1,7 +1,6 @@
 #include <algorithm>
+#include <solvers/smt/smt_conv.h>
 #include <sstream>
-
-#include "smt_conv.h"
 
 /** @file smt_memspace.cpp
  *  Modelling the memory address space of C isn't something that is handled
@@ -55,10 +54,10 @@ smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
   // To ensure we can do this in an operation independant way, we're going to
   // clone the original comparison expression, and replace its operands with
   // new values. Works whatever the expr is, so long as it has two operands.
-  *start_expr.get()->get_sub_expr_nc(0) = obj1_start;
-  *start_expr.get()->get_sub_expr_nc(1) = obj2_start;
-  *offs_expr.get()->get_sub_expr_nc(0) = ptr_offs1;
-  *offs_expr.get()->get_sub_expr_nc(1) = ptr_offs2;
+  *start_expr->get_sub_expr_nc(0) = obj1_start;
+  *start_expr->get_sub_expr_nc(1) = obj2_start;
+  *offs_expr->get_sub_expr_nc(0) = ptr_offs1;
+  *offs_expr->get_sub_expr_nc(1) = ptr_offs2;
 
   // Those are now boolean type'd relations.
   equality2tc is_same_obj_expr(ptr_obj1, ptr_obj2);
@@ -155,7 +154,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       if (is_empty_type(followed_type))
         type_size = 1;
       else
-        type_size = type_byte_size(*followed_type);
+        type_size = type_byte_size(followed_type);
 
       // Generate nonptr * constant.
       type2tc inttype = machine_ptr;
@@ -182,9 +181,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       // Voila, we have our pointer arithmatic
       smt_astt the_ptr = convert_ast(ptr_op);
 
-      expr2tc tmp = newexpr->simplify();
-      if (!is_nil_expr(tmp))
-        newexpr = tmp;
+      simplify(newexpr);
 
       // That calculated the offset; update field in pointer.
       return the_ptr->update(this, convert_ast(newexpr), 1);
@@ -196,8 +193,10 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 }
 
 void
-smt_convt::renumber_symbol_address(const expr2tc &guard,
-    const expr2tc &addr_symbol, const expr2tc &new_size)
+smt_convt::renumber_symbol_address(
+  const expr2tc &guard,
+  const expr2tc &addr_symbol,
+  const expr2tc &new_size)
 {
   const symbol2t &sym = to_symbol2t(addr_symbol);
   std::string str = sym.get_symbol_name();
@@ -229,7 +228,7 @@ smt_convt::renumber_symbol_address(const expr2tc &guard,
 }
 
 smt_astt
-smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
+smt_convt::convert_identifier_pointer(const expr2tc &expr, const std::string& symbol)
 {
   smt_astt a;
   std::string cte, identifier;
@@ -382,11 +381,11 @@ smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
     // through malloc will be marked dynamic.
 
     type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
-                                     expr2tc((expr2t*)NULL), true));
+                                     expr2tc((expr2t*)nullptr), true));
     symbol2tc allocarr(arrtype, dyn_info_arr_name);
     constant_int2tc objid(machine_uint, BigInt(obj_num));
     index2tc idx(get_bool_type(), allocarr, objid);
-    equality2tc dyn_eq(idx, false_expr);
+    equality2tc dyn_eq(idx, gen_false_expr());
     assert_expr(dyn_eq);
 
     return ptr_val;
@@ -424,8 +423,6 @@ smt_convt::finalize_pointer_chain(unsigned int objnum)
     or2tc or1(lt1, gt1);
     assert_expr(or1);
   }
-
-  return;
 }
 
 smt_astt
@@ -436,41 +433,23 @@ smt_convt::convert_addr_of(const expr2tc &expr)
   std::string symbol_name, out;
 
   if (is_index2t(obj.ptr_obj)) {
-    const index2t &idx = to_index2t(obj.ptr_obj);
+    // This might be a composite index/member/blah chain
+    expr2tc offs = compute_pointer_offset(obj.ptr_obj);
+    expr2tc base = get_base_object(obj.ptr_obj);
 
-    if (!is_string_type(idx.source_value)) {
-      const array_type2t &arr = to_array_type(idx.source_value->type);
-
-      // Pick pointer-to array subtype; need to make pointer arith work.
-      address_of2tc addrof(arr.subtype, idx.source_value);
-      add2tc plus(addrof->type, addrof, idx.index);
-      return convert_ast(plus);
-    } else {
-      // Strings; convert with slightly different types.
-      type2tc stringtype(new unsignedbv_type2t(8));
-      address_of2tc addrof(stringtype, idx.source_value);
-      add2tc plus(addrof->type, addrof, idx.index);
-      return convert_ast(plus);
-    }
+    address_of2tc addrof(obj.type, base);
+    smt_astt a = convert_ast(addrof);
+    return a->update(this, convert_ast(offs), 1);
   } else if (is_member2t(obj.ptr_obj)) {
-    const member2t &memb = to_member2t(obj.ptr_obj);
+    expr2tc offs = compute_pointer_offset(obj.ptr_obj);
+    expr2tc base = get_base_object(obj.ptr_obj);
 
-    int64_t offs;
-    if (is_struct_type(memb.source_value)) {
-      const struct_type2t &type = to_struct_type(memb.source_value->type);
-      offs = member_offset(type, memb.member).to_long();
-    } else {
-      offs = 0; // Offset is always zero for unions.
-    }
-
-    address_of2tc addr(type2tc(new pointer_type2t(memb.source_value->type)),
-                       memb.source_value);
+    address_of2tc addr(obj.type, base);
 
     smt_astt a = convert_ast(addr);
 
     // Update pointer offset to offset to that field.
-    constant_int2tc offset(machine_ptr, BigInt(offs));
-    return a->update(this, convert_ast(offset), 1);
+    return a->update(this, convert_ast(offs), 1);
   } else if (is_symbol2t(obj.ptr_obj)) {
     const symbol2t &symbol = to_symbol2t(obj.ptr_obj);
     return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name());
@@ -510,7 +489,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     // Take the address of whatevers being casted. Either way, they all end up
     // being of a pointer_tuple type, so this should be fine.
     address_of2tc tmp(type2tc(), to_typecast2t(obj.ptr_obj).from);
-    tmp.get()->type = obj.type;
+    tmp->type = obj.type;
     return convert_ast(tmp);
   }
 
@@ -521,7 +500,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
 
 
 void
-smt_convt::init_addr_space_array(void)
+smt_convt::init_addr_space_array()
 {
   addr_space_sym_num.back() = 1;
 
@@ -613,11 +592,10 @@ smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   symbol2tc newname(addr_space_arr_type, ss2.str());
   equality2tc eq(newname, store);
   convert_assign(eq);
-  return;
 }
 
 std::string
-smt_convt::get_cur_addrspace_ident(void)
+smt_convt::get_cur_addrspace_ident()
 {
   std::stringstream ss;
   ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();

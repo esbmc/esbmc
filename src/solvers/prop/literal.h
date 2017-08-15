@@ -9,16 +9,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_PROPDEC_LITERAL_H
 #define CPROVER_PROPDEC_LITERAL_H
 
+#include <cstdint>
 #include <vector>
-#include <stdint.h>
 
 class literalt
 {
 public:
   // constructors
-  literalt()
-  {
-  }
+  literalt() = default;
 
   literalt(unsigned v, bool sign)
   {

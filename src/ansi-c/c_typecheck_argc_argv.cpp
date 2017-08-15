@@ -6,22 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <arith_tools.h>
-#include <expr_util.h>
-
-#include "c_typecheck_base.h"
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::add_argc_argv
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <ansi-c/c_typecheck_base.h>
+#include <util/arith_tools.h>
+#include <util/expr_util.h>
 
 void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
 {
@@ -37,15 +24,15 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
   }
 
   symbolt *argc_new_symbol;
-  
+
   const exprt &op0=(exprt &)arguments.get_sub()[0];
-  const exprt &op1=(exprt &)arguments.get_sub()[1];    
+  const exprt &op1=(exprt &)arguments.get_sub()[1];
 
   {
     symbolt argc_symbol;
 
     argc_symbol.base_name="argc";
-    argc_symbol.name="c::argc'";
+    argc_symbol.name="argc'";
     argc_symbol.type=op0.type();
     argc_symbol.static_lifetime=true;
     argc_symbol.lvalue=true;
@@ -80,7 +67,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     // need to add one to the size -- the array is terminated
     // with NULL
     exprt one_expr=from_integer(1, argc_new_symbol->type);
-    
+
     exprt size_expr("+", argc_new_symbol->type);
     size_expr.copy_to_operands(symbol_expr(*argc_new_symbol), one_expr);
     argv_type.size(size_expr);
@@ -88,7 +75,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     symbolt argv_symbol;
 
     argv_symbol.base_name="argv";
-    argv_symbol.name="c::argv'";
+    argv_symbol.name="argv'";
     argv_symbol.type=argv_type;
     argv_symbol.static_lifetime=true;
     argv_symbol.lvalue=true;
@@ -96,21 +83,21 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     symbolt *argv_new_symbol;
     move_symbol(argv_symbol, argv_new_symbol);
   }
-  
+
   if (arguments.get_sub().size()==3)
-  {    
-    symbolt envp_symbol;    
+  {
+    symbolt envp_symbol;
     envp_symbol.base_name="envp";
-    envp_symbol.name="c::envp'";
+    envp_symbol.name="envp'";
     envp_symbol.type=(static_cast<const exprt&>(arguments.get_sub()[2])).type();
     envp_symbol.static_lifetime=true;
-    
+
     symbolt envp_size_symbol, *envp_new_size_symbol;
     envp_size_symbol.base_name="envp_size";
-    envp_size_symbol.name="c::envp_size'";
+    envp_size_symbol.name="envp_size'";
     envp_size_symbol.type=op0.type(); // same type as argc!
-    envp_size_symbol.static_lifetime=true;    
-    move_symbol(envp_size_symbol, envp_new_size_symbol);        
+    envp_size_symbol.static_lifetime=true;
+    move_symbol(envp_size_symbol, envp_new_size_symbol);
 
     if(envp_symbol.type.id()!="pointer")
     {
@@ -119,12 +106,12 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
           << to_string(envp_symbol.type) << "'";
       throw 0;
     }
-    
+
     exprt size_expr = symbol_expr(*envp_new_size_symbol);
 
     envp_symbol.type.id("array");
     envp_symbol.type.size(size_expr);
-    
+
     symbolt *envp_new_symbol;
     move_symbol(envp_symbol, envp_new_symbol);
   }

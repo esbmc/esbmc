@@ -5,20 +5,18 @@
  *      Author: mramalho
  */
 
-#include "clang_c_convert.h"
-
-#include <std_code.h>
-#include <std_expr.h>
-#include <expr_util.h>
-#include <mp_arith.h>
-#include <arith_tools.h>
-#include <i2string.h>
-#include <bitvector.h>
-#include <c_types.h>
-
-#include <ansi-c/type2name.h>
-
-#include "typecast.h"
+#include <clang/AST/Attr.h>
+#include <clang/Tooling/Core/QualTypeNames.h>
+#include <clang-c-frontend/clang_c_convert.h>
+#include <clang-c-frontend/typecast.h>
+#include <util/arith_tools.h>
+#include <util/bitvector.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/mp_arith.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -28,8 +26,6 @@ clang_c_convertert::clang_c_convertert(
     ns(context),
     ASTs(_ASTs),
     current_scope_var_num(1),
-    anon_var_counter(0),
-    anon_tag_counter(0),
     sm(nullptr),
     current_functionDecl(nullptr)
 {
@@ -66,7 +62,7 @@ bool clang_c_convertert::convert_top_level_decl()
 {
   // Iterate through each translation unit and their global symbols, creating
   // symbols as we go.
-  for (auto &translation_unit : ASTs)
+  for (auto const &translation_unit : ASTs)
   {
     // Update ASTContext as it changes for each source file
     ASTContext = &(*translation_unit).getASTContext();
@@ -96,10 +92,6 @@ bool clang_c_convertert::get_decl(
     // Label declaration
     case clang::Decl::Label:
     {
-      std::cerr << "ESBMC does not support label declaration"
-                << std::endl;
-      return true;
-
       const clang::LabelDecl &ld =
         static_cast<const clang::LabelDecl&>(decl);
 
@@ -132,7 +124,12 @@ bool clang_c_convertert::get_decl(
     {
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
-      return get_function(fd);
+
+      // We can safely ignore any expr generated when parsing C code
+      // In C++ mode, methods are initially parsed as function and
+      // need to be added to the class scope
+      exprt dummy;
+      return get_function(fd, dummy);
     }
 
     // Field inside a struct/union
@@ -145,24 +142,10 @@ bool clang_c_convertert::get_decl(
       if(get_type(fd.getType(), t))
         return true;
 
-      struct_union_typet::componentt comp;
-      comp.type() = t;
-
       std::string name, pretty_name;
-      if((t.is_struct() || t.is_union()) && fd.getName().str().empty())
-      {
-        name = to_struct_union_type(t).tag().as_string();
-        pretty_name = "#anon" + i2string(anon_tag_counter++);
-      }
-      else
-      {
-        get_field_name(fd, name);
-        pretty_name = name;
-      }
+      get_field_name(fd, name, pretty_name);
 
-      comp.name(name);
-      comp.pretty_name(pretty_name);
-
+      struct_union_typet::componentt comp(name, pretty_name, t);
       if(fd.isBitField() && !config.options.get_bool_option("no-bitfields"))
       {
         exprt width;
@@ -185,9 +168,10 @@ bool clang_c_convertert::get_decl(
       if(get_type(fd.getType(), t))
         return true;
 
-      struct_union_typet::componentt comp(fd.getName().str(), t);
-      comp.set_pretty_name(fd.getName().str());
+      std::string name, pretty_name;
+      get_field_name(*fd.getAnonField(), name, pretty_name);
 
+      struct_union_typet::componentt comp(name, pretty_name, t);
       if(fd.getAnonField()->isBitField())
       {
         exprt width;
@@ -218,9 +202,9 @@ bool clang_c_convertert::get_decl(
       const clang::TranslationUnitDecl &tu =
         static_cast<const clang::TranslationUnitDecl &>(decl);
 
-      for(auto decl : tu.decls())
+      for(auto const &decl : tu.decls())
       {
-        // This is a global declaration (varible, function, struct, etc)
+        // This is a global declaration (variable, function, struct, etc)
         // We don't need the exprt, it will be automatically added to the
         // context
         exprt dummy_decl;
@@ -251,12 +235,6 @@ bool clang_c_convertert::get_decl(
     case clang::Decl::Typedef:
       break;
 
-    case clang::Decl::Namespace:
-    case clang::Decl::TypeAlias:
-    case clang::Decl::FileScopeAsm:
-    case clang::Decl::Block:
-    case clang::Decl::Captured:
-    case clang::Decl::Import:
     default:
       std::cerr << "**** ERROR: ";
       std::cerr << "Unrecognized / unimplemented clang declaration "
@@ -291,9 +269,6 @@ bool clang_c_convertert::get_struct_union_class(
     // This should never be reached
     abort();
 
-  // Try to get the definition
-  clang::RecordDecl *record_def = recordd.getDefinition();
-
   std::string identifier;
   if(get_tag_name(recordd, identifier))
     return true;
@@ -310,7 +285,8 @@ bool clang_c_convertert::get_struct_union_class(
     t,
     identifier,
     "tag-" + identifier,
-    location_begin);
+    location_begin,
+    true);
 
   // Save the struct/union/class type address and name to the type map
   std::string symbol_name = symbol.name.as_string();
@@ -329,6 +305,8 @@ bool clang_c_convertert::get_struct_union_class(
   move_symbol_to_context(symbol);
 
   // Don't continue to parse if it doesn't have a complete definition
+  // Try to get the definition
+  clang::RecordDecl *record_def = recordd.getDefinition();
   if(!record_def)
     return false;
 
@@ -353,17 +331,29 @@ bool clang_c_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &recordd,
   struct_union_typet &type)
 {
-  for(const auto &decl : recordd.decls())
+  // First, parse the fields
+  for(auto const &field : recordd.fields())
   {
     struct_typet::componentt comp;
-    if(get_decl(*decl, comp))
+    if(get_decl(*field, comp))
       return true;
 
-    // If we are parsing a field declaration, add it to the components
-    if(decl->getKind() == clang::Decl::Field)
-      type.components().push_back(comp);
+    // Don't add fields that have global storage (e.g., static)
+    if(const clang::VarDecl* nd = llvm::dyn_cast<clang::VarDecl>(field))
+      if(nd->hasGlobalStorage())
+        continue;
+
+    type.components().push_back(comp);
   }
 
+  return false;
+}
+
+bool clang_c_convertert::get_struct_union_class_methods(
+  const clang::RecordDecl &recordd,
+  struct_union_typet &type)
+{
+  // We don't add methods to the struct in C
   return false;
 }
 
@@ -375,6 +365,22 @@ bool clang_c_convertert::get_var(
   typet t;
   if(get_type(vd.getType(), t))
     return true;
+
+  // Check if we annotated it to be have an infinity size
+  if(vd.hasAttrs())
+  {
+    for(auto const &attr : vd.getAttrs())
+    {
+      if(const auto *a = llvm::dyn_cast<clang::AnnotateAttr>(attr))
+      {
+        if(a->getAnnotation().str() == "__ESBMC_inf_size")
+        {
+          assert(t.is_array());
+          t.size(exprt("infinity", uint_type()));
+        }
+      }
+    }
+  }
 
   std::string identifier;
   get_var_name(vd, identifier);
@@ -389,15 +395,8 @@ bool clang_c_convertert::get_var(
     t,
     vd.getName().str(),
     identifier,
-    location_begin);
-
-  if (vd.hasGlobalStorage() && !vd.hasInit())
-  {
-    // Initialize with zero value, if the symbol has initial value,
-    // it will be add later on this method
-    symbol.value = gen_zero(t, true);
-    symbol.value.zero_initializer(true);
-  }
+    location_begin,
+    true);
 
   symbol.lvalue = true;
   symbol.static_lifetime = (vd.getStorageClass() == clang::SC_Static)
@@ -405,6 +404,14 @@ bool clang_c_convertert::get_var(
   symbol.is_extern = vd.hasExternalStorage();
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static)
     || (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
+
+  if (symbol.static_lifetime && !symbol.is_extern && !vd.hasInit())
+  {
+    // Initialize with zero value, if the symbol has initial value,
+    // it will be add later on this method
+    symbol.value = gen_zero(t, true);
+    symbol.value.zero_initializer(true);
+  }
 
   // Save the variable address and name to the object map
   std::string symbol_name = symbol.name.as_string();
@@ -415,13 +422,9 @@ bool clang_c_convertert::get_var(
   // We have to add the symbol before converting the initial assignment
   // because we might have something like 'int x = x + 1;' which is
   // completely wrong but allowed by the language
-  move_symbol_to_context(symbol);
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
 
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
-
-  code_declt decl;
-  decl.operands().push_back(symbol_expr(added_symbol));
+  code_declt decl(symbol_exprt(identifier, t));
 
   if(vd.hasInit())
   {
@@ -442,7 +445,8 @@ bool clang_c_convertert::get_var(
 }
 
 bool clang_c_convertert::get_function(
-  const clang::FunctionDecl &fd)
+  const clang::FunctionDecl &fd,
+  exprt &new_expr)
 {
   // Don't convert if clang thinks that the functions was implicitly converted
   if(fd.isImplicit())
@@ -467,11 +471,8 @@ bool clang_c_convertert::get_function(
   code_typet type;
 
   // Return type
-  typet return_type;
-  if(get_type(fd.getReturnType(), return_type))
+  if(get_type(fd.getReturnType(), type.return_type()))
     return true;
-
-  type.return_type() = return_type;
 
   if(fd.isVariadic())
     type.make_ellipsis();
@@ -485,6 +486,10 @@ bool clang_c_convertert::get_function(
   std::string base_name, pretty_name;
   get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
 
+  // special case for is_used: we'll always convert the entry point,
+  // either the main function or the user defined entry point
+  bool is_used = fd.isMain() || (fd.getName().str() == config.main) || fd.isUsed();
+
   symbolt symbol;
   get_default_symbol(
     symbol,
@@ -492,7 +497,8 @@ bool clang_c_convertert::get_function(
     type,
     base_name,
     pretty_name,
-    location_begin);
+    location_begin,
+    is_used);
 
   std::string symbol_name = symbol.name.as_string();
 
@@ -501,14 +507,11 @@ bool clang_c_convertert::get_function(
                      || fd.getStorageClass() == clang::SC_PrivateExtern;
   symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
-  move_symbol_to_context(symbol);
-
-  // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = *context.find_symbol(symbol_name);
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
-  for (const auto &pdecl : fd.parameters())
+  for (auto const &pdecl : fd.parameters())
   {
     code_typet::argumentt param;
     if(get_function_params(*pdecl, param))
@@ -573,6 +576,14 @@ bool clang_c_convertert::get_function_params(
   std::string pretty_name;
   get_function_param_name(pdecl, pretty_name);
 
+  param.cmt_identifier(pretty_name);
+  param.location() = location_begin;
+
+  // TODO: we can remove the following code once irep1 is dead, there
+  // is no need to add the function argument to the symbol table,
+  // as nothing relies on it. However, if we remove this now, the migrate
+  // code will wrongly assume the symbol to be level1, as it generates
+  // level0 symbol only if they are already on the context
   symbolt param_symbol;
   get_default_symbol(
     param_symbol,
@@ -580,14 +591,12 @@ bool clang_c_convertert::get_function_params(
     param_type,
     name,
     pretty_name,
-    location_begin); // function parameter cannot be static
+    location_begin,
+    true); // function parameter cannot be static
 
   param_symbol.lvalue = true;
   param_symbol.is_parameter = true;
   param_symbol.file_local = true;
-
-  param.cmt_identifier(param_symbol.name.as_string());
-  param.location() = param_symbol.location;
 
   // Save the function's param address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(pdecl.getFirstDecl());
@@ -610,7 +619,25 @@ bool clang_c_convertert::get_type(
   typet &new_type)
 {
   const clang::Type &the_type = *q_type.getTypePtrOrNull();
+  if(get_type(the_type, new_type))
+    return true;
 
+  if(q_type.isConstQualified())
+    new_type.cmt_constant(true);
+
+  if(q_type.isVolatileQualified())
+    new_type.cmt_volatile(true);
+
+  if(q_type.isRestrictQualified())
+    new_type.restricted(true);
+
+  return false;
+}
+
+bool clang_c_convertert::get_type(
+  const clang::Type &the_type,
+  typet &new_type)
+{
   switch (the_type.getTypeClass())
   {
     // Builtin types like integer
@@ -654,7 +681,7 @@ bool clang_c_convertert::get_type(
       if(sub_type.is_struct() || sub_type.is_union())
       {
         struct_union_typet t = to_struct_union_type(sub_type);
-        sub_type = symbol_typet("c::tag-" + t.tag().as_string());
+        sub_type = symbol_typet("tag-" + t.tag().as_string());
       }
 
       new_type = gen_pointer_type(sub_type);
@@ -722,19 +749,21 @@ bool clang_c_convertert::get_type(
       const clang::VariableArrayType &arr =
         static_cast<const clang::VariableArrayType &>(the_type);
 
-      exprt size_expr;
-      if(get_expr(*arr.getSizeExpr(), size_expr))
-        return true;
+      // If the size expression is null, we assume empty
+      if(auto const *s = arr.getSizeExpr())
+      {
+        exprt size_expr;
+        if(get_expr(*s, size_expr))
+          return true;
 
-      typet the_type;
-      if(get_type(arr.getElementType(), the_type))
-        return true;
+        typet subtype;
+        if(get_type(arr.getElementType(), subtype))
+          return true;
 
-      array_typet type;
-      type.size() = size_expr;
-      type.subtype() = the_type;
-
-      new_type = type;
+        new_type = array_typet(subtype, size_expr);
+      }
+      else
+        new_type = empty_typet();
       break;
     }
 
@@ -757,14 +786,18 @@ bool clang_c_convertert::get_type(
 
       type.return_type() = return_type;
 
-      for (const auto &ptype : func.getParamTypes())
+      for (auto const &ptype : func.getParamTypes())
       {
         typet param_type;
         if(get_type(ptype, param_type))
           return true;
 
-        type.arguments().push_back(param_type);
+        type.arguments().emplace_back(param_type);
       }
+
+      // Apparently, if the type has no arguments, we assume ellipsis
+      if(!type.arguments().size() || func.isVariadic())
+        type.make_ellipsis();
 
       new_type = type;
       break;
@@ -785,6 +818,10 @@ bool clang_c_convertert::get_type(
         return true;
 
       type.return_type() = return_type;
+
+      // Apparently, if the type has no arguments, we assume ellipsis
+      if(!type.arguments().size())
+        type.make_ellipsis();
 
       new_type = type;
       break;
@@ -807,10 +844,10 @@ bool clang_c_convertert::get_type(
 
     case clang::Type::Record:
     {
-      const clang::RecordDecl &tag =
+      const clang::RecordDecl &rd =
         *(static_cast<const clang::RecordType &>(the_type)).getDecl();
 
-      if(tag.isClass())
+      if(rd.isClass())
       {
         std::cerr << "Class Type is not supported yet" << std::endl;
         return true;
@@ -818,7 +855,7 @@ bool clang_c_convertert::get_type(
 
       // Search for the type on the type map
       type_mapt::iterator it;
-      if(search_add_type_map(tag, it))
+      if(search_add_type_map(rd, it))
         return true;
 
       symbolt &s = *context.find_symbol(it->second);
@@ -887,15 +924,22 @@ bool clang_c_convertert::get_type(
       break;
     }
 
+    case clang::Type::Decltype:
+    {
+      const clang::DecltypeType &dt =
+        static_cast<const clang::DecltypeType &>(the_type);
+
+      if(get_type(dt.getUnderlyingType(), new_type))
+        return true;
+
+      break;
+    }
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
       the_type.dump();
       return true;
   }
-
-  if(q_type.isConstQualified())
-    new_type.cmt_constant(true);
 
   return false;
 }
@@ -920,7 +964,12 @@ bool clang_c_convertert::get_builtin_type(
     case clang::BuiltinType::Char_U:
     case clang::BuiltinType::UChar:
       new_type = unsigned_char_type();
-      c_type = "unsigned char";
+      c_type = "unsigned_char";
+      break;
+
+    case clang::BuiltinType::WChar_U:
+      new_type = unsigned_wchar_type();
+      c_type = "unsigned_wchar_t";
       break;
 
     case clang::BuiltinType::Char16:
@@ -933,58 +982,55 @@ bool clang_c_convertert::get_builtin_type(
       c_type = "char32_t";
       break;
 
-    case clang::BuiltinType::Char_S:
-    case clang::BuiltinType::SChar:
-      new_type = signed_char_type();
-      c_type = "signed char";
-      break;
-
     case clang::BuiltinType::UShort:
       new_type = unsigned_short_int_type();
-      c_type = "unsigned short";
+      c_type = "unsigned_short";
       break;
 
     case clang::BuiltinType::UInt:
       new_type = uint_type();
-      c_type = "unsigned int";
+      c_type = "unsigned_int";
       break;
 
     case clang::BuiltinType::ULong:
       new_type = long_uint_type();
-      c_type = "unsigned long";
+      c_type = "unsigned_long";
       break;
 
     case clang::BuiltinType::ULongLong:
       new_type = long_long_uint_type();
-      c_type = "unsigned long long";
+      c_type = "unsigned_long_long";
       break;
 
-    case clang::BuiltinType::Int128:
-    case clang::BuiltinType::UInt128:
-      // Various simplification / big-int related things use uint64_t's...
-      std::cerr << "ESBMC currently does not support integers bigger "
-                    "than 64 bits" << std::endl;
-      bt.dump();
-      return true;
+    case clang::BuiltinType::Char_S:
+    case clang::BuiltinType::SChar:
+      new_type = signed_char_type();
+      c_type = "signed_char";
+      break;
+
+    case clang::BuiltinType::WChar_S:
+      new_type = wchar_type();
+      c_type = "wchar_t";
+      break;
 
     case clang::BuiltinType::Short:
       new_type = signed_short_int_type();
-      c_type = "signed short";
+      c_type = "signed_short";
       break;
 
     case clang::BuiltinType::Int:
       new_type = int_type();
-      c_type = "signed int";
+      c_type = "signed_int";
       break;
 
     case clang::BuiltinType::Long:
       new_type = long_int_type();
-      c_type = "signed long";
+      c_type = "signed_long";
       break;
 
     case clang::BuiltinType::LongLong:
       new_type = long_long_int_type();
-      c_type = "signed long long";
+      c_type = "signed_long_long";
       break;
 
     case clang::BuiltinType::Float:
@@ -999,8 +1045,16 @@ bool clang_c_convertert::get_builtin_type(
 
     case clang::BuiltinType::LongDouble:
       new_type = long_double_type();
-      c_type = "long double";
+      c_type = "long_double";
       break;
+
+    case clang::BuiltinType::Int128:
+    case clang::BuiltinType::UInt128:
+      // Various simplification / big-int related things use uint64_t's...
+      std::cerr << "ESBMC currently does not support integers bigger "
+                << "than 64 bits" << std::endl;
+      bt.dump();
+      return true;
 
     default:
       std::cerr << "Unrecognized clang builtin type "
@@ -1010,7 +1064,7 @@ bool clang_c_convertert::get_builtin_type(
       return true;
   }
 
-  new_type.set("#c_type", c_type);
+  new_type.set("#cpp_type", c_type);
   return false;
 }
 
@@ -1155,11 +1209,11 @@ bool clang_c_convertert::get_expr(
         return true;
 
       exprt array;
-      if(get_expr(*arr.getLHS(), array))
+      if(get_expr(*arr.getBase(), array))
         return true;
 
       exprt pos;
-      if(get_expr(*arr.getRHS(), pos))
+      if(get_expr(*arr.getIdx(), pos))
         return true;
 
       new_expr = index_exprt(array, pos, t);
@@ -1196,10 +1250,13 @@ bool clang_c_convertert::get_expr(
       const clang::UnaryExprOrTypeTraitExpr &unary =
         static_cast<const clang::UnaryExprOrTypeTraitExpr &>(stmt);
 
-      // Use clang to calculate sizeof/alignof
-      llvm::APSInt val;
-      if(unary.EvaluateAsInt(val, *ASTContext))
+      // Use clang to calculate alignof
+      if(unary.getKind() == clang::UETT_AlignOf)
       {
+        llvm::APSInt val;
+        if(!unary.EvaluateAsInt(val, *ASTContext))
+          return true;
+
         new_expr =
           constant_exprt(
             integer2binary(val.getZExtValue(), bv_width(uint_type())),
@@ -1224,16 +1281,16 @@ bool clang_c_convertert::get_expr(
       if(size_type.is_struct() || size_type.is_union())
       {
         struct_union_typet t = to_struct_union_type(size_type);
-        size_type = symbol_typet("c::tag-" + t.tag().as_string());
+        size_type = symbol_typet("tag-" + t.tag().as_string());
       }
 
       new_expr.set("#c_sizeof_type", size_type);
       break;
     }
 
-    // A function call expr. The symbol may be undefined so we create it here
-    // This should be moved to a step after the conversion. The conversion
-    // step should only convert the code
+    // A function call expr
+    // It can be undefined here, the symbol will be added in
+    // adjust_expr::adjust_side_effect_function_call
     case clang::Stmt::CallExprClass:
     {
       const clang::CallExpr &function_call =
@@ -1253,7 +1310,8 @@ bool clang_c_convertert::get_expr(
       call.function() = callee_expr;
       call.type() = type;
 
-      for (const clang::Expr *arg : function_call.arguments()) {
+      for (const clang::Expr *arg : function_call.arguments())
+      {
         exprt single_arg;
         if(get_expr(*arg, single_arg))
           return true;
@@ -1297,11 +1355,6 @@ bool clang_c_convertert::get_expr(
 
     case clang::Stmt::AddrLabelExprClass:
     {
-      std::cerr << "ESBMC currently does not support label as values"
-                << std::endl;
-      stmt.dumpColor();
-      return true;
-
       const clang::AddrLabelExpr &addrlabelExpr =
         static_cast<const clang::AddrLabelExpr &>(stmt);
 
@@ -1333,6 +1386,18 @@ bool clang_c_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::GNUNullExprClass:
+    {
+      const clang::GNUNullExpr &gnun =
+        static_cast<const clang::GNUNullExpr&>(stmt);
+
+      typet t;
+      if(get_type(gnun.getType(), t))
+        return true;
+
+      new_expr = gen_zero(t);
+      break;
+    }
     // Casts expression:
     // Implicit: float f = 1; equivalent to float f = (float) 1;
     // CStyle: int a = (int) 3.0;
@@ -1408,7 +1473,7 @@ bool clang_c_convertert::get_expr(
       if(get_type(ternary_if.getType(), t))
         return true;
 
-      side_effect_exprt gcc_ternary("gcc_conditional_expression");
+      side_effect_exprt gcc_ternary("gcc_conditional_expression", t);
       gcc_ternary.copy_to_operands(cond, else_expr);
 
       new_expr = gcc_ternary;
@@ -1529,13 +1594,10 @@ bool clang_c_convertert::get_expr(
       const auto &declgroup = decl.getDeclGroup();
 
       codet decls("decl-block");
-      for (clang::DeclGroupRef::const_iterator
-        it = declgroup.begin();
-        it != declgroup.end();
-        it++)
+      for (auto it : declgroup)
       {
         exprt single_decl;
-        if(get_decl(**it, single_decl))
+        if(get_decl(*it, single_decl))
           return true;
 
         decls.operands().push_back(single_decl);
@@ -1545,12 +1607,6 @@ bool clang_c_convertert::get_expr(
       break;
     }
 
-    // A NULL statement, we ignore it. An example is a lost semicolon on
-    // the program
-    case clang::Stmt::NullStmtClass:
-      new_expr = code_skipt();
-      break;
-
     // A compound statement is a scope/block
     case clang::Stmt::CompoundStmtClass:
     {
@@ -1558,7 +1614,7 @@ bool clang_c_convertert::get_expr(
         static_cast<const clang::CompoundStmt &>(stmt);
 
       code_blockt block;
-      for (const auto &stmt : compound_stmt.body()) {
+      for (auto const &stmt : compound_stmt.body()) {
         exprt statement;
         if(get_expr(*stmt, statement))
           return true;
@@ -1592,15 +1648,13 @@ bool clang_c_convertert::get_expr(
       if(get_expr(*case_stmt.getSubStmt(), sub_stmt))
         return true;
 
+      code_switch_caset switch_case;
+      switch_case.case_op() = value;
+
       convert_expression_to_code(sub_stmt);
+      switch_case.code() = to_code(sub_stmt);
 
-      codet label("label");
-      exprt &case_ops=label.add_expr("case");
-      case_ops.copy_to_operands(value);
-
-      label.copy_to_operands(sub_stmt);
-
-      new_expr = label;
+      new_expr = switch_case;
       break;
     }
 
@@ -1615,13 +1669,13 @@ bool clang_c_convertert::get_expr(
       if(get_expr(*default_stmt.getSubStmt(), sub_stmt))
         return true;
 
+      code_switch_caset switch_case;
+      switch_case.set_default(true);
+
       convert_expression_to_code(sub_stmt);
+      switch_case.code() = to_code(sub_stmt);
 
-      codet label("label");
-      label.set("default", true);
-      label.copy_to_operands(sub_stmt);
-
-      new_expr = label;
+      new_expr = switch_case;
       break;
     }
 
@@ -1637,9 +1691,9 @@ bool clang_c_convertert::get_expr(
 
       convert_expression_to_code(sub_stmt);
 
-      codet label("label");
-      label.set("label", label_stmt.getName());
-      label.copy_to_operands(sub_stmt);
+      code_labelt label;
+      label.set_label(label_stmt.getName());
+      label.code() = to_code(sub_stmt);
 
       new_expr = label;
       break;
@@ -1653,8 +1707,12 @@ bool clang_c_convertert::get_expr(
       const clang::IfStmt &ifstmt =
         static_cast<const clang::IfStmt &>(stmt);
 
+      const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = ifstmt.getCond();
+
       exprt cond;
-      if(get_expr(*ifstmt.getCond(), cond))
+      if(get_expr(*cond_expr, cond))
         return true;
 
       exprt then;
@@ -1688,8 +1746,12 @@ bool clang_c_convertert::get_expr(
       const clang::SwitchStmt &switch_stmt =
         static_cast<const clang::SwitchStmt &>(stmt);
 
-      exprt value;
-      if(get_expr(*switch_stmt.getCond(), value))
+      const clang::Stmt *cond_expr = switch_stmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = switch_stmt.getCond();
+
+      exprt cond;
+      if(get_expr(*cond_expr, cond))
         return true;
 
       codet body;
@@ -1697,7 +1759,7 @@ bool clang_c_convertert::get_expr(
         return true;
 
       code_switcht switch_code;
-      switch_code.value() = value;
+      switch_code.value() = cond;
       switch_code.body() = body;
 
       new_expr = switch_code;
@@ -1711,8 +1773,12 @@ bool clang_c_convertert::get_expr(
       const clang::WhileStmt &while_stmt =
         static_cast<const clang::WhileStmt &>(stmt);
 
+      const clang::Stmt *cond_expr = while_stmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = while_stmt.getCond();
+
       exprt cond;
-      if(get_expr(*while_stmt.getCond(), cond))
+      if(get_expr(*cond_expr, cond))
         return true;
 
       codet body = code_skipt();
@@ -1770,11 +1836,13 @@ bool clang_c_convertert::get_expr(
           return true;
 
       convert_expression_to_code(init);
+      const clang::Stmt *cond_expr = for_stmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = for_stmt.getCond();
 
       exprt cond = true_exprt();
-      const clang::Stmt *cond_stmt = for_stmt.getCond();
-      if(cond_stmt)
-        if(get_expr(*cond_stmt, cond))
+      if(cond_expr)
+        if(get_expr(*cond_expr, cond))
           return true;
 
       codet inc = code_skipt();
@@ -1817,11 +1885,6 @@ bool clang_c_convertert::get_expr(
 
     case clang::Stmt::IndirectGotoStmtClass:
     {
-      std::cerr << "ESBMC currently does not support indirect gotos"
-                << std::endl;
-      stmt.dumpColor();
-      return true;
-
       const clang::IndirectGotoStmt &goto_stmt =
         static_cast<const clang::IndirectGotoStmt &>(stmt);
 
@@ -1836,6 +1899,11 @@ bool clang_c_convertert::get_expr(
       }
       else
       {
+        std::cerr << "ESBMC currently does not support indirect gotos"
+                  << std::endl;
+        stmt.dumpColor();
+        return true;
+
         exprt target;
         if(get_expr(*goto_stmt.getTarget(), target))
           return true;
@@ -1894,26 +1962,16 @@ bool clang_c_convertert::get_expr(
       break;
     }
 
+    // A NULL statement, we ignore it. An example is a lost semicolon on
+    // the program
+    case clang::Stmt::NullStmtClass:
+
     // GCC or MS Assembly instruction. We ignore them
     case clang::Stmt::GCCAsmStmtClass:
     case clang::Stmt::MSAsmStmtClass:
       new_expr = code_skipt();
       break;
 
-    // No idea when these AST is created
-    case clang::Stmt::ImaginaryLiteralClass:
-    case clang::Stmt::ShuffleVectorExprClass:
-    case clang::Stmt::ConvertVectorExprClass:
-    case clang::Stmt::ChooseExprClass:
-    case clang::Stmt::GNUNullExprClass:
-    case clang::Stmt::DesignatedInitExprClass:
-    case clang::Stmt::ParenListExprClass:
-    case clang::Stmt::ExtVectorElementExprClass:
-    case clang::Stmt::BlockExprClass:
-    case clang::Stmt::AsTypeExprClass:
-    case clang::Stmt::PseudoObjectExprClass:
-    case clang::Stmt::AtomicExprClass:
-    case clang::Stmt::AttributedStmtClass:
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
@@ -1970,7 +2028,7 @@ bool clang_c_convertert::get_decl_ref(
       std::string base_name, pretty_name;
       get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
 
-      identifier = "c::" + pretty_name;
+      identifier = pretty_name;
 
       if(get_type(fd.getType(), type))
         return true;
@@ -2004,11 +2062,7 @@ bool clang_c_convertert::get_decl_ref(
   new_expr = exprt("symbol", type);
   new_expr.identifier(identifier);
   new_expr.cmt_lvalue(true);
-
-  if(identifier.find_last_of("::") != std::string::npos)
-    new_expr.name(identifier.substr(identifier.find_last_of("::")+1));
-  else
-    new_expr.name(identifier);
+  new_expr.name(identifier);
 
   return false;
 }
@@ -2120,6 +2174,10 @@ bool clang_c_convertert::get_unary_operator_expr(
     case clang::UO_Deref:
       new_expr = exprt("dereference", uniop_type);
       break;
+
+    case clang::UO_Extension:
+      new_expr.swap(unary_sub);
+      return false;
 
     default:
       std::cerr << "Conversion of unsupported clang unary operator: \"";
@@ -2338,25 +2396,41 @@ void clang_c_convertert::get_default_symbol(
   typet type,
   std::string base_name,
   std::string pretty_name,
-  locationt location)
+  locationt location,
+  bool is_used)
 {
   symbol.mode = "C";
   symbol.module = module_name;
-  symbol.location = location;
-  symbol.type = type;
+  symbol.location = std::move(location);
+  symbol.type = std::move(type);
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
-  symbol.name = "c::" + pretty_name;
+  symbol.name = pretty_name;
+  symbol.is_used = is_used;
 }
 
 void clang_c_convertert::get_field_name(
   const clang::FieldDecl& fd,
-  std::string &name)
+  std::string &name,
+  std::string &pretty_name)
 {
-  name = fd.getName().str();
+  name = pretty_name = fd.getName().str();
 
   if(name.empty())
-    name += "#anon" + i2string(anon_var_counter++);
+  {
+    typet t;
+    get_type(fd.getType(), t);
+
+    if(fd.isBitField())
+    {
+      exprt width;
+      get_expr(*fd.getBitWidth(), width);
+      t.width(width.cformat());
+    }
+
+    name = clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext);
+    pretty_name = "anon";
+  }
 }
 
 void clang_c_convertert::get_var_name(
@@ -2416,32 +2490,13 @@ void clang_c_convertert::get_function_name(
 }
 
 bool clang_c_convertert::get_tag_name(
-  const clang::RecordDecl& recordd,
-  std::string &identifier)
+  const clang::RecordDecl& rd,
+  std::string &name)
 {
-  if(recordd.getName().str().empty())
-  {
-    clang::RecordDecl *record_def = recordd.getDefinition();
-
-    struct_union_typet t;
-    if(recordd.isStruct())
-      t = struct_typet();
-    else if(recordd.isUnion())
-      t = union_typet();
-    else
-      // This should never be reached
-      abort();
-
-    if(get_struct_union_class_fields(*record_def, t))
-      return true;
-
-    identifier += "#anon#" + type2name(t);
-  }
-  else
-  {
-    identifier += recordd.getName().str();
-  }
-
+  name =
+    clang::TypeName::getFullyQualifiedName(
+      ASTContext->getTagDeclType(&rd),
+      *ASTContext);
   return false;
 }
 
@@ -2451,7 +2506,7 @@ void clang_c_convertert::get_start_location_from_stmt(
 {
   sm = &ASTContext->getSourceManager();
 
-  std::string function_name = "";
+  std::string function_name;
 
   if(current_functionDecl)
     function_name = current_functionDecl->getName().str();
@@ -2468,7 +2523,7 @@ void clang_c_convertert::get_final_location_from_stmt(
 {
   sm = &ASTContext->getSourceManager();
 
-  std::string function_name = "";
+  std::string function_name;
 
   if(current_functionDecl)
     function_name = current_functionDecl->getName().str();
@@ -2485,7 +2540,7 @@ void clang_c_convertert::get_location_from_decl(
 {
   sm = &ASTContext->getSourceManager();
 
-  std::string function_name = "";
+  std::string function_name;
 
   if(decl.getDeclContext()->isFunctionOrMethod())
   {
@@ -2547,13 +2602,13 @@ std::string clang_c_convertert::get_filename_from_path(std::string path)
   return path;
 }
 
-void clang_c_convertert::move_symbol_to_context(
+symbolt* clang_c_convertert::move_symbol_to_context(
   symbolt& symbol)
 {
   symbolt* s = context.find_symbol(symbol.name);
   if(s == nullptr)
   {
-    if (context.move(symbol))
+    if (context.move(symbol, s))
     {
       std::cerr << "Couldn't add symbol " << symbol.name
           << " to symbol table" << std::endl;
@@ -2563,61 +2618,37 @@ void clang_c_convertert::move_symbol_to_context(
   }
   else
   {
-    check_symbol_redefinition(*s, symbol);
+    // types that are code means functions
+    if(s->type.is_code())
+    {
+      if(symbol.value.is_not_nil() && !s->value.is_not_nil())
+        s->swap(symbol);
+    }
+    else if(s->is_type)
+    {
+      if(symbol.type.is_not_nil() && !s->type.is_not_nil())
+        s->swap(symbol);
+    }
+
+    // Update is_used
+    s->is_used |= symbol.is_used;
   }
+
+  return s;
 }
 
 void clang_c_convertert::dump_type_map()
 {
   std::cout << "Type_map:" << std::endl;
-  for (auto it : type_map)
+  for (auto const &it : type_map)
     std::cout << it.first << ": " << it.second << std::endl;
 }
 
 void clang_c_convertert::dump_object_map()
 {
   std::cout << "Object_map:" << std::endl;
-  for (auto it : object_map)
+  for (auto const &it : object_map)
     std::cout << it.first << ": " << it.second << std::endl;
-}
-
-void clang_c_convertert::check_symbol_redefinition(
-  symbolt& old_symbol,
-  symbolt& new_symbol)
-{
-  // types that are code means functions
-  if(old_symbol.type.is_code())
-  {
-    if(new_symbol.value.is_not_nil())
-    {
-      if(old_symbol.value.is_not_nil())
-      {
-        // If this is a invalid redefinition, clang will complain and
-        // won't convert the program. We should safely to ignore this.
-      }
-      else
-      {
-        // overwrite
-        old_symbol.swap(new_symbol);
-      }
-    }
-  }
-  else if(old_symbol.is_type)
-  {
-    if(new_symbol.type.is_not_nil())
-    {
-      if(old_symbol.type.is_not_nil())
-      {
-        // If this is a invalid redefinition, clang will complain and
-        // won't convert the program. We should safely to ignore this.
-      }
-      else
-      {
-        // overwrite
-        old_symbol.swap(new_symbol);
-      }
-    }
-  }
 }
 
 void clang_c_convertert::convert_expression_to_code(exprt& expr)
@@ -2688,35 +2719,4 @@ const clang::Decl* clang_c_convertert::get_top_FunctionDecl_from_Stmt(
   }
 
   return nullptr;
-}
-
-bool clang_c_convertert::convert_this_decl(const clang::Decl& decl)
-{
-  // If the flag to keep unused calls is set, we convert them all
-  if(config.options.get_bool_option("keep-unused"))
-    return true;
-
-  if(decl.isFunctionOrFunctionTemplate())
-  {
-    // TODO: We cannot activate this code until the language_file class
-    // is rewritten to parse/typecheck all files once, instead of a per
-    // file approach
-#if 0
-    const clang::FunctionDecl &fd =
-      static_cast<const clang::FunctionDecl&>(decl);
-
-    // If we're checking an function, passed through --function flag, we
-    // should convert it
-    if(fd.getName().str() == config.main)
-      return true;
-
-    if(fd.isMain())
-      return true;
-#else
-    return true;
-#endif
-  }
-
-  // Otherwise, don't convert it
-  return decl.isUsed();
 }

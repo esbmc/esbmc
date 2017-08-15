@@ -9,11 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_UNION_FIND_H
 #define CPROVER_UNION_FIND_H
 
-#include <assert.h>
-
+#include <cassert>
+#include <util/numbering.h>
 #include <vector>
-
-#include "numbering.h"
 
 class unsigned_union_find
 {
@@ -73,8 +71,8 @@ public:
   unsigned count_roots() const
   {
     unsigned c=0;
-    for(unsigned i=0; i<nodes.size(); i++)
-      if(nodes[i].root) c++;
+    for(auto node : nodes)
+      if(node.root) c++;
     return c;
   }
   

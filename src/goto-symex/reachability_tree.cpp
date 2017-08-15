@@ -15,21 +15,20 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #undef small // mingw workaround
 #endif
 
-#include "reachability_tree.h"
-#include "goto_symex.h"
-#include <i2string.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <config.h>
-#include <message.h>
-
-#include "crypto_hash.h"
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/reachability_tree.h>
+#include <util/config.h>
+#include <util/crypto_hash.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/message.h>
+#include <util/std_expr.h>
 
 reachability_treet::reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
     optionst &opts,
-    std::shared_ptr<symex_targett> target,
+    boost::shared_ptr<symex_targett> target,
     contextt &context,
     message_handlert &_message_handler) :
     goto_functions(goto_functions),
@@ -53,18 +52,18 @@ reachability_treet::reachability_treet(
   round_robin = options.get_bool_option("round-robin");
   schedule = options.get_bool_option("schedule");
 
-  if (options.get_bool_option("no-por") || options.get_bool_option("control-flow-test"))
+  if (options.get_bool_option("no-por"))
     por = false;
   else
     por = true;
 
-  target_template = target;
+  target_template = std::move(target);
 }
 
 void
-reachability_treet::setup_for_new_explore(void)
+reachability_treet::setup_for_new_explore()
 {
-  std::shared_ptr<symex_targett> targ;
+  boost::shared_ptr<symex_targett> targ;
 
   execution_states.clear();
 
@@ -87,10 +86,10 @@ reachability_treet::setup_for_new_explore(void)
                          new dfs_execution_statet(goto_functions, ns, this,
                                                targ, permanent_context, options,
                                                message_handler));
-    schedule_target = NULL;
+    schedule_target = nullptr;
   }
 
-  execution_states.push_back(std::shared_ptr<execution_statet>(s));
+  execution_states.emplace_back(s);
   cur_state_it = execution_states.begin();
   targ->push_ctx(); // Start with a depth of 1.
 }
@@ -118,7 +117,7 @@ int reachability_treet::get_CS_bound() const
 }
 
 bool
-reachability_treet::check_for_hash_collision(void) const
+reachability_treet::check_for_hash_collision() const
 {
 
   const execution_statet &ex_state = get_cur_state();
@@ -132,18 +131,15 @@ reachability_treet::check_for_hash_collision(void) const
 }
 
 void
-reachability_treet::post_hash_collision_cleanup(void)
+reachability_treet::post_hash_collision_cleanup()
 {
 
-  for (std::vector<bool>::iterator it = get_cur_state().DFS_traversed.begin();
-       it != get_cur_state().DFS_traversed.end(); it++ )
-    *it = true;
-
-  return;
+  for (auto && it : get_cur_state().DFS_traversed)
+    it = true;
 }
 
 void
-reachability_treet::update_hash_collision_set(void)
+reachability_treet::update_hash_collision_set()
 {
 
   execution_statet &ex_state = get_cur_state();
@@ -151,11 +147,10 @@ reachability_treet::update_hash_collision_set(void)
   crypto_hash hash;
   hash = ex_state.generate_hash();
   hit_hashes.insert(hash);
-  return;
 }
 
 void
-reachability_treet::create_next_state(void)
+reachability_treet::create_next_state()
 {
   execution_statet &ex_state = get_cur_state();
 
@@ -179,12 +174,10 @@ reachability_treet::create_next_state(void)
     new_state->switch_to_thread(next_thread_id);
     new_state->update_after_switch_point();
   }
-
-  return;
 }
 
 bool
-reachability_treet::step_next_state(void)
+reachability_treet::step_next_state()
 {
 
   next_thread_id = decide_ileave_direction(get_cur_state());
@@ -262,7 +255,7 @@ bool reachability_treet::is_has_complete_formula()
 void reachability_treet::switch_to_next_execution_state()
 {
 
-  std::list<std::shared_ptr<execution_statet> >::iterator it = cur_state_it;
+  std::list<boost::shared_ptr<execution_statet> >::iterator it = cur_state_it;
   it++;
 
   if(it != execution_states.end()) {
@@ -280,8 +273,6 @@ void reachability_treet::switch_to_next_execution_state()
 
 bool reachability_treet::reset_to_unexplored_state()
 {
-  std::list<std::shared_ptr<execution_statet> >::iterator it;
-
   // After executing up to a point where all threads have ended and returning
   // that equation to the caller, free and remove fully explored execution
   // states back to the point where there's an unexplored one.
@@ -290,7 +281,7 @@ bool reachability_treet::reset_to_unexplored_state()
   // the last on the list. If we can, it's an unexplored state, if we can't,
   // all depths from the current execution state are explored, so delete it.
 
-  it = cur_state_it--;
+  auto it = cur_state_it--;
   execution_states.erase(it);
 
   while(execution_states.size() > 0 && !step_next_state()) {
@@ -322,7 +313,7 @@ bool reachability_treet::reset_to_unexplored_state()
 void reachability_treet::go_next_state()
 {
 
-  std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
+  std::list<boost::shared_ptr<execution_statet>>::iterator it = cur_state_it;
   it++;
   if(it != execution_states.end())
     cur_state_it++;
@@ -347,7 +338,7 @@ void reachability_treet::go_next_state()
 
 reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
 {
-  std::list<std::shared_ptr<execution_statet>>::const_iterator it;
+  std::list<boost::shared_ptr<execution_statet>>::const_iterator it;
 
   // Iterate through each position in the DFS tree recording data into this
   // object.
@@ -376,16 +367,16 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
   ileaves = 0; // Can use this depending on a future refactor.
 }
 
-reachability_treet::dfs_position::dfs_position(const std::string filename)
+reachability_treet::dfs_position::dfs_position(const std::string&& filename)
 {
 
-  read_from_file(filename);
+  read_from_file(std::move(filename));
 }
 
 const uint32_t reachability_treet::dfs_position::file_magic = 0x4543484B; //'ECHK'
 
 bool reachability_treet::dfs_position::write_to_file(
-                                       const std::string filename) const
+                                       const std::string&& filename) const
 {
   uint8_t buffer[8192];
   reachability_treet::dfs_position::file_hdr hdr;
@@ -396,7 +387,7 @@ bool reachability_treet::dfs_position::write_to_file(
   unsigned int i;
 
   f = fopen(filename.c_str(), "wb");
-  if (f == NULL) {
+  if (f == nullptr) {
     std::cerr << "Couldn't open checkpoint output file" << std::endl;
     return true;
   }
@@ -448,7 +439,7 @@ fail:
 }
 
 bool reachability_treet::dfs_position::read_from_file(
-                                       const std::string filename)
+                                       const std::string&& filename)
 {
   reachability_treet::dfs_position::file_hdr hdr;
   reachability_treet::dfs_position::file_entry entry;
@@ -457,7 +448,7 @@ bool reachability_treet::dfs_position::read_from_file(
   char c;
 
   f = fopen(filename.c_str(), "rb");
-  if (f == NULL) {
+  if (f == nullptr) {
     std::cerr << "Couldn't open checkpoint input file" << std::endl;
     return true;
   }
@@ -510,9 +501,9 @@ fail:
 }
 
 void
-reachability_treet::print_ileave_trace(void) const
+reachability_treet::print_ileave_trace() const
 {
-  std::list<std::shared_ptr<execution_statet>>::const_iterator it;
+  std::list<boost::shared_ptr<execution_statet>>::const_iterator it;
   int i = 0;
 
   std::cout << "Context switch trace for interleaving:" << std::endl;
@@ -523,7 +514,7 @@ reachability_treet::print_ileave_trace(void) const
 }
 
 int
-reachability_treet::get_ileave_direction_from_user(void) const
+reachability_treet::get_ileave_direction_from_user() const
 {
   std::string input;
   unsigned int tid;
@@ -578,7 +569,7 @@ reachability_treet::get_ileave_direction_from_user(void) const
 
 //begin - H.Savino
 int
-reachability_treet::get_ileave_direction_from_scheduling(void) const
+reachability_treet::get_ileave_direction_from_scheduling() const
 {
   unsigned int tid;
 
@@ -656,7 +647,7 @@ reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   return true;
 }
 
-std::shared_ptr<goto_symext::symex_resultt>
+boost::shared_ptr<goto_symext::symex_resultt>
 reachability_treet::get_next_formula()
 {
 
@@ -703,13 +694,13 @@ reachability_treet::get_next_formula()
 }
 
 bool
-reachability_treet::setup_next_formula(void)
+reachability_treet::setup_next_formula()
 {
 
   return reset_to_unexplored_state();
 }
 
-std::shared_ptr<goto_symext::symex_resultt>
+boost::shared_ptr<goto_symext::symex_resultt>
 reachability_treet::generate_schedule_formula()
 {
 
@@ -741,7 +732,7 @@ reachability_treet::generate_schedule_formula()
     go_next_state();
   }
 
-  return std::shared_ptr<goto_symext::symex_resultt>(
+  return boost::shared_ptr<goto_symext::symex_resultt>(
     new goto_symext::symex_resultt(schedule_target, schedule_total_claims,
                                    schedule_remaining_claims));
 }
@@ -807,7 +798,7 @@ reachability_treet::restore_from_dfs_state(void *_dfs __attribute__((unused)))
   return false;
 }
 
-void reachability_treet::save_checkpoint(const std::string fname __attribute__((unused))) const
+void reachability_treet::save_checkpoint(const std::string&& fname __attribute__((unused))) const
 {
 
 #if 0
@@ -817,6 +808,4 @@ void reachability_treet::save_checkpoint(const std::string fname __attribute__((
 #endif
 
   abort();
-
-  return;
 }

@@ -9,10 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_OPTIONS_H
 #define CPROVER_OPTIONS_H
 
-#include <string>
 #include <list>
 #include <map>
-#include "cmdline.h"
+#include <string>
+#include <util/cmdline.h>
 
 class optionst
 {
@@ -30,8 +30,8 @@ public:
 
   virtual void cmdline(cmdlinet &cmds);
   
-  optionst() { }
-  virtual ~optionst() { }
+  optionst() = default;
+  virtual ~optionst() = default;
 };
 
 #endif

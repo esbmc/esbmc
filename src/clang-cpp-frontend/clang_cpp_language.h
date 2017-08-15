@@ -9,12 +9,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_LANGUAGE_H
 #define CPROVER_CPP_LANGUAGE_H
 
-#include <language.h>
+#include <util/language.h>
 
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
-
-#include <clang/Frontend/ASTUnit.h>
 
 class clang_cpp_languaget: public languaget
 {
@@ -24,54 +22,53 @@ public:
     std::ostream &outstream,
     message_handlert &message_handler);
 
-  virtual bool parse(
+  bool parse(
     const std::string &path,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override;
 
-  virtual bool final(
+  bool final(
     contextt &context,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override;
 
-  virtual bool typecheck(
+  bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override;
 
   bool convert(
     contextt &context,
     const std::string &module,
     message_handlert &message_handler);
 
-  std::string id() const { return "cpp"; }
-  std::string description() const { return "C++"; }
-
-  virtual void show_parse(std::ostream &out);
+  void show_parse(std::ostream &out) override;
 
   // conversion from expression into string
-  virtual bool from_expr(
+  bool from_expr(
     const exprt &expr,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false) override;
 
   // conversion from type into string
-  virtual bool from_type(
+  bool from_type(
     const typet &type,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false) override;
 
   // conversion from string into expression
-  virtual bool to_expr(
+  bool to_expr(
     const std::string &code,
     const std::string &module,
     exprt &expr,
     message_handlert &message_handler,
-    const namespacet &ns);
+    const namespacet &ns) override;
 
-  virtual languaget *new_language()
+  languaget *new_language() override
   { return new clang_cpp_languaget; }
 
   // constructor, destructor
-  virtual ~clang_cpp_languaget() = default;
+  ~clang_cpp_languaget() override = default;
   clang_cpp_languaget();
 };
 

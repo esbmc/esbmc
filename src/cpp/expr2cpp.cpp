@@ -7,57 +7,42 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <cassert>
-
-#include <std_types.h>
-
-#include <ansi-c/expr2c.h>
-
-#include "expr2cpp.h"
-
-#include <symbol.h>
+#include <clang-c-frontend/expr2c.h>
+#include <cpp/expr2cpp.h>
+#include <util/std_types.h>
+#include <util/symbol.h>
 
 class expr2cppt:public expr2ct
 {
 public:
-  expr2cppt(const namespacet &_ns):expr2ct(_ns) { }
+  expr2cppt(const namespacet &_ns, const bool _fullname) : expr2ct(_ns, _fullname) { }
 
-  virtual std::string convert(const exprt &src)
+  std::string convert(const exprt &src) override
   {
     return expr2ct::convert(src);
   }
 
-  virtual std::string convert(const typet &src)
+  std::string convert(const typet &src) override
   {
     return expr2ct::convert(src);
   }
 
 protected:
-  virtual std::string convert(const exprt &src, unsigned &precedence);
+  std::string convert(const exprt &src, unsigned &precedence) override;
   virtual std::string convert_cpp_this(const exprt &src, unsigned precedence);
   virtual std::string convert_cpp_new(const exprt &src, unsigned precedence);
   virtual std::string convert_code_cpp_delete(const exprt &src, unsigned precedence);
-  virtual std::string convert_struct(const exprt &src, unsigned &precedence);
-  virtual std::string convert_code(const codet &src, unsigned indent);
-  virtual std::string convert_constant(const exprt &src, unsigned &precedence);
+  std::string convert_struct(const exprt &src, unsigned &precedence) override;
+  std::string convert_code(const codet &src, unsigned indent) override;
+  std::string convert_constant(const exprt &src, unsigned &precedence) override;
 
-  virtual std::string convert_rec(
+  std::string convert_rec(
     const typet &src,
-    const c_qualifierst &qualifiers);
+    const c_qualifierst &qualifiers,
+    const std::string &declarator) override;
 
   typedef hash_set_cont<std::string, string_hash> id_sett;
 };
-
-/*******************************************************************\
-
-Function: expr2cppt::convert_struct
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2cppt::convert_struct(
   const exprt &src,
@@ -82,12 +67,9 @@ std::string expr2cppt::convert_struct(
   bool first=true;
   unsigned last_size=0;
 
-  for(struct_typet::componentst::const_iterator
-      c_it=components.begin();
-      c_it!=components.end();
-      c_it++)
+  for(const auto & component : components)
   {
-    if(c_it->type().id()=="code")
+    if(component.type().id()=="code")
     {
     }
     else
@@ -110,7 +92,7 @@ std::string expr2cppt::convert_struct(
 
       dest+=sep;
       dest+=".";
-      dest+=c_it->get_string("pretty_name");
+      dest+=component.get_string("pretty_name");
       dest+="=";
       dest+=tmp;
     }
@@ -122,18 +104,6 @@ std::string expr2cppt::convert_struct(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2cppt::convert_constant
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2cppt::convert_constant(
   const exprt &src,
@@ -151,69 +121,64 @@ std::string expr2cppt::convert_constant(
   return expr2ct::convert_constant(src, precedence);
 }
 
-/*******************************************************************\
-
-Function: expr2cppt::convert_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2cppt::convert_rec(
   const typet &src,
-  const c_qualifierst &qualifiers)
+  const c_qualifierst &qualifiers,
+  const std::string &declarator)
 {
   c_qualifierst new_qualifiers(qualifiers);
   new_qualifiers.read(src);
 
+  const std::string d=
+    declarator==""?declarator:(" "+declarator);
+
+  const std::string q=
+    new_qualifiers.as_string();
+
   if(is_reference(src))
   {
-    return new_qualifiers.as_string()+convert(src.subtype())+" &";
+    return new_qualifiers.as_string()+convert(src.subtype())+" &"+d;
   }
   else if(is_rvalue_reference(src))
   {
-    return new_qualifiers.as_string()+convert(src.subtype())+" &&";
+    return new_qualifiers.as_string()+convert(src.subtype())+" &&"+d;
   }
   else if(src.get("#cpp_type")!="")
   {
     const irep_idt cpp_type=src.get("#cpp_type");
 
     if(cpp_type=="signed_char")
-      return new_qualifiers.as_string()+"signed char";
+      return new_qualifiers.as_string()+"signed char"+d;
     else if(cpp_type=="unsigned_char")
-      return new_qualifiers.as_string()+"unsigned char";
+      return new_qualifiers.as_string()+"unsigned char"+d;
     else if(cpp_type=="char")
-      return new_qualifiers.as_string()+"char";
+      return new_qualifiers.as_string()+"char"+d;
     else if(cpp_type=="signed_short_int")
-      return new_qualifiers.as_string()+"short";
+      return new_qualifiers.as_string()+"short"+d;
     else if(cpp_type=="signed_short_int")
-      return new_qualifiers.as_string()+"unsigned short";
+      return new_qualifiers.as_string()+"unsigned short"+d;
     else if(cpp_type=="signed_int")
-      return new_qualifiers.as_string()+"int";
+      return new_qualifiers.as_string()+"int"+d;
     else if(cpp_type=="unsigned_int")
-      return new_qualifiers.as_string()+"unsigned";
+      return new_qualifiers.as_string()+"unsigned"+d;
     else if(cpp_type=="signed_long_int")
-      return new_qualifiers.as_string()+"long";
+      return new_qualifiers.as_string()+"long"+d;
     else if(cpp_type=="unsigned_long_int")
-      return new_qualifiers.as_string()+"unsigned long";
+      return new_qualifiers.as_string()+"unsigned long"+d;
     else if(cpp_type=="signed_long_long_int")
-      return new_qualifiers.as_string()+"long long";
+      return new_qualifiers.as_string()+"long long"+d;
     else if(cpp_type=="unsigned_long_long_int")
-      return new_qualifiers.as_string()+"unsigned long long";
+      return new_qualifiers.as_string()+"unsigned long long"+d;
     else if(cpp_type=="wchar_t")
-      return new_qualifiers.as_string()+"wchar_t";
+      return new_qualifiers.as_string()+"wchar_t"+d;
     else if(cpp_type=="float")
-      return new_qualifiers.as_string()+"float";
+      return new_qualifiers.as_string()+"float"+d;
     else if(cpp_type=="double")
-      return new_qualifiers.as_string()+"double";
+      return new_qualifiers.as_string()+"double"+d;
     else if(cpp_type=="long_double")
-      return new_qualifiers.as_string()+"long double";
+      return new_qualifiers.as_string()+"long double"+d;
     else
-      return expr2ct::convert_rec(src, qualifiers);
+      return expr2ct::convert_rec(src, qualifiers, declarator);
   }
   else if(src.id()=="symbol")
   {
@@ -236,6 +201,8 @@ std::string expr2cppt::convert_rec(
       if(symbol.pretty_name!=irep_idt())
         dest+=" "+id2string(symbol.pretty_name);
 
+      dest+=d;
+
       return dest;
     }
     else if(symbol.type.id()=="c_enum")
@@ -247,10 +214,12 @@ std::string expr2cppt::convert_rec(
       if(symbol.pretty_name!=irep_idt())
         dest+=" "+id2string(symbol.pretty_name);
 
+      dest+=d;
+
       return dest;
     }
     else
-      return expr2ct::convert_rec(src, qualifiers);
+      return expr2ct::convert_rec(src, qualifiers, declarator);
   }
   else if(src.id()=="struct" ||
           src.id()=="incomplete_struct")
@@ -263,6 +232,8 @@ std::string expr2cppt::convert_rec(
       dest+="__interface"; // MS-specific
     else
       dest+="struct";
+
+    dest+=d;
 
     return dest;
   }
@@ -310,47 +281,36 @@ std::string expr2cppt::convert_rec(
     typet member;
     member.swap(tmp.add("to-member"));
 
-    std::string dest = "(" + convert_rec(member, c_qualifierst()) + ":: *)";
+    std::string dest = "(" + convert_rec(member, c_qualifierst(), "") + ":: *)";
 
     if(src.subtype().id()=="code")
     {
       const code_typet& code_type = to_code_type(src.subtype());
       const typet& return_type = code_type.return_type();
-      dest = convert_rec(return_type, c_qualifierst()) +" " + dest;
+      dest = convert_rec(return_type, c_qualifierst(), "") +" " + dest;
 
       const code_typet::argumentst& args = code_type.arguments();
       dest += "(";
 
       if(args.size() > 0)
-        dest += convert_rec(args[0].type(), c_qualifierst());
+        dest += convert_rec(args[0].type(), c_qualifierst(), "");
 
       for(unsigned i = 1; i < args.size();i++)
-        dest += ", " + convert_rec(args[i].type(), c_qualifierst());
+        dest += ", " + convert_rec(args[i].type(), c_qualifierst(), "");
       dest += ")";
+      dest+=d;
     }
     else
     {
-      dest = convert_rec(src.subtype(),c_qualifierst()) + " " + dest;
+      dest = convert_rec(src.subtype(),c_qualifierst(), "") + " " + dest+d;
     }
     return dest;
   }
   else if(src.id()=="unassigned")
     return "?";
   else
-    return expr2ct::convert_rec(src, qualifiers);
+    return expr2ct::convert_rec(src, qualifiers, declarator);
 }
-
-/*******************************************************************\
-
-Function: expr2cppt::convert_cpp_this
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2cppt::convert_cpp_this(
   const exprt &src __attribute__((unused)),
@@ -358,18 +318,6 @@ std::string expr2cppt::convert_cpp_this(
 {
   return "this";
 }
-
-/*******************************************************************\
-
-Function: expr2cppt::convert_cpp_new
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2cppt::convert_cpp_new(
   const exprt &src,
@@ -396,18 +344,6 @@ std::string expr2cppt::convert_cpp_new(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2cppt::convert_code_cpp_delete
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2cppt::convert_code_cpp_delete(
   const exprt &src,
   unsigned indent)
@@ -427,18 +363,6 @@ std::string expr2cppt::convert_code_cpp_delete(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2cppt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2cppt::convert(
   const exprt &src,
   unsigned &precedence)
@@ -457,18 +381,6 @@ std::string expr2cppt::convert(
     return expr2ct::convert(src, precedence);
 }
 
-/*******************************************************************\
-
-Function: expr2cppt::convert_code
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2cppt::convert_code(
   const codet &src,
   unsigned indent)
@@ -486,39 +398,15 @@ std::string expr2cppt::convert_code(
   return expr2ct::convert_code(src, indent);
 }
 
-/*******************************************************************\
-
-Function: expr2cpp
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-std::string expr2cpp(const exprt &expr, const namespacet &ns)
+std::string expr2cpp(const exprt &expr, const namespacet &ns, const bool fullname)
 {
-  expr2cppt expr2cpp(ns);
+  expr2cppt expr2cpp(ns, fullname);
   expr2cpp.get_shorthands(expr);
   return expr2cpp.convert(expr);
 }
 
-/*******************************************************************\
-
-Function: type2cpp
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-std::string type2cpp(const typet &type, const namespacet &ns)
+std::string type2cpp(const typet &type, const namespacet &ns, const bool fullname)
 {
-  expr2cppt expr2cpp(ns);
+  expr2cppt expr2cpp(ns, fullname);
   return expr2cpp.convert(type);
 }

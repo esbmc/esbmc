@@ -1,10 +1,9 @@
 #include <set>
-
-#include "bitblast_conv.h"
+#include <bitblast_conv.h>
 
 bitblast_convt::bitblast_convt(bool int_encoding, const namespacet &_ns,
-    bool is_cpp, sat_iface *_sat_api)
-  : smt_convt(int_encoding, _ns, is_cpp), sat_api(_sat_api)
+    sat_iface *_sat_api)
+  : smt_convt(int_encoding, _ns), sat_api(_sat_api)
 {
 }
 
@@ -449,9 +448,9 @@ bitblast_convt::get_bool(smt_astt a)
 {
   tvt t = l_get(a);
   if (t.is_true())
-    return true_expr;
+    return gen_true_expr();
   else if (t.is_false())
-    return false_expr;
+    return gen_false_expr();
   else
     return expr2tc();
 }
@@ -487,7 +486,7 @@ bitblast_convt::get_bv(const type2tc &t, smt_astt a)
   return constant_int2tc(t, BigInt(accuml));
 }
 
-smt_astt 
+smt_astt
 bitblast_convt::make_disjunct(const smt_convt::ast_vec &v)
 {
   bvt bv;
@@ -503,7 +502,7 @@ bitblast_convt::make_disjunct(const smt_convt::ast_vec &v)
   return ba;
 }
 
-smt_astt 
+smt_astt
 bitblast_convt::make_conjunct(const smt_convt::ast_vec &v)
 {
   bvt bv;
@@ -663,7 +662,7 @@ bitblast_convt::cond_negate(const bvt &vals, bvt &out, literalt cond)
 
   for (unsigned int i = 0; i < vals.size(); i++)
     out[i] = sat_api->lselect(cond, inv[i], vals[i]);
-  
+
   return;
 }
 
@@ -818,7 +817,7 @@ bitblast_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res,
                                  bool subtract, bool is_signed)
 {
   assert(op0.size() == op1.size());
-  unsigned int width = op0.size();;
+  unsigned int width = op0.size();
   bvt tmp_op1 = op1;
   if (subtract)
     negate(op1, tmp_op1);

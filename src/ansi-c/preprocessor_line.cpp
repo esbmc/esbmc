@@ -6,23 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <stdlib.h>
-#include <ctype.h>
-
-#include "unescape_string.h"
-#include "preprocessor_line.h"
-
-/*******************************************************************\
-
-Function: preprocessor_line
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <ansi-c/preprocessor_line.h>
+#include <ansi-c/unescape_string.h>
+#include <cctype>
+#include <cstdlib>
 
 void preprocessor_line(
   const char *text,

@@ -1,137 +1,44 @@
 
-#include "crypto_hash.h"
+#include <boost/algorithm/hex.hpp>
+#include <boost/uuid/sha1.hpp>
+#include <cstring>
+#include <util/crypto_hash.h>
 
-#ifndef NO_OPENSSL
+class crypto_hash_private {
+public:
+  boost::uuids::detail::sha1 s;
+};
 
-extern "C" {
-  #include <dlfcn.h>
-  #include <string.h>
-
-  #include <openssl/sha.h>
-}
-
-bool crypto_hash::have_pointers = false;
-int (*crypto_hash::sha_init)(SHA256_CTX *c) = 0;
-int (*crypto_hash::sha_update)(SHA256_CTX *c, const void *data, size_t len) = 0;
-int (*crypto_hash::sha_final)(unsigned char *md, SHA256_CTX *c) = 0;
-
-bool
-crypto_hash::operator<(const crypto_hash h2) const
+bool crypto_hash::operator<(const crypto_hash h2) const
 {
 
-  if (memcmp(hash, h2.hash, 32) < 0)
+  if (memcmp(hash, h2.hash, CRYPTO_HASH_SIZE) < 0)
     return true;
 
   return false;
 }
 
-std::string
-crypto_hash::to_string() const
+std::string crypto_hash::to_string() const
 {
-  int i;
-  char hex[65];
+  std::ostringstream buf;
+  for(unsigned int i : hash)
+    buf << std::hex << std::setfill('0') << std::setw(8) << i;
 
-  for (i = 0; i < 32; i++)
-    sprintf(&hex[i*2], "%02X", (unsigned char)hash[i]);
-
-  hex[64] = '\0';
-  return std::string(hex);
+  return buf.str();
 }
 
 crypto_hash::crypto_hash()
+  : p_crypto(std::make_shared<crypto_hash_private>()),
+    hash{0}
 {
-
-  if (!have_pointers)
-    setup_pointers();
-
-  sha_init(&c);
 }
 
-void
-crypto_hash::ingest(void const *data, unsigned int size)
+void crypto_hash::ingest(void const *data, unsigned int size)
 {
-
-  sha_update(&c, data, size);
-  return;
+  p_crypto->s.process_bytes(data, size);
 }
 
-void
-crypto_hash::fin(void)
+void crypto_hash::fin()
 {
-
-  sha_final(hash, &c);
+  p_crypto->s.get_digest(hash);
 }
-
-void
-crypto_hash::setup_pointers()
-{
-  void *ssl_lib;
-  long (*ssleay)(void);
-
-  ssl_lib = dlopen("libcrypto.so", RTLD_LAZY);
-  if (ssl_lib == NULL)
-    throw "Couldn't open OpenSSL crypto library - can't hash state";
-
-  ssleay = (long (*)(void)) dlsym(ssl_lib, "SSLeay");
-  // Check for version 0.9.8 - I believe this is the first release with SHA256.
-  if (ssleay() < 0x000908000)
-    throw "OpenSSL >= 0.9.8 required for state hashing";
-
-  sha_init = (int (*) (SHA256_CTX *c)) dlsym(ssl_lib, "SHA256_Init");
-  sha_update = (int (*) (SHA256_CTX *c, const void *data, size_t len))
-               dlsym(ssl_lib, "SHA256_Update");
-  sha_final = (int (*) (unsigned char *md, SHA256_CTX *c))
-               dlsym(ssl_lib, "SHA256_Final");
-  have_pointers = true;
-  return;
-}
-
-#else /* !NO_OPENSSL */
-
-extern "C" {
-  #include <stdlib.h>
-  #include <string.h>
-};
-
-#include <iostream>
-
-/* Generate some dummy implementations that complain and abort if used */
-
-bool
-crypto_hash::operator<(const crypto_hash h2 __attribute__((unused))) const
-{
-
-  abort();
-  return false;
-}
-
-std::string
-crypto_hash::to_string() const
-{
-
-  abort();
-}
-
-crypto_hash::crypto_hash()
-{
-  // Valid; some exist as default constructions within other parts of ESBMC.
-  // Preventing this constructor running leads to *all* runtimes being blocked
-  // by errors thrown from here.
-}
-
-void
-crypto_hash::ingest(const void *data __attribute__((unused)),
-                    unsigned int size __attribute__((unused)))
-{
-  abort();
-}
-
-void
-crypto_hash::fin(void)
-{
-  abort();
-}
-
-
-
-#endif /* NO_OPENSSL */

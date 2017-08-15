@@ -8,13 +8,12 @@ Date: February 2006
 
 \*******************************************************************/
 
-#include <expr_util.h>
-#include <std_expr.h>
-#include <namespace.h>
-#include <arith_tools.h>
+#include <goto-programs/rw_set.h>
 #include <pointer-analysis/goto_program_dereference.h>
-
-#include "rw_set.h"
+#include <util/arith_tools.h>
+#include <util/expr_util.h>
+#include <util/namespace.h>
+#include <util/std_expr.h>
 
 void rw_sett::compute(const codet &code)
 {
@@ -52,12 +51,12 @@ void rw_sett::read_write_rec(
         return; // ignore for now
       }
 
-      if(symbol->name=="c::__ESBMC_alloc" ||
-         symbol->name=="c::__ESBMC_alloc_size" ||
-         symbol->name=="c::stdin" ||
-         symbol->name=="c::stdout" ||
-         symbol->name=="c::stderr" ||
-         symbol->name=="c::sys_nerr")
+      if(symbol->name=="__ESBMC_alloc" ||
+         symbol->name=="__ESBMC_alloc_size" ||
+         symbol->name=="stdin" ||
+         symbol->name=="stdout" ||
+         symbol->name=="stderr" ||
+         symbol->name=="sys_nerr")
       {
         return; // ignore for now
       }

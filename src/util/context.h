@@ -9,14 +9,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_CONTEXT_H
 #define CPROVER_CONTEXT_H
 
-#include <iostream>
 #include <functional>
+#include <iostream>
 #include <map>
-
-#include <hash_cont.h>
-#include <type.h>
-#include <symbol.h>
-#include <string_hash.h>
+#include <util/hash_cont.h>
+#include <util/string_hash.h>
+#include <util/symbol.h>
+#include <util/type.h>
 
 typedef hash_map_cont<irep_idt, symbolt, irep_id_hash> symbolst;
 typedef std::vector<symbolt*> ordered_symbolst;
@@ -65,6 +64,7 @@ public:
   const symbolt* find_symbol(irep_idt name) const;
 
   void erase_symbol(irep_idt name);
+  void remove_unused();
 
   template <typename T>
   void foreach_operand_in_order(T &&t) const

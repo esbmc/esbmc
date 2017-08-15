@@ -6,15 +6,33 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "std_types.h"
-#include "fixedbv.h"
-#include "arith_tools.h"
-#include "irep2.h"
+#include <util/arith_tools.h>
+#include <util/fixedbv.h>
+#include <util/std_types.h>
 
 fixedbv_spect::fixedbv_spect(const fixedbv_typet &type)
 {
-  integer_bits=type.get_integer_bits();
-  width=type.get_width();
+  integer_bits = type.get_integer_bits();
+  width = type.get_width();
+}
+
+fixedbv_spect::fixedbv_spect(const fixedbv_type2tc& type)
+{
+  integer_bits = type->integer_bits;
+  width = type->get_width();
+}
+
+const fixedbv_type2tc fixedbv_spect::get_type() const
+{
+  return fixedbv_type2tc(width, integer_bits);
+}
+
+fixedbvt::fixedbvt() : v(0)
+{
+}
+
+fixedbvt::fixedbvt(const fixedbv_spect &s) : spec(s), v(0)
+{
 }
 
 fixedbvt::fixedbvt(const constant_exprt &expr)
@@ -206,3 +224,54 @@ bool operator >(const fixedbvt &a, int i)
   other.from_integer(i);
   return a > other;
 }
+
+bool operator < (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a < other;
+}
+
+bool operator >= (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a >= other;
+}
+
+bool operator <= (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a <= other;
+}
+
+#ifdef WITH_PYTHON
+#include <boost/python/class.hpp>
+
+void
+build_fixedbv_python_class()
+{
+  using namespace boost::python;
+
+  init<unsigned, unsigned> fbv_spec_init;
+  class_<fixedbv_spect>("fixedbv_spec", fbv_spec_init)
+    .def_readwrite("width", &fixedbv_spect::width)
+    .def_readwrite("integer_bits", &fixedbv_spect::integer_bits)
+    .def("get_fraction_bits", &fixedbv_spect::get_fraction_bits);
+
+  // Only default inits
+  class_<fixedbvt>("fixedbv")
+    .def_readwrite("spec", &fixedbvt::spec)
+    .add_property("value",
+        make_function(&fixedbvt::get_value, return_value_policy<return_by_value>()),
+        make_function(&fixedbvt::set_value, return_value_policy<return_by_value>()))
+    .def("from_integer", &fixedbvt::from_integer)
+    .def("to_integer", &fixedbvt::to_integer)
+    .def("round", &fixedbvt::round);
+}
+
+#endif

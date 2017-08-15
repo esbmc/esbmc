@@ -6,22 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ctype.h>
-#include <stdio.h>
-
-#include "unescape_string.h"
-
-/*******************************************************************\
-
-Function: cpp_convert_string_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <ansi-c/unescape_string.h>
+#include <cctype>
+#include <cstdio>
 
 void unescape_string(const std::string &src, std::string &dest)
 {

@@ -10,24 +10,22 @@
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
-#include <irep2.h>
-
-#include <assert.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <guard.h>
-#include <pointer-analysis/value_set.h>
+#include <boost/shared_ptr.hpp>
+#include <cassert>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <goto-programs/goto_functions.h>
-#include <string>
+#include <goto-symex/renaming.h>
+#include <goto-symex/symex_target.h>
+#include <pointer-analysis/value_set.h>
 #include <stack>
+#include <string>
+#include <util/crypto_hash.h>
+#include <util/guard.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
 #include <vector>
-
-#include "symex_target.h"
-#include "crypto_hash.h"
-#include "renaming.h"
-
-#include <i2string.h>
 
 class execution_statet; // foward dec
 
@@ -93,7 +91,7 @@ public:
   {
   public:
     unsigned depth;
-    std::shared_ptr<renaming::level2t> level2_ptr;
+    boost::shared_ptr<renaming::level2t> level2_ptr;
     renaming::level2t &level2;
     value_sett value_set;
     guardt guard;
@@ -124,9 +122,7 @@ public:
     }
 
   public:
-    ~goto_statet() {
-      return;
-    }
+    ~goto_statet() = default;
   };
 
   /**
@@ -195,11 +191,23 @@ public:
     /** Record of how many loop unwinds we've performed. For each target in the
      *  program that contains a loop, record how many times we've unwound round
      *  it. */
-    typedef hash_map_cont<unsigned, unsigned> loop_iterationst;
+    typedef hash_map_cont<unsigned, BigInt> loop_iterationst;
     loop_iterationst loop_iterations;
 
+    /** Record the first va_args index used in this function call, if any,
+     *  otherwise UINT_MAX
+     */
+    unsigned int va_index;
+
+    /** Record the entry guard of the function */
+    guardt entry_guard;
+
+    /** Record if the function body is hidden */
+    bool hidden;
+
     framet(unsigned int thread_id) :
-      return_value(expr2tc())
+      return_value(expr2tc()),
+      hidden(false)
     {
       level1.thread_id = thread_id;
     }
@@ -291,7 +299,7 @@ public:
    */
   inline framet &
   new_frame(unsigned int thread_id) {
-    call_stack.push_back(framet(thread_id));
+    call_stack.emplace_back(thread_id);
     return call_stack.back();
   }
 
@@ -395,7 +403,7 @@ public:
    *  current function invocations on the stack, and returns them.
    *  @return Vector of strings describing the current function calls in state.
    */
-  std::vector<dstring> gen_stack_trace(void) const;
+  std::vector<stack_framet> gen_stack_trace() const;
 
   /**
    *  Fixup types after renaming: we might rename a symbol that we
@@ -431,7 +439,7 @@ public:
    *  re-naming out of step with function invocations. */
   std::map<irep_idt, unsigned> variable_instance_nums;
   /** Record of how many times we've unwound function recursion. */
-  std::map<irep_idt, unsigned> function_unwind;
+  std::map<irep_idt, BigInt> function_unwind;
 
   /** Flag saying whether to maintain pointer value set tracking. */
   bool use_value_set;

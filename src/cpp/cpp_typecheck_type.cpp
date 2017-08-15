@@ -6,25 +6,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <location.h>
-
-#include <ansi-c/c_qualifiers.h>
-
-#include "cpp_typecheck.h"
-#include "cpp_convert_type.h"
-#include "expr2cpp.h"
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <util/c_qualifiers.h>
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/expr2cpp.h>
+#include <util/location.h>
 
 void cpp_typecheckt::typecheck_type(typet &type)
 {
@@ -159,17 +145,15 @@ void cpp_typecheckt::typecheck_type(typet &type)
 
     code_typet::argumentst &arguments=code_type.arguments();
 
-    for(code_typet::argumentst::iterator it=arguments.begin();
-        it!=arguments.end();
-        it++)
+    for(auto & argument : arguments)
     {
-      typecheck_type(it->type());
+      typecheck_type(argument.type());
 
       // see if there is a default value
-      if(it->has_default_value())
+      if(argument.has_default_value())
       {
-        typecheck_expr(it->default_value());
-        implicit_typecast(it->default_value(), it->type());
+        typecheck_expr(argument.default_value());
+        implicit_typecast(argument.default_value(), argument.type());
       }
     }
   }

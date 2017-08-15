@@ -6,26 +6,13 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <i2string.h>
-#include <ansi-c/c_qualifiers.h>
-#include <expr_util.h>
-
-#include "cpp_template_type.h"
-#include "cpp_typecheck.h"
-#include "cpp_type2name.h"
-#include "cpp_util.h"
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert_argument
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <util/c_qualifiers.h>
+#include <cpp/cpp_template_type.h>
+#include <cpp/cpp_type2name.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/cpp_util.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
 
 void cpp_typecheckt::convert_argument(
   const irep_idt &mode,
@@ -39,8 +26,7 @@ void cpp_typecheckt::convert_argument(
     argument.set_base_name(identifier);
   }
 
-  identifier=cpp_identifier_prefix(mode)+"::"+
-             cpp_scopes.current_scope().prefix+
+  identifier=cpp_scopes.current_scope().prefix+
              id2string(identifier);
 
   argument.set_identifier(identifier);
@@ -71,18 +57,6 @@ void cpp_typecheckt::convert_argument(
   cpp_scopes.put_into_scope(*new_symbol);
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert_arguments
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::convert_arguments(
   const irep_idt &mode,
   code_typet &function_type)
@@ -90,24 +64,9 @@ void cpp_typecheckt::convert_arguments(
   code_typet::argumentst &arguments=
     function_type.arguments();
 
-  for(code_typet::argumentst::iterator
-      it=arguments.begin();
-      it!=arguments.end();
-      it++)
-    convert_argument(mode, *it);
+  for(auto & argument : arguments)
+    convert_argument(mode, argument);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert_function
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::convert_function(symbolt &symbol)
 {
@@ -190,18 +149,6 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
 
   return_type = old_return_type;
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::function_identifier
-
-  Inputs:
-
- Outputs:
-
- Purpose: for function overloading
-
-\*******************************************************************/
 
 irep_idt cpp_typecheckt::function_identifier(const typet &type)
 {

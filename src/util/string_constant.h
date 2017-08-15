@@ -9,13 +9,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_ANSI_C_EXPR_H
 #define CPROVER_ANSI_C_EXPR_H
 
-#include <expr.h>
+#include <util/expr.h>
 
 class string_constantt:public exprt
 {
 public:
   explicit string_constantt(const irep_idt &value);
-  explicit string_constantt(const irep_idt &value, const typet type);
+  explicit string_constantt(const irep_idt &value, const typet& type);
 
   friend inline const string_constantt &to_string_constant(const exprt &expr)
   {

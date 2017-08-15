@@ -9,17 +9,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 #define CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 
-#include <irep2.h>
-
+#include <pointer-analysis/value_sets.h>
 #include <set>
-
-#include <namespace.h>
-#include <mp_arith.h>
-#include <reference_counting.h>
-#include <type_byte_size.h>
-
-#include "object_numbering.h"
-#include "value_sets.h"
+#include <util/irep2.h>
+#include <util/mp_arith.h>
+#include <util/namespace.h>
+#include <util/numbering.h>
+#include <util/type_byte_size.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.
  *
@@ -55,18 +51,24 @@ Author: Daniel Kroening, kroening@kroening.com
  *  takes a variable and returns the set of things it might point at.
  */
 
+typedef hash_numbering<expr2tc, irep2_hash> object_numberingt;
+typedef hash_numbering<unsigned, std::hash<unsigned> > object_number_numberingt;
+
 class value_sett
 {
 public:
   /** Primary constructor. Does approximately nothing non-standard. */
-  value_sett(const namespacet &_ns):location_number(0), ns(_ns)
+  value_sett(const namespacet &_ns):location_number(0), ns(_ns),
+    xchg_name("value_sett::__ESBMC_xchg_ptr"), xchg_num(0)
   {
   }
 
   value_sett(const value_sett &ref) :
     location_number(ref.location_number),
     values(ref.values),
-    ns(ref.ns)
+    ns(ref.ns),
+    xchg_name("value_sett::__ESBMC_xchg_ptr"),
+    xchg_num(0)
   {
   }
 
@@ -74,6 +76,8 @@ public:
   {
     location_number = ref.location_number;
     values = ref.values;
+    xchg_name = ref.xchg_name;
+    xchg_num = ref.xchg_num;
     // No need to copy ns, it should be the same in all contexts.
     return *this;
   }
@@ -96,6 +100,8 @@ public:
   class objectt
   {
   public:
+    objectt() : offset(0), offset_is_set(true), offset_alignment(0) { }
+
     objectt(bool offset_set, unsigned int operand)
     {
       if (offset_set) {
@@ -140,18 +146,67 @@ public:
   /** Datatype for a value set: stores a mapping between some integers and
    *  additional reference data in an objectt object. The integers are indexes
    *  into value_sett::object_numbering, which identifies the l1 variable
-   *  being referred to.
-   *
-   *  This code commits the sin of extending an STL type. Bad. */
-  class object_map_dt:public std::map<unsigned, objectt>
+   *  being referred to. */
+  typedef hash_map_cont<unsigned, objectt> object_mapt;
+  class object_map_dt
   {
+    // If you said this class looks pretty map like, it's because it used to be
+    // a subclass of std::map, which was far too funky for me, thanks.
   public:
-    object_map_dt() : std::map<unsigned, objectt>() { }
-    const static object_map_dt empty;
+    ~object_map_dt()
+    {
+      for (auto const& it : themap)
+        value_sett::obj_numbering_deref(it.first);
+    }
+
+    object_map_dt()
+    {
+    }
+
+    object_map_dt(const object_map_dt &ref)
+    {
+      *this = ref;
+      for (auto const& it : themap)
+        value_sett::obj_numbering_ref(it.first);
+    }
+    typedef object_mapt::const_iterator const_iterator;
+    typedef object_mapt::iterator iterator;
+
+    objectt &operator[](unsigned i)
+    {
+      if (themap.find(i) == themap.end())
+        value_sett::obj_numbering_ref(i);
+      return themap[i];
+    }
+
+    const_iterator find(unsigned i) const
+    {
+      return themap.find(i);
+    }
+
+    iterator find(unsigned i)
+    {
+      return themap.find(i);
+    }
+
+    const_iterator begin() const
+    {
+      return themap.begin();
+    }
+
+    const_iterator end() const
+    {
+      return themap.end();
+    }
+
+    std::size_t size(void) const
+    {
+      return themap.size();
+    }
+
+    object_mapt themap;
   };
 
-  /** Reference counting wrapper around an object_map_dt. */
-  typedef reference_counting<object_map_dt> object_mapt;
 
   /** Record for a particular value set: stores the identity of the variable
    *  that points at this set of objects, and the objects themselves (with
@@ -178,12 +233,10 @@ public:
      *  track each individual element, only the array of them. */
     std::string suffix;
 
-    entryt()
-    {
-    }
+    entryt() = default;
 
-    entryt(const std::string &_identifier, const std::string _suffix):
-      identifier(_identifier),
+    entryt(std::string _identifier, const std::string& _suffix):
+      identifier(std::move(_identifier)),
       suffix(_suffix)
     {
     }
@@ -193,8 +246,6 @@ public:
    *  to an entryt, storing the value set of objects a variable might point
    *  at. */
   typedef hash_map_cont<string_wrapper, entryt, string_wrap_hash> valuest;
-
-//********************************** Methods ***********************************
 
   /** Get the natural alignment unit of a reference to e. I don't know a more
    *  appropriate term, but if we were to have an offset into e, then what is
@@ -218,7 +269,7 @@ public:
     assert(!is_symbol_type(t));
     if (is_array_type(t)) {
       const array_type2t &arr = to_array_type(t);
-      return type_byte_size(*arr.subtype).to_ulong();
+      return type_byte_size_default(arr.subtype, 8).to_ulong();
     } else {
       return 8;
     }
@@ -247,23 +298,23 @@ public:
 
   /** Convert an object map element to an expression. Formulates either an
    *  object_descriptor irep, or unknown / invalid expr's as appropriate. */
-  expr2tc to_expr(object_map_dt::const_iterator it) const;
+  expr2tc to_expr(object_mapt::const_iterator it) const;
 
   /** Insert an object record element into an object map.
    *  @param dest The map to insert this record into.
    *  @param it Iterator of existing object record to insert into dest. */
-  void set(object_mapt &dest, object_map_dt::const_iterator it) const
+  void set(object_mapt &dest, object_mapt::const_iterator it) const
   {
     // Fetch/insert iterator
-    std::pair<object_map_dt::iterator,bool> res =
-      dest.write().insert(object_map_dt::value_type(it->first, it->second));
+    std::pair<object_mapt::iterator,bool> res =
+      dest.insert(object_mapt::value_type(it->first, it->second));
 
     // If element already existed, overwrite.
     if (res.second)
       res.first->second = it->second;
   }
 
-  bool insert(object_mapt &dest, object_map_dt::const_iterator it) const
+  bool insert(object_mapt &dest, object_mapt::const_iterator it) const
   {
     return insert(dest, it->first, it->second);
   }
@@ -292,16 +343,16 @@ public:
    */
   bool insert(object_mapt &dest, unsigned n, const objectt &object) const
   {
-    object_map_dt::const_iterator it = dest.read().find(n);
-    if (it == dest.read().end())
+    object_mapt::const_iterator it = dest.find(n);
+    if (it == dest.end())
     {
       // new
-      dest.write().insert(object_map_dt::value_type(n, object));
+      dest.insert(object_mapt::value_type(n, object));
       return true;
     }
     else
     {
-      object_map_dt::iterator it2 = dest.write().find(n);
+      object_mapt::iterator it2 = dest.find(n);
       objectt &old = it2->second;
       const expr2tc &expr_obj = object_numbering[n];
 
@@ -428,11 +479,8 @@ public:
   /** Add a value set for each variable in the given list. */
   void add_vars(const std::list<entryt> &vars)
   {
-    for(std::list<entryt>::const_iterator
-        it=vars.begin();
-        it!=vars.end();
-        it++)
-      add_var(*it);
+    for(const auto & var : vars)
+      add_var(var);
   }
 
   /** Dump the value set's textual representation to the given iostream.
@@ -440,7 +488,7 @@ public:
   void output(std::ostream &out) const;
 
   /** Write a textual representation of the value set to stderr. */
-  void dump(void) const;
+  void dump() const;
 
   /** Join the two given object maps. Takes all the pointer records from src
    *  and stores them into the dest object map.
@@ -463,7 +511,7 @@ public:
   }
 
   /** When using value_sett for static analysis, takes a code statement and
-   *  sends any assignments contained within to the assign method. 
+   *  sends any assignments contained within to the assign method.
    *  @param code The statement to interpret. */
   void apply_code(const expr2tc &code);
 
@@ -529,6 +577,15 @@ protected:
     const std::string &suffix,
     const type2tc &original_type) const;
 
+  // Like get_value_set_rec, but dedicated to walking through the ireps that
+  // are produced by pointer deref byte stitching
+  void get_byte_stitching_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const;
+
+
   /** Internal get_value_set method. Just the same as the other get_value_set
    *  method, but collects into an object_mapt instead of a list of exprs.
    *  @param expr The expression to evaluate the value set of.
@@ -582,13 +639,17 @@ protected:
    *  @param component_name Name of the component to extract from src. */
   expr2tc make_member(const expr2tc &src, const irep_idt &component_name);
 
+  static void obj_numbering_ref(unsigned int num);
+  static void obj_numbering_deref(unsigned int num);
+
 public:
 //********************************** Members ***********************************
   /** Some crazy static analysis tool. */
   unsigned location_number;
   /** Object to assign numbers to objects -- i.e., the numbers in the map of
-   *  a @ref object_map_dt. Static and bad. */
+   *  a @ref object_mapt. Static and bad. */
   static object_numberingt object_numbering;
+  static object_number_numberingt obj_numbering_refset;
 
   /** Storage for all the value sets for all the variables in the program. See
    *  @ref entryt for the format of the string used as an index. */
@@ -596,6 +657,9 @@ public:
 
   /** Namespace for looking up types against. */
   const namespacet &ns;
+
+  irep_idt xchg_name;
+  unsigned long xchg_num;
 };
 
 #endif

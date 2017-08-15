@@ -11,13 +11,11 @@ Date:
 #if defined(_WIN32)
 
 #else
-#include <signal.h>
-#include <stdlib.h>
-
 #include <csignal>
+#include <cstdlib>
 #endif
 
-#include "signal_catcher.h"
+#include <util/signal_catcher.h>
 
 void install_signal_catcher()
 {
@@ -31,7 +29,7 @@ void install_signal_catcher()
   sigfillset(&(act.sa_mask));
 
   // install signal handler
-  sigaction(SIGTERM, &act, NULL);
+  sigaction(SIGTERM, &act, nullptr);
   #endif
 }
 

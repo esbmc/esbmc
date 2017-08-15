@@ -5,12 +5,13 @@
  *      Author: mramalho
  */
 
-#include <arith_tools.h>
-#include <bitvector.h>
-#include <expr_util.h>
-#include <c_types.h>
-#include <string_constant.h>
-#include "clang_c_convert.h"
+#include <clang-c-frontend/clang_c_convert.h>
+#include <util/arith_tools.h>
+#include <util/bitvector.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
+#include <util/ieee_float.h>
+#include <util/string_constant.h>
 
 bool clang_c_convertert::convert_character_literal(
   const clang::CharacterLiteral &char_literal,
@@ -87,7 +88,7 @@ static void parse_float(
   unsigned p = 0;
 
   // get whole number
-  std::string str_whole_number = "";
+  std::string str_whole_number;
   str_whole_number += src[p++];
 
   // skip dot
@@ -95,7 +96,7 @@ static void parse_float(
   p++;
 
   // get fraction part
-  std::string str_fraction_part = "";
+  std::string str_fraction_part;
   while (src[p] != 'E')
     str_fraction_part += src[p++];
 
@@ -110,7 +111,7 @@ static void parse_float(
   if(src[p] == '+')
     p++;
 
-  std::string str_exponent = "";
+  std::string str_exponent;
   str_exponent += src[p++];
 
   while (p < src.size())
@@ -176,9 +177,7 @@ bool clang_c_convertert::convert_float_literal(
     }
     else if(val.isNaN())
     {
-      // Don't represent that on fixedbvs
-      std::cerr << "We can't build a NaN using fixedbv representation."
-        << "Use floatbvs instead" << std::endl;
+      value = 0;
     }
     else
     {

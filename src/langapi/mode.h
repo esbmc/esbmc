@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_MODE_H
 #define CPROVER_MODE_H
 
-#include <language.h>
+#include <util/language.h>
 
 // Table recording details about language modes
 
@@ -28,10 +28,8 @@ extern const mode_table_et mode_table[];
 extern const char *extensions_ansi_c[];
 extern const char *extensions_cpp[];
 
-#ifndef WITHOUT_CLANG
 languaget *new_clang_c_language();
 languaget *new_clang_cpp_language();
-#endif
 languaget *new_ansi_c_language();
 languaget *new_cpp_language();
 

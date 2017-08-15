@@ -9,26 +9,24 @@
 static int isatty(int) { return 0; }
 #endif
 
-#include <expr.h>
-#include <arith_tools.h>
-#include <config.h>
-#include <c_types.h>
-
-#include <ansi-c/preprocessor_line.h>
-
+#include <ansi-c/convert_character_literal.h>
 #include <ansi-c/convert_float_literal.h>
 #include <ansi-c/convert_integer_literal.h>
-#include <ansi-c/unescape_string.h>
-#include <ansi-c/convert_character_literal.h>
 #include <ansi-c/convert_string_literal.h>
+#include <ansi-c/preprocessor_line.h>
+#include <ansi-c/unescape_string.h>
+#include <util/arith_tools.h>
+#include <util/config.h>
+#include <util/c_types.h>
+#include <util/expr.h>
 
 #define PARSER cpp_parser
 #define YYSTYPE unsigned
 #undef  ECHO
 #define ECHO
 
-#include "cpp_parser.h"
-#include "tokens.h"
+#include <cpp/cpp_parser.h>
+#include <cpp/tokens.h>
 
 void set_line_no();
 int yycpperror(const std::string &error);

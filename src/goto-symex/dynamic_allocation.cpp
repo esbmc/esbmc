@@ -6,21 +6,19 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <assert.h>
-
-#include <cprover_prefix.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <c_types.h>
-
-#include "goto_symex.h"
-#include "dynamic_allocation.h"
+#include <cassert>
+#include <goto-symex/dynamic_allocation.h>
+#include <goto-symex/goto_symex.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/irep2.h>
+#include <util/std_expr.h>
 
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
 
-  expr.get()->Foreach_operand([this] (expr2tc &e) {
+  expr->Foreach_operand([this] (expr2tc &e) {
     if (!is_nil_expr(e))
       default_replace_dynamic_allocation(e);
      }
@@ -33,9 +31,8 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 
     pointer_object2tc obj_expr(pointer_type2(), obj.value);
 
-    exprt alloc_array=symbol_expr(ns.lookup(valid_ptr_arr_name));
     expr2tc alloc_arr_2;
-    migrate_expr(alloc_array, alloc_arr_2);
+    migrate_expr(symbol_expr(ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
 
     index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
     expr = index_expr;
@@ -46,9 +43,8 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 
     pointer_object2tc obj_expr(pointer_type2(), ptr.ptr_obj);
 
-    exprt alloc_array=symbol_expr(ns.lookup(valid_ptr_arr_name));
     expr2tc alloc_arr_2;
-    migrate_expr(alloc_array, alloc_arr_2);
+    migrate_expr(symbol_expr(ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
 
     index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
     not2tc notindex(index_expr);
@@ -60,9 +56,8 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     // So, add the precondition that invalid_ptr only ever applies to dynamic
     // objects.
 
-    exprt sym = symbol_expr(ns.lookup(dyn_info_arr_name));
     expr2tc sym_2;
-    migrate_expr(sym, sym_2);
+    migrate_expr(symbol_expr(ns.lookup(dyn_info_arr_name)), sym_2);
 
     pointer_object2tc ptr_obj(pointer_type2(), ptr.ptr_obj);
     index2tc is_dyn(get_bool_type(), sym_2, ptr_obj);
@@ -86,9 +81,8 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 
     pointer_object2tc obj_expr(pointer_type2(), obj.value);
 
-    exprt alloc_array=symbol_expr(ns.lookup(deallocd_arr_name));
     expr2tc alloc_arr_2;
-    migrate_expr(alloc_array, alloc_arr_2);
+    migrate_expr(symbol_expr(ns.lookup(deallocd_arr_name)), alloc_arr_2);
 
     index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
     expr = index_expr;
@@ -101,9 +95,8 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 
     pointer_object2tc obj_expr(pointer_type2(), size.value);
 
-    exprt alloc_array=symbol_expr(ns.lookup(alloc_size_arr_name));
     expr2tc alloc_arr_2;
-    migrate_expr(alloc_array, alloc_arr_2);
+    migrate_expr(symbol_expr(ns.lookup(alloc_size_arr_name)), alloc_arr_2);
 
     index2tc index_expr(uint_type2(), alloc_arr_2, obj_expr);
     expr = index_expr;

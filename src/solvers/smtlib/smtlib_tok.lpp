@@ -7,8 +7,8 @@
 
 #include <string>
 #include <list>
-#include "smtlib_conv.h"
-#include "smtlib.hpp"
+#include <solvers/smtlib/smtlib_conv.h>
+#include <solvers/smtlib/smtlib.hpp>
 
 #define YY_DECL int smtliblex(int startsym)
 

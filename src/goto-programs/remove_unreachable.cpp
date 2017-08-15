@@ -6,22 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <goto-programs/remove_unreachable.h>
 #include <set>
 #include <stack>
-
-#include "remove_unreachable.h"
-
-/*******************************************************************\
-
-Function: remove_unreachable
-
-  Inputs:
-
- Outputs:
-
- Purpose: remove unreachable code
-
-\*******************************************************************/
 
 void remove_unreachable(goto_programt &goto_program)
 {

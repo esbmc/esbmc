@@ -2,7 +2,7 @@
 #define _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
-#include "sat_iface.h"
+#include <sat_iface.h>
 
 class bitblast_smt_sort : public smt_sort {
   // Record all the things.
@@ -39,7 +39,7 @@ public:
     LEFT, LRIGHT, ARIGHT
   } shiftt;
 
-  bitblast_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
+  bitblast_convt(bool int_encoding, const namespacet &_ns,
       sat_iface *sat_api);
   ~bitblast_convt();
 

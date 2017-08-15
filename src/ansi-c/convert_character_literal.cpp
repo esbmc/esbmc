@@ -6,27 +6,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <arith_tools.h>
-#include <i2string.h>
-#include <c_types.h>
-
+#include <ansi-c/convert_character_literal.h>
 #include <ansi-c/unescape_string.h>
-
-#include "convert_character_literal.h"
-
-/*******************************************************************\
-
-Function: convert_character_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <cassert>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/i2string.h>
 
 void convert_character_literal(
   const std::string &src,
@@ -43,18 +28,6 @@ void convert_character_literal(
   else
     unescape_string(std::string(src, 1, src.size()-2), dest);
 }
-
-/*******************************************************************\
-
-Function: convert_character_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void convert_character_literal(
   const std::string &src,

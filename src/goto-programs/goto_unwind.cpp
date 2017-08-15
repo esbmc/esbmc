@@ -5,10 +5,9 @@
  *      Author: mramalho
  */
 
+#include <goto-programs/goto_unwind.h>
+#include <goto-programs/remove_skip.h>
 #include <util/std_expr.h>
-
-#include "goto_unwind.h"
-#include "remove_skip.h"
 
 void goto_unwind(
   contextt &context,
@@ -46,7 +45,7 @@ void goto_unwindt::goto_unwind()
 
 void goto_unwindt::unwind_program(
   goto_programt &goto_program,
-  function_loopst::reverse_iterator loop)
+  const function_loopst::reverse_iterator& loop)
 {
   // Get loop exit goto number
   goto_programt::targett loop_exit = loop->get_original_loop_exit();
@@ -74,7 +73,7 @@ void goto_unwindt::unwind_program(
       t_goto->make_goto(loop_exit);
       t_goto->location=loop_exit->location;
       t_goto->function=loop_exit->function;
-      t_goto->guard=true_expr;
+      t_goto->guard=gen_true_expr();
     }
   }
 
@@ -106,11 +105,8 @@ void goto_unwindt::unwind_program(
       t!=loop_iter; t++)
   {
     assert(t!=goto_program.instructions.end());
-    for(goto_programt::instructiont::targetst::iterator
-        t_it=t->targets.begin();
-        t_it!=t->targets.end();
-        t_it++)
-      if(*t_it==loop_head) *t_it=loop_iter;
+    for(auto & target : t->targets)
+      if(target==loop_head) target=loop_iter;
   }
 
   // we make k-1 copies, to be inserted before loop_exit
@@ -136,17 +132,14 @@ void goto_unwindt::unwind_program(
     {
       goto_programt::targett t=target_vector[i];
 
-      for(goto_programt::instructiont::targetst::iterator
-          t_it=t->targets.begin();
-          t_it!=t->targets.end();
-          t_it++)
+      for(auto & target : t->targets)
       {
         std::map<goto_programt::targett, unsigned>::const_iterator
-          m_it=target_map.find(*t_it);
+          m_it=target_map.find(target);
         if(m_it!=target_map.end()) // intra-loop?
         {
           assert(m_it->second<target_vector.size());
-          *t_it=target_vector[m_it->second];
+          target=target_vector[m_it->second];
         }
       }
     }

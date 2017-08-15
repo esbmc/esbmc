@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define DBOX_PARSEOPTIONS_H
 
 #include <string>
-#include "cmdline.h"
+#include <util/cmdline.h>
 
 class parseoptions_baset
 {
@@ -25,7 +25,7 @@ public:
   virtual int doit()=0;
 
   virtual int main();
-  virtual ~parseoptions_baset() { }
+  virtual ~parseoptions_baset() = default;
 
 private:
   bool parse_result;

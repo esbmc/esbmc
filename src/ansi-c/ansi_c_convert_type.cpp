@@ -6,26 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
+#include <ansi-c/ansi_c_convert_type.h>
+#include <cassert>
 #include <iostream>
-
-#include <config.h>
-#include <arith_tools.h>
-
-#include "ansi_c_convert_type.h"
-
-/*******************************************************************\
-
-Function: ansi_c_convert_typet::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <util/arith_tools.h>
+#include <util/config.h>
 
 void ansi_c_convert_typet::read(const typet &type)
 {
@@ -33,18 +18,6 @@ void ansi_c_convert_typet::read(const typet &type)
   location=type.location();
   read_rec(type);
 }
-
-/*******************************************************************\
-
-Function: ansi_c_convert_typet::read_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ansi_c_convert_typet::read_rec(const typet &type)
 {
@@ -110,18 +83,6 @@ void ansi_c_convert_typet::read_rec(const typet &type)
   else 
     other.push_back(type);
 }
-
-/*******************************************************************\
-
-Function: ansi_c_convert_typet::write
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ansi_c_convert_typet::write(typet &type)
 {
@@ -259,7 +220,7 @@ void ansi_c_convert_typet::write(typet &type)
       else if(int64_cnt)
         width=8*8;
       else
-        assert(false);
+        abort();
     }
     else if(short_cnt)
     {

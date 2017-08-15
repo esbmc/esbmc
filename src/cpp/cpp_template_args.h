@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_TEMPLATE_ARGS_H
 #define CPROVER_CPP_TEMPLATE_ARGS_H
 
-#include <irep.h>
+#include <util/std_expr.h>
 
 // A data structures for template arguments, i.e.,
 // expressions of the form <E1, T2, ...>.
@@ -61,12 +61,9 @@ public:
   bool has_unassigned() const
   {
     const argumentst &_arguments=arguments();
-    for(argumentst::const_iterator
-        it=_arguments.begin();
-        it!=_arguments.end();
-        it++)
-      if(it->id()=="unassigned" ||
-         it->type().id()=="unassigned")
+    for(const auto & _argument : _arguments)
+      if(_argument.id()=="unassigned" ||
+         _argument.type().id()=="unassigned")
         return true;
 
     return false;

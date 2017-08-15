@@ -9,9 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_UI_LANGUAGE_H
 #define CPROVER_UI_LANGUAGE_H
 
-#include <message.h>
-
 #include <iostream>
+#include <util/message.h>
 
 class ui_message_handlert:public message_handlert
 {
@@ -36,7 +35,7 @@ public:
     }
   }
    
-  virtual ~ui_message_handlert()
+  ~ui_message_handlert() override
   {
     if(get_ui()==XML_UI)
       std::cout << "</cprover>" << std::endl;
@@ -51,15 +50,15 @@ protected:
   uit _ui;
  
   // overloading
-  virtual void print(
+  void print(
     unsigned level,
-    const std::string &message);
+    const std::string &message) override;
 
   // overloading
-  virtual void print(
+  void print(
     unsigned level,
     const std::string &message,
-    const locationt &location);
+    const locationt &location) override;
 
   virtual void old_gui_msg(
     const std::string &type,

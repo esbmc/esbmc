@@ -6,17 +6,15 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <i2string.h>
-#include <expr_util.h>
-#include <location.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <c_types.h>
-
-#include "goto_convert_class.h"
-#include "goto_functions.h"
+#include <cassert>
+#include <goto-programs/goto_convert_class.h>
+#include <goto-programs/goto_functions.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/location.h>
+#include <util/prefix.h>
 
 void goto_convertt::convert_function_call(
   const code_function_callt &function_call,
@@ -177,19 +175,16 @@ void goto_functionst::output(
   const namespacet &ns,
   std::ostream& out) const
 {
-  for(typename function_mapt::const_iterator
-      it=function_map.begin();
-      it!=function_map.end();
-      it++)
+  for(const auto & it : function_map)
   {
-    if(it->second.body_available)
+    if(it.second.body_available)
     {
       out << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
       out << std::endl;
 
-      const symbolt &symbol=ns.lookup(it->first);
+      const symbolt &symbol=ns.lookup(it.first);
       out << symbol.display_name() << " (" << symbol.name << "):" << std::endl;
-      it->second.body.output(ns, symbol.name, out);
+      it.second.body.output(ns, symbol.name, out);
     }
   }
 }
@@ -198,28 +193,19 @@ void goto_functionst::compute_location_numbers()
 {
   unsigned nr=0;
 
-  for(typename function_mapt::iterator
-      it=function_map.begin();
-      it!=function_map.end();
-      it++)
-    it->second.body.compute_location_numbers(nr);
+  for(auto & it : function_map)
+    it.second.body.compute_location_numbers(nr);
 }
 
 void goto_functionst::compute_target_numbers()
 {
-  for(typename function_mapt::iterator
-      it=function_map.begin();
-      it!=function_map.end();
-      it++)
-    it->second.body.compute_target_numbers();
+  for(auto & it : function_map)
+    it.second.body.compute_target_numbers();
 }
 
 void goto_functionst::compute_loop_numbers()
 {
   unsigned int num = 1;
-  for(typename function_mapt::iterator
-      it=function_map.begin();
-      it!=function_map.end();
-      it++)
-    it->second.body.compute_loop_numbers(num);
+  for(auto & it : function_map)
+    it.second.body.compute_loop_numbers(num);
 }

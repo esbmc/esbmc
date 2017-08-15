@@ -6,19 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "parse_float.h"
-
-/*******************************************************************\
-
-Function: convert_ct::parse_float
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <ansi-c/parse_float.h>
 
 void parse_float(
   const std::string &src,

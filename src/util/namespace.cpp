@@ -6,10 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <string.h>
-#include <assert.h>
-
-#include "namespace.h"
+#include <cassert>
+#include <cstring>
+#include <util/namespace.h>
 
 unsigned get_max(const std::string &prefix, const contextt *context)
 {
@@ -101,23 +100,4 @@ const typet &namespacet::follow(const typet &src) const
     if(!symbol->type.is_symbol()) return symbol->type;
     symbol=&lookup(symbol->type);
   }
-}
-
-void namespacet::follow_macros(exprt &expr) const
-{
-  if(expr.is_symbol())
-  {
-    const symbolt &symbol=lookup(expr);
-
-    if(symbol.is_macro && !symbol.value.is_nil())
-    {
-      expr=symbol.value;
-      follow_macros(expr);
-    }
-
-    return;
-  }
-
-  Forall_operands(it, expr)
-    follow_macros(*it);
 }

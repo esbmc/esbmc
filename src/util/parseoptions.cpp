@@ -6,8 +6,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <iostream>
-
 #if defined (_WIN32)
 #define EX_OK 0
 #define EX_USAGE 1
@@ -15,9 +13,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <sysexits.h>
 #endif
 
-#include "cmdline.h"
-#include "parseoptions.h"
-#include "signal_catcher.h"
+#include <iostream>
+#include <util/cmdline.h>
+#include <util/parseoptions.h>
+#include <util/signal_catcher.h>
 
 parseoptions_baset::parseoptions_baset(
   const struct opt_templ *opts, int argc, const char **argv)

@@ -3,10 +3,9 @@
 
 #include <iostream>
 #include <string>
+#include <util/expr.h>
+#include <util/message.h>
 #include <vector>
-
-#include "expr.h"
-#include "message.h"
 
 class parsert:public messaget
 {
@@ -29,7 +28,7 @@ public:
   
   parsert() { clear(); }
   
-  virtual ~parsert() { }
+  ~parsert() override = default;
 
   virtual bool read(char &ch)
   {

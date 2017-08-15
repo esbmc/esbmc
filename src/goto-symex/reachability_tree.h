@@ -9,18 +9,19 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef REACHABILITY_TREE_H_
 #define REACHABILITY_TREE_H_
 
-#include <iostream>
+#include <boost/shared_ptr.hpp>
 #include <deque>
-#include <set>
-#include <map>
-#include <options.h>
-#include <message.h>
-#include "goto_symex.h"
-#include "execution_state.h"
-#include "symex_target_equation.h"
-#include "renaming.h"
-#include "crypto_hash.h"
 #include <goto-programs/goto_program.h>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/renaming.h>
+#include <goto-symex/symex_target_equation.h>
+#include <iostream>
+#include <map>
+#include <set>
+#include <util/crypto_hash.h>
+#include <util/message.h>
+#include <util/options.h>
 
 /**
  *  Class to explore states reachable through threading.
@@ -75,22 +76,20 @@ public:
     const goto_functionst &goto_functions,
     const namespacet &ns,
     optionst &opts,
-    std::shared_ptr<symex_targett> target,
+    boost::shared_ptr<symex_targett> target,
     contextt &context,
     message_handlert &message_handler);
 
   /**
    *  Default destructor.
    */
-  virtual ~reachability_treet()
-  {
-  };
+  virtual ~reachability_treet() = default;
 
   /** Reinitialize for making new exploration of given functions.
    *  Sets up the flags and fields of the object to start a new exploration of
    *  the goto functions we're operating over. To be called when the previous
    *  exploration using this object has been completed. */
-  void setup_for_new_explore(void);
+  void setup_for_new_explore();
 
   /**
    *  Return current execution_statet being explored / symex'd.
@@ -129,7 +128,7 @@ public:
    *  again if that switch is blocked somehow.
    *  @return Thread ID user desires us to switch to
    */
-  int get_ileave_direction_from_user(void) const;
+  int get_ileave_direction_from_user() const;
 
   /**
    *  Decide context switch from --round-robin.
@@ -137,7 +136,7 @@ public:
    *  switch to take on that basis.
    *  @return Thread ID to switch to according to scheduling
    */
-  int get_ileave_direction_from_scheduling(void) const;
+  int get_ileave_direction_from_scheduling() const;
 
   /**
    *  Determine if a thread can be run.
@@ -154,18 +153,18 @@ public:
    *  Check whether current ex_state is a state hash collision.
    *  @return True if this state has already been visited
    */
-  bool check_for_hash_collision(void) const;
+  bool check_for_hash_collision() const;
 
   /**
    *  Perform various pieces of accounting after a hash collision - primarily,
    *  ensuring that no further paths from this cswitch are explored.
    */
-  void post_hash_collision_cleanup(void);
+  void post_hash_collision_cleanup();
 
   /**
    *  Update seen state hashes to contain current state.
    */
-  void update_hash_collision_set(void);
+  void update_hash_collision_set();
 
   /**
    *  Perform context switch operation triggered elsewhere.
@@ -176,7 +175,7 @@ public:
    *  As referred to in the reachability_treet algorithm, this makes up steps
    *  four and five.
    */
-  void create_next_state(void);
+  void create_next_state();
 
   /**
    *  Force a context switch, and take it.
@@ -186,7 +185,7 @@ public:
    *  the reachability_treet algorithm.
    *  @return True if context switch was generated and taken
    */
-  bool step_next_state(void);
+  bool step_next_state();
 
   /**
    *  Pick a context switch to take.
@@ -205,7 +204,7 @@ public:
    *  switch was caused in each state. Gives you a good idea of how the current
    *  interleaving of ex_state shas been reached.
    */
-  void print_ileave_trace(void) const;
+  void print_ileave_trace() const;
 
   /**
    *  Have we generated a full program trace.
@@ -235,7 +234,7 @@ public:
    *  Explores a new thread interleaving and returns its trace.
    *  @return A symex_resultt recording the trace that we just generated.
    */
-  std::shared_ptr<goto_symext::symex_resultt> get_next_formula();
+  boost::shared_ptr<goto_symext::symex_resultt> get_next_formula();
 
   /**
    *  Run threads in --schedule manner.
@@ -243,14 +242,14 @@ public:
    *  trace.
    *  @return Symex result representing all interleavings
    */
-  std::shared_ptr<goto_symext::symex_resultt> generate_schedule_formula();
+  boost::shared_ptr<goto_symext::symex_resultt> generate_schedule_formula();
 
   /**
    *  Reset ex_state stack to unexplored state.
    *  This is just a wrapper around reset_to_unexplored_state
    *  @return True if there is another state to be explored
    */
-  bool setup_next_formula(void);
+  bool setup_next_formula();
 
   /**
    *  Class recording a reachability checkpoint.
@@ -262,10 +261,10 @@ public:
   class dfs_position {
 public:
     dfs_position(const reachability_treet &rt);
-    dfs_position(const std::string filename);
-    bool write_to_file(const std::string filename) const;
+    dfs_position(const std::string&& filename);
+    bool write_to_file(const std::string&& filename) const;
 protected:
-    bool read_from_file(const std::string filename);
+    bool read_from_file(const std::string&& filename);
 public:
     struct dfs_state {
       unsigned int location_number;
@@ -313,7 +312,7 @@ public:
    *  Save RT reachability state to file.
    *  @param fname Name of file to save to.
    */
-  void save_checkpoint(const std::string fname) const;
+  void save_checkpoint(const std::string&& fname) const;
 
   /** GOTO functions we're operating over. */
   const goto_functionst &goto_functions;
@@ -341,15 +340,15 @@ protected:
    *  contained in the list. At end of exploration, contains zero.
    *  @see print_ileave_trace
    */
-  std::list<std::shared_ptr<execution_statet>> execution_states;
+  std::list<boost::shared_ptr<execution_statet>> execution_states;
   /** Iterator recording the execution_statet in stack we're operating on */
-  std::list<std::shared_ptr<execution_statet>>::iterator cur_state_it;
+  std::list<boost::shared_ptr<execution_statet>>::iterator cur_state_it;
   /** "Global" symex target for output from --schedule exploration */
-  std::shared_ptr<symex_targett> schedule_target;
+  boost::shared_ptr<symex_targett> schedule_target;
   /** Target template; from which all targets are cloned.
    *  This allows for the use of a non-concrete target class throughout
    *  exploration */
-  std::shared_ptr<symex_targett> target_template;
+  boost::shared_ptr<symex_targett> target_template;
   /** Limit on context switches; -1 for no limit */
   int CS_bound;
   /** Limit on timeslices (--round-robin) */
@@ -375,6 +374,8 @@ protected:
   bool schedule;
 
   friend class execution_statet;
+  friend void build_goto_symex_classes();
+  friend class python_rt_mangler;
 };
 
 #endif /* REACHABILITY_TREE_H_ */

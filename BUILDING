@@ -60,9 +60,7 @@ same way.
 Most necessary platform libraries will be autodetected by the configure script.
 The only abnormal things ESBMC requires are:
  * Compiler tools such as yacc and lex
- * Eigen for certain DSP functions (optional)
  * Boost
- * OpenSSL for state hashing (optional)
 
 Of these, the only that is likely to cause problems is boost. You may need to
 point the configure script at it with the --with-boost=... option.

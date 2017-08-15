@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_USING_H
 #define CPROVER_CPP_USING_H
 
-#include "cpp_name.h"
+#include <cpp/cpp_name.h>
 
 class cpp_usingt:public irept
 {

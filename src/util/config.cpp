@@ -7,10 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <iostream>
-
-#include <irep2.h>
-
-#include "config.h"
+#include <util/config.h>
 
 configt config;
 
@@ -50,12 +47,6 @@ void configt::ansi_ct::set_32()
   word_size=32;
   wchar_t_width=4*8;
   alignment=4;
-
-  // Configure exprs we use as long / uints etc for this mode.
-  const_cast<constant_int2tc&>(zero_ulong) = zero_u32;
-  const_cast<constant_int2tc&>(one_ulong) = one_u32;
-  const_cast<constant_int2tc&>(zero_long) = zero_32;
-  const_cast<constant_int2tc&>(one_long) = one_32;
 }
 
 void configt::ansi_ct::set_64()
@@ -75,12 +66,6 @@ void configt::ansi_ct::set_64()
   word_size=64;
   wchar_t_width=4*8;
   alignment=4;
-
-  // Configure exprs we use as long / uints etc for this mode.
-  const_cast<constant_int2tc&>(zero_ulong) = zero_u64;
-  const_cast<constant_int2tc&>(one_ulong) = one_u64;
-  const_cast<constant_int2tc&>(zero_long) = zero_64;
-  const_cast<constant_int2tc&>(one_long) = one_64;
 }
 
 bool configt::set(const cmdlinet &cmdline)
@@ -97,7 +82,6 @@ bool configt::set(const cmdlinet &cmdline)
   ansi_c.endianess=ansi_ct::NO_ENDIANESS;
   ansi_c.os=ansi_ct::NO_OS;
   ansi_c.lib=configt::ansi_ct::LIB_NONE;
-  ansi_c.rounding_mode=ieee_floatt::ROUND_TO_EVEN;
 
   if(cmdline.isset("16"))
     ansi_c.set_16();
@@ -192,18 +176,6 @@ bool configt::set(const cmdlinet &cmdline)
   if(cmdline.isset("big-endian"))
     ansi_c.endianess=configt::ansi_ct::IS_BIG_ENDIAN;
 
-  if(cmdline.isset("round-to-even") || cmdline.isset("round-to-nearest"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_EVEN;
-
-  if(cmdline.isset("round-to-plus-inf"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_PLUS_INF;
-
-  if(cmdline.isset("round-to-minus-inf"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_MINUS_INF;
-
-  if(cmdline.isset("round-to-zero"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_ZERO;
-
   if(cmdline.isset("little-endian") && cmdline.isset("big-endian"))
   {
     std::cerr << "Can't set both little and big endian modes" << std::endl;
@@ -291,18 +263,6 @@ std::string configt::this_architecture()
 
   return this_arch;
 }
-
-/*******************************************************************\
-
-Function: configt::ansi_ct::this_operating_system
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string configt::this_operating_system()
 {

@@ -11,9 +11,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <iostream>
 #include <set>
-
-#include "message.h"
-#include "context.h"
+#include <util/context.h>
+#include <util/message.h>
 
 class language_modulet
 {
@@ -36,7 +35,7 @@ public:
   
   void get_modules();
   
-  language_filet() { language=NULL; }
+  language_filet() { language=nullptr; }
   ~language_filet();
 };
  

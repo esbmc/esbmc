@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_ANSI_C_PARSE_TREE_H
 #define CPROVER_ANSI_C_PARSE_TREE_H
 
-#include "ansi_c_declaration.h"
+#include <ansi-c/ansi_c_declaration.h>
 
 class ansi_c_parse_treet
 {
@@ -23,13 +23,10 @@ public:
   
   void output(std::ostream &out) const
   {
-    for(declarationst::const_iterator
-        it=declarations.begin();
-        it!=declarations.end();
-        it++)
+    for(const auto & declaration : declarations)
     {
       symbolt tmp;
-      it->to_symbol(tmp);
+      declaration.to_symbol(tmp);
       out << tmp;
     }
   }

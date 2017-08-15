@@ -6,15 +6,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cstdlib>
-#include <cctype>
 #include <cassert>
-
-#include <sstream>
+#include <cctype>
+#include <cstdlib>
 #include <limits>
-
-#include "mp_arith.h"
-#include "arith_tools.h"
+#include <sstream>
+#include <util/arith_tools.h>
+#include <util/mp_arith.h>
 
 mp_integer operator>>(const mp_integer &a, const mp_integer &b)
 {
@@ -86,8 +84,8 @@ const std::string integer2binary(const mp_integer &n, std::size_t width)
     result=result.substr(result.size()-width, width);
 
   if(neg)
-    for(std::size_t i=0; i<result.size(); i++)
-      result[i]=(result[i]=='0')?'1':'0';
+    for(char & i : result)
+      i=(i=='0')?'1':'0';
 
   return result;
 }

@@ -6,11 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include "std_types.h"
-#include "base_type.h"
-#include "union_find.h"
+#include <util/base_type.h>
+#include <util/irep2_utils.h>
+#include <util/std_types.h>
+#include <util/union_find.h>
 
 void base_type(type2tc &type, const namespacet &ns)
 {
@@ -34,8 +33,8 @@ void base_type(type2tc &type, const namespacet &ns)
   {
     struct_union_data &data = static_cast<struct_union_data&>(*type.get());
 
-    Forall_types(it, data.members) {
-      type2tc &subtype = *it;
+    for(auto &it : data.members) {
+      type2tc &subtype = it;
       base_type(subtype, ns);
     }
   }
@@ -88,9 +87,9 @@ void base_type(typet &type, const namespacet &ns)
 
 void base_type(expr2tc &expr, const namespacet &ns)
 {
-  base_type(expr.get()->type, ns);
+  base_type(expr->type, ns);
 
-  expr.get()->Foreach_operand([&ns] (expr2tc &e) {
+  expr->Foreach_operand([&ns] (expr2tc &e) {
       base_type(e, ns);
     }
   );
@@ -447,10 +446,10 @@ reformat_class_name(const std::string &from)
   size_t pos = from.rfind(':');
   std::string classname;
   if (pos == std::string::npos) {
-    classname = "cpp::tag." + from;
+    classname = "tag." + from;
   } else {
     pos++;
-    classname = "cpp::" + from.substr(0, pos) + "tag." + from.substr(pos);
+    classname = from.substr(0, pos) + "tag." + from.substr(pos);
   }
 
   return classname;
@@ -461,7 +460,7 @@ is_subclass_of_rec(const std::string &supername, const std::string &subname,
                    const namespacet &ns)
 {
 
-  const symbolt *symbol = NULL;
+  const symbolt *symbol = nullptr;
   if (!ns.lookup(supername, symbol)) {
     // look at the list of bases; see if the subclass name is a base of this
     // object. Currently, old-irep.

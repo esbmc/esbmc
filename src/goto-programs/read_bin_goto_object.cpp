@@ -8,32 +8,17 @@ Date: June 2006
 
 \*******************************************************************/
 
-#include <namespace.h>
-#include <base_type.h>
-#include <message_stream.h>
-
+#include <goto-programs/goto_function_serialization.h>
+#include <goto-programs/goto_program_irep.h>
+#include <goto-programs/read_bin_goto_object.h>
 #include <langapi/mode.h>
-
-#include "read_bin_goto_object.h"
-#include "goto_function_serialization.h"
-#include "symbol_serialization.h"
-#include "irep_serialization.h"
-#include "goto_program_irep.h"
+#include <util/base_type.h>
+#include <util/irep_serialization.h>
+#include <util/message_stream.h>
+#include <util/namespace.h>
+#include <util/symbol_serialization.h>
 
 #define BINARY_VERSION 1
-
-/*******************************************************************\
-
-Function: read_goto_object
-
-  Inputs: input stream, context, functions
-
- Outputs: true on error, false otherwise
-
- Purpose: reads a goto object xml file back into a symbol and a
-          function table
-
-\*******************************************************************/
 
 bool read_bin_goto_object(
   std::istream &in,
@@ -98,14 +83,12 @@ bool read_bin_goto_object(
     symbolt symbol;
     symbol.from_irep(t);
 
-    if(!symbol.is_type &&
-       symbol.type.is_code())
+    if(!symbol.is_type && symbol.type.is_code())
     {
       // makes sure there is an empty function
       // for every function symbol and fixes
       // the function types.
-      code_typet type = functions.function_map[symbol.name].type=
-        to_code_type(symbol.type);
+      functions.function_map[symbol.name].type = to_code_type(symbol.type);
     }
     context.add(symbol);
   }

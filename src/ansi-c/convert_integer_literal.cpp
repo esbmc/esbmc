@@ -6,24 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <arith_tools.h>
-#include <config.h>
-
-#include "convert_integer_literal.h"
-
-/*******************************************************************\
-
-Function: convert_integer_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <ansi-c/convert_integer_literal.h>
+#include <cassert>
+#include <util/arith_tools.h>
+#include <util/config.h>
 
 void convert_integer_literal(
   const std::string &src,

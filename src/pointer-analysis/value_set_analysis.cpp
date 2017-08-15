@@ -6,15 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-//#include <assert.h>
-
-#include <prefix.h>
-#include <cprover_prefix.h>
-#include <xml_irep.h>
-
 #include <langapi/language_util.h>
-
-#include "value_set_analysis.h"
+#include <pointer-analysis/value_set_analysis.h>
+#include <util/cprover_prefix.h>
+#include <util/prefix.h>
+#include <util/xml_irep.h>
 
 void value_set_analysist::initialize(
   const goto_programt &goto_program)
@@ -49,22 +45,18 @@ void value_set_analysist::add_vars(
       i_it++)
   {
     value_sett &v=*(*this)[i_it].value_set;
-
     v.add_vars(globals);
 
-    for(goto_programt::local_variablest::const_iterator
-        l_it=i_it->local_variables.begin();
-        l_it!=i_it->local_variables.end();
-        l_it++)
+    for(auto const &l_it : goto_program.local_variables)
     {
       // cache hit?
-      entry_cachet::const_iterator e_it=entry_cache.find(*l_it);
+      entry_cachet::const_iterator e_it = entry_cache.find(l_it);
 
-      if(e_it==entry_cache.end())
+      if(e_it == entry_cache.end())
       {
-        const symbolt &symbol=ns.lookup(*l_it);
+        const symbolt &symbol = ns.lookup(l_it);
 
-        std::list<value_sett::entryt> &entries=entry_cache[*l_it];
+        std::list<value_sett::entryt> &entries = entry_cache[l_it];
         get_entries(symbol, entries);
         v.add_vars(entries);
       }
@@ -89,22 +81,18 @@ void value_set_analysist::get_entries_rec(
 {
   const typet &t=ns.follow(type);
 
-  if(t.id()=="struct" ||
-     t.id()=="union")
+  if(t.id()=="struct" || t.id()=="union")
   {
     const struct_typet &struct_type=to_struct_type(t);
 
     const struct_typet::componentst &c=struct_type.components();
 
-    for(struct_typet::componentst::const_iterator
-        it=c.begin();
-        it!=c.end();
-        it++)
+    for(const auto & it : c)
     {
       get_entries_rec(
         identifier,
-        suffix+"."+it->name().as_string(),
-        it->type(),
+        suffix+"."+it.name().as_string(),
+        it.type(),
         dest);
     }
   }
@@ -114,7 +102,7 @@ void value_set_analysist::get_entries_rec(
   }
   else if(check_type(t))
   {
-    dest.push_back(value_sett::entryt(identifier, suffix));
+    dest.emplace_back(identifier, std::move(suffix));
   }
 }
 
@@ -129,18 +117,15 @@ void value_set_analysist::add_vars(
       f_it=goto_functions.function_map.begin();
       f_it!=goto_functions.function_map.end();
       f_it++)
+
     forall_goto_program_instructions(i_it, f_it->second.body)
     {
       value_sett &v=*(*this)[i_it].value_set;
-
       v.add_vars(globals);
 
-      for(goto_programt::local_variablest::const_iterator
-          l_it=i_it->local_variables.begin();
-          l_it!=i_it->local_variables.end();
-          l_it++)
+      for(auto const &l_it : f_it->second.body.local_variables)
       {
-        const symbolt &symbol=ns.lookup(*l_it);
+        const symbolt &symbol=ns.lookup(l_it);
 
         std::list<value_sett::entryt> entries;
         get_entries(symbol, entries);
@@ -174,12 +159,9 @@ bool value_set_analysist::check_type(const typet &type)
     const struct_typet::componentst &components=
       struct_type.components();
 
-    for(struct_typet::componentst::const_iterator
-        it=components.begin();
-        it!=components.end();
-        it++)
+    for(const auto & component : components)
     {
-      if(check_type(it->type())) return true;
+      if(check_type(component.type())) return true;
     }
   }
   else if(type.is_array())
@@ -214,13 +196,10 @@ void value_set_analysist::convert(
     ::convert(location, xml_location);
     xml_location.name="location";
 
-    for(value_sett::valuest::const_iterator
-        v_it=value_set.values.begin();
-        v_it!=value_set.values.end();
-        v_it++)
+    for(const auto & value : value_set.values)
     {
       xmlt &var=i.new_element("variable");
-      var.new_element("identifier").data = v_it->first.the_string;
+      var.new_element("identifier").data = value.first.the_string;
 
       #if 0
       const value_sett::expr_sett &expr_set=
@@ -249,16 +228,13 @@ void convert(
 {
   dest=xmlt("value_set_analysis");
 
-  for(goto_functionst::function_mapt::const_iterator
-      f_it=goto_functions.function_map.begin();
-      f_it!=goto_functions.function_map.end();
-      f_it++)
+  for(const auto & f_it : goto_functions.function_map)
   {
     xmlt &f=dest.new_element("function");
 
-    f.new_element("identifier").data=xmlt::escape(id2string(f_it->first));
+    f.new_element("identifier").data=xmlt::escape(id2string(f_it.first));
 
-    value_set_analysis.convert(f_it->second.body, f_it->first, f);
+    value_set_analysis.convert(f_it.second.body, f_it.first, f);
   }
 }
 

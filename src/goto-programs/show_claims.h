@@ -9,10 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAMS_SHOW_CLAIMS_H
 #define CPROVER_GOTO_PROGRAMS_SHOW_CLAIMS_H
 
-#include <ui_message.h>
-#include <namespace.h>
-
 #include <goto-programs/goto_functions.h>
+#include <util/namespace.h>
+#include <util/ui_message.h>
 
 void show_claims(
   const namespacet &ns,

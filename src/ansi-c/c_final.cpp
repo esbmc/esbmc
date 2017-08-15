@@ -6,22 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <message_stream.h>
-
-#include "c_final.h"
-#include "cprover_library.h"
-
-/*******************************************************************\
-
-Function: c_final
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <ansi-c/c_final.h>
+#include <c2goto/cprover_library.h>
+#include <util/message_stream.h>
 
 void c_finalize_expression(
   const contextt &context,
@@ -75,18 +62,6 @@ void c_finalize_expression(
     Forall_operands(it, expr)
       c_finalize_expression(context, *it, message_handler);
 }
-
-/*******************************************************************\
-
-Function: c_final
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool c_final(contextt &context, message_handlert &message_handler)
 {

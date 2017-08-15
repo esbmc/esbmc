@@ -1,22 +1,18 @@
 #ifndef _ESBMC_PROP_SMT_SMT_CONV_H_
 #define _ESBMC_PROP_SMT_SMT_CONV_H_
 
-#include <stdint.h>
-
-#include <irep2.h>
-#include <message.h>
-#include <namespace.h>
-#include <threeval.h>
-
-#include <util/type_byte_size.h>
-
-#include <solvers/prop/pointer_logic.h>
-#include <solvers/prop/literal.h>
-
-#include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index_container.hpp>
+#include <cstdint>
+#include <solvers/prop/literal.h>
+#include <solvers/prop/pointer_logic.h>
+#include <util/irep2_utils.h>
+#include <util/message.h>
+#include <util/namespace.h>
+#include <util/threeval.h>
+#include <util/type_byte_size.h>
 
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
@@ -192,6 +188,7 @@ enum smt_func_kind {
   SMT_FUNC_IS_INT,
 
   // floatbv operations
+  SMT_FUNC_FABS,
   SMT_FUNC_ISZERO,
   SMT_FUNC_ISNAN,
   SMT_FUNC_ISINF,
@@ -203,11 +200,16 @@ enum smt_func_kind {
   SMT_FUNC_IEEE_SUB,
   SMT_FUNC_IEEE_MUL,
   SMT_FUNC_IEEE_DIV,
+  SMT_FUNC_IEEE_FMA,
+  SMT_FUNC_IEEE_SQRT,
 
   SMT_FUNC_IEEE_RM_NE,
   SMT_FUNC_IEEE_RM_ZR,
   SMT_FUNC_IEEE_RM_PI,
   SMT_FUNC_IEEE_RM_MI,
+
+  SMT_FUNC_BV2FLOAT,
+  SMT_FUNC_FLOAT2BV,
 };
 
 /** Class that will hold information about which operation
@@ -265,7 +267,7 @@ public:
       // XXX not applicable during int mode?
     }
 
-  virtual ~smt_sort() { }
+  virtual ~smt_sort() = default;
 };
 
 #define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
@@ -310,7 +312,7 @@ public:
   smt_sortt sort;
 
   smt_ast(smt_convt *ctx, smt_sortt s);
-  virtual ~smt_ast() { }
+  virtual ~smt_ast() = default;
 
   // "this" is the true operand.
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
@@ -357,9 +359,10 @@ public:
 };
 
 // Pull in the tuple interface definitions. _after_ the AST defs.
-#include "smt_tuple.h"
+#include <solvers/smt/smt_tuple.h>
+
 // Also, array interface
-#include "smt_array.h"
+#include <solvers/smt/smt_array.h>
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
@@ -408,18 +411,16 @@ public:
    *  before the object is used as a solver converter.
    *
    *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
-   *  @param _ns Namespace for looking up the type of certain symbols.
-   *  @param is_cpp Flag indicating whether memory modelling arrays have c:: or
-   *         cpp:: prefix to their symbols. */
-  smt_convt(bool int_encoding, const namespacet &_ns, bool is_cpp);
-  ~smt_convt();
+   *  @param _ns Namespace for looking up the type of certain symbols. */
+  smt_convt(bool int_encoding, const namespacet &_ns);
+  ~smt_convt() override = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
    *  model data for tracking, however can't do it from the constructor because
    *  the solver converter itself won't have been initialized itself at that
    *  point. So, once it's ready, the solver converter should call this from
    *  it's constructor. */
-  void smt_post_init(void);
+  void smt_post_init();
 
   // The API that we provide to the rest of the world:
   /** @{
@@ -427,12 +428,12 @@ public:
 
   /** Result of a call to dec_solve. Either sat, unsat, or error. SMTLIB is
    *  historic case that needs to go. */
-  typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
+  typedef enum { P_UNSATISFIABLE, P_SATISFIABLE, P_ERROR, P_SMTLIB } resultt;
 
   /** Push one context on the SMT assertion stack. */
-  virtual void push_ctx(void);
+  virtual void push_ctx();
   /** Pop one context on the SMT assertion stack. */
-  virtual void pop_ctx(void);
+  virtual void pop_ctx();
 
   /** Main interface to SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
@@ -658,6 +659,11 @@ public:
    *  @return The newly created cast smt_ast. */
   virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast) = 0;
 
+  /** Calculate the nearby int from a floating point, considering the rounding mode
+   *  @param expr the nearby int expression
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) = 0;
+
   /** Convert the ieee arithmetic operations (add, sub, mul, div, mod)
    *  @param expr the arithmetic operations
    *  @return The newly created cast smt_ast. */
@@ -724,6 +730,9 @@ public:
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_neg(const expr2tc &expr);
 
+  /** Method to dump the SMT formula */
+  virtual void dump_smt();
+
   /** @} */
 
   /** @{
@@ -755,7 +764,7 @@ public:
   /** Create a free variable with the given sort, and a unique name, with the
    *  prefix given in 'tag' */
   virtual smt_astt mk_fresh(smt_sortt s, const std::string &tag,
-                            smt_sortt st = NULL);
+                            smt_sortt st = nullptr);
   /** Create a previously un-used variable name with the prefix given in tag */
   std::string mk_fresh_name(const std::string &tag);
 
@@ -804,7 +813,7 @@ public:
    *  @param sym The textual representation of this symbol.
    *  @return A pointer-typed AST representing the address of this symbol. */
   smt_astt convert_identifier_pointer(const expr2tc &expr,
-                                            std::string sym);
+                                            const std::string& sym);
 
   smt_astt init_pointer_obj(unsigned int obj_num, const expr2tc &size);
 
@@ -850,7 +859,7 @@ public:
 
   /** Initialize tracking data for the address space records. This also sets
    *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */
-  void init_addr_space_array(void);
+  void init_addr_space_array();
   /** Stores handle for the tuple interface. */
   void set_tuple_iface(tuple_iface *iface);
   /** Stores handle for the array interface. */
@@ -859,7 +868,7 @@ public:
    *  idx indicates the object number of this record. */
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
-  std::string get_cur_addrspace_ident(void);
+  std::string get_cur_addrspace_ident();
   /** Create and assert address space constraints on the given object ID
    *  number. Essentially, this asserts that all the objects to date don't
    *  overlap with /this/ one. */
@@ -917,8 +926,6 @@ public:
   smt_sortt make_array_domain_sort(const array_type2t &arr);
   /** Like make_array_domain_sort, but a type2tc not an smt_sort */
   type2tc make_array_domain_sort_exp(const array_type2t &arr);
-  /** Cast the given expression to the domain width of the array in type */
-  expr2tc twiddle_index_width(const expr2tc &expr, const type2tc &type);
   /** For a multi-dimensional array, convert the type into a single dimension
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */
@@ -938,6 +945,10 @@ public:
     else
       return mk_sort(SMT_SORT_BV, width, false);
   }
+
+  /** For the given type, replace all instances of a pointer type with the
+   *  struct representation of it. */
+  void rewrite_ptrs_to_structs(type2tc &type);
 
   /** When dealing with multi-dimensional arrays, and selecting one element
    *  out of several dimensions, reduce it to an expression on a single
@@ -1091,7 +1102,7 @@ public:
 // Define here to enable inlining
 extern inline
 smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s) {
-  assert(sort != NULL);
+  assert(sort != nullptr);
   ctx->live_asts.push_back(this);
 }
 

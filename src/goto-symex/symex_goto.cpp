@@ -7,24 +7,19 @@
 
 \*******************************************************************/
 
-#include <iostream>
+#include <cassert>
 #include <fstream>
-
-#include <irep2.h>
-#include <migrate.h>
-#include <assert.h>
-#include <prefix.h>
-
-#include <expr_util.h>
-#include <std_expr.h>
-
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/slice.h>
+#include <goto-symex/symex_target_equation.h>
+#include <iostream>
 #include <langapi/language_ui.h>
-
 #include <solvers/smtlib/smtlib_conv.h>
-
-#include "goto_symex.h"
-#include "symex_target_equation.h"
-#include "slice.h"
+#include <util/expr_util.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
 
 void
 goto_symext::symex_goto(const expr2tc &old_guard)
@@ -42,15 +37,11 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
   if (!new_guard_false && options.get_bool_option("smt-symex-guard"))
   {
-    auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
+    auto rte = boost::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
-    equality2tc question(true_expr, new_guard);
+    equality2tc question(gen_true_expr(), new_guard);
     try {
-      symex_slicet slicer;
-      symex_target_equationt eq = dynamic_cast<const symex_target_equationt&>(*target);
-      slicer.slice_for_symbols(eq, question);
-
-      tvt res = rte.get()->ask_solver_question(question);
+      tvt res = rte->ask_solver_question(question);
 
       if (res.is_false())
         new_guard_false = true;
@@ -93,8 +84,8 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   // backwards?
   if (!forward)
   {
-    unsigned &unwind = frame.loop_iterations[instruction.loop_number];
-    unwind++;
+    BigInt &unwind = frame.loop_iterations[instruction.loop_number];
+    ++unwind;
 
     if (get_unwind(cur_state->source, unwind)) {
       loop_bound_exceeded(new_guard);
@@ -131,7 +122,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   statet::goto_state_listt &goto_state_list =
     cur_state->top().goto_state_map[new_state_pc];
 
-  goto_state_list.push_back(statet::goto_statet(*cur_state));
+  goto_state_list.emplace_back(*cur_state);
   statet::goto_statet &new_state = goto_state_list.back();
 
   // adjust guards
@@ -153,10 +144,8 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
       cur_state->assignment(guard_expr, new_rhs, false);
 
-      guardt guard;
-
       target->assignment(
-        guard.as_expr(),
+        gen_true_expr(),
         guard_expr, guard_expr,
         new_rhs,
         cur_state->source,
@@ -180,7 +169,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 }
 
 void
-goto_symext::merge_gotos(void)
+goto_symext::merge_gotos()
 {
   statet::framet &frame = cur_state->top();
 
@@ -237,23 +226,31 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
   goto_state.level2.get_variables(variables);
   cur_state->level2.get_variables(variables);
 
-  for (std::set<renaming::level2t::name_record>::const_iterator
-       it = variables.begin();
-       it != variables.end();
-       it++)
+  guardt tmp_guard;
+  if(!variables.empty()
+     && !cur_state->guard.is_false()
+     && !goto_state.guard.is_false())
   {
-    if (goto_state.level2.current_number(*it) ==
-        cur_state->level2.current_number(*it))
+    tmp_guard = goto_state.guard;
+
+    // this gets the diff between the guards
+    tmp_guard -= cur_state->guard;
+  }
+
+  for (const auto & variable : variables)
+  {
+    if (goto_state.level2.current_number(variable) ==
+        cur_state->level2.current_number(variable))
       continue;  // not changed
 
-    if (it->base_name == guard_identifier_s)
+    if (variable.base_name == guard_identifier_s)
       continue;  // just a guard
 
-    if (has_prefix(it->base_name.as_string(),"symex::invalid_object"))
+    if (has_prefix(variable.base_name.as_string(),"symex::invalid_object"))
       continue;
 
     // changed!
-    const symbolt &symbol = ns.lookup(it->base_name);
+    const symbolt &symbol = ns.lookup(variable.base_name);
 
     type2tc type;
     typet old_type = symbol.type;
@@ -261,36 +258,41 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     expr2tc rhs;
 
-    if (cur_state->guard.is_false()) {
+    if (cur_state->guard.is_false() || goto_state.guard.is_false()) {
       rhs = symbol2tc(type, symbol.name);
-      cur_state->current_name(goto_state, rhs);
-    } else if (goto_state.guard.is_false())    {
-      rhs = symbol2tc(type, symbol.name);
-      cur_state->current_name(goto_state, rhs);
-    } else   {
-      guardt tmp_guard(goto_state.guard);
 
-      // this gets the diff between the guards
-      tmp_guard -= cur_state->guard;
-
+      // Try to get the value
+      renaming::level2t::rename_to_record(rhs, variable);
+      goto_state.level2.rename(rhs);
+    } else {
       symbol2tc true_val(type, symbol.name);
       symbol2tc false_val(type, symbol.name);
-      cur_state->current_name(goto_state, true_val);
-      cur_state->current_name(false_val);
+
+      // Semi-manually rename these symbols: we may be referring to an l1
+      // variable not in the current scope, thus we need to directly specify
+      // which l1 variable we're dealing with.
+      renaming::level2t::rename_to_record(true_val, variable);
+      renaming::level2t::rename_to_record(false_val, variable);
+
+      // Try to get the symbol's value
+      goto_state.level2.rename(true_val);
+      cur_state->level2.rename(false_val);
+
       rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
-      do_simplify(rhs);
     }
 
     expr2tc lhs;
     migrate_expr(symbol_expr(symbol), lhs);
     expr2tc new_lhs = lhs;
 
-    cur_state->assignment(new_lhs, rhs, false);
+    // Again, specifiy which l1 data object we're going to make the assignment
+    // to.
+    renaming::level2t::rename_to_record(new_lhs, variable);
 
-    guardt true_guard;
+    cur_state->assignment(new_lhs, rhs, true);
 
     target->assignment(
-      true_guard.as_expr(),
+      gen_true_expr(),
       new_lhs, lhs,
       rhs,
       cur_state->source,
@@ -307,7 +309,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
   expr2tc negated_cond;
 
   if (is_true(guard)) {
-    negated_cond = false_expr;
+    negated_cond = gen_false_expr();
   } else {
     negated_cond = not2tc(guard);
   }
@@ -351,11 +353,10 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
 }
 
 bool
-goto_symext::get_unwind(
-  const symex_targett::sourcet &source, unsigned unwind)
+goto_symext::get_unwind(const symex_targett::sourcet &source, BigInt unwind)
 {
   unsigned id = source.pc->loop_number;
-  unsigned long this_loop_max_unwind = max_unwind;
+  BigInt this_loop_max_unwind = max_unwind;
 
   if (unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
@@ -363,13 +364,12 @@ goto_symext::get_unwind(
   if (!options.get_bool_option("quiet"))
   {
     std::string msg =
-      "Unwinding loop " + i2string(id) + " iteration " + i2string(unwind) +
+      "Unwinding loop " + i2string(id) + " iteration " + integer2string(unwind) +
       " " + source.pc->location.as_string();
     std::cout << msg << std::endl;
   }
 
-  return this_loop_max_unwind != 0 &&
-         unwind >= this_loop_max_unwind;
+  return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
 }
 
 hash_set_cont<irep_idt, irep_id_hash> goto_symext::body_warnings;

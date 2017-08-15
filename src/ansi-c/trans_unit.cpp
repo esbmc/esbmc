@@ -6,19 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "trans_unit.h"
-
-/*******************************************************************\
-
-Function: translation_unit
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <ansi-c/trans_unit.h>
 
 std::string translation_unit(const std::string &path)
 {

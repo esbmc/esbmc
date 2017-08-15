@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "context.h"
+#include <util/context.h>
 
 bool contextt::add(const symbolt &symbol)
 {
@@ -55,7 +55,6 @@ void contextt::dump() const
       s.dump();
     }
   );
-
 }
 
 symbolt* contextt::find_symbol(irep_idt name)
@@ -81,7 +80,11 @@ const symbolt* contextt::find_symbol(irep_idt name) const
 void contextt::erase_symbol(irep_idt name)
 {
   symbolst::iterator it = symbols.find(name);
-  assert(it != symbols.end());
+  if(it == symbols.end())
+  {
+    std::cerr << "Couldn't find symbol to erase"  << std::endl;
+    abort();
+  }
 
   symbols.erase(name);
   ordered_symbols.erase(
@@ -92,41 +95,49 @@ void contextt::erase_symbol(irep_idt name)
 
 void contextt::foreach_operand_impl_const(const_symbol_delegate& expr) const
 {
-  for(symbolst::const_iterator it = symbols.begin();
-      it != symbols.end();
-      it++)
+  for(const auto & symbol : symbols)
   {
-    expr(it->second);
+    expr(symbol.second);
   }
 }
 
 void contextt::foreach_operand_impl(symbol_delegate& expr)
 {
-  for(symbolst::iterator it = symbols.begin();
-      it != symbols.end();
-      it++)
+  for(auto & symbol : symbols)
   {
-    expr(it->second);
+    expr(symbol.second);
   }
 }
 
 void contextt::foreach_operand_impl_in_order_const(
     const_symbol_delegate& expr) const
 {
-  for(ordered_symbolst::const_iterator it = ordered_symbols.begin();
-      it != ordered_symbols.end();
-      it++)
+  for(auto ordered_symbol : ordered_symbols)
   {
-    expr(**it);
+    expr(*ordered_symbol);
   }
 }
 
 void contextt::foreach_operand_impl_in_order(symbol_delegate& expr)
 {
-  for(ordered_symbolst::iterator it = ordered_symbols.begin();
-      it != ordered_symbols.end();
-      it++)
+  for(auto & ordered_symbol : ordered_symbols)
   {
-    expr(**it);
+    expr(*ordered_symbol);
   }
+}
+
+void contextt::remove_unused()
+{
+  for(auto it = symbols.begin(), ite = symbols.end(); it != ite;)
+  {
+    if(!it->second.is_used)
+      it = symbols.erase(it);
+    else
+      ++it;
+  }
+
+  ordered_symbols.erase(
+    std::remove_if(ordered_symbols.begin(), ordered_symbols.end(),
+      [](const symbolt *s) { return !s->is_used; }),
+    ordered_symbols.end());
 }

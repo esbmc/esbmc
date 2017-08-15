@@ -10,9 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_ERROR_HANDLER_H
 
 #include <sstream>
-
-#include "message.h"
-#include "expr.h"
+#include <util/expr.h>
+#include <util/message.h>
 
 class message_streamt
 {
@@ -24,7 +23,7 @@ public:
   {
   }
 
-  virtual ~message_streamt() { }
+  virtual ~message_streamt() = default;
 
   // overload to use language specific syntax
   virtual std::string to_string(const exprt &expr) { return expr.to_string(); }

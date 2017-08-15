@@ -6,32 +6,18 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <arith_tools.h>
-#include <string2array.h>
-#include <config.h>
-#include <i2string.h>
-#include <type_eq.h>
-#include <std_types.h>
-#include <expr_util.h>
-#include <simplify_expr.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <std_types.h>
-
-#include "c_types.h"
-#include "c_typecheck_base.h"
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::zero_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include <ansi-c/c_typecheck_base.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_types.h>
+#include <util/string2array.h>
+#include <util/type_eq.h>
 
 bool c_typecheck_baset::zero_initializer(
   exprt &value,
@@ -137,18 +123,6 @@ bool c_typecheck_baset::zero_initializer(
   return true;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::do_initializer(
   exprt &value,
   typet &type,
@@ -177,18 +151,6 @@ void c_typecheck_baset::do_initializer(
     type=value.type();
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt c_typecheck_baset::do_initializer_rec(
   const exprt &value,
@@ -281,18 +243,6 @@ exprt c_typecheck_baset::do_initializer_rec(
   }
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt c_typecheck_baset::do_initializer_rec(
   init_statet &state,
   const typet &type,
@@ -332,18 +282,6 @@ exprt c_typecheck_baset::do_initializer_rec(
     return result;
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_array
-
-  Inputs:
-
- Outputs:
-
-  Purpose:
-
-\*******************************************************************/
 
 exprt c_typecheck_baset::do_initializer_array(
   init_statet &state,
@@ -417,18 +355,6 @@ exprt c_typecheck_baset::do_initializer_array(
   return result;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_incomplete_array
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt c_typecheck_baset::do_initializer_incomplete_array(
   init_statet &state,
   const typet &type,
@@ -459,18 +385,6 @@ exprt c_typecheck_baset::do_initializer_incomplete_array(
   return result;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_struct
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt c_typecheck_baset::do_initializer_struct(
   init_statet &state,
   const struct_typet &type,
@@ -490,12 +404,9 @@ exprt c_typecheck_baset::do_initializer_struct(
 
   result.reserve_operands(components.size());
 
-  for(struct_typet::componentst::const_iterator
-      it=components.begin();
-      it!=components.end();
-      it++)
+  for(const auto & component : components)
   {
-    const typet &op_type=it->type();
+    const typet &op_type=component.type();
 
     if(state.has_next())
     {
@@ -520,18 +431,6 @@ exprt c_typecheck_baset::do_initializer_struct(
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_union
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt c_typecheck_baset::do_initializer_union(
   init_statet &state,
@@ -572,18 +471,6 @@ exprt c_typecheck_baset::do_initializer_union(
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::do_initializer(symbolt &symbol)
 {
@@ -639,18 +526,6 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
     }
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_designated_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt c_typecheck_baset::do_designated_initializer(
   const exprt &value,

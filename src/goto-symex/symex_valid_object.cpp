@@ -6,10 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <std_expr.h>
-
-#include "goto_symex.h"
-#include "dynamic_allocation.h"
+#include <goto-symex/dynamic_allocation.h>
+#include <goto-symex/goto_symex.h>
+#include <util/std_expr.h>
 
 static const expr2tc *get_object(const expr2tc &expr)
 {
@@ -26,7 +25,7 @@ static const expr2tc *get_object(const expr2tc &expr)
     return get_object(to_index2t(expr).source_value);
   }
 
-  return NULL;
+  return nullptr;
 }
 
 void goto_symext::replace_dynamic_allocation(expr2tc &expr)
@@ -35,7 +34,7 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
-  expr.get()->Foreach_operand([this] (expr2tc &e) {
+  expr->Foreach_operand([this] (expr2tc &e) {
       replace_dynamic_allocation(e);
     }
   );
@@ -54,7 +53,7 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
       // see if that is a good one!
       const expr2tc *identifier = get_object(obj_operand);
       
-      if (identifier != NULL)
+      if (identifier != nullptr)
       {        
         expr2tc base_ident = *identifier;
         cur_state->get_original_name(base_ident);

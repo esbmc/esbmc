@@ -1,0 +1,14 @@
+To use these tests, you need to symlink the name 'esbmc.so' in this directory
+to point at wherever your libesbmc.so object file is.
+
+The intention of these unit tests is not to provide a comprehensive test suite
+for the correct operation of the python API: it's more to act as a fairly
+detailed smoke test to see that all the _expected_ functions are exported to
+python, and they seem to behave correctly. Given all the technical jiggery
+pokery going on with type overloading and specialisation in boost.python, it's
+entirely possible that someone will take a wrong step and wind up
+instantiating a blank type that doesn't register any C++/python classes.
+
+Otherwise I guess this'll be useful to detect when there's a change in
+function signature between whatever verison of python API has been "Published"
+(TM), and what's currently implemented in ESBMC.

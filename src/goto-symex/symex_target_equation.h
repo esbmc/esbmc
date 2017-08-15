@@ -9,29 +9,20 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_BASIC_SYMEX_EQUATION_H
 #define CPROVER_BASIC_SYMEX_EQUATION_H
 
-#include <irep2.h>
-
-extern "C" {
-#include <stdio.h>
-}
-
+#include <boost/shared_ptr.hpp>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <goto-programs/goto_program.h>
+#include <goto-symex/goto_trace.h>
+#include <goto-symex/symex_target.h>
 #include <list>
 #include <map>
-#include <vector>
-
-#include <namespace.h>
-
-#include <config.h>
-#include <goto-programs/goto_program.h>
 #include <solvers/smt/smt_conv.h>
-
-#include "symex_target.h"
-#include "goto_trace.h"
-
-extern "C" {
-#include <stdint.h>
-#include <string.h>
-}
+#include <util/config.h>
+#include <util/irep2.h>
+#include <util/namespace.h>
+#include <vector>
 
 class symex_target_equationt:public symex_targett
 {
@@ -46,47 +37,50 @@ public:
 
   // assignment to a variable - must be symbol
   // the value is destroyed
-  virtual void assignment(
+  void assignment(
     const expr2tc &guard,
     const expr2tc &lhs,
     const expr2tc &original_lhs,
     const expr2tc &rhs,
     const sourcet &source,
-    std::vector<dstring> stack_trace,
-    assignment_typet assignment_type);
-    
+    std::vector<stack_framet> stack_trace,
+    assignment_typet assignment_type) override ;
+
   // output
-  virtual void output(
+  void output(
     const expr2tc &guard,
     const sourcet &source,
     const std::string &fmt,
-    const std::list<expr2tc> &args);
-  
+    const std::list<expr2tc> &args) override ;
+
   // record an assumption
   // cond is destroyed
-  virtual void assumption(
+  void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
-    const sourcet &source);
+    const sourcet &source) override ;
 
   // record an assertion
   // cond is destroyed
-  virtual void assertion(
+  void assertion(
     const expr2tc &guard,
     const expr2tc &cond,
     const std::string &msg,
-    std::vector<dstring> stack_trace,
-    const sourcet &source);
+    std::vector<stack_framet> stack_trace,
+    const sourcet &source) override ;
 
-  virtual void renumber(
+  void renumber(
     const expr2tc &guard,
     const expr2tc &symbol,
     const expr2tc &size,
-    const sourcet &source);
+    const sourcet &source) override ;
 
   virtual void convert(smt_convt &smt_conv);
-  void convert_internal_step(smt_convt &smt_conv, const smt_ast *&assumpt_ast,
-                             smt_convt::ast_vec &assertions, SSA_stept &s);
+  void convert_internal_step(
+    smt_convt &smt_conv,
+    const smt_ast *&assumpt_ast,
+    smt_convt::ast_vec &assertions,
+    SSA_stept &s);
 
   class SSA_stept
   {
@@ -94,11 +88,10 @@ public:
     sourcet source;
     goto_trace_stept::typet type;
 
-    // Vector of strings recording the stack state when this step was taken.
-    // This can potentially be optimised to the point where there's only one
-    // stack trace recorded per function activation record. Valid for assignment
-    // and assert steps only. In reverse order (most recent in idx 0).
-    std::vector<dstring> stack_trace;
+    // One stack trace recorded per function activation record. Valid for
+    // assignment and assert steps only. In reverse order (most recent in idx
+    // 0).
+    std::vector<stack_framet> stack_trace;
     
     bool is_assert() const     { return type==goto_trace_stept::ASSERT; }
     bool is_assume() const     { return type==goto_trace_stept::ASSUME; }
@@ -109,10 +102,10 @@ public:
     
     expr2tc guard;
 
-    // for ASSIGNMENT  
+    // for ASSIGNMENT
     expr2tc lhs, rhs, original_lhs;
     assignment_typet assignment_type;
-    
+
     // for ASSUME/ASSERT
     expr2tc cond;
     std::string comment;
@@ -124,10 +117,10 @@ public:
     // for conversion
     const smt_ast *guard_ast, *cond_ast;
     std::list<expr2tc> converted_output_args;
-    
+
     // for slicing
     bool ignore;
-    
+
     SSA_stept() : ignore(false)
     {
     }
@@ -136,14 +129,12 @@ public:
     void short_output(const namespacet &ns, std::ostream &out,
                       bool show_ignored = false) const;
   };
-  
+
   unsigned count_ignored_SSA_steps() const
   {
     unsigned i=0;
-    for(SSA_stepst::const_iterator
-        it=SSA_steps.begin();
-        it!=SSA_steps.end(); it++)
-      if(it->ignore) i++;
+    for(const auto & SSA_step : SSA_steps)
+      if(SSA_step.ignore) i++;
     return i;
   }
 
@@ -174,15 +165,15 @@ public:
 
   unsigned int clear_assertions();
 
-  virtual std::shared_ptr<symex_targett> clone(void) const
+  boost::shared_ptr<symex_targett> clone() const override 
   {
     // No pointers or anything that requires ownership modification, can just
     // duplicate self.
-    return std::shared_ptr<symex_targett>(new symex_target_equationt(*this));
+    return boost::shared_ptr<symex_targett>(new symex_target_equationt(*this));
   }
 
-  virtual void push_ctx(void);
-  virtual void pop_ctx(void);
+  void push_ctx() override ;
+  void pop_ctx() override ;
 
 protected:
   const namespacet &ns;
@@ -197,13 +188,13 @@ public:
 
   runtime_encoded_equationt(const namespacet &_ns, smt_convt &conv);
 
-  virtual void push_ctx(void);
-  virtual void pop_ctx(void);
+  void push_ctx() override ;
+  void pop_ctx() override ;
 
-  virtual std::shared_ptr<symex_targett> clone(void) const;
+  boost::shared_ptr<symex_targett> clone() const override ;
 
-  virtual void convert(smt_convt &smt_conv);
-  void flush_latest_instructions(void);
+  void convert(smt_convt &smt_conv) override ;
+  void flush_latest_instructions();
 
   tvt ask_solver_question(const expr2tc &question);
 

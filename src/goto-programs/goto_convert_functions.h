@@ -11,8 +11,8 @@ Date: June 2003
 #ifndef CPROVER_GOTO_CONVERT_FUNCTIONS_H
 #define CPROVER_GOTO_CONVERT_FUNCTIONS_H
 
-#include "goto_functions.h"
-#include "goto_convert_class.h"
+#include <goto-programs/goto_convert_class.h>
+#include <goto-programs/goto_functions.h>
 
 // just convert it all
 void goto_convert(
@@ -30,8 +30,8 @@ public:
   void goto_convert();
   void convert_function(symbolt &symbol);
   void convert_function(const irep_idt &identifier);
-  void thrash_type_symbols(void);
-  void fixup_unions(void);
+  void thrash_type_symbols();
+  void fixup_unions();
 
   void collect_type(const irept &type, typename_sett &set);
   void collect_expr(const irept &expr, typename_sett &set);
@@ -51,7 +51,7 @@ public:
     goto_functionst &_functions,
     message_handlert &_message_handler);
 
-  virtual ~goto_convert_functionst();
+  ~goto_convert_functionst() override = default;
 
 protected:
   goto_functionst &functions;

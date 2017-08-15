@@ -9,16 +9,14 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_ID_H
 #define CPROVER_CPP_ID_H
 
-#include <assert.h>
-
+#include <cassert>
+#include <iostream>
 #include <list>
 #include <map>
-#include <string>
 #include <set>
-#include <iostream>
-
-#include <expr.h>
-#include <std_types.h>
+#include <string>
+#include <util/expr.h>
+#include <util/std_types.h>
 
 typedef std::multimap<irep_idt, class cpp_idt> cpp_id_mapt;
 
@@ -89,7 +87,7 @@ public:
 
     it->second.base_name=base_name;
     it->second.add_parent(*this);
-    it->second.original_scope=NULL;
+    it->second.original_scope=nullptr;
 
     return it->second;
   }
@@ -97,7 +95,7 @@ public:
   cpp_idt &get_parent(unsigned i=0) const
   {
     assert(i<parents_size());
-    assert(parents[i]!=NULL);
+    assert(parents[i]!=nullptr);
     return *parents[i];
   }
 

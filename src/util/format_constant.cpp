@@ -6,18 +6,16 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "format_constant.h"
-#include "arith_tools.h"
-#include "fixedbv.h"
-#include "ieee_float.h"
+#include <util/arith_tools.h>
+#include <util/fixedbv.h>
+#include <util/format_constant.h>
+#include <util/ieee_float.h>
 
 std::string format_constantt::operator()(const exprt &expr)
 {
   if(expr.is_constant())
   {
-    if(expr.type().id()=="natural" ||
-       expr.type().id()=="integer" ||
-       expr.type().id()=="unsignedbv" ||
+    if(expr.type().id()=="unsignedbv" ||
        expr.type().id()=="signedbv")
     {
       mp_integer i;

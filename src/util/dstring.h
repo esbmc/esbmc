@@ -10,8 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define DSTRING_H
 
 #include <iostream>
-
-#include "string_container.h"
+#include <util/string_container.h>
 
 class dstring
 {
@@ -101,8 +100,7 @@ public:
   inline void swap(dstring &b)
   { unsigned t=no; no=b.no; b.no=t; }
 
-  inline dstring &operator=(const dstring &b)
-  { no=b.no; return *this; }
+  inline dstring &operator=(const dstring &b) = default;
   
   inline friend std::ostream &operator<<(std::ostream &out, const dstring &a)
   {

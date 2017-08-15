@@ -6,18 +6,15 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <assert.h>
-
+#include <cassert>
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_declaration.h>
+#include <cpp/cpp_name.h>
 #include <iostream>
-
-#include <config.h>
-#include <arith_tools.h>
-#include <std_types.h>
-#include <c_types.h>
-
-#include "cpp_convert_type.h"
-#include "cpp_declaration.h"
-#include "cpp_name.h"
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/std_types.h>
 
 class cpp_convert_typet
 {
@@ -33,7 +30,7 @@ public:
 
   std::list<typet> other;
 
-  cpp_convert_typet() { }
+  cpp_convert_typet() = default;
   cpp_convert_typet(const typet &type) { read(type); }
 
 protected:
@@ -41,18 +38,6 @@ protected:
   void read_function_type(const typet &type);
   void read_template(const typet &type);
 };
-
-/*******************************************************************\
-
-Function: cpp_convert_typet::read
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_convert_typet::read(const typet &type)
 {
@@ -66,18 +51,6 @@ void cpp_convert_typet::read(const typet &type)
 
   read_rec(type);
 }
-
-/*******************************************************************\
-
-Function: cpp_convert_typet::read_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_convert_typet::read_rec(const typet &type)
 {
@@ -168,18 +141,6 @@ void cpp_convert_typet::read_rec(const typet &type)
   }
 }
 
-/*******************************************************************\
-
-Function: cpp_covnert_typet::read_template
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_convert_typet::read_template(const typet &type)
 {
   other.push_back(type);
@@ -207,18 +168,6 @@ void cpp_convert_typet::read_template(const typet &type)
     // TODO: initializer
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_convert_typet::read_function_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_convert_typet::read_function_type(const typet &type)
 {
@@ -316,18 +265,6 @@ void cpp_convert_typet::read_function_type(const typet &type)
      arguments.get_sub().front().type().id()=="empty")
     arguments.get_sub().clear();
 }
-
-/*******************************************************************\
-
-Function: cpp_convert_typet::write
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_convert_typet::write(typet &type)
 {
@@ -596,18 +533,6 @@ void cpp_convert_typet::write(typet &type)
   if(volatile_cnt)
     type.set("#volatile", true);
 }
-
-/*******************************************************************\
-
-Function: cpp_convert_plain_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_convert_plain_type(typet &type)
 {
