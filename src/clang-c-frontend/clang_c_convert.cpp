@@ -1473,7 +1473,7 @@ bool clang_c_convertert::get_expr(
       if(get_type(ternary_if.getType(), t))
         return true;
 
-      side_effect_exprt gcc_ternary("gcc_conditional_expression");
+      side_effect_exprt gcc_ternary("gcc_conditional_expression", t);
       gcc_ternary.copy_to_operands(cond, else_expr);
 
       new_expr = gcc_ternary;
