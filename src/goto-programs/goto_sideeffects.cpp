@@ -817,15 +817,15 @@ void goto_convertt::remove_gcc_conditional_expression(
   // first remove side-effects from condition
   remove_sideeffects(expr.op0(), dest);
 
-  exprt if_expr("if");
-  if_expr.operands().resize(3);
+  if_exprt if_expr;
 
-  if_expr.op0() = expr.op0();
-  if_expr.op1() = expr.op0();
-  if_expr.op2() = expr.op1();
+  if_expr.cond() = expr.op0();
+  if_expr.true_case() = expr.op0();
+  if_expr.false_case() = expr.op1();
+  if_expr.type() = expr.type();
   if_expr.location() = expr.location();
 
-  if(if_expr.op0().type() != bool_typet())
+  if(!if_expr.op0().type().is_bool())
     if_expr.op0().make_typecast(bool_typet());
 
   expr.swap(if_expr);
