@@ -1,12 +1,6 @@
-//#include <stdio.h>
-//#include <string.h>
-//#define MAX 10
-int nondet_int();
-char nondet_char();
-unsigned int nondet_uint();
-int MAX = nondet_uint();
 
 int main() {
+    int MAX;
     char str1[MAX], str2[MAX];
     int cont, i, j;
     cont = 0;
