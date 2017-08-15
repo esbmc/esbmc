@@ -308,11 +308,6 @@ protected:
     const irep_idt &id,
     std::list<exprt> &dest);
 
-  //
-  // misc
-  //
-  const std::string &get_string_constant(const exprt &expr);
-
   // some built-in functions
   void do_abort         (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_abs           (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
