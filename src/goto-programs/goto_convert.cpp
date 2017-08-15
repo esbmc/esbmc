@@ -1689,6 +1689,7 @@ void goto_convertt::convert_ifthenelse(
 
   exprt tmp_guard = code.op0();
   remove_sideeffects(tmp_guard, dest);
+
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 }
 
