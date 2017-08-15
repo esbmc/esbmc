@@ -1855,27 +1855,6 @@ void goto_convertt::generate_conditional_branch(
   t_false->location=guard.location();
 }
 
-const std::string &goto_convertt::get_string_constant(
-  const exprt &expr)
-{
-  if(expr.id()=="typecast" &&
-     expr.operands().size()==1)
-    return get_string_constant(expr.op0());
-
-  if(!expr.is_address_of()
-     || expr.operands().size()!=1
-     || !expr.op0().is_index()
-     || expr.op0().operands().size()!=2)
-  {
-    err_location(expr);
-    std::cerr << "expected string constant, but got: "
-          << expr.pretty() << std::endl;
-    abort();
-  }
-
-  return expr.op0().op0().value().as_string();
-}
-
 symbolt &goto_convertt::new_tmp_symbol(const typet &type)
 {
   symbolt new_symbol;
