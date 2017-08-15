@@ -607,7 +607,7 @@ void goto_convertt::remove_function_call(
   goto_programt &dest,
   bool result_is_used)
 {
-  if(!result_is_used || expr.type().id() == "empty")
+  if(!result_is_used)
   {
     assert(expr.operands().size() == 2);
     code_function_callt call;
@@ -653,21 +653,20 @@ void goto_convertt::remove_function_call(
   new_name(new_symbol);
   scoped_variables.push_front(new_symbol.name);
 
-  {
-    code_declt decl(symbol_expr(new_symbol));
-    decl.location() = new_symbol.location;
-    convert_decl(decl, dest);
-  }
+  code_function_callt call;
+  call.lhs() = symbol_expr(new_symbol);
+  call.function() = expr.op0();
+  call.arguments() = expr.op1().operands();
+  call.location() = new_symbol.location;
 
-  {
-    goto_programt tmp_program2;
-    code_function_callt call;
-    call.lhs() = symbol_expr(new_symbol);
-    call.function() = expr.op0();
-    call.arguments() = expr.op1().operands();
-    call.location() = new_symbol.location;
-    convert_function_call(call, dest);
-  }
+  codet assignment("assign");
+  assignment.reserve_operands(2);
+  assignment.copy_to_operands(symbol_expr(new_symbol));
+  assignment.move_to_operands(call);
+
+  goto_programt tmp_program;
+  convert(assignment, tmp_program);
+  dest.destructive_append(tmp_program);
 
   expr = symbol_expr(new_symbol);
 }
