@@ -63,6 +63,7 @@ protected:
   //
   // side effect removal
   //
+  void make_temp_symbol(exprt &expr,goto_programt &dest);
   unsigned int get_expr_number_globals(const exprt & expr);
   unsigned int get_expr_number_globals(const expr2tc & expr);
   void break_globals2assignments(exprt & rhs, goto_programt & dest,const locationt & location);
@@ -87,7 +88,8 @@ protected:
   bool has_sideeffect(const exprt &expr);
 
   void remove_assignment(exprt &expr, goto_programt &dest, bool result_is_used);
-  void remove_increment(exprt &expr, goto_programt &dest, bool result_is_used);
+  void remove_post(exprt &expr, goto_programt &dest, bool result_is_used);
+  void remove_pre(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_function_call(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_new(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_temporary_object(exprt &expr, goto_programt &dest);
