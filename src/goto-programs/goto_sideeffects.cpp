@@ -14,6 +14,24 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/rename.h>
 #include <util/std_expr.h>
 
+void goto_convertt::make_temp_symbol(
+  exprt &expr,
+  goto_programt &dest)
+{
+  const locationt location=expr.find_location();
+
+  symbolt &new_symbol=new_tmp_symbol(expr.type());
+
+  code_assignt assignment;
+  assignment.lhs()=symbol_expr(new_symbol);
+  assignment.rhs()=expr;
+  assignment.location()=location;
+
+  convert(assignment, dest);
+
+  expr=symbol_expr(new_symbol);
+}
+
 bool goto_convertt::has_sideeffect(const exprt &expr)
 {
   forall_operands(it, expr)
@@ -263,9 +281,9 @@ void goto_convertt::remove_sideeffects(
             statement == "assign_mod")
       remove_assignment(expr, dest, result_is_used);
     else if(statement == "postincrement" || statement == "postdecrement")
-      remove_increment(expr, dest, result_is_used);
+      remove_post(expr, dest, result_is_used);
     else if(statement == "preincrement" || statement == "predecrement")
-      remove_increment(expr, dest, result_is_used);
+      remove_pre(expr, dest, result_is_used);
     else if(statement == "cpp_new" || statement == "cpp_new[]")
       remove_cpp_new(expr, dest, result_is_used);
     else if(statement == "temporary_object")
@@ -407,19 +425,16 @@ void goto_convertt::remove_assignment(
     expr.make_nil();
 }
 
-void goto_convertt::remove_increment(
+void goto_convertt::remove_pre(
   exprt &expr,
   goto_programt &dest,
   bool result_is_used)
 {
-  const irep_idt &statement=expr.statement();
+  const irep_idt statement = expr.statement();
 
-  assert(statement=="postincrement" ||
-     statement=="postdecrement" ||
-     statement=="preincrement" ||
-     statement=="predecrement");
+  assert(statement == "preincrement" || statement == "predecrement");
 
-  if(expr.operands().size()!=1)
+  if(expr.operands().size() != 1)
   {
     err_location(expr);
     str << statement << " takes one argument";
@@ -427,8 +442,9 @@ void goto_convertt::remove_increment(
   }
 
   exprt rhs;
+  rhs.location() = expr.location();
 
-  if(statement == "postincrement" || statement == "preincrement")
+  if(statement == "preincrement")
   {
     if(expr.type().is_floatbv())
       rhs.id("ieee_add");
@@ -443,60 +459,147 @@ void goto_convertt::remove_increment(
       rhs.id("-");
   }
 
-  const typet &op_type=ns.follow(expr.op0().type());
+  const typet &op_type = ns.follow(expr.op0().type());
 
   if(op_type.is_bool())
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
-    rhs.type()=int_type();
-    rhs.make_typecast(typet("bool"));
+    rhs.type() = int_type();
+    rhs.make_typecast(bool_type());
   }
-  else if(op_type.id()=="c_enum" ||
-      op_type.id()=="incomplete_c_enum")
+  else if(op_type.id()=="c_enum" || op_type.id()=="incomplete_c_enum")
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
-    rhs.type()=int_type();
+    rhs.type() = int_type();
     rhs.make_typecast(op_type);
   }
   else
   {
     typet constant_type;
 
-    if(op_type.id()=="pointer")
-      constant_type=index_type();
+    if(op_type.is_pointer())
+      constant_type = index_type();
     else if(is_number(op_type))
-      constant_type=op_type;
+      constant_type = op_type;
     else
     {
       err_location(expr);
       throw "no constant one of type "+op_type.to_string();
     }
 
-    exprt constant=gen_one(constant_type);
+    exprt constant = gen_one(constant_type);
 
     rhs.copy_to_operands(expr.op0());
     rhs.move_to_operands(constant);
-    rhs.type()=expr.op0().type();
+    rhs.type() = expr.op0().type();
   }
 
-  codet assignment("assign");
-  assignment.copy_to_operands(expr.op0());
-  assignment.move_to_operands(rhs);
-
-  assignment.location()=expr.find_location();
+  code_assignt assignment(expr.op0(), rhs);
+  assignment.location() = expr.location();
 
   convert(assignment, dest);
 
   if(result_is_used)
   {
     // revert to argument of pre-inc/pre-dec
-    exprt tmp=expr.op0();
+    exprt tmp = expr.op0();
     expr.swap(tmp);
   }
   else
     expr.make_nil();
+}
+
+void goto_convertt::remove_post(
+  exprt &expr,
+  goto_programt &dest,
+  bool result_is_used)
+{
+  const irep_idt statement = expr.statement();
+
+  assert(statement == "postincrement" || statement == "postdecrement");
+
+  if(expr.operands().size() != 1)
+  {
+    err_location(expr);
+    str << statement << " takes one argument";
+    throw 0;
+  }
+
+  exprt rhs;
+  rhs.location() = expr.location();
+
+  if(statement == "postincrement")
+  {
+    if(expr.type().is_floatbv())
+      rhs.id("ieee_add");
+    else
+      rhs.id("+");
+  }
+  else
+  {
+    if(expr.type().is_floatbv())
+      rhs.id("ieee_sub");
+    else
+      rhs.id("-");
+  }
+
+  const typet &op_type = ns.follow(expr.op0().type());
+
+  if(op_type.is_bool())
+  {
+    rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
+    rhs.op0().make_typecast(int_type());
+    rhs.type() = int_type();
+    rhs.make_typecast(bool_type());
+  }
+  else if(op_type.id()=="c_enum" || op_type.id()=="incomplete_c_enum")
+  {
+    rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
+    rhs.op0().make_typecast(int_type());
+    rhs.type() = int_type();
+    rhs.make_typecast(op_type);
+  }
+  else
+  {
+    typet constant_type;
+
+    if(op_type.is_pointer())
+      constant_type = index_type();
+    else if(is_number(op_type))
+      constant_type = op_type;
+    else
+    {
+      err_location(expr);
+      throw "no constant one of type "+op_type.to_string();
+    }
+
+    exprt constant = gen_one(constant_type);
+
+    rhs.copy_to_operands(expr.op0());
+    rhs.move_to_operands(constant);
+    rhs.type() = expr.op0().type();
+  }
+
+  code_assignt assignment(expr.op0(), rhs);
+  assignment.location() = expr.location();
+
+  goto_programt tmp;
+  convert(assignment, tmp);
+
+  // fix up the expression, if needed
+
+  if(result_is_used)
+  {
+    exprt tmp = expr.op0();
+    make_temp_symbol(tmp, dest);
+    expr.swap(tmp);
+  }
+  else
+    expr.make_nil();
+
+  dest.destructive_append(tmp);
 }
 
 void goto_convertt::remove_function_call(
