@@ -314,26 +314,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
     negated_cond = not2tc(guard);
   }
 
-  if (base_case || inductive_step)
-  {
-    // generate unwinding assumption
-    expr2tc guarded_expr=negated_cond;
-    cur_state->guard.guard_expr(guarded_expr);
-    target->assumption(cur_state->guard.as_expr(), guarded_expr, cur_state->source);
-
-    // add to state guard to prevent further assignments
-    cur_state->guard.add(negated_cond);
-  }
-  else if (forward_condition)
-  {
-    // generate unwinding assertion
-    claim(negated_cond,
-      "unwinding assertion loop "+id2string(loop_id));
-
-    // add to state guard to prevent further assignments
-    cur_state->guard.add(negated_cond);
-  }
-  else if(!partial_loops)
+  if(!partial_loops)
   {
     if(!no_unwinding_assertions)
     {
