@@ -1,5 +1,14 @@
 Release Notes of the ESBMC model checker
 
+*** Version 4.5
+* We use clang to generate tag names now
+* General improvements to SSA generation
+* Fix alignof evaluation by clang
+* Fix cex generation of structs
+* Fix VLA encoding of structs
+* Fix statement expressions generating out of order instructions
+* Removed a lot of dead code
+
 *** Version 4.4.1
 * Remove option to disable clang
 * Improvements to ax_clang to support Ubuntu/Debian/Fedora

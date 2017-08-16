@@ -1785,8 +1785,7 @@ bool cbmc_parseoptionst::process_goto_program(
         context,
         goto_functions);
 
-      value_set_analysis.
-        update(goto_functions);
+      value_set_analysis.update(goto_functions);
     }
 
     if(cmdline.isset("unroll-loops"))

@@ -1,6 +1,5 @@
 int nondet_int();
 
-
 main()
 {
   unsigned int M;

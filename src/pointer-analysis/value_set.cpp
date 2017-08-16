@@ -1321,18 +1321,6 @@ value_sett::obj_numbering_deref(unsigned int num)
 #include <boost/python/return_internal_reference.hpp>
 #include <boost/python/operators.hpp>
 
-const value_sett::object_mapt &
-read_object_map(const value_sett::object_mapt &map)
-{
-  return map.read();
-}
-
-void
-write_object_map(value_sett::object_mapt &map, const value_sett::object_mapt &value)
-{
-  map.write() = value;
-}
-
 // Wrap call to get_value_set to just return a python list: otherwise we wind
 // up having the caller spuriously allocate a value_setst::valuest, which is
 // a list.
@@ -1410,10 +1398,8 @@ build_value_set_classes()
     .def_readwrite("offset_is_set", &value_sett::objectt::offset_is_set)
     .def_readwrite("offset_alignment", &value_sett::objectt::offset_alignment);
 
-  // Hurrrrr, extending an std::map
   class_<value_sett::object_mapt>("object_mapt")
     .def(map_indexing_suite<value_sett::object_mapt>());
-//    .def_readwrite("empty", &value_sett::object_mapt::empty); // is static
 
   class_<value_sett::entryt>("entryt")
     .def(init<std::string, std::string>())
@@ -1421,13 +1407,9 @@ build_value_set_classes()
     .def_readwrite("suffix", &value_sett::entryt::suffix)
     .def_readwrite("object_map", &value_sett::entryt::object_map);
 
-  class_<value_sett::object_mapt>("object_mapt")
-    .def("get", make_function(read_object_map, return_internal_reference<>()))
-    .def("set", make_function(write_object_map));
-
   class_<object_numberingt>("object_numberingt")
-    .def(vector_indexing_suite<object_numberingt>())
-    .def("number", &object_numberingt::get_number);
+    .def("number", &object_numberingt::number)
+    .def("get_number", &object_numberingt::get_number);
 
   }
 }

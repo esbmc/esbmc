@@ -21,7 +21,7 @@ void convert(
   xmlt &xml)
 {
   xml=xmlt("goto_trace");
-  
+
   xml.new_element("mode").data=goto_trace.mode;
 
   locationt previous_location;
@@ -29,14 +29,14 @@ void convert(
   for(const auto & step : goto_trace.steps)
   {
     const locationt &location=step.pc->location;
-    
+
     xmlt xml_location;
     if(location.is_not_nil() && location.get_file()!="")
     {
       convert(location, xml_location);
       xml_location.name="location";
     }
-    
+
     switch(step.type)
     {
     case goto_trace_stept::ASSERT:
@@ -44,14 +44,14 @@ void convert(
       {
         xmlt &xml_failure=xml.new_element("failure");
         xml_failure.new_element("reason").data=xmlt::escape(id2string(step.comment));
-        
+
         xml_failure.new_element("thread").data=i2string(step.thread_nr);
 
         if(xml_location.name!="")
           xml_failure.new_element().swap(xml_location);
       }
       break;
-      
+
     case goto_trace_stept::ASSIGNMENT:
       {
         irep_idt identifier;
@@ -60,14 +60,14 @@ void convert(
           identifier = to_symbol2t(step.original_lhs).get_symbol_name();
         else
           identifier = to_symbol2t(step.lhs).get_symbol_name();
-          
+
         xmlt &xml_assignment=xml.new_element("assignment");
 
         if(xml_location.name!="")
           xml_assignment.new_element().swap(xml_location);
 
         std::string value_string, type_string;
-        
+
         if (!is_nil_expr(step.value)) {
           value_string = from_expr(ns, identifier,
                                    migrate_expr_back(step.value));
@@ -97,19 +97,11 @@ void convert(
         xml_assignment.new_element("step_nr").data=i2string(step.step_nr);
       }
       break;
-      
+
     case goto_trace_stept::OUTPUT:
       {
         printf_formattert printf_formatter;
-
-        std::list<exprt> vec;
-
-        for (std::list<expr2tc>::const_iterator it2 = step.output_args.begin();
-             it2 != step.output_args.end(); it2++) {
-          vec.push_back(migrate_expr_back(*it2));
-        }
-
-        printf_formatter(step.format_string, vec);
+        printf_formatter(step.format_string, step.output_args);
         std::string text=printf_formatter.as_string();
         xmlt &xml_output=xml.new_element("output");
         xml_output.new_element("step_nr").data=i2string(step.step_nr);
@@ -118,7 +110,7 @@ void convert(
         xml_output.new_element().swap(xml_location);
       }
       break;
-      
+
     default:
       if(location!=previous_location)
       {

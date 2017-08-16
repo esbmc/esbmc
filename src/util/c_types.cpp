@@ -46,7 +46,7 @@ type2tc build_float_type2(unsigned width)
   }
   else
   {
-    unsigned fraction;
+    unsigned fraction = 0;
     switch(width)
     {
     case 32: fraction = 23; break;

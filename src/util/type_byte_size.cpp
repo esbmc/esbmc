@@ -313,3 +313,23 @@ get_base_object(const expr2tc &expr)
     return expr;
   }
 }
+
+const irep_idt get_string_argument(const expr2tc &expr)
+{
+  // Remove typecast
+  if(is_typecast2t(expr))
+    return get_string_argument(to_typecast2t(expr).from);
+
+  // Remove address_of
+  if(is_address_of2t(expr))
+    return get_string_argument(to_address_of2t(expr).ptr_obj);
+
+  // Remove index
+  if(is_index2t(expr))
+    return get_string_argument(to_index2t(expr).source_value);
+
+  if(is_constant_string2t(expr))
+    return to_constant_string2t(expr).value;
+
+  return "";
+}
