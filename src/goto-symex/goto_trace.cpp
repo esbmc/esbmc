@@ -628,16 +628,7 @@ show_goto_trace(
       case goto_trace_stept::OUTPUT:
       {
         printf_formattert printf_formatter;
-
-        std::list<exprt> vec;
-
-        for (std::list<expr2tc>::const_iterator it2 = step.output_args.begin();
-            it2 != step.output_args.end(); it2++)
-        {
-          vec.push_back(migrate_expr_back(*it2));
-        }
-
-        printf_formatter(step.format_string, vec);
+        printf_formatter(step.format_string, step.output_args);
         printf_formatter.print(out);
         out << std::endl;
 
