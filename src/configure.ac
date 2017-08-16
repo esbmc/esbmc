@@ -97,7 +97,7 @@ AC_CHECK_LIB([gmp], [__gmpz_cmp],
 )
 
 # Define what to do when clang is enabled
-AX_CLANG(3.7, [], AC_MSG_ERROR([Cannot find clang; please pass it in --with-clang argument]))
+AX_CLANG(3.8, [], AC_MSG_ERROR([Cannot find clang; please pass it in --with-clang argument]))
 AX_LLVM(,AC_MSG_ERROR([Cannot find llvm; please pass it in --with-llvm argument]))
 AC_SUBST([ESBMC_CLANG_SUBDIRS], " clang-c-frontend clang-cpp-frontend ")
 AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../clang-cpp-frontend/libclangcppfrontend.la ../clang-c-frontend/headers/libclangheaders.la ../clang-c-frontend/AST/libclangcfrontendast.la")
