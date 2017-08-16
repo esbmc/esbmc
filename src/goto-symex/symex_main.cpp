@@ -318,9 +318,8 @@ void goto_symext::symex_assert()
 
   // Don't convert if it's an user provided assertion and we're running in
   // no assertion mode or forward condition
-  if(cur_state->source.pc->location.user_provided())
-    if(no_assertions || forward_condition)
-      return;
+  if(cur_state->source.pc->location.user_provided() && no_assertions)
+    return;
 
   std::string msg = cur_state->source.pc->location.comment().as_string();
   if (msg == "") msg = "assertion";
