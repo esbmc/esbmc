@@ -62,12 +62,11 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     cur_state->source.pc->location_number <
     goto_target->location_number;
 
-  statet::framet &frame=cur_state->top();
   if (new_guard_false)
   {
     // reset unwinding counter
     if(instruction.is_backwards_goto())
-      frame.loop_iterations[instruction.loop_number] = 0;
+      cur_state->loop_iterations[instruction.loop_number] = 0;
 
     // next instruction
     cur_state->source.pc++;
@@ -84,7 +83,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   // backwards?
   if (!forward)
   {
-    BigInt &unwind = frame.loop_iterations[instruction.loop_number];
+    BigInt &unwind = cur_state->loop_iterations[instruction.loop_number];
     ++unwind;
 
     if (get_unwind(cur_state->source, unwind)) {

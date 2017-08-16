@@ -307,8 +307,7 @@ void goto_symext::symex_assert()
      && loop_numbers.size()
      && inductive_step)
   {
-    statet::framet &frame = cur_state->top();
-    BigInt unwind = frame.loop_iterations[loop_numbers.top()];
+    BigInt unwind = cur_state->loop_iterations[loop_numbers.top()];
 
     if(unwind < (max_unwind - 1))
     {
