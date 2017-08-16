@@ -73,9 +73,9 @@ class Gotoinsns(unittest.TestCase):
     def test_insn_targets(self):
         import esbmc
         # First branch insn...
-        self.assertTrue(self.insns[6].target != None, "7th insn in main should be branch")
-        self.assertTrue(type(self.insns[6].target) == esbmc.goto_programs.instructiont, "Branch target should be insn")
-        self.assertTrue(self.insns[6].target in self.insns, "Branch target should be in same program!")
+        self.assertTrue(self.insns[5].target != None, "6th insn in main should be branch")
+        self.assertTrue(type(self.insns[5].target) == esbmc.goto_programs.instructiont, "Branch target should be insn")
+        self.assertTrue(self.insns[5].target in self.insns, "Branch target should be in same program!")
 
     def test_insn_target_munging(self):
         # Check that if we change the target of a brnach that it's reflected
