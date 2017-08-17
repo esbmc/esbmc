@@ -25,17 +25,19 @@ public:
     boost::shared_ptr<symex_target_equationt> &eq,
     const expr2tc &expr);
 
-  u_int64_t ignored;
-
-protected:
   typedef hash_set_cont<std::string, string_hash> symbol_sett;
-
   symbol_sett depends;
+
+  u_int64_t ignored;
   bool single_slice;
 
-  void get_symbols(const expr2tc &expr);
+  std::function<bool (const symbol2t&)> add_to_deps;
+
+protected:
+  bool get_symbols(const expr2tc &expr, std::function<bool (const symbol2t &)> fn);
 
   void slice(symex_target_equationt::SSA_stept &SSA_step);
+  void slice_assume(symex_target_equationt::SSA_stept &SSA_step);
   void slice_assignment(symex_target_equationt::SSA_stept &SSA_step);
   void slice_renumber(symex_target_equationt::SSA_stept &SSA_step);
 };
