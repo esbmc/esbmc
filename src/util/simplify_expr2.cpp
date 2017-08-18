@@ -1990,7 +1990,7 @@ if2t::do_simplify(bool second __attribute__((unused))) const
 
   if(is_true(true_value) && is_false(false_value))
   {
-    expr2tc cast = typecast2tc(type_pool.get_bool(), cond);
+    expr2tc cast = typecast2tc(type, cond);
     ::simplify(cast);
     return cast;
   }
