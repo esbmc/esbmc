@@ -127,10 +127,6 @@ protected:
     const exprt::operandst &arguments,
     goto_programt &dest);
 
-  virtual void do_function_call_symbol(const symbolt &symbol __attribute__((unused)))
-  {
-  }
-
   virtual void do_function_call_dereference(
     const exprt &lhs,
     const exprt &function,
@@ -310,7 +306,6 @@ protected:
 
   // some built-in functions
   void do_abort         (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_abs           (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_atomic_begin  (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_atomic_end    (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_create_thread (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);

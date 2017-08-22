@@ -493,36 +493,6 @@ void goto_convertt::do_free(
   t_f->location=function.location();
 }
 
-void goto_convertt::do_abs(
-  const exprt &lhs,
-  const exprt &function,
-  const exprt::operandst &arguments,
-  goto_programt &dest)
-{
-  if(lhs.is_nil()) return;
-
-  if(arguments.size()!=1)
-  {
-    err_location(function);
-    throw "abs expected to have one argument";
-  }
-
-  const exprt &arg=arguments.front();
-
-  exprt uminus=exprt("uminus", arg.type());
-  uminus.copy_to_operands(arg);
-
-  exprt rhs=exprt("if", arg.type());
-  rhs.operands().resize(3);
-  rhs.op0()=binary_relation_exprt(arg, ">=", gen_zero(arg.type()));
-  rhs.op1()=arg;
-  rhs.op2()=uminus;
-
-  code_assignt assignment(lhs, rhs);
-  assignment.location()=function.location();
-  copy(assignment, ASSIGN, dest);
-}
-
 bool is_lvalue(const exprt &expr)
 {
   if(expr.is_index())
@@ -888,8 +858,6 @@ void goto_convertt::do_function_call_symbol(
   }
   else
   {
-    do_function_call_symbol(*symbol);
-
     // insert function call
     code_function_callt function_call;
     function_call.lhs()=lhs;
