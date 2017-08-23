@@ -125,7 +125,6 @@ const struct opt_templ esbmc_options[] = {
   { 0, "inductive-step", switc, "" },
   { 0, "k-induction", switc, "" },
   { 0, "k-induction-parallel", switc, "" },
-  { 0, "constrain-all-states", switc, "" },
   { 0, "k-step", number, "1" },
   { 0, "max-k-step", number, "50" },
   { 0, "unlimited-k-steps", switc, "" },

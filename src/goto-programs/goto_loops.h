@@ -53,7 +53,7 @@ protected:
     function_loopst::iterator loop,
     const irep_idt &_function_name);
 
-  void add_loop_var(loopst &loop, const exprt &expr);
+  void add_loop_var(loopst &loop, const expr2tc &expr);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_LOOPS_H_ */

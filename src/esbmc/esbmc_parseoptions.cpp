@@ -890,12 +890,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       opts.set_option("forward-condition", false);
       opts.set_option("inductive-step", true);
 
-      // This will be changed to true if the code contains:
-      // 1. Dynamic allocated memory
-      // 2. Multithreaded code (during symbolic execution)
-      // 3. Recursion (during inlining)
-      opts.set_option("disable-inductive-step", false);
-
       // Start communication to the parent process
       close(forward_pipe[0]);
       close(backward_pipe[1]);
@@ -1204,9 +1198,6 @@ int cbmc_parseoptionst::do_inductive_step(
 {
   // Don't run inductive step for k_step == 1
   if(k_step == 1)
-    return true;
-
-  if(opts.get_bool_option("disable-inductive-step"))
     return true;
 
   opts.set_option("base-case", false);
@@ -1709,16 +1700,9 @@ bool cbmc_parseoptionst::process_goto_program(
        || cmdline.isset("k-induction")
        || cmdline.isset("k-induction-parallel"))
     {
-      // If the inductive step was disabled during the conversion,
-      // there is no point spending time trying to convert it,
-      // so just give up and return
-      if(options.get_bool_option("disable-inductive-step"))
-        return false;
-
       goto_k_induction(
         goto_functions,
         context,
-        options,
         ui_message_handler);
 
       // Warn the user if the forward condition was disabled
@@ -2009,7 +1993,6 @@ void cbmc_parseoptionst::help()
     " --k-induction                prove by k-induction \n"
     " --k-induction-parallel       prove by k-induction, running each step on a separate\n"
     "                              process\n"
-    " --constrain-all-states       remove all redundant states in the inductive step\n"
     " --k-step nr                  set k increment (default is 1)\n"
     " --max-k-step nr              set max number of iteration (default is 50)\n"
     " --unlimited-k-steps          set max number of iteration to UINT_MAX\n"
