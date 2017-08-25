@@ -598,15 +598,11 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
   try
   {
     fine_timet slice_start = current_time();
-    u_int64_t ignored;
+    BigInt ignored;
     if(!options.get_bool_option("no-slice"))
-    {
       ignored = slice(eq);
-    }
     else
-    {
       ignored = simple_slice(eq);
-    }
     fine_timet slice_stop = current_time();
 
     {
@@ -629,7 +625,7 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
       std::ostringstream str;
       str << "Generated " << result->total_claims << " VCC(s), ";
       str << result->remaining_claims << " remaining after simplification ";
-      str << "(" << eq->SSA_steps.size() - ignored << " assignments)";
+      str << "(" << BigInt(eq->SSA_steps.size()) - ignored << " assignments)";
       status(str.str());
     }
 

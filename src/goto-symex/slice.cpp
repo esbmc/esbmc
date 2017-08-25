@@ -110,7 +110,7 @@ void symex_slicet::slice_assume(
   {
     // we don't really need it
     SSA_step.ignore=true;
-    ignored++;
+    ++ignored;
   }
 }
 
@@ -124,7 +124,7 @@ void symex_slicet::slice_assignment(
   {
     // we don't really need it
     SSA_step.ignore=true;
-    ignored++;
+    ++ignored;
   }
   else
   {
@@ -145,22 +145,22 @@ void symex_slicet::slice_renumber(
   {
     // we don't really need it
     SSA_step.ignore=true;
-    ignored++;
+    ++ignored;
   }
 
   // Don't collect the symbol; this insn has no effect on dependencies.
 }
 
-u_int64_t slice(boost::shared_ptr<symex_target_equationt> &eq)
+BigInt slice(boost::shared_ptr<symex_target_equationt> &eq)
 {
   symex_slicet symex_slice;
   symex_slice.slice(eq);
   return symex_slice.ignored;
 }
 
-u_int64_t simple_slice(boost::shared_ptr<symex_target_equationt> &eq)
+BigInt simple_slice(boost::shared_ptr<symex_target_equationt> &eq)
 {
-  u_int64_t ignored = 0;
+  BigInt ignored = 0;
 
   // just find the last assertion
   symex_target_equationt::SSA_stepst::iterator
@@ -184,7 +184,7 @@ u_int64_t simple_slice(boost::shared_ptr<symex_target_equationt> &eq)
         s_it++)
     {
       s_it->ignore=true;
-      ignored++;
+      ++ignored;
     }
 
   return ignored;

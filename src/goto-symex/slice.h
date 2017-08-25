@@ -13,8 +13,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/symex_target_equation.h>
 #include <util/hash_cont.h>
 
-u_int64_t slice(boost::shared_ptr<symex_target_equationt> &eq);
-u_int64_t simple_slice(boost::shared_ptr<symex_target_equationt> &eq);
+BigInt slice(boost::shared_ptr<symex_target_equationt> &eq);
+BigInt simple_slice(boost::shared_ptr<symex_target_equationt> &eq);
 
 class symex_slicet
 {
@@ -28,7 +28,7 @@ public:
   typedef hash_set_cont<std::string, string_hash> symbol_sett;
   symbol_sett depends;
 
-  u_int64_t ignored;
+  BigInt ignored;
   bool single_slice;
 
   std::function<bool (const symbol2t&)> add_to_deps;
