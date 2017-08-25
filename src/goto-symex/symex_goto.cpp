@@ -76,7 +76,6 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     }
   }
 
-  statet::framet &frame=cur_state->top();
   if (new_guard_false)
   {
     // reset unwinding counter
