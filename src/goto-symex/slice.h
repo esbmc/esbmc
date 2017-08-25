@@ -13,27 +13,24 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/symex_target_equation.h>
 #include <util/hash_cont.h>
 
-BigInt slice(boost::shared_ptr<symex_target_equationt> &eq);
+BigInt slice(boost::shared_ptr<symex_target_equationt> &eq, bool slice_assume);
 BigInt simple_slice(boost::shared_ptr<symex_target_equationt> &eq);
 
 class symex_slicet
 {
 public:
-  symex_slicet();
+  symex_slicet(bool assume);
   void slice(boost::shared_ptr<symex_target_equationt> &eq);
-  void slice_for_symbols(
-    boost::shared_ptr<symex_target_equationt> &eq,
-    const expr2tc &expr);
 
   typedef hash_set_cont<std::string, string_hash> symbol_sett;
   symbol_sett depends;
 
   BigInt ignored;
-  bool single_slice;
-
-  std::function<bool (const symbol2t&)> add_to_deps;
 
 protected:
+  bool slice_assumes;
+  std::function<bool (const symbol2t&)> add_to_deps;
+
   bool get_symbols(const expr2tc &expr, std::function<bool (const symbol2t &)> fn);
 
   void slice(symex_target_equationt::SSA_stept &SSA_step);

@@ -76,6 +76,7 @@ const struct opt_templ esbmc_options[] = {
   { 0, "partial-loops", switc, "" },
   { 0, "unroll-loops", switc, "" },
   { 0, "no-slice", switc, "" },
+  { 0, "slice-assumes", switc, "" },
   { 0, "extended-try-analysis", switc, "" },
   { 0, "skip-bmc", switc, "" },
 

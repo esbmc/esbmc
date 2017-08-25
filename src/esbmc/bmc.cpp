@@ -600,7 +600,7 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
     fine_timet slice_start = current_time();
     BigInt ignored;
     if(!options.get_bool_option("no-slice"))
-      ignored = slice(eq);
+      ignored = slice(eq, options.get_bool_option("slice-assumes"));
     else
       ignored = simple_slice(eq);
     fine_timet slice_stop = current_time();
