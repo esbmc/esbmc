@@ -549,11 +549,7 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->base_name.as_string();
 
-  // Replace __VERIFIER by __ESBMC
-  base_name =
-    std::regex_replace(base_name, std::regex("VERIFIER_assume"), "ESBMC_assume");
-
-  bool is_assume = (base_name == "__ESBMC_assume");
+  bool is_assume = (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
   bool is_assert = (base_name == "assert") || (base_name == "__VERIFIER_assert");
 
   if(is_assume || is_assert)
