@@ -8,10 +8,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-symex/slice.h>
 
-
-symex_slicet::symex_slicet()
+symex_slicet::symex_slicet(bool assume)
   : ignored(0),
-    single_slice(false),
+    slice_assumes(assume),
     add_to_deps([this](const symbol2t &s) -> bool
       { return depends.insert(s.get_symbol_name()).second;})
 {
@@ -21,9 +20,7 @@ bool symex_slicet::get_symbols(
   const expr2tc &expr,
   std::function<bool (const symbol2t &)> fn)
 {
-
   bool res = false;
-
   expr->foreach_operand([this, &fn, &res] (const expr2tc &e)
     {
       if (!is_nil_expr(e))
@@ -50,35 +47,21 @@ void symex_slicet::slice(boost::shared_ptr<symex_target_equationt> &eq)
     slice(*it);
 }
 
-void symex_slicet::slice_for_symbols(
-  boost::shared_ptr<symex_target_equationt> &eq,
-  const expr2tc &expr)
-{
-  get_symbols(expr, add_to_deps);
-
-  single_slice = true;
-
-  for(symex_target_equationt::SSA_stepst::reverse_iterator
-      it = eq->SSA_steps.rbegin();
-      it != eq->SSA_steps.rend();
-      it++)
-    slice(*it);
-}
-
 void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
 {
-  if (!single_slice)
-    get_symbols(SSA_step.guard, add_to_deps);
+  get_symbols(SSA_step.guard, add_to_deps);
 
   switch(SSA_step.type)
   {
   case goto_trace_stept::ASSERT:
-    if (!single_slice)
-      get_symbols(SSA_step.cond, add_to_deps);
+    get_symbols(SSA_step.cond, add_to_deps);
     break;
 
   case goto_trace_stept::ASSUME:
-    slice_assume(SSA_step);
+    if(slice_assumes)
+      slice_assume(SSA_step);
+    else
+      get_symbols(SSA_step.cond, add_to_deps);
     break;
 
   case goto_trace_stept::ASSIGNMENT:
@@ -110,7 +93,7 @@ void symex_slicet::slice_assume(
   {
     // we don't really need it
     SSA_step.ignore=true;
-    ignored++;
+    ++ignored;
   }
 }
 
@@ -124,7 +107,7 @@ void symex_slicet::slice_assignment(
   {
     // we don't really need it
     SSA_step.ignore=true;
-    ignored++;
+    ++ignored;
   }
   else
   {
@@ -145,22 +128,22 @@ void symex_slicet::slice_renumber(
   {
     // we don't really need it
     SSA_step.ignore=true;
-    ignored++;
+    ++ignored;
   }
 
   // Don't collect the symbol; this insn has no effect on dependencies.
 }
 
-u_int64_t slice(boost::shared_ptr<symex_target_equationt> &eq)
+BigInt slice(boost::shared_ptr<symex_target_equationt> &eq, bool slice_assumes)
 {
-  symex_slicet symex_slice;
+  symex_slicet symex_slice(slice_assumes);
   symex_slice.slice(eq);
   return symex_slice.ignored;
 }
 
-u_int64_t simple_slice(boost::shared_ptr<symex_target_equationt> &eq)
+BigInt simple_slice(boost::shared_ptr<symex_target_equationt> &eq)
 {
-  u_int64_t ignored = 0;
+  BigInt ignored = 0;
 
   // just find the last assertion
   symex_target_equationt::SSA_stepst::iterator
@@ -184,7 +167,7 @@ u_int64_t simple_slice(boost::shared_ptr<symex_target_equationt> &eq)
         s_it++)
     {
       s_it->ignore=true;
-      ignored++;
+      ++ignored;
     }
 
   return ignored;

@@ -1462,7 +1462,7 @@ void c_typecheck_baset::do_special_functions(
       exprt tmp = expr.arguments()[0];
       expr.swap(tmp);
     }
-    else if(identifier == "c::__builtin_isgreater")
+    else if(identifier == "__builtin_isgreater")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -1477,7 +1477,7 @@ void c_typecheck_baset::do_special_functions(
 
       expr.swap(op);
     }
-    else if(identifier == "c::__builtin_isgreaterequal")
+    else if(identifier == "__builtin_isgreaterequal")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -1492,7 +1492,7 @@ void c_typecheck_baset::do_special_functions(
 
       expr.swap(op);
     }
-    else if(identifier == "c::__builtin_isless")
+    else if(identifier == "__builtin_isless")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -1507,7 +1507,7 @@ void c_typecheck_baset::do_special_functions(
 
       expr.swap(op);
     }
-    else if(identifier == "c::__builtin_islessequal")
+    else if(identifier == "__builtin_islessequal")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -1522,7 +1522,7 @@ void c_typecheck_baset::do_special_functions(
 
       expr.swap(op);
     }
-    else if(identifier == "c::__builtin_islessgreater")
+    else if(identifier == "__builtin_islessgreater")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -1543,7 +1543,7 @@ void c_typecheck_baset::do_special_functions(
 
       expr.swap(op);
     }
-    else if(identifier == "c::__builtin_isunordered")
+    else if(identifier == "__builtin_isunordered")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)

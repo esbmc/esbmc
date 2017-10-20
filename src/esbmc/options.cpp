@@ -76,6 +76,7 @@ const struct opt_templ esbmc_options[] = {
   { 0, "partial-loops", switc, "" },
   { 0, "unroll-loops", switc, "" },
   { 0, "no-slice", switc, "" },
+  { 0, "slice-assumes", switc, "" },
   { 0, "extended-try-analysis", switc, "" },
   { 0, "skip-bmc", switc, "" },
 
@@ -174,9 +175,6 @@ const struct opt_templ esbmc_options[] = {
   // will be enabled by default, but for now, it needs more testing
   { 0, "keep-unused", switc, "" },
 
-  // LTL mode?
-  { 0, "ltl", switc, "" },
-
   // Verbosity of message, probably does nothing
   { 0, "verbosity", number, "" },
 
@@ -191,12 +189,6 @@ const struct opt_templ esbmc_options[] = {
   // any other exploration from that point. Useful for constructing an
   // explicit multithreading path
   { 0, "direct-interleavings", switc, "" },
-
-  // Used to print out the instructions that had been identified as touching
-  // global variables, thus instructions that cause interleavings. Probably
-  // isn't sound any more seeing how we don't do the static pointer analysis
-  // any more.
-  { 0, "show-ileave-points", switc, "" },
 
   // I think this dumps the current stack of all threads on an ileave point.
   // Useful for working out the state of _all_ the threads and how they

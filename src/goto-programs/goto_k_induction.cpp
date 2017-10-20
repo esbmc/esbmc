@@ -154,10 +154,10 @@ void goto_k_inductiont::assume_neg_loop_cond_after_loop(
   make_not(neg_loop_cond);
   assume_cond(neg_loop_cond, dest);
 
-  goto_programt::targett _loop_exit = loop_exit;
-  ++_loop_exit;
+//  goto_programt::targett _loop_exit = loop_exit;
+//  ++_loop_exit;
 
-  goto_function.body.insert_swap(_loop_exit, dest);
+  goto_function.body.insert_swap(loop_exit, dest);
 }
 
 void goto_k_inductiont::adjust_loop_head_and_exit(

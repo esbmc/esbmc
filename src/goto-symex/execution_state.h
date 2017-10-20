@@ -511,8 +511,6 @@ class execution_statet : public goto_symext
    *  produced code when the monitor is to be ended. */
   void kill_monitor_thread();
 
-  void init_property_monitors();
-
   public:
 
   /** Pointer to reachability_treet that owns this ex_state */
@@ -579,8 +577,6 @@ class execution_statet : public goto_symext
   unsigned int monitor_from_tid;
   /** Whether monitor_from_tid is set */
   bool mon_from_tid;
-  /** Are we performing LTL monitor checking? */
-  bool check_ltl;
   /** Have we warned of an ended monitor thread already?. */
   bool mon_thread_warning;
   /** Message handler object */

@@ -64,10 +64,8 @@ void loopst::dump()
 void loopst::dump_loop_vars()
 {
   std::cout << "Loop variables:\n";
-
   unsigned int i = 0;
   for (auto var : loop_vars)
     std::cout << ++i << ". \t" << to_symbol2t(var).thename << '\n';
-
   std::cout << '\n';
 }
