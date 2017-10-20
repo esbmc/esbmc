@@ -136,6 +136,9 @@ void goto_k_inductiont::assume_loop_cond_before_loop(
   goto_programt::targett& loop_head,
   expr2tc &loop_cond)
 {
+  if(is_true(loop_cond))
+    return;
+
   goto_programt dest;
   assume_cond(loop_cond, dest);
 
