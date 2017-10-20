@@ -305,13 +305,8 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
   const irep_idt &loop_id = cur_state->source.pc->location.loopid();
 
-  expr2tc negated_cond;
-
-  if (is_true(guard)) {
-    negated_cond = gen_false_expr();
-  } else {
-    negated_cond = not2tc(guard);
-  }
+  expr2tc negated_cond = guard;
+  make_not(negated_cond);
 
   if(!partial_loops)
   {
