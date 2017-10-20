@@ -75,9 +75,6 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   // We must point to the assume that was inserted in the previous
   // transformation
   adjust_loop_head_and_exit(loop_head, loop_exit);
-
-  // We need to assume the loop exit condition
-  assume_neg_loop_cond_after_loop(loop_exit, loop_cond);
 }
 
 const expr2tc goto_k_inductiont::get_loop_cond(
