@@ -31,13 +31,6 @@ public:
     message_handlert &_message_handler);
 
   optionst &options;
-  enum {
-    ltl_res_good,
-    ltl_res_succeeding,
-    ltl_res_failing,
-    ltl_res_bad
-  };
-  int ltl_results_seen[4];
 
   BigInt interleaving_number;
   BigInt interleaving_failed;
@@ -88,7 +81,6 @@ protected:
   virtual void report_result(smt_convt::resultt &res);
 
   smt_convt::resultt run_thread(boost::shared_ptr<symex_target_equationt> &eq);
-  int ltl_run_thread(boost::shared_ptr<symex_target_equationt> &eq);
 };
 
 #endif
