@@ -74,7 +74,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 
     expr = is_valid_ptr;
   }
-  if (is_deallocated_obj2t(expr))
+  else if (is_deallocated_obj2t(expr))
   {
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
     const deallocated_obj2t &obj = to_deallocated_obj2t(expr);

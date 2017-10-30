@@ -579,6 +579,16 @@ void value_sett::get_value_set_rec(
     get_byte_stitching_value_set(expr, dest, suffix, original_type);
     return;
   }
+  else if (is_byte_extract2t(expr))
+  {
+    // This is cropping up when one assigns, for example, a pointer into a
+    // byte array. The lhs gets portions of the pointer, bitcasted and then
+    // byte extracted on the lhs. Thus, we need to blast through the byte
+    // extract.
+    const byte_extract2t &be = to_byte_extract2t(expr);
+    get_value_set_rec(be.source_value, dest, suffix, original_type);
+    return;
+  }
 
   // If none of those expressions matched, then we don't really know what this
   // expression evaluates to. So just record it as being unknown.
