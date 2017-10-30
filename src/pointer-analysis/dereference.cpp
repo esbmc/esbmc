@@ -989,6 +989,20 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
     mp_integer m_offs = member_offset(value->type, struct_type.member_names[i]);
     mp_integer m_size = type_byte_size(it);
 
+    if (m_size == 0) {
+      // This field has no size: it's most likely a struct that has no members.
+      // Just skip over it: we can never correctly build a reference to a field
+      // in that struct, because there are no fields. The next field in the
+      // current struct lies at the same offset and is probably what the pointer
+      // is supposed to point at.
+      // If user is seeking a reference to this substruct, a different method
+      // should have been called (construct_struct_ref_from_const_offset).
+      assert(is_struct_type(it));
+      assert(!is_struct_type(type));
+      i++;
+      continue;
+    }
+
     if (int_offset < m_offs) {
       // The offset is behind this field, but wasn't accepted by the previous
       // member. That means that the offset falls in the undefined gap in the
