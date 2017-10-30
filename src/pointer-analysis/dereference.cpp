@@ -1262,6 +1262,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
   // Minimal effort: the moment that we can throw this object out due to an
   // incompatible type, we do.
   const constant_int2t &intref = to_constant_int2t(offs);
+  mp_integer type_size = type_byte_size(type);
 
   if (is_struct_type(value->type))
   {
@@ -1290,14 +1291,29 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
       if (!is_scalar_type(it) && intref.value >= offs && intref.value < (offs + size))
       {
-        // It's this field. Don't make a decision about whether it's correct
-        // or not, recurse to make that happen.
+        // It's this field. However, zero sized structs may have conspired
+        // to make life miserable: we might be creating a reference to one,
+        // or there might be one preceeding the desired struct.
+
+        // Zero sized struct and we don't want one,
+        if (size == 0 && type_size != 0)
+          goto cont;
+
+        value = member2tc(it, value, struct_type.member_names[i]);
+
+        // Zero sized struct and it's not the right one (!):
+        if (size == 0 && type_size == 0 && !dereference_type_compare(value, type))
+          goto cont;
+
+        // OK, it's this substruct, and we've eliminated the zero-sized-struct
+        // menace. Recurse to continue our checks.
         mp_integer new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs.to_ulong());
         value = member2tc(it, value, struct_type.member_names[i]);
         construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
         return;
       }
+    cont:
       i++;
     }
 
