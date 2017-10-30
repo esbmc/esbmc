@@ -15,7 +15,9 @@
 #include <goto-symex/witnesses.h>
 #include <langapi/languages.h>
 #include <util/irep2.h>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
+/* */
 int generate_sha1_hash_for_file(const char * path, std::string & output)
 {
   FILE * file = fopen(path, "rb");
@@ -40,6 +42,7 @@ int generate_sha1_hash_for_file(const char * path, std::string & output)
 int node_count;
 int edge_count;
 
+/* */
 std::string execute_cmd(const std::string& command)
 {
   /* add ./ for linux execution */
@@ -58,6 +61,7 @@ std::string execute_cmd(const std::string& command)
   return result;
 }
 
+/* */
 std::string read_file(const std::string& path)
 {
   std::ifstream t(path.c_str());
@@ -66,6 +70,7 @@ std::string read_file(const std::string& path)
   return str;
 }
 
+/* */
 std::string trim(const std::string& str)
 {
   const std::string whitespace_characters = " \t\r\n";
@@ -77,6 +82,7 @@ std::string trim(const std::string& str)
   return str.substr(first_non_whitespace, length);
 }
 
+/* */
 void map_line_number_to_content(const std::string& source_code_file,
     std::map<int, std::string> & line_content_map)
 {
@@ -96,6 +102,7 @@ void map_line_number_to_content(const std::string& source_code_file,
   }
 }
 
+/* */
 void create_node(boost::property_tree::ptree & node, node_p & node_props)
 {
   node.add("<xmlattr>.id", "n" + std::to_string(node_count++));
@@ -150,6 +157,7 @@ void create_node(boost::property_tree::ptree & node, node_p & node_props)
   }
 }
 
+/* */
 void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
     boost::property_tree::ptree & source, boost::property_tree::ptree & target)
 {
@@ -214,6 +222,7 @@ void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
   }
 }
 
+/* */
 void create_graphml(boost::property_tree::ptree & graphml,
     const std::string& file_path)
 {
@@ -361,6 +370,17 @@ void create_graphml(boost::property_tree::ptree & graphml,
   key_programhash.add("<xmlattr>.for", "graph");
   graphml.add_child("graphml.key", key_programhash);
 
+  boost::property_tree::ptree key_creationTime;
+  key_creationTime.add("<xmlattr>.id", "creationtime");
+  key_creationTime.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "creationtime");
+  key_creationTime.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_creationTime.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", key_creationTime);
+
   boost::property_tree::ptree key_specification;
   key_specification.add("<xmlattr>.id", "specification");
   key_specification.put(
@@ -371,17 +391,6 @@ void create_graphml(boost::property_tree::ptree & graphml,
     "string");
   key_specification.add("<xmlattr>.for", "graph");
   graphml.add_child("graphml.key", key_specification);
-
-  boost::property_tree::ptree key_memorymodel;
-  key_memorymodel.add("<xmlattr>.id", "memorymodel");
-  key_memorymodel.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "memoryModel");
-  key_memorymodel.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_programhash.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_memorymodel);
 
   boost::property_tree::ptree key_architecture;
   key_architecture.add("<xmlattr>.id", "architecture");
@@ -549,56 +558,66 @@ void create_graphml(boost::property_tree::ptree & graphml,
   graphml.add_child("graphml.key", key_witnessType);
 }
 
+/* */
 void create_graph(
   boost::property_tree::ptree & graph,
   std::string & filename,
   int & specification,
   const bool is_correctness)
 {
-  std::string hash;
-  if (!filename.empty())
-    generate_sha1_hash_for_file(filename.c_str(), hash);
-
   graph.add("<xmlattr>.edgedefault", "directed");
-  boost::property_tree::ptree data_witnesstype;
-  data_witnesstype.add("<xmlattr>.key", "witness-type");
-  data_witnesstype.put_value(is_correctness ? "correctness_witness" : "violation_witness");
-  graph.add_child("data", data_witnesstype);
-  boost::property_tree::ptree data_sourcecodelang;
-  data_sourcecodelang.add("<xmlattr>.key", "sourcecodelang");
-  data_sourcecodelang.put_value("C");
-  graph.add_child("data", data_sourcecodelang);
-  boost::property_tree::ptree data_producer;
-  data_producer.add("<xmlattr>.key", "producer");
-  data_producer.put_value("ESBMC " + std::string(ESBMC_VERSION));
-  graph.add_child("data", data_producer);
-  boost::property_tree::ptree data_specification;
-  data_specification.add("<xmlattr>.key", "specification");
+
+  boost::property_tree::ptree pProducer;
+  pProducer.add("<xmlattr>.key", "producer");
+  pProducer.put_value("ESBMC " + std::string(ESBMC_VERSION));
+  graph.add_child("data", pProducer);
+
+  boost::property_tree::ptree pSourceCodeLang;
+  pSourceCodeLang.add("<xmlattr>.key", "sourcecodelang");
+  pSourceCodeLang.put_value("C");
+  graph.add_child("data", pSourceCodeLang);
+
+  boost::property_tree::ptree pArchitecture;
+  pArchitecture.add("<xmlattr>.key", "architecture");
+  pArchitecture.put_value(std::to_string(config.ansi_c.word_size) + "bit");
+  graph.add_child("data", pArchitecture);
+
+  boost::property_tree::ptree pProgramFile;
+  pProgramFile.add("<xmlattr>.key", "programfile");
+  pProgramFile.put_value(filename);
+  graph.add_child("data", pProgramFile);
+
+  std::string programFileHash;
+  if (!filename.empty())
+    generate_sha1_hash_for_file(filename.c_str(), programFileHash);
+  boost::property_tree::ptree pProgramHash;
+  pProgramHash.add("<xmlattr>.key", "programhash");
+  pProgramHash.put_value(programFileHash);
+  graph.add_child("data", pProgramHash);
+
+  boost::property_tree::ptree pDataSpecification;
+  pDataSpecification.add("<xmlattr>.key", "specification");
   if (specification == 1)
-    data_specification.put_value("CHECK( init(main()), LTL(G ! overflow) )");
+    pDataSpecification.put_value("CHECK( init(main()), LTL(G ! overflow) )");
   else if (specification == 2)
-    data_specification.put_value("CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
+    pDataSpecification.put_value("CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
   else
-    data_specification.put_value("CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
-  graph.add_child("data", data_specification);
-  boost::property_tree::ptree data_programfile;
-  data_programfile.add("<xmlattr>.key", "programfile");
-  data_programfile.put_value(filename);
-  graph.add_child("data", data_programfile);
-  boost::property_tree::ptree data_programhash;
-  data_programhash.add("<xmlattr>.key", "programhash");
-  data_programhash.put_value(hash);
-  graph.add_child("data", data_programhash);
-  boost::property_tree::ptree data_memorymodel;
-  data_memorymodel.add("<xmlattr>.key", "memoryModel");
-  data_memorymodel.put_value("precise");
-  graph.add_child("data", data_memorymodel);
-  boost::property_tree::ptree data_architecture;
-  data_architecture.add("<xmlattr>.key", "architecture");
-  data_architecture.put_value(std::to_string(config.ansi_c.word_size) + "bit");
-  graph.add_child("data", data_architecture);
+    pDataSpecification.put_value("CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
+  graph.add_child("data", pDataSpecification);
+
+  boost::property_tree::ptree pWitnessType;
+  pWitnessType.add("<xmlattr>.key", "witness-type");
+  pWitnessType.put_value(is_correctness ? "correctness_witness" : "violation_witness");
+  graph.add_child("data", pWitnessType);
+
+  boost::posix_time::ptime creationTime = boost::posix_time::microsec_clock::universal_time();
+  boost::property_tree::ptree pCreationTime;
+  pCreationTime.add("<xmlattr>.key", "creationtime");
+  pCreationTime.put_value(boost::posix_time::to_iso_extended_string(creationTime));
+  graph.add_child("data", pCreationTime);
 }
 
+/* */
 std::string w_string_replace(
   std::string subject,
   const std::string & search,
@@ -612,6 +631,7 @@ std::string w_string_replace(
   return subject;
 }
 
+/* */
 void get_offsets_for_line_using_wc(
   const std::string & file_path,
   const int line_number,
@@ -643,6 +663,7 @@ void get_offsets_for_line_using_wc(
   p_endoffset = endoffset;
 }
 
+/* */
 bool is_valid_witness_expr(
   const namespacet &ns,
 	const irep_container<expr2t> & exp)
@@ -657,6 +678,7 @@ bool is_valid_witness_expr(
     value.find("sys_")) == std::string::npos;
 }
 
+/* */
 void get_relative_line_in_programfile(
   const std::string& relative_file_path,
   const int relative_line_number,

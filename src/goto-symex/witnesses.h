@@ -8,19 +8,25 @@
  *  http://sv-comp.sosy-lab.org/2016/witnesses/s3_cln1_false.witness.cpachecker.graphml
  *
  */
-
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <util/namespace.h>
 #include <util/irep2.h>
 
+/**
+ *
+ */
 typedef struct graph_props
 {
   std::string sourcecodeLanguage;
   std::string witnessType;
+  std::string creationTime;
 } graph_p;
 
+/**
+ *
+ */
 typedef struct node_props
 {
   std::string nodeType = "";
@@ -32,6 +38,9 @@ typedef struct node_props
   std::string invariantScope = "";
 } node_p;
 
+/**
+ *
+ */
 typedef struct edge_props
 {
   std::string assumption = "";
@@ -46,45 +55,75 @@ typedef struct edge_props
   std::string returnFromFunction = "";
 } edge_p;
 
+/**
+ *
+ */
 int generate_sha1_hash_for_file(const char * path, std::string & output);
 
+/**
+ *
+ */
 void map_line_number_to_content(
   const std::string& source_code_file,
   std::map<int, std::string> & line_content_map);
 
+/**
+ *
+ */
 void create_node(boost::property_tree::ptree & node, node_p & node_props);
 
+/**
+ *
+ */
 void create_edge(
   boost::property_tree::ptree & edge,
   edge_p & edge_props,
   boost::property_tree::ptree & source,
   boost::property_tree::ptree & target);
 
+/**
+ *
+ */
 void create_graphml(
   boost::property_tree::ptree & graphml,
   const std::string& file_path);
 
+/**
+ *
+ */
 void create_graph(
   boost::property_tree::ptree & graph,
   std::string & filename,
   int & specification,
   const bool is_correctness);
 
+/**
+ *
+ */
 std::string w_string_replace(
   std::string subject,
   const std::string & search,
   const std::string & replace);
 
+/**
+ *
+ */
 void get_offsets_for_line_using_wc(
   const std::string & file_path,
   const int line_number,
   int & p_startoffset,
   int & p_endoffset);
 
+/**
+ *
+ */
 bool is_valid_witness_expr(
   const namespacet &ns,
 	const irep_container<expr2t> & exp);
 
+/**
+ *
+ */
 void get_relative_line_in_programfile(
   const std::string& relative_file_path,
   const int relative_line_number,
