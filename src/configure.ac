@@ -266,6 +266,15 @@ AS_IF([test "${enable_libesbmc}" = "yes"], [
   AC_SUBST([ESBMC_LIB], "")
 ])
 
+dnl The witness code wants boost date-time, apparently. Only symbols are cpp,
+dnl so pick a special one
+AC_CHECK_LIB(["boost_date_time"], [_init],
+[
+  AS_VAR_SET(LIBS, " -lboost_date_time $LIBS")
+], [
+  AC_MSG_ERROR([Could not find boost_date_time library])
+])
+
 AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 $ESBMC_CLANG_CXXFLAGS ")
 dnl A necessary evil due to the presence of rubbish in boost::python's headers.
 dnl local typedefs because that's how boost python works
