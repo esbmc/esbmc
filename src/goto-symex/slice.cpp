@@ -50,11 +50,10 @@ void symex_slicet::slice(boost::shared_ptr<symex_target_equationt> &eq)
 
 void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
 {
-  get_symbols(SSA_step.guard, add_to_deps);
-
   switch(SSA_step.type)
   {
   case goto_trace_stept::ASSERT:
+    get_symbols(SSA_step.guard, add_to_deps);
     get_symbols(SSA_step.cond, add_to_deps);
     break;
 
@@ -62,7 +61,10 @@ void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
     if(slice_assumes)
       slice_assume(SSA_step);
     else
+    {
+      get_symbols(SSA_step.guard, add_to_deps);
       get_symbols(SSA_step.cond, add_to_deps);
+    }
     break;
 
   case goto_trace_stept::ASSIGNMENT:
@@ -99,6 +101,7 @@ void symex_slicet::slice_assume(
   else
   {
     // If we need it, add the symbols to dependency
+    get_symbols(SSA_step.guard, add_to_deps);
     get_symbols(SSA_step.cond, add_to_deps);
   }
 }
@@ -108,8 +111,13 @@ void symex_slicet::slice_assignment(
 {
   assert(is_symbol2t(SSA_step.lhs));
 
-  const symbol2t &tmp = to_symbol2t(SSA_step.lhs);
-  if (depends.find(tmp.get_symbol_name()) == depends.end())
+  auto check_in_deps =
+    [this](const symbol2t &s) -> bool
+      {
+        return depends.find(s.get_symbol_name()) != depends.end();
+      };
+
+  if(!get_symbols(SSA_step.lhs, check_in_deps))
   {
     // we don't really need it
     SSA_step.ignore=true;
@@ -117,10 +125,12 @@ void symex_slicet::slice_assignment(
   }
   else
   {
+    get_symbols(SSA_step.guard, add_to_deps);
     get_symbols(SSA_step.rhs, add_to_deps);
+
     // Remove this symbol as we won't be seeing any references to it further
     // into the history.
-    depends.erase(tmp.get_symbol_name());
+    depends.erase(to_symbol2t(SSA_step.lhs).get_symbol_name());
   }
 }
 
@@ -129,8 +139,13 @@ void symex_slicet::slice_renumber(
 {
   assert(is_symbol2t(SSA_step.lhs));
 
-  const symbol2t &tmp = to_symbol2t(SSA_step.lhs);
-  if (depends.find(tmp.get_symbol_name()) == depends.end())
+  auto check_in_deps =
+    [this](const symbol2t &s) -> bool
+      {
+        return depends.find(s.get_symbol_name()) != depends.end();
+      };
+
+  if(!get_symbols(SSA_step.lhs, check_in_deps))
   {
     // we don't really need it
     SSA_step.ignore=true;
