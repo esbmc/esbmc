@@ -120,16 +120,19 @@ mathsat_convt::get_bool(const smt_ast *a)
   msat_term t = msat_get_model_value(env, mast->t);
   check_msat_error(t);
 
-  if (msat_term_is_true(env, t)) {
-    return gen_true_expr();
-  } else if (msat_term_is_false(env, t)) {
-    return gen_false_expr();
-  } else {
+  expr2tc res;
+  if (msat_term_is_true(env, t))
+    res = gen_true_expr();
+  else if (msat_term_is_false(env, t))
+    res = gen_false_expr();
+  else
+  {
     std::cerr << "Boolean model value is neither true or false" << std::endl;
     abort();
   }
 
   msat_free(msat_term_repr(t));
+  return res;
 }
 
 expr2tc
@@ -207,10 +210,11 @@ mathsat_convt::l_get(const smt_ast *a)
   constant_bool2tc b = get_bool(a);
   if (b->value)
     return tvt(true);
-  else if (!b->value)
+
+  if (!b->value)
     return tvt(false);
-  else
-    assert(0);
+
+  assert(0);
 }
 
 const std::string

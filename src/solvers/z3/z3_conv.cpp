@@ -375,13 +375,14 @@ z3_convt::l_get(const smt_ast *a)
   tvt result = tvt(tvt::TV_UNKNOWN);
 
   expr2tc res = get_bool(a);
+  if(is_nil_expr(res))
+    return result;
 
-  if (!is_nil_expr(res) && is_constant_bool2t(res)) {
-    result = (to_constant_bool2t(res).is_true())
-             ? tvt(tvt::TV_TRUE) : tvt(tvt::TV_FALSE);
-  } else {
-    result = tvt(tvt::TV_UNKNOWN);
-  }
+  if(is_true(res))
+    return tvt(tvt::TV_TRUE);
+
+  if (is_false(res))
+    return tvt(tvt::TV_FALSE);
 
   return result;
 }

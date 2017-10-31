@@ -81,8 +81,7 @@ void goto_program_dereferencet::dereference_failure(
       simplify(guard_expr);
     }
 
-    if (!is_constant_bool2t(guard_expr) ||
-        !to_constant_bool2t(guard_expr).value)
+    if (!is_true(guard_expr))
     {
       goto_programt::targett t=new_code.add_instruction(ASSERT);
       t->guard = guard_expr;

@@ -550,7 +550,7 @@ void goto_convertt::do_function_call_symbol(
   std::string base_name = symbol->base_name.as_string();
 
   bool is_assume = (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
-  bool is_assert = (base_name == "assert") || (base_name == "__VERIFIER_assert");
+  bool is_assert = (base_name == "assert");
 
   if(is_assume || is_assert)
   {
@@ -613,6 +613,33 @@ void goto_convertt::do_function_call_symbol(
       err_location(function);
       throw id2string(base_name)+" expected not to have LHS";
     }
+  }
+  else if(identifier=="__VERIFIER_error")
+  {
+    if(!arguments.empty())
+    {
+      err_location(function);
+      throw "`"+id2string(base_name)+"' expected to have no arguments";
+    }
+
+    goto_programt::targett t=dest.add_instruction(ASSERT);
+    t->guard=gen_false_expr();
+    t->location=function.location();
+    t->location.user_provided(true);
+    t->location.property("assertion");
+
+    if(lhs.is_not_nil())
+    {
+      err_location(function);
+      throw "`"+id2string(base_name)+"' expected not to have LHS";
+    }
+
+    // __VERIFIER_error has abort() semantics, even if no assertions
+    // are being checked
+    goto_programt::targett a=dest.add_instruction(ASSUME);
+    a->guard=gen_false_expr();
+    a->location=function.location();
+    t->location.user_provided(true);
   }
   else if(base_name == "printf")
   {

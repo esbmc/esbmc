@@ -416,9 +416,9 @@ smtlib_convt::get_bv(const type2tc &t, smt_astt a)
     result = constant_fixedbv2tc(fbt);
   } else if (is_bool_type(t)) {
     if (respval.token == TOK_KW_TRUE) {
-      result = constant_bool2tc(true);
+      result = gen_true_expr();
     } else if (respval.token == TOK_KW_FALSE) {
-      result = constant_bool2tc(false);
+      result = gen_false_expr();
     } else {
       std::cerr << "Unexpected token reading value of boolean symbol from "
                    "smtlib solver" << std::endl;
@@ -508,9 +508,9 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
     result = constant_fixedbv2tc(fbt);
   } else if (is_bool_type(t)) {
     if (respval.token == TOK_KW_TRUE) {
-      result = constant_bool2tc(true);
+      result = gen_true_expr();
     } else if (respval.token == TOK_KW_FALSE) {
-      result = constant_bool2tc(false);
+      result = gen_false_expr();
     } else if (respval.token == TOK_BINNUM) {
       assert(respval.data.size() == 3 && "Boolean-typed binary number should "
           "be 3 characters long (e.g. #b0)");
