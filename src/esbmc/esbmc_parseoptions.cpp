@@ -989,29 +989,15 @@ int cbmc_parseoptionst::doit_k_induction()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    std::cout << "\n*** K-Induction Loop Iteration ";
-    std::cout << integer2string(k_step);
+    std::cout << "\n*** Iteration number ";
+    std::cout << k_step;
     std::cout << " ***\n";
-    std::cout << "*** Checking base case\n";
 
     if(do_base_case(opts, goto_functions, k_step))
       return true;
 
-    std::cout << "\n*** K-Induction Loop Iteration ";
-    std::cout << integer2string(k_step);
-    std::cout << " ***\n";
-    std::cout << "*** Checking forward condition\n";
-
     if(!do_forward_condition(opts, goto_functions, k_step))
       return false;
-
-    if(k_step > 1)
-    {
-      std::cout << "\n*** K-Induction Loop Iteration ";
-      std::cout << integer2string( k_step);
-      std::cout << " ***\n";
-      std::cout << "*** Checking inductive step\n";
-    }
 
     if(!do_inductive_step(opts, goto_functions, k_step))
       return false;
@@ -1135,6 +1121,7 @@ int cbmc_parseoptionst::do_base_case(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
+  std::cout << "*** Checking base case\n";
   switch(do_bmc(bmc))
   {
     case smt_convt::P_UNSATISFIABLE:
@@ -1173,6 +1160,7 @@ int cbmc_parseoptionst::do_forward_condition(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
+  std::cout << "*** Checking forward condition\n";
   switch(do_bmc(bmc))
   {
     case smt_convt::P_SATISFIABLE:
@@ -1213,28 +1201,22 @@ int cbmc_parseoptionst::do_inductive_step(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  try {
-    switch(do_bmc(bmc))
-    {
-      case smt_convt::P_SATISFIABLE:
-      case smt_convt::P_SMTLIB:
-      case smt_convt::P_ERROR:
-        break;
-
-      case smt_convt::P_UNSATISFIABLE:
-        std::cout << "\nSolution found by the inductive step "
-                  << "(k = " << k_step << ")\n";
-        return false;
-
-      default:
-        std::cout << "Unknown BMC result\n";
-        abort();
-    }
-  }
-  catch(...)
+  std::cout << "*** Checking inductive step\n";
+  switch(do_bmc(bmc))
   {
-    // If there is a dynamic allocation during goto symex, an
-    // exception will be thrown and the inductive step is disabled
+    case smt_convt::P_SATISFIABLE:
+    case smt_convt::P_SMTLIB:
+    case smt_convt::P_ERROR:
+      break;
+
+    case smt_convt::P_UNSATISFIABLE:
+      std::cout << "\nSolution found by the inductive step "
+                << "(k = " << k_step << ")\n";
+      return false;
+
+    default:
+      std::cout << "Unknown BMC result\n";
+      abort();
   }
 
   return true;
