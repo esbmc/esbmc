@@ -1114,7 +1114,6 @@ int cbmc_parseoptionst::do_base_case(
 
   opts.set_option("no-unwinding-assertions", true);
   opts.set_option("partial-loops", false);
-  opts.set_option("no-assertions", false);
 
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
@@ -1197,7 +1196,6 @@ int cbmc_parseoptionst::do_inductive_step(
 
   opts.set_option("no-unwinding-assertions", true);
   opts.set_option("partial-loops", true);
-  opts.set_option("no-assertions", false);
 
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
