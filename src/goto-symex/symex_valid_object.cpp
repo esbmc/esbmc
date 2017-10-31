@@ -49,17 +49,17 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
     if (is_address_of2t(obj_ref))
     {
       expr2tc &obj_operand = to_address_of2t(obj_ref).ptr_obj;
-      
+
       // see if that is a good one!
       const expr2tc *identifier = get_object(obj_operand);
-      
+
       if (identifier != nullptr)
-      {        
+      {
         expr2tc base_ident = *identifier;
         cur_state->get_original_name(base_ident);
 
         const symbolt &symbol=ns.lookup(to_symbol2t(*identifier).thename);
-        
+
         // dynamic?
         if(symbol.type.dynamic())
         {
@@ -67,7 +67,7 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
         }
         else
         {
-          expr = constant_bool2tc(is_valid_object(symbol));
+          expr = is_valid_object(symbol) ? gen_true_expr() : gen_false_expr();
           return; // done
         }
       }
@@ -92,7 +92,7 @@ bool
 goto_symext::is_valid_object(const symbolt &symbol)
 {
   if(symbol.static_lifetime) return true; // global
-  
+
   // dynamic?
   if(symbol.type.dynamic())
     return false;

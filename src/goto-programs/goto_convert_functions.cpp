@@ -80,8 +80,7 @@ void goto_convert_functionst::add_return(
   // see if we have an unconditional goto at the end
   if(!f.body.instructions.empty() &&
      f.body.instructions.back().is_goto() &&
-     is_constant_bool2t(f.body.instructions.back().guard) &&
-     to_constant_bool2t(f.body.instructions.back().guard).value)
+     is_true(f.body.instructions.back().guard))
     return;
 
   goto_programt::targett t=f.body.add_instruction();

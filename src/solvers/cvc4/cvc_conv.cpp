@@ -58,7 +58,7 @@ cvc_convt::get_bool(const smt_ast *a)
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::Expr e = smt.getValue(ca->e);
   bool foo = e.getConst<bool>();
-  return constant_bool2tc(foo);
+  return foo ? gen_true_expr() : gen_false_expr();
 }
 
 expr2tc

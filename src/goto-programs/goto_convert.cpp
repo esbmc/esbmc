@@ -1591,8 +1591,7 @@ void goto_convertt::generate_ifthenelse(
   if(false_case.instructions.empty() &&
      true_case.instructions.size()==1 &&
      true_case.instructions.back().is_goto() &&
-     is_constant_bool2t(true_case.instructions.back().guard) &&
-     to_constant_bool2t(true_case.instructions.back().guard).value)
+     is_true(true_case.instructions.back().guard))
   {
     migrate_expr(guard, true_case.instructions.back().guard);
     dest.destructive_append(true_case);
