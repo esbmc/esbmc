@@ -96,6 +96,11 @@ void symex_slicet::slice_assume(
     SSA_step.ignore=true;
     ++ignored;
   }
+  else
+  {
+    // If we need it, add the symbols to dependency
+    get_symbols(SSA_step.cond, add_to_deps);
+  }
 }
 
 void symex_slicet::slice_assignment(
