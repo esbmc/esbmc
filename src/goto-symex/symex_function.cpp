@@ -30,6 +30,15 @@ goto_symext::get_unwind_recursion(const irep_idt &identifier, BigInt unwind)
     if(options.get_bool_option("abort-on-recursion"))
       abort();
 
+    if(k_induction)
+    {
+      std::cout << "**** WARNING: k-induction does not support recursion yet. "
+          << "Disabling inductive step\n";
+
+      // Disable inductive step on recursion
+      options.set_option("disable-inductive-step", true);
+    }
+
     const symbolt &symbol = ns.lookup(identifier);
 
     std::string msg = "Unwinding recursion " + id2string(symbol.display_name())

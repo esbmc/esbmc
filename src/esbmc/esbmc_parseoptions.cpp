@@ -1188,6 +1188,9 @@ int cbmc_parseoptionst::do_inductive_step(
   if(k_step == 1)
     return true;
 
+  if(opts.get_bool_option("disable-inductive-step"))
+    return true;
+
   opts.set_option("base-case", false);
   opts.set_option("forward-condition", false);
   opts.set_option("inductive-step", true);
