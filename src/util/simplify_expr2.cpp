@@ -2075,7 +2075,7 @@ concat2t::do_simplify(bool second __attribute__((unused))) const
 expr2tc
 extract2t::do_simplify(bool second __attribute__((unused))) const
 {
-  assert(is_unsignedbv_type(type) || is_signedbv_type(type));
+  assert(is_bv_type(type));
 
   if (!is_constant_int2t(from))
     return expr2tc();
