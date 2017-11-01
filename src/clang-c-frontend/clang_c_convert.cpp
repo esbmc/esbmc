@@ -146,13 +146,14 @@ bool clang_c_convertert::get_decl(
       get_field_name(fd, name, pretty_name);
 
       struct_union_typet::componentt comp(name, pretty_name, t);
-      if(fd.isBitField() && !config.options.get_bool_option("no-bitfields"))
+      if (fd.isBitField())
       {
         exprt width;
         if(get_expr(*fd.getBitWidth(), width))
           return true;
 
         comp.type().width(width.cformat());
+        comp.type().set("#bitfield", "true");
       }
 
       new_expr.swap(comp);
@@ -178,6 +179,7 @@ bool clang_c_convertert::get_decl(
         if(get_expr(*fd.getAnonField()->getBitWidth(), width))
           return true;
 
+        comp.type().set("#bitfield", "true");
         comp.type().width(width.cformat());
       }
 
