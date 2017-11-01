@@ -1658,7 +1658,8 @@ migrate_type_back(const type2tc &ref)
 
     thetype.components() = comps;
     thetype.set("tag", irep_idt(ref2.name));
-    thetype.set("packed", ref2.packed ? irep_idt("true") : irep_idt("false"));
+    if (ref2.packed)
+      thetype.set("packed", irep_idt("true"));
     return thetype;
     }
   case type2t::union_id:
