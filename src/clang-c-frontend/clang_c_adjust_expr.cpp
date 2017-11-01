@@ -147,6 +147,10 @@ void clang_c_adjust::adjust_expr(exprt& expr)
   {
     adjust_code(to_code(expr));
   }
+  else if (expr.id() == "struct")
+  {
+    adjust_constant_struct(expr);
+  }
   else
   {
     // Just check operands of everything else
@@ -564,8 +568,82 @@ typet clang_c_adjust::fix_bitfields(const typet &type)
   // operation to build.
   sutype.components() = new_components;
   bitfield_mappings.insert(std::make_pair(sutype, std::move(backmap)));
+  bitfield_fixed_type_map.insert(std::make_pair(type, sutype));
+  bitfield_orig_type_map.insert(std::make_pair(sutype, type));
 
   return sutype;
+}
+
+void clang_c_adjust::adjust_constant_struct(exprt &expr)
+{
+  assert(expr.type().id() == "struct");
+  // Has this type been adjusted for bitfields?
+  if (bitfield_mappings.find(expr.type()) == bitfield_mappings.end()) {
+    // Nothing needs to be done to the struct itself
+    adjust_operands(expr);
+    return;
+  }
+
+  // Well, we now need to fix up this constant struct expr into one that doesn't
+  // feature any bitfields, because:
+  auto sutype = to_struct_union_type(expr.type());
+  assert(expr.operands().size() != sutype.components().size());
+  const std::map<irep_idt, bitfield_map> &backmap = bitfield_mappings[expr.type()];
+
+  const auto &orig_type = to_struct_union_type(bitfield_orig_type_map[expr.type()]);
+  assert(orig_type.components().size() == expr.operands().size());
+  exprt new_expr = expr;
+  new_expr.operands().clear();
+  exprt accuml;
+
+  unsigned int bit_offs = 0;
+
+  auto pop_blob = [this, &accuml, &bit_offs, &new_expr]() {
+    if (bv_width(accuml.type()) != 64)
+      accuml = typecast_exprt(accuml, unsignedbv_typet(64));
+
+    new_expr.operands().push_back(accuml);
+    accuml = exprt();
+  };
+
+  // OK: iterate through all operands, concatting the bitfields, and then
+  // storing back into the operand list. XXX, work out how to use bitfield
+  // map to make this better?
+  for (unsigned int i = 0; i < expr.operands().size(); ++i) {
+    const exprt &orig_elem = expr.operands()[i];
+    const exprt &orig_comp = orig_type.components()[i];
+    if (orig_comp.type().get("#bitfield") != "true") {
+      new_expr.operands().push_back(orig_elem);
+      continue;
+    }
+
+    unsigned int width = bv_width(orig_elem.type());
+    if (bit_offs + width > 64)
+      pop_blob();
+
+    if (accuml.is_nil()) {
+      accuml = orig_elem;
+    } else {
+      unsigned int a_width = bv_width(accuml.type());
+      unsigned int b_width = bv_width(orig_elem.type());
+      unsignedbv_typet ubv(a_width + b_width);
+      exprt tmp("concat", ubv);
+      tmp.copy_to_operands(accuml, orig_elem);
+      accuml = tmp;
+    }
+
+    bit_offs += width;
+  }
+
+  if (bit_offs != 0)
+    pop_blob();
+
+  // We should now have replaced all operands corresponding to bitfields with
+  // single concatted operands.
+  assert(sutype.components().size() == new_expr.operands().size());
+  // Just check the sub-operands now.
+  expr = new_expr;
+  adjust_operands(expr);
 }
 
 void clang_c_adjust::adjust_type(typet &type)
