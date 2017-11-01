@@ -842,6 +842,7 @@ static const char *expr_names[] = {
   "isfinite",
   "signbit",
   "concat",
+  "extract",
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -2839,6 +2840,8 @@ std::string signbit2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string concat2t::field_names [esbmct::num_type_fields]  =
 { "forward", "aft", "", "", ""};
+std::string extract2t::field_names [esbmct::num_type_fields]  =
+{ "from", "upper", "lower", "", ""};
 
 // This has become particularly un-fun with the arrival of gcc 6.x and clang
 // 3.8 (roughly). Both are very aggressive wrt. whether templates are actually
@@ -3085,3 +3088,4 @@ expr_typedefs1(isnormal, bool_1op);
 expr_typedefs1(isfinite, bool_1op);
 expr_typedefs1(signbit, overflow_ops);
 expr_typedefs2(concat, bit_2ops);
+expr_typedefs3(extract, extract_data);

@@ -2072,6 +2072,18 @@ concat2t::do_simplify(bool second __attribute__((unused))) const
   return constant_int2tc(type, accuml);
 }
 
+expr2tc
+extract2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  if (!is_constant_int2t(from))
+    return expr2tc();
+
+  // Take the value, mask and shift.
+  assert(false);
+  abort();
+}
+
 template<template<typename> class TFunctor, typename constructor>
 static expr2tc
 simplify_floatbv_1op(
