@@ -246,6 +246,47 @@ void clang_c_adjust::adjust_member(member_exprt& expr)
     deref.move_to_operands(base);
     base.swap(deref);
   }
+
+  // Is this type bitfielded?
+  if (bitfield_orig_type_map.find(base.type()) != bitfield_orig_type_map.end()){
+    // It is. This means that this member expression *may* need to be rewritten.
+    // Is the field name a bitfield?
+    const auto &backmap = bitfield_mappings[base.type()];
+    auto it = backmap.find(expr.get("component_name"));
+    if (it != backmap.end()) {
+      // Yes. Rewrite it.
+      rewrite_bitfield_member(expr, it->second);
+    }
+  }
+}
+
+void clang_c_adjust::rewrite_bitfield_member(exprt &expr, const bitfield_map &bm)
+{
+  // The plan: build a new member expression accessing the blob field that
+  // contains the bitfield. Then create an extract expression that pulls out
+  // the relevant bits.
+  unsignedbv_typet ubv64(64);
+  auto &memb = to_member_expr(expr);
+  std::string fieldname = gen_bitfield_blob_name(bm.blobloc);
+  // Note that we depend on the member expression still carrying the bitfield
+  // width here. If that isn't true in the future, it'll have to be stored in
+  // the bitfield map struct.
+  unsigned int our_width = bv_width(memb.type());
+
+  member_exprt new_memb(memb.struct_op(), irep_idt(fieldname), ubv64);
+
+  // Welp. Today, the bit ordering is that the 'bitloc' is the bottommost bit.
+  exprt extract("extract", memb.type());
+  extract.copy_to_operands(new_memb);
+  std::stringstream ss;
+  ss << bm.bitloc;
+  extract.set("lower", irep_idt(ss.str()));
+  ss.clear();
+
+  ss << bm.bitloc + (our_width-1);
+  extract.set("upper", irep_idt(ss.str()));
+
+  expr = extract;
 }
 
 void clang_c_adjust::adjust_expr_binary_arithmetic(exprt& expr)
@@ -634,7 +675,7 @@ void clang_c_adjust::adjust_constant_struct(exprt &expr)
       unsigned int b_width = bv_width(orig_elem.type());
       unsignedbv_typet ubv(a_width + b_width);
       exprt tmp("concat", ubv);
-      tmp.copy_to_operands(accuml, orig_elem);
+      tmp.copy_to_operands(orig_elem, accuml); // XXX: ordering!
       accuml = tmp;
     }
 

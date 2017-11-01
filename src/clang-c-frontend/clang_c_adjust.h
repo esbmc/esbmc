@@ -80,6 +80,7 @@ class clang_c_adjust
       unsigned int blobloc;
     } bitfield_map;
     std::map<typet, std::map<irep_idt, bitfield_map> > bitfield_mappings;
+    void rewrite_bitfield_member(exprt &expr, const bitfield_map &bm);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */
