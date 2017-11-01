@@ -248,9 +248,10 @@ void clang_c_adjust::adjust_member(member_exprt& expr)
   }
 
   // Is this type bitfielded?
-  if (bitfield_orig_type_map.find(base.type()) != bitfield_orig_type_map.end()){
+  if (has_bitfields(base.type())) {
     // It is. This means that this member expression *may* need to be rewritten.
     // Is the field name a bitfield?
+    base.type() = fix_bitfields(base.type());
     const auto &backmap = bitfield_mappings[base.type()];
     auto it = backmap.find(expr.get("component_name"));
     if (it != backmap.end()) {
@@ -530,8 +531,18 @@ void clang_c_adjust::adjust_sizeof(exprt& expr)
   expr.c_sizeof_type(type);
 }
 
-bool clang_c_adjust::has_bitfields(const typet &type)
+bool clang_c_adjust::has_bitfields(const typet &_type)
 {
+  typet type = _type;
+  if (type.id() == "symbol")
+    type = ns.follow(type);
+
+  if (bitfield_fixed_type_map.find(type) != bitfield_fixed_type_map.end())
+    return true; // Yes, and this is the unfixed version
+
+  if (bitfield_orig_type_map.find(type) != bitfield_orig_type_map.end())
+    return true; // Yes, and this is the fixed version
+
   assert(type.id() == "struct");
 
   auto sutype = to_struct_union_type(type);
@@ -552,8 +563,12 @@ std::string clang_c_adjust::gen_bitfield_blob_name(unsigned int num)
 }
 
 #define BITFIELD_MAX_FIELD 64
-typet clang_c_adjust::fix_bitfields(const typet &type)
+typet clang_c_adjust::fix_bitfields(const typet &_type)
 {
+  typet type = _type;
+  if (type.id() == "symbol")
+    type = ns.follow(type);
+
   if (bitfield_fixed_type_map.find(type) != bitfield_fixed_type_map.end())
     return bitfield_fixed_type_map.find(type)->second;
 
