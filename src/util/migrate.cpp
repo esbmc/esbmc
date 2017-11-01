@@ -150,7 +150,12 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     if (name.as_string() == "")
       name = type.get("name"); // C++
 
-    struct_type2t *s = new struct_type2t(members, names, pretty_names, name);
+    irep_idt ispacked = type.get("packed");
+    bool packed = false;
+    if (ispacked.as_string() == "true")
+      packed = true;
+
+    struct_type2t *s = new struct_type2t(members, names, pretty_names, name, packed);
     new_type_ref = type2tc(s);
   } else if (type.id() == typet::t_union) {
     std::vector<type2tc> members;
@@ -1653,6 +1658,7 @@ migrate_type_back(const type2tc &ref)
 
     thetype.components() = comps;
     thetype.set("tag", irep_idt(ref2.name));
+    thetype.set("packed", ref2.packed ? irep_idt("true") : irep_idt("false"));
     return thetype;
     }
   case type2t::union_id:
