@@ -1,3 +1,5 @@
+#include <sstream>
+
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/irep2_utils.h>
@@ -1617,6 +1619,13 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     convert_operand_pair(expr, op0, op1);
     migrate_type(expr.type(), type);
     new_expr_ref = concat2tc(type, op0, op1);
+  } else if (expr.id() ==  "extract") {
+    expr2tc theop;
+    migrate_type(expr.type(), type);
+    migrate_expr(expr.op0(), theop);
+    unsigned int upper = atoi(expr.get("upper").as_string().c_str());
+    unsigned int lower = atoi(expr.get("lower").as_string().c_str());
+    new_expr_ref = extract2tc(type, theop, upper, lower);
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -2723,6 +2732,22 @@ migrate_expr_back(const expr2tc &ref)
     exprt back("concat", migrate_type_back(ref2.type));
     back.copy_to_operands(migrate_expr_back(ref2.side_1));
     back.copy_to_operands(migrate_expr_back(ref2.side_2));
+    return back;
+  }
+  case expr2t::extract_id:
+  {
+    std::stringstream ss;
+    const extract2t &ref2 = to_extract2t(ref);
+    exprt back("extract", migrate_type_back(ref2.type));
+    back.copy_to_operands(migrate_expr_back(ref2.from));
+
+    ss << ref2.upper;
+    back.set("upper", irep_idt(ss.str()));
+    ss.clear();
+
+    ss << ref2.lower;
+    back.set("lower", irep_idt(ss.str()));
+
     return back;
   }
   case expr2t::bitcast_id:
