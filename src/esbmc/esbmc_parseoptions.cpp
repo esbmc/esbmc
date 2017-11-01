@@ -1160,7 +1160,12 @@ int cbmc_parseoptionst::do_forward_condition(
   bmc.options.set_option("unwind", integer2string(k_step));
 
   std::cout << "*** Checking forward condition\n";
-  switch(do_bmc(bmc))
+  auto res = do_bmc(bmc);
+
+  // We have to restore the no assertion, before checking the other steps
+  opts.set_option("no-assertions", false);
+
+  switch(res)
   {
     case smt_convt::P_SATISFIABLE:
     case smt_convt::P_SMTLIB:
