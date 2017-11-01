@@ -2624,9 +2624,9 @@ std::string empty_type2t::field_names [esbmct::num_type_fields]  =
 std::string symbol_type2t::field_names [esbmct::num_type_fields]  =
 { "symbol_name", "", "", "", ""};
 std::string struct_type2t::field_names [esbmct::num_type_fields]  =
-{ "members", "member_names", "member_pretty_names", "typename", "", ""};
+{ "members", "member_names", "member_pretty_names", "typename", "packed", ""};
 std::string union_type2t::field_names [esbmct::num_type_fields]  =
-{ "members", "member_names", "member_pretty_names", "typename", "", ""};
+{ "members", "member_names", "member_pretty_names", "typename", "packed", ""};
 std::string unsignedbv_type2t::field_names [esbmct::num_type_fields]  =
 { "width", "", "", "", ""};
 std::string signedbv_type2t::field_names [esbmct::num_type_fields]  =
