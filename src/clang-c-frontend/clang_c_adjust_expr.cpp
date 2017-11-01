@@ -282,7 +282,7 @@ void clang_c_adjust::rewrite_bitfield_member(exprt &expr, const bitfield_map &bm
   std::stringstream ss;
   ss << bm.bitloc;
   extract.set("lower", irep_idt(ss.str()));
-  ss.clear();
+  ss = std::stringstream();
 
   ss << bm.bitloc + (our_width-1);
   extract.set("upper", irep_idt(ss.str()));

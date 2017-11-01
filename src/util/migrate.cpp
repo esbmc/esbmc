@@ -2743,7 +2743,7 @@ migrate_expr_back(const expr2tc &ref)
 
     ss << ref2.upper;
     back.set("upper", irep_idt(ss.str()));
-    ss.clear();
+    ss = std::stringstream();
 
     ss << ref2.lower;
     back.set("lower", irep_idt(ss.str()));
