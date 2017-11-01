@@ -1185,6 +1185,13 @@ smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
+  case expr2t::extract_id:
+  {
+    const extract2t &ex = to_extract2t(expr);
+    a = convert_ast(ex.from);
+    a = mk_extract(a, ex.upper, ex.lower, sort);
+    break;
+  }
   default:
     std::cerr << "Couldn't convert expression in unrecognised format"
               << std::endl;
