@@ -595,6 +595,7 @@ void clang_c_adjust::adjust_constant_struct(exprt &expr)
   exprt new_expr = expr;
   new_expr.operands().clear();
   exprt accuml;
+  accuml.make_nil();
 
   unsigned int bit_offs = 0;
 
@@ -604,6 +605,8 @@ void clang_c_adjust::adjust_constant_struct(exprt &expr)
 
     new_expr.operands().push_back(accuml);
     accuml = exprt();
+    accuml.make_nil();
+    bit_offs = 0;
   };
 
   // OK: iterate through all operands, concatting the bitfields, and then
@@ -613,6 +616,9 @@ void clang_c_adjust::adjust_constant_struct(exprt &expr)
     const exprt &orig_elem = expr.operands()[i];
     const exprt &orig_comp = orig_type.components()[i];
     if (orig_comp.type().get("#bitfield") != "true") {
+      if (bit_offs > 0)
+        pop_blob();
+
       new_expr.operands().push_back(orig_elem);
       continue;
     }
