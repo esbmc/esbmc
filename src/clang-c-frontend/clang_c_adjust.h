@@ -69,6 +69,15 @@ class clang_c_adjust
 
     bool has_bitfields(const typet &type);
     typet fix_bitfields(const typet &type);
+    std::string gen_bitfield_blob_name(unsigned int num);
+
+    std::map<typet, typet> bitfield_fixed_type_map;
+
+    typedef struct bitfield_map {
+      unsigned int bitloc;
+      unsigned int blobloc;
+    } bitfield_map;
+    std::map<typet, std::map<irep_idt, bitfield_map> > bitfield_mappings;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */

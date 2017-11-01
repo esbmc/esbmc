@@ -5,6 +5,9 @@
  *      Author: mramalho
  */
 
+#include <type_traits>
+#include <sstream>
+
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -495,9 +498,73 @@ bool clang_c_adjust::has_bitfields(const typet &type)
   return false;
 }
 
+std::string clang_c_adjust::gen_bitfield_blob_name(unsigned int num)
+{
+  std::stringstream ss;
+  ss << "#BITFIELD" << num;
+  return ss.str();
+}
+
+#define BITFIELD_MAX_FIELD 64
 typet clang_c_adjust::fix_bitfields(const typet &type)
 {
-  return type;
+  if (bitfield_fixed_type_map.find(type) != bitfield_fixed_type_map.end())
+    return bitfield_fixed_type_map.find(type)->second;
+
+  typet new_type = type;
+  auto sutype = to_struct_union_type(new_type);
+  auto &components = sutype.components(); // It's a vector of components
+  std::decay<decltype(components)>::type new_components;
+
+  unsigned int bit_offs = 0;
+  unsigned int blob_count = 0;
+
+  std::map<irep_idt, bitfield_map> backmap;
+
+  auto pop_blob = [this, &bit_offs, &blob_count, &new_components]() {
+    // We have to pop the current bitfield blob into the struct and create
+    // a new one to make space.
+    // Always generate a 64 bit blob for now, optimise later.
+    unsignedbv_typet ubv64(64);
+    std::string name = gen_bitfield_blob_name(blob_count);
+    struct_union_typet::componentt newcomp(name, name, ubv64);
+    new_components.push_back(newcomp);
+
+    bit_offs = 0;
+    blob_count++;
+  };
+
+  for (const auto &comp : components) { // Go through all components...
+    if (comp.type().get("#bitfield").as_string() != "true") {
+      if (bit_offs != 0)
+        pop_blob();
+
+      new_components.push_back(comp);
+      continue;
+    }
+
+    // Otherwise: this is a bitfield.
+    unsigned int width = bv_width(comp.type());
+    assert(width <= BITFIELD_MAX_FIELD && "Humoungous bitfield");
+
+    if (width + bit_offs > BITFIELD_MAX_FIELD)
+      pop_blob();
+
+    // Add this bitfield to the current blob.
+    backmap.insert(std::make_pair(comp.name(), bitfield_map {bit_offs, blob_count}));
+    bit_offs += width;
+  }
+
+  if (bit_offs != 0)
+    pop_blob();
+
+  // We now have: to replace the components in the new type, and store the
+  // backmap so that subsequent read/writes can work out what replacement
+  // operation to build.
+  sutype.components() = new_components;
+  bitfield_mappings.insert(std::make_pair(sutype, std::move(backmap)));
+
+  return sutype;
 }
 
 void clang_c_adjust::adjust_type(typet &type)
