@@ -1098,7 +1098,9 @@ int cbmc_parseoptionst::doit_incremental()
 }
 
 int cbmc_parseoptionst::do_base_case(
-  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
+  optionst &opts,
+  const goto_functionst &goto_functions,
+  const BigInt &k_step)
 {
   opts.set_option("base-case", true);
   opts.set_option("forward-condition", false);
@@ -1133,7 +1135,9 @@ int cbmc_parseoptionst::do_base_case(
 }
 
 int cbmc_parseoptionst::do_forward_condition(
-  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
+  optionst &opts,
+  const goto_functionst &goto_functions,
+  const BigInt &k_step)
 {
   if(opts.get_bool_option("disable-forward-condition"))
     return true;
@@ -1184,7 +1188,9 @@ int cbmc_parseoptionst::do_forward_condition(
 }
 
 int cbmc_parseoptionst::do_inductive_step(
-  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
+  optionst &opts,
+  const goto_functionst &goto_functions,
+  const BigInt &k_step)
 {
   // Don't run inductive step for k_step == 1
   if(k_step == 1)
