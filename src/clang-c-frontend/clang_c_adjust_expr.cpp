@@ -59,6 +59,9 @@ void clang_c_adjust::adjust_symbol(symbolt& symbol)
 
 void clang_c_adjust::adjust_expr(exprt& expr)
 {
+
+  adjust_type(expr.type());
+
   if(expr.id() == "sideeffect")
   {
     adjust_side_effect(to_side_effect_expr(expr));
