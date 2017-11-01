@@ -958,9 +958,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
 int cbmc_parseoptionst::doit_k_induction()
 {
-  // Generate goto functions for base case and forward condition
-  status("\n*** Generating Base Case and Forward Condition ***");
-
   optionst opts;
   get_command_line_options(opts);
 
@@ -1011,9 +1008,6 @@ int cbmc_parseoptionst::doit_k_induction()
 
 int cbmc_parseoptionst::doit_falsification()
 {
-  // Generate goto functions for base case and forward condition
-  goto_functionst goto_functions;
-
   optionst opts;
   get_command_line_options(opts);
 
@@ -1058,8 +1052,6 @@ int cbmc_parseoptionst::doit_falsification()
 
 int cbmc_parseoptionst::doit_incremental()
 {
-  // Generate goto functions for base case and forward condition
-
   optionst opts;
   get_command_line_options(opts);
 
