@@ -481,6 +481,25 @@ void clang_c_adjust::adjust_sizeof(exprt& expr)
   expr.c_sizeof_type(type);
 }
 
+bool clang_c_adjust::has_bitfields(const typet &type)
+{
+  assert(type.id() == "struct");
+
+  auto sutype = to_struct_union_type(type);
+  for (const auto &comp : sutype.components()) {
+    if (comp.type().get("#bitfield").as_string() == "true") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+typet clang_c_adjust::fix_bitfields(const typet &type)
+{
+  return type;
+}
+
 void clang_c_adjust::adjust_type(typet &type)
 {
   if(type.id()=="symbol")
@@ -507,6 +526,11 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(symbol.is_macro)
       type=symbol.type; // overwrite
+  }
+
+  if (type.id() == "struct") {
+    if (has_bitfields(type))
+      type = fix_bitfields(type);
   }
 }
 

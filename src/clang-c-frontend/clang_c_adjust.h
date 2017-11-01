@@ -66,6 +66,9 @@ class clang_c_adjust
     void adjust_argc_argv(const symbolt &main_symbol);
 
     void do_special_functions(side_effect_expr_function_callt &expr);
+
+    bool has_bitfields(const typet &type);
+    typet fix_bitfields(const typet &type);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */
