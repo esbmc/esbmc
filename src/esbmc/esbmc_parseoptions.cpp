@@ -1152,6 +1152,12 @@ int cbmc_parseoptionst::do_forward_condition(
 
   opts.set_option("no-unwinding-assertions", false);
   opts.set_option("partial-loops", false);
+
+  // We have to disable assertions in the forward condition but
+  // restore the previous value after it
+  bool no_assertions = opts.get_bool_option("no-assertions");
+
+  // Turn assertions off
   opts.set_option("no-assertions", true);
 
   bmct bmc(goto_functions, opts, context, ui_message_handler);
@@ -1162,8 +1168,8 @@ int cbmc_parseoptionst::do_forward_condition(
   std::cout << "*** Checking forward condition\n";
   auto res = do_bmc(bmc);
 
-  // We have to restore the no assertion, before checking the other steps
-  opts.set_option("no-assertions", false);
+  // Restore the no assertion flag, before checking the other steps
+  opts.set_option("no-assertions", no_assertions);
 
   switch(res)
   {
