@@ -116,6 +116,13 @@ AC_CHECK_HEADERS([boost/utility/enable_if.hpp], [], AC_MSG_ERROR([No boost enabl
 AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp], [], AC_MSG_ERROR([No boost fusion library found]))
 AC_CHECK_HEADERS([sys/sendfile.h], AC_DEFINE([HAVE_SENDFILE_ESBMC], [], [Has sendfile header]), [])
 
+dnl The witness code wants boost date-time, apparently. Only symbols are cpp,
+dnl so pick a special one
+AX_BOOST_DATE_TIME
+AS_IF([test "x$ax_cv_boost_date_time" = "xyes"], [], [
+  AC_MSG_ERROR([Could not find boost date-time library])
+])
+
 AC_CHECK_HEADERS([unistd.h], [AC_DEFINE([HAVE_UNISTD], [], [Has unistd.h header])], [])
 
 AC_HEADER_STDBOOL
@@ -264,15 +271,6 @@ AS_IF([test "${enable_libesbmc}" = "yes"], [
   AC_SUBST([ESBMC_LIB], "libesbmc.la")
 ], [
   AC_SUBST([ESBMC_LIB], "")
-])
-
-dnl The witness code wants boost date-time, apparently. Only symbols are cpp,
-dnl so pick a special one
-AC_CHECK_LIB(["boost_date_time"], [_init],
-[
-  AS_VAR_SET(LIBS, " -lboost_date_time $LIBS")
-], [
-  AC_MSG_ERROR([Could not find boost_date_time library])
 ])
 
 AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 $ESBMC_CLANG_CXXFLAGS ")
