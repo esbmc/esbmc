@@ -656,7 +656,6 @@ void clang_c_adjust::adjust_constant_struct(exprt &expr)
   // feature any bitfields, because:
   auto sutype = to_struct_union_type(expr.type());
   assert(expr.operands().size() != sutype.components().size());
-  const std::map<irep_idt, bitfield_map> &backmap = bitfield_mappings[expr.type()];
 
   const auto &orig_type = to_struct_union_type(bitfield_orig_type_map[expr.type()]);
   assert(orig_type.components().size() == expr.operands().size());
