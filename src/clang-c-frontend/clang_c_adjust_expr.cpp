@@ -38,6 +38,15 @@ bool clang_c_adjust::adjust()
     }
   );
 
+  // Adjust types first, so that symbolic-type resolution always receives
+  // fixed up types.
+  Forall_symbol_list(it, symbol_list)
+  {
+    symbolt &symbol = **it;
+    if(symbol.is_type)
+      adjust_type(symbol.type);
+  }
+
   Forall_symbol_list(it, symbol_list)
   {
     symbolt &symbol = **it;
