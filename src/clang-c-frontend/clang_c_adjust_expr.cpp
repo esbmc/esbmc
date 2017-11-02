@@ -279,11 +279,11 @@ void clang_c_adjust::rewrite_bitfield_member(exprt &expr, const bitfield_map &bm
   // the relevant bits.
   auto &memb = to_member_expr(expr);
   auto &sutype = to_struct_union_type(expr.op0().type());
-  auto &this_comp = sutype.get_component(memb.get_component_name());
 
+  std::string fieldname = gen_bitfield_blob_name(bm.blobloc);
+  auto &this_comp = sutype.get_component(fieldname);
   assert(bv_width(this_comp.type()) != 0);
   unsignedbv_typet ubv_size(bv_width(this_comp.type()));
-  std::string fieldname = gen_bitfield_blob_name(bm.blobloc);
   // Note that we depend on the member expression still carrying the bitfield
   // width here. If that isn't true in the future, it'll have to be stored in
   // the bitfield map struct.
