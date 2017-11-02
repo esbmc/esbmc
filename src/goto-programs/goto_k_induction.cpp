@@ -34,6 +34,9 @@ void goto_k_inductiont::goto_k_induction()
   // Full unwind the program
   for(auto & function_loop : function_loops)
   {
+    if(function_loop.get_loop_vars().empty())
+      continue;
+
     // TODO: Can we check if the loop is infinite? If so, we should
     // disable the forward condition
 
