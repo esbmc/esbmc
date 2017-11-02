@@ -1579,6 +1579,12 @@ dereferencet::extract_bytes_from_scalar(const expr2tc &object,
 
   expr2tc *bytes = new expr2tc[num_bytes];
 
+  // Don't produce a byte update of a byte.
+  if (is_bv_type(object) && object->type->get_width() == 8) {
+    bytes[0] = object;
+    return bytes;
+  }
+
   expr2tc accuml_offs = offset;
   for (unsigned int i = 0; i < num_bytes; i++) {
     bytes[i] = byte_extract2tc(bytetype, object, accuml_offs, is_big_endian);
