@@ -511,6 +511,7 @@ void clang_c_adjust::adjust_sizeof(exprt& expr)
   else if(expr.operands().size()==1)
   {
     type.swap(expr.op0().type());
+    adjust_type(type);
   }
   else
   {
@@ -543,7 +544,8 @@ bool clang_c_adjust::has_bitfields(const typet &_type)
   if (bitfield_orig_type_map.find(type) != bitfield_orig_type_map.end())
     return true; // Yes, and this is the fixed version
 
-  assert(type.id() == "struct");
+  if (type.id() != "struct")
+    return false; // Could have been a symbol of a union
 
   auto sutype = to_struct_union_type(type);
   for (const auto &comp : sutype.components()) {
