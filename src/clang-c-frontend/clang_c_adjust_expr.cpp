@@ -20,6 +20,8 @@
 #include <util/prefix.h>
 #include <util/std_code.h>
 
+#define BITFIELD_MAX_FIELD 64
+
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context),
     ns(namespacet(context))
@@ -275,7 +277,7 @@ void clang_c_adjust::rewrite_bitfield_member(exprt &expr, const bitfield_map &bm
   // The plan: build a new member expression accessing the blob field that
   // contains the bitfield. Then create an extract expression that pulls out
   // the relevant bits.
-  unsignedbv_typet ubv64(64);
+  unsignedbv_typet ubv_size(BITFIELD_MAX_FIELD);
   auto &memb = to_member_expr(expr);
   std::string fieldname = gen_bitfield_blob_name(bm.blobloc);
   // Note that we depend on the member expression still carrying the bitfield
@@ -283,7 +285,7 @@ void clang_c_adjust::rewrite_bitfield_member(exprt &expr, const bitfield_map &bm
   // the bitfield map struct.
   unsigned int our_width = bv_width(memb.type());
 
-  member_exprt new_memb(memb.struct_op(), irep_idt(fieldname), ubv64);
+  member_exprt new_memb(memb.struct_op(), irep_idt(fieldname), ubv_size);
 
   // Welp. Today, the bit ordering is that the 'bitloc' is the bottommost bit.
   exprt extract("extract", memb.type());
@@ -573,7 +575,6 @@ std::string clang_c_adjust::gen_bitfield_blob_name(unsigned int num)
   return ss.str();
 }
 
-#define BITFIELD_MAX_FIELD 64
 typet clang_c_adjust::fix_bitfields(const typet &_type)
 {
   typet type = _type;
@@ -597,9 +598,9 @@ typet clang_c_adjust::fix_bitfields(const typet &_type)
     // We have to pop the current bitfield blob into the struct and create
     // a new one to make space.
     // Always generate a 64 bit blob for now, optimise later.
-    unsignedbv_typet ubv64(64);
+    unsignedbv_typet ubv(BITFIELD_MAX_FIELD);
     std::string name = gen_bitfield_blob_name(blob_count);
-    struct_union_typet::componentt newcomp(name, name, ubv64);
+    struct_union_typet::componentt newcomp(name, name, ubv);
     new_components.push_back(newcomp);
 
     bit_offs = 0;
@@ -667,8 +668,8 @@ void clang_c_adjust::adjust_constant_struct(exprt &expr)
   unsigned int bit_offs = 0;
 
   auto pop_blob = [this, &accuml, &bit_offs, &new_expr]() {
-    if (bv_width(accuml.type()) != 64)
-      accuml = typecast_exprt(accuml, unsignedbv_typet(64));
+    if (bv_width(accuml.type()) != BITFIELD_MAX_FIELD)
+      accuml = typecast_exprt(accuml, unsignedbv_typet(BITFIELD_MAX_FIELD));
 
     new_expr.operands().push_back(accuml);
     accuml = exprt();
@@ -691,7 +692,7 @@ void clang_c_adjust::adjust_constant_struct(exprt &expr)
     }
 
     unsigned int width = bv_width(orig_elem.type());
-    if (bit_offs + width > 64)
+    if (bit_offs + width > BITFIELD_MAX_FIELD)
       pop_blob();
 
     if (accuml.is_nil()) {
