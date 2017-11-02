@@ -105,9 +105,10 @@ AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../c
 AX_BOOST_BASE(1.47, [], AC_MSG_ERROR([Cannot find boost base dir; please pass it in --with-boost argument or set BOOST_ROOT]))
 AX_BOOST_FILESYSTEM
 AX_BOOST_SYSTEM
+AX_BOOST_DATE_TIME
 
 AS_VAR_APPEND(CPPFLAGS, " $BOOST_CPPFLAGS")
-AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS $BOOST_FILESYSTEM_LIB $BOOST_SYSTEM_LIB")
+AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS $BOOST_FILESYSTEM_LIB $BOOST_SYSTEM_LIB $BOOST_DATE_TIME_LIB")
 
 AC_CHECK_HEADERS([boost/mpl/if.hpp], [], AC_MSG_ERROR([No boost mpl found]))
 AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], AC_MSG_ERROR([No boost shared ptr found]))
@@ -115,13 +116,6 @@ AC_CHECK_HEADERS([boost/crc.hpp], [], AC_MSG_ERROR([No boost CRC library found])
 AC_CHECK_HEADERS([boost/utility/enable_if.hpp], [], AC_MSG_ERROR([No boost enable_if utility found]))
 AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp], [], AC_MSG_ERROR([No boost fusion library found]))
 AC_CHECK_HEADERS([sys/sendfile.h], AC_DEFINE([HAVE_SENDFILE_ESBMC], [], [Has sendfile header]), [])
-
-dnl The witness code wants boost date-time, apparently. Only symbols are cpp,
-dnl so pick a special one
-AX_BOOST_DATE_TIME
-AS_IF([test "x$ax_cv_boost_date_time" = "xyes"], [], [
-  AC_MSG_ERROR([Could not find boost date-time library])
-])
 
 AC_CHECK_HEADERS([unistd.h], [AC_DEFINE([HAVE_UNISTD], [], [Has unistd.h header])], [])
 
