@@ -641,8 +641,17 @@ dereferencet::build_reference_to(
 
   // If offset is unknown, or whatever, we have to consider it
   // nondeterministic, and let the reference builders deal with it.
+  unsigned int alignment = o.alignment;
   if (!is_constant_int2t(final_offset)) {
-    assert(o.alignment != 0);
+    assert(alignment != 0);
+
+    if (!is_symbol2t(deref_expr)) {
+      // The expression being dereferenced isn't just a symbol: it might have
+      // all kind of things messing with alignment in there. We could interpret
+      // it as future work.
+      alignment = 1;
+    }
+
     final_offset = pointer_offset2tc(pointer_type2(), deref_expr);
   }
 
@@ -677,7 +686,7 @@ dereferencet::build_reference_to(
 
   // Call reference building methods. For the given data object in value,
   // an expression of type type will be constructed that reads from it.
-  build_reference_rec(value, final_offset, type, tmp_guard, mode, o.alignment);
+  build_reference_rec(value, final_offset, type, tmp_guard, mode, alignment);
 
   return value;
 }
