@@ -277,8 +277,12 @@ void clang_c_adjust::rewrite_bitfield_member(exprt &expr, const bitfield_map &bm
   // The plan: build a new member expression accessing the blob field that
   // contains the bitfield. Then create an extract expression that pulls out
   // the relevant bits.
-  unsignedbv_typet ubv_size(BITFIELD_MAX_FIELD);
   auto &memb = to_member_expr(expr);
+  auto &sutype = to_struct_union_type(expr.op0().type());
+  auto &this_comp = sutype.get_component(memb.get_component_name());
+
+  assert(bv_width(this_comp.type()) != 0);
+  unsignedbv_typet ubv_size(bv_width(this_comp.type()));
   std::string fieldname = gen_bitfield_blob_name(bm.blobloc);
   // Note that we depend on the member expression still carrying the bitfield
   // width here. If that isn't true in the future, it'll have to be stored in
@@ -588,17 +592,29 @@ typet clang_c_adjust::fix_bitfields(const typet &_type)
   auto sutype = to_struct_union_type(new_type);
   auto &components = sutype.components(); // It's a vector of components
   std::decay<decltype(components)>::type new_components;
+  bool is_packed = sutype.get("packed").as_string() == "true";
 
   unsigned int bit_offs = 0;
   unsigned int blob_count = 0;
 
   std::map<irep_idt, bitfield_map> backmap;
 
-  auto pop_blob = [this, &bit_offs, &blob_count, &new_components]() {
+  auto pop_blob = [this, is_packed, &bit_offs, &blob_count, &new_components]() {
     // We have to pop the current bitfield blob into the struct and create
     // a new one to make space.
-    // Always generate a 64 bit blob for now, optimise later.
-    unsignedbv_typet ubv(BITFIELD_MAX_FIELD);
+
+    // Size of the bitfield depends on whether we're packed or not.
+    typet ubv;
+    if (is_packed) {
+      // Round up to nearest byte.
+      bit_offs += 7;
+      bit_offs &= 0xFFFFFFF8;
+      ubv = unsignedbv_typet(bit_offs);
+    } else {
+      // Always generate a 64 bit blob for now, optimise later.
+      ubv = unsignedbv_typet(BITFIELD_MAX_FIELD);
+    }
+
     std::string name = gen_bitfield_blob_name(blob_count);
     struct_union_typet::componentt newcomp(name, name, ubv);
     new_components.push_back(newcomp);
@@ -656,6 +672,7 @@ void clang_c_adjust::adjust_constant_struct(exprt &expr)
   // feature any bitfields, because:
   auto sutype = to_struct_union_type(expr.type());
   assert(expr.operands().size() != sutype.components().size());
+  bool is_packed = sutype.get("packed").as_string() == "true";
 
   const auto &orig_type = to_struct_union_type(bitfield_orig_type_map[expr.type()]);
   assert(orig_type.components().size() == expr.operands().size());
@@ -666,9 +683,15 @@ void clang_c_adjust::adjust_constant_struct(exprt &expr)
 
   unsigned int bit_offs = 0;
 
-  auto pop_blob = [this, &accuml, &bit_offs, &new_expr]() {
-    if (bv_width(accuml.type()) != BITFIELD_MAX_FIELD)
+  auto pop_blob = [this, is_packed, &accuml, &bit_offs, &new_expr]() {
+    if (is_packed) {
+      // Round number of bits up to nearest byte,
+      bit_offs += 7;
+      bit_offs &= 0xFFFFFFF8;
+      accuml = typecast_exprt(accuml, unsignedbv_typet(bit_offs));
+    } else if (bv_width(accuml.type()) != BITFIELD_MAX_FIELD) {
       accuml = typecast_exprt(accuml, unsignedbv_typet(BITFIELD_MAX_FIELD));
+    } // Otherwise it's already at the right size
 
     new_expr.operands().push_back(accuml);
     accuml = exprt();
