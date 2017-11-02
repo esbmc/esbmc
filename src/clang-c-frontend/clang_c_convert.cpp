@@ -318,6 +318,16 @@ bool clang_c_convertert::get_struct_union_class(
   if(get_struct_union_class_fields(*record_def, t))
     return true;
 
+  // Check for packed specifier.
+  if (record_def->hasAttrs()) {
+    const auto &attrs = record_def->getAttrs();
+    for (const auto &attr : attrs) {
+      if (attr->getKind() == clang::attr::Packed) {
+        t.set("packed", "true");
+      }
+    }
+  }
+
   added_symbol.type = t;
 
   // This change on the pretty_name is just to beautify the output
