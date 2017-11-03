@@ -88,7 +88,7 @@ void create_graphml(
 void create_violation_graph_node(
   std::string & verifiedfile,
   optionst & options,
-  xmlnodet & graphnode );
+  xmlnodet & graphnode);
 
 /**
  * Create a correctness graph node.
@@ -98,7 +98,7 @@ void create_violation_graph_node(
 void create_correctness_graph_node(
   std::string & verifiedfile,
   optionst & options,
-  xmlnodet & graphnode );
+  xmlnodet & graphnode);
 
 /**
  * Create a edge node.

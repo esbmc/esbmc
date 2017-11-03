@@ -250,31 +250,9 @@ void create_graphml(const std::string& file_path, xmlnodet & graphml)
     "string");
   origin_file_node.add("<xmlattr>.for", "edge");
   xmlnodet origin_file_default_node;
-  origin_file_node.put_value(file_path);
+  origin_file_default_node.put_value(file_path);
   origin_file_node.add_child("default", origin_file_default_node);
   graphml.add_child("graphml.key", origin_file_node);
-
-  xmlnodet invariant_node;
-  invariant_node.add("<xmlattr>.id", "invariant");
-  invariant_node.put(
-    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
-    "invariant");
-  invariant_node.put(
-    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  invariant_node.add("<xmlattr>.for", "node");
-  graphml.add_child("graphml.key", invariant_node);
-
-  xmlnodet invariant_scope_node;
-  invariant_scope_node.add("<xmlattr>.id", "invariant.scope");
-  invariant_scope_node.put(
-    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
-    "invariant.scope");
-  invariant_scope_node.put(
-    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  invariant_scope_node.add("<xmlattr>.for", "node");
-  graphml.add_child("graphml.key", invariant_scope_node);
 
   xmlnodet frontier_node;
   frontier_node.add("<xmlattr>.id", "frontier");
@@ -452,6 +430,28 @@ void create_graphml(const std::string& file_path, xmlnodet & graphml)
     "string");
   control_node.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", control_node);
+
+  xmlnodet invariant_node;
+  invariant_node.add("<xmlattr>.id", "invariant");
+  invariant_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
+    "invariant");
+  invariant_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  invariant_node.add("<xmlattr>.for", "node");
+  graphml.add_child("graphml.key", invariant_node);
+
+  xmlnodet invariant_scope_node;
+  invariant_scope_node.add("<xmlattr>.id", "invariant.scope");
+  invariant_scope_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
+    "invariant.scope");
+  invariant_scope_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  invariant_scope_node.add("<xmlattr>.for", "node");
+  graphml.add_child("graphml.key", invariant_scope_node);
 
   xmlnodet assumption_node;
   assumption_node.add("<xmlattr>.id", "assumption");

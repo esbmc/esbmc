@@ -281,14 +281,14 @@ void violation_graphml_goto_trace(
       get_offsets_for_line_using_wc(verification_file, new_edge.start_line,
                                     new_edge.start_offset, new_edge.end_offset);
 
-	/* check if it has entered or returned from a function */
+    /* check if it has entered or returned from a function */
     std::string function = step.pc->location.get_function().c_str();
     new_edge.assumption_scope = function;
     if(function != function && !function.empty())
     {
       if(func_control_map.find(function) == func_control_map.end())
       {
-         /* it is entering a function for the first time */
+         /* it is entering in a function for the first time */
          func_control_map.insert(std::make_pair(function, new_edge.start_line));
          new_edge.enter_function = function;
          prev_function = function;
@@ -322,8 +322,8 @@ void violation_graphml_goto_trace(
 #else
   boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
-  //options.get_option("witness_output")
-  boost::property_tree::write_xml("teste.graphml", graphml, std::locale(), settings);
+  boost::property_tree::write_xml(
+    options.get_option("witness-output").c_str(), graphml, std::locale(), settings);
 }
 
 void generate_goto_trace_in_correctness_graphml_format(
