@@ -1534,13 +1534,7 @@ expr2tc*
 dereferencet::extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
     const expr2tc &offset)
 {
-  if(!bytes)
-  {
-    std::cerr << "**** ERROR: "
-              << "Zero byte when extracting from an array.\n"
-              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
-    abort();
-  }
+  assert(bytes != 0);
 
   expr2tc *exprs = new expr2tc[bytes];
 
@@ -1565,14 +1559,7 @@ expr2tc *
 dereferencet::extract_bytes_from_scalar(const expr2tc &object,
     unsigned int num_bytes, const expr2tc &offset)
 {
-  if(!num_bytes)
-  {
-    std::cerr << "**** ERROR: "
-              << "Zero byte when extracting from scalar.\n"
-              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
-    abort();
-  }
-
+  assert(num_bytes != 0);
 
   assert(is_scalar_type(object) && "Can't extract bytes out of non-scalars");
   const type2tc &bytetype = get_uint8_type();
@@ -1601,13 +1588,7 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
 {
   int num_bytes = type->get_width() / 8;
 
-  if(!num_bytes)
-  {
-    std::cerr << "**** ERROR: "
-              << "Zero byte when stitching from byte array.\n"
-              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
-    abort();
-  }
+  assert(num_bytes != 0);
 
   // We are composing a larger data type out of bytes -- we must consider
   // what byte order we are giong to stitch it together out of.
