@@ -108,6 +108,11 @@ void violation_graphml_goto_trace(
   const namespacet & ns,
   const goto_tracet & goto_trace );
 
+void correctness_graphml_goto_trace(
+  optionst & options,
+  const namespacet & ns,
+  const goto_tracet & goto_trace );
+
 void generate_goto_trace_in_correctness_graphml_format(
   std::string & witness_output,
   bool is_detailed_mode,

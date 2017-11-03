@@ -323,154 +323,100 @@ void violation_graphml_goto_trace(
   boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
   boost::property_tree::write_xml(
-    options.get_option("witness-output").c_str(), graphml, std::locale(), settings);
+    options.get_option("witness-output"), graphml, std::locale(), settings);
 }
 
-void generate_goto_trace_in_correctness_graphml_format(
-  std::string &witness_output,
-  bool is_detailed_mode,
-  int &specification,
-  const namespacet &ns,
-  const goto_tracet &goto_trace)
+void correctness_graphml_goto_trace(
+  optionst & options,
+  const namespacet & ns,
+  const goto_tracet & goto_trace )
 {
-//  boost::property_tree::ptree graphml;
-//  boost::property_tree::ptree graph;
-//  std::map<int, std::string> line_content_map;
-//  std::map<std::string, int> function_control_map;
+  grapht graph(grapht::CORRECTNESS);
+  graph.verified_file = verification_file;
 
-//  boost::property_tree::ptree last_created_node;
-//  std::string last_function;
-//  std::string last_ver_file;
+  nodet * prev_node;
+  std::map<std::string, uint16_t> func_control_map;
+  std::string prev_function;
 
-//  create_graph(graph, verification_file, specification, true);
-//  boost::property_tree::ptree first_node;
-//  node_p first_node_p;
-//  first_node_p.isEntryNode = true;
-//  create_node(first_node, first_node_p);
-//  graph.add_child("node", first_node);
-//  last_created_node = first_node;
+  nodet firstnode;
+  firstnode.entry = true;
+  prev_node = &firstnode;
 
-//  for(const auto & step : goto_trace.steps)
-//  {
-//    /* check if it is an internal call */
-//    std::string::size_type find_bt =
-//      step.pc->location.to_string().find("built-in", 0);
-//    std::string::size_type find_lib =
-//      step.pc->location.to_string().find("library", 0);
-//    bool is_internal_call = (find_bt != std::string::npos)
-//        || (find_lib != std::string::npos);
+  for(const auto & step : goto_trace.steps)
+  {
+    /* checking restrictions for correctness GraphML */
+    if ((!(is_valid_witness_step(ns, step))) ||
+        (!(step.is_assignment() || step.is_assume() || step.is_assert())))
+      continue;
 
-//    /** ignore internal calls and non assignments */
-//    if(!(step.type == goto_trace_stept::ASSIGNMENT)
-//        || (is_internal_call == true))
-//      continue;
+    nodet new_node;
+    edget new_edge;
+    new_edge.assumption = get_formated_assignment(ns, step);
+    new_edge.start_line = std::atoi(step.pc->location.get_line().c_str());
+    new_edge.end_line = new_edge.start_line;
+    if(new_edge.start_line)
+      get_offsets_for_line_using_wc(verification_file, new_edge.start_line,
+                                    new_edge.start_offset, new_edge.end_offset);
 
-//    /* checking other restrictions */
-//    if(!is_valid_witness_expr(ns, step.lhs))
-//      continue;
+    /* check if it has entered or returned from a function */
+    std::string function = step.pc->location.get_function().c_str();
+    if(function != function && !function.empty())
+    {
+      if(func_control_map.find(function) == func_control_map.end())
+      {
+        /* it is entering in a function for the first time */
+        func_control_map.insert(std::make_pair(function, new_edge.start_line));
+        new_edge.enter_function = function;
+        prev_function = function;
+      }
+      else
+      {
+        /* it is backing from another function */
+        new_edge.return_from_function = prev_function;
+        new_edge.enter_function = function;
+        prev_function = function;
+      }
+    }
 
-//    /** ignore internal calls and non assignments */
-//    if(!(step.is_assignment() || step.is_assume() || step.is_assert()))
-//      continue;
+    if(step.is_assignment())
+    {
+      /* assignment are not required according svcomp2018 specifications */
+    }
+    else if(step.is_assume()) //FIXME this field should be updated.
+    {
+      std::string code_line = ""; //FIXME //line_content_map[line_number];
+      if((code_line.find("__VERIFIER_assume") != std::string::npos)
+        || (code_line.find("__ESBMC_assume") != std::string::npos)
+        || (code_line.find("assume") != std::string::npos))
+      {
+        code_line = w_string_replace(code_line, "__VERIFIER_assume", "");
+        code_line = w_string_replace(code_line, "__ESBMC_assume", "");
+        code_line = w_string_replace(code_line, "assume(", "");
+        code_line = w_string_replace(code_line, ";", "");
+        new_node.invariant = 0; //FIXME code_line;
+        new_edge.assumption_scope = function;
+      }
+    }
+    else if(step.is_assert())
+    {
+      /* nothing to do here yet */
+    }
 
-//    std::string current_ver_file = step.pc->location.get_file().as_string();
-//    if(verification_file.find(current_ver_file) != std::string::npos)
-//      current_ver_file = verification_file;
+    new_edge.from_node = prev_node;
+    new_edge.to_node = &new_node;
+    prev_node = &new_node;
+    graph.edges.push_back(new_edge);
+  }
 
-//    /* creating nodes and edges */
-//    boost::property_tree::ptree current_node;
-//    node_p current_node_p;
-//    /* check if tokens are already ok */
-//    if(last_ver_file != current_ver_file)
-//    {
-//      last_ver_file = current_ver_file;
-//      map_line_number_to_content(current_ver_file, line_content_map);
-//    }
-//    boost::property_tree::ptree current_edge;
-//    edge_p current_edge_p;
-//    current_edge_p.originFileName = current_ver_file;
+  xmlnodet graphml = graph.generate_graphml(options);
 
-//    /* check if has a line number (to get tokens) */
-//    int line_number = std::atoi(step.pc->location.get_line().c_str());
-//    if(line_number != 0)
-//    {
-//      current_edge_p.startline = line_number;
-//      if(is_detailed_mode)
-//      {
-//        current_edge_p.endline = line_number;
-//        int p_startoffset = 0;
-//        int p_endoffset = 0;
-//        get_offsets_for_line_using_wc(
-//          current_ver_file, line_number, p_startoffset, p_endoffset);
-//        current_edge_p.startoffset = p_startoffset;
-//        current_edge_p.endoffset = p_endoffset;
-//      }
-//    }
-
-//    /* check if it has entered or returned from a function */
-//    std::string function_name = step.pc->location.get_function().c_str();
-//    if(last_function != function_name && !function_name.empty())
-//    {
-//      /* it is a new entry */
-//      if(function_control_map.find(function_name) == function_control_map.end())
-//      {
-//        function_control_map.insert(std::make_pair(function_name, line_number));
-//        current_edge_p.enterFunction = function_name;
-//        last_function = function_name;
-//      }
-//      else
-//      {
-//        /* it is backing from another function */
-//        current_edge_p.returnFromFunction = last_function;
-//        current_edge_p.enterFunction = function_name;
-//        last_function = function_name;
-//      }
-//    }
-
-//    if(step.is_assignment())
-//    {
-//      /* assignment not required according spec 2017 */
-//    }
-//    else if(step.is_assume())
-//    {
-//      std::string codeline = line_content_map[line_number];
-//      if((codeline.find("__VERIFIER_assume") != std::string::npos)
-//          || (codeline.find("__ESBMC_assume") != std::string::npos)
-//          || (codeline.find("assume") != std::string::npos))
-//      {
-//        codeline = w_string_replace(codeline, "__VERIFIER_assume", "");
-//        codeline = w_string_replace(codeline, "__ESBMC_assume", "");
-//        codeline = w_string_replace(codeline, "assume(", "");
-//        codeline = w_string_replace(codeline, ";", "");
-//        current_node_p.invariant = codeline;
-//        current_node_p.invariantScope = function_name;
-//      }
-//    }
-//    else if(step.is_assert())
-//    {
-//      /* nothing to do here yet */
-//    }
-
-//    /* current node */
-//    create_node(current_node, current_node_p);
-//    graph.add_child("node", current_node);
-
-//    /* including current node */
-//    create_edge(current_edge, current_edge_p, last_created_node, current_node);
-//    graph.add_child("edge", current_edge);
-//    last_created_node = current_node;
-//  }
-
-//  /* write graphml */
-//  create_graphml(graphml, verification_file);
-//  graphml.add_child("graphml.graph", graph);
-
-//#if (BOOST_VERSION >= 105700)
-//  boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
-//#else
-//  boost::property_tree::xml_writer_settings<char> settings(' ', 2);
-//#endif
-//  boost::property_tree::write_xml(witness_output, graphml, std::locale(), settings);
+#if (BOOST_VERSION >= 105700)
+  boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
+#else
+  boost::property_tree::xml_writer_settings<char> settings(' ', 2);
+#endif
+  boost::property_tree::write_xml(
+    options.get_option("witness-output"), graphml, std::locale(), settings);
 }
 
 void show_goto_trace(

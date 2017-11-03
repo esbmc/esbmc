@@ -96,13 +96,12 @@ void bmct::do_cbmc(
 
 void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq)
 {
+
   if(options.get_bool_option("result-only"))
     return;
 
   goto_tracet goto_trace;
-  std::string witness_output = options.get_option("witness-output");
-  int specification = 0;
-  if(!witness_output.empty())
+  if(!options.get_option("witness-output").empty())
     set_ui(ui_message_handlert::GRAPHML);
 
   switch(ui)
@@ -110,15 +109,10 @@ void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq)
     case ui_message_handlert::GRAPHML:
       status("Building successful trace");
       build_successful_goto_trace(eq, ns, goto_trace);
-      specification += options.get_bool_option("overflow-check") ? 1 : 0;
-      specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
-      generate_goto_trace_in_correctness_graphml_format(
-        witness_output,
-        options.get_bool_option("witness-detailed"),
-        specification,
+      correctness_graphml_goto_trace(
+        options,
         ns,
-        goto_trace
-      );
+        goto_trace);
     break;
 
     case ui_message_handlert::OLD_GUI:

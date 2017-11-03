@@ -17,12 +17,12 @@ class nodet
 private:
   static short int _id;
 public:
-  std::string     id;
-  bool            entry     = false;
-  bool            sink      = false;
-  bool            violation = false;
-  unsigned char   invariant = 0xFF;
-  std::string     invariant_scope;
+  std::string   id;
+  bool          entry     = false;
+  bool          sink      = false;
+  bool          violation = false;
+  unsigned char invariant = 0xFF;
+  std::string   invariant_scope;
   nodet(void)
   {
     id = "n" + std::to_string(_id);
@@ -41,10 +41,10 @@ public:
   std::string        assumption_resultfunction;
   std::string        enter_function;
   std::string        return_from_function;
-  unsigned short int start_line      = 0xFFFF;
-  unsigned short int end_line        = 0xFFFF;
-  unsigned short int start_offset    = 0xFFFF;
-  unsigned short int end_offset      = 0xFFFF;
+  unsigned short int start_line      = c_nonset;
+  unsigned short int end_line        = c_nonset;
+  unsigned short int start_offset    = c_nonset;
+  unsigned short int end_offset      = c_nonset;
   bool               control         = false;
   bool               enter_loop_head = false;
   nodet            * from_node;
@@ -62,9 +62,9 @@ class grapht
 {
 public:
   enum typet { VIOLATION, CORRECTNESS };
-  typet                  witness_type;
-  std::string            verified_file;
-  std::vector<edget>     edges;
+  typet              witness_type;
+  std::string        verified_file;
+  std::vector<edget> edges;
   grapht(typet t){
     witness_type = t;
   }
