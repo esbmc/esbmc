@@ -157,27 +157,15 @@ void bmct::error_trace(
   status("Building error trace");
 
   goto_tracet goto_trace;
-  int specification = 0;
   build_goto_trace(eq, smt_conv, goto_trace);
 
-  std::string witness_output = options.get_option("witness-output");
-  if(!witness_output.empty())
-  {
+  if(!options.get_option("witness-output").empty())
     set_ui(ui_message_handlert::GRAPHML);
-  }
 
   switch (ui)
   {
     case ui_message_handlert::GRAPHML:
-      specification += options.get_bool_option("overflow-check") ? 1 : 0;
-      specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
-      generate_goto_trace_in_violation_graphml_format(
-        witness_output,
-        options.get_bool_option("witness-detailed"),
-        specification,
-        ns,
-        goto_trace
-      );
+      violation_graphml_goto_trace(options, ns, goto_trace);
       /* fallthrough */
     case ui_message_handlert::PLAIN:
       std::cout << std::endl << "Counterexample:" << std::endl;

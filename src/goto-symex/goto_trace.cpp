@@ -18,10 +18,12 @@
 #include <goto-symex/printf_formatter.h>
 #include <goto-symex/witnesses.h>
 #include <iostream>
+#include <regex>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <util/arith_tools.h>
 #include <util/std_types.h>
+#include <boost/graph/graphml.hpp>
 
 extern std::string verification_file;
 
@@ -247,192 +249,81 @@ void show_state_header(
   out << "----------------------------------------------------" << std::endl;
 }
 
-void generate_goto_trace_in_violation_graphml_format(
-  std::string & witness_output,
-  bool is_detailed_mode,
-  int &specification,
-  const namespacet &ns,
-  const goto_tracet &goto_trace)
+void violation_graphml_goto_trace(
+  optionst & options,
+  const namespacet & ns,
+  const goto_tracet & goto_trace )
 {
-  boost::property_tree::ptree graphml;
-  boost::property_tree::ptree graph;
-  std::map<std::string, int> function_control_map;
-  boost::property_tree::ptree last_created_node;
-  std::string last_function;
-  std::string last_ver_filename;
-  bool already_initialized = false;
+  grapht graph(grapht::VIOLATION);
+  graph.verified_file = verification_file;
 
-  create_graph(graph, verification_file, specification, false);
-  boost::property_tree::ptree first_node;
-  node_p first_node_p;
-  first_node_p.isEntryNode = true;
-  create_node(first_node, first_node_p);
-  graph.add_child("node", first_node);
-  last_created_node = first_node;
-  already_initialized = true;
+  nodet * prev_node;
+  std::map<std::string, uint16_t> func_control_map;
+  std::string prev_function;
+
+  nodet firstnode;
+  firstnode.entry = true;
+  prev_node = &firstnode;
 
   for(const auto & step : goto_trace.steps)
   {
-    /* check if it is an internal call */
-    std::string::size_type find_bt =
-      step.pc->location.to_string().find("built-in", 0);
-    std::string::size_type find_lib =
-      step.pc->location.to_string().find("library", 0);
-    bool is_internal_call = (find_bt != std::string::npos)
-        || (find_lib != std::string::npos);
-
-    /** ignore internal calls and non assignments */
-    if(!(step.type == goto_trace_stept::ASSIGNMENT) || is_internal_call)
+    /* checking restrictions for violation GraphML */
+    if (!((is_valid_witness_step(ns, step) &&
+         (step.type == goto_trace_stept::ASSIGNMENT))))
       continue;
 
-    /* checking other restrictions */
-    if(!is_valid_witness_expr(ns, step.lhs))
-      continue;
+    nodet new_node;
+    edget new_edge;
+    new_edge.assumption = get_formated_assignment(ns, step);
+    new_edge.start_line = std::atoi(step.pc->location.get_line().c_str());
+    new_edge.end_line = new_edge.start_line;
+    if(new_edge.start_line)
+      get_offsets_for_line_using_wc(verification_file, new_edge.start_line,
+                                    new_edge.start_offset, new_edge.end_offset);
 
-    const irep_idt &identifier = to_symbol2t(step.lhs).get_symbol_name();
-
-    /* check if it is a temporary assignment */
-    std::string id_str = id2string(identifier);
-    std::string::size_type find_tmp = id_str.find("::$tmp::", 0);
-    if(find_tmp != std::string::npos)
-      continue;
-
-    std::string current_ver_file = step.pc->location.get_file().as_string();
-    if(verification_file.find(current_ver_file) != std::string::npos)
-      current_ver_file = verification_file;
-
-    /* creating edge */
-    edge_p current_edge_p;
-    current_edge_p.originFileName = current_ver_file;
-
-    /* check if it has a line number (getting tokens) */
-    int line_number = std::atoi(step.pc->location.get_line().c_str());
-    if(line_number != 0)
+	/* check if it has entered or returned from a function */
+    std::string function = step.pc->location.get_function().c_str();
+    new_edge.assumption_scope = function;
+    if(function != function && !function.empty())
     {
-      current_edge_p.startline = line_number;
-      if(is_detailed_mode)
+      if(func_control_map.find(function) == func_control_map.end())
       {
-        current_edge_p.endline = line_number;
-        int p_startoffset = 0;
-        int p_endoffset = 0;
-        get_offsets_for_line_using_wc(current_ver_file, line_number,
-            p_startoffset, p_endoffset);
-        current_edge_p.startoffset = p_startoffset;
-        current_edge_p.endoffset = p_endoffset;
-      }
-    }
-
-    /* check if it has entered or returned from a function */
-    std::string function_name = step.pc->location.get_function().c_str();
-    if(last_function != function_name && !function_name.empty())
-    {
-      /* it is a new entry */
-      if(function_control_map.find(function_name) == function_control_map.end())
-      {
-        function_control_map.insert(std::make_pair(function_name, line_number));
-        current_edge_p.enterFunction = function_name;
-        last_function = function_name;
+         /* it is entering a function for the first time */
+         func_control_map.insert(std::make_pair(function, new_edge.start_line));
+         new_edge.enter_function = function;
+         prev_function = function;
       }
       else
       {
         /* it is backing from another function */
-        current_edge_p.returnFromFunction = last_function;
-        current_edge_p.enterFunction = function_name;
-        last_function = function_name;
+        new_edge.return_from_function = prev_function;
+        new_edge.enter_function = function;
+        prev_function = function;
       }
     }
 
-    /* adjusts assumptions */
-    /* left hand */
-    std::vector<std::string> split;
-    std::string lhs_str = from_expr(ns, identifier, step.lhs);
-    boost::split(split, lhs_str, boost::is_any_of("@"));
-    lhs_str = split[0];
-    std::string::size_type findamp = lhs_str.find("&", 0);
-    if(findamp != std::string::npos)
-      lhs_str = lhs_str.substr(0, findamp);
-    std::string::size_type findds = lhs_str.find("$", 0);
-    if(findds != std::string::npos)
-      lhs_str = lhs_str.substr(0, findds);
-
-    /* check if isn't in an array (modify assumptions) */
-    if(step.lhs->type->type_id != step.lhs->type->array_id)
-    {
-      /* common cases */
-      std::string value_str = from_expr(ns, identifier, step.value);
-
-      /* remove memory address */
-      std::string::size_type findat = value_str.find("@", 0);
-      if(findat != std::string::npos)
-        value_str = value_str.substr(0, findat);
-      /* remove float suffix */
-      std::string::size_type findfs = value_str.find("f", 0);
-      if(findfs != std::string::npos)
-        value_str = value_str.substr(0, findfs);
-      /* check if has a double &quote */
-      std::string::size_type findq1 = value_str.find("\"", 0);
-      if(findq1 != std::string::npos)
-      {
-        std::string::size_type findq2 = value_str.find("\"", findq1 + 1);
-        if(findq2 == std::string::npos)
-          value_str = value_str + "\"";
-      }
-      std::string assumption = lhs_str + " == (" + value_str + ");";
-      std::string::size_type findesbm = assumption.find("__ESBMC", 0);
-      std::string::size_type finddma = assumption.find("&dynamic_", 0);
-      std::string::size_type findivo = assumption.find("invalid-object", 0);
-      bool is_union = (step.rhs->type->type_id == step.rhs->type->union_id);
-      bool is_struct = (step.rhs->type->type_id == step.rhs->type->struct_id);
-
-      /* TODO check if it is an union, struct, or dynamic attr.
-       * However, we need more details about the validation tools */
-      bool is_esbmc_or_dynamic = ((findesbm != std::string::npos)
-          || (finddma != std::string::npos) || (findivo != std::string::npos)
-          || is_union || is_struct);
-      if(!is_esbmc_or_dynamic)
-      {
-        current_edge_p.assumption = assumption;
-        current_edge_p.assumptionScope = function_name;
-      }
-    }
-
-    /* creating node and edge */
-    boost::property_tree::ptree current_node;
-    node_p current_node_p;
-    create_node(current_node, current_node_p);
-    graph.add_child("node", current_node);
-    boost::property_tree::ptree current_edge;
-    create_edge(current_edge, current_edge_p, last_created_node, current_node);
-    graph.add_child("edge", current_edge);
-    last_created_node = current_node;
+    new_edge.from_node = prev_node;
+    new_edge.to_node = &new_node;
+    prev_node = &new_node;
+    graph.edges.push_back(new_edge);
   }
 
-  if(already_initialized)
-  {
-    /* violation node */
-    boost::property_tree::ptree violation_node;
-    node_p violation_node_p;
-    violation_node_p.isViolationNode = true;
-    create_node(violation_node, violation_node_p);
-    graph.add_child("node", violation_node);
+  nodet violation_node;
+  violation_node.violation = true;
+  edget violation_edge;
+  violation_edge.from_node = prev_node;
+  violation_edge.to_node = &violation_node;
+  graph.edges.push_back(violation_edge);
 
-    boost::property_tree::ptree violation_edge;
-    edge_p violation_edge_p;
-    create_edge(
-      violation_edge, violation_edge_p, last_created_node, violation_node);
-    graph.add_child("edge", violation_edge);
-  }
-
-  /* write graphml */
-  create_graphml(graphml, verification_file);
-  graphml.add_child("graphml.graph", graph);
+  xmlnodet graphml = graph.generate_graphml(options);
 
 #if (BOOST_VERSION >= 105700)
-  boost::property_tree::xml_writer_settings<std::string> settings('\t', 1);
+  boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
 #else
-  boost::property_tree::xml_writer_settings<char> settings('\t', 1);
+  boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
-  boost::property_tree::write_xml(witness_output, graphml, std::locale(), settings);
+  //options.get_option("witness_output")
+  boost::property_tree::write_xml("teste.graphml", graphml, std::locale(), settings);
 }
 
 void generate_goto_trace_in_correctness_graphml_format(
@@ -442,144 +333,144 @@ void generate_goto_trace_in_correctness_graphml_format(
   const namespacet &ns,
   const goto_tracet &goto_trace)
 {
-  boost::property_tree::ptree graphml;
-  boost::property_tree::ptree graph;
-  std::map<int, std::string> line_content_map;
-  std::map<std::string, int> function_control_map;
+//  boost::property_tree::ptree graphml;
+//  boost::property_tree::ptree graph;
+//  std::map<int, std::string> line_content_map;
+//  std::map<std::string, int> function_control_map;
 
-  boost::property_tree::ptree last_created_node;
-  std::string last_function;
-  std::string last_ver_file;
+//  boost::property_tree::ptree last_created_node;
+//  std::string last_function;
+//  std::string last_ver_file;
 
-  create_graph(graph, verification_file, specification, true);
-  boost::property_tree::ptree first_node;
-  node_p first_node_p;
-  first_node_p.isEntryNode = true;
-  create_node(first_node, first_node_p);
-  graph.add_child("node", first_node);
-  last_created_node = first_node;
+//  create_graph(graph, verification_file, specification, true);
+//  boost::property_tree::ptree first_node;
+//  node_p first_node_p;
+//  first_node_p.isEntryNode = true;
+//  create_node(first_node, first_node_p);
+//  graph.add_child("node", first_node);
+//  last_created_node = first_node;
 
-  for(const auto & step : goto_trace.steps)
-  {
-    /* check if it is an internal call */
-    std::string::size_type find_bt =
-      step.pc->location.to_string().find("built-in", 0);
-    std::string::size_type find_lib =
-      step.pc->location.to_string().find("library", 0);
-    bool is_internal_call = (find_bt != std::string::npos)
-        || (find_lib != std::string::npos);
+//  for(const auto & step : goto_trace.steps)
+//  {
+//    /* check if it is an internal call */
+//    std::string::size_type find_bt =
+//      step.pc->location.to_string().find("built-in", 0);
+//    std::string::size_type find_lib =
+//      step.pc->location.to_string().find("library", 0);
+//    bool is_internal_call = (find_bt != std::string::npos)
+//        || (find_lib != std::string::npos);
 
-    /** ignore internal calls and non assignments */
-    if(!(step.type == goto_trace_stept::ASSIGNMENT)
-        || (is_internal_call == true))
-      continue;
+//    /** ignore internal calls and non assignments */
+//    if(!(step.type == goto_trace_stept::ASSIGNMENT)
+//        || (is_internal_call == true))
+//      continue;
 
-    /* checking other restrictions */
-    if(!is_valid_witness_expr(ns, step.lhs))
-      continue;
+//    /* checking other restrictions */
+//    if(!is_valid_witness_expr(ns, step.lhs))
+//      continue;
 
-    /** ignore internal calls and non assignments */
-    if(!(step.is_assignment() || step.is_assume() || step.is_assert()))
-      continue;
+//    /** ignore internal calls and non assignments */
+//    if(!(step.is_assignment() || step.is_assume() || step.is_assert()))
+//      continue;
 
-    std::string current_ver_file = step.pc->location.get_file().as_string();
-    if(verification_file.find(current_ver_file) != std::string::npos)
-      current_ver_file = verification_file;
+//    std::string current_ver_file = step.pc->location.get_file().as_string();
+//    if(verification_file.find(current_ver_file) != std::string::npos)
+//      current_ver_file = verification_file;
 
-    /* creating nodes and edges */
-    boost::property_tree::ptree current_node;
-    node_p current_node_p;
-    /* check if tokens are already ok */
-    if(last_ver_file != current_ver_file)
-    {
-      last_ver_file = current_ver_file;
-      map_line_number_to_content(current_ver_file, line_content_map);
-    }
-    boost::property_tree::ptree current_edge;
-    edge_p current_edge_p;
-    current_edge_p.originFileName = current_ver_file;
+//    /* creating nodes and edges */
+//    boost::property_tree::ptree current_node;
+//    node_p current_node_p;
+//    /* check if tokens are already ok */
+//    if(last_ver_file != current_ver_file)
+//    {
+//      last_ver_file = current_ver_file;
+//      map_line_number_to_content(current_ver_file, line_content_map);
+//    }
+//    boost::property_tree::ptree current_edge;
+//    edge_p current_edge_p;
+//    current_edge_p.originFileName = current_ver_file;
 
-    /* check if has a line number (to get tokens) */
-    int line_number = std::atoi(step.pc->location.get_line().c_str());
-    if(line_number != 0)
-    {
-      current_edge_p.startline = line_number;
-      if(is_detailed_mode)
-      {
-        current_edge_p.endline = line_number;
-        int p_startoffset = 0;
-        int p_endoffset = 0;
-        get_offsets_for_line_using_wc(
-          current_ver_file, line_number, p_startoffset, p_endoffset);
-        current_edge_p.startoffset = p_startoffset;
-        current_edge_p.endoffset = p_endoffset;
-      }
-    }
+//    /* check if has a line number (to get tokens) */
+//    int line_number = std::atoi(step.pc->location.get_line().c_str());
+//    if(line_number != 0)
+//    {
+//      current_edge_p.startline = line_number;
+//      if(is_detailed_mode)
+//      {
+//        current_edge_p.endline = line_number;
+//        int p_startoffset = 0;
+//        int p_endoffset = 0;
+//        get_offsets_for_line_using_wc(
+//          current_ver_file, line_number, p_startoffset, p_endoffset);
+//        current_edge_p.startoffset = p_startoffset;
+//        current_edge_p.endoffset = p_endoffset;
+//      }
+//    }
 
-    /* check if it has entered or returned from a function */
-    std::string function_name = step.pc->location.get_function().c_str();
-    if(last_function != function_name && !function_name.empty())
-    {
-      /* it is a new entry */
-      if(function_control_map.find(function_name) == function_control_map.end())
-      {
-        function_control_map.insert(std::make_pair(function_name, line_number));
-        current_edge_p.enterFunction = function_name;
-        last_function = function_name;
-      }
-      else
-      {
-        /* it is backing from another function */
-        current_edge_p.returnFromFunction = last_function;
-        current_edge_p.enterFunction = function_name;
-        last_function = function_name;
-      }
-    }
+//    /* check if it has entered or returned from a function */
+//    std::string function_name = step.pc->location.get_function().c_str();
+//    if(last_function != function_name && !function_name.empty())
+//    {
+//      /* it is a new entry */
+//      if(function_control_map.find(function_name) == function_control_map.end())
+//      {
+//        function_control_map.insert(std::make_pair(function_name, line_number));
+//        current_edge_p.enterFunction = function_name;
+//        last_function = function_name;
+//      }
+//      else
+//      {
+//        /* it is backing from another function */
+//        current_edge_p.returnFromFunction = last_function;
+//        current_edge_p.enterFunction = function_name;
+//        last_function = function_name;
+//      }
+//    }
 
-    if(step.is_assignment())
-    {
-      /* assignment not required according spec 2017 */
-    }
-    else if(step.is_assume())
-    {
-      std::string codeline = line_content_map[line_number];
-      if((codeline.find("__VERIFIER_assume") != std::string::npos)
-          || (codeline.find("__ESBMC_assume") != std::string::npos)
-          || (codeline.find("assume") != std::string::npos))
-      {
-        codeline = w_string_replace(codeline, "__VERIFIER_assume", "");
-        codeline = w_string_replace(codeline, "__ESBMC_assume", "");
-        codeline = w_string_replace(codeline, "assume(", "");
-        codeline = w_string_replace(codeline, ";", "");
-        current_node_p.invariant = codeline;
-        current_node_p.invariantScope = function_name;
-      }
-    }
-    else if(step.is_assert())
-    {
-      /* nothing to do here yet */
-    }
+//    if(step.is_assignment())
+//    {
+//      /* assignment not required according spec 2017 */
+//    }
+//    else if(step.is_assume())
+//    {
+//      std::string codeline = line_content_map[line_number];
+//      if((codeline.find("__VERIFIER_assume") != std::string::npos)
+//          || (codeline.find("__ESBMC_assume") != std::string::npos)
+//          || (codeline.find("assume") != std::string::npos))
+//      {
+//        codeline = w_string_replace(codeline, "__VERIFIER_assume", "");
+//        codeline = w_string_replace(codeline, "__ESBMC_assume", "");
+//        codeline = w_string_replace(codeline, "assume(", "");
+//        codeline = w_string_replace(codeline, ";", "");
+//        current_node_p.invariant = codeline;
+//        current_node_p.invariantScope = function_name;
+//      }
+//    }
+//    else if(step.is_assert())
+//    {
+//      /* nothing to do here yet */
+//    }
 
-    /* current node */
-    create_node(current_node, current_node_p);
-    graph.add_child("node", current_node);
+//    /* current node */
+//    create_node(current_node, current_node_p);
+//    graph.add_child("node", current_node);
 
-    /* including current node */
-    create_edge(current_edge, current_edge_p, last_created_node, current_node);
-    graph.add_child("edge", current_edge);
-    last_created_node = current_node;
-  }
+//    /* including current node */
+//    create_edge(current_edge, current_edge_p, last_created_node, current_node);
+//    graph.add_child("edge", current_edge);
+//    last_created_node = current_node;
+//  }
 
-  /* write graphml */
-  create_graphml(graphml, verification_file);
-  graphml.add_child("graphml.graph", graph);
+//  /* write graphml */
+//  create_graphml(graphml, verification_file);
+//  graphml.add_child("graphml.graph", graph);
 
-#if (BOOST_VERSION >= 105700)
-  boost::property_tree::xml_writer_settings<std::string> settings('\t', 1);
-#else
-  boost::property_tree::xml_writer_settings<char> settings('\t', 1);
-#endif
-  boost::property_tree::write_xml(witness_output, graphml, std::locale(), settings);
+//#if (BOOST_VERSION >= 105700)
+//  boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
+//#else
+//  boost::property_tree::xml_writer_settings<char> settings(' ', 2);
+//#endif
+//  boost::property_tree::write_xml(witness_output, graphml, std::locale(), settings);
 }
 
 void show_goto_trace(
