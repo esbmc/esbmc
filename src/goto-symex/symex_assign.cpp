@@ -551,6 +551,8 @@ void goto_symext::symex_assign_extract(
   if (!is_nil_expr(accuml)) {
     type2tc thetype = get_uint_type(accuml->type->get_width() + rhs->type->get_width());
     accuml = concat2tc(thetype, rhs, bottom_part);
+  } else {
+    accuml = rhs;
   }
 
   if (!is_nil_expr(top_part)) {
