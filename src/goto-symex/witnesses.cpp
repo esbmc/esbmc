@@ -694,7 +694,7 @@ bool is_valid_witness_step(
   return ((location.find("built-in") & location.find("library") &
            lhsexpr.find("__ESBMC") & lhsexpr.find("stdin") &
            lhsexpr.find("stdout") & lhsexpr.find("stderr") &
-           lhsexpr.find("sys_")) == std::string::npos);
+		   lhsexpr.find("$") & lhsexpr.find("sys_")) == std::string::npos);
 }
 
 /* */
