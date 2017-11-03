@@ -622,6 +622,7 @@ flatten_union(const exprt &expr)
 {
   type2tc type;
   migrate_type(expr.type(), type);
+  mp_integer full_size = type_byte_size(type);
 
   // Union literals should have one field.
   assert(expr.operands().size() == 1 &&
@@ -630,6 +631,12 @@ flatten_union(const exprt &expr)
   // Cannot have unbounded size; flatten to an array of bytes.
   std::vector<expr2tc> byte_array;
   flatten_to_bytes(expr.op0(), byte_array);
+
+  // Potentially extend this array further if this literal is smaller than
+  // the overall size of the union.
+  expr2tc abyte = gen_zero(get_uint8_type());
+  while (byte_array.size() < full_size.to_uint64())
+    byte_array.push_back(abyte);
 
   expr2tc size = gen_ulong(byte_array.size());
   type2tc arraytype(new array_type2t(get_uint8_type(), size, false));
