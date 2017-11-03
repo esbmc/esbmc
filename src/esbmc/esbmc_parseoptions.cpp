@@ -78,7 +78,7 @@ timeout_handler(int dummy __attribute__((unused)))
 }
 #endif
 
-void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
+void esbmc_parseoptionst::set_verbosity_msg(messaget &message)
 {
   int v=8;
 
@@ -96,7 +96,7 @@ void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
 
 extern "C" uint8_t *esbmc_version_string;
 
-uint64_t cbmc_parseoptionst::read_time_spec(const char *str)
+uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
 {
   uint64_t mult;
   int len = strlen(str);
@@ -127,7 +127,7 @@ uint64_t cbmc_parseoptionst::read_time_spec(const char *str)
   return timeout;
 }
 
-uint64_t cbmc_parseoptionst::read_mem_spec(const char *str)
+uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
 {
 
   uint64_t mult;
@@ -159,7 +159,7 @@ uint64_t cbmc_parseoptionst::read_mem_spec(const char *str)
   return size;
 }
 
-void cbmc_parseoptionst::get_command_line_options(optionst &options)
+void esbmc_parseoptionst::get_command_line_options(optionst &options)
 {
   if(config.set(cmdline))
   {
@@ -317,7 +317,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   config.options = options;
 }
 
-int cbmc_parseoptionst::doit()
+int esbmc_parseoptionst::doit()
 {
   //
   // Print a banner
@@ -392,7 +392,7 @@ int cbmc_parseoptionst::doit()
   return do_bmc(bmc);
 }
 
-int cbmc_parseoptionst::doit_k_induction_parallel()
+int esbmc_parseoptionst::doit_k_induction_parallel()
 {
   // Pipes for communication between processes
   int forward_pipe[2], backward_pipe[2];
@@ -956,7 +956,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
   return 0;
 }
 
-int cbmc_parseoptionst::doit_k_induction()
+int esbmc_parseoptionst::doit_k_induction()
 {
   // Generate goto functions for base case and forward condition
   status("\n*** Generating Base Case and Forward Condition ***");
@@ -1023,7 +1023,7 @@ int cbmc_parseoptionst::doit_k_induction()
   return 0;
 }
 
-int cbmc_parseoptionst::doit_falsification()
+int esbmc_parseoptionst::doit_falsification()
 {
   // Generate goto functions for base case and forward condition
   goto_functionst goto_functions;
@@ -1070,7 +1070,7 @@ int cbmc_parseoptionst::doit_falsification()
   return 0;
 }
 
-int cbmc_parseoptionst::doit_incremental()
+int esbmc_parseoptionst::doit_incremental()
 {
   // Generate goto functions for base case and forward condition
 
@@ -1119,7 +1119,7 @@ int cbmc_parseoptionst::doit_incremental()
   return 0;
 }
 
-int cbmc_parseoptionst::do_base_case(
+int esbmc_parseoptionst::do_base_case(
   optionst &opts, goto_functionst &goto_functions, BigInt k_step)
 {
   opts.set_option("base-case", true);
@@ -1150,7 +1150,7 @@ int cbmc_parseoptionst::do_base_case(
   return false;
 }
 
-int cbmc_parseoptionst::do_forward_condition(
+int esbmc_parseoptionst::do_forward_condition(
   optionst &opts, goto_functionst &goto_functions, BigInt k_step)
 {
   if(opts.get_bool_option("disable-forward-condition"))
@@ -1185,7 +1185,7 @@ int cbmc_parseoptionst::do_forward_condition(
   return true;
 }
 
-int cbmc_parseoptionst::do_inductive_step(
+int esbmc_parseoptionst::do_inductive_step(
   optionst &opts, goto_functionst &goto_functions, BigInt k_step)
 {
   // Don't run inductive step for k_step == 1
@@ -1228,7 +1228,7 @@ int cbmc_parseoptionst::do_inductive_step(
   return true;
 }
 
-bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
+bool esbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
 {
   try
   {
@@ -1256,7 +1256,7 @@ bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
   return false;
 }
 
-bool cbmc_parseoptionst::get_goto_program(
+bool esbmc_parseoptionst::get_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
 {
@@ -1352,7 +1352,7 @@ bool cbmc_parseoptionst::get_goto_program(
   return false;
 }
 
-void cbmc_parseoptionst::preprocessing()
+void esbmc_parseoptionst::preprocessing()
 {
   try
   {
@@ -1392,7 +1392,7 @@ void cbmc_parseoptionst::preprocessing()
   }
 }
 
-bool cbmc_parseoptionst::read_goto_binary(
+bool esbmc_parseoptionst::read_goto_binary(
   goto_functionst &goto_functions)
 {
   std::ifstream in(cmdline.getval("binary"), std::ios::binary);
@@ -1412,7 +1412,7 @@ bool cbmc_parseoptionst::read_goto_binary(
   return false;
 }
 
-bool cbmc_parseoptionst::process_goto_program(
+bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
 {
@@ -1553,7 +1553,7 @@ bool cbmc_parseoptionst::process_goto_program(
   return false;
 }
 
-int cbmc_parseoptionst::do_bmc(bmct &bmc)
+int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   bmc.set_ui(get_ui());
 
@@ -1576,7 +1576,7 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc)
   return res;
 }
 
-void cbmc_parseoptionst::help()
+void esbmc_parseoptionst::help()
 {
   std::cout <<
     "\n"

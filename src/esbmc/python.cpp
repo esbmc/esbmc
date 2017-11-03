@@ -56,7 +56,7 @@ class dummy_symex_class { };
 // Prevent more than one instance per process
 static bool python_module_engaged = false;
 // Parseoptions instance representing an esbmc process
-static cbmc_parseoptionst *po = NULL;
+static esbmc_parseoptionst *po = NULL;
 namespacet *pythonctx_ns = NULL;
 // Type pool needs to live as long as the process.
 static type_poolt *tp = NULL;
@@ -188,7 +188,7 @@ init_esbmc_process(boost::python::object o)
   type_pool = *tp;
 
   python_module_engaged = true;
-  po = new cbmc_parseoptionst(argc, argv);
+  po = new esbmc_parseoptionst(argc, argv);
   free(argv);
 
   // Perform initial processing
@@ -214,7 +214,7 @@ init_esbmc_process(boost::python::object o)
   // Emit internal reference to parseoptions object. It's the python users
   // problem if it calls kill_esbmc_process and then touches references to
   // this.
-  reference_existing_object::apply<cbmc_parseoptionst*>::type po_cvt;
+  reference_existing_object::apply<esbmc_parseoptionst*>::type po_cvt;
   PyObject *pop = po_cvt(po);
   handle<> poh(pop);
   object po_obj(poh);
@@ -418,8 +418,8 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   class_<contextt, boost::noncopyable>("contextt", no_init); // basically opaque
   class_<message_handlert, boost::noncopyable>("message_handler", no_init); // basically opaque
   class_<ui_message_handlert, boost::noncopyable, bases<message_handlert> >("ui_message_handler", no_init); // basically opaque
-  class_<cbmc_parseoptionst, boost::noncopyable>("parseoptions", no_init)
-    .def_readwrite("goto_functions", &cbmc_parseoptionst::goto_functions)
+  class_<esbmc_parseoptionst, boost::noncopyable>("parseoptions", no_init)
+    .def_readwrite("goto_functions", &esbmc_parseoptionst::goto_functions)
     .def_readonly("message_handler", &language_uit::ui_message_handler)
     .def_readonly("context", &language_uit::context);
 

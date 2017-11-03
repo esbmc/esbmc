@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#ifndef CPROVER_CBMC_PARSEOPTIONS_H
-#define CPROVER_CBMC_PARSEOPTIONS_H
+#ifndef CPROVER_ESBMC_PARSEOPTIONS_H
+#define CPROVER_ESBMC_PARSEOPTIONS_H
 
 #include <esbmc/bmc.h>
 #include <goto-programs/goto_convert_functions.h>
@@ -19,7 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 extern const struct opt_templ esbmc_options[];
 
-class cbmc_parseoptionst:
+class esbmc_parseoptionst:
   public parseoptions_baset,
   public language_uit
 {
@@ -27,7 +27,7 @@ public:
   int doit() override ;
   void help() override ;
 
-  cbmc_parseoptionst(int argc, const char **argv):
+  esbmc_parseoptionst(int argc, const char **argv):
     parseoptions_baset(esbmc_options, argc, argv),
     language_uit(cmdline)
   {
