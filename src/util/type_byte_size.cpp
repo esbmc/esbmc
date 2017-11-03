@@ -66,7 +66,10 @@ member_offset(const type2tc &type, const irep_idt &member)
       if (is_structure_type(it))
         round_up_to_int64(result);
 
-      if (is_array_type(it) && to_array_type(it).subtype->get_width() > 32)
+      // Unions are now being converted to arrays: conservatively round up
+      // all array alignment to 64 bits. This is because we can't easily
+      // work out whether someone is going to store a double into it.
+      if (is_array_type(it))
         round_up_to_int64(result);
     }
 
@@ -183,8 +186,10 @@ type_byte_size(const type2tc &type)
         if (is_structure_type(it))
           round_up_to_int64(accumulated_size);
 
-        // Also arrays of int64's.
-        if (is_array_type(it) && to_array_type(*it).subtype->get_width() > 32)
+        // Unions are now being converted to arrays: conservatively round up
+        // all array alignment to 64 bits. This is because we can't easily
+        // work out whether someone is going to store a double into it.
+        if (is_array_type(it))
           round_up_to_int64(accumulated_size);
       }
 
