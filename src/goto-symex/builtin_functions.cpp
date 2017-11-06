@@ -777,19 +777,50 @@ goto_symext::intrinsic_memset(reachability_treet &art,
   bool can_construct = true;
   for (const auto &item : internal_deref_items) {
     const expr2tc &offs = item.offset;
-    if (!is_constant_int2t(offs) || to_constant_int2t(offs).value != 0)
+
+    int64_t tmpsize;
+    try {
+      tmpsize = type_byte_size(item.object->type).to_int64();
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      tmpsize = -1;
+    } catch (array_type2t::inf_sized_array_excp *e) {
+      tmpsize = -1;
+    }
+
+    if (!is_constant_int2t(offs) || to_constant_int2t(offs).value != 0) {
       can_construct = false;
+    } else if (is_constant_int2t(offs) || !is_constant_int2t(size) || to_constant_int2t(size).value.to_int64() != tmpsize) {
+      can_construct = false;
+    }
   }
 
   if (can_construct) {
     for (const auto &item : internal_deref_items) {
       const expr2tc &offs = item.offset;
+      expr2tc val = gen_zero(item.object->type);
+      guardt curguard(cur_state->guard);
+      curguard.add(item.guard);
+
+      int64_t tmpsize;
+      try {
+        tmpsize = type_byte_size(item.object->type).to_int64();
+      } catch (array_type2t::dyn_sized_array_excp *e) {
+        tmpsize = -1;
+      } catch (array_type2t::inf_sized_array_excp *e) {
+        tmpsize = -1;
+      }
+
       if (is_constant_int2t(offs) && to_constant_int2t(offs).value == 0) {
-        expr2tc val = gen_zero(item.object->type);
-        guardt curguard(cur_state->guard);
-        curguard.add(item.guard);
         symex_assign_rec(item.object, val, curguard, symex_targett::STATE);
+      } else if (!is_constant_int2t(offs) && is_constant_int2t(size) && to_constant_int2t(size).value.to_int64() == tmpsize) {
+        // It's a memset where the size is such that the only valid offset is
+        // zero.
+        symex_assign_rec(item.object, val, curguard, symex_targett::STATE);
+        expr2tc eq = equality2tc(offs, gen_zero(offs->type));
+        curguard.guard_expr(eq);
+        claim(eq, "Memset of full-object-size must have zero offset");
       } else {
+        std::cerr << "Logic mismatch in memset intrinsic" << std::endl;
         abort();
       }
     }
