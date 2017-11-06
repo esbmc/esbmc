@@ -394,6 +394,8 @@ protected:
   void intrinsic_register_monitor(const code_function_call2t &call, reachability_treet &art);
   /** Terminate the monitor thread */
   void intrinsic_kill_monitor(reachability_treet &art);
+  /** Memset optimiser */
+  void intrinsic_memset(reachability_treet &art, const code_function_call2t &func_call);
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();

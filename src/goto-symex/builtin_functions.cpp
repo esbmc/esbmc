@@ -732,3 +732,34 @@ void goto_symext::symex_va_arg(const expr2tc& lhs, const sideeffect2t &code)
   symex_assign(code_assign2tc(lhs, va_rhs));
 }
 
+void
+goto_symext::intrinsic_memset(reachability_treet &art,
+    const code_function_call2t &func_call)
+{
+  assert(func_call.operands.size() == 3 && "Wrong memset signature");
+  auto &ex_state = art.get_cur_state();
+  const expr2tc &ptr = func_call.operands[0];
+  const expr2tc &value = func_call.operands[1];
+  const expr2tc &size = func_call.operands[2];
+  (void)ptr;
+  (void)value;
+  (void)size;
+
+  // This can be a conditional intrinsic
+  if (ex_state.cur_state->guard.is_false())
+    return;
+
+  // Define a local function for translating to calling the unwinding C
+  // implementation of memset
+  auto bump_call = [this, &func_call]() -> void {
+    expr2tc newcall = func_call.clone();
+    code_function_call2t &mutable_funccall = to_code_function_call2t(newcall);
+    mutable_funccall.function = symbol2tc(get_empty_type(), "memset_impl");
+    // Execute call
+    symex_function_call(newcall);
+    return;
+  };
+
+  bump_call();
+  return;
+}
