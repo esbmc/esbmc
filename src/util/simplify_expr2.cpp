@@ -2092,8 +2092,8 @@ extract2t::do_simplify(bool second __attribute__((unused))) const
   // Take the value, mask and shift.
   uint64_t theval = theint.to_uint64();
   theval >>= lower;
-  theval &= (1<<upper) - 1;
-  bool isneg = (1<<(upper-1)) & theval;
+  theval &= (2<<upper) - 1;
+  bool isneg = (1<<(upper)) & theval;
 
   if (is_signedbv_type(type) && isneg) {
     // Type punning.
