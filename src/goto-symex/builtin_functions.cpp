@@ -739,10 +739,9 @@ goto_symext::intrinsic_memset(reachability_treet &art,
   assert(func_call.operands.size() == 3 && "Wrong memset signature");
   auto &ex_state = art.get_cur_state();
   const expr2tc &ptr = func_call.operands[0];
-  const expr2tc &value = func_call.operands[1];
+  expr2tc value = func_call.operands[1];
   const expr2tc &size = func_call.operands[2];
   (void)ptr;
-  (void)value;
   (void)size;
 
   // This can be a conditional intrinsic
@@ -760,6 +759,33 @@ goto_symext::intrinsic_memset(reachability_treet &art,
     return;
   };
 
-  bump_call();
+  // Skip if the operand is not zero. Because honestly, there's very little
+  // point.
+  cur_state->rename(value);
+  if (!is_constant_int2t(value) || to_constant_int2t(value).value != 0) {
+    bump_call();
+    return;
+  }
+
+  // Work out what the ptr points at.
+  internal_deref_items.clear();
+  dereference2tc deref(get_empty_type(), ptr);
+  dereference(deref, dereferencet::INTERNAL);
+
+  // Work out here whether we can construct an assignment for each thing
+  // pointed at by the ptr.
+  bool can_construct = true;
+  for (const auto &item : internal_deref_items) {
+    const expr2tc &offs = item.offset;
+    if (!is_constant_int2t(offs) || to_constant_int2t(offs).value != 0)
+      can_construct = false;
+  }
+
+  if (can_construct) {
+    abort();
+  } else {
+    bump_call();
+  }
+
   return;
 }
