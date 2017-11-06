@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <complex>
+#include <functional>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
@@ -787,12 +788,42 @@ goto_symext::intrinsic_memset(reachability_treet &art,
     }
 
     if (is_constant_int2t(offs) && to_constant_int2t(offs).value == 0) {
-      ;
+      continue;
     } else if (!is_constant_int2t(offs) && is_constant_int2t(size) && to_constant_int2t(size).value.to_int64() == tmpsize) {
-      ;
-    } else {
-      can_construct = false;
+      continue;
     }
+
+    // Alternately, we might be memsetting a field within a struct. Don't allow
+    // setting more than one field at a time, unaligned access, or the like.
+    // If you're setting a random run of bytes within a struct, best to use
+    // the C implementation.
+    if (is_struct_type(item.object->type) && is_constant_int2t(size)) {
+      uint64_t sz = to_constant_int2t(size).value.to_uint64();
+
+      std::function<bool(const type2tc &)> right_sized_field;
+      right_sized_field = [sz, right_sized_field](const type2tc &strct) -> bool{
+        const struct_type2t &sref = to_struct_type(strct);
+        for (const auto &elem : sref.members) {
+          // Is this this field?
+          uint64_t fieldsize = type_byte_size(elem).to_uint64();
+          if (fieldsize == sz)
+            return true;
+
+          // Or in a struct in this field?
+          if (is_struct_type(elem))
+            if (right_sized_field(elem))
+              return true;
+        }
+
+        return false;
+      };
+
+      // Is there at least one field the same size
+      if (right_sized_field(item.object->type))
+        continue;
+    }
+
+    can_construct = false;
   }
 
   if (can_construct) {
