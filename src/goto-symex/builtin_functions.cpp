@@ -740,9 +740,7 @@ goto_symext::intrinsic_memset(reachability_treet &art,
   auto &ex_state = art.get_cur_state();
   const expr2tc &ptr = func_call.operands[0];
   expr2tc value = func_call.operands[1];
-  const expr2tc &size = func_call.operands[2];
-  (void)ptr;
-  (void)size;
+  expr2tc size = func_call.operands[2];
 
   // This can be a conditional intrinsic
   if (ex_state.cur_state->guard.is_false())
@@ -774,6 +772,7 @@ goto_symext::intrinsic_memset(reachability_treet &art,
 
   // Work out here whether we can construct an assignment for each thing
   // pointed at by the ptr.
+  cur_state->rename(size);
   bool can_construct = true;
   for (const auto &item : internal_deref_items) {
     const expr2tc &offs = item.offset;
@@ -787,9 +786,11 @@ goto_symext::intrinsic_memset(reachability_treet &art,
       tmpsize = -1;
     }
 
-    if (!is_constant_int2t(offs) || to_constant_int2t(offs).value != 0) {
-      can_construct = false;
-    } else if (is_constant_int2t(offs) || !is_constant_int2t(size) || to_constant_int2t(size).value.to_int64() != tmpsize) {
+    if (is_constant_int2t(offs) && to_constant_int2t(offs).value == 0) {
+      ;
+    } else if (!is_constant_int2t(offs) && is_constant_int2t(size) && to_constant_int2t(size).value.to_int64() == tmpsize) {
+      ;
+    } else {
       can_construct = false;
     }
   }
