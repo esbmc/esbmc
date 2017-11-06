@@ -782,7 +782,17 @@ goto_symext::intrinsic_memset(reachability_treet &art,
   }
 
   if (can_construct) {
-    abort();
+    for (const auto &item : internal_deref_items) {
+      const expr2tc &offs = item.offset;
+      if (is_constant_int2t(offs) && to_constant_int2t(offs).value == 0) {
+        expr2tc val = gen_zero(item.object->type);
+        guardt curguard(cur_state->guard);
+        curguard.add(item.guard);
+        symex_assign_rec(item.object, val, curguard, symex_targett::STATE);
+      } else {
+        abort();
+      }
+    }
   } else {
     bump_call();
   }
