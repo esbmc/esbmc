@@ -527,9 +527,6 @@ void goto_symext::symex_assign_extract(
   assert(is_bv_type(ex.from));
   assert(is_bv_type(rhs));
   assert(rhs->type->get_width() == lhs->type->get_width());
-  // Must be a member of a struct. If this fires, you've introduced a source
-  // of extracts that isn't bitfields, and thus might violate assumptions.
-  assert(is_member2t(ex.from));
 
   // We need to: read the rest of the bitfield and reconstruct it. Extract
   // and concats are probably the best approach for the solver to optimise for.
