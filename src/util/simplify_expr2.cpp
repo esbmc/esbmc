@@ -2072,6 +2072,44 @@ concat2t::do_simplify(bool second __attribute__((unused))) const
   return constant_int2tc(type, accuml);
 }
 
+expr2tc
+extract2t::do_simplify(bool second __attribute__((unused))) const
+{
+  assert(is_bv_type(type));
+
+  if (!is_constant_int2t(from))
+    return expr2tc();
+
+  // If you're hitting this, a non-bitfield related piece of code is now
+  // generating extracts, and you have to consider performing extracts on
+  // negative numbers.
+  assert(is_unsignedbv_type(from->type));
+  const constant_int2t &cint = to_constant_int2t(from);
+  const BigInt &theint = cint.value;
+  assert(theint.is_positive());
+  assert(theint.get_len() <= 2);
+
+  // Take the value, mask and shift.
+  uint64_t theval = theint.to_uint64();
+  theval >>= lower;
+  theval &= (2<<upper) - 1;
+  bool isneg = (1<<(upper)) & theval;
+
+  if (is_signedbv_type(type) && isneg) {
+    // Type punning.
+    union {
+      int64_t sign;
+      uint64_t nosign;
+    } totallytmp;
+
+    theval |= 0xFFFFFFFFFFFFFFFFULL << upper;
+    totallytmp.nosign = theval;
+    return constant_int2tc(type, BigInt(totallytmp.sign));
+  } else {
+    return constant_int2tc(type, BigInt(theval));
+  }
+}
+
 template<template<typename> class TFunctor, typename constructor>
 static expr2tc
 simplify_floatbv_1op(

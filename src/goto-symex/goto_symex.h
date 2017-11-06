@@ -506,6 +506,26 @@ protected:
     symex_targett::assignment_typet type);
 
   /**
+   *  Perform assignment to an extract irep.
+   *
+   *  Currently these extract assignments can crop up when we're assigning into
+   *  a bitfield. We can't rewrite the assignment in the front end, because
+   *  there isn't enough context there to know whether an expression is on the
+   *  lhs or rhs of an expression. Thus we have to take the operand of the
+   *  extract irep, and read/modify/write it.
+   *
+   *  @param lhs Extract irep to assign into
+   *  @param rhs Value to assign to bitfield
+   *  @param guard Guard of the current assignment
+   */
+  void symex_assign_extract(
+    const expr2tc &lhs,
+    expr2tc &rhs,
+    guardt &guard,
+    symex_targett::assignment_typet type);
+
+
+  /**
    *  Perform assignment to a typecast irep.
    *  This just ends up moving the typecast from the lhs to the rhs.
    *  @param lhs Typecast to assign to
