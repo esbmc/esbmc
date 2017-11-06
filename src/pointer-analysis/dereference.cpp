@@ -1506,7 +1506,7 @@ dereferencet::dereference_failure(const std::string &error_class,
                                   const guardt &guard)
 {
   // This just wraps dereference failure in a no-pointer-check check.
-  if(!options.get_bool_option("no-pointer-check")) {
+  if(!options.get_bool_option("no-pointer-check") && !block_assertions) {
     dereference_callback.dereference_failure( error_class, error_name, guard);
   }
 }

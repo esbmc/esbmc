@@ -12,46 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/irep2.h>
 #include <util/migrate.h>
 
-class symex_dereference_statet:
-  public dereference_callbackt
-{
-public:
-  symex_dereference_statet(
-    goto_symext &_goto_symex,
-    goto_symext::statet &_state):
-    goto_symex(_goto_symex),
-    state(_state)
-  {
-  }
-
-protected:
-  goto_symext &goto_symex;
-  goto_symext::statet &state;
-
-  // overloads from dereference_callbackt
-  bool is_valid_object(const irep_idt &identifier __attribute__((unused))) override
-  {
-    return true;
-  }
-
-  void dereference_failure(
-    const std::string &property,
-    const std::string &msg,
-    const guardt &guard) override;
-
-  void get_value_set(
-    const expr2tc &expr,
-    value_setst::valuest &value_set) override;
-
-  bool has_failed_symbol(
-    const expr2tc &expr,
-    const symbolt *&symbol) override;
-
-  void rename(expr2tc &expr) override;
-
-  void dump_internal_state(const std::list<struct internal_item> &data) override;
-};
-
 void symex_dereference_statet::dereference_failure(
   const std::string &property __attribute__((unused)),
   const std::string &msg,

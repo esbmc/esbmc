@@ -742,6 +742,7 @@ goto_symext::intrinsic_memset(reachability_treet &art,
   const expr2tc &ptr = func_call.operands[0];
   expr2tc value = func_call.operands[1];
   expr2tc size = func_call.operands[2];
+  std::map<type2tc, std::list<type2tc> > ref_types;
 
   // This can be a conditional intrinsic
   if (ex_state.cur_state->guard.is_false())
@@ -799,23 +800,33 @@ goto_symext::intrinsic_memset(reachability_treet &art,
     // the C implementation.
     if (is_struct_type(item.object->type) && is_constant_int2t(size)) {
       uint64_t sz = to_constant_int2t(size).value.to_uint64();
+      if (sz != 1 || sz != 2 || sz != 4 || sz != 8)
+        ref_types.insert(std::make_pair(item.object->type, std::list<type2tc>()));
 
       std::function<bool(const type2tc &)> right_sized_field;
-      right_sized_field = [sz, right_sized_field](const type2tc &strct) -> bool{
+      right_sized_field = [item, sz, right_sized_field, &ref_types]
+      (const type2tc &strct) -> bool{
         const struct_type2t &sref = to_struct_type(strct);
+        bool retval = false;
         for (const auto &elem : sref.members) {
           // Is this this field?
           uint64_t fieldsize = type_byte_size(elem).to_uint64();
-          if (fieldsize == sz)
-            return true;
+          if (fieldsize == sz) {
+            // Good: but if it isn't a common type, store what reference it
+            // might be for later.
+            if (sz != 1 || sz != 2 || sz != 4 || sz != 8) {
+              ref_types[item.object->type].push_back(elem);
+            }
+            retval = true;
+          }
 
           // Or in a struct in this field?
           if (is_struct_type(elem))
             if (right_sized_field(elem))
-              return true;
+              retval = true;
         }
 
-        return false;
+        return retval;
       };
 
       // Is there at least one field the same size
@@ -851,6 +862,67 @@ goto_symext::intrinsic_memset(reachability_treet &art,
         expr2tc eq = equality2tc(offs, gen_zero(offs->type));
         curguard.guard_expr(eq);
         claim(eq, "Memset of full-object-size must have zero offset");
+      } else if (is_struct_type(item.object->type) && is_constant_int2t(size)) {
+        // Misery time: rather than re-building the build-reference-to logic,
+        // use it here. The memset'd size might correspond to a large number
+        // of incompatible types though: so we might need to _try_ to build
+        // references to a lot of them.
+        std::list<expr2tc> out_list;
+        std::list<type2tc> in_list;
+        if (tmpsize == 1 || tmpsize == 2 || tmpsize == 4 || tmpsize == 4) {
+          in_list.push_back(get_uint_type(tmpsize * 8));
+        } else {
+          auto it = ref_types.find(item.object->type);
+          assert(it != ref_types.end());
+          in_list = it->second;
+        }
+
+        // We now have a list of types we might resolve to.
+        symex_dereference_statet sds(*this, *cur_state);
+        dereferencet dereference(ns, new_context, options, sds);
+        dereference.set_block_assertions();
+        dereference2tc deref2(get_empty_type(), ptr);
+        for (const auto &cur_type : in_list) {
+          expr2tc value = item.object;
+          dereference.build_reference_rec(value, gen_zero(get_uint_type(32)), cur_type, curguard, dereferencet::READ);
+          out_list.push_back(value);
+          // XXX: what if we generate an address of a stitched expr?
+        }
+
+        // OK, we now have a list of references we might point at. Assert that
+        // we actually point at one of them.
+        std::list<std::pair<expr2tc, expr2tc> > decomposed;
+        std::function<void(const expr2tc &, const guardt &g)> sucker;
+        sucker = [sucker, &decomposed](const expr2tc &expr, const guardt &g) {
+          if (is_if2t(expr)) {
+            const if2t &theif = to_if2t(expr);
+            guardt thisguard(g);
+            thisguard.add(theif.cond);
+            sucker(theif.true_value, thisguard);
+
+            not2tc invcond(theif.cond);
+            guardt thisguard2(g);
+            thisguard2.add(invcond);
+            sucker(theif.false_value, thisguard2);
+          } else {
+            decomposed.push_back(std::make_pair(g.as_expr(), expr));
+          }
+        };
+
+        sucker(item.object, curguard);
+        expr2tc or_accuml = gen_false_expr();
+        for (const auto &ref : decomposed) {
+          or_accuml = or2tc(or_accuml, ref.first);
+        }
+
+        curguard.guard_expr(or_accuml);
+        claim(or_accuml, "Unaligned, cross-field or other non-field-based memset?");
+        for (const auto &ref : decomposed) {
+          guardt newguard(curguard);
+          newguard.add(ref.first);
+          expr2tc zero = gen_zero(ref.second->type);
+          symex_assign_rec(ref.second, zero, newguard, symex_targett::STATE);
+        }
       } else {
         std::cerr << "Logic mismatch in memset intrinsic" << std::endl;
         abort();
