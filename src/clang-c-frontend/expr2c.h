@@ -112,6 +112,9 @@ protected:
     const exprt &src,
     unsigned precedence);
 
+  std::string convert_extract(
+    const exprt &src);
+
   std::string convert_unary(
     const exprt &src, const std::string &symbol,
     unsigned precedence);

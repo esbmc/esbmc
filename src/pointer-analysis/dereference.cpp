@@ -641,8 +641,17 @@ dereferencet::build_reference_to(
 
   // If offset is unknown, or whatever, we have to consider it
   // nondeterministic, and let the reference builders deal with it.
+  unsigned int alignment = o.alignment;
   if (!is_constant_int2t(final_offset)) {
-    assert(o.alignment != 0);
+    assert(alignment != 0);
+
+    if (!is_symbol2t(deref_expr)) {
+      // The expression being dereferenced isn't just a symbol: it might have
+      // all kind of things messing with alignment in there. We could interpret
+      // it as future work.
+      alignment = 1;
+    }
+
     final_offset = pointer_offset2tc(pointer_type2(), deref_expr);
   }
 
@@ -677,7 +686,7 @@ dereferencet::build_reference_to(
 
   // Call reference building methods. For the given data object in value,
   // an expression of type type will be constructed that reads from it.
-  build_reference_rec(value, final_offset, type, tmp_guard, mode, o.alignment);
+  build_reference_rec(value, final_offset, type, tmp_guard, mode, alignment);
 
   return value;
 }
@@ -1525,13 +1534,7 @@ expr2tc*
 dereferencet::extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
     const expr2tc &offset)
 {
-  if(!bytes)
-  {
-    std::cerr << "**** ERROR: "
-              << "Zero byte when extracting from an array.\n"
-              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
-    abort();
-  }
+  assert(bytes != 0);
 
   expr2tc *exprs = new expr2tc[bytes];
 
@@ -1556,19 +1559,18 @@ expr2tc *
 dereferencet::extract_bytes_from_scalar(const expr2tc &object,
     unsigned int num_bytes, const expr2tc &offset)
 {
-  if(!num_bytes)
-  {
-    std::cerr << "**** ERROR: "
-              << "Zero byte when extracting from scalar.\n"
-              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
-    abort();
-  }
-
+  assert(num_bytes != 0);
 
   assert(is_scalar_type(object) && "Can't extract bytes out of non-scalars");
   const type2tc &bytetype = get_uint8_type();
 
   expr2tc *bytes = new expr2tc[num_bytes];
+
+  // Don't produce a byte update of a byte.
+  if (is_bv_type(object) && object->type->get_width() == 8) {
+    bytes[0] = object;
+    return bytes;
+  }
 
   expr2tc accuml_offs = offset;
   for (unsigned int i = 0; i < num_bytes; i++) {
@@ -1586,13 +1588,7 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
 {
   int num_bytes = type->get_width() / 8;
 
-  if(!num_bytes)
-  {
-    std::cerr << "**** ERROR: "
-              << "Zero byte when stitching from byte array.\n"
-              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
-    abort();
-  }
+  assert(num_bytes != 0);
 
   // We are composing a larger data type out of bytes -- we must consider
   // what byte order we are giong to stitch it together out of.

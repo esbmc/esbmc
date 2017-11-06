@@ -1,3 +1,5 @@
+#include <sstream>
+
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/irep2_utils.h>
@@ -150,7 +152,12 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     if (name.as_string() == "")
       name = type.get("name"); // C++
 
-    struct_type2t *s = new struct_type2t(members, names, pretty_names, name);
+    irep_idt ispacked = type.get("packed");
+    bool packed = false;
+    if (ispacked.as_string() == "true")
+      packed = true;
+
+    struct_type2t *s = new struct_type2t(members, names, pretty_names, name, packed);
     new_type_ref = type2tc(s);
   } else if (type.id() == typet::t_union) {
     std::vector<type2tc> members;
@@ -615,6 +622,7 @@ flatten_union(const exprt &expr)
 {
   type2tc type;
   migrate_type(expr.type(), type);
+  mp_integer full_size = type_byte_size(type);
 
   // Union literals should have one field.
   assert(expr.operands().size() == 1 &&
@@ -623,6 +631,12 @@ flatten_union(const exprt &expr)
   // Cannot have unbounded size; flatten to an array of bytes.
   std::vector<expr2tc> byte_array;
   flatten_to_bytes(expr.op0(), byte_array);
+
+  // Potentially extend this array further if this literal is smaller than
+  // the overall size of the union.
+  expr2tc abyte = gen_zero(get_uint8_type());
+  while (byte_array.size() < full_size.to_uint64())
+    byte_array.push_back(abyte);
 
   expr2tc size = gen_ulong(byte_array.size());
   type2tc arraytype(new array_type2t(get_uint8_type(), size, false));
@@ -1612,6 +1626,13 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     convert_operand_pair(expr, op0, op1);
     migrate_type(expr.type(), type);
     new_expr_ref = concat2tc(type, op0, op1);
+  } else if (expr.id() ==  "extract") {
+    expr2tc theop;
+    migrate_type(expr.type(), type);
+    migrate_expr(expr.op0(), theop);
+    unsigned int upper = atoi(expr.get("upper").as_string().c_str());
+    unsigned int lower = atoi(expr.get("lower").as_string().c_str());
+    new_expr_ref = extract2tc(type, theop, upper, lower);
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1653,6 +1674,8 @@ migrate_type_back(const type2tc &ref)
 
     thetype.components() = comps;
     thetype.set("tag", irep_idt(ref2.name));
+    if (ref2.packed)
+      thetype.set("packed", irep_idt("true"));
     return thetype;
     }
   case type2t::union_id:
@@ -2716,6 +2739,22 @@ migrate_expr_back(const expr2tc &ref)
     exprt back("concat", migrate_type_back(ref2.type));
     back.copy_to_operands(migrate_expr_back(ref2.side_1));
     back.copy_to_operands(migrate_expr_back(ref2.side_2));
+    return back;
+  }
+  case expr2t::extract_id:
+  {
+    std::stringstream ss;
+    const extract2t &ref2 = to_extract2t(ref);
+    exprt back("extract", migrate_type_back(ref2.type));
+    back.copy_to_operands(migrate_expr_back(ref2.from));
+
+    ss << ref2.upper;
+    back.set("upper", irep_idt(ss.str()));
+    ss = std::stringstream();
+
+    ss << ref2.lower;
+    back.set("lower", irep_idt(ss.str()));
+
     return back;
   }
   case expr2t::bitcast_id:

@@ -170,6 +170,12 @@ bool base_type_eqt::base_type_eq_rec(
     const struct_union_data &data2 =
       static_cast<const struct_union_data &>(*type2.get());
 
+    // Packed structs will have a different layout from unpacked structs.
+    // Might be some corner cases where this isn't the case, but at a conceptual
+    // level they're different.
+    if (data1.packed != data2.packed)
+      return false;
+
     if (data1.members.size() != data2.members.size())
       return false;
 
@@ -285,6 +291,9 @@ bool base_type_eqt::base_type_eq_rec(
 
     const struct_union_typet::componentst &components2=
       to_struct_union_type(type2).components();
+
+    if (type1.get("packed") != type2.get("packed"))
+      return false;
 
     if(components1.size()!=components2.size())
       return false;
