@@ -910,7 +910,9 @@ goto_symext::intrinsic_memset(reachability_treet &art,
           }
         };
 
-        sucker(item.object, curguard);
+        for (const auto &builtref : out_list)
+          sucker(builtref, curguard);
+
         expr2tc or_accuml = gen_false_expr();
         for (const auto &ref : decomposed) {
           or_accuml = or2tc(or_accuml, ref.first);
