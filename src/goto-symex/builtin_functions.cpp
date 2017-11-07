@@ -883,7 +883,6 @@ goto_symext::intrinsic_memset(reachability_treet &art,
         symex_dereference_statet sds(*this, *cur_state);
         dereferencet dereference(ns, new_context, options, sds);
         dereference.set_block_assertions();
-        dereference2tc deref2(get_empty_type(), ptr);
         for (const auto &cur_type : in_list) {
           expr2tc value = item.object;
           dereference.build_reference_rec(value, gen_zero(get_uint_type(32)), cur_type, curguard, dereferencet::READ);
