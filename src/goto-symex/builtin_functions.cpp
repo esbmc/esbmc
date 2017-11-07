@@ -838,6 +838,8 @@ goto_symext::intrinsic_memset(reachability_treet &art,
   }
 
   if (can_construct) {
+    uint64_t set_sz = to_constant_int2t(size).value.to_uint64();
+
     for (const auto &item : internal_deref_items) {
       const expr2tc &offs = item.offset;
       expr2tc val = gen_zero(item.object->type);
@@ -869,8 +871,8 @@ goto_symext::intrinsic_memset(reachability_treet &art,
         // references to a lot of them.
         std::list<expr2tc> out_list;
         std::list<type2tc> in_list;
-        if (tmpsize == 1 || tmpsize == 2 || tmpsize == 4 || tmpsize == 4) {
-          in_list.push_back(get_uint_type(tmpsize * 8));
+        if (set_sz == 1 || set_sz == 2 || set_sz == 4 || set_sz == 8) {
+          in_list.push_back(get_uint_type(set_sz * 8));
         } else {
           auto it = ref_types.find(item.object->type);
           assert(it != ref_types.end());
