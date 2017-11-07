@@ -804,7 +804,7 @@ goto_symext::intrinsic_memset(reachability_treet &art,
         ref_types.insert(std::make_pair(item.object->type, std::list<type2tc>()));
 
       std::function<bool(const type2tc &)> right_sized_field;
-      right_sized_field = [item, sz, right_sized_field, &ref_types]
+      right_sized_field = [item, sz, &right_sized_field, &ref_types]
       (const type2tc &strct) -> bool{
         const struct_type2t &sref = to_struct_type(strct);
         bool retval = false;
@@ -893,7 +893,7 @@ goto_symext::intrinsic_memset(reachability_treet &art,
         // we actually point at one of them.
         std::list<std::pair<expr2tc, expr2tc> > decomposed;
         std::function<void(const expr2tc &, const guardt &g)> sucker;
-        sucker = [sucker, &decomposed](const expr2tc &expr, const guardt &g) {
+        sucker = [&sucker, &decomposed](const expr2tc &expr, const guardt &g) {
           if (is_if2t(expr)) {
             const if2t &theif = to_if2t(expr);
             guardt thisguard(g);
