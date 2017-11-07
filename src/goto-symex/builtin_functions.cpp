@@ -885,7 +885,7 @@ goto_symext::intrinsic_memset(reachability_treet &art,
         dereference.set_block_assertions();
         for (const auto &cur_type : in_list) {
           expr2tc value = item.object;
-          dereference.build_reference_rec(value, gen_zero(get_uint_type(32)), cur_type, curguard, dereferencet::READ);
+          dereference.build_reference_rec(value, item.offset, cur_type, curguard, dereferencet::READ);
           out_list.push_back(value);
           // XXX: what if we generate an address of a stitched expr?
         }
