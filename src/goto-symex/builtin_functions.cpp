@@ -788,7 +788,7 @@ goto_symext::intrinsic_memset(reachability_treet &art,
       tmpsize = -1;
     }
 
-    if (is_constant_int2t(offs) && to_constant_int2t(offs).value == 0) {
+    if (is_constant_int2t(offs) && to_constant_int2t(offs).value == 0 && is_constant_int2t(size)) {
       continue;
     } else if (!is_constant_int2t(offs) && is_constant_int2t(size) && to_constant_int2t(size).value.to_int64() == tmpsize) {
       continue;
