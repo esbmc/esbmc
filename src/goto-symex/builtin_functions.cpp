@@ -742,7 +742,7 @@ goto_symext::intrinsic_memset(reachability_treet &art,
   const expr2tc &ptr = func_call.operands[0];
   expr2tc value = func_call.operands[1];
   expr2tc size = func_call.operands[2];
-  std::map<type2tc, std::list<type2tc> > ref_types;
+  std::map<type2tc, std::list<std::pair<type2tc, unsigned int> > > ref_types;
 
   // This can be a conditional intrinsic
   if (ex_state.cur_state->guard.is_false())
@@ -800,37 +800,40 @@ goto_symext::intrinsic_memset(reachability_treet &art,
     // the C implementation.
     if (is_struct_type(item.object->type) && is_constant_int2t(size)) {
       uint64_t sz = to_constant_int2t(size).value.to_uint64();
-      if (sz != 1 || sz != 2 || sz != 4 || sz != 8)
-        ref_types.insert(std::make_pair(item.object->type, std::list<type2tc>()));
+      ref_types.insert(std::make_pair(item.object->type, std::list<std::pair<type2tc, unsigned int> >()));
 
-      std::function<bool(const type2tc &)> right_sized_field;
+      std::function<bool(const type2tc &, unsigned int)> right_sized_field;
       right_sized_field = [item, sz, &right_sized_field, &ref_types]
-      (const type2tc &strct) -> bool{
+      (const type2tc &strct, unsigned int offs) -> bool{
         const struct_type2t &sref = to_struct_type(strct);
         bool retval = false;
+        unsigned int i = 0;
         for (const auto &elem : sref.members) {
           // Is this this field?
           uint64_t fieldsize = type_byte_size(elem).to_uint64();
           if (fieldsize == sz) {
-            // Good: but if it isn't a common type, store what reference it
-            // might be for later.
-            if (sz != 1 || sz != 2 || sz != 4 || sz != 8) {
-              ref_types[item.object->type].push_back(elem);
-            }
+            unsigned int new_offs = offs;
+            new_offs += member_offset(strct, sref.member_names[i]).to_uint64();
+            ref_types[item.object->type].push_back(std::make_pair(elem, new_offs));
             retval = true;
           }
 
           // Or in a struct in this field?
-          if (is_struct_type(elem))
-            if (right_sized_field(elem))
+          if (is_struct_type(elem)) {
+            unsigned int new_offs = offs;
+            new_offs += member_offset(strct, sref.member_names[i]).to_uint64();
+            if (right_sized_field(elem, new_offs))
               retval = true;
+          }
+
+          i++;
         }
 
         return retval;
       };
 
       // Is there at least one field the same size
-      if (right_sized_field(item.object->type))
+      if (right_sized_field(item.object->type, 0))
         continue;
     }
 
@@ -838,7 +841,7 @@ goto_symext::intrinsic_memset(reachability_treet &art,
   }
 
   if (can_construct) {
-    uint64_t set_sz = to_constant_int2t(size).value.to_uint64();
+    //uint64_t set_sz = to_constant_int2t(size).value.to_uint64();
 
     for (const auto &item : internal_deref_items) {
       const expr2tc &offs = item.offset;
@@ -863,68 +866,68 @@ goto_symext::intrinsic_memset(reachability_treet &art,
         symex_assign_rec(item.object, val, curguard, symex_targett::STATE);
         expr2tc eq = equality2tc(offs, gen_zero(offs->type));
         curguard.guard_expr(eq);
-        claim(eq, "Memset of full-object-size must have zero offset");
+        if (!options.get_bool_option("no-pointer-check"))
+          claim(eq, "Memset of full-object-size must have zero offset");
       } else if (is_struct_type(item.object->type) && is_constant_int2t(size)) {
         // Misery time: rather than re-building the build-reference-to logic,
         // use it here. The memset'd size might correspond to a large number
         // of incompatible types though: so we might need to _try_ to build
         // references to a lot of them.
-        std::list<expr2tc> out_list;
-        std::list<type2tc> in_list;
-        if (set_sz == 1 || set_sz == 2 || set_sz == 4 || set_sz == 8) {
-          in_list.push_back(get_uint_type(set_sz * 8));
-        } else {
-          auto it = ref_types.find(item.object->type);
-          assert(it != ref_types.end());
-          in_list = it->second;
-        }
+        std::list<std::tuple<type2tc, expr2tc, expr2tc> > out_list;
+        std::list<std::pair<type2tc, unsigned int> > in_list;
+        auto it = ref_types.find(item.object->type);
+        assert(it != ref_types.end());
+        in_list = it->second;
 
-        // We now have a list of types we might resolve to.
+        // We now have a list of types and offsets we might resolve to.
         symex_dereference_statet sds(*this, *cur_state);
         dereferencet dereference(ns, new_context, options, sds);
         dereference.set_block_assertions();
         for (const auto &cur_type : in_list) {
           expr2tc value = item.object;
-          dereference.build_reference_rec(value, item.offset, cur_type, curguard, dereferencet::READ);
-          out_list.push_back(value);
+          expr2tc this_offs = gen_ulong(cur_type.second);
+
+          if (is_array_type(cur_type.first)) {
+            // Build a reference to the first elem.
+            const array_type2t &arrtype = to_array_type(cur_type.first);
+            dereference.build_reference_rec(value, this_offs, arrtype.subtype, curguard, dereferencet::READ);
+          } else {
+            dereference.build_reference_rec(value, this_offs, cur_type.first, curguard, dereferencet::READ);
+          }
+
+          out_list.push_back(std::make_tuple(cur_type.first, value, this_offs));
           // XXX: what if we generate an address of a stitched expr?
         }
 
         // OK, we now have a list of references we might point at. Assert that
         // we actually point at one of them.
-        std::list<std::pair<expr2tc, expr2tc> > decomposed;
-        std::function<void(const expr2tc &, const guardt &g)> sucker;
-        sucker = [&sucker, &decomposed](const expr2tc &expr, const guardt &g) {
-          if (is_if2t(expr)) {
-            const if2t &theif = to_if2t(expr);
-            guardt thisguard(g);
-            thisguard.add(theif.cond);
-            sucker(theif.true_value, thisguard);
-
-            not2tc invcond(theif.cond);
-            guardt thisguard2(g);
-            thisguard2.add(invcond);
-            sucker(theif.false_value, thisguard2);
-          } else {
-            decomposed.push_back(std::make_pair(g.as_expr(), expr));
-          }
-        };
-
-        for (const auto &builtref : out_list)
-          sucker(builtref, curguard);
-
         expr2tc or_accuml = gen_false_expr();
-        for (const auto &ref : decomposed) {
-          or_accuml = or2tc(or_accuml, ref.first);
+        for (const auto &ref : out_list) {
+          const expr2tc &this_offs = std::get<2>(ref);
+          pointer_offset2tc ptroffs(this_offs->type, ptr);
+          equality2tc eq(this_offs, ptroffs);
+          or_accuml = or2tc(or_accuml, eq);
         }
 
         curguard.guard_expr(or_accuml);
-        claim(or_accuml, "Unaligned, cross-field or other non-field-based memset?");
-        for (const auto &ref : decomposed) {
+        if (!options.get_bool_option("no-pointer-check"))
+          claim(or_accuml, "Unaligned, cross-field or other non-field-based memset?");
+        for (const auto &ref : out_list) {
           guardt newguard(curguard);
-          newguard.add(ref.first);
-          expr2tc zero = gen_zero(ref.second->type);
-          symex_assign_rec(ref.second, zero, newguard, symex_targett::STATE);
+          pointer_offset2tc ptroffs(std::get<2>(ref)->type, ptr);
+          equality2tc eq(std::get<2>(ref), ptroffs);
+          newguard.add(eq);
+
+          expr2tc target = std::get<1>(ref);
+          if (is_array_type(std::get<0>(ref))) {
+            // Actually, the deref'd operand is now an array.
+            assert(is_index2t(target));
+            const index2t &idx = to_index2t(target);
+            target = idx.source_value;
+          }
+
+          expr2tc zero = gen_zero(std::get<0>(ref));
+          symex_assign_rec(target, zero, newguard, symex_targett::STATE);
         }
       } else {
         std::cerr << "Logic mismatch in memset intrinsic" << std::endl;
