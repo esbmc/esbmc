@@ -533,8 +533,9 @@ void goto_symext::symex_assign_extract(
   unsigned int bitblob_width = ex.from->type->get_width();
   expr2tc top_part;
   if (ex.upper != bitblob_width-1) {
+    // Extract from the top of the blob down to the bit above this extract
     type2tc thetype = get_uint_type(bitblob_width - ex.upper - 1);
-    top_part = extract2tc(thetype, ex.from, bitblob_width-1, ex.upper);
+    top_part = extract2tc(thetype, ex.from, bitblob_width-1, ex.upper + 1);
   }
 
   expr2tc bottom_part;

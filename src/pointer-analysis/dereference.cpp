@@ -1308,8 +1308,6 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
         if (size == 0 && type_size != 0)
           goto cont;
 
-        value = member2tc(it, value, struct_type.member_names[i]);
-
         // Zero sized struct and it's not the right one (!):
         if (size == 0 && type_size == 0 && !dereference_type_compare(value, type))
           goto cont;
@@ -1567,7 +1565,7 @@ dereferencet::extract_bytes_from_scalar(const expr2tc &object,
   expr2tc *bytes = new expr2tc[num_bytes];
 
   // Don't produce a byte update of a byte.
-  if (is_bv_type(object) && object->type->get_width() == 8) {
+  if (is_bv_type(object) && num_bytes == 1 && object->type->get_width() == 8) {
     bytes[0] = object;
     return bytes;
   }
