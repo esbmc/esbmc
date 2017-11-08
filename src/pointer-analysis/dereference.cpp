@@ -1467,7 +1467,12 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     // we don't overflow bounds. Start by encoding an assertion.
     guardt tmp;
     tmp.add(accuml_guard);
-    bounds_check(value, offs, type, tmp);
+
+    // Only encode a bounds check if we're directly accessing an array symbol:
+    // if it isn't, then it's a member of some other struct. If it's the wrong
+    // size, a higher level check will encode relevant assertions.
+    if (is_symbol2t(value))
+      bounds_check(value, offs, type, tmp);
 
     // We are left with constructing a structure from a byte array. XXX, this
     // is duplicated from above, refactor?
