@@ -739,7 +739,7 @@ goto_symext::intrinsic_memset(reachability_treet &art,
 {
   assert(func_call.operands.size() == 3 && "Wrong memset signature");
   auto &ex_state = art.get_cur_state();
-  const expr2tc &ptr = func_call.operands[0];
+  expr2tc ptr = func_call.operands[0];
   expr2tc value = func_call.operands[1];
   expr2tc size = func_call.operands[2];
   std::map<type2tc, std::list<std::pair<type2tc, unsigned int> > > ref_types;
@@ -934,6 +934,11 @@ goto_symext::intrinsic_memset(reachability_treet &art,
         abort();
       }
     }
+
+    // Construct assignment to return value
+    expr2tc ret_ref = func_call.ret;
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign_rec(ret_ref, ptr, cur_state->guard, symex_targett::STATE);
   } else {
     bump_call();
   }
