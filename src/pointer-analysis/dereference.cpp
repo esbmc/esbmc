@@ -1570,7 +1570,7 @@ dereferencet::extract_bytes_from_scalar(const expr2tc &object,
   expr2tc *bytes = new expr2tc[num_bytes];
 
   // Don't produce a byte update of a byte.
-  if (is_bv_type(object) && object->type->get_width() == 8) {
+  if (is_bv_type(object) && num_bytes == 1 && object->type->get_width() == 8) {
     bytes[0] = object;
     return bytes;
   }
