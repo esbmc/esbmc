@@ -751,6 +751,11 @@ goto_symext::intrinsic_memset(reachability_treet &art,
   // Define a local function for translating to calling the unwinding C
   // implementation of memset
   auto bump_call = [this, &func_call]() -> void {
+    // We're going to execute a function call, and that's going to mess with
+    // the program counter. Set it back *onto* pointing at this intrinsic, so
+    // symex_function_call calculates the right return address. Misery.
+    cur_state->source.pc--;
+
     expr2tc newcall = func_call.clone();
     code_function_call2t &mutable_funccall = to_code_function_call2t(newcall);
     mutable_funccall.function = symbol2tc(get_empty_type(), "memset_impl");
