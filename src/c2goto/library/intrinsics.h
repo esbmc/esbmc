@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 int __ESBMC_abs(int);
 long int __ESBMC_labs(long int);
 long long int __ESBMC_llabs(long long int);
@@ -40,3 +42,5 @@ long double __ESBMC_fmald(long double x, long double y, long double z);
 float __ESBMC_sqrtf(float n);
 double __ESBMC_sqrtd(double n);
 long double __ESBMC_sqrtld(long double n);
+
+void *__ESBMC_memset(void *s, int c, size_t n);
