@@ -659,20 +659,31 @@ void get_offsets_for_line_using_wc(
 {
   uint16_t startoffset = 0;
   uint16_t endoffset = 0;
+  uint8_t whiteSpaces = 0;
+  size_t endOfAssignment = std::string::npos;
+  std::string line;
+  std::ifstream file (file_path.c_str());
 
   try {
-    /* get the offsets */
-    startoffset = std::atoi(execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number - 1) + " | wc --chars").c_str());
-    endoffset = std::atoi(execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number) + " | wc --chars").c_str());
-    /* count the spaces in the beginning and append to the startoffset  */
-    std::string str_line = execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number) + " | tail -n 1 ");
-    uint16_t i=0;
-    for (i=0; i<str_line.length(); i++)
+    if (file.is_open())
     {
-      if (str_line.c_str()[i] == ' ')
-        startoffset++;
-      else
-        break;
+  	  for (int currentLineNumber = 1; getline(file,line) && (endOfAssignment == std::string::npos); currentLineNumber++)
+	  {
+	    line += '\n';
+        if (currentLineNumber >= line_number)
+	    {
+		  if (currentLineNumber == line_number)
+		  {
+		    endoffset = line.size();
+		    for(; line.at(whiteSpaces) == ' ' && (whiteSpaces < line.size()); whiteSpaces++);
+		    startoffset += whiteSpaces;
+		  }
+		  endOfAssignment = line.rfind(';');
+	    } else {
+	      startoffset += line.size();
+	    }
+	  }
+  	  file.close();
     }
   } catch (const std::exception& e) {
     /* nothing to do here */
