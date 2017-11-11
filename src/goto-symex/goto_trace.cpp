@@ -260,7 +260,7 @@ void violation_graphml_goto_trace(
   edget * first_edge = &graph.edges.at(0);
   nodet * prev_node = first_edge->to_node;
 
-#ifndef witness_function_control_disabled
+#ifndef lightweight_witness
   std::map<std::string, uint16_t> func_control_map;
   std::string prev_function = first_edge->enter_function;
 #endif
@@ -273,9 +273,10 @@ void violation_graphml_goto_trace(
        continue;
 
      edget new_edge;
-
      new_edge.assumption = get_formated_assignment(ns, step);
      new_edge.start_line = std::atoi(step.pc->location.get_line().c_str());
+
+#ifndef lightweight_witness
      new_edge.end_line = new_edge.start_line;
      if(new_edge.start_line)
        get_offsets(verification_file, new_edge.start_line,
@@ -284,7 +285,6 @@ void violation_graphml_goto_trace(
      /* check if it has entered or returned from a function */
      std::string function = step.pc->location.get_function().c_str();
      new_edge.assumption_scope = function;
-#ifndef witness_function_control_disabled
      if(prev_function != function && !function.empty())
      {
        if(func_control_map.find(function) == func_control_map.end())
@@ -338,7 +338,7 @@ void correctness_graphml_goto_trace(
   edget * first_edge = &graph.edges.at(0);
   nodet * prev_node = first_edge->to_node;
 
-#ifndef witness_function_control_disabled
+#ifndef lightweight_witness
   std::map<std::string, uint16_t> func_control_map;
   std::string prev_function = first_edge->enter_function;
 #endif
@@ -354,6 +354,7 @@ void correctness_graphml_goto_trace(
     edget new_edge;
     new_edge.assumption = get_formated_assignment(ns, step);
     new_edge.start_line = std::atoi(step.pc->location.get_line().c_str());
+#ifndef lightweight_witness
     new_edge.end_line = new_edge.start_line;
     if(new_edge.start_line)
       get_offsets(verification_file, new_edge.start_line,
@@ -361,7 +362,6 @@ void correctness_graphml_goto_trace(
 
     /* check if it has entered or returned from a function */
     std::string function = step.pc->location.get_function().c_str();
-#ifndef witness_function_control_disabled
     if(prev_function != function && !function.empty())
     {
       if(func_control_map.find(function) == func_control_map.end())
@@ -396,8 +396,10 @@ void correctness_graphml_goto_trace(
         code_line = w_string_replace(code_line, "__ESBMC_assume", "");
         code_line = w_string_replace(code_line, "assume(", "");
         code_line = w_string_replace(code_line, ";", "");
+#ifndef lightweight_witness
         new_node->invariant = 0; //FIXME code_line;
         new_edge.assumption_scope = function;
+#endif
       }
     }
     else if(step.is_assert())

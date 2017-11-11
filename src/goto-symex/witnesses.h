@@ -10,7 +10,7 @@
 
 typedef boost::property_tree::ptree xmlnodet;
 
-#define witness_function_control_disabled
+#define lightweight_witness
 #define c_nonset 0xFFFF
 
 class nodet
