@@ -25,7 +25,7 @@ public:
   std::string   invariant_scope;
   nodet(void)
   {
-    id = "n" + std::to_string(_id);
+    id = "N" + std::to_string(_id);
     _id++;
   }
 };
@@ -51,15 +51,24 @@ public:
   nodet            * to_node;
   edget(void)
   {
-    id = "e" + std::to_string(_id);
+    id = "E" + std::to_string(_id);
     _id++;
     from_node = NULL;
     to_node = NULL;
+  }
+  edget(nodet * from_node, nodet * to_node)
+  {
+    id = "E" + std::to_string(_id);
+    _id++;
+    this->from_node = from_node;
+    this->to_node = to_node;
   }
 };
 
 class grapht
 {
+private:
+  void create_initial_edge();
 public:
   enum typet { VIOLATION, CORRECTNESS };
   typet              witness_type;
@@ -67,6 +76,7 @@ public:
   std::vector<edget> edges;
   grapht(typet t){
     witness_type = t;
+    create_initial_edge();
   }
   xmlnodet generate_graphml(optionst & options);
 };

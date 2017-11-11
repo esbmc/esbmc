@@ -22,22 +22,38 @@ xmlnodet grapht::generate_graphml(optionst & options)
   else
 	create_correctness_graph_node(this->verified_file, options, graph_node);
 
+  nodet * prev_node;
   for (std::vector<edget>::iterator it = this->edges.begin(); it != this->edges.end(); ++it)
   {
      edget current_edge = (edget)*it;
-     xmlnodet from_node_node;
-     create_node_node(*current_edge.from_node, from_node_node);
-     graph_node.add_child("node", from_node_node);
+     if (prev_node == NULL || prev_node != current_edge.from_node)
+     {
+       xmlnodet from_node_node;
+       create_node_node(*current_edge.from_node, from_node_node);
+       graph_node.add_child("node", from_node_node);
+     }
      xmlnodet to_node_node;
      create_node_node(*current_edge.to_node, to_node_node);
      graph_node.add_child("node", to_node_node);
      xmlnodet edge_node;
      create_edge_node(current_edge, edge_node);
      graph_node.add_child("edge", edge_node);
+     prev_node = current_edge.to_node;
   }
   graphml_node.add_child("graphml.graph", graph_node);
 
   return graphml_node;
+}
+
+/* */
+void grapht::create_initial_edge()
+{
+  nodet * first_node = new nodet();
+  first_node->entry = true;
+  nodet * initial_node = new nodet();;
+  edget first_edge(first_node, initial_node);
+  first_edge.enter_function = "main";
+  this->edges.push_back(first_edge);
 }
 
 /* */
@@ -61,9 +77,6 @@ int generate_sha1_hash_for_file(const char * path, std::string & output)
   fclose(file);
   return 0;
 }
-
-int node_count;
-int edge_count;
 
 /* */
 std::string execute_cmd(const std::string& command)
@@ -130,7 +143,7 @@ void create_node_node(
   nodet & node,
   xmlnodet & nodenode)
 {
-  nodenode.add("<xmlattr>.id", "n" + std::to_string(node_count++));
+  nodenode.add("<xmlattr>.id", node.id);
   if (node.violation)
   {
     xmlnodet data_violation;
@@ -619,7 +632,7 @@ std::string get_formated_assignment(const namespacet & ns, const goto_trace_step
   lhs_symbol = id_sections[id_sections.size()-1];
   std::string rhs_value = from_expr(ns, identifier, step.value);
   rhs_value = std::regex_replace (rhs_value, std::regex("f"),"");
-  return lhs_symbol + "=" + rhs_value + ";";
+  return lhs_symbol + " == (" + rhs_value + ");";
 }
 
 /* */

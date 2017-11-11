@@ -257,62 +257,59 @@ void violation_graphml_goto_trace(
   grapht graph(grapht::VIOLATION);
   graph.verified_file = verification_file;
 
-  nodet * prev_node;
   std::map<std::string, uint16_t> func_control_map;
-  std::string prev_function;
 
-  nodet firstnode;
-  firstnode.entry = true;
-  prev_node = &firstnode;
+  edget * first_edge = &graph.edges.at(0);
+  nodet * prev_node = first_edge->to_node;
+  std::string prev_function = first_edge->enter_function;
 
   for(const auto & step : goto_trace.steps)
-  {
-    /* checking restrictions for violation GraphML */
-    if (!((is_valid_witness_step(ns, step) &&
-         (step.type == goto_trace_stept::ASSIGNMENT))))
-      continue;
+   {
+     /* checking restrictions for violation GraphML */
+     if (!((is_valid_witness_step(ns, step) &&
+          (step.type == goto_trace_stept::ASSIGNMENT))))
+       continue;
 
-    nodet new_node;
-    edget new_edge;
-    new_edge.assumption = get_formated_assignment(ns, step);
-    new_edge.start_line = std::atoi(step.pc->location.get_line().c_str());
-    new_edge.end_line = new_edge.start_line;
-    if(new_edge.start_line)
-      get_offsets(verification_file, new_edge.start_line,
-        new_edge.start_offset, new_edge.end_offset);
+     edget new_edge;
 
-    /* check if it has entered or returned from a function */
-    std::string function = step.pc->location.get_function().c_str();
-    new_edge.assumption_scope = function;
-    if(prev_function != function && !function.empty())
-    {
-      if(func_control_map.find(function) == func_control_map.end())
-      {
-         /* it is entering in a function for the first time */
-         func_control_map.insert(std::make_pair(function, new_edge.start_line));
+     new_edge.assumption = get_formated_assignment(ns, step);
+     new_edge.start_line = std::atoi(step.pc->location.get_line().c_str());
+     new_edge.end_line = new_edge.start_line;
+     if(new_edge.start_line)
+       get_offsets(verification_file, new_edge.start_line,
+         new_edge.start_offset, new_edge.end_offset);
+
+     /* check if it has entered or returned from a function */
+     std::string function = step.pc->location.get_function().c_str();
+     new_edge.assumption_scope = function;
+     if(prev_function != function && !function.empty())
+     {
+       if(func_control_map.find(function) == func_control_map.end())
+       {
+          /* it is entering in a function for the first time */
+          func_control_map.insert(std::make_pair(function, new_edge.start_line));
+          new_edge.enter_function = function;
+          prev_function = function;
+       }
+       else
+       {
+         /* it is backing from another function */
+         new_edge.return_from_function = prev_function;
          new_edge.enter_function = function;
          prev_function = function;
-      }
-      else
-      {
-        /* it is backing from another function */
-        new_edge.return_from_function = prev_function;
-        new_edge.enter_function = function;
-        prev_function = function;
-      }
-    }
+       }
+     }
 
-    new_edge.from_node = prev_node;
-    new_edge.to_node = &new_node;
-    prev_node = &new_node;
-    graph.edges.push_back(new_edge);
-  }
+     nodet * new_node = new nodet();
+     new_edge.from_node = prev_node;
+     new_edge.to_node = new_node;
+     prev_node = new_node;
+     graph.edges.push_back(new_edge);
+   }
 
-  nodet violation_node;
-  violation_node.violation = true;
-  edget violation_edge;
-  violation_edge.from_node = prev_node;
-  violation_edge.to_node = &violation_node;
+  nodet * violation_node = new nodet();
+  violation_node->violation = true;
+  edget violation_edge(prev_node, violation_node);
   graph.edges.push_back(violation_edge);
 
   xmlnodet graphml = graph.generate_graphml(options);
@@ -334,13 +331,11 @@ void correctness_graphml_goto_trace(
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = verification_file;
 
-  nodet * prev_node;
   std::map<std::string, uint16_t> func_control_map;
-  std::string prev_function;
 
-  nodet first_node;
-  first_node.entry = true;
-  prev_node = &first_node;
+  edget * first_edge = &graph.edges.at(0);
+  nodet * prev_node = first_edge->to_node;
+  std::string prev_function = first_edge->enter_function;
 
   for(const auto & step : goto_trace.steps)
   {
@@ -349,14 +344,14 @@ void correctness_graphml_goto_trace(
         (!(step.is_assignment() || step.is_assume() || step.is_assert())))
       continue;
 
-    nodet new_node;
+    nodet * new_node = new nodet();
     edget new_edge;
     new_edge.assumption = get_formated_assignment(ns, step);
     new_edge.start_line = std::atoi(step.pc->location.get_line().c_str());
     new_edge.end_line = new_edge.start_line;
     if(new_edge.start_line)
-    get_offsets(verification_file, new_edge.start_line,
-      new_edge.start_offset, new_edge.end_offset);
+      get_offsets(verification_file, new_edge.start_line,
+        new_edge.start_offset, new_edge.end_offset);
 
     /* check if it has entered or returned from a function */
     std::string function = step.pc->location.get_function().c_str();
@@ -393,7 +388,7 @@ void correctness_graphml_goto_trace(
         code_line = w_string_replace(code_line, "__ESBMC_assume", "");
         code_line = w_string_replace(code_line, "assume(", "");
         code_line = w_string_replace(code_line, ";", "");
-        new_node.invariant = 0; //FIXME code_line;
+        new_node->invariant = 0; //FIXME code_line;
         new_edge.assumption_scope = function;
       }
     }
@@ -403,8 +398,8 @@ void correctness_graphml_goto_trace(
     }
 
     new_edge.from_node = prev_node;
-    new_edge.to_node = &new_node;
-    prev_node = &new_node;
+    new_edge.to_node = new_node;
+    prev_node = new_node;
     graph.edges.push_back(new_edge);
   }
 
@@ -416,7 +411,7 @@ void correctness_graphml_goto_trace(
   boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
   boost::property_tree::write_xml(
-    options.get_option("witness-output"), graphml, std::locale(), settings);
+  options.get_option("witness-output"), graphml, std::locale(), settings);
 }
 
 void show_goto_trace(
