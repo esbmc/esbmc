@@ -257,11 +257,13 @@ void violation_graphml_goto_trace(
   grapht graph(grapht::VIOLATION);
   graph.verified_file = verification_file;
 
-  std::map<std::string, uint16_t> func_control_map;
-
   edget * first_edge = &graph.edges.at(0);
   nodet * prev_node = first_edge->to_node;
+
+#ifndef witness_function_control_disabled
+  std::map<std::string, uint16_t> func_control_map;
   std::string prev_function = first_edge->enter_function;
+#endif
 
   for(const auto & step : goto_trace.steps)
    {
@@ -282,6 +284,7 @@ void violation_graphml_goto_trace(
      /* check if it has entered or returned from a function */
      std::string function = step.pc->location.get_function().c_str();
      new_edge.assumption_scope = function;
+#ifndef witness_function_control_disabled
      if(prev_function != function && !function.empty())
      {
        if(func_control_map.find(function) == func_control_map.end())
@@ -299,6 +302,7 @@ void violation_graphml_goto_trace(
          prev_function = function;
        }
      }
+#endif
 
      nodet * new_node = new nodet();
      new_edge.from_node = prev_node;
@@ -331,11 +335,13 @@ void correctness_graphml_goto_trace(
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = verification_file;
 
-  std::map<std::string, uint16_t> func_control_map;
-
   edget * first_edge = &graph.edges.at(0);
   nodet * prev_node = first_edge->to_node;
+
+#ifndef witness_function_control_disabled
+  std::map<std::string, uint16_t> func_control_map;
   std::string prev_function = first_edge->enter_function;
+#endif
 
   for(const auto & step : goto_trace.steps)
   {
@@ -355,6 +361,7 @@ void correctness_graphml_goto_trace(
 
     /* check if it has entered or returned from a function */
     std::string function = step.pc->location.get_function().c_str();
+#ifndef witness_function_control_disabled
     if(prev_function != function && !function.empty())
     {
       if(func_control_map.find(function) == func_control_map.end())
@@ -372,6 +379,7 @@ void correctness_graphml_goto_trace(
         prev_function = function;
       }
     }
+#endif
 
     if(step.is_assignment())
     {
