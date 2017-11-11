@@ -76,7 +76,6 @@ public:
  * one and includes graph, edges, and nodes.
  */
 void create_graphml(
-  const std::string& file_path,
   xmlnodet & graphml);
 
 /**
@@ -143,7 +142,7 @@ std::string w_string_replace(
 /**
  *
  */
-void get_offsets_for_line_using_wc(
+void get_offsets(
   const std::string & file_path,
   const uint16_t line_number,
   uint16_t & p_startoffset,

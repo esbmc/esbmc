@@ -14,7 +14,7 @@ short int edget::_id = 0;
 xmlnodet grapht::generate_graphml(optionst & options)
 {
   xmlnodet graphml_node;
-  create_graphml(this->verified_file, graphml_node);
+  create_graphml(graphml_node);
 
   xmlnodet graph_node;
   if (this->witness_type == grapht::VIOLATION)
@@ -233,26 +233,12 @@ void create_edge_node(edget & edge, xmlnodet & edgenode)
 }
 
 /* */
-void create_graphml(const std::string& file_path, xmlnodet & graphml)
+void create_graphml(xmlnodet & graphml)
 {
   graphml.add("graphml.<xmlattr>.xmlns",
     "http://graphml.graphdrawing.org/xmlns");
   graphml.add("graphml.<xmlattr>.xmlns:xsi",
     "http://www.w3.org/2001/XMLSchema-instance");
-
-  xmlnodet origin_file_node;
-  origin_file_node.add("<xmlattr>.id", "originfile");
-  origin_file_node.put(
-    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
-    "originFileName");
-  origin_file_node.put(
-    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  origin_file_node.add("<xmlattr>.for", "edge");
-  xmlnodet origin_file_default_node;
-  origin_file_default_node.put_value(file_path);
-  origin_file_node.add_child("default", origin_file_default_node);
-  graphml.add_child("graphml.key", origin_file_node);
 
   xmlnodet frontier_node;
   frontier_node.add("<xmlattr>.id", "frontier");
@@ -651,7 +637,7 @@ std::string w_string_replace(
 }
 
 /* */
-void get_offsets_for_line_using_wc(
+void get_offsets(
   const std::string & file_path,
   const uint16_t line_number,
   uint16_t & p_startoffset,
@@ -664,32 +650,29 @@ void get_offsets_for_line_using_wc(
   std::string line;
   std::ifstream file (file_path.c_str());
 
-  try {
-    if (file.is_open())
+  if (file.is_open())
+  {
+    for (int currentLineNumber = 1; getline(file,line) && (endOfAssignment == std::string::npos); currentLineNumber++)
     {
-  	  for (int currentLineNumber = 1; getline(file,line) && (endOfAssignment == std::string::npos); currentLineNumber++)
-	  {
-	    line += '\n';
-        if (currentLineNumber >= line_number)
-	    {
-		  if (currentLineNumber == line_number)
-		  {
-		    endoffset = line.size();
-		    for(; line.at(whiteSpaces) == ' ' && (whiteSpaces < line.size()); whiteSpaces++);
-		    startoffset += whiteSpaces;
-		  }
-		  endOfAssignment = line.rfind(';');
-	    } else {
-	      startoffset += line.size();
-	    }
-	  }
-      endoffset += startoffset;
-  	  file.close();
+      line += '\n';
+      if (currentLineNumber >= line_number)
+      {
+        if (currentLineNumber == line_number)
+        {
+          endoffset = line.size();
+          for(; line.at(whiteSpaces) == ' ' && (whiteSpaces < line.size()); whiteSpaces++)
+            startoffset += whiteSpaces;
+        }
+        endOfAssignment = line.rfind(';');
+      }
+      else
+      {
+        startoffset += line.size();
+      }
     }
-  } catch (const std::exception& e) {
-    /* nothing to do here */
+    endoffset += startoffset;
+    file.close();
   }
-
   p_startoffset = startoffset;
   p_endoffset = endoffset;
 }

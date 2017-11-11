@@ -278,13 +278,13 @@ void violation_graphml_goto_trace(
     new_edge.start_line = std::atoi(step.pc->location.get_line().c_str());
     new_edge.end_line = new_edge.start_line;
     if(new_edge.start_line)
-      get_offsets_for_line_using_wc(verification_file, new_edge.start_line,
-                                    new_edge.start_offset, new_edge.end_offset);
+      get_offsets(verification_file, new_edge.start_line,
+        new_edge.start_offset, new_edge.end_offset);
 
     /* check if it has entered or returned from a function */
     std::string function = step.pc->location.get_function().c_str();
     new_edge.assumption_scope = function;
-    if(function != function && !function.empty())
+    if(prev_function != function && !function.empty())
     {
       if(func_control_map.find(function) == func_control_map.end())
       {
@@ -338,9 +338,9 @@ void correctness_graphml_goto_trace(
   std::map<std::string, uint16_t> func_control_map;
   std::string prev_function;
 
-  nodet firstnode;
-  firstnode.entry = true;
-  prev_node = &firstnode;
+  nodet first_node;
+  first_node.entry = true;
+  prev_node = &first_node;
 
   for(const auto & step : goto_trace.steps)
   {
@@ -355,12 +355,12 @@ void correctness_graphml_goto_trace(
     new_edge.start_line = std::atoi(step.pc->location.get_line().c_str());
     new_edge.end_line = new_edge.start_line;
     if(new_edge.start_line)
-      get_offsets_for_line_using_wc(verification_file, new_edge.start_line,
-                                    new_edge.start_offset, new_edge.end_offset);
+    get_offsets(verification_file, new_edge.start_line,
+      new_edge.start_offset, new_edge.end_offset);
 
     /* check if it has entered or returned from a function */
     std::string function = step.pc->location.get_function().c_str();
-    if(function != function && !function.empty())
+    if(prev_function != function && !function.empty())
     {
       if(func_control_map.find(function) == func_control_map.end())
       {
