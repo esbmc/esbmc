@@ -24,9 +24,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-object_numberingt value_sett::object_numbering;
-object_number_numberingt value_sett::obj_numbering_refset;
-
 void value_sett::output(std::ostream &out) const
 {
   // Iterate over all tracked variables, dumping a list of all the things it
@@ -70,7 +67,7 @@ void value_sett::output(std::ostream &out) const
         o_it!=e.object_map.end();
         o_it++)
     {
-      const expr2tc &o = object_numbering[o_it->first];
+      const expr2tc &o = o_it->first;
 
       std::string result;
 
@@ -114,7 +111,7 @@ void value_sett::output(std::ostream &out) const
 expr2tc
 value_sett::to_expr(object_mapt::const_iterator it) const
 {
-  const expr2tc &object = object_numbering[it->first];
+  const expr2tc &object = it->first;
 
   if (is_invalid2t(object) || is_unknown2t(object))
     return object;
@@ -330,7 +327,7 @@ void value_sett::get_value_set_rec(
     // Then get the value set of all the pointers we might dereference to.
     for(const auto & it1 : reference_set)
     {
-      const expr2tc &object = object_numbering[it1.first];
+      const expr2tc &object = it1.first;
       get_value_set_rec(object, dest, suffix, original_type);
     }
 
@@ -434,7 +431,7 @@ void value_sett::get_value_set_rec(
         objectt object=it.second;
 
         unsigned int nat_align =
-          get_natural_alignment(object_numbering[it.first]);
+          get_natural_alignment(it.first);
         unsigned int ptr_align = get_natural_alignment(ptr_op);
 
         if (is_const && object.offset_is_set) {
@@ -687,7 +684,7 @@ void value_sett::get_reference_set_rec(
 
     for(const auto & a_it : array_references)
     {
-      expr2tc object = object_numbering[a_it.first];
+      const expr2tc &object = a_it.first;
 
       if (is_unknown2t(object)) {
         // Once an unknown, always an unknown.
@@ -746,7 +743,7 @@ void value_sett::get_reference_set_rec(
 
     for(const auto & it : struct_references)
     {
-      expr2tc object = object_numbering[it.first];
+      const expr2tc &object = it.first;
 
       // An unknown or null base is /always/ unknown or null.
       if (is_unknown2t(object) || is_null_object2t(object) ||
@@ -969,7 +966,7 @@ void value_sett::do_free(const expr2tc &op)
 
   for(const auto & it : value_set)
   {
-    const expr2tc &object = object_numbering[it.first];
+    const expr2tc &object = it.first;
 
     if (is_dynamic_object2t(object))
     {
@@ -994,7 +991,7 @@ void value_sett::do_free(const expr2tc &op)
         o_it!=value.second.object_map.end();
         o_it++)
     {
-      const expr2tc &object = object_numbering[o_it->first];
+      const expr2tc &object = o_it->first;
 
       if (is_dynamic_object2t(object))
       {
@@ -1061,7 +1058,7 @@ void value_sett::assign_rec(
 
     for(const auto & it : reference_set)
     {
-      const expr2tc obj = object_numbering[it.first];
+      const expr2tc &obj = it.first;
 
       if (!is_unknown2t(obj))
         assign_rec(obj, values_rhs, suffix, add_to_sets);
@@ -1306,22 +1303,6 @@ value_sett::dump() const
   output(std::cout);
 }
 
-void
-value_sett::obj_numbering_ref(unsigned int num)
-{
-  obj_numbering_refset[num]++;
-}
-
-void
-value_sett::obj_numbering_deref(unsigned int num)
-{
-  unsigned int refcount = --obj_numbering_refset[num];
-  if (refcount == 0) {
-    object_numbering.erase(num);
-    obj_numbering_refset.erase(num);
-  }
-}
-
 #ifdef WITH_PYTHON
 #include <boost/python.hpp>
 #include <boost/python/class.hpp>
@@ -1394,7 +1375,6 @@ build_value_set_classes()
     .def("do_function_call", &value_sett::do_function_call)
     .def("do_end_function", &value_sett::do_end_function)
     .def("get_reference_set", get_reference_set)
-    .def_readwrite("object_numbering", &value_sett::object_numbering)
     .def_readwrite("values", &value_sett::values);
   // XXX object numberingt?
 
@@ -1416,10 +1396,6 @@ build_value_set_classes()
     .def_readwrite("identifier", &value_sett::entryt::identifier)
     .def_readwrite("suffix", &value_sett::entryt::suffix)
     .def_readwrite("object_map", &value_sett::entryt::object_map);
-
-  class_<object_numberingt>("object_numberingt")
-    .def("number", &object_numberingt::number)
-    .def("get_number", &object_numberingt::get_number);
 
   }
 }

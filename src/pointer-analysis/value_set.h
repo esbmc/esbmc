@@ -43,16 +43,11 @@ Author: Daniel Kroening, kroening@kroening.com
  *  attempts to statically track dynamically allocated memory.
  *
  *  The only data element stored is a map from l1 variable names (as strings)
- *  to a record of what objects are stored. Data objects are numbered, with the
- *  mapping for that stored in a global variable, value_sett::object_numbering,
- *  (which will explode into multithreaded death cakes in the future). The
+ *  to a record of what objects are stored. The
  *  primary interfaces to the value_sett object itself are the 'assign' method
  *  (for interpreting a variable assignment) and the get_value_set method, that
  *  takes a variable and returns the set of things it might point at.
  */
-
-typedef hash_numbering<expr2tc, irep2_hash> object_numberingt;
-typedef hash_numbering<unsigned, std::hash<unsigned> > object_number_numberingt;
 
 class value_sett
 {
@@ -143,70 +138,9 @@ public:
     { return offset_is_set && offset.is_zero(); }
   };
 
-  /** Datatype for a value set: stores a mapping between some integers and
-   *  additional reference data in an objectt object. The integers are indexes
-   *  into value_sett::object_numbering, which identifies the l1 variable
-   *  being referred to. */
-  typedef hash_map_cont<unsigned, objectt> object_mapt;
-  class object_map_dt
-  {
-    // If you said this class looks pretty map like, it's because it used to be
-    // a subclass of std::map, which was far too funky for me, thanks.
-  public:
-    ~object_map_dt()
-    {
-      for (auto const& it : themap)
-        value_sett::obj_numbering_deref(it.first);
-    }
-
-    object_map_dt()
-    {
-    }
-
-    object_map_dt(const object_map_dt &ref)
-    {
-      *this = ref;
-      for (auto const& it : themap)
-        value_sett::obj_numbering_ref(it.first);
-    }
-    typedef object_mapt::const_iterator const_iterator;
-    typedef object_mapt::iterator iterator;
-
-    objectt &operator[](unsigned i)
-    {
-      if (themap.find(i) == themap.end())
-        value_sett::obj_numbering_ref(i);
-      return themap[i];
-    }
-
-    const_iterator find(unsigned i) const
-    {
-      return themap.find(i);
-    }
-
-    iterator find(unsigned i)
-    {
-      return themap.find(i);
-    }
-
-    const_iterator begin() const
-    {
-      return themap.begin();
-    }
-
-    const_iterator end() const
-    {
-      return themap.end();
-    }
-
-    std::size_t size(void) const
-    {
-      return themap.size();
-    }
-
-    object_mapt themap;
-  };
-
+  /** Datatype for a value set: stores a mapping between expressions of l1
+   *  variables and additional reference data in an objectt object. */
+  typedef hash_map_cont<expr2tc, objectt> object_mapt;
 
   /** Record for a particular value set: stores the identity of the variable
    *  that points at this set of objects, and the objects themselves (with
@@ -321,14 +255,13 @@ public:
 
   bool insert(object_mapt &dest, const expr2tc &src, const mp_integer &offset) const
   {
-    return insert(dest, object_numbering.number(src), objectt(true, offset));
+    return insert(dest, src, objectt(true, offset));
   }
 
   /** Insert an object record into the given object map. This method has
    *  various overloaded instances, that all descend to this particular method.
-   *  The essential elements are a) an object map, b) an l1 data object or
-   *  the index number (in value_sett::object_numbering) that identifies
-   *  it, and c) the offset data for this record.
+   *  The essential elements are a) an object map, b) an l1 data object
+   *  that identifies it, and c) the offset data for this record.
    *
    *  Rather than just adding this pointer record to the object map, this
    *  method attempts to merge the data in. That is, if the variable might
@@ -337,24 +270,22 @@ public:
    *  and let the SMT solver work it out.
    *
    *  @param dest The object map to insert this record into.
-   *  @param n The identifier for the object being referrred to, as indexed by
-   *         the value_set::object_numbering mapping.
+   *  @param e The object being referrred to.
    *  @param object The offset data for the pointer record being inserted.
    */
-  bool insert(object_mapt &dest, unsigned n, const objectt &object) const
+  bool insert(object_mapt &dest, const expr2tc &e, const objectt &object) const
   {
-    object_mapt::const_iterator it = dest.find(n);
+    object_mapt::const_iterator it = dest.find(e);
     if (it == dest.end())
     {
       // new
-      dest.insert(object_mapt::value_type(n, object));
+      dest.insert(object_mapt::value_type(e, object));
       return true;
     }
     else
     {
-      object_mapt::iterator it2 = dest.find(n);
+      object_mapt::iterator it2 = dest.find(e);
       objectt &old = it2->second;
-      const expr2tc &expr_obj = object_numbering[n];
 
       if(old.offset_is_set && object.offset_is_set)
       {
@@ -364,8 +295,8 @@ public:
         {
           // Merge the tracking for two offsets; take the minimum alignment
           // guarenteed by them.
-          unsigned long old_align = offset2align(expr_obj, old.offset);
-          unsigned long new_align = offset2align(expr_obj, object.offset);
+          unsigned long old_align = offset2align(e, old.offset);
+          unsigned long new_align = offset2align(e, object.offset);
           old.offset_is_set = false;
           old.offset_alignment = std::min(old_align, new_align);
           return true;
@@ -381,7 +312,7 @@ public:
           // Old offset unset; new offset set. Compute the alignment of the
           // new object's offset, and take the minimum of that and the old
           // alignment.
-          unsigned int new_alignment = offset2align(expr_obj, object.offset);
+          unsigned int new_alignment = offset2align(e, object.offset);
           old.offset_alignment = std::min(old.offset_alignment, new_alignment);
           return !(old.offset_alignment == oldalign);
         }
@@ -389,17 +320,12 @@ public:
       else
       {
         // Old offset alignment is set; new isn't.
-        unsigned int old_align = offset2align(expr_obj, old.offset);
+        unsigned int old_align = offset2align(e, old.offset);
         old.offset_alignment = std::min(old_align, object.offset_alignment);
         old.offset_is_set=false;
         return true;
       }
     }
-  }
-
-  bool insert(object_mapt &dest, const expr2tc &expr, const objectt &object) const
-  {
-    return insert(dest, object_numbering.number(expr), object);
   }
 
   /** Remove the given pointer value set from the map.
@@ -639,17 +565,10 @@ protected:
    *  @param component_name Name of the component to extract from src. */
   expr2tc make_member(const expr2tc &src, const irep_idt &component_name);
 
-  static void obj_numbering_ref(unsigned int num);
-  static void obj_numbering_deref(unsigned int num);
-
 public:
 //********************************** Members ***********************************
   /** Some crazy static analysis tool. */
   unsigned location_number;
-  /** Object to assign numbers to objects -- i.e., the numbers in the map of
-   *  a @ref object_mapt. Static and bad. */
-  static object_numberingt object_numbering;
-  static object_number_numberingt obj_numbering_refset;
 
   /** Storage for all the value sets for all the variables in the program. See
    *  @ref entryt for the format of the string used as an index. */
