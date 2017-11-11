@@ -683,6 +683,7 @@ void get_offsets_for_line_using_wc(
 	      startoffset += line.size();
 	    }
 	  }
+      endoffset += startoffset;
   	  file.close();
     }
   } catch (const std::exception& e) {
