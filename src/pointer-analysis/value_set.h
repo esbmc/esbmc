@@ -14,7 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/irep2.h>
 #include <util/mp_arith.h>
 #include <util/namespace.h>
-#include <util/numbering.h>
 #include <util/type_byte_size.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.

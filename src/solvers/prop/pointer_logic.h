@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/hash_cont.h>
 #include <util/irep2.h>
 #include <util/mp_arith.h>
-#include <util/numbering.h>
 
 class pointer_logict
 {
