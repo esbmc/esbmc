@@ -14,7 +14,7 @@ libutil_la_SOURCES = \
       signal_catcher.cpp migrate.cpp show_symbol_table.cpp \
       thread.cpp crypto_hash.cpp type_byte_size.cpp dcutil.cpp \
       string_constant.cpp c_types.cpp ieee_float.cpp c_qualifiers.cpp \
-      c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp
+      c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp renaming.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -Wno-bool-compare
 
 utilincludedir = $(includedir)/util
@@ -33,4 +33,5 @@ utilinclude_HEADERS = arith_tools.h array_name.h base_type.h bitvector.h \
       string_container.h symbol.h symbol_serialization.h \
       thread.h threeval.h time_stopping.h type.h type_byte_size.h \
       type_eq.h typecheck.h ui_message.h xml.h xml_irep.h \
-      show_symbol_table.h c_sizeof.h c_link.h c_typecast.h fix_symbol.h
+      show_symbol_table.h c_sizeof.h c_link.h c_typecast.h fix_symbol.h \
+      renaming.h

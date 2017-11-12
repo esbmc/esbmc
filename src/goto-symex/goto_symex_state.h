@@ -16,7 +16,6 @@
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_functions.h>
-#include <goto-symex/renaming.h>
 #include <goto-symex/symex_target.h>
 #include <pointer-analysis/value_set.h>
 #include <stack>
@@ -25,6 +24,7 @@
 #include <util/guard.h>
 #include <util/i2string.h>
 #include <util/irep2.h>
+#include <util/renaming.h>
 #include <vector>
 
 class execution_statet; // foward dec

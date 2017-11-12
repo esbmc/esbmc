@@ -14,7 +14,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <goto-programs/goto_program.h>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
-#include <goto-symex/renaming.h>
 #include <goto-symex/symex_target_equation.h>
 #include <iostream>
 #include <map>
@@ -22,6 +21,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <util/crypto_hash.h>
 #include <util/message.h>
 #include <util/options.h>
+#include <util/renaming.h>
 
 /**
  *  Class to explore states reachable through threading.

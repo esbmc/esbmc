@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_SLICE_H
 #define CPROVER_GOTO_SYMEX_SLICE_H
 
-#include <goto-symex/renaming.h>
 #include <goto-symex/symex_target_equation.h>
 #include <util/hash_cont.h>
+#include <util/renaming.h>
 
 BigInt slice(boost::shared_ptr<symex_target_equationt> &eq, bool slice_assume);
 BigInt simple_slice(boost::shared_ptr<symex_target_equationt> &eq);
