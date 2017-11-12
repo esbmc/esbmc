@@ -22,7 +22,7 @@ public:
   symex_slicet(bool assume);
   void slice(boost::shared_ptr<symex_target_equationt> &eq);
 
-  typedef hash_set_cont<std::string, string_hash> symbol_sett;
+  typedef hash_set_cont<std::string> symbol_sett;
   symbol_sett depends;
 
   BigInt ignored;

@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iostream>
 #include <map>
 #include <util/hash_cont.h>
-#include <util/string_hash.h>
 #include <util/symbol.h>
 #include <util/type.h>
 

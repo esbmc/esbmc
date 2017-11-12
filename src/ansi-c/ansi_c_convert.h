@@ -14,7 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/hash_cont.h>
 #include <util/message_stream.h>
 #include <util/std_code.h>
-#include <util/string_hash.h>
 
 bool ansi_c_convert(
   ansi_c_parse_treet &ansi_c_parse_tree,

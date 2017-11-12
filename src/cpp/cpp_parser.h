@@ -15,7 +15,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/expr.h>
 #include <util/hash_cont.h>
 #include <util/parser.h>
-#include <util/string_hash.h>
 
 class cpp_parsert:public parsert
 {

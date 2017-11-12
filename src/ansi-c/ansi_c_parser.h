@@ -15,7 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/hash_cont.h>
 #include <util/i2string.h>
 #include <util/parser.h>
-#include <util/string_hash.h>
 
 typedef enum { ANSI_C_UNKNOWN, ANSI_C_SYMBOL, ANSI_C_TYPEDEF,
                ANSI_C_TAG } ansi_c_id_classt;

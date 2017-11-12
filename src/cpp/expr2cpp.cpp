@@ -41,7 +41,7 @@ protected:
     const c_qualifierst &qualifiers,
     const std::string &declarator) override;
 
-  typedef hash_set_cont<std::string, string_hash> id_sett;
+  typedef hash_set_cont<std::string> id_sett;
 };
 
 std::string expr2cppt::convert_struct(

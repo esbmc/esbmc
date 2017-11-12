@@ -10,7 +10,6 @@ Date: May 2007
 
 #include <sstream>
 #include <util/irep_serialization.h>
-#include <util/string_hash.h>
 
 void irep_serializationt::write_irep(
   std::ostream &out,
