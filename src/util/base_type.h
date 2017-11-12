@@ -14,6 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/namespace.h>
 #include <util/type.h>
 #include <util/union_find.h>
+#include <util/hash_cont.h>
 
 void base_type(type2tc &type, const namespacet &ns);
 void base_type(expr2tc &expr, const namespacet &ns);
@@ -88,7 +89,7 @@ protected:
   virtual bool base_type_eq_rec(const exprt &expr1, const exprt &expr2);
 
   // for loop avoidance
-  typedef union_find<irep_idt> identifierst;
+  typedef hash_set_cont<irep_idt> identifierst;
   identifierst identifiers;
 };
 

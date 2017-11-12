@@ -137,6 +137,19 @@ public:
 
 size_t hash_string(const dstring &s);
 
+// Hashing boilerplate
+namespace std {
+  template<> struct hash<dstring>
+  {
+    typedef dstring argument_type;
+    typedef std::size_t result_type;
+    result_type operator()(dstring const& d) const noexcept
+    {
+      return hash_string(d);
+    }
+  };
+}
+
 std::ostream &operator << (std::ostream &out, const dstring &a);
 
 #endif

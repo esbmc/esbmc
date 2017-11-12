@@ -114,14 +114,15 @@ bool base_type_eqt::base_type_eq_rec(
   if (is_symbol_type(type1) && is_symbol_type(type2))
   {
     // already in same set?
-    if (identifiers.make_union(to_symbol_type(type1).symbol_name,
-                               to_symbol_type(type2).symbol_name))
+    if (identifiers.find(to_symbol_type(type1).symbol_name) != identifiers.end()
+        && identifiers.find(to_symbol_type(type2).symbol_name) != identifiers.end())
       return true;
   }
 
   if (is_symbol_type(type1))
   {
     const symbolt &symbol = ns.lookup(to_symbol_type(type1).symbol_name);
+    identifiers.insert(to_symbol_type(type1).symbol_name);
 
     if(!symbol.is_type)
       throw "symbol "+id2string(symbol.name)+" is not a type";
@@ -134,6 +135,7 @@ bool base_type_eqt::base_type_eq_rec(
   if (is_symbol_type(type2))
   {
     const symbolt &symbol=ns.lookup(to_symbol_type(type2).symbol_name);
+    identifiers.insert(to_symbol_type(type2).symbol_name);
 
     if(!symbol.is_type)
       throw "symbol "+id2string(symbol.name)+" is not a type";
@@ -253,15 +255,15 @@ bool base_type_eqt::base_type_eq_rec(
      type2.id()=="symbol")
   {
     // already in same set?
-    if(identifiers.make_union(
-         type1.identifier(),
-         type2.identifier()))
+    if(identifiers.find(type1.identifier()) != identifiers.end() &&
+       identifiers.find(type2.identifier()) != identifiers.end())
       return true;
   }
 
   if(type1.id()=="symbol")
   {
     const symbolt &symbol=ns.lookup(type1.identifier());
+    identifiers.insert(type1.identifier());
 
     if(!symbol.is_type)
       throw "symbol "+id2string(symbol.name)+" is not a type";
@@ -272,6 +274,7 @@ bool base_type_eqt::base_type_eq_rec(
   if(type2.id()=="symbol")
   {
     const symbolt &symbol=ns.lookup(type2.identifier());
+    identifiers.insert(type2.identifier());
 
     if(!symbol.is_type)
       throw "symbol "+id2string(symbol.name)+" is not a type";
