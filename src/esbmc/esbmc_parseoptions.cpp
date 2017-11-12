@@ -175,8 +175,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("witness-producer"))
     options.set_option("witness-producer", cmdline.getval("witness-producer"));
 
-  if(cmdline.isset("witness-plain-verified-file"))
-    options.set_option("witness-plain-verified-file", cmdline.getval("witness-plain-verified-file"));
+  if(cmdline.isset("witness-programfile"))
+    options.set_option("witness-programfile", cmdline.getval("witness-programfile"));
 
   if(cmdline.isset("git-hash"))
   {

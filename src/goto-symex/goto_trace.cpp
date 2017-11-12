@@ -274,7 +274,10 @@ void violation_graphml_goto_trace(
 
      edget new_edge;
      new_edge.assumption = get_formated_assignment(ns, step);
-     new_edge.start_line = std::atoi(step.pc->location.get_line().c_str());
+     new_edge.start_line = get_line_number(
+       verification_file,
+       std::atoi(step.pc->location.get_line().c_str()),
+       options);
 
 #ifndef lightweight_witness
      new_edge.end_line = new_edge.start_line;
@@ -353,7 +356,11 @@ void correctness_graphml_goto_trace(
     nodet * new_node = new nodet();
     edget new_edge;
     new_edge.assumption = get_formated_assignment(ns, step);
-    new_edge.start_line = std::atoi(step.pc->location.get_line().c_str());
+    new_edge.start_line = get_line_number(
+      verification_file,
+      std::atoi(step.pc->location.get_line().c_str()),
+      options);
+
 #ifndef lightweight_witness
     new_edge.end_line = new_edge.start_line;
     if(new_edge.start_line)

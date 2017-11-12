@@ -169,11 +169,10 @@ bool is_valid_witness_expr(
 /**
  *
  */
-void get_relative_line_in_programfile(
-  const std::string& relative_file_path,
-  const int relative_line_number,
-  const std::string& program_file_path,
-  int & programfile_line_number);
+uint16_t get_line_number(
+  std::string& verified_file,
+  uint16_t relative_line_number,
+  optionst & options);
 
 /**
  *

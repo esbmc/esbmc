@@ -570,12 +570,18 @@ void _create_graph_node(
 
   xmlnodet pProgramFile;
   pProgramFile.add("<xmlattr>.key", "programfile");
-  pProgramFile.put_value(verifiedfile);
+  std::string program_file = options.get_option("witness-programfile");
+  if (program_file.empty())
+    pProgramFile.put_value(verifiedfile);
+  else
+    pProgramFile.put_value(program_file);
   graphnode.add_child("data", pProgramFile);
 
   std::string programFileHash;
-  if (!verifiedfile.empty())
+  if (program_file.empty())
     generate_sha1_hash_for_file(verifiedfile.c_str(), programFileHash);
+  else
+    generate_sha1_hash_for_file(program_file.c_str(), programFileHash);
   xmlnodet pProgramHash;
   pProgramHash.add("<xmlattr>.key", "programhash");
   pProgramHash.put_value(programFileHash);
@@ -725,23 +731,22 @@ bool is_valid_witness_expr(
 }
 
 /* */
-void get_relative_line_in_programfile(
-  const std::string& relative_file_path,
-  const int relative_line_number,
-  const std::string& program_file_path,
-  int & programfile_line_number)
+uint16_t get_line_number(
+  std::string& verified_file,
+  uint16_t relative_line_number,
+  optionst & options)
 {
+  std::string program_file = options.get_option("witness-programfile");
   /* check if it is necessary to get the relative line */
-  if (relative_file_path == program_file_path)
+  if (program_file.empty() || verified_file == program_file)
   {
-	programfile_line_number = relative_line_number;
-    return;
+    return relative_line_number;
   }
   std::string line;
   std::string relative_content;
-  std::ifstream stream_relative (relative_file_path);
-  std::ifstream stream_programfile (program_file_path);
-  int line_count = 0;
+  std::ifstream stream_relative (verified_file);
+  std::ifstream stream_programfile (program_file);
+  uint16_t line_count = 0;
   /* get the relative content */
   if (stream_relative.is_open())
   {
@@ -752,7 +757,6 @@ void get_relative_line_in_programfile(
 	  line_count++;
 	}
   }
-
   /* file for the line in the programfile */
   line_count = 1;
   if (stream_programfile.is_open())
@@ -763,5 +767,5 @@ void get_relative_line_in_programfile(
       line_count++;
     }
   }
-  programfile_line_number = line_count;
+  return line_count;
 }

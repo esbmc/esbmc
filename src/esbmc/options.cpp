@@ -59,7 +59,7 @@ const struct opt_templ esbmc_options[] = {
   { 0, "version", switc, "" },
   { 0, "witness-output", string, "" },
   { 0, "witness-producer", string, "" },
-  { 0, "witness-plain-verified-file", string, "" },
+  { 0, "witness-programfile", string, "" },
   { 0, "old-frontend", switc, "" },
   { 0, "result-only", switc, "" },
   { 0, "i386-linux", switc, "" },
