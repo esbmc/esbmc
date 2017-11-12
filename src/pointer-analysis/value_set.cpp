@@ -165,41 +165,34 @@ merge_mangler(CIterator sit, CIterator send, Iterator dit, Iterator dend,
 
 bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 {
-  bool result=false;
-
   // Iterate over all new values; if they're in the current value set, merge
   // them. If not, only merge it in if keepnew is true.
-  for(const auto & new_value : new_values)
-  {
-    valuest::iterator it2=values.find(new_value.first);
 
-    // If the new variable isnt in this' set,
-    if(it2==values.end())
+  auto merger = [this](valuest::iterator &dit, valuest::const_iterator &sit) -> bool {
+    entryt &e = dit->second;
+    const entryt &new_e = sit->second;
+    return make_union(e.object_map, new_e.object_map);
+  };
+
+  auto inserter = [keepnew, this](valuest::iterator &dit, valuest::const_iterator &sit) {
+    const entryt &new_e = sit->second;
+    // We always track these when merging value sets, as these store data
+    // that's transfered back and forth between function calls. So, the
+    // variables not existing in the state we're merging into is irrelevant.
+    if(has_prefix(id2string(new_e.identifier.base_name),
+         "value_set::dynamic_object") ||
+       new_e.identifier.base_name=="value_set::return_value" ||
+       keepnew)
     {
-      // We always track these when merging value sets, as these store data
-      // that's transfered back and forth between function calls. So, the
-      // variables not existing in the state we're merging into is irrelevant.
-      if(has_prefix(id2string(new_value.second.identifier.base_name),
-           "value_set::dynamic_object") ||
-         new_value.second.identifier.base_name=="value_set::return_value" ||
-         keepnew)
-      {
-        values.insert(new_value);
-        result=true;
-      }
-
-      continue;
+      values.insert(dit, std::make_pair(sit->first, sit->second));
     }
+  };
 
-    // The variable was in this' set, merge the values.
-    entryt &e=it2->second;
-    const entryt &new_e=new_value.second;
-
-    if(make_union(e.object_map, new_e.object_map))
-      result=true;
-  }
-
-  return result;
+  typedef std::function<bool(valuest::iterator &, valuest::const_iterator &)> functype1;
+  typedef std::function<void(valuest::iterator &, valuest::const_iterator &)> functype2;
+  auto tmp1 = functype1(merger);
+  auto tmp2 = functype2(inserter);
+  return merge_mangler(new_values.begin(), new_values.end(), values.begin(), values.end(), tmp1, tmp2);
 }
 
 bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
