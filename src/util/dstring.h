@@ -107,11 +107,6 @@ public:
     return out << a.as_string();
   }
   
-  inline friend size_t hash_string(const dstring &s)
-  {
-    return s.hash();
-  }
-
   inline size_t hash() const
   {
     return no;
@@ -135,17 +130,16 @@ public:
   }
 };
 
-size_t hash_string(const dstring &s);
-
 // Hashing boilerplate
 namespace std {
   template<> struct hash<dstring>
   {
     typedef dstring argument_type;
     typedef std::size_t result_type;
-    result_type operator()(dstring const& d) const noexcept
+
+    result_type operator()(const dstring &d) const noexcept
     {
-      return hash_string(d);
+      return d.hash();
     }
   };
 }

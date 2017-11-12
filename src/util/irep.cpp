@@ -408,13 +408,13 @@ bool operator<(const irept &X, const irept &Y)
 
 size_t irept::hash() const
 {
-  size_t result=hash_string(id());
+  size_t result=id().hash();
 
   forall_irep(it, get_sub()) result=result^it->hash();
 
   forall_named_irep(it, get_named_sub())
   {
-    result=result^hash_string(it->first);
+    result=result^it->first.hash();
     result=result^it->second.hash();
   }
 
@@ -423,19 +423,19 @@ size_t irept::hash() const
 
 size_t irept::full_hash() const
 {
-  size_t result=hash_string(id());
+  size_t result=id().hash();
 
   forall_irep(it, get_sub()) result=result^it->full_hash();
 
   forall_named_irep(it, get_named_sub())
   {
-    result=result^hash_string(it->first);
+    result=result^it->first.hash();
     result=result^it->second.full_hash();
   }
 
   forall_named_irep(it, get_comments())
   {
-    result=result^hash_string(it->first);
+    result=result^it->first.hash();
     result=result^it->second.full_hash();
   }
 
