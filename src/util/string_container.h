@@ -12,38 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cassert>
 #include <list>
 #include <util/hash_cont.h>
-#include <util/string_hash.h>
 #include <vector>
-
-struct string_ptrt
-{
-  const char *s;
-  unsigned len;
-  
-  const char *c_str() const
-  {
-    return s;
-  }
-  
-  explicit string_ptrt(const char *_s);
-
-  explicit string_ptrt(const std::string &_s):s(_s.c_str()), len(_s.size())
-  {
-  }
-
-  friend bool operator==(const string_ptrt a, const string_ptrt b);
-};
-
-bool operator==(const string_ptrt a, const string_ptrt b);
-
-class string_ptr_hash hash_map_hasher_superclass(std::string)
-{
-public:
-  size_t operator()(const string_ptrt s) const { return hash_string(s.s); }
-  bool operator()(const string_ptrt &s1, const string_ptrt &s2) const {
-    return hash_string(s1.s) < hash_string(s2.s);
-  }
-};
 
 class string_containert
 {

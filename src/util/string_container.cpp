@@ -13,17 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 string_containert string_container __attribute__((init_priority(101)));
 
-string_ptrt::string_ptrt(const char *_s):s(_s), len(strlen(_s))
-{
-}
-
-bool operator==(const string_ptrt a, const string_ptrt b)
-{
-  if(a.len!=b.len) return false;
-  if(a.len==0) return true;
-  return memcmp(a.s, b.s, a.len)==0;
-}
-
 unsigned string_containert::get(const char *s)
 {
   std::string string_ptr(s);
