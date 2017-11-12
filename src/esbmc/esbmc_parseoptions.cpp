@@ -1655,8 +1655,7 @@ void cbmc_parseoptionst::help()
     " --16, --32, --64             set width of machine word (default is 64)\n"
     " --unsigned-char              make \"char\" unsigned by default\n"
     " --version                    show current ESBMC version and exit\n"
-    " --witness-output filename    generate a verification result witness in GraphML format\n"
-    " --witness-detailed           generate line offset when generating a witness (linux only)\n"
+    " --witness-output filename    generate the verification result witness in GraphML format\n"
     " --old-frontend               parse source files using our old frontend (deprecated)\n"
     " --result-only                do not print the counter-example\n"
     #ifdef _WIN32
