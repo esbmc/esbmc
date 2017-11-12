@@ -14,6 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/irep2.h>
 #include <util/mp_arith.h>
 #include <util/namespace.h>
+#include <util/renaming.h>
 #include <util/type_byte_size.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.
@@ -80,6 +81,9 @@ public:
 
   /** A type for a set of expressions */
   typedef std::set<expr2tc> expr_sett;
+
+  /** Type for identifiying l1 variables. */
+  typedef renaming::level2t::name_record name_recordt;
 
   /** Record for an object reference. Any reference to an object is stored as
    *  an objectt, as a map element in an object_mapt. The actual object that
@@ -155,8 +159,8 @@ public:
      *  map represents a object/offset-data (respectively) that this variable
      *  can point at. */
     object_mapt object_map;
-    /** The L1 name of the pointer variable that's doing the pointing. */
-    std::string identifier;
+    /** The L1 identifier of the pointer variable that's doing the pointing. */
+    name_recordt identifier;
     /** Additional suffix data -- an L1 variable might actually contain several
      *  pointers. For example, an array of pointer, or a struct with multiple
      *  pointer members. This suffix uniquely distinguishes which pointer
@@ -164,21 +168,28 @@ public:
      *  it might read '.ptr' to identify the ptr field of a struct. It might
      *  also be '[]' if this is the value set of an array of pointers: we don't
      *  track each individual element, only the array of them. */
-    std::string suffix;
+    irep_idt suffix;
 
     entryt() = default;
 
-    entryt(std::string _identifier, const std::string& _suffix):
+    entryt(name_recordt _identifier, const irep_idt &_suffix):
       identifier(std::move(_identifier)),
       suffix(_suffix)
     {
     }
   };
 
+  class pair_hasher {
+  public:
+    size_t operator()(const std::pair<name_recordt, irep_idt> &ref) const noexcept {
+      return std::hash<name_recordt>{}(ref.first) ^ std::hash<irep_idt>{}(ref.second);
+    }
+  };
+
   /** Type of the value-set containing structure. A hash map mapping variables
    *  to an entryt, storing the value set of objects a variable might point
    *  at. */
-  typedef hash_map_cont<std::string, entryt> valuest;
+  typedef hash_map_cont<std::pair<name_recordt, irep_idt>, entryt, pair_hasher> valuest;
 
   /** Get the natural alignment unit of a reference to e. I don't know a more
    *  appropriate term, but if we were to have an offset into e, then what is
@@ -330,9 +341,15 @@ public:
   /** Remove the given pointer value set from the map.
    *  @param name The name of the variable, including suffix, to erase.
    *  @return True when the erase succeeds, false otherwise. */
-  bool erase(const std::string &name)
+  bool erase(const name_recordt &name, const irep_idt &suffix)
   {
-    return (values.erase(name) == 1);
+    return (values.erase(std::make_pair(name, suffix)) == 1);
+  }
+
+  bool erase(const symbol2t &name)
+  {
+    name_recordt rec(name);
+    return (values.erase(std::make_pair(rec, irep_idt(""))) == 1);
   }
 
   /** Get the set of things that an expression might point at. Interprets the
@@ -365,38 +382,37 @@ public:
 
   /** Add a value set for the given variable name and suffix. No effect if the
    *  given record already exists. */
-  void add_var(const std::string &id, const std::string &suffix)
+  void add_var(const name_recordt &rec, const std::string &suffix)
   {
-    get_entry(id, suffix);
+    get_entry(rec, suffix);
   }
 
   void add_var(const entryt &e)
   {
-    get_entry(e.identifier, e.suffix);
+    get_entry(e);
   }
 
   /** Delete the value set for the given variable name and suffix. */
-  void del_var(const std::string &id, const std::string &suffix)
+  void del_var(const name_recordt &id, const std::string &suffix)
   {
-    std::string index = id2string(id) + suffix;
+    auto index = std::make_pair(id, irep_idt(suffix));
     values.erase(index);
   }
 
   /** Look up the value set for the given variable name and suffix. */
-  entryt &get_entry(const std::string &id, const std::string &suffix)
+  entryt &get_entry(const name_recordt &id, const std::string &suffix)
   {
-    return get_entry(entryt(id, suffix));
+    return get_entry(entryt(id, irep_idt(suffix)));
   }
 
   /** Look upt he value set for the variable name and suffix stored in the
    *  given entryt. */
   entryt &get_entry(const entryt &e)
   {
-    std::string index=id2string(e.identifier)+e.suffix;
+    auto index = std::make_pair(e.identifier, e.suffix);
 
     std::pair<valuest::iterator, bool> r=
-      values.insert(std::pair<std::string, entryt>
-                             (index, e));
+      values.insert(valuest::value_type(index, e));
 
     return r.first->second;
   }

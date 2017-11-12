@@ -34,14 +34,14 @@ void value_sett::output(std::ostream &out) const
 
     const entryt &e=value.second;
 
-    if(has_prefix(e.identifier, "value_set::dynamic_object"))
+    if(has_prefix(e.identifier.base_name.as_string(), "value_set::dynamic_object"))
     {
-      display_name=e.identifier + e.suffix;
+      display_name=e.identifier.to_string() + e.suffix.as_string();
       identifier="";
     }
-    else if(e.identifier=="value_set::return_value")
+    else if(e.identifier.base_name==irep_idt("value_set::return_value"))
     {
-      display_name="RETURN_VALUE"+e.suffix;
+      display_name="RETURN_VALUE"+e.suffix.as_string();
       identifier="";
     }
     else
@@ -51,8 +51,8 @@ void value_sett::output(std::ostream &out) const
       display_name=symbol.display_name()+e.suffix;
       identifier=symbol.name;
       #else
-      identifier = e.identifier;
-      display_name = identifier + e.suffix;
+      identifier = e.identifier.to_string();
+      display_name = identifier + e.suffix.as_string();
       #endif
     }
 
@@ -143,9 +143,9 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
       // We always track these when merging value sets, as these store data
       // that's transfered back and forth between function calls. So, the
       // variables not existing in the state we're merging into is irrelevant.
-      if(has_prefix(id2string(new_value.second.identifier),
+      if(has_prefix(id2string(new_value.second.identifier.base_name),
            "value_set::dynamic_object") ||
-         new_value.second.identifier=="value_set::return_value" ||
+         new_value.second.identifier.base_name=="value_set::return_value" ||
          keepnew)
       {
         values.insert(new_value);
@@ -277,7 +277,8 @@ void value_sett::get_value_set_rec(
 
     // Look up this symbol, with the given suffix to distinguish any arrays or
     // members we've picked out of it at a higher level.
-    valuest::const_iterator v_it = values.find(sym.get_symbol_name() + suffix);
+    valuest::const_iterator v_it =
+      values.find(std::make_pair(name_recordt(sym), irep_idt(suffix)));
 
     // If it points at things, put those things into the destination object map.
     if(v_it!=values.end())
@@ -559,11 +560,12 @@ void value_sett::get_value_set_rec(
 
     assert(is_constant_int2t(dyn.instance));
     const constant_int2t &intref = to_constant_int2t(dyn.instance);
-    std::string idnum = integer2string(intref.value);
-    const std::string name = "value_set::dynamic_object" + idnum + suffix;
+    symbol2t sym(type2tc(), irep_idt("value_set::dynamic_object"),
+        symbol2t::level0, intref.value.to_uint64(), 0, 0, 0);
 
     // look it up
-    valuest::const_iterator v_it=values.find(name);
+    auto pair = std::make_pair(name_recordt(sym), irep_idt(suffix));
+    valuest::const_iterator v_it=values.find(pair);
 
     if(v_it!=values.end())
     {
@@ -833,7 +835,8 @@ void value_sett::assign(
     assign(xchg_sym, ifref.false_value, true);
     assign(lhs, xchg_sym, add_to_sets);
 
-    erase(xchg_sym->get_symbol_name());
+    name_recordt rec(to_symbol2t(xchg_sym));
+    erase(rec, irep_idt("")); // XXX misses nonempty suffixes
     return;
   }
 
@@ -1028,12 +1031,12 @@ void value_sett::assign_rec(
 
   if (is_symbol2t(lhs))
   {
-    std::string identifier = to_symbol2t(lhs).get_symbol_name();
+    name_recordt rec(to_symbol2t(lhs));
 
     if(add_to_sets)
-      make_union(get_entry(identifier, suffix).object_map, values_rhs);
+      make_union(get_entry(rec, suffix).object_map, values_rhs);
     else
-      get_entry(identifier, suffix).object_map=values_rhs;
+      get_entry(rec, suffix).object_map=values_rhs;
   }
   else if (is_dynamic_object2t(lhs))
   {
@@ -1044,9 +1047,11 @@ void value_sett::assign_rec(
     assert(is_constant_int2t(dynamic_object.instance));
     unsigned int idnum =
       to_constant_int2t(dynamic_object.instance).value.to_long();
-    const std::string name = "value_set::dynamic_object" + i2string(idnum);
+    symbol2t sym(type2tc(), irep_idt("value_set::dynamic_object"),
+        symbol2t::level0, idnum, 0, 0, 0);
+    name_recordt rec(sym);
 
-    make_union(get_entry(name, suffix).object_map, values_rhs);
+    make_union(get_entry(rec, suffix).object_map, values_rhs);
   }
   else if (is_dereference2t(lhs))
   {
@@ -1132,8 +1137,10 @@ void value_sett::do_function_call(
 
   for(unsigned i=0; i<arguments.size(); i++)
   {
-    const std::string identifier="value_set::dummy_arg_"+i2string(i);
-    add_var(identifier, "");
+    symbol2t sym(type2tc(), irep_idt("value_set::dummy_arg"),
+        symbol2t::level0, i, 0, 0, 0);
+    name_recordt rec(sym);
+    add_var(rec, "");
 
     expr2tc dummy_lhs;
     expr2tc tmp_arg = arguments[i];
@@ -1142,9 +1149,11 @@ void value_sett::do_function_call(
       // arguments in here, take the expected function argument type rather
       // than the type from the argument.
       tmp_arg = unknown2tc(argument_types[i]);
-      dummy_lhs = symbol2tc(argument_types[i], identifier);
+      dummy_lhs = symbol2tc(argument_types[i],irep_idt("value_set::dummy_arg"),
+          symbol2t::level0, i, 0, 0, 0);
     } else {
-      dummy_lhs = symbol2tc(arguments[i]->type, identifier);
+      dummy_lhs = symbol2tc(arguments[i]->type,irep_idt("value_set::dummy_arg"),
+          symbol2t::level0, i, 0, 0, 0);
     }
 
     assign(dummy_lhs, tmp_arg, true);
@@ -1161,9 +1170,12 @@ void value_sett::do_function_call(
     const std::string &identifier = it->as_string();
     if(identifier=="") continue;
 
-    add_var(identifier, "");
+    symbol2t sym(type2tc(), irep_idt(identifier), symbol2t::level0, 0, 0, 0,0);
+    name_recordt rec(sym);
+    add_var(rec, "");
 
-    symbol2tc v_expr(*it2, "value_set::dummy_arg_"+i2string(i));
+    symbol2tc v_expr(type2tc(), irep_idt("value_set::dummy_arg"),
+        symbol2t::level0, i, 0, 0, 0);
 
     symbol2tc actual_lhs(*it2, identifier);
     assign(actual_lhs, v_expr, true);
@@ -1174,7 +1186,10 @@ void value_sett::do_function_call(
   // accumulating values from each function call that is made, which is a
   // bad plan.
   for(unsigned i=0; i<arguments.size(); i++) {
-    del_var("value_set::dummy_arg_"+i2string(i), "");
+    symbol2t sym(type2tc(), irep_idt("value_set::dummy_arg"),
+        symbol2t::level0, i, 0, 0, 0);
+    name_recordt rec(sym);
+    del_var(rec, "");
   }
 }
 

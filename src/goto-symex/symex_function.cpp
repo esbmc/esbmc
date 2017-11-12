@@ -492,7 +492,7 @@ goto_symext::pop_frame()
     // the value set is storing things in a not-an-irep-idt form.
     symbol2tc tmp_expr(get_empty_type(), it->base_name, it->lev, it->l1_num,
                        0, it->t_num, 0);
-    cur_state->value_set.erase(to_symbol2t(tmp_expr).get_symbol_name());
+    cur_state->value_set.erase(to_symbol2t(tmp_expr));
   }
 
   // decrease recursion unwinding counter

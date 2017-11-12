@@ -1,6 +1,8 @@
 #ifndef _GOTO_SYMEX_RENAMING_H_
 #define _GOTO_SYMEX_RENAMING_H_
 
+#include <sstream>
+
 #include <boost/functional/hash.hpp>
 #include <boost/shared_ptr.hpp>
 #include <util/crypto_hash.h>
@@ -187,6 +189,16 @@ namespace renaming {
         return false;
       }
 
+      std::string to_string(void) const
+      {
+        std::stringstream ss;
+        if (lev != symbol2t::level1_global)
+          ss << base_name << "@" << l1_num << "!" << t_num;
+        else
+          ss << base_name;
+        return ss.str();
+      }
+
       irep_idt base_name;
       symbol2t::renaming_level lev;
       unsigned int l1_num;
@@ -282,5 +294,20 @@ namespace renaming {
   };
 
 } // namespace renaming
+
+// Hashing boilerplate
+namespace std {
+  template<> struct hash<renaming::level2t::name_record>
+  {
+    typedef renaming::level2t::name_record argument_type;
+    typedef std::size_t result_type;
+
+    result_type operator()(argument_type const &n) const noexcept
+    {
+      renaming::level2t::name_rec_hash h;
+      return h(n);
+    }
+  };
+}
 
 #endif /* _GOTO_SYMEX_RENAMING_H_ */

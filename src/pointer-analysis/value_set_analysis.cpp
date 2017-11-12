@@ -70,11 +70,18 @@ void value_set_analysist::get_entries(
   const symbolt &symbol,
   std::list<value_sett::entryt> &dest)
 {
-  get_entries_rec(symbol.name.as_string(), "", symbol.type, dest);
+  expr2tc sym;
+  exprt old_sym;
+
+  symbol.to_irep(old_sym);
+  migrate_expr(old_sym, sym);
+  value_sett::name_recordt rec(to_symbol2t(sym));
+
+  get_entries_rec(rec, "", symbol.type, dest);
 }
 
 void value_set_analysist::get_entries_rec(
-  const std::string &identifier,
+  const value_sett::name_recordt &identifier,
   const std::string &suffix,
   const typet &type,
   std::list<value_sett::entryt> &dest)
@@ -199,7 +206,7 @@ void value_set_analysist::convert(
     for(const auto & value : value_set.values)
     {
       xmlt &var=i.new_element("variable");
-      var.new_element("identifier").data = value.first;
+      var.new_element("identifier").data = value.first.first.to_string() + value.first.second.as_string();
 
       #if 0
       const value_sett::expr_sett &expr_set=

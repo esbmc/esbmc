@@ -56,7 +56,7 @@ protected:
     std::list<value_sett::entryt> &dest);
 
   void get_entries_rec(
-    const std::string &identifier,
+    const value_sett::name_recordt &identifier,
     const std::string &suffix,
     const typet &type,
     std::list<value_sett::entryt> &dest);
