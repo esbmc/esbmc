@@ -1407,4 +1407,28 @@ struct type2_hash
   size_t operator()(const type2tc &ref) const { return ref->crc(); }
 };
 
+// Inject some hashes for std::hash into std namespace
+namespace std
+{
+    template<> struct hash<expr2tc>
+    {
+        typedef expr2tc argument_type;
+        typedef std::size_t result_type;
+        result_type operator()(expr2tc const& e) const noexcept
+        {
+          return e->crc();
+        }
+    };
+
+    template<> struct hash<type2tc>
+    {
+        typedef type2tc argument_type;
+        typedef std::size_t result_type;
+        result_type operator()(type2tc const& t) const noexcept
+        {
+          return t->crc();
+        }
+    };
+}
+
 #endif /* IREP2_H_ */
