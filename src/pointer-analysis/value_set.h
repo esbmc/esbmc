@@ -235,7 +235,7 @@ public:
 
   /** Datatype for a value set: stores a mapping between expressions of l1
    *  variables and additional reference data in an objectt object. */
-  typedef hash_map_cont<expr2tc, objectt> object_mapt;
+  typedef std::map<expr2tc, objectt> object_mapt;
 
   /** Record for a particular value set: stores the identity of the variable
    *  that points at this set of objects, and the objects themselves (with

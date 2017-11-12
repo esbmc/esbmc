@@ -170,13 +170,39 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
 {
   bool result=false;
 
-  // Merge the pointed at objects in src into dest.
-  for(object_mapt::const_iterator it=src.begin();
-      it!=src.end();
-      it++)
-  {
-    if(insert(dest, it))
-      result=true;
+  if (src.empty())
+    return false;
+
+  if (dest.empty()) {
+    dest.insert(src.begin(), src.end());
+    return true;
+  }
+
+  // Merge the pointed at objects in src into dest. How come there's no
+  // std::algorithm for this yet (or I missed it?)
+  auto dit = dest.begin();
+  auto sit = src.begin();
+  while (sit != src.end()) {
+    if (dit->first == sit->first) {
+      // Keys match: merge.
+      result |= dit->second.merge(sit->first, sit->second);
+      sit++;
+    } else if (sit->first < dit->first) {
+      dest.insert(dit, std::make_pair(sit->first, sit->second));
+      result = true;
+      sit++;
+    } else {
+      dit++;
+      // Have we run out of dest elems but still have srcs?
+      if (dit == dest.end()) {
+        while (sit != src.end()) {
+          dest.insert(dit, std::make_pair(sit->first, sit->second));
+          sit++;
+        }
+        result = true;
+        break;
+      }
+    }
   }
 
   return result;
