@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/namespace.h>
 #include <util/type.h>
-#include <util/union_find.h>
 #include <util/hash_cont.h>
 
 void base_type(type2tc &type, const namespacet &ns);

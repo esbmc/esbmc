@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/base_type.h>
 #include <util/irep2_utils.h>
 #include <util/std_types.h>
-#include <util/union_find.h>
 
 void base_type(type2tc &type, const namespacet &ns)
 {

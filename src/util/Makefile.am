@@ -8,7 +8,7 @@ libutil_la_SOURCES = \
       string_hash.cpp string_container.cpp options.cpp c_misc.cpp \
       simplify_expr.cpp dstring.cpp simplify_expr2.cpp ui_message.cpp \
       simplify_utils.cpp string2array.cpp time_stopping.cpp symbol.cpp \
-      type_eq.cpp guard.cpp array_name.cpp message_stream.cpp union_find.cpp \
+      type_eq.cpp guard.cpp array_name.cpp message_stream.cpp \
       xml.cpp xml_irep.cpp std_types.cpp std_code.cpp format_constant.cpp \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
       signal_catcher.cpp migrate.cpp show_symbol_table.cpp \
@@ -25,12 +25,12 @@ utilinclude_HEADERS = arith_tools.h array_name.h base_type.h bitvector.h \
       format_constant.h format_spec.h guard.h hash_cont.h \
       i2string.h ieee_float.h irep.h irep2.h irep_serialization.h \
       language.h language_file.h location.h message.h message_stream.h \
-      migrate.h mp_arith.h namespace.h numbering.h options.h \
+      migrate.h mp_arith.h namespace.h options.h \
       parseoptions.h parser.h prefix.h c_qualifiers.h \
       rename.h replace_symbol.h signal_catcher.h \
       simplify_expr.h simplify_expr_class.h simplify_utils.h std_code.h \
       std_expr.h std_types.h string2array.h string_constant.h \
       string_container.h string_hash.h symbol.h symbol_serialization.h \
       thread.h threeval.h time_stopping.h type.h type_byte_size.h \
-      type_eq.h typecheck.h ui_message.h union_find.h xml.h xml_irep.h \
+      type_eq.h typecheck.h ui_message.h xml.h xml_irep.h \
       show_symbol_table.h c_sizeof.h c_link.h c_typecast.h fix_symbol.h
