@@ -51,7 +51,7 @@ public:
     }
   };
 
-  typedef hash_map_cont<irep_idt, entryt, irep_id_hash> entriest;
+  typedef hash_map_cont<irep_idt, entryt> entriest;
   entriest entries;
 
   void compute(const codet &code);

@@ -22,7 +22,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 typedef dstring irep_idt;
 typedef dstring irep_namet;
-typedef dstring_hash irep_id_hash;
 
 #define forall_irep(it, irep) \
   for(irept::subt::const_iterator it=(irep).begin(); \

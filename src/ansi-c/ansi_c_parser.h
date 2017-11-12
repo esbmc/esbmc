@@ -70,7 +70,7 @@ public:
   class scopet
   {
   public:
-    typedef hash_map_cont<irep_idt, identifiert, irep_id_hash> name_mapt;
+    typedef hash_map_cont<irep_idt, identifiert> name_mapt;
     name_mapt name_map;
     
     std::string prefix;

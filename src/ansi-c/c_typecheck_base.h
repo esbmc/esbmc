@@ -55,7 +55,7 @@ protected:
   const std::string &module;
   std::string mode;
 
-  typedef hash_map_cont<irep_idt, std::string, irep_id_hash> id_replace_mapt;
+  typedef hash_map_cont<irep_idt, std::string> id_replace_mapt;
   id_replace_mapt id_replace_map;
 
   // apply id_replace_map

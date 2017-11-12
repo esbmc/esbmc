@@ -91,10 +91,10 @@ protected:
     const exprt::operandst &arguments,
     goto_programt &dest);
 
-  typedef hash_set_cont<irep_idt, irep_id_hash> recursion_sett;
+  typedef hash_set_cont<irep_idt> recursion_sett;
   recursion_sett recursion_set;
 
-  typedef hash_set_cont<irep_idt, irep_id_hash> no_body_sett;
+  typedef hash_set_cont<irep_idt> no_body_sett;
   no_body_sett no_body_set;
 
 public:

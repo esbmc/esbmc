@@ -56,7 +56,7 @@ protected:
   std::string module;
   namespacet ns;
 
-  typedef hash_set_cont<irep_idt, irep_id_hash> known_modulest;
+  typedef hash_set_cont<irep_idt> known_modulest;
   known_modulest known_modules;
 
   fix_symbolt symbol_fixer;

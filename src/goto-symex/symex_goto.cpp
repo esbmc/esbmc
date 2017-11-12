@@ -385,4 +385,4 @@ goto_symext::get_unwind(const symex_targett::sourcet &source, BigInt unwind)
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
 }
 
-hash_set_cont<irep_idt, irep_id_hash> goto_symext::body_warnings;
+hash_set_cont<irep_idt> goto_symext::body_warnings;

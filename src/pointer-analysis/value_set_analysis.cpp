@@ -36,7 +36,7 @@ void value_set_analysist::add_vars(
   get_globals(globals);
 
   // cache the list for the locals to speed things up
-  typedef hash_map_cont<irep_idt, entry_listt, irep_id_hash> entry_cachet;
+  typedef hash_map_cont<irep_idt, entry_listt> entry_cachet;
   entry_cachet entry_cache;
 
   for(goto_programt::instructionst::const_iterator
