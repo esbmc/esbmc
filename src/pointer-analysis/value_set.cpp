@@ -127,6 +127,42 @@ value_sett::to_expr(object_mapt::const_iterator it) const
   return obj;
 }
 
+template <class CIterator, class Iterator>
+bool
+merge_mangler(CIterator sit, CIterator send, Iterator dit, Iterator dend,
+    std::function<bool(Iterator &, CIterator &)> &merge,
+    std::function<void(Iterator &, CIterator &)> &inst)
+{
+  // Merge the pointed at objects in src into dest. How come there's no
+  // std::algorithm for this yet (or I missed it?)
+  bool result = false;
+
+  while (sit != send) {
+    if (dit->first == sit->first) {
+      // Keys match: merge.
+      result |= merge(dit, sit);
+      sit++;
+    } else if (sit->first < dit->first) {
+      inst(dit, sit);
+      result = true;
+      sit++;
+    } else {
+      dit++;
+      // Have we run out of dest elems but still have srcs?
+      if (dit == dend) {
+        while (sit != send) {
+          inst(dit, sit);
+          sit++;
+        }
+        result = true;
+        break;
+      }
+    }
+  }
+
+  return result;
+}
+
 bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 {
   bool result=false;
@@ -168,7 +204,6 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 
 bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
 {
-  bool result=false;
 
   if (src.empty())
     return false;
@@ -178,34 +213,19 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
     return true;
   }
 
-  // Merge the pointed at objects in src into dest. How come there's no
-  // std::algorithm for this yet (or I missed it?)
-  auto dit = dest.begin();
-  auto sit = src.begin();
-  while (sit != src.end()) {
-    if (dit->first == sit->first) {
-      // Keys match: merge.
-      result |= dit->second.merge(sit->first, sit->second);
-      sit++;
-    } else if (sit->first < dit->first) {
-      dest.insert(dit, std::make_pair(sit->first, sit->second));
-      result = true;
-      sit++;
-    } else {
-      dit++;
-      // Have we run out of dest elems but still have srcs?
-      if (dit == dest.end()) {
-        while (sit != src.end()) {
-          dest.insert(dit, std::make_pair(sit->first, sit->second));
-          sit++;
-        }
-        result = true;
-        break;
-      }
-    }
-  }
+  auto merger = [](object_mapt::iterator &dit, object_mapt::const_iterator &sit) -> bool {
+    return dit->second.merge(sit->first, sit->second);
+  };
 
-  return result;
+  auto inst = [&dest](object_mapt::iterator &dit, object_mapt::const_iterator &sit) {
+    dest.insert(dit, std::make_pair(sit->first, sit->second));
+  };
+
+  typedef std::function<bool(object_mapt::iterator &, object_mapt::const_iterator &)> lolfunc1;
+  typedef std::function<void(object_mapt::iterator &, object_mapt::const_iterator &)> lolfunc2;
+  auto tmp1 = lolfunc1(merger);
+  auto tmp2 = lolfunc2(inst);
+  return merge_mangler(src.begin(), src.end(), dest.begin(), dest.end(), tmp1, tmp2);
 }
 
 void value_sett::get_value_set(
