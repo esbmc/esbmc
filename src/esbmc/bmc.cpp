@@ -243,6 +243,10 @@ void bmct::report_success()
 {
   status("\nVERIFICATION SUCCESSFUL");
 
+  goto_tracet goto_trace;
+  if(!options.get_option("witness-output").empty())
+    set_ui(ui_message_handlert::GRAPHML);
+
   switch(ui)
   {
     case ui_message_handlert::OLD_GUI:
@@ -258,6 +262,10 @@ void bmct::report_success()
     break;
 
     case ui_message_handlert::GRAPHML:
+      correctness_graphml_goto_trace(
+        options,
+        ns,
+        goto_trace);
     break;
 
     case ui_message_handlert::XML_UI:

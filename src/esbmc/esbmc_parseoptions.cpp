@@ -1153,6 +1153,22 @@ int cbmc_parseoptionst::do_base_case(
   return false;
 }
 
+void generate_k_induction_correctness_witness(
+  contextt context,
+  optionst opts )
+{
+  if (!opts.get_option("witness-output").empty())
+  {
+    goto_tracet goto_trace;
+    const namespacet ns(context);
+    /* build_successful_goto_trace(eq, ns, goto_trace); */
+    correctness_graphml_goto_trace(
+      opts,
+      ns,
+      goto_trace);
+  }
+}
+
 int cbmc_parseoptionst::do_forward_condition(
   optionst &opts, goto_functionst &goto_functions, BigInt k_step)
 {
@@ -1178,6 +1194,7 @@ int cbmc_parseoptionst::do_forward_condition(
     case smt_convt::P_UNSATISFIABLE:
       std::cout << "\nSolution found by the forward condition; "
                 << "all states are reachable (k = " << k_step << ")\n";
+      generate_k_induction_correctness_witness(context, opts);
       return false;
 
     default:
@@ -1215,6 +1232,7 @@ int cbmc_parseoptionst::do_inductive_step(
       case smt_convt::P_UNSATISFIABLE:
         std::cout << "\nSolution found by the inductive step "
                   << "(k = " << k_step << ")\n";
+        generate_k_induction_correctness_witness(context, opts);
         return false;
 
       default:
