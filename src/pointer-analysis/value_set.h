@@ -17,6 +17,57 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/renaming.h>
 #include <util/type_byte_size.h>
 
+/** Get the natural alignment unit of a reference to e. I don't know a more
+ *  appropriate term, but if we were to have an offset into e, then what is
+ *  the greatest alignment guarentee that would make sense? i.e., an offset
+ *  of 404 into an array of integers gives an alignment guarentee of 4 bytes,
+ *  not 404.
+ *
+ *  For arrays, this is the element size.
+ *  For structs, I imagine it's the machine word size (?). Depends on padding.
+ *  For integers / other things, it's the machine / word size (?).
+ */
+inline unsigned int
+get_natural_alignment(const expr2tc &e)
+{
+  const type2tc &t = e->type;
+
+  // Null objects are allowed to have symbol types. What alignment to give?
+  // Pick 8 bytes, as that's a) word aligned, b) double/uint64_t aligned.
+  if (is_null_object2t(e))
+    return 8;
+
+  assert(!is_symbol_type(t));
+  if (is_array_type(t)) {
+    const array_type2t &arr = to_array_type(t);
+    return type_byte_size_default(arr.subtype, 8).to_ulong();
+  } else {
+    return 8;
+  }
+}
+
+inline unsigned int
+offset2align(const expr2tc &e, const mp_integer &m)
+{
+  unsigned int nat_align = get_natural_alignment(e);
+  if (m == 0) {
+    return nat_align;
+  } else if ((m % nat_align) == 0) {
+    return nat_align;
+  } else {
+    // What's the least alignment available?
+    unsigned int max_align = 8;
+    do {
+      // Repeatedly decrease the word size by powers of two, and test to see
+      // whether the offset meets that alignment. This will always succeed
+      // and exit the loop when the alignment reaches 1.
+      if ((m % max_align) == 0)
+        return max_align;
+      max_align /= 2;
+    } while (true);
+  }
+}
+
 /** Code for tracking "value sets" across assignments in ESBMC.
  *
  *  The values in a value set are /references/ to /objects/, and additional data
@@ -190,55 +241,6 @@ public:
    *  to an entryt, storing the value set of objects a variable might point
    *  at. */
   typedef hash_map_cont<std::pair<name_recordt, irep_idt>, entryt, pair_hasher> valuest;
-
-  /** Get the natural alignment unit of a reference to e. I don't know a more
-   *  appropriate term, but if we were to have an offset into e, then what is
-   *  the greatest alignment guarentee that would make sense? i.e., an offset
-   *  of 404 into an array of integers gives an alignment guarentee of 4 bytes,
-   *  not 404.
-   *
-   *  For arrays, this is the element size.
-   *  For structs, I imagine it's the machine word size (?). Depends on padding.
-   *  For integers / other things, it's the machine / word size (?).
-   */
-  inline unsigned int get_natural_alignment(const expr2tc &e) const
-  {
-    const type2tc &t = e->type;
-
-    // Null objects are allowed to have symbol types. What alignment to give?
-    // Pick 8 bytes, as that's a) word aligned, b) double/uint64_t aligned.
-    if (is_null_object2t(e))
-      return 8;
-
-    assert(!is_symbol_type(t));
-    if (is_array_type(t)) {
-      const array_type2t &arr = to_array_type(t);
-      return type_byte_size_default(arr.subtype, 8).to_ulong();
-    } else {
-      return 8;
-    }
-  }
-
-  inline unsigned int offset2align(const expr2tc &e, const mp_integer &m) const
-  {
-    unsigned int nat_align = get_natural_alignment(e);
-    if (m == 0) {
-      return nat_align;
-    } else if ((m % nat_align) == 0) {
-      return nat_align;
-    } else {
-      // What's the least alignment available?
-      unsigned int max_align = 8;
-      do {
-        // Repeatedly decrease the word size by powers of two, and test to see
-        // whether the offset meets that alignment. This will always succeed
-        // and exit the loop when the alignment reaches 1.
-        if ((m % max_align) == 0)
-          return max_align;
-        max_align /= 2;
-      } while (true);
-    }
-  }
 
   /** Convert an object map element to an expression. Formulates either an
    *  object_descriptor irep, or unknown / invalid expr's as appropriate. */
