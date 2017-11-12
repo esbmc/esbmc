@@ -199,7 +199,7 @@ void value_set_analysist::convert(
     for(const auto & value : value_set.values)
     {
       xmlt &var=i.new_element("variable");
-      var.new_element("identifier").data = value.first.the_string;
+      var.new_element("identifier").data = value.first;
 
       #if 0
       const value_sett::expr_sett &expr_set=

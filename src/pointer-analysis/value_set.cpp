@@ -277,7 +277,7 @@ void value_sett::get_value_set_rec(
 
     // Look up this symbol, with the given suffix to distinguish any arrays or
     // members we've picked out of it at a higher level.
-    valuest::const_iterator v_it = values.find(string_wrapper(sym.get_symbol_name() + suffix));
+    valuest::const_iterator v_it = values.find(sym.get_symbol_name() + suffix);
 
     // If it points at things, put those things into the destination object map.
     if(v_it!=values.end())
@@ -563,7 +563,7 @@ void value_sett::get_value_set_rec(
     const std::string name = "value_set::dynamic_object" + idnum + suffix;
 
     // look it up
-    valuest::const_iterator v_it=values.find(string_wrapper(name));
+    valuest::const_iterator v_it=values.find(name);
 
     if(v_it!=values.end())
     {

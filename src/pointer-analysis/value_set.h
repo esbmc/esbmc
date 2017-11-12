@@ -178,7 +178,7 @@ public:
   /** Type of the value-set containing structure. A hash map mapping variables
    *  to an entryt, storing the value set of objects a variable might point
    *  at. */
-  typedef hash_map_cont<string_wrapper, entryt, string_wrap_hash> valuest;
+  typedef hash_map_cont<std::string, entryt> valuest;
 
   /** Get the natural alignment unit of a reference to e. I don't know a more
    *  appropriate term, but if we were to have an offset into e, then what is
@@ -332,7 +332,7 @@ public:
    *  @return True when the erase succeeds, false otherwise. */
   bool erase(const std::string &name)
   {
-    return (values.erase(string_wrapper(name)) == 1);
+    return (values.erase(name) == 1);
   }
 
   /** Get the set of things that an expression might point at. Interprets the
@@ -395,8 +395,8 @@ public:
     std::string index=id2string(e.identifier)+e.suffix;
 
     std::pair<valuest::iterator, bool> r=
-      values.insert(std::pair<string_wrapper, entryt>
-                             (string_wrapper(index), e));
+      values.insert(std::pair<std::string, entryt>
+                             (index, e));
 
     return r.first->second;
   }
