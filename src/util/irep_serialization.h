@@ -37,7 +37,7 @@ private:
     }
   };
 
-  struct irep_full_hash hash_map_hasher_superclass(irept)
+  struct irep_full_hash
   {
     size_t operator()(const irept &i) const 
     { 
