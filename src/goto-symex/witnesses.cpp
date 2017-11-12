@@ -551,7 +551,11 @@ void _create_graph_node(
 
   xmlnodet pProducer;
   pProducer.add("<xmlattr>.key", "producer");
-  pProducer.put_value("ESBMC " + std::string(ESBMC_VERSION));
+  std::string producer = options.get_option("witness-producer");
+  if (producer.empty())
+    pProducer.put_value("ESBMC " + std::string(ESBMC_VERSION));
+  else
+    pProducer.put_value(producer);
   graphnode.add_child("data", pProducer);
 
   xmlnodet pSourceCodeLang;
