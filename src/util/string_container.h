@@ -77,7 +77,7 @@ public:
   }
 
 protected:
-  typedef hash_map_cont<string_ptrt, unsigned, string_ptr_hash> hash_tablet;
+  typedef hash_map_cont<std::string, unsigned> hash_tablet;
   hash_tablet hash_table;
   
   unsigned get(const char *s);

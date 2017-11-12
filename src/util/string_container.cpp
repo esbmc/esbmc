@@ -26,7 +26,7 @@ bool operator==(const string_ptrt a, const string_ptrt b)
 
 unsigned string_containert::get(const char *s)
 {
-  string_ptrt string_ptr(s);
+  std::string string_ptr(s);
 
   hash_tablet::iterator it=hash_table.find(string_ptr);
   
@@ -37,9 +37,8 @@ unsigned string_containert::get(const char *s)
 
   // these are stable
   string_list.emplace_back(s);
-  string_ptrt result(string_list.back());
 
-  hash_table[result]=r;
+  hash_table[string_list.back()]=r;
   
   // these are not
   string_vector.push_back(&string_list.back());
@@ -49,9 +48,8 @@ unsigned string_containert::get(const char *s)
 
 unsigned string_containert::get(const std::string &s)
 {
-  string_ptrt string_ptr(s);
 
-  hash_tablet::iterator it=hash_table.find(string_ptr);
+  hash_tablet::iterator it=hash_table.find(s);
   
   if(it!=hash_table.end())
     return it->second;
@@ -60,9 +58,8 @@ unsigned string_containert::get(const std::string &s)
 
   // these are stable
   string_list.push_back(s);
-  string_ptrt result(string_list.back());
 
-  hash_table[result]=r;
+  hash_table[string_list.back()]=r;
   
   // these are not
   string_vector.push_back(&string_list.back());
