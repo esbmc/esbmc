@@ -554,15 +554,15 @@ void _create_graph_node(
   std::string producer = options.get_option("witness-producer");
   if (producer.empty())
   {
-    producer = "ESBMC " + std::string(ESBMC_VERSION) + " ";
+    producer = "ESBMC " + std::string(ESBMC_VERSION);
     if(options.get_bool_option("k-induction"))
-      producer += "kind";
+      producer += " kind";
     else if(options.get_bool_option("k-induction-parallel"))
-      producer += "kind";
+      producer += " kind";
     else if(options.get_bool_option("falsification"))
-      producer += "falsi";
+      producer += " falsi";
     else if(options.get_bool_option("incremental-bmc"))
-      producer += "incr";
+      producer += " incr";
   }
 
   pProducer.put_value(producer);
