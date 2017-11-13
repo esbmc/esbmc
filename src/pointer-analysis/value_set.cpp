@@ -171,11 +171,7 @@ bool value_sett::make_union(const value_sett::valuest &new_values, unsigned long
     }
   };
 
-  typedef std::function<bool(valuest::iterator &, valuest::const_iterator &)> functype1;
-  typedef std::function<void(valuest::iterator &, valuest::const_iterator &)> functype2;
-  auto tmp1 = functype1(merger);
-  auto tmp2 = functype2(inserter);
-  return esbmct::merge_mangler(new_values.begin(), new_values.end(), values.begin(), values.end(), tmp1, tmp2);
+  return esbmct::merge_mangler(new_values.begin(), new_values.end(), values.begin(), values.end(), merger, inserter);
 }
 
 bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
@@ -197,11 +193,7 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
     dest.insert(dit, std::make_pair(sit->first, sit->second));
   };
 
-  typedef std::function<bool(object_mapt::iterator &, object_mapt::const_iterator &)> lolfunc1;
-  typedef std::function<void(object_mapt::iterator &, object_mapt::const_iterator &)> lolfunc2;
-  auto tmp1 = lolfunc1(merger);
-  auto tmp2 = lolfunc2(inst);
-  return esbmct::merge_mangler(src.begin(), src.end(), dest.begin(), dest.end(), tmp1, tmp2);
+  return esbmct::merge_mangler(src.begin(), src.end(), dest.begin(), dest.end(), merger, inst);
 }
 
 void value_sett::get_value_set(

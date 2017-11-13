@@ -51,11 +51,10 @@ public:
 // A utility put here for convenience,
 
 namespace esbmct {
-  template <class CIterator, class Iterator>
+  template <class CIterator, class Iterator, class Merger, class Inster>
   bool
   merge_mangler(CIterator sit, CIterator send, Iterator dit, Iterator dend,
-      std::function<bool(Iterator &, CIterator &)> &merge,
-      std::function<void(Iterator &, CIterator &)> &inst)
+      Merger merge, Inster inst)
   {
     // Merge the pointed at objects in src into dest. How come there's no
     // std::algorithm for this yet (or I missed it?)
