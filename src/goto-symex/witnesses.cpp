@@ -242,6 +242,20 @@ void create_edge_node(edget & edge, xmlnodet & edgenode)
     data_assumptionScope.put_value(edge.assumption_scope);
     edgenode.add_child("data", data_assumptionScope);
   }
+  if (!edge.thread_id.empty())
+  {
+    xmlnodet data_thread_id;
+    data_thread_id.add("<xmlattr>.key", "threadId");
+    data_thread_id.put_value(edge.thread_id);
+    edgenode.add_child("data", data_thread_id);
+  }
+  if (!edge.create_thread.empty())
+  {
+    xmlnodet data_create_thread;
+    data_create_thread.add("<xmlattr>.key", "createThread");
+    data_create_thread.put_value(edge.thread_id);
+    edgenode.add_child("data", data_create_thread);
+  }
 }
 
 /* */
@@ -517,16 +531,38 @@ void create_graphml(xmlnodet & graphml)
   end_line_node.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", end_line_node);
 
-  xmlnodet end_offset;
-  end_offset.add("<xmlattr>.id", "endoffset");
-  end_offset.put(
+  xmlnodet end_offset_node;
+  end_offset_node.add("<xmlattr>.id", "endoffset");
+  end_offset_node.put(
     xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "endoffset");
-  end_offset.put(
+  end_offset_node.put(
     xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "int");
-  end_offset.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", end_offset);
+  end_offset_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", end_offset_node);
+
+  xmlnodet thread_id_node;
+  thread_id_node.add("<xmlattr>.id", "threadId");
+  thread_id_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
+    "threadId");
+  thread_id_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  thread_id_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", thread_id_node);
+
+  xmlnodet create_thread_node;
+  create_thread_node.add("<xmlattr>.id", "createThread");
+  create_thread_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
+    "createThread");
+  create_thread_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  create_thread_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", create_thread_node);
 
   xmlnodet witness_type_node;
   witness_type_node.add("<xmlattr>.id", "witness-type");

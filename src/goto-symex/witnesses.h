@@ -42,6 +42,8 @@ public:
   std::string        assumption_resultfunction;
   std::string        enter_function;
   std::string        return_from_function;
+  std::string        thread_id;
+  std::string        create_thread;
   unsigned short int start_line      = c_nonset;
   unsigned short int end_line        = c_nonset;
   unsigned short int start_offset    = c_nonset;
