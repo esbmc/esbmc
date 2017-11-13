@@ -855,10 +855,12 @@ void value_sett::get_reference_set_rec(
 void value_sett::assign(
   const expr2tc &lhs,
   const expr2tc &rhs,
-  unsigned long ssa_step __attribute__((unused)),
+  unsigned long ssa_step,
   bool add_to_sets)
 {
   // Assignment interpretation.
+  assert(ssa_step >= last_timestep || (ssa_step == 0 && last_timestep == 0));
+  last_timestep = ssa_step;
 
   if (is_if2t(rhs))
   {

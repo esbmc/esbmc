@@ -105,7 +105,7 @@ class value_sett
 public:
   /** Primary constructor. Does approximately nothing non-standard. */
   value_sett(const namespacet &_ns):location_number(0), ns(_ns),
-    xchg_name("value_sett::__ESBMC_xchg_ptr"), xchg_num(0)
+    xchg_name("value_sett::__ESBMC_xchg_ptr"), xchg_num(0), last_timestep(0)
   {
   }
 
@@ -114,7 +114,8 @@ public:
     values(ref.values),
     ns(ref.ns),
     xchg_name("value_sett::__ESBMC_xchg_ptr"),
-    xchg_num(0)
+    xchg_num(0),
+    last_timestep(ref.last_timestep)
   {
   }
 
@@ -124,6 +125,7 @@ public:
     values = ref.values;
     xchg_name = ref.xchg_name;
     xchg_num = ref.xchg_num;
+    last_timestep = ref.last_timestep;
     // No need to copy ns, it should be the same in all contexts.
     return *this;
   }
@@ -600,6 +602,14 @@ public:
 
   irep_idt xchg_name;
   unsigned long xchg_num;
+
+  /** The last time (SSA step number) that something was assigned. Used as an
+   *  index for working out, during the merge of two value sets, whether each
+   *  tracked pointer set needs merging or not. Not passed down through
+   *  functions because:
+   *   * We should only enter through assign anyway
+   *   * That would be a pain */
+  unsigned long last_timestep;
 };
 
 #endif
