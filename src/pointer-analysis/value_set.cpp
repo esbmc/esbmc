@@ -844,16 +844,11 @@ void value_sett::assign(
     // then assign back.
     const if2t &ifref = to_if2t(rhs);
 
-    // Build a sym specific to this type. Give l1 number to guard against
-    // recursively entering this code path
-    symbol2tc xchg_sym(lhs->type, xchg_name, symbol2t::level1, xchg_num++, 0, 0, 0);
+    object_mapt accuml;
+    get_value_set(ifref.true_value, accuml);
+    get_value_set(ifref.false_value, accuml);
+    assign_rec(lhs, accuml, "", add_to_sets);
 
-    assign(xchg_sym, ifref.true_value, ssa_step, false);
-    assign(xchg_sym, ifref.false_value, ssa_step, true);
-    assign(lhs, xchg_sym, ssa_step, add_to_sets);
-
-    name_recordt rec(to_symbol2t(xchg_sym));
-    erase(rec, irep_idt("")); // XXX misses nonempty suffixes
     return;
   }
 
