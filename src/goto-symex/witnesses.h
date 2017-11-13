@@ -1,101 +1,146 @@
-/*****************************************
- * GraphML Generation
- *****************************************
- *
- *  Modifications:
- *
- *  23/01/2016 - Updated for svcomp16 according to
- *  http://sv-comp.sosy-lab.org/2016/witnesses/s3_cln1_false.witness.cpachecker.graphml
- *
- */
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <util/namespace.h>
 #include <util/irep2.h>
+#include <langapi/language_util.h>
+#include <goto_trace.h>
+#include <string>
+#include <regex>
 
-/**
- *
- */
-typedef struct graph_props
+typedef boost::property_tree::ptree xmlnodet;
+
+#define lightweight_witness
+#define c_nonset 0xFFFF
+
+class nodet
 {
-  std::string sourcecodeLanguage;
-  std::string witnessType;
-  std::string creationTime;
-} graph_p;
+private:
+  static short int _id;
+public:
+  std::string   id;
+  bool          entry     = false;
+  bool          sink      = false;
+  bool          violation = false;
+  unsigned char invariant = 0xFF;
+  std::string   invariant_scope;
+  nodet(void)
+  {
+    id = "N" + std::to_string(_id);
+    _id++;
+  }
+};
 
-/**
- *
- */
-typedef struct node_props
+class edget
 {
-  std::string nodeType = "";
-  bool isFrontierNode = false;
-  bool isViolationNode = false;
-  bool isEntryNode = false;
-  bool isSinkNode = false;
-  std::string invariant = "";
-  std::string invariantScope = "";
-} node_p;
+private:
+  static short int _id;
+public:
+  std::string        id;
+  std::string        assumption;
+  std::string        assumption_scope;
+  std::string        assumption_resultfunction;
+  std::string        enter_function;
+  std::string        return_from_function;
+  unsigned short int start_line      = c_nonset;
+  unsigned short int end_line        = c_nonset;
+  unsigned short int start_offset    = c_nonset;
+  unsigned short int end_offset      = c_nonset;
+  bool               control         = false;
+  bool               enter_loop_head = false;
+  nodet            * from_node;
+  nodet            * to_node;
+  edget(void)
+  {
+    id = "E" + std::to_string(_id);
+    _id++;
+    from_node = NULL;
+    to_node = NULL;
+  }
+  edget(nodet * from_node, nodet * to_node)
+  {
+    id = "E" + std::to_string(_id);
+    _id++;
+    this->from_node = from_node;
+    this->to_node = to_node;
+  }
+};
 
-/**
- *
- */
-typedef struct edge_props
+class grapht
 {
-  std::string assumption = "";
-  std::string assumptionScope = "";
-  std::string assumptionResultFunction = "";
-  int startline = -1;
-  int endline = -1;
-  int startoffset = -1;
-  int endoffset = -1;
-  std::string originFileName = "";
-  std::string enterFunction = "";
-  std::string returnFromFunction = "";
-} edge_p;
+private:
+  void create_initial_edge();
+public:
+  enum typet { VIOLATION, CORRECTNESS };
+  typet              witness_type;
+  std::string        verified_file;
+  std::vector<edget> edges;
+  grapht(typet t){
+    witness_type = t;
+    create_initial_edge();
+  }
+  xmlnodet generate_graphml(optionst & options);
+};
 
 /**
- *
- */
-int generate_sha1_hash_for_file(const char * path, std::string & output);
-
-/**
- *
- */
-void map_line_number_to_content(
-  const std::string& source_code_file,
-  std::map<int, std::string> & line_content_map);
-
-/**
- *
- */
-void create_node(boost::property_tree::ptree & node, node_p & node_props);
-
-/**
- *
- */
-void create_edge(
-  boost::property_tree::ptree & edge,
-  edge_p & edge_props,
-  boost::property_tree::ptree & source,
-  boost::property_tree::ptree & target);
-
-/**
- *
+ * Create a GraphML node, which is the most external
+ * one and includes graph, edges, and nodes.
  */
 void create_graphml(
-  boost::property_tree::ptree & graphml,
-  const std::string& file_path);
+  xmlnodet & graphml);
 
 /**
+ * Create a violation graph node.
  *
+ * This node contains all edges and vertexes
+ * of the GraphML requested by SVCOMP.
  */
-void create_graph(
-  boost::property_tree::ptree & graph,
-  std::string & filename,
-  int & specification,
-  const bool is_correctness);
+void create_violation_graph_node(
+  std::string & verifiedfile,
+  optionst & options,
+  xmlnodet & graphnode);
+
+/**
+ * Create a correctness graph node.
+ *
+ * See create_violation_graph_node().
+ */
+void create_correctness_graph_node(
+  std::string & verifiedfile,
+  optionst & options,
+  xmlnodet & graphnode);
+
+/**
+ * Create a edge node.
+ *
+ * This node contains information about
+ * lines, offsets, assumptions, invariants, and etc.
+ */
+void create_edge_node(edget & edge, xmlnodet & edgenode);
+
+/**
+ * Create a node node.
+ */
+void create_node_node(
+  nodet & node,
+  xmlnodet & nodenode);
+
+/**
+ * This function checks if the current counterexample step
+ * is valid for the GraphML. A priori, ESBMC only prints steps
+ * from the original program (i.e., internals and built-in
+ * are excluded).
+ */
+bool is_valid_witness_step(
+  const namespacet &ns,
+  const goto_trace_stept & step);
+
+/**
+ * If the current step is an assignment, this function
+ * will return the lhs and rhs formated in a way expected
+ * by the assumption field.
+ */
+std::string get_formated_assignment(const namespacet & ns, const goto_trace_stept & step);
 
 /**
  *
@@ -108,11 +153,11 @@ std::string w_string_replace(
 /**
  *
  */
-void get_offsets_for_line_using_wc(
+void get_offsets(
   const std::string & file_path,
-  const int line_number,
-  int & p_startoffset,
-  int & p_endoffset);
+  const uint16_t line_number,
+  uint16_t & p_startoffset,
+  uint16_t & p_endoffset);
 
 /**
  *
@@ -124,8 +169,19 @@ bool is_valid_witness_expr(
 /**
  *
  */
-void get_relative_line_in_programfile(
-  const std::string& relative_file_path,
-  const int relative_line_number,
-  const std::string& program_file_path,
-  int & programfile_line_number);
+uint16_t get_line_number(
+  std::string& verified_file,
+  uint16_t relative_line_number,
+  optionst & options);
+
+/**
+ *
+ */
+int generate_sha1_hash_for_file(const char * path, std::string & output);
+
+/**
+ *
+ */
+void map_line_number_to_content(
+  const std::string& source_code_file,
+  std::map<int, std::string> & line_content_map);

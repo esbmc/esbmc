@@ -172,8 +172,11 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("witness-output"))
     options.set_option("witness-output", cmdline.getval("witness-output"));
 
-  if(cmdline.isset("witness-detailed"))
-    options.set_option("witness-detailed", true);
+  if(cmdline.isset("witness-producer"))
+    options.set_option("witness-producer", cmdline.getval("witness-producer"));
+
+  if(cmdline.isset("witness-programfile"))
+    options.set_option("witness-programfile", cmdline.getval("witness-programfile"));
 
   if(cmdline.isset("git-hash"))
   {
@@ -1123,7 +1126,7 @@ int esbmc_parseoptionst::do_base_case(
       break;
 
     case smt_convt::P_SATISFIABLE:
-      std::cout << "\nBug found at k = " << k_step << "\n";
+      std::cout << "\nBug found (k = " << k_step << ")\n";
       return true;
 
     default:
@@ -1638,8 +1641,7 @@ void esbmc_parseoptionst::help()
     " --16, --32, --64             set width of machine word (default is 64)\n"
     " --unsigned-char              make \"char\" unsigned by default\n"
     " --version                    show current ESBMC version and exit\n"
-    " --witness-output filename    generate a verification result witness in GraphML format\n"
-    " --witness-detailed           generate line offset when generating a witness (linux only)\n"
+    " --witness-output filename    generate the verification result witness in GraphML format\n"
     " --old-frontend               parse source files using our old frontend (deprecated)\n"
     " --result-only                do not print the counter-example\n"
     #ifdef _WIN32

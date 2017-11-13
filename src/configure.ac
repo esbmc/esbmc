@@ -181,6 +181,15 @@ AC_SUBST([ESBMC_LDFLAGS], $ESBMC_LDFLAGS)
 
 AC_ARG_ENABLE(werror, [AS_HELP_STRING([--disable-werror], Disable werror build flag)])
 
+AC_ARG_ENABLE(libm, [AS_HELP_STRING([--disable-libm], Disable builtin libm)])
+AS_IF([test "${enable_libm}" = "no"], [
+  AC_SUBST([ESBMC_LIBM], "")
+], [
+  AC_SUBST([ESBMC_LIBM], "\$(srcdir)/library/libm/*.c")
+])
+
+
+
 dnl on by default...
 AC_ARG_ENABLE(enable-esbmc, [AS_HELP_STRING([--enable-esbmc], Build main ESBMC binary)])
 AS_IF([test "${enable_esbmc}" = "yes"], [

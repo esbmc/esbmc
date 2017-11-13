@@ -1,21 +1,59 @@
-/*****************************************
- * GraphML Generation
- *****************************************
- *
- *  Modifications:
- *
- *  23/01/2016 - Updated for svcomp16 according to
- *  http://sv-comp.sosy-lab.org/2016/witnesses/s3_cln1_false.witness.cpachecker.graphml
- *
- */
-
+#include <goto-symex/witnesses.h>
 #include <ac_config.h>
 #include <boost/property_tree/ptree.hpp>
 #include <fstream>
-#include <goto-symex/witnesses.h>
 #include <langapi/languages.h>
 #include <util/irep2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
+
+typedef boost::property_tree::ptree xmlnodet;
+
+short int nodet::_id = 0;
+short int edget::_id = 0;
+
+xmlnodet grapht::generate_graphml(optionst & options)
+{
+  xmlnodet graphml_node;
+  create_graphml(graphml_node);
+
+  xmlnodet graph_node;
+  if (this->witness_type == grapht::VIOLATION)
+    create_violation_graph_node(this->verified_file, options, graph_node);
+  else
+	create_correctness_graph_node(this->verified_file, options, graph_node);
+
+  nodet * prev_node = nullptr;
+  for (auto &current_edge : this->edges)
+  {
+     if (prev_node == nullptr || prev_node != current_edge.from_node)
+     {
+       xmlnodet from_node_node;
+       create_node_node(*current_edge.from_node, from_node_node);
+       graph_node.add_child("node", from_node_node);
+     }
+     xmlnodet to_node_node;
+     create_node_node(*current_edge.to_node, to_node_node);
+     graph_node.add_child("node", to_node_node);
+     xmlnodet edge_node;
+     create_edge_node(current_edge, edge_node);
+     graph_node.add_child("edge", edge_node);
+     prev_node = current_edge.to_node;
+  }
+  graphml_node.add_child("graphml.graph", graph_node);
+
+  return graphml_node;
+}
+
+/* */
+void grapht::create_initial_edge()
+{
+  nodet * first_node = new nodet();
+  first_node->entry = true;
+  nodet * initial_node = new nodet();;
+  edget first_edge(first_node, initial_node);
+  first_edge.enter_function = "main";
+  this->edges.push_back(first_edge);
+}
 
 /* */
 int generate_sha1_hash_for_file(const char * path, std::string & output)
@@ -38,9 +76,6 @@ int generate_sha1_hash_for_file(const char * path, std::string & output)
   fclose(file);
   return 0;
 }
-
-int node_count;
-int edge_count;
 
 /* */
 std::string execute_cmd(const std::string& command)
@@ -103,518 +138,522 @@ void map_line_number_to_content(const std::string& source_code_file,
 }
 
 /* */
-void create_node(boost::property_tree::ptree & node, node_p & node_props)
+void create_node_node(
+  nodet & node,
+  xmlnodet & nodenode)
 {
-  node.add("<xmlattr>.id", "n" + std::to_string(node_count++));
-  if (!node_props.nodeType.empty())
+  nodenode.add("<xmlattr>.id", node.id);
+  if (node.violation)
   {
-    boost::property_tree::ptree data_nodetype;
-    data_nodetype.add("<xmlattr>.key", "notetype");
-    data_nodetype.put_value(node_props.nodeType);
-    node.add_child("data", data_nodetype);
-  }
-  if (node_props.isViolationNode != 0)
-  {
-    boost::property_tree::ptree data_violation;
+    xmlnodet data_violation;
     data_violation.add("<xmlattr>.key", "violation");
     data_violation.put_value("true");
-    node.add_child("data", data_violation);
+    nodenode.add_child("data", data_violation);
   }
-  if (node_props.isSinkNode != 0)
+  if (node.sink)
   {
-    boost::property_tree::ptree data_sink;
+    xmlnodet data_sink;
     data_sink.add("<xmlattr>.key", "sink");
     data_sink.put_value("true");
-    node.add_child("data", data_sink);
+    nodenode.add_child("data", data_sink);
   }
-  if (node_props.isFrontierNode != 0)
+  if (node.entry)
   {
-    boost::property_tree::ptree data_frontier;
-    data_frontier.add("<xmlattr>.key", "frontier");
-    data_frontier.put_value("true");
-    node.add_child("data", data_frontier);
-  }
-  if (node_props.isEntryNode != 0)
-  {
-    boost::property_tree::ptree data_entry;
+    xmlnodet data_entry;
     data_entry.add("<xmlattr>.key", "entry");
     data_entry.put_value("true");
-    node.add_child("data", data_entry);
+    nodenode.add_child("data", data_entry);
   }
-  if (!node_props.invariant.empty())
+  if (node.invariant != 0xFF)
   {
-    boost::property_tree::ptree data_invariant;
+    xmlnodet data_invariant;
     data_invariant.add("<xmlattr>.key", "invariant");
-    data_invariant.put_value(node_props.invariant);
-    node.add_child("data", data_invariant);
+    data_invariant.put_value(node.invariant);
+    nodenode.add_child("data", data_invariant);
   }
-  if (!node_props.invariantScope.empty())
+  if (!node.invariant_scope.empty())
   {
-    boost::property_tree::ptree data_invariant;
+    xmlnodet data_invariant;
     data_invariant.add("<xmlattr>.key", "invariant.scope");
-    data_invariant.put_value(node_props.invariantScope);
-    node.add_child("data", data_invariant);
+    data_invariant.put_value(node.invariant_scope);
+    nodenode.add_child("data", data_invariant);
   }
 }
 
 /* */
-void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
-    boost::property_tree::ptree & source, boost::property_tree::ptree & target)
+void create_edge_node(edget & edge, xmlnodet & edgenode)
 {
-  edge.add("<xmlattr>.id", "e" + std::to_string(edge_count++));
-  edge.add("<xmlattr>.source", source.get<std::string>("<xmlattr>.id"));
-  edge.add("<xmlattr>.target", target.get<std::string>("<xmlattr>.id"));
-  if (edge_props.startline != -1)
+  edgenode.add("<xmlattr>.id", edge.id);
+  edgenode.add("<xmlattr>.source", edge.from_node->id);
+  edgenode.add("<xmlattr>.target", edge.to_node->id);
+  if (edge.start_line != c_nonset)
   {
-    boost::property_tree::ptree data_lineNumberInOrigin;
+    xmlnodet data_lineNumberInOrigin;
     data_lineNumberInOrigin.add("<xmlattr>.key", "startline");
-    data_lineNumberInOrigin.put_value(edge_props.startline);
-    edge.add_child("data", data_lineNumberInOrigin);
+    data_lineNumberInOrigin.put_value(edge.start_line);
+    edgenode.add_child("data", data_lineNumberInOrigin);
   }
-  if (edge_props.endline != -1)
+  if (edge.end_line != c_nonset)
   {
-    boost::property_tree::ptree data_endLine;
+    xmlnodet data_endLine;
     data_endLine.add("<xmlattr>.key", "endline");
-    data_endLine.put_value(edge_props.endline);
-    edge.add_child("data", data_endLine);
+    data_endLine.put_value(edge.end_line);
+    edgenode.add_child("data", data_endLine);
   }
-  if (edge_props.startoffset > 0)
+  if (edge.start_offset != c_nonset)
   {
-    boost::property_tree::ptree data_startoffset;
+    xmlnodet data_startoffset;
     data_startoffset.add("<xmlattr>.key", "startoffset");
-    data_startoffset.put_value(edge_props.startoffset);
-    edge.add_child("data", data_startoffset);
+    data_startoffset.put_value(edge.start_offset);
+    edgenode.add_child("data", data_startoffset);
   }
-  if (edge_props.endoffset > 0)
+  if (edge.end_offset != c_nonset)
   {
-    boost::property_tree::ptree data_endoffset;
+    xmlnodet data_endoffset;
     data_endoffset.add("<xmlattr>.key", "endoffset");
-    data_endoffset.put_value(edge_props.endoffset);
-    edge.add_child("data", data_endoffset);
+    data_endoffset.put_value(edge.end_offset);
+    edgenode.add_child("data", data_endoffset);
   }
-  if (!edge_props.returnFromFunction.empty())
+  if (!edge.return_from_function.empty())
   {
-    boost::property_tree::ptree data_returnFromFunction;
+    xmlnodet data_returnFromFunction;
     data_returnFromFunction.add("<xmlattr>.key", "returnFromFunction");
-    data_returnFromFunction.put_value(edge_props.returnFromFunction);
-    edge.add_child("data", data_returnFromFunction);
+    data_returnFromFunction.put_value(edge.return_from_function);
+    edgenode.add_child("data", data_returnFromFunction);
   }
-  if (!edge_props.enterFunction.empty())
+  if (!edge.enter_function.empty())
   {
-    boost::property_tree::ptree data_enterFunction;
+    xmlnodet data_enterFunction;
     data_enterFunction.add("<xmlattr>.key", "enterFunction");
-    data_enterFunction.put_value(edge_props.enterFunction);
-    edge.add_child("data", data_enterFunction);
+    data_enterFunction.put_value(edge.enter_function);
+    edgenode.add_child("data", data_enterFunction);
   }
-  if (!edge_props.assumption.empty())
+  if (!edge.assumption.empty())
   {
-    boost::property_tree::ptree data_assumption;
+    xmlnodet data_assumption;
     data_assumption.add("<xmlattr>.key", "assumption");
-    data_assumption.put_value(edge_props.assumption);
-    edge.add_child("data", data_assumption);
+    data_assumption.put_value(edge.assumption);
+    edgenode.add_child("data", data_assumption);
   }
-  if (!edge_props.assumptionScope.empty())
+  if (!edge.assumption_scope.empty())
   {
-    boost::property_tree::ptree data_assumptionScope;
+    xmlnodet data_assumptionScope;
     data_assumptionScope.add("<xmlattr>.key", "assumption.scope");
-    data_assumptionScope.put_value(edge_props.assumptionScope);
-    edge.add_child("data", data_assumptionScope);
+    data_assumptionScope.put_value(edge.assumption_scope);
+    edgenode.add_child("data", data_assumptionScope);
   }
 }
 
 /* */
-void create_graphml(boost::property_tree::ptree & graphml,
-    const std::string& file_path)
+void create_graphml(xmlnodet & graphml)
 {
   graphml.add("graphml.<xmlattr>.xmlns",
     "http://graphml.graphdrawing.org/xmlns");
   graphml.add("graphml.<xmlattr>.xmlns:xsi",
     "http://www.w3.org/2001/XMLSchema-instance");
 
-  boost::property_tree::ptree key_originfile;
-  key_originfile.add("<xmlattr>.id", "originfile");
-  key_originfile.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "originFileName");
-  key_originfile.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_originfile.add("<xmlattr>.for", "edge");
-  boost::property_tree::ptree key_originfile_default;
-  key_originfile_default.put_value(file_path);
-  key_originfile.add_child("default", key_originfile_default);
-  graphml.add_child("graphml.key", key_originfile);
-
-  boost::property_tree::ptree key_invariant;
-  key_invariant.add("<xmlattr>.id", "invariant");
-  key_invariant.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "invariant");
-  key_invariant.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_invariant.add("<xmlattr>.for", "node");
-  graphml.add_child("graphml.key", key_invariant);
-
-  boost::property_tree::ptree key_invariantScope;
-  key_invariantScope.add("<xmlattr>.id", "invariant.scope");
-  key_invariantScope.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "invariant.scope");
-  key_invariantScope.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_invariantScope.add("<xmlattr>.for", "node");
-  graphml.add_child("graphml.key", key_invariantScope);
-
-  boost::property_tree::ptree key_nodeType;
-  key_nodeType.add("<xmlattr>.id", "nodetype");
-  key_nodeType.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "nodeType");
-  key_nodeType.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_nodeType.add("<xmlattr>.for", "node");
-  boost::property_tree::ptree key_node_type_default;
-  key_node_type_default.put_value("path");
-  key_nodeType.add_child("default", key_node_type_default);
-  graphml.add_child("graphml.key", key_nodeType);
-
-  boost::property_tree::ptree key_frontier;
-  key_frontier.add("<xmlattr>.id", "frontier");
-  key_frontier.put(
-  boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet frontier_node;
+  frontier_node.add("<xmlattr>.id", "frontier");
+  frontier_node.put(
+  xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "isFrontierNode");
-  key_frontier.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  frontier_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "boolean");
-  key_frontier.add("<xmlattr>.for", "node");
-  boost::property_tree::ptree key_frontier_default;
-  key_frontier_default.put_value("false");
-  key_frontier.add_child("default", key_frontier_default);
-  graphml.add_child("graphml.key", key_frontier);
+  frontier_node.add("<xmlattr>.for", "node");
+  xmlnodet frontier_default_node;
+  frontier_default_node.put_value("false");
+  frontier_node.add_child("default", frontier_default_node);
+  graphml.add_child("graphml.key", frontier_node);
 
-  boost::property_tree::ptree key_violation;
-  key_violation.add("<xmlattr>.id", "violation");
-  key_violation.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet violation_node;
+  violation_node.add("<xmlattr>.id", "violation");
+  violation_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "isViolationNode");
-  key_violation.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  violation_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "boolean");
-  key_violation.add("<xmlattr>.for", "node");
-  boost::property_tree::ptree key_violation_default;
-  key_violation_default.put_value("false");
-  key_violation.add_child("default", key_violation_default);
-  graphml.add_child("graphml.key", key_violation);
+  violation_node.add("<xmlattr>.for", "node");
+  xmlnodet violation_default_node;
+  violation_default_node.put_value("false");
+  violation_node.add_child("default", violation_default_node);
+  graphml.add_child("graphml.key", violation_node);
 
-  boost::property_tree::ptree key_entry;
-  key_entry.add("<xmlattr>.id", "entry");
-  key_entry.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet entry_node;
+  entry_node.add("<xmlattr>.id", "entry");
+  entry_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "isEntryNode");
-  key_entry.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  entry_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "boolean");
-  key_entry.add("<xmlattr>.for", "node");
-  boost::property_tree::ptree key_entry_default;
-  key_entry_default.put_value("false");
-  key_entry.add_child("default", key_entry_default);
-  graphml.add_child("graphml.key", key_entry);
+  entry_node.add("<xmlattr>.for", "node");
+  xmlnodet entry_default_node;
+  entry_default_node.put_value("false");
+  entry_node.add_child("default", entry_default_node);
+  graphml.add_child("graphml.key", entry_node);
 
-  boost::property_tree::ptree key_sink;
-  key_sink.add("<xmlattr>.id", "sink");
-  key_sink.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet sink_node;
+  sink_node.add("<xmlattr>.id", "sink");
+  sink_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "isSinkNode");
-  key_sink.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  sink_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "boolean");
-  key_sink.add("<xmlattr>.for", "node");
-  boost::property_tree::ptree key_sink_default;
-  key_sink_default.put_value("false");
-  key_sink.add_child("default", key_sink_default);
-  graphml.add_child("graphml.key", key_sink);
+  sink_node.add("<xmlattr>.for", "node");
+  xmlnodet sink_default_node;
+  sink_default_node.put_value("false");
+  sink_node.add_child("default", sink_default_node);
+  graphml.add_child("graphml.key", sink_node);
 
-  boost::property_tree::ptree key_sourcecodelang;
-  key_sourcecodelang.add("<xmlattr>.id", "sourcecodelang");
-  key_sourcecodelang.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet source_code_lang_node;
+  source_code_lang_node.add("<xmlattr>.id", "sourcecodelang");
+  source_code_lang_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "sourcecodeLanguage");
-  key_sourcecodelang.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  source_code_lang_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_sourcecodelang.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_sourcecodelang);
+  source_code_lang_node.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", source_code_lang_node);
 
-  boost::property_tree::ptree key_programfile;
-  key_programfile.add("<xmlattr>.id", "programfile");
-  key_programfile.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet program_file_node;
+  program_file_node.add("<xmlattr>.id", "programfile");
+  program_file_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "programfile");
-  key_programfile.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  program_file_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_programfile.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_programfile);
+  program_file_node.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", program_file_node);
 
-  boost::property_tree::ptree key_programhash;
-  key_programhash.add("<xmlattr>.id", "programhash");
-  key_programhash.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet program_hash_node;
+  program_hash_node.add("<xmlattr>.id", "programhash");
+  program_hash_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "programhash");
-  key_programhash.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  program_hash_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_programhash.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_programhash);
+  program_hash_node.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", program_hash_node);
 
-  boost::property_tree::ptree key_creationTime;
-  key_creationTime.add("<xmlattr>.id", "creationtime");
-  key_creationTime.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet creation_time_node;
+  creation_time_node.add("<xmlattr>.id", "creationtime");
+  creation_time_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "creationtime");
-  key_creationTime.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  creation_time_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_creationTime.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_creationTime);
+  creation_time_node.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", creation_time_node);
 
-  boost::property_tree::ptree key_specification;
-  key_specification.add("<xmlattr>.id", "specification");
-  key_specification.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet specification_node;
+  specification_node.add("<xmlattr>.id", "specification");
+  specification_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "specification");
-  key_specification.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  specification_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_specification.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_specification);
+  specification_node.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", specification_node);
 
-  boost::property_tree::ptree key_architecture;
-  key_architecture.add("<xmlattr>.id", "architecture");
-  key_architecture.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet architecture_node;
+  architecture_node.add("<xmlattr>.id", "architecture");
+  architecture_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "architecture");
-  key_architecture.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  architecture_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_programhash.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_architecture);
+  architecture_node.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", architecture_node);
 
-  boost::property_tree::ptree key_producer;
-  key_producer.add("<xmlattr>.id", "producer");
-  key_producer.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet producer_node;
+  producer_node.add("<xmlattr>.id", "producer");
+  producer_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "producer");
-  key_producer.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  producer_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_programhash.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_producer);
+  producer_node.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", producer_node);
 
-  boost::property_tree::ptree key_sourcecode;
-  key_sourcecode.add("<xmlattr>.id", "sourcecode");
-  key_sourcecode.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet source_code_node;
+  source_code_node.add("<xmlattr>.id", "sourcecode");
+  source_code_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "sourcecode");
-  key_sourcecode.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  source_code_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_sourcecode.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_sourcecode);
+  source_code_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", source_code_node);
 
-  boost::property_tree::ptree key_startline;
-  key_startline.add("<xmlattr>.id", "startline");
-  key_startline.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet start_line_node;
+  start_line_node.add("<xmlattr>.id", "startline");
+  start_line_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "startline");
-  key_startline.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  start_line_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "int");
-  key_startline.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_startline);
+  start_line_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", start_line_node);
 
-  boost::property_tree::ptree key_startoffset;
-  key_startoffset.add("<xmlattr>.id", "startoffset");
-  key_startoffset.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet start_offset_node;
+  start_offset_node.add("<xmlattr>.id", "startoffset");
+  start_offset_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "startoffset");
-  key_startoffset.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  start_offset_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "int");
-  key_startoffset.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_startoffset);
+  start_offset_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", start_offset_node);
 
-  boost::property_tree::ptree key_control;
-  key_control.add("<xmlattr>.id", "control");
-  key_control.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet control_node;
+  control_node.add("<xmlattr>.id", "control");
+  control_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "control");
-  key_control.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  control_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_control.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_control);
+  control_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", control_node);
 
-  boost::property_tree::ptree key_assumption;
-  key_assumption.add("<xmlattr>.id", "assumption");
-  key_assumption.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet invariant_node;
+  invariant_node.add("<xmlattr>.id", "invariant");
+  invariant_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
+    "invariant");
+  invariant_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  invariant_node.add("<xmlattr>.for", "node");
+  graphml.add_child("graphml.key", invariant_node);
+
+  xmlnodet invariant_scope_node;
+  invariant_scope_node.add("<xmlattr>.id", "invariant.scope");
+  invariant_scope_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
+    "invariant.scope");
+  invariant_scope_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  invariant_scope_node.add("<xmlattr>.for", "node");
+  graphml.add_child("graphml.key", invariant_scope_node);
+
+  xmlnodet assumption_node;
+  assumption_node.add("<xmlattr>.id", "assumption");
+  assumption_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "assumption");
-  key_assumption.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  assumption_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_assumption.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_assumption);
+  assumption_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", assumption_node);
 
-  boost::property_tree::ptree key_assumptionScope;
-  key_assumptionScope.add("<xmlattr>.id", "assumption.scope");
-  key_assumptionScope.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet assumption_scope_node;
+  assumption_scope_node.add("<xmlattr>.id", "assumption.scope");
+  assumption_scope_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "assumption");
-  key_assumptionScope.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  assumption_scope_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_assumptionScope.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_assumptionScope);
+  assumption_scope_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", assumption_scope_node);
 
-  boost::property_tree::ptree key_assumption_resultFunction;
-  key_assumption_resultFunction.add("<xmlattr>.id", "assumption.resultfunction");
-  key_assumption_resultFunction.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet assumption_result_function_node;
+  assumption_result_function_node.add("<xmlattr>.id", "assumption.resultfunction");
+  assumption_result_function_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "assumption.resultfunction");
-  key_assumption_resultFunction.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  assumption_result_function_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_assumption_resultFunction.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_assumption_resultFunction);
+  assumption_result_function_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", assumption_result_function_node);
 
-  boost::property_tree::ptree key_assumption_scope;
-  key_assumption_scope.add("<xmlattr>.id", "assumption.scope");
-  key_assumption_scope.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "assumption.scope");
-  key_assumption_scope.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_assumption_scope.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_assumption_scope);
-
-  boost::property_tree::ptree key_enterFunction;
-  key_enterFunction.add("<xmlattr>.id", "enterFunction");
-  key_enterFunction.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet enter_function_node;
+  enter_function_node.add("<xmlattr>.id", "enterFunction");
+  enter_function_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "enterFunction");
-  key_enterFunction.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  enter_function_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_enterFunction.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_enterFunction);
+  enter_function_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", enter_function_node);
 
-  boost::property_tree::ptree key_returnFromFunction;
-  key_returnFromFunction.add("<xmlattr>.id", "returnFromFunction");
-  key_returnFromFunction.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet return_from_function_node;
+  return_from_function_node.add("<xmlattr>.id", "returnFromFunction");
+  return_from_function_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "returnFromFunction");
-  key_returnFromFunction.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  return_from_function_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_returnFromFunction.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_returnFromFunction);
+  return_from_function_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", return_from_function_node);
 
-  boost::property_tree::ptree key_endline;
-  key_endline.add("<xmlattr>.id", "endline");
-  key_endline.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet end_line_node;
+  end_line_node.add("<xmlattr>.id", "endline");
+  end_line_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "endline");
-  key_endline.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  end_line_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "int");
-  key_endline.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_endline);
+  end_line_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", end_line_node);
 
-  boost::property_tree::ptree key_endoffset;
-  key_endoffset.add("<xmlattr>.id", "endoffset");
-  key_endoffset.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet end_offset;
+  end_offset.add("<xmlattr>.id", "endoffset");
+  end_offset.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "endoffset");
-  key_endoffset.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  end_offset.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "int");
-  key_endoffset.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_endoffset);
+  end_offset.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", end_offset);
 
-  boost::property_tree::ptree key_witnessType;
-  key_witnessType.add("<xmlattr>.id", "witness-type");
-  key_witnessType.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  xmlnodet witness_type_node;
+  witness_type_node.add("<xmlattr>.id", "witness-type");
+  witness_type_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "witness-type");
-  key_witnessType.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+  witness_type_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "string");
-  key_witnessType.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_witnessType);
+  witness_type_node.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", witness_type_node);
 }
 
 /* */
-void create_graph(
-  boost::property_tree::ptree & graph,
-  std::string & filename,
-  int & specification,
-  const bool is_correctness)
-{
-  graph.add("<xmlattr>.edgedefault", "directed");
+void _create_graph_node(
+  std::string & verifiedfile,
+  optionst & options,
+  xmlnodet & graphnode )
+ {
+  graphnode.add("<xmlattr>.edgedefault", "directed");
 
-  boost::property_tree::ptree pProducer;
+  xmlnodet pProducer;
   pProducer.add("<xmlattr>.key", "producer");
-  pProducer.put_value("ESBMC " + std::string(ESBMC_VERSION));
-  graph.add_child("data", pProducer);
 
-  boost::property_tree::ptree pSourceCodeLang;
+  std::string producer = options.get_option("witness-producer");
+  if (producer.empty())
+  {
+    producer = "ESBMC " + std::string(ESBMC_VERSION) + " ";
+    if(options.get_bool_option("k-induction"))
+      producer += "kind";
+    else if(options.get_bool_option("k-induction-parallel"))
+      producer += "kind";
+    else if(options.get_bool_option("falsification"))
+      producer += "falsi";
+    else if(options.get_bool_option("incremental-bmc"))
+      producer += "incr";
+  }
+
+  pProducer.put_value(producer);
+
+  graphnode.add_child("data", pProducer);
+
+  xmlnodet pSourceCodeLang;
   pSourceCodeLang.add("<xmlattr>.key", "sourcecodelang");
   pSourceCodeLang.put_value("C");
-  graph.add_child("data", pSourceCodeLang);
+  graphnode.add_child("data", pSourceCodeLang);
 
-  boost::property_tree::ptree pArchitecture;
+  xmlnodet pArchitecture;
   pArchitecture.add("<xmlattr>.key", "architecture");
   pArchitecture.put_value(std::to_string(config.ansi_c.word_size) + "bit");
-  graph.add_child("data", pArchitecture);
+  graphnode.add_child("data", pArchitecture);
 
-  boost::property_tree::ptree pProgramFile;
+  xmlnodet pProgramFile;
   pProgramFile.add("<xmlattr>.key", "programfile");
-  pProgramFile.put_value(filename);
-  graph.add_child("data", pProgramFile);
+  std::string program_file = options.get_option("witness-programfile");
+  if (program_file.empty())
+    pProgramFile.put_value(verifiedfile);
+  else
+    pProgramFile.put_value(program_file);
+  graphnode.add_child("data", pProgramFile);
 
   std::string programFileHash;
-  if (!filename.empty())
-    generate_sha1_hash_for_file(filename.c_str(), programFileHash);
-  boost::property_tree::ptree pProgramHash;
+  if (program_file.empty())
+    generate_sha1_hash_for_file(verifiedfile.c_str(), programFileHash);
+  else
+    generate_sha1_hash_for_file(program_file.c_str(), programFileHash);
+  xmlnodet pProgramHash;
   pProgramHash.add("<xmlattr>.key", "programhash");
   pProgramHash.put_value(programFileHash);
-  graph.add_child("data", pProgramHash);
+  graphnode.add_child("data", pProgramHash);
 
-  boost::property_tree::ptree pDataSpecification;
+  xmlnodet pDataSpecification;
   pDataSpecification.add("<xmlattr>.key", "specification");
-  if (specification == 1)
+  if (options.get_bool_option("overflow-check"))
     pDataSpecification.put_value("CHECK( init(main()), LTL(G ! overflow) )");
-  else if (specification == 2)
+  else if (options.get_bool_option("memory-leak-check"))
     pDataSpecification.put_value("CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
   else
     pDataSpecification.put_value("CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
-  graph.add_child("data", pDataSpecification);
+  graphnode.add_child("data", pDataSpecification);
 
-  boost::property_tree::ptree pWitnessType;
+  boost::posix_time::ptime creation_time = boost::posix_time::microsec_clock::universal_time();
+  xmlnodet p_creationTime;
+  p_creationTime.add("<xmlattr>.key", "creationtime");
+  p_creationTime.put_value(boost::posix_time::to_iso_extended_string(creation_time));
+  graphnode.add_child("data", p_creationTime);
+}
+
+/* */
+void create_violation_graph_node(
+  std::string & verifiedfile,
+  optionst & options,
+  xmlnodet & graphnode )
+{
+  _create_graph_node(verifiedfile, options, graphnode);
+  xmlnodet pWitnessType;
   pWitnessType.add("<xmlattr>.key", "witness-type");
-  pWitnessType.put_value(is_correctness ? "correctness_witness" : "violation_witness");
-  graph.add_child("data", pWitnessType);
+  pWitnessType.put_value("violation_witness");
+  graphnode.add_child("data", pWitnessType);
+}
 
-  boost::posix_time::ptime creationTime = boost::posix_time::microsec_clock::universal_time();
-  boost::property_tree::ptree pCreationTime;
-  pCreationTime.add("<xmlattr>.key", "creationtime");
-  pCreationTime.put_value(boost::posix_time::to_iso_extended_string(creationTime));
-  graph.add_child("data", pCreationTime);
+/* */
+void create_correctness_graph_node(
+  std::string & verifiedfile,
+  optionst & options,
+  xmlnodet & graphnode )
+{
+  _create_graph_node(verifiedfile, options, graphnode);
+  xmlnodet pWitnessType;
+  pWitnessType.add("<xmlattr>.key", "witness-type");
+  pWitnessType.put_value("correctness_witness");
+  graphnode.add_child("data", pWitnessType);
+}
+
+std::string get_formated_assignment(const namespacet & ns, const goto_trace_stept & step)
+{
+  const irep_idt &identifier = to_symbol2t(step.original_lhs).get_symbol_name();
+  std::string lhs_symbol = id2string(identifier);
+  const symbolt *symbol;
+  if(!ns.lookup(identifier, symbol) && !symbol->pretty_name.empty())
+    lhs_symbol = id2string(symbol->pretty_name);
+  std::vector<std::string> id_sections;
+  boost::split(id_sections, lhs_symbol, boost::is_any_of("::"));
+  lhs_symbol = id_sections[id_sections.size()-1];
+  std::string rhs_value = from_expr(ns, identifier, step.value);
+  rhs_value = std::regex_replace (rhs_value, std::regex("f"),"");
+  return lhs_symbol + " == (" + rhs_value + ");";
 }
 
 /* */
@@ -632,35 +671,59 @@ std::string w_string_replace(
 }
 
 /* */
-void get_offsets_for_line_using_wc(
+void get_offsets(
   const std::string & file_path,
-  const int line_number,
-  int & p_startoffset,
-  int & p_endoffset)
+  const uint16_t line_number,
+  uint16_t & p_startoffset,
+  uint16_t & p_endoffset)
 {
-  unsigned int startoffset = 0;
-  unsigned int endoffset = 0;
+  uint16_t startoffset = 0;
+  uint16_t endoffset = 0;
+  uint8_t whiteSpaces = 0;
+  size_t endOfAssignment = std::string::npos;
+  std::string line;
+  std::ifstream file (file_path.c_str());
 
-  try {
-    /* get the offsets */
-    startoffset = std::atoi(execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number - 1) + " | wc --chars").c_str());
-    endoffset = std::atoi(execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number) + " | wc --chars").c_str());
-    /* count the spaces in the beginning and append to the startoffset  */
-    std::string str_line = execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number) + " | tail -n 1 ");
-    unsigned int i=0;
-    for (i=0; i<str_line.length(); i++)
+  if (file.is_open())
+  {
+    for (int currentLineNumber = 1; getline(file,line) && (endOfAssignment == std::string::npos); currentLineNumber++)
     {
-      if (str_line.c_str()[i] == ' ')
-        startoffset++;
+      line += '\n';
+      if (currentLineNumber >= line_number)
+      {
+        if (currentLineNumber == line_number)
+        {
+          endoffset = line.size();
+          for(; line.at(whiteSpaces) == ' ' && (whiteSpaces < line.size()); whiteSpaces++)
+            startoffset += whiteSpaces;
+        }
+        endOfAssignment = line.rfind(';');
+      }
       else
-        break;
+      {
+        startoffset += line.size();
+      }
     }
-  } catch (const std::exception& e) {
-    /* nothing to do here */
+    endoffset += startoffset;
+    file.close();
   }
-
   p_startoffset = startoffset;
   p_endoffset = endoffset;
+}
+
+/* */
+bool is_valid_witness_step(
+  const namespacet &ns,
+  const goto_trace_stept & step)
+{
+  languagest languages(ns, "C");
+  std::string lhsexpr;
+  languages.from_expr(migrate_expr_back(step.lhs), lhsexpr);
+  std::string location = step.pc->location.to_string();
+  return ((location.find("built-in") & location.find("library") &
+           lhsexpr.find("__ESBMC") & lhsexpr.find("stdin") &
+           lhsexpr.find("stdout") & lhsexpr.find("stderr") &
+		   lhsexpr.find("$") & lhsexpr.find("sys_")) == std::string::npos);
 }
 
 /* */
@@ -679,23 +742,22 @@ bool is_valid_witness_expr(
 }
 
 /* */
-void get_relative_line_in_programfile(
-  const std::string& relative_file_path,
-  const int relative_line_number,
-  const std::string& program_file_path,
-  int & programfile_line_number)
+uint16_t get_line_number(
+  std::string& verified_file,
+  uint16_t relative_line_number,
+  optionst & options)
 {
+  std::string program_file = options.get_option("witness-programfile");
   /* check if it is necessary to get the relative line */
-  if (relative_file_path == program_file_path)
+  if (program_file.empty() || verified_file == program_file)
   {
-	programfile_line_number = relative_line_number;
-    return;
+    return relative_line_number;
   }
   std::string line;
   std::string relative_content;
-  std::ifstream stream_relative (relative_file_path);
-  std::ifstream stream_programfile (program_file_path);
-  int line_count = 0;
+  std::ifstream stream_relative (verified_file);
+  std::ifstream stream_programfile (program_file);
+  uint16_t line_count = 0;
   /* get the relative content */
   if (stream_relative.is_open())
   {
@@ -706,7 +768,6 @@ void get_relative_line_in_programfile(
 	  line_count++;
 	}
   }
-
   /* file for the line in the programfile */
   line_count = 1;
   if (stream_programfile.is_open())
@@ -717,5 +778,5 @@ void get_relative_line_in_programfile(
       line_count++;
     }
   }
-  programfile_line_number = line_count;
+  return line_count;
 }
