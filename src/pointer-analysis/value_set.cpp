@@ -174,6 +174,17 @@ bool value_sett::make_union(const value_sett::valuest &new_values, unsigned long
     entryt &e = dit->second;
     const entryt &new_e = sit->second;
 
+    // Serious business: When were these entries last accessed? If one is zero,
+    // then it's an edge case or just-constructed, so asssume a write has to
+    // occur. If they're nonzero but differ: one has been written to since
+    // the last, potentially down different branches of the exploration paths.
+    // Don't read anything into their relative order, just update.
+    // The only circumstance we don't update is on equal nonzero timesteps: we
+    // know that one is simply an unmodified copy of the other.
+    if (e.timestep == new_e.timestep && e.timestep != 0) {
+      return false;
+    }
+
     if (make_union(e.object_map, new_e.object_map)) {
       e.timestep = this->last_timestep;
       return true;
