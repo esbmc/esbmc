@@ -127,42 +127,6 @@ value_sett::to_expr(object_mapt::const_iterator it) const
   return obj;
 }
 
-template <class CIterator, class Iterator>
-bool
-merge_mangler(CIterator sit, CIterator send, Iterator dit, Iterator dend,
-    std::function<bool(Iterator &, CIterator &)> &merge,
-    std::function<void(Iterator &, CIterator &)> &inst)
-{
-  // Merge the pointed at objects in src into dest. How come there's no
-  // std::algorithm for this yet (or I missed it?)
-  bool result = false;
-
-  while (sit != send) {
-    if (dit->first == sit->first) {
-      // Keys match: merge.
-      result |= merge(dit, sit);
-      sit++;
-    } else if (sit->first < dit->first) {
-      inst(dit, sit);
-      result = true;
-      sit++;
-    } else {
-      dit++;
-      // Have we run out of dest elems but still have srcs?
-      if (dit == dend) {
-        while (sit != send) {
-          inst(dit, sit);
-          sit++;
-        }
-        result = true;
-        break;
-      }
-    }
-  }
-
-  return result;
-}
-
 bool value_sett::make_union(const value_sett::valuest &new_values, unsigned long last_timestep, bool keepnew)
 {
   // Iterate over all new values; if they're in the current value set, merge
@@ -211,7 +175,7 @@ bool value_sett::make_union(const value_sett::valuest &new_values, unsigned long
   typedef std::function<void(valuest::iterator &, valuest::const_iterator &)> functype2;
   auto tmp1 = functype1(merger);
   auto tmp2 = functype2(inserter);
-  return merge_mangler(new_values.begin(), new_values.end(), values.begin(), values.end(), tmp1, tmp2);
+  return esbmct::merge_mangler(new_values.begin(), new_values.end(), values.begin(), values.end(), tmp1, tmp2);
 }
 
 bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
@@ -237,7 +201,7 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
   typedef std::function<void(object_mapt::iterator &, object_mapt::const_iterator &)> lolfunc2;
   auto tmp1 = lolfunc1(merger);
   auto tmp2 = lolfunc2(inst);
-  return merge_mangler(src.begin(), src.end(), dest.begin(), dest.end(), tmp1, tmp2);
+  return esbmct::merge_mangler(src.begin(), src.end(), dest.begin(), dest.end(), tmp1, tmp2);
 }
 
 void value_sett::get_value_set(

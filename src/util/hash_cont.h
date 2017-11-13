@@ -17,6 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <unordered_map>
 #include <unordered_set>
+#include <functional>
 
 // for new g++ libraries >= 3.2
 
@@ -46,5 +47,45 @@ public:
 
 #define hash_map_cont esbmc_map_wrapper
 #define hash_set_cont std::unordered_set
+
+// A utility put here for convenience,
+
+namespace esbmct {
+  template <class CIterator, class Iterator>
+  bool
+  merge_mangler(CIterator sit, CIterator send, Iterator dit, Iterator dend,
+      std::function<bool(Iterator &, CIterator &)> &merge,
+      std::function<void(Iterator &, CIterator &)> &inst)
+  {
+    // Merge the pointed at objects in src into dest. How come there's no
+    // std::algorithm for this yet (or I missed it?)
+    bool result = false;
+
+    while (sit != send) {
+      if (dit->first == sit->first) {
+        // Keys match: merge.
+        result |= merge(dit, sit);
+        sit++;
+      } else if (sit->first < dit->first) {
+        inst(dit, sit);
+        result = true;
+        sit++;
+      } else {
+        dit++;
+        // Have we run out of dest elems but still have srcs?
+        if (dit == dend) {
+          while (sit != send) {
+            inst(dit, sit);
+            sit++;
+          }
+          result = true;
+          break;
+        }
+      }
+    }
+
+    return result;
+  }
+}
 
 #endif
