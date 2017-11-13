@@ -309,3 +309,23 @@ void renaming::level2t::rename_to_record(expr2tc &expr, const name_record &rec)
   sym.thread_num = rec.t_num;
   sym.rlevel = rec.lev;
 }
+
+void renaming::level2t::rename_to_value(expr2tc &expr, const valuet &val)
+{
+  assert(is_symbol2t(expr));
+  symbol2t &sym = to_symbol2t(expr);
+  assert(sym.rlevel == symbol2t::level1 || sym.rlevel == symbol2t::level1_global);
+
+  if (!is_nil_expr(val.constant)) {
+    expr = val.constant;
+    return;
+  }
+
+  sym.level2_num = val.count;
+  sym.node_num = val.node_id;
+
+  if (sym.rlevel == symbol2t::level1)
+    sym.rlevel = symbol2t::level2;
+  else
+    sym.rlevel = symbol2t::level2_global;
+}

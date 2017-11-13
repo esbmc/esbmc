@@ -234,36 +234,25 @@ void
 goto_symext::phi_function(const statet::goto_statet &goto_state)
 {
   // go over all variables to see what changed
-  std::set<renaming::level2t::name_record> variables;
 
-  goto_state.level2.get_variables(variables);
-  cur_state->level2.get_variables(variables);
-
-  guardt tmp_guard;
-  if(!variables.empty()
-     && !cur_state->guard.is_false()
-     && !goto_state.guard.is_false())
-  {
-    tmp_guard = goto_state.guard;
-
+  guardt tmp_guard = goto_state.guard;
     // this gets the diff between the guards
-    tmp_guard -= cur_state->guard;
-  }
+  tmp_guard -= cur_state->guard;
 
-  for (const auto & variable : variables)
-  {
-    if (goto_state.level2.current_number(variable) ==
-        cur_state->level2.current_number(variable))
-      continue;  // not changed
+  typedef renaming::level2t::current_namest rln;
+  auto merger = [this, &goto_state, &tmp_guard]
+    (rln::iterator &dit, rln::const_iterator &&sit) -> bool {
+    if (dit->second.count == sit->second.count)
+      return false;  // not changed
 
-    if (variable.base_name == guard_identifier_s)
-      continue;  // just a guard
+    if (dit->first.base_name == guard_identifier_s)
+      return false;  // just a guard
 
-    if (has_prefix(variable.base_name.as_string(),"symex::invalid_object"))
-      continue;
+    if (has_prefix(dit->first.base_name.as_string(),"symex::invalid_object"))
+      return false;
 
     // changed!
-    const symbolt &symbol = ns.lookup(variable.base_name);
+    const symbolt &symbol = ns.lookup(dit->first.base_name);
 
     type2tc type;
     typet old_type = symbol.type;
@@ -271,25 +260,30 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     expr2tc rhs;
 
-    if (cur_state->guard.is_false() || goto_state.guard.is_false()) {
+    if (cur_state->guard.is_false()) {
       rhs = symbol2tc(type, symbol.name);
-
-      // Try to get the value
-      renaming::level2t::rename_to_record(rhs, variable);
-      goto_state.level2.rename(rhs);
+      renaming::level2t::rename_to_record(rhs, sit->first);
+      renaming::level2t::rename_to_value(rhs, sit->second);
+    } else if (goto_state.guard.is_false()) {
+      // XXX: this path is redundant?
+      rhs = symbol2tc(type, symbol.name);
+      renaming::level2t::rename_to_record(rhs, dit->first);
+      renaming::level2t::rename_to_value(rhs, dit->second);
     } else {
+      // "True" -> guard is true, so merging-in path was active, so source
+      // iterator used rather than destination iterator.
       symbol2tc true_val(type, symbol.name);
       symbol2tc false_val(type, symbol.name);
 
       // Semi-manually rename these symbols: we may be referring to an l1
       // variable not in the current scope, thus we need to directly specify
       // which l1 variable we're dealing with.
-      renaming::level2t::rename_to_record(true_val, variable);
-      renaming::level2t::rename_to_record(false_val, variable);
+      renaming::level2t::rename_to_record(true_val, sit->first);
+      renaming::level2t::rename_to_record(false_val, dit->first);
 
       // Try to get the symbol's value
-      goto_state.level2.rename(true_val);
-      cur_state->level2.rename(false_val);
+      renaming::level2t::rename_to_value(true_val, sit->second);
+      renaming::level2t::rename_to_value(false_val, dit->second);
 
       rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
     }
@@ -300,7 +294,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     // Again, specifiy which l1 data object we're going to make the assignment
     // to.
-    renaming::level2t::rename_to_record(new_lhs, variable);
+    renaming::level2t::rename_to_record(new_lhs, dit->first);
 
     cur_state->assignment(new_lhs, rhs, true, target->get_num_steps());
 
@@ -311,7 +305,23 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       cur_state->source,
       cur_state->gen_stack_trace(),
       symex_targett::HIDDEN);
-  }
+
+    return true;
+  };
+
+  auto inserter = [this](rln::iterator &dit, rln::const_iterator &&sit) {
+    // In this case, there's something assigned in the merging-in goto state
+    // that just isn't in the destination. In the past we would merge with a
+    // #0 variable, just don't now, execution guards should prevent stale
+    // variables being read.
+    cur_state->level2.current_names.insert(dit, std::make_pair(sit->first, sit->second));
+    return;
+  };
+
+  esbmct::merge_mangler(goto_state.level2.current_names.begin(),
+      goto_state.level2.current_names.end(),
+      cur_state->level2.current_names.begin(),
+      cur_state->level2.current_names.end(), merger, inserter);
 }
 
 void

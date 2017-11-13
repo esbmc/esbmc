@@ -277,6 +277,10 @@ namespace renaming {
     // specific level2t object.
     static void rename_to_record(expr2tc &sym, const name_record &rec);
 
+    // Like rename to record, but we rename a level1 name to a level 2 given
+    // the valuet record passed in
+    static void rename_to_value(expr2tc &sym, const valuet &rec);
+
     level2t() = default;
     ~level2t() override = default;
     virtual boost::shared_ptr<level2t> clone() const = 0;
@@ -286,7 +290,7 @@ namespace renaming {
 
     friend void build_goto_symex_classes();
     // Repeat of the above ignored friend directive.
-    typedef hash_map_cont<name_record, valuet, name_rec_hash> current_namest;
+    typedef std::map<name_record, valuet> current_namest;
 
     current_namest current_names;
     typedef std::map<const expr2tc, crypto_hash> current_state_hashest;
