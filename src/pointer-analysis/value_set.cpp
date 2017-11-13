@@ -867,7 +867,7 @@ void value_sett::assign(
   bool add_to_sets)
 {
   // Assignment interpretation.
-  assert(ssa_step >= last_timestep || (ssa_step == 0 && last_timestep == 0));
+  assert(ssa_step >= last_timestep);
   last_timestep = ssa_step;
 
   if (is_if2t(rhs))
@@ -881,9 +881,9 @@ void value_sett::assign(
     // recursively entering this code path
     symbol2tc xchg_sym(lhs->type, xchg_name, symbol2t::level1, xchg_num++, 0, 0, 0);
 
-    assign(xchg_sym, ifref.true_value, false);
-    assign(xchg_sym, ifref.false_value, true);
-    assign(lhs, xchg_sym, add_to_sets);
+    assign(xchg_sym, ifref.true_value, ssa_step, false);
+    assign(xchg_sym, ifref.false_value, ssa_step, true);
+    assign(lhs, xchg_sym, ssa_step, add_to_sets);
 
     name_recordt rec(to_symbol2t(xchg_sym));
     erase(rec, irep_idt("")); // XXX misses nonempty suffixes
@@ -934,7 +934,7 @@ void value_sett::assign(
         expr2tc rhs_member = make_member(rhs, name);
 
         // XXX -- shouldn't this be one level of indentation up?
-        assign(lhs_member, rhs_member, add_to_sets);
+        assign(lhs_member, rhs_member, ssa_step, add_to_sets);
       }
     }
   }
@@ -956,7 +956,7 @@ void value_sett::assign(
 
       if (is_constant_array_of2t(rhs))
       {
-        assign(lhs_index, to_constant_array_of2t(rhs).initializer,
+        assign(lhs_index, to_constant_array_of2t(rhs).initializer, ssa_step, 
                add_to_sets);
       }
       else if (is_constant_array2t(rhs) || is_constant_expr(rhs))
@@ -965,13 +965,13 @@ void value_sett::assign(
 #if 0
         forall_operands(o_it, rhs)
         {
-          assign(lhs_index, *o_it, add_to_sets);
+          assign(lhs_index, *o_it, ssa_step, add_to_sets);
           add_to_sets=true;
         }
 #endif
-        rhs->foreach_operand([this, &add_to_sets, &lhs_index] (const expr2tc &e)
+        rhs->foreach_operand([this, ssa_step, &add_to_sets, &lhs_index] (const expr2tc &e)
           {
-            assign(lhs_index, e, add_to_sets);
+            assign(lhs_index, e, ssa_step, add_to_sets);
             add_to_sets = true;
           }
         );
@@ -983,14 +983,14 @@ void value_sett::assign(
         unknown2tc unknown(index_type2());
         index2tc idx(arr_type.subtype, with.source_value, unknown);
 
-        assign(lhs_index, idx, add_to_sets);
-        assign(lhs_index, with.update_value, true);
+        assign(lhs_index, idx, ssa_step, add_to_sets);
+        assign(lhs_index, with.update_value, ssa_step, true);
       }
       else
       {
         unknown2tc unknown(index_type2());
         index2tc rhs_idx(arr_type.subtype, rhs, unknown);
-        assign(lhs_index, rhs_idx, true);
+        assign(lhs_index, rhs_idx, ssa_step, true);
       }
     }
   }
