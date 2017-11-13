@@ -155,7 +155,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
       new_rhs = not2tc(new_rhs);
       do_simplify(new_rhs);
 
-      cur_state->assignment(guard_expr, new_rhs, false);
+      cur_state->assignment(guard_expr, new_rhs, false, target->get_num_steps());
 
       target->assignment(
         gen_true_expr(),
@@ -302,7 +302,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     // to.
     renaming::level2t::rename_to_record(new_lhs, variable);
 
-    cur_state->assignment(new_lhs, rhs, true);
+    cur_state->assignment(new_lhs, rhs, true, target->get_num_steps());
 
     target->assignment(
       gen_true_expr(),

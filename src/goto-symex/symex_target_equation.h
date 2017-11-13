@@ -175,6 +175,13 @@ public:
   void push_ctx() override ;
   void pop_ctx() override ;
 
+  unsigned long get_num_steps() const override {
+#if __cplusplus < 201103L
+#error std::list::size is O(n) pre C++11, you are going to have a bad time
+#endif
+    return SSA_steps.size();
+  }
+
 protected:
   const namespacet &ns;
   bool debug_print;

@@ -178,7 +178,8 @@ bool goto_symex_statet::constant_propagation_reference(const expr2tc &expr)const
 void goto_symex_statet::assignment(
   expr2tc &lhs,
   const expr2tc &rhs,
-  bool record_value)
+  bool record_value,
+  unsigned long ssa_num)
 {
   assert(is_symbol2t(lhs));
   symbol2t &lhs_sym = to_symbol2t(lhs);
@@ -207,7 +208,7 @@ void goto_symex_statet::assignment(
     expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
     level2.get_original_name(l1_rhs);
 
-    value_set.assign(l1_lhs, l1_rhs);
+    value_set.assign(l1_lhs, l1_rhs, ssa_num);
   }
 }
 

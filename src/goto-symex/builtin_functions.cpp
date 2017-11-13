@@ -474,12 +474,9 @@ void
 goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
                                      reachability_treet &art)
 {
-  statet &state = art.get_cur_state().get_active_state();
 
   unsigned int thread_id = art.get_cur_state().get_active_state_number();
   constant_int2tc tid(call.ret->type, BigInt(thread_id));
-
-  state.value_set.assign(call.ret, tid);
 
   code_assign2tc assign(call.ret, tid);
   symex_assign(assign);
@@ -533,7 +530,6 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
   code_assign2tc assign(call.ret, startdata);
   assert(base_type_eq(call.ret->type, startdata->type, ns));
 
-  state.value_set.assign(call.ret, startdata);
   symex_assign(assign);
 }
 
@@ -566,11 +562,7 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
   // Invalidates current state reference!
   unsigned int thread_id = art.get_cur_state().add_thread(&prog);
 
-  statet &state = art.get_cur_state().get_active_state();
-
   constant_int2tc thread_id_exp(call.ret->type, BigInt(thread_id));
-
-  state.value_set.assign(call.ret, thread_id_exp);
 
   code_assign2tc assign(call.ret, thread_id_exp);
   symex_assign(assign);

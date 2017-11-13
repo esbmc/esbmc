@@ -262,7 +262,7 @@ void goto_symext::symex_assign_symbol(
   do_simplify(rhs);
 
   expr2tc renamed_lhs = lhs;
-  cur_state->assignment(renamed_lhs, rhs, constant_propagation);
+  cur_state->assignment(renamed_lhs, rhs, constant_propagation, target->get_num_steps());
 
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);

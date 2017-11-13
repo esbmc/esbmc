@@ -471,6 +471,7 @@ public:
   void assign(
     const expr2tc &lhs,
     const expr2tc &rhs,
+    unsigned long timestep,
     bool add_to_sets=false);
 
   /** Interpret a function call during static analysis. Looks up the given

@@ -855,6 +855,7 @@ void value_sett::get_reference_set_rec(
 void value_sett::assign(
   const expr2tc &lhs,
   const expr2tc &rhs,
+  unsigned long ssa_step __attribute__((unused)),
   bool add_to_sets)
 {
   // Assignment interpretation.
@@ -1239,7 +1240,7 @@ void value_sett::do_end_function(const expr2tc &lhs)
 
   symbol2tc rhs(lhs->type, irep_idt("value_set::return_value"));
 
-  assign(lhs, rhs);
+  assign(lhs, rhs, 0);
 }
 
 void value_sett::apply_code(const expr2tc &code)
@@ -1254,19 +1255,19 @@ void value_sett::apply_code(const expr2tc &code)
   else if (is_code_assign2t(code))
   {
     const code_assign2t &ref = to_code_assign2t(code);
-    assign(ref.target, ref.source);
+    assign(ref.target, ref.source, 0);
   }
   else if (is_code_init2t(code))
   {
     const code_init2t &ref = to_code_init2t(code);
-    assign(ref.target, ref.source);
+    assign(ref.target, ref.source, 0);
   }
   else if (is_code_decl2t(code))
   {
     const code_decl2t &ref = to_code_decl2t(code);
     symbol2tc sym(ref.type, ref.value);
     invalid2tc invalid(ref.type);
-    assign(sym, invalid);
+    assign(sym, invalid, 0);
   }
   else if (is_code_expression2t(code))
   {
@@ -1289,7 +1290,7 @@ void value_sett::apply_code(const expr2tc &code)
     if (!is_nil_expr(ref.operand))
     {
       symbol2tc sym(ref.operand->type, "value_set::return_value");
-      assign(sym, ref.operand);
+      assign(sym, ref.operand, 0);
     }
   }
   else if (is_code_asm2t(code))

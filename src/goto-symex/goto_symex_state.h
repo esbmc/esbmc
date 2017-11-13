@@ -353,8 +353,10 @@ public:
    *  @param lhs Symbol being assigned to.
    *  @param rhs Value being assigned to symbol.
    *  @param record_value Whether to enable constant propagation.
+   *  @param ssa_num Number of SSA assignments so far, for time-tracking
    */
-  void assignment(expr2tc &lhs, const expr2tc &rhs, bool record_value);
+  void assignment(expr2tc &lhs, const expr2tc &rhs, bool record_value,
+      unsigned long ssa_num);
 
   /**
    *  Determine whether to constant propagate the value of an expression.

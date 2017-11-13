@@ -91,6 +91,8 @@ public:
 
   virtual void push_ctx() = 0;
   virtual void pop_ctx() = 0;
+
+  virtual unsigned long get_num_steps() const = 0;
 };
 
 class stack_framet
