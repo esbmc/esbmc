@@ -19,6 +19,8 @@ static ui_message_handlert::uit get_ui_cmdline(const cmdlinet &cmdline)
     return ui_message_handlert::OLD_GUI;
   else if(cmdline.isset("xml-ui"))
     return ui_message_handlert::XML_UI;
+  else if(cmdline.isset("witness-output"))
+    return ui_message_handlert::GRAPHML;
 
   return ui_message_handlert::PLAIN;
 }
