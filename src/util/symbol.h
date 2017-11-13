@@ -14,11 +14,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <list>
 #include <util/expr.h>
 #include <util/location.h>
+#include <util/irep2.h>
 
 class symbolt
 {
 public:
   typet type;
+  type2tc type2; // Only valid after goto function conversion.
   exprt value;
   locationt location;
   irep_idt name;

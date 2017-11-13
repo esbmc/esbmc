@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/location.h>
 #include <util/symbol.h>
+#include <util/migrate.h>
 
 symbolt::symbolt()
 {
@@ -33,6 +34,7 @@ void symbolt::swap(symbolt &b)
 #define SYM_SWAP1(x) x.swap(b.x)
 
   SYM_SWAP1(type);
+  SYM_SWAP1(type2);
   SYM_SWAP1(value);
   SYM_SWAP1(name);
   SYM_SWAP1(pretty_name);

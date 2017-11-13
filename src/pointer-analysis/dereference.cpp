@@ -506,6 +506,7 @@ dereferencet::make_failed_symbol(const type2tc &out_type)
   symbol.name="symex::invalid_object"+i2string(invalid_counter++);
   symbol.base_name="invalid_object";
   symbol.type=migrate_type_back(the_type);
+  symbol.type2=the_type;
 
   // make it a lvalue, so we can assign to it
   symbol.lvalue=true;

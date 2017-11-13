@@ -254,9 +254,8 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     // changed!
     const symbolt &symbol = ns.lookup(dit->first.base_name);
 
-    type2tc type;
-    typet old_type = symbol.type;
-    migrate_type(symbol.type, type);
+    const type2tc &type = symbol.type2;
+    assert(!is_nil_type(type));
 
     expr2tc rhs;
 

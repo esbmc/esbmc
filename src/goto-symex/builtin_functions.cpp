@@ -172,10 +172,11 @@ goto_symext::symex_mem(
 
   symbol.mode="C";
 
-  new_context.add(symbol);
-
   type2tc new_type;
   migrate_type(symbol.type, new_type);
+  symbol.type2 = new_type;
+
+  new_context.add(symbol);
 
   address_of2tc rhs_addrof(get_empty_type(), expr2tc());
 
