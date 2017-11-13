@@ -263,12 +263,15 @@ public:
      *  also be '[]' if this is the value set of an array of pointers: we don't
      *  track each individual element, only the array of them. */
     irep_idt suffix;
+    /** Timestep (SSA num) at which this was last written to. */
+    unsigned long timestep;
 
     entryt() = default;
 
     entryt(name_recordt _identifier, const irep_idt &_suffix):
       identifier(std::move(_identifier)),
-      suffix(_suffix)
+      suffix(_suffix),
+      timestep(0)
     {
     }
   };
@@ -448,14 +451,18 @@ public:
   /** Given another value set tracking object's storage, read all value set
    *  records out and merge them into this object's.
    *  @param new_values Stored set of value sets to merge into this object.
+   *  @param last_timestep Time (SSA step number) at which to record that
+   *         this merge / update happened.
    *  @param keepnew If true, add new pointer records in new_values into this
    *         object's tracking map; if not, discard them.
    *  @return True if a modification occurs. */
-  bool make_union(const valuest &new_values, bool keepnew=false);
+  bool make_union(const valuest &new_values, unsigned long last_timestep,
+      bool keepnew=false);
 
-  bool make_union(const value_sett &new_values, bool keepnew=false)
+  bool make_union(const value_sett &new_values, unsigned long last_timestep,
+      bool keepnew=false)
   {
-    return make_union(new_values.values, keepnew);
+    return make_union(new_values.values, last_timestep, keepnew);
   }
 
   /** When using value_sett for static analysis, takes a code statement and
@@ -607,7 +614,7 @@ public:
    *  index for working out, during the merge of two value sets, whether each
    *  tracked pointer set needs merging or not. Not passed down through
    *  functions because:
-   *   * We should only enter through assign anyway
+   *   * We should only enter through assign anyway (or merge/union).
    *   * That would be a pain */
   unsigned long last_timestep;
 };

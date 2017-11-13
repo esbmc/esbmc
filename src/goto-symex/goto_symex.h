@@ -221,9 +221,10 @@ protected:
    *  See merge_gotos - when we're merging states together due to previous
    *  jumps, this function implements the merging of pointer tracking data.
    *  @param goto_state Previously executed goto state to be merged in.
-   *  @param dest Thread state for previous jump to be merged into.
+   *  @param stepno Time (SSA step number) at which the merge should occur
    */
-  void merge_value_sets(const statet::goto_statet &goto_state);
+  void merge_value_sets(const statet::goto_statet &goto_state,
+      unsigned long stepno);
 
   /**
    *  Join together a previous jump state into thread state.

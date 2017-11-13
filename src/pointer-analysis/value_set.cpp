@@ -163,15 +163,23 @@ merge_mangler(CIterator sit, CIterator send, Iterator dit, Iterator dend,
   return result;
 }
 
-bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
+bool value_sett::make_union(const value_sett::valuest &new_values, unsigned long last_timestep, bool keepnew)
 {
   // Iterate over all new values; if they're in the current value set, merge
   // them. If not, only merge it in if keepnew is true.
 
+  this->last_timestep = last_timestep;
+
   auto merger = [this](valuest::iterator &dit, valuest::const_iterator &sit) -> bool {
     entryt &e = dit->second;
     const entryt &new_e = sit->second;
-    return make_union(e.object_map, new_e.object_map);
+
+    if (make_union(e.object_map, new_e.object_map)) {
+      e.timestep = this->last_timestep;
+      return true;
+    }
+
+    return false;
   };
 
   auto inserter = [keepnew, this](valuest::iterator &dit, valuest::const_iterator &sit) {
@@ -1075,10 +1083,14 @@ void value_sett::assign_rec(
   {
     name_recordt rec(to_symbol2t(lhs));
 
-    if(add_to_sets)
-      make_union(get_entry(rec, suffix).object_map, values_rhs);
-    else
-      get_entry(rec, suffix).object_map=values_rhs;
+    entryt &ent = get_entry(rec, suffix);
+    if (add_to_sets) {
+      if (make_union(ent.object_map, values_rhs))
+        ent.timestep = last_timestep;
+    } else {
+      ent.object_map=values_rhs;
+      ent.timestep = last_timestep;
+    }
   }
   else if (is_dynamic_object2t(lhs))
   {
@@ -1093,7 +1105,9 @@ void value_sett::assign_rec(
         symbol2t::level0, idnum, 0, 0, 0);
     name_recordt rec(sym);
 
-    make_union(get_entry(rec, suffix).object_map, values_rhs);
+    entryt &ent = get_entry(rec, suffix);
+    if (make_union(ent.object_map, values_rhs))
+      ent.timestep = last_timestep;
   }
   else if (is_dereference2t(lhs))
   {

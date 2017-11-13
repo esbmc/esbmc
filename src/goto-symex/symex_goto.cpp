@@ -206,7 +206,7 @@ goto_symext::merge_gotos()
     // do SSA phi functions
     phi_function(goto_state);
 
-    merge_value_sets(goto_state);
+    merge_value_sets(goto_state, target->get_num_steps());
 
     // adjust guard
     cur_state->guard |= goto_state.guard;
@@ -220,14 +220,14 @@ goto_symext::merge_gotos()
 }
 
 void
-goto_symext::merge_value_sets(const statet::goto_statet &src)
+goto_symext::merge_value_sets(const statet::goto_statet &src, unsigned long stepno)
 {
   if (cur_state->guard.is_false()) {
     cur_state->value_set = src.value_set;
     return;
   }
 
-  cur_state->value_set.make_union(src.value_set);
+  cur_state->value_set.make_union(src.value_set, stepno);
 }
 
 void
