@@ -53,11 +53,6 @@ bmct::bmct(const goto_functionst &funcs,
   interleaving_number = 0;
   interleaving_failed = 0;
 
-  ltl_results_seen[ltl_res_bad] = 0;
-  ltl_results_seen[ltl_res_failing] = 0;
-  ltl_results_seen[ltl_res_succeeding] = 0;
-  ltl_results_seen[ltl_res_good] = 0;
-
   if(options.get_bool_option("smt-during-symex"))
   {
     runtime_solver =
@@ -104,39 +99,28 @@ void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq)
   if(options.get_bool_option("result-only"))
     return;
 
-  goto_tracet goto_trace;
-  std::string witness_output = options.get_option("witness-output");
-  int specification = 0;
-  if(!witness_output.empty())
-    set_ui(ui_message_handlert::GRAPHML);
-
   switch(ui)
   {
     case ui_message_handlert::GRAPHML:
+    {
+      goto_tracet goto_trace;
       status("Building successful trace");
       build_successful_goto_trace(eq, ns, goto_trace);
-      specification += options.get_bool_option("overflow-check") ? 1 : 0;
-      specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
-      generate_goto_trace_in_correctness_graphml_format(
-        witness_output,
-        options.get_bool_option("witness-detailed"),
-        specification,
+      correctness_graphml_goto_trace(
+        options,
         ns,
-        goto_trace
-      );
+        goto_trace);
+    }
     break;
 
     case ui_message_handlert::OLD_GUI:
       std::cout << "SUCCESS" << std::endl
-                << "Verification successful" << std::endl
-                << ""     << std::endl
-                << ""     << std::endl
-                << ""     << std::endl
-                << ""     << std::endl;
-    break;
+      << "Verification successful" << std::endl
+      << "\n\n\n\n";
+      break;
 
     case ui_message_handlert::PLAIN:
-    break;
+      break;
 
     case ui_message_handlert::XML_UI:
     {
@@ -162,27 +146,13 @@ void bmct::error_trace(
   status("Building error trace");
 
   goto_tracet goto_trace;
-  int specification = 0;
   build_goto_trace(eq, smt_conv, goto_trace);
-
-  std::string witness_output = options.get_option("witness-output");
-  if(!witness_output.empty())
-  {
-    set_ui(ui_message_handlert::GRAPHML);
-  }
 
   switch (ui)
   {
     case ui_message_handlert::GRAPHML:
-      specification += options.get_bool_option("overflow-check") ? 1 : 0;
-      specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
-      generate_goto_trace_in_violation_graphml_format(
-        witness_output,
-        options.get_bool_option("witness-detailed"),
-        specification,
-        ns,
-        goto_trace
-      );
+      violation_graphml_goto_trace(options, ns, goto_trace);
+      /* fallthrough */
 
     case ui_message_handlert::PLAIN:
       std::cout << std::endl << "Counterexample:" << std::endl;
@@ -270,18 +240,22 @@ void bmct::report_success()
   {
     case ui_message_handlert::OLD_GUI:
       std::cout << "SUCCESS" << std::endl
-                << "Verification successful" << std::endl
-                << ""     << std::endl
-                << ""     << std::endl
-                << ""     << std::endl
-                << ""     << std::endl;
-    break;
-
-    case ui_message_handlert::PLAIN:
-    break;
+      << "Verification successful" << std::endl
+      << ""     << std::endl
+      << ""     << std::endl
+      << ""     << std::endl
+      << ""     << std::endl;
+      break;
 
     case ui_message_handlert::GRAPHML:
-    break;
+    {
+      goto_tracet goto_trace;
+      correctness_graphml_goto_trace(options, ns, goto_trace);
+    }
+    /* fallthrough */
+
+    case ui_message_handlert::PLAIN:
+      break;
 
     case ui_message_handlert::XML_UI:
     {
@@ -295,7 +269,6 @@ void bmct::report_success()
     default:
       assert(false);
   }
-
 }
 
 void bmct::report_failure()
@@ -304,26 +277,26 @@ void bmct::report_failure()
 
   switch(ui)
   {
-  case ui_message_handlert::OLD_GUI:
-  break;
+    case ui_message_handlert::OLD_GUI:
+      break;
 
-  case ui_message_handlert::PLAIN:
-  break;
+    case ui_message_handlert::PLAIN:
+      break;
 
-  case ui_message_handlert::XML_UI:
-  {
-    xmlt xml("cprover-status");
-    xml.data="FAILURE";
-    std::cout << xml;
-    std::cout << std::endl;
-  }
-  break;
+    case ui_message_handlert::XML_UI:
+    {
+      xmlt xml("cprover-status");
+      xml.data="FAILURE";
+      std::cout << xml;
+      std::cout << std::endl;
+    }
+    break;
 
-  case ui_message_handlert::GRAPHML:
-  break;
+    case ui_message_handlert::GRAPHML:
+      break;
 
-  default:
-    assert(false);
+    default:
+      assert(false);
   }
 }
 
@@ -485,7 +458,6 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
     return run_thread(eq);
 
   smt_convt::resultt res;
-
   do
   {
     if(++interleaving_number > 1)
@@ -520,26 +492,7 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
 
   } while(symex->setup_next_formula());
 
-  if (options.get_bool_option("ltl"))
-  {
-    // So, what was the lowest value ltl outcome that we saw?
-    if (ltl_results_seen[ltl_res_bad]) {
-      std::cout << "Final lowest outcome: LTL_BAD" << std::endl;
-    } else if (ltl_results_seen[ltl_res_failing]) {
-      std::cout << "Final lowest outcome: LTL_FAILING" << std::endl;
-    } else if (ltl_results_seen[ltl_res_succeeding]) {
-      std::cout << "Final lowest outcome: LTL_SUCCEEDING" << std::endl;
-    } else if (ltl_results_seen[ltl_res_good]) {
-      std::cout << "Final lowest outcome: LTL_GOOD" << std::endl;
-    }  else {
-      std::cout << "No traces seen, apparently" << std::endl;
-    }
-  }
-
-  if(interleaving_failed > 0)
-    return smt_convt::P_SATISFIABLE;
-
-  return res;
+  return interleaving_failed > 0 ? smt_convt::P_SATISFIABLE : res;
 }
 
 smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &eq)
@@ -598,15 +551,11 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
   try
   {
     fine_timet slice_start = current_time();
-    u_int64_t ignored;
+    BigInt ignored;
     if(!options.get_bool_option("no-slice"))
-    {
-      ignored = slice(eq);
-    }
+      ignored = slice(eq, options.get_bool_option("slice-assumes"));
     else
-    {
       ignored = simple_slice(eq);
-    }
     fine_timet slice_stop = current_time();
 
     {
@@ -629,7 +578,7 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
       std::ostringstream str;
       str << "Generated " << result->total_claims << " VCC(s), ";
       str << result->remaining_claims << " remaining after simplification ";
-      str << "(" << eq->SSA_steps.size() - ignored << " assignments)";
+      str << "(" << BigInt(eq->SSA_steps.size()) - ignored << " assignments)";
       status(str.str());
     }
 
@@ -655,14 +604,6 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
         return smt_convt::P_SMTLIB;
       }
 
-      return smt_convt::P_UNSATISFIABLE;
-    }
-
-    if (options.get_bool_option("ltl")) {
-      int res = ltl_run_thread(eq);
-      // Record that we've seen this outcome; later decide what the least
-      // outcome was.
-      ltl_results_seen[res]++;
       return smt_convt::P_UNSATISFIABLE;
     }
 
@@ -696,105 +637,4 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
     std::cout << "Out of memory" << std::endl;
     return smt_convt::P_ERROR;
   }
-}
-
-int
-bmct::ltl_run_thread(boost::shared_ptr<symex_target_equationt> &equation)
-{
-  unsigned int num_asserts = 0;
-  // LTL checking - first check for whether we have an indeterminate prefix,
-  // and then check for all others.
-
-  // Start by turning all assertions that aren't the negative prefix
-  // assertion into skips.
-  for(auto & SSA_step : equation->SSA_steps)
-  {
-    if (SSA_step.is_assert()) {
-      if (SSA_step.comment != "LTL_BAD") {
-        SSA_step.type = goto_trace_stept::SKIP;
-      } else {
-        num_asserts++;
-      }
-    }
-  }
-
-  std::cout << "Checking for LTL_BAD" << std::endl;
-  if (num_asserts != 0) {
-    if (run(equation)) {
-      std::cout << "Found trace satisfying LTL_BAD" << std::endl;
-      return ltl_res_bad;
-    }
-  } else {
-    std::cerr << "Warning: Couldn't find LTL_BAD assertion" << std::endl;
-  }
-
-  // Didn't find it; turn skip steps back into assertions.
-  for(auto & SSA_step : equation->SSA_steps)
-  {
-    if (SSA_step.type == goto_trace_stept::SKIP)
-      SSA_step.type = goto_trace_stept::ASSERT;
-  }
-
-  // Try again, with LTL_FAILING
-  num_asserts = 0;
-  for(auto & SSA_step : equation->SSA_steps)
-  {
-    if (SSA_step.is_assert()) {
-      if (SSA_step.comment != "LTL_FAILING") {
-        SSA_step.type = goto_trace_stept::SKIP;
-      } else {
-        num_asserts++;
-      }
-    }
-  }
-
-  std::cout << "Checking for LTL_FAILING" << std::endl;
-  if (num_asserts != 0) {
-    if (run(equation)) {
-      std::cout << "Found trace satisfying LTL_FAILING" << std::endl;
-      return ltl_res_failing;
-    }
-  } else {
-    std::cerr << "Warning: Couldn't find LTL_FAILING assertion" <<std::endl;
-  }
-
-  // Didn't find it; turn skip steps back into assertions.
-  for(auto & SSA_step : equation->SSA_steps)
-  {
-    if (SSA_step.type == goto_trace_stept::SKIP)
-      SSA_step.type = goto_trace_stept::ASSERT;
-  }
-
-  // Try again, with LTL_SUCCEEDING
-  num_asserts = 0;
-  for(auto & SSA_step : equation->SSA_steps)
-  {
-    if (SSA_step.is_assert()) {
-      if (SSA_step.comment != "LTL_SUCCEEDING") {
-        SSA_step.type = goto_trace_stept::SKIP;
-      } else {
-        num_asserts++;
-      }
-    }
-  }
-
-  std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
-  if (num_asserts != 0) {
-    if (run(equation)) {
-      std::cout << "Found trace satisfying LTL_SUCCEEDING" << std::endl;
-      return ltl_res_succeeding;
-    }
-  } else {
-    std::cerr << "Warning: Couldn't find LTL_SUCCEEDING assertion"
-              << std::endl;
-  }
-
-  // Otherwise, we just got a good prefix.
-  for(auto & SSA_step : equation->SSA_steps)
-  {
-    if (SSA_step.type == goto_trace_stept::SKIP)
-      SSA_step.type = goto_trace_stept::ASSERT;
-  }
-
-  return ltl_res_good;
 }

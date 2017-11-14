@@ -145,14 +145,14 @@ goto_symext::symex_step(reachability_treet & art)
       if (thrown_obj_map.find(cur_state->source.pc) != thrown_obj_map.end()) {
         symbol2tc thrown_obj = thrown_obj_map[cur_state->source.pc];
 
-        if (is_pointer_type(deref_code.get()->target.get()->type)
-            && !is_pointer_type(thrown_obj.get()->type))
+        if (is_pointer_type(deref_code->target->type)
+            && !is_pointer_type(thrown_obj->type))
         {
-          expr2tc new_thrown_obj(new address_of2t(thrown_obj.get()->type, thrown_obj));
-          deref_code.get()->source = new_thrown_obj;
+          expr2tc new_thrown_obj(new address_of2t(thrown_obj->type, thrown_obj));
+          deref_code->source = new_thrown_obj;
         }
         else
-          deref_code.get()->source = thrown_obj;
+          deref_code->source = thrown_obj;
 
         thrown_obj_map.erase(cur_state->source.pc);
       }
@@ -290,8 +290,7 @@ void goto_symext::symex_assert()
      && loop_numbers.size()
      && inductive_step)
   {
-    statet::framet &frame = cur_state->top();
-    BigInt unwind = frame.loop_iterations[loop_numbers.top()];
+    BigInt unwind = cur_state->loop_iterations[loop_numbers.top()];
 
     if(unwind < (max_unwind - 1))
     {

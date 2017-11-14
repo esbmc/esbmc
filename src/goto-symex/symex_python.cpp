@@ -506,10 +506,9 @@ build_goto_symex_classes()
     .def_readwrite("function_ptr_call_loc", &goto_symex_statet::framet::function_ptr_call_loc)
     .def_readwrite("function_ptr_combine_target", &goto_symex_statet::framet::function_ptr_combine_target)
     .def_readwrite("orig_func_ptr_call", &goto_symex_statet::framet::orig_func_ptr_call)
-    .def_readwrite("declaration_history", &goto_symex_statet::framet::declaration_history)
-    .def_readwrite("loop_iterations", &goto_symex_statet::framet::loop_iterations);
+    .def_readwrite("declaration_history", &goto_symex_statet::framet::declaration_history);
 
-  class_<goto_symex_statet::framet::loop_iterationst>("loop_iterationst")
+  class_<goto_symex_statet::loop_iterationst>("loop_iterationst")
     .def(map_indexing_suite<hash_map_cont<unsigned, unsigned> >());
 
   void (goto_symex_statet::*current_name_expr)(expr2tc &) const = &goto_symex_statet::current_name;
@@ -547,6 +546,7 @@ build_goto_symex_classes()
     .add_property("level2", make_function(get_level2, return_internal_reference<>()))
     .add_property("value_set", make_function(get_value_set, return_internal_reference<>()))
     .def_readwrite("call_stack", &goto_symex_statet::call_stack)
+    .def_readwrite("loop_iterations", &goto_symex_statet::loop_iterations)
     .def_readwrite("realloc_map", &goto_symex_statet::realloc_map);
 
   class_<std::vector<goto_symex_statet::framet> >("frame_vec")

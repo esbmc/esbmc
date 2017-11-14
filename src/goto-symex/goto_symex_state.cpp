@@ -47,6 +47,7 @@ goto_symex_statet::operator=(const goto_symex_statet &state)
   global_guard = state.global_guard;
   source = state.source;
   variable_instance_nums = state.variable_instance_nums;
+  loop_iterations = state.loop_iterations;
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   call_stack = state.call_stack;
@@ -233,7 +234,7 @@ void goto_symex_statet::rename(expr2tc &expr, bool rename_only)
   else
   {
     // do this recursively
-    expr.get()->Foreach_operand([this, &rename_only] (expr2tc &e) {
+    expr->Foreach_operand([this, &rename_only] (expr2tc &e) {
         rename(e, rename_only);
       }
     );
@@ -273,7 +274,7 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   else
   {
     // do this recursively
-    expr.get()->Foreach_operand([this] (expr2tc &e) {
+    expr->Foreach_operand([this] (expr2tc &e) {
         rename_address(e);
       }
     );
@@ -352,7 +353,7 @@ void goto_symex_statet::get_original_name(expr2tc &expr) const
   if (is_nil_expr(expr))
     return;
 
-  expr.get()->Foreach_operand([this] (expr2tc &e) {
+  expr->Foreach_operand([this] (expr2tc &e) {
       get_original_name(e);
     }
   );

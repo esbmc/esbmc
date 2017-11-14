@@ -1,7 +1,6 @@
 int nondet_int();
 
-unsigned int nondet_uint();
-unsigned int M = nondet_uint();
+unsigned int M;
 
 main()
 {

@@ -15,7 +15,6 @@
 void goto_k_induction(
   goto_functionst& goto_functions,
   contextt &context,
-  optionst &options,
   message_handlert& message_handler)
 {
   Forall_goto_functions(it, goto_functions)
@@ -25,7 +24,6 @@ void goto_k_induction(
         goto_functions,
         it->second,
         context,
-        options,
         message_handler);
 
   goto_functions.update();
@@ -50,11 +48,10 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
-  exprt loop_cond;
-  get_loop_cond(loop_head, loop_exit, loop_cond);
+  auto loop_cond = get_loop_cond(loop_head, loop_exit);
 
   // If we didn't find a loop condition, don't change anything
-  if(loop_cond.is_nil())
+  if(is_nil_expr(loop_cond))
   {
     std::cout << "**** WARNING: we couldn't find a loop condition for the"
               << " following loop, so we're not converting it."
@@ -63,14 +60,11 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
     return;
   }
 
-  // Fill the state member with the variables
-  fill_state(loop);
-
   // Assume the loop condition before go into the loop
   assume_loop_cond_before_loop(loop_head, loop_cond);
 
   // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(loop_head);
+  make_nondet_assign(loop_head, loop);
 
   // Get original head again
   // Since we are using insert_swap to keep the targets, the
@@ -83,13 +77,10 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   adjust_loop_head_and_exit(loop_head, loop_exit);
 }
 
-void goto_k_inductiont::get_loop_cond(
+const expr2tc goto_k_inductiont::get_loop_cond(
   goto_programt::targett& loop_head,
-  goto_programt::targett& loop_exit,
-  exprt& loop_cond)
+  goto_programt::targett& loop_exit)
 {
-  loop_cond = nil_exprt();
-
   // Let's not change the loop head
   goto_programt::targett tmp = loop_head;
 
@@ -100,26 +91,39 @@ void goto_k_inductiont::get_loop_cond(
   // If we hit the loop's end and didn't find any loop condition
   // return a nil exprt
   if(tmp == loop_exit)
-    return;
+    return expr2tc();
 
-  // Otherwise, fill the loop condition
-  loop_cond = migrate_expr_back(tmp->guard);
+  // We found the loop condition however it's inverted, so we
+  // have to negate it before returning
+  auto cond = tmp->guard;
+  make_not(cond);
+  return cond;
 }
 
-void goto_k_inductiont::make_nondet_assign(goto_programt::targett& loop_head)
+void goto_k_inductiont::make_nondet_assign(
+  goto_programt::targett &loop_head,
+  const loopst &loop)
 {
   goto_programt dest;
 
-  unsigned int component_size = state.components().size();
-  for (unsigned int j = 0; j < component_size; j++)
-  {
-    exprt rhs_expr = side_effect_expr_nondett(
-      state.components()[j].type());
-    exprt lhs_expr = state.components().at(j);
+  auto const &loop_vars = loop.get_loop_vars();
 
-    code_assignt new_assign(lhs_expr, rhs_expr);
-    new_assign.location() = loop_head->location;
-    copy(new_assign, ASSIGN, dest);
+  for(auto const &var : loop_vars)
+  {
+    expr2tc lhs = var;
+    expr2tc rhs =
+      sideeffect2tc(
+        lhs->type,
+        expr2tc(),
+        expr2tc(),
+        std::vector<expr2tc>(),
+        type2tc(),
+        sideeffect2t::nondet);
+
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    t->inductive_step_instruction = true;
+    t->code = code_assign2tc(lhs, rhs);
+    t->location = loop_head->location;
   }
 
   goto_function.body.insert_swap(loop_head, dest);
@@ -127,28 +131,22 @@ void goto_k_inductiont::make_nondet_assign(goto_programt::targett& loop_head)
 
 void goto_k_inductiont::assume_loop_cond_before_loop(
   goto_programt::targett& loop_head,
-  exprt &loop_cond)
+  expr2tc &loop_cond)
 {
   goto_programt dest;
-
-  if(loop_cond.is_not())
-    assume_cond(loop_cond.op0(), dest);
-  else
-    assume_cond(loop_cond, dest);
+  assume_cond(loop_cond, dest);
 
   goto_function.body.insert_swap(loop_head, dest);
 }
 
 void goto_k_inductiont::assume_neg_loop_cond_after_loop(
   goto_programt::targett& loop_exit,
-  exprt& loop_cond)
+  expr2tc& loop_cond)
 {
   goto_programt dest;
-
-  if(loop_cond.is_not())
-    assume_cond(gen_not(loop_cond.op0()), dest);
-  else
-    assume_cond(gen_not(loop_cond), dest);
+  expr2tc neg_loop_cond = loop_cond;
+  make_not(neg_loop_cond);
+  assume_cond(neg_loop_cond, dest);
 
   goto_programt::targett _loop_exit = loop_exit;
   ++_loop_exit;
@@ -298,43 +296,13 @@ void goto_k_inductiont::convert_assert_to_assume(
     if(t->is_assert()) t->type=ASSUME;
 }
 
-void goto_k_inductiont::fill_state(loopst &loop)
-{
-  loopst::loop_varst loop_vars = loop.get_loop_vars();
-
-  // State size will be the number of loop vars + global vars
-  state.components().resize(loop_vars.size());
-
-  // Copy from loop vars
-  loopst::loop_varst::iterator it = loop_vars.begin();
-  unsigned int i=0;
-  for(i=0; i<loop_vars.size(); i++, it++)
-  {
-    state.components()[i] = (struct_typet::componentt &) it->second;
-    state.components()[i].set_name(it->second.identifier());
-    state.components()[i].pretty_name(it->second.identifier());
-  }
-}
-
-void goto_k_inductiont::copy(const codet& code,
-  goto_program_instruction_typet type,
-  goto_programt& dest)
-{
-  goto_programt::targett t=dest.add_instruction(type);
-  t->inductive_step_instruction = true;
-
-  migrate_expr(code, t->code);
-  t->location=code.location();
-}
-
 void goto_k_inductiont::assume_cond(
-  const exprt& cond,
+  const expr2tc& cond,
   goto_programt& dest)
 {
   goto_programt tmp_e;
   goto_programt::targett e=tmp_e.add_instruction(ASSUME);
   e->inductive_step_instruction = true;
-
-  migrate_expr(cond, e->guard);
+  e->guard = cond;
   dest.destructive_append(tmp_e);
 }

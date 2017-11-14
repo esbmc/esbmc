@@ -1,0 +1,3 @@
+main.c
+--incremental-bmc --max-k-step 5
+^VERIFICATION FAILED$

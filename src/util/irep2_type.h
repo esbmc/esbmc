@@ -49,9 +49,9 @@ class struct_union_data : public type2t
 public:
   struct_union_data(type2t::type_ids id, std::vector<type2tc> membs,
     std::vector<irep_idt> names, std::vector<irep_idt> pretty_names,
-    const irep_idt &n)
+    const irep_idt &n, bool _packed)
       : type2t(id), members(std::move(membs)), member_names(std::move(names)),
-        member_pretty_names(std::move(pretty_names)), name(n)
+        member_pretty_names(std::move(pretty_names)), name(n), packed(_packed)
   {
   }
   struct_union_data(const struct_union_data &ref) = default;
@@ -73,13 +73,15 @@ public:
   std::vector<irep_idt> member_names;
   std::vector<irep_idt> member_pretty_names;
   irep_idt name;
+  bool packed;
 
 // Type mangling:
   typedef esbmct::field_traits<std::vector<type2tc>, struct_union_data, &struct_union_data::members> members_field;
   typedef esbmct::field_traits<std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names> member_names_field;
   typedef esbmct::field_traits<std::vector<irep_idt>, struct_union_data, &struct_union_data::member_pretty_names> member_pretty_names_field;
   typedef esbmct::field_traits<irep_idt, struct_union_data, &struct_union_data::name> name_field;
-  typedef esbmct::type2t_traits<members_field, member_names_field, member_pretty_names_field, name_field> traits;
+  typedef esbmct::field_traits<bool, struct_union_data, &struct_union_data::packed> packed_field;
+  typedef esbmct::type2t_traits<members_field, member_names_field, member_pretty_names_field, name_field, packed_field> traits;
 };
 
 class bv_data : public type2t
@@ -307,8 +309,9 @@ public:
   struct_type2t(const std::vector<type2tc> &members,
                 const std::vector<irep_idt> &memb_names,
                 const std::vector<irep_idt> &memb_pretty_names,
-                const irep_idt &name)
-    : struct_type_methods(struct_id, members, memb_names, memb_pretty_names, name) {}
+                const irep_idt &name,
+                bool packed = false)
+    : struct_type_methods(struct_id, members, memb_names, memb_pretty_names, name, packed) {}
   struct_type2t(const struct_type2t &ref) = default;
   unsigned int get_width() const override;
 
@@ -333,7 +336,7 @@ public:
                const std::vector<irep_idt> &memb_names,
                const std::vector<irep_idt> &memb_pretty_names,
                const irep_idt &name)
-    : union_type_methods(union_id, members, memb_names, memb_pretty_names, name) {}
+    : union_type_methods(union_id, members, memb_names, memb_pretty_names, name, false) {}
   union_type2t(const union_type2t &ref) = default;
   unsigned int get_width() const override;
 

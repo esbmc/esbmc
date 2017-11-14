@@ -1193,6 +1193,13 @@ smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
+  case expr2t::extract_id:
+  {
+    const extract2t &ex = to_extract2t(expr);
+    a = convert_ast(ex.from);
+    a = mk_extract(a, ex.upper, ex.lower, sort);
+    break;
+  }
   default:
     std::cerr << "Couldn't convert expression in unrecognised format"
               << std::endl;
@@ -2686,13 +2693,13 @@ smt_convt::rewrite_ptrs_to_structs(type2tc &type)
       e = pointer_struct;
     } else {
       // Recurse
-      e.get()->Foreach_subtype(*delegate);
+      e->Foreach_subtype(*delegate);
     }
   };
 
   type2t::subtype_delegate del_wrap(std::ref(replace_w_ptr));
   delegate = &del_wrap;
-  type.get()->Foreach_subtype(replace_w_ptr);
+  type->Foreach_subtype(replace_w_ptr);
 }
 
 // Default behaviours for SMT AST's

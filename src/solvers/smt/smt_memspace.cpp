@@ -54,10 +54,10 @@ smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
   // To ensure we can do this in an operation independant way, we're going to
   // clone the original comparison expression, and replace its operands with
   // new values. Works whatever the expr is, so long as it has two operands.
-  *start_expr.get()->get_sub_expr_nc(0) = obj1_start;
-  *start_expr.get()->get_sub_expr_nc(1) = obj2_start;
-  *offs_expr.get()->get_sub_expr_nc(0) = ptr_offs1;
-  *offs_expr.get()->get_sub_expr_nc(1) = ptr_offs2;
+  *start_expr->get_sub_expr_nc(0) = obj1_start;
+  *start_expr->get_sub_expr_nc(1) = obj2_start;
+  *offs_expr->get_sub_expr_nc(0) = ptr_offs1;
+  *offs_expr->get_sub_expr_nc(1) = ptr_offs2;
 
   // Those are now boolean type'd relations.
   equality2tc is_same_obj_expr(ptr_obj1, ptr_obj2);
@@ -489,7 +489,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     // Take the address of whatevers being casted. Either way, they all end up
     // being of a pointer_tuple type, so this should be fine.
     address_of2tc tmp(type2tc(), to_typecast2t(obj.ptr_obj).from);
-    tmp.get()->type = obj.type;
+    tmp->type = obj.type;
     return convert_ast(tmp);
   }
 

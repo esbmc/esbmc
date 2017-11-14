@@ -5,6 +5,9 @@
  *      Author: mramalho
  */
 
+#include <type_traits>
+#include <sstream>
+
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -16,6 +19,8 @@
 #include <util/ieee_float.h>
 #include <util/prefix.h>
 #include <util/std_code.h>
+
+#define BITFIELD_MAX_FIELD 64
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context),
@@ -35,9 +40,19 @@ bool clang_c_adjust::adjust()
     }
   );
 
+  // Adjust types first, so that symbolic-type resolution always receives
+  // fixed up types.
   Forall_symbol_list(it, symbol_list)
   {
     symbolt &symbol = **it;
+    if(symbol.is_type)
+      adjust_type(symbol.type);
+  }
+
+  Forall_symbol_list(it, symbol_list)
+  {
+    symbolt &symbol = **it;
+    adjust_type(symbol.type);
 
     if(symbol.is_type)
       continue;
@@ -59,6 +74,9 @@ void clang_c_adjust::adjust_symbol(symbolt& symbol)
 
 void clang_c_adjust::adjust_expr(exprt& expr)
 {
+
+  adjust_type(expr.type());
+
   if(expr.id() == "sideeffect")
   {
     adjust_side_effect(to_side_effect_expr(expr));
@@ -139,6 +157,10 @@ void clang_c_adjust::adjust_expr(exprt& expr)
   else if(expr.is_code())
   {
     adjust_code(to_code(expr));
+  }
+  else if (expr.id() == "struct")
+  {
+    adjust_constant_struct(expr);
   }
   else
   {
@@ -235,6 +257,52 @@ void clang_c_adjust::adjust_member(member_exprt& expr)
     deref.move_to_operands(base);
     base.swap(deref);
   }
+
+  // Is this type bitfielded?
+  if (has_bitfields(base.type())) {
+    // It is. This means that this member expression *may* need to be rewritten.
+    // Is the field name a bitfield?
+    base.type() = fix_bitfields(base.type());
+    const auto &backmap = bitfield_mappings[base.type()];
+    auto it = backmap.find(expr.get("component_name"));
+    if (it != backmap.end()) {
+      // Yes. Rewrite it.
+      rewrite_bitfield_member(expr, it->second);
+    }
+  }
+}
+
+void clang_c_adjust::rewrite_bitfield_member(exprt &expr, const bitfield_map &bm)
+{
+  // The plan: build a new member expression accessing the blob field that
+  // contains the bitfield. Then create an extract expression that pulls out
+  // the relevant bits.
+  auto &memb = to_member_expr(expr);
+  auto &sutype = to_struct_union_type(expr.op0().type());
+
+  std::string fieldname = gen_bitfield_blob_name(bm.blobloc);
+  auto &this_comp = sutype.get_component(fieldname);
+  assert(bv_width(this_comp.type()) != 0);
+  unsignedbv_typet ubv_size(bv_width(this_comp.type()));
+  // Note that we depend on the member expression still carrying the bitfield
+  // width here. If that isn't true in the future, it'll have to be stored in
+  // the bitfield map struct.
+  unsigned int our_width = bv_width(memb.type());
+
+  member_exprt new_memb(memb.struct_op(), irep_idt(fieldname), ubv_size);
+
+  // Welp. Today, the bit ordering is that the 'bitloc' is the bottommost bit.
+  exprt extract("extract", memb.type());
+  extract.copy_to_operands(new_memb);
+  std::stringstream ss;
+  ss << bm.bitloc;
+  extract.set("lower", irep_idt(ss.str()));
+  ss = std::stringstream();
+
+  ss << bm.bitloc + (our_width-1);
+  extract.set("upper", irep_idt(ss.str()));
+
+  expr = extract;
 }
 
 void clang_c_adjust::adjust_expr_binary_arithmetic(exprt& expr)
@@ -458,6 +526,7 @@ void clang_c_adjust::adjust_sizeof(exprt& expr)
   else if(expr.operands().size()==1)
   {
     type.swap(expr.op0().type());
+    adjust_type(type);
   }
   else
   {
@@ -476,6 +545,201 @@ void clang_c_adjust::adjust_sizeof(exprt& expr)
 
   new_expr.swap(expr);
   expr.c_sizeof_type(type);
+}
+
+bool clang_c_adjust::has_bitfields(const typet &_type)
+{
+  typet type = _type;
+  if (type.id() == "symbol")
+    type = ns.follow(type);
+
+  if (bitfield_fixed_type_map.find(type) != bitfield_fixed_type_map.end())
+    return true; // Yes, and this is the unfixed version
+
+  if (bitfield_orig_type_map.find(type) != bitfield_orig_type_map.end())
+    return true; // Yes, and this is the fixed version
+
+  if (type.id() != "struct")
+    return false; // Could have been a symbol of a union
+
+  auto sutype = to_struct_union_type(type);
+  for (const auto &comp : sutype.components()) {
+    if (comp.type().get("#bitfield").as_string() == "true") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+std::string clang_c_adjust::gen_bitfield_blob_name(unsigned int num)
+{
+  std::stringstream ss;
+  ss << "#BITFIELD" << num;
+  return ss.str();
+}
+
+typet clang_c_adjust::fix_bitfields(const typet &_type)
+{
+  typet type = _type;
+  if (type.id() == "symbol")
+    type = ns.follow(type);
+
+  if (bitfield_fixed_type_map.find(type) != bitfield_fixed_type_map.end())
+    return bitfield_fixed_type_map.find(type)->second;
+
+  typet new_type = type;
+  auto sutype = to_struct_union_type(new_type);
+  auto &components = sutype.components(); // It's a vector of components
+  std::decay<decltype(components)>::type new_components;
+  bool is_packed = sutype.get("packed").as_string() == "true";
+
+  unsigned int bit_offs = 0;
+  unsigned int blob_count = 0;
+
+  std::map<irep_idt, bitfield_map> backmap;
+
+  auto pop_blob = [this, is_packed, &bit_offs, &blob_count, &new_components]() {
+    // We have to pop the current bitfield blob into the struct and create
+    // a new one to make space.
+
+    // Size of the bitfield depends on whether we're packed or not.
+    typet ubv;
+    if (is_packed) {
+      // Round up to nearest byte.
+      bit_offs += 7;
+      bit_offs &= 0xFFFFFFF8;
+      ubv = unsignedbv_typet(bit_offs);
+    } else {
+      // Always generate a 64 bit blob for now, optimise later.
+      ubv = unsignedbv_typet(BITFIELD_MAX_FIELD);
+    }
+
+    std::string name = gen_bitfield_blob_name(blob_count);
+    struct_union_typet::componentt newcomp(name, name, ubv);
+    new_components.push_back(newcomp);
+
+    bit_offs = 0;
+    blob_count++;
+  };
+
+  for (const auto &comp : components) { // Go through all components...
+    if (comp.type().get("#bitfield").as_string() != "true") {
+      if (bit_offs != 0)
+        pop_blob();
+
+      new_components.push_back(comp);
+      continue;
+    }
+
+    // Otherwise: this is a bitfield.
+    unsigned int width = bv_width(comp.type());
+    assert(width <= BITFIELD_MAX_FIELD && "Humoungous bitfield");
+
+    if (width + bit_offs > BITFIELD_MAX_FIELD)
+      pop_blob();
+
+    // Add this bitfield to the current blob.
+    backmap.insert(std::make_pair(comp.name(), bitfield_map {bit_offs, blob_count}));
+    bit_offs += width;
+  }
+
+  if (bit_offs != 0)
+    pop_blob();
+
+  // We now have: to replace the components in the new type, and store the
+  // backmap so that subsequent read/writes can work out what replacement
+  // operation to build.
+  sutype.components() = new_components;
+  bitfield_mappings.insert(std::make_pair(sutype, std::move(backmap)));
+  bitfield_fixed_type_map.insert(std::make_pair(type, sutype));
+  bitfield_orig_type_map.insert(std::make_pair(sutype, type));
+
+  return sutype;
+}
+
+void clang_c_adjust::adjust_constant_struct(exprt &expr)
+{
+  assert(expr.type().id() == "struct");
+  // Has this type been adjusted for bitfields?
+  if (bitfield_mappings.find(expr.type()) == bitfield_mappings.end()) {
+    // Nothing needs to be done to the struct itself
+    adjust_operands(expr);
+    return;
+  }
+
+  // Well, we now need to fix up this constant struct expr into one that doesn't
+  // feature any bitfields, because:
+  auto sutype = to_struct_union_type(expr.type());
+  assert(expr.operands().size() != sutype.components().size());
+  bool is_packed = sutype.get("packed").as_string() == "true";
+
+  const auto &orig_type = to_struct_union_type(bitfield_orig_type_map[expr.type()]);
+  assert(orig_type.components().size() == expr.operands().size());
+  exprt new_expr = expr;
+  new_expr.operands().clear();
+  exprt accuml;
+  accuml.make_nil();
+
+  unsigned int bit_offs = 0;
+
+  auto pop_blob = [this, is_packed, &accuml, &bit_offs, &new_expr]() {
+    if (is_packed) {
+      // Round number of bits up to nearest byte,
+      bit_offs += 7;
+      bit_offs &= 0xFFFFFFF8;
+      accuml = typecast_exprt(accuml, unsignedbv_typet(bit_offs));
+    } else if (bv_width(accuml.type()) != BITFIELD_MAX_FIELD) {
+      accuml = typecast_exprt(accuml, unsignedbv_typet(BITFIELD_MAX_FIELD));
+    } // Otherwise it's already at the right size
+
+    new_expr.operands().push_back(accuml);
+    accuml = exprt();
+    accuml.make_nil();
+    bit_offs = 0;
+  };
+
+  // OK: iterate through all operands, concatting the bitfields, and then
+  // storing back into the operand list. XXX, work out how to use bitfield
+  // map to make this better?
+  for (unsigned int i = 0; i < expr.operands().size(); ++i) {
+    const exprt &orig_elem = expr.operands()[i];
+    const exprt &orig_comp = orig_type.components()[i];
+    if (orig_comp.type().get("#bitfield") != "true") {
+      if (bit_offs > 0)
+        pop_blob();
+
+      new_expr.operands().push_back(orig_elem);
+      continue;
+    }
+
+    unsigned int width = bv_width(orig_elem.type());
+    if (bit_offs + width > BITFIELD_MAX_FIELD)
+      pop_blob();
+
+    if (accuml.is_nil()) {
+      accuml = orig_elem;
+    } else {
+      unsigned int a_width = bv_width(accuml.type());
+      unsigned int b_width = bv_width(orig_elem.type());
+      unsignedbv_typet ubv(a_width + b_width);
+      exprt tmp("concat", ubv);
+      tmp.copy_to_operands(orig_elem, accuml); // XXX: ordering!
+      accuml = tmp;
+    }
+
+    bit_offs += width;
+  }
+
+  if (bit_offs != 0)
+    pop_blob();
+
+  // We should now have replaced all operands corresponding to bitfields with
+  // single concatted operands.
+  assert(sutype.components().size() == new_expr.operands().size());
+  // Just check the sub-operands now.
+  expr = new_expr;
+  adjust_operands(expr);
 }
 
 void clang_c_adjust::adjust_type(typet &type)
@@ -504,6 +768,11 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(symbol.is_macro)
       type=symbol.type; // overwrite
+  }
+
+  if (type.id() == "struct") {
+    if (has_bitfields(type))
+      type = fix_bitfields(type);
   }
 }
 

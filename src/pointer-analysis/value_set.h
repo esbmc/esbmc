@@ -9,12 +9,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 #define CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 
-#include <pointer-analysis/object_numbering.h>
 #include <pointer-analysis/value_sets.h>
 #include <set>
 #include <util/irep2.h>
 #include <util/mp_arith.h>
 #include <util/namespace.h>
+#include <util/numbering.h>
 #include <util/type_byte_size.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.
@@ -50,6 +50,9 @@ Author: Daniel Kroening, kroening@kroening.com
  *  (for interpreting a variable assignment) and the get_value_set method, that
  *  takes a variable and returns the set of things it might point at.
  */
+
+typedef hash_numbering<expr2tc, irep2_hash> object_numberingt;
+typedef hash_numbering<unsigned, std::hash<unsigned> > object_number_numberingt;
 
 class value_sett
 {
@@ -145,6 +148,65 @@ public:
    *  into value_sett::object_numbering, which identifies the l1 variable
    *  being referred to. */
   typedef hash_map_cont<unsigned, objectt> object_mapt;
+  class object_map_dt
+  {
+    // If you said this class looks pretty map like, it's because it used to be
+    // a subclass of std::map, which was far too funky for me, thanks.
+  public:
+    ~object_map_dt()
+    {
+      for (auto const& it : themap)
+        value_sett::obj_numbering_deref(it.first);
+    }
+
+    object_map_dt()
+    {
+    }
+
+    object_map_dt(const object_map_dt &ref)
+    {
+      *this = ref;
+      for (auto const& it : themap)
+        value_sett::obj_numbering_ref(it.first);
+    }
+    typedef object_mapt::const_iterator const_iterator;
+    typedef object_mapt::iterator iterator;
+
+    objectt &operator[](unsigned i)
+    {
+      if (themap.find(i) == themap.end())
+        value_sett::obj_numbering_ref(i);
+      return themap[i];
+    }
+
+    const_iterator find(unsigned i) const
+    {
+      return themap.find(i);
+    }
+
+    iterator find(unsigned i)
+    {
+      return themap.find(i);
+    }
+
+    const_iterator begin() const
+    {
+      return themap.begin();
+    }
+
+    const_iterator end() const
+    {
+      return themap.end();
+    }
+
+    std::size_t size(void) const
+    {
+      return themap.size();
+    }
+
+    object_mapt themap;
+  };
+
 
   /** Record for a particular value set: stores the identity of the variable
    *  that points at this set of objects, and the objects themselves (with
@@ -577,6 +639,9 @@ protected:
    *  @param component_name Name of the component to extract from src. */
   expr2tc make_member(const expr2tc &src, const irep_idt &component_name);
 
+  static void obj_numbering_ref(unsigned int num);
+  static void obj_numbering_deref(unsigned int num);
+
 public:
 //********************************** Members ***********************************
   /** Some crazy static analysis tool. */
@@ -584,6 +649,7 @@ public:
   /** Object to assign numbers to objects -- i.e., the numbers in the map of
    *  a @ref object_mapt. Static and bad. */
   static object_numberingt object_numbering;
+  static object_number_numberingt obj_numbering_refset;
 
   /** Storage for all the value sets for all the variables in the program. See
    *  @ref entryt for the format of the string used as an index. */

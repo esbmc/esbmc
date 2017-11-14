@@ -1,21 +1,3 @@
-/*int nondet(void)
-{
-  int x;
-  {
-    return (x);
-  }
-  }*/
-
-
-void error(void) 
-{ 
-
-  {
-  goto ERROR;
-  ERROR: ;
-  return;
-}
-}
 
 int m_run_st  ;
 int m_run_i  ;
@@ -61,7 +43,7 @@ int s_memory_read(int i)
   if (i==0)
     x = s_memory0;
   else
-    error();
+    assert(0);
 
   return (x);
 }
@@ -71,7 +53,7 @@ void s_memory_write(int i, int v)
   if (i==0)
     s_memory0 = v;
   else
-    error();
+    assert(0);
 
   return;
 }
@@ -391,7 +373,7 @@ void m_run(void)
     c_read_rsp_ev = 2;
     if (c_m_lock == 0) {
       {
-      error();
+      assert(0);
       }
     } else {
 
@@ -741,7 +723,7 @@ void m_run(void)
     c_read_rsp_ev = 2;
     if (c_m_lock == 0) {
       {
-      error();
+      assert(0);
       }
     } else {
 
@@ -823,7 +805,7 @@ void m_run(void)
     c_m_ev = 2;
     if (! (req_a___0 + 50 == rsp_d___0)) {
       {
-      error();
+      assert(0);
       }
     } else {
 

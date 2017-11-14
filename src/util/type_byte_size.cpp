@@ -57,16 +57,21 @@ member_offset(const type2tc &type, const irep_idt &member)
   for(auto const &it : thetype.members)
   {
     // If the current field is 64 bits, and we're on a 32 bit machine, then we
-    // _must_ round up to 64 bits now.
-    if (is_scalar_type(it) && !is_code_type(it) &&
-        (it)->get_width() > 32 && config.ansi_c.word_size == 32)
-      round_up_to_int64(result);
+    // _must_ round up to 64 bits now. No early padding in packed mode though.
+    if (!thetype.packed) {
+      if (is_scalar_type(it) && !is_code_type(it) &&
+          (it)->get_width() > 32 && config.ansi_c.word_size == 32)
+        round_up_to_int64(result);
 
-    if (is_structure_type(it))
-      round_up_to_int64(result);
+      if (is_structure_type(it))
+        round_up_to_int64(result);
 
-    if (is_array_type(it) && to_array_type(it).subtype->get_width() > 32)
-      round_up_to_int64(result);
+      // Unions are now being converted to arrays: conservatively round up
+      // all array alignment to 64 bits. This is because we can't easily
+      // work out whether someone is going to store a double into it.
+      if (is_array_type(it))
+        round_up_to_int64(result);
+    }
 
     if (thetype.member_names[idx] == member.as_string())
       break;
@@ -75,7 +80,8 @@ member_offset(const type2tc &type, const irep_idt &member)
 
     mp_integer sub_size = type_byte_size(it);
     // Handle padding: we need to observe the usual struct constraints.
-    round_up_to_word(sub_size);
+    if (!thetype.packed)
+      round_up_to_word(sub_size);
 
     result += sub_size;
     idx++;
@@ -101,7 +107,7 @@ mp_integer
 type_byte_size(const type2tc &type)
 {
 
-  switch (type.get()->type_id) {
+  switch (type->type_id) {
   case type2t::bool_id:
     return 1;
   case type2t::empty_id:
@@ -109,7 +115,7 @@ type_byte_size(const type2tc &type)
     abort();
   case type2t::symbol_id:
     std::cerr << "Symbolic type id in type_byte_size" <<std::endl;
-    type.get()->dump();
+    type->dump();
     abort();
   case type2t::code_id:
     // In C++, methods are struct fields.
@@ -117,13 +123,13 @@ type_byte_size(const type2tc &type)
     abort();
   case type2t::cpp_name_id:
     std::cerr << "C++ symbolic type id in type_byte_size" <<std::endl;
-    type.get()->dump();
+    type->dump();
     abort();
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
-    return mp_integer(type.get()->get_width() / 8);
+    return mp_integer(type->get_width() / 8);
   case type2t::pointer_id:
     return mp_integer(config.ansi_c.pointer_width / 8);
   case type2t::string_id:
@@ -167,25 +173,30 @@ type_byte_size(const type2tc &type)
     mp_integer accumulated_size(0);
     for(auto const &it : t2.members)
     {
-      // If the current field is 64 bits, and we're on a 32 bit machine, then we
-      // _must_ round up to 64 bits now. Also guard against symbolic types
-      // as operands.
-      if (is_scalar_type(it) && !is_code_type(it) &&
-          (it)->get_width() > 32 && config.ansi_c.word_size == 32)
-        round_up_to_int64(accumulated_size);
+      if (!t2.packed) {
+        // If the current field is 64 bits, and we're on a 32 bit machine, then
+        // we _must_ round up to 64 bits now. Also guard against symbolic types
+        // as operands.
+        if (is_scalar_type(it) && !is_code_type(it) &&
+            (it)->get_width() > 32 && config.ansi_c.word_size == 32)
+          round_up_to_int64(accumulated_size);
 
-      // While we're at it, round any struct/union up to 64 bit alignment too,
-      // as that might require such alignment due to internal doubles.
-      if (is_structure_type(it))
-        round_up_to_int64(accumulated_size);
+        // While we're at it, round any struct/union up to 64 bit alignment too,
+        // as that might require such alignment due to internal doubles.
+        if (is_structure_type(it))
+          round_up_to_int64(accumulated_size);
 
-      // Also arrays of int64's. One onders why I bother.
-      if (is_array_type(it) && to_array_type(*it).subtype->get_width() > 32)
-        round_up_to_int64(accumulated_size);
+        // Unions are now being converted to arrays: conservatively round up
+        // all array alignment to 64 bits. This is because we can't easily
+        // work out whether someone is going to store a double into it.
+        if (is_array_type(it))
+          round_up_to_int64(accumulated_size);
+      }
 
       mp_integer memb_size = type_byte_size(it);
 
-      round_up_to_word(memb_size);
+      if (!t2.packed)
+        round_up_to_word(memb_size);
 
       accumulated_size += memb_size;
     }
@@ -193,7 +204,7 @@ type_byte_size(const type2tc &type)
     // At the end of that, the tests above should have rounded accumulated size
     // up to a size that contains the required trailing padding for array
     // allocation alignment.
-    assert((accumulated_size % (config.ansi_c.word_size / 8)) == 0);
+    assert(t2.packed || ((accumulated_size % (config.ansi_c.word_size / 8)) == 0));
     return accumulated_size;
   }
   case type2t::union_id:
@@ -213,7 +224,7 @@ type_byte_size(const type2tc &type)
   }
   default:
     std::cerr << "Unrecognised type in type_byte_size:" << std::endl;
-    type.get()->dump();
+    type->dump();
     abort();
   }
 }
@@ -312,4 +323,24 @@ get_base_object(const expr2tc &expr)
   } else {
     return expr;
   }
+}
+
+const irep_idt get_string_argument(const expr2tc &expr)
+{
+  // Remove typecast
+  if(is_typecast2t(expr))
+    return get_string_argument(to_typecast2t(expr).from);
+
+  // Remove address_of
+  if(is_address_of2t(expr))
+    return get_string_argument(to_address_of2t(expr).ptr_obj);
+
+  // Remove index
+  if(is_index2t(expr))
+    return get_string_argument(to_index2t(expr).source_value);
+
+  if(is_constant_string2t(expr))
+    return to_constant_string2t(expr).value;
+
+  return "";
 }

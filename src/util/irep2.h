@@ -133,8 +133,9 @@
   BOOST_PP_LIST_CONS(isnormal,\
   BOOST_PP_LIST_CONS(isfinite,\
   BOOST_PP_LIST_CONS(signbit,\
-  BOOST_PP_LIST_CONS(concat, BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))\
-)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  BOOST_PP_LIST_CONS(concat,\
+  BOOST_PP_LIST_CONS(extract, BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))\
+))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 #define ESBMC_LIST_OF_TYPES BOOST_PP_LIST_CONS(bool,\
 BOOST_PP_LIST_CONS(empty,\
@@ -233,6 +234,12 @@ public:
     return *this;
   }
 
+  irep_container simplify() const
+  {
+    const T *foo = std::shared_ptr<T>::get();
+    return foo->simplify();
+  }
+
   const T &operator*() const
   {
     return *std::shared_ptr<T>::get();
@@ -256,6 +263,14 @@ public:
     return tmp;
   }
 
+  T * operator-> () // never throws
+  {
+    detach();
+    T *tmp = std::shared_ptr<T>::get();
+    tmp->crc_val = 0;
+    return tmp;
+  }
+
   void detach()
   {
     if (this->use_count() == 1)
@@ -268,14 +283,13 @@ public:
     *this = foo->clone();
   }
 
-  uint32_t crc() const
+  size_t crc() const
   {
     const T *foo = std::shared_ptr<T>::get();
     if (foo->crc_val != 0)
       return foo->crc_val;
 
-    foo->do_crc(0);
-    return foo->crc_val;
+    return foo->do_crc();
   }
 };
 
@@ -387,7 +401,7 @@ public:
    *  @see do_crc
    *  @return Digest of the current type.
    */
-  uint32_t crc() const;
+  size_t crc() const;
 
   /** Perform checked invocation of cmp method.
    *  Takes reference to another type - if they have the same type id, invoke
@@ -441,7 +455,7 @@ public:
    *  @param seed Hash to accumulate hash data into.
    *  @return Hash value
    */
-  virtual size_t do_crc(size_t seed) const;
+  virtual size_t do_crc() const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
@@ -602,7 +616,7 @@ public:
    *  distribution properties, but is at least fast.
    *  @return Hash value of this expr
    */
-  uint32_t crc() const;
+  size_t crc() const;
 
   /** Perform comparison operation between this and another expr.
    *  Overridden by subclasses of expr2t to compare different members of this
@@ -642,7 +656,7 @@ public:
    *  @param seed Hash to accumulate expression data into.
    *  @return Hash value
    */
-  virtual size_t do_crc(size_t seed) const;
+  virtual size_t do_crc() const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
@@ -893,19 +907,6 @@ namespace esbmct {
     static constexpr membr_ptr value = v;
   };
 
-  // Field traits specialization for const fields, i.e. expr_id. These become
-  // landmines for future mutable methods, i.e. get_sub_expr, which may get
-  // it's consts mixed up.
-  template <typename R, typename C, R C::* v>
-    class field_traits<const R, C, v>
-  {
-  public:
-    typedef R result_type;
-    typedef C source_class;
-    typedef const R C::* membr_ptr;
-    static constexpr membr_ptr value = v;
-  };
-
   template <typename R, typename C, R C::* v>
   constexpr typename field_traits<R, C, v>::membr_ptr field_traits<R, C, v>::value;
 
@@ -1045,7 +1046,7 @@ namespace esbmct {
     list_of_memberst tostring(unsigned int indent) const override;
     bool cmp(const base2t &ref) const override;
     int lt(const base2t &ref) const override;
-    size_t do_crc(size_t seed) const override;
+    size_t do_crc() const override;
     void hash(crypto_hash &hash) const override;
 
     static void build_python_class(const typename container::id_field_type id);
@@ -1282,6 +1283,12 @@ namespace esbmct {
     {
       base2tc::detach();
       return static_cast<contained*>(base2tc::get());
+    }
+
+    contained * operator-> () // never throws
+    {
+      base2tc::detach();
+      return static_cast<contained*>(base2tc::operator->());
     }
 
     // Forward all constructors down to the contained type.

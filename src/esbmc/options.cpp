@@ -58,7 +58,8 @@ const struct opt_templ esbmc_options[] = {
   { 0, "unsigned-char", switc, "" },
   { 0, "version", switc, "" },
   { 0, "witness-output", string, "" },
-  { 0, "witness-detailed", switc, "" },
+  { 0, "witness-producer", string, "" },
+  { 0, "witness-programfile", string, "" },
   { 0, "old-frontend", switc, "" },
   { 0, "result-only", switc, "" },
   { 0, "i386-linux", switc, "" },
@@ -76,6 +77,7 @@ const struct opt_templ esbmc_options[] = {
   { 0, "partial-loops", switc, "" },
   { 0, "unroll-loops", switc, "" },
   { 0, "no-slice", switc, "" },
+  { 0, "slice-assumes", switc, "" },
   { 0, "extended-try-analysis", switc, "" },
   { 0, "skip-bmc", switc, "" },
 
@@ -125,7 +127,6 @@ const struct opt_templ esbmc_options[] = {
   { 0, "inductive-step", switc, "" },
   { 0, "k-induction", switc, "" },
   { 0, "k-induction-parallel", switc, "" },
-  { 0, "constrain-all-states", switc, "" },
   { 0, "k-step", number, "1" },
   { 0, "max-k-step", number, "50" },
   { 0, "unlimited-k-steps", switc, "" },
@@ -139,7 +140,6 @@ const struct opt_templ esbmc_options[] = {
   // Concurrency checking
   { 0, "context-bound", number, "-1" },
   { 0, "state-hashing", switc, "" },
-  { 0, "control-flow-test", switc, "" },
   { 0, "no-por", switc, "" },
   { 0, "all-runs", switc, "" },
 
@@ -169,15 +169,9 @@ const struct opt_templ esbmc_options[] = {
   // Abort if the program contains a recursion
   { 0, "abort-on-recursion", switc, "" },
 
-  // Don't generate bitfields, all members members will have the full size
-  { 0, "no-bitfields", switc, "" },
-
   // The clang frontend can mark unused struct/functions, in the future this
   // will be enabled by default, but for now, it needs more testing
   { 0, "keep-unused", switc, "" },
-
-  // LTL mode?
-  { 0, "ltl", switc, "" },
 
   // Verbosity of message, probably does nothing
   { 0, "verbosity", number, "" },
@@ -193,12 +187,6 @@ const struct opt_templ esbmc_options[] = {
   // any other exploration from that point. Useful for constructing an
   // explicit multithreading path
   { 0, "direct-interleavings", switc, "" },
-
-  // Used to print out the instructions that had been identified as touching
-  // global variables, thus instructions that cause interleavings. Probably
-  // isn't sound any more seeing how we don't do the static pointer analysis
-  // any more.
-  { 0, "show-ileave-points", switc, "" },
 
   // I think this dumps the current stack of all threads on an ileave point.
   // Useful for working out the state of _all_ the threads and how they

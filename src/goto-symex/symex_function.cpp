@@ -454,7 +454,7 @@ goto_symext::run_next_function_ptr_target(bool first)
 
   // And setup the function call.
   code_function_call2tc call = cur_state->top().orig_func_ptr_call;
-  call.get()->function = target_symbol;
+  call->function = target_symbol;
   goto_symex_statet::framet &cur_frame = cur_state->top();
 
   if (cur_state->top().cur_function_ptr_targets.size() == 0)

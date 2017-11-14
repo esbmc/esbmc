@@ -18,22 +18,22 @@
 #include <goto-symex/printf_formatter.h>
 #include <goto-symex/witnesses.h>
 #include <iostream>
+#include <regex>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <util/arith_tools.h>
 #include <util/std_types.h>
+#include <boost/graph/graphml.hpp>
 
 extern std::string verification_file;
 
-void
-goto_tracet::output(const class namespacet &ns, std::ostream &out) const
+void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
 {
-  for (const auto & step : steps)
+  for(const auto & step : steps)
     step.output(ns, out);
 }
 
-void
-goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
+void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
 {
   out << "*** ";
 
@@ -55,36 +55,36 @@ goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
       assert(false);
   }
 
-  if (type == ASSERT || type == ASSUME)
+  if(type == ASSERT || type == ASSUME)
     out << " (" << guard << ")";
 
   out << std::endl;
 
-  if (!pc->location.is_nil())
+  if(!pc->location.is_nil())
     out << pc->location << std::endl;
 
-  if (pc->is_goto())
+  if(pc->is_goto())
     out << "GOTO   ";
-  else if (pc->is_assume())
+  else if(pc->is_assume())
     out << "ASSUME ";
-  else if (pc->is_assert())
+  else if(pc->is_assert())
     out << "ASSERT ";
-  else if (pc->is_other())
+  else if(pc->is_other())
     out << "OTHER  ";
-  else if (pc->is_assign())
+  else if(pc->is_assign())
     out << "ASSIGN ";
-  else if (pc->is_function_call())
+  else if(pc->is_function_call())
     out << "CALL   ";
   else
     out << "(?)    ";
 
   out << std::endl;
 
-  if (pc->is_other() || pc->is_assign())
+  if(pc->is_other() || pc->is_assign())
   {
     irep_idt identifier;
 
-    if (!is_nil_expr(original_lhs))
+    if(!is_nil_expr(original_lhs))
       identifier = to_symbol2t(original_lhs).get_symbol_name();
     else
       identifier = to_symbol2t(lhs).get_symbol_name();
@@ -92,15 +92,15 @@ goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
     out << "  " << identifier << " = " << from_expr(ns, identifier, value)
         << std::endl;
   }
-  else if (pc->is_assert())
+  else if(pc->is_assert())
   {
-    if (!guard)
+    if(!guard)
     {
       out << "Violated property:" << std::endl;
-      if (pc->location.is_nil())
+      if(pc->location.is_nil())
         out << "  " << pc->location << std::endl;
 
-      if (comment != "")
+      if(!comment.empty())
         out << "  " << comment << std::endl;
       out << "  " << from_expr(ns, "", pc->guard) << std::endl;
       out << std::endl;
@@ -110,13 +110,15 @@ goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
   out << std::endl;
 }
 
-void
-counterexample_value(
-  std::ostream &out, const namespacet &ns, const expr2tc &lhs, const expr2tc &value)
+void counterexample_value(
+  std::ostream &out,
+  const namespacet &ns,
+  const expr2tc &lhs,
+  const expr2tc &value)
 {
   std::string value_string;
 
-  if (is_nil_expr(value))
+  if(is_nil_expr(value))
     value_string = "(assignment removed)";
   else
   {
@@ -125,17 +127,17 @@ counterexample_value(
     // Don't print the bit-vector if we're running on integer/real mode
     if (is_constant_expr(value) && !config.options.get_bool_option("ir"))
     {
-      if (is_bv_type(value))
+      if(is_bv_type(value))
       {
         value_string +=
           " (" + integer2binary(to_constant_int2t(value).value, value->type->get_width()) + ")";
       }
-      else if (is_fixedbv_type(value))
+      else if(is_fixedbv_type(value))
       {
         value_string +=
-         " (" + to_constant_fixedbv2t(value).value.to_expr().get_value().as_string() + ")";
+          " (" + to_constant_fixedbv2t(value).value.to_expr().get_value().as_string() + ")";
       }
-      else if (is_floatbv_type(value))
+      else if(is_floatbv_type(value))
       {
         value_string +=
           " (" + to_constant_floatbv2t(value).value.to_expr().get_value().as_string() + ")";
@@ -146,17 +148,18 @@ counterexample_value(
   out << "  " << from_expr(ns, "", lhs) << " = " << value_string << std::endl;
 }
 
-void
-show_goto_trace_gui(
-  std::ostream &out, const namespacet &ns, const goto_tracet &goto_trace)
+void show_goto_trace_gui(
+  std::ostream &out,
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
 {
   locationt previous_location;
 
-  for (const auto & step : goto_trace.steps)
+  for(const auto & step : goto_trace.steps)
   {
     const locationt &location = step.pc->location;
 
-    if ((step.type == goto_trace_stept::ASSERT) && !step.guard)
+    if((step.type == goto_trace_stept::ASSERT) && !step.guard)
     {
       out << "FAILED" << std::endl << step.comment
           << std::endl // value
@@ -164,11 +167,11 @@ show_goto_trace_gui(
           << location.file() << std::endl << location.line() << std::endl
           << location.column() << std::endl;
     }
-    else if (step.type == goto_trace_stept::ASSIGNMENT)
+    else if(step.type == goto_trace_stept::ASSIGNMENT)
     {
       irep_idt identifier;
 
-      if (!is_nil_expr(step.original_lhs))
+      if(!is_nil_expr(step.original_lhs))
         identifier = to_symbol2t(step.original_lhs).get_symbol_name();
       else
         identifier = to_symbol2t(step.lhs).get_symbol_name();
@@ -177,7 +180,7 @@ show_goto_trace_gui(
 
       const symbolt *symbol;
       irep_idt base_name;
-      if (!ns.lookup(identifier, symbol))
+      if(!ns.lookup(identifier, symbol))
         base_name = symbol->base_name;
 
       out << "TRACE" << std::endl;
@@ -188,11 +191,11 @@ show_goto_trace_gui(
           << step.pc->location.line() << std::endl << step.pc->location.column()
           << std::endl;
     }
-    else if (location != previous_location)
+    else if(location != previous_location)
     {
       // just the location
 
-      if (location.file() != "")
+      if(!location.file().empty())
       {
         out << "TRACE" << std::endl;
 
@@ -211,14 +214,15 @@ show_goto_trace_gui(
   }
 }
 
-void
-show_state_header(
-  std::ostream &out, const goto_trace_stept &state, const locationt &location,
+void show_state_header(
+  std::ostream &out,
+  const goto_trace_stept &state,
+  const locationt &location,
   unsigned step_nr)
 {
   out << std::endl;
 
-  if (step_nr == 0)
+  if(step_nr == 0)
     out << "Initial State";
   else
     out << "State " << step_nr;
@@ -227,9 +231,9 @@ show_state_header(
 
   // Print stack trace
 
-  for (const auto & it : state.stack_trace)
+  for(const auto & it : state.stack_trace)
   {
-    if (it.src == nullptr)
+    if(it.src == nullptr)
       out << it.function.as_string() << std::endl;
     else
       out << it.function.as_string() << " at "
@@ -240,363 +244,210 @@ show_state_header(
   out << "----------------------------------------------------" << std::endl;
 }
 
-void generate_goto_trace_in_violation_graphml_format(
-  std::string & witness_output,
-  bool is_detailed_mode,
-  int & specification,
+void violation_graphml_goto_trace(
+  optionst & options,
   const namespacet & ns,
-  const goto_tracet & goto_trace)
+  const goto_tracet & goto_trace )
 {
-  // Remove timeout when building witness
-  alarm(0);
+  grapht graph(grapht::VIOLATION);
+  graph.verified_file = verification_file;
 
-  boost::property_tree::ptree graphml;
-  boost::property_tree::ptree graph;
-  std::map<std::string, int> function_control_map;
-  boost::property_tree::ptree last_created_node;
-  std::string last_function;
-  std::string last_ver_filename;
-  bool already_initialized = false;
+  edget * first_edge = &graph.edges.at(0);
+  nodet * prev_node = first_edge->to_node;
 
-  create_graph(graph, verification_file, specification, false);
-  boost::property_tree::ptree first_node;
-  node_p first_node_p;
-  first_node_p.isEntryNode = true;
-  create_node(first_node, first_node_p);
-  graph.add_child("node", first_node);
-  last_created_node = first_node;
-  already_initialized = true;
+#ifndef lightweight_witness
+  std::map<std::string, uint16_t> func_control_map;
+  std::string prev_function = first_edge->enter_function;
+#endif
 
   for(const auto & step : goto_trace.steps)
-  {
-    /* check if it is an internal call */
-    std::string::size_type find_bt =
-      step.pc->location.to_string().find("built-in", 0);
-    std::string::size_type find_lib =
-      step.pc->location.to_string().find("library", 0);
-    bool is_internal_call = (find_bt != std::string::npos)
-        || (find_lib != std::string::npos);
+   {
+     /* checking restrictions for violation GraphML */
+     if (!((is_valid_witness_step(ns, step) &&
+          (step.type == goto_trace_stept::ASSIGNMENT))))
+       continue;
 
-    /** ignore internal calls and non assignments */
-    if(!(step.type == goto_trace_stept::ASSIGNMENT)
-        || (is_internal_call == true))
-      continue;
+     edget new_edge;
+     new_edge.assumption = get_formated_assignment(ns, step);
+     new_edge.start_line = get_line_number(
+       verification_file,
+       std::atoi(step.pc->location.get_line().c_str()),
+       options);
 
-    /* checking other restrictions */
-    if (!is_valid_witness_expr(ns, step.lhs))
-      continue;
+#ifndef lightweight_witness
+     new_edge.end_line = new_edge.start_line;
+     if(new_edge.start_line)
+       get_offsets(verification_file, new_edge.start_line,
+         new_edge.start_offset, new_edge.end_offset);
 
-    const irep_idt &identifier = to_symbol2t(step.lhs).get_symbol_name();
+     /* check if it has entered or returned from a function */
+     std::string function = step.pc->location.get_function().c_str();
+     new_edge.assumption_scope = function;
+     if(prev_function != function && !function.empty())
+     {
+       if(func_control_map.find(function) == func_control_map.end())
+       {
+          /* it is entering in a function for the first time */
+          func_control_map.insert(std::make_pair(function, new_edge.start_line));
+          new_edge.enter_function = function;
+          prev_function = function;
+       }
+       else
+       {
+         /* it is backing from another function */
+         new_edge.return_from_function = prev_function;
+         new_edge.enter_function = function;
+         prev_function = function;
+       }
+     }
+#endif
 
-    /* check if it is a temporary assignment */
-    std::string id_str = id2string(identifier);
-    std::string::size_type find_tmp = id_str.find("::$tmp::", 0);
-    if(find_tmp != std::string::npos)
-      continue;
+     nodet * new_node = new nodet();
+     new_edge.from_node = prev_node;
+     new_edge.to_node = new_node;
+     prev_node = new_node;
+     graph.edges.push_back(new_edge);
+   }
 
-    std::string current_ver_file = step.pc->location.get_file().as_string();
-    if (verification_file.find(current_ver_file) != std::string::npos)
-      current_ver_file = verification_file;
+  nodet * violation_node = new nodet();
+  violation_node->violation = true;
+  edget violation_edge(prev_node, violation_node);
+  graph.edges.push_back(violation_edge);
 
-    /* creating edge */
-    edge_p current_edge_p;
-    current_edge_p.originFileName = current_ver_file;
-
-    /* check if it has a line number (getting tokens) */
-	int line_number = std::atoi(step.pc->location.get_line().c_str());
-	if(line_number != 0)
-	{
-	  current_edge_p.startline = line_number;
-	  if (is_detailed_mode)
-	  {
-	    current_edge_p.endline = line_number;
-	    int p_startoffset = 0;
-	    int p_endoffset = 0;
-	    get_offsets_for_line_using_wc(current_ver_file, line_number, p_startoffset, p_endoffset);
-	    current_edge_p.startoffset = p_startoffset;
-	    current_edge_p.endoffset = p_endoffset;
-	  }
-	}
-
-    /* check if it has entered or returned from a function */
-	std::string function_name = step.pc->location.get_function().c_str();
-	if (last_function != function_name && !function_name.empty())
-	{
-	  /* it is a new entry */
-	  if (function_control_map.find(function_name) == function_control_map.end())
-	  {
-		function_control_map.insert(std::make_pair(function_name, line_number));
-		current_edge_p.enterFunction = function_name;
-		last_function = function_name;
-	  }
-	  else
-	  {
-		/* it is backing from another function */
-		current_edge_p.returnFromFunction = last_function;
-		current_edge_p.enterFunction = function_name;
-		last_function = function_name;
-	  }
-	}
-
-    /* adjusts assumptions */
-    /* left hand */
-    std::vector<std::string> split;
-    std::string lhs_str = from_expr(ns, identifier, step.lhs);
-    boost::split(split, lhs_str, boost::is_any_of("@"));
-    lhs_str = split[0];
-    std::string::size_type findamp = lhs_str.find("&", 0);
-    if(findamp != std::string::npos)
-      lhs_str = lhs_str.substr(0, findamp);
-    std::string::size_type findds = lhs_str.find("$", 0);
-    if(findds != std::string::npos)
-      lhs_str = lhs_str.substr(0, findds);
-
-    /* check if isn't in an array (modify assumptions) */
-    if(step.lhs->type->type_id != step.lhs->type->array_id)
-    {
-      /* common cases */
-      std::string value_str = from_expr(ns, identifier, step.value);
-
-      /* remove memory address */
-      std::string::size_type findat = value_str.find("@", 0);
-      if(findat != std::string::npos)
-        value_str = value_str.substr(0, findat);
-      /* remove float suffix */
-      std::string::size_type findfs = value_str.find("f", 0);
-      if(findfs != std::string::npos)
-        value_str = value_str.substr(0, findfs);
-      /* check if has a double &quote */
-      std::string::size_type findq1 = value_str.find("\"", 0);
-      if(findq1 != std::string::npos)
-      {
-        std::string::size_type findq2 = value_str.find("\"", findq1 + 1);
-        if(findq2 == std::string::npos)
-          value_str = value_str + "\"";
-      }
-      std::string assumption = lhs_str + " == (" + value_str + ");";
-      std::string::size_type findesbm = assumption.find("__ESBMC", 0);
-      std::string::size_type finddma = assumption.find("&dynamic_", 0);
-      std::string::size_type findivo = assumption.find("invalid-object", 0);
-      bool is_union = (step.rhs->type->type_id == step.rhs->type->union_id);
-      bool is_struct = (step.rhs->type->type_id == step.rhs->type->struct_id);
-
-      /* TODO check if it is an union, struct, or dynamic attr.
-       * However, we need more details about the validation tools */
-      bool is_esbmc_or_dynamic = ((findesbm != std::string::npos)
-          || (finddma != std::string::npos) || (findivo != std::string::npos)
-          || is_union || is_struct);
-      if(is_esbmc_or_dynamic == false){
-        current_edge_p.assumption = assumption;
-        current_edge_p.assumptionScope = function_name;
-      }
-    }
-
-    /* creating node and edge */
-    boost::property_tree::ptree current_node;
-    node_p current_node_p;
-    create_node(current_node, current_node_p);
-    graph.add_child("node", current_node);
-    boost::property_tree::ptree current_edge;
-    create_edge(current_edge, current_edge_p, last_created_node, current_node);
-    graph.add_child("edge", current_edge);
-    last_created_node = current_node;
-  }
-
-  if (already_initialized == true){
-    /* violation node */
-    boost::property_tree::ptree violation_node;
-    node_p violation_node_p;
-    violation_node_p.isViolationNode = true;
-    create_node(violation_node, violation_node_p);
-    graph.add_child("node", violation_node);
-
-    boost::property_tree::ptree violation_edge;
-    edge_p violation_edge_p;
-    create_edge(violation_edge, violation_edge_p, last_created_node,
-      violation_node);
-    graph.add_child("edge", violation_edge);
-  }
-
-  /* write graphml */
-  create_graphml(graphml, verification_file);
-  graphml.add_child("graphml.graph", graph);
+  xmlnodet graphml = graph.generate_graphml(options);
 
 #if (BOOST_VERSION >= 105700)
-  boost::property_tree::xml_writer_settings<std::string> settings('\t', 1);
+  boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
 #else
-  boost::property_tree::xml_writer_settings<char> settings('\t', 1);
+  boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
-  boost::property_tree::write_xml(witness_output, graphml, std::locale(), settings);
+  boost::property_tree::write_xml(
+    options.get_option("witness-output"), graphml, std::locale(), settings);
 }
 
-void generate_goto_trace_in_correctness_graphml_format(
-  std::string & witness_output,
-  bool is_detailed_mode,
-  int & specification,
+void correctness_graphml_goto_trace(
+  optionst & options,
   const namespacet & ns,
-  const goto_tracet & goto_trace)
+  const goto_tracet & goto_trace )
 {
-  boost::property_tree::ptree graphml;
-  boost::property_tree::ptree graph;
-  std::map<int, std::string> line_content_map;
-  std::map<std::string, int> function_control_map;
+  grapht graph(grapht::CORRECTNESS);
+  graph.verified_file = verification_file;
 
-  boost::property_tree::ptree last_created_node;
-  std::string last_function;
-  std::string last_ver_file;
+  edget * first_edge = &graph.edges.at(0);
+  nodet * prev_node = first_edge->to_node;
 
-  create_graph(graph, verification_file, specification, true);
-  boost::property_tree::ptree first_node;
-  node_p first_node_p;
-  first_node_p.isEntryNode = true;
-  create_node(first_node, first_node_p);
-  graph.add_child("node", first_node);
-  last_created_node = first_node;
+#ifndef lightweight_witness
+  std::map<std::string, uint16_t> func_control_map;
+  std::string prev_function = first_edge->enter_function;
+#endif
 
   for(const auto & step : goto_trace.steps)
   {
-    /* check if it is an internal call */
-    std::string::size_type find_bt =
-      step.pc->location.to_string().find("built-in", 0);
-
-    std::string::size_type find_lib =
-      step.pc->location.to_string().find("library", 0);
-
-    bool is_internal_call =
-      (find_bt != std::string::npos) || (find_lib != std::string::npos);
-
-    /** ignore internal calls and non assignments */
-    if(!(step.type == goto_trace_stept::ASSIGNMENT)
-        || (is_internal_call == true))
+    /* checking restrictions for correctness GraphML */
+    if ((!(is_valid_witness_step(ns, step))) ||
+        (!(step.is_assignment() || step.is_assume() || step.is_assert())))
       continue;
 
-    /* checking other restrictions */
-    if (!is_valid_witness_expr(ns, step.lhs))
-      continue;
+    nodet * new_node = new nodet();
+    edget new_edge;
+    new_edge.assumption = get_formated_assignment(ns, step);
+    new_edge.start_line = get_line_number(
+      verification_file,
+      std::atoi(step.pc->location.get_line().c_str()),
+      options);
 
-    /** ignore internal calls and non assignments */
-    if(!(step.is_assignment() || step.is_assume() || step.is_assert()))
-      continue;
-
-    std::string current_ver_file = step.pc->location.get_file().as_string();
-    if (verification_file.find(current_ver_file) != std::string::npos)
-      current_ver_file = verification_file;
-
-    /* creating nodes and edges */
-    boost::property_tree::ptree current_node;
-    node_p current_node_p;
-    /* check if tokens are already ok */
-    if (last_ver_file != current_ver_file)
-    {
-      last_ver_file = current_ver_file;
-      map_line_number_to_content(current_ver_file, line_content_map);
-    }
-    boost::property_tree::ptree current_edge;
-    edge_p current_edge_p;
-    current_edge_p.originFileName = current_ver_file;
-
-    /* check if has a line number (to get tokens) */
-    int line_number = std::atoi(step.pc->location.get_line().c_str());
-    if(line_number != 0)
-    {
-      current_edge_p.startline = line_number;
-      if (is_detailed_mode)
-      {
-        current_edge_p.endline = line_number;
-        int p_startoffset = 0;
-        int p_endoffset = 0;
-        get_offsets_for_line_using_wc(current_ver_file, line_number, p_startoffset, p_endoffset);
-        current_edge_p.startoffset = p_startoffset;
-        current_edge_p.endoffset = p_endoffset;
-      }
-    }
+#ifndef lightweight_witness
+    new_edge.end_line = new_edge.start_line;
+    if(new_edge.start_line)
+      get_offsets(verification_file, new_edge.start_line,
+        new_edge.start_offset, new_edge.end_offset);
 
     /* check if it has entered or returned from a function */
-    std::string function_name = step.pc->location.get_function().c_str();
-    if (last_function != function_name && !function_name.empty())
+    std::string function = step.pc->location.get_function().c_str();
+    if(prev_function != function && !function.empty())
     {
-      /* it is a new entry */
-      if (function_control_map.find(function_name) == function_control_map.end())
+      if(func_control_map.find(function) == func_control_map.end())
       {
-        function_control_map.insert(std::make_pair(function_name, line_number));
-        current_edge_p.enterFunction = function_name;
-        last_function = function_name;
+        /* it is entering in a function for the first time */
+        func_control_map.insert(std::make_pair(function, new_edge.start_line));
+        new_edge.enter_function = function;
+        prev_function = function;
       }
       else
       {
         /* it is backing from another function */
-        current_edge_p.returnFromFunction = last_function;
-        current_edge_p.enterFunction = function_name;
-        last_function = function_name;
+        new_edge.return_from_function = prev_function;
+        new_edge.enter_function = function;
+        prev_function = function;
       }
     }
+#endif
 
-    if (step.is_assignment()){
-      /* assignment not required according spec 2017 */
-    }
-    else if (step.is_assume())
+    if(step.is_assignment())
     {
-      std::string codeline = line_content_map[line_number];
-      if ((codeline.find("__VERIFIER_assume") != std::string::npos ) ||
-          (codeline.find("__ESBMC_assume") != std::string::npos ) ||
-          (codeline.find("assume") != std::string::npos))
+      /* assignment are not required according svcomp2018 specifications */
+    }
+    else if(step.is_assume()) //FIXME this field should be updated.
+    {
+      std::string code_line = ""; //FIXME //line_content_map[line_number];
+      if((code_line.find("__VERIFIER_assume") != std::string::npos)
+        || (code_line.find("__ESBMC_assume") != std::string::npos)
+        || (code_line.find("assume") != std::string::npos))
       {
-        codeline = w_string_replace(codeline, "__VERIFIER_assume", "");
-        codeline = w_string_replace(codeline, "__ESBMC_assume", "");
-        codeline = w_string_replace(codeline, "assume(", "");
-        codeline = w_string_replace(codeline, ";", "");
-        current_node_p.invariant = codeline;
-        current_node_p.invariantScope = function_name;
+        code_line = w_string_replace(code_line, "__VERIFIER_assume", "");
+        code_line = w_string_replace(code_line, "__ESBMC_assume", "");
+        code_line = w_string_replace(code_line, "assume(", "");
+        code_line = w_string_replace(code_line, ";", "");
+#ifndef lightweight_witness
+        new_node->invariant = 0; //FIXME code_line;
+        new_edge.assumption_scope = function;
+#endif
       }
     }
-    else if (step.is_assert())
+    else if(step.is_assert())
     {
       /* nothing to do here yet */
     }
 
-    /* current node */
-    create_node(current_node, current_node_p);
-    graph.add_child("node", current_node);
-
-    /* including current node */
-    create_edge(current_edge, current_edge_p, last_created_node, current_node);
-    graph.add_child("edge", current_edge);
-    last_created_node = current_node;
+    new_edge.from_node = prev_node;
+    new_edge.to_node = new_node;
+    prev_node = new_node;
+    graph.edges.push_back(new_edge);
   }
 
-  /* write graphml */
-  create_graphml(graphml, verification_file);
-  graphml.add_child("graphml.graph", graph);
+  xmlnodet graphml = graph.generate_graphml(options);
 
 #if (BOOST_VERSION >= 105700)
-  boost::property_tree::xml_writer_settings<std::string> settings('\t', 1);
+  boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
 #else
-  boost::property_tree::xml_writer_settings<char> settings('\t', 1);
+  boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
-  boost::property_tree::write_xml(witness_output, graphml, std::locale(), settings);
+  boost::property_tree::write_xml(
+    options.get_option("witness-output"), graphml, std::locale(), settings);
 }
 
-void
-show_goto_trace(
-  std::ostream &out, const namespacet &ns, const goto_tracet &goto_trace)
+void show_goto_trace(
+  std::ostream &out,
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
 {
   unsigned prev_step_nr = 0;
   bool first_step = true;
 
-  for (const auto & step : goto_trace.steps)
+  for(const auto & step : goto_trace.steps)
   {
     switch (step.type)
     {
       case goto_trace_stept::ASSERT:
-        if (!step.guard)
+        if(!step.guard)
         {
           show_state_header(out, step, step.pc->location, step.step_nr);
           out << "Violated property:" << std::endl;
-          if (!step.pc->location.is_nil())
+          if(!step.pc->location.is_nil())
             out << "  " << step.pc->location << std::endl;
           out << "  " << step.comment << std::endl;
 
-          if (step.pc->is_assert())
+          if(step.pc->is_assert())
             out << "  " << from_expr(ns, "", step.pc->guard) << std::endl;
 
           // Having printed a property violation, don't print more steps.
@@ -605,10 +456,10 @@ show_goto_trace(
         break;
 
       case goto_trace_stept::ASSIGNMENT:
-        if (step.pc->is_assign() || step.pc->is_return()
-            || (step.pc->is_other() && is_nil_expr(step.lhs)))
+        if(step.pc->is_assign() || step.pc->is_return()
+            || (step.pc->is_other() && is_nil_expr(step.original_lhs)))
         {
-          if (prev_step_nr != step.step_nr || first_step)
+          if(prev_step_nr != step.step_nr || first_step)
           {
             first_step = false;
             prev_step_nr = step.step_nr;
@@ -620,12 +471,8 @@ show_goto_trace(
 
       case goto_trace_stept::OUTPUT:
       {
-        std::list<exprt> vec;
-        for (auto it2 : step.output_args)
-          vec.push_back(migrate_expr_back(it2));
-
         printf_formattert printf_formatter;
-        printf_formatter(step.format_string, vec);
+        printf_formatter(step.format_string, step.output_args);
         printf_formatter.print(out);
         out << std::endl;
         break;
@@ -646,4 +493,3 @@ show_goto_trace(
     }
   }
 }
-

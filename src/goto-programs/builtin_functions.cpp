@@ -21,6 +21,26 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
+static const std::string &get_string_constant(
+  const exprt &expr)
+{
+  if(expr.id()=="typecast" &&
+     expr.operands().size()==1)
+    return get_string_constant(expr.op0());
+
+  if(!expr.is_address_of()
+     || expr.operands().size()!=1
+     || !expr.op0().is_index()
+     || expr.op0().operands().size()!=2)
+  {
+    std::cerr << "expected string constant, but got:\n";
+    expr.dump();
+    abort();
+  }
+
+  return expr.op0().op0().value().as_string();
+}
+
 static void get_alloc_type_rec(
   const exprt &src,
   typet &type,
@@ -473,36 +493,6 @@ void goto_convertt::do_free(
   t_f->location=function.location();
 }
 
-void goto_convertt::do_abs(
-  const exprt &lhs,
-  const exprt &function,
-  const exprt::operandst &arguments,
-  goto_programt &dest)
-{
-  if(lhs.is_nil()) return;
-
-  if(arguments.size()!=1)
-  {
-    err_location(function);
-    throw "abs expected to have one argument";
-  }
-
-  const exprt &arg=arguments.front();
-
-  exprt uminus=exprt("uminus", arg.type());
-  uminus.copy_to_operands(arg);
-
-  exprt rhs=exprt("if", arg.type());
-  rhs.operands().resize(3);
-  rhs.op0()=binary_relation_exprt(arg, ">=", gen_zero(arg.type()));
-  rhs.op1()=arg;
-  rhs.op2()=uminus;
-
-  code_assignt assignment(lhs, rhs);
-  assignment.location()=function.location();
-  copy(assignment, ASSIGN, dest);
-}
-
 bool is_lvalue(const exprt &expr)
 {
   if(expr.is_index())
@@ -559,12 +549,8 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->base_name.as_string();
 
-  // Replace __VERIFIER by __ESBMC
-  base_name =
-    std::regex_replace(base_name, std::regex("VERIFIER_assume"), "ESBMC_assume");
-
-  bool is_assume = (base_name == "__ESBMC_assume");
-  bool is_assert = (base_name == "assert") || (base_name == "__VERIFIER_assert");
+  bool is_assume = (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
+  bool is_assert = (base_name == "assert");
 
   if(is_assume || is_assert)
   {
@@ -627,6 +613,33 @@ void goto_convertt::do_function_call_symbol(
       err_location(function);
       throw id2string(base_name)+" expected not to have LHS";
     }
+  }
+  else if(identifier=="__VERIFIER_error")
+  {
+    if(!arguments.empty())
+    {
+      err_location(function);
+      throw "`"+id2string(base_name)+"' expected to have no arguments";
+    }
+
+    goto_programt::targett t=dest.add_instruction(ASSERT);
+    t->guard=gen_false_expr();
+    t->location=function.location();
+    t->location.user_provided(true);
+    t->location.property("assertion");
+
+    if(lhs.is_not_nil())
+    {
+      err_location(function);
+      throw "`"+id2string(base_name)+"' expected not to have LHS";
+    }
+
+    // __VERIFIER_error has abort() semantics, even if no assertions
+    // are being checked
+    goto_programt::targett a=dest.add_instruction(ASSUME);
+    a->guard=gen_false_expr();
+    a->location=function.location();
+    t->location.user_provided(true);
   }
   else if(base_name == "printf")
   {
@@ -868,8 +881,6 @@ void goto_convertt::do_function_call_symbol(
   }
   else
   {
-    do_function_call_symbol(*symbol);
-
     // insert function call
     code_function_callt function_call;
     function_call.lhs()=lhs;

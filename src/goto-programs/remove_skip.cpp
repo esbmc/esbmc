@@ -15,8 +15,7 @@ static bool is_skip(goto_programt::instructionst::iterator it)
 
   if (it->is_goto())
   {
-    if (is_constant_bool2t(it->guard) &&
-        !to_constant_bool2t(it->guard).value)
+    if (is_false(it->guard))
       return true;
 
     if (it->targets.size()!=1)

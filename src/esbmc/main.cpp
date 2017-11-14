@@ -29,6 +29,6 @@ int main(int argc, const char **argv)
   type_poolt bees(true);
   type_pool = bees;
 
-  cbmc_parseoptionst parseoptions(argc, argv);
+  esbmc_parseoptionst parseoptions(argc, argv);
   return parseoptions.main();
 }

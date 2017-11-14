@@ -6,16 +6,6 @@
   }
   }*/
 
-void error(void) 
-{ 
-
-  {
-  goto ERROR;
-  ERROR: ;
-  return;
-}
-}
-
 int b0_val  ;
 int b0_val_t  ;
 int b0_ev  ;
@@ -496,7 +486,7 @@ int main(void)
   }
   if (! ((int )z_val == 0)) {
     {
-    error();
+    assert(0);
     }
   } else {
 

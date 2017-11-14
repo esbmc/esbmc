@@ -46,6 +46,9 @@
 /* Define to 1 if you have the <boost/crc.hpp> header file. */
 #undef HAVE_BOOST_CRC_HPP
 
+/* define if the Boost::Date_Time library is available */
+#undef HAVE_BOOST_DATE_TIME
+
 /* define if the Boost::Filesystem library is available */
 #undef HAVE_BOOST_FILESYSTEM
 

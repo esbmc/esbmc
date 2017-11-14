@@ -53,11 +53,18 @@ void clang_c_adjust::adjust_code(codet& code)
 
 void clang_c_adjust::adjust_decl(codet& code)
 {
-  if(code.operands().size() != 2)
+  if(code.operands().size() == 1) {
+    adjust_type(code.op0().type());
     return;
+  }
+
+  assert(code.operands().size() == 2);
 
   // Check assignment
   adjust_expr(code.op1());
+
+  // Check type
+  adjust_type(code.op0().type());
 
   // Create typecast on assingments, if needed
   gen_typecast(ns, code.op1(), code.op0().type());

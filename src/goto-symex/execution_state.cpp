@@ -105,10 +105,9 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   nondet_count = 0;
   DFS_traversed.reserve(1);
   DFS_traversed[0] = false;
-  check_ltl = false;
   mon_thread_warning = false;
 
-  thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
+  thread_cswitch_threshold = 2;
 }
 
 execution_statet::execution_statet(const execution_statet &ex) :
@@ -154,7 +153,6 @@ execution_statet::operator=(const execution_statet &ex)
   interleaving_unviable = ex.interleaving_unviable;
   pre_goto_guard = ex.pre_goto_guard;
   mon_thread_warning = ex.mon_thread_warning;
-  check_ltl = ex.check_ltl;
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
@@ -654,7 +652,6 @@ execution_statet::execute_guard()
 {
 
   node_id = node_count++;
-  expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
 
   // Parent guard of this context switch - if a assign/claim/assume, just use
@@ -667,24 +664,14 @@ execution_statet::execute_guard()
   else
     parent_guard = threads_state[last_active_thread].guard.as_expr();
 
-  // Rename value, allows its use in other renamed exprs
-  state_level2->make_assignment(guard_expr, expr2tc(), expr2tc());
-
   // Truth of this guard implies the parent is true.
   state_level2->rename(parent_guard);
   do_simplify(parent_guard);
-  implies2tc assumpt(guard_expr, parent_guard);
 
-  target->assumption(guardt().as_expr(), assumpt, get_active_state().source);
+  target->assumption(guardt().as_expr(), parent_guard, get_active_state().source);
 
   guardt old_guard;
   old_guard.add(threads_state[last_active_thread].guard.as_expr());
-
-  // If we simplified the global guard expr to false, write that to thread
-  // guards, not the symbolic guard name. This is the only way to bail out of
-  // evaulating a particular interleaving early right now.
-  if (is_false(parent_guard))
-    guard_expr = parent_guard;
 
   for (auto & i : threads_state)
   {
@@ -1159,66 +1146,6 @@ execution_statet::kill_monitor_thread()
   threads_state[monitor_tid].thread_ended = true;
 }
 
-static void replace_symbol_names(exprt &e, const std::string&& prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
-{
-
-  if (e.id() ==  "symbol") {
-    std::string sym = e.identifier().as_string();
-    used_syms.insert(sym);
-  } else {
-    Forall_operands(it, e)
-      replace_symbol_names(*it, std::move(prefix), strings, used_syms);
-  }
-}
-
-void
-execution_statet::init_property_monitors()
-{
-  std::map<std::string, std::string> strings;
-
-  new_context.foreach_operand(
-    [&strings] (const symbolt& s)
-    {
-      if (s.name.as_string().find("__ESBMC_property_") != std::string::npos) {
-        // Munge back into the shape of an actual string
-        std::string str;
-        forall_operands(iter2, s.value) {
-          char c = (char)strtol(iter2->value().as_string().c_str(), nullptr, 2);
-          if (c != 0)
-            str += c;
-          else
-            break;
-        }
-
-        strings[s.name.as_string()] = str;
-      }
-    }
-  );
-
-  std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
-  std::map<std::string, std::string>::const_iterator str_it;
-  for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
-    if (str_it->first.find("$type") == std::string::npos) {
-      std::set<std::string> used_syms;
-      exprt main_expr;
-      std::string prop_name = str_it->first.substr(20, std::string::npos);
-
-      namespacet ns(new_context);
-      languagest languages(ns, MODE_C);
-
-      std::string expr_str = strings["__ESBMC_property_" + prop_name];
-      std::string dummy_str;
-
-      languages.to_expr(expr_str, dummy_str, main_expr, message_handler);
-
-      replace_symbol_names(main_expr, std::move(prop_name), strings, used_syms);
-
-      monitors[prop_name] = std::pair<std::set<std::string>, exprt>
-                                      (used_syms, main_expr);
-    }
-  }
-}
-
 execution_statet::ex_state_level2t::ex_state_level2t(
     execution_statet &ref)
   : owner(&ref)
@@ -1259,10 +1186,10 @@ boost::shared_ptr<execution_statet> dfs_execution_statet::clone() const
 
   // Duplicate target equation; or if we're encoding at runtime, push a context.
   if (smt_during_symex) {
-    d.get()->target = target;
-    d.get()->target->push_ctx();
+    d->target = target;
+    d->target->push_ctx();
   } else {
-    d.get()->target = target.get()->clone();
+    d->target = target->clone();
   }
 
   return d;
@@ -1279,7 +1206,7 @@ boost::shared_ptr<execution_statet> schedule_execution_statet::clone() const
     boost::shared_ptr<schedule_execution_statet>(new schedule_execution_statet(*this));
 
   // Don't duplicate target equation.
-  s.get()->target = target;
+  s->target = target;
   return s;
 }
 

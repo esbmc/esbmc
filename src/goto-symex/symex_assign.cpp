@@ -199,7 +199,7 @@ void goto_symext::symex_assign(
     else if(is_symbol2t(lhs))
     {
       symbol2t s = to_symbol2t(lhs);
-      if(s.thename.as_string().find("return_value!") != std::string::npos)
+      if(s.thename.as_string().find("return_value$") != std::string::npos)
         type = symex_targett::HIDDEN;
     }
 
@@ -236,6 +236,8 @@ void goto_symext::symex_assign_rec(
     symex_assign_concat(lhs, full_lhs, rhs, guard, type);
   } else if (is_constant_struct2t(lhs)) {
     symex_assign_structure(lhs, full_lhs, rhs, guard, type);
+  } else if (is_extract2t(lhs)) {
+    symex_assign_extract(lhs, full_lhs, rhs, guard, type);
   } else {
     std::cerr <<  "assignment to " << get_expr_id(lhs) << " not handled"
               << std::endl;
@@ -523,6 +525,56 @@ void goto_symext::symex_assign_concat(
   }
 }
 
+void goto_symext::symex_assign_extract(
+  const expr2tc &lhs,
+  const expr2tc &full_lhs,
+  expr2tc &rhs,
+  guardt &guard,
+  symex_targett::assignment_typet type)
+{
+  const extract2t &ex = to_extract2t(lhs);
+  assert(is_bv_type(ex.from));
+  assert(is_bv_type(rhs));
+  assert(rhs->type->get_width() == lhs->type->get_width());
+
+  // We need to: read the rest of the bitfield and reconstruct it. Extract
+  // and concats are probably the best approach for the solver to optimise for.
+  unsigned int bitblob_width = ex.from->type->get_width();
+  expr2tc top_part;
+  if (ex.upper != bitblob_width-1) {
+    // Extract from the top of the blob down to the bit above this extract
+    type2tc thetype = get_uint_type(bitblob_width - ex.upper - 1);
+    top_part = extract2tc(thetype, ex.from, bitblob_width-1, ex.upper + 1);
+  }
+
+  expr2tc bottom_part;
+  if (ex.lower != 0) {
+    type2tc thetype = get_uint_type(ex.lower);
+    bottom_part = extract2tc(thetype, ex.from, ex.lower-1, 0);
+  }
+
+  // We now have two or three parts: accumulate them into a bitblob sized lump
+  expr2tc accuml = bottom_part;
+  if (!is_nil_expr(accuml)) {
+    type2tc thetype = get_uint_type(accuml->type->get_width() + rhs->type->get_width());
+    accuml = concat2tc(thetype, rhs, bottom_part);
+  } else {
+    accuml = rhs;
+  }
+
+  if (!is_nil_expr(top_part)) {
+    assert(accuml->type->get_width() + top_part->type->get_width() == bitblob_width);
+    type2tc thetype = get_uint_type(bitblob_width);
+    accuml = concat2tc(thetype, top_part, accuml);
+  } else {
+    assert(accuml->type->get_width() == bitblob_width);
+  }
+
+  // OK: accuml now has a bitblob sized expression that can be assigned into
+  // the relevant field.
+  symex_assign_rec(ex.from, full_lhs, accuml, guard, type);
+}
+
 void goto_symext::replace_nondet(expr2tc &expr)
 {
   if (is_sideeffect2t(expr) &&
@@ -534,7 +586,7 @@ void goto_symext::replace_nondet(expr2tc &expr)
   }
   else
   {
-    expr.get()->Foreach_operand([this] (expr2tc &e) {
+    expr->Foreach_operand([this] (expr2tc &e) {
         if (!is_nil_expr(e))
           replace_nondet(e);
       }

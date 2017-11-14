@@ -49,7 +49,7 @@ cvc_convt::get_bool(const smt_ast *a)
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::Expr e = smt.getValue(ca->e);
   bool foo = e.getConst<bool>();
-  return constant_bool2tc(foo);
+  return foo ? gen_true_expr() : gen_false_expr();
 }
 
 expr2tc
@@ -113,11 +113,7 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
 
   switch (k) {
   case SMT_FUNC_EQ:
-    if (args[0]->sort->id == SMT_SORT_BOOL) {
-      e = em.mkExpr(CVC4::kind::IFF, args[0]->e, args[1]->e);
-    } else {
-      e = em.mkExpr(CVC4::kind::EQUAL, args[0]->e, args[1]->e);
-    }
+    e = em.mkExpr(CVC4::kind::EQUAL, args[0]->e, args[1]->e);
     break;
   case SMT_FUNC_NOTEQ:
     e = em.mkExpr(CVC4::kind::DISTINCT, args[0]->e, args[1]->e);
@@ -166,6 +162,7 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     break;
   case SMT_FUNC_BVUMOD:
     e = em.mkExpr(CVC4::kind::BITVECTOR_UREM, args[0]->e, args[1]->e);
+    break;
   case SMT_FUNC_BVLSHR:
     e = em.mkExpr(CVC4::kind::BITVECTOR_LSHR, args[0]->e, args[1]->e);
     break;

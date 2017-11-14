@@ -1,8 +1,7 @@
-unsigned int nondet_uint();
-unsigned int SIZE = nondet_uint();
 
 int main()
 {
+  unsigned int SIZE;
   int i, j, k, key;
   int v[SIZE];
 

@@ -102,7 +102,7 @@ void renaming::level1t::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    expr.get()->Foreach_operand([this] (expr2tc &e) {
+    expr->Foreach_operand([this] (expr2tc &e) {
         rename(e);
       }
     );
@@ -169,7 +169,7 @@ void renaming::level2t::rename(expr2tc &expr, bool rename_only)
   else
   {
     // do this recursively
-    expr.get()->Foreach_operand([this, &rename_only] (expr2tc &e) {
+    expr->Foreach_operand([this, &rename_only] (expr2tc &e) {
         if (!is_nil_expr(e))
           rename(e, rename_only);
       }
@@ -198,9 +198,7 @@ void renaming::renaming_levelt::get_original_name(
   if (is_nil_expr(expr))
     return;
 
-  expr.get()->Foreach_operand(
-    [&lev] (expr2tc &e)
-    {
+  expr.get()->Foreach_operand([&lev] (expr2tc &e) {
       renaming_levelt::get_original_name(e, lev);
     }
   );

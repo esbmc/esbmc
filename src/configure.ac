@@ -97,7 +97,7 @@ AC_CHECK_LIB([gmp], [__gmpz_cmp],
 )
 
 # Define what to do when clang is enabled
-AX_CLANG(3.7, [], AC_MSG_ERROR([Cannot find clang; please pass it in --with-clang argument]))
+AX_CLANG(3.8, [], AC_MSG_ERROR([Cannot find clang; please pass it in --with-clang argument]))
 AX_LLVM(,AC_MSG_ERROR([Cannot find llvm; please pass it in --with-llvm argument]))
 AC_SUBST([ESBMC_CLANG_SUBDIRS], " clang-c-frontend clang-cpp-frontend ")
 AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../clang-cpp-frontend/libclangcppfrontend.la ../clang-c-frontend/headers/libclangheaders.la ../clang-c-frontend/AST/libclangcfrontendast.la")
@@ -105,9 +105,10 @@ AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../c
 AX_BOOST_BASE(1.47, [], AC_MSG_ERROR([Cannot find boost base dir; please pass it in --with-boost argument or set BOOST_ROOT]))
 AX_BOOST_FILESYSTEM
 AX_BOOST_SYSTEM
+AX_BOOST_DATE_TIME
 
 AS_VAR_APPEND(CPPFLAGS, " $BOOST_CPPFLAGS")
-AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS $BOOST_FILESYSTEM_LIB $BOOST_SYSTEM_LIB")
+AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS $BOOST_FILESYSTEM_LIB $BOOST_SYSTEM_LIB $BOOST_DATE_TIME_LIB")
 
 AC_CHECK_HEADERS([boost/mpl/if.hpp], [], AC_MSG_ERROR([No boost mpl found]))
 AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], AC_MSG_ERROR([No boost shared ptr found]))
@@ -179,6 +180,15 @@ AC_SUBST([LIBESBMC_LDFLAGS], $LIBESBMC_LDFLAGS)
 AC_SUBST([ESBMC_LDFLAGS], $ESBMC_LDFLAGS)
 
 AC_ARG_ENABLE(werror, [AS_HELP_STRING([--disable-werror], Disable werror build flag)])
+
+AC_ARG_ENABLE(libm, [AS_HELP_STRING([--disable-libm], Disable builtin libm)])
+AS_IF([test "${enable_libm}" = "no"], [
+  AC_SUBST([ESBMC_LIBM], "")
+], [
+  AC_SUBST([ESBMC_LIBM], "\$(srcdir)/library/libm/*.c")
+])
+
+
 
 dnl on by default...
 AC_ARG_ENABLE(enable-esbmc, [AS_HELP_STRING([--enable-esbmc], Build main ESBMC binary)])

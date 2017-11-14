@@ -81,8 +81,7 @@ void goto_program_dereferencet::dereference_failure(
       simplify(guard_expr);
     }
 
-    if (!is_constant_bool2t(guard_expr) ||
-        !to_constant_bool2t(guard_expr).value)
+    if (!is_true(guard_expr))
     {
       goto_programt::targett t=new_code.add_instruction(ASSERT);
       t->guard = guard_expr;
@@ -209,7 +208,7 @@ void goto_program_dereferencet::dereference_instruction(
       code_expression2t &theexp = to_code_expression2t(i.code);
       dereference_expr(theexp.operand, checks_only, dereferencet::READ);
     } else if (is_code_printf2t(i.code)) {
-      i.code.get()->Foreach_operand([this, &checks_only] (expr2tc &e) {
+      i.code->Foreach_operand([this, &checks_only] (expr2tc &e) {
           dereference_expr(e, checks_only, dereferencet::READ);
         }
       );

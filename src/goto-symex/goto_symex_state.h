@@ -188,12 +188,6 @@ public:
      *  already seen names in a function for making that decision. */
     declaration_historyt declaration_history;
 
-    /** Record of how many loop unwinds we've performed. For each target in the
-     *  program that contains a loop, record how many times we've unwound round
-     *  it. */
-    typedef hash_map_cont<unsigned, BigInt> loop_iterationst;
-    loop_iterationst loop_iterations;
-
     /** Record the first va_args index used in this function call, if any,
      *  otherwise UINT_MAX
      */
@@ -439,6 +433,11 @@ public:
    *  for each function invocation, but the existance of decl insns makes l1
    *  re-naming out of step with function invocations. */
   std::map<irep_idt, unsigned> variable_instance_nums;
+  /** Record of how many loop unwinds we've performed. For each target in the
+   *  program that contains a loop, record how many times we've unwound round
+   *  it. */
+  typedef hash_map_cont<unsigned, BigInt> loop_iterationst;
+  loop_iterationst loop_iterations;
   /** Record of how many times we've unwound function recursion. */
   std::map<irep_idt, BigInt> function_unwind;
 

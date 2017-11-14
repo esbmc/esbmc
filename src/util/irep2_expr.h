@@ -905,6 +905,25 @@ public:
   typedef esbmct::expr2t_traits<data_items_field> traits;
 };
 
+class extract_data : public expr2t
+{
+public:
+  extract_data(const type2tc &t, expr2t::expr_ids id,
+               const expr2tc &_from, unsigned int _upper, unsigned int _lower)
+    : expr2t(t, id), from(_from), upper(_upper), lower(_lower) { }
+  extract_data(const extract_data &ref) = default;
+
+  expr2tc from;
+  unsigned int upper;
+  unsigned int lower;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, extract_data, &extract_data::from> from_field;
+  typedef esbmct::field_traits<unsigned int, extract_data, &extract_data::upper> upper_field;
+  typedef esbmct::field_traits<unsigned int, extract_data, &extract_data::lower> lower_field;
+  typedef esbmct::expr2t_traits<from_field, upper_field, lower_field> traits;
+};
+
 // Give everything a typedef name. Use this to construct both the templated
 // expression methods, but also the container class which needs the template
 // parameters too.
@@ -1028,6 +1047,7 @@ irep_typedefs(isnormal, bool_1op);
 irep_typedefs(isfinite, bool_1op);
 irep_typedefs(signbit, overflow_ops);
 irep_typedefs(concat, bit_2ops);
+irep_typedefs(extract, extract_data);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -2617,6 +2637,18 @@ public:
   concat2t(const type2tc &type, const expr2tc &forward, const expr2tc &aft)
     : concat_expr_methods(type, concat_id, forward, aft) { }
   concat2t(const concat2t &ref) = default;
+
+  expr2tc do_simplify(bool second) const override;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class extract2t : public extract_expr_methods
+{
+public:
+  extract2t(const type2tc &type, const expr2tc &from, unsigned int upper, unsigned int lower)
+    : extract_expr_methods(type, extract_id, from, upper, lower) { }
+  extract2t(const extract2t &ref) = default;
 
   expr2tc do_simplify(bool second) const override;
 

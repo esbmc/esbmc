@@ -1,17 +1,5 @@
 #include <assert.h>
 
-char nondet_char()
-{
-  char c;
-  return c;
-}
-
-unsigned int nondet_uint()
-{
-  unsigned int ui;
-  return ui;
-}
-
 int main() {
     unsigned int max = 5;
     char str1[max], str2[max];

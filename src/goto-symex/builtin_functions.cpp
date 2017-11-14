@@ -180,8 +180,8 @@ goto_symext::symex_mem(
 
   if(size_is_one)
   {
-    rhs_addrof.get()->type = get_pointer_type(pointer_typet(symbol.type));
-    rhs_addrof.get()->ptr_obj = symbol2tc(new_type, symbol.name);
+    rhs_addrof->type = get_pointer_type(pointer_typet(symbol.type));
+    rhs_addrof->ptr_obj = symbol2tc(new_type, symbol.name);
   }
   else
   {
@@ -190,9 +190,9 @@ goto_symext::symex_mem(
     expr2tc sym = symbol2tc(new_type, symbol.name);
     expr2tc idx_val = gen_ulong(0);
     expr2tc idx = index2tc(subtype, sym, idx_val);
-    rhs_addrof.get()->type =
+    rhs_addrof->type =
       get_pointer_type(pointer_typet(symbol.type.subtype()));
-    rhs_addrof.get()->ptr_obj = idx;
+    rhs_addrof->ptr_obj = idx;
   }
 
   expr2tc rhs = rhs_addrof;
@@ -321,38 +321,30 @@ void goto_symext::symex_printf(
   const expr2tc &lhs __attribute__((unused)),
   const expr2tc &rhs)
 {
-
   assert(is_code_printf2t(rhs));
-  expr2tc new_rhs = rhs;
+
+  code_printf2tc new_rhs(to_code_printf2t(rhs));
   cur_state->rename(new_rhs);
 
-  const expr2tc &format = *new_rhs->get_sub_expr(0);
+  // The expr2tc in position 0 is the string format
+  const irep_idt fmt = get_string_argument(new_rhs->operands[0]);
 
-  if (is_address_of2t(format))
+  // Now we pop the format
+  new_rhs->operands.erase(new_rhs->operands.begin());
+
+  std::list<expr2tc> args;
+  new_rhs->foreach_operand([this, &args] (const expr2tc &e)
   {
-    const address_of2t &addrof = to_address_of2t(format);
-    if (is_index2t(addrof.ptr_obj))
-    {
-      const index2t &idx = to_index2t(addrof.ptr_obj);
-      if(is_constant_string2t(idx.source_value)
-         && is_constant_int2t(idx.index)
-         && to_constant_int2t(idx.index).as_ulong() == 0)
-      {
-        const std::string &fmt =
-          to_constant_string2t(idx.source_value).value.as_string();
+    expr2tc tmp = e;
+    do_simplify(tmp);
+    args.push_back(tmp);
+  });
 
-        std::list<expr2tc> args;
-        new_rhs->foreach_operand([this, &args] (const expr2tc &e)
-          {
-            expr2tc tmp = e;
-            do_simplify(tmp);
-            args.push_back(tmp);
-          });
-
-        target->output(cur_state->guard.as_expr(), cur_state->source, fmt, args);
-      }
-    }
-  }
+  target->output(
+    cur_state->guard.as_expr(),
+    cur_state->source,
+    fmt.as_string(),
+    args);
 }
 
 void goto_symext::symex_cpp_new(
@@ -403,10 +395,10 @@ void goto_symext::symex_cpp_new(
   {
     symbol2tc sym(newtype, symbol.name);
     index2tc idx(renamedtype2, sym, gen_ulong(0));
-    rhs.get()->ptr_obj = idx;
+    rhs->ptr_obj = idx;
   }
   else
-    rhs.get()->ptr_obj = symbol2tc(newtype, symbol.name);
+    rhs->ptr_obj = symbol2tc(newtype, symbol.name);
 
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
@@ -728,3 +720,4 @@ void goto_symext::symex_va_arg(const expr2tc& lhs, const sideeffect2t &code)
 
   symex_assign(code_assign2tc(lhs, va_rhs));
 }
+

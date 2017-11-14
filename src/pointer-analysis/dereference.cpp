@@ -146,7 +146,7 @@ dereferencet::dereference_expr(
     default:
     {
       // Recurse over the operands
-      expr.get()->Foreach_operand([this, &guard, &mode] (expr2tc &e)
+      expr->Foreach_operand([this, &guard, &mode] (expr2tc &e)
         {
           if (is_nil_expr(e)) return;
           dereference_expr(e, guard, mode);
@@ -171,7 +171,7 @@ dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode)
     // Take the current size of the guard, so that we can reset it later.
     guardt old_guards(guard);
 
-    expr.get()->Foreach_operand([this, &guard, &expr] (expr2tc &op) {
+    expr->Foreach_operand([this, &guard, &expr] (expr2tc &op) {
       assert(is_bool_type(op));
 
       // Handle any derererences in this operand
@@ -641,8 +641,17 @@ dereferencet::build_reference_to(
 
   // If offset is unknown, or whatever, we have to consider it
   // nondeterministic, and let the reference builders deal with it.
+  unsigned int alignment = o.alignment;
   if (!is_constant_int2t(final_offset)) {
-    assert(o.alignment != 0);
+    assert(alignment != 0);
+
+    if (!is_symbol2t(deref_expr)) {
+      // The expression being dereferenced isn't just a symbol: it might have
+      // all kind of things messing with alignment in there. We could interpret
+      // it as future work.
+      alignment = 1;
+    }
+
     final_offset = pointer_offset2tc(pointer_type2(), deref_expr);
   }
 
@@ -677,7 +686,7 @@ dereferencet::build_reference_to(
 
   // Call reference building methods. For the given data object in value,
   // an expression of type type will be constructed that reads from it.
-  build_reference_rec(value, final_offset, type, tmp_guard, mode, o.alignment);
+  build_reference_rec(value, final_offset, type, tmp_guard, mode, alignment);
 
   return value;
 }
@@ -989,6 +998,20 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
     mp_integer m_offs = member_offset(value->type, struct_type.member_names[i]);
     mp_integer m_size = type_byte_size(it);
 
+    if (m_size == 0) {
+      // This field has no size: it's most likely a struct that has no members.
+      // Just skip over it: we can never correctly build a reference to a field
+      // in that struct, because there are no fields. The next field in the
+      // current struct lies at the same offset and is probably what the pointer
+      // is supposed to point at.
+      // If user is seeking a reference to this substruct, a different method
+      // should have been called (construct_struct_ref_from_const_offset).
+      assert(is_struct_type(it));
+      assert(!is_struct_type(type));
+      i++;
+      continue;
+    }
+
     if (int_offset < m_offs) {
       // The offset is behind this field, but wasn't accepted by the previous
       // member. That means that the offset falls in the undefined gap in the
@@ -1248,6 +1271,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
   // Minimal effort: the moment that we can throw this object out due to an
   // incompatible type, we do.
   const constant_int2t &intref = to_constant_int2t(offs);
+  mp_integer type_size = type_byte_size(type);
 
   if (is_struct_type(value->type))
   {
@@ -1276,14 +1300,27 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
       if (!is_scalar_type(it) && intref.value >= offs && intref.value < (offs + size))
       {
-        // It's this field. Don't make a decision about whether it's correct
-        // or not, recurse to make that happen.
+        // It's this field. However, zero sized structs may have conspired
+        // to make life miserable: we might be creating a reference to one,
+        // or there might be one preceeding the desired struct.
+
+        // Zero sized struct and we don't want one,
+        if (size == 0 && type_size != 0)
+          goto cont;
+
+        // Zero sized struct and it's not the right one (!):
+        if (size == 0 && type_size == 0 && !dereference_type_compare(value, type))
+          goto cont;
+
+        // OK, it's this substruct, and we've eliminated the zero-sized-struct
+        // menace. Recurse to continue our checks.
         mp_integer new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs.to_ulong());
         value = member2tc(it, value, struct_type.member_names[i]);
         construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
         return;
       }
+    cont:
       i++;
     }
 
@@ -1495,13 +1532,7 @@ expr2tc*
 dereferencet::extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
     const expr2tc &offset)
 {
-  if(!bytes)
-  {
-    std::cerr << "**** ERROR: "
-              << "Zero byte when extracting from an array.\n"
-              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
-    abort();
-  }
+  assert(bytes != 0);
 
   expr2tc *exprs = new expr2tc[bytes];
 
@@ -1526,19 +1557,18 @@ expr2tc *
 dereferencet::extract_bytes_from_scalar(const expr2tc &object,
     unsigned int num_bytes, const expr2tc &offset)
 {
-  if(!num_bytes)
-  {
-    std::cerr << "**** ERROR: "
-              << "Zero byte when extracting from scalar.\n"
-              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
-    abort();
-  }
-
+  assert(num_bytes != 0);
 
   assert(is_scalar_type(object) && "Can't extract bytes out of non-scalars");
   const type2tc &bytetype = get_uint8_type();
 
   expr2tc *bytes = new expr2tc[num_bytes];
+
+  // Don't produce a byte update of a byte.
+  if (is_bv_type(object) && num_bytes == 1 && object->type->get_width() == 8) {
+    bytes[0] = object;
+    return bytes;
+  }
 
   expr2tc accuml_offs = offset;
   for (unsigned int i = 0; i < num_bytes; i++) {
@@ -1556,13 +1586,7 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
 {
   int num_bytes = type->get_width() / 8;
 
-  if(!num_bytes)
-  {
-    std::cerr << "**** ERROR: "
-              << "Zero byte when stitching from byte array.\n"
-              << "If your program contains bitfields, please rerun ESBMC with --no-bitfields\n";
-    abort();
-  }
+  assert(num_bytes != 0);
 
   // We are composing a larger data type out of bytes -- we must consider
   // what byte order we are giong to stitch it together out of.
@@ -1726,7 +1750,7 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
     for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();
          it != scalar_step_list->end(); it++) {
       expr2tc tmp = *it;
-      *tmp.get()->get_sub_expr_nc(0) = accuml;
+      *tmp->get_sub_expr_nc(0) = accuml;
       accuml = tmp;
     }
     value = accuml;

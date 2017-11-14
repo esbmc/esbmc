@@ -1,13 +1,15 @@
-//#define SIZE 3
-unsigned int nondet_uint();
-unsigned int SIZE=nondet_uint();
-int main() {
+
+int main()
+{
+   unsigned int SIZE;
    int i, j, k, key;
    int v[SIZE];   
-   for (j=1;j<SIZE;j++) {	  
+  for (j = 1; j < SIZE; j++)
+{
       key = v[j];
       i = j - 1;
-      while((i>=0) && (v[i]>key)) {
+    while((i>=0) && (v[i]>key))
+  {
          if (i<2)
          v[i+1] = v[i];
          i = i - 1;

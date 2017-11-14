@@ -146,13 +146,14 @@ bool clang_c_convertert::get_decl(
       get_field_name(fd, name, pretty_name);
 
       struct_union_typet::componentt comp(name, pretty_name, t);
-      if(fd.isBitField() && !config.options.get_bool_option("no-bitfields"))
+      if (fd.isBitField())
       {
         exprt width;
         if(get_expr(*fd.getBitWidth(), width))
           return true;
 
         comp.type().width(width.cformat());
+        comp.type().set("#bitfield", "true");
       }
 
       new_expr.swap(comp);
@@ -178,6 +179,7 @@ bool clang_c_convertert::get_decl(
         if(get_expr(*fd.getAnonField()->getBitWidth(), width))
           return true;
 
+        comp.type().set("#bitfield", "true");
         comp.type().width(width.cformat());
       }
 
@@ -316,6 +318,16 @@ bool clang_c_convertert::get_struct_union_class(
   if(get_struct_union_class_fields(*record_def, t))
     return true;
 
+  // Check for packed specifier.
+  if (record_def->hasAttrs()) {
+    const auto &attrs = record_def->getAttrs();
+    for (const auto &attr : attrs) {
+      if (attr->getKind() == clang::attr::Packed) {
+        t.set("packed", "true");
+      }
+    }
+  }
+
   added_symbol.type = t;
 
   // This change on the pretty_name is just to beautify the output
@@ -424,8 +436,7 @@ bool clang_c_convertert::get_var(
   // completely wrong but allowed by the language
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
-  code_declt decl;
-  decl.operands().push_back(symbol_exprt(identifier, t));
+  code_declt decl(symbol_exprt(identifier, t));
 
   if(vd.hasInit())
   {
@@ -750,19 +761,21 @@ bool clang_c_convertert::get_type(
       const clang::VariableArrayType &arr =
         static_cast<const clang::VariableArrayType &>(the_type);
 
-      exprt size_expr;
-      if(get_expr(*arr.getSizeExpr(), size_expr))
-        return true;
+      // If the size expression is null, we assume empty
+      if(auto const *s = arr.getSizeExpr())
+      {
+        exprt size_expr;
+        if(get_expr(*s, size_expr))
+          return true;
 
-      typet the_type;
-      if(get_type(arr.getElementType(), the_type))
-        return true;
+        typet subtype;
+        if(get_type(arr.getElementType(), subtype))
+          return true;
 
-      array_typet type;
-      type.size() = size_expr;
-      type.subtype() = the_type;
-
-      new_type = type;
+        new_type = array_typet(subtype, size_expr);
+      }
+      else
+        new_type = empty_typet();
       break;
     }
 
@@ -1472,7 +1485,7 @@ bool clang_c_convertert::get_expr(
       if(get_type(ternary_if.getType(), t))
         return true;
 
-      side_effect_exprt gcc_ternary("gcc_conditional_expression");
+      side_effect_exprt gcc_ternary("gcc_conditional_expression", t);
       gcc_ternary.copy_to_operands(cond, else_expr);
 
       new_expr = gcc_ternary;

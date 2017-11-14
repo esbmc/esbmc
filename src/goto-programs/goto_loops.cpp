@@ -8,6 +8,43 @@
 #include <goto-programs/goto_loops.h>
 #include <util/expr_util.h>
 
+bool check_var_name(const expr2tc &expr)
+{
+  if(!is_symbol2t(expr))
+    return false;
+
+  symbol2t s = to_symbol2t(expr);
+  std::string identifier = s.thename.as_string();
+
+  std::size_t found = identifier.find("__ESBMC_");
+  if(found != std::string::npos)
+    return false;
+
+  found = identifier.find("return_value___");
+  if(found != std::string::npos)
+    return false;
+
+  found = identifier.find("pthread_lib");
+  if(found != std::string::npos)
+    return false;
+
+  // Don't add variables that we created for k-induction
+  found = identifier.find("$");
+  if(found != std::string::npos)
+    return false;
+
+  if(identifier == "__func__")
+    return false;
+
+  if(identifier == "__PRETTY_FUNCTION__")
+    return false;
+
+  if(identifier == "__LINE__")
+    return false;
+
+  return true;
+}
+
 void goto_loopst::find_function_loops()
 {
   for(goto_programt::instructionst::iterator
@@ -67,7 +104,7 @@ void goto_loopst::get_modified_variables(
   if(instruction->is_assign())
   {
     const code_assign2t &assign = to_code_assign2t(instruction->code);
-    add_loop_var(*loop, migrate_expr_back(assign.target));
+    add_loop_var(*loop, assign.target);
   }
   else if(instruction->is_function_call())
   {
@@ -80,7 +117,7 @@ void goto_loopst::get_modified_variables(
       return;
 
     // First, add its return
-    add_loop_var(*loop, migrate_expr_back(function_call.ret));
+    add_loop_var(*loop, function_call.ret);
 
     // The run over the function body and get the modified variables there
     irep_idt &identifier = to_symbol2t(function_call.function).thename;
@@ -113,24 +150,21 @@ void goto_loopst::get_modified_variables(
   }
 }
 
-void goto_loopst::add_loop_var(loopst &loop, const exprt& expr)
+void goto_loopst::add_loop_var(loopst &loop, const expr2tc& expr)
 {
-  if (expr.is_symbol() && expr.type().id() != "code")
-  {
-    if(check_var_name(expr))
-      loop.add_var_to_loop(expr);
-  }
-  else
-  {
-    forall_operands(it, expr)
-      add_loop_var(loop, *it);
-  }
+  if(is_nil_expr(expr))
+    return;
+
+  expr->foreach_operand([this, &loop] (const expr2tc &e) {
+    add_loop_var(loop, e);
+  });
+
+  if(is_symbol2t(expr) && check_var_name(expr))
+    loop.add_var_to_loop(expr);
 }
 
 void goto_loopst::dump()
 {
   for(auto & function_loop : function_loops)
-  {
     function_loop.dump();
-  }
 }

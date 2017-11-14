@@ -379,241 +379,6 @@ void goto_convertt::convert_block(
   scoped_variables = old_scoped_vars;
 }
 
-void goto_convertt::convert_sideeffect(
-  exprt &expr,
-  goto_programt &dest)
-{
-  const irep_idt &statement=expr.statement();
-
-  if(statement=="postincrement" ||
-     statement=="postdecrement" ||
-     statement=="preincrement" ||
-     statement=="predecrement")
-  {
-    if(expr.operands().size()!=1)
-    {
-      err_location(expr);
-      str << statement << " takes one argument";
-      throw 0;
-    }
-
-    exprt rhs;
-
-    if(statement == "postincrement" || statement == "preincrement")
-    {
-      if(expr.type().is_floatbv())
-        rhs.id("ieee_add");
-      else
-        rhs.id("+");
-    }
-    else
-    {
-      if(expr.type().is_floatbv())
-        rhs.id("ieee_sub");
-      else
-        rhs.id("-");
-    }
-
-    const typet &op_type=ns.follow(expr.op0().type());
-
-    if(op_type.is_bool())
-    {
-      rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
-      rhs.op0().make_typecast(int_type());
-      rhs.type()=int_type();
-      rhs.make_typecast(typet("bool"));
-    }
-    else if(op_type.id()=="c_enum" ||
-            op_type.id()=="incomplete_c_enum")
-    {
-      rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
-      rhs.op0().make_typecast(int_type());
-      rhs.type()=int_type();
-      rhs.make_typecast(op_type);
-    }
-    else
-    {
-      typet constant_type;
-
-      if(op_type.id()=="pointer")
-        constant_type=index_type();
-      else if(is_number(op_type))
-        constant_type=op_type;
-      else
-      {
-        err_location(expr);
-        throw "no constant one of type "+op_type.to_string();
-      }
-
-      exprt constant=gen_one(constant_type);
-
-      rhs.copy_to_operands(expr.op0());
-      rhs.move_to_operands(constant);
-      rhs.type()=expr.op0().type();
-    }
-
-    codet assignment("assign");
-    assignment.copy_to_operands(expr.op0());
-    assignment.move_to_operands(rhs);
-
-    assignment.location()=expr.find_location();
-
-    convert(assignment, dest);
-  }
-  else if(statement=="assign")
-  {
-    exprt tmp;
-    tmp.swap(expr);
-    tmp.id("code");
-    convert(to_code(tmp), dest);
-  }
-  else if(statement=="assign+" ||
-          statement=="assign-" ||
-          statement=="assign*" ||
-          statement=="assign_div" ||
-          statement=="assign_mod" ||
-          statement=="assign_shl" ||
-          statement=="assign_ashr" ||
-          statement=="assign_lshr" ||
-          statement=="assign_bitand" ||
-          statement=="assign_bitxor" ||
-          statement=="assign_bitor")
-  {
-    if(expr.operands().size()!=2)
-    {
-      err_location(expr);
-      str << statement << " takes two arguments";
-      throw 0;
-    }
-
-    exprt rhs;
-
-    if(statement == "assign+") {
-      if(expr.type().is_floatbv()) {
-        rhs.id("ieee_add");
-      } else {
-        rhs.id("+");
-      }
-    } else if(statement == "assign-") {
-      if(expr.type().is_floatbv()) {
-        rhs.id("ieee_sub");
-      } else {
-        rhs.id("-");
-      }
-    } else if(statement == "assign*") {
-      if(expr.type().is_floatbv()) {
-        rhs.id("ieee_mul");
-      } else {
-        rhs.id("*");
-      }
-    } else if(statement == "assign_div") {
-      if(expr.type().is_floatbv()) {
-        rhs.id("ieee_div");
-      } else {
-        rhs.id("/");
-      }
-    } else if(statement == "assign_mod") {
-      rhs.id("mod");
-    } else if(statement == "assign_shl") {
-      rhs.id("shl");
-    } else if(statement == "assign_ashr") {
-      rhs.id("ashr");
-    } else if(statement == "assign_lshr") {
-      rhs.id("lshr");
-    } else if(statement == "assign_bitand") {
-      rhs.id("bitand");
-    } else if(statement == "assign_bitxor") {
-      rhs.id("bitxor");
-    } else if(statement == "assign_bitor") {
-      rhs.id("bitor");
-    } else {
-      err_location(expr);
-      str << statement << " not yet supproted";
-      throw 0;
-    }
-
-    rhs.copy_to_operands(expr.op0(), expr.op1());
-    rhs.type()=expr.op0().type();
-
-    if(rhs.op0().type().is_bool())
-    {
-      rhs.op0().make_typecast(int_type());
-      rhs.op1().make_typecast(int_type());
-      rhs.type()=int_type();
-      rhs.make_typecast(typet("bool"));
-    }
-
-    exprt lhs(expr.op0());
-
-    code_assignt assignment(lhs, rhs);
-    assignment.location()=expr.location();
-
-    convert(assignment, dest);
-  }
-  else if(statement=="cpp_delete" ||
-          statement=="cpp_delete[]")
-  {
-    exprt tmp;
-    tmp.swap(expr);
-    tmp.id("code");
-    convert(to_code(tmp), dest);
-  }
-  else if(statement=="function_call")
-  {
-    if(expr.operands().size()!=2)
-    {
-      err_location(expr);
-      str << "function_call sideeffect takes two arguments, but got "
-          << expr.operands().size();
-      throw 0;
-    }
-
-    code_function_callt function_call;
-    function_call.location()=expr.location();
-    function_call.function()=expr.op0();
-    function_call.arguments()=expr.op1().operands();
-    convert_function_call(function_call, dest);
-  }
-  else if(statement=="statement_expression")
-  {
-    if(expr.operands().size()!=1)
-    {
-      err_location(expr);
-      str << "statement_expression sideeffect takes one argument";
-      throw 0;
-    }
-
-    convert(to_code(expr.op0()), dest);
-  }
-  else if(statement=="gcc_conditional_expression")
-  {
-    remove_sideeffects(expr, dest, false);
-  }
-  else if(statement=="temporary_object")
-  {
-    remove_sideeffects(expr, dest, false);
-  }
-  else if(statement=="cpp-throw")
-  {
-    goto_programt::targett t=dest.add_instruction(THROW);
-    codet tmp("cpp-throw");
-    tmp.operands().swap(expr.operands());
-    tmp.location()=expr.location();
-    tmp.set("exception_list", expr.find("exception_list"));
-    migrate_expr(tmp, t->code);
-    t->location=expr.location();
-
-    // the result can't be used, these are void
-    expr.make_nil();
-  }
-  else
-  {
-    err_location(expr);
-    str << "sideeffect " << statement << " not supported";
-    throw 0;
-  }
-}
-
 void goto_convertt::convert_expression(
   const codet &code,
   goto_programt &dest)
@@ -626,14 +391,17 @@ void goto_convertt::convert_expression(
 
   exprt expr=code.op0();
 
-  if(expr.id()=="sideeffect")
+  if(expr.id()=="if")
   {
-    Forall_operands(it, expr)
-      remove_sideeffects(*it, dest);
-
-    goto_programt tmp;
-    convert_sideeffect(expr, tmp);
-    dest.destructive_append(tmp);
+    const if_exprt &if_expr = to_if_expr(expr);
+    code_ifthenelset tmp_code;
+    tmp_code.location() = expr.location();
+    tmp_code.cond() = if_expr.cond();
+    tmp_code.then_case() = code_expressiont(if_expr.true_case());
+    tmp_code.then_case().location() = expr.location();
+    tmp_code.else_case() = code_expressiont(if_expr.false_case());
+    tmp_code.else_case().location() = expr.location();
+    convert_ifthenelse(tmp_code, dest);
   }
   else
   {
@@ -643,6 +411,7 @@ void goto_convertt::convert_expression(
     {
       codet tmp(code);
       tmp.op0()=expr;
+      tmp.location() = expr.location();
       copy(tmp, OTHER, dest);
     }
   }
@@ -1739,10 +1508,10 @@ void goto_convertt::convert_return(
     }
   }
 
-  goto_programt::targett t=dest.add_instruction();
+  goto_programt::targett t = dest.add_instruction();
   t->make_return();
   migrate_expr(new_code, t->code);
-  t->location=new_code.location();
+  t->location = new_code.location();
 }
 
 void goto_convertt::convert_continue(
@@ -1822,8 +1591,7 @@ void goto_convertt::generate_ifthenelse(
   if(false_case.instructions.empty() &&
      true_case.instructions.size()==1 &&
      true_case.instructions.back().is_goto() &&
-     is_constant_bool2t(true_case.instructions.back().guard) &&
-     to_constant_bool2t(true_case.instructions.back().guard).value)
+     is_true(true_case.instructions.back().guard))
   {
     migrate_expr(guard, true_case.instructions.back().guard);
     dest.destructive_append(true_case);
@@ -1918,47 +1686,9 @@ void goto_convertt::convert_ifthenelse(
   if(has_else)
     convert(to_code(code.op2()), tmp_op2);
 
-  exprt tmp_guard;
-  if (options.get_bool_option("control-flow-test")
-    && code.op0().id() != "notequal" && code.op0().id() != "symbol"
-    && code.op0().id() != "typecast" && code.op0().id() != "="
-    && !options.get_bool_option("deadlock-check"))
-  {
-    symbolt &new_symbol=new_cftest_symbol(code.op0().type());
-    irept irep;
-    new_symbol.to_irep(irep);
-
-    codet assignment("assign");
-    assignment.reserve_operands(2);
-    assignment.copy_to_operands(symbol_expr(new_symbol));
-    assignment.copy_to_operands(code.op0());
-    assignment.location() = code.op0().find_location();
-    copy(assignment, ASSIGN, dest);
-
-    tmp_guard=symbol_expr(new_symbol);
-  }
-  else if (code.op0().statement() == "block")
-  {
-    exprt lhs(code.op0().op0().op0());
-    lhs.location()=code.op0().op0().location();
-    exprt rhs(code.op0().op0().op1());
-
-    rhs.type()=code.op0().op0().op1().type();
-
-    codet assignment("assign");
-    assignment.copy_to_operands(lhs);
-    assignment.move_to_operands(rhs);
-    assignment.location()=lhs.location();
-    convert(assignment, dest);
-
-    tmp_guard=assignment.op0();
-    if (!tmp_guard.type().is_bool())
-      tmp_guard.make_typecast(bool_typet());
-  }
-  else
-    tmp_guard=code.op0();
-
+  exprt tmp_guard = code.op0();
   remove_sideeffects(tmp_guard, dest);
+
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 }
 
@@ -2124,27 +1854,6 @@ void goto_convertt::generate_conditional_branch(
   t_false->location=guard.location();
 }
 
-const std::string &goto_convertt::get_string_constant(
-  const exprt &expr)
-{
-  if(expr.id()=="typecast" &&
-     expr.operands().size()==1)
-    return get_string_constant(expr.op0());
-
-  if(!expr.is_address_of()
-     || expr.operands().size()!=1
-     || !expr.op0().is_index()
-     || expr.op0().operands().size()!=2)
-  {
-    err_location(expr);
-    std::cerr << "expected string constant, but got: "
-          << expr.pretty() << std::endl;
-    abort();
-  }
-
-  return expr.op0().op0().value().as_string();
-}
-
 symbolt &goto_convertt::new_tmp_symbol(const typet &type)
 {
   symbolt new_symbol;
@@ -2160,42 +1869,4 @@ symbolt &goto_convertt::new_tmp_symbol(const typet &type)
   scoped_variables.push_front(symbol_ptr->name);
 
   return *symbol_ptr;
-}
-
-symbolt &goto_convertt::new_cftest_symbol(const typet &type)
-{
-  static int cftest_counter=0;
-  symbolt new_symbol;
-  symbolt *symbol_ptr;
-
-  do {
-    new_symbol.base_name="cftest$"+i2string(++cftest_counter);
-    new_symbol.name=tmp_symbol_prefix+id2string(new_symbol.base_name);
-    new_symbol.lvalue=true;
-    new_symbol.type=type;
-  } while (context.move(new_symbol, symbol_ptr));
-
-  scoped_variables.push_front(symbol_ptr->name);
-
-  return *symbol_ptr;
-}
-
-void goto_convertt::guard_program(
-  const guardt &guard,
-  goto_programt &dest)
-{
-  if(guard.is_true()) return;
-
-  // the target for the GOTO
-  goto_programt::targett t=dest.add_instruction(SKIP);
-
-  goto_programt tmp;
-  tmp.add_instruction(GOTO);
-  tmp.instructions.front().targets.push_back(t);
-  exprt guardexpr = migrate_expr_back(guard.as_expr());
-  guardexpr.make_not();
-  migrate_expr(guardexpr, tmp.instructions.front().guard);
-  tmp.destructive_append(dest);
-
-  tmp.swap(dest);
 }

@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <sstream>
+
 #include <clang-c-frontend/expr2c.h>
 #include <util/arith_tools.h>
 #include <util/c_misc.h>
@@ -133,7 +135,29 @@ std::string expr2ct::convert_rec(
   }
   else if(src.id()=="struct")
   {
-    return convert_struct_type(src, q, d);
+    const struct_typet &struct_type=to_struct_type(src);
+
+    std::string dest=q;
+
+    const irep_idt &tag=struct_type.tag().as_string();
+    if(tag!="")
+      dest+=" "+id2string(tag);
+
+    dest+=" {";
+
+    for(const auto &component : struct_type.components())
+    {
+      dest+=' ';
+      dest+=convert_rec(
+        component.type(),
+        c_qualifierst(),
+        id2string(component.get_name()));
+      dest+=';';
+    }
+
+    dest+=" }";
+    dest+=declarator;
+    return dest;
   }
   else if(src.id()=="incomplete_struct")
   {
@@ -147,7 +171,7 @@ std::string expr2ct::convert_rec(
   {
     const union_typet &union_type=to_union_type(src);
 
-    std::string dest=q+"union";
+    std::string dest=q;
 
     const irep_idt &tag=union_type.tag().as_string();
     if(tag!="")
@@ -213,7 +237,7 @@ std::string expr2ct::convert_rec(
   else if(src.is_array())
   {
     std::string size_string=convert(static_cast<const exprt &>(src.size_irep()));
-    return convert(src.subtype())+d+" ["+size_string+"]";
+    return convert(src.subtype())+" ["+size_string+"]"+d;
   }
   else if(src.id()=="incomplete_array")
   {
@@ -224,7 +248,7 @@ std::string expr2ct::convert_rec(
     const typet &followed=ns.follow(src);
     if(followed.id()=="struct")
     {
-      std::string dest=q+"struct";
+      std::string dest=q;
       const std::string &tag=followed.tag().as_string();
       if(tag!="") dest+=" "+tag;
       dest+=d;
@@ -233,7 +257,7 @@ std::string expr2ct::convert_rec(
 
     if(followed.id()=="union")
     {
-      std::string dest=q+"union";
+      std::string dest=q;
       const std::string &tag=followed.tag().as_string();
       if(tag!="") dest+=" "+tag;
       dest+=d;
@@ -269,36 +293,6 @@ std::string expr2ct::convert_rec(
   return convert_norep((exprt&)src, precedence);
 }
 
-std::string expr2ct::convert_struct_type(
-  const typet &src,
-  const std::string &qualifiers,
-  const std::string &declarator)
-{
-  const struct_typet &struct_type=to_struct_type(src);
-
-  std::string dest=qualifiers+"struct";
-
-  const irep_idt &tag=struct_type.tag().as_string();
-  if(tag!="")
-    dest+=" "+id2string(tag);
-
-  dest+=" {";
-
-  for(const auto &component : struct_type.components())
-  {
-    dest+=' ';
-    dest+=convert_rec(
-      component.type(),
-      c_qualifierst(),
-      id2string(component.get_name()));
-    dest+=';';
-  }
-
-  dest+=" }";
-  dest+=declarator;
-  return dest;
-}
-
 std::string expr2ct::convert_typecast(
   const exprt &src,
   unsigned &precedence)
@@ -320,7 +314,7 @@ std::string expr2ct::convert_typecast(
   std::string dest;
   if(type.id()=="struct")
   {
-    std::string dest="struct";
+    std::string dest;
     const std::string &tag=type.tag().as_string();
     assert(tag!="");
     dest+=" "+tag;
@@ -328,7 +322,7 @@ std::string expr2ct::convert_typecast(
   }
   else if(type.id()=="union")
   {
-    std::string dest="union";
+    std::string dest;
     const std::string &tag=type.tag().as_string();
     assert(tag!="");
     dest+=" "+tag;
@@ -1431,7 +1425,7 @@ std::string expr2ct::convert_code_return(
   std::string dest=indent_str(indent);
   dest+="return";
 
-  if(src.operands().size()==1)
+  if(to_code_return(src).has_return_value())
     dest+=" "+convert(src.op0());
 
   dest+=";\n";
@@ -1570,14 +1564,12 @@ std::string expr2ct::convert_code_decl(
   const typet &followed=ns.follow(src.op0().type());
   if(followed.id()=="struct")
   {
-    dest+="struct ";
     const std::string &tag=followed.tag().as_string();
     if(tag!="") dest+=tag+" ";
     dest+=declarator;
   }
   else if(followed.id()=="union")
   {
-    dest+="union ";
     const std::string &tag=followed.tag().as_string();
     if(tag!="") dest+=tag+" ";
     dest+=declarator;
@@ -2056,6 +2048,17 @@ std::string expr2ct::convert_sizeof(
   return dest;
 }
 
+std::string expr2ct::convert_extract(const exprt &src)
+{
+  std::stringstream ss;
+  std::string op = convert(src.op0());
+  unsigned int upper = atoi(src.get("upper").as_string().c_str());
+  unsigned int lower = atoi(src.get("lower").as_string().c_str());
+
+  ss << "EXTRACT(" << op << "," << upper << "," << lower << ")";
+  return ss.str();
+}
+
 std::string expr2ct::convert(
   const exprt &src,
   unsigned &precedence)
@@ -2483,6 +2486,9 @@ std::string expr2ct::convert(
 
   else if(src.id()=="concat")
     return convert_function(src, "CONCAT", precedence=15);
+
+  else if(src.id()=="extract")
+    return convert_extract(src);
 
   // no C language expression for internal representation
   return convert_norep(src, precedence);
