@@ -282,7 +282,7 @@ public:
   /** Type of the value-set containing structure. A hash map mapping variables
    *  to an entryt, storing the value set of objects a variable might point
    *  at. */
-  typedef hash_map_cont<std::pair<name_recordt, irep_idt>, entryt, pair_hasher> valuest;
+  typedef std::map<std::pair<name_recordt, irep_idt>, entryt> valuest;
 
   /** Convert an object map element to an expression. Formulates either an
    *  object_descriptor irep, or unknown / invalid expr's as appropriate. */
