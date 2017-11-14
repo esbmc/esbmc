@@ -53,6 +53,11 @@ void goto_convert_functionst::goto_convert()
   }
 
   functions.compute_location_numbers();
+
+  // After all symbols have been extricated, concreteise migrated type
+  context.Foreach_operand([](symbolt &s) {
+      migrate_type(s.type, s.type2);
+      });
 }
 
 bool goto_convert_functionst::hide(const goto_programt &goto_program)
