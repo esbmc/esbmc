@@ -273,7 +273,7 @@ void violation_graphml_goto_trace(
        continue;
 
      edget new_edge;
-     new_edge.thread_id = step.thread_nr;
+     new_edge.thread_id = std::to_string(step.thread_nr);
      new_edge.assumption = get_formated_assignment(ns, step);
      new_edge.start_line = get_line_number(
        verification_file,
