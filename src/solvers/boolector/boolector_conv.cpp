@@ -59,10 +59,11 @@ boolector_convt::dec_solve()
 
   if (result == BOOLECTOR_SAT)
     return P_SATISFIABLE;
-  else if (result == BOOLECTOR_UNSAT)
+
+  if (result == BOOLECTOR_UNSAT)
     return P_UNSATISFIABLE;
-  else
-    return P_ERROR;
+
+  return P_ERROR;
 }
 
 const std::string
@@ -421,12 +422,12 @@ boolector_convt::get_array_elem(
         break;
       }
     }
+
+    boolector_free_array_assignment(btor, indicies, values, size);
+    return smt_convt::get_bv(subtype, val);
   }
 
-  boolector_free_array_assignment(btor, indicies, values, size);
-
-  // TODO: floatbv
-  return smt_convt::get_bv(subtype, val);
+  return gen_zero(subtype);
 }
 
 const smt_ast *
