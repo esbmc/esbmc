@@ -105,7 +105,7 @@ void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq)
     {
       goto_tracet goto_trace;
       status("Building successful trace");
-      build_successful_goto_trace(eq, ns, goto_trace);
+      /* build_successful_goto_trace(eq, ns, goto_trace); FIXME */
       correctness_graphml_goto_trace(
         options,
         ns,
