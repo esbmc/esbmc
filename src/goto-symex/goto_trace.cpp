@@ -332,12 +332,13 @@ void violation_graphml_goto_trace(
 
 void correctness_graphml_goto_trace(
   optionst & options,
-  const namespacet & ns,
-  const goto_tracet & goto_trace )
+  const namespacet & ns __attribute__((unused)),
+  const goto_tracet & goto_trace __attribute__((unused)) )
 {
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = verification_file;
 
+#if 0
   edget * first_edge = &graph.edges.at(0);
   nodet * prev_node = first_edge->to_node;
 
@@ -419,6 +420,7 @@ void correctness_graphml_goto_trace(
     prev_node = new_node;
     graph.edges.push_back(new_edge);
   }
+#endif
 
   xmlnodet graphml = graph.generate_graphml(options);
 
