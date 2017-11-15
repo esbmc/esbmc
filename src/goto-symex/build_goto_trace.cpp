@@ -78,12 +78,15 @@ void build_goto_trace(
       goto_trace_step.value = build_rhs(smt_conv, SSA_step.lhs, SSA_step.rhs);
     }
 
-    for(const auto & arg : SSA_step.converted_output_args)
+    if(SSA_step.is_output())
     {
-      if (is_constant_expr(arg))
-        goto_trace_step.output_args.push_back(arg);
-      else
-        goto_trace_step.output_args.push_back(smt_conv->get(arg));
+      for(const auto & arg : SSA_step.converted_output_args)
+      {
+        if (is_constant_expr(arg))
+          goto_trace_step.output_args.push_back(arg);
+        else
+          goto_trace_step.output_args.push_back(smt_conv->get(arg));
+      }
     }
 
     if(SSA_step.is_assert() || SSA_step.is_assume())
