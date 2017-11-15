@@ -272,6 +272,8 @@ void violation_graphml_goto_trace(
           (step.type == goto_trace_stept::ASSIGNMENT))))
        continue;
 
+     graph.check_create_new_thread(step.thread_nr, prev_node);
+
      edget new_edge;
      new_edge.thread_id = std::to_string(step.thread_nr);
      new_edge.assumption = get_formated_assignment(ns, step);

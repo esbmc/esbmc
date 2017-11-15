@@ -71,6 +71,7 @@ public:
 class grapht
 {
 private:
+  std::vector<uint16_t> threads;
   void create_initial_edge();
 public:
   enum typet { VIOLATION, CORRECTNESS };
@@ -82,6 +83,7 @@ public:
     create_initial_edge();
   }
   xmlnodet generate_graphml(optionst & options);
+  void check_create_new_thread(uint16_t thread_id, nodet * prev_node);
 };
 
 /**
