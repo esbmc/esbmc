@@ -201,6 +201,8 @@ void goto_symext::symex_assign(
       symbol2t s = to_symbol2t(lhs);
       if(s.thename.as_string().find("return_value$") != std::string::npos)
         type = symex_targett::HIDDEN;
+      else if(s.thename.as_string().find("__ESBMC_") != std::string::npos)
+        type = symex_targett::HIDDEN;
     }
 
     guardt g(guard) ; // NOT the state guard!
