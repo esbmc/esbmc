@@ -109,7 +109,7 @@ goto_symext::argument_assignments(
         }
       }
 
-      symex_assign(code_assign2tc(lhs, rhs));
+      symex_assign(code_assign2tc(lhs, rhs), symex_targett::HIDDEN);
     }
 
     it1++;
@@ -147,7 +147,7 @@ goto_symext::argument_assignments(
         (*it1)->type, id, symbol2t::level1, 0, 0,
         cur_state->top().level1.thread_id, 0);
 
-      symex_assign(code_assign2tc(va_lhs, *it1));
+      symex_assign(code_assign2tc(va_lhs, *it1), symex_targett::HIDDEN);
     }
   }
   else if(it1 != arguments.end())
