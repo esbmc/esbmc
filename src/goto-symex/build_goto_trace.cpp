@@ -2,8 +2,7 @@
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/witnesses.h>
 
-expr2tc build_lhs(
-  boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
+expr2tc build_lhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
 {
   if(is_nil_expr(lhs))
     return lhs;
@@ -72,8 +71,12 @@ void build_goto_trace(
     goto_trace_step.format_string = SSA_step.format_string;
 
     goto_trace_step.stack_trace = SSA_step.stack_trace;
-    goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
-    goto_trace_step.value = build_rhs(smt_conv, SSA_step.lhs, SSA_step.rhs);
+
+    if(SSA_step.is_assignment())
+    {
+      goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
+      goto_trace_step.value = build_rhs(smt_conv, SSA_step.lhs, SSA_step.rhs);
+    }
 
     for(const auto & arg : SSA_step.converted_output_args)
     {
