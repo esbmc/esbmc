@@ -408,9 +408,21 @@ boolector_convt::get_array_elem(
   int size;
   char **indicies, **values;
   boolector_array_assignment(btor, ast->e, &indicies, &values, &size);
-  assert(size);
 
-  BigInt val = string2integer(values[index], 2);
+  BigInt val = 0;
+  if(size > 0)
+  {
+    for (int i = 0; i < size; i++)
+    {
+      auto idx = string2integer(indicies[i], 2);
+      if(idx.to_uint64() == index)
+      {
+        val = string2integer(values[i], 2);
+        break;
+      }
+    }
+  }
+
   boolector_free_array_assignment(btor, indicies, values, size);
 
   // TODO: floatbv
