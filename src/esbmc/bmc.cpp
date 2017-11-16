@@ -94,7 +94,8 @@ void bmct::do_cbmc(
   eq->convert(*smt_conv.get());
 }
 
-void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq)
+void bmct::successful_trace(
+  boost::shared_ptr<symex_target_equationt> &eq __attribute__((unused)))
 {
   if(options.get_bool_option("result-only"))
     return;
@@ -465,8 +466,7 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
 
-    if (res == smt_convt::P_SATISFIABLE ||
-        res == smt_convt::P_UNSATISFIABLE)
+    if (res == smt_convt::P_SATISFIABLE || res == smt_convt::P_UNSATISFIABLE)
       report_trace(res, eq);
 
     if(res)
