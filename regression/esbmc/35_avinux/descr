@@ -1,0 +1,5 @@
+See trac ticket #81, when verifying this lump of code from avinux's example, we end up reporting an invalid pointer when accessing a pointer to something on the stack. Extremely obvious that nothing is wrong with it.
+
+It turns out that what's happening, is that the initialization of the __ESBMC_is_dynamic array is being sliced out by the slicer. Because it's not referred to, because dynamic functionality goes through the is_dynamic_object irep, so the slicer knows nothing of the array holding its data.
+
+See af8c56e6 for fix.
