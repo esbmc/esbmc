@@ -2335,8 +2335,8 @@ smt_convt::get(const expr2tc &expr)
       return src_value;
 
     // Convert the idx, it must be an integer
-    newidx = get(newidx);
-    assert(is_constant_int2t(newidx));
+    expr2tc idx = get(newidx);
+    assert(is_constant_int2t(idx));
 
     // Convert the array so we can call the array api
     smt_astt array = convert_ast(src_value);
@@ -2344,7 +2344,7 @@ smt_convt::get(const expr2tc &expr)
     // Retrieve the element
     res = array_api->get_array_elem(
       array,
-      to_constant_int2t(newidx).value.to_uint64(),
+      to_constant_int2t(idx).value.to_uint64(),
       get_flattened_array_subtype(res->type));
   }
   else if(is_with2t(res))
@@ -2367,8 +2367,8 @@ smt_convt::get(const expr2tc &expr)
       return update_val;
 
     // Convert the idx, it must be an integer
-    newidx = get(newidx);
-    assert(is_constant_int2t(newidx));
+    expr2tc idx = get(newidx);
+    assert(is_constant_int2t(idx));
 
     // Convert the array so we can call the array api
     smt_astt array = convert_ast(with.source_value);
@@ -2376,15 +2376,18 @@ smt_convt::get(const expr2tc &expr)
     // Retrieve the element
     res = array_api->get_array_elem(
       array,
-      to_constant_int2t(newidx).value.to_uint64(),
+      to_constant_int2t(idx).value.to_uint64(),
       get_flattened_array_subtype(res->type));
+  }
+  else if(is_address_of2t(res))
+  {
+    return res;
   }
   else if(is_symbol2t(res))
     return get_by_type(res); // Query symbol value from the solver
 
   // Recurse on operands
-  res.get()->Foreach_operand(
-    [this] (expr2tc &e)
+  res->Foreach_operand([this] (expr2tc &e)
     {
       expr2tc new_e = get(e);
       e = new_e;
