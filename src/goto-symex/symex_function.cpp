@@ -109,8 +109,7 @@ goto_symext::argument_assignments(
         }
       }
 
-      guardt guard;
-      symex_assign_symbol(lhs, rhs, guard, symex_targett::STATE);
+      symex_assign(code_assign2tc(lhs, rhs), symex_targett::HIDDEN);
     }
 
     it1++;
@@ -148,7 +147,7 @@ goto_symext::argument_assignments(
         (*it1)->type, id, symbol2t::level1, 0, 0,
         cur_state->top().level1.thread_id, 0);
 
-      symex_assign(code_assign2tc(va_lhs, *it1));
+      symex_assign(code_assign2tc(va_lhs, *it1), symex_targett::HIDDEN);
     }
   }
   else if(it1 != arguments.end())
@@ -224,8 +223,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
       unsigned int &nondet_count = get_nondet_counter();
       symbol2tc rhs(call.ret->type, "nondet$symex::"+i2string(nondet_count++));
 
-      guardt guard;
-      symex_assign_rec(call.ret, rhs, guard, symex_targett::STATE);
+      symex_assign(code_assign2tc(call.ret, rhs));
     }
 
     cur_state->source.pc++;

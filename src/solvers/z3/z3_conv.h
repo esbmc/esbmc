@@ -26,16 +26,22 @@ class z3_smt_sort : public smt_sort {
 public:
 #define z3_sort_downcast(x) static_cast<const z3_smt_sort *>(x)
   z3_smt_sort(smt_sort_kind i, z3::sort _s)
-    : smt_sort(i), s(_s), rangesort(nullptr) { }
+    : smt_sort(i), s(_s), rangesort(NULL) { }
+
   z3_smt_sort(smt_sort_kind i, z3::sort _s, const type2tc &_tupletype)
-    : smt_sort(i), s(_s), rangesort(nullptr), tupletype(_tupletype) { }
-  z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w)
-    : smt_sort(i, w), s(_s), rangesort(nullptr) { }
-  z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w, unsigned long dw,
+    : smt_sort(i), s(_s), rangesort(NULL), tupletype(_tupletype) { }
+
+  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w)
+    : smt_sort(i, w), s(_s), rangesort(NULL) { }
+
+  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w, size_t sw)
+    : smt_sort(i, w, sw), s(_s), rangesort(NULL) { }
+
+  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w, size_t dw,
               const smt_sort *_rangesort)
     : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
 
-  ~z3_smt_sort() override = default;
+  ~z3_smt_sort() = default;
 
   z3::sort s;
   const smt_sort *rangesort;
@@ -47,10 +53,9 @@ public:
 #define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
   z3_smt_ast(smt_convt *ctx, z3::expr _e, const smt_sort *_s) :
             smt_ast(ctx, _s), e(_e) { }
-  ~z3_smt_ast() override = default;
+  ~z3_smt_ast() = default;
   z3::expr e;
 
-  const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const override;
   const smt_ast *update(smt_convt *ctx, const smt_ast *value,
                                 unsigned int idx, expr2tc idx_expr) const override;
   const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const override;
@@ -59,7 +64,7 @@ public:
   void dump() const override;
 };
 
-class z3_convt: public smt_convt, public tuple_iface, public array_iface
+class z3_convt: public smt_convt, public tuple_iface, public array_iface, public fp_convt
 {
 public:
   z3_convt(bool int_encoding, const namespacet &ns);
@@ -74,9 +79,12 @@ public:
   z3::check_result check2_z3_properties();
 
   expr2tc get_bool(const smt_ast *a) override;
-  expr2tc get_bv(const type2tc &t, const smt_ast *a) override;
-  expr2tc get_array_elem(const smt_ast *array, uint64_t index,
-                                 const type2tc &subtype) override;
+  expr2tc get_bv(const type2tc &type, smt_astt a) override;
+  expr2tc get_fpbv(const type2tc &t, smt_astt a) override;
+  expr2tc get_array_elem(
+    const smt_ast *array,
+    uint64_t index,
+    const type2tc &subtype) override;
 
   void setup_pointer_sort();
   void convert_type(const type2tc &type, z3::sort &outtype);
@@ -97,28 +105,36 @@ public:
   smt_astt mk_func_app(const smt_sort *s, smt_func_kind k,
                                const smt_ast * const *args,
                                unsigned int numargs) override;
-  smt_sort *mk_sort(const smt_sort_kind k, ...) override;
+  smt_sortt mk_sort(const smt_sort_kind k, ...) override;
 
   smt_astt mk_smt_int(const mp_integer &theint, bool sign) override;
   smt_astt mk_smt_real(const std::string &str) override;
-  smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
-                                unsigned int w) override;
-  smt_astt mk_smt_bvfloat(const ieee_floatt &thereal,
-                                  unsigned ew, unsigned sw) override;
-  smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw) override;
-  smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw) override;
-  smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm) override;
-  smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast) override;
-  smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast) override;
+  smt_astt mk_smt_bvint(
+    const mp_integer &theint,
+    bool sign,
+    unsigned int w) override;
+  smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
+  smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw) override;
+  smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw) override;
+  smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm) override;
+  smt_astt mk_smt_typecast_from_fpbv(const typecast2t &cast) override;
+  smt_astt mk_smt_typecast_to_fpbv(const typecast2t &cast) override;
   smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) override;
-  smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr) override;
+  smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr) override;
+  smt_astt mk_smt_fpbv_fma(const expr2tc &expr) override;
   smt_astt mk_smt_bool(bool val) override;
-  smt_astt mk_array_symbol(const std::string &name, const smt_sort *s,
-                                   smt_sortt array_subtype) override;
+  smt_astt mk_array_symbol(
+    const std::string &name,
+    const smt_sort *s,
+    smt_sortt array_subtype) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
   smt_sort *mk_struct_sort(const type2tc &type) override;
-  smt_astt mk_extract(const smt_ast *a, unsigned int high,
-                              unsigned int low, const smt_sort *s) override;
+  smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) override;
+  smt_astt mk_extract(
+    const smt_ast *a,
+    unsigned int high,
+    unsigned int low,
+    const smt_sort *s) override;
   const smt_ast *make_disjunct(const ast_vec &v) override;
   const smt_ast *make_conjunct(const ast_vec &v) override;
 
@@ -126,10 +142,11 @@ public:
   smt_astt tuple_fresh(const smt_sort *s, std::string name = "") override;
   expr2tc tuple_get(const expr2tc &expr) override;
 
-  const smt_ast *tuple_array_create(const type2tc &array_type,
-                                            const smt_ast **input_args,
-                                            bool const_array,
-                                            const smt_sort *domain) override;
+  const smt_ast *tuple_array_create(
+    const type2tc &array_type,
+    const smt_ast **input_args,
+    bool const_array,
+    const smt_sort *domain) override;
 
   smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override;
   smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
@@ -165,8 +182,6 @@ public:
     return ss.str();
   }
 
-  tvt l_get(const smt_ast *a) override;
-
   void dump_smt() override;
 
   // Some useful types
@@ -178,7 +193,7 @@ public:
   }
 
   //  Must be first member; that way it's the last to be destroyed.
-  z3::context ctx;
+  z3::context z3_ctx;
   z3::solver solver;
   z3::model model;
 

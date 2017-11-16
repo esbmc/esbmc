@@ -110,8 +110,7 @@ goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
   pointer_object2tc ptr_obj(pointer_type2(), result);
   track_new_pointer(ptr_obj, type2tc(), realloc_size);
 
-  guardt guard;
-  symex_assign_rec(lhs, result, guard, symex_targett::STATE);
+  symex_assign(code_assign2tc(lhs, result), symex_targett::HIDDEN);
 }
 
 expr2tc
@@ -217,13 +216,12 @@ goto_symext::symex_mem(
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
 
-  guardt guard;
-  symex_assign_rec(lhs, rhs, guard, symex_targett::STATE);
+  symex_assign(code_assign2tc(lhs, rhs), symex_targett::HIDDEN);
 
   pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
 
-  dynamic_memory.emplace_back(rhs_copy, alloc_guard, !is_malloc);
+  dynamic_memory.emplace_back(rhs_copy, alloc_guard, !is_malloc, symbol.base_name.as_string());
 
   return rhs_addrof->ptr_obj;
 }
@@ -232,8 +230,6 @@ void
 goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
                                const expr2tc& size)
 {
-  guardt guard;
-
   // Also update all the accounting data.
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
@@ -243,17 +239,17 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
 
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = gen_true_expr();
-  symex_assign_rec(idx, truth, guard, symex_targett::STATE);
+  symex_assign(code_assign2tc(idx, truth), symex_targett::HIDDEN);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
   truth = gen_true_expr();
-  symex_assign_rec(valid_index_expr, truth, guard, symex_targett::STATE);
+  symex_assign(code_assign2tc(valid_index_expr, truth), symex_targett::HIDDEN);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
   expr2tc falseity = gen_false_expr();
-  symex_assign_rec(dealloc_index_expr, falseity, guard, symex_targett::STATE);
+  symex_assign(code_assign2tc(dealloc_index_expr, falseity), symex_targett::HIDDEN);
 
   type2tc sz_sym_type =
     type2tc(new array_type2t(pointer_type2(), expr2tc(),true));
@@ -273,7 +269,7 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
     object_size_exp = size;
   }
 
-  symex_assign_rec(sz_index_expr, object_size_exp, guard, symex_targett::STATE);
+  symex_assign(code_assign2tc(sz_index_expr, object_size_exp), symex_targett::HIDDEN);
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
@@ -305,7 +301,6 @@ void goto_symext::symex_free(const expr2tc &expr)
   }
 
   // Clear the alloc bit, and set the deallocated bit.
-  guardt guard;
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code.operand);
@@ -314,12 +309,12 @@ void goto_symext::symex_free(const expr2tc &expr)
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
   expr2tc truth = gen_true_expr();
-  symex_assign_rec(dealloc_index_expr, truth, guard, symex_targett::STATE);
+  symex_assign(code_assign2tc(dealloc_index_expr, truth), symex_targett::HIDDEN);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
   expr2tc falsity = gen_false_expr();
-  symex_assign_rec(valid_index_expr, falsity, guard, symex_targett::STATE);
+  symex_assign(code_assign2tc(valid_index_expr, falsity), symex_targett::HIDDEN);
 }
 
 void goto_symext::symex_printf(
@@ -408,8 +403,7 @@ void goto_symext::symex_cpp_new(
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
 
-  guardt guard;
-  symex_assign_rec(lhs, rhs, guard, symex_targett::STATE);
+  symex_assign(code_assign2tc(lhs, rhs), symex_targett::HIDDEN);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
@@ -420,9 +414,9 @@ void goto_symext::symex_cpp_new(
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = gen_true_expr();
 
-  symex_assign_rec(idx, truth, guard, symex_targett::STATE);
+  symex_assign(code_assign2tc(idx, truth), symex_targett::HIDDEN);
 
-  dynamic_memory.emplace_back(rhs_copy, cur_state->guard, false);
+  dynamic_memory.emplace_back(rhs_copy, cur_state->guard, false, symbol.base_name.as_string());
 }
 
 // XXX - implement as a call to free?
@@ -469,7 +463,6 @@ goto_symext::intrinsic_switch_from(reachability_treet &art)
   art.get_cur_state().force_cswitch();
 }
 
-
 void
 goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
                                      reachability_treet &art)
@@ -481,8 +474,7 @@ goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
 
   state.value_set.assign(call.ret, tid);
 
-  code_assign2tc assign(call.ret, tid);
-  symex_assign(assign);
+  symex_assign(code_assign2tc(call.ret, tid), symex_targett::HIDDEN);
 }
 
 void
@@ -530,11 +522,10 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
   unsigned int tid = to_constant_int2t(threadid).value.to_ulong();
   const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
 
-  code_assign2tc assign(call.ret, startdata);
   assert(base_type_eq(call.ret->type, startdata->type, ns));
 
   state.value_set.assign(call.ret, startdata);
-  symex_assign(assign);
+  symex_assign(code_assign2tc(call.ret, startdata), symex_targett::HIDDEN);
 }
 
 void
@@ -572,8 +563,7 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
 
   state.value_set.assign(call.ret, thread_id_exp);
 
-  code_assign2tc assign(call.ret, thread_id_exp);
-  symex_assign(assign);
+  symex_assign(code_assign2tc(call.ret, thread_id_exp), symex_targett::HIDDEN);
 
   // Force a context switch point. If the caller is in an atomic block, it'll be
   // blocked, but a context switch will be forced when we exit the atomic block.
@@ -615,8 +605,7 @@ goto_symext::intrinsic_get_thread_state(const code_function_call2t &call, reacha
 
   // Reuse threadid
   constant_int2tc flag_expr(get_uint_type(config.ansi_c.int_width), flags);
-  code_assign2tc assign(call.ret, flag_expr);
-  symex_assign(assign);
+  symex_assign(code_assign2tc(call.ret, flag_expr), symex_targett::HIDDEN);
 }
 
 void
@@ -729,6 +718,6 @@ void goto_symext::symex_va_arg(const expr2tc& lhs, const sideeffect2t &code)
     va_rhs = gen_zero(lhs->type);
   }
 
-  symex_assign(code_assign2tc(lhs, va_rhs));
+  symex_assign(code_assign2tc(lhs, va_rhs), symex_targett::HIDDEN);
 }
 

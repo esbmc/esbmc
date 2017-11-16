@@ -68,6 +68,14 @@ inline bool is_multi_dimensional_array(const expr2tc &e)
   return is_multi_dimensional_array(e->type);
 }
 
+inline bool is_constant_number(const expr2tc &t)
+{
+  return t->expr_id == expr2t::constant_int_id ||
+         t->expr_id == expr2t::constant_fixedbv_id ||
+         t->expr_id == expr2t::constant_floatbv_id ||
+         t->expr_id == expr2t::constant_bool_id;
+}
+
 inline bool is_constant_expr(const expr2tc &t)
 {
   return t->expr_id == expr2t::constant_int_id ||

@@ -57,12 +57,11 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
     // Just concat fraction ozeros at the bottom
     frontpart = a;
   } else if (from_width > to_integer_bits) {
-    smt_sortt tmp = mk_sort(SMT_SORT_BV, from_width - to_integer_bits,
-                            false);
+    smt_sortt tmp = mk_sort(SMT_SORT_UBV, from_width - to_integer_bits);
     frontpart = mk_extract(a, to_integer_bits - 1, 0, tmp);
   } else {
     assert(from_width < to_integer_bits);
-    smt_sortt tmp = mk_sort(SMT_SORT_BV, to_integer_bits, false);
+    smt_sortt tmp = mk_sort(SMT_SORT_UBV, to_integer_bits);
     frontpart = convert_sign_ext(a, tmp, from_width,
                                  to_integer_bits - from_width);
   }
@@ -86,7 +85,7 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
   smt_sortt intsort;
   smt_astt zero = mk_smt_bvint(BigInt(0), false, to_integer_bits);
   smt_astt one = mk_smt_bvint(BigInt(1), false, to_integer_bits);
-  intsort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
+  intsort = mk_sort(SMT_SORT_UBV, to_integer_bits);
   smt_astt switched = mk_func_app(intsort, SMT_FUNC_ITE, a, zero, one);
   return mk_func_app(s, SMT_FUNC_CONCAT, switched, zero);
 }
@@ -115,23 +114,23 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
 
   // Start with the magnitude
   if (to_integer_bits <= from_integer_bits) {
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
+    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, to_integer_bits);
     magnitude = mk_extract(a, (from_fraction_bits + to_integer_bits - 1),
                            from_fraction_bits, tmp_sort);
   } else {
     assert(to_integer_bits > from_integer_bits);
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, from_integer_bits, false);
+    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, from_integer_bits);
     smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits, tmp_sort);
 
     unsigned int additional_bits = to_integer_bits - from_integer_bits;
-    tmp_sort = mk_sort(SMT_SORT_BV, from_integer_bits + additional_bits, false);
+    tmp_sort = mk_sort(SMT_SORT_UBV, from_integer_bits + additional_bits);
     magnitude = convert_sign_ext(ext, tmp_sort, from_integer_bits,
                                  additional_bits);
   }
 
   // Followed by the fraction part
   if (to_fraction_bits <= from_fraction_bits) {
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
+    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, to_fraction_bits);
     fraction = mk_extract(a, from_fraction_bits - 1,
                           from_fraction_bits - to_fraction_bits, tmp_sort);
   } else {
@@ -139,12 +138,12 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
 
     // Increase the size of the fraction by adding zeros on the end. This is
     // not a zero extension because they're at the end, not the start
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, from_fraction_bits, false);
+    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, from_fraction_bits);
     smt_astt src_fraction = mk_extract(a, from_fraction_bits - 1, 0, tmp_sort);
     smt_astt zeros = mk_smt_bvint(BigInt(0), false,
                                   to_fraction_bits - from_fraction_bits);
 
-    tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
+    tmp_sort = mk_sort(SMT_SORT_UBV, to_fraction_bits);
     fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, src_fraction, zeros);
   }
 
@@ -164,7 +163,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
   } else if (is_unsignedbv_type(cast.from)) {
     return convert_typecast_to_ints_from_unsigned(cast);
   } else if (is_floatbv_type(cast.from)) {
-    return mk_smt_typecast_from_bvfloat(cast);
+    return fp_api->mk_smt_typecast_from_fpbv(cast);
   } else if (is_bool_type(cast.from)) {
     return convert_typecast_to_ints_from_bool(cast);
   }
@@ -544,7 +543,7 @@ smt_convt::convert_typecast(const expr2tc &expr)
   } else if (is_bv_type(cast.type) || is_fixedbv_type(cast.type)) {
     return convert_typecast_to_ints(cast);
   } else if (is_floatbv_type(cast.type)) {
-    return mk_smt_typecast_to_bvfloat(cast);
+    return fp_api->mk_smt_typecast_to_fpbv(cast);
   } else if (is_struct_type(cast.type)) {
     return convert_typecast_to_struct(cast);
   } else if (is_union_type(cast.type)) {

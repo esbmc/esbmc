@@ -109,7 +109,7 @@ void renaming::level1t::rename(expr2tc &expr)
   }
 }
 
-void renaming::level2t::rename(expr2tc &expr)
+void renaming::level2t::rename(expr2tc &expr, bool rename_only)
 {
   // rename all the symbols with their last known value
 
@@ -142,7 +142,7 @@ void renaming::level2t::rename(expr2tc &expr)
       else
         lev = symbol2t::level2;
 
-      if (!is_nil_expr(it->second.constant))
+      if (!is_nil_expr(it->second.constant) && !rename_only)
         expr = it->second.constant; // sym is now invalid reference
       else
         expr = symbol2tc(sym.type, sym.thename, lev,
@@ -169,9 +169,9 @@ void renaming::level2t::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    expr->Foreach_operand([this] (expr2tc &e) {
+    expr->Foreach_operand([this, &rename_only] (expr2tc &e) {
         if (!is_nil_expr(e))
-          rename(e);
+          rename(e, rename_only);
       }
     );
   }
@@ -191,42 +191,45 @@ void renaming::level2t::coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned
   entry.node_id = node_id;
 }
 
-void renaming::renaming_levelt::get_original_name(expr2tc &expr,
-                                            symbol2t::renaming_level lev) const
+void renaming::renaming_levelt::get_original_name(
+  expr2tc &expr,
+  symbol2t::renaming_level lev)
 {
-
   if (is_nil_expr(expr))
     return;
 
-  expr->Foreach_operand([this] (expr2tc &e) {
-      get_original_name(e);
+  expr.get()->Foreach_operand([&lev] (expr2tc &e) {
+      renaming_levelt::get_original_name(e, lev);
     }
   );
 
-  if (is_symbol2t(expr))
+  if (!is_symbol2t(expr))
+    return;
+
+  symbol2t &sym = to_symbol2t(expr);
+
+  // Rename level2_global down to level1_global, not level1
+  if(lev == symbol2t::level1 && sym.rlevel == symbol2t::level2_global)
+    lev = symbol2t::level1_global;
+  // level1 and level1_global are equivalent.
+  else if(lev == symbol2t::level1 && sym.rlevel == symbol2t::level1_global)
+    return;
+
+  // Can't rename any lower,
+  if(sym.rlevel == symbol2t::level0)
+    return;
+
+  // Wipe out some data with default values and set renaming level to whatever
+  // was requested.
+  switch (lev)
   {
-    symbol2t &sym = to_symbol2t(expr);
-
-    // Rename level2_global down to level1_global, not level1
-    if (lev == symbol2t::level1 && sym.rlevel == symbol2t::level2_global)
-      lev = symbol2t::level1_global;
-    // level1 and level1_global are equivalent.
-    else if (lev == symbol2t::level1 && sym.rlevel == symbol2t::level1_global)
-      return;
-
-    // Can't rename any lower,
-    if (sym.rlevel == symbol2t::level0)
-      return;
-
-    // Wipe out some data with default values and set renaming level to whatever
-    // was requested.
-    switch (lev) {
     case symbol2t::level1:
     case symbol2t::level1_global:
       sym.rlevel = lev;
       sym.node_num = 0;
       sym.level2_num = 0;
       return;
+
     case symbol2t::level0:
       sym.rlevel = lev;
       sym.node_num = 0;
@@ -234,10 +237,10 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr,
       sym.thread_num = 0;
       sym.level1_num = 0;
       return;
+
     default:
       std::cerr << "get_original_nameing to invalid level " << lev << std::endl;
       abort();
-    }
   }
 }
 
@@ -291,7 +294,7 @@ renaming::level2t::make_assignment(expr2tc &lhs_symbol,
                                   ? symbol2t::level2_global : symbol2t::level2;
   symbol.rlevel = lev;
   // These fields were updated by the rename call,
-  symbol.level2_num = entry.count; 
+  symbol.level2_num = entry.count;
   symbol.node_num = entry.node_id;
 
   entry.constant = const_value;

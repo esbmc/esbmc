@@ -7,7 +7,8 @@ smt_convt *
 create_new_minisat_solver(bool int_encoding, const namespacet &ns,
                           const optionst &options,
                           tuple_iface **tuple_api __attribute__((unused)),
-                          array_iface **array_api __attribute__((unused)))
+                          array_iface **array_api __attribute__((unused)),
+                          fp_iface **fp_api __attribute__((unused)))
 {
   minisat_convt *conv = new minisat_convt(int_encoding, ns,options);
   return conv;

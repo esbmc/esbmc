@@ -20,10 +20,12 @@ smt_convt *
 create_new_yices_solver(bool int_encoding, const namespacet &ns,
                               const optionst &opts __attribute__((unused)),
                               tuple_iface **tuple_api __attribute__((unused)),
-                              array_iface **array_api)
+                              array_iface **array_api,
+                              fp_convt **fp_api)
 {
   yices_convt *conv = new yices_convt(int_encoding, ns);
   *array_api = static_cast<array_iface*>(conv);
+  *fp_api = static_cast<fp_convt*>(conv);
   // As illustrated by 01_cbmc_Pointer4, there is something broken in yices
   // tuples. Specifically, the implication of (p != NULL) doesn't seem to feed
   // through to the later dereference, which fails.
@@ -32,7 +34,7 @@ create_new_yices_solver(bool int_encoding, const namespacet &ns,
 }
 
 yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(false, false),
+  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this),
     sat_model(nullptr)
 {
   yices_init();
@@ -103,21 +105,6 @@ yices_convt::dec_solve()
   }
 }
 
-tvt
-yices_convt::l_get(smt_astt l)
-{
-  expr2tc b = get_bool(l);
-  if (is_nil_expr(b))
-    return tvt(tvt::TV_UNKNOWN);
-
-  if (b == gen_true_expr())
-    return tvt(true);
-  else if (b == gen_false_expr())
-    return tvt(false);
-  else
-    return tvt(tvt::TV_UNKNOWN);
-}
-
 const std::string
 yices_convt::solver_text()
 {
@@ -134,9 +121,9 @@ yices_convt::assert_ast(smt_astt a)
 }
 
 smt_astt
-yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
-                             smt_astt const *args,
-                             unsigned int numargs)
+yices_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
+                         const smt_ast * const *args,
+                         unsigned int numargs)
 {
   const yices_smt_ast *asts[4];
   unsigned int i;
@@ -161,13 +148,17 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
       return new_ast(s, yices_bveq_atom(asts[0]->term, asts[1]->term));
 
   case SMT_FUNC_NOTEQ:
-    if (asts[0]->sort->id == SMT_SORT_BV && !int_encoding) {
-      term_t comp = yices_redcomp(asts[0]->term, asts[1]->term);
-      term_t zero = yices_bvconst_uint64(1, 0);
-      return new_ast(s, yices_bveq_atom(comp, zero));
+    if(asts[0]->sort->id >= SMT_SORT_SBV || asts[0]->sort->id <= SMT_SORT_FIXEDBV)
+    {
+      if(!int_encoding)
+      {
+        term_t comp = yices_redcomp(asts[0]->term, asts[1]->term);
+        term_t zero = yices_bvconst_uint64(1, 0);
+        return new_ast(s, yices_bveq_atom(comp, zero));
+      }
+      else
+        return new_ast(s, yices_arith_neq_atom(asts[0]->term, asts[1]->term));
     }
-    else if (asts[0]->sort->id == SMT_SORT_BV && int_encoding)
-      return new_ast(s, yices_arith_neq_atom(asts[0]->term, asts[1]->term));
     else
       return new_ast(s, yices_neq(asts[0]->term, asts[1]->term));
 
@@ -295,7 +286,6 @@ smt_sortt
 yices_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
-  unsigned long uint;
 
   va_start(ap, k);
   switch(k) {
@@ -305,7 +295,7 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
   }
   case SMT_SORT_INT:
   {
-    return new yices_smt_sort(k, yices_int_type(), 1);
+    return new yices_smt_sort(k, yices_int_type(), 0);
   }
   case SMT_SORT_REAL:
   {
@@ -317,18 +307,26 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
     // the given domain as a single dimension.
     yices_smt_sort *dom = va_arg(ap, yices_smt_sort*);
     yices_smt_sort *range = va_arg(ap, yices_smt_sort*);
-    type_t t = yices_function_type(1, &dom->type, range->type);
+    type_t t = yices_function_type(1, &dom->s, range->s);
 
-    unsigned int tmp = range->data_width;
+    unsigned int tmp = range->get_data_width();
     if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_UNION)
       tmp = 1;
 
-    return new yices_smt_sort(k, t, tmp, dom->data_width, range);
+    return new yices_smt_sort(k, t, tmp, dom->get_data_width(), range);
   }
-  case SMT_SORT_BV:
+  case SMT_SORT_FIXEDBV:
+  case SMT_SORT_UBV:
+  case SMT_SORT_SBV:
   {
-    uint = va_arg(ap, unsigned long);
+    unsigned long uint = va_arg(ap, unsigned long);
     return new yices_smt_sort(k, yices_bv_type(uint), uint);
+  }
+  case SMT_SORT_FLOATBV:
+  {
+    unsigned ew = va_arg(ap, unsigned long);
+    unsigned sw = va_arg(ap, unsigned long);
+    return mk_fpbv_sort(ew, sw);
   }
   default:
     std::cerr << "Unimplemented sort " << k << " in yices mk_sort" << std::endl;
@@ -354,63 +352,11 @@ yices_convt::mk_smt_real(const std::string &str)
 }
 
 smt_astt
-yices_convt::mk_smt_bvint(const mp_integer &theint,
-      bool sign __attribute__((unused)),
-      unsigned int w)
+yices_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
-  assert(w != 0);
-  term_t term = yices_bvconst_uint64(w, theint.to_int64());
-  smt_sortt s = mk_sort(SMT_SORT_BV, w, false);
+  smt_sortt s = mk_sort(ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
+  term_t term = yices_bvconst_uint64(width, theint.to_int64());
   return new yices_smt_ast(this, s, term);
-}
-
-smt_astt yices_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                     unsigned ew, unsigned sw)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
 }
 
 smt_astt
@@ -431,7 +377,7 @@ yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
   if (term == NULL_TERM) {
     // No: create a new one.
     const yices_smt_sort *sort = yices_sort_downcast(s);
-    term = yices_new_uninterpreted_term(sort->type);
+    term = yices_new_uninterpreted_term(sort->s);
 
     // If that wasn't the error term, set it's name.
     if (term != NULL_TERM)
@@ -492,46 +438,41 @@ yices_convt::get_bool(smt_astt a)
 
   if (val)
     return gen_true_expr();
-  else
-    return gen_false_expr();
+
+  return gen_false_expr();
 }
 
 expr2tc
-yices_convt::get_bv(const type2tc &t, smt_astt a)
+yices_convt::get_bv(const type2tc &type, smt_astt a)
 {
-  int32_t data[64];
-  int32_t err = 0;
   const yices_smt_ast *ast = yices_ast_downcast(a);
 
-  // XXX -- model fetching for ints needs to be better
+  int64_t val = 0;
   if (int_encoding) {
-    int64_t val;
-    err = yices_get_int64_value(sat_model, ast->term, &val);
-    if (err)
-      return expr2tc();
-    else
-      return constant_int2tc(t, BigInt(val));
-  } else {
-    unsigned int width = t->get_width();
-    assert(width <= 64);
-    err = yices_get_bv_value(sat_model, ast->term, data);
-    if (err)
-      return expr2tc();
-
-    uint64_t val = 0;
-    int i;
-    for (i = width - 1; i >= 0; i--) {
-      val <<= 1;
-      val |= data[i];
-    }
-
-    return constant_int2tc(t, BigInt(val));
+    yices_get_int64_value(sat_model, ast->term, &val);
+    return smt_convt::get_bv(type, BigInt(val));
   }
+
+  unsigned int width = a->sort->get_data_width();
+  assert(width <= 64);
+
+  int32_t data[64];
+  yices_get_bv_value(sat_model, ast->term, data);
+
+  int i;
+  for (i = width - 1; i >= 0; i--) {
+    val <<= 1;
+    val |= data[i];
+  }
+
+  return smt_convt::get_bv(type, BigInt(val));
 }
 
 expr2tc
-yices_convt::get_array_elem(smt_astt array, uint64_t index,
-                       const type2tc &subtype)
+yices_convt::get_array_elem(
+  const smt_ast *array,
+  uint64_t index,
+  const type2tc &subtype)
 {
   // Construct a term accessing that element, and get_bv it.
   const yices_smt_ast *ast = yices_ast_downcast(array);
@@ -539,13 +480,13 @@ yices_convt::get_array_elem(smt_astt array, uint64_t index,
   if (int_encoding) {
     idx = yices_int64(index);
   } else {
-    idx = yices_bvconst_uint64(array->sort->domain_width, index);
+    idx = yices_bvconst_uint64(array->sort->get_domain_width(), index);
   }
 
   term_t app = yices_application(ast->term, 1, &idx);
   smt_sortt subsort = convert_sort(subtype);
   smt_astt container = new_ast(subsort, app);
-  return get_bv(subtype, container);
+  return get_by_ast(subtype, container);
 }
 
 void
@@ -568,7 +509,7 @@ smt_astt
 yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
 {
   const yices_smt_sort *ysort = yices_sort_downcast(sort);
-  type2tc type = ysort->tuple_type;
+  type2tc type = ysort->tupletype;
   const struct_union_data &data = ctx->get_type_def(type);
   smt_sortt elemsort = ctx->convert_sort(data.members[elem]);
 
@@ -599,8 +540,8 @@ yices_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 
   const yices_smt_sort *ys = yices_sort_downcast(sort);
 
-  return new yices_smt_ast(ctx, ys->arr_range,
-                           yices_application(this->term, 1, &temp_term));
+  return new yices_smt_ast(
+    ctx, ys->rangesort, yices_application(this->term, 1, &temp_term));
 }
 
 smt_sortt
@@ -621,7 +562,7 @@ yices_convt::mk_struct_sort(const type2tc &type)
   {
     smt_sortt s = convert_sort(it);
     const yices_smt_sort *sort = yices_sort_downcast(s);
-    sorts.push_back(sort->type);
+    sorts.push_back(sort->s);
   }
 
   // We now have an array of types, ready for sort creation
@@ -650,7 +591,7 @@ smt_astt
 yices_convt::tuple_fresh(smt_sortt s, std::string name)
 {
   const yices_smt_sort *sort = yices_sort_downcast(s);
-  term_t t = yices_new_uninterpreted_term(sort->type);
+  term_t t = yices_new_uninterpreted_term(sort->s);
   yices_set_term_name(t, name.c_str());
   return new yices_smt_ast(this, s, t);
 }
@@ -699,8 +640,8 @@ yices_convt::tuple_array_of(const expr2tc &init_value,
   smt_sortt doms = convert_sort(domtype);
   const yices_smt_sort *domsort = yices_sort_downcast(doms);
 
-  type_t domsort_type = domsort->type;
-  type_t tuplearr = yices_function_type(1, &domsort_type, subsort->type);
+  type_t domsort_type = domsort->s;
+  type_t tuplearr = yices_function_type(1, &domsort_type, subsort->s);
   term_t theterm = yices_new_uninterpreted_term(tuplearr);
 
   smt_astt a = convert_ast(init_value);
@@ -747,56 +688,28 @@ yices_convt::tuple_get(const expr2tc &expr)
     return expr2tc();
   }
 
-  return tuple_get_rec(t, expr->type);
-}
+  const struct_union_data &strct = get_type_def(expr->type);
+  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
 
-expr2tc
-yices_convt::tuple_get_rec(term_t term, const type2tc &type)
-{
-  // Otherwise, select through building a tuple.
-  const struct_union_data &ref = get_type_def(type);
-  std::vector<expr2tc> members;
+  // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  for(auto const &it : ref.members)
-  {
-    expr2tc res;
-    term_t elem = yices_select(i + 1, term);
-    smt_astt a = new_ast(convert_sort(it), elem);
-
-    switch (it->type_id) {
-    case type2t::bool_id:
-      res = get_bool(a);
-      break;
-    case type2t::pointer_id:
-    case type2t::struct_id:
-      res = tuple_get_rec(elem, it);
-      break;
-    case type2t::array_id:
-      res = get_array(a, it);
-      break;
-    case type2t::unsignedbv_id:
-    case type2t::signedbv_id:
-    case type2t::fixedbv_id:
-      res = get_bv(it, a);
-      break;
-    default:
-      std::cerr << "Unexpected sort " << it->type_id << " in tuple_get_rec"
-                << std::endl;
-      abort();
-    }
-
-    members.push_back(res);
+  for(auto const &it : strct.members) {
+    member2tc memb(it, expr, strct.member_names[i]);
+    outstruct.get()->datatype_members.push_back(get(memb));
     i++;
   }
 
-  if (type->type_id != type2t::pointer_id) {
-    return constant_struct2tc(type, members);
-  } else {
-    uint64_t num = to_constant_int2t(members[0]).value.to_uint64();
-    uint64_t offs = to_constant_int2t(members[1]).value.to_uint64();
+  // If it's a pointer, rewrite.
+  if (is_pointer_type(expr->type)) {
+    uint64_t num = to_constant_int2t(outstruct->datatype_members[0])
+                                    .value.to_uint64();
+    uint64_t offs = to_constant_int2t(outstruct->datatype_members[1])
+                                     .value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
-    return pointer_logic.back().pointer_expr(p, type);
+    return pointer_logic.back().pointer_expr(p, expr->type);
   }
+
+  return outstruct;
 }
 
 void

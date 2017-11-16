@@ -17,16 +17,17 @@ smt_convt *
 create_new_smtlib_solver(bool int_encoding, const namespacet &ns,
                           const optionst &opts __attribute__((unused)),
                           tuple_iface **tuple_api __attribute__((unused)),
-                          array_iface **array_api)
+                          array_iface **array_api, fp_convt **fp_api)
 {
   smtlib_convt *conv = new smtlib_convt(int_encoding, ns, opts);
   *array_api = static_cast<array_iface*>(conv);
+  *fp_api = static_cast<fp_convt*>(conv);
   return conv;
 }
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            const optionst &_opts)
-  : smt_convt(int_encoding, _ns), array_iface(false, false),
+  : smt_convt(int_encoding, _ns), array_iface(false, false), fp_convt(ctx),
     options(_opts)
 {
 
@@ -177,8 +178,10 @@ smtlib_convt::sort_to_string(const smt_sort *s) const
     return "Int";
   case SMT_SORT_REAL:
     return "Real";
-  case SMT_SORT_BV:
-    ss << "(_ BitVec " << sort->data_width << ")";
+  case SMT_SORT_FIXEDBV:
+  case SMT_SORT_UBV:
+  case SMT_SORT_SBV:
+    ss << "(_ BitVec " << sort->get_data_width() << ")";
     return ss.str();
   case SMT_SORT_ARRAY:
     ss << "(Array " << sort_to_string(sort->domain) << " "
@@ -215,16 +218,16 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
     // Construct a bitvector
   {
     // Irritatingly, the number may be higher than the actual bitwidth permits.
-    assert(sort->data_width <= 64 && "smtlib printer assumes no numbers more "
+    assert(sort->get_data_width() <= 64 && "smtlib printer assumes no numbers more "
            "than 64 bits wide, sorry");
     uint64_t theval = ast->intval.to_int64();
-    if (sort->data_width < 64) {
-      uint64_t mask = 1ULL << sort->data_width;
+    if (sort->get_data_width() < 64) {
+      uint64_t mask = 1ULL << sort->get_data_width();
       mask -= 1;
       theval &= mask;
     }
-    assert(sort->data_width != 0);
-    ss << "(_ bv" << theval << " " << sort->data_width << ")";
+    assert(sort->get_data_width() != 0);
+    ss << "(_ bv" << theval << " " << sort->get_data_width() << ")";
     output = ss.str();
     return 0;
   }
@@ -343,9 +346,8 @@ smtlib_convt::dec_solve()
 }
 
 expr2tc
-smtlib_convt::get_bv(const type2tc &t, smt_astt a)
+smtlib_convt::get_bv(const type2tc &type, smt_astt a)
 {
-
   // This should always be a symbol.
   const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast*>(a);
   assert(sa->kind == SMT_FUNC_SYMBOL && "Non-symbol in smtlib expr get_bv()");
@@ -380,7 +382,6 @@ smtlib_convt::get_bv(const type2tc &t, smt_astt a)
 
   // Attempt to read an integer.
   BigInt m;
-  bool was_integer = true;
   if (respval.token == TOK_DECIMAL) {
     m = string2integer(respval.data);
   } else if (respval.token == TOK_NUMERAL) {
@@ -393,42 +394,21 @@ smtlib_convt::get_bv(const type2tc &t, smt_astt a)
   } else if (respval.token == TOK_BINNUM) {
     std::string data = respval.data.substr(2);
     m = string2integer(data, 2);
-  } else {
-    was_integer = false;
-  }
-
-  // Generate the appropriate expr.
-  expr2tc result;
-  if (is_bv_type(t)) {
-    assert(was_integer && "smtlib solver didn't provide integer response to "
-           "integer get-value");
-    result = constant_int2tc(t, m);
-  } else if (is_fixedbv_type(t)) {
-    assert(!int_encoding && "Can't parse reals right now in smtlib solver "
-           "responses");
-    assert(was_integer && "smtlib solver didn't provide integer/bv response to "
-           "fixedbv get-value");
-    const fixedbv_type2t &fbtype = to_fixedbv_type(t);
-    fixedbv_spect spec(fbtype.width, fbtype.integer_bits);
-    fixedbvt fbt;
-    fbt.spec = spec;
-    fbt.from_integer(m);
-    result = constant_fixedbv2tc(fbt);
-  } else if (is_bool_type(t)) {
-    if (respval.token == TOK_KW_TRUE) {
-      result = gen_true_expr();
-    } else if (respval.token == TOK_KW_FALSE) {
-      result = gen_false_expr();
-    } else {
-      std::cerr << "Unexpected token reading value of boolean symbol from "
-                   "smtlib solver" << std::endl;
-    }
-  } else {
-    abort();
   }
 
   delete smtlib_output;
-  return result;
+
+  if(is_fixedbv_type(type))
+  {
+    fixedbvt fbv(
+      constant_exprt(
+        integer2binary(m, type->get_width()),
+        integer2string(m),
+        migrate_type_back(type)));
+    return constant_fixedbv2tc(fbv);
+  }
+
+  return constant_int2tc(type, m);
 }
 
 expr2tc
@@ -442,7 +422,7 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
   std::string name = sa->symname;
 
   // XXX -- double bracing this may be a Z3 ecentricity
-  unsigned long domain_width = array->sort->domain_width;
+  unsigned long domain_width = array->sort->get_domain_width();
   fprintf(out_stream,
       "(get-value ((select |%s| (_ bv%" PRIu64 " %" PRIu64 "))))\n",
       name.c_str(), index, domain_width);
@@ -541,20 +521,6 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
 expr2tc
 smtlib_convt::get_bool(smt_astt a)
 {
-  tvt res = l_get(a);
-  if (res.is_true())
-    return gen_true_expr();
-  else if (res.is_false())
-    return gen_false_expr();
-  else {
-    std::cerr << "Non-true, non-false value read from smtlib model" <<std::endl;
-    abort();
-  }
-}
-
-tvt
-smtlib_convt::l_get(const smt_ast *a)
-{
   fprintf(out_stream, "(get-value (");
 
   std::string output;
@@ -596,14 +562,11 @@ smtlib_convt::l_get(const smt_ast *a)
 //         "Unexpected valuation variable from smtlib solver");
 
   // And finally we have our value. It should be true or false.
-  tvt result;
+  expr2tc result;
   if (second.token == TOK_KW_TRUE) {
-    result = tvt(true);
+    result = gen_true_expr();
   } else if (second.token == TOK_KW_FALSE) {
-    result = tvt(false);
-  } else {
-    std::cerr << "Unexpected literal valuation from smtlib solver" << std::endl;
-    abort();
+    result = gen_false_expr();
   }
 
   delete smtlib_output;
@@ -663,33 +626,35 @@ smtlib_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
 }
 
 smt_sort *
-smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
+smtlib_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
-  smtlib_smt_sort *s = nullptr, *dom, *range;
-  unsigned long uint;
-  int thebool;
+  smtlib_smt_sort *s = nullptr;
 
   va_start(ap, k);
   switch (k) {
   case SMT_SORT_INT:
-    thebool = va_arg(ap, int);
-    s = new smtlib_smt_sort(k, thebool);
+    s = new smtlib_smt_sort(k);
     break;
   case SMT_SORT_REAL:
     s = new smtlib_smt_sort(k);
     break;
-  case SMT_SORT_BV:
-    uint = va_arg(ap, unsigned long);
-    thebool = va_arg(ap, int);
+  case SMT_SORT_FIXEDBV:
+  case SMT_SORT_UBV:
+  case SMT_SORT_SBV:
+  {
+    unsigned long uint = va_arg(ap, unsigned long);
     assert(uint != 0);
     s = new smtlib_smt_sort(k, uint);
     break;
+  }
   case SMT_SORT_ARRAY:
-    dom = va_arg(ap, smtlib_smt_sort *); // Consider constness?
-    range = va_arg(ap, smtlib_smt_sort *);
+  {
+    smtlib_smt_sort* dom = va_arg(ap, smtlib_smt_sort *); // Consider constness?
+    smtlib_smt_sort* range = va_arg(ap, smtlib_smt_sort *);
     s = new smtlib_smt_sort(k, dom, range);
     break;
+  }
   case SMT_SORT_BOOL:
     s = new smtlib_smt_sort(k);
     break;
@@ -703,7 +668,7 @@ smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
 smt_ast *
 smtlib_convt::mk_smt_int(const mp_integer &theint, bool sign)
 {
-  smt_sort *s = mk_sort(SMT_SORT_INT, sign);
+  smt_sortt s = mk_sort(SMT_SORT_INT, sign);
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_INT);
   a->intval = theint;
   return a;
@@ -712,7 +677,7 @@ smtlib_convt::mk_smt_int(const mp_integer &theint, bool sign)
 smt_ast *
 smtlib_convt::mk_smt_real(const std::string &str)
 {
-  smt_sort *s = mk_sort(SMT_SORT_REAL);
+  smt_sortt s = mk_sort(SMT_SORT_REAL);
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_REAL);
   a->realval = str;
   return a;
@@ -721,60 +686,10 @@ smtlib_convt::mk_smt_real(const std::string &str)
 smt_ast *
 smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 {
-  smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
+  smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, w);
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_BVINT);
   a->intval = theint;
   return a;
-}
-
-smt_ast *
-smtlib_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                             unsigned ew, unsigned sw)
-{
-  std::cerr << "Can't create floating points on smtlib yet" << std::endl;
-  abort();
-}
-
-smt_astt smtlib_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
-{
-  std::cerr << "Can't create NaNs on smtlib yet" << std::endl;
-  abort();
-}
-
-smt_astt smtlib_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
-{
-  std::cerr << "Can't create Infs on smtlib yet" << std::endl;
-  abort();
-}
-
-smt_astt smtlib_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
-{
-  std::cerr << "Can't create rounding modes on smtlib yet" << std::endl;
-  abort();
-}
-
-smt_astt smtlib_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
-{
-  std::cerr << "Can't cast floating point on smtlib yet" << std::endl;
-  abort();
-}
-
-smt_astt smtlib_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
-{
-  std::cerr << "Can't cast floating point on smtlib yet" << std::endl;
-  abort();
-}
-
-smt_astt smtlib_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
-{
-  std::cerr << "Can't create floating point arith op on smtlib yet" << std::endl;
-  abort();
-}
-
-smt_astt smtlib_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
-{
-  std::cerr << "Can't create floating point nearbyint expression on smtlibt yet" << std::endl;
-  abort();
 }
 
 smt_ast *

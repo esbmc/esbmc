@@ -25,7 +25,7 @@ namespace renaming {
 //  protected:
 //  XXX: should leave protected enabled, but g++ 5.4 on ubuntu 16.04 does not
 //  appear to honour the following friend directive?
-    void get_original_name(expr2tc &expr, symbol2t::renaming_level lev) const;
+    static void get_original_name(expr2tc &expr, symbol2t::renaming_level lev);
     friend void build_goto_symex_classes();
   };
 
@@ -214,7 +214,7 @@ namespace renaming {
                                  const expr2tc &constant_value,
                                  const expr2tc &assigned_value);
 
-    void rename(expr2tc &expr) override ;
+    virtual void rename(expr2tc &expr, bool rename_only = false);
     virtual void rename(expr2tc &expr, unsigned count)=0;
 
     void get_ident_name(expr2tc &symbol) const override ;

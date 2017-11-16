@@ -116,21 +116,21 @@ void counterexample_value(
   const expr2tc &lhs,
   const expr2tc &value)
 {
-  const irep_idt &identifier = to_symbol2t(lhs).get_symbol_name();
   std::string value_string;
 
   if(is_nil_expr(value))
     value_string = "(assignment removed)";
   else
   {
-    value_string = from_expr(ns, identifier, value);
+    value_string = from_expr(ns, "", value);
 
-    if(is_constant_expr(value))
+    // Don't print the bit-vector if we're running on integer/real mode
+    if (is_constant_expr(value) && !config.options.get_bool_option("ir"))
     {
       if(is_bv_type(value))
       {
         value_string +=
-          " (" + integer2string(to_constant_int2t(value).value) + ")";
+          " (" + integer2binary(to_constant_int2t(value).value, value->type->get_width()) + ")";
       }
       else if(is_fixedbv_type(value))
       {
@@ -145,12 +145,7 @@ void counterexample_value(
     }
   }
 
-  std::string name = id2string(identifier);
-
-  const symbolt *symbol;
-  if(!ns.lookup(identifier, symbol) && !symbol->pretty_name.empty())
-    name = id2string(symbol->pretty_name);
-  out << "  " << name << "=" << value_string << std::endl;
+  out << "  " << from_expr(ns, "", lhs) << " = " << value_string << std::endl;
 }
 
 void show_goto_trace_gui(
@@ -465,9 +460,6 @@ void show_goto_trace(
         }
         break;
 
-      case goto_trace_stept::ASSUME:
-        break;
-
       case goto_trace_stept::ASSIGNMENT:
         if(step.pc->is_assign() || step.pc->is_return()
             || (step.pc->is_other() && is_nil_expr(step.original_lhs)))
@@ -478,7 +470,7 @@ void show_goto_trace(
             prev_step_nr = step.step_nr;
             show_state_header(out, step, step.pc->location, step.step_nr);
           }
-          counterexample_value(out, ns, step.original_lhs, step.value);
+          counterexample_value(out, ns, step.lhs, step.value);
         }
         break;
 
@@ -488,17 +480,17 @@ void show_goto_trace(
         printf_formatter(step.format_string, step.output_args);
         printf_formatter.print(out);
         out << std::endl;
-
         break;
       }
-
-      case goto_trace_stept::SKIP:
-        // Something deliberately ignored
-        break;
 
       case goto_trace_stept::RENUMBER:
         out << "Renumbered pointer to ";
         counterexample_value(out, ns, step.lhs, step.value);
+        break;
+
+      case goto_trace_stept::ASSUME:
+      case goto_trace_stept::SKIP:
+        // Something deliberately ignored
         break;
 
       default:

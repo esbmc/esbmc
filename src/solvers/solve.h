@@ -8,11 +8,11 @@
 
 typedef smt_convt *(solver_creator)
     (bool int_encoding, const namespacet &ns, const optionst &opts,
-        tuple_iface **tuple_api, array_iface **array_api);
+        tuple_iface **tuple_api, array_iface **array_api, fp_convt **fp_api);
 
 typedef smt_convt *(*solver_creator_ptr)
     (bool int_encoding, const namespacet &ns, const optionst &opts,
-        tuple_iface **tuple_api, array_iface **array_api);
+        tuple_iface **tuple_api, array_iface **array_api, fp_convt **fp_api);
 
 struct esbmc_solver_config {
   std::string name;

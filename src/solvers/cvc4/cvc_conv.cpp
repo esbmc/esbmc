@@ -5,15 +5,17 @@ smt_convt *
 create_new_cvc_solver(bool int_encoding, const namespacet &ns,
                       const optionst &opts __attribute__((unused)),
                       tuple_iface **tuple_api __attribute__((unused)),
-                      array_iface **array_api)
+                      array_iface **array_api,
+                      fp_convt **fp_api __attribute__((unused)))
 {
   cvc_convt *conv = new cvc_convt(int_encoding, ns);
   *array_api = static_cast<array_iface*>(conv);
+  *fp_api = static_cast<fp_convt*>(conv);
   return conv;
 }
 
 cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
-   : smt_convt(int_encoding, ns), array_iface(false, false),
+   : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this),
      em(), smt(&em), sym_tab()
 {
   // Already initialized stuff in the constructor list,
@@ -41,17 +43,6 @@ cvc_convt::dec_solve()
   }
 }
 
-tvt
-cvc_convt::l_get(const smt_ast *a)
-{
-  const cvc_smt_ast *ca = cvc_ast_downcast(a);
-  constant_bool2tc b = get_bool(ca);
-  if (b->value)
-    return tvt(true);
-  else
-    return tvt(false);
-}
-
 expr2tc
 cvc_convt::get_bool(const smt_ast *a)
 {
@@ -62,31 +53,30 @@ cvc_convt::get_bool(const smt_ast *a)
 }
 
 expr2tc
-cvc_convt::get_bv(const type2tc &t __attribute__((unused)), const smt_ast *a)
+cvc_convt::get_bv(const type2tc &type, smt_astt a)
 {
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::Expr e = smt.getValue(ca->e);
   CVC4::BitVector foo = e.getConst<CVC4::BitVector>();
-  // XXX, might croak on 32 bit machines. I'm not aware of a fixed-width api
-  // for CVC right now.
-  uint64_t val = foo.toInteger().getUnsignedLong();
-  return constant_int2tc(get_uint_type(foo.getSize()), BigInt(val));
+  return smt_convt::get_bv(type, BigInt(foo.toInteger().getUnsignedLong()));
 }
 
 expr2tc
-cvc_convt::get_array_elem(const smt_ast *array, uint64_t index,
-                          const type2tc &elem_sort)
+cvc_convt::get_array_elem(
+  const smt_ast *array,
+  uint64_t index,
+  const type2tc &subtype)
 {
   const cvc_smt_ast *carray = cvc_ast_downcast(array);
-  unsigned int orig_w = array->sort->domain_width;
+  size_t orig_w = array->sort->get_domain_width();
 
   smt_ast *tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
   const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
   CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->e, tmpa->e);
   free(tmpast);
 
-  cvc_smt_ast *tmpb = new cvc_smt_ast(this, convert_sort(elem_sort), e);
-  expr2tc result = get_bv(type2tc(), tmpb);
+  cvc_smt_ast *tmpb = new cvc_smt_ast(this, convert_sort(subtype), e);
+  expr2tc result = get_bv(subtype, tmpb);
   free(tmpb);
 
   return result;
@@ -233,39 +223,43 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   return new cvc_smt_ast(this, s, e);
 }
 
-smt_sort *
+smt_sortt
 cvc_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
-  unsigned long uint;
-  int thebool;
 
   va_start(ap, k);
   switch (k) {
   case SMT_SORT_BOOL:
+    return new cvc_smt_sort(k, em.booleanType());
+  case SMT_SORT_FIXEDBV:
+  case SMT_SORT_UBV:
+  case SMT_SORT_SBV:
   {
-    CVC4::BooleanType t = em.booleanType();
-    return new cvc_smt_sort(k, t);
-  }
-  case SMT_SORT_BV:
-  {
-    uint = va_arg(ap, unsigned long);
-    thebool = va_arg(ap, int);
-    thebool = thebool;
-    CVC4::BitVectorType t = em.mkBitVectorType(uint);
-    return new cvc_smt_sort(k, t, uint);
+    unsigned long uint = va_arg(ap, unsigned long);
+    return new cvc_smt_sort(k, em.mkBitVectorType(uint), uint);
   }
   case SMT_SORT_ARRAY:
   {
     const cvc_smt_sort *dom = va_arg(ap, const cvc_smt_sort*);
     const cvc_smt_sort *range = va_arg(ap, const cvc_smt_sort*);
-    CVC4::ArrayType t = em.mkArrayType(dom->t, range->t);
-    return new cvc_smt_sort(k, t, range->data_width, dom->data_width);
+    assert(int_encoding || dom->get_data_width() != 0);
+
+    // The range data width is allowed to be zero, which happens if the range
+    // is not a bitvector / integer
+    unsigned int data_width = range->get_data_width();
+    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
+      data_width = 1;
+
+    return new cvc_smt_sort(k, em.mkArrayType(dom->s, range->s), data_width,
+                            dom->get_data_width(), range);
+    break;
   }
   case SMT_SORT_FLOATBV:
   {
-    std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-    abort();
+    unsigned ew = va_arg(ap, unsigned long);
+    unsigned sw = va_arg(ap, unsigned long);
+    return mk_fpbv_sort(ew, sw);
   }
   default:
     std::cerr << "Unimplemented smt sort " << k << " in CVC mk_sort"
@@ -287,70 +281,21 @@ cvc_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 }
 
 smt_ast *
-cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
+cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
-  const smt_sort *s = mk_sort(SMT_SORT_BV, w, false);
+  smt_sortt s = mk_sort(ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
 
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv = CVC4::BitVector(w, (unsigned long int)theint.to_int64());
+  CVC4::BitVector bv = CVC4::BitVector(width, (unsigned long int)theint.to_int64());
   CVC4::Expr e = em.mkConst(bv);
   return new cvc_smt_ast(this, s, e);
-}
-
-smt_ast* cvc_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                   unsigned ew, unsigned sw)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
 }
 
 smt_ast *
 cvc_convt::mk_smt_bool(bool val)
 {
-  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  const smt_sort *s = boolean_sort;
   CVC4::Expr e = em.mkConst(val);
   return new cvc_smt_ast(this, s, e);
 }
@@ -380,7 +325,7 @@ cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   }
 
   // Time for a new one.
-  CVC4::Expr e = em.mkVar(name, sort->t); // "global", eh?
+  CVC4::Expr e = em.mkVar(name, sort->s); // "global", eh?
   sym_tab.bind(name, e, true);
   return new cvc_smt_ast(this, s, e);
 }

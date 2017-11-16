@@ -84,7 +84,9 @@
  *  @see smt_convt::mk_func_app
  */
 
-class smt_convt; // Forward dec.
+// Forward dec.
+class fp_convt;
+class smt_convt;
 
 /** Identifier for SMT sort kinds
  *  Each different kind of sort (i.e. arrays, bv's, bools, etc) gets its own
@@ -93,13 +95,15 @@ class smt_convt; // Forward dec.
 enum smt_sort_kind {
   SMT_SORT_INT = 1,
   SMT_SORT_REAL = 2,
-  SMT_SORT_BV = 4,
-  SMT_SORT_ARRAY = 8,
-  SMT_SORT_BOOL = 16,
-  SMT_SORT_STRUCT = 32,
-  SMT_SORT_UNION = 64, // Contencious
-  SMT_SORT_FLOATBV = 128,
-  SMT_SORT_FLOATBV_RM = 256
+  SMT_SORT_SBV = 4,
+  SMT_SORT_UBV = 8,
+  SMT_SORT_FIXEDBV = 16,
+  SMT_SORT_ARRAY = 32,
+  SMT_SORT_BOOL = 64,
+  SMT_SORT_STRUCT = 128,
+  SMT_SORT_UNION = 256, // Contencious
+  SMT_SORT_FLOATBV = 512,
+  SMT_SORT_FLOATBV_RM = 1024
 };
 
 /** Identifiers for SMT functions.
@@ -237,37 +241,62 @@ struct expr_op_convert {
 class smt_sort;
 typedef const smt_sort * smt_sortt;
 
-class smt_sort {
+class smt_sort
+{
 public:
   /** Identifies what /kind/ of sort this is.
    *  The specific sort itself may be parameterised with widths and domains,
    *  for example. */
   smt_sort_kind id;
-  /** Data size of the sort.
-   *  For bitvectors this is the bit width, for arrays the range BV bit width.
-   *  For everything else, undefined */
-  unsigned long data_width;
-  /** BV Width of array domain. For everything else, undefined */
-  unsigned long domain_width;
 
-  smt_sort(smt_sort_kind i) : id(i), data_width(0), domain_width(0)
+  smt_sort(smt_sort_kind i) : id(i), data_width(0), secondary_width(0)
   {
     assert(id != SMT_SORT_ARRAY);
   }
-  smt_sort(smt_sort_kind i, unsigned long width)
-    : id(i), data_width(width), domain_width(0)
+
+  smt_sort(smt_sort_kind i, size_t width)
+    : id(i), data_width(width), secondary_width(0)
   {
     assert(width != 0 || i == SMT_SORT_INT);
     assert(id != SMT_SORT_ARRAY);
   }
-  smt_sort(smt_sort_kind i, unsigned long rwidth, unsigned long domwidth)
-    : id(i), data_width(rwidth), domain_width(domwidth) {
-      assert(id == SMT_SORT_ARRAY);
-      //assert(domain_width != 0);
-      // XXX not applicable during int mode?
-    }
+
+  smt_sort(smt_sort_kind i, size_t rwidth, size_t domwidth)
+    : id(i), data_width(rwidth), secondary_width(domwidth)
+  {
+    assert(id == SMT_SORT_ARRAY || id == SMT_SORT_FLOATBV);
+    // assert(secondary_width != 0);
+    // XXX not applicable during int mode?
+  }
+
+  size_t get_data_width() const { return data_width; }
+
+  size_t get_domain_width() const
+  {
+    assert(id == SMT_SORT_ARRAY);
+    return secondary_width;
+  }
+
+  size_t get_significand_width() const
+  {
+    assert(id == SMT_SORT_FLOATBV);
+    return secondary_width;
+  }
 
   virtual ~smt_sort() = default;
+
+private:
+  /** Data size of the sort.
+   * For bitvectors and floating-points this is the bit width,
+   * for arrays the range BV bit width,
+   * For everything else, undefined */
+  size_t data_width;
+
+  /** Secondary width
+   * For floating-points this is the significand width,
+   * for arrays this is the width of array domain,
+   * For everything else, undefined */
+  size_t secondary_width;
 };
 
 #define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
@@ -359,10 +388,9 @@ public:
 };
 
 // Pull in the tuple interface definitions. _after_ the AST defs.
-#include <solvers/smt/smt_tuple.h>
-
-// Also, array interface
+#include <solvers/smt/fp_conv.h>
 #include <solvers/smt/smt_array.h>
+#include <solvers/smt/smt_tuple.h>
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
@@ -503,6 +531,21 @@ public:
 
   void pre_solve();
 
+  /** Get the satisfying assignment using the type.
+   *  @param expr Variable to get the value of. Must be a symbol expression.
+   *  @return Explicit assigned value of expr in the solver. May be nil, in
+   *          which case the solver did not assign a value to it for some
+   *          reason. */
+  virtual expr2tc get_by_type(const expr2tc &expr);
+
+  /** Get the satisfying assignment using the ast.
+   *  @param a Variable to get the value of.
+   *  @param type The variable type.
+   *  @return Explicit assigned value of expr in the solver. May be nil, in
+   *          which case the solver did not assign a value to it for some
+   *          reason. */
+  virtual expr2tc get_by_ast(const type2tc &type, smt_astt a);
+
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the
@@ -523,7 +566,7 @@ public:
    *  unassigned.
    *  @param a The boolean sorted ast to fetch the value of.
    *  @return A three-valued return val, of the assignment to a. */
-  virtual tvt l_get(smt_astt a)=0;
+  virtual tvt l_get(smt_astt a);
 
   /** @} */
 
@@ -590,7 +633,7 @@ public:
    *  arguments are:
    *  * Bools: None
    *  * Int's: None
-   *  * BV's:  Width as a machine integer, and a bool that's true if it's signed
+   *  * BV's:  Width as a machine integer
    *  * Arrays: Two pointers to smt_sort's: the domain sort, and the range sort
    *
    *  Structs and unions use @ref mk_struct_sort and @ref mk_union_sort.
@@ -623,52 +666,6 @@ public:
   virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w) = 0;
 
-  /** Create a floating point bitvector
-   *  @param thereal the ieee float number
-   *  @param ew Exponent width, in bits, of the bitvector to create.
-   *  @param sw Significand width, in bits, of the bitvector to create.
-   *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bvfloat(const ieee_floatt &thereal,
-                                  unsigned ew, unsigned sw) = 0;
-
-  /** Create a NaN floating point bitvector
-   *  @param ew Exponent width, in bits, of the bitvector to create.
-   *  @param sw Significand width, in bits, of the bitvector to create.
-   *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw) = 0;
-
-  /** Create a (+/-)inf floating point bitvector
-   *  @param sgn Whether this bitvector is negative or positive.
-   *  @param ew Exponent width, in bits, of the bitvector to create.
-   *  @param sw Significand width, in bits, of the bitvector to create.
-   *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw) = 0;
-
-  /** Create a rounding mode to be used by floating point cast and arith ops
-   *  @param rm the kind of rounding mode
-   *  @return The newly created rounding mode smt_ast. */
-  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm) = 0;
-
-  /** Typecast from a floating point
-   *  @param cast the cast expression
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast) = 0;
-
-  /** Typecast to a floating point
-   *  @param cast the cast expression
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast) = 0;
-
-  /** Calculate the nearby int from a floating point, considering the rounding mode
-   *  @param expr the nearby int expression
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) = 0;
-
-  /** Convert the ieee arithmetic operations (add, sub, mul, div, mod)
-   *  @param expr the arithmetic operations
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr) = 0;
-
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.
    *  @return The newly created terminal smt_ast of this boolean. */
@@ -700,8 +697,14 @@ public:
 
   /** Extract the assignment to a bitvector from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
-   *  @return Expression representation of a's value, as a constant_int2tc */
-  virtual expr2tc get_bv(const type2tc &t, smt_astt a) = 0;
+   *  @return Expression representation of a's value */
+  virtual expr2tc get_bv(const type2tc &type, smt_astt a) = 0;
+
+  /** Builds the bitvector based on the value retrieved from the solver.
+   *  @param type the type (fixedbv or (un)signedbv),
+   *  @param value the value retrieved from the solver.
+   *  @return Expression representation of a's value */
+  expr2tc get_bv(const type2tc &type, BigInt value);
 
   /** @} */
 
@@ -864,6 +867,8 @@ public:
   void set_tuple_iface(tuple_iface *iface);
   /** Stores handle for the array interface. */
   void set_array_iface(array_iface *iface);
+  /** Stores handle for the floating-point interface. */
+  void set_fp_conv(fp_convt *iface);
   /** Store a new address-allocation record into the address space accounting.
    *  idx indicates the object number of this record. */
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
@@ -938,13 +943,6 @@ public:
   type2tc get_flattened_array_subtype(const type2tc &type);
   /** Fetch the number of elements in an array (the domain). */
   expr2tc array_domain_to_width(const type2tc &type);
-  /** Create an array domain sort */
-  smt_sortt mk_int_bv_sort(unsigned int width) {
-    if (int_encoding)
-      return mk_sort(SMT_SORT_INT);
-    else
-      return mk_sort(SMT_SORT_BV, width, false);
-  }
 
   /** For the given type, replace all instances of a pointer type with the
    *  struct representation of it. */
@@ -977,7 +975,7 @@ public:
   // Ours:
   /** Given an array expression, attempt to extract its valuation from the
    *  solver model, computing a constant_array2tc by calling get_array_elem. */
-  expr2tc get_array(smt_astt array, const type2tc &t);
+  expr2tc get_array(const expr2tc &expr);
 
   void delete_all_asts();
 
@@ -1090,6 +1088,7 @@ public:
 
   tuple_iface *tuple_api;
   array_iface *array_api;
+  fp_convt *fp_api;
 
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.

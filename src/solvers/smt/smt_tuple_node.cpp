@@ -259,7 +259,7 @@ smt_tuple_node_flattener::tuple_array_create(const type2tc &array_type,
   // Optimise the creation of a const array.
   if (const_array)
     return array_conv.convert_array_of_wsort(inputargs[0],
-                                             domain->data_width, sort);
+                                             domain->get_data_width(), sort);
 
   // Otherwise, we'll need to create a new array, and update data into it.
   std::string name = ctx->mk_fresh_name("tuple_array_create::") + ".";
@@ -321,7 +321,6 @@ smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
   for(auto const &it : strct.members)
   {
     expr2tc res;
-
     if (is_tuple_ast_type(it)) {
       res = tuple_get_rec(to_tuple_node_ast(tuple->elements[i]));
     } else if (is_tuple_array_ast_type(it)) {

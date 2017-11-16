@@ -95,8 +95,8 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
          "array flattener. Should be flattened elsewhere");
 
   // Create either a new bounded or unbounded array.
-  unsigned long domain_width = ms->domain_width;
-  unsigned long array_size = 1UL << domain_width;
+  size_t domain_width = ms->get_domain_width();
+  size_t array_size = 1UL << domain_width;
 
   // Create new AST storage
   array_ast *mast = new_ast(ms);
@@ -157,7 +157,7 @@ array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
   // For undetermined indexes, create a large case switch across all values.
   smt_astt fresh = ctx->mk_fresh(ressort, "array_mk_select::");
   smt_astt real_idx = ctx->convert_ast(idx);
-  unsigned long dom_width = ma->sort->domain_width;
+  size_t dom_width = ma->sort->get_domain_width();
   smt_sortt bool_sort = ctx->boolean_sort;
 
   for (unsigned long i = 0; i < ma->array_fields.size(); i++) {
@@ -202,7 +202,7 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
   // array.
   smt_astt real_idx = ctx->convert_ast(idx);
   smt_astt real_value = value;
-  unsigned long dom_width = mast->sort->domain_width;
+  size_t dom_width = mast->sort->get_domain_width();
 
   for (unsigned long i = 0; i < mast->array_fields.size(); i++) {
     smt_astt this_idx = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
@@ -371,7 +371,7 @@ smt_astt
 array_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   // Create a new array, initialized with init_val
-  smt_sortt dom_sort = ctx->mk_int_bv_sort(domain_width);
+  smt_sortt dom_sort = ctx->mk_sort(SMT_SORT_UBV, domain_width);
   smt_sortt idx_sort = init_val->sort;
 
   smt_sortt arr_sort = ctx->mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
@@ -447,19 +447,12 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
   // index.
   const array_ast *mast = array_downcast(a);
 
-  if (!is_unbounded_array(a->sort)) {
-    if (index < mast->array_fields.size()) {
-      return ctx->get_bv(subtype, mast->array_fields[index]);
-    } else {
-      return expr2tc(); // Out of range
-    }
-  }
+  if (!is_unbounded_array(a->sort) && (index < mast->array_fields.size()))
+    return ctx->get_by_ast(subtype, mast->array_fields[index]);
 
-  if (mast->base_array_id >= array_valuation.size()) {
-    // This is an array that was not previously converted, therefore doesn't
-    // appear in the valuation table. Therefore, all its values are free.
-    return expr2tc();
-  }
+  // This is an array that was not previously converted, therefore doesn't
+  // appear in the valuation table. Therefore, all its values are free.
+  assert(mast->base_array_id >= array_valuation.size());
 
   // Fetch all the indexes
   const idx_record_containert &indexes = array_indexes[mast->base_array_id];
@@ -468,7 +461,8 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
   // Basically, we have to do a linear search of all the indexes to find one
   // that matches the index argument.
   idx_record_containert::const_iterator it;
-  for (it = indexes.begin(); it != indexes.end(); it++, i++) {
+  for (it = indexes.begin(); it != indexes.end(); it++, i++)
+  {
     const expr2tc &e = it->idx;
     expr2tc e2 = ctx->get(e);
     if (is_nil_expr(e2))
@@ -479,20 +473,14 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
       break;
   }
 
-  if (it == indexes.end())
-    // Then this index wasn't modelled in any way.
-    return expr2tc();
+  assert(it == indexes.end());
 
   // We've found an index; pick its value out, convert back to expr.
-
   const ast_vect &solver_values =
     array_valuation[mast->base_array_id][mast->array_update_num];
   assert(i < solver_values.size());
 
-  if (array_subtypes[mast->base_array_id]->id == SMT_SORT_BOOL)
-    return ctx->get_bool(solver_values[i]);
-  else
-    return ctx->get_bv(subtype, solver_values[i]);
+  return ctx->get_by_ast(subtype, solver_values[i]);
 }
 
 void
@@ -1234,7 +1222,7 @@ array_ast::update(smt_convt *ctx __attribute__((unused)), smt_astt value,
                                 expr2tc idx_expr) const
 {
   if (is_nil_expr(idx_expr))
-    idx_expr = constant_int2tc(get_uint_type(sort->domain_width), BigInt(idx));
+    idx_expr = constant_int2tc(get_uint_type(sort->get_domain_width()), BigInt(idx));
 
   return array_ctx->mk_store(this, idx_expr, value, sort);
 }

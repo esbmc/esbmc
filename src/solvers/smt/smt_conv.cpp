@@ -69,6 +69,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
 {
   tuple_api = nullptr;
   array_api = nullptr;
+  fp_api = nullptr;
 
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -132,6 +133,13 @@ smt_convt::set_array_iface(array_iface *iface)
 }
 
 void
+smt_convt::set_fp_conv(fp_convt *iface)
+{
+  assert(fp_api == NULL && "set_fp_iface should only be called once");
+  fp_api = iface;
+}
+
+void
 smt_convt::delete_all_asts()
 {
 
@@ -148,8 +156,8 @@ smt_convt::smt_post_init()
     machine_int_sort = mk_sort(SMT_SORT_INT, false);
     machine_uint_sort = machine_int_sort;
   } else {
-    machine_int_sort = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, true);
-    machine_uint_sort = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, false);
+    machine_int_sort = mk_sort(SMT_SORT_SBV, config.ansi_c.int_width);
+    machine_uint_sort = mk_sort(SMT_SORT_UBV, config.ansi_c.int_width);
   }
 
   boolean_sort = mk_sort(SMT_SORT_BOOL);
@@ -449,7 +457,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (int_encoding) {
       domain = machine_int_sort;
     } else {
-      domain = mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
+      domain = mk_sort(SMT_SORT_UBV, calculate_array_domain_width(arr));
     }
 
     expr2tc flat_expr = expr;
@@ -576,21 +584,21 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 3);
-    a = mk_smt_bvfloat_arith_ops(expr);
+    a = fp_api->mk_smt_fpbv_arith_ops(expr);
     break;
   }
   case expr2t::ieee_fma_id:
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 4);
-    a = mk_smt_bvfloat_arith_ops(expr);
+    a = fp_api->mk_smt_fpbv_fma(expr);
     break;
   }
   case expr2t::ieee_sqrt_id:
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 2);
-    a = mk_smt_bvfloat_arith_ops(expr);
+    a = fp_api->mk_smt_fpbv_fma(expr);
     break;
   }
   case expr2t::modulus_id:
@@ -682,7 +690,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::nearbyint_id:
   {
-    a = mk_smt_nearbyint_from_float(to_nearbyint2t(expr));
+    a = fp_api->mk_smt_nearbyint_from_float(to_nearbyint2t(expr));
     break;
   }
   case expr2t::if_id:
@@ -973,7 +981,7 @@ smt_convt::convert_ast(const expr2tc &expr)
 
     unsigned long accuml_side =
       cat.side_1->type->get_width() + cat.side_2->type->get_width();
-    smt_sortt s = mk_sort(SMT_SORT_BV, accuml_side, false);
+    smt_sortt s = mk_sort(SMT_SORT_UBV, accuml_side);
     a = mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
 
     break;
@@ -1233,33 +1241,42 @@ smt_convt::convert_sort(const type2tc &type)
     result = tuple_api->mk_struct_sort(pointer_struct);
     break;
   case type2t::unsignedbv_id:
-    /* FALLTHROUGH */
+  {
+    if (int_encoding)
+      result = mk_sort(SMT_SORT_INT);
+    else
+      result = mk_sort(SMT_SORT_UBV, type->get_width());
+    break;
+  }
   case type2t::signedbv_id:
   {
-    unsigned int width = type->get_width();
-    assert(width != 0);
-    result = mk_int_bv_sort(width);
+    if (int_encoding)
+      result = mk_sort(SMT_SORT_INT);
+    else
+      result = mk_sort(SMT_SORT_SBV, type->get_width());
+    break;
   }
-  break;
   case type2t::fixedbv_id:
   {
-    unsigned int width = type->get_width();
+
     if (int_encoding)
       result = mk_sort(SMT_SORT_REAL);
     else
-      result = mk_sort(SMT_SORT_BV, width, false);
+      result = mk_sort(SMT_SORT_FIXEDBV, type->get_width());
+    break;
   }
-  break;
   case type2t::floatbv_id:
   {
-    unsigned int fraw = to_floatbv_type(type).fraction;
-    unsigned int expw = to_floatbv_type(type).exponent;
     if (int_encoding)
       result = mk_sort(SMT_SORT_REAL);
     else
-      result = mk_sort(SMT_SORT_FLOATBV, expw, fraw);
+    {
+      unsigned int sw = to_floatbv_type(type).fraction;
+      unsigned int ew = to_floatbv_type(type).exponent;
+      result = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+    }
+    break;
   }
-  break;
   case type2t::string_id:
   {
     const string_type2t &str_type = to_string_type(type);
@@ -1291,7 +1308,7 @@ smt_convt::convert_sort(const type2tc &type)
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sortt r;
     if (is_bool_type(range) && !array_api->supports_bools_in_arrays) {
-      r = mk_int_bv_sort(1);
+      r = mk_sort(SMT_SORT_UBV, 1);
     } else {
       r = convert_sort(range);
     }
@@ -1394,13 +1411,13 @@ smt_convt::convert_terminal(const expr2tc &expr)
       unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
       unsigned int exponent_width = to_floatbv_type(thereal.type).exponent;
       if(thereal.value.is_NaN())
-        return mk_smt_bvfloat_nan(exponent_width, fraction_width);
+        return fp_api->mk_smt_fpbv_nan(exponent_width, fraction_width);
 
       bool sign = thereal.value.get_sign();
       if(thereal.value.is_infinity())
-        return mk_smt_bvfloat_inf(sign, exponent_width, fraction_width);
+        return fp_api->mk_smt_fpbv_inf(sign, exponent_width, fraction_width);
 
-      return mk_smt_bvfloat(thereal.value, exponent_width, fraction_width);
+      return fp_api->mk_smt_fpbv(thereal.value);
     }
   }
   case expr2t::constant_bool_id:
@@ -1588,7 +1605,7 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)
     ieee_floatt::rounding_modet rm =
       static_cast<ieee_floatt::rounding_modet>
         (to_constant_int2t(expr).value.to_int64());
-    return mk_smt_bvfloat_rm(rm);
+    return fp_api->mk_smt_fpbv_rm(rm);
   }
 
   assert(is_symbol2t(expr));
@@ -1615,10 +1632,10 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)
     mk_func_app(bs, SMT_FUNC_EQ, symbol,
       mk_smt_bvint(BigInt(2), false, get_int32_type()->get_width()));
 
-  smt_astt ne = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_EVEN);
-  smt_astt mi = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_MINUS_INF);
-  smt_astt pi = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_PLUS_INF);
-  smt_astt ze = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+  smt_astt ne = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
+  smt_astt mi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
+  smt_astt pi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF);
+  smt_astt ze = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
 
   smt_astt ite2 =
     mk_func_app(
@@ -1657,7 +1674,7 @@ smt_convt::convert_sign_ext(smt_astt a, smt_sortt s,
                             unsigned int topbit, unsigned int topwidth)
 {
 
-  smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
+  smt_sortt bit = mk_sort(SMT_SORT_UBV, 1);
   smt_astt the_top_bit = mk_extract(a, topbit-1, topbit-1, bit);
   smt_astt zero_bit = mk_smt_bvint(BigInt(0), false, 1);
   smt_sortt b = boolean_sort;
@@ -1673,7 +1690,7 @@ smt_convt::convert_sign_ext(smt_astt a, smt_sortt s,
   BigInt big_int(big);
   smt_astt f = mk_smt_bvint(big_int, false, topwidth);
 
-  smt_sortt topsort = mk_sort(SMT_SORT_BV, topwidth, false);
+  smt_sortt topsort = mk_sort(SMT_SORT_UBV, topwidth);
   smt_astt topbits = mk_func_app(topsort, SMT_FUNC_ITE, t, z, f);
 
   return mk_func_app(s, SMT_FUNC_CONCAT, topbits, a);
@@ -1725,9 +1742,9 @@ smt_convt::round_fixedbv_to_int(smt_astt a, unsigned int fromwidth,
   unsigned int frac_width = fromwidth / 2;
 
   // Sorts
-  smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
-  smt_sortt halfwidth = mk_sort(SMT_SORT_BV, frac_width, false);
-  smt_sortt tosort = mk_sort(SMT_SORT_BV, towidth, false);
+  smt_sortt bit = mk_sort(SMT_SORT_UBV, 1);
+  smt_sortt halfwidth = mk_sort(SMT_SORT_UBV, frac_width);
+  smt_sortt tosort = mk_sort(SMT_SORT_UBV, towidth);
   smt_sortt boolsort = boolean_sort;
 
   // Determine whether the source is signed from its topmost bit.
@@ -1779,9 +1796,10 @@ smt_astt
 smt_convt::make_bit_bool(smt_astt a)
 {
 
-  assert(((!int_encoding && a->sort->id == SMT_SORT_BV) ||
-          (int_encoding && a->sort->id == SMT_SORT_INT)) &&
-        "Wrong sort fed to " "smt_convt::make_bit_bool");
+  assert(((!int_encoding && a->sort->id == SMT_SORT_UBV)
+          || (!int_encoding && a->sort->id == SMT_SORT_SBV)
+          || (int_encoding && a->sort->id == SMT_SORT_INT))
+          && "Wrong sort fed to " "smt_convt::make_bit_bool");
 
   smt_sortt boolsort = boolean_sort;
   smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
@@ -1796,7 +1814,7 @@ smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
     return idx;
 
   smt_sortt s = convert_sort(arr_sort);
-  unsigned int domain_width = s->domain_width;
+  size_t domain_width = s->get_domain_width();
   if (domain_width == config.ansi_c.int_width)
     return idx;
 
@@ -1840,7 +1858,7 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
 smt_sortt
 smt_convt::make_array_domain_sort(const array_type2t &arr)
 {
-  return mk_sort(int_encoding ? SMT_SORT_INT : SMT_SORT_BV, make_array_domain_sort_exp(arr)->get_width(), false);
+  return mk_sort(int_encoding ? SMT_SORT_INT : SMT_SORT_UBV, make_array_domain_sort_exp(arr)->get_width());
 }
 
 type2tc
@@ -2290,68 +2308,160 @@ smt_convt::pre_solve()
 expr2tc
 smt_convt::get(const expr2tc &expr)
 {
-  switch (expr->type->type_id) {
-  case type2t::bool_id:
-    return get_bool(convert_ast(expr));
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-    return get_bv(expr->type, convert_ast(expr));
-  case type2t::fixedbv_id:
-  {
-    // XXX -- again, another candidate for refactoring.
-    expr2tc tmp = get_bv(expr->type, convert_ast(expr));
-    if (is_nil_expr(tmp))
-      return tmp;
+  if(is_constant_number(expr))
+    return expr;
 
-    const constant_int2t &intval = to_constant_int2t(tmp);
-    uint64_t val = intval.value.to_ulong();
-    std::stringstream ss;
-    ss << val;
-    constant_exprt value_expr(migrate_type_back(expr->type));
-    value_expr.set_value(get_fixed_point(expr->type->get_width(), ss.str()));
-    fixedbvt fbv;
-    fbv.from_expr(value_expr);
-    return constant_fixedbv2tc(fbv);
-  }
-  case type2t::floatbv_id:
-  {
-    expr2tc tmp = get_bv(expr->type, convert_ast(expr));
-    if (is_nil_expr(tmp))
-      return expr2tc();
+  expr2tc res = expr;
 
-    return tmp;
+  // Special cases:
+  if(is_index2t(res))
+  {
+    // If we try to get an index from the solver, it will first
+    // return the whole array and then get the index, we can
+    // do better and call get_array_element directly
+    index2t index = to_index2t(res);
+    expr2tc src_value = index.source_value;
+
+    expr2tc newidx;
+    if (is_index2t(index.source_value)) {
+      newidx = decompose_select_chain(expr, src_value);
+    } else {
+      newidx = fix_array_idx(index.index, index.source_value->type);
+    }
+
+    // if the source value is a constant, there's no need to
+    // call the array api
+    if(is_constant_number(src_value))
+      return src_value;
+
+    // Convert the idx, it must be an integer
+    expr2tc idx = get(newidx);
+    assert(is_constant_int2t(idx));
+
+    // Convert the array so we can call the array api
+    smt_astt array = convert_ast(src_value);
+
+    // Retrieve the element
+    res = array_api->get_array_elem(
+      array,
+      to_constant_int2t(idx).value.to_uint64(),
+      get_flattened_array_subtype(res->type));
   }
-  case type2t::array_id:
-    return get_array(convert_ast(expr), expr->type);
-  case type2t::struct_id:
-  case type2t::pointer_id:
-    return tuple_api->tuple_get(expr);
-  default:
-    std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
-              << ") in smt get" << std::endl;
-    abort();
+  else if(is_with2t(res))
+  {
+    // This will be converted
+    with2t with = to_with2t(res);
+    expr2tc update_val = with.update_value;
+    expr2tc newidx;
+
+    if (is_array_type(with.type) &&
+        is_array_type(to_array_type(with.type).subtype)) {
+      newidx = decompose_store_chain(expr, update_val);
+    } else {
+      newidx = fix_array_idx(with.update_field, with.type);
+    }
+
+    // if the update value is a constant, there's no need to
+    // call the array api
+    if(is_constant_number(update_val))
+      return update_val;
+
+    // Convert the idx, it must be an integer
+    expr2tc idx = get(newidx);
+    assert(is_constant_int2t(idx));
+
+    // Convert the array so we can call the array api
+    smt_astt array = convert_ast(with.source_value);
+
+    // Retrieve the element
+    res = array_api->get_array_elem(
+      array,
+      to_constant_int2t(idx).value.to_uint64(),
+      get_flattened_array_subtype(res->type));
+  }
+  else if(is_address_of2t(res))
+  {
+    return res;
+  }
+  else if(is_symbol2t(res))
+    return get_by_type(res); // Query symbol value from the solver
+
+  // Recurse on operands
+  res->Foreach_operand([this] (expr2tc &e)
+    {
+      expr2tc new_e = get(e);
+      e = new_e;
+    }
+  );
+
+  // And simplify
+  simplify(res);
+  return res;
+}
+
+expr2tc
+smt_convt::get_by_ast(const type2tc &type, smt_astt a)
+{
+  switch (type->type_id)
+  {
+    case type2t::bool_id:
+      return get_bool(a);
+
+    case type2t::unsignedbv_id:
+    case type2t::signedbv_id:
+    case type2t::fixedbv_id:
+      return get_bv(type, a);
+
+    case type2t::floatbv_id:
+      return fp_api->get_fpbv(type, a);
+
+    default:
+      std::cerr << "Unimplemented type'd expression (" << type->type_id
+          << ") in smt get" << std::endl;
+      abort();
   }
 }
 
 expr2tc
-smt_convt::get_array(smt_astt array, const type2tc &t)
+smt_convt::get_by_type(const expr2tc &expr)
+{
+  switch (expr->type->type_id)
+  {
+    case type2t::bool_id:
+    case type2t::unsignedbv_id:
+    case type2t::signedbv_id:
+    case type2t::fixedbv_id:
+    case type2t::floatbv_id:
+      return get_by_ast(expr->type, convert_ast(expr));
+
+    case type2t::array_id:
+      return get_array(expr);
+
+    case type2t::struct_id:
+    case type2t::pointer_id:
+      return tuple_api->tuple_get(expr);
+
+    default:
+      std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
+          << ") in smt get" << std::endl;
+      abort();
+  }
+}
+
+expr2tc
+smt_convt::get_array(const expr2tc &expr)
 {
   // XXX -- printing multidimensional arrays?
 
-  type2tc newtype = flatten_array_type(t);
-
-  const array_type2t &ar = to_array_type(newtype);
-  if (is_tuple_ast_type(ar.subtype)) {
-    std::cerr << "Tuple array getting not implemented yet, sorry" << std::endl;
-    return expr2tc();
-  }
+  smt_astt array = convert_ast(expr);
 
   // Fetch the array bounds, if it's huge then assume this is a 1024 element
   // array. Then fetch all elements and formulate a constant_array.
-  size_t w = array->sort->domain_width;
+  size_t w = array->sort->get_domain_width();
   if (w > 10)
     w = 10;
 
+  const array_type2t &ar = to_array_type(flatten_array_type(expr->type));
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   std::vector<expr2tc> fields;
@@ -2500,11 +2610,11 @@ array_iface::default_convert_array_of(smt_astt init_val,
   if (init_val->sort->id == SMT_SORT_BOOL && !supports_bools_in_arrays) {
     smt_astt zero = ctx->mk_smt_bvint(BigInt(0), false, 1);
     smt_astt one = ctx->mk_smt_bvint(BigInt(0), false, 1);
-    smt_sortt result_sort = ctx->mk_sort(SMT_SORT_BV, 1, false);
+    smt_sortt result_sort = ctx->mk_sort(SMT_SORT_UBV, 1);
     init_val = ctx->mk_func_app(result_sort, SMT_FUNC_ITE, init_val, one, zero);
   }
 
-  smt_sortt domwidth = ctx->mk_int_bv_sort(array_size);
+  smt_sortt domwidth = ctx->mk_sort(SMT_SORT_UBV, array_size);
   smt_sortt arrsort = ctx->mk_sort(SMT_SORT_ARRAY, domwidth, init_val->sort);
   smt_astt newsym_ast =
     ctx->mk_fresh(arrsort, "default_array_of::", init_val->sort);
@@ -2627,7 +2737,7 @@ smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   // We're an array; just generate a 'with' operation.
   expr2tc index;
   if (is_nil_expr(idx_expr)) {
-    size_t dom_width = ctx->int_encoding ? config.ansi_c.int_width : sort->domain_width;
+    size_t dom_width = ctx->int_encoding ? config.ansi_c.int_width : sort->get_domain_width();
     index =
       constant_int2tc(type2tc(new unsignedbv_type2t(dom_width)), BigInt(idx));
   } else {
@@ -2645,13 +2755,12 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
          "scalar AST");
 
   // Just apply a select operation to the current array. Index should be fixed.
-
   // Guess the resulting sort. This could be a lot, lot better.
   smt_sortt range_sort = nullptr;
-  if (sort->data_width == 1 && ctx->array_api->supports_bools_in_arrays)
+  if (sort->get_data_width() == 1 && ctx->array_api->supports_bools_in_arrays)
     range_sort = ctx->boolean_sort;
   else
-    range_sort = ctx->mk_int_bv_sort(sort->data_width);
+    range_sort = ctx->mk_sort(SMT_SORT_UBV, sort->get_data_width());
 
   return ctx->mk_func_app(range_sort, SMT_FUNC_SELECT,
                           this, ctx->convert_ast(idx));
@@ -2668,4 +2777,30 @@ smt_ast::project(smt_convt *ctx __attribute__((unused)),
 void smt_convt::dump_smt()
 {
   std::cerr << "SMT dump not implemented for " << solver_text() << "\n";
+}
+
+tvt smt_convt::l_get(smt_astt a)
+{
+  expr2tc b = get_bool(a);
+  if (is_true(b))
+    return tvt(true);
+
+  if (is_false(b))
+    return tvt(false);
+
+  return tvt(tvt::TV_UNKNOWN);
+}
+
+expr2tc smt_convt::get_bv(const type2tc& type, BigInt value)
+{
+  if(is_fixedbv_type(type))
+  {
+    fixedbvt fbv(
+      constant_exprt(
+        integer2binary(value, type->get_width()),
+        integer2string(value),
+        migrate_type_back(type)));
+    return constant_fixedbv2tc(fbv);
+  }
+  return constant_int2tc(type, value);
 }

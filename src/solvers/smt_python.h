@@ -90,14 +90,14 @@ public:
   void pop_tuple_ctx();
 
   // Uhhhh, float api?
-  smt_ast *mk_smt_bvfloat(const ieee_floatt &thereal, unsigned ew, unsigned sw);
-  smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw);
-  smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw);
-  smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm);
-  smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast);
-  smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast);
+  smt_ast *mk_smt_fpbv(const ieee_floatt &thereal);
+  smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw);
+  smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw);
+  smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm);
+  smt_astt mk_smt_typecast_from_fpbv(const typecast2t &cast);
+  smt_astt mk_smt_typecast_to_fpbv(const typecast2t &cast);
   smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr);
-  smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr);
+  smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr);
 };
 
 #endif /* WITH_PYTHON */

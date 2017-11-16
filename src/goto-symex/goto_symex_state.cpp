@@ -18,6 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/irep2.h>
 #include <util/migrate.h>
+#include <util/prefix.h>
 
 goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,
                                      const namespacet &_ns)
@@ -211,7 +212,7 @@ void goto_symex_statet::assignment(
   }
 }
 
-void goto_symex_statet::rename(expr2tc &expr)
+void goto_symex_statet::rename(expr2tc &expr, bool rename_only)
 {
   // rename all the symbols with their last known value
 
@@ -222,7 +223,7 @@ void goto_symex_statet::rename(expr2tc &expr)
   {
     type2tc origtype = expr->type;
     top().level1.rename(expr);
-    level2.rename(expr);
+    level2.rename(expr, rename_only);
     fixup_renamed_type(expr, origtype);
   }
   else if (is_address_of2t(expr))
@@ -233,8 +234,8 @@ void goto_symex_statet::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    expr->Foreach_operand([this] (expr2tc &e) {
-        rename(e);
+    expr->Foreach_operand([this, &rename_only] (expr2tc &e) {
+        rename(e, rename_only);
       }
     );
   }

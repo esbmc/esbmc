@@ -1,6 +1,7 @@
 #include <solve.h>
 #include <solver_config.h>
 #include <solvers/smt/array_conv.h>
+#include <solvers/smt/fp_conv.h>
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/smt_tuple.h>
 #include <solvers/smt/smt_tuple_flat.h>
@@ -48,13 +49,17 @@ static smt_convt *
 create_solver(const std::string&& the_solver,
             bool int_encoding, const namespacet &ns,
             const optionst &options, tuple_iface **tuple_api,
-            array_iface **array_api)
+            array_iface **array_api, fp_convt **fp_api)
 {
-
   for (const auto & esbmc_solver : esbmc_solvers) {
     if (the_solver == esbmc_solver.name) {
-      return esbmc_solver.create(int_encoding, ns,
-                               options, tuple_api, array_api);
+      return esbmc_solver.create(
+        int_encoding,
+        ns,
+        options,
+        tuple_api,
+        array_api,
+        fp_api);
     }
   }
 
@@ -87,7 +92,7 @@ pick_default_solver()
 static smt_convt *
 pick_solver(bool int_encoding, const namespacet &ns,
             const optionst &options, tuple_iface **tuple_api,
-            array_iface **array_api)
+            array_iface **array_api, fp_convt **fp_api)
 {
   unsigned int i;
   std::string the_solver;
@@ -107,7 +112,7 @@ pick_solver(bool int_encoding, const namespacet &ns,
     the_solver = pick_default_solver();
 
   return create_solver(std::move(the_solver), int_encoding, ns,
-                       options, tuple_api, array_api);
+                       options, tuple_api, array_api, fp_api);
 }
 
 smt_convt *
@@ -115,14 +120,15 @@ create_solver_factory1(const std::string &solver_name,
                        bool int_encoding, const namespacet &ns,
                        const optionst &options,
                        tuple_iface **tuple_api,
-                       array_iface **array_api)
+                       array_iface **array_api,
+                       fp_convt **fp_api)
 {
   if (solver_name == "")
     // Pick one based on options.
-    return pick_solver(int_encoding, ns, options, tuple_api, array_api);
+    return pick_solver(int_encoding, ns, options, tuple_api, array_api, fp_api);
 
   return create_solver(std::move(solver_name), int_encoding, ns,
-                       options, tuple_api, array_api);
+                       options, tuple_api, array_api, fp_api);
 }
 
 
@@ -133,7 +139,16 @@ create_solver_factory(const std::string &solver_name,
 {
   tuple_iface *tuple_api = nullptr;
   array_iface *array_api = nullptr;
-  smt_convt *ctx = create_solver_factory1(solver_name, int_encoding, ns, options, &tuple_api, &array_api);
+  fp_convt *fp_api = nullptr;
+  smt_convt *ctx = 
+    create_solver_factory1(
+      solver_name, 
+      int_encoding, 
+      ns, 
+      options, 
+      &tuple_api, 
+      &array_api, 
+      &fp_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");
@@ -162,6 +177,11 @@ create_solver_factory(const std::string &solver_name,
     ctx->set_array_iface(new array_convt(ctx));
   else
     ctx->set_array_iface(new array_convt(ctx));
+
+  if(fp_api != NULL)
+    ctx->set_fp_conv(fp_api);
+  else
+    ctx->set_fp_conv(new fp_convt(ctx));
 
   ctx->smt_post_init();
   return ctx;

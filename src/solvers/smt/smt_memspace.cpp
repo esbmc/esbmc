@@ -432,7 +432,8 @@ smt_convt::convert_addr_of(const expr2tc &expr)
 
   std::string symbol_name, out;
 
-  if (is_index2t(obj.ptr_obj)) {
+  if (is_index2t(obj.ptr_obj))
+  {
     // This might be a composite index/member/blah chain
     expr2tc offs = compute_pointer_offset(obj.ptr_obj);
     expr2tc base = get_base_object(obj.ptr_obj);
@@ -440,7 +441,10 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     address_of2tc addrof(obj.type, base);
     smt_astt a = convert_ast(addrof);
     return a->update(this, convert_ast(offs), 1);
-  } else if (is_member2t(obj.ptr_obj)) {
+  }
+
+  if (is_member2t(obj.ptr_obj))
+  {
     expr2tc offs = compute_pointer_offset(obj.ptr_obj);
     expr2tc base = get_base_object(obj.ptr_obj);
 
@@ -450,10 +454,16 @@ smt_convt::convert_addr_of(const expr2tc &expr)
 
     // Update pointer offset to offset to that field.
     return a->update(this, convert_ast(offs), 1);
-  } else if (is_symbol2t(obj.ptr_obj)) {
+  }
+
+  if (is_symbol2t(obj.ptr_obj))
+  {
     const symbol2t &symbol = to_symbol2t(obj.ptr_obj);
     return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name());
-  } else if (is_constant_string2t(obj.ptr_obj)) {
+  }
+
+  if (is_constant_string2t(obj.ptr_obj))
+  {
     // XXXjmorse - we should avoid encoding invalid characters in the symbol,
     // but this works for now.
     const constant_string2t &str = to_constant_string2t(obj.ptr_obj);
@@ -464,7 +474,10 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     std::replace(identifier.begin(), identifier.end(), '\0', '_');
 
     return convert_identifier_pointer(obj.ptr_obj, identifier);
-  } else if (is_constant_array2t(obj.ptr_obj)) {
+  }
+
+  if (is_constant_array2t(obj.ptr_obj))
+  {
     // This can occur (rather than being a constant string) when the C++
     // frontend performs const propagation in functions that pass around
     // character array references/pointers, but it drops some type information
@@ -475,7 +488,10 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     std::stringstream ss;
     ss << "address_of_arr_const(" << constarr_num++ << ")";
     return convert_identifier_pointer(obj.ptr_obj, ss.str());
-  } else if (is_if2t(obj.ptr_obj)) {
+  }
+
+  if (is_if2t(obj.ptr_obj))
+  {
     // We can't nondeterministically take the address of something; So instead
     // rewrite this to be if (cond) ? &a : &b;.
 
@@ -485,7 +501,10 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     address_of2tc addrof2(obj.type, ifval.false_value);
     if2tc newif(obj.type, ifval.cond, addrof1, addrof2);
     return convert_ast(newif);
-  } else if (is_typecast2t(obj.ptr_obj)) {
+  }
+
+  if (is_typecast2t(obj.ptr_obj))
+  {
     // Take the address of whatevers being casted. Either way, they all end up
     // being of a pointer_tuple type, so this should be fine.
     address_of2tc tmp(type2tc(), to_typecast2t(obj.ptr_obj).from);
