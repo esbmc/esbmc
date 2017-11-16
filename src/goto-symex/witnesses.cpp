@@ -181,6 +181,13 @@ void create_node_node(
     data_entry.put_value("true");
     nodenode.add_child("data", data_entry);
   }
+  if (node.cycle_head)
+  {
+    xmlnodet data_cycle_head;
+    data_cycle_head.add("<xmlattr>.key", "cyclehead");
+    data_cycle_head.put_value("true");
+    nodenode.add_child("data", data_cycle_head);
+  }
   if (node.invariant != 0xFF)
   {
     xmlnodet data_invariant;
@@ -338,6 +345,20 @@ void create_graphml(xmlnodet & graphml)
   sink_default_node.put_value("false");
   sink_node.add_child("default", sink_default_node);
   graphml.add_child("graphml.key", sink_node);
+
+  xmlnodet cycle_head_node;
+  cycle_head_node.add("<xmlattr>.id", "cyclehead");
+  cycle_head_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
+    "cyclehead");
+  cycle_head_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
+    "boolean");
+  cycle_head_node.add("<xmlattr>.for", "node");
+  xmlnodet cycle_head_default_node;
+  cycle_head_default_node.put_value("false");
+  cycle_head_node.add_child("default", cycle_head_default_node);
+  graphml.add_child("graphml.key", cycle_head_node);
 
   xmlnodet source_code_lang_node;
   source_code_lang_node.add("<xmlattr>.id", "sourcecodelang");
