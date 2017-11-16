@@ -45,6 +45,21 @@ xmlnodet grapht::generate_graphml(optionst & options)
 }
 
 /* */
+void grapht::check_create_new_thread(uint16_t thread_id, nodet * prev_node)
+{
+  if (std::find(std::begin(this->threads), std::end(this->threads), thread_id) == std::end(this->threads))
+  {
+    this->threads.push_back(thread_id);
+    nodet * new_node = new nodet();
+    edget * new_edge = new edget();
+    new_edge->create_thread = std::to_string(thread_id);
+    new_edge->from_node = prev_node;
+    new_edge->to_node = new_node;
+    this->edges.push_back(*new_edge);
+    prev_node = new_node;
+  }
+}
+/* */
 void grapht::create_initial_edge()
 {
   nodet * first_node = new nodet();
@@ -52,6 +67,8 @@ void grapht::create_initial_edge()
   nodet * initial_node = new nodet();;
   edget first_edge(first_node, initial_node);
   first_edge.enter_function = "main";
+  first_edge.create_thread = std::to_string(0);
+  this->threads.push_back(0);
   this->edges.push_back(first_edge);
 }
 
@@ -253,7 +270,7 @@ void create_edge_node(edget & edge, xmlnodet & edgenode)
   {
     xmlnodet data_create_thread;
     data_create_thread.add("<xmlattr>.key", "createThread");
-    data_create_thread.put_value(edge.thread_id);
+    data_create_thread.put_value(edge.create_thread);
     edgenode.add_child("data", data_create_thread);
   }
 }
