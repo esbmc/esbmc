@@ -259,7 +259,13 @@ void goto_symext::symex_assign_symbol(
   if (!guard.is_true())
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
 
+  // There are a number of cases to consider here
   expr2tc orig_name_lhs = full_lhs;
+
+  // If the original code is an assignment, use the original target instead
+  if(is_code_assign2t(cur_state->source.pc->code))
+    orig_name_lhs = to_code_assign2t(cur_state->source.pc->code).target;
+
   cur_state->rename(orig_name_lhs, true);
 
   cur_state->rename(rhs);
