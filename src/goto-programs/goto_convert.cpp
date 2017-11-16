@@ -576,16 +576,11 @@ void goto_convertt::convert_decl(
       if(globals > 0)
         break_globals2assignments(initializer, dest, new_code.location());
     }
-  }
-  else
-  {
-    initializer = side_effect_expr_nondett(var.type());
-    initializer.location() = var.location();
-  }
 
-  goto_programt sideeffects;
-  remove_sideeffects(initializer, sideeffects);
-  dest.destructive_append(sideeffects);
+    goto_programt sideeffects;
+    remove_sideeffects(initializer, sideeffects);
+    dest.destructive_append(sideeffects);
+  }
 
   // break up into decl and assignment
   copy(new_code, OTHER, dest);
@@ -593,9 +588,12 @@ void goto_convertt::convert_decl(
   if(is_vla)
     generate_dynamic_size_vla(var, dest);
 
-  code_assignt assign(var, initializer);
-  assign.location() = new_code.location();
-  copy(assign, ASSIGN, dest);
+  if(!initializer.is_nil())
+  {
+    code_assignt assign(var, initializer);
+    assign.location() = new_code.location();
+    copy(assign, ASSIGN, dest);
+  }
 }
 
 void goto_convertt::convert_decl_block(
