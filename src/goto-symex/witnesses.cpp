@@ -45,6 +45,21 @@ xmlnodet grapht::generate_graphml(optionst & options)
 }
 
 /* */
+void grapht::check_create_new_thread(uint16_t thread_id, nodet * prev_node)
+{
+  if (std::find(std::begin(this->threads), std::end(this->threads), thread_id) == std::end(this->threads))
+  {
+    this->threads.push_back(thread_id);
+    nodet * new_node = new nodet();
+    edget * new_edge = new edget();
+    new_edge->create_thread = std::to_string(thread_id);
+    new_edge->from_node = prev_node;
+    new_edge->to_node = new_node;
+    this->edges.push_back(*new_edge);
+    prev_node = new_node;
+  }
+}
+/* */
 void grapht::create_initial_edge()
 {
   nodet * first_node = new nodet();
@@ -52,6 +67,8 @@ void grapht::create_initial_edge()
   nodet * initial_node = new nodet();;
   edget first_edge(first_node, initial_node);
   first_edge.enter_function = "main";
+  first_edge.create_thread = std::to_string(0);
+  this->threads.push_back(0);
   this->edges.push_back(first_edge);
 }
 
@@ -241,6 +258,20 @@ void create_edge_node(edget & edge, xmlnodet & edgenode)
     data_assumptionScope.add("<xmlattr>.key", "assumption.scope");
     data_assumptionScope.put_value(edge.assumption_scope);
     edgenode.add_child("data", data_assumptionScope);
+  }
+  if (!edge.thread_id.empty())
+  {
+    xmlnodet data_thread_id;
+    data_thread_id.add("<xmlattr>.key", "threadId");
+    data_thread_id.put_value(edge.thread_id);
+    edgenode.add_child("data", data_thread_id);
+  }
+  if (!edge.create_thread.empty())
+  {
+    xmlnodet data_create_thread;
+    data_create_thread.add("<xmlattr>.key", "createThread");
+    data_create_thread.put_value(edge.create_thread);
+    edgenode.add_child("data", data_create_thread);
   }
 }
 
@@ -517,16 +548,38 @@ void create_graphml(xmlnodet & graphml)
   end_line_node.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", end_line_node);
 
-  xmlnodet end_offset;
-  end_offset.add("<xmlattr>.id", "endoffset");
-  end_offset.put(
+  xmlnodet end_offset_node;
+  end_offset_node.add("<xmlattr>.id", "endoffset");
+  end_offset_node.put(
     xmlnodet::path_type("<xmlattr>|attr.name", '|'),
     "endoffset");
-  end_offset.put(
+  end_offset_node.put(
     xmlnodet::path_type("<xmlattr>|attr.type", '|'),
     "int");
-  end_offset.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", end_offset);
+  end_offset_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", end_offset_node);
+
+  xmlnodet thread_id_node;
+  thread_id_node.add("<xmlattr>.id", "threadId");
+  thread_id_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
+    "threadId");
+  thread_id_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  thread_id_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", thread_id_node);
+
+  xmlnodet create_thread_node;
+  create_thread_node.add("<xmlattr>.id", "createThread");
+  create_thread_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
+    "createThread");
+  create_thread_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  create_thread_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", create_thread_node);
 
   xmlnodet witness_type_node;
   witness_type_node.add("<xmlattr>.id", "witness-type");
@@ -554,15 +607,15 @@ void _create_graph_node(
   std::string producer = options.get_option("witness-producer");
   if (producer.empty())
   {
-    producer = "ESBMC " + std::string(ESBMC_VERSION) + " ";
+    producer = "ESBMC " + std::string(ESBMC_VERSION);
     if(options.get_bool_option("k-induction"))
-      producer += "kind";
+      producer += " kind";
     else if(options.get_bool_option("k-induction-parallel"))
-      producer += "kind";
+      producer += " kind";
     else if(options.get_bool_option("falsification"))
-      producer += "falsi";
+      producer += " falsi";
     else if(options.get_bool_option("incremental-bmc"))
-      producer += "incr";
+      producer += " incr";
   }
 
   pProducer.put_value(producer);

@@ -42,7 +42,7 @@ void configt::ansi_ct::set_32()
   pointer_diff_width=4*8;
   single_width=4*8;
   double_width=8*8;
-  long_double_width=8*8;
+  long_double_width=12*8;
   char_is_unsigned=false;
   word_size=32;
   wchar_t_width=4*8;

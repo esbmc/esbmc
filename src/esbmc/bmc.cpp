@@ -94,7 +94,8 @@ void bmct::do_cbmc(
   eq->convert(*smt_conv.get());
 }
 
-void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq)
+void bmct::successful_trace(
+  boost::shared_ptr<symex_target_equationt> &eq __attribute__((unused)))
 {
   if(options.get_bool_option("result-only"))
     return;
@@ -105,7 +106,7 @@ void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq)
     {
       goto_tracet goto_trace;
       status("Building successful trace");
-      build_successful_goto_trace(eq, ns, goto_trace);
+      /* build_successful_goto_trace(eq, ns, goto_trace); FIXME */
       correctness_graphml_goto_trace(
         options,
         ns,
@@ -248,11 +249,7 @@ void bmct::report_success()
       break;
 
     case ui_message_handlert::GRAPHML:
-    {
-      goto_tracet goto_trace;
-      correctness_graphml_goto_trace(options, ns, goto_trace);
-    }
-    /* fallthrough */
+      break;
 
     case ui_message_handlert::PLAIN:
       break;
@@ -468,10 +465,12 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
 
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
-    if(res)
-    {
+
+    if (res == smt_convt::P_SATISFIABLE || res == smt_convt::P_UNSATISFIABLE)
       report_trace(res, eq);
 
+    if(res)
+    {
       if(res == smt_convt::P_SATISFIABLE)
         ++interleaving_failed;
 

@@ -272,7 +272,10 @@ void violation_graphml_goto_trace(
           (step.type == goto_trace_stept::ASSIGNMENT))))
        continue;
 
+     graph.check_create_new_thread(step.thread_nr, prev_node);
+
      edget new_edge;
+     new_edge.thread_id = std::to_string(step.thread_nr);
      new_edge.assumption = get_formated_assignment(ns, step);
      new_edge.start_line = get_line_number(
        verification_file,
@@ -332,12 +335,13 @@ void violation_graphml_goto_trace(
 
 void correctness_graphml_goto_trace(
   optionst & options,
-  const namespacet & ns,
-  const goto_tracet & goto_trace )
+  const namespacet & ns __attribute__((unused)),
+  const goto_tracet & goto_trace __attribute__((unused)) )
 {
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = verification_file;
 
+#if 0
   edget * first_edge = &graph.edges.at(0);
   nodet * prev_node = first_edge->to_node;
 
@@ -419,6 +423,7 @@ void correctness_graphml_goto_trace(
     prev_node = new_node;
     graph.edges.push_back(new_edge);
   }
+#endif
 
   xmlnodet graphml = graph.generate_graphml(options);
 

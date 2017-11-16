@@ -29,6 +29,7 @@ typet build_float_type(unsigned width)
     {
     case 32: result.set_f(23); break;
     case 64: result.set_f(52); break;
+    case 96: result.set_f(80); break;
     case 128: result.set_f(112); break;
     default: assert(false);
     }
