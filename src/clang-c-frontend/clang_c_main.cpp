@@ -80,6 +80,7 @@ bool clang_main(
   static_lifetime_init(context, init_code);
 
   init_code.make_block();
+  init_code.end_location(symbol.value.end_location());
 
   // build call to function
 
@@ -258,6 +259,3 @@ bool clang_main(
 
   return false;
 }
-
-
-
