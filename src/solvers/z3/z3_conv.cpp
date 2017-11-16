@@ -1119,6 +1119,9 @@ z3_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
 expr2tc
 z3_convt::tuple_get(const expr2tc &expr)
 {
+  if(is_pointer_type(expr->type))
+    return expr2tc();
+
   const struct_union_data &strct = get_type_def(expr->type);
 
   constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
