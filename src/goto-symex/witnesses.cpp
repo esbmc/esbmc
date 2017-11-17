@@ -717,17 +717,15 @@ void create_correctness_graph_node(
 
 std::string get_formated_assignment(const namespacet & ns, const goto_trace_stept & step)
 {
-  const irep_idt &identifier = to_symbol2t(step.original_lhs).get_symbol_name();
-  std::string lhs_symbol = id2string(identifier);
-  const symbolt *symbol;
-  if(!ns.lookup(identifier, symbol) && !symbol->pretty_name.empty())
-    lhs_symbol = id2string(symbol->pretty_name);
-  std::vector<std::string> id_sections;
-  boost::split(id_sections, lhs_symbol, boost::is_any_of("::"));
-  lhs_symbol = id_sections[id_sections.size()-1];
-  std::string rhs_value = from_expr(ns, identifier, step.value);
-  rhs_value = std::regex_replace (rhs_value, std::regex("f"),"");
-  return lhs_symbol + " == (" + rhs_value + ");";
+  std::string assignment = "";
+  if(!is_nil_expr(step.value))
+  {
+    assignment += from_expr(ns, "", step.lhs);
+    assignment += " = ";
+    assignment += from_expr(ns, "", step.value);
+    assignment += ";";
+  }
+  return assignment;
 }
 
 /* */
