@@ -466,7 +466,8 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
 
-    if (res == smt_convt::P_SATISFIABLE || res == smt_convt::P_UNSATISFIABLE)
+    if ((res == smt_convt::P_SATISFIABLE) ||
+        ((res == smt_convt::P_UNSATISFIABLE) && (interleaving_number == 1)))
       report_trace(res, eq);
 
     if(res)

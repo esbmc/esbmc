@@ -181,6 +181,13 @@ void create_node_node(
     data_entry.put_value("true");
     nodenode.add_child("data", data_entry);
   }
+  if (node.cycle_head)
+  {
+    xmlnodet data_cycle_head;
+    data_cycle_head.add("<xmlattr>.key", "cyclehead");
+    data_cycle_head.put_value("true");
+    nodenode.add_child("data", data_cycle_head);
+  }
   if (node.invariant != 0xFF)
   {
     xmlnodet data_invariant;
@@ -338,6 +345,20 @@ void create_graphml(xmlnodet & graphml)
   sink_default_node.put_value("false");
   sink_node.add_child("default", sink_default_node);
   graphml.add_child("graphml.key", sink_node);
+
+  xmlnodet cycle_head_node;
+  cycle_head_node.add("<xmlattr>.id", "cyclehead");
+  cycle_head_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'),
+    "cyclehead");
+  cycle_head_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'),
+    "boolean");
+  cycle_head_node.add("<xmlattr>.for", "node");
+  xmlnodet cycle_head_default_node;
+  cycle_head_default_node.put_value("false");
+  cycle_head_node.add_child("default", cycle_head_default_node);
+  graphml.add_child("graphml.key", cycle_head_node);
 
   xmlnodet source_code_lang_node;
   source_code_lang_node.add("<xmlattr>.id", "sourcecodelang");
@@ -694,19 +715,41 @@ void create_correctness_graph_node(
   graphnode.add_child("data", pWitnessType);
 }
 
+const std::regex regex_array("[a-zA-Z0-9_]+ = \\{ ?(-?[0-9]+(.[0-9]+)?,? ?)+ ?\\};");
+
+/* */
+void reformat_assignment_array(
+  const namespacet & ns,
+  const goto_trace_stept & step,
+  std::string & assignment)
+{
+  std::regex re{R"(((-?[0-9]+(.[0-9]+)?)))"};
+  using reg_itr = std::regex_token_iterator<std::string::iterator>;
+  uint16_t pos = 0;
+  std::string lhs = from_expr(ns, "", step.lhs);
+  std::string assignment_array = "";
+  for (reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{}; it != end;) {
+    std::string value = *it++;
+    assignment_array += lhs + "[" + std::to_string(pos++) + "] = " + value + "; ";
+  }
+  assignment_array.pop_back();
+  assignment = assignment_array;
+}
+
+/* */
 std::string get_formated_assignment(const namespacet & ns, const goto_trace_stept & step)
 {
-  const irep_idt &identifier = to_symbol2t(step.original_lhs).get_symbol_name();
-  std::string lhs_symbol = id2string(identifier);
-  const symbolt *symbol;
-  if(!ns.lookup(identifier, symbol) && !symbol->pretty_name.empty())
-    lhs_symbol = id2string(symbol->pretty_name);
-  std::vector<std::string> id_sections;
-  boost::split(id_sections, lhs_symbol, boost::is_any_of("::"));
-  lhs_symbol = id_sections[id_sections.size()-1];
-  std::string rhs_value = from_expr(ns, identifier, step.value);
-  rhs_value = std::regex_replace (rhs_value, std::regex("f"),"");
-  return lhs_symbol + " == (" + rhs_value + ");";
+  std::string assignment = "";
+  if(!is_nil_expr(step.value))
+  {
+    assignment += from_expr(ns, "", step.lhs);
+    assignment += " = ";
+    assignment += from_expr(ns, "", step.value);
+    assignment += ";";
+    if (std::regex_match(assignment, regex_array))
+      reformat_assignment_array(ns, step, assignment);
+  }
+  return assignment;
 }
 
 /* */

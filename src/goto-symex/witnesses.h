@@ -19,10 +19,11 @@ private:
   static short int _id;
 public:
   std::string   id;
-  bool          entry     = false;
-  bool          sink      = false;
-  bool          violation = false;
-  unsigned char invariant = 0xFF;
+  bool          entry      = false;
+  bool          sink       = false;
+  bool          violation  = false;
+  bool          cycle_head = false;
+  unsigned char invariant  = 0xFF;
   std::string   invariant_scope;
   nodet(void)
   {
