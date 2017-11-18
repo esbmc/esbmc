@@ -715,6 +715,28 @@ void create_correctness_graph_node(
   graphnode.add_child("data", pWitnessType);
 }
 
+const std::regex regex_array("[a-zA-Z0-9_]+ = \\{ ?(-?[0-9]+(.[0-9]+)?,? ?)+ ?\\};");
+
+/* */
+void reformat_assignment_array(
+  const namespacet & ns,
+  const goto_trace_stept & step,
+  std::string & assignment)
+{
+  std::regex re{R"(((-?[0-9]+(.[0-9]+)?)))"};
+  using reg_itr = std::regex_token_iterator<std::string::iterator>;
+  uint16_t pos = 0;
+  std::string lhs = from_expr(ns, "", step.lhs);
+  std::string assignment_array = "";
+  for (reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{}; it != end;) {
+    std::string value = *it++;
+    assignment_array += lhs + "[" + std::to_string(pos++) + "] = " + value + "; ";
+  }
+  assignment_array.pop_back();
+  assignment = assignment_array;
+}
+
+/* */
 std::string get_formated_assignment(const namespacet & ns, const goto_trace_stept & step)
 {
   std::string assignment = "";
@@ -724,6 +746,8 @@ std::string get_formated_assignment(const namespacet & ns, const goto_trace_step
     assignment += " = ";
     assignment += from_expr(ns, "", step.value);
     assignment += ";";
+    if (std::regex_match(assignment, regex_array))
+      reformat_assignment_array(ns, step, assignment);
   }
   return assignment;
 }
