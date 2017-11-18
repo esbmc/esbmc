@@ -268,6 +268,7 @@ void violation_graphml_goto_trace(
        continue;
 
      graph.check_create_new_thread(step.thread_nr, prev_node);
+     prev_node = graph.edges.back().to_node;
 
      edget new_edge;
      new_edge.thread_id = std::to_string(step.thread_nr);
