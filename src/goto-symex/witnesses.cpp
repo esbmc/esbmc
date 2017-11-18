@@ -716,6 +716,7 @@ void create_correctness_graph_node(
 }
 
 const std::regex regex_array("[a-zA-Z0-9_]+ = \\{ ?(-?[0-9]+(.[0-9]+)?,? ?)+ ?\\};");
+const std::regex regex_structs("[a-zA-Z0-9_]+ = \\{ ?(\\.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?),? ?)+\\};");
 
 /* */
 void reformat_assignment_array(
@@ -737,6 +738,24 @@ void reformat_assignment_array(
 }
 
 /* */
+void reformat_assignment_structs(
+  const namespacet & ns,
+  const goto_trace_stept & step,
+  std::string & assignment)
+{
+  std::regex re{R"((((.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?))+)))"};
+  using reg_itr = std::regex_token_iterator<std::string::iterator>;
+  std::string lhs = from_expr(ns, "", step.lhs);
+  std::string assignment_struct = "";
+  for (reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{}; it != end;) {
+   std::string a = *it++;
+   assignment_struct += lhs + a + "; ";
+  }
+  assignment_struct.pop_back();
+  assignment = assignment_struct;
+}
+
+/* */
 std::string get_formated_assignment(const namespacet & ns, const goto_trace_stept & step)
 {
   std::string assignment = "";
@@ -748,6 +767,8 @@ std::string get_formated_assignment(const namespacet & ns, const goto_trace_step
     assignment += ";";
     if (std::regex_match(assignment, regex_array))
       reformat_assignment_array(ns, step, assignment);
+    else if (std::regex_match(assignment, regex_structs))
+      reformat_assignment_structs(ns, step, assignment);
   }
   return assignment;
 }
