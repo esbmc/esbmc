@@ -329,7 +329,6 @@ void correctness_graphml_goto_trace(
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = verification_file;
 
-#if 0
   edget * first_edge = &graph.edges.at(0);
   nodet * prev_node = first_edge->to_node;
 
@@ -342,16 +341,26 @@ void correctness_graphml_goto_trace(
   {
     /* checking restrictions for correctness GraphML */
     if ((!(is_valid_witness_step(ns, step))) ||
-        (!(step.is_assignment() || step.is_assume() || step.is_assert())))
+        (!(step.is_assume() || step.is_assert())))
       continue;
 
-    nodet * new_node = new nodet();
-    edget new_edge;
-    new_edge.assumption = get_formated_assignment(ns, step);
-    new_edge.start_line = get_line_number(
+    std::string invariant = get_invariant(
       verification_file,
       std::atoi(step.pc->location.get_line().c_str()),
       options);
+
+    if (invariant.empty())
+      continue; /* we don't have to consider this invariant */
+
+    nodet * new_node = new nodet();
+    edget * new_edge = new edget();
+    std::string function = step.pc->location.get_function().c_str();
+    new_edge->start_line = get_line_number(
+      verification_file,
+      std::atoi(step.pc->location.get_line().c_str()),
+      options);
+    new_node->invariant = invariant;
+    new_node->invariant_scope = function;
 
 #ifndef lightweight_witness
     new_edge.end_line = new_edge.start_line;
@@ -380,38 +389,11 @@ void correctness_graphml_goto_trace(
     }
 #endif
 
-    if(step.is_assignment())
-    {
-      /* assignment are not required according svcomp2018 specifications */
-    }
-    else if(step.is_assume()) //FIXME this field should be updated.
-    {
-      std::string code_line = ""; //FIXME //line_content_map[line_number];
-      if((code_line.find("__VERIFIER_assume") != std::string::npos)
-        || (code_line.find("__ESBMC_assume") != std::string::npos)
-        || (code_line.find("assume") != std::string::npos))
-      {
-        code_line = w_string_replace(code_line, "__VERIFIER_assume", "");
-        code_line = w_string_replace(code_line, "__ESBMC_assume", "");
-        code_line = w_string_replace(code_line, "assume(", "");
-        code_line = w_string_replace(code_line, ";", "");
-#ifndef lightweight_witness
-        new_node->invariant = 0; //FIXME code_line;
-        new_edge.assumption_scope = function;
-#endif
-      }
-    }
-    else if(step.is_assert())
-    {
-      /* nothing to do here yet */
-    }
-
-    new_edge.from_node = prev_node;
-    new_edge.to_node = new_node;
+    new_edge->from_node = prev_node;
+    new_edge->to_node = new_node;
     prev_node = new_node;
-    graph.edges.push_back(new_edge);
+    graph.edges.push_back(*new_edge);
   }
-#endif
 
   xmlnodet graphml = graph.generate_graphml(options);
 

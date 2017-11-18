@@ -188,7 +188,7 @@ void create_node_node(
     data_cycle_head.put_value("true");
     nodenode.add_child("data", data_cycle_head);
   }
-  if (node.invariant != 0xFF)
+  if (!node.invariant.empty())
   {
     xmlnodet data_invariant;
     data_invariant.add("<xmlattr>.key", "invariant");
@@ -716,7 +716,6 @@ void create_correctness_graph_node(
 }
 
 const std::regex regex_array("[a-zA-Z0-9_]+ = \\{ ?(-?[0-9]+(.[0-9]+)?,? ?)+ ?\\};");
-const std::regex regex_structs("[a-zA-Z0-9_]+ = \\{ ?(\\.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?),? ?)+\\};");
 
 /* */
 void reformat_assignment_array(
@@ -736,6 +735,8 @@ void reformat_assignment_array(
   assignment_array.pop_back();
   assignment = assignment_array;
 }
+
+const std::regex regex_structs("[a-zA-Z0-9_]+ = \\{ ?(\\.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?),? ?)+\\};");
 
 /* */
 void reformat_assignment_structs(
@@ -896,4 +897,54 @@ uint16_t get_line_number(
     }
   }
   return line_count;
+}
+
+std::string read_line(std::string file, uint16_t line_number)
+{
+  std::string line;
+  std::string line_code = "";
+  std::ifstream stream(file);
+  uint16_t line_count = 0;
+  if (stream.is_open())
+  {
+	while(getline(stream, line) &&
+		  line_count < line_number)
+	{
+      line_code = line;
+	  line_count++;
+	}
+  }
+  return line_code;
+}
+
+const std::regex regex_invariants("( +)?(__((VERIFIER|ESBMC))_)?(assume|assert)\\([a-zA-Z(-?(0-9))\\[\\]_>=+/*<~.&! \\(\\)]+\\);( +)?");
+
+std::string get_invariant(
+  std::string verified_file,
+  uint16_t line_number,
+  optionst & options )
+{
+  std::string invariant = "";
+  std::string line_code = "";
+
+  std::string program_file = options.get_option("witness-programfile");
+  if (program_file.empty() || verified_file == program_file)
+  {
+    line_code = read_line(verified_file, line_number);
+  }
+  else
+  {
+    uint16_t program_file_line_number = get_line_number(verified_file, line_number, options);
+    line_code = read_line(program_file, program_file_line_number);
+  }
+  if (std::regex_match(line_code, regex_invariants))
+  {
+    std::regex re("(\\([a-zA-Z(-?(0-9))\\[\\]_>=+/*<~.&! \\(\\)]+\\))");
+    using reg_itr = std::regex_token_iterator<std::string::iterator>;
+    for (reg_itr it{line_code.begin(), line_code.end(), re, 1}, end{}; it != end;) {
+      invariant = *it++;
+      break;
+    }
+  }
+  return invariant;
 }
