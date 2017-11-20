@@ -247,7 +247,7 @@ void show_state_header(
 void violation_graphml_goto_trace(
   optionst & options,
   const namespacet & ns,
-  const goto_tracet & goto_trace )
+  const goto_tracet & goto_trace)
 {
   grapht graph(grapht::VIOLATION);
   graph.verified_file = verification_file;
@@ -255,78 +255,70 @@ void violation_graphml_goto_trace(
   edget * first_edge = &graph.edges.at(0);
   nodet * prev_node = first_edge->to_node;
 
-#ifndef lightweight_witness
-  std::map<std::string, uint16_t> func_control_map;
-  std::string prev_function = first_edge->enter_function;
-#endif
-
   for(const auto & step : goto_trace.steps)
-   {
-     /* checking restrictions for violation GraphML */
-     if (!((is_valid_witness_step(ns, step) &&
-          (step.type == goto_trace_stept::ASSIGNMENT))))
-       continue;
+  {
+    switch (step.type)
+    {
+      case goto_trace_stept::ASSERT:
+        if(!step.guard)
+        {
+          nodet * violation_node = new nodet();
+          violation_node->violation = true;
 
-     graph.check_create_new_thread(step.thread_nr, prev_node);
-     prev_node = graph.edges.back().to_node;
+          edget violation_edge(prev_node, violation_node);
+          violation_edge.thread_id = std::to_string(step.thread_nr);
+          violation_edge.start_line =
+              get_line_number(
+                verification_file,
+                std::atoi(step.pc->location.get_line().c_str()),
+                options);
 
-     edget new_edge;
-     new_edge.thread_id = std::to_string(step.thread_nr);
-     new_edge.assumption = get_formated_assignment(ns, step);
-     new_edge.start_line = get_line_number(
-       verification_file,
-       std::atoi(step.pc->location.get_line().c_str()),
-       options);
+          graph.edges.push_back(violation_edge);
 
-#ifndef lightweight_witness
-     new_edge.end_line = new_edge.start_line;
-     if(new_edge.start_line)
-       get_offsets(verification_file, new_edge.start_line,
-         new_edge.start_offset, new_edge.end_offset);
+          // Having printed a property violation, don't print more steps.
 
-     /* check if it has entered or returned from a function */
-     std::string function = step.pc->location.get_function().c_str();
-     new_edge.assumption_scope = function;
-     if(prev_function != function && !function.empty())
-     {
-       if(func_control_map.find(function) == func_control_map.end())
-       {
-          /* it is entering in a function for the first time */
-          func_control_map.insert(std::make_pair(function, new_edge.start_line));
-          new_edge.enter_function = function;
-          prev_function = function;
-       }
-       else
-       {
-         /* it is backing from another function */
-         new_edge.return_from_function = prev_function;
-         new_edge.enter_function = function;
-         prev_function = function;
-       }
-     }
-#endif
-
-     nodet * new_node = new nodet();
-     new_edge.from_node = prev_node;
-     new_edge.to_node = new_node;
-     prev_node = new_node;
-     graph.edges.push_back(new_edge);
-   }
-
-  nodet * violation_node = new nodet();
-  violation_node->violation = true;
-  edget violation_edge(prev_node, violation_node);
-  graph.edges.push_back(violation_edge);
-
-  xmlnodet graphml = graph.generate_graphml(options);
+          xmlnodet graphml = graph.generate_graphml(options);
 
 #if (BOOST_VERSION >= 105700)
-  boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
+          boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
 #else
-  boost::property_tree::xml_writer_settings<char> settings(' ', 2);
+          boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
-  boost::property_tree::write_xml(
-    options.get_option("witness-output"), graphml, std::locale(), settings);
+          boost::property_tree::write_xml(
+            options.get_option("witness-output"), graphml, std::locale(), settings);
+
+          return;
+        }
+        break;
+
+      case goto_trace_stept::ASSIGNMENT:
+        if(step.pc->is_assign() || step.pc->is_return()
+            || (step.pc->is_other() && is_nil_expr(step.lhs)))
+        {
+          graph.check_create_new_thread(step.thread_nr, prev_node);
+          prev_node = graph.edges.back().to_node;
+
+          edget new_edge;
+          new_edge.thread_id = std::to_string(step.thread_nr);
+          new_edge.assumption = get_formated_assignment(ns, step);
+          new_edge.start_line =
+            get_line_number(
+              verification_file,
+              std::atoi(step.pc->location.get_line().c_str()),
+              options);
+
+          nodet * new_node = new nodet();
+          new_edge.from_node = prev_node;
+          new_edge.to_node = new_node;
+          prev_node = new_node;
+          graph.edges.push_back(new_edge);
+        }
+        break;
+
+      default:
+        continue;
+    }
+  }
 }
 
 void correctness_graphml_goto_trace(
@@ -463,7 +455,7 @@ void show_goto_trace(
 
       case goto_trace_stept::ASSIGNMENT:
         if(step.pc->is_assign() || step.pc->is_return()
-            || (step.pc->is_other() && is_nil_expr(step.original_lhs)))
+            || (step.pc->is_other() && is_nil_expr(step.lhs)))
         {
           if(prev_step_nr != step.step_nr || first_step)
           {
