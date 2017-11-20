@@ -93,7 +93,8 @@ void goto_loopst::create_function_loop(
     ++size;
   }
 
-  it1->set_size(size);
+  // Include loop_exit
+  it1->set_size(size+1);
 }
 
 void goto_loopst::get_modified_variables(

@@ -1,9 +1,8 @@
 int nondet_int();
 
-unsigned int M;
-
 main()
 {
+  unsigned int M;
   int A[M], B[M], C[M];
   unsigned int  i;
   

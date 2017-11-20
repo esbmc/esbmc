@@ -532,6 +532,15 @@ void
 goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
+  if(k_induction && !options.get_bool_option("disable-inductive-step"))
+  {
+    std::cout << "**** WARNING: k-induction does not support concurrency yet. "
+        << "Disabling inductive step\n";
+
+    // Disable inductive step on multi threaded code
+    options.set_option("disable-inductive-step", true);
+  }
+
   // As an argument, we expect the address of a symbol.
   const expr2tc &addr = call.operands[0];
   assert(is_address_of2t(addr));

@@ -34,6 +34,9 @@ void goto_k_inductiont::goto_k_induction()
   // Full unwind the program
   for(auto & function_loop : function_loops)
   {
+    if(function_loop.get_loop_vars().empty())
+      continue;
+
     // TODO: Can we check if the loop is infinite? If so, we should
     // disable the forward condition
 
@@ -133,6 +136,9 @@ void goto_k_inductiont::assume_loop_cond_before_loop(
   goto_programt::targett& loop_head,
   expr2tc &loop_cond)
 {
+  if(is_true(loop_cond))
+    return;
+
   goto_programt dest;
   assume_cond(loop_cond, dest);
 
@@ -148,10 +154,10 @@ void goto_k_inductiont::assume_neg_loop_cond_after_loop(
   make_not(neg_loop_cond);
   assume_cond(neg_loop_cond, dest);
 
-  goto_programt::targett _loop_exit = loop_exit;
-  ++_loop_exit;
+//  goto_programt::targett _loop_exit = loop_exit;
+//  ++_loop_exit;
 
-  goto_function.body.insert_swap(_loop_exit, dest);
+  goto_function.body.insert_swap(loop_exit, dest);
 }
 
 void goto_k_inductiont::adjust_loop_head_and_exit(

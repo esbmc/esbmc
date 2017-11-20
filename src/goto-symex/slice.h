@@ -24,7 +24,6 @@ public:
 
   typedef hash_set_cont<std::string, string_hash> symbol_sett;
   symbol_sett depends;
-
   BigInt ignored;
 
 protected:

@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-symex/slice.h>
 
-
 symex_slicet::symex_slicet(bool assume)
   : ignored(0),
     slice_assumes(assume),

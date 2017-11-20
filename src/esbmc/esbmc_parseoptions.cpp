@@ -961,9 +961,6 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
 int esbmc_parseoptionst::doit_k_induction()
 {
-  // Generate goto functions for base case and forward condition
-  status("\n*** Generating Base Case and Forward Condition ***");
-
   optionst opts;
   get_command_line_options(opts);
 
@@ -992,29 +989,15 @@ int esbmc_parseoptionst::doit_k_induction()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    std::cout << "\n*** K-Induction Loop Iteration ";
-    std::cout << integer2string(k_step);
+    std::cout << "\n*** Iteration number ";
+    std::cout << k_step;
     std::cout << " ***\n";
-    std::cout << "*** Checking base case\n";
 
     if(do_base_case(opts, goto_functions, k_step))
       return true;
 
-    std::cout << "\n*** K-Induction Loop Iteration ";
-    std::cout << integer2string(k_step);
-    std::cout << " ***\n";
-    std::cout << "*** Checking forward condition\n";
-
     if(!do_forward_condition(opts, goto_functions, k_step))
       return false;
-
-    if(k_step > 1)
-    {
-      std::cout << "\n*** K-Induction Loop Iteration ";
-      std::cout << integer2string( k_step);
-      std::cout << " ***\n";
-      std::cout << "*** Checking inductive step\n";
-    }
 
     if(!do_inductive_step(opts, goto_functions, k_step))
       return false;
@@ -1028,9 +1011,6 @@ int esbmc_parseoptionst::doit_k_induction()
 
 int esbmc_parseoptionst::doit_falsification()
 {
-  // Generate goto functions for base case and forward condition
-  goto_functionst goto_functions;
-
   optionst opts;
   get_command_line_options(opts);
 
@@ -1075,8 +1055,6 @@ int esbmc_parseoptionst::doit_falsification()
 
 int esbmc_parseoptionst::doit_incremental()
 {
-  // Generate goto functions for base case and forward condition
-
   optionst opts;
   get_command_line_options(opts);
 
@@ -1123,17 +1101,23 @@ int esbmc_parseoptionst::doit_incremental()
 }
 
 int esbmc_parseoptionst::do_base_case(
-  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
+  optionst &opts,
+  const goto_functionst &goto_functions,
+  const BigInt &k_step)
 {
   opts.set_option("base-case", true);
   opts.set_option("forward-condition", false);
   opts.set_option("inductive-step", false);
+
+  opts.set_option("no-unwinding-assertions", true);
+  opts.set_option("partial-loops", false);
 
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
+  std::cout << "*** Checking base case\n";
   switch(do_bmc(bmc))
   {
     case smt_convt::P_UNSATISFIABLE:
@@ -1154,7 +1138,9 @@ int esbmc_parseoptionst::do_base_case(
 }
 
 int esbmc_parseoptionst::do_forward_condition(
-  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
+  optionst &opts,
+  const goto_functionst &goto_functions,
+  const BigInt &k_step)
 {
   if(opts.get_bool_option("disable-forward-condition"))
     return true;
@@ -1163,12 +1149,28 @@ int esbmc_parseoptionst::do_forward_condition(
   opts.set_option("forward-condition", true);
   opts.set_option("inductive-step", false);
 
+  opts.set_option("no-unwinding-assertions", false);
+  opts.set_option("partial-loops", false);
+
+  // We have to disable assertions in the forward condition but
+  // restore the previous value after it
+  bool no_assertions = opts.get_bool_option("no-assertions");
+
+  // Turn assertions off
+  opts.set_option("no-assertions", true);
+
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  switch(do_bmc(bmc))
+  std::cout << "*** Checking forward condition\n";
+  auto res = do_bmc(bmc);
+
+  // Restore the no assertion flag, before checking the other steps
+  opts.set_option("no-assertions", no_assertions);
+
+  switch(res)
   {
     case smt_convt::P_SATISFIABLE:
     case smt_convt::P_SMTLIB:
@@ -1189,43 +1191,45 @@ int esbmc_parseoptionst::do_forward_condition(
 }
 
 int esbmc_parseoptionst::do_inductive_step(
-  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
+  optionst &opts,
+  const goto_functionst &goto_functions,
+  const BigInt &k_step)
 {
   // Don't run inductive step for k_step == 1
   if(k_step == 1)
+    return true;
+
+  if(opts.get_bool_option("disable-inductive-step"))
     return true;
 
   opts.set_option("base-case", false);
   opts.set_option("forward-condition", false);
   opts.set_option("inductive-step", true);
 
+  opts.set_option("no-unwinding-assertions", true);
+  opts.set_option("partial-loops", true);
+
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  try {
-    switch(do_bmc(bmc))
-    {
-      case smt_convt::P_SATISFIABLE:
-      case smt_convt::P_SMTLIB:
-      case smt_convt::P_ERROR:
-        break;
-
-      case smt_convt::P_UNSATISFIABLE:
-        std::cout << "\nSolution found by the inductive step "
-                  << "(k = " << k_step << ")\n";
-        return false;
-
-      default:
-        std::cout << "Unknown BMC result\n";
-        abort();
-    }
-  }
-  catch(...)
+  std::cout << "*** Checking inductive step\n";
+  switch(do_bmc(bmc))
   {
-    // If there is a dynamic allocation during goto symex, an
-    // exception will be thrown and the inductive step is disabled
+    case smt_convt::P_SATISFIABLE:
+    case smt_convt::P_SMTLIB:
+    case smt_convt::P_ERROR:
+      break;
+
+    case smt_convt::P_UNSATISFIABLE:
+      std::cout << "\nSolution found by the inductive step "
+                << "(k = " << k_step << ")\n";
+      return false;
+
+    default:
+      std::cout << "Unknown BMC result\n";
+      abort();
   }
 
   return true;

@@ -62,20 +62,6 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     cur_state->source.pc->location_number <
     goto_target->location_number;
 
-  // Check if we are inside a loop, during inductive step
-  if(inductive_step && (instruction.loop_number != 0))
-  {
-    // We just entered the loop, save the loop number
-    if(forward)
-      loop_numbers.push(instruction.loop_number);
-    else
-    {
-      // We are leaving the loop, remove from stack
-      assert(instruction.loop_number == loop_numbers.top());
-      loop_numbers.pop();
-    }
-  }
-
   if (new_guard_false)
   {
     // reset unwinding counter
@@ -319,34 +305,10 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
   const irep_idt &loop_id = cur_state->source.pc->location.loopid();
 
-  expr2tc negated_cond;
+  expr2tc negated_cond = guard;
+  make_not(negated_cond);
 
-  if (is_true(guard)) {
-    negated_cond = gen_false_expr();
-  } else {
-    negated_cond = not2tc(guard);
-  }
-
-  if (base_case || inductive_step)
-  {
-    // generate unwinding assumption
-    expr2tc guarded_expr=negated_cond;
-    cur_state->guard.guard_expr(guarded_expr);
-    target->assumption(cur_state->guard.as_expr(), guarded_expr, cur_state->source);
-
-    // add to state guard to prevent further assignments
-    cur_state->guard.add(negated_cond);
-  }
-  else if (forward_condition)
-  {
-    // generate unwinding assertion
-    claim(negated_cond,
-      "unwinding assertion loop "+id2string(loop_id));
-
-    // add to state guard to prevent further assignments
-    cur_state->guard.add(negated_cond);
-  }
-  else if(!partial_loops)
+  if(!partial_loops)
   {
     if(!no_unwinding_assertions)
     {

@@ -85,6 +85,23 @@ goto_symext::symex_step(reachability_treet & art)
     cur_state->depth++;
   }
 
+  // Handle loops in inductive step
+  // Check if we are inside a loop, during inductive step
+  if(inductive_step && (instruction.loop_number != 0))
+  {
+    // If we are entering a loop, add it to the stack
+    if(!loop_numbers.size() || (loop_numbers.top() != instruction.loop_number))
+    {
+      loop_numbers.push(instruction.loop_number);
+    }
+    else
+    {
+      // We are leaving the loop, remove from stack
+      assert(instruction.loop_number == loop_numbers.top());
+      loop_numbers.pop();
+    }
+  }
+
   // actually do instruction
   switch (instruction.type) {
   case SKIP:
@@ -301,9 +318,8 @@ void goto_symext::symex_assert()
 
   // Don't convert if it's an user provided assertion and we're running in
   // no assertion mode or forward condition
-  if(cur_state->source.pc->location.user_provided())
-    if(no_assertions || forward_condition)
-      return;
+  if(cur_state->source.pc->location.user_provided() && no_assertions)
+    return;
 
   std::string msg = cur_state->source.pc->location.comment().as_string();
   if (msg == "") msg = "assertion";

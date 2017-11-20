@@ -30,6 +30,15 @@ goto_symext::get_unwind_recursion(const irep_idt &identifier, BigInt unwind)
     if(options.get_bool_option("abort-on-recursion"))
       abort();
 
+    if(k_induction && !options.get_bool_option("disable-inductive-step"))
+    {
+      std::cout << "**** WARNING: k-induction does not support recursion yet. "
+          << "Disabling inductive step\n";
+
+      // Disable inductive step on recursion
+      options.set_option("disable-inductive-step", true);
+    }
+
     const symbolt &symbol = ns.lookup(identifier);
 
     std::string msg = "Unwinding recursion " + id2string(symbol.display_name())
@@ -198,9 +207,8 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
 
   // see if it's too much
   if (get_unwind_recursion(identifier, unwinding_counter)) {
-    if (!no_unwinding_assertions && !base_case) {
-      claim(gen_false_expr(),
-            "recursion unwinding assertion");
+    if (!no_unwinding_assertions) {
+      claim(gen_false_expr(), "recursion unwinding assertion");
     } else {
       // Add an unwinding assumption.
       expr2tc now_guard = cur_state->guard.as_expr();

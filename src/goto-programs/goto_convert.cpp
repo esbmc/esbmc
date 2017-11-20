@@ -1752,9 +1752,9 @@ void goto_convertt::generate_conditional_branch(
   const locationt &location,
   goto_programt &dest)
 {
-  if(guard.id()=="not")
+  if(guard.id() == "not")
   {
-    assert(guard.operands().size()==1);
+    assert(guard.operands().size() == 1);
     // swap targets
     generate_conditional_branch(
       guard.op0(), target_false, target_true, location, dest);
@@ -1763,24 +1763,24 @@ void goto_convertt::generate_conditional_branch(
 
   if(!has_sideeffect(guard))
   {
-	exprt g = guard;
-	if(options.get_bool_option("atomicity-check"))
-	{
-	  unsigned int globals = get_expr_number_globals(g);
-	  if(globals > 0)
-		break_globals2assignments(g, dest,location);
-	}
+    exprt g = guard;
+    if(options.get_bool_option("atomicity-check"))
+    {
+      unsigned int globals = get_expr_number_globals(g);
+      if(globals > 0)
+        break_globals2assignments(g, dest, location);
+    }
 
     // this is trivial
-    goto_programt::targett t_true=dest.add_instruction();
+    goto_programt::targett t_true = dest.add_instruction();
     t_true->make_goto(target_true);
     migrate_expr(guard, t_true->guard);
-    t_true->location=location;
+    t_true->location = location;
 
-    goto_programt::targett t_false=dest.add_instruction();
+    goto_programt::targett t_false = dest.add_instruction();
     t_false->make_goto(target_false);
     t_false->guard = gen_true_expr();
-    t_false->location=location;
+    t_false->location = location;
     return;
   }
 
@@ -1800,14 +1800,14 @@ void goto_convertt::generate_conditional_branch(
       generate_conditional_branch(
         gen_not(*it), target_false, location, dest);
 
-    goto_programt::targett t_true=dest.add_instruction();
+    goto_programt::targett t_true = dest.add_instruction();
     t_true->make_goto(target_true);
     t_true->guard = gen_true_expr();
-    t_true->location=location;
+    t_true->location = location;
 
     return;
   }
-  else if(guard.id()=="or")
+  else if(guard.id() == "or")
   {
     // turn
     //   if(a || b) goto target_true; else goto target_false;
@@ -1823,33 +1823,33 @@ void goto_convertt::generate_conditional_branch(
       generate_conditional_branch(
         *it, target_true, location, dest);
 
-    goto_programt::targett t_false=dest.add_instruction();
+    goto_programt::targett t_false = dest.add_instruction();
     t_false->make_goto(target_false);
     t_false->guard = gen_true_expr();
-    t_false->location=guard.location();
+    t_false->location = guard.location();
 
     return;
   }
 
-  exprt cond=guard;
+  exprt cond = guard;
   remove_sideeffects(cond, dest);
 
   if(options.get_bool_option("atomicity-check"))
   {
     unsigned int globals = get_expr_number_globals(cond);
-	if(globals > 0)
-	  break_globals2assignments(cond, dest,location);
+    if(globals > 0)
+      break_globals2assignments(cond, dest, location);
   }
 
-  goto_programt::targett t_true=dest.add_instruction();
+  goto_programt::targett t_true = dest.add_instruction();
   t_true->make_goto(target_true);
   migrate_expr(cond, t_true->guard);
-  t_true->location=guard.location();
+  t_true->location = guard.location();
 
-  goto_programt::targett t_false=dest.add_instruction();
+  goto_programt::targett t_false = dest.add_instruction();
   t_false->make_goto(target_false);
   t_false->guard = gen_true_expr();
-  t_false->location=guard.location();
+  t_false->location = guard.location();
 }
 
 symbolt &goto_convertt::new_tmp_symbol(const typet &type)
