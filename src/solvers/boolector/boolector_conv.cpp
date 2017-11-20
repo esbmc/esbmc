@@ -404,8 +404,6 @@ boolector_convt::get_array_elem(
 {
   const btor_smt_ast *ast = btor_ast_downcast(array);
 
-  unsigned long array_bound = array->sort->get_domain_width();
-
   int size;
   char **indicies, **values;
   boolector_array_assignment(btor, ast->e, &indicies, &values, &size);
