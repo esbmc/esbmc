@@ -61,7 +61,7 @@ class Unwindings:
 
 # Function to run esbmc
 def run_esbmc(cmd_line):
-  print "Verifying with ESBMC "
+  print "Verifying with ESBMC"
   print "Command: " + cmd_line
 
   the_args = shlex.split(cmd_line)
@@ -69,6 +69,8 @@ def run_esbmc(cmd_line):
   p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   (stdout, stderr) = p.communicate()
 
+  """ DEBUG output
+  """
   print stdout
   print stderr
 
@@ -83,7 +85,7 @@ def parse_result(the_output, prop):
   if "Out of memory" in the_output:
     return Result.err_memout
 
-  if "try with Z3 or Mathsat" in the_output:
+  if "Chosen solver doesn\'t support floating-point numbers" in the_output:
     return Result.force_fp_mode
 
   # Error messages:
@@ -184,23 +186,22 @@ def get_result_string(the_result):
 esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
-esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --context-bound 7 "
-esbmc_dargs += "--state-hashing -Dldv_assume=__ESBMC_assume "
+esbmc_dargs = "--no-div-by-zero-check --force-malloc-success "
+esbmc_dargs += "--state-hashing --no-align-check --k-step 2 "
 
 def get_command_line(strat, prop, arch, benchmark, fp_mode):
   command_line = esbmc_path + esbmc_dargs
 
-  # Add witness arg, if we're not checking memory
-  if prop != Property.memory:
-    command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
+  # Add witness arg
+  command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
 
   # Add strategy
   if strat == "kinduction":
-    command_line += "--floatbv --unlimited-k-steps --z3 --k-induction "
+    command_line += "--floatbv --unlimited-k-steps --k-induction "
   elif strat == "falsi":
-    command_line += "--floatbv --unlimited-k-steps --z3 --falsification "
+    command_line += "--floatbv --unlimited-k-steps --falsification "
   elif strat == "incr":
-    command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc "
+    command_line += "--floatbv --unlimited-k-steps --incremental-bmc "
   else:
     print "Unknown strategy"
     exit(1)
@@ -216,25 +217,29 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-assertions "
   elif prop == Property.reach:
-    command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
+    command_line += "--no-pointer-check --no-bounds-check "
+
+  # if we're running in FP mode, use MathSAT
+  if fp_mode:
+    command_line += "--mathsat "
 
   # Benchmark
   command_line += benchmark
   return command_line
 
-def verify(strat, prop):
+def verify(strat, prop, fp_mode):
   # Get command line
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, False)
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, fp_mode)
 
   # Call ESBMC
   output = run_esbmc(esbmc_command_line)
 
-  # Parse output
-  return parse_result(output, category_property)
+  res = parse_result(output, category_property)
+  if(res == Result.force_fp_mode):
+    return verify(strat, prop, True)
 
-def setlimits():
-  # Set maximum RAM
-  resource.setrlimit(resource.RLIMIT_AS, (13958643712, 13958643712))
+  # Parse output
+  return res
 
 # Options
 parser = argparse.ArgumentParser()
@@ -280,5 +285,5 @@ else:
   print "Unsupported Property"
   exit(1)
 
-result = verify(strategy, category_property)
+result = verify(strategy, category_property, False)
 print get_result_string(result)
