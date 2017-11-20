@@ -11,7 +11,7 @@ typedef boost::property_tree::ptree xmlnodet;
 short int nodet::_id = 0;
 short int edget::_id = 0;
 
-xmlnodet grapht::generate_graphml(optionst & options)
+void grapht::generate_graphml(optionst & options)
 {
   xmlnodet graphml_node;
   create_graphml(graphml_node);
@@ -41,7 +41,12 @@ xmlnodet grapht::generate_graphml(optionst & options)
   }
   graphml_node.add_child("graphml.graph", graph_node);
 
-  return graphml_node;
+#if (BOOST_VERSION >= 105700)
+  boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
+#else
+  boost::property_tree::xml_writer_settings<char> settings(' ', 2);
+#endif
+  boost::property_tree::write_xml(options.get_option("witness-output"), graphml_node, std::locale(), settings);
 }
 
 /* */
@@ -188,7 +193,7 @@ void create_node_node(
     data_cycle_head.put_value("true");
     nodenode.add_child("data", data_cycle_head);
   }
-  if (node.invariant != 0xFF)
+  if (!node.invariant.empty())
   {
     xmlnodet data_invariant;
     data_invariant.add("<xmlattr>.key", "invariant");
@@ -716,7 +721,6 @@ void create_correctness_graph_node(
 }
 
 const std::regex regex_array("[a-zA-Z0-9_]+ = \\{ ?(-?[0-9]+(.[0-9]+)?,? ?)+ ?\\};");
-const std::regex regex_structs("[a-zA-Z0-9_]+ = \\{ ?(\\.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?),? ?)+\\};");
 
 /* */
 void reformat_assignment_array(
@@ -737,6 +741,8 @@ void reformat_assignment_array(
   assignment = assignment_array;
 }
 
+const std::regex regex_structs("[a-zA-Z0-9_]+ = \\{ ?(\\.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?),? ?)+\\};");
+
 /* */
 void reformat_assignment_structs(
   const namespacet & ns,
@@ -756,10 +762,24 @@ void reformat_assignment_structs(
 }
 
 /* */
+void check_replace_invalid_assignment(std::string & assignment)
+{
+  /* replace: SAME-OBJECT(&var1, &var2) into &var1 == &var2 (XXX check if should stay) */
+  //std::regex e ("SAME-OBJECT\\((&([a-zA-Z_0-9]+)), (&([a-zA-Z_0-9]+))\\)");
+  //assignment = std::regex_replace(assignment, e ,"$1 == $3");
+  std::smatch m;
+  /* looking for undesired in the assignment */
+  if (std::regex_search(assignment,m,std::regex("&dynamic_([0-9]+)_value")) ||
+      std::regex_search(assignment,m,std::regex("anonymous at")) ||
+      std::regex_search(assignment,m,std::regex("BITCAST:")))
+    assignment.clear();
+}
+
+/* */
 std::string get_formated_assignment(const namespacet & ns, const goto_trace_stept & step)
 {
   std::string assignment = "";
-  if(!is_nil_expr(step.value))
+  if(!is_nil_expr(step.value) && (is_valid_witness_step(ns, step)))
   {
     assignment += from_expr(ns, "", step.lhs);
     assignment += " = ";
@@ -769,6 +789,7 @@ std::string get_formated_assignment(const namespacet & ns, const goto_trace_step
       reformat_assignment_array(ns, step, assignment);
     else if (std::regex_match(assignment, regex_structs))
       reformat_assignment_structs(ns, step, assignment);
+    check_replace_invalid_assignment(assignment);
   }
   return assignment;
 }
@@ -896,4 +917,54 @@ uint16_t get_line_number(
     }
   }
   return line_count;
+}
+
+std::string read_line(std::string file, uint16_t line_number)
+{
+  std::string line;
+  std::string line_code = "";
+  std::ifstream stream(file);
+  uint16_t line_count = 0;
+  if (stream.is_open())
+  {
+	while(getline(stream, line) &&
+		  line_count < line_number)
+	{
+      line_code = line;
+	  line_count++;
+	}
+  }
+  return line_code;
+}
+
+const std::regex regex_invariants("( +)?(__((VERIFIER|ESBMC))_)?(assume|assert)\\([a-zA-Z(-?(0-9))\\[\\]_>=+/*<~.&! \\(\\)]+\\);( +)?");
+
+std::string get_invariant(
+  std::string verified_file,
+  uint16_t line_number,
+  optionst & options )
+{
+  std::string invariant = "";
+  std::string line_code = "";
+
+  std::string program_file = options.get_option("witness-programfile");
+  if (program_file.empty() || verified_file == program_file)
+  {
+    line_code = read_line(verified_file, line_number);
+  }
+  else
+  {
+    uint16_t program_file_line_number = get_line_number(verified_file, line_number, options);
+    line_code = read_line(program_file, program_file_line_number);
+  }
+  if (std::regex_match(line_code, regex_invariants))
+  {
+    std::regex re("(\\([a-zA-Z(-?(0-9))\\[\\]_>=+/*<~.&! \\(\\)]+\\))");
+    using reg_itr = std::regex_token_iterator<std::string::iterator>;
+    for (reg_itr it{line_code.begin(), line_code.end(), re, 1}, end{}; it != end;) {
+      invariant = *it++;
+      break;
+    }
+  }
+  return invariant;
 }

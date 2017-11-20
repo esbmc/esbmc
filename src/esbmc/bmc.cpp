@@ -106,7 +106,7 @@ void bmct::successful_trace(
     {
       goto_tracet goto_trace;
       status("Building successful trace");
-      /* build_successful_goto_trace(eq, ns, goto_trace); FIXME */
+      build_successful_goto_trace(eq, ns, goto_trace);
       correctness_graphml_goto_trace(
         options,
         ns,

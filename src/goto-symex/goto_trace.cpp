@@ -275,32 +275,29 @@ void violation_graphml_goto_trace(
 
           graph.edges.push_back(violation_edge);
 
-          // Having printed a property violation, don't print more steps.
+          /* having printed a property violation, don't print more steps. */
 
-          xmlnodet graphml = graph.generate_graphml(options);
-
-#if (BOOST_VERSION >= 105700)
-          boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
-#else
-          boost::property_tree::xml_writer_settings<char> settings(' ', 2);
-#endif
-          boost::property_tree::write_xml(
-            options.get_option("witness-output"), graphml, std::locale(), settings);
-
+          graph.generate_graphml(options);
           return;
         }
         break;
 
       case goto_trace_stept::ASSIGNMENT:
         if(step.pc->is_assign() || step.pc->is_return()
-            || (step.pc->is_other() && is_nil_expr(step.lhs)))
+           || (step.pc->is_other() && is_nil_expr(step.lhs)))
         {
+
+          std::string assignment = get_formated_assignment(ns, step);
+          /* if the assignment is empty, it will not be accepted by the checker */
+          if (assignment.empty())
+            continue;
+
           graph.check_create_new_thread(step.thread_nr, prev_node);
           prev_node = graph.edges.back().to_node;
 
           edget new_edge;
           new_edge.thread_id = std::to_string(step.thread_nr);
-          new_edge.assumption = get_formated_assignment(ns, step);
+          new_edge.assumption = assignment;
           new_edge.start_line =
             get_line_number(
               verification_file,
@@ -329,99 +326,41 @@ void correctness_graphml_goto_trace(
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = verification_file;
 
-#if 0
   edget * first_edge = &graph.edges.at(0);
   nodet * prev_node = first_edge->to_node;
-
-#ifndef lightweight_witness
-  std::map<std::string, uint16_t> func_control_map;
-  std::string prev_function = first_edge->enter_function;
-#endif
 
   for(const auto & step : goto_trace.steps)
   {
     /* checking restrictions for correctness GraphML */
     if ((!(is_valid_witness_step(ns, step))) ||
-        (!(step.is_assignment() || step.is_assume() || step.is_assert())))
+        (!(step.is_assume() || step.is_assert())))
       continue;
 
-    nodet * new_node = new nodet();
-    edget new_edge;
-    new_edge.assumption = get_formated_assignment(ns, step);
-    new_edge.start_line = get_line_number(
+    std::string invariant = get_invariant(
       verification_file,
       std::atoi(step.pc->location.get_line().c_str()),
       options);
 
-#ifndef lightweight_witness
-    new_edge.end_line = new_edge.start_line;
-    if(new_edge.start_line)
-      get_offsets(verification_file, new_edge.start_line,
-        new_edge.start_offset, new_edge.end_offset);
+    if (invariant.empty())
+      continue; /* we don't have to consider this invariant */
 
-    /* check if it has entered or returned from a function */
+    nodet * new_node = new nodet();
+    edget * new_edge = new edget();
     std::string function = step.pc->location.get_function().c_str();
-    if(prev_function != function && !function.empty())
-    {
-      if(func_control_map.find(function) == func_control_map.end())
-      {
-        /* it is entering in a function for the first time */
-        func_control_map.insert(std::make_pair(function, new_edge.start_line));
-        new_edge.enter_function = function;
-        prev_function = function;
-      }
-      else
-      {
-        /* it is backing from another function */
-        new_edge.return_from_function = prev_function;
-        new_edge.enter_function = function;
-        prev_function = function;
-      }
-    }
-#endif
+    new_edge->start_line = get_line_number(
+      verification_file,
+      std::atoi(step.pc->location.get_line().c_str()),
+      options);
+    new_node->invariant = invariant;
+    new_node->invariant_scope = function;
 
-    if(step.is_assignment())
-    {
-      /* assignment are not required according svcomp2018 specifications */
-    }
-    else if(step.is_assume()) //FIXME this field should be updated.
-    {
-      std::string code_line = ""; //FIXME //line_content_map[line_number];
-      if((code_line.find("__VERIFIER_assume") != std::string::npos)
-        || (code_line.find("__ESBMC_assume") != std::string::npos)
-        || (code_line.find("assume") != std::string::npos))
-      {
-        code_line = w_string_replace(code_line, "__VERIFIER_assume", "");
-        code_line = w_string_replace(code_line, "__ESBMC_assume", "");
-        code_line = w_string_replace(code_line, "assume(", "");
-        code_line = w_string_replace(code_line, ";", "");
-#ifndef lightweight_witness
-        new_node->invariant = 0; //FIXME code_line;
-        new_edge.assumption_scope = function;
-#endif
-      }
-    }
-    else if(step.is_assert())
-    {
-      /* nothing to do here yet */
-    }
-
-    new_edge.from_node = prev_node;
-    new_edge.to_node = new_node;
+    new_edge->from_node = prev_node;
+    new_edge->to_node = new_node;
     prev_node = new_node;
-    graph.edges.push_back(new_edge);
+    graph.edges.push_back(*new_edge);
   }
-#endif
 
-  xmlnodet graphml = graph.generate_graphml(options);
-
-#if (BOOST_VERSION >= 105700)
-  boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
-#else
-  boost::property_tree::xml_writer_settings<char> settings(' ', 2);
-#endif
-  boost::property_tree::write_xml(
-    options.get_option("witness-output"), graphml, std::locale(), settings);
+  graph.generate_graphml(options);
 }
 
 void show_goto_trace(

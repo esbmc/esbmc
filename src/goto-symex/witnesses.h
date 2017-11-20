@@ -23,7 +23,7 @@ public:
   bool          sink       = false;
   bool          violation  = false;
   bool          cycle_head = false;
-  unsigned char invariant  = 0xFF;
+  std::string   invariant;
   std::string   invariant_scope;
   nodet(void)
   {
@@ -83,7 +83,7 @@ public:
     witness_type = t;
     create_initial_edge();
   }
-  xmlnodet generate_graphml(optionst & options);
+  void generate_graphml(optionst & options);
   void check_create_new_thread(uint16_t thread_id, nodet * prev_node);
 };
 
@@ -190,3 +190,11 @@ int generate_sha1_hash_for_file(const char * path, std::string & output);
 void map_line_number_to_content(
   const std::string& source_code_file,
   std::map<int, std::string> & line_content_map);
+
+/**
+ *
+ */
+std::string get_invariant(
+  std::string verified_file,
+  uint16_t line_number,
+  optionst & options );
