@@ -275,18 +275,9 @@ void violation_graphml_goto_trace(
 
           graph.edges.push_back(violation_edge);
 
-          // Having printed a property violation, don't print more steps.
+          /* having printed a property violation, don't print more steps. */
 
-          xmlnodet graphml = graph.generate_graphml(options);
-
-#if (BOOST_VERSION >= 105700)
-          boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
-#else
-          boost::property_tree::xml_writer_settings<char> settings(' ', 2);
-#endif
-          boost::property_tree::write_xml(
-            options.get_option("witness-output"), graphml, std::locale(), settings);
-
+          graph.generate_graphml(options);
           return;
         }
         break;
@@ -332,11 +323,6 @@ void correctness_graphml_goto_trace(
   edget * first_edge = &graph.edges.at(0);
   nodet * prev_node = first_edge->to_node;
 
-#ifndef lightweight_witness
-  std::map<std::string, uint16_t> func_control_map;
-  std::string prev_function = first_edge->enter_function;
-#endif
-
   for(const auto & step : goto_trace.steps)
   {
     /* checking restrictions for correctness GraphML */
@@ -362,48 +348,13 @@ void correctness_graphml_goto_trace(
     new_node->invariant = invariant;
     new_node->invariant_scope = function;
 
-#ifndef lightweight_witness
-    new_edge.end_line = new_edge.start_line;
-    if(new_edge.start_line)
-      get_offsets(verification_file, new_edge.start_line,
-        new_edge.start_offset, new_edge.end_offset);
-
-    /* check if it has entered or returned from a function */
-    std::string function = step.pc->location.get_function().c_str();
-    if(prev_function != function && !function.empty())
-    {
-      if(func_control_map.find(function) == func_control_map.end())
-      {
-        /* it is entering in a function for the first time */
-        func_control_map.insert(std::make_pair(function, new_edge.start_line));
-        new_edge.enter_function = function;
-        prev_function = function;
-      }
-      else
-      {
-        /* it is backing from another function */
-        new_edge.return_from_function = prev_function;
-        new_edge.enter_function = function;
-        prev_function = function;
-      }
-    }
-#endif
-
     new_edge->from_node = prev_node;
     new_edge->to_node = new_node;
     prev_node = new_node;
     graph.edges.push_back(*new_edge);
   }
 
-  xmlnodet graphml = graph.generate_graphml(options);
-
-#if (BOOST_VERSION >= 105700)
-  boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
-#else
-  boost::property_tree::xml_writer_settings<char> settings(' ', 2);
-#endif
-  boost::property_tree::write_xml(
-    options.get_option("witness-output"), graphml, std::locale(), settings);
+  graph.generate_graphml(options);
 }
 
 void show_goto_trace(

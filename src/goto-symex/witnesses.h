@@ -83,7 +83,7 @@ public:
     witness_type = t;
     create_initial_edge();
   }
-  xmlnodet generate_graphml(optionst & options);
+  void generate_graphml(optionst & options);
   void check_create_new_thread(uint16_t thread_id, nodet * prev_node);
 };
 

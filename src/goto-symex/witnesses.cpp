@@ -11,7 +11,7 @@ typedef boost::property_tree::ptree xmlnodet;
 short int nodet::_id = 0;
 short int edget::_id = 0;
 
-xmlnodet grapht::generate_graphml(optionst & options)
+void grapht::generate_graphml(optionst & options)
 {
   xmlnodet graphml_node;
   create_graphml(graphml_node);
@@ -41,7 +41,12 @@ xmlnodet grapht::generate_graphml(optionst & options)
   }
   graphml_node.add_child("graphml.graph", graph_node);
 
-  return graphml_node;
+#if (BOOST_VERSION >= 105700)
+  boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
+#else
+  boost::property_tree::xml_writer_settings<char> settings(' ', 2);
+#endif
+  boost::property_tree::write_xml(options.get_option("witness-output"), graphml_node, std::locale(), settings);
 }
 
 /* */
