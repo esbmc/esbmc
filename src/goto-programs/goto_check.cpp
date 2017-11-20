@@ -527,16 +527,17 @@ void goto_checkt::check_rec(
       bounds_check(expr, guard, loc);
       return;
 
+    case expr2t::div_id:
+    case expr2t::modulus_id:
+      div_by_zero_check(expr, guard, loc);
+      /* fallthrough */
+
+    case expr2t::shl_id:
     case expr2t::neg_id:
     case expr2t::add_id:
     case expr2t::sub_id:
     case expr2t::mul_id:
-    case expr2t::div_id:
-    case expr2t::modulus_id:
     {
-      if(is_div2t(expr) || is_modulus2t(expr))
-        div_by_zero_check(expr, guard, loc);
-
       overflow_check(expr, guard, loc);
       break;
     }
