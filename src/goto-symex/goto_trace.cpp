@@ -284,14 +284,20 @@ void violation_graphml_goto_trace(
 
       case goto_trace_stept::ASSIGNMENT:
         if(step.pc->is_assign() || step.pc->is_return()
-            || (step.pc->is_other() && is_nil_expr(step.lhs)))
+           || (step.pc->is_other() && is_nil_expr(step.lhs)))
         {
+
+          std::string assignment = get_formated_assignment(ns, step);
+          /* if the assignment is empty, it will not be accepted by the checker */
+          if (assignment.empty())
+            continue;
+
           graph.check_create_new_thread(step.thread_nr, prev_node);
           prev_node = graph.edges.back().to_node;
 
           edget new_edge;
           new_edge.thread_id = std::to_string(step.thread_nr);
-          new_edge.assumption = get_formated_assignment(ns, step);
+          new_edge.assumption = assignment;
           new_edge.start_line =
             get_line_number(
               verification_file,

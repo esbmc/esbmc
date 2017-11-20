@@ -762,10 +762,24 @@ void reformat_assignment_structs(
 }
 
 /* */
+void check_replace_invalid_assignment(std::string & assignment)
+{
+  /* replace: SAME-OBJECT(&var1, &var2) into &var1 == &var2 (XXX check if should stay) */
+  //std::regex e ("SAME-OBJECT\\((&([a-zA-Z_0-9]+)), (&([a-zA-Z_0-9]+))\\)");
+  //assignment = std::regex_replace(assignment, e ,"$1 == $3");
+  std::smatch m;
+  /* looking for undesired in the assignment */
+  if (std::regex_search(assignment,m,std::regex("&dynamic_([0-9]+)_value")) ||
+      std::regex_search(assignment,m,std::regex("anonymous at")) ||
+      std::regex_search(assignment,m,std::regex("BITCAST:")))
+    assignment.clear();
+}
+
+/* */
 std::string get_formated_assignment(const namespacet & ns, const goto_trace_stept & step)
 {
   std::string assignment = "";
-  if(!is_nil_expr(step.value))
+  if(!is_nil_expr(step.value) && (is_valid_witness_step(ns, step)))
   {
     assignment += from_expr(ns, "", step.lhs);
     assignment += " = ";
@@ -775,6 +789,7 @@ std::string get_formated_assignment(const namespacet & ns, const goto_trace_step
       reformat_assignment_array(ns, step, assignment);
     else if (std::regex_match(assignment, regex_structs))
       reformat_assignment_structs(ns, step, assignment);
+    check_replace_invalid_assignment(assignment);
   }
   return assignment;
 }
