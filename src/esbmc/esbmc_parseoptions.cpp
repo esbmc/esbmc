@@ -987,7 +987,7 @@ int esbmc_parseoptionst::doit_k_induction()
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
   {
     std::cout << "\n*** Iteration number ";
     std::cout << k_step;
@@ -1196,7 +1196,7 @@ int esbmc_parseoptionst::do_inductive_step(
   const BigInt &k_step)
 {
   // Don't run inductive step for k_step == 1
-  if(k_step == 1)
+  if(k_step != 2)
     return true;
 
   if(opts.get_bool_option("disable-inductive-step"))
