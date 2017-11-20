@@ -463,8 +463,7 @@ boolector_convt::overflow_arith(const expr2tc &expr)
   } else if (is_div2t(overflow.operand) || is_modulus2t(overflow.operand)) {
     res = boolector_sdivo(btor, side1->e, side2->e);
   } else {
-    std::cerr << "Unexpected operand to overflow_arith2t irep" << std::endl;
-    abort();
+    return smt_convt::overflow_arith(expr);
   }
 
   const smt_sort *s = boolean_sort;
