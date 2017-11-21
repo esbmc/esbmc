@@ -315,7 +315,7 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt& expr)
   const typet type0=ns.follow(op0.type());
   const typet type1=ns.follow(op1.type());
 
-  if(expr.id()=="shr")
+  if(expr.id()=="shr" || expr.id() == "shl")
   {
     gen_typecast_arithmetic(ns, op0);
     gen_typecast_arithmetic(ns, op1);
