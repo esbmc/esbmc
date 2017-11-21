@@ -95,69 +95,58 @@ smt_convt::overflow_arith(const expr2tc &expr)
       return nullptr;
     }
 
+    case expr2t::shl_id:
     case expr2t::mul_id:
     {
       // Zero extend; multiply; Make a decision based on the top half.
       unsigned int sz = zero->type->get_width();
+
       smt_sortt normalsort = mk_sort(SMT_SORT_UBV, sz);
       smt_sortt bigsort = mk_sort(SMT_SORT_UBV, sz * 2);
 
-      smt_astt arg1_ext, arg2_ext;
-      if (is_signed) {
-        // sign extend top bits.
-        arg1_ext = convert_ast(opers.side_1);
-        arg1_ext = convert_sign_ext(arg1_ext, bigsort, sz - 1, sz);
-        arg2_ext = convert_ast(opers.side_2);
-        arg2_ext = convert_sign_ext(arg2_ext, bigsort, sz - 1, sz);
-      } else {
-        // Zero extend the top parts
-        arg1_ext = convert_ast(opers.side_1);
-        arg1_ext = convert_zero_ext(arg1_ext, bigsort, sz);
-        arg2_ext = convert_ast(opers.side_2);
-        arg2_ext = convert_zero_ext(arg2_ext, bigsort, sz);
-      }
+      smt_astt arg1_ext = convert_ast(opers.side_1);
+      arg1_ext = is_signedbv_type(opers.side_1) ?
+        convert_sign_ext(arg1_ext, bigsort, sz, sz) :
+        convert_zero_ext(arg1_ext, bigsort, sz);
 
-      smt_astt result = mk_func_app(bigsort, SMT_FUNC_BVMUL, arg1_ext, arg2_ext);
+      smt_astt arg2_ext = convert_ast(opers.side_2);
+      arg2_ext = is_signedbv_type(opers.side_2) ?
+        convert_sign_ext(arg2_ext, bigsort, sz, sz) :
+        convert_zero_ext(arg2_ext, bigsort, sz);
 
-      // Extract top half.
-      smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz, normalsort);
+      smt_astt result =
+        mk_func_app(
+          bigsort,
+          (is_mul2t(overflow.operand) ? SMT_FUNC_BVMUL : SMT_FUNC_BVSHL),
+          arg1_ext,
+          arg2_ext);
 
       if (is_signed)
       {
-        // It should either be zero or all one's; which depends on what
-        // configuration of signs it had. If both pos / both neg, then the top
-        // should all be zeros, otherwise all ones. Implement with xor.
-        smt_astt op1neg_ast = convert_ast(op1neg);
-        smt_astt op2neg_ast = convert_ast(op2neg);
-        smt_astt allonescond =
-          mk_func_app(boolean_sort, SMT_FUNC_XOR, op1neg_ast, op2neg_ast);
-        smt_astt zerovector = convert_ast(zero);
+        // Extract top half plus one (for the sign)
+        smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz-1, normalsort);
+
+        // Create a now base 2 type
+        unsignedbv_type2tc newtype(sz+1);
 
         // All one bit vector is tricky, might be 64 bits wide for all we know.
-        constant_int2tc allonesexpr(zero->type, BigInt((sz == 64)
-                                                     ? 0xFFFFFFFFFFFFFFFFULL
-                                                     : ((1ULL << sz) - 1)));
+        constant_int2tc allonesexpr(newtype, BigInt((1ULL << (sz+1)) - 1));
         smt_astt allonesvector = convert_ast(allonesexpr);
 
-        smt_astt initial_switch =
-          mk_func_app(normalsort, SMT_FUNC_ITE, allonescond,
-                      allonesvector, zerovector);
+        // It should either be zero or all one's;
+        smt_astt all_ones =
+          mk_func_app(boolean_sort, SMT_FUNC_EQ, toppart, allonesvector);
 
-        // either value being zero means the top must be zero.
-        equality2tc op1iszero(opers.side_1, zero);
-        equality2tc op2iszero(opers.side_2, zero);
-        or2tc containszero(op1iszero, op2iszero);
+        smt_astt all_zeros =
+          mk_func_app(boolean_sort, SMT_FUNC_EQ, toppart, convert_ast(gen_zero(newtype)));
 
-        smt_astt contains_zero_ast = convert_ast(containszero);
-        smt_astt second_switch = mk_func_app(normalsort, SMT_FUNC_ITE,
-                                             contains_zero_ast,
-                                             zerovector,
-                                             initial_switch);
-
-        smt_astt is_eq =
-          mk_func_app(boolean_sort, SMT_FUNC_EQ, second_switch, toppart);
-        return mk_func_app(boolean_sort, SMT_FUNC_NOT, &is_eq, 1);
+        smt_astt lor =
+          mk_func_app(boolean_sort, SMT_FUNC_OR, all_ones, all_zeros);
+        return mk_func_app(boolean_sort, SMT_FUNC_NOT, &lor, 1);
       }
+
+      // Extract top half.
+      smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz, normalsort);
 
       // It should be zero; if not, overflow
       smt_astt iseq =
