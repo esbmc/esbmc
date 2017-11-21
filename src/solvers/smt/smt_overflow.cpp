@@ -183,7 +183,6 @@ smt_convt::overflow_cast(const expr2tc &expr)
   const overflow_cast2t &ocast = to_overflow_cast2t(expr);
   unsigned int width = ocast.operand->type->get_width();
   unsigned int bits = ocast.bits;
-  smt_sortt boolsort = boolean_sort;
 
   if (ocast.bits >= width || ocast.bits == 0) {
     std::cerr << "SMT conversion: overflow-typecast got wrong number of bits"
@@ -220,16 +219,16 @@ smt_convt::overflow_cast(const expr2tc &expr)
                                       width - neg_one_bits,
                                       neg_one_bits_sort);
 
-  smt_astt pos_eq = mk_func_app(boolsort, SMT_FUNC_EQ, pos_bits, pos_sel);
-  smt_astt neg_eq = mk_func_app(boolsort, SMT_FUNC_EQ, neg_bits, neg_sel);
+  smt_astt pos_eq = mk_func_app(boolean_sort, SMT_FUNC_EQ, pos_bits, pos_sel);
+  smt_astt neg_eq = mk_func_app(boolean_sort, SMT_FUNC_EQ, neg_bits, neg_sel);
 
   // isneg -> neg_eq, !isneg -> pos_eq
-  smt_astt notisneg = mk_func_app(boolsort, SMT_FUNC_NOT, &isneg, 1);
-  smt_astt c1 = mk_func_app(boolsort, SMT_FUNC_IMPLIES, isneg, neg_eq);
-  smt_astt c2 = mk_func_app(boolsort, SMT_FUNC_IMPLIES, notisneg, pos_eq);
+  smt_astt notisneg = mk_func_app(boolean_sort, SMT_FUNC_NOT, &isneg, 1);
+  smt_astt c1 = mk_func_app(boolean_sort, SMT_FUNC_IMPLIES, isneg, neg_eq);
+  smt_astt c2 = mk_func_app(boolean_sort, SMT_FUNC_IMPLIES, notisneg, pos_eq);
 
-  smt_astt nooverflow = mk_func_app(boolsort, SMT_FUNC_AND, c1, c2);
-  return mk_func_app(boolsort, SMT_FUNC_NOT, &nooverflow, 1);
+  smt_astt nooverflow = mk_func_app(boolean_sort, SMT_FUNC_AND, c1, c2);
+  return mk_func_app(boolean_sort, SMT_FUNC_NOT, &nooverflow, 1);
 }
 
 smt_astt
@@ -247,4 +246,3 @@ smt_convt::overflow_neg(const expr2tc &expr)
   equality2tc val(neg.operand, min_int);
   return convert_ast(val);
 }
-
