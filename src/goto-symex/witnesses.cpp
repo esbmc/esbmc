@@ -770,7 +770,13 @@ void check_replace_invalid_assignment(std::string & assignment)
   std::smatch m;
   /* looking for undesired in the assignment */
   if (std::regex_search(assignment,m,std::regex("&dynamic_([0-9]+)_value")) ||
+      std::regex_search(assignment,m,std::regex("dynamic_([0-9]+)_array")) ||
       std::regex_search(assignment,m,std::regex("anonymous at")) ||
+      std::regex_search(assignment,m,std::regex("Union")) ||
+      std::regex_search(assignment,m,std::regex("&")) ||
+      std::regex_search(assignment,m,std::regex("@")) ||
+      std::regex_search(assignment,m,std::regex("POINTER_OFFSET")) ||
+      std::regex_search(assignment,m,std::regex("SAME-OBJECT")) ||
       std::regex_search(assignment,m,std::regex("BITCAST:")))
     assignment.clear();
 }
