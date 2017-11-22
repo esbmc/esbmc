@@ -28,9 +28,6 @@
 void
 goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
 
-  if (unwinding_recursion_assumption)
-    return ;
-
   if(cur_state->source.pc->location.user_provided()
      && loop_numbers.size()
      && inductive_step)

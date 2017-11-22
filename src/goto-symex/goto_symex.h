@@ -744,9 +744,6 @@ protected:
   /** Flag to indicate if we are go into the unexpected flow. */
   bool inside_unexpected;
 
-  /** Flag to indicate if we have an unwinding recursion assumption. */
-  bool unwinding_recursion_assumption;
-
   /** Depth limit, as given by the --depth option */
   unsigned long depth_limit;
   /** Instruction number we are to break at -- that is, trap, to the debugger.

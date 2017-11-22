@@ -36,7 +36,6 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   cur_state(nullptr),
   last_throw(nullptr),
   inside_unexpected(false),
-  unwinding_recursion_assumption(false),
   depth_limit(atol(options.get_option("depth").c_str())),
   break_insn(atol(options.get_option("break-at").c_str())),
   memory_leak_check(options.get_bool_option("memory-leak-check")),
@@ -84,8 +83,7 @@ goto_symext::goto_symext(const goto_symext &sym) :
   new_context(sym.new_context),
   goto_functions(sym.goto_functions),
   last_throw(nullptr),
-  inside_unexpected(false),
-  unwinding_recursion_assumption(false)
+  inside_unexpected(false)
 {
   *this = sym;
 }
