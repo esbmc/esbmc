@@ -102,6 +102,11 @@ void build_successful_goto_trace(
     if((it->is_assert() || it->is_assume()) &&
        (is_valid_witness_expr(ns, it->lhs)))
     {
+      // When building the correctness witness, we only care about
+      // asserts and assumes
+      if(!(it->is_assert() || it->is_assume()))
+        continue;
+
       goto_trace.steps.emplace_back();
       goto_trace_stept &goto_trace_step=goto_trace.steps.back();
       goto_trace_step.thread_nr=it->source.thread_nr;
