@@ -2336,50 +2336,59 @@ smt_convt::get(const expr2tc &expr)
 
     // Convert the idx, it must be an integer
     expr2tc idx = get(newidx);
-    if(!is_constant_int2t(idx))
-      return res;
+    if(is_constant_int2t(idx))
+    {
+      // Convert the array so we can call the array api
+      smt_astt array = convert_ast(src_value);
 
-    // Convert the array so we can call the array api
-    smt_astt array = convert_ast(src_value);
-
-    // Retrieve the element
-    res = array_api->get_array_elem(
-      array,
-      to_constant_int2t(idx).value.to_uint64(),
-      get_flattened_array_subtype(res->type));
+      // Retrieve the element
+      res = array_api->get_array_elem(
+        array,
+        to_constant_int2t(idx).value.to_uint64(),
+        get_flattened_array_subtype(res->type));
+    }
   }
   else if(is_with2t(res))
   {
     // This will be converted
     with2t with = to_with2t(res);
     expr2tc update_val = with.update_value;
-    expr2tc newidx;
 
-    if (is_array_type(with.type) &&
-        is_array_type(to_array_type(with.type).subtype)) {
-      newidx = decompose_store_chain(expr, update_val);
-    } else {
-      newidx = fix_array_idx(with.update_field, with.type);
-    }
-
-    // if the update value is a constant, there's no need to
-    // call the array api
-    if(is_constant_number(update_val))
+    // if the update value is a constant, just return it
+    if(is_constant_number(update_val)
+       || (is_symbol2t(update_val) && to_symbol2t(update_val).thename == "NULL"))
       return update_val;
 
-    // Convert the idx, it must be an integer
-    expr2tc idx = get(newidx);
-    if(!is_constant_int2t(idx))
-      return res;
+    if (!(is_struct_type(expr) || is_pointer_type(expr)))
+    {
+      expr2tc newidx;
+      if (is_array_type(with.type) &&
+          is_array_type(to_array_type(with.type).subtype)) {
+        newidx = decompose_store_chain(expr, update_val);
+      } else {
+        newidx = fix_array_idx(with.update_field, with.type);
+      }
 
-    // Convert the array so we can call the array api
-    smt_astt array = convert_ast(with.source_value);
+      // if the update value is a constant, there's no need to
+      // call the array api
+      if(is_constant_number(update_val)
+         || (is_symbol2t(update_val) && to_symbol2t(update_val).thename == "NULL"))
+        return update_val;
 
-    // Retrieve the element
-    res = array_api->get_array_elem(
-      array,
-      to_constant_int2t(idx).value.to_uint64(),
-      get_flattened_array_subtype(res->type));
+      // Convert the idx, it must be an integer
+      expr2tc idx = get(newidx);
+      if(is_constant_int2t(idx))
+      {
+        // Convert the array so we can call the array api
+        smt_astt array = convert_ast(with.source_value);
+
+        // Retrieve the element
+        res = array_api->get_array_elem(
+          array,
+          to_constant_int2t(idx).value.to_uint64(),
+          get_flattened_array_subtype(res->type));
+      }
+    }
   }
   else if(is_address_of2t(res))
   {
