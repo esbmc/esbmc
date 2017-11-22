@@ -111,9 +111,8 @@ void goto_k_inductiont::make_nondet_assign(
 
   auto const &loop_vars = loop.get_loop_vars();
 
-  for(auto const &var : loop_vars)
+  for(auto const &lhs : loop_vars)
   {
-    expr2tc lhs = var;
     expr2tc rhs =
       sideeffect2tc(
         lhs->type,
