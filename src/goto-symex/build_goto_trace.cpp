@@ -39,7 +39,9 @@ expr2tc build_rhs(
   if(is_with2t(new_rhs))
     new_rhs = build_rhs(smt_conv, lhs, to_with2t(new_rhs).update_value);
 
-  return smt_conv->get(new_rhs);
+  auto res = smt_conv->get(new_rhs);
+  renaming::renaming_levelt::get_original_name(res, symbol2t::level0);
+  return res;
 }
 
 void build_goto_trace(

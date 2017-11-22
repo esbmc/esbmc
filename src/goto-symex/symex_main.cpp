@@ -31,6 +31,19 @@ goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
   if (unwinding_recursion_assumption)
     return ;
 
+  if(cur_state->source.pc->location.user_provided()
+     && loop_numbers.size()
+     && inductive_step)
+  {
+    BigInt unwind = cur_state->loop_iterations[loop_numbers.top()];
+
+    if(unwind < (max_unwind - 1))
+    {
+      assume(claim_expr);
+      return;
+    }
+  }
+
   // Can happen when evaluating certain special intrinsics. Gulp.
   if (cur_state->guard.is_false())
     return;
@@ -303,19 +316,6 @@ void goto_symext::symex_assert()
 {
   if (cur_state->guard.is_false())
     return;
-
-  if(cur_state->source.pc->location.user_provided()
-     && loop_numbers.size()
-     && inductive_step)
-  {
-    BigInt unwind = cur_state->loop_iterations[loop_numbers.top()];
-
-    if(unwind < (max_unwind - 1))
-    {
-      symex_assume();
-      return;
-    }
-  }
 
   // Don't convert if it's an user provided assertion and we're running in
   // no assertion mode or forward condition

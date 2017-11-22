@@ -198,7 +198,7 @@ void renaming::renaming_levelt::get_original_name(
   if (is_nil_expr(expr))
     return;
 
-  expr.get()->Foreach_operand([&lev] (expr2tc &e) {
+  expr->Foreach_operand([&lev] (expr2tc &e) {
       renaming_levelt::get_original_name(e, lev);
     }
   );
