@@ -2336,7 +2336,8 @@ smt_convt::get(const expr2tc &expr)
 
     // Convert the idx, it must be an integer
     expr2tc idx = get(newidx);
-    assert(is_constant_int2t(idx));
+    if(!is_constant_int2t(idx))
+      return res;
 
     // Convert the array so we can call the array api
     smt_astt array = convert_ast(src_value);
@@ -2368,7 +2369,8 @@ smt_convt::get(const expr2tc &expr)
 
     // Convert the idx, it must be an integer
     expr2tc idx = get(newidx);
-    assert(is_constant_int2t(idx));
+    if(!is_constant_int2t(idx))
+      return res;
 
     // Convert the array so we can call the array api
     smt_astt array = convert_ast(with.source_value);

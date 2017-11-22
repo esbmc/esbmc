@@ -24,10 +24,7 @@ expr2tc build_lhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
   return new_lhs;
 }
 
-expr2tc build_rhs(
-  boost::shared_ptr<smt_convt> &smt_conv,
-  const expr2tc &lhs,
-  const expr2tc &rhs)
+expr2tc build_rhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &rhs)
 {
   if(is_nil_expr(rhs))
     return rhs;
@@ -35,13 +32,9 @@ expr2tc build_rhs(
   if(is_constant_number(rhs))
     return rhs;
 
-  expr2tc new_rhs = rhs;
-  if(is_with2t(new_rhs))
-    new_rhs = build_rhs(smt_conv, lhs, to_with2t(new_rhs).update_value);
-
-  auto res = smt_conv->get(new_rhs);
-  renaming::renaming_levelt::get_original_name(res, symbol2t::level0);
-  return res;
+  auto new_rhs = smt_conv->get(rhs);
+  renaming::renaming_levelt::get_original_name(new_rhs, symbol2t::level0);
+  return new_rhs;
 }
 
 void build_goto_trace(
@@ -77,7 +70,7 @@ void build_goto_trace(
     if(SSA_step.is_assignment())
     {
       goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
-      goto_trace_step.value = build_rhs(smt_conv, SSA_step.lhs, SSA_step.rhs);
+      goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
     }
 
     if(SSA_step.is_output())
