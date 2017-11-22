@@ -55,12 +55,24 @@ goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
 }
 
 void
-goto_symext::assume(const expr2tc &assumption)
+goto_symext::assume(const expr2tc &the_assumption)
 {
+  expr2tc assumption = the_assumption;
+  cur_state->rename(assumption);
+  do_simplify(assumption);
+
+  if (is_true(assumption))
+    return;
+
+  cur_state->guard.guard_expr(assumption);
 
   // Irritatingly, assumption destroys its expr argument
   expr2tc tmp_guard = cur_state->guard.as_expr();
   target->assumption(tmp_guard, assumption, cur_state->source);
+
+  // If we're assuming false, make the guard for the following statement false
+  if(is_false(the_assumption))
+    cur_state->guard.make_false();
 }
 
 boost::shared_ptr<goto_symext::symex_resultt>
@@ -284,18 +296,7 @@ void goto_symext::symex_assume()
   dereference(cond, dereferencet::READ);
   replace_dynamic_allocation(cond);
 
-  cur_state->rename(cond);
-  do_simplify(cond);
-
-  if (is_true(cond))
-    return;
-
-  cur_state->guard.guard_expr(cond);
   assume(cond);
-
-  // If we're assuming false, make the guard for the following statement false
-  if(is_false(cond))
-    cur_state->guard.make_false();
 }
 
 void goto_symext::symex_assert()
