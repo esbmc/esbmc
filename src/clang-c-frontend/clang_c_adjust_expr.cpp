@@ -671,7 +671,6 @@ void clang_c_adjust::adjust_constant_struct(exprt &expr)
   // Well, we now need to fix up this constant struct expr into one that doesn't
   // feature any bitfields, because:
   auto sutype = to_struct_union_type(expr.type());
-  assert(expr.operands().size() != sutype.components().size());
   bool is_packed = sutype.get("packed").as_string() == "true";
 
   const auto &orig_type = to_struct_union_type(bitfield_orig_type_map[expr.type()]);
