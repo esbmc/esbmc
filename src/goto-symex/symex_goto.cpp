@@ -86,7 +86,8 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     BigInt &unwind = cur_state->loop_iterations[instruction.loop_number];
     ++unwind;
 
-    if (get_unwind(cur_state->source, unwind)) {
+    if (get_unwind(cur_state->source, unwind))
+    {
       loop_bound_exceeded(new_guard);
 
       // reset unwinding
@@ -314,7 +315,9 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
     {
       // generate unwinding assertion
       claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
-    } else   {
+    }
+    else
+    {
       // generate unwinding assumption, unless we permit partial loops
       expr2tc guarded_expr = negated_cond;
       cur_state->guard.guard_expr(guarded_expr);

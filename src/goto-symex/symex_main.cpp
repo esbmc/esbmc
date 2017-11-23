@@ -26,8 +26,8 @@
 #include <vector>
 
 void
-goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
-
+goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
+{
   if(cur_state->source.pc->location.user_provided()
      && loop_numbers.size()
      && inductive_step)
