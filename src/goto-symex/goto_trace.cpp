@@ -288,9 +288,6 @@ void violation_graphml_goto_trace(
         {
 
           std::string assignment = get_formated_assignment(ns, step);
-          /* if the assignment is empty, it will not be accepted by the checker */
-          if (assignment.empty())
-            continue;
 
           graph.check_create_new_thread(step.thread_nr, prev_node);
           prev_node = graph.edges.back().to_node;
