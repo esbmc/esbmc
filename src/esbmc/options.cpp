@@ -84,6 +84,7 @@ const struct opt_templ esbmc_options[] = {
   // IBMC
   { 0, "incremental-bmc", switc, "" },
   { 0, "falsification", switc, "" },
+  { 0, "termination", switc, "" },
 
   // Solver
   { 0, "list-solvers", switc, "" },

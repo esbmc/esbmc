@@ -50,6 +50,7 @@ protected:
 
   int doit_falsification();
   int doit_incremental();
+  int doit_termination();
 
   int do_base_case(
     optionst &opts,

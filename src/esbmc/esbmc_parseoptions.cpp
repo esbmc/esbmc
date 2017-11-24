@@ -370,6 +370,9 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("incremental-bmc"))
     return doit_incremental();
 
+  if(cmdline.isset("termination"))
+    return doit_termination();
+
   optionst opts;
   get_command_line_options(opts);
 
@@ -1100,6 +1103,50 @@ int esbmc_parseoptionst::doit_incremental()
   return 0;
 }
 
+int esbmc_parseoptionst::doit_termination()
+{
+  optionst opts;
+  get_command_line_options(opts);
+
+  if(get_goto_program(opts, goto_functions))
+    return 6;
+
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), goto_functions);
+    return 0;
+  }
+
+  if(set_claims(goto_functions))
+    return 7;
+
+  // Get max number of iterations
+  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+
+  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
+  if(cmdline.isset("unlimited-k-steps"))
+    max_k_step = UINT_MAX;
+
+  // Get the increment
+  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  {
+    std::cout << "\n*** Iteration number ";
+    std::cout << k_step;
+    std::cout << " ***\n";
+
+    if(!do_forward_condition(opts, goto_functions, k_step))
+      return false;
+  }
+
+  status("Unable to prove or falsify the program, giving up.");
+  status("VERIFICATION UNKNOWN");
+
+  return 0;
+}
+
 int esbmc_parseoptionst::do_base_case(
   optionst &opts,
   const goto_functionst &goto_functions,
@@ -1676,6 +1723,7 @@ void esbmc_parseoptionst::help()
     "\nIncremental BMC\n"
     " --falsification              incremental loop unwinding for bug searching\n"
     " --incremental-bmc            incremental loop unwinding verification\n"
+    " --termination                incremental loop unwinding assertion verification\n"
     " --k-step nr                  set k increment (default is 1)\n"
     " --max-k-step nr              set max number of iteration (default is 50)\n"
     " --unlimited-k-steps          set max number of iteration to UINT_MAX\n"
