@@ -245,7 +245,7 @@ protected:
    *  @param unwind Number of unwinds that have already occured.
    *  @return True if we've unwound past the unwinding limit.
    */
-  bool get_unwind(const symex_targett::sourcet &source, BigInt unwind);
+  bool get_unwind(const symex_targett::sourcet &source, const BigInt &unwind);
 
   /**
    *  Encode unwinding assertions and assumption.

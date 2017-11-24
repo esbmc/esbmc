@@ -331,7 +331,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
 }
 
 bool
-goto_symext::get_unwind(const symex_targett::sourcet &source, BigInt unwind)
+goto_symext::get_unwind(const symex_targett::sourcet &source, const BigInt &unwind)
 {
   unsigned id = source.pc->loop_number;
   BigInt this_loop_max_unwind = max_unwind;
@@ -344,7 +344,7 @@ goto_symext::get_unwind(const symex_targett::sourcet &source, BigInt unwind)
   if (!options.get_bool_option("quiet"))
   {
     std::string msg = (res ? "Not unwinding " : "Unwinding ");
-    msg += i2string(id) + " iteration " + integer2string(unwind) +
+    msg += "loop " + i2string(id) + " iteration " + integer2string(unwind) +
       " " + source.pc->location.as_string();
     std::cout << msg << std::endl;
   }
