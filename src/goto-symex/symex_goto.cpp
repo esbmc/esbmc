@@ -344,16 +344,16 @@ goto_symext::get_unwind(const symex_targett::sourcet &source, const BigInt &unwi
     this_loop_max_unwind = unwind_set[id];
 
 
-  bool res = this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
+  bool stop_unwind = this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
   if (!options.get_bool_option("quiet"))
   {
-    std::string msg = (res ? "Not unwinding " : "Unwinding ");
-    msg += "loop " + i2string(id) + " iteration " + integer2string(unwind) +
-      " " + source.pc->location.as_string();
-    std::cout << msg << std::endl;
+    std::cout << (stop_unwind ? "Not unwinding " : "Unwinding ")
+      << "loop " + i2string(cur_state->source.pc->loop_number)
+      << " iteration " + integer2string(unwind) + " "
+      << cur_state->source.pc->location.as_string() << '\n';
   }
 
-  return res;
+  return stop_unwind;
 }
 
 hash_set_cont<irep_idt, irep_id_hash> goto_symext::body_warnings;
