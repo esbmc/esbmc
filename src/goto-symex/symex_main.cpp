@@ -28,12 +28,10 @@
 void
 goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
-  if(cur_state->source.pc->location.user_provided()
-     && loop_numbers.size()
-     && inductive_step)
+  if(inductive_step && first_loop)
   {
-    BigInt unwind = cur_state->loop_iterations[loop_numbers.top()];
 
+    BigInt unwind = cur_state->loop_iterations[first_loop];
     if(unwind < (max_unwind - 1))
     {
       assume(claim_expr);
@@ -107,22 +105,9 @@ goto_symext::symex_step(reachability_treet & art)
     cur_state->depth++;
   }
 
-  // Handle loops in inductive step
-  // Check if we are inside a loop, during inductive step
-  if(inductive_step && (instruction.loop_number != 0))
-  {
-    // If we are entering a loop, add it to the stack
-    if(!loop_numbers.size() || (loop_numbers.top() != instruction.loop_number))
-    {
-      loop_numbers.push(instruction.loop_number);
-    }
-    else
-    {
-      // We are leaving the loop, remove from stack
-      assert(instruction.loop_number == loop_numbers.top());
-      loop_numbers.pop();
-    }
-  }
+  // Remember the first loop we're entering
+  if(inductive_step && instruction.loop_number && !first_loop)
+    first_loop = instruction.loop_number;
 
   // actually do instruction
   switch (instruction.type) {

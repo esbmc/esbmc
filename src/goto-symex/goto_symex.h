@@ -690,7 +690,7 @@ protected:
    */
   irep_idt guard_identifier_s;
   /** Loop numbers. */
-  std::stack<unsigned> loop_numbers;
+  unsigned first_loop;
   /** Number of assertions executed. */
   unsigned total_claims;
   /** Number of assertions remaining to be discharged. */

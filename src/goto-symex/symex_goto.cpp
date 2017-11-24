@@ -71,6 +71,10 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     // next instruction
     cur_state->source.pc++;
 
+    // Reset loop counter
+    if(instruction.loop_number == first_loop)
+      first_loop = 0;
+
     return; // nothing to do
   }
 
@@ -95,6 +99,11 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
       // next instruction
       cur_state->source.pc++;
+
+      // Reset loop counter
+      if(instruction.loop_number == first_loop)
+        first_loop = 0;
+
       return;
     }
 
