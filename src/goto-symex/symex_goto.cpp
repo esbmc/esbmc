@@ -152,7 +152,11 @@ goto_symext::symex_goto(const expr2tc &old_guard)
         cur_state->gen_stack_trace(),
         symex_targett::HIDDEN);
 
+      if(is_constant_expr(new_rhs))
+        guard_expr = new_rhs;
+
       guard_expr = not2tc(guard_expr);
+      do_simplify(guard_expr);
     }
 
     not2tc not_guard_expr(guard_expr);
