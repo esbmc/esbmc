@@ -187,24 +187,13 @@ esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success "
-esbmc_dargs += "--no-align-check --k-step 2 "
+esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 
 def get_command_line(strat, prop, arch, benchmark, fp_mode):
   command_line = esbmc_path + esbmc_dargs
 
-  # Add witness arg
-  command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
-
-  # Add strategy
-  if strat == "kinduction":
-    command_line += "--floatbv --unlimited-k-steps --k-induction "
-  elif strat == "falsi":
-    command_line += "--floatbv --unlimited-k-steps --falsification "
-  elif strat == "incr":
-    command_line += "--floatbv --unlimited-k-steps --incremental-bmc "
-  else:
-    print "Unknown strategy"
-    exit(1)
+  # Add benchmark
+  command_line += benchmark + " "
 
   # Add arch
   if arch == 32:
@@ -212,19 +201,40 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
   else:
     command_line += "--64 "
 
+  # Add witness arg
+  command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
+
+  # Special case for termination, it runs regardless of the strategy
+  if prop == Property.termination:
+    command_line += "--no-pointer-check --no-bounds-check --no-assertions "
+    command_line += "--termination "
+    return command_line
+
+  # Add strategy
+  if strat == "kinduction":
+    command_line += "--k-induction "
+  elif strat == "falsi":
+    command_line += "--falsification "
+  elif strat == "incr":
+    command_line += "--incremental-bmc "
+  else:
+    print "Unknown strategy"
+    exit(1)
+
   if prop == Property.overflow:
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-assertions "
   elif prop == Property.reach:
     command_line += "--no-pointer-check --no-bounds-check "
+  else:
+    print "Unknown property"
+    exit(1)
 
   # if we're running in FP mode, use MathSAT
   if fp_mode:
     command_line += "--mathsat "
 
-  # Benchmark
-  command_line += benchmark
   return command_line
 
 def verify(strat, prop, fp_mode):
@@ -280,8 +290,9 @@ elif "CHECK( init(main()), LTL(G ! overflow) )" in property_file_content:
   category_property = Property.overflow
 elif "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )" in property_file_content:
   category_property = Property.reach
+elif "CHECK( init(main()), LTL(F end) )" in property_file_content:
+  category_property = Property.termination
 else:
-  # We don't support termination
   print "Unsupported Property"
   exit(1)
 
