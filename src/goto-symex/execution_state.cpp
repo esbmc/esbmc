@@ -652,6 +652,7 @@ execution_statet::execute_guard()
 {
 
   node_id = node_count++;
+  expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
 
   // Parent guard of this context switch - if a assign/claim/assume, just use
@@ -664,14 +665,24 @@ execution_statet::execute_guard()
   else
     parent_guard = threads_state[last_active_thread].guard.as_expr();
 
+  // Rename value, allows its use in other renamed exprs
+  state_level2->make_assignment(guard_expr, expr2tc(), expr2tc());
+
   // Truth of this guard implies the parent is true.
   state_level2->rename(parent_guard);
   do_simplify(parent_guard);
+  implies2tc assumpt(guard_expr, parent_guard);
 
-  target->assumption(guardt().as_expr(), parent_guard, get_active_state().source);
+  target->assumption(guardt().as_expr(), assumpt, get_active_state().source);
 
   guardt old_guard;
   old_guard.add(threads_state[last_active_thread].guard.as_expr());
+
+  // If we simplified the global guard expr to false, write that to thread
+  // guards, not the symbolic guard name. This is the only way to bail out of
+  // evaulating a particular interleaving early right now.
+  if (is_false(parent_guard))
+    guard_expr = parent_guard;
 
   for (auto & i : threads_state)
   {
