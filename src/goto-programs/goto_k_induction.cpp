@@ -122,10 +122,44 @@ void goto_k_inductiont::make_nondet_assign(
         type2tc(),
         sideeffect2t::nondet);
 
-    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    goto_programt tmp_w;
+    goto_programt::targett t = tmp_w.add_instruction(ASSIGN);
     t->inductive_step_instruction = true;
     t->code = code_assign2tc(lhs, rhs);
     t->location = loop_head->location;
+
+    if(is_pointer_type(lhs))
+    {
+      //    if(c) P;
+      //--------------------
+      // v: if(!c) goto z;
+      // w: P;
+      // z: ;
+
+      // do the x label
+      goto_programt tmp_x;
+      goto_programt::targett x=tmp_x.add_instruction();
+
+      // do the z label
+      goto_programt tmp_z;
+      goto_programt::targett z=tmp_z.add_instruction();
+      z->make_skip();
+
+      goto_programt tmp_v;
+      goto_programt::targett t1=tmp_v.add_instruction();
+      t1->make_goto(z);
+      t1->guard = typecast2tc(get_bool_type(), lhs);
+      t1->location = loop_head->location;
+
+      // x: goto z;
+      x->make_goto(z);
+
+      dest.destructive_append(tmp_v);
+      dest.destructive_append(tmp_w);
+      dest.destructive_append(tmp_z);
+    }
+    else
+      dest.destructive_append(tmp_w);
   }
 
   goto_function.body.insert_swap(loop_head, dest);
