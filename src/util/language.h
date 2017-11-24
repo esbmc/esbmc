@@ -71,13 +71,6 @@ public:
     const namespacet &ns,
     bool fullname = false) = 0;
 
-  virtual bool to_expr(
-    const std::string &code,
-    const std::string &module,
-    exprt &expr,
-    message_handlert &message_handler,
-    const namespacet &ns)=0;
-
   virtual languaget *new_language()=0;
 
   // constructor / destructor

@@ -245,50 +245,6 @@ bool ansi_c_languaget::from_type(
   return false;
 }
 
-bool ansi_c_languaget::to_expr(
-  const std::string &code __attribute__((unused)),
-  const std::string &module __attribute__((unused)),
-  exprt &expr,
-  message_handlert &message_handler,
-  const namespacet &ns)
-{
-  expr.make_nil();
-
-  // no preprocessing yet...
-
-  std::istringstream i_preprocessed(code);
-
-  // parsing
-
-  ansi_c_parser.clear();
-  ansi_c_parser.filename="";
-  ansi_c_parser.in=&i_preprocessed;
-  ansi_c_parser.set_message_handler(&message_handler);
-  ansi_c_parser.grammar=ansi_c_parsert::EXPRESSION;
-  ansi_c_parser.mode=ansi_c_parsert::GCC;
-  ansi_c_scanner_init();
-
-  bool result=ansi_c_parser.parse();
-
-  if(ansi_c_parser.parse_tree.declarations.empty())
-    result=true;
-  else
-  {
-    expr.swap(ansi_c_parser.parse_tree.declarations.front());
-
-    result=ansi_c_convert(expr, "", message_handler);
-
-    // typecheck it
-    if(!result)
-      result=ansi_c_typecheck(expr, message_handler, ns);
-  }
-
-  // save some memory
-  ansi_c_parser.clear();
-
-  return result;
-}
-
 bool ansi_c_languaget::merge_context(
   contextt &dest,
   contextt &src,

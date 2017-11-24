@@ -56,14 +56,6 @@ public:
     const namespacet &ns,
     bool fullname = false) override;
 
-  // conversion from string into expression
-  bool to_expr(
-    const std::string &code,
-    const std::string &module,
-    exprt &expr,
-    message_handlert &message_handler,
-    const namespacet &ns) override;
-
   languaget *new_language() override
   { return new clang_cpp_languaget; }
 

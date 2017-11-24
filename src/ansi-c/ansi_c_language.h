@@ -58,13 +58,6 @@ public:
     const namespacet &ns,
     bool fullname = false) override;
 
-  bool to_expr(
-    const std::string &code,
-    const std::string &module,
-    exprt &expr,
-    message_handlert &message_handler,
-    const namespacet &ns) override;
-
   languaget *new_language() override
   { return new ansi_c_languaget; }
 

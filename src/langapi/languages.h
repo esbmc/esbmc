@@ -26,15 +26,6 @@ public:
     return language->from_type(type, code, ns, fullname);
   }
 
-  bool to_expr(
-    const std::string &code,
-    const std::string &module,
-    exprt &expr,
-    message_handlert &message_handler)
-  {
-    return language->to_expr(code, module, expr, message_handler, ns);
-  }
-
   // constructor / destructor
 
   languagest(const namespacet &_ns, const char *mode);
