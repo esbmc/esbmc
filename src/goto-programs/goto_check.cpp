@@ -275,7 +275,7 @@ void goto_checkt::pointer_rel_check(
     same_object2tc same_object(side_1, side_2);
     add_guarded_claim(
       same_object,
-      "Same bject violation",
+      "Same object violation",
       "pointer",
       loc,
       guard);
