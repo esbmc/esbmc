@@ -186,7 +186,7 @@ def get_result_string(the_result):
 esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
-esbmc_dargs = "--no-div-by-zero-check --force-malloc-success "
+esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --state-hashing "
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 
 def get_command_line(strat, prop, arch, benchmark, fp_mode):
