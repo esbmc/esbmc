@@ -6,6 +6,8 @@
 #include <util/irep2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
+#include <boost/version.hpp>
+
 typedef boost::property_tree::ptree xmlnodet;
 
 short int nodet::_id = 0;
