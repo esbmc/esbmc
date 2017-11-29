@@ -1,0 +1,3 @@
+main.c
+--incremental-bmc --force-malloc-success
+^VERIFICATION UNKNOWN$
