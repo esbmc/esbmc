@@ -253,51 +253,6 @@ void clang_c_adjust::adjust_member(member_exprt& expr)
     deref.move_to_operands(base);
     base.swap(deref);
   }
-
-  // Is this type bitfielded?
-  if (converter.has_bitfields(base.type())) {
-    // It is. This means that this member expression *may* need to be rewritten.
-    // Is the field name a bitfield?
-    const auto &backmap = converter.bitfield_mappings[base.type()];
-    auto it = backmap.find(expr.get("component_name"));
-    if (it != backmap.end()) {
-      // Yes. Rewrite it.
-      rewrite_bitfield_member(expr, it->second);
-    }
-  }
-}
-
-void clang_c_adjust::rewrite_bitfield_member(exprt &expr, const bitfield_map &bm)
-{
-  // The plan: build a new member expression accessing the blob field that
-  // contains the bitfield. Then create an extract expression that pulls out
-  // the relevant bits.
-  auto &memb = to_member_expr(expr);
-  auto &sutype = to_struct_union_type(expr.op0().type());
-
-  std::string fieldname = converter.gen_bitfield_blob_name(bm.blobloc);
-  auto &this_comp = sutype.get_component(fieldname);
-  assert(bv_width(this_comp.type()) != 0);
-  unsignedbv_typet ubv_size(bv_width(this_comp.type()));
-  // Note that we depend on the member expression still carrying the bitfield
-  // width here. If that isn't true in the future, it'll have to be stored in
-  // the bitfield map struct.
-  unsigned int our_width = bv_width(memb.type());
-
-  member_exprt new_memb(memb.struct_op(), irep_idt(fieldname), ubv_size);
-
-  // Welp. Today, the bit ordering is that the 'bitloc' is the bottommost bit.
-  exprt extract("extract", memb.type());
-  extract.copy_to_operands(new_memb);
-  std::stringstream ss;
-  ss << bm.bitloc;
-  extract.set("lower", irep_idt(ss.str()));
-  ss = std::stringstream();
-
-  ss << bm.bitloc + (our_width-1);
-  extract.set("upper", irep_idt(ss.str()));
-
-  expr = extract;
 }
 
 void clang_c_adjust::adjust_expr_binary_arithmetic(exprt& expr)

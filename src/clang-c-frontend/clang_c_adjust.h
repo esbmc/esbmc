@@ -69,9 +69,6 @@ class clang_c_adjust
     void adjust_argc_argv(const symbolt &main_symbol);
 
     void do_special_functions(side_effect_expr_function_callt &expr);
-
-    typedef clang_c_convertert::bitfield_map bitfield_map;
-    void rewrite_bitfield_member(exprt &expr, const bitfield_map &bm);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */
