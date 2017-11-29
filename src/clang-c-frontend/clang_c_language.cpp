@@ -164,7 +164,7 @@ bool clang_c_languaget::typecheck(
   if(converter.convert())
     return true;
 
-  clang_c_adjust adjuster(new_context, converter);
+  clang_c_adjust adjuster(new_context);
   if(adjuster.adjust())
     return true;
 

@@ -21,10 +21,9 @@
 #include <util/prefix.h>
 #include <util/std_code.h>
 
-clang_c_adjust::clang_c_adjust(contextt &_context, clang_c_convertert &cvt)
+clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context),
-    ns(namespacet(context)),
-    converter(cvt)
+    ns(namespacet(context))
 {
 }
 

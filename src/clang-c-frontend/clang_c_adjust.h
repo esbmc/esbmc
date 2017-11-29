@@ -19,7 +19,7 @@
 class clang_c_adjust
 {
   public:
-    clang_c_adjust(contextt &_context, clang_c_convertert &cvt);
+    clang_c_adjust(contextt &_context);
     virtual ~clang_c_adjust() = default;
 
     bool adjust();
@@ -27,7 +27,6 @@ class clang_c_adjust
   private:
     contextt &context;
     namespacet ns;
-    clang_c_convertert &converter; // For context/metadata collected in conversion
 
     void adjust_symbol(symbolt &symbol);
     void adjust_type(typet &type);
