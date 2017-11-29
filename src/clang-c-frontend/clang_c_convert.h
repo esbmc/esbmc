@@ -205,7 +205,7 @@ private:
     const clang::Stmt &stmt);
 
   // Bitfield mangling
-  bool has_bitfields(const typet &type);
+  bool has_bitfields(const typet &type, typet *converted = NULL);
   typet fix_bitfields(const typet &type);
   std::string gen_bitfield_blob_name(unsigned int num);
 

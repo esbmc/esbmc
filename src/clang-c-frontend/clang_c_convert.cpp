@@ -1359,9 +1359,10 @@ bool clang_c_convertert::get_expr(
       if (base.type().id() == "pointer")
         base_type = base.type().subtype();
 
-      if (has_bitfields(base_type)) {
+      typet fixed_version;
+      if (has_bitfields(base_type, &fixed_version)) {
         // Look up record for this struct kind. Should be converted.
-        const auto bmit = bitfield_mappings.find(base_type);
+        const auto bmit = bitfield_mappings.find(fixed_version);
         assert(bmit != bitfield_mappings.end());
         const auto &backmap = bmit->second;
 
@@ -2763,17 +2764,25 @@ const clang::Decl* clang_c_convertert::get_top_FunctionDecl_from_Stmt(
   return nullptr;
 }
 
-bool clang_c_convertert::has_bitfields(const typet &_type)
+bool clang_c_convertert::has_bitfields(const typet &_type, typet *converted)
 {
   typet type = _type;
   if (type.id() == "symbol")
     type = ns.follow(type);
 
-  if (bitfield_fixed_type_map.find(type) != bitfield_fixed_type_map.end())
-    return true; // Yes, and this is the unfixed version
+  auto fixed_it = bitfield_fixed_type_map.find(type);
+  if (fixed_it != bitfield_fixed_type_map.end()) {
+    if (converted)
+      *converted = fixed_it->second;
+    return true; // Yes, and the unfixed version version was passed in
+  }
 
-  if (bitfield_orig_type_map.find(type) != bitfield_orig_type_map.end())
+  auto orig_it = bitfield_orig_type_map.find(type);
+  if (orig_it != bitfield_orig_type_map.end()) {
+    if (converted)
+      *converted = type;
     return true; // Yes, and this is the fixed version
+  }
 
   if (type.id() != "struct")
     return false; // Could have been a symbol of a union
@@ -2781,7 +2790,9 @@ bool clang_c_convertert::has_bitfields(const typet &_type)
   auto sutype = to_struct_union_type(type);
   for (const auto &comp : sutype.components()) {
     if (comp.type().get("#bitfield").as_string() == "true") {
-      return true;
+      if (converted)
+        *converted = typet();
+      return true; // Yes, this is unconverted, and to date unknown.
     }
   }
 
@@ -2957,8 +2968,16 @@ void clang_c_convertert::rewrite_bitfield_member(exprt &expr, const bitfield_map
   // The plan: build a new member expression accessing the blob field that
   // contains the bitfield. Then create an extract expression that pulls out
   // the relevant bits.
+
+  // Erk. Clang applies members to pointers sometimes.
   auto &memb = to_member_expr(expr);
-  auto &sutype = to_struct_union_type(expr.op0().type());
+  typet basetype = expr.op0().type();
+  if (basetype.id() == "pointer") {
+    basetype = basetype.subtype();
+    basetype = ns.follow(basetype);
+  }
+
+  auto &sutype = to_struct_union_type(basetype);
 
   std::string fieldname = gen_bitfield_blob_name(bm.blobloc);
   auto &this_comp = sutype.get_component(fieldname);
