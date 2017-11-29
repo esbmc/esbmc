@@ -1532,15 +1532,21 @@ expr2tc*
 dereferencet::extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
     const expr2tc &offset)
 {
+  type2tc subtype;
   assert(bytes != 0);
 
   expr2tc *exprs = new expr2tc[bytes];
 
   assert(bytes <= 8 && "Too many bytes for extraction/stitching in deref");
-  assert(is_array_type(array) && "Can only extract bytes for stitching from arrays");
-  type2tc subtype = to_array_type(array->type).subtype;
-  assert(!is_array_type(subtype) && "Can't extract bytes from multi-dimensional arrays");
-  assert(subtype->get_width() == 8 && "Can only extract bytes for stitching from byte array");
+  assert((is_array_type(array) || is_string_type(array)) && "Can only extract bytes for stitching from arrays");
+  if (is_array_type(array)) {
+    subtype = to_array_type(array->type).subtype;
+    assert(!is_array_type(subtype) && "Can't extract bytes from multi-dimensional arrays");
+    assert(subtype->get_width() == 8 && "Can only extract bytes for stitching from byte array");
+  } else {
+    subtype = get_uint8_type(); //XXX signedness of chars
+  }
+
   // XXX -- this doesn't allow for scenarios where we read, say, a uint32 from
   // an array of uint16s.
 
