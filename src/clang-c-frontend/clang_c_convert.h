@@ -18,6 +18,8 @@
 #include <util/namespace.h>
 #include <util/std_types.h>
 
+#define BITFIELD_MAX_FIELD 64
+
 class clang_c_convertert
 {
 public:
@@ -27,6 +29,8 @@ public:
   virtual ~clang_c_convertert() = default;
 
   bool convert();
+
+  friend class clang_c_adjust;
 
 private:
   clang::ASTContext *ASTContext;
@@ -199,6 +203,22 @@ private:
 
   const clang::Decl* get_top_FunctionDecl_from_Stmt(
     const clang::Stmt &stmt);
+
+  // Bitfield mangling
+  bool has_bitfields(const typet &type);
+  typet fix_bitfields(const typet &type);
+  std::string gen_bitfield_blob_name(unsigned int num);
+
+  std::map<typet, typet> bitfield_fixed_type_map;
+  std::map<typet, typet> bitfield_orig_type_map;
+
+  typedef struct bitfield_map {
+    unsigned int bitloc;
+    unsigned int blobloc;
+  } bitfield_map;
+  std::map<typet, std::map<irep_idt, bitfield_map> > bitfield_mappings;
+  void rewrite_bitfield_member(exprt &expr, const bitfield_map &bm);
+  void fix_constant_bitfields(exprt &expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
