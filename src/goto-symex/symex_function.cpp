@@ -7,6 +7,7 @@
 
 \*******************************************************************/
 
+#include <algorithm>
 #include <cassert>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
@@ -369,6 +370,24 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
   }
 
   std::list<std::pair<guardt, symbol2tc> > l = get_function_list(func_ptr);
+
+  // Filter out illegal calls
+  auto illegal_filter = [&call](const decltype(l)::value_type &it) -> bool {
+    expr2tc sym = it.second;
+    assert(is_symbol2t(sym));
+    if (!is_code_type(sym))
+      return true;
+
+    const code_type2t &ct = to_code_type(sym->type);
+    if (ct.arguments.size() != call.operands.size())
+      return true;
+
+    // At this point we could (should) do more: for example ensuring that the
+    // arguments and return values are compatible. Skip for now.
+    return false;
+  };
+  // Remove if returns an iterator for the new end of list.
+  l.erase(std::remove_if(l.begin(), l.end(), illegal_filter), l.end());
 
   // Store.
   for (auto & it : l) {
