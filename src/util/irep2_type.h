@@ -335,8 +335,9 @@ public:
   union_type2t(const std::vector<type2tc> &members,
                const std::vector<irep_idt> &memb_names,
                const std::vector<irep_idt> &memb_pretty_names,
-               const irep_idt &name)
-    : union_type_methods(union_id, members, memb_names, memb_pretty_names, name, false) {}
+               const irep_idt &name,
+               bool packed = false)
+    : union_type_methods(union_id, members, memb_names, memb_pretty_names, name, packed) {}
   union_type2t(const union_type2t &ref) = default;
   unsigned int get_width() const override;
 
