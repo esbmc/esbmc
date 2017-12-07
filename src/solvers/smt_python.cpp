@@ -246,7 +246,6 @@ smt_convt_wrapper::mk_sort(const smt_sort_kind k, ...)
   // Because this function is variadic (haha poor design choices) we can't
   // just funnel it to python. Extract actual args, then call an overrider.
   va_list ap;
-  unsigned long uint;
 
   boost::python::object o;
 
@@ -257,15 +256,19 @@ smt_convt_wrapper::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_BOOL:
     o = make_tuple(object(k));
     break;
-  case SMT_SORT_BV:
-    uint = va_arg(ap, unsigned long);
+  case SMT_SORT_FIXEDBV:
+  case SMT_SORT_UBV:
+  case SMT_SORT_SBV:
+  {
+    unsigned long uint = va_arg(ap, unsigned long);
     o = make_tuple(object(k), object(uint));
     break;
+  }
   case SMT_SORT_ARRAY:
   {
     smt_sort *dom = va_arg(ap, smt_sort *); // Consider constness?
     smt_sort *range = va_arg(ap, smt_sort *);
-    assert(int_encoding || dom->data_width != 0);
+    assert(int_encoding || dom->get_data_width() != 0);
 
     // XXX: setting data_width to 1 if non-bv type?
     // XXX: how are those types going to be convertged to python references eh
@@ -633,7 +636,9 @@ build_smt_conv_python_class(void)
   enum_<smt_sort_kind>("smt_sort_kind")
     .value("int", SMT_SORT_INT)
     .value("real", SMT_SORT_REAL)
-    .value("bv", SMT_SORT_BV)
+    .value("sbv", SMT_SORT_SBV)
+    .value("ubv", SMT_SORT_UBV)
+    .value("fixedbv", SMT_SORT_FIXEDBV)
     .value("array", SMT_SORT_ARRAY)
     .value("bool", SMT_SORT_BOOL)
     .value("struct", SMT_SORT_STRUCT)
@@ -704,8 +709,9 @@ build_smt_conv_python_class(void)
     .def(init<smt_sort_kind, unsigned long>())
     .def(init<smt_sort_kind, unsigned long, unsigned long>())
     .def_readwrite("id", &smt_sort::id)
-    .def_readwrite("data_width", &smt_sort::data_width)
-    .def_readwrite("domain_width", &smt_sort::domain_width);
+    .def("get_data_width", &smt_sort::get_data_width)
+    .def("get_domain_width", &smt_sort::get_domain_width)
+    .def("get_significand_width", &smt_sort::get_significand_width);
 
   // Declare smt_ast class, wrapped, with overrides available. Note that these
   // are all declared to return internal references: by default is's the solvers

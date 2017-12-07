@@ -320,13 +320,11 @@ build_goto_symex_classes()
     symex.attr("renaming") = renam;
 
     void (renaming_levelt::*get_original_name)(expr2tc &expr) const = &renaming_levelt::get_original_name;
-    void (renaming_levelt::*get_original_name_lev)(expr2tc &expr, symbol2t::renaming_level lev) const = &renaming_levelt::get_original_name;
     class_<renaming_levelt, boost::noncopyable>("renaming_levelt", no_init)
       .def("get_original_name", get_original_name)
       .def("rename", &renaming_levelt::rename)
       .def("remove", &renaming_levelt::remove)
-      .def("get_ident_name", &renaming_levelt::get_ident_name)
-      .def("get_original_name_lev", get_original_name_lev);
+      .def("get_ident_name", &renaming_levelt::get_ident_name);
 
     {
     void (level1t::*rename)(expr2tc &) = &level1t::rename;
@@ -358,7 +356,7 @@ build_goto_symex_classes()
 
     unsigned (level2t::*current_number)(const expr2tc &sym) const = &level2t::current_number;
     unsigned (level2t::*current_number_rec)(const level2t::name_record &rec) const = &level2t::current_number;
-    void (level2t::*rename)(expr2tc &) = &level2t::rename;
+    void (level2t::*rename)(expr2tc &, bool rename_only) = &level2t::rename;
     void (level2t::*rename_num)(expr2tc &, unsigned) = &level2t::rename;
     void (level2t::*remove)(const expr2tc &) = &level2t::remove;
     void (level2t::*remove_rec)(const level2t::name_record &) = &level2t::remove;
@@ -475,7 +473,6 @@ build_goto_symex_classes()
     .def_readwrite("last_throw", &goto_symext::last_throw)
     .def_readwrite("thrown_obj_map", &goto_symext::thrown_obj_map)
     .def_readwrite("inside_unexpected", &goto_symext::inside_unexpected)
-    .def_readwrite("unwinding_recursion_assumption", &goto_symext::unwinding_recursion_assumption)
     .def_readwrite("depth_limit", &goto_symext::depth_limit)
     .def_readwrite("break_insn", &goto_symext::break_insn)
     .def_readwrite("memory_leak_check", &goto_symext::memory_leak_check)

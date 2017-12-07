@@ -2802,7 +2802,7 @@ tvt smt_convt::l_get(smt_astt a)
   return tvt(tvt::TV_UNKNOWN);
 }
 
-expr2tc smt_convt::get_bv(const type2tc& type, BigInt value)
+expr2tc smt_convt::build_bv(const type2tc& type, BigInt value)
 {
   if(is_fixedbv_type(type))
   {
@@ -2813,5 +2813,6 @@ expr2tc smt_convt::get_bv(const type2tc& type, BigInt value)
         migrate_type_back(type)));
     return constant_fixedbv2tc(fbv);
   }
+  assert(is_bv_type(type));
   return constant_int2tc(type, value);
 }

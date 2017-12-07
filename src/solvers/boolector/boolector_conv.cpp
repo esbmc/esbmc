@@ -393,7 +393,7 @@ boolector_convt::get_bv(const type2tc &type, smt_astt a)
   BigInt val = string2integer(result, 2);
   boolector_free_bv_assignment(btor, result);
 
-  return smt_convt::get_bv(type, val);
+  return build_bv(type, val);
 }
 
 expr2tc
@@ -422,7 +422,7 @@ boolector_convt::get_array_elem(
     }
 
     boolector_free_array_assignment(btor, indicies, values, size);
-    return smt_convt::get_bv(subtype, val);
+    return build_bv(subtype, val);
   }
 
   return gen_zero(subtype);

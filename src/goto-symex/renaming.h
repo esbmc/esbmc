@@ -93,7 +93,7 @@ namespace renaming {
 
     void rename(expr2tc &expr) override ;
     void get_ident_name(expr2tc &symbol) const override ;
-    void remove(const expr2tc &symbol) override 
+    void remove(const expr2tc &symbol) override
     {
       current_names.erase(name_record(to_symbol2t(symbol)));
     }
@@ -106,7 +106,7 @@ namespace renaming {
       frameno = frame;
     }
 
-    void get_original_name(expr2tc &expr) const override 
+    void get_original_name(expr2tc &expr) const override
     {
       renaming_levelt::get_original_name(expr, symbol2t::level0);
     }
@@ -219,7 +219,7 @@ namespace renaming {
 
     void get_ident_name(expr2tc &symbol) const override ;
 
-    void remove(const expr2tc &symbol) override 
+    void remove(const expr2tc &symbol) override
     {
         current_names.erase(name_record(to_symbol2t(symbol)));
     }
@@ -229,7 +229,7 @@ namespace renaming {
       current_names.erase(rec);
     }
 
-    void get_original_name(expr2tc &expr) const override 
+    void get_original_name(expr2tc &expr) const override
     {
       renaming_levelt::get_original_name(expr, symbol2t::level1);
     }

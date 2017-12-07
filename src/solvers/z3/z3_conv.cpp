@@ -1177,7 +1177,7 @@ z3_convt::get_bv(const type2tc &type, smt_astt a)
     return expr2tc();
 
   BigInt val = string2integer(Z3_get_numeral_string(z3_ctx, e));
-  return smt_convt::get_bv(type, val);
+  return build_bv(type, val);
 }
 
 expr2tc z3_convt::get_fpbv(const type2tc& t, smt_astt a)

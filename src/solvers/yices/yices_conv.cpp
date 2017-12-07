@@ -450,7 +450,7 @@ yices_convt::get_bv(const type2tc &type, smt_astt a)
   int64_t val = 0;
   if (int_encoding) {
     yices_get_int64_value(sat_model, ast->term, &val);
-    return smt_convt::get_bv(type, BigInt(val));
+    return build_bv(type, BigInt(val));
   }
 
   unsigned int width = a->sort->get_data_width();
@@ -465,7 +465,7 @@ yices_convt::get_bv(const type2tc &type, smt_astt a)
     val |= data[i];
   }
 
-  return smt_convt::get_bv(type, BigInt(val));
+  return build_bv(type, BigInt(val));
 }
 
 expr2tc

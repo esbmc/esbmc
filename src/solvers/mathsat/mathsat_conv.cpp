@@ -167,7 +167,7 @@ mathsat_convt::get_bv(const type2tc &type, smt_astt a)
     abort();
   }
 
-  return smt_convt::get_bv(type, BigInt(finval));
+  return build_bv(type, BigInt(finval));
 }
 
 expr2tc mathsat_convt::get_fpbv(const type2tc& _t, smt_astt a)

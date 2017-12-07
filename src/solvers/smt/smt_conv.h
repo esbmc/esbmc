@@ -704,7 +704,7 @@ public:
    *  @param type the type (fixedbv or (un)signedbv),
    *  @param value the value retrieved from the solver.
    *  @return Expression representation of a's value */
-  expr2tc get_bv(const type2tc &type, BigInt value);
+  expr2tc build_bv(const type2tc &type, BigInt value);
 
   /** @} */
 

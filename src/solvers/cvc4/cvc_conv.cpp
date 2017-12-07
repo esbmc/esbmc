@@ -58,7 +58,7 @@ cvc_convt::get_bv(const type2tc &type, smt_astt a)
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::Expr e = smt.getValue(ca->e);
   CVC4::BitVector foo = e.getConst<CVC4::BitVector>();
-  return smt_convt::get_bv(type, BigInt(foo.toInteger().getUnsignedLong()));
+  return build_bv(type, BigInt(foo.toInteger().getUnsignedLong()));
 }
 
 expr2tc
