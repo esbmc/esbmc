@@ -14,8 +14,6 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-#include <clang-c-frontend/clang_c_convert.h>
-
 class clang_c_adjust
 {
   public:

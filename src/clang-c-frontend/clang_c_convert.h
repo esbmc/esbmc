@@ -30,8 +30,6 @@ public:
 
   bool convert();
 
-  friend class clang_c_adjust;
-
 private:
   clang::ASTContext *ASTContext;
   contextt &context;
