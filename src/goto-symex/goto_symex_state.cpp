@@ -18,7 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/irep2.h>
 #include <util/migrate.h>
-#include <util/prefix.h>
 
 goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,
                                      const namespacet &_ns)
