@@ -20,7 +20,6 @@ extern "C" {
 #include <cstdlib>
 #include <fstream>
 #include <goto-programs/read_goto_binary.h>
-#include <sstream>
 #include <util/c_link.h>
 #include <util/config.h>
 

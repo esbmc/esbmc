@@ -15,7 +15,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
 #include <clang-c-frontend/expr2c.h>
-#include <fstream>
 #include <sstream>
 #include <util/c_link.h>
 

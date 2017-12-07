@@ -1,5 +1,3 @@
-#include <sstream>
-
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/irep2_utils.h>
@@ -2742,18 +2740,12 @@ migrate_expr_back(const expr2tc &ref)
   }
   case expr2t::extract_id:
   {
-    std::stringstream ss;
     const extract2t &ref2 = to_extract2t(ref);
     exprt back("extract", migrate_type_back(ref2.type));
     back.copy_to_operands(migrate_expr_back(ref2.from));
 
-    ss << ref2.upper;
-    back.set("upper", irep_idt(ss.str()));
-    ss = std::stringstream();
-
-    ss << ref2.lower;
-    back.set("lower", irep_idt(ss.str()));
-
+    back.set("upper", irep_idt(std::to_string(ref2.upper)));
+    back.set("lower", irep_idt(std::to_string(ref2.lower)));
     return back;
   }
   case expr2t::bitcast_id:

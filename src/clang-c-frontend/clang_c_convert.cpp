@@ -5,7 +5,6 @@
  *      Author: mramalho
  */
 
-#include <sstream>
 #include <clang/AST/Attr.h>
 #include <clang/Tooling/Core/QualTypeNames.h>
 #include <clang-c-frontend/clang_c_convert.h>
@@ -2801,9 +2800,7 @@ bool clang_c_convertert::has_bitfields(const typet &_type, typet *converted)
 
 std::string clang_c_convertert::gen_bitfield_blob_name(unsigned int num)
 {
-  std::stringstream ss;
-  ss << "#BITFIELD" << num;
-  return ss.str();
+  return "#BITFIELD" + std::to_string(num);
 }
 
 typet clang_c_convertert::fix_bitfields(const typet &_type)
@@ -2993,14 +2990,7 @@ void clang_c_convertert::rewrite_bitfield_member(exprt &expr, const bitfield_map
   // Welp. Today, the bit ordering is that the 'bitloc' is the bottommost bit.
   exprt extract("extract", memb.type());
   extract.copy_to_operands(new_memb);
-  std::stringstream ss;
-  ss << bm.bitloc;
-  extract.set("lower", irep_idt(ss.str()));
-  ss = std::stringstream();
-
-  ss << bm.bitloc + (our_width-1);
-  extract.set("upper", irep_idt(ss.str()));
-
+  extract.set("lower", irep_idt(std::to_string(bm.bitloc)));
+  extract.set("upper", irep_idt(std::to_string(bm.bitloc + (our_width-1))));
   expr = extract;
 }
-

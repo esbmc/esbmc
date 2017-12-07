@@ -6,8 +6,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <sstream>
-
 #include <clang-c-frontend/expr2c.h>
 #include <util/arith_tools.h>
 #include <util/c_misc.h>
@@ -2050,13 +2048,11 @@ std::string expr2ct::convert_sizeof(
 
 std::string expr2ct::convert_extract(const exprt &src)
 {
-  std::stringstream ss;
   std::string op = convert(src.op0());
   unsigned int upper = atoi(src.get("upper").as_string().c_str());
   unsigned int lower = atoi(src.get("lower").as_string().c_str());
 
-  ss << "EXTRACT(" << op << "," << upper << "," << lower << ")";
-  return ss.str();
+  return "EXTRACT(" + op + "," + std::to_string(upper) + "," + std::to_string(lower) + ")";
 }
 
 std::string expr2ct::convert(
