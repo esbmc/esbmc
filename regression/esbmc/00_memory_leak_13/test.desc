@@ -1,3 +1,4 @@
+CORE
 main.c
 --memory-leak-check --claim 1
 ^VERIFICATION FAILED$

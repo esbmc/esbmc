@@ -1,3 +1,4 @@
+CORE
 main.c
 --error-label ERROR --smt-during-symex --smt-symex-guard --z3 --unwind 1 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

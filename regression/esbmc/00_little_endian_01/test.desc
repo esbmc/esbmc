@@ -1,3 +1,4 @@
+CORE
 main.c
 --little-endian
 ^VERIFICATION SUCCESSFUL$

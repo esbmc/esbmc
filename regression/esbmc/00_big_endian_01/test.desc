@@ -1,3 +1,4 @@
+CORE
 main.c
 --big-endian --bv
 ^VERIFICATION FAILED$
