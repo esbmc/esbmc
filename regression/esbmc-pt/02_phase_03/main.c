@@ -3,14 +3,11 @@
 
 pthread_mutex_t  x, y;
 
-//void __ESBMC_yield();
-
 void *thread1(void *arg)
 {
   pthread_mutex_lock(&x);
   pthread_mutex_unlock(&x);
   pthread_mutex_lock(&x);
-//  pthread_mutex_unlock(&x);
 
   pthread_mutex_lock(&y);
   pthread_mutex_unlock(&y);
@@ -23,7 +20,6 @@ void *thread2(void *arg)
   pthread_mutex_lock(&x);
   pthread_mutex_unlock(&x);
   pthread_mutex_lock(&x); 
-//  pthread_mutex_unlock(&x);
 
   pthread_mutex_lock(&y);
   pthread_mutex_unlock(&y);

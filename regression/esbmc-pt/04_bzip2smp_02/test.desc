@@ -1,4 +1,0 @@
-CORE
-main.c
---unwind 1 --context-bound 1 --no-bounds-check
-^VERIFICATION FAILED$

@@ -2,7 +2,6 @@
 #include <stdio.h>
 
 pthread_mutex_t m, n;
-//int nondet_int();
 int x, y, z, balance;
 int deposit_done=0, withdraw_done=0;
 

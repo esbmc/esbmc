@@ -1,7 +1,7 @@
 #include <pthread.h>
 
 
-#define  N  3
+#define  N  1
 
 int  num;
 
@@ -20,7 +20,6 @@ void * thread1(void * arg)
     
     num++;
 
-    printf ("produce ....%d\n", i);
     pthread_mutex_unlock(&m);
 
     pthread_cond_signal(&full);
@@ -41,7 +40,6 @@ void * thread2(void * arg)
       pthread_cond_wait(&full, &m);
 
     num--;
-    printf("consume ....%d\n",j);
     pthread_mutex_unlock(&m);
     
     pthread_cond_signal(&empty);
@@ -54,7 +52,7 @@ int main()
 {
   pthread_t  t1, t2;
 
-  num = 3;
+  num = 1;
 
   pthread_mutex_init(&m, 0);
   pthread_cond_init(&empty, 0);

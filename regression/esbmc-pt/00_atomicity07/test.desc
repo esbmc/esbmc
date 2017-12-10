@@ -1,4 +1,4 @@
 CORE
 main.c
---context-bound 3 --atomicity-check
+--state-hashing --context-bound 2 --atomicity-check
 ^VERIFICATION FAILED$

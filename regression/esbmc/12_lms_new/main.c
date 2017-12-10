@@ -52,8 +52,8 @@
 
 static float gaussian(void);
 
-#define N 201
-#define L 20            /* filter order, (length L+1) */
+#define N 20
+#define L 2            /* filter order, (length L+1) */
 
 /* set convergence parameter */
 float mu = 0.01;

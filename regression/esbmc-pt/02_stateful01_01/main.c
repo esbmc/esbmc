@@ -1,6 +1,5 @@
 #include <pthread.h>
 
-
 pthread_mutex_t  ma, mb;
 int data1, data2;
 

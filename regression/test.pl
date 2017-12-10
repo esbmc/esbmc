@@ -3,6 +3,7 @@
 use subs;
 use strict;
 use warnings;
+use File::Basename;
 
 use Cwd;
 
@@ -41,8 +42,15 @@ sub run($$$$$) {
     }
   }
 
-  system "echo EXIT=$exit_value >>'$name/$output'";
-  system "echo SIGNAL=$signal_num >>'$name/$output'";
+  open my $FH, ">>$name/$output";
+  print $FH "EXIT=$exit_value\n";
+  print $FH "SIGNAL=$signal_num\n";
+  close $FH;
+
+  if($signal_num == 2) {
+    print "\nProgram under test interrupted; stopping\n";
+    exit 1;
+  }
 
   return $failed;
 }
@@ -58,9 +66,21 @@ sub load($) {
   return @data;
 }
 
-sub test($$$$$) {
-  my ($name, $test, $t_level, $cmd, $ign) = @_;
+sub test($$$$$$$) {
+  my ($name, $test, $t_level, $cmd, $ign, $dry_run, $defines) = @_;
   my ($level, $input, $options, $grep_options, @results) = load("$test");
+  my @keys = keys %{$defines};
+  foreach my $key (@keys) {
+    my $value = $defines->{$key};
+    $options =~ s/(\$$key$|\$$key )/$value /g;
+  }
+  if (scalar @keys) {
+    foreach my $word (split(/\s/, $options)) {
+      if ((substr($word, 0, 1) cmp '$') == 0) {
+        print "$name: variable \"$word\" not replaced; consider passing \"-D$word\"=...";
+      }
+    }
+  }
 
   # If the 4th line is activate-multi-line-match we enable multi-line checks
   if($grep_options ne "activate-multi-line-match") {
@@ -71,8 +91,7 @@ sub test($$$$$) {
 
   $options =~ s/$ign//g if(defined($ign));
 
-  my $descriptor = $test;
-  $descriptor =~ s/^.*\///;
+  my $descriptor = basename($test);
   my $output = $descriptor;
   $output =~ s/\.[^.]*$/.out/;
 
@@ -106,6 +125,11 @@ sub test($$$$$) {
 
   my $failed = 2;
   if($level & $t_level) {
+
+    if ($dry_run) {
+      return 0;
+    }
+
     $failed = run($name, $input, $cmd, $options, $output);
 
     if(!$failed) {
@@ -211,11 +235,15 @@ Usage: test.pl -c CMD [OPTIONS] [DIRECTORIES ...]
   -c CMD     run tests on CMD - required option
   -i <regex> options in test.desc matching the specified perl regex are ignored
   -j <num>   run <num> tests in parallel (requires Thread::Pool::Simple)
+  -n         dry-run: print the tests that would be run, but don't actually run them
+  -p         print logs of each failed test (if any)
   -h         show this help and exit
   -C         core: run all essential tests (default if none of C/T/F/K are given)
   -T         thorough: run expensive tests
   -F         future: run checks for future features
   -K         known: run tests associated with known bugs
+  -D <key=value> Define - replace \$key string with "value" string in
+                 test descriptors
 
 
 test.pl expects a test.desc file in each subdirectory. The file test.desc
@@ -247,11 +275,13 @@ EOF
 }
 
 use Getopt::Std;
+use Getopt::Long qw(:config pass_through bundling);
 $main::VERSION = 0.1;
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
-our ($opt_c, $opt_i, $opt_j, $opt_h, $opt_C, $opt_T, $opt_F, $opt_K); # the variables for getopt
+our ($opt_c, $opt_i, $opt_j, $opt_n, $opt_p, $opt_h, $opt_C, $opt_T, $opt_F, $opt_K, %defines); # the variables for getopt
 $opt_j = 0;
-getopts('c:i:j:hCTFK') or &main::HELP_MESSAGE(\*STDOUT, "", $main::VERSION, "");
+GetOptions("D=s", \%defines);
+getopts('c:i:j:nphCTFK') or &main::HELP_MESSAGE(\*STDOUT, "", $main::VERSION, "");
 $opt_c or &main::HELP_MESSAGE(\*STDOUT, "", $main::VERSION, "");
 (!$opt_j || $has_thread_pool) or &main::HELP_MESSAGE(\*STDOUT, "", $main::VERSION, "");
 $opt_h and &main::HELP_MESSAGE(\*STDOUT, "", $main::VERSION, "");
@@ -260,7 +290,7 @@ $t_level += 2 if($opt_T);
 $t_level += 4 if($opt_F);
 $t_level += 8 if($opt_K);
 $t_level += 1 if($opt_C || 0 == $t_level);
-
+my $dry_run = $opt_n;
 
 
 open LOG,">tests.log";
@@ -287,7 +317,10 @@ sub do_test($)
   my @files = glob "$test/*.desc";
   for (0..$#files){
     defined($pool) or print "  Running $files[$_]";
-    $failed_skipped = test($test, $files[$_], $t_level, $opt_c, $opt_i);
+    my $start_time = time();
+    $failed_skipped = test(
+      $test, $files[$_], $t_level, $opt_c, $opt_i, $dry_run, \%defines);
+    my $runtime = time() - $start_time;
 
     lock($skips);
     defined($pool) and print "  Running $test $files[$_]";
@@ -295,7 +328,7 @@ sub do_test($)
       $skips++;
       print "  [SKIPPED]\n";
     } elsif(0 == $failed_skipped) {
-      print "  [OK]\n";
+      print "  [OK] in $runtime seconds\n";
     } else {
       $failures++;
       print "  [FAILED]\n";
@@ -340,5 +373,42 @@ print "\n";
 
 
 close LOG;
+
+if($opt_p && $failures != 0) {
+  open LOG,"<tests.log" or die "Failed to open tests.log\n";
+
+  my $printed_this_test = 1;
+  my $current_test = "";
+  my $output_file = "";
+  my $descriptor_file = "";
+
+  while (my $line = <LOG>) {
+    chomp $line;
+    if ($line =~ /^Test '(.+)'/) {
+      $current_test = $1;
+      $printed_this_test = 0;
+    } elsif ($line =~ /Descriptor:\s+([^\s]+)/) {
+      $descriptor_file = $1;
+    } elsif ($line =~ /Output:\s+([^\s]+)/) {
+      $output_file = $1;
+    } elsif ($line =~ /\[FAILED\]\s*$/) {
+      # print a descriptive header before dumping the test.desc lines that
+      # actually weren't matched (and print this header just once)
+      if(0 == $printed_this_test) {
+        $printed_this_test = 1;
+        print "\n\n";
+        print "Failed test: $current_test\n";
+        open FH, "<$current_test/$output_file";
+        while (my $f = <FH>) {
+          print $f;
+        }
+        close FH;
+        print "\n\nFailed $descriptor_file lines:\n";
+      }
+
+      print "$line\n";
+    }
+  }
+}
 
 exit $failures;

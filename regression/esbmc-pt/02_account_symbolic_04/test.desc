@@ -1,4 +1,4 @@
 CORE
 main.c
---no-slice --context-bound 4
+--no-slice --context-bound 1
 ^VERIFICATION SUCCESSFUL$

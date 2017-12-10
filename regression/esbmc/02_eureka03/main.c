@@ -1,5 +1,5 @@
 
-#define SIZE 5
+#define SIZE 2
 
 int item[SIZE];
 

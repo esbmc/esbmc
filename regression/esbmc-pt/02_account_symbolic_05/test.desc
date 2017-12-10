@@ -1,4 +1,4 @@
 CORE
 main.c
---context-bound 4 
+--context-bound 1 
 ^VERIFICATION SUCCESSFUL$

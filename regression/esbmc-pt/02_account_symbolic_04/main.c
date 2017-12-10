@@ -27,10 +27,6 @@ void *check_result(void *arg)
 {
   pthread_mutex_lock(&m); //lock 3
   pthread_mutex_lock(&n); //lock 4
-#if 0
-  if (deposit_done && withdraw_done)
-    assert(balance == (x - y) - z);
-#endif
   pthread_mutex_unlock(&m); //unlock 2
   pthread_mutex_unlock(&n); //unlock 3
 }
@@ -49,11 +45,9 @@ int main()
 
   pthread_create(&t1, 0, deposit, 0);
   pthread_create(&t2, 0, withdraw, 0);
-//  pthread_create(&t3, 0, check_result, 0);
 
   pthread_join(t1, NULL);
   pthread_join(t2, NULL);
-//  pthread_join(t3, NULL);
 
   return 0;
 }

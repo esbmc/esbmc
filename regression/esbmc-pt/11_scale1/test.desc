@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 --unwind 10
 ^VERIFICATION FAILED$

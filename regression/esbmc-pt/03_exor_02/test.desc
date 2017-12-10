@@ -1,4 +1,0 @@
-CORE
-main.c
--I . --context-bound 6
-^VERIFICATION SUCCESSFUL$
