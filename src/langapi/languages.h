@@ -31,7 +31,7 @@ public:
   languagest(const namespacet &_ns, const char *mode);
   virtual ~languagest();
 
- protected:
+protected:
   const namespacet &ns;
   languaget *language;
 };

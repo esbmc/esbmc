@@ -13,32 +13,46 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/irep.h>
 #include <util/location.h>
 
-class typet:public irept
+class typet : public irept
 {
- public:
+public:
   typet() = default;
-   
-  explicit typet(const irep_idt &_id):irept(_id) { }
-  
+
+  explicit typet(const irep_idt &_id) : irept(_id)
+  {
+  }
+
   const typet &subtype() const
-  { return (typet &)find(f_subtype); }
-   
+  {
+    return (typet &)find(f_subtype);
+  }
+
   typet &subtype()
-  { return (typet &)add(f_subtype); }
-   
+  {
+    return (typet &)add(f_subtype);
+  }
+
   typedef std::vector<typet> subtypest;
 
   subtypest &subtypes()
-  { return (subtypest &)add(f_subtypes).get_sub(); }
-  
+  {
+    return (subtypest &)add(f_subtypes).get_sub();
+  }
+
   const subtypest &subtypes() const
-  { return (const subtypest &)find(f_subtypes).get_sub(); }
-   
+  {
+    return (const subtypest &)find(f_subtypes).get_sub();
+  }
+
   bool has_subtypes() const
-  { return !find(f_subtypes).is_nil(); }
-   
+  {
+    return !find(f_subtypes).is_nil();
+  }
+
   bool has_subtype() const
-  { return !find(f_subtype).is_nil(); }
+  {
+    return !find(f_subtype).is_nil();
+  }
 
   void move_to_subtypes(typet &type); // destroys expr
 
@@ -51,7 +65,7 @@ class typet:public irept
   {
     return (locationt &)add(f_location);
   }
-  
+
   typet &add_type(const std::string &name)
   {
     return (typet &)add(name);
@@ -104,23 +118,23 @@ protected:
 
 typedef std::list<typet> type_listt;
 
-#define forall_type_list(it, type) \
-  for(type_listt::const_iterator it=(type).begin(); \
-      it!=(type).end(); it++)
+#define forall_type_list(it, type)                                             \
+  for(type_listt::const_iterator it = (type).begin(); it != (type).end(); it++)
 
-#define Forall_type_list(it, type) \
-  for(type_listt::iterator it=(type).begin(); \
-      it!=(type).end(); it++)
+#define Forall_type_list(it, type)                                             \
+  for(type_listt::iterator it = (type).begin(); it != (type).end(); it++)
 
-#define forall_subtypes(it, type) \
-  if((type).has_subtypes()) \
-    for(typet::subtypest::const_iterator it=(type).subtypes().begin(); \
-        it!=(type).subtypes().end(); it++)
+#define forall_subtypes(it, type)                                              \
+  if((type).has_subtypes())                                                    \
+    for(typet::subtypest::const_iterator it = (type).subtypes().begin();       \
+        it != (type).subtypes().end();                                         \
+        it++)
 
-#define Forall_subtypes(it, type) \
-  if((type).has_subtypes()) \
-    for(typet::subtypest::iterator it=(type).subtypes().begin(); \
-        it!=(type).subtypes().end(); it++)
+#define Forall_subtypes(it, type)                                              \
+  if((type).has_subtypes())                                                    \
+    for(typet::subtypest::iterator it = (type).subtypes().begin();             \
+        it != (type).subtypes().end();                                         \
+        it++)
 
 /*
 
@@ -155,7 +169,7 @@ pre-defined types:
 
 */
 
-bool is_number(const typet &type); 
+bool is_number(const typet &type);
 // rational, real, integer, complex, unsignedbv, signedbv, floatbv
 
 #endif

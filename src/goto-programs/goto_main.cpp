@@ -58,10 +58,11 @@ void goto_convert(
   message_handlert &message_handler)
 {
   // find main symbol
-  const symbolt* s = context.find_symbol("__ESBMC_main");
+  const symbolt *s = context.find_symbol("__ESBMC_main");
   if(s == nullptr)
     throw "failed to find main symbol";
 
-  std::cout << "goto_convert : start converting symbol table to goto functions " << std::endl;
+  std::cout << "goto_convert : start converting symbol table to goto functions "
+            << std::endl;
   ::goto_convert(to_code(s->value), context, options, dest, message_handler);
 }

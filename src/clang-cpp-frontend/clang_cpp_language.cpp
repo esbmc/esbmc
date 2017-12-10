@@ -18,7 +18,9 @@ languaget *new_clang_cpp_language()
 
 clang_cpp_languaget::clang_cpp_languaget()
 {
-  std::cout << "ESBMC currently does not support parsing C++ programs using clang" << std::endl;
+  std::cout
+    << "ESBMC currently does not support parsing C++ programs using clang"
+    << std::endl;
   abort();
 }
 
@@ -26,24 +28,27 @@ bool clang_cpp_languaget::parse(
   const std::string &path __attribute__((unused)),
   message_handlert &message_handler __attribute__((unused)))
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet"
+            << std::endl;
   abort();
   return true;
 }
 
 bool clang_cpp_languaget::typecheck(
-  contextt& context __attribute__((unused)),
-  const std::string& module __attribute__((unused)),
-  message_handlert& message_handler __attribute__((unused)))
+  contextt &context __attribute__((unused)),
+  const std::string &module __attribute__((unused)),
+  message_handlert &message_handler __attribute__((unused)))
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet"
+            << std::endl;
   abort();
   return true;
 }
 
-void clang_cpp_languaget::show_parse(std::ostream& out __attribute__((unused)))
+void clang_cpp_languaget::show_parse(std::ostream &out __attribute__((unused)))
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet"
+            << std::endl;
   abort();
 }
 
@@ -52,7 +57,8 @@ bool clang_cpp_languaget::convert(
   const std::string &module __attribute__((unused)),
   message_handlert &message_handler __attribute__((unused)))
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet"
+            << std::endl;
   abort();
   return true;
 }
@@ -62,16 +68,18 @@ bool clang_cpp_languaget::preprocess(
   std::ostream &outstream __attribute__((unused)),
   message_handlert &message_handler __attribute__((unused)))
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet"
+            << std::endl;
   abort();
   return true;
 }
 
 bool clang_cpp_languaget::final(
-  contextt& context __attribute__((unused)),
-  message_handlert& message_handler __attribute__((unused)))
+  contextt &context __attribute__((unused)),
+  message_handlert &message_handler __attribute__((unused)))
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet"
+            << std::endl;
   abort();
   return true;
 }
@@ -82,7 +90,8 @@ bool clang_cpp_languaget::from_expr(
   const namespacet &ns __attribute__((unused)),
   bool fullname __attribute__((unused)))
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet"
+            << std::endl;
   abort();
   return true;
 }
@@ -93,7 +102,8 @@ bool clang_cpp_languaget::from_type(
   const namespacet &ns __attribute__((unused)),
   bool fullname __attribute__((unused)))
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet"
+            << std::endl;
   abort();
   return true;
 }

@@ -42,7 +42,7 @@ class goto_symex_statet
 {
 public:
   class goto_statet; // forward dec
-  class framet; // forward dec
+  class framet;      // forward dec
 
   /**
    *  Default constructor.
@@ -52,8 +52,10 @@ public:
    *  @param l2 Global L2 state reference.
    *  @param vs Global value set reference.
    */
-  goto_symex_statet(renaming::level2t &l2, value_sett &vs,
-                    const namespacet &_ns);
+  goto_symex_statet(
+    renaming::level2t &l2,
+    value_sett &vs,
+    const namespacet &_ns);
 
   /**
    *  Copy constructor.
@@ -65,17 +67,18 @@ public:
    *  @param l2 New L2 state to refer to.
    *  @param vs New value set to refer to.
    */
-  goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2,
-                    value_sett &vs);
+  goto_symex_statet(
+    const goto_symex_statet &state,
+    renaming::level2t &l2,
+    value_sett &vs);
 
-  goto_symex_statet &
-  operator=(const goto_symex_statet &state);
+  goto_symex_statet &operator=(const goto_symex_statet &state);
 
   // Types
 
   typedef std::list<goto_statet> goto_state_listt;
-  typedef std::map<goto_programt::const_targett,
-                   goto_state_listt> goto_state_mapt;
+  typedef std::map<goto_programt::const_targett, goto_state_listt>
+    goto_state_mapt;
   typedef std::vector<framet> call_stackt;
 
   /**
@@ -97,24 +100,25 @@ public:
     guardt guard;
     unsigned int thread_id;
 
-    explicit
-    goto_statet(const goto_symex_statet &s) :
-      depth(s.depth),
-      level2_ptr(s.level2.clone()),
-      level2(*level2_ptr),
-      value_set(s.value_set),
-      guard(s.guard),
-      thread_id(s.source.thread_nr)
+    explicit goto_statet(const goto_symex_statet &s)
+      : depth(s.depth),
+        level2_ptr(s.level2.clone()),
+        level2(*level2_ptr),
+        value_set(s.value_set),
+        guard(s.guard),
+        thread_id(s.source.thread_nr)
     {
     }
 
-    goto_statet(const goto_statet &s) :
-      depth(s.depth),
-      level2_ptr(s.level2_ptr->clone()),
-      level2(*level2_ptr),
-      value_set(s.value_set),
-      guard(s.guard),
-      thread_id(s.thread_id) {}
+    goto_statet(const goto_statet &s)
+      : depth(s.depth),
+        level2_ptr(s.level2_ptr->clone()),
+        level2(*level2_ptr),
+        value_set(s.value_set),
+        guard(s.guard),
+        thread_id(s.thread_id)
+    {
+    }
 
     goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
     {
@@ -157,7 +161,7 @@ public:
 
     typedef hash_set_cont<renaming::level2t::name_record,
                           renaming::level2t::name_rec_hash>
-            local_variablest;
+      local_variablest;
     /** Set of local variable l1 names. */
     local_variablest local_variables;
 
@@ -166,7 +170,7 @@ public:
      *  can point at, and that need to have calls set up to and executed. This
      *  member contains an iterator to the first goto instruction in the target
      *  and the target symbol name. */
-    std::list<std::pair<goto_programt::const_targett, symbol2tc> >
+    std::list<std::pair<goto_programt::const_targett, symbol2tc>>
       cur_function_ptr_targets;
     /** Instruction where function pointer calls should seem to originate
      *  from. */
@@ -181,7 +185,7 @@ public:
 
     typedef hash_set_cont<renaming::level2t::name_record,
                           renaming::level2t::name_rec_hash>
-            declaration_historyt;
+      declaration_historyt;
     /** Set of variables names that have been declared. Used to detect when we
      *  are in some kind of block that is entered then exited repeatedly -
      *  whenever that happens, a new l1 name is required. This caches the
@@ -199,9 +203,7 @@ public:
     /** Record if the function body is hidden */
     bool hidden;
 
-    framet(unsigned int thread_id) :
-      return_value(expr2tc()),
-      hidden(false)
+    framet(unsigned int thread_id) : return_value(expr2tc()), hidden(false)
     {
       level1.thread_id = thread_id;
     }
@@ -212,8 +214,7 @@ public:
   class exceptiont
   {
   public:
-    exceptiont() :
-      has_throw_decl(false)
+    exceptiont() : has_throw_decl(false)
     {
     }
 
@@ -237,8 +238,7 @@ public:
    *  Perform both levels of renaming.
    *  @param symirep Symbol to perform renaming on.
    */
-  void
-  current_name(expr2tc &symirep) const
+  void current_name(expr2tc &symirep) const
   {
     current_name(level2, symirep);
   }
@@ -248,8 +248,7 @@ public:
    *  @param plevel2 L2 renaming context to rename with.
    *  @param symirep Symbol irep to rename
    */
-  void
-  current_name(const renaming::level2t &plevel2, expr2tc &symirep) const
+  void current_name(const renaming::level2t &plevel2, expr2tc &symirep) const
   {
     top().level1.get_ident_name(symirep);
     plevel2.get_ident_name(symirep);
@@ -260,8 +259,7 @@ public:
    *  @param goto_state Detatched state containing L2 state to rename with.
    *  @param symirep Symbol irep to rename
    */
-  void
-  current_name(const goto_statet &goto_state, expr2tc &symirep) const
+  void current_name(const goto_statet &goto_state, expr2tc &symirep) const
   {
     current_name(goto_state.level2, symirep);
   }
@@ -272,15 +270,13 @@ public:
    *  interpreted.
    *  @return Currently executing stack frame.
    */
-  inline framet &
-  top()
+  inline framet &top()
   {
     assert(!call_stack.empty());
     return call_stack.back();
   }
 
-  inline const framet &
-  top() const
+  inline const framet &top() const
   {
     assert(!call_stack.empty());
     return call_stack.back();
@@ -291,8 +287,8 @@ public:
    *  @param thread_id Thread identifier of current state.
    *  @return New stack frame.
    */
-  inline framet &
-  new_frame(unsigned int thread_id) {
+  inline framet &new_frame(unsigned int thread_id)
+  {
     call_stack.emplace_back(thread_id);
     return call_stack.back();
   }
@@ -300,8 +296,8 @@ public:
   /**
    *  Clear topmost stackframe from the stack.
    */
-  inline void
-  pop_frame() {
+  inline void pop_frame()
+  {
     assert(call_stack.back().goto_state_map.size() == 0);
     call_stack.pop_back();
   }
@@ -309,8 +305,8 @@ public:
   /**
    *  Return stack frame of previous function call.
    */
-  inline const framet &
-  previous_frame() {
+  inline const framet &previous_frame()
+  {
     return *(--(--call_stack.end()));
   }
 
@@ -325,10 +321,11 @@ public:
    *  @param prog Goto program we're operating over.
    *  @param thread_id Thread identifier of this state.
    */
-  void initialize(const goto_programt::const_targett & start,
-                  const goto_programt::const_targett & end,
-                  const goto_programt *prog,
-                  unsigned int thread_id);
+  void initialize(
+    const goto_programt::const_targett &start,
+    const goto_programt::const_targett &end,
+    const goto_programt *prog,
+    unsigned int thread_id);
 
   /**
    *  Perform both levels of renaming on an expression.

@@ -34,10 +34,9 @@ void goto_convertt::do_function_call(
   goto_programt &dest)
 {
   // make it all side effect free
-  exprt new_lhs=lhs,
-        new_function=function;
+  exprt new_lhs = lhs, new_function = function;
 
-  exprt::operandst new_arguments=arguments;
+  exprt::operandst new_arguments = arguments;
 
   if(!new_lhs.is_nil())
   {
@@ -52,20 +51,21 @@ void goto_convertt::do_function_call(
   }
 
   // split on the function
-  if(new_function.id()=="dereference" ||
-     new_function.id()=="implicit_dereference")
+  if(
+    new_function.id() == "dereference" ||
+    new_function.id() == "implicit_dereference")
   {
     do_function_call_dereference(new_lhs, new_function, new_arguments, dest);
   }
-  else if(new_function.id()=="if")
+  else if(new_function.id() == "if")
   {
     do_function_call_if(new_lhs, new_function, new_arguments, dest);
   }
-  else if(new_function.id()=="symbol")
+  else if(new_function.id() == "symbol")
   {
     do_function_call_symbol(new_lhs, new_function, new_arguments, dest);
   }
-  else if(new_function.id()=="NULL-object")
+  else if(new_function.id() == "NULL-object")
   {
   }
   else
@@ -83,7 +83,7 @@ void goto_convertt::do_function_call_if(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  if(function.operands().size()!=3)
+  if(function.operands().size() != 3)
   {
     err_location(function);
     throw "if expects three operands";
@@ -101,15 +101,15 @@ void goto_convertt::do_function_call_if(
 
   // do the v label
   goto_programt tmp_v;
-  goto_programt::targett v=tmp_v.add_instruction();
+  goto_programt::targett v = tmp_v.add_instruction();
 
   // do the x label
   goto_programt tmp_x;
-  goto_programt::targett x=tmp_x.add_instruction();
+  goto_programt::targett x = tmp_x.add_instruction();
 
   // do the z label
   goto_programt tmp_z;
-  goto_programt::targett z=tmp_z.add_instruction();
+  goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
 
   // y: g();
@@ -119,20 +119,21 @@ void goto_convertt::do_function_call_if(
   do_function_call(lhs, function.op2(), arguments, tmp_y);
 
   if(tmp_y.instructions.empty())
-    y=tmp_y.add_instruction(SKIP);
+    y = tmp_y.add_instruction(SKIP);
   else
-    y=tmp_y.instructions.begin();
+    y = tmp_y.instructions.begin();
 
   // v: if(!c) goto y;
   v->make_goto(y);
   migrate_expr(function.op0(), v->guard);
   v->guard = not2tc(v->guard);
-  v->location=function.op0().location();
+  v->location = function.op0().location();
 
   unsigned int globals = get_expr_number_globals(v->guard);
-  if(globals > 1) {
+  if(globals > 1)
+  {
     exprt tmp = migrate_expr_back(v->guard);
-    break_globals2assignments(tmp, tmp_v,lhs.location());
+    break_globals2assignments(tmp, tmp_v, lhs.location());
   }
 
   // w: f();
@@ -159,30 +160,28 @@ void goto_convertt::do_function_call_dereference(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  goto_programt::targett t=dest.add_instruction(FUNCTION_CALL);
+  goto_programt::targett t = dest.add_instruction(FUNCTION_CALL);
 
   code_function_callt function_call;
-  function_call.location()=function.location();
-  function_call.lhs()=lhs;
-  function_call.function()=function;
-  function_call.arguments()=arguments;
+  function_call.location() = function.location();
+  function_call.lhs() = lhs;
+  function_call.function() = function;
+  function_call.arguments() = arguments;
 
-  t->location=function.location();
+  t->location = function.location();
   migrate_expr(function_call, t->code);
 }
 
-void goto_functionst::output(
-  const namespacet &ns,
-  std::ostream& out) const
+void goto_functionst::output(const namespacet &ns, std::ostream &out) const
 {
-  for(const auto & it : function_map)
+  for(const auto &it : function_map)
   {
     if(it.second.body_available)
     {
       out << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
       out << std::endl;
 
-      const symbolt &symbol=ns.lookup(it.first);
+      const symbolt &symbol = ns.lookup(it.first);
       out << symbol.display_name() << " (" << symbol.name << "):" << std::endl;
       it.second.body.output(ns, symbol.name, out);
     }
@@ -191,21 +190,21 @@ void goto_functionst::output(
 
 void goto_functionst::compute_location_numbers()
 {
-  unsigned nr=0;
+  unsigned nr = 0;
 
-  for(auto & it : function_map)
+  for(auto &it : function_map)
     it.second.body.compute_location_numbers(nr);
 }
 
 void goto_functionst::compute_target_numbers()
 {
-  for(auto & it : function_map)
+  for(auto &it : function_map)
     it.second.body.compute_target_numbers();
 }
 
 void goto_functionst::compute_loop_numbers()
 {
   unsigned int num = 1;
-  for(auto & it : function_map)
+  for(auto &it : function_map)
     it.second.body.compute_loop_numbers(num);
 }

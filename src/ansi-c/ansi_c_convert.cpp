@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void ansi_c_convertt::convert(ansi_c_parse_treet &ansi_c_parse_tree)
 {
-  for(auto & declaration : ansi_c_parse_tree.declarations)
+  for(auto &declaration : ansi_c_parse_tree.declarations)
     convert_declaration(declaration);
 }
 
@@ -51,32 +51,32 @@ void ansi_c_convertt::convert_expr(exprt &expr)
   Forall_operands(it, expr)
     convert_expr(*it);
 
-  if(expr.id()=="symbol")
+  if(expr.id() == "symbol")
   {
     expr.identifier(final_id(expr.identifier()));
     expr.remove("#id_class");
     expr.remove("#base_name");
   }
-  else if(expr.id()=="sizeof")
+  else if(expr.id() == "sizeof")
   {
-    if(expr.operands().size()==0)
+    if(expr.operands().size() == 0)
     {
-      typet type=static_cast<const typet &>(expr.c_sizeof_type());
+      typet type = static_cast<const typet &>(expr.c_sizeof_type());
       convert_type(type);
       expr.c_sizeof_type(type);
     }
   }
-  else if(expr.id()=="builtin_va_arg")
+  else if(expr.id() == "builtin_va_arg")
   {
     convert_type(expr.type());
   }
-  else if(expr.id()=="builtin_offsetof")
+  else if(expr.id() == "builtin_offsetof")
   {
-    typet offsetof_type=static_cast<const typet &>(expr.offsetof_type());
+    typet offsetof_type = static_cast<const typet &>(expr.offsetof_type());
     convert_type(offsetof_type);
     expr.offsetof_type(offsetof_type);
   }
-  else if(expr.id()=="typecast")
+  else if(expr.id() == "typecast")
   {
     convert_type(expr.type());
   }
@@ -84,63 +84,60 @@ void ansi_c_convertt::convert_expr(exprt &expr)
 
 void ansi_c_convertt::convert_code(codet &code)
 {
-  const irep_idt &statement=code.get_statement();
+  const irep_idt &statement = code.get_statement();
 
-  if(statement=="expression")
+  if(statement == "expression")
   {
-    assert(code.operands().size()==1);
+    assert(code.operands().size() == 1);
     convert_expr(code.op0());
   }
-  else if(statement=="decl")
+  else if(statement == "decl")
   {
-    assert(code.operands().size()==1 ||
-           code.operands().size()==2);
+    assert(code.operands().size() == 1 || code.operands().size() == 2);
 
     convert_expr(code.op0());
 
-    if(code.operands().size()==2)
+    if(code.operands().size() == 2)
       convert_expr(code.op1());
   }
-  else if(statement=="label")
+  else if(statement == "label")
   {
-    assert(code.operands().size()==1);
+    assert(code.operands().size() == 1);
     convert_code(to_code(code.op0()));
   }
-  else if(statement=="switch_case")
+  else if(statement == "switch_case")
   {
-    assert(code.operands().size()==2);
+    assert(code.operands().size() == 2);
     if(code.op0().is_not_nil())
       convert_expr(code.op0());
 
     convert_code(to_code(code.op1()));
   }
-  else if(statement=="block")
+  else if(statement == "block")
   {
     Forall_operands(it, code)
       convert_code(to_code(*it));
   }
-  else if(statement=="ifthenelse")
+  else if(statement == "ifthenelse")
   {
-    assert(code.operands().size()==2 ||
-           code.operands().size()==3);
+    assert(code.operands().size() == 2 || code.operands().size() == 3);
 
     convert_expr(code.op0());
     convert_code(to_code(code.op1()));
 
-    if(code.operands().size()==3)
+    if(code.operands().size() == 3)
       convert_code(to_code(code.op2()));
   }
-  else if(statement=="while" ||
-          statement=="dowhile")
+  else if(statement == "while" || statement == "dowhile")
   {
-    assert(code.operands().size()==2);
+    assert(code.operands().size() == 2);
 
     convert_expr(code.op0());
     convert_code(to_code(code.op1()));
   }
-  else if(statement=="for")
+  else if(statement == "for")
   {
-    assert(code.operands().size()==4);
+    assert(code.operands().size() == 4);
 
     if(code.op0().is_not_nil())
       convert_code(to_code(code.op0()));
@@ -158,44 +155,44 @@ void ansi_c_convertt::convert_code(codet &code)
 
     convert_code(to_code(code.op3()));
   }
-  else if(statement=="msc_try_except")
+  else if(statement == "msc_try_except")
   {
-    assert(code.operands().size()==3);
+    assert(code.operands().size() == 3);
     convert_code(to_code(code.op0()));
     convert_expr(code.op1());
     convert_code(to_code(code.op2()));
   }
-  else if(statement=="msc_try_finally")
+  else if(statement == "msc_try_finally")
   {
-    assert(code.operands().size()==2);
+    assert(code.operands().size() == 2);
     convert_code(to_code(code.op0()));
     convert_code(to_code(code.op1()));
   }
-  else if(statement=="switch")
+  else if(statement == "switch")
   {
-    assert(code.operands().size()==2);
+    assert(code.operands().size() == 2);
 
     convert_expr(code.op0());
     convert_code(to_code(code.op1()));
   }
-  else if(statement=="break")
+  else if(statement == "break")
   {
   }
-  else if(statement=="goto")
+  else if(statement == "goto")
   {
   }
-  else if(statement=="continue")
+  else if(statement == "continue")
   {
   }
-  else if(statement=="return")
+  else if(statement == "return")
   {
-    if(code.operands().size()==1)
+    if(code.operands().size() == 1)
       convert_expr(code.op0());
   }
-  else if(statement=="skip")
+  else if(statement == "skip")
   {
   }
-  else if(statement=="asm")
+  else if(statement == "asm")
   {
   }
   else
@@ -212,25 +209,23 @@ void ansi_c_convertt::convert_type(typet &type)
   convert_type(type, c_storage_spec);
 }
 
-void ansi_c_convertt::convert_type(
-  typet &type,
-  c_storage_spect &c_storage_spec)
+void ansi_c_convertt::convert_type(typet &type, c_storage_spect &c_storage_spec)
 {
   ansi_c_convert_typet ansi_c_convert_type(get_message_handler());
 
   ansi_c_convert_type.read(type);
   ansi_c_convert_type.write(type);
 
-  c_storage_spec=ansi_c_convert_type.c_storage_spec;
+  c_storage_spec = ansi_c_convert_type.c_storage_spec;
 
-  if(type.id()=="pointer")
+  if(type.id() == "pointer")
   {
     c_storage_spect sub_storage_spec;
 
     convert_type(type.subtype(), sub_storage_spec);
-    c_storage_spec|=sub_storage_spec;
+    c_storage_spec |= sub_storage_spec;
   }
-  else if(type.id()=="c_bitfield")
+  else if(type.id() == "c_bitfield")
   {
     convert_type(type.subtype());
     exprt tmp = static_cast<const exprt &>(type.size_irep());
@@ -239,14 +234,14 @@ void ansi_c_convertt::convert_type(
     // XXX jmorse - does this reveal a condition where c_bitfield doesn't have
     // a size field?
   }
-  else if(type.id()=="symbol")
+  else if(type.id() == "symbol")
   {
-    irep_idt identifier=final_id(type.identifier());
+    irep_idt identifier = final_id(type.identifier());
     type.identifier(identifier);
     type.remove("#id_class");
     type.remove("#base_name");
   }
-  else if(type.id()=="ansi_c_event")
+  else if(type.id() == "ansi_c_event")
   {
     if(!ansi_c_convert_type.c_qualifiers.is_empty())
     {
@@ -259,88 +254,84 @@ void ansi_c_convertt::convert_type(
     c_storage_spect sub_storage_spec;
 
     convert_type(type.subtype(), sub_storage_spec);
-    c_storage_spec|=sub_storage_spec;
+    c_storage_spec |= sub_storage_spec;
 
-    code_typet &code_type=to_code_type(type);
+    code_typet &code_type = to_code_type(type);
 
     // change subtype to return_type
     code_type.return_type().swap(type.subtype());
     type.remove("subtype");
 
     // take care of argument types
-    code_typet::argumentst &arguments=code_type.arguments();
+    code_typet::argumentst &arguments = code_type.arguments();
 
     // see if we have an ellipsis
-    if(!arguments.empty() &&
-       arguments.back().id()=="ansi_c_ellipsis")
+    if(!arguments.empty() && arguments.back().id() == "ansi_c_ellipsis")
     {
       code_type.make_ellipsis();
       arguments.pop_back();
     }
 
-    for(auto & it : arguments)
+    for(auto &it : arguments)
     {
-      if(it.id()=="declaration")
+      if(it.id() == "declaration")
       {
         code_typet::argumentt argument;
 
-        ansi_c_declarationt &declaration=
-          to_ansi_c_declaration(it);
+        ansi_c_declarationt &declaration = to_ansi_c_declaration(it);
 
         convert_type(declaration.type());
 
-        irep_idt base_name=declaration.get_base_name();
+        irep_idt base_name = declaration.get_base_name();
 
         argument.type().swap(declaration.type());
         argument.set_base_name(base_name);
-        argument.location()=declaration.location();
+        argument.location() = declaration.location();
 
         argument.set_identifier(id2string(declaration.get_name()));
 
         it.swap(argument);
       }
-      else if(it.id()=="ansi_c_ellipsis")
+      else if(it.id() == "ansi_c_ellipsis")
         throw "ellipsis only allowed as last argument";
       else
-        throw "unexpected argument: "+it.id_string();
+        throw "unexpected argument: " + it.id_string();
     }
   }
   else if(type.is_array())
   {
-    array_typet &array_type=to_array_type(type);
+    array_typet &array_type = to_array_type(type);
 
     c_storage_spect sub_storage_spec;
 
     convert_type(array_type.subtype(), sub_storage_spec);
-    c_storage_spec|=sub_storage_spec;
+    c_storage_spec |= sub_storage_spec;
 
     convert_expr(array_type.size());
   }
-  else if(type.id()=="incomplete_array")
+  else if(type.id() == "incomplete_array")
   {
     c_storage_spect sub_storage_spec;
 
     convert_type(type.subtype(), sub_storage_spec);
-    c_storage_spec|=sub_storage_spec;
+    c_storage_spec |= sub_storage_spec;
   }
-  else if(type.id()=="struct" ||
-          type.id()=="union" ||
-          type.id()=="ansi_c_interface" ||
-          type.id()=="ansi_c_channel" ||
-          type.id()=="ansi_c_behavior")
+  else if(
+    type.id() == "struct" || type.id() == "union" ||
+    type.id() == "ansi_c_interface" || type.id() == "ansi_c_channel" ||
+    type.id() == "ansi_c_behavior")
   {
     // Create new components subt to operate upon
-    irept::subt components=type.components().get_sub();
+    irept::subt components = type.components().get_sub();
 
     Forall_irep(it, components)
     {
       // the arguments are now declarations
-      ansi_c_declarationt &component=
-        to_ansi_c_declaration((exprt &)*it);
+      ansi_c_declarationt &component = to_ansi_c_declaration((exprt &)*it);
 
       exprt new_component("component");
 
-      new_component.location()=component.location();
+      new_component.location() = component.location();
       new_component.name(component.get_base_name());
       new_component.pretty_name(component.get_base_name());
       new_component.type().swap(component.type());
@@ -355,20 +346,19 @@ void ansi_c_convertt::convert_type(
     tmp.get_sub() = components;
     type.components(tmp);
   }
-  else if(type.id()=="type_of")
+  else if(type.id() == "type_of")
   {
     if(type.is_expression())
-      convert_expr((exprt&)type.subtype());
+      convert_expr((exprt &)type.subtype());
     else
       convert_type(type.subtype());
   }
-  else if(type.id()=="c_enum" ||
-          type.id()=="incomplete_c_enum")
+  else if(type.id() == "c_enum" || type.id() == "incomplete_c_enum")
   {
     // add width
     type.width(config.ansi_c.int_width);
   }
-  else if(type.id()=="void")
+  else if(type.id() == "void")
   {
     type.id("empty");
   }

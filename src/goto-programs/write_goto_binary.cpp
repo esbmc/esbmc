@@ -27,25 +27,22 @@ bool write_goto_binary(
   symbol_serializationt symbolconverter(irepc);
   goto_function_serializationt gfconverter(irepc);
 
-  write_long( out, lcontext.size() );
+  write_long(out, lcontext.size());
 
-  lcontext.foreach_operand(
-    [&symbolconverter, &out] (const symbolt& s)
-    {
-      symbolconverter.convert(s, out);
-    }
-  );
+  lcontext.foreach_operand([&symbolconverter, &out](const symbolt &s) {
+    symbolconverter.convert(s, out);
+  });
 
-  unsigned cnt=0;
+  unsigned cnt = 0;
   forall_goto_functions(it, functions)
-    if (it->second.body_available)
+    if(it->second.body_available)
       cnt++;
 
-  write_long( out, cnt );
+  write_long(out, cnt);
 
-  for (auto & it : functions.function_map)
+  for(auto &it : functions.function_map)
   {
-    if (it.second.body_available)
+    if(it.second.body_available)
     {
       it.second.body.compute_location_numbers();
       write_string(out, it.first.as_string());

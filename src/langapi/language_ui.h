@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/parseoptions.h>
 #include <util/ui_message.h>
 
-class language_uit:public messaget
+class language_uit : public messaget
 {
 public:
   language_filest language_files;

@@ -21,8 +21,7 @@
 #include <util/prefix.h>
 #include <util/std_expr.h>
 
-void
-goto_symext::symex_goto(const expr2tc &old_guard)
+void goto_symext::symex_goto(const expr2tc &old_guard)
 {
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
@@ -35,19 +34,22 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   new_guard_false = ((is_false(new_guard)) || cur_state->guard.is_false());
   new_guard_true = is_true(new_guard);
 
-  if (!new_guard_false && options.get_bool_option("smt-symex-guard"))
+  if(!new_guard_false && options.get_bool_option("smt-symex-guard"))
   {
     auto rte = boost::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
     equality2tc question(gen_true_expr(), new_guard);
-    try {
+    try
+    {
       tvt res = rte->ask_solver_question(question);
 
-      if (res.is_false())
+      if(res.is_false())
         new_guard_false = true;
-      else if (res.is_true())
+      else if(res.is_true())
         new_guard_true = true;
-    } catch (runtime_encoded_equationt::dual_unsat_exception &e) {
+    }
+    catch(runtime_encoded_equationt::dual_unsat_exception &e)
+    {
       // Assumptions mean that the guard is never satisfiable as true or false,
       // basically means we've assume'd away the possibility of hitting this
       // point.
@@ -55,14 +57,12 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     }
   }
 
-  goto_programt::const_targett goto_target =
-    instruction.targets.front();
+  goto_programt::const_targett goto_target = instruction.targets.front();
 
   bool forward =
-    cur_state->source.pc->location_number <
-    goto_target->location_number;
+    cur_state->source.pc->location_number < goto_target->location_number;
 
-  if (new_guard_false)
+  if(new_guard_false)
   {
     // reset unwinding counter
     if(instruction.is_backwards_goto())
@@ -81,16 +81,16 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   assert(!instruction.targets.empty());
 
   // we only do deterministic gotos for now
-  if (instruction.targets.size() != 1)
+  if(instruction.targets.size() != 1)
     throw "no support for non-deterministic gotos";
 
   // backwards?
-  if (!forward)
+  if(!forward)
   {
     BigInt &unwind = cur_state->loop_iterations[instruction.loop_number];
     ++unwind;
 
-    if (get_unwind(cur_state->source, unwind))
+    if(get_unwind(cur_state->source, unwind))
     {
       loop_bound_exceeded(new_guard);
 
@@ -107,7 +107,8 @@ goto_symext::symex_goto(const expr2tc &old_guard)
       return;
     }
 
-    if (new_guard_true) {
+    if(new_guard_true)
+    {
       cur_state->source.pc = goto_target;
       return; // nothing else to do
     }
@@ -115,11 +116,14 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
   goto_programt::const_targett new_state_pc, state_pc;
 
-  if (forward) {
+  if(forward)
+  {
     new_state_pc = goto_target; // goto target instruction
     state_pc = cur_state->source.pc;
     state_pc++; // next instruction
-  } else {
+  }
+  else
+  {
     new_state_pc = cur_state->source.pc;
     new_state_pc++;
     state_pc = goto_target;
@@ -135,16 +139,23 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   statet::goto_statet &new_state = goto_state_list.back();
 
   // adjust guards
-  if (new_guard_true) {
+  if(new_guard_true)
+  {
     cur_state->guard.make_false();
-  } else {
+  }
+  else
+  {
     // produce new guard symbol
     expr2tc guard_expr;
 
-    if (is_symbol2t(new_guard) ||
-        (is_not2t(new_guard) && is_symbol2t(to_not2t(new_guard).value))) {
+    if(
+      is_symbol2t(new_guard) ||
+      (is_not2t(new_guard) && is_symbol2t(to_not2t(new_guard).value)))
+    {
       guard_expr = new_guard;
-    } else {
+    }
+    else
+    {
       guard_expr = guard_identifier();
 
       expr2tc new_rhs = new_guard;
@@ -155,7 +166,8 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
       target->assignment(
         gen_true_expr(),
-        guard_expr, guard_expr,
+        guard_expr,
+        guard_expr,
         new_rhs,
         cur_state->source,
         cur_state->gen_stack_trace(),
@@ -171,18 +183,20 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     not2tc not_guard_expr(guard_expr);
     do_simplify(not_guard_expr);
 
-    if (forward) {
+    if(forward)
+    {
       new_state.guard.add(guard_expr);
       cur_state->guard.add(not_guard_expr);
-    } else   {
+    }
+    else
+    {
       cur_state->guard.add(guard_expr);
       new_state.guard.add(not_guard_expr);
     }
   }
 }
 
-void
-goto_symext::merge_gotos()
+void goto_symext::merge_gotos()
 {
   statet::framet &frame = cur_state->top();
 
@@ -190,16 +204,15 @@ goto_symext::merge_gotos()
   statet::goto_state_mapt::iterator state_map_it =
     frame.goto_state_map.find(cur_state->source.pc);
 
-  if (state_map_it == frame.goto_state_map.end())
-    return;  // nothing to do
+  if(state_map_it == frame.goto_state_map.end())
+    return; // nothing to do
 
   // we need to merge
   statet::goto_state_listt &state_list = state_map_it->second;
 
-  for (statet::goto_state_listt::reverse_iterator
-       list_it = state_list.rbegin();
-       list_it != state_list.rend();
-       list_it++)
+  for(statet::goto_state_listt::reverse_iterator list_it = state_list.rbegin();
+      list_it != state_list.rend();
+      list_it++)
   {
     statet::goto_statet &goto_state = *list_it;
 
@@ -219,10 +232,10 @@ goto_symext::merge_gotos()
   frame.goto_state_map.erase(state_map_it);
 }
 
-void
-goto_symext::merge_value_sets(const statet::goto_statet &src)
+void goto_symext::merge_value_sets(const statet::goto_statet &src)
 {
-  if (cur_state->guard.is_false()) {
+  if(cur_state->guard.is_false())
+  {
     cur_state->value_set = src.value_set;
     return;
   }
@@ -230,8 +243,7 @@ goto_symext::merge_value_sets(const statet::goto_statet &src)
   cur_state->value_set.make_union(src.value_set);
 }
 
-void
-goto_symext::phi_function(const statet::goto_statet &goto_state)
+void goto_symext::phi_function(const statet::goto_statet &goto_state)
 {
   // go over all variables to see what changed
   std::set<renaming::level2t::name_record> variables;
@@ -240,9 +252,9 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
   cur_state->level2.get_variables(variables);
 
   guardt tmp_guard;
-  if(!variables.empty()
-     && !cur_state->guard.is_false()
-     && !goto_state.guard.is_false())
+  if(
+    !variables.empty() && !cur_state->guard.is_false() &&
+    !goto_state.guard.is_false())
   {
     tmp_guard = goto_state.guard;
 
@@ -250,16 +262,17 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     tmp_guard -= cur_state->guard;
   }
 
-  for (const auto & variable : variables)
+  for(const auto &variable : variables)
   {
-    if (goto_state.level2.current_number(variable) ==
-        cur_state->level2.current_number(variable))
-      continue;  // not changed
+    if(
+      goto_state.level2.current_number(variable) ==
+      cur_state->level2.current_number(variable))
+      continue; // not changed
 
-    if (variable.base_name == guard_identifier_s)
-      continue;  // just a guard
+    if(variable.base_name == guard_identifier_s)
+      continue; // just a guard
 
-    if (has_prefix(variable.base_name.as_string(),"symex::invalid_object"))
+    if(has_prefix(variable.base_name.as_string(), "symex::invalid_object"))
       continue;
 
     // changed!
@@ -271,13 +284,16 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     expr2tc rhs;
 
-    if (cur_state->guard.is_false() || goto_state.guard.is_false()) {
+    if(cur_state->guard.is_false() || goto_state.guard.is_false())
+    {
       rhs = symbol2tc(type, symbol.name);
 
       // Try to get the value
       renaming::level2t::rename_to_record(rhs, variable);
       goto_state.level2.rename(rhs);
-    } else {
+    }
+    else
+    {
       symbol2tc true_val(type, symbol.name);
       symbol2tc false_val(type, symbol.name);
 
@@ -306,7 +322,8 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     target->assignment(
       gen_true_expr(),
-      new_lhs, lhs,
+      new_lhs,
+      lhs,
       rhs,
       cur_state->source,
       cur_state->gen_stack_trace(),
@@ -314,8 +331,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
   }
 }
 
-void
-goto_symext::loop_bound_exceeded(const expr2tc &guard)
+void goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
   const irep_idt &loop_id = cur_state->source.pc->location.loopid();
 
@@ -334,8 +350,8 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
       // generate unwinding assumption, unless we permit partial loops
       expr2tc guarded_expr = negated_cond;
       cur_state->guard.guard_expr(guarded_expr);
-      target->assumption(cur_state->guard.as_expr(), guarded_expr,
-                         cur_state->source);
+      target->assumption(
+        cur_state->guard.as_expr(), guarded_expr, cur_state->source);
     }
 
     // add to state guard to prevent further assignments
@@ -343,23 +359,24 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
   }
 }
 
-bool
-goto_symext::get_unwind(const symex_targett::sourcet &source, const BigInt &unwind)
+bool goto_symext::get_unwind(
+  const symex_targett::sourcet &source,
+  const BigInt &unwind)
 {
   unsigned id = source.pc->loop_number;
   BigInt this_loop_max_unwind = max_unwind;
 
-  if (unwind_set.count(id) != 0)
+  if(unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
 
-
-  bool stop_unwind = this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
-  if (!options.get_bool_option("quiet"))
+  bool stop_unwind =
+    this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
+  if(!options.get_bool_option("quiet"))
   {
     std::cout << (stop_unwind ? "Not unwinding " : "Unwinding ")
-      << "loop " + i2string(cur_state->source.pc->loop_number)
-      << " iteration " + integer2string(unwind) + " "
-      << cur_state->source.pc->location.as_string() << '\n';
+              << "loop " + i2string(cur_state->source.pc->loop_number)
+              << " iteration " + integer2string(unwind) + " "
+              << cur_state->source.pc->location.as_string() << '\n';
   }
 
   return stop_unwind;

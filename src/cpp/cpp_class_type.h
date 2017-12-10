@@ -13,10 +13,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 // used for C++ structs and classes
 
-class class_typet:public struct_union_typet
+class class_typet : public struct_union_typet
 {
 public:
-  inline class_typet():struct_union_typet("struct")
+  inline class_typet() : struct_union_typet("struct")
   {
   }
 
@@ -27,7 +27,7 @@ public:
 
   inline irep_idt default_access() const
   {
-    return is_class()?"private":"public";
+    return is_class() ? "private" : "public";
   }
 
   inline const irept::subt &bases() const
@@ -37,13 +37,14 @@ public:
 
   bool has_base(const irep_idt &id) const
   {
-    const irept::subt &b=bases();
+    const irept::subt &b = bases();
     forall_irep(it, b)
     {
-      assert(it->id()=="bases");
-      const irept &type=it->find("type");
-      assert(type.id()=="symbol");
-      if(type.get("identifier")==id) return true;
+      assert(it->id() == "bases");
+      const irept &type = it->find("type");
+      assert(type.id() == "symbol");
+      if(type.get("identifier") == id)
+        return true;
     }
 
     return false;
@@ -52,13 +53,13 @@ public:
 
 extern inline const class_typet &to_class_type(const typet &type)
 {
-  assert(type.id()=="struct");
+  assert(type.id() == "struct");
   return static_cast<const class_typet &>(type);
 }
 
 extern inline class_typet &to_class_type(typet &type)
 {
-  assert(type.id()=="struct");
+  assert(type.id() == "struct");
   return static_cast<class_typet &>(type);
 }
 

@@ -12,8 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string>
 #include <util/expr.h>
 
-void convert_float_literal(
-  const std::string &src,
-  exprt &dest);
+void convert_float_literal(const std::string &src, exprt &dest);
 
 #endif

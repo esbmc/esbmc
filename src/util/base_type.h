@@ -31,24 +31,19 @@ bool base_type_eq(
   const expr2tc &expr2,
   const namespacet &ns);
 
-bool base_type_eq(
-  const typet &type1,
-  const typet &type2,
-  const namespacet &ns);
+bool base_type_eq(const typet &type1, const typet &type2, const namespacet &ns);
 
-bool base_type_eq(
-  const exprt &expr1,
-  const exprt &expr2,
-  const namespacet &ns);
+bool base_type_eq(const exprt &expr1, const exprt &expr2, const namespacet &ns);
 
-bool
-is_subclass_of(const type2tc &subclass, const type2tc &superclass,
-               const namespacet &ns);
+bool is_subclass_of(
+  const type2tc &subclass,
+  const type2tc &superclass,
+  const namespacet &ns);
 
 class base_type_eqt
 {
 public:
-  base_type_eqt(const namespacet &_ns):ns(_ns)
+  base_type_eqt(const namespacet &_ns) : ns(_ns)
   {
   }
 
@@ -58,7 +53,7 @@ public:
     return base_type_eq_rec(type1, type2);
   }
 
-   bool base_type_eq(const typet &type1, const typet &type2)
+  bool base_type_eq(const typet &type1, const typet &type2)
   {
     identifiers.clear();
     return base_type_eq_rec(type1, type2);

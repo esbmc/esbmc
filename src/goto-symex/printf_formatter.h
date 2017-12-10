@@ -14,9 +14,8 @@ Author: Daniel Kroening, kroening@kroening.com
 class printf_formattert
 {
 public:
-  void operator()(
-    const std::string &format,
-    const std::list<expr2tc> &_operands);
+  void
+  operator()(const std::string &format, const std::list<expr2tc> &_operands);
 
   void print(std::ostream &out);
   std::string as_string();
@@ -26,13 +25,19 @@ protected:
   std::list<expr2tc> operands;
   std::list<expr2tc>::const_iterator next_operand;
   unsigned format_pos;
-  inline bool eol() const { return format_pos>=format.size(); }
+  inline bool eol() const
+  {
+    return format_pos >= format.size();
+  }
 
-  class eol_exception { };
+  class eol_exception
+  {
+  };
 
   char next()
   {
-    if(eol()) throw eol_exception();
+    if(eol())
+      throw eol_exception();
     return format[format_pos++];
   }
 

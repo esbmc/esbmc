@@ -19,27 +19,28 @@ class message_handlert
 public:
   virtual void print(unsigned level, const std::string &message) = 0;
 
-  virtual void print(
-    unsigned level,
-    const std::string &message,
-    const locationt &location);
+  virtual void
+  print(unsigned level, const std::string &message, const locationt &location);
 
   virtual ~message_handlert() = default;
 };
 
-class nul_message_handlert:public message_handlert
+class nul_message_handlert : public message_handlert
 {
 };
 
-class stream_message_handlert:public message_handlert
+class stream_message_handlert : public message_handlert
 {
 public:
-  stream_message_handlert(std::ostream &_out):out(_out)
+  stream_message_handlert(std::ostream &_out) : out(_out)
   {
   }
 
-  void print(unsigned level __attribute__((unused)), const std::string &message) override
-  { out << message << std::endl; }
+  void print(unsigned level __attribute__((unused)), const std::string &message)
+    override
+  {
+    out << message << std::endl;
+  }
 
 protected:
   std::ostream &out;
@@ -49,20 +50,26 @@ class messaget
 {
 public:
   virtual void print(const std::string &message)
-  { print(1, message); }
+  {
+    print(1, message);
+  }
 
   void status(const std::string &message)
-  { print(6, message); }
+  {
+    print(6, message);
+  }
 
   void result(const std::string &message)
-  { print(4, message); }
+  {
+    print(4, message);
+  }
 
   void warning(const std::string &message)
-  { print(2, message); }
+  {
+    print(2, message);
+  }
 
-  void status(
-    const std::string &message,
-    const std::string &file)
+  void status(const std::string &message, const std::string &file)
   {
     locationt location;
     location.set_file(file);
@@ -70,11 +77,11 @@ public:
   }
 
   void error(const std::string &message)
-  { print(1, message); }
+  {
+    print(1, message);
+  }
 
-  void error(
-    const std::string &message,
-    const std::string &file)
+  void error(const std::string &message, const std::string &file)
   {
     locationt location;
     location.set_file(file);
@@ -83,14 +90,14 @@ public:
 
   virtual void print(unsigned level, const std::string &message);
 
-  virtual void print(
-    unsigned level,
-    const std::string &message,
-    const locationt &location);
+  virtual void
+  print(unsigned level, const std::string &message, const locationt &location);
 
   virtual void set_message_handler(message_handlert *_message_handler);
   virtual void set_verbosity(unsigned _verbosity)
-  { verbosity=_verbosity; }
+  {
+    verbosity = _verbosity;
+  }
 
   virtual unsigned get_verbosity() const
   {
@@ -99,14 +106,14 @@ public:
 
   messaget()
   {
-    message_handler=(message_handlert *)nullptr;
-    verbosity=10;
+    message_handler = (message_handlert *)nullptr;
+    verbosity = 10;
   }
 
   messaget(message_handlert &_message_handler)
   {
-    message_handler=&_message_handler;
-    verbosity=10;
+    message_handler = &_message_handler;
+    verbosity = 10;
   }
 
   virtual ~messaget() = default;

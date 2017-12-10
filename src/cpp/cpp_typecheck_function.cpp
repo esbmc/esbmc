@@ -18,28 +18,27 @@ void cpp_typecheckt::convert_argument(
   const irep_idt &mode,
   code_typet::argumentt &argument)
 {
-  std::string identifier=id2string(argument.get_identifier());
+  std::string identifier = id2string(argument.get_identifier());
 
   if(identifier.empty())
   {
-    identifier="#anon_arg"+i2string(anon_counter++);
+    identifier = "#anon_arg" + i2string(anon_counter++);
     argument.set_base_name(identifier);
   }
 
-  identifier=cpp_scopes.current_scope().prefix+
-             id2string(identifier);
+  identifier = cpp_scopes.current_scope().prefix + id2string(identifier);
 
   argument.set_identifier(identifier);
 
   symbolt symbol;
 
-  symbol.name=identifier;
-  symbol.base_name=argument.get_base_name();
-  symbol.location=argument.location();
-  symbol.mode=mode;
-  symbol.module=module;
-  symbol.type=argument.type();
-  symbol.lvalue=!is_reference(symbol.type);
+  symbol.name = identifier;
+  symbol.base_name = argument.get_base_name();
+  symbol.location = argument.location();
+  symbol.mode = mode;
+  symbol.module = module;
+  symbol.type = argument.type();
+  symbol.lvalue = !is_reference(symbol.type);
 
   assert(!symbol.base_name.empty());
 
@@ -48,8 +47,8 @@ void cpp_typecheckt::convert_argument(
   if(context.move(symbol, new_symbol))
   {
     err_location(symbol.location);
-    str << "cpp_typecheckt::convert_argument: context.move("
-        << symbol.name << ") failed";
+    str << "cpp_typecheckt::convert_argument: context.move(" << symbol.name
+        << ") failed";
     throw 0;
   }
 
@@ -61,25 +60,24 @@ void cpp_typecheckt::convert_arguments(
   const irep_idt &mode,
   code_typet &function_type)
 {
-  code_typet::argumentst &arguments=
-    function_type.arguments();
+  code_typet::argumentst &arguments = function_type.arguments();
 
-  for(auto & argument : arguments)
+  for(auto &argument : arguments)
     convert_argument(mode, argument);
 }
 
 void cpp_typecheckt::convert_function(symbolt &symbol)
 {
-  code_typet &function_type=
-    to_code_type(template_subtype(symbol.type));
+  code_typet &function_type = to_code_type(template_subtype(symbol.type));
 
   // Is this a template that was instantiated for a function overload, but isn't
   // referred to? If so, don't attempt to convert it, because the template
   // itself would never be instantiated in a real compilation. This is the tail
   // end of SFINAE, but instead of discarding compilation errors in unused
   // templates, we just don't convert them.
-  if (symbol.value.get("#speculative_template") == "1" &&
-      symbol.value.get("#template_in_use") != "1")
+  if(
+    symbol.value.get("#speculative_template") == "1" &&
+    symbol.value.get("#template_in_use") != "1")
     return;
 
   // only a prototype?
@@ -87,11 +85,11 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
     return;
 
   // if it is a destructor, add the implicit code
-  if(symbol.type.get("return_type")=="destructor")
+  if(symbol.type.get("return_type") == "destructor")
   {
-    const symbolt &msymb=lookup(symbol.type.get("#member_name"));
+    const symbolt &msymb = lookup(symbol.type.get("#member_name"));
 
-    assert(symbol.value.id()=="code");
+    assert(symbol.value.id() == "code");
     assert(symbol.value.statement() == "block");
 
     // vtables should be updated as soon as the destructor is called
@@ -109,22 +107,21 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
 
   // enter appropriate scope
   cpp_save_scopet saved_scope(cpp_scopes);
-  cpp_scopet &function_scope=cpp_scopes.set_scope(symbol.name);
+  cpp_scopet &function_scope = cpp_scopes.set_scope(symbol.name);
 
   // fix the scope's prefix
-  function_scope.prefix+=id2string(symbol.name)+"::";
+  function_scope.prefix += id2string(symbol.name) + "::";
 
   // genuine function definition -- do the parameter declarations
   convert_arguments(symbol.mode, function_type);
 
   // create "this" if it's a non-static method
-  if(function_scope.is_method &&
-     !function_scope.is_static_member)
+  if(function_scope.is_method && !function_scope.is_static_member)
   {
-    code_typet::argumentst &arguments=function_type.arguments();
-    assert(arguments.size()>=1);
-    code_typet::argumentt &this_argument_expr=arguments.front();
-    function_scope.this_expr=exprt("symbol", this_argument_expr.type());
+    code_typet::argumentst &arguments = function_type.arguments();
+    assert(arguments.size() >= 1);
+    code_typet::argumentt &this_argument_expr = arguments.front();
+    function_scope.this_expr = exprt("symbol", this_argument_expr.type());
     function_scope.this_expr.identifier(this_argument_expr.cmt_identifier());
   }
   else
@@ -134,65 +131,65 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   start_typecheck_code();
 
   // save current return type
-  typet old_return_type=return_type;
+  typet old_return_type = return_type;
 
-  return_type=function_type.return_type();
+  return_type = function_type.return_type();
 
   // constructor, destructor?
-  if(return_type.id()=="constructor" ||
-     return_type.id()=="destructor")
-    return_type=empty_typet();
+  if(return_type.id() == "constructor" || return_type.id() == "destructor")
+    return_type = empty_typet();
 
   typecheck_code(to_code(symbol.value));
 
-  symbol.value.type()=symbol.type;
+  symbol.value.type() = symbol.type;
 
   return_type = old_return_type;
 }
 
 irep_idt cpp_typecheckt::function_identifier(const typet &type)
 {
-  const code_typet &function_type=
-    to_code_type(template_subtype(type));
+  const code_typet &function_type = to_code_type(template_subtype(type));
 
-  const code_typet::argumentst &arguments=
-    function_type.arguments();
+  const code_typet::argumentst &arguments = function_type.arguments();
 
   std::string result;
-  bool first=true;
+  bool first = true;
 
-  result+='(';
+  result += '(';
 
   // the name of the function should not depend on
   // the class name that is encoded in the type of this,
   // but we must distinguish "const" and "non-const" member
   // functions
 
-  code_typet::argumentst::const_iterator it=
-    arguments.begin();
+  code_typet::argumentst::const_iterator it = arguments.begin();
 
-  if(it!=arguments.end() &&
-     it->get_identifier()=="this")
+  if(it != arguments.end() && it->get_identifier() == "this")
   {
-    const typet &pointer=it->type();
-    const typet &symbol =pointer.subtype();
-    if(symbol.cmt_constant()) result+="const$";
-    if(symbol.cmt_volatile()) result+="volatile$";
-    result+="this";
-    first=false;
+    const typet &pointer = it->type();
+    const typet &symbol = pointer.subtype();
+    if(symbol.cmt_constant())
+      result += "const$";
+    if(symbol.cmt_volatile())
+      result += "volatile$";
+    result += "this";
+    first = false;
     it++;
   }
 
   // we skipped the "this", on purpose!
 
-  for(; it!=arguments.end(); it++)
+  for(; it != arguments.end(); it++)
   {
-    if(first) first=false; else result+=",";
-    typet tmp_type=it->type();
-    result+=cpp_type2name(it->type());
+    if(first)
+      first = false;
+    else
+      result += ",";
+    typet tmp_type = it->type();
+    result += cpp_type2name(it->type());
   }
 
-  result+=')';
+  result += ')';
 
   return result;
 }

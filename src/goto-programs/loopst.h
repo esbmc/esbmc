@@ -13,10 +13,9 @@
 class loopst
 {
 public:
-  loopst(contextt &_context) :
-    context(_context),
-    size(0)
-  {}
+  loopst(contextt &_context) : context(_context), size(0)
+  {
+  }
 
   typedef hash_set_cont<expr2tc, irep2_hash> loop_varst;
 

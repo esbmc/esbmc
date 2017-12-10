@@ -29,7 +29,7 @@ extern std::string verification_file;
 
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
 {
-  for(const auto & step : steps)
+  for(const auto &step : steps)
     step.output(ns, out);
 }
 
@@ -37,22 +37,22 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
 {
   out << "*** ";
 
-  switch (type)
+  switch(type)
   {
-    case goto_trace_stept::ASSERT:
-      out << "ASSERT";
-      break;
+  case goto_trace_stept::ASSERT:
+    out << "ASSERT";
+    break;
 
-    case goto_trace_stept::ASSUME:
-      out << "ASSUME";
-      break;
+  case goto_trace_stept::ASSUME:
+    out << "ASSUME";
+    break;
 
-    case goto_trace_stept::ASSIGNMENT:
-      out << "ASSIGNMENT";
-      break;
+  case goto_trace_stept::ASSIGNMENT:
+    out << "ASSIGNMENT";
+    break;
 
-    default:
-      assert(false);
+  default:
+    assert(false);
   }
 
   if(type == ASSERT || type == ASSUME)
@@ -125,22 +125,28 @@ void counterexample_value(
     value_string = from_expr(ns, "", value);
 
     // Don't print the bit-vector if we're running on integer/real mode
-    if (is_constant_expr(value) && !config.options.get_bool_option("ir"))
+    if(is_constant_expr(value) && !config.options.get_bool_option("ir"))
     {
       if(is_bv_type(value))
       {
         value_string +=
-          " (" + integer2binary(to_constant_int2t(value).value, value->type->get_width()) + ")";
+          " (" + integer2binary(
+                   to_constant_int2t(value).value, value->type->get_width()) +
+          ")";
       }
       else if(is_fixedbv_type(value))
       {
         value_string +=
-          " (" + to_constant_fixedbv2t(value).value.to_expr().get_value().as_string() + ")";
+          " (" +
+          to_constant_fixedbv2t(value).value.to_expr().get_value().as_string() +
+          ")";
       }
       else if(is_floatbv_type(value))
       {
         value_string +=
-          " (" + to_constant_floatbv2t(value).value.to_expr().get_value().as_string() + ")";
+          " (" +
+          to_constant_floatbv2t(value).value.to_expr().get_value().as_string() +
+          ")";
       }
     }
   }
@@ -155,16 +161,17 @@ void show_goto_trace_gui(
 {
   locationt previous_location;
 
-  for(const auto & step : goto_trace.steps)
+  for(const auto &step : goto_trace.steps)
   {
     const locationt &location = step.pc->location;
 
     if((step.type == goto_trace_stept::ASSERT) && !step.guard)
     {
-      out << "FAILED" << std::endl << step.comment
-          << std::endl // value
-          << std::endl // PC
-          << location.file() << std::endl << location.line() << std::endl
+      out << "FAILED" << std::endl
+          << step.comment << std::endl // value
+          << std::endl                 // PC
+          << location.file() << std::endl
+          << location.line() << std::endl
           << location.column() << std::endl;
     }
     else if(step.type == goto_trace_stept::ASSIGNMENT)
@@ -187,9 +194,10 @@ void show_goto_trace_gui(
 
       out << identifier << "," << base_name << ","
           << get_type_id(step.value->type) << "," << value_string << std::endl
-          << step.step_nr << std::endl << step.pc->location.file() << std::endl
-          << step.pc->location.line() << std::endl << step.pc->location.column()
-          << std::endl;
+          << step.step_nr << std::endl
+          << step.pc->location.file() << std::endl
+          << step.pc->location.line() << std::endl
+          << step.pc->location.column() << std::endl;
     }
     else if(location != previous_location)
     {
@@ -199,14 +207,14 @@ void show_goto_trace_gui(
       {
         out << "TRACE" << std::endl;
 
-        out
-            << ","             // identifier
+        out << ","             // identifier
             << ","             // base_name
             << ","             // type
-            << ""
-            << std::endl // value
-            << step.step_nr << std::endl << location.file() << std::endl
-            << location.line() << std::endl << location.column() << std::endl;
+            << "" << std::endl // value
+            << step.step_nr << std::endl
+            << location.file() << std::endl
+            << location.line() << std::endl
+            << location.column() << std::endl;
       }
     }
 
@@ -231,7 +239,7 @@ void show_state_header(
 
   // Print stack trace
 
-  for(const auto & it : state.stack_trace)
+  for(const auto &it : state.stack_trace)
   {
     if(it.src == nullptr)
       out << it.function.as_string() << std::endl;
@@ -245,92 +253,91 @@ void show_state_header(
 }
 
 void violation_graphml_goto_trace(
-  optionst & options,
-  const namespacet & ns,
-  const goto_tracet & goto_trace)
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
 {
   grapht graph(grapht::VIOLATION);
   graph.verified_file = verification_file;
 
-  edget * first_edge = &graph.edges.at(0);
-  nodet * prev_node = first_edge->to_node;
+  edget *first_edge = &graph.edges.at(0);
+  nodet *prev_node = first_edge->to_node;
 
-  for(const auto & step : goto_trace.steps)
+  for(const auto &step : goto_trace.steps)
   {
-    switch (step.type)
+    switch(step.type)
     {
-      case goto_trace_stept::ASSERT:
-        if(!step.guard)
-        {
-          nodet * violation_node = new nodet();
-          violation_node->violation = true;
+    case goto_trace_stept::ASSERT:
+      if(!step.guard)
+      {
+        nodet *violation_node = new nodet();
+        violation_node->violation = true;
 
-          edget violation_edge(prev_node, violation_node);
-          violation_edge.thread_id = std::to_string(step.thread_nr);
-          violation_edge.start_line =
-              get_line_number(
-                verification_file,
-                std::atoi(step.pc->location.get_line().c_str()),
-                options);
+        edget violation_edge(prev_node, violation_node);
+        violation_edge.thread_id = std::to_string(step.thread_nr);
+        violation_edge.start_line = get_line_number(
+          verification_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
 
-          graph.edges.push_back(violation_edge);
+        graph.edges.push_back(violation_edge);
 
-          /* having printed a property violation, don't print more steps. */
+        /* having printed a property violation, don't print more steps. */
 
-          graph.generate_graphml(options);
-          return;
-        }
-        break;
+        graph.generate_graphml(options);
+        return;
+      }
+      break;
 
-      case goto_trace_stept::ASSIGNMENT:
-        if(step.pc->is_assign() || step.pc->is_return()
-           || (step.pc->is_other() && is_nil_expr(step.lhs)))
-        {
+    case goto_trace_stept::ASSIGNMENT:
+      if(
+        step.pc->is_assign() || step.pc->is_return() ||
+        (step.pc->is_other() && is_nil_expr(step.lhs)))
+      {
+        std::string assignment = get_formated_assignment(ns, step);
 
-          std::string assignment = get_formated_assignment(ns, step);
+        graph.check_create_new_thread(step.thread_nr, prev_node);
+        prev_node = graph.edges.back().to_node;
 
-          graph.check_create_new_thread(step.thread_nr, prev_node);
-          prev_node = graph.edges.back().to_node;
+        edget new_edge;
+        new_edge.thread_id = std::to_string(step.thread_nr);
+        new_edge.assumption = assignment;
+        new_edge.start_line = get_line_number(
+          verification_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
 
-          edget new_edge;
-          new_edge.thread_id = std::to_string(step.thread_nr);
-          new_edge.assumption = assignment;
-          new_edge.start_line =
-            get_line_number(
-              verification_file,
-              std::atoi(step.pc->location.get_line().c_str()),
-              options);
+        nodet *new_node = new nodet();
+        new_edge.from_node = prev_node;
+        new_edge.to_node = new_node;
+        prev_node = new_node;
+        graph.edges.push_back(new_edge);
+      }
+      break;
 
-          nodet * new_node = new nodet();
-          new_edge.from_node = prev_node;
-          new_edge.to_node = new_node;
-          prev_node = new_node;
-          graph.edges.push_back(new_edge);
-        }
-        break;
-
-      default:
-        continue;
+    default:
+      continue;
     }
   }
 }
 
 void correctness_graphml_goto_trace(
-  optionst & options,
-  const namespacet & ns __attribute__((unused)),
-  const goto_tracet & goto_trace __attribute__((unused)) )
+  optionst &options,
+  const namespacet &ns __attribute__((unused)),
+  const goto_tracet &goto_trace __attribute__((unused)))
 {
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = verification_file;
 
-  edget * first_edge = &graph.edges.at(0);
-  nodet * prev_node = first_edge->to_node;
+  edget *first_edge = &graph.edges.at(0);
+  nodet *prev_node = first_edge->to_node;
 
-  for(const auto & step : goto_trace.steps)
+  for(const auto &step : goto_trace.steps)
   {
     /* checking restrictions for correctness GraphML */
-    if ((!(is_valid_witness_step(ns, step))) ||
-        (!(step.is_assume() || step.is_assert())))
+    if(
+      (!(is_valid_witness_step(ns, step))) ||
+      (!(step.is_assume() || step.is_assert())))
       continue;
 
     std::string invariant = get_invariant(
@@ -338,11 +345,11 @@ void correctness_graphml_goto_trace(
       std::atoi(step.pc->location.get_line().c_str()),
       options);
 
-    if (invariant.empty())
+    if(invariant.empty())
       continue; /* we don't have to consider this invariant */
 
-    nodet * new_node = new nodet();
-    edget * new_edge = new edget();
+    nodet *new_node = new nodet();
+    edget *new_edge = new edget();
     std::string function = step.pc->location.get_function().c_str();
     new_edge->start_line = get_line_number(
       verification_file,
@@ -368,62 +375,63 @@ void show_goto_trace(
   unsigned prev_step_nr = 0;
   bool first_step = true;
 
-  for(const auto & step : goto_trace.steps)
+  for(const auto &step : goto_trace.steps)
   {
-    switch (step.type)
+    switch(step.type)
     {
-      case goto_trace_stept::ASSERT:
-        if(!step.guard)
-        {
-          show_state_header(out, step, step.pc->location, step.step_nr);
-          out << "Violated property:" << std::endl;
-          if(!step.pc->location.is_nil())
-            out << "  " << step.pc->location << std::endl;
-          out << "  " << step.comment << std::endl;
-
-          if(step.pc->is_assert())
-            out << "  " << from_expr(ns, "", step.pc->guard) << std::endl;
-
-          // Having printed a property violation, don't print more steps.
-          return;
-        }
-        break;
-
-      case goto_trace_stept::ASSIGNMENT:
-        if(step.pc->is_assign() || step.pc->is_return()
-            || (step.pc->is_other() && is_nil_expr(step.lhs)))
-        {
-          if(prev_step_nr != step.step_nr || first_step)
-          {
-            first_step = false;
-            prev_step_nr = step.step_nr;
-            show_state_header(out, step, step.pc->location, step.step_nr);
-          }
-          counterexample_value(out, ns, step.lhs, step.value);
-        }
-        break;
-
-      case goto_trace_stept::OUTPUT:
+    case goto_trace_stept::ASSERT:
+      if(!step.guard)
       {
-        printf_formattert printf_formatter;
-        printf_formatter(step.format_string, step.output_args);
-        printf_formatter.print(out);
-        out << std::endl;
-        break;
+        show_state_header(out, step, step.pc->location, step.step_nr);
+        out << "Violated property:" << std::endl;
+        if(!step.pc->location.is_nil())
+          out << "  " << step.pc->location << std::endl;
+        out << "  " << step.comment << std::endl;
+
+        if(step.pc->is_assert())
+          out << "  " << from_expr(ns, "", step.pc->guard) << std::endl;
+
+        // Having printed a property violation, don't print more steps.
+        return;
       }
+      break;
 
-      case goto_trace_stept::RENUMBER:
-        out << "Renumbered pointer to ";
+    case goto_trace_stept::ASSIGNMENT:
+      if(
+        step.pc->is_assign() || step.pc->is_return() ||
+        (step.pc->is_other() && is_nil_expr(step.lhs)))
+      {
+        if(prev_step_nr != step.step_nr || first_step)
+        {
+          first_step = false;
+          prev_step_nr = step.step_nr;
+          show_state_header(out, step, step.pc->location, step.step_nr);
+        }
         counterexample_value(out, ns, step.lhs, step.value);
-        break;
+      }
+      break;
 
-      case goto_trace_stept::ASSUME:
-      case goto_trace_stept::SKIP:
-        // Something deliberately ignored
-        break;
+    case goto_trace_stept::OUTPUT:
+    {
+      printf_formattert printf_formatter;
+      printf_formatter(step.format_string, step.output_args);
+      printf_formatter.print(out);
+      out << std::endl;
+      break;
+    }
 
-      default:
-        assert(false);
+    case goto_trace_stept::RENUMBER:
+      out << "Renumbered pointer to ";
+      counterexample_value(out, ns, step.lhs, step.value);
+      break;
+
+    case goto_trace_stept::ASSUME:
+    case goto_trace_stept::SKIP:
+      // Something deliberately ignored
+      break;
+
+    default:
+      assert(false);
     }
   }
 }

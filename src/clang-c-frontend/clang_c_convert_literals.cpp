@@ -21,11 +21,10 @@ bool clang_c_convertert::convert_character_literal(
   if(get_type(char_literal.getType(), type))
     return true;
 
-  dest =
-    constant_exprt(
-      integer2binary(char_literal.getValue(), bv_width(type)),
-      integer2string(char_literal.getValue()),
-      type);
+  dest = constant_exprt(
+    integer2binary(char_literal.getValue(), bv_width(type)),
+    integer2string(char_literal.getValue()),
+    type);
 
   return false;
 }
@@ -57,21 +56,19 @@ bool clang_c_convertert::convert_integer_literal(
   llvm::APInt val = integer_literal.getValue();
 
   exprt the_val;
-  if (type.is_unsignedbv())
+  if(type.is_unsignedbv())
   {
-    the_val =
-      constant_exprt(
-        integer2binary(val.getZExtValue(), bv_width(type)),
-        integer2string(val.getZExtValue()),
-        type);
+    the_val = constant_exprt(
+      integer2binary(val.getZExtValue(), bv_width(type)),
+      integer2string(val.getZExtValue()),
+      type);
   }
   else
   {
-    the_val =
-      constant_exprt(
-        integer2binary(val.getSExtValue(), bv_width(type)),
-        integer2string(val.getSExtValue()),
-        type);
+    the_val = constant_exprt(
+      integer2binary(val.getSExtValue(), bv_width(type)),
+      integer2string(val.getSExtValue()),
+      type);
   }
 
   dest.swap(the_val);
@@ -97,7 +94,7 @@ static void parse_float(
 
   // get fraction part
   std::string str_fraction_part;
-  while (src[p] != 'E')
+  while(src[p] != 'E')
     str_fraction_part += src[p++];
 
   // skip E
@@ -114,17 +111,17 @@ static void parse_float(
   std::string str_exponent;
   str_exponent += src[p++];
 
-  while (p < src.size())
+  while(p < src.size())
     str_exponent += src[p++];
 
   std::string str_number = str_whole_number + str_fraction_part;
 
-  if (str_number.empty())
+  if(str_number.empty())
     significand = 0;
   else
     significand = string2integer(str_number);
 
-  if (str_exponent.empty())
+  if(str_exponent.empty())
     exponent = 0;
   else
     exponent = string2integer(str_exponent);
@@ -187,7 +184,7 @@ bool clang_c_convertert::convert_float_literal(
       unsigned fraction_bits;
       const std::string &integer_bits = type.integer_bits().as_string();
 
-      if (integer_bits == "")
+      if(integer_bits == "")
         fraction_bits = width / 2;
       else
         fraction_bits = width - atoi(integer_bits.c_str());
@@ -220,14 +217,17 @@ bool clang_c_convertert::convert_float_literal(
   else
   {
     ieee_floatt a;
-    a.spec=to_floatbv_type(type);
+    a.spec = to_floatbv_type(type);
 
     // If it's +oo or -oo, we can't parse it
     if(val.isInfinity())
     {
-      if(val.isNegative()) {
+      if(val.isNegative())
+      {
         a = ieee_floatt::minus_infinity(a.spec);
-      } else {
+      }
+      else
+      {
         a = ieee_floatt::plus_infinity(a.spec);
       }
     }
@@ -250,10 +250,7 @@ bool clang_c_convertert::convert_float_literal(
   }
 
   dest =
-    constant_exprt(
-      integer2binary(value, bv_width(type)),
-      value_string,
-      type);
+    constant_exprt(integer2binary(value, bv_width(type)), value_string, type);
 
   return false;
 }

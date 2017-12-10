@@ -12,16 +12,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/expr.h>
 #include <util/message_stream.h>
 
-class typecheckt:public message_streamt
+class typecheckt : public message_streamt
 {
 public:
-  typecheckt(message_handlert &_message_handler):
-    message_streamt(_message_handler) { }
+  typecheckt(message_handlert &_message_handler)
+    : message_streamt(_message_handler)
+  {
+  }
   ~typecheckt() override = default;
-  
+
 protected:
   // main function -- overload this one
-  virtual void typecheck()=0;
+  virtual void typecheck() = 0;
 
 public:
   // call that one

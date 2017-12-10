@@ -5,42 +5,34 @@
 #ifndef ALLOCAINC_H
 #define ALLOCAINC_H
 
-
-#if defined linux || defined __linux__		\
- || defined sun					\
- || defined UWIN				\
- || defined osf1                                \
- || defined __MACH__                            \
- || defined __CYGWIN__
+#if defined linux || defined __linux__ || defined sun || defined UWIN ||       \
+  defined osf1 || defined __MACH__ || defined __CYGWIN__
 
 #include <alloca.h>
 
-#elif defined _MSC_VER    \
-   || defined __BORLANDC__ \
-   || defined __MINGW32__
+#elif defined _MSC_VER || defined __BORLANDC__ || defined __MINGW32__
 
-# include <malloc.h>
+#include <malloc.h>
 
 #elif defined __VMS
 
 // DEC CXX on VMS alpha.
-# include <builtins.h>
-# define alloca(N) __ALLOCA(N)
+#include <builtins.h>
+#define alloca(N) __ALLOCA(N)
 
 #elif defined __xlC__
 
-# pragma alloca
-# include <stdlib.h>
+#pragma alloca
+#include <stdlib.h>
 
 #elif defined __FCC__
 
-# define alloca(X) __builtin_alloca(X)
+#define alloca(X) __builtin_alloca(X)
 
 #elif defined __FreeBSD__
 
-# include <stdlib.h>
+#include <stdlib.h>
 
 #endif
 
-
-#endif//ndef ALLOCAINC_H
+#endif //ndef ALLOCAINC_H

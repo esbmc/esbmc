@@ -10,21 +10,21 @@ Author: Daniel Kroening, kroening@kroening.com
 
 static bool is_skip(goto_programt::instructionst::iterator it)
 {
-  if (it->is_skip())
+  if(it->is_skip())
     return true;
 
-  if (it->is_goto())
+  if(it->is_goto())
   {
-    if (is_false(it->guard))
+    if(is_false(it->guard))
       return true;
 
-    if (it->targets.size()!=1)
+    if(it->targets.size() != 1)
       return false;
 
-    goto_programt::instructionst::iterator next_it=it;
+    goto_programt::instructionst::iterator next_it = it;
     next_it++;
 
-    return it->targets.front()==next_it;
+    return it->targets.front() == next_it;
   }
 
   if(it->is_other())
@@ -42,11 +42,11 @@ void remove_skip(goto_programt &goto_program)
 
   // remove skip statements
 
-  for(goto_programt::instructionst::iterator
-      it=goto_program.instructions.begin();
-      it!=goto_program.instructions.end();)
+  for(goto_programt::instructionst::iterator it =
+        goto_program.instructions.begin();
+      it != goto_program.instructions.end();)
   {
-    goto_programt::targett old_target=it;
+    goto_programt::targett old_target = it;
 
     // for collecting labels
     std::list<irep_idt> labels;
@@ -55,7 +55,7 @@ void remove_skip(goto_programt &goto_program)
     {
       // don't remove the last skip statement,
       // it could be a target
-      if(it==--goto_program.instructions.end())
+      if(it == --goto_program.instructions.end())
         break;
 
       // save labels
@@ -63,18 +63,18 @@ void remove_skip(goto_programt &goto_program)
       it++;
     }
 
-    goto_programt::targett new_target=it;
+    goto_programt::targett new_target = it;
 
     // save labels
     it->labels.splice(it->labels.begin(), labels);
 
-    if(new_target!=old_target)
+    if(new_target != old_target)
     {
-      while(new_target!=old_target)
+      while(new_target != old_target)
       {
         // remember the old targets
-        new_targets[old_target]=new_target;
-        old_target=goto_program.instructions.erase(old_target);
+        new_targets[old_target] = new_target;
+        old_target = goto_program.instructions.erase(old_target);
       }
     }
     else
@@ -86,20 +86,20 @@ void remove_skip(goto_programt &goto_program)
   Forall_goto_program_instructions(i_it, goto_program)
     if(i_it->is_goto())
     {
-      for(auto & target : i_it->targets)
+      for(auto &target : i_it->targets)
       {
-        new_targetst::const_iterator
-          result=new_targets.find(target);
+        new_targetst::const_iterator result = new_targets.find(target);
 
-        if(result!=new_targets.end())
-          target=result->second;
+        if(result != new_targets.end())
+          target = result->second;
       }
     }
 
   // remove the last skip statement unless it's a target
-  if(!goto_program.instructions.empty() &&
-     is_skip(--goto_program.instructions.end()) &&
-     !goto_program.instructions.back().is_target())
+  if(
+    !goto_program.instructions.empty() &&
+    is_skip(--goto_program.instructions.end()) &&
+    !goto_program.instructions.back().is_target())
     goto_program.instructions.pop_back();
 }
 

@@ -24,21 +24,19 @@ typedef dstring irep_idt;
 typedef dstring irep_namet;
 typedef dstring_hash irep_id_hash;
 
-#define forall_irep(it, irep) \
-  for(irept::subt::const_iterator it=(irep).begin(); \
-      it!=(irep).end(); it++)
+#define forall_irep(it, irep)                                                  \
+  for(irept::subt::const_iterator it = (irep).begin(); it != (irep).end(); it++)
 
-#define Forall_irep(it, irep) \
-  for(irept::subt::iterator it=(irep).begin(); \
-      it!=(irep).end(); it++)
+#define Forall_irep(it, irep)                                                  \
+  for(irept::subt::iterator it = (irep).begin(); it != (irep).end(); it++)
 
-#define forall_named_irep(it, irep) \
-  for(irept::named_subt::const_iterator it=(irep).begin(); \
-      it!=(irep).end(); it++)
+#define forall_named_irep(it, irep)                                            \
+  for(irept::named_subt::const_iterator it = (irep).begin();                   \
+      it != (irep).end();                                                      \
+      it++)
 
-#define Forall_named_irep(it, irep) \
-  for(irept::named_subt::iterator it=(irep).begin(); \
-      it!=(irep).end(); it++)
+#define Forall_named_irep(it, irep)                                            \
+  for(irept::named_subt::iterator it = (irep).begin(); it != (irep).end(); it++)
 
 #include <iostream>
 
@@ -55,40 +53,47 @@ public:
   // Dump contents of irep to stdout. Debugging only.
   void dump() const;
 
-  bool is_nil() const { return id()=="nil"; }
-  bool is_not_nil() const { return id()!="nil"; }
+  bool is_nil() const
+  {
+    return id() == "nil";
+  }
+  bool is_not_nil() const
+  {
+    return id() != "nil";
+  }
 
   explicit irept(const irep_idt &_id);
 
-  #ifdef SHARING
-  inline irept():data(nullptr)
+#ifdef SHARING
+  inline irept() : data(nullptr)
   {
   }
 
-  inline irept(const irept &irep):data(irep.data)
+  inline irept(const irept &irep) : data(irep.data)
   {
-    if(data!=nullptr)
+    if(data != nullptr)
     {
-      assert(data->ref_count!=0);
+      assert(data->ref_count != 0);
       data->ref_count++;
-      #ifdef IREP_DEBUG
+#ifdef IREP_DEBUG
       std::cout << "COPY " << data << " " << data->ref_count << std::endl;
-      #endif
+#endif
     }
   }
 
   inline irept &operator=(const irept &irep)
   {
     dt *tmp;
-    assert(&irep!=this); // check if we assign to ourselves
+    assert(&irep != this); // check if we assign to ourselves
 
-    #ifdef IREP_DEBUG
+#ifdef IREP_DEBUG
     std::cout << "ASSIGN\n";
-    #endif
+#endif
 
     tmp = data;
-    data=irep.data;
-    if(data!=nullptr) data->ref_count++;
+    data = irep.data;
+    if(data != nullptr)
+      data->ref_count++;
     remove_ref(tmp);
     return *this;
   }
@@ -96,26 +101,32 @@ public:
   ~irept()
   {
     remove_ref(data);
-    data=nullptr;
+    data = nullptr;
   }
-  #else
+#else
   irept()
   {
   }
-  #endif
+#endif
 
   inline const irep_idt &id() const
-  { return read().data; }
+  {
+    return read().data;
+  }
 
   inline const std::string &id_string() const
-  { return read().data.as_string(); }
+  {
+    return read().data.as_string();
+  }
 
   inline void id(const irep_idt &_data)
-  { write().data=_data; }
+  {
+    write().data = _data;
+  }
 
   // These methods should be protected; however to make things play nice with
   // the C++ frontend right now, they're made public.
-//protected:
+  //protected:
   // This class has to be able to fiddle with ireps directly.
   friend class irep_serializationt;
 
@@ -131,765 +142,1023 @@ public:
   bool get_bool(const irep_namet &name) const;
 
   inline void set(const irep_namet &name, const irep_idt &value)
-  { add(name).id(value); }
+  {
+    add(name).id(value);
+  }
 
   void set(const irep_namet &name, const long value);
   void set(const irep_namet &name, const irept &irep);
-//public:
+  //public:
   void remove(const irep_namet &name);
   void move_to_sub(irept &irep);
   void move_to_named_sub(const irep_namet &name, irept &irep);
 
-  inline typet &type() { return (typet &)(add(s_type)); }
-  inline const typet &type() const { return (typet &)(find(s_type)); }
+  inline typet &type()
+  {
+    return (typet &)(add(s_type));
+  }
+  inline const typet &type() const
+  {
+    return (typet &)(find(s_type));
+  }
 
-  inline bool is_identifier_set() const {
+  inline bool is_identifier_set() const
+  {
     return (get(a_identifier) != "");
   }
 
-  inline const irep_idt &identifier() const {
+  inline const irep_idt &identifier() const
+  {
     return get(a_identifier);
   }
 
-  inline const irep_idt &width() const {
+  inline const irep_idt &width() const
+  {
     return get(a_width);
   }
 
-  inline const irep_idt &statement() const {
+  inline const irep_idt &statement() const
+  {
     return get(a_statement);
   }
 
-  inline const irep_idt &name() const {
+  inline const irep_idt &name() const
+  {
     return get(a_name);
   }
 
-  inline const irep_idt &component_name() const {
+  inline const irep_idt &component_name() const
+  {
     return get(a_comp_name);
   }
 
-  inline const irep_idt &tag() const {
+  inline const irep_idt &tag() const
+  {
     return get(a_tag);
   }
 
-  inline const irep_idt &from() const {
+  inline const irep_idt &from() const
+  {
     return get(a_from);
   }
 
-  inline const irep_idt &file() const {
+  inline const irep_idt &file() const
+  {
     return get(a_file);
   }
 
-  inline const irep_idt &line() const {
+  inline const irep_idt &line() const
+  {
     return get(a_line);
   }
 
-  inline const irep_idt &function() const {
+  inline const irep_idt &function() const
+  {
     return get(a_function);
   }
 
-  inline const irept &function_irep() const {
+  inline const irept &function_irep() const
+  {
     return find(a_function);
   }
 
-  inline const irep_idt &column() const {
+  inline const irep_idt &column() const
+  {
     return get(a_column);
   }
 
-  inline const irep_idt &destination() const {
+  inline const irep_idt &destination() const
+  {
     return get(a_destination);
   }
 
-  inline const irep_idt &access() const {
+  inline const irep_idt &access() const
+  {
     return get(a_access);
   }
 
-  inline const irep_idt &base_name() const {
+  inline const irep_idt &base_name() const
+  {
     return get(a_base_name);
   }
 
-  inline const irep_idt &comment() const {
+  inline const irep_idt &comment() const
+  {
     return get(a_comment);
   }
 
-  inline const irep_idt &event() const {
+  inline const irep_idt &event() const
+  {
     return get(a_event);
   }
 
-  inline const irept &event_irep() const {
+  inline const irept &event_irep() const
+  {
     return find(a_event);
   }
 
-  inline const irep_idt &literal() const {
+  inline const irep_idt &literal() const
+  {
     return get(a_literal);
   }
 
-  inline const irep_idt &loopid() const {
+  inline const irep_idt &loopid() const
+  {
     return get(a_loopid);
   }
 
-  inline const irep_idt &mode() const {
+  inline const irep_idt &mode() const
+  {
     return get(a_mode);
   }
 
-  inline const irep_idt &module() const {
+  inline const irep_idt &module() const
+  {
     return get(a_module);
   }
 
-  inline const irep_idt &pretty_name() const {
+  inline const irep_idt &pretty_name() const
+  {
     return get(a_pretty_name);
   }
 
-  inline const irep_idt &property() const {
+  inline const irep_idt &property() const
+  {
     return get(a_property);
   }
 
-  inline const irep_idt &size() const {
+  inline const irep_idt &size() const
+  {
     return get(a_size);
   }
 
-  inline const irept &size_irep() const {
+  inline const irept &size_irep() const
+  {
     return find(a_size);
   }
 
-  inline const irep_idt &integer_bits() const {
+  inline const irep_idt &integer_bits() const
+  {
     return get(a_integer_bits);
   }
 
-  inline const irep_idt &to() const {
+  inline const irep_idt &to() const
+  {
     return get(a_to);
   }
 
-  inline const irep_idt &failed_symbol() const {
+  inline const irep_idt &failed_symbol() const
+  {
     return get(a_failed_symbol);
   }
 
-  inline const irep_idt &type_id() const {
+  inline const irep_idt &type_id() const
+  {
     return get(a_type_id);
   }
 
-  inline const irept &arguments() const {
+  inline const irept &arguments() const
+  {
     return find(s_arguments);
   }
 
-  inline const irept &components() const {
+  inline const irept &components() const
+  {
     return find(s_components);
   }
 
-  inline const irept &cmt_type() const {
+  inline const irept &cmt_type() const
+  {
     return find(a_cmt_type);
   }
 
-  inline const irept &return_type() const {
+  inline const irept &return_type() const
+  {
     return find(s_return_type);
   }
 
-  inline const irept &body() const {
+  inline const irept &body() const
+  {
     return find(s_body);
   }
 
-  inline const irept &member_irep() const {
+  inline const irept &member_irep() const
+  {
     return find(s_member);
   }
 
-  inline const irept &labels_irep() const {
+  inline const irept &labels_irep() const
+  {
     return find(s_labels);
   }
 
-  inline const irept &c_sizeof_type() const {
+  inline const irept &c_sizeof_type() const
+  {
     return find(a_c_sizeof_type);
   }
 
-  inline const irept &bv() const {
+  inline const irept &bv() const
+  {
     return find(s_bv);
   }
 
-  inline const irept &targets() const {
+  inline const irept &targets() const
+  {
     return find(s_targets);
   }
 
-  inline const irept &variables() const {
+  inline const irept &variables() const
+  {
     return find(s_variables);
   }
 
-  inline const irept &object_type() const {
+  inline const irept &object_type() const
+  {
     return find(a_object_type);
   }
 
-  inline const irept &initializer() const {
+  inline const irept &initializer() const
+  {
     return find(s_initializer);
   }
 
-  inline const irept &cmt_size() const {
+  inline const irept &cmt_size() const
+  {
     return find(a_cmt_size);
   }
 
-  inline const irept &code() const {
+  inline const irept &code() const
+  {
     return find(a_code);
   }
 
-  inline const irept &guard() const {
+  inline const irept &guard() const
+  {
     return find(a_guard);
   }
 
-  inline const irept &location() const {
+  inline const irept &location() const
+  {
     return find(a_location);
   }
 
-  inline const irept &declaration_type() const {
+  inline const irept &declaration_type() const
+  {
     return find(s_declaration_type);
   }
 
-  inline const irept &decl_value() const {
+  inline const irept &decl_value() const
+  {
     return find(s_decl_value);
   }
 
-  inline const irept &end_location() const {
+  inline const irept &end_location() const
+  {
     return find(a_end_location);
   }
 
-  inline const irept &symvalue() const {
+  inline const irept &symvalue() const
+  {
     return find(s_symvalue);
   }
 
-  inline const irept &cmt_location() const {
+  inline const irept &cmt_location() const
+  {
     return find(s_cmt_location);
   }
 
-  inline const irept &decl_ident() const {
+  inline const irept &decl_ident() const
+  {
     return find(s_decl_ident);
   }
 
-  inline bool is_decl_ident_set() const {
+  inline bool is_decl_ident_set() const
+  {
     return (get(s_decl_ident) != "");
   }
 
-  inline const irept &elements() const {
+  inline const irept &elements() const
+  {
     return find(s_elements);
   }
 
-  inline bool is_dynamic_set() const {
+  inline bool is_dynamic_set() const
+  {
     const irep_idt &c = get(a_dynamic);
     return (c != "");
   }
 
-  inline bool dynamic() const {
+  inline bool dynamic() const
+  {
     return get_bool(a_dynamic);
   }
 
-  inline const irep_idt &cmt_base_name() const {
+  inline const irep_idt &cmt_base_name() const
+  {
     return get(a_cmt_base_name);
   }
 
-  inline const irep_idt &id_class() const {
+  inline const irep_idt &id_class() const
+  {
     return get(a_id_class);
   }
 
-  inline const irep_idt &cmt_identifier() const {
+  inline const irep_idt &cmt_identifier() const
+  {
     return get(a_cmt_identifier);
   }
 
-  inline const irep_idt &cformat() const {
+  inline const irep_idt &cformat() const
+  {
     return get(a_cformat);
   }
 
-  inline const irep_idt &cmt_width() const {
+  inline const irep_idt &cmt_width() const
+  {
     return get(a_cmt_width);
   }
 
-  inline const irept &offsetof_type() const {
+  inline const irept &offsetof_type() const
+  {
     return find(s_offsetof_type);
   }
 
-  inline bool axiom() const {
+  inline bool axiom() const
+  {
     return get_bool(a_axiom);
   }
 
-  inline bool cmt_constant() const {
+  inline bool cmt_constant() const
+  {
     return get_bool(a_cmt_constant);
   }
 
-  inline bool dfault() const {
+  inline bool dfault() const
+  {
     return get_bool(a_default);
   }
 
-  inline bool ellipsis() const {
+  inline bool ellipsis() const
+  {
     return get_bool(a_ellipsis);
   }
 
-  inline bool explict() const {
+  inline bool explict() const
+  {
     return get_bool(a_explicit);
   }
 
-  inline bool file_local() const {
+  inline bool file_local() const
+  {
     return get_bool(a_file_local);
   }
 
-  inline bool hex_or_oct() const {
+  inline bool hex_or_oct() const
+  {
     return get_bool(a_hex_or_oct);
   }
 
-  inline bool hide() const {
+  inline bool hide() const
+  {
     return get_bool(a_hide);
   }
 
-  inline bool implicit() const {
+  inline bool implicit() const
+  {
     return get_bool(a_implicit);
   }
 
-  inline bool incomplete() const {
+  inline bool incomplete() const
+  {
     return get_bool(a_incomplete);
   }
 
-  inline bool initialization() const {
+  inline bool initialization() const
+  {
     return get_bool(a_initialization);
   }
 
-  inline bool inlined() const {
+  inline bool inlined() const
+  {
     return get_bool(a_inlined);
   }
 
-  inline bool invalid_object() const {
+  inline bool invalid_object() const
+  {
     return get_bool(a_invalid_object);
   }
 
-  inline bool is_parameter() const {
+  inline bool is_parameter() const
+  {
     return get_bool(a_is_parameter);
   }
 
-  inline bool is_expression() const {
+  inline bool is_expression() const
+  {
     return get_bool(a_is_expression);
   }
 
-  inline bool is_extern() const {
+  inline bool is_extern() const
+  {
     return get_bool(a_is_extern);
   }
 
-  inline bool is_macro() const {
+  inline bool is_macro() const
+  {
     return get_bool(a_is_macro);
   }
 
-  inline bool is_type() const {
+  inline bool is_type() const
+  {
     return get_bool(a_is_type);
   }
 
-  inline bool cmt_lvalue() const {
+  inline bool cmt_lvalue() const
+  {
     return get_bool(a_cmt_lvalue);
   }
 
-  inline bool lvalue() const {
+  inline bool lvalue() const
+  {
     return get_bool(a_lvalue);
   }
 
-  inline bool reference() const {
+  inline bool reference() const
+  {
     return get_bool(a_reference);
   }
 
-  inline bool restricted() const {
+  inline bool restricted() const
+  {
     return get_bool(a_restricted);
   }
 
-  inline bool static_lifetime() const {
+  inline bool static_lifetime() const
+  {
     return get_bool(a_static_lifetime);
   }
 
-  inline bool theorem() const {
+  inline bool theorem() const
+  {
     return get_bool(a_theorem);
   }
 
-  inline bool cmt_unsigned() const {
+  inline bool cmt_unsigned() const
+  {
     return get_bool(a_cmt_unsigned);
   }
 
-  inline bool user_provided() const {
+  inline bool user_provided() const
+  {
     return get_bool(a_user_provided);
   }
 
-  inline bool cmt_volatile() const {
+  inline bool cmt_volatile() const
+  {
     return get_bool(a_cmt_volatile);
   }
 
-  inline bool zero_initializer() const {
+  inline bool zero_initializer() const
+  {
     return get_bool(a_zero_initializer);
   }
 
-  inline void arguments(const irept &val) {
+  inline void arguments(const irept &val)
+  {
     set(s_arguments, val);
   }
 
-  inline void decl_ident(const irept &val) {
+  inline void decl_ident(const irept &val)
+  {
     set(s_decl_ident, val);
   }
 
-  inline void identifier(const irep_idt ident) {
+  inline void identifier(const irep_idt ident)
+  {
     set(a_identifier, ident);
   }
 
-  inline void statement(const irep_idt statm) {
+  inline void statement(const irep_idt statm)
+  {
     set(a_statement, statm);
   }
 
-  inline void comment(const irep_idt cmt) {
+  inline void comment(const irep_idt cmt)
+  {
     set(a_comment, cmt);
   }
 
-  inline void component_name(const irep_idt name) {
+  inline void component_name(const irep_idt name)
+  {
     set(a_comp_name, name);
   }
 
-  inline void hex_or_oct(const irep_idt which) {
+  inline void hex_or_oct(const irep_idt which)
+  {
     set(a_hex_or_oct, which);
   }
 
-  inline void hex_or_oct(bool which) {
+  inline void hex_or_oct(bool which)
+  {
     set(a_hex_or_oct, which);
   }
 
-  inline void cmt_width(const irep_idt width) {
+  inline void cmt_width(const irep_idt width)
+  {
     set(a_cmt_width, width);
   }
 
-  inline void cmt_width(unsigned int width) {
+  inline void cmt_width(unsigned int width)
+  {
     set(a_cmt_width, width);
   }
 
-  inline void width(const irep_idt width) {
+  inline void width(const irep_idt width)
+  {
     set(a_width, width);
   }
 
-  inline void width(unsigned int width) {
+  inline void width(unsigned int width)
+  {
     set(a_width, width);
   }
 
-  inline void cmt_unsigned(const irep_idt val) {
+  inline void cmt_unsigned(const irep_idt val)
+  {
     set(a_cmt_unsigned, val);
   }
 
-  inline void cmt_unsigned(bool val) {
+  inline void cmt_unsigned(bool val)
+  {
     set(a_cmt_unsigned, val);
   }
 
-  inline void property(const irep_idt prop) {
+  inline void property(const irep_idt prop)
+  {
     set(a_property, prop);
   }
 
-  inline void cmt_base_name(const irep_idt name) {
+  inline void cmt_base_name(const irep_idt name)
+  {
     set(a_cmt_base_name, name);
   }
 
-  inline void cmt_lvalue(const irep_idt val) {
+  inline void cmt_lvalue(const irep_idt val)
+  {
     set(a_cmt_lvalue, val);
   }
 
-  inline void cmt_lvalue(bool val) {
+  inline void cmt_lvalue(bool val)
+  {
     set(a_cmt_lvalue, val);
   }
 
-  inline void name(const irep_idt val) {
+  inline void name(const irep_idt val)
+  {
     set(a_name, val);
   }
 
-  inline void cformat(const irep_idt val) {
+  inline void cformat(const irep_idt val)
+  {
     set(a_cformat, val);
   }
 
-  inline void flavor(const irep_idt val) {
+  inline void flavor(const irep_idt val)
+  {
     set(a_flavor, val);
   }
 
-  inline void function(const irep_idt val) {
+  inline void function(const irep_idt val)
+  {
     set(a_function, val);
   }
 
-  inline void size(const irep_idt val) {
+  inline void size(const irep_idt val)
+  {
     set(a_size, val);
   }
 
-  inline void size(const irept &val) {
+  inline void size(const irept &val)
+  {
     set(a_size, val);
   }
 
-  inline void user_provided(const irep_idt val) {
+  inline void user_provided(const irep_idt val)
+  {
     set(a_user_provided, val);
   }
 
-  inline void user_provided(bool val) {
+  inline void user_provided(bool val)
+  {
     set(a_user_provided, val);
   }
 
-  inline void destination(const irep_idt val) {
+  inline void destination(const irep_idt val)
+  {
     set(a_destination, val);
   }
 
-  inline void cmt_constant(const irep_idt val) {
+  inline void cmt_constant(const irep_idt val)
+  {
     set(a_cmt_constant, val);
   }
 
-  inline void cmt_constant(bool val) {
+  inline void cmt_constant(bool val)
+  {
     set(a_cmt_constant, val);
   }
 
-  inline void cmt_active(const irep_idt val) {
+  inline void cmt_active(const irep_idt val)
+  {
     set(a_cmt_active, val);
   }
 
-  inline void base_name(const irep_idt val) {
+  inline void base_name(const irep_idt val)
+  {
     set(a_base_name, val);
   }
 
-  inline void code(const irept &val) {
+  inline void code(const irept &val)
+  {
     set(a_code, val);
   }
 
-  inline void component(const irep_idt val) {
+  inline void component(const irep_idt val)
+  {
     set(a_component, val);
   }
 
-  inline void component(unsigned int val) {
+  inline void component(unsigned int val)
+  {
     set(a_component, val);
   }
 
-  inline void c_sizeof_type(const irept &val) {
+  inline void c_sizeof_type(const irept &val)
+  {
     set(a_c_sizeof_type, val);
   }
 
-  inline void dfault(bool val) {
+  inline void dfault(bool val)
+  {
     set(a_default, val);
   }
 
-  inline void dynamic(bool val) {
+  inline void dynamic(bool val)
+  {
     set(a_dynamic, val);
   }
 
-  inline void end_location(const irept &val) {
+  inline void end_location(const irept &val)
+  {
     set(a_end_location, val);
   }
 
-  inline void ellipsis(bool val) {
+  inline void ellipsis(bool val)
+  {
     set(a_ellipsis, val);
   }
 
-  inline void axiom(bool val) {
+  inline void axiom(bool val)
+  {
     set(a_axiom, val);
   }
 
-  inline void event(const irep_idt &val) {
+  inline void event(const irep_idt &val)
+  {
     set(a_event, val);
   }
 
-  inline void failed_symbol(const irep_idt val) {
+  inline void failed_symbol(const irep_idt val)
+  {
     set(a_failed_symbol, val);
   }
 
-  inline void file(const irep_idt val) {
+  inline void file(const irep_idt val)
+  {
     set(a_file, val);
   }
 
-  inline void file_local(bool val) {
+  inline void file_local(bool val)
+  {
     set(a_file_local, val);
   }
 
-  inline void guard(const irept &val) {
+  inline void guard(const irept &val)
+  {
     set(a_guard, val);
   }
 
-  inline void hide(bool val) {
+  inline void hide(bool val)
+  {
     set(a_hide, val);
   }
 
-  inline void id_class(unsigned int val) {
+  inline void id_class(unsigned int val)
+  {
     set(a_id_class, val);
   }
 
-  inline void cmt_identifier(const irep_idt val) {
+  inline void cmt_identifier(const irep_idt val)
+  {
     set(a_cmt_identifier, val);
   }
 
-  inline void implicit(bool val) {
+  inline void implicit(bool val)
+  {
     set(a_implicit, val);
   }
 
-  inline void incomplete(bool val) {
+  inline void incomplete(bool val)
+  {
     set(a_incomplete, val);
   }
 
-  inline void inlined(bool val) {
+  inline void inlined(bool val)
+  {
     set(a_inlined, val);
   }
 
-  inline void invalid_object(bool val) {
+  inline void invalid_object(bool val)
+  {
     set(a_invalid_object, val);
   }
 
-  inline void is_parameter(bool val) {
+  inline void is_parameter(bool val)
+  {
     set(a_is_parameter, val);
   }
 
-  inline void is_expression(bool val) {
+  inline void is_expression(bool val)
+  {
     set(a_is_expression, val);
   }
 
-  inline void is_extern(bool val) {
+  inline void is_extern(bool val)
+  {
     set(a_is_extern, val);
   }
 
-  inline void is_macro(bool val) {
+  inline void is_macro(bool val)
+  {
     set(a_is_macro, val);
   }
 
-  inline void is_type(bool val) {
+  inline void is_type(bool val)
+  {
     set(a_is_type, val);
   }
 
-  inline void label(const irep_idt &val) {
+  inline void label(const irep_idt &val)
+  {
     set(a_label, val);
   }
 
-  inline void lhs(bool val) {
+  inline void lhs(bool val)
+  {
     set(a_lhs, val);
   }
 
-  inline void line(const irep_idt &val) {
+  inline void line(const irep_idt &val)
+  {
     set(a_line, val);
   }
 
-  inline void line(unsigned int val) {
+  inline void line(unsigned int val)
+  {
     set(a_line, val);
   }
 
-  inline void location(const irept &val) {
+  inline void location(const irept &val)
+  {
     set(a_location, val);
   }
 
-  inline void lvalue(bool val) {
+  inline void lvalue(bool val)
+  {
     set(a_lvalue, val);
   }
 
-  inline void mode(const irep_idt &val) {
+  inline void mode(const irep_idt &val)
+  {
     set(a_mode, val);
   }
 
-  inline void module(const irep_idt &val) {
+  inline void module(const irep_idt &val)
+  {
     set(a_module, val);
   }
 
-  inline void object_type(const irept &val) {
+  inline void object_type(const irept &val)
+  {
     set(a_object_type, val);
   }
 
-  inline void pretty_name(const irep_idt &val) {
+  inline void pretty_name(const irep_idt &val)
+  {
     set(a_pretty_name, val);
   }
 
-  inline void restricted(bool val) {
+  inline void restricted(bool val)
+  {
     set(a_restricted, val);
   }
 
-  inline void cmt_size(const irept &val) {
+  inline void cmt_size(const irept &val)
+  {
     set(a_cmt_size, val);
   }
 
-  inline void static_lifetime(bool val) {
+  inline void static_lifetime(bool val)
+  {
     set(a_static_lifetime, val);
   }
 
-  inline void tag(const irep_idt &val) {
+  inline void tag(const irep_idt &val)
+  {
     set(a_tag, val);
   }
 
-  inline void theorem(bool val) {
+  inline void theorem(bool val)
+  {
     set(a_theorem, val);
   }
 
-  inline void cmt_type(const irept &val) {
+  inline void cmt_type(const irept &val)
+  {
     set(a_cmt_type, val);
   }
 
-  inline void type_id(unsigned int val) {
+  inline void type_id(unsigned int val)
+  {
     set(a_type_id, val);
   }
 
-  inline void cmt_volatile(bool val) {
+  inline void cmt_volatile(bool val)
+  {
     set(a_cmt_volatile, val);
   }
 
-  inline void zero_initializer(bool val) {
+  inline void zero_initializer(bool val)
+  {
     set(a_zero_initializer, val);
   }
 
-  inline void components(const irept &val) {
+  inline void components(const irept &val)
+  {
     set(s_components, val);
   }
 
-  inline void offsetof_type(const irept &val) {
+  inline void offsetof_type(const irept &val)
+  {
     set(s_offsetof_type, val);
   }
 
-  inline void declaration_type(const irept &val) {
+  inline void declaration_type(const irept &val)
+  {
     set(s_declaration_type, val);
   }
 
-  inline void bv(const irept &val) {
+  inline void bv(const irept &val)
+  {
     set(s_bv, val);
   }
 
-  inline void initializer(const irept &val) {
+  inline void initializer(const irept &val)
+  {
     set(s_initializer, val);
   }
 
-  inline void labels(const irept &val) {
+  inline void labels(const irept &val)
+  {
     set(s_labels, val);
   }
 
-  inline void symvalue(const irept &val) {
+  inline void symvalue(const irept &val)
+  {
     set(s_symvalue, val);
   }
 
-  inline void member_irep(const irept &val) {
+  inline void member_irep(const irept &val)
+  {
     set(s_member, val);
   }
 
-  inline void return_type(const irept &val) {
+  inline void return_type(const irept &val)
+  {
     set(s_return_type, val);
   }
 
-  inline void variables(const irept &val) {
+  inline void variables(const irept &val)
+  {
     set(s_variables, val);
   }
 
-  inline void targets(const irept &val) {
+  inline void targets(const irept &val)
+  {
     set(s_targets, val);
   }
 
-  inline bool is_address_of() const { return id() == id_address_of; }
-  inline bool is_and() const { return id() == id_and; }
-  inline bool is_or() const { return id() == id_or; }
-  inline bool is_array() const { return id() == id_array; }
-  inline bool is_bool() const { return id() == id_bool; }
-  inline bool is_code() const { return id() == id_code; }
-  inline bool is_constant() const { return id() == id_constant; }
-  inline bool is_dereference() const { return id() == id_dereference; }
-  inline bool is_empty() const { return id() == id_empty; }
-  inline bool is_fixedbv() const { return id() == id_fixedbv; }
-  inline bool is_floatbv() const { return id() == id_floatbv; }
-  inline bool is_incomplete_array() const { return id() == id_incomplete_array;}
-  inline bool is_index() const { return id() == id_index; }
-  inline bool is_member() const { return id() == id_member; }
-  inline bool is_not() const { return id() == id_not; }
-  inline bool is_notequal() const { return id() == id_notequal; }
-  inline bool is_pointer() const { return id() == id_pointer; }
-  inline bool is_signedbv() const { return id() == id_signedbv; }
-  inline bool is_struct() const { return id() == id_struct; }
-  inline bool is_symbol() const { return id() == id_symbol; }
-  inline bool is_typecast() const { return id() == id_typecast; }
-  inline bool is_union() const { return id() == id_union; }
-  inline bool is_unsignedbv() const { return id() == id_unsignedbv; }
+  inline bool is_address_of() const
+  {
+    return id() == id_address_of;
+  }
+  inline bool is_and() const
+  {
+    return id() == id_and;
+  }
+  inline bool is_or() const
+  {
+    return id() == id_or;
+  }
+  inline bool is_array() const
+  {
+    return id() == id_array;
+  }
+  inline bool is_bool() const
+  {
+    return id() == id_bool;
+  }
+  inline bool is_code() const
+  {
+    return id() == id_code;
+  }
+  inline bool is_constant() const
+  {
+    return id() == id_constant;
+  }
+  inline bool is_dereference() const
+  {
+    return id() == id_dereference;
+  }
+  inline bool is_empty() const
+  {
+    return id() == id_empty;
+  }
+  inline bool is_fixedbv() const
+  {
+    return id() == id_fixedbv;
+  }
+  inline bool is_floatbv() const
+  {
+    return id() == id_floatbv;
+  }
+  inline bool is_incomplete_array() const
+  {
+    return id() == id_incomplete_array;
+  }
+  inline bool is_index() const
+  {
+    return id() == id_index;
+  }
+  inline bool is_member() const
+  {
+    return id() == id_member;
+  }
+  inline bool is_not() const
+  {
+    return id() == id_not;
+  }
+  inline bool is_notequal() const
+  {
+    return id() == id_notequal;
+  }
+  inline bool is_pointer() const
+  {
+    return id() == id_pointer;
+  }
+  inline bool is_signedbv() const
+  {
+    return id() == id_signedbv;
+  }
+  inline bool is_struct() const
+  {
+    return id() == id_struct;
+  }
+  inline bool is_symbol() const
+  {
+    return id() == id_symbol;
+  }
+  inline bool is_typecast() const
+  {
+    return id() == id_typecast;
+  }
+  inline bool is_union() const
+  {
+    return id() == id_union;
+  }
+  inline bool is_unsignedbv() const
+  {
+    return id() == id_unsignedbv;
+  }
 
   friend bool operator==(const irept &i1, const irept &i2);
 
   friend inline bool operator!=(const irept &i1, const irept &i2)
-  { return !(i1==i2); }
+  {
+    return !(i1 == i2);
+  }
 
-  friend std::ostream& operator<< (std::ostream& out, const irept &irep);
+  friend std::ostream &operator<<(std::ostream &out, const irept &irep);
 
   std::string to_string() const;
 
@@ -905,25 +1174,49 @@ public:
 
   void clear();
 
-  void make_nil() { clear(); id("nil"); }
+  void make_nil()
+  {
+    clear();
+    id("nil");
+  }
 
-  subt &get_sub() { return write().sub; } // DANGEROUS
-  const subt &get_sub() const { return read().sub; }
-  named_subt &get_named_sub() { return write().named_sub; } // DANGEROUS
-  const named_subt &get_named_sub() const { return read().named_sub; }
-  named_subt &get_comments() { return write().comments; } // DANGEROUS
-  const named_subt &get_comments() const { return read().comments; }
+  subt &get_sub()
+  {
+    return write().sub;
+  } // DANGEROUS
+  const subt &get_sub() const
+  {
+    return read().sub;
+  }
+  named_subt &get_named_sub()
+  {
+    return write().named_sub;
+  } // DANGEROUS
+  const named_subt &get_named_sub() const
+  {
+    return read().named_sub;
+  }
+  named_subt &get_comments()
+  {
+    return write().comments;
+  } // DANGEROUS
+  const named_subt &get_comments() const
+  {
+    return read().comments;
+  }
 
   size_t hash() const;
   size_t full_hash() const;
 
   friend bool full_eq(const irept &a, const irept &b);
 
-  std::string pretty(unsigned indent=0) const;
+  std::string pretty(unsigned indent = 0) const;
 
 protected:
   static bool is_comment(const irep_namet &name)
-  { return !name.empty() && name[0]=='#'; }
+  {
+    return !name.empty() && name[0] == '#';
+  }
 
 public:
   static const irep_idt s_type, s_arguments, s_components;
@@ -934,7 +1227,8 @@ public:
   static const irep_idt s_elements, s_offsetof_type;
   static const irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
   static const irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
-  static const irep_idt a_access, a_destination, a_base_name, a_comment,a_event;
+  static const irep_idt a_access, a_destination, a_base_name, a_comment,
+    a_event;
   static const irep_idt a_literal, a_loopid, a_mode, a_module;
   static const irep_idt a_pretty_name, a_property, a_size, a_integer_bits, a_to;
   static const irep_idt a_failed_symbol, a_dynamic, a_cmt_base_name, a_id_class;
@@ -954,7 +1248,8 @@ public:
   static const irep_idt a_object_type, a_cmt_size, a_cmt, a_type_id;
   static const irep_idt a_cmt_type;
 
-  static const irep_idt id_address_of, id_and, id_or, id_array, id_bool, id_code;
+  static const irep_idt id_address_of, id_and, id_or, id_array, id_bool,
+    id_code;
   static const irep_idt id_constant, id_dereference, id_empty, id_fixedbv;
   static const irep_idt id_floatbv, id_incomplete_array, id_index, id_member;
   static const irep_idt id_not, id_notequal, id_pointer, id_signedbv;
@@ -964,9 +1259,9 @@ public:
   class dt
   {
   public:
-    #ifdef SHARING
+#ifdef SHARING
     unsigned ref_count;
-    #endif
+#endif
 
     dstring data;
 
@@ -990,19 +1285,19 @@ public:
       d.comments.swap(comments);
     }
 
-    #ifdef SHARING
-    dt():ref_count(1)
+#ifdef SHARING
+    dt() : ref_count(1)
     {
     }
-    #else
+#else
     dt()
     {
     }
-    #endif
+#endif
   };
 
 protected:
-  #ifdef SHARING
+#ifdef SHARING
   dt *data;
 
   void remove_ref(dt *old_data);
@@ -1016,7 +1311,7 @@ protected:
   }
 
   void detatch();
-  #else
+#else
   dt data;
 
   inline const dt &read() const
@@ -1028,7 +1323,7 @@ protected:
   {
     return data;
   }
-  #endif
+#endif
 };
 
 extern inline const std::string &id2string(const irep_idt &d)
@@ -1041,17 +1336,23 @@ extern inline const std::string &name2string(const irep_namet &n)
   return n.as_string();
 }
 
-struct irep_hash hash_map_hasher_superclass(irept)
+struct irep_hash
+  hash_map_hasher_superclass(irept){size_t operator()(const irept &irep)
+                                      const {return irep.hash();
+}
+bool operator()(const irept &i1, const irept &i2) const
 {
-  size_t operator()(const irept &irep) const { return irep.hash(); }
-  bool operator()(const irept &i1, const irept &i2) const {
-    return i1.hash() < i2.hash();
-  }
-};
+  return i1.hash() < i2.hash();
+}
+}
+;
 
 struct irep_full_hash
 {
-  size_t operator()(const irept &irep) const { return irep.full_hash(); }
+  size_t operator()(const irept &irep) const
+  {
+    return irep.full_hash();
+  }
 };
 
 struct irep_full_eq

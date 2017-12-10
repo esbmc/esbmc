@@ -11,11 +11,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <util/std_types.h>
 
-class template_parametert:public exprt
+class template_parametert : public exprt
 {
 public:
   inline template_parametert(const irep_idt &_id, const typet &_type)
-   : exprt(_id, _type)
+    : exprt(_id, _type)
   {
   }
 
@@ -35,10 +35,10 @@ public:
   }
 };
 
-class template_typet:public typet
+class template_typet : public typet
 {
 public:
-  inline template_typet():typet("template")
+  inline template_typet() : typet("template")
   {
   }
 
@@ -59,19 +59,19 @@ public:
 
 inline template_typet &to_template_type(typet &type)
 {
-  assert(type.id()=="template");
+  assert(type.id() == "template");
   return static_cast<template_typet &>(type);
 }
 
 inline const template_typet &to_template_type(const typet &type)
 {
-  assert(type.id()=="template");
+  assert(type.id() == "template");
   return static_cast<const template_typet &>(type);
 }
 
 inline const typet &template_subtype(const typet &type)
 {
-  if(type.id()=="template")
+  if(type.id() == "template")
     return type.subtype();
 
   return type;
@@ -79,7 +79,7 @@ inline const typet &template_subtype(const typet &type)
 
 inline typet &template_subtype(typet &type)
 {
-  if(type.id()=="template")
+  if(type.id() == "template")
     return type.subtype();
 
   return type;

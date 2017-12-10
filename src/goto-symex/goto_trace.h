@@ -28,12 +28,30 @@ public:
   // See SSA_stept.
   std::vector<stack_framet> stack_trace;
 
-  bool is_assignment() const { return type==ASSIGNMENT; }
-  bool is_assume() const     { return type==ASSUME; }
-  bool is_assert() const     { return type==ASSERT; }
-  bool is_output() const     { return type==OUTPUT; }
-  bool is_skip() const       { return type==SKIP; }
-  bool is_renumber() const   { return type==RENUMBER; }
+  bool is_assignment() const
+  {
+    return type == ASSIGNMENT;
+  }
+  bool is_assume() const
+  {
+    return type == ASSUME;
+  }
+  bool is_assert() const
+  {
+    return type == ASSERT;
+  }
+  bool is_output() const
+  {
+    return type == OUTPUT;
+  }
+  bool is_skip() const
+  {
+    return type == SKIP;
+  }
+  bool is_renumber() const
+  {
+    return type == RENUMBER;
+  }
 
   typedef enum { ASSIGNMENT, ASSUME, ASSERT, OUTPUT, SKIP, RENUMBER } typet;
   typet type;
@@ -62,14 +80,9 @@ public:
   std::string format_string;
   std::list<expr2tc> output_args;
 
-  void output(
-    const class namespacet &ns,
-    std::ostream &out) const;
+  void output(const class namespacet &ns, std::ostream &out) const;
 
-  goto_trace_stept():
-    step_nr(0),
-    thread_nr(0),
-    guard(false)
+  goto_trace_stept() : step_nr(0), thread_nr(0), guard(false)
   {
   }
 };
@@ -78,7 +91,7 @@ class goto_tracet
 {
 public:
   typedef std::list<goto_trace_stept> stepst;
-  typedef std::map< std::string, std::string, std::less< std::string > > mid;
+  typedef std::map<std::string, std::string, std::less<std::string>> mid;
   stepst steps;
   std::string mode;
 
@@ -88,9 +101,7 @@ public:
     steps.clear();
   }
 
-  void output(
-    const class namespacet &ns,
-    std::ostream &out) const;
+  void output(const class namespacet &ns, std::ostream &out) const;
 };
 
 void show_goto_trace_gui(
@@ -104,21 +115,21 @@ void show_goto_trace(
   const goto_tracet &goto_trace);
 
 void violation_graphml_goto_trace(
-  optionst & options,
-  const namespacet & ns,
-  const goto_tracet & goto_trace );
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
 
 void correctness_graphml_goto_trace(
-  optionst & options,
-  const namespacet & ns,
-  const goto_tracet & goto_trace );
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
 
 void generate_goto_trace_in_correctness_graphml_format(
-  std::string & witness_output,
+  std::string &witness_output,
   bool is_detailed_mode,
-  int & specification,
-  const namespacet & ns,
-  const goto_tracet & goto_trace);
+  int &specification,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
 
 void counterexample_value(
   std::ostream &out,

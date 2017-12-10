@@ -12,29 +12,49 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void unescape_string(const std::string &src, std::string &dest)
 {
-  dest="";
+  dest = "";
   dest.reserve(src.size());
 
-  for(unsigned i=0; i<src.size(); i++)
+  for(unsigned i = 0; i < src.size(); i++)
   {
-    char ch=src[i];
+    char ch = src[i];
 
-    if(ch=='\\')
+    if(ch == '\\')
     {
       i++;
-      ch=src[i];
+      ch = src[i];
       switch(ch)
       {
-      case '\\': dest+=ch; break;
-      case 'n': dest+='\n'; break; /* NL (0x0a) */
-      case 't': dest+='\t'; break; /* HT (0x09) */
-      case 'v': dest+='\v'; break; /* VT (0x0b) */
-      case 'b': dest+='\b'; break; /* BS (0x08) */
-      case 'r': dest+='\r'; break; /* CR (0x0d) */
-      case 'f': dest+='\f'; break; /* FF (0x0c) */
-      case 'a': dest+='\a'; break; /* BEL (0x07) */
-      case '"': dest.push_back('"'); break;
-      case '\'': dest.push_back('\''); break;
+      case '\\':
+        dest += ch;
+        break;
+      case 'n':
+        dest += '\n';
+        break; /* NL (0x0a) */
+      case 't':
+        dest += '\t';
+        break; /* HT (0x09) */
+      case 'v':
+        dest += '\v';
+        break; /* VT (0x0b) */
+      case 'b':
+        dest += '\b';
+        break; /* BS (0x08) */
+      case 'r':
+        dest += '\r';
+        break; /* CR (0x0d) */
+      case 'f':
+        dest += '\f';
+        break; /* FF (0x0c) */
+      case 'a':
+        dest += '\a';
+        break; /* BEL (0x07) */
+      case '"':
+        dest.push_back('"');
+        break;
+      case '\'':
+        dest.push_back('\'');
+        break;
 
       case 'x': // hex
         i++;
@@ -44,15 +64,15 @@ void unescape_string(const std::string &src, std::string &dest)
           while(isxdigit(src[i]))
           {
             i++;
-            hex+=src[i];
+            hex += src[i];
           }
 
           unsigned int result;
           sscanf(hex.c_str(), "%x", &result);
-          ch=result;
+          ch = result;
         }
 
-        dest+=ch;
+        dest += ch;
 
         break;
 
@@ -63,23 +83,23 @@ void unescape_string(const std::string &src, std::string &dest)
 
           while(isdigit(src[i]))
           {
-            octal+=src[i];
+            octal += src[i];
             i++;
           }
 
           unsigned int result;
           sscanf(octal.c_str(), "%o", &result);
-          ch=result;
-          dest+=ch;
+          ch = result;
+          dest += ch;
         }
         else
         {
-          dest+='\\';
-          dest+=ch;
+          dest += '\\';
+          dest += ch;
         }
       }
     }
     else
-      dest+=ch;
+      dest += ch;
   }
 }

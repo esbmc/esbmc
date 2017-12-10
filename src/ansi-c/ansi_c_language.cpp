@@ -25,7 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 static void internal_additions(std::string &code)
 {
-  code+=
+  code +=
     "void __ESBMC_assume(_Bool assumption);\n"
     "void assert(_Bool assertion);\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"
@@ -53,9 +53,12 @@ static void internal_additions(std::string &code)
     "_Bool __ESBMC_floatbv_mode();\n"
 
     // Digital controllers code
-    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
-    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);\n"
-    "_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);\n"
+    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float "
+    "* cout, int coutsize, _Bool isDenominator);\n"
+    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float "
+    "delta);\n"
+    "_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int "
+    "iwidth, int precision);\n"
 
     // Forward decs for pthread main thread begin/end hooks. Because they're
     // pulled in from the C library, they need to be declared prior to pulling
@@ -106,12 +109,12 @@ bool ansi_c_languaget::preprocess(
   std::ostream &outstream,
   message_handlert &message_handler)
 {
-  // check extensions
+// check extensions
 
-  // TACAS14: preprocess /everything/, including .i files. While the user might
-  // have preprocessed his file already, we might still want to inject some
-  // model checker specific stuff into it. A command line option disabling
-  // preprocessing would be more appropriate.
+// TACAS14: preprocess /everything/, including .i files. While the user might
+// have preprocessed his file already, we might still want to inject some
+// model checker specific stuff into it. A command line option disabling
+// preprocessing would be more appropriate.
 #if 0
   const char *ext=strrchr(path.c_str(), '.');
   if(ext!=NULL && std::string(ext)==".i")
@@ -136,7 +139,7 @@ bool ansi_c_languaget::parse(
 {
   // store the path
 
-  parse_path=path;
+  parse_path = path;
 
   // preprocessing
 
@@ -154,27 +157,27 @@ bool ansi_c_languaget::parse(
   std::istringstream codestr(code);
 
   ansi_c_parser.clear();
-  ansi_c_parser.filename="<built-in>";
-  ansi_c_parser.in=&codestr;
+  ansi_c_parser.filename = "<built-in>";
+  ansi_c_parser.in = &codestr;
   ansi_c_parser.set_message_handler(&message_handler);
-  ansi_c_parser.grammar=ansi_c_parsert::LANGUAGE;
+  ansi_c_parser.grammar = ansi_c_parsert::LANGUAGE;
 
-  if(config.ansi_c.os==configt::ansi_ct::OS_WIN32)
-    ansi_c_parser.mode=ansi_c_parsert::MSC;
+  if(config.ansi_c.os == configt::ansi_ct::OS_WIN32)
+    ansi_c_parser.mode = ansi_c_parsert::MSC;
   else
-    ansi_c_parser.mode=ansi_c_parsert::GCC;
+    ansi_c_parser.mode = ansi_c_parsert::GCC;
 
   ansi_c_scanner_init();
 
-  bool result=ansi_c_parser.parse();
+  bool result = ansi_c_parser.parse();
 
   if(!result)
   {
-    ansi_c_parser.line_no=0;
-    ansi_c_parser.filename=path;
-    ansi_c_parser.in=&i_preprocessed;
+    ansi_c_parser.line_no = 0;
+    ansi_c_parser.filename = path;
+    ansi_c_parser.in = &i_preprocessed;
     ansi_c_scanner_init();
-    result=ansi_c_parser.parse();
+    result = ansi_c_parser.parse();
   }
 
   // save result
@@ -209,8 +212,10 @@ bool ansi_c_languaget::final(
   contextt &context,
   message_handlert &message_handler)
 {
-  if(c_final(context, message_handler)) return true;
-  if(c_main(context, "main", message_handler)) return true;
+  if(c_final(context, message_handler))
+    return true;
+  if(c_main(context, "main", message_handler))
+    return true;
 
   return false;
 }
@@ -231,7 +236,7 @@ bool ansi_c_languaget::from_expr(
   const namespacet &ns,
   bool fullname)
 {
-  code=expr2c(expr, ns, fullname);
+  code = expr2c(expr, ns, fullname);
   return false;
 }
 
@@ -241,7 +246,7 @@ bool ansi_c_languaget::from_type(
   const namespacet &ns,
   bool fullname)
 {
-  code=type2c(type, ns, fullname);
+  code = type2c(type, ns, fullname);
   return false;
 }
 

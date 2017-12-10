@@ -44,7 +44,7 @@ void loopst::add_var_to_loop(const expr2tc &expr)
 
 void loopst::dump()
 {
-  unsigned n=original_loop_head->location_number;
+  unsigned n = original_loop_head->location_number;
 
   std::cout << n << " is head of (size: ";
   std::cout << size;
@@ -65,7 +65,7 @@ void loopst::dump_loop_vars()
 {
   std::cout << "Loop variables:\n";
   unsigned int i = 0;
-  for (auto var : loop_vars)
+  for(auto var : loop_vars)
     std::cout << ++i << ". \t" << to_symbol2t(var).thename << '\n';
   std::cout << '\n';
 }

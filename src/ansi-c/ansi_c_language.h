@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/ansi_c_parse_tree.h>
 #include <util/language.h>
 
-class ansi_c_languaget:public languaget
+class ansi_c_languaget : public languaget
 {
 public:
   virtual bool preprocess(
@@ -20,18 +20,15 @@ public:
     std::ostream &outstream,
     message_handlert &message_handler);
 
-  bool parse(
-    const std::string &path,
-    message_handlert &message_handler) override;
+  bool
+  parse(const std::string &path, message_handlert &message_handler) override;
 
   bool typecheck(
     contextt &context,
     const std::string &module,
     message_handlert &message_handler) override;
 
-  bool final(
-    contextt &context,
-    message_handlert &message_handler) override;
+  bool final(contextt &context, message_handlert &message_handler) override;
 
   virtual bool merge_context(
     contextt &dest,
@@ -59,9 +56,14 @@ public:
     bool fullname = false) override;
 
   languaget *new_language() override
-  { return new ansi_c_languaget; }
+  {
+    return new ansi_c_languaget;
+  }
 
-  std::string id() const override { return "C"; }
+  std::string id() const override
+  {
+    return "C";
+  }
 
 protected:
   ansi_c_parse_treet parse_tree;

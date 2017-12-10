@@ -34,22 +34,33 @@ languaget *new_ansi_c_language();
 languaget *new_cpp_language();
 
 // List of language entries, one can put in the mode table:
-#define LANGAPI_HAVE_MODE_CLANG_C \
-  { "C",        &new_clang_c_language,   extensions_ansi_c   }
-#define LANGAPI_HAVE_MODE_CLANG_CPP \
-  { "C",        &new_clang_cpp_language,   extensions_cpp   }
-#define LANGAPI_HAVE_MODE_C \
-  { "C",        &new_ansi_c_language,   extensions_ansi_c   }
-#define LANGAPI_HAVE_MODE_CPP \
-  { "C++",      &new_cpp_language,      extensions_cpp      }
-#define LANGAPI_HAVE_MODE_END {NULL, NULL, NULL}
+#define LANGAPI_HAVE_MODE_CLANG_C                                              \
+  {                                                                            \
+    "C", &new_clang_c_language, extensions_ansi_c                              \
+  }
+#define LANGAPI_HAVE_MODE_CLANG_CPP                                            \
+  {                                                                            \
+    "C", &new_clang_cpp_language, extensions_cpp                               \
+  }
+#define LANGAPI_HAVE_MODE_C                                                    \
+  {                                                                            \
+    "C", &new_ansi_c_language, extensions_ansi_c                               \
+  }
+#define LANGAPI_HAVE_MODE_CPP                                                  \
+  {                                                                            \
+    "C++", &new_cpp_language, extensions_cpp                                   \
+  }
+#define LANGAPI_HAVE_MODE_END                                                  \
+  {                                                                            \
+    NULL, NULL, NULL                                                           \
+  }
 
 int get_mode(const std::string &str);
 int get_mode_filename(const std::string &filename);
 
 languaget *new_language(const char *mode);
 
-#define MODE_C        "C"
-#define MODE_CPP      "C++"
+#define MODE_C "C"
+#define MODE_CPP "C++"
 
 #endif

@@ -41,7 +41,7 @@ clang_c_languaget::clang_c_languaget()
   dump_clang_headers(p.string());
 }
 
-void clang_c_languaget::build_compiler_args(const std::string&& tmp_dir)
+void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
 {
   compiler_args.emplace_back("clang-tool");
 
@@ -50,22 +50,21 @@ void clang_c_languaget::build_compiler_args(const std::string&& tmp_dir)
   // Append mode arg
   switch(config.ansi_c.word_size)
   {
-    case 16:
-      compiler_args.emplace_back("-m16");
-      break;
+  case 16:
+    compiler_args.emplace_back("-m16");
+    break;
 
-    case 32:
-      compiler_args.emplace_back("-m32");
-      break;
+  case 32:
+    compiler_args.emplace_back("-m32");
+    break;
 
-    case 64:
-      compiler_args.emplace_back("-m64");
-      break;
+  case 64:
+    compiler_args.emplace_back("-m64");
+    break;
 
-    default:
-      std::cerr << "Unknown word size: " << config.ansi_c.word_size
-                << std::endl;
-      abort();
+  default:
+    std::cerr << "Unknown word size: " << config.ansi_c.word_size << std::endl;
+    abort();
   }
 
   if(config.ansi_c.char_is_unsigned)
@@ -75,21 +74,26 @@ void clang_c_languaget::build_compiler_args(const std::string&& tmp_dir)
   {
     compiler_args.emplace_back("-Dpthread_join=pthread_join_switch");
     compiler_args.emplace_back("-Dpthread_mutex_lock=pthread_mutex_lock_check");
-    compiler_args.emplace_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
+    compiler_args.emplace_back(
+      "-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_check");
   }
-  else if (config.options.get_bool_option("lock-order-check"))
+  else if(config.options.get_bool_option("lock-order-check"))
   {
     compiler_args.emplace_back("-Dpthread_join=pthread_join_noswitch");
-    compiler_args.emplace_back("-Dpthread_mutex_lock=pthread_mutex_lock_nocheck");
-    compiler_args.emplace_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_nocheck");
+    compiler_args.emplace_back(
+      "-Dpthread_mutex_lock=pthread_mutex_lock_nocheck");
+    compiler_args.emplace_back(
+      "-Dpthread_mutex_unlock=pthread_mutex_unlock_nocheck");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
   else
   {
     compiler_args.emplace_back("-Dpthread_join=pthread_join_noswitch");
-    compiler_args.emplace_back("-Dpthread_mutex_lock=pthread_mutex_lock_noassert");
-    compiler_args.emplace_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_noassert");
+    compiler_args.emplace_back(
+      "-Dpthread_mutex_lock=pthread_mutex_lock_noassert");
+    compiler_args.emplace_back(
+      "-Dpthread_mutex_unlock=pthread_mutex_unlock_noassert");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
@@ -145,17 +149,17 @@ bool clang_c_languaget::parse(
   ASTs.push_back(std::move(AST));
 
   // Use diagnostics to find errors, rather than the return code.
-  for (auto const &astunit : ASTs)
-    if (astunit->getDiagnostics().hasErrorOccurred())
+  for(auto const &astunit : ASTs)
+    if(astunit->getDiagnostics().hasErrorOccurred())
       return true;
 
   return false;
 }
 
 bool clang_c_languaget::typecheck(
-  contextt& context,
-  const std::string& module,
-  message_handlert& message_handler)
+  contextt &context,
+  const std::string &module,
+  message_handlert &message_handler)
 {
   contextt new_context;
 
@@ -177,9 +181,9 @@ bool clang_c_languaget::typecheck(
   return false;
 }
 
-void clang_c_languaget::show_parse(std::ostream& out __attribute__((unused)))
+void clang_c_languaget::show_parse(std::ostream &out __attribute__((unused)))
 {
-  for (auto const &translation_unit : ASTs)
+  for(auto const &translation_unit : ASTs)
     (*translation_unit).getASTContext().getTranslationUnitDecl()->dump();
 }
 
@@ -188,14 +192,16 @@ bool clang_c_languaget::preprocess(
   std::ostream &outstream __attribute__((unused)),
   message_handlert &message_handler __attribute__((unused)))
 {
-  // TODO: Check the preprocess situation.
+// TODO: Check the preprocess situation.
 #if 0
   return c_preprocess(path, outstream, false, message_handler);
 #endif
   return false;
 }
 
-bool clang_c_languaget::final(contextt& context, message_handlert& message_handler)
+bool clang_c_languaget::final(
+  contextt &context,
+  message_handlert &message_handler)
 {
   add_cprover_library(context, message_handler);
   return clang_main(context, "main", message_handler);
@@ -238,9 +244,12 @@ std::string clang_c_languaget::internal_additions()
     "_Bool __ESBMC_floatbv_mode();\n"
 
     // Digital controllers code
-    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
-    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);\n"
-    "_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);\n"
+    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float "
+    "* cout, int coutsize, _Bool isDenominator);\n"
+    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float "
+    "delta);\n"
+    "_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int "
+    "iwidth, int precision);\n"
 
     // Forward decs for pthread main thread begin/end hooks. Because they're
     // pulled in from the C library, they need to be declared prior to pulling
@@ -294,7 +303,7 @@ bool clang_c_languaget::from_expr(
   const namespacet &ns,
   bool fullname)
 {
-  code=expr2c(expr, ns, fullname);
+  code = expr2c(expr, ns, fullname);
   return false;
 }
 
@@ -304,6 +313,6 @@ bool clang_c_languaget::from_type(
   const namespacet &ns,
   bool fullname)
 {
-  code=type2c(type, ns, fullname);
+  code = type2c(type, ns, fullname);
   return false;
 }

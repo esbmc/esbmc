@@ -15,11 +15,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define __STDC_FORMAT_MACROS
 
 // Forward dec, to avoid bringing in clang headers
-namespace clang {
-  class ASTUnit;
+namespace clang
+{
+class ASTUnit;
 } // namespace clang
 
-class clang_c_languaget: public languaget
+class clang_c_languaget : public languaget
 {
 public:
   virtual bool preprocess(
@@ -27,39 +28,41 @@ public:
     std::ostream &outstream,
     message_handlert &message_handler);
 
-  bool parse(
-    const std::string &path,
-    message_handlert &message_handler) override ;
+  bool
+  parse(const std::string &path, message_handlert &message_handler) override;
 
-  bool final(
-    contextt &context,
-    message_handlert &message_handler) override ;
+  bool final(contextt &context, message_handlert &message_handler) override;
 
   bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler) override ;
+    message_handlert &message_handler) override;
 
-  std::string id() const override { return "c"; }
+  std::string id() const override
+  {
+    return "c";
+  }
 
-  void show_parse(std::ostream &out) override ;
+  void show_parse(std::ostream &out) override;
 
   // conversion from expression into string
   bool from_expr(
     const exprt &expr,
     std::string &code,
     const namespacet &ns,
-    bool fullname = false) override ;
+    bool fullname = false) override;
 
   // conversion from type into string
   bool from_type(
     const typet &type,
     std::string &code,
     const namespacet &ns,
-    bool fullname = false) override ;
+    bool fullname = false) override;
 
   languaget *new_language() override
-  { return new clang_c_languaget; }
+  {
+    return new clang_c_languaget;
+  }
 
   // constructor, destructor
   ~clang_c_languaget() override = default;
@@ -68,11 +71,11 @@ public:
 protected:
   std::string internal_additions();
 
-  void dump_clang_headers(const std::string& tmp_dir);
-  void build_compiler_args(const std::string&& tmp_dir);
+  void dump_clang_headers(const std::string &tmp_dir);
+  void build_compiler_args(const std::string &&tmp_dir);
 
   std::vector<std::string> compiler_args;
-  std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
+  std::vector<std::unique_ptr<clang::ASTUnit>> ASTs;
 };
 
 languaget *new_clang_c_language();

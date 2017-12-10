@@ -17,4 +17,3 @@ void ansi_c_parse_treet::clear()
 {
   declarations.clear();
 }
-

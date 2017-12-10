@@ -18,22 +18,22 @@ std::string from_expr(
 {
   int mode;
 
-  if(identifier=="")
-    mode=0;
+  if(identifier == "")
+    mode = 0;
   else
   {
     const symbolt *symbol;
 
     if(ns.lookup(identifier, symbol))
-      mode=0;
-    else if(symbol->mode=="")
-      mode=0;
+      mode = 0;
+    else if(symbol->mode == "")
+      mode = 0;
     else
     {
-      mode=get_mode(id2string(symbol->mode));
-      if(mode<0)
-        throw "symbol "+id2string(symbol->name)+
-              " has unknown mode '"+id2string(symbol->mode)+"'";
+      mode = get_mode(id2string(symbol->mode));
+      if(mode < 0)
+        throw "symbol " + id2string(symbol->name) + " has unknown mode '" +
+          id2string(symbol->mode) + "'";
     }
   }
 
@@ -51,22 +51,22 @@ std::string from_type(
 {
   int mode;
 
-  if(identifier=="")
-    mode=0;
+  if(identifier == "")
+    mode = 0;
   else
   {
     const symbolt *symbol;
 
     if(ns.lookup(identifier, symbol))
-      mode=0;
-    else if(symbol->mode=="")
-      mode=0;
+      mode = 0;
+    else if(symbol->mode == "")
+      mode = 0;
     else
     {
-      mode=get_mode(id2string(symbol->mode));
-      if(mode<0)
-        throw "symbol "+id2string(symbol->name)+
-              " has unknown mode '"+id2string(symbol->mode)+"'";
+      mode = get_mode(id2string(symbol->mode));
+      if(mode < 0)
+        throw "symbol " + id2string(symbol->name) + " has unknown mode '" +
+          id2string(symbol->mode) + "'";
     }
   }
 
@@ -87,4 +87,3 @@ std::string from_type(const typet &type)
   contextt context;
   return from_type(namespacet(context), "", type);
 }
-

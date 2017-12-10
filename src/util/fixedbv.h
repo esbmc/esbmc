@@ -35,7 +35,7 @@ public:
 
   inline unsigned get_fraction_bits() const
   {
-    return width-integer_bits;
+    return width - integer_bits;
   }
 
   const fixedbv_type2tc get_type() const;
@@ -64,52 +64,91 @@ public:
 
   std::string format(const format_spect &format_spec) const;
 
-  bool operator == (int i) const;
+  bool operator==(int i) const;
   bool is_zero() const
   {
-    return v==0;
+    return v == 0;
   }
 
-  bool get_sign() const { return v.is_negative(); }
-  bool is_NaN() const { return false; } // Never true
-  bool is_infinity() const { return false; } // Never true
-  bool is_finite() const { return true; } // Always true
-  bool is_normal() const { return true; } // Always true?
+  bool get_sign() const
+  {
+    return v.is_negative();
+  }
+  bool is_NaN() const
+  {
+    return false;
+  } // Never true
+  bool is_infinity() const
+  {
+    return false;
+  } // Never true
+  bool is_finite() const
+  {
+    return true;
+  } // Always true
+  bool is_normal() const
+  {
+    return true;
+  } // Always true?
 
   void negate();
 
-  fixedbvt &operator /= (const fixedbvt &other);
-  fixedbvt &operator *= (const fixedbvt &other);
-  fixedbvt &operator += (const fixedbvt &other);
-  fixedbvt &operator -= (const fixedbvt &other);
+  fixedbvt &operator/=(const fixedbvt &other);
+  fixedbvt &operator*=(const fixedbvt &other);
+  fixedbvt &operator+=(const fixedbvt &other);
+  fixedbvt &operator-=(const fixedbvt &other);
 
-  fixedbvt &operator ! ();
+  fixedbvt &operator!();
 
-  friend bool operator < (const fixedbvt &a, const fixedbvt &b) { return a.v<b.v; }
-  friend bool operator <=(const fixedbvt &a, const fixedbvt &b) { return a.v<=b.v; }
-  friend bool operator > (const fixedbvt &a, const fixedbvt &b) { return a.v>b.v; }
-  friend bool operator >=(const fixedbvt &a, const fixedbvt &b) { return a.v>=b.v; }
-  friend bool operator ==(const fixedbvt &a, const fixedbvt &b) { return a.v==b.v; }
-  friend bool operator !=(const fixedbvt &a, const fixedbvt &b) { return a.v!=b.v; }
+  friend bool operator<(const fixedbvt &a, const fixedbvt &b)
+  {
+    return a.v < b.v;
+  }
+  friend bool operator<=(const fixedbvt &a, const fixedbvt &b)
+  {
+    return a.v <= b.v;
+  }
+  friend bool operator>(const fixedbvt &a, const fixedbvt &b)
+  {
+    return a.v > b.v;
+  }
+  friend bool operator>=(const fixedbvt &a, const fixedbvt &b)
+  {
+    return a.v >= b.v;
+  }
+  friend bool operator==(const fixedbvt &a, const fixedbvt &b)
+  {
+    return a.v == b.v;
+  }
+  friend bool operator!=(const fixedbvt &a, const fixedbvt &b)
+  {
+    return a.v != b.v;
+  }
 
-  friend bool operator > (const fixedbvt &a, int i);
-  friend bool operator < (const fixedbvt &a, int i);
-  friend bool operator >= (const fixedbvt &a, int i);
-  friend bool operator <= (const fixedbvt &a, int i);
+  friend bool operator>(const fixedbvt &a, int i);
+  friend bool operator<(const fixedbvt &a, int i);
+  friend bool operator>=(const fixedbvt &a, int i);
+  friend bool operator<=(const fixedbvt &a, int i);
 
-  const mp_integer &get_value() const { return v; }
-  void set_value(const mp_integer &_v) { v=_v; }
+  const mp_integer &get_value() const
+  {
+    return v;
+  }
+  void set_value(const mp_integer &_v)
+  {
+    v = _v;
+  }
 
 protected:
   // negative values stored as such
   mp_integer v;
 };
 
-bool operator < (const fixedbvt &a, const fixedbvt &b);
-bool operator <=(const fixedbvt &a, const fixedbvt &b);
-bool operator > (const fixedbvt &a, const fixedbvt &b);
-bool operator >=(const fixedbvt &a, const fixedbvt &b);
-bool operator ==(const fixedbvt &a, const fixedbvt &b);
-bool operator !=(const fixedbvt &a, const fixedbvt &b);
+bool operator<(const fixedbvt &a, const fixedbvt &b);
+bool operator<=(const fixedbvt &a, const fixedbvt &b);
+bool operator>(const fixedbvt &a, const fixedbvt &b);
+bool operator>=(const fixedbvt &a, const fixedbvt &b);
+bool operator==(const fixedbvt &a, const fixedbvt &b);
+bool operator!=(const fixedbvt &a, const fixedbvt &b);
 
 #endif

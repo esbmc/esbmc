@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_namespace_spec.h>
 #include <cpp/cpp_using.h>
 
-class cpp_itemt:public irept
+class cpp_itemt : public irept
 {
 public:
   // declaration
@@ -40,7 +40,7 @@ public:
 
   bool is_declaration() const
   {
-    return id()=="cpp-declaration";
+    return id() == "cpp-declaration";
   }
 
   // linkage spec
@@ -65,7 +65,7 @@ public:
 
   bool is_linkage_spec() const
   {
-    return id()=="cpp-linkage-spec";
+    return id() == "cpp-linkage-spec";
   }
 
   // namespace
@@ -90,7 +90,7 @@ public:
 
   bool is_namespace_spec() const
   {
-    return id()=="cpp-namespace-spec";
+    return id() == "cpp-namespace-spec";
   }
 
   // using
@@ -115,7 +115,7 @@ public:
 
   bool is_using() const
   {
-    return id()=="cpp-using";
+    return id() == "cpp-using";
   }
 };
 

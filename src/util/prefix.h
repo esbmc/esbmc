@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 inline bool has_prefix(const std::string &s, const std::string &prefix)
 {
-  return std::string(s, 0, prefix.size())==prefix;
+  return std::string(s, 0, prefix.size()) == prefix;
 }
 
 #endif

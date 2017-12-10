@@ -11,21 +11,22 @@ Author: Daniel Kroening, kroening@kroening.com
 
 bool sort_operands(exprt::operandst &operands)
 {
-  bool do_sort=false;
+  bool do_sort = false;
 
   forall_expr(it, operands)
   {
-    exprt::operandst::const_iterator next_it=it;
+    exprt::operandst::const_iterator next_it = it;
     next_it++;
 
-    if(next_it!=operands.end() && *next_it < *it)
+    if(next_it != operands.end() && *next_it < *it)
     {
-      do_sort=true;
+      do_sort = true;
       break;
     }
   }
 
-  if(!do_sort) return true;
+  if(!do_sort)
+    return true;
 
   std::sort(operands.begin(), operands.end());
 

@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_parse_tree.h>
 #include <util/language.h>
 
-class cpp_languaget:public languaget
+class cpp_languaget : public languaget
 {
 public:
   virtual bool preprocess(
@@ -20,9 +20,8 @@ public:
     std::ostream &outstream,
     message_handlert &message_handler);
 
-  bool parse(
-    const std::string &path,
-    message_handlert &message_handler) override;
+  bool
+  parse(const std::string &path, message_handlert &message_handler) override;
 
   bool typecheck(
     contextt &context,
@@ -36,9 +35,7 @@ public:
     const std::string &module,
     class replace_symbolt &replace_symbol) const;
 
-  bool final(
-    contextt &context,
-    message_handlert &message_handler) override;
+  bool final(contextt &context, message_handlert &message_handler) override;
 
   void show_parse(std::ostream &out) override;
 
@@ -61,7 +58,9 @@ public:
     bool fullname = false) override;
 
   languaget *new_language() override
-  { return new cpp_languaget; }
+  {
+    return new cpp_languaget;
+  }
 
 protected:
   cpp_parse_treet cpp_parse_tree;

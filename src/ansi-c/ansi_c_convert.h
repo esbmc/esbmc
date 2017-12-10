@@ -26,14 +26,13 @@ bool ansi_c_convert(
   const std::string &module,
   message_handlert &message_handler);
 
-class ansi_c_convertt:public message_streamt
+class ansi_c_convertt : public message_streamt
 {
 public:
   ansi_c_convertt(
     const std::string &_module,
-    message_handlert &_message_handler):
-    message_streamt(_message_handler),
-    module(_module)
+    message_handlert &_message_handler)
+    : message_streamt(_message_handler), module(_module)
   {
   }
 
@@ -45,9 +44,7 @@ public:
   // types
   virtual void convert_type(typet &type);
 
-  virtual void convert_type(
-    typet &type,
-    c_storage_spect &c_storage_spec);
+  virtual void convert_type(typet &type, c_storage_spect &c_storage_spec);
 
 protected:
   virtual void convert_code(codet &code);

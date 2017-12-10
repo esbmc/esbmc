@@ -17,7 +17,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/parser.h>
 #include <util/string_hash.h>
 
-class cpp_parsert:public parsert
+class cpp_parsert : public parsert
 {
 public:
   cpp_parse_treet parse_tree;
@@ -34,8 +34,17 @@ public:
 public:
   // internal state
 
-  enum { LANGUAGE, EXPRESSION } grammar;
-  enum { ANSI, GCC, MSC } mode;
+  enum
+  {
+    LANGUAGE,
+    EXPRESSION
+  } grammar;
+  enum
+  {
+    ANSI,
+    GCC,
+    MSC
+  } mode;
 
   cpp_token_buffert token_buffer;
 
@@ -46,11 +55,11 @@ public:
 
   void set_location()
   {
-    token_buffer.current_token().line_no=line_no-1;
-    token_buffer.current_token().filename=filename;
+    token_buffer.current_token().line_no = line_no - 1;
+    token_buffer.current_token().filename = filename;
   }
 
-  cpp_parsert():mode(ANSI)
+  cpp_parsert() : mode(ANSI)
   {
   }
 

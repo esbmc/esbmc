@@ -19,17 +19,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 extern const struct opt_templ esbmc_options[];
 
-class esbmc_parseoptionst:
-  public parseoptions_baset,
-  public language_uit
+class esbmc_parseoptionst : public parseoptions_baset, public language_uit
 {
 public:
-  int doit() override ;
-  void help() override ;
+  int doit() override;
+  void help() override;
 
-  esbmc_parseoptionst(int argc, const char **argv):
-    parseoptions_baset(esbmc_options, argc, argv),
-    language_uit(cmdline)
+  esbmc_parseoptionst(int argc, const char **argv)
+    : parseoptions_baset(esbmc_options, argc, argv), language_uit(cmdline)
   {
   }
 
@@ -37,13 +34,11 @@ protected:
   virtual void get_command_line_options(optionst &options);
   virtual int do_bmc(bmct &bmc);
 
-  virtual bool get_goto_program(
-    optionst &options,
-    goto_functionst &goto_functions);
+  virtual bool
+  get_goto_program(optionst &options, goto_functionst &goto_functions);
 
-  virtual bool process_goto_program(
-    optionst &options,
-    goto_functionst &goto_functions);
+  virtual bool
+  process_goto_program(optionst &options, goto_functionst &goto_functions);
 
   int doit_k_induction();
   int doit_k_induction_parallel();

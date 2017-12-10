@@ -39,7 +39,7 @@ void string2array(const exprt &src, exprt &dest)
     int ch = i >= actual_size ? 0 : str[i];
 
     if(char_is_unsigned)
-      ch = (unsigned char) ch;
+      ch = (unsigned char)ch;
 
     exprt &op = *it;
 

@@ -56,7 +56,13 @@ extern "C" {
 #include <sys/wait.h>
 #include <util/time_stopping.h>
 
-enum PROCESS_TYPE { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP, PARENT };
+enum PROCESS_TYPE
+{
+  BASE_CASE,
+  FORWARD_CONDITION,
+  INDUCTIVE_STEP,
+  PARENT
+};
 
 struct resultt
 {
@@ -65,8 +71,7 @@ struct resultt
 };
 
 #ifndef _WIN32
-void
-timeout_handler(int dummy __attribute__((unused)))
+void timeout_handler(int dummy __attribute__((unused)))
 {
   std::cout << "Timed out" << std::endl;
 
@@ -80,15 +85,15 @@ timeout_handler(int dummy __attribute__((unused)))
 
 void esbmc_parseoptionst::set_verbosity_msg(messaget &message)
 {
-  int v=8;
+  int v = 8;
 
   if(cmdline.isset("verbosity"))
   {
-    v=atoi(cmdline.getval("verbosity"));
-    if(v<0)
-      v=0;
-    else if(v>9)
-      v=9;
+    v = atoi(cmdline.getval("verbosity"));
+    if(v < 0)
+      v = 0;
+    else if(v > 9)
+      v = 9;
   }
 
   message.set_verbosity(v);
@@ -100,8 +105,10 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
 {
   uint64_t mult;
   int len = strlen(str);
-  if (!isdigit(str[len-1])) {
-    switch (str[len-1]) {
+  if(!isdigit(str[len - 1]))
+  {
+    switch(str[len - 1])
+    {
     case 's':
       mult = 1;
       break;
@@ -118,7 +125,9 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
       std::cerr << "Unrecognized timeout suffix" << std::endl;
       abort();
     }
-  } else {
+  }
+  else
+  {
     mult = 1;
   }
 
@@ -129,11 +138,12 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
 
 uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
 {
-
   uint64_t mult;
   int len = strlen(str);
-  if (!isdigit(str[len-1])) {
-    switch (str[len-1]) {
+  if(!isdigit(str[len - 1]))
+  {
+    switch(str[len - 1])
+    {
     case 'b':
       mult = 1;
       break;
@@ -141,17 +151,19 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
       mult = 1024;
       break;
     case 'm':
-      mult = 1024*1024;
+      mult = 1024 * 1024;
       break;
     case 'g':
-      mult = 1024*1024*1024;
+      mult = 1024 * 1024 * 1024;
       break;
     default:
       std::cerr << "Unrecognized memlimit suffix" << std::endl;
       abort();
     }
-  } else {
-    mult = 1024*1024;
+  }
+  else
+  {
+    mult = 1024 * 1024;
   }
 
   uint64_t size = strtol(str, nullptr, 10);
@@ -176,7 +188,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("witness-producer", cmdline.getval("witness-producer"));
 
   if(cmdline.isset("witness-programfile"))
-    options.set_option("witness-programfile", cmdline.getval("witness-programfile"));
+    options.set_option(
+      "witness-programfile", cmdline.getval("witness-programfile"));
 
   if(cmdline.isset("git-hash"))
   {
@@ -231,7 +244,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     if(!cmdline.isset("smt-during-symex"))
     {
       std::cerr << "Please explicitly specify --smt-during-symex if you want "
-          "to use features that involve encoding SMT during symex" << std::endl;
+                   "to use features that involve encoding SMT during symex"
+                << std::endl;
       abort();
     }
   }
@@ -325,9 +339,8 @@ int esbmc_parseoptionst::doit()
   //
   // Print a banner
   //
-  std::cout << "ESBMC version " << ESBMC_VERSION " "
-            << sizeof(void *)*8 << "-bit "
-            << config.this_architecture() << " "
+  std::cout << "ESBMC version " << ESBMC_VERSION " " << sizeof(void *) * 8
+            << "-bit " << config.this_architecture() << " "
             << config.this_operating_system() << std::endl;
 
   if(cmdline.isset("version"))
@@ -337,12 +350,12 @@ int esbmc_parseoptionst::doit()
   // unwinding of transition systems
   //
 
-  if(cmdline.isset("module") ||
-    cmdline.isset("gen-interface"))
+  if(cmdline.isset("module") || cmdline.isset("gen-interface"))
 
   {
-    error("This version has no support for "
-          " hardware modules.");
+    error(
+      "This version has no support for "
+      " hardware modules.");
     return 1;
   }
 
@@ -389,7 +402,7 @@ int esbmc_parseoptionst::doit()
   if(set_claims(goto_functions))
     return 7;
 
-  if (opts.get_bool_option("skip-bmc"))
+  if(opts.get_bool_option("skip-bmc"))
     return 0;
 
   // do actual BMC
@@ -419,7 +432,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   }
 
   /* Set file descriptor non-blocking */
-  fcntl(backward_pipe[0], F_SETFL, fcntl(backward_pipe[0], F_GETFL) | O_NONBLOCK);
+  fcntl(
+    backward_pipe[0], F_SETFL, fcntl(backward_pipe[0], F_GETFL) | O_NONBLOCK);
 
   pid_t children_pid[3];
   short num_p = 0;
@@ -489,474 +503,483 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   // All processes were created successfully
   switch(process_type)
   {
-    case PARENT:
+  case PARENT:
+  {
+    // Communication to child processes
+    close(forward_pipe[1]);
+    close(backward_pipe[0]);
+
+    struct resultt a_result;
+    bool bc_finished = false, fc_finished = false, is_finished = false;
+    u_int bc_solution = max_k_step, fc_solution = max_k_step,
+          is_solution = max_k_step;
+
+    // Keep reading until we find an answer
+    while(!(bc_finished && fc_finished && is_finished))
     {
-      // Communication to child processes
-      close(forward_pipe[1]);
-      close(backward_pipe[0]);
-
-      struct resultt a_result;
-      bool bc_finished = false, fc_finished = false, is_finished = false;
-      u_int bc_solution = max_k_step, fc_solution = max_k_step, is_solution = max_k_step;
-
-      // Keep reading until we find an answer
-      while(!(bc_finished && fc_finished && is_finished))
+      // Perform read and interpret the number of bytes read
+      int read_size = read(forward_pipe[0], &a_result, sizeof(resultt));
+      if(read_size != sizeof(resultt))
       {
-        // Perform read and interpret the number of bytes read
-        int read_size = read(forward_pipe[0], &a_result, sizeof(resultt));
-        if(read_size != sizeof(resultt))
+        if(read_size == 0)
         {
-          if(read_size == 0)
-          {
-            // Client hung up; continue on, but don't interpret the result.
-            ;
-          }
-          else
-          {
-            // Invalid size read.
-            std::cerr << "Short read communicating with kinduction children"
-                << std::endl;
-            std::cerr << "Size " << read_size << ", expected "
-                << sizeof(resultt) << std::endl;
-            abort();
-          }
+          // Client hung up; continue on, but don't interpret the result.
+          ;
         }
-
-        // Eventually the parent process will check if the child process is alive
-
-        // Check base case process
-        if(!bc_finished)
-        {
-          int status;
-          pid_t result = waitpid(children_pid[0], &status, WNOHANG);
-          if(result == 0)
-          {
-            // Child still alive
-          }
-          else if(result == -1)
-          {
-            // Error
-          }
-          else
-          {
-            std::cout << "**** WARNING: Base case process crashed." << std::endl;
-
-            bc_finished = true;
-            if(cmdline.isset("dont-ignore-dead-child-process"))
-              fc_finished = is_finished = true;
-          }
-        }
-
-        // Check forward condition process
-        if(!fc_finished)
-        {
-          int status;
-          pid_t result = waitpid(children_pid[1], &status, WNOHANG);
-          if(result == 0)
-          {
-            // Child still alive
-          }
-          else if(result == -1)
-          {
-            // Error
-          }
-          else
-          {
-            std::cout << "**** WARNING: Forward condition process crashed." << std::endl;
-
-            fc_finished = true;
-            if(cmdline.isset("dont-ignore-dead-child-process"))
-              bc_finished = is_finished = true;
-          }
-        }
-
-        // Check inductive step process
-        if(!is_finished)
-        {
-          int status;
-          pid_t result = waitpid(children_pid[2], &status, WNOHANG);
-          if(result == 0)
-          {
-            // Child still alive
-          }
-          else if(result == -1)
-          {
-            // Error
-          }
-          else
-          {
-            std::cout << "**** WARNING: Inductive step process crashed." << std::endl;
-
-            is_finished = true;
-            if(cmdline.isset("dont-ignore-dead-child-process"))
-              bc_finished = fc_finished = true;
-          }
-        }
-
-        switch(a_result.type)
-        {
-          case BASE_CASE:
-            bc_finished = true;
-            bc_solution = a_result.k;
-            break;
-
-          case FORWARD_CONDITION:
-            fc_finished = true;
-            fc_solution = a_result.k;
-            break;
-
-          case INDUCTIVE_STEP:
-            is_finished = true;
-            is_solution = a_result.k;
-            break;
-
-          default:
-            std::cerr << "Message from unrecognized k-induction child "
-                << "process" << std::endl;
-            abort();
-        }
-
-        // If either the base case found a bug or the forward condition
-        // finds a solution, present the result
-        if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
-          break;
-
-        // If the either the forward condition or inductive step finds a
-        // solution, first check if base case couldn't find a bug in that code,
-        // if there is no bug, inductive step can present the result
-
-        if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
-        {
-          // If base case finished, then we can present the result
-          if(bc_finished)
-            break;
-
-          // Otherwise, ask base case for a solution
-
-          // Struct to keep the result
-          struct resultt r = { process_type, 0 };
-
-          r.k = fc_solution;
-
-          // Write result
-          u_int len = write(backward_pipe[1], &r, sizeof(r));
-          assert(len == sizeof(r) && "short write");
-          (void)len; //ndebug
-        }
-
-        if(is_finished && (is_solution != 0) && (is_solution != max_k_step))
-        {
-          // If base case finished, then we can present the result
-          if(bc_finished)
-            break;
-
-          // Otherwise, ask base case for a solution
-
-          // Struct to keep the result
-          struct resultt r = { process_type, 0 };
-
-          r.k = is_solution;
-
-          // Write result
-          u_int len = write(backward_pipe[1], &r, sizeof(r));
-          assert(len == sizeof(r) && "short write");
-          (void)len; //ndebug
-        }
-      }
-
-      for(int i : children_pid)
-        kill(i, SIGKILL);
-
-      // Check if a solution was found by the base case
-      if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
-      {
-        std::cout << std::endl << "Bug found by the base case (k = "
-            << bc_solution << ")" << std::endl;
-        std::cout << "VERIFICATION FAILED" << std::endl;
-        return true;
-      }
-
-      // Check if a solution was found by the forward condition
-      if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
-      {
-        // We should only present the result if the base case finished
-        // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
-        if(bc_finished && (bc_solution != max_k_step))
-        {
-          std::cout << std::endl << "Solution found by the forward condition; "
-              << "all states are reachable (k = " << fc_solution
-              << ")" << std::endl;
-          std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
-          return false;
-        }
-      }
-
-      // Check if a solution was found by the inductive step
-      if(is_finished && (is_solution != 0) && (is_solution != max_k_step))
-      {
-        // We should only present the result if the base case finished
-        // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
-        if(bc_finished && (bc_solution != max_k_step))
-        {
-          std::cout << std::endl << "Solution found by the inductive step "
-              << "(k = " << is_solution << ")" << std::endl;
-          std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
-          return false;
-        }
-      }
-
-      // Couldn't find a bug or a proof for the current deepth
-      std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
-      return false;
-      break;
-    }
-
-    case BASE_CASE:
-    {
-      // Set that we are running base case
-      opts.set_option("base-case", true);
-      opts.set_option("forward-condition", false);
-      opts.set_option("inductive-step", false);
-
-      // Start communication to the parent process
-      close(forward_pipe[0]);
-      close(backward_pipe[1]);
-
-      // Struct to keep the result
-      struct resultt r = { process_type, 0 };
-
-      // Run bmc and only send results in two occasions:
-      // 1. A bug was found, we send the step where it was found
-      // 2. It couldn't find a bug
-      for(u_int k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
-      {
-        bmct bmc(goto_functions, opts, context, ui_message_handler);
-        set_verbosity_msg(bmc);
-
-        bmc.options.set_option("unwind", i2string(k_step));
-
-        std::cout << std::endl << "*** K-Induction Loop Iteration ";
-        std::cout << i2string((unsigned long) k_step);
-        std::cout << " ***" << std::endl;
-        std::cout << "*** Checking base case" << std::endl;
-
-        // If an exception was thrown, we should abort the process
-        bool res = true;
-        try {
-          res = do_bmc(bmc);
-        }
-        catch(...)
-        {
-          break;
-        }
-
-        // Send information to parent if no bug was found
-        if(res == smt_convt::P_SATISFIABLE)
-        {
-          r.k = k_step;
-
-          // Write result
-          u_int len = write(forward_pipe[1], &r, sizeof(r));
-          assert(len == sizeof(r) && "short write");
-          (void)len; //ndebug
-
-          std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
-
-          return 1;
-        }
-
-        // Check if the parent process is asking questions
-
-        // Perform read and interpret the number of bytes read
-        struct resultt a_result;
-        int read_size = read(backward_pipe[0], &a_result, sizeof(resultt));
-        if(read_size != sizeof(resultt))
-        {
-          if(read_size == 0)
-          {
-            // Client hung up; continue on, but don't interpret the result.
-            continue;
-          }
-          else if (read_size == -1 && errno == EAGAIN)
-          {
-            // No data available yet
-            continue;
-          }
-          else
-          {
-            // Invalid size read.
-            std::cerr << "Short read communicating with kinduction parent"
-                << std::endl;
-            std::cerr << "Size " << read_size << ", expected "
-                << sizeof(resultt) << std::endl;
-            abort();
-          }
-        }
-
-        // We only receive messages from the parent
-        assert(a_result.type == PARENT);
-
-        // If the value being asked is greater or equal the current step,
-        // then we can stop the base case. It can be equal, because we
-        // have just checked the current value of k
-
-        if(a_result.k >= k_step)
-          break;
         else
         {
-          // Otherwise, we just need to check the base case for k = a_result.k
-          k_step = max_k_step = a_result.k;
+          // Invalid size read.
+          std::cerr << "Short read communicating with kinduction children"
+                    << std::endl;
+          std::cerr << "Size " << read_size << ", expected " << sizeof(resultt)
+                    << std::endl;
+          abort();
         }
       }
 
-      // Send information to parent that a bug was not found
-      r.k = 0;
+      // Eventually the parent process will check if the child process is alive
 
-      u_int len = write(forward_pipe[1], &r, sizeof(r));
-      assert(len == sizeof(r) && "short write");
-      (void)len; //ndebug
-
-      std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
-      break;
-    }
-
-    case FORWARD_CONDITION:
-    {
-      // Set that we are running forward condition
-      opts.set_option("base-case", false);
-      opts.set_option("forward-condition", true);
-      opts.set_option("inductive-step", false);
-
-      // Start communication to the parent process
-      close(forward_pipe[0]);
-      close(backward_pipe[1]);
-
-      // Struct to keep the result
-      struct resultt r = { process_type, 0 };
-
-      // Run bmc and only send results in two occasions:
-      // 1. A proof was found, we send the step where it was found
-      // 2. It couldn't find a proof
-      for(u_int k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+      // Check base case process
+      if(!bc_finished)
       {
-        if(opts.get_bool_option("disable-forward-condition"))
-          break;
-
-        bmct bmc(goto_functions, opts, context, ui_message_handler);
-        set_verbosity_msg(bmc);
-
-        bmc.options.set_option("unwind", i2string(k_step));
-
-        std::cout << std::endl << "*** K-Induction Loop Iteration ";
-        std::cout << i2string((unsigned long) k_step);
-        std::cout << " ***" << std::endl;
-        std::cout << "*** Checking forward condition" << std::endl;
-
-        // If an exception was thrown, we should abort the process
-        bool res = true;
-        try {
-          res = do_bmc(bmc);
-        }
-        catch(...)
+        int status;
+        pid_t result = waitpid(children_pid[0], &status, WNOHANG);
+        if(result == 0)
         {
-          break;
+          // Child still alive
         }
-
-        // Send information to parent if no bug was found
-        if(res == smt_convt::P_UNSATISFIABLE)
+        else if(result == -1)
         {
-          r.k = k_step;
+          // Error
+        }
+        else
+        {
+          std::cout << "**** WARNING: Base case process crashed." << std::endl;
 
-          // Write result
-          u_int len = write(forward_pipe[1], &r, sizeof(r));
-          assert(len == sizeof(r) && "short write");
-          (void)len; //ndebug
-
-          std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
-
-          return 0;
+          bc_finished = true;
+          if(cmdline.isset("dont-ignore-dead-child-process"))
+            fc_finished = is_finished = true;
         }
       }
 
-      // Send information to parent that it couldn't prove the code
-      r.k = 0;
-
-      u_int len = write(forward_pipe[1], &r, sizeof(r));
-      assert(len == sizeof(r) && "short write");
-      (void)len; //ndebug
-
-      std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
-      break;
-    }
-
-    case INDUCTIVE_STEP:
-    {
-      // Set that we are running inductive step
-      opts.set_option("base-case", false);
-      opts.set_option("forward-condition", false);
-      opts.set_option("inductive-step", true);
-
-      // Start communication to the parent process
-      close(forward_pipe[0]);
-      close(backward_pipe[1]);
-
-      // Struct to keep the result
-      struct resultt r = { process_type, 0 };
-
-      // Run bmc and only send results in two occasions:
-      // 1. A proof was found, we send the step where it was found
-      // 2. It couldn't find a proof
-      for(u_int k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+      // Check forward condition process
+      if(!fc_finished)
       {
-        bmct bmc(goto_functions, opts, context, ui_message_handler);
-        set_verbosity_msg(bmc);
-
-        bmc.options.set_option("unwind", i2string(k_step));
-
-        std::cout << std::endl << "*** K-Induction Loop Iteration ";
-        std::cout << i2string((unsigned long) k_step+1);
-        std::cout << " ***" << std::endl;
-        std::cout << "*** Checking inductive step" << std::endl;
-
-        // If an exception was thrown, we should abort the process
-        bool res = true;
-        try {
-          res = do_bmc(bmc);
-        }
-        catch(...)
+        int status;
+        pid_t result = waitpid(children_pid[1], &status, WNOHANG);
+        if(result == 0)
         {
-          break;
+          // Child still alive
         }
-
-        // Send information to parent if no bug was found
-        if(res == smt_convt::P_UNSATISFIABLE)
+        else if(result == -1)
         {
-          r.k = k_step;
+          // Error
+        }
+        else
+        {
+          std::cout << "**** WARNING: Forward condition process crashed."
+                    << std::endl;
 
-          // Write result
-          u_int len = write(forward_pipe[1], &r, sizeof(r));
-          assert(len == sizeof(r) && "short write");
-          (void)len; //ndebug
-
-          std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
-
-          return res;
+          fc_finished = true;
+          if(cmdline.isset("dont-ignore-dead-child-process"))
+            bc_finished = is_finished = true;
         }
       }
 
-      // Send information to parent that it couldn't prove the code
-      r.k = 0;
+      // Check inductive step process
+      if(!is_finished)
+      {
+        int status;
+        pid_t result = waitpid(children_pid[2], &status, WNOHANG);
+        if(result == 0)
+        {
+          // Child still alive
+        }
+        else if(result == -1)
+        {
+          // Error
+        }
+        else
+        {
+          std::cout << "**** WARNING: Inductive step process crashed."
+                    << std::endl;
 
-      u_int len = write(forward_pipe[1], &r, sizeof(r));
-      assert(len == sizeof(r) && "short write");
-      (void)len; //ndebug
+          is_finished = true;
+          if(cmdline.isset("dont-ignore-dead-child-process"))
+            bc_finished = fc_finished = true;
+        }
+      }
 
-      std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
-      break;
+      switch(a_result.type)
+      {
+      case BASE_CASE:
+        bc_finished = true;
+        bc_solution = a_result.k;
+        break;
+
+      case FORWARD_CONDITION:
+        fc_finished = true;
+        fc_solution = a_result.k;
+        break;
+
+      case INDUCTIVE_STEP:
+        is_finished = true;
+        is_solution = a_result.k;
+        break;
+
+      default:
+        std::cerr << "Message from unrecognized k-induction child "
+                  << "process" << std::endl;
+        abort();
+      }
+
+      // If either the base case found a bug or the forward condition
+      // finds a solution, present the result
+      if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
+        break;
+
+      // If the either the forward condition or inductive step finds a
+      // solution, first check if base case couldn't find a bug in that code,
+      // if there is no bug, inductive step can present the result
+
+      if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
+      {
+        // If base case finished, then we can present the result
+        if(bc_finished)
+          break;
+
+        // Otherwise, ask base case for a solution
+
+        // Struct to keep the result
+        struct resultt r = {process_type, 0};
+
+        r.k = fc_solution;
+
+        // Write result
+        u_int len = write(backward_pipe[1], &r, sizeof(r));
+        assert(len == sizeof(r) && "short write");
+        (void)len; //ndebug
+      }
+
+      if(is_finished && (is_solution != 0) && (is_solution != max_k_step))
+      {
+        // If base case finished, then we can present the result
+        if(bc_finished)
+          break;
+
+        // Otherwise, ask base case for a solution
+
+        // Struct to keep the result
+        struct resultt r = {process_type, 0};
+
+        r.k = is_solution;
+
+        // Write result
+        u_int len = write(backward_pipe[1], &r, sizeof(r));
+        assert(len == sizeof(r) && "short write");
+        (void)len; //ndebug
+      }
     }
 
-    default:
-      assert(0 && "Unknown process type.");
+    for(int i : children_pid)
+      kill(i, SIGKILL);
+
+    // Check if a solution was found by the base case
+    if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
+    {
+      std::cout << std::endl
+                << "Bug found by the base case (k = " << bc_solution << ")"
+                << std::endl;
+      std::cout << "VERIFICATION FAILED" << std::endl;
+      return true;
+    }
+
+    // Check if a solution was found by the forward condition
+    if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
+    {
+      // We should only present the result if the base case finished
+      // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
+      if(bc_finished && (bc_solution != max_k_step))
+      {
+        std::cout << std::endl
+                  << "Solution found by the forward condition; "
+                  << "all states are reachable (k = " << fc_solution << ")"
+                  << std::endl;
+        std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+        return false;
+      }
+    }
+
+    // Check if a solution was found by the inductive step
+    if(is_finished && (is_solution != 0) && (is_solution != max_k_step))
+    {
+      // We should only present the result if the base case finished
+      // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
+      if(bc_finished && (bc_solution != max_k_step))
+      {
+        std::cout << std::endl
+                  << "Solution found by the inductive step "
+                  << "(k = " << is_solution << ")" << std::endl;
+        std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+        return false;
+      }
+    }
+
+    // Couldn't find a bug or a proof for the current deepth
+    std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
+    return false;
+    break;
+  }
+
+  case BASE_CASE:
+  {
+    // Set that we are running base case
+    opts.set_option("base-case", true);
+    opts.set_option("forward-condition", false);
+    opts.set_option("inductive-step", false);
+
+    // Start communication to the parent process
+    close(forward_pipe[0]);
+    close(backward_pipe[1]);
+
+    // Struct to keep the result
+    struct resultt r = {process_type, 0};
+
+    // Run bmc and only send results in two occasions:
+    // 1. A bug was found, we send the step where it was found
+    // 2. It couldn't find a bug
+    for(u_int k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+    {
+      bmct bmc(goto_functions, opts, context, ui_message_handler);
+      set_verbosity_msg(bmc);
+
+      bmc.options.set_option("unwind", i2string(k_step));
+
+      std::cout << std::endl << "*** K-Induction Loop Iteration ";
+      std::cout << i2string((unsigned long)k_step);
+      std::cout << " ***" << std::endl;
+      std::cout << "*** Checking base case" << std::endl;
+
+      // If an exception was thrown, we should abort the process
+      bool res = true;
+      try
+      {
+        res = do_bmc(bmc);
+      }
+      catch(...)
+      {
+        break;
+      }
+
+      // Send information to parent if no bug was found
+      if(res == smt_convt::P_SATISFIABLE)
+      {
+        r.k = k_step;
+
+        // Write result
+        u_int len = write(forward_pipe[1], &r, sizeof(r));
+        assert(len == sizeof(r) && "short write");
+        (void)len; //ndebug
+
+        std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
+
+        return 1;
+      }
+
+      // Check if the parent process is asking questions
+
+      // Perform read and interpret the number of bytes read
+      struct resultt a_result;
+      int read_size = read(backward_pipe[0], &a_result, sizeof(resultt));
+      if(read_size != sizeof(resultt))
+      {
+        if(read_size == 0)
+        {
+          // Client hung up; continue on, but don't interpret the result.
+          continue;
+        }
+        else if(read_size == -1 && errno == EAGAIN)
+        {
+          // No data available yet
+          continue;
+        }
+        else
+        {
+          // Invalid size read.
+          std::cerr << "Short read communicating with kinduction parent"
+                    << std::endl;
+          std::cerr << "Size " << read_size << ", expected " << sizeof(resultt)
+                    << std::endl;
+          abort();
+        }
+      }
+
+      // We only receive messages from the parent
+      assert(a_result.type == PARENT);
+
+      // If the value being asked is greater or equal the current step,
+      // then we can stop the base case. It can be equal, because we
+      // have just checked the current value of k
+
+      if(a_result.k >= k_step)
+        break;
+      else
+      {
+        // Otherwise, we just need to check the base case for k = a_result.k
+        k_step = max_k_step = a_result.k;
+      }
+    }
+
+    // Send information to parent that a bug was not found
+    r.k = 0;
+
+    u_int len = write(forward_pipe[1], &r, sizeof(r));
+    assert(len == sizeof(r) && "short write");
+    (void)len; //ndebug
+
+    std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
+    break;
+  }
+
+  case FORWARD_CONDITION:
+  {
+    // Set that we are running forward condition
+    opts.set_option("base-case", false);
+    opts.set_option("forward-condition", true);
+    opts.set_option("inductive-step", false);
+
+    // Start communication to the parent process
+    close(forward_pipe[0]);
+    close(backward_pipe[1]);
+
+    // Struct to keep the result
+    struct resultt r = {process_type, 0};
+
+    // Run bmc and only send results in two occasions:
+    // 1. A proof was found, we send the step where it was found
+    // 2. It couldn't find a proof
+    for(u_int k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+    {
+      if(opts.get_bool_option("disable-forward-condition"))
+        break;
+
+      bmct bmc(goto_functions, opts, context, ui_message_handler);
+      set_verbosity_msg(bmc);
+
+      bmc.options.set_option("unwind", i2string(k_step));
+
+      std::cout << std::endl << "*** K-Induction Loop Iteration ";
+      std::cout << i2string((unsigned long)k_step);
+      std::cout << " ***" << std::endl;
+      std::cout << "*** Checking forward condition" << std::endl;
+
+      // If an exception was thrown, we should abort the process
+      bool res = true;
+      try
+      {
+        res = do_bmc(bmc);
+      }
+      catch(...)
+      {
+        break;
+      }
+
+      // Send information to parent if no bug was found
+      if(res == smt_convt::P_UNSATISFIABLE)
+      {
+        r.k = k_step;
+
+        // Write result
+        u_int len = write(forward_pipe[1], &r, sizeof(r));
+        assert(len == sizeof(r) && "short write");
+        (void)len; //ndebug
+
+        std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+
+        return 0;
+      }
+    }
+
+    // Send information to parent that it couldn't prove the code
+    r.k = 0;
+
+    u_int len = write(forward_pipe[1], &r, sizeof(r));
+    assert(len == sizeof(r) && "short write");
+    (void)len; //ndebug
+
+    std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+    break;
+  }
+
+  case INDUCTIVE_STEP:
+  {
+    // Set that we are running inductive step
+    opts.set_option("base-case", false);
+    opts.set_option("forward-condition", false);
+    opts.set_option("inductive-step", true);
+
+    // Start communication to the parent process
+    close(forward_pipe[0]);
+    close(backward_pipe[1]);
+
+    // Struct to keep the result
+    struct resultt r = {process_type, 0};
+
+    // Run bmc and only send results in two occasions:
+    // 1. A proof was found, we send the step where it was found
+    // 2. It couldn't find a proof
+    for(u_int k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+    {
+      bmct bmc(goto_functions, opts, context, ui_message_handler);
+      set_verbosity_msg(bmc);
+
+      bmc.options.set_option("unwind", i2string(k_step));
+
+      std::cout << std::endl << "*** K-Induction Loop Iteration ";
+      std::cout << i2string((unsigned long)k_step + 1);
+      std::cout << " ***" << std::endl;
+      std::cout << "*** Checking inductive step" << std::endl;
+
+      // If an exception was thrown, we should abort the process
+      bool res = true;
+      try
+      {
+        res = do_bmc(bmc);
+      }
+      catch(...)
+      {
+        break;
+      }
+
+      // Send information to parent if no bug was found
+      if(res == smt_convt::P_UNSATISFIABLE)
+      {
+        r.k = k_step;
+
+        // Write result
+        u_int len = write(forward_pipe[1], &r, sizeof(r));
+        assert(len == sizeof(r) && "short write");
+        (void)len; //ndebug
+
+        std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
+
+        return res;
+      }
+    }
+
+    // Send information to parent that it couldn't prove the code
+    r.k = 0;
+
+    u_int len = write(forward_pipe[1], &r, sizeof(r));
+    assert(len == sizeof(r) && "short write");
+    (void)len; //ndebug
+
+    std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
+    break;
+  }
+
+  default:
+    assert(0 && "Unknown process type.");
   }
 
   return 0;
@@ -1167,18 +1190,18 @@ int esbmc_parseoptionst::do_base_case(
   std::cout << "*** Checking base case\n";
   switch(do_bmc(bmc))
   {
-    case smt_convt::P_UNSATISFIABLE:
-    case smt_convt::P_SMTLIB:
-    case smt_convt::P_ERROR:
-      break;
+  case smt_convt::P_UNSATISFIABLE:
+  case smt_convt::P_SMTLIB:
+  case smt_convt::P_ERROR:
+    break;
 
-    case smt_convt::P_SATISFIABLE:
-      std::cout << "\nBug found (k = " << k_step << ")\n";
-      return true;
+  case smt_convt::P_SATISFIABLE:
+    std::cout << "\nBug found (k = " << k_step << ")\n";
+    return true;
 
-    default:
-      std::cout << "Unknown BMC result\n";
-      abort();
+  default:
+    std::cout << "Unknown BMC result\n";
+    abort();
   }
 
   return false;
@@ -1219,19 +1242,19 @@ int esbmc_parseoptionst::do_forward_condition(
 
   switch(res)
   {
-    case smt_convt::P_SATISFIABLE:
-    case smt_convt::P_SMTLIB:
-    case smt_convt::P_ERROR:
-      break;
+  case smt_convt::P_SATISFIABLE:
+  case smt_convt::P_SMTLIB:
+  case smt_convt::P_ERROR:
+    break;
 
-    case smt_convt::P_UNSATISFIABLE:
-      std::cout << "\nSolution found by the forward condition; "
-                << "all states are reachable (k = " << k_step << ")\n";
-      return false;
+  case smt_convt::P_UNSATISFIABLE:
+    std::cout << "\nSolution found by the forward condition; "
+              << "all states are reachable (k = " << k_step << ")\n";
+    return false;
 
-    default:
-      std::cout << "Unknown BMC result\n";
-      abort();
+  default:
+    std::cout << "Unknown BMC result\n";
+    abort();
   }
 
   return true;
@@ -1264,19 +1287,19 @@ int esbmc_parseoptionst::do_inductive_step(
   std::cout << "*** Checking inductive step\n";
   switch(do_bmc(bmc))
   {
-    case smt_convt::P_SATISFIABLE:
-    case smt_convt::P_SMTLIB:
-    case smt_convt::P_ERROR:
-      break;
+  case smt_convt::P_SATISFIABLE:
+  case smt_convt::P_SMTLIB:
+  case smt_convt::P_ERROR:
+    break;
 
-    case smt_convt::P_UNSATISFIABLE:
-      std::cout << "\nSolution found by the inductive step "
-                << "(k = " << k_step << ")\n";
-      return false;
+  case smt_convt::P_UNSATISFIABLE:
+    std::cout << "\nSolution found by the inductive step "
+              << "(k = " << k_step << ")\n";
+    return false;
 
-    default:
-      std::cout << "Unknown BMC result\n";
-      abort();
+  default:
+    std::cout << "Unknown BMC result\n";
+    abort();
   }
 
   return true;
@@ -1317,7 +1340,7 @@ bool esbmc_parseoptionst::get_goto_program(
   fine_timet parse_start = current_time();
   try
   {
-    if(cmdline.args.size()==0)
+    if(cmdline.args.size() == 0)
     {
       error("Please provide a program to verify");
       return true;
@@ -1334,27 +1357,33 @@ bool esbmc_parseoptionst::get_goto_program(
     else
     {
       // Parsing
-      if(parse()) return true;
+      if(parse())
+        return true;
       if(cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
       {
         assert(language_files.filemap.size());
         languaget &language = *language_files.filemap.begin()->second.language;
         language.show_parse(std::cout);
 
-        if(cmdline.isset("parse-tree-only")) return true;
+        if(cmdline.isset("parse-tree-only"))
+          return true;
       }
 
       // Typecheking (old frontend) or adjust (clang frontend)
-      if(typecheck()) return true;
-      if(final()) return true;
+      if(typecheck())
+        return true;
+      if(final())
+        return true;
 
       // we no longer need any parse trees or language files
       clear_parse();
 
-      if(cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
+      if(
+        cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
       {
         show_symbol_table();
-        if(cmdline.isset("symbol-table-only")) return true;
+        if(cmdline.isset("symbol-table-only"))
+          return true;
       }
 
       status("Generating GOTO Program");
@@ -1362,9 +1391,7 @@ bool esbmc_parseoptionst::get_goto_program(
       // Ahem
       migrate_namespace_lookup = new namespacet(context);
 
-      goto_convert(
-        context, options, goto_functions,
-        ui_message_handler);
+      goto_convert(context, options, goto_functions, ui_message_handler);
     }
 
     fine_timet parse_stop = current_time();
@@ -1397,7 +1424,7 @@ bool esbmc_parseoptionst::get_goto_program(
     return true;
   }
 
-  catch(std::bad_alloc&)
+  catch(std::bad_alloc &)
   {
     std::cout << "Out of memory" << std::endl;
     return true;
@@ -1410,13 +1437,13 @@ void esbmc_parseoptionst::preprocessing()
 {
   try
   {
-    if(cmdline.args.size()!=1)
+    if(cmdline.args.size() != 1)
     {
       error("Please provide one program to preprocess");
       return;
     }
 
-    std::string filename=cmdline.args[0];
+    std::string filename = cmdline.args[0];
 
     // To test that the file exists,
     std::ifstream infile(filename.c_str());
@@ -1426,7 +1453,7 @@ void esbmc_parseoptionst::preprocessing()
       return;
     }
 
-    if (c_preprocess(filename, std::cout, false, *get_message_handler()))
+    if(c_preprocess(filename, std::cout, false, *get_message_handler()))
       error("PREPROCESSING ERROR");
   }
 
@@ -1440,28 +1467,23 @@ void esbmc_parseoptionst::preprocessing()
     error(e);
   }
 
-  catch(std::bad_alloc&)
+  catch(std::bad_alloc &)
   {
     std::cout << "Out of memory" << std::endl;
   }
 }
 
-bool esbmc_parseoptionst::read_goto_binary(
-  goto_functionst &goto_functions)
+bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 {
   std::ifstream in(cmdline.getval("binary"), std::ios::binary);
 
   if(!in)
   {
-    error(
-      std::string("Failed to open `")+
-      cmdline.getval("binary")+
-      "'");
+    error(std::string("Failed to open `") + cmdline.getval("binary") + "'");
     return true;
   }
 
-  ::read_goto_binary(
-    in, context, goto_functions, *get_message_handler());
+  ::read_goto_binary(in, context, goto_functions, *get_message_handler());
 
   return false;
 }
@@ -1475,7 +1497,7 @@ bool esbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     // do partial inlining
-    if (!cmdline.isset("no-inlining"))
+    if(!cmdline.isset("no-inlining"))
     {
       if(cmdline.isset("full-inlining"))
         goto_inline(goto_functions, options, ns, ui_message_handler);
@@ -1483,21 +1505,18 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns, ui_message_handler);
     }
 
-    if(cmdline.isset("inductive-step")
-       || cmdline.isset("k-induction")
-       || cmdline.isset("k-induction-parallel"))
+    if(
+      cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
+      cmdline.isset("k-induction-parallel"))
     {
-      goto_k_induction(
-        goto_functions,
-        context,
-        ui_message_handler);
+      goto_k_induction(goto_functions, context, ui_message_handler);
 
       // Warn the user if the forward condition was disabled
       if(options.get_bool_option("disable-forward-condition"))
       {
         std::cout << "**** WARNING: this program contains infinite loops, "
-            << "so we are not applying the forward condition!"
-            << std::endl;
+                  << "so we are not applying the forward condition!"
+                  << std::endl;
       }
     }
 
@@ -1548,10 +1567,7 @@ bool esbmc_parseoptionst::process_goto_program(
       value_set_analysist value_set_analysis(ns);
       value_set_analysis(goto_functions);
 
-      add_race_assertions(
-        value_set_analysis,
-        context,
-        goto_functions);
+      add_race_assertions(value_set_analysis, context, goto_functions);
 
       value_set_analysis.update(goto_functions);
     }
@@ -1579,10 +1595,13 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     // show it?
-    if(cmdline.isset("goto-functions-too") || cmdline.isset("goto-functions-only"))
+    if(
+      cmdline.isset("goto-functions-too") ||
+      cmdline.isset("goto-functions-only"))
     {
       goto_functions.output(ns, std::cout);
-      if(cmdline.isset("goto-functions-only")) return true;
+      if(cmdline.isset("goto-functions-only"))
+        return true;
     }
   }
 
@@ -1598,7 +1617,7 @@ bool esbmc_parseoptionst::process_goto_program(
     return true;
   }
 
-  catch(std::bad_alloc&)
+  catch(std::bad_alloc &)
   {
     std::cout << "Out of memory" << std::endl;
     return true;
@@ -1620,7 +1639,8 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
     abort();
 
 #ifdef HAVE_SENDFILE_ESBMC
-  if (bmc.options.get_bool_option("memstats")) {
+  if(bmc.options.get_bool_option("memstats"))
+  {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, nullptr, 100000);
     close(fd);
@@ -1632,167 +1652,206 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 
 void esbmc_parseoptionst::help()
 {
-  std::cout <<
-    "\n"
-    "* * *           ESBMC " ESBMC_VERSION "          * * *\n"
-    "\n"
-    "Usage:                       Purpose:\n"
-    "\n"
-    " esbmc [-?] [-h] [--help]      show help\n"
-    " esbmc file.c ...              source file names\n"
+  std::cout
+    << "\n"
+       "* * *           ESBMC " ESBMC_VERSION
+       "          * * *\n"
+       "\n"
+       "Usage:                       Purpose:\n"
+       "\n"
+       " esbmc [-?] [-h] [--help]      show help\n"
+       " esbmc file.c ...              source file names\n"
 
-    "\nAdditonal options:\n"
+       "\nAdditonal options:\n"
 
-    "\nOutput options\n"
-    " --parse-tree-only            only show parse tree\n"
-    " --parse-tree-too             show parse tree and verify\n"
-    " --symbol-table-only          only show symbol table\n"
-    " --symbol-table-too           show symbol table and verify\n"
-    " --goto-functions-only        only show goto program\n"
-    " --goto-functions-too         show goto program and verify\n"
-    " --program-only               only show program expression\n"
-    " --program-too                show program expression and verify\n"
-    " --ssa-symbol-table           show symbol table along with SSA\n"
-    " --ssa-guards                 print SSA's guards, if any\n"
-    " --ssa-no-location            do not print the SSA's original location\n"
-    " --ssa-no-sliced              do not print the sliced SSAs\n"
-    " --ssa-full-names             print SSAs with full variable names\n"
-    " --smt-formula-only           only show SMT formula (not supported by all solvers)\n"
-    " --smt-formula-too            show SMT formula (not supported by all solvers) and verify\n"
-    " --show-smt-model             show SMT model (not supported by all solvers), if the formula is SAT\n"
+       "\nOutput options\n"
+       " --parse-tree-only            only show parse tree\n"
+       " --parse-tree-too             show parse tree and verify\n"
+       " --symbol-table-only          only show symbol table\n"
+       " --symbol-table-too           show symbol table and verify\n"
+       " --goto-functions-only        only show goto program\n"
+       " --goto-functions-too         show goto program and verify\n"
+       " --program-only               only show program expression\n"
+       " --program-too                show program expression and verify\n"
+       " --ssa-symbol-table           show symbol table along with SSA\n"
+       " --ssa-guards                 print SSA's guards, if any\n"
+       " --ssa-no-location            do not print the SSA's original "
+       "location\n"
+       " --ssa-no-sliced              do not print the sliced SSAs\n"
+       " --ssa-full-names             print SSAs with full variable names\n"
+       " --smt-formula-only           only show SMT formula (not supported by "
+       "all solvers)\n"
+       " --smt-formula-too            show SMT formula (not supported by all "
+       "solvers) and verify\n"
+       " --show-smt-model             show SMT model (not supported by all "
+       "solvers), if the formula is SAT\n"
 
-    "\nTrace options\n"
-    " --quiet                      do not print unwinding information during symbolic execution\n"
-    " --symex-trace                print instructions during symbolic execution\n"
-    " --symex-ssa-trace            print generated SSA during symbolic execution\n"
-    " --ssa-trace                  print SSA during SMT encoding\n"
-    " --show-goto-value-sets       show value-set analysis for the goto functions\n"
-    " --show-symex-value-sets      show value-set analysis during symbolic execution\n"
+       "\nTrace options\n"
+       " --quiet                      do not print unwinding information "
+       "during symbolic execution\n"
+       " --symex-trace                print instructions during symbolic "
+       "execution\n"
+       " --symex-ssa-trace            print generated SSA during symbolic "
+       "execution\n"
+       " --ssa-trace                  print SSA during SMT encoding\n"
+       " --show-goto-value-sets       show value-set analysis for the goto "
+       "functions\n"
+       " --show-symex-value-sets      show value-set analysis during symbolic "
+       "execution\n"
 
-    "\nFront-end options\n"
-    " -I path                      set include path\n"
-    " -D macro                     define preprocessor macro\n"
-    " --preprocess                 stop after preprocessing\n"
-    " --no-inlining                disable inlining function calls\n"
-    " --full-inlining              perform full inlining of function calls\n"
-    " --all-claims                 keep all claims\n"
-    " --show-loops                 show the loops in the program\n"
-    " --show-claims                only show claims\n"
-    " --show-vcc                   show the verification conditions\n"
-    " --document-subgoals          generate subgoals documentation\n"
-    " --no-arch                    don't set up an architecture\n"
-    " --no-library                 disable built-in abstract C library\n"
-    " --binary                     read goto program instead of source code\n"
-    " --little-endian              allow little-endian word-byte conversions\n"
-    " --big-endian                 allow big-endian word-byte conversions\n"
-    " --16, --32, --64             set width of machine word (default is 64)\n"
-    " --unsigned-char              make \"char\" unsigned by default\n"
-    " --version                    show current ESBMC version and exit\n"
-    " --witness-output filename    generate the verification result witness in GraphML format\n"
-    " --old-frontend               parse source files using our old frontend (deprecated)\n"
-    " --result-only                do not print the counter-example\n"
-    #ifdef _WIN32
-    " --i386-macos                 set MACOS/I386 architecture\n"
-    " --ppc-macos                  set PPC/I386 architecture\n"
-    " --i386-linux                 set Linux/I386 architecture\n"
-    " --i386-win32                 set Windows/I386 architecture (default)\n"
-    #elif __APPLE__
-    " --i386-macos                 set MACOS/I386 architecture (default)\n"
-    " --ppc-macos                  set PPC/I386 architecture\n"
-    " --i386-linux                 set Linux/I386 architecture\n"
-    " --i386-win32                 set Windows/I386 architecture\n"
-    #else
-    " --i386-macos                 set MACOS/I386 architecture\n"
-    " --ppc-macos                  set PPC/I386 architecture\n"
-    " --i386-linux                 set Linux/I386 architecture (default)\n"
-    " --i386-win32                 set Windows/I386 architecture\n"
-    #endif
+       "\nFront-end options\n"
+       " -I path                      set include path\n"
+       " -D macro                     define preprocessor macro\n"
+       " --preprocess                 stop after preprocessing\n"
+       " --no-inlining                disable inlining function calls\n"
+       " --full-inlining              perform full inlining of function calls\n"
+       " --all-claims                 keep all claims\n"
+       " --show-loops                 show the loops in the program\n"
+       " --show-claims                only show claims\n"
+       " --show-vcc                   show the verification conditions\n"
+       " --document-subgoals          generate subgoals documentation\n"
+       " --no-arch                    don't set up an architecture\n"
+       " --no-library                 disable built-in abstract C library\n"
+       " --binary                     read goto program instead of source "
+       "code\n"
+       " --little-endian              allow little-endian word-byte "
+       "conversions\n"
+       " --big-endian                 allow big-endian word-byte conversions\n"
+       " --16, --32, --64             set width of machine word (default is "
+       "64)\n"
+       " --unsigned-char              make \"char\" unsigned by default\n"
+       " --version                    show current ESBMC version and exit\n"
+       " --witness-output filename    generate the verification result witness "
+       "in GraphML format\n"
+       " --old-frontend               parse source files using our old "
+       "frontend (deprecated)\n"
+       " --result-only                do not print the counter-example\n"
+#ifdef _WIN32
+       " --i386-macos                 set MACOS/I386 architecture\n"
+       " --ppc-macos                  set PPC/I386 architecture\n"
+       " --i386-linux                 set Linux/I386 architecture\n"
+       " --i386-win32                 set Windows/I386 architecture (default)\n"
+#elif __APPLE__
+       " --i386-macos                 set MACOS/I386 architecture (default)\n"
+       " --ppc-macos                  set PPC/I386 architecture\n"
+       " --i386-linux                 set Linux/I386 architecture\n"
+       " --i386-win32                 set Windows/I386 architecture\n"
+#else
+       " --i386-macos                 set MACOS/I386 architecture\n"
+       " --ppc-macos                  set PPC/I386 architecture\n"
+       " --i386-linux                 set Linux/I386 architecture (default)\n"
+       " --i386-win32                 set Windows/I386 architecture\n"
+#endif
 
-    "\nBMC options\n"
-    " --function name              set main function name\n"
-    " --claim nr                   only check specific claim\n"
-    " --depth nr                   limit search depth\n"
-    " --unwind nr                  unwind nr times\n"
-    " --unwindset nr               unwind given loop nr times\n"
-    " --no-unwinding-assertions    do not generate unwinding assertions\n"
-    " --partial-loops              permit paths with partial loops\n"
-    " --unroll-loops               unwind all loops by the value defined by the --unwind option\n"
-    " --no-slice                   do not remove unused equations\n"
-    " --extended-try-analysis      check all the try block, even when an exception is thrown\n"
+       "\nBMC options\n"
+       " --function name              set main function name\n"
+       " --claim nr                   only check specific claim\n"
+       " --depth nr                   limit search depth\n"
+       " --unwind nr                  unwind nr times\n"
+       " --unwindset nr               unwind given loop nr times\n"
+       " --no-unwinding-assertions    do not generate unwinding assertions\n"
+       " --partial-loops              permit paths with partial loops\n"
+       " --unroll-loops               unwind all loops by the value defined by "
+       "the --unwind option\n"
+       " --no-slice                   do not remove unused equations\n"
+       " --extended-try-analysis      check all the try block, even when an "
+       "exception is thrown\n"
 
-    "\nIncremental BMC\n"
-    " --falsification              incremental loop unwinding for bug searching\n"
-    " --incremental-bmc            incremental loop unwinding verification\n"
-    " --termination                incremental loop unwinding assertion verification\n"
-    " --k-step nr                  set k increment (default is 1)\n"
-    " --max-k-step nr              set max number of iteration (default is 50)\n"
-    " --unlimited-k-steps          set max number of iteration to UINT_MAX\n"
+       "\nIncremental BMC\n"
+       " --falsification              incremental loop unwinding for bug "
+       "searching\n"
+       " --incremental-bmc            incremental loop unwinding verification\n"
+       " --termination                incremental loop unwinding assertion "
+       "verification\n"
+       " --k-step nr                  set k increment (default is 1)\n"
+       " --max-k-step nr              set max number of iteration (default is "
+       "50)\n"
+       " --unlimited-k-steps          set max number of iteration to UINT_MAX\n"
 
-    "\nSolver configuration\n"
-    " --list-solvers               list available solvers and exit\n"
-    " --boolector                  use Boolector (default)\n"
-    " --z3                         use Z3\n"
-    " --mathsat                    use MathSAT\n"
-    " --cvc                        use CVC4\n"
-    " --yices                      use Yices\n"
-    " --bv                         use solver with bit-vector arithmetic\n"
-    " --ir                         use solver with integer/real arithmetic\n"
-    " --smtlib                     use SMT lib format\n"
-    " --smtlib-solver-prog         SMT lib program name\n"
-    " --output <filename>          output VCCs in SMT lib format to given file\n"
-    " --fixedbv                    encode floating-point as fixed bitvectors (default)\n"
-    " --floatbv                    encode floating-point using the SMT floating-point theory\n"
+       "\nSolver configuration\n"
+       " --list-solvers               list available solvers and exit\n"
+       " --boolector                  use Boolector (default)\n"
+       " --z3                         use Z3\n"
+       " --mathsat                    use MathSAT\n"
+       " --cvc                        use CVC4\n"
+       " --yices                      use Yices\n"
+       " --bv                         use solver with bit-vector arithmetic\n"
+       " --ir                         use solver with integer/real arithmetic\n"
+       " --smtlib                     use SMT lib format\n"
+       " --smtlib-solver-prog         SMT lib program name\n"
+       " --output <filename>          output VCCs in SMT lib format to given "
+       "file\n"
+       " --fixedbv                    encode floating-point as fixed "
+       "bitvectors (default)\n"
+       " --floatbv                    encode floating-point using the SMT "
+       "floating-point theory\n"
 
-    "\nIncremental SMT solving\n"
-    " --smt-during-symex           enable incremental SMT solving (experimental)\n"
-    " --smt-thread-guard           call the solver during thread exploration (experimental)\n"
-    " --smt-symex-guard            call the solver during symbolic execution (experimental)\n"
+       "\nIncremental SMT solving\n"
+       " --smt-during-symex           enable incremental SMT solving "
+       "(experimental)\n"
+       " --smt-thread-guard           call the solver during thread "
+       "exploration (experimental)\n"
+       " --smt-symex-guard            call the solver during symbolic "
+       "execution (experimental)\n"
 
-    "\nProperty checking\n"
-    " --no-assertions              ignore assertions\n"
-    " --no-bounds-check            do not do array bounds check\n"
-    " --no-div-by-zero-check       do not do division by zero check\n"
-    " --no-pointer-check           do not do pointer check\n"
-    " --no-align-check             do not check pointer alignment\n"
-    " --memory-leak-check          enable memory leak check check\n"
-    " --nan-check                  check floating-point for NaN\n"
-    " --overflow-check             enable arithmetic over- and underflow check\n"
-    " --deadlock-check             enable global and local deadlock check with mutex\n"
-    " --data-races-check           enable data races check\n"
-    " --lock-order-check           enable for lock acquisition ordering check\n"
-    " --atomicity-check            enable atomicity check at visible assignments\n"
-    " --error-label label          check if label is unreachable\n"
-    " --force-malloc-success       do not check for malloc/new failure\n"
+       "\nProperty checking\n"
+       " --no-assertions              ignore assertions\n"
+       " --no-bounds-check            do not do array bounds check\n"
+       " --no-div-by-zero-check       do not do division by zero check\n"
+       " --no-pointer-check           do not do pointer check\n"
+       " --no-align-check             do not check pointer alignment\n"
+       " --memory-leak-check          enable memory leak check check\n"
+       " --nan-check                  check floating-point for NaN\n"
+       " --overflow-check             enable arithmetic over- and underflow "
+       "check\n"
+       " --deadlock-check             enable global and local deadlock check "
+       "with mutex\n"
+       " --data-races-check           enable data races check\n"
+       " --lock-order-check           enable for lock acquisition ordering "
+       "check\n"
+       " --atomicity-check            enable atomicity check at visible "
+       "assignments\n"
+       " --error-label label          check if label is unreachable\n"
+       " --force-malloc-success       do not check for malloc/new failure\n"
 
-    "\nK-induction\n"
-    " --base-case                  check the base case\n"
-    " --forward-condition          check the forward condition\n"
-    " --inductive-step             check the inductive step\n"
-    " --k-induction                prove by k-induction \n"
-    " --k-induction-parallel       prove by k-induction, running each step on a separate\n"
-    "                              process\n"
-    " --k-step nr                  set k increment (default is 1)\n"
-    " --max-k-step nr              set max number of iteration (default is 50)\n"
-    " --unlimited-k-steps          set max number of iteration to UINT_MAX\n"
-    " --show-counter-example       print the counter-example produced by the inductive step\n"
+       "\nK-induction\n"
+       " --base-case                  check the base case\n"
+       " --forward-condition          check the forward condition\n"
+       " --inductive-step             check the inductive step\n"
+       " --k-induction                prove by k-induction \n"
+       " --k-induction-parallel       prove by k-induction, running each step "
+       "on a separate\n"
+       "                              process\n"
+       " --k-step nr                  set k increment (default is 1)\n"
+       " --max-k-step nr              set max number of iteration (default is "
+       "50)\n"
+       " --unlimited-k-steps          set max number of iteration to UINT_MAX\n"
+       " --show-counter-example       print the counter-example produced by "
+       "the inductive step\n"
 
-    "\nScheduling approaches\n"
-    " --schedule                   use schedule recording approach \n"
-    " --round-robin                use the round robin scheduling approach\n"
-    " --time-slice nr              set the time slice of the round robin algorithm\n"
-    "                              (default is 1) \n"
+       "\nScheduling approaches\n"
+       " --schedule                   use schedule recording approach \n"
+       " --round-robin                use the round robin scheduling approach\n"
+       " --time-slice nr              set the time slice of the round robin "
+       "algorithm\n"
+       "                              (default is 1) \n"
 
-    "\nConcurrency checking\n"
-    " --context-bound nr           limit number of context switches for each thread \n"
-    " --state-hashing              enable state-hashing, prunes duplicate states\n"
-    " --no-por                     do not do partial order reduction\n"
-    " --all-runs                   check all interleavings, even if a bug was already found\n"
+       "\nConcurrency checking\n"
+       " --context-bound nr           limit number of context switches for "
+       "each thread \n"
+       " --state-hashing              enable state-hashing, prunes duplicate "
+       "states\n"
+       " --no-por                     do not do partial order reduction\n"
+       " --all-runs                   check all interleavings, even if a bug "
+       "was already found\n"
 
-    "\nMiscellaneous options\n"
-    " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
-    " --timeout                    configure time limit, integer followed by {s,m,h}\n"
-    " --memstats                   print memory usage statistics\n"
-    " --no-simplify                do not simplify any expression\n"
-    " --enable-core-dump           do not disable core dump output\n"
-    "\n";
+       "\nMiscellaneous options\n"
+       " --memlimit                   configure memory limit, of form \"100m\" "
+       "or \"2g\"\n"
+       " --timeout                    configure time limit, integer followed "
+       "by {s,m,h}\n"
+       " --memstats                   print memory usage statistics\n"
+       " --no-simplify                do not simplify any expression\n"
+       " --enable-core-dump           do not disable core dump output\n"
+       "\n";
 }

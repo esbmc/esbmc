@@ -15,18 +15,16 @@ void c_finalize_expression(
   exprt &expr,
   message_handlert &message_handler)
 {
-  if(expr.id()=="symbol")
+  if(expr.id() == "symbol")
   {
-    if(expr.type().id()=="incomplete_array")
+    if(expr.type().id() == "incomplete_array")
     {
-      const symbolt* s = context.find_symbol(expr.identifier());
+      const symbolt *s = context.find_symbol(expr.identifier());
 
       if(s == nullptr)
       {
         message_streamt message_stream(message_handler);
-        message_stream.str
-          << "failed to find symbol "
-          << expr.identifier();
+        message_stream.str << "failed to find symbol " << expr.identifier();
         message_stream.error();
         throw 0;
       }
@@ -34,14 +32,13 @@ void c_finalize_expression(
       const symbolt &symbol = *s;
 
       if(symbol.type.is_array())
-        expr.type()=symbol.type;
-      else if(symbol.type.id()=="incomplete_array")
+        expr.type() = symbol.type;
+      else if(symbol.type.id() == "incomplete_array")
       {
         message_streamt message_stream(message_handler);
         message_stream.err_location(symbol.location);
-        message_stream.str
-          << "symbol `" << symbol.display_name()
-          << "' has incomplete type";
+        message_stream.str << "symbol `" << symbol.display_name()
+                           << "' has incomplete type";
         message_stream.error();
         throw 0;
       }
@@ -49,9 +46,8 @@ void c_finalize_expression(
       {
         message_streamt message_stream(message_handler);
         message_stream.err_location(symbol.location);
-        message_stream.str
-          << "symbol `" << symbol.display_name()
-          << "' has unexpected type";
+        message_stream.str << "symbol `" << symbol.display_name()
+                           << "' has unexpected type";
         message_stream.error();
         throw 0;
       }
@@ -69,15 +65,12 @@ bool c_final(contextt &context, message_handlert &message_handler)
 
   try
   {
-    context.Foreach_operand(
-      [&context, &message_handler] (symbolt& s)
+    context.Foreach_operand([&context, &message_handler](symbolt &s) {
+      if(s.mode == "C")
       {
-        if(s.mode=="C")
-        {
-          c_finalize_expression(context, s.value, message_handler);
-        }
+        c_finalize_expression(context, s.value, message_handler);
       }
-    );
+    });
   }
 
   catch(int e)

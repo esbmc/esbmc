@@ -7,7 +7,6 @@
 
 \*******************************************************************/
 
-
 #ifndef EXECUTION_STATE_H_
 #define EXECUTION_STATE_H_
 
@@ -55,11 +54,12 @@ class reachability_treet;
 
 class execution_statet : public goto_symext
 {
-  public: class ex_state_level2t; // Forward dec
+public:
+  class ex_state_level2t; // Forward dec
   // Convenience typedef
   typedef goto_symex_statet::goto_statet goto_statet;
 
-  public:
+public:
   /**
    *  Default constructor.
    *  Takes the environment we'll be working with, and sets up a single thread
@@ -74,13 +74,15 @@ class execution_statet : public goto_symext
    *  @param options Options we're going to operate with.
    *  @param message_handler Message object to collect errors/warnings
    */
-  execution_statet(const goto_functionst &goto_functions, const namespacet &ns,
-                   reachability_treet *art,
-                   boost::shared_ptr<symex_targett> _target,
-                   contextt &context,
-                   boost::shared_ptr<ex_state_level2t> l2init,
-                   optionst &options,
-                   message_handlert &message_handler);
+  execution_statet(
+    const goto_functionst &goto_functions,
+    const namespacet &ns,
+    reachability_treet *art,
+    boost::shared_ptr<symex_targett> _target,
+    contextt &context,
+    boost::shared_ptr<ex_state_level2t> l2init,
+    optionst &options,
+    message_handlert &message_handler);
 
   /**
    *  Default copy constructor.
@@ -109,9 +111,9 @@ class execution_statet : public goto_symext
   public:
     ex_state_level2t(execution_statet &ref);
     ~ex_state_level2t() override = default;
-    boost::shared_ptr<renaming::level2t> clone() const override ;
-    void rename(expr2tc &lhs_symbol, unsigned count) override ;
-    void rename(expr2tc &identifier) override ;
+    boost::shared_ptr<renaming::level2t> clone() const override;
+    void rename(expr2tc &lhs_symbol, unsigned count) override;
+    void rename(expr2tc &identifier) override;
 
     execution_statet *owner;
   };
@@ -126,10 +128,11 @@ class execution_statet : public goto_symext
   public:
     state_hashing_level2t(execution_statet &ref);
     ~state_hashing_level2t() override = default;
-    boost::shared_ptr<renaming::level2t> clone() const override ;
-    void make_assignment(expr2tc &lhs_symbol,
-                                     const expr2tc &const_value,
-                                     const expr2tc &assigned_value) override ;
+    boost::shared_ptr<renaming::level2t> clone() const override;
+    void make_assignment(
+      expr2tc &lhs_symbol,
+      const expr2tc &const_value,
+      const expr2tc &assigned_value) override;
     crypto_hash generate_l2_state_hash() const;
     typedef std::map<irep_idt, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
@@ -138,58 +141,53 @@ class execution_statet : public goto_symext
   // Macros
 
   /** Increase number of context switches this ex_state has taken */
-  void
-  increment_context_switch()
+  void increment_context_switch()
   {
     CS_number++;
   }
 
   /** Increase number of time slices performed by this ex_state */
-  void
-  increment_time_slice()
+  void increment_time_slice()
   {
     TS_number++;
   }
 
   /** Reset the number of time slices performed by this ex_state */
-  void
-  reset_time_slice()
+  void reset_time_slice()
   {
     TS_number = 0;
   }
 
   /** Get the number of context switches performed by this ex_state */
-  int
-  get_context_switch()
+  int get_context_switch()
   {
     return CS_number;
   }
 
   /** Get the number of time slices performed by this ex_state */
-  int
-  get_time_slice()
+  int get_time_slice()
   {
     return TS_number;
   }
 
   /** Reset record of what context switches were taken from this ex_state */
-  void
-  resetDFS_traversed()
+  void resetDFS_traversed()
   {
-    for (unsigned int i = 0; i < threads_state.size(); i++)
+    for(unsigned int i = 0; i < threads_state.size(); i++)
       DFS_traversed.at(i) = false;
   }
 
   /** Fetch the thread ID of the current active thread */
-  unsigned int
-  get_active_state_number() {
+  unsigned int get_active_state_number()
+  {
     return active_thread;
   }
 
   /** Set internal thread startup data */
   void set_thread_start_data(unsigned int tid, const expr2tc &argdata)
   {
-    if (tid >= thread_start_data.size()) {
+    if(tid >= thread_start_data.size())
+    {
       std::cerr << "Setting thread data for nonexistant thread " << tid;
       std::cerr << std::endl;
       abort();
@@ -201,7 +199,8 @@ class execution_statet : public goto_symext
   /** Fetch internal thread startup data */
   const expr2tc &get_thread_start_data(unsigned int tid) const
   {
-    if (tid >= thread_start_data.size()) {
+    if(tid >= thread_start_data.size())
+    {
       std::cerr << "Getting thread data for nonexistant thread " << tid;
       std::cerr << std::endl;
       abort();
@@ -229,7 +228,7 @@ class execution_statet : public goto_symext
    *  a thread being created, and so forth.
    *  @param art reachability_treet we're operating with (defunct?)
    */
-  void symex_step(reachability_treet &art) override ;
+  void symex_step(reachability_treet &art) override;
 
   /**
    *  Symbolically assign a value.
@@ -243,7 +242,7 @@ class execution_statet : public goto_symext
   void symex_assign(
     const expr2tc &code,
     symex_targett::assignment_typet type,
-    const guardt &guard) override ;
+    const guardt &guard) override;
 
   /**
    *  Symbolically assert something.
@@ -254,7 +253,7 @@ class execution_statet : public goto_symext
    *  @param expr Expression that we're asserting is true.
    *  @param msg Textual message explaining this assertion.
    */
-  void claim(const expr2tc &expr, const std::string &msg) override ;
+  void claim(const expr2tc &expr, const std::string &msg) override;
 
   /**
    *  Perform a jump across GOTO code.
@@ -265,7 +264,7 @@ class execution_statet : public goto_symext
    *  too.
    *  @param old_guard Guard of the goto jump being performed.
    */
-  void symex_goto(const expr2tc &old_guard) override ;
+  void symex_goto(const expr2tc &old_guard) override;
 
   /**
    *  Assume some expression is true.
@@ -274,7 +273,7 @@ class execution_statet : public goto_symext
    *  function.
    *  @param assumption Expression of the thing we're assuming to be true.
    */
-  void assume(const expr2tc &assumption) override ;
+  void assume(const expr2tc &assumption) override;
 
   /**
    *  Fetch reference to count of dynamic objects in this state.
@@ -283,10 +282,10 @@ class execution_statet : public goto_symext
    *  to the true counter.
    *  @return Reference to the count of global dynamic objects.
    */
-  unsigned int &get_dynamic_counter() override ;
+  unsigned int &get_dynamic_counter() override;
 
   /** Like get_dynamic_counter, but with nondet symbols. */
-  unsigned int &get_nondet_counter() override ;
+  unsigned int &get_nondet_counter() override;
 
   /**
    *  Fetch name of current execution guard.
@@ -301,8 +300,8 @@ class execution_statet : public goto_symext
    *  Get reference to current thread state.
    *  @return Reference to current thread state.
    */
-  goto_symex_statet & get_active_state();
-  const goto_symex_statet & get_active_state() const;
+  goto_symex_statet &get_active_state();
+  const goto_symex_statet &get_active_state() const;
 
   /**
    *  Get atomic number count for current thread state.
@@ -424,8 +423,10 @@ class execution_statet : public goto_symext
    *  @expr Expression to count global writes in.
    *  @return Number of global refs in this expression.
    */
-  void get_expr_globals(const namespacet &ns, const expr2tc &expr,
-                        std::set<expr2tc> &global_list);
+  void get_expr_globals(
+    const namespacet &ns,
+    const expr2tc &expr,
+    std::set<expr2tc> &global_list);
 
   /**
    *  Check for scheduling dependancies. Whether it exists between the variables
@@ -516,8 +517,7 @@ class execution_statet : public goto_symext
    *  produced code when the monitor is to be ended. */
   void kill_monitor_thread();
 
-  public:
-
+public:
   /** Pointer to reachability_treet that owns this ex_state */
   reachability_treet *owning_rt;
   /** Stack of thread states. The index into this vector is the thread ID of
@@ -528,7 +528,7 @@ class execution_statet : public goto_symext
    *  here. Format is: for each thread, a list of paths, which are made up
    *  of an insn number where the path merges and it's goto_statet when we
    *  switched away. Preserved paths can only be in the top() frame.  */
-  std::vector<std::list<std::pair<goto_programt::const_targett, goto_statet> > >
+  std::vector<std::list<std::pair<goto_programt::const_targett, goto_statet>>>
     preserved_paths;
   /** Atomic section count. Every time an atomic begin is executed, the
    *  atomic_number corresponding to the thread is incremented, allowing nested
@@ -596,20 +596,20 @@ class execution_statet : public goto_symext
    *  exists, compare the number of threads against this threshold. */
   unsigned int thread_cswitch_threshold;
 
-  protected:
+protected:
   /** Number of context switches performed by this ex_state */
   int CS_number;
   /** For each thread, a set of symbols that were read by the thread in the
    *  last transition (run). Renamed to level1, as that identifies each piece of
    *  data that could have storage in C. */
-  std::vector<std::set<expr2tc> > thread_last_reads;
+  std::vector<std::set<expr2tc>> thread_last_reads;
   /** For each thread, a set of symbols that were written by the thread in the
    *  last transition (run). Renamed to level1, as that identifies each piece of
    *  data that could have storage in C. */
-  std::vector<std::set<expr2tc> > thread_last_writes;
+  std::vector<std::set<expr2tc>> thread_last_writes;
   /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
    *  to dependancy_chain[i][j] here. */
-  std::vector<std::vector<int> > dependancy_chain;
+  std::vector<std::vector<int>> dependancy_chain;
   /** MPOR scheduling outcome. If we've just taken a transition that MPOR
    *  rejects, this becomes true. For various reasons, we can't tell whether or
    *  not MPOR rejects a transition in advance. */
@@ -628,7 +628,7 @@ class execution_statet : public goto_symext
 
   // Static stuff:
 
-  public:
+public:
   static unsigned int node_count;
 
   friend void build_goto_symex_classes();
@@ -646,28 +646,31 @@ class execution_statet : public goto_symext
 
 class dfs_execution_statet : public execution_statet
 {
-  public:
+public:
   dfs_execution_statet(
-                   const goto_functionst &goto_functions,
-                   const namespacet &ns,
-                   reachability_treet *art,
-                   boost::shared_ptr<symex_targett> _target,
-                   contextt &context,
-                   optionst &options,
-                   message_handlert &_message_handler)
-      : execution_statet(goto_functions, ns, art, std::move(_target), context,
-                         options.get_bool_option("state-hashing")
-                             ? boost::shared_ptr<state_hashing_level2t>(
-                                 new state_hashing_level2t(*this))
-                             : boost::shared_ptr<ex_state_level2t>(
-                                 new ex_state_level2t(*this)),
-                             options, _message_handler)
-  {
-  };
+    const goto_functionst &goto_functions,
+    const namespacet &ns,
+    reachability_treet *art,
+    boost::shared_ptr<symex_targett> _target,
+    contextt &context,
+    optionst &options,
+    message_handlert &_message_handler)
+    : execution_statet(
+        goto_functions,
+        ns,
+        art,
+        std::move(_target),
+        context,
+        options.get_bool_option("state-hashing")
+          ? boost::shared_ptr<state_hashing_level2t>(
+              new state_hashing_level2t(*this))
+          : boost::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
+        options,
+        _message_handler){};
 
   dfs_execution_statet(const dfs_execution_statet &ref) = default;
-  boost::shared_ptr<execution_statet> clone() const override ;
-  ~dfs_execution_statet() override ;
+  boost::shared_ptr<execution_statet> clone() const override;
+  ~dfs_execution_statet() override;
 };
 
 /**
@@ -678,21 +681,26 @@ class dfs_execution_statet : public execution_statet
 
 class schedule_execution_statet : public execution_statet
 {
-  public:
+public:
   schedule_execution_statet(
-                   const goto_functionst &goto_functions,
-                   const namespacet &ns,
-                   reachability_treet *art,
-                   boost::shared_ptr<symex_targett> _target,
-                   contextt &context,
-                   optionst &options,
-                   unsigned int *ptotal_claims,
-                   unsigned int *premaining_claims,
-                   message_handlert &_message_handler)
-      : execution_statet(goto_functions, ns, art, std::move(_target), context,
-                         boost::shared_ptr<ex_state_level2t>(
-                           new ex_state_level2t(*this)),
-                         options, _message_handler)
+    const goto_functionst &goto_functions,
+    const namespacet &ns,
+    reachability_treet *art,
+    boost::shared_ptr<symex_targett> _target,
+    contextt &context,
+    optionst &options,
+    unsigned int *ptotal_claims,
+    unsigned int *premaining_claims,
+    message_handlert &_message_handler)
+    : execution_statet(
+        goto_functions,
+        ns,
+        art,
+        std::move(_target),
+        context,
+        boost::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
+        options,
+        _message_handler)
   {
     this->ptotal_claims = ptotal_claims;
     this->premaining_claims = premaining_claims;
@@ -701,9 +709,9 @@ class schedule_execution_statet : public execution_statet
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref) = default;
-  boost::shared_ptr<execution_statet> clone() const override ;
-  ~schedule_execution_statet() override ;
-  void claim(const expr2tc &expr, const std::string &msg) override ;
+  boost::shared_ptr<execution_statet> clone() const override;
+  ~schedule_execution_statet() override;
+  void claim(const expr2tc &expr, const std::string &msg) override;
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;

@@ -17,7 +17,7 @@ typet build_float_type(unsigned width)
   {
     fixedbv_typet result;
     result.set_width(width);
-    result.set_integer_bits(width/2);
+    result.set_integer_bits(width / 2);
     return result;
   }
   else
@@ -27,11 +27,20 @@ typet build_float_type(unsigned width)
 
     switch(width)
     {
-    case 32: result.set_f(23); break;
-    case 64: result.set_f(52); break;
-    case 96: result.set_f(80); break;
-    case 128: result.set_f(112); break;
-    default: assert(false);
+    case 32:
+      result.set_f(23);
+      break;
+    case 64:
+      result.set_f(52);
+      break;
+    case 96:
+      result.set_f(80);
+      break;
+    case 128:
+      result.set_f(112);
+      break;
+    default:
+      assert(false);
     }
 
     return result;
@@ -42,7 +51,7 @@ type2tc build_float_type2(unsigned width)
 {
   if(config.ansi_c.use_fixed_for_float)
   {
-    fixedbv_type2tc result(width, width/2);
+    fixedbv_type2tc result(width, width / 2);
     return result;
   }
   else
@@ -50,10 +59,17 @@ type2tc build_float_type2(unsigned width)
     unsigned fraction = 0;
     switch(width)
     {
-    case 32: fraction = 23; break;
-    case 64: fraction = 52; break;
-    case 128: fraction = 112; break;
-    default: assert(false);
+    case 32:
+      fraction = 23;
+      break;
+    case 64:
+      fraction = 52;
+      break;
+    case 128:
+      fraction = 112;
+      break;
+    default:
+      assert(false);
     }
 
     floatbv_type2tc result(fraction, width - fraction - 1);
@@ -98,7 +114,7 @@ type2tc uint_type2()
 
 typet bool_type()
 {
-  typet result=bool_typet();
+  typet result = bool_typet();
   return result;
 }
 
@@ -192,7 +208,7 @@ typet unsigned_wchar_type()
 
 type2tc char_type2()
 {
-  if (config.ansi_c.char_is_unsigned)
+  if(config.ansi_c.char_is_unsigned)
     return type_pool.get_uint(config.ansi_c.char_width);
   else
     return type_pool.get_int(config.ansi_c.char_width);

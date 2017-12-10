@@ -14,35 +14,35 @@
 #include <util/prefix.h>
 #include <util/std_code.h>
 
-void clang_c_adjust::adjust_code(codet& code)
+void clang_c_adjust::adjust_code(codet &code)
 {
-  const irep_idt &statement=code.statement();
+  const irep_idt &statement = code.statement();
 
-  if(statement=="ifthenelse")
+  if(statement == "ifthenelse")
   {
     adjust_ifthenelse(code);
   }
-  else if(statement=="while" || statement=="dowhile")
+  else if(statement == "while" || statement == "dowhile")
   {
     adjust_while(code);
   }
-  else if(statement=="for")
+  else if(statement == "for")
   {
     adjust_for(code);
   }
-  else if(statement=="switch")
+  else if(statement == "switch")
   {
     adjust_switch(code);
   }
-  else if(statement=="assign")
+  else if(statement == "assign")
   {
     adjust_assign(code);
   }
-  else if(statement=="decl")
+  else if(statement == "decl")
   {
     adjust_decl(code);
   }
-  else if(statement=="function_call")
+  else if(statement == "function_call")
   {
   }
   else
@@ -51,9 +51,10 @@ void clang_c_adjust::adjust_code(codet& code)
   }
 }
 
-void clang_c_adjust::adjust_decl(codet& code)
+void clang_c_adjust::adjust_decl(codet &code)
 {
-  if(code.operands().size() == 1) {
+  if(code.operands().size() == 1)
+  {
     adjust_type(code.op0().type());
     return;
   }
@@ -70,7 +71,7 @@ void clang_c_adjust::adjust_decl(codet& code)
   gen_typecast(ns, code.op1(), code.op0().type());
 }
 
-void clang_c_adjust::adjust_ifthenelse(codet& code)
+void clang_c_adjust::adjust_ifthenelse(codet &code)
 {
   adjust_operands(code);
 
@@ -78,7 +79,7 @@ void clang_c_adjust::adjust_ifthenelse(codet& code)
   gen_typecast_bool(ns, code.op0());
 }
 
-void clang_c_adjust::adjust_while(codet& code)
+void clang_c_adjust::adjust_while(codet &code)
 {
   adjust_operands(code);
 
@@ -86,7 +87,7 @@ void clang_c_adjust::adjust_while(codet& code)
   gen_typecast_bool(ns, code.op0());
 }
 
-void clang_c_adjust::adjust_for(codet& code)
+void clang_c_adjust::adjust_for(codet &code)
 {
   adjust_operands(code);
 
@@ -94,7 +95,7 @@ void clang_c_adjust::adjust_for(codet& code)
   gen_typecast_bool(ns, code.op1());
 }
 
-void clang_c_adjust::adjust_switch(codet& code)
+void clang_c_adjust::adjust_switch(codet &code)
 {
   adjust_operands(code);
 
@@ -102,7 +103,7 @@ void clang_c_adjust::adjust_switch(codet& code)
   gen_typecast_arithmetic(ns, code.op0());
 }
 
-void clang_c_adjust::adjust_assign(codet& code)
+void clang_c_adjust::adjust_assign(codet &code)
 {
   adjust_operands(code);
 

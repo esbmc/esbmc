@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 void cpp_typecheckt::typecheck_type(typet &type)
 {
-  assert(type.id()!="");
+  assert(type.id() != "");
   assert(type.is_not_nil());
 
   try
@@ -36,26 +36,24 @@ void cpp_typecheckt::typecheck_type(typet &type)
     throw 0;
   }
 
-  if(type.id()=="cpp-name")
+  if(type.id() == "cpp-name")
   {
     c_qualifierst qualifiers(type);
 
     cpp_namet cpp_name;
     cpp_name.swap(type);
 
-    exprt symbol_expr=resolve(
-      cpp_name,
-      cpp_typecheck_resolvet::TYPE,
-      cpp_typecheck_fargst());
+    exprt symbol_expr =
+      resolve(cpp_name, cpp_typecheck_resolvet::TYPE, cpp_typecheck_fargst());
 
-    if(symbol_expr.id()!="type")
+    if(symbol_expr.id() != "type")
     {
       err_location(type);
       str << "error: expected type";
       throw 0;
     }
 
-    type=symbol_expr.type();
+    type = symbol_expr.type();
     assert(type.is_not_nil());
 
     if(type.cmt_constant())
@@ -63,12 +61,11 @@ void cpp_typecheckt::typecheck_type(typet &type)
 
     qualifiers.write(type);
   }
-  else if(type.id()=="struct" ||
-          type.id()=="union")
+  else if(type.id() == "struct" || type.id() == "union")
   {
     typecheck_compound_type(type);
   }
-  else if(type.id()=="pointer")
+  else if(type.id() == "pointer")
   {
     // the pointer might have a qualifier, but do subtype first
     typecheck_type(type.subtype());
@@ -79,30 +76,29 @@ void cpp_typecheckt::typecheck_type(typet &type)
       // these can point either to data members or member functions
       // of a class
 
-      typet &class_object=static_cast<typet &>(type.add("to-member"));
+      typet &class_object = static_cast<typet &>(type.add("to-member"));
 
-      if(class_object.id()=="cpp-name")
+      if(class_object.id() == "cpp-name")
       {
-        assert(class_object.get_sub().back().id()=="::");
+        assert(class_object.get_sub().back().id() == "::");
         class_object.get_sub().pop_back();
       }
 
       typecheck_type(class_object);
 
       // there may be arguments if this is a pointer to member function
-      if(type.subtype().id()=="code")
+      if(type.subtype().id() == "code")
       {
-        irept::subt &args=type.subtype().add("arguments").get_sub();
+        irept::subt &args = type.subtype().add("arguments").get_sub();
 
-        if(args.empty() ||
-           args.front().cmt_base_name()!="this")
+        if(args.empty() || args.front().cmt_base_name() != "this")
         {
           // Add 'this' to the arguments
           exprt a0("argument");
           a0.cmt_base_name("this");
           a0.type().id("pointer");
           a0.type().subtype() = class_object;
-          args.insert(args.begin(),a0);
+          args.insert(args.begin(), a0);
         }
       }
     }
@@ -110,7 +106,7 @@ void cpp_typecheckt::typecheck_type(typet &type)
     // now do qualifier
     if(type.find("#qualifier").is_not_nil())
     {
-      typet &t=static_cast<typet &>(type.add("#qualifier"));
+      typet &t = static_cast<typet &>(type.add("#qualifier"));
       cpp_convert_plain_type(t);
       c_qualifierst q(t);
       q.write(type);
@@ -118,9 +114,9 @@ void cpp_typecheckt::typecheck_type(typet &type)
 
     type.remove("#qualifier");
   }
-  else if(type.id()=="array")
+  else if(type.id() == "array")
   {
-    exprt &size_expr=to_array_type(type).size();
+    exprt &size_expr = to_array_type(type).size();
 
     if(size_expr.is_nil())
       type.id("incomplete_array");
@@ -138,14 +134,14 @@ void cpp_typecheckt::typecheck_type(typet &type)
     if(type.subtype().cmt_volatile())
       type.set("#volatile", true);
   }
-  else if(type.id()=="code")
+  else if(type.id() == "code")
   {
-    code_typet &code_type=to_code_type(type);
+    code_typet &code_type = to_code_type(type);
     typecheck_type(code_type.return_type());
 
-    code_typet::argumentst &arguments=code_type.arguments();
+    code_typet::argumentst &arguments = code_type.arguments();
 
-    for(auto & argument : arguments)
+    for(auto &argument : arguments)
     {
       typecheck_type(argument.type());
 
@@ -157,81 +153,77 @@ void cpp_typecheckt::typecheck_type(typet &type)
       }
     }
   }
-  else if(type.id()=="template")
+  else if(type.id() == "template")
   {
     typecheck_type(type.subtype());
   }
-  else if(type.id()=="c_enum")
+  else if(type.id() == "c_enum")
   {
     typecheck_enum_type(type);
   }
-  else if(type.id()=="unsignedbv" ||
-          type.id()=="signedbv" ||
-          type.id()=="bool" ||
-          type.id()=="floatbv" ||
-          type.id()=="fixedbv" ||
-          type.id()=="empty")
+  else if(
+    type.id() == "unsignedbv" || type.id() == "signedbv" ||
+    type.id() == "bool" || type.id() == "floatbv" || type.id() == "fixedbv" ||
+    type.id() == "empty")
   {
   }
-  else if(type.id()=="symbol")
+  else if(type.id() == "symbol")
   {
   }
-  else if(type.id()=="constructor" ||
-          type.id()=="destructor")
+  else if(type.id() == "constructor" || type.id() == "destructor")
   {
   }
-  else if(type.id()=="cpp-cast-operator")
+  else if(type.id() == "cpp-cast-operator")
   {
   }
-  else if(type.id()=="cpp-template-type")
+  else if(type.id() == "cpp-template-type")
   {
   }
-  else if(type.id()=="typeof")
+  else if(type.id() == "typeof")
   {
-    exprt e=static_cast<const exprt &>(type.find("expr"));
+    exprt e = static_cast<const exprt &>(type.find("expr"));
 
     if(e.is_nil())
     {
-      typet tmp_type=
-        static_cast<const typet &>(type.find("sizeof-type"));
+      typet tmp_type = static_cast<const typet &>(type.find("sizeof-type"));
 
-      if(tmp_type.id()=="cpp-name")
+      if(tmp_type.id() == "cpp-name")
       {
         // this may be ambiguous -- it can be either a type or
         // an expression
 
         cpp_typecheck_fargst fargs;
 
-        exprt symbol_expr=resolve(
+        exprt symbol_expr = resolve(
           to_cpp_name(static_cast<const irept &>(tmp_type)),
           cpp_typecheck_resolvet::BOTH,
           fargs);
 
-        type=symbol_expr.type();
+        type = symbol_expr.type();
       }
       else
       {
         typecheck_type(tmp_type);
-        type=tmp_type;
+        type = tmp_type;
       }
     }
     else
     {
       typecheck_expr(e);
-      type=e.type();
+      type = e.type();
     }
   }
-  else if(type.id()=="decltype")
+  else if(type.id() == "decltype")
   {
-    exprt e=static_cast<const exprt &>(type.find("expr_arg"));
+    exprt e = static_cast<const exprt &>(type.find("expr_arg"));
     typecheck_expr(e);
-    type=e.type();
+    type = e.type();
   }
-  else if(type.id()=="unassigned")
+  else if(type.id() == "unassigned")
   {
     // ignore, for template argument guessing
   }
-  else if(type.id()=="ellipsis")
+  else if(type.id() == "ellipsis")
   {
   }
   else

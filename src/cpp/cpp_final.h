@@ -12,8 +12,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/context.h>
 #include <util/message.h>
 
-bool cpp_final(
-  contextt &context,
-  message_handlert &message_handler);
+bool cpp_final(contextt &context, message_handlert &message_handler);
 
 #endif

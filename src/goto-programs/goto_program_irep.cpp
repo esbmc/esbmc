@@ -20,7 +20,7 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
   if(instruction.location.is_not_nil())
     irep.location(instruction.location);
 
-  irep.type_id((long) instruction.type);
+  irep.type_id((long)instruction.type);
 
   irep.guard(migrate_expr_back(instruction.guard));
 
@@ -50,10 +50,10 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
 
 void convert(const irept &irep, goto_programt::instructiont &instruction)
 {
-  migrate_expr(static_cast<const exprt&>(irep.code()), instruction.code);
-  migrate_expr(static_cast<const exprt&>(irep.guard()), instruction.guard);
+  migrate_expr(static_cast<const exprt &>(irep.code()), instruction.code);
+  migrate_expr(static_cast<const exprt &>(irep.guard()), instruction.guard);
   instruction.function = irep.function_irep().id();
-  instruction.location = static_cast<const locationt&>(irep.location());
+  instruction.location = static_cast<const locationt &>(irep.location());
   instruction.type =
     static_cast<goto_program_instruction_typet>(atoi(irep.type_id().c_str()));
 
@@ -95,7 +95,7 @@ void convert(const irept &irep, goto_programt &program)
 
   program.instructions.clear();
 
-  std::list<std::list<unsigned> > number_targets_list;
+  std::list<std::list<unsigned>> number_targets_list;
 
   // convert instructions back
   const irept::subt &subs = irep.get_sub();
@@ -119,7 +119,7 @@ void convert(const irept &irep, goto_programt &program)
       lit != program.instructions.end() && nit != number_targets_list.end();
       lit++, nit++)
   {
-    for (unsigned int & tit : *nit)
+    for(unsigned int &tit : *nit)
     {
       goto_programt::targett fit = program.instructions.begin();
       for(; fit != program.instructions.end(); fit++)
@@ -134,7 +134,7 @@ void convert(const irept &irep, goto_programt &program)
       if(fit == program.instructions.end())
       {
         std::cout << "Warning: could not resolve target link "
-            << "during irep->goto_program translation." << std::endl;
+                  << "during irep->goto_program translation." << std::endl;
         throw 0;
       }
     }

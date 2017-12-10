@@ -24,12 +24,12 @@ public:
 
   void clear()
   {
-    kind=0;
+    kind = 0;
     data.clear();
-    text="";
-    line_no=0;
-    filename="";
-    pos=0;
+    text = "";
+    line_no = 0;
+    filename = "";
+    pos = 0;
   }
 
   void swap(cpp_tokent &token)

@@ -12,10 +12,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_name.h>
 #include <util/expr.h>
 
-class cpp_namespace_spect:public exprt
+class cpp_namespace_spect : public exprt
 {
 public:
-  inline cpp_namespace_spect():exprt("cpp-namespace-spec")
+  inline cpp_namespace_spect() : exprt("cpp-namespace-spec")
   {
     add("alias").make_nil();
   }
@@ -53,7 +53,7 @@ public:
   }
 
   void output(std::ostream &out) const;
-  
+
   inline void set_is_inline(bool value)
   {
     set("is_inline", value);

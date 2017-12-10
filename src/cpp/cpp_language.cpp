@@ -26,13 +26,13 @@ bool cpp_languaget::preprocess(
   std::ostream &outstream,
   message_handlert &message_handler)
 {
-  if(path=="")
+  if(path == "")
     return c_preprocess("", outstream, true, message_handler);
 
   // check extension
 
-  const char *ext=strrchr(path.c_str(), '.');
-  if(ext!=nullptr && std::string(ext)==".ipp")
+  const char *ext = strrchr(path.c_str(), '.');
+  if(ext != nullptr && std::string(ext) == ".ipp")
   {
     std::ifstream infile(path.c_str());
 
@@ -59,7 +59,8 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "void __ESBMC_assume(bool assumption);" << std::endl;
   out << "void assert(bool assertion);" << std::endl;
   out << "void __ESBMC_assert("
-         "bool assertion, const char *description);" << std::endl;
+         "bool assertion, const char *description);"
+      << std::endl;
   out << "bool __ESBMC_same_object(const void *, const void *);" << std::endl;
 
   // pointers
@@ -74,9 +75,12 @@ void cpp_languaget::internal_additions(std::ostream &out)
   // for dynamic objects
   out << "unsigned __CPROVER::constant_infinity_uint;" << std::endl;
   out << "bool __ESBMC_alloc[__CPROVER::constant_infinity_uint];" << std::endl;
-  out << "unsigned __ESBMC_alloc_size[__CPROVER::constant_infinity_uint];" << std::endl;
-  out << "bool __ESBMC_deallocated[__CPROVER::constant_infinity_uint];" << std::endl;
-  out << "bool __ESBMC_is_dynamic[__CPROVER::constant_infinity_uint];" << std::endl;
+  out << "unsigned __ESBMC_alloc_size[__CPROVER::constant_infinity_uint];"
+      << std::endl;
+  out << "bool __ESBMC_deallocated[__CPROVER::constant_infinity_uint];"
+      << std::endl;
+  out << "bool __ESBMC_is_dynamic[__CPROVER::constant_infinity_uint];"
+      << std::endl;
 
   // float stuff
   out << "bool __ESBMC_isnan(double f);" << std::endl;
@@ -93,9 +97,15 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "float __ESBMC_fabsf(float x);" << std::endl;
 
   // Digital controllers code
-  out << "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, bool isDenominator);" << std::endl;
-  out << "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);" << std::endl;
-  out << "bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);" << std::endl;
+  out << "void __ESBMC_generate_cascade_controllers(float * cden, int csize, "
+         "float * cout, int coutsize, bool isDenominator);"
+      << std::endl;
+  out << "void __ESBMC_generate_delta_coefficients(float a[], double out[], "
+         "float delta);"
+      << std::endl;
+  out << "bool __ESBMC_check_delta_stability(double dc[], double sample_time, "
+         "int iwidth, int precision);"
+      << std::endl;
 
   // Forward decs for pthread main thread begin/end hooks. Because they're
   // pulled in from the C library, they need to be declared prior to pulling
@@ -145,7 +155,7 @@ bool cpp_languaget::parse(
 {
   // store the path
 
-  parse_path=path;
+  parse_path = path;
 
   // preprocessing
 
@@ -161,19 +171,19 @@ bool cpp_languaget::parse(
   // parsing
 
   cpp_parser.clear();
-  cpp_parser.filename=path;
-  cpp_parser.in=&i_preprocessed;
+  cpp_parser.filename = path;
+  cpp_parser.in = &i_preprocessed;
   cpp_parser.set_message_handler(&message_handler);
-  cpp_parser.grammar=cpp_parsert::LANGUAGE;
+  cpp_parser.grammar = cpp_parsert::LANGUAGE;
 
-  if(config.ansi_c.os==configt::ansi_ct::OS_WIN32)
-    cpp_parser.mode=cpp_parsert::MSC;
+  if(config.ansi_c.os == configt::ansi_ct::OS_WIN32)
+    cpp_parser.mode = cpp_parsert::MSC;
   else
-    cpp_parser.mode=cpp_parsert::GCC;
+    cpp_parser.mode = cpp_parsert::GCC;
 
   cpp_scanner_init();
 
-  bool result=cpp_parser.parse();
+  bool result = cpp_parser.parse();
 
   // save result
   cpp_parse_tree.swap(cpp_parser.parse_tree);
@@ -197,55 +207,49 @@ bool cpp_languaget::typecheck(
   return c_link(context, new_context, message_handler, module);
 }
 
-bool cpp_languaget::final(
-  contextt &context,
-  message_handlert &message_handler)
+bool cpp_languaget::final(contextt &context, message_handlert &message_handler)
 {
-  if(cpp_final(context, message_handler)) return true;
-  if(c_main(context, "main", message_handler)) return true;
+  if(cpp_final(context, message_handler))
+    return true;
+  if(c_main(context, "main", message_handler))
+    return true;
 
   return false;
 }
 
 void cpp_languaget::show_parse(std::ostream &out)
 {
-  for(cpp_parse_treet::itemst::const_iterator it=
-      cpp_parse_tree.items.begin();
-      it!=cpp_parse_tree.items.end();
+  for(cpp_parse_treet::itemst::const_iterator it = cpp_parse_tree.items.begin();
+      it != cpp_parse_tree.items.end();
       it++)
     show_parse(out, *it);
 }
 
-void cpp_languaget::show_parse(
-  std::ostream &out,
-  const cpp_itemt &item)
+void cpp_languaget::show_parse(std::ostream &out, const cpp_itemt &item)
 {
   if(item.is_linkage_spec())
   {
-    const cpp_linkage_spect &linkage_spec=
-      item.get_linkage_spec();
+    const cpp_linkage_spect &linkage_spec = item.get_linkage_spec();
 
-    for(const auto & it : linkage_spec.items())
+    for(const auto &it : linkage_spec.items())
       show_parse(out, it);
 
     out << std::endl;
   }
   else if(item.is_namespace_spec())
   {
-    const cpp_namespace_spect &namespace_spec=
-      item.get_namespace_spec();
+    const cpp_namespace_spect &namespace_spec = item.get_namespace_spec();
 
-    out << "NAMESPACE " << namespace_spec.get_namespace()
-        << ":" << std::endl;
+    out << "NAMESPACE " << namespace_spec.get_namespace() << ":" << std::endl;
 
-    for(const auto & it : namespace_spec.items())
+    for(const auto &it : namespace_spec.items())
       show_parse(out, it);
 
     out << std::endl;
   }
   else if(item.is_using())
   {
-    const cpp_usingt &cpp_using=item.get_using();
+    const cpp_usingt &cpp_using = item.get_using();
 
     out << "USING ";
     if(cpp_using.get_namespace())
@@ -272,7 +276,7 @@ bool cpp_languaget::from_expr(
   const namespacet &ns,
   bool fullname)
 {
-  code=expr2cpp(expr, ns, fullname);
+  code = expr2cpp(expr, ns, fullname);
   return false;
 }
 
@@ -282,6 +286,6 @@ bool cpp_languaget::from_type(
   const namespacet &ns,
   bool fullname)
 {
-  code=type2cpp(type, ns, fullname);
+  code = type2cpp(type, ns, fullname);
   return false;
 }

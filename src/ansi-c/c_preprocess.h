@@ -18,5 +18,5 @@ bool c_preprocess(
   std::ostream &outstream,
   bool is_cpp,
   message_handlert &message_handler);
- 
+
 #endif

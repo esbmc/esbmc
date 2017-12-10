@@ -50,24 +50,22 @@ public:
 
 std::ostream &operator<<(std::ostream &out, const symbolt &symbol);
 
-typedef std::list<symbolt*> symbol_listt;
+typedef std::list<symbolt *> symbol_listt;
 
-#define forall_symbol_list(it, expr) \
-  for(symbol_listt::const_iterator it=(expr).begin(); \
-      it!=(expr).end(); it++)
+#define forall_symbol_list(it, expr)                                           \
+  for(symbol_listt::const_iterator it = (expr).begin(); it != (expr).end();    \
+      it++)
 
-#define Forall_symbol_list(it, expr) \
-  for(symbol_listt::iterator it=(expr).begin(); \
-      it!=(expr).end(); it++)
+#define Forall_symbol_list(it, expr)                                           \
+  for(symbol_listt::iterator it = (expr).begin(); it != (expr).end(); it++)
 
 typedef std::list<const symbolt *> symbolptr_listt;
 
-#define forall_symbolptr_list(it, list) \
-  for(symbolptr_listt::const_iterator it=(list).begin(); \
-      it!=(list).end(); it++)
+#define forall_symbolptr_list(it, list)                                        \
+  for(symbolptr_listt::const_iterator it = (list).begin(); it != (list).end(); \
+      it++)
 
-#define Forall_symbolptr_list(it, list) \
-  for(symbolptr_listt::iterator it=(list).begin(); \
-      it!=(list).end(); it++)
+#define Forall_symbolptr_list(it, list)                                        \
+  for(symbolptr_listt::iterator it = (list).begin(); it != (list).end(); it++)
 
 #endif

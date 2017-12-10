@@ -13,18 +13,14 @@
 #include <util/std_expr.h>
 
 void goto_k_induction(
-  goto_functionst& goto_functions,
+  goto_functionst &goto_functions,
   contextt &context,
-  message_handlert& message_handler)
+  message_handlert &message_handler)
 {
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
       goto_k_inductiont(
-        it->first,
-        goto_functions,
-        it->second,
-        context,
-        message_handler);
+        it->first, goto_functions, it->second, context, message_handler);
 
   goto_functions.update();
 }
@@ -32,7 +28,7 @@ void goto_k_induction(
 void goto_k_inductiont::goto_k_induction()
 {
   // Full unwind the program
-  for(auto & function_loop : function_loops)
+  for(auto &function_loop : function_loops)
   {
     if(function_loop.get_loop_vars().empty())
       continue;
@@ -45,7 +41,7 @@ void goto_k_inductiont::goto_k_induction()
   }
 }
 
-void goto_k_inductiont::convert_finite_loop(loopst& loop)
+void goto_k_inductiont::convert_finite_loop(loopst &loop)
 {
   // Get current loop head and loop exit
   goto_programt::targett loop_head = loop.get_original_loop_head();
@@ -57,8 +53,8 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   if(is_nil_expr(loop_cond))
   {
     std::cout << "**** WARNING: we couldn't find a loop condition for the"
-              << " following loop, so we're not converting it."
-              << std::endl << "Loop: ";
+              << " following loop, so we're not converting it." << std::endl
+              << "Loop: ";
     loop.dump();
     return;
   }
@@ -72,7 +68,8 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   // Get original head again
   // Since we are using insert_swap to keep the targets, the
   // original loop head as shifted to after the assume cond
-  while((++loop_head)->inductive_step_instruction);
+  while((++loop_head)->inductive_step_instruction)
+    ;
 
   // Check if the loop exit needs to be updated
   // We must point to the assume that was inserted in the previous
@@ -81,8 +78,8 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
 }
 
 const expr2tc goto_k_inductiont::get_loop_cond(
-  goto_programt::targett& loop_head,
-  goto_programt::targett& loop_exit)
+  goto_programt::targett &loop_head,
+  goto_programt::targett &loop_exit)
 {
   // Let's not change the loop head
   goto_programt::targett tmp = loop_head;
@@ -113,14 +110,13 @@ void goto_k_inductiont::make_nondet_assign(
 
   for(auto const &lhs : loop_vars)
   {
-    expr2tc rhs =
-      sideeffect2tc(
-        lhs->type,
-        expr2tc(),
-        expr2tc(),
-        std::vector<expr2tc>(),
-        type2tc(),
-        sideeffect2t::nondet);
+    expr2tc rhs = sideeffect2tc(
+      lhs->type,
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::nondet);
 
     goto_programt::targett t = dest.add_instruction(ASSIGN);
     t->inductive_step_instruction = true;
@@ -132,7 +128,7 @@ void goto_k_inductiont::make_nondet_assign(
 }
 
 void goto_k_inductiont::assume_loop_cond_before_loop(
-  goto_programt::targett& loop_head,
+  goto_programt::targett &loop_head,
   expr2tc &loop_cond)
 {
   if(is_true(loop_cond))
@@ -145,23 +141,23 @@ void goto_k_inductiont::assume_loop_cond_before_loop(
 }
 
 void goto_k_inductiont::assume_neg_loop_cond_after_loop(
-  goto_programt::targett& loop_exit,
-  expr2tc& loop_cond)
+  goto_programt::targett &loop_exit,
+  expr2tc &loop_cond)
 {
   goto_programt dest;
   expr2tc neg_loop_cond = loop_cond;
   make_not(neg_loop_cond);
   assume_cond(neg_loop_cond, dest);
 
-//  goto_programt::targett _loop_exit = loop_exit;
-//  ++_loop_exit;
+  //  goto_programt::targett _loop_exit = loop_exit;
+  //  ++_loop_exit;
 
   goto_function.body.insert_swap(loop_exit, dest);
 }
 
 void goto_k_inductiont::adjust_loop_head_and_exit(
-  goto_programt::targett& loop_head,
-  goto_programt::targett& loop_exit)
+  goto_programt::targett &loop_head,
+  goto_programt::targett &loop_exit)
 {
   loop_exit->targets.clear();
   loop_exit->targets.push_front(loop_head);
@@ -183,8 +179,8 @@ void goto_k_inductiont::adjust_loop_head_and_exit(
 
 // Duplicate the loop after loop_exit, but without the backward goto
 void goto_k_inductiont::duplicate_loop_body(
-  goto_programt::targett& loop_head,
-  goto_programt::targett& loop_exit)
+  goto_programt::targett &loop_head,
+  goto_programt::targett &loop_exit)
 {
   goto_programt::targett _loop_exit = loop_exit;
   ++_loop_exit;
@@ -267,11 +263,11 @@ void goto_k_inductiont::duplicate_loop_body(
   iteration_points[1] = target_vector.back();
 
   // adjust the intra-loop branches
-  for(unsigned i=0; i < target_vector.size(); i++)
+  for(unsigned i = 0; i < target_vector.size(); i++)
   {
     goto_programt::targett t = target_vector[i];
 
-    for(auto & target : t->targets)
+    for(auto &target : t->targets)
     {
       std::map<goto_programt::targett, unsigned>::const_iterator m_it =
         target_map.find(target);
@@ -294,19 +290,18 @@ void goto_k_inductiont::duplicate_loop_body(
 // Convert assert into assumes on the original loop (don't touch the
 // copy made on the last step)
 void goto_k_inductiont::convert_assert_to_assume(
-  goto_programt::targett& loop_head,
-  goto_programt::targett& loop_exit)
+  goto_programt::targett &loop_head,
+  goto_programt::targett &loop_exit)
 {
-  for(goto_programt::targett t=loop_head; t!=loop_exit; t++)
-    if(t->is_assert()) t->type=ASSUME;
+  for(goto_programt::targett t = loop_head; t != loop_exit; t++)
+    if(t->is_assert())
+      t->type = ASSUME;
 }
 
-void goto_k_inductiont::assume_cond(
-  const expr2tc& cond,
-  goto_programt& dest)
+void goto_k_inductiont::assume_cond(const expr2tc &cond, goto_programt &dest)
 {
   goto_programt tmp_e;
-  goto_programt::targett e=tmp_e.add_instruction(ASSUME);
+  goto_programt::targett e = tmp_e.add_instruction(ASSUME);
   e->inductive_step_instruction = true;
   e->guard = cond;
   dest.destructive_append(tmp_e);

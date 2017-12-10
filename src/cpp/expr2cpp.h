@@ -15,7 +15,9 @@ class exprt;
 class namespacet;
 class typet;
 
-std::string expr2cpp(const exprt &expr, const namespacet &ns, const bool fullname = false);
-std::string type2cpp(const typet &type, const namespacet &ns, const bool fullname = false);
+std::string
+expr2cpp(const exprt &expr, const namespacet &ns, const bool fullname = false);
+std::string
+type2cpp(const typet &type, const namespacet &ns, const bool fullname = false);
 
 #endif
