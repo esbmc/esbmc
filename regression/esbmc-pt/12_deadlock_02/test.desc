@@ -1,3 +1,4 @@
+CORE
 time_var_mutex.c
 --deadlock-check --context-bound 3
 ^VERIFICATION SUCCESSFUL$

@@ -1,3 +1,4 @@
+CORE
 main.c
 --unwind 1 --deadlock-check
 ^VERIFICATION FAILED$

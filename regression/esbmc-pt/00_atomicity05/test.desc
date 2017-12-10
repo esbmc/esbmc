@@ -1,3 +1,4 @@
+CORE
 main.c
 --atomicity-check
 ^VERIFICATION SUCCESSFUL$

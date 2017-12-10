@@ -1,3 +1,4 @@
+CORE
 main.c
 --unwind 4 --context-bound 1 --lock-order-check
 ^VERIFICATION FAILED$

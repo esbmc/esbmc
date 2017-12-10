@@ -1,3 +1,4 @@
+CORE
 main.c
 --unwind 3 --deadlock-check --context-bound 8
 ^VERIFICATION FAILED$

@@ -1,3 +1,4 @@
+CORE
 main.c
 -I . --unwind 2 --no-unwinding-assertions --context-bound 3
 ^VERIFICATION FAILED$
