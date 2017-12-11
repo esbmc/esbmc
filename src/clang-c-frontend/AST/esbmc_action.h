@@ -22,7 +22,8 @@ public:
   esbmc_action(const std::string&& esbmc_instrinsics) : intrinsics(esbmc_instrinsics) {};
 
   bool BeginSourceFileAction(
-    clang::CompilerInstance &CI) override
+    clang::CompilerInstance &CI,
+    llvm::StringRef Filename) override
   {
     clang::Preprocessor &PP = CI.getPreprocessor();
 
