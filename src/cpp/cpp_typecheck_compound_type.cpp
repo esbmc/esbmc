@@ -414,10 +414,9 @@ void cpp_typecheckt::typecheck_compound_declarator(
     component.set("is_inline", declaration.member_spec().is_inline());
 
     // the 'virtual' name of the function
-    std::string virtual_name =
-      component.get_string("base_name") +
-      id2string(
-        function_identifier(static_cast<const typet &>(component.type())));
+    std::string virtual_name = component.get_string("base_name") +
+                               id2string(function_identifier(
+                                 static_cast<const typet &>(component.type())));
 
     if(has_const(method_qualifier))
       virtual_name += "$const";
@@ -609,9 +608,8 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
           for(unsigned i = 1; i < args.size(); i++)
           {
-            expr_call.arguments().push_back(
-              symbol_expr(
-                namespacet(context).lookup(args[i].cmt_identifier())));
+            expr_call.arguments().push_back(symbol_expr(
+              namespacet(context).lookup(args[i].cmt_identifier())));
           }
 
           code_returnt code_return;
@@ -629,9 +627,8 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
           for(unsigned i = 1; i < args.size(); i++)
           {
-            code_func.arguments().push_back(
-              symbol_expr(
-                namespacet(context).lookup(args[i].cmt_identifier())));
+            code_func.arguments().push_back(symbol_expr(
+              namespacet(context).lookup(args[i].cmt_identifier())));
           }
 
           func_symb.value = code_func;

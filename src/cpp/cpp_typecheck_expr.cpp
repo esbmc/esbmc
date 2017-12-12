@@ -905,8 +905,8 @@ void cpp_typecheckt::typecheck_expr_delete(exprt &expr)
   expr.set("destructor", destructor_code);
 }
 
-void cpp_typecheckt::typecheck_expr_typecast(
-  exprt &expr __attribute__((unused)))
+void cpp_typecheckt::typecheck_expr_typecast(exprt &expr
+                                             __attribute__((unused)))
 {
 // should not be called
 #if 0
@@ -1645,8 +1645,8 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
 
       // look for the right entry
       irep_idt vtentry_component_name =
-        vt_compo.type().subtype().identifier().as_string() + "::" +
-        expr.function().type().get("#virtual_name").as_string();
+        vt_compo.type().subtype().identifier().as_string() +
+        "::" + expr.function().type().get("#virtual_name").as_string();
 
       exprt vtentry_member("ptrmember");
       vtentry_member.copy_to_operands(vtptr_member);

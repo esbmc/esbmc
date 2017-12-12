@@ -20,9 +20,8 @@ bool goto_program_dereferencet::has_failed_symbol(
 {
   if(is_symbol2t(expr))
   {
-    if(
-      has_prefix(
-        to_symbol2t(expr).thename.as_string(), "symex::invalid_object"))
+    if(has_prefix(
+         to_symbol2t(expr).thename.as_string(), "symex::invalid_object"))
       return false;
 
     // Null and invalid name lookups will fail.

@@ -391,8 +391,9 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
           else
           {
             if(
-              new_symbol.is_macro && (final_new.id() == "incomplete_c_enum" ||
-                                      final_new.id() == "c_enum") &&
+              new_symbol.is_macro &&
+              (final_new.id() == "incomplete_c_enum" ||
+               final_new.id() == "c_enum") &&
               old_symbol.value.is_constant() &&
               new_symbol.value.is_constant() &&
               old_symbol.value.value() == new_symbol.value.value())

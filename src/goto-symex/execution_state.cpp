@@ -755,9 +755,8 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
-  preserved_paths[thread_nr].push_back(
-    std::make_pair(
-      prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
+  preserved_paths[thread_nr].push_back(std::make_pair(
+    prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
 
   return threads_state.size() - 1; // thread ID, zero based
 }
@@ -813,9 +812,8 @@ void execution_statet::get_expr_globals(
     const std::string &name = to_symbol2t(newexpr).thename.as_string();
 
     if(
-      name ==
-      "goto_symex::guard!" +
-        i2string(get_active_state().top().level1.thread_id))
+      name == "goto_symex::guard!" +
+                i2string(get_active_state().top().level1.thread_id))
       return;
 
     const symbolt *symbol;

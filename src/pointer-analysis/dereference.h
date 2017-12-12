@@ -153,8 +153,8 @@ public:
     expr2tc guard;
   };
 
-  virtual void dump_internal_state(
-    const std::list<struct internal_item> &data __attribute__((unused)))
+  virtual void dump_internal_state(const std::list<struct internal_item> &data
+                                   __attribute__((unused)))
   {
   }
 };

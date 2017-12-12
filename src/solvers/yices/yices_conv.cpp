@@ -16,25 +16,28 @@
 #define yices_bvor yices_bvor2
 #endif
 
-smt_convt *
-create_new_yices_solver(bool int_encoding, const namespacet &ns,
-                              const optionst &opts __attribute__((unused)),
-                              tuple_iface **tuple_api __attribute__((unused)),
-                              array_iface **array_api,
-                              fp_convt **fp_api)
+smt_convt *create_new_yices_solver(
+  bool int_encoding,
+  const namespacet &ns,
+  const optionst &opts __attribute__((unused)),
+  tuple_iface **tuple_api __attribute__((unused)),
+  array_iface **array_api,
+  fp_convt **fp_api)
 {
   yices_convt *conv = new yices_convt(int_encoding, ns);
-  *array_api = static_cast<array_iface*>(conv);
-  *fp_api = static_cast<fp_convt*>(conv);
+  *array_api = static_cast<array_iface *>(conv);
+  *fp_api = static_cast<fp_convt *>(conv);
   // As illustrated by 01_cbmc_Pointer4, there is something broken in yices
   // tuples. Specifically, the implication of (p != NULL) doesn't seem to feed
   // through to the later dereference, which fails.
-//  *tuple_api = static_cast<tuple_iface*>(conv);
+  //  *tuple_api = static_cast<tuple_iface*>(conv);
   return conv;
 }
 
 yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this),
+  : smt_convt(int_encoding, ns),
+    array_iface(false, false),
+    fp_convt(this),
     sat_model(nullptr)
 {
   yices_init();
@@ -42,7 +45,7 @@ yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
   yices_clear_error();
 
   ctx_config_t *config = yices_new_config();
-  if (int_encoding)
+  if(int_encoding)
     yices_default_config_for_logic(config, "QF_AUFLIRA");
   else
     yices_default_config_for_logic(config, "QF_AUFBV");
@@ -58,25 +61,25 @@ yices_convt::~yices_convt()
   yices_free_context(yices_ctx);
 }
 
-void
-yices_convt::push_ctx()
+void yices_convt::push_ctx()
 {
   smt_convt::push_ctx();
   int32_t res = yices_push(yices_ctx);
 
-  if (res != 0) {
+  if(res != 0)
+  {
     std::cerr << "Error pushing yices context" << std::endl;
     yices_print_error(stderr);
     abort();
   }
 }
 
-void
-yices_convt::pop_ctx()
+void yices_convt::pop_ctx()
 {
   int32_t res = yices_pop(yices_ctx);
 
-  if (res != 0) {
+  if(res != 0)
+  {
     std::cerr << "Error poping yices context" << std::endl;
     yices_print_error(stderr);
     abort();
@@ -85,70 +88,79 @@ yices_convt::pop_ctx()
   smt_convt::pop_ctx();
 }
 
-smt_convt::resultt
-yices_convt::dec_solve()
+smt_convt::resultt yices_convt::dec_solve()
 {
   clear_model();
   pre_solve();
 
   smt_status_t result = yices_check_context(yices_ctx, nullptr);
 
-  if (result == STATUS_SAT) {
+  if(result == STATUS_SAT)
+  {
     sat_model = yices_get_model(yices_ctx, 1);
     return smt_convt::P_SATISFIABLE;
-  } else if (result == STATUS_UNSAT) {
+  }
+  else if(result == STATUS_UNSAT)
+  {
     sat_model = nullptr;
     return smt_convt::P_UNSATISFIABLE;
-  } else {
+  }
+  else
+  {
     sat_model = nullptr;
     return smt_convt::P_ERROR;
   }
 }
 
-const std::string
-yices_convt::solver_text()
+const std::string yices_convt::solver_text()
 {
   std::stringstream ss;
   ss << "Yices version " << yices_version;
   return ss.str();
 }
 
-void
-yices_convt::assert_ast(smt_astt a)
+void yices_convt::assert_ast(smt_astt a)
 {
   const yices_smt_ast *ast = yices_ast_downcast(a);
   yices_assert_formula(yices_ctx, ast->term);
 }
 
-smt_astt
-yices_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
-                         const smt_ast * const *args,
-                         unsigned int numargs)
+smt_astt yices_convt::mk_func_app(
+  const smt_sort *s,
+  smt_func_kind k,
+  const smt_ast *const *args,
+  unsigned int numargs)
 {
   const yices_smt_ast *asts[4];
   unsigned int i;
   term_t temp_term;
 
   assert(numargs <= 4);
-  for (i = 0; i < numargs; i++)
+  for(i = 0; i < numargs; i++)
     asts[i] = yices_ast_downcast(args[i]);
 
-  switch (k) {
+  switch(k)
+  {
   case SMT_FUNC_EQ:
-    assert(asts[0]->sort->id != SMT_SORT_ARRAY && "Yices array assignment "
-           "made its way through to an equality");
-    if (asts[0]->sort->id == SMT_SORT_BOOL)
+    assert(
+      asts[0]->sort->id != SMT_SORT_ARRAY &&
+      "Yices array assignment "
+      "made its way through to an equality");
+    if(asts[0]->sort->id == SMT_SORT_BOOL)
       return new_ast(s, yices_eq(asts[0]->term, asts[1]->term));
-    else if (asts[0]->sort->id == SMT_SORT_STRUCT ||
-             asts[0]->sort->id == SMT_SORT_UNION)
+    else if(
+      asts[0]->sort->id == SMT_SORT_STRUCT ||
+      asts[0]->sort->id == SMT_SORT_UNION)
       return new_ast(s, yices_eq(asts[0]->term, asts[1]->term));
-    else if (int_encoding)
+    else if(int_encoding)
       return new_ast(s, yices_arith_eq_atom(asts[0]->term, asts[1]->term));
     else
       return new_ast(s, yices_bveq_atom(asts[0]->term, asts[1]->term));
 
   case SMT_FUNC_NOTEQ:
-    if(asts[0]->sort->id >= SMT_SORT_SBV || asts[0]->sort->id <= SMT_SORT_FIXEDBV)
+    if(
+      asts[0]->sort->id >= SMT_SORT_SBV ||
+      asts[0]->sort->id <= SMT_SORT_FIXEDBV)
     {
       if(!int_encoding)
       {
@@ -212,8 +224,8 @@ yices_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_STORE:
     // Crazy "function update" situation.
     temp_term = asts[1]->term;
-    return new_ast(s, yices_update(asts[0]->term, 1, &temp_term,
-                                   asts[2]->term));
+    return new_ast(
+      s, yices_update(asts[0]->term, 1, &temp_term, asts[2]->term));
   case SMT_FUNC_SELECT:
     temp_term = asts[1]->term;
     return new_ast(s, yices_application(asts[0]->term, 1, &temp_term));
@@ -282,13 +294,13 @@ yices_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
 }
 
-smt_sortt
-yices_convt::mk_sort(const smt_sort_kind k, ...)
+smt_sortt yices_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
 
   va_start(ap, k);
-  switch(k) {
+  switch(k)
+  {
   case SMT_SORT_BOOL:
   {
     return new yices_smt_sort(k, yices_bool_type());
@@ -305,12 +317,12 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
   {
     // Arrays are uninterpreted functions with updates. Create an array with
     // the given domain as a single dimension.
-    yices_smt_sort *dom = va_arg(ap, yices_smt_sort*);
-    yices_smt_sort *range = va_arg(ap, yices_smt_sort*);
+    yices_smt_sort *dom = va_arg(ap, yices_smt_sort *);
+    yices_smt_sort *range = va_arg(ap, yices_smt_sort *);
     type_t t = yices_function_type(1, &dom->s, range->s);
 
     unsigned int tmp = range->get_data_width();
-    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_UNION)
+    if(range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_UNION)
       tmp = 1;
 
     return new yices_smt_sort(k, t, tmp, dom->get_data_width(), range);
@@ -334,73 +346,78 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
   }
 }
 
-smt_astt
-yices_convt::mk_smt_int(const mp_integer &theint,
-    bool sign __attribute__((unused)))
+smt_astt yices_convt::mk_smt_int(
+  const mp_integer &theint,
+  bool sign __attribute__((unused)))
 {
   term_t term = yices_int64(theint.to_int64());
   smt_sortt s = mk_sort(SMT_SORT_INT);
   return new_ast(s, term);
 }
 
-smt_astt
-yices_convt::mk_smt_real(const std::string &str)
+smt_astt yices_convt::mk_smt_real(const std::string &str)
 {
   term_t term = yices_parse_rational(str.c_str());
   smt_sortt s = mk_sort(SMT_SORT_REAL);
   return new_ast(s, term);
 }
 
-smt_astt
-yices_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
+smt_astt yices_convt::mk_smt_bvint(
+  const mp_integer &theint,
+  bool sign,
+  unsigned int width)
 {
-  smt_sortt s = mk_sort(ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
+  smt_sortt s = mk_sort(
+    ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV,
+    width);
   term_t term = yices_bvconst_uint64(width, theint.to_int64());
   return new yices_smt_ast(this, s, term);
 }
 
-smt_astt
-yices_convt::mk_smt_bool(bool val)
+smt_astt yices_convt::mk_smt_bool(bool val)
 {
   smt_sortt s = mk_sort(SMT_SORT_BOOL);
-  if (val)
+  if(val)
     return new_ast(s, yices_true());
   else
     return new_ast(s, yices_false());
 }
 
-smt_astt
-yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
+smt_astt yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
 {
   // Is this term already in the symbol table?
   term_t term = yices_get_term_by_name(name.c_str());
-  if (term == NULL_TERM) {
+  if(term == NULL_TERM)
+  {
     // No: create a new one.
     const yices_smt_sort *sort = yices_sort_downcast(s);
     term = yices_new_uninterpreted_term(sort->s);
 
     // If that wasn't the error term, set it's name.
-    if (term != NULL_TERM)
+    if(term != NULL_TERM)
       yices_set_term_name(term, name.c_str());
   }
 
   return new yices_smt_ast(this, s, term);
 }
 
-smt_astt
-yices_convt::mk_array_symbol(const std::string &name, smt_sortt s,
-                             smt_sortt array_subtype __attribute__((unused)))
+smt_astt yices_convt::mk_array_symbol(
+  const std::string &name,
+  smt_sortt s,
+  smt_sortt array_subtype __attribute__((unused)))
 {
   // For array symbols, store the symbol name in the ast to implement
   // assign semantics
   const yices_smt_ast *ast = yices_ast_downcast(mk_smt_symbol(name, s));
-  const_cast<yices_smt_ast*>(ast)->symname = name;
+  const_cast<yices_smt_ast *>(ast)->symname = name;
   return ast;
 }
 
-smt_astt
-yices_convt::mk_extract(smt_astt a, unsigned int high,
-                            unsigned int low, smt_sortt s)
+smt_astt yices_convt::mk_extract(
+  smt_astt a,
+  unsigned int high,
+  unsigned int low,
+  smt_sortt s)
 {
   const yices_smt_ast *ast = yices_ast_downcast(a);
   term_t term = yices_bvextract(ast->term, low, high);
@@ -413,42 +430,38 @@ yices_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return default_convert_array_of(init_val, domain_width, this);
 }
 
-void
-yices_convt::add_array_constraints_for_solving()
+void yices_convt::add_array_constraints_for_solving()
 {
 }
 
-void
-yices_convt::push_array_ctx()
+void yices_convt::push_array_ctx()
 {
 }
 
-void
-yices_convt::pop_array_ctx()
+void yices_convt::pop_array_ctx()
 {
 }
 
-expr2tc
-yices_convt::get_bool(smt_astt a)
+expr2tc yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
   const yices_smt_ast *ast = yices_ast_downcast(a);
-  if (yices_get_bool_value(sat_model, ast->term, &val) != 0)
+  if(yices_get_bool_value(sat_model, ast->term, &val) != 0)
     return expr2tc();
 
-  if (val)
+  if(val)
     return gen_true_expr();
 
   return gen_false_expr();
 }
 
-expr2tc
-yices_convt::get_bv(const type2tc &type, smt_astt a)
+expr2tc yices_convt::get_bv(const type2tc &type, smt_astt a)
 {
   const yices_smt_ast *ast = yices_ast_downcast(a);
 
   int64_t val = 0;
-  if (int_encoding) {
+  if(int_encoding)
+  {
     yices_get_int64_value(sat_model, ast->term, &val);
     return build_bv(type, BigInt(val));
   }
@@ -460,7 +473,8 @@ yices_convt::get_bv(const type2tc &type, smt_astt a)
   yices_get_bv_value(sat_model, ast->term, data);
 
   int i;
-  for (i = width - 1; i >= 0; i--) {
+  for(i = width - 1; i >= 0; i--)
+  {
     val <<= 1;
     val |= data[i];
   }
@@ -468,8 +482,7 @@ yices_convt::get_bv(const type2tc &type, smt_astt a)
   return build_bv(type, BigInt(val));
 }
 
-expr2tc
-yices_convt::get_array_elem(
+expr2tc yices_convt::get_array_elem(
   const smt_ast *array,
   uint64_t index,
   const type2tc &subtype)
@@ -477,9 +490,12 @@ yices_convt::get_array_elem(
   // Construct a term accessing that element, and get_bv it.
   const yices_smt_ast *ast = yices_ast_downcast(array);
   term_t idx;
-  if (int_encoding) {
+  if(int_encoding)
+  {
     idx = yices_int64(index);
-  } else {
+  }
+  else
+  {
     idx = yices_bvconst_uint64(array->sort->get_domain_width(), index);
   }
 
@@ -489,24 +505,25 @@ yices_convt::get_array_elem(
   return get_by_ast(subtype, container);
 }
 
-void
-yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
+void yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
 {
-  if (sort->id == SMT_SORT_ARRAY) {
+  if(sort->id == SMT_SORT_ARRAY)
+  {
     // Perform assign semantics, of this to the given sym
     const yices_smt_ast *ast = yices_ast_downcast(sym);
     yices_remove_term_name(ast->symname.c_str());
     yices_set_term_name(term, ast->symname.c_str());
 
     // set the other ast too
-    const_cast<yices_smt_ast*>(ast)->term = term;
-  } else {
+    const_cast<yices_smt_ast *>(ast)->term = term;
+  }
+  else
+  {
     smt_ast::assign(ctx, sym);
   }
-  }
+}
 
-smt_astt
-yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
+smt_astt yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
 {
   const yices_smt_sort *ysort = yices_sort_downcast(sort);
   type2tc type = ysort->tupletype;
@@ -516,11 +533,13 @@ yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
   return new yices_smt_ast(ctx, elemsort, yices_select(elem + 1, term));
 }
 
-smt_astt
-yices_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
-                      expr2tc idx_expr) const
+smt_astt yices_smt_ast::update(
+  smt_convt *ctx,
+  smt_astt value,
+  unsigned int idx,
+  expr2tc idx_expr) const
 {
-  if (sort->id == SMT_SORT_ARRAY)
+  if(sort->id == SMT_SORT_ARRAY)
     return smt_ast::update(ctx, value, idx, idx_expr);
 
   // Otherwise, it's a struct
@@ -532,8 +551,7 @@ yices_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   return new yices_smt_ast(ctx, sort, result);
 }
 
-smt_astt
-yices_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+smt_astt yices_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 {
   smt_astt idx_ast = ctx->convert_ast(idx);
   term_t temp_term = yices_ast_downcast(idx_ast)->term;
@@ -544,12 +562,12 @@ yices_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
     ctx, ys->rangesort, yices_application(this->term, 1, &temp_term));
 }
 
-smt_sortt
-yices_convt::mk_struct_sort(const type2tc &type)
+smt_sortt yices_convt::mk_struct_sort(const type2tc &type)
 {
   // Exactly the same as a normal yices sort, ish.
 
-  if (is_array_type(type)) {
+  if(is_array_type(type))
+  {
     const array_type2t &arrtype = to_array_type(type);
     smt_sortt subtypesort = convert_sort(arrtype.subtype);
     smt_sortt d = make_array_domain_sort(arrtype);
@@ -570,14 +588,14 @@ yices_convt::mk_struct_sort(const type2tc &type)
   return new yices_smt_sort(SMT_SORT_STRUCT, tuple_sort, type);
 }
 
-smt_astt
-yices_convt::tuple_create(const expr2tc &structdef)
+smt_astt yices_convt::tuple_create(const expr2tc &structdef)
 {
   const constant_struct2t &strct = to_constant_struct2t(structdef);
   const struct_union_data &type = get_type_def(strct.type);
 
   std::vector<term_t> terms;
-  for(auto const &it : strct.datatype_members) {
+  for(auto const &it : strct.datatype_members)
+  {
     smt_astt a = convert_ast(it);
     const yices_smt_ast *yast = yices_ast_downcast(a);
     terms.push_back(yast->term);
@@ -587,8 +605,7 @@ yices_convt::tuple_create(const expr2tc &structdef)
   return new_ast(convert_sort(strct.type), thetuple);
 }
 
-smt_astt
-yices_convt::tuple_fresh(smt_sortt s, std::string name)
+smt_astt yices_convt::tuple_fresh(smt_sortt s, std::string name)
 {
   const yices_smt_sort *sort = yices_sort_downcast(s);
   term_t t = yices_new_uninterpreted_term(sort->s);
@@ -596,11 +613,11 @@ yices_convt::tuple_fresh(smt_sortt s, std::string name)
   return new yices_smt_ast(this, s, t);
 }
 
-smt_astt
-yices_convt::tuple_array_create(const type2tc &array_type,
-                   smt_astt *inputargs,
-                   bool const_array,
-                   smt_sortt domain __attribute__((unused)))
+smt_astt yices_convt::tuple_array_create(
+  const type2tc &array_type,
+  smt_astt *inputargs,
+  bool const_array,
+  smt_sortt domain __attribute__((unused)))
 {
   const array_type2t &arr_type = to_array_type(array_type);
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
@@ -611,16 +628,21 @@ yices_convt::tuple_array_create(const type2tc &array_type,
   std::string name = mk_fresh_name("yices_convt::tuple_array_create");
   smt_astt a = tuple_fresh(sort, name);
 
-  if (const_array) {
+  if(const_array)
+  {
     smt_astt init = inputargs[0];
-    for (unsigned int i = 0; i < sz; i++) {
+    for(unsigned int i = 0; i < sz; i++)
+    {
       a = a->update(this, init, i);
     }
 
     return a;
-  } else {
+  }
+  else
+  {
     // Repeatedly store operands into this.
-    for (unsigned int i = 0; i < sz; i++) {
+    for(unsigned int i = 0; i < sz; i++)
+    {
       a = a->update(this, inputargs[i], i);
     }
 
@@ -628,11 +650,10 @@ yices_convt::tuple_array_create(const type2tc &array_type,
   }
 }
 
-smt_astt
-yices_convt::tuple_array_of(const expr2tc &init_value,
-                            unsigned long domain_width)
+smt_astt yices_convt::tuple_array_of(
+  const expr2tc &init_value,
+  unsigned long domain_width)
 {
-
   smt_sortt subs = convert_sort(init_value->type);
   const yices_smt_sort *subsort = yices_sort_downcast(subs);
 
@@ -650,10 +671,11 @@ yices_convt::tuple_array_of(const expr2tc &init_value,
   // Now repeatedly store Things into it
   unsigned long elems =
     to_constant_int2t(array_domain_to_width(domtype)).value.to_ulong();
-  for (unsigned long i = 0; i < elems; i++) {
+  for(unsigned long i = 0; i < elems; i++)
+  {
     term_t idxterm;
 
-    if (int_encoding)
+    if(int_encoding)
       idxterm = yices_int64(i);
     else
       idxterm = yices_bvconst_uint64(domain_width, i);
@@ -665,25 +687,23 @@ yices_convt::tuple_array_of(const expr2tc &init_value,
   return new_ast(retsort, theterm);
 }
 
-smt_astt
-yices_convt::mk_tuple_symbol(const std::string &name, smt_sortt s)
+smt_astt yices_convt::mk_tuple_symbol(const std::string &name, smt_sortt s)
 {
   return mk_smt_symbol(name, s);
 }
 
-smt_astt
-yices_convt::mk_tuple_array_symbol(const expr2tc &expr)
+smt_astt yices_convt::mk_tuple_array_symbol(const expr2tc &expr)
 {
   const symbol2t &sym = to_symbol2t(expr);
   return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
 }
 
-expr2tc
-yices_convt::tuple_get(const expr2tc &expr)
+expr2tc yices_convt::tuple_get(const expr2tc &expr)
 {
   const symbol2t &sym = to_symbol2t(expr);
   term_t t = yices_get_term_by_name(sym.get_symbol_name().c_str());
-  if (t == NULL_TERM) {
+  if(t == NULL_TERM)
+  {
     // This might be legitimate, could have been sliced or unassigned
     return expr2tc();
   }
@@ -693,18 +713,20 @@ yices_convt::tuple_get(const expr2tc &expr)
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  for(auto const &it : strct.members) {
+  for(auto const &it : strct.members)
+  {
     member2tc memb(it, expr, strct.member_names[i]);
     outstruct.get()->datatype_members.push_back(get(memb));
     i++;
   }
 
   // If it's a pointer, rewrite.
-  if (is_pointer_type(expr->type)) {
-    uint64_t num = to_constant_int2t(outstruct->datatype_members[0])
-                                    .value.to_uint64();
-    uint64_t offs = to_constant_int2t(outstruct->datatype_members[1])
-                                     .value.to_uint64();
+  if(is_pointer_type(expr->type))
+  {
+    uint64_t num =
+      to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
+    uint64_t offs =
+      to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, expr->type);
   }
@@ -712,17 +734,14 @@ yices_convt::tuple_get(const expr2tc &expr)
   return outstruct;
 }
 
-void
-yices_convt::add_tuple_constraints_for_solving()
+void yices_convt::add_tuple_constraints_for_solving()
 {
 }
 
-void
-yices_convt::push_tuple_ctx()
+void yices_convt::push_tuple_ctx()
 {
 }
 
-void
-yices_convt::pop_tuple_ctx()
+void yices_convt::pop_tuple_ctx()
 {
 }

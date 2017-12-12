@@ -1250,9 +1250,8 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
 
           // If we cannot get the #cpp_type or if they are different, we remove it
           // from the vector
-          if(
-            !(full_args_cpp != irept() && full_template_args_cpp != irept() &&
-              full_args_cpp == full_template_args_cpp))
+          if(!(full_args_cpp != irept() && full_template_args_cpp != irept() &&
+               full_args_cpp == full_template_args_cpp))
             return true;
         }
 
@@ -1828,9 +1827,8 @@ bool cpp_typecheck_resolvet::is_conversion_type_exact_match(
   exprt output_expr;
 
   cpp_typecast_rank rank;
-  if(
-    !cpp_typecheck.implicit_conversion_sequence(
-      temp_src_value, dest_type, output_expr, rank))
+  if(!cpp_typecheck.implicit_conversion_sequence(
+       temp_src_value, dest_type, output_expr, rank))
     return false; // No conversion.
 
   // Only permit argument deduction where there's an exact match. Otherwise,

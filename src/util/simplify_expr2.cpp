@@ -527,14 +527,14 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
   if(is_bv_type(value))
   {
     std::function<constant_int2t &(expr2tc &)> to_constant =
-      (constant_int2t & (*)(expr2tc &))to_constant_int2t;
+      (constant_int2t & (*)(expr2tc &)) to_constant_int2t;
 
     simpl_res = TFunctor<constant_int2t>::simplify(to_simplify, to_constant);
   }
   else if(is_fixedbv_type(value))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
-      (constant_fixedbv2t & (*)(expr2tc &))to_constant_fixedbv2t;
+      (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
 
     simpl_res =
       TFunctor<constant_fixedbv2t>::simplify(to_simplify, to_constant);
@@ -542,7 +542,7 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
   else if(is_floatbv_type(value))
   {
     std::function<constant_floatbv2t &(expr2tc &)> to_constant =
-      (constant_floatbv2t & (*)(expr2tc &))to_constant_floatbv2t;
+      (constant_floatbv2t & (*)(expr2tc &)) to_constant_floatbv2t;
 
     simpl_res =
       TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
@@ -550,7 +550,7 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
   else if(is_bool_type(value))
   {
     std::function<constant_bool2t &(expr2tc &)> to_constant =
-      (constant_bool2t & (*)(expr2tc &))to_constant_bool2t;
+      (constant_bool2t & (*)(expr2tc &)) to_constant_bool2t;
 
     simpl_res = TFunctor<constant_bool2t>::simplify(to_simplify, to_constant);
   }
@@ -975,8 +975,10 @@ static expr2tc simplify_logic_2ops(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-    std::function<ieee_floatt &(expr2tc &)> get_value = [](
-      expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1673,8 +1675,10 @@ static expr2tc simplify_relations(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-    std::function<ieee_floatt &(expr2tc &)> get_value = [](
-      expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1721,8 +1725,10 @@ static expr2tc simplify_floatbv_relations(
       std::function<bool(const expr2tc &)> is_constant =
         (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-      std::function<ieee_floatt &(expr2tc &)> get_value = [](
-        expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
+      std::function<ieee_floatt &(expr2tc &)> get_value =
+        [](expr2tc &c) -> ieee_floatt & {
+        return to_constant_floatbv2t(c).value;
+      };
 
       simpl_res = TFunctor<ieee_floatt>::simplify(
         simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1950,8 +1956,8 @@ struct Greaterthanequaltor
   }
 };
 
-expr2tc
-greaterthanequal2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc greaterthanequal2t::do_simplify(bool second
+                                        __attribute__((unused))) const
 {
   return simplify_relations<Greaterthanequaltor, greaterthanequal2t>(
     type, side_1, side_2);
@@ -2135,7 +2141,7 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
   if(is_fixedbv_type(value))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
-      (constant_fixedbv2t & (*)(expr2tc &))to_constant_fixedbv2t;
+      (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
 
     simpl_res =
       TFunctor<constant_fixedbv2t>::simplify(to_simplify, to_constant);
@@ -2143,7 +2149,7 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
   else if(is_floatbv_type(value))
   {
     std::function<constant_floatbv2t &(expr2tc &)> to_constant =
-      (constant_floatbv2t & (*)(expr2tc &))to_constant_floatbv2t;
+      (constant_floatbv2t & (*)(expr2tc &)) to_constant_floatbv2t;
 
     simpl_res =
       TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
@@ -2287,8 +2293,10 @@ static expr2tc simplify_floatbv_2ops(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-    std::function<ieee_floatt &(expr2tc &)> get_value = [](
-      expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);

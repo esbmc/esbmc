@@ -42,10 +42,9 @@ public:
   irep_idt symbol_name;
 
   // Type mangling:
-  typedef esbmct::field_traits<irep_idt,
-                               symbol_type_data,
-                               &symbol_type_data::symbol_name>
-    symbol_name_field;
+  typedef esbmct::
+    field_traits<irep_idt, symbol_type_data, &symbol_type_data::symbol_name>
+      symbol_name_field;
   typedef esbmct::type2t_traits<symbol_name_field> traits;
 };
 
@@ -89,31 +88,33 @@ public:
   bool packed;
 
   // Type mangling:
-  typedef esbmct::field_traits<std::vector<type2tc>,
-                               struct_union_data,
-                               &struct_union_data::members>
+  typedef esbmct::field_traits<
+    std::vector<type2tc>,
+    struct_union_data,
+    &struct_union_data::members>
     members_field;
-  typedef esbmct::field_traits<std::vector<irep_idt>,
-                               struct_union_data,
-                               &struct_union_data::member_names>
+  typedef esbmct::field_traits<
+    std::vector<irep_idt>,
+    struct_union_data,
+    &struct_union_data::member_names>
     member_names_field;
-  typedef esbmct::field_traits<std::vector<irep_idt>,
-                               struct_union_data,
-                               &struct_union_data::member_pretty_names>
+  typedef esbmct::field_traits<
+    std::vector<irep_idt>,
+    struct_union_data,
+    &struct_union_data::member_pretty_names>
     member_pretty_names_field;
-  typedef esbmct::field_traits<irep_idt,
-                               struct_union_data,
-                               &struct_union_data::name>
-    name_field;
-  typedef esbmct::field_traits<bool,
-                               struct_union_data,
-                               &struct_union_data::packed>
-    packed_field;
-  typedef esbmct::type2t_traits<members_field,
-                                member_names_field,
-                                member_pretty_names_field,
-                                name_field,
-                                packed_field>
+  typedef esbmct::
+    field_traits<irep_idt, struct_union_data, &struct_union_data::name>
+      name_field;
+  typedef esbmct::
+    field_traits<bool, struct_union_data, &struct_union_data::packed>
+      packed_field;
+  typedef esbmct::type2t_traits<
+    members_field,
+    member_names_field,
+    member_pretty_names_field,
+    name_field,
+    packed_field>
     traits;
 };
 
@@ -163,22 +164,21 @@ public:
   bool ellipsis;
 
   // Type mangling:
-  typedef esbmct::field_traits<std::vector<type2tc>,
-                               code_data,
-                               &code_data::arguments>
-    arguments_field;
+  typedef esbmct::
+    field_traits<std::vector<type2tc>, code_data, &code_data::arguments>
+      arguments_field;
   typedef esbmct::field_traits<type2tc, code_data, &code_data::ret_type>
     ret_type_field;
-  typedef esbmct::field_traits<std::vector<irep_idt>,
-                               code_data,
-                               &code_data::argument_names>
-    argument_names_field;
+  typedef esbmct::
+    field_traits<std::vector<irep_idt>, code_data, &code_data::argument_names>
+      argument_names_field;
   typedef esbmct::field_traits<bool, code_data, &code_data::ellipsis>
     ellipsis_field;
-  typedef esbmct::type2t_traits<arguments_field,
-                                ret_type_field,
-                                argument_names_field,
-                                ellipsis_field>
+  typedef esbmct::type2t_traits<
+    arguments_field,
+    ret_type_field,
+    argument_names_field,
+    ellipsis_field>
     traits;
 };
 
@@ -202,10 +202,9 @@ public:
     array_size_field;
   typedef esbmct::field_traits<bool, array_data, &array_data::size_is_infinite>
     size_is_infinite_field;
-  typedef esbmct::type2t_traits<subtype_field,
-                                array_size_field,
-                                size_is_infinite_field>
-    traits;
+  typedef esbmct::
+    type2t_traits<subtype_field, array_size_field, size_is_infinite_field>
+      traits;
 };
 
 class pointer_data : public type2t
@@ -239,10 +238,9 @@ public:
   // Type mangling:
   typedef esbmct::field_traits<unsigned int, fixedbv_data, &fixedbv_data::width>
     width_field;
-  typedef esbmct::field_traits<unsigned int,
-                               fixedbv_data,
-                               &fixedbv_data::integer_bits>
-    integer_bits_field;
+  typedef esbmct::
+    field_traits<unsigned int, fixedbv_data, &fixedbv_data::integer_bits>
+      integer_bits_field;
   typedef esbmct::type2t_traits<width_field, integer_bits_field> traits;
 };
 
@@ -259,14 +257,12 @@ public:
   unsigned int exponent;
 
   // Type mangling:
-  typedef esbmct::field_traits<unsigned int,
-                               floatbv_data,
-                               &floatbv_data::fraction>
-    fraction_field;
-  typedef esbmct::field_traits<unsigned int,
-                               floatbv_data,
-                               &floatbv_data::exponent>
-    exponent_field;
+  typedef esbmct::
+    field_traits<unsigned int, floatbv_data, &floatbv_data::fraction>
+      fraction_field;
+  typedef esbmct::
+    field_traits<unsigned int, floatbv_data, &floatbv_data::exponent>
+      exponent_field;
   typedef esbmct::type2t_traits<fraction_field, exponent_field> traits;
 };
 
@@ -304,9 +300,10 @@ public:
   // Type mangling:
   typedef esbmct::field_traits<irep_idt, cpp_name_data, &cpp_name_data::name>
     name_field;
-  typedef esbmct::field_traits<std::vector<type2tc>,
-                               cpp_name_data,
-                               &cpp_name_data::template_args>
+  typedef esbmct::field_traits<
+    std::vector<type2tc>,
+    cpp_name_data,
+    &cpp_name_data::template_args>
     template_args_field;
   typedef esbmct::type2t_traits<name_field, template_args_field> traits;
 };
@@ -314,22 +311,25 @@ public:
 // Then give them a typedef name
 
 #define irep_typedefs(basename, superclass)                                    \
-  typedef esbmct::something2tc<type2t,                                         \
-                               basename##_type2t,                              \
-                               type2t::basename##_id,                          \
-                               const type2t::type_ids,                         \
-                               &type2t::type_id,                               \
-                               superclass>                                     \
+  typedef esbmct::something2tc<                                                \
+    type2t,                                                                    \
+    basename##_type2t,                                                         \
+    type2t::basename##_id,                                                     \
+    const type2t::type_ids,                                                    \
+    &type2t::type_id,                                                          \
+    superclass>                                                                \
     basename##_type2tc;                                                        \
-  typedef esbmct::type_methods2<basename##_type2t,                             \
-                                superclass,                                    \
-                                superclass::traits,                            \
-                                basename##_type2tc>                            \
+  typedef esbmct::type_methods2<                                               \
+    basename##_type2t,                                                         \
+    superclass,                                                                \
+    superclass::traits,                                                        \
+    basename##_type2tc>                                                        \
     basename##_type_methods;                                                   \
-  extern template class esbmct::type_methods2<basename##_type2t,               \
-                                              superclass,                      \
-                                              superclass::traits,              \
-                                              basename##_type2tc>;
+  extern template class esbmct::type_methods2<                                 \
+    basename##_type2t,                                                         \
+    superclass,                                                                \
+    superclass::traits,                                                        \
+    basename##_type2tc>;
 
 irep_typedefs(bool, type2t) irep_typedefs(empty, type2t)
   irep_typedefs(symbol, symbol_type_data)

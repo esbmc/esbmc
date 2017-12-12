@@ -123,8 +123,7 @@ array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   return ctx->convert_ast(result);
 }
 
-smt_astt
-tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
+smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
   // We have two tuple_sym_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
@@ -149,9 +148,7 @@ tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   return ctx->make_conjunct(eqs);
 }
 
-
-smt_astt
-array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
+smt_astt array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
   // We have two tuple_sym_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
@@ -182,13 +179,17 @@ array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   return ctx->make_conjunct(eqs);
 }
 
-smt_astt
-tuple_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
-    expr2tc idx_expr __attribute__((unused)) /*ndebug*/) const
+smt_astt tuple_sym_smt_ast::update(
+  smt_convt *ctx,
+  smt_astt value,
+  unsigned int idx,
+  expr2tc idx_expr __attribute__((unused)) /*ndebug*/) const
 {
   smt_convt::ast_vec eqs;
-  assert(is_nil_expr(idx_expr) && "Can't apply non-constant index update to "
-         "structure");
+  assert(
+    is_nil_expr(idx_expr) &&
+    "Can't apply non-constant index update to "
+    "structure");
 
   // XXX: future work, accept member_name exprs?
   tuple_smt_sortt ts = to_tuple_sort(sort);
@@ -200,13 +201,16 @@ tuple_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   // Iterate over all members, deciding what to do with them.
   for(unsigned int j = 0; j < data.members.size(); j++)
   {
-    if (j == idx) {
+    if(j == idx)
+    {
       // This is the updated field -- generate the name of its variable with
       // tuple project and assign it in.
       smt_astt thefield = result->project(ctx, j);
 
       eqs.push_back(thefield->eq(ctx, value));
-    } else {
+    }
+    else
+    {
       // This is not an updated field; extract the member out of the input
       // tuple (a) and assign it into the fresh tuple.
       smt_astt field1 = project(ctx, j);
@@ -219,20 +223,24 @@ tuple_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   return result;
 }
 
-smt_astt
-array_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
-    expr2tc idx_expr) const
+smt_astt array_sym_smt_ast::update(
+  smt_convt *ctx,
+  smt_astt value,
+  unsigned int idx,
+  expr2tc idx_expr) const
 {
-
   tuple_smt_sortt ts = to_tuple_sort(sort);
   const array_type2t array_type = to_array_type(ts->thetype);
   const struct_union_data &data = ctx->get_type_def(array_type.subtype);
 
   expr2tc index;
-  if (is_nil_expr(idx_expr)) {
-    index = constant_int2tc(ctx->make_array_domain_sort_exp(array_type),
-                            BigInt(idx));
-  } else {
+  if(is_nil_expr(idx_expr))
+  {
+    index =
+      constant_int2tc(ctx->make_array_domain_sort_exp(array_type), BigInt(idx));
+  }
+  else
+  {
     index = idx_expr;
   }
 
@@ -261,16 +269,15 @@ array_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   return result;
 }
 
-smt_astt
-tuple_sym_smt_ast::select(smt_convt *ctx __attribute__((unused)),
-    const expr2tc &idx __attribute__((unused))) const
+smt_astt tuple_sym_smt_ast::select(
+  smt_convt *ctx __attribute__((unused)),
+  const expr2tc &idx __attribute__((unused))) const
 {
   std::cerr << "Select operation applied to tuple" << std::endl;
   abort();
 }
 
-smt_astt
-array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+smt_astt array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 {
   tuple_smt_sortt ts = to_tuple_sort(sort);
   const array_type2t &array_type = to_array_type(ts->thetype);
@@ -298,8 +305,7 @@ array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   return result;
 }
 
-smt_astt
-tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
+smt_astt tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 {
   // Create an AST representing the i'th field of the tuple a. This means we
   // have to open up the (tuple symbol) a, tack on the field name to the end
@@ -317,22 +323,24 @@ tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   const type2tc &restype = data.members[idx];
   smt_sortt s = ctx->convert_sort(restype);
 
-  if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype)) {
+  if(is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype))
+  {
     // This is a struct within a struct, so just generate the name prefix of
     // the internal struct being projected.
     sym_name = sym_name + ".";
-    if (is_tuple_array_ast_type(restype))
+    if(is_tuple_array_ast_type(restype))
       return new array_sym_smt_ast(ctx, s, sym_name);
     else
       return new tuple_sym_smt_ast(ctx, s, sym_name);
-  } else {
+  }
+  else
+  {
     // This is a normal variable, so create a normal symbol of its name.
     return ctx->mk_smt_symbol(sym_name, s);
   }
 }
 
-smt_astt
-array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
+smt_astt array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 {
   tuple_smt_sortt ts = to_tuple_sort(sort);
 
@@ -342,31 +350,32 @@ array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   const array_type2t &arr = to_array_type(ts->thetype);
   const struct_union_data &data = ctx->get_type_def(arr.subtype);
 
-  assert(idx < data.members.size() &&
-      "Out-of-bounds tuple-array element accessed");
+  assert(
+    idx < data.members.size() && "Out-of-bounds tuple-array element accessed");
   const std::string &fieldname = data.member_names[idx].as_string();
   std::string sym_name = name + fieldname;
 
   const type2tc &restype = data.members[idx];
-  type2tc new_arr_type(new array_type2t(restype, arr.array_size,
-        arr.size_is_infinite));
+  type2tc new_arr_type(
+    new array_type2t(restype, arr.array_size, arr.size_is_infinite));
   smt_sortt s = ctx->convert_sort(new_arr_type);
 
-  if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype)) {
+  if(is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype))
+  {
     // This is a struct within a struct, so just generate the name prefix of
     // the internal struct being projected.
     sym_name = sym_name + ".";
     return new array_sym_smt_ast(ctx, s, sym_name);
-  } else {
+  }
+  else
+  {
     // This is a normal variable, so create a normal symbol of its name.
     return ctx->mk_smt_symbol(sym_name, s);
   }
 }
 
-void
-array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
+void array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
 {
-
   // We have two tuple_sym_smt_asts and need to call assign on all of their
   // components.
   array_sym_smt_astt src = this;
@@ -387,8 +396,7 @@ array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   }
 }
 
-smt_astt
-smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
+smt_astt smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
 {
   // From a vector of expressions, create a tuple representation by creating
   // a fresh name and assigning members into it.
@@ -397,9 +405,10 @@ smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
   name += ".";
 
   smt_ast *result =
-    new tuple_sym_smt_ast(ctx, ctx->convert_sort(structdef->type),name);
+    new tuple_sym_smt_ast(ctx, ctx->convert_sort(structdef->type), name);
 
-  for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++) {
+  for(unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
+  {
     smt_astt tmp = ctx->convert_ast(*structdef->get_sub_expr(i));
     smt_astt elem = result->project(ctx, i);
     ctx->assert_ast(elem->eq(ctx, tmp));
@@ -408,13 +417,12 @@ smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
   return result;
 }
 
-smt_astt
-smt_tuple_sym_flattener::tuple_fresh(smt_sortt s, std::string name)
+smt_astt smt_tuple_sym_flattener::tuple_fresh(smt_sortt s, std::string name)
 {
-  std::string n = (name == "") ? ctx->mk_fresh_name("tuple_fresh::") + "."
-                               : name;
+  std::string n =
+    (name == "") ? ctx->mk_fresh_name("tuple_fresh::") + "." : name;
 
-  if (s->id == SMT_SORT_ARRAY)
+  if(s->id == SMT_SORT_ARRAY)
     return new array_sym_smt_ast(ctx, s, n);
   else
     return new tuple_sym_smt_ast(ctx, s, n);
@@ -423,20 +431,18 @@ smt_tuple_sym_flattener::tuple_fresh(smt_sortt s, std::string name)
 smt_astt
 smt_tuple_sym_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
 {
-
   // We put a '.' on the end of all symbols to deliminate the rest of the
   // name. However, these names may become expressions again, then be converted
   // again, thus accumulating dots. So don't.
   std::string name2 = name;
-  if (name2[name2.size() - 1] != '.')
+  if(name2[name2.size() - 1] != '.')
     name2 += ".";
 
   assert(s->id != SMT_SORT_ARRAY);
   return new tuple_sym_smt_ast(ctx, s, name2);
 }
 
-smt_astt
-smt_tuple_sym_flattener::mk_tuple_array_symbol(const expr2tc &expr)
+smt_astt smt_tuple_sym_flattener::mk_tuple_array_symbol(const expr2tc &expr)
 {
   // Exactly the same as creating a tuple symbol, but for arrays.
   const symbol2t &sym = to_symbol2t(expr);
@@ -445,11 +451,11 @@ smt_tuple_sym_flattener::mk_tuple_array_symbol(const expr2tc &expr)
   return new array_sym_smt_ast(ctx, sort, name);
 }
 
-smt_astt
-smt_tuple_sym_flattener::tuple_array_create(const type2tc &array_type,
-                                            smt_astt *inputargs,
-                                            bool const_array,
-                              smt_sortt domain __attribute__((unused)))
+smt_astt smt_tuple_sym_flattener::tuple_array_create(
+  const type2tc &array_type,
+  smt_astt *inputargs,
+  bool const_array,
+  smt_sortt domain __attribute__((unused)))
 {
   // Create a tuple array from a constant representation. This means that
   // either we have an array_of or a constant_array. Handle this by creating
@@ -462,10 +468,13 @@ smt_tuple_sym_flattener::tuple_array_create(const type2tc &array_type,
 
   // Check size
   const array_type2t &arr_type = to_array_type(array_type);
-  if (arr_type.size_is_infinite) {
+  if(arr_type.size_is_infinite)
+  {
     // Guarentee nothing, this is modelling only.
     return newsym;
-  } else if (!is_constant_int2t(arr_type.array_size)) {
+  }
+  else if(!is_constant_int2t(arr_type.array_size))
+  {
     std::cerr << "Non-constant sized array of type constant_array_of2t"
               << std::endl;
     abort();
@@ -474,18 +483,23 @@ smt_tuple_sym_flattener::tuple_array_create(const type2tc &array_type,
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
   uint64_t sz = thesize.value.to_ulong();
 
-  if (const_array) {
+  if(const_array)
+  {
     // Repeatedly store the same value into this at all the demanded
     // indexes.
     smt_astt init = inputargs[0];
-    for (unsigned int i = 0; i < sz; i++) {
+    for(unsigned int i = 0; i < sz; i++)
+    {
       newsym = newsym->update(ctx, init, i);
     }
 
     return newsym;
-  } else {
+  }
+  else
+  {
     // Repeatedly store operands into this.
-    for (unsigned int i = 0; i < sz; i++) {
+    for(unsigned int i = 0; i < sz; i++)
+    {
       newsym = newsym->update(ctx, inputargs[i], i);
     }
 
@@ -493,15 +507,14 @@ smt_tuple_sym_flattener::tuple_array_create(const type2tc &array_type,
   }
 }
 
-expr2tc
-smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
+expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
 {
   assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name();
 
-  const type2tc &thetype = (is_structure_type(expr->type))
-    ? expr->type : ctx->pointer_struct;
+  const type2tc &thetype =
+    (is_structure_type(expr->type)) ? expr->type : ctx->pointer_struct;
   const struct_union_data &strct = ctx->get_type_def(thetype);
 
   // XXX - what's the correct type to return here.
@@ -519,16 +532,16 @@ smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
   }
 
   // If it's a pointer, rewrite.
-  if (is_pointer_type(expr->type)) {
-
+  if(is_pointer_type(expr->type))
+  {
     // Guard against free pointer value
-    if (is_nil_expr(outstruct->datatype_members[0]))
+    if(is_nil_expr(outstruct->datatype_members[0]))
       return expr2tc();
 
-    uint64_t num = to_constant_int2t(outstruct->datatype_members[0])
-                                    .value.to_uint64();
-    uint64_t offs = to_constant_int2t(outstruct->datatype_members[1])
-                                     .value.to_uint64();
+    uint64_t num =
+      to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
+    uint64_t offs =
+      to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return ctx->pointer_logic.back().pointer_expr(p, expr->type);
   }
@@ -536,10 +549,10 @@ smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
   return outstruct;
 }
 
-smt_astt
-smt_tuple_sym_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
+smt_astt smt_tuple_sym_flattener::tuple_array_of(
+  const expr2tc &init_val,
+  unsigned long array_size)
 {
-
   // An array of tuples without tuple support: decompose into array_of's each
   // subtype.
   const struct_union_data &subtype = ctx->get_type_def(init_val->type);
@@ -555,7 +568,8 @@ smt_tuple_sym_flattener::tuple_array_of(const expr2tc &init_val, unsigned long a
   smt_astt newsym = new array_sym_smt_ast(ctx, sort, name);
 
   assert(subtype.members.size() == data.datatype_members.size());
-  for (unsigned long i = 0; i < subtype.members.size(); i++) {
+  for(unsigned long i = 0; i < subtype.members.size(); i++)
+  {
     const expr2tc &val = data.datatype_members[i];
     type2tc subarr_type = type2tc(new array_type2t(val->type, arrsize, false));
     constant_array_of2tc sub_array_of(subarr_type, val);
@@ -570,30 +584,32 @@ smt_tuple_sym_flattener::tuple_array_of(const expr2tc &init_val, unsigned long a
   return newsym;
 }
 
-smt_sortt
-smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
+smt_sortt smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
 {
-  if (is_array_type(type)) {
+  if(is_array_type(type))
+  {
     const array_type2t &arrtype = to_array_type(type);
-    assert(!is_array_type(arrtype.subtype) && "Arrays dimensions should be flattened by the time they reach tuple interface");
+    assert(
+      !is_array_type(arrtype.subtype) &&
+      "Arrays dimensions should be flattened by the time they reach tuple "
+      "interface");
     unsigned int dom_width = ctx->calculate_array_domain_width(arrtype);
     return new tuple_smt_sort(type, 1, dom_width);
-  } else {
+  }
+  else
+  {
     return new tuple_smt_sort(type);
   }
 }
 
-void
-smt_tuple_sym_flattener::add_tuple_constraints_for_solving()
+void smt_tuple_sym_flattener::add_tuple_constraints_for_solving()
 {
 }
 
-void
-smt_tuple_sym_flattener::push_tuple_ctx()
+void smt_tuple_sym_flattener::push_tuple_ctx()
 {
 }
 
-void
-smt_tuple_sym_flattener::pop_tuple_ctx()
+void smt_tuple_sym_flattener::pop_tuple_ctx()
 {
 }

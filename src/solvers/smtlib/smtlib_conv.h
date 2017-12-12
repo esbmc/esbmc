@@ -9,35 +9,51 @@
 #include <unistd.h>
 #include <util/irep2.h>
 
-class sexpr {
+class sexpr
+{
 public:
-  sexpr() : token(0) { sexpr_list.clear(); }
+  sexpr() : token(0)
+  {
+    sexpr_list.clear();
+  }
   unsigned int token; // If zero, then an sexpr list
   std::list<sexpr> sexpr_list;
   std::string data; // Text rep of parsed token.
 };
 
-class smtlib_smt_sort : public smt_sort {
+class smtlib_smt_sort : public smt_sort
+{
 public:
-  explicit smtlib_smt_sort(smt_sort_kind k, unsigned int w)
-    : smt_sort(k, w) { };
-  explicit smtlib_smt_sort(smt_sort_kind k)
-    : smt_sort(k) { }
-  explicit smtlib_smt_sort(smt_sort_kind k, const smtlib_smt_sort *dom,
-                  const smtlib_smt_sort *rag)
+  explicit smtlib_smt_sort(smt_sort_kind k, unsigned int w) : smt_sort(k, w){};
+  explicit smtlib_smt_sort(smt_sort_kind k) : smt_sort(k)
+  {
+  }
+  explicit smtlib_smt_sort(
+    smt_sort_kind k,
+    const smtlib_smt_sort *dom,
+    const smtlib_smt_sort *rag)
     : smt_sort(k, rag->get_data_width(), dom->get_domain_width()),
-      domain(dom), range(rag) { }
+      domain(dom),
+      range(rag)
+  {
+  }
 
   const smtlib_smt_sort *domain;
   const smtlib_smt_sort *range;
 };
 
-class smtlib_smt_ast : public smt_ast {
+class smtlib_smt_ast : public smt_ast
+{
 public:
   smtlib_smt_ast(smt_convt *ctx, const smt_sort *s, smt_func_kind k)
-    : smt_ast(ctx, s), kind(k) { }
+    : smt_ast(ctx, s), kind(k)
+  {
+  }
   ~smtlib_smt_ast() override = default;
-  void dump() const override { abort(); }
+  void dump() const override
+  {
+    abort();
+  }
 
   smt_func_kind kind;
   std::string symname;
@@ -53,8 +69,10 @@ public:
 class smtlib_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  smtlib_convt(bool int_encoding, const namespacet &_ns,
-               const optionst &_options);
+  smtlib_convt(
+    bool int_encoding,
+    const namespacet &_ns,
+    const optionst &_options);
   ~smtlib_convt() override;
 
   resultt dec_solve() override;
@@ -62,17 +80,15 @@ public:
 
   void assert_ast(const smt_ast *a) override;
   smt_ast *mk_func_app(
-    const smt_sort *s, 
+    const smt_sort *s,
     smt_func_kind k,
-    const smt_ast * const *args,
+    const smt_ast *const *args,
     unsigned int numargs) override;
   smt_sort *mk_sort(const smt_sort_kind k, ...) override;
   smt_ast *mk_smt_int(const mp_integer &theint, bool sign) override;
   smt_ast *mk_smt_real(const std::string &str) override;
-  smt_ast *mk_smt_bvint(
-    const mp_integer &theint,
-    bool sign,
-    unsigned int w) override;
+  smt_ast *
+  mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w) override;
   smt_ast *mk_smt_bool(bool val) override;
   smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) override;
   smt_ast *mk_array_symbol(
@@ -88,9 +104,8 @@ public:
 
   void add_array_constraints_for_solving() override;
 
-  const smt_ast *convert_array_of(
-    smt_astt init_val,
-    unsigned long domain_width) override;
+  const smt_ast *
+  convert_array_of(smt_astt init_val, unsigned long domain_width) override;
   void push_array_ctx() override;
   void pop_array_ctx() override;
 
@@ -119,7 +134,8 @@ public:
   // Actual solving data
   // The set of symbols and their sorts.
 
-  struct symbol_table_rec {
+  struct symbol_table_rec
+  {
     std::string ident;
     unsigned int level;
     smt_sortt sort;
@@ -129,14 +145,11 @@ public:
     symbol_table_rec,
     boost::multi_index::indexed_by<
       boost::multi_index::hashed_unique<
-        BOOST_MULTI_INDEX_MEMBER(symbol_table_rec, std::string, ident)
-      >,
+        BOOST_MULTI_INDEX_MEMBER(symbol_table_rec, std::string, ident)>,
       boost::multi_index::ordered_non_unique<
         BOOST_MULTI_INDEX_MEMBER(symbol_table_rec, unsigned int, level),
-        std::greater<unsigned int>
-      >
-    >
-  > symbol_tablet;
+        std::greater<unsigned int>>>>
+    symbol_tablet;
 
   symbol_tablet symbol_table;
   std::vector<unsigned long> temp_sym_count;

@@ -1824,9 +1824,8 @@ void dereferencet::valid_check(
   {
     // Hacks, but as dereferencet object isn't persistent, necessary. Fix by
     // making dereferencet persistent.
-    if(
-      has_prefix(
-        to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
+    if(has_prefix(
+         to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
       return;
 
     const symbolt &sym = ns.lookup(to_symbol2t(symbol).thename);

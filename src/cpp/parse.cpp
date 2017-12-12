@@ -490,13 +490,12 @@ bool Parser::isTypeSpecifier()
     t == TOK_CONST || t == TOK_VOLATILE || t == TOK_RESTRICT || t == TOK_CHAR ||
     t == TOK_INT || t == TOK_SHORT || t == TOK_LONG || t == TOK_WCHAR_T ||
     t == TOK_COMPLEX // new !!!
-    ||
-    t == TOK_SIGNED || t == TOK_UNSIGNED || t == TOK_FLOAT || t == TOK_DOUBLE ||
-    t == TOK_INT8 || t == TOK_INT16 || t == TOK_INT32 || t == TOK_INT64 ||
-    t == TOK_PTR32 || t == TOK_PTR64 || t == TOK_VOID || t == TOK_BOOL ||
-    t == TOK_CLASS || t == TOK_STRUCT || t == TOK_UNION || t == TOK_ENUM ||
-    t == TOK_INTERFACE || t == TOK_TYPENAME || t == TOK_INT64 ||
-    t == TOK_TYPEOF || t == TOK_DECLTYPE)
+    || t == TOK_SIGNED || t == TOK_UNSIGNED || t == TOK_FLOAT ||
+    t == TOK_DOUBLE || t == TOK_INT8 || t == TOK_INT16 || t == TOK_INT32 ||
+    t == TOK_INT64 || t == TOK_PTR32 || t == TOK_PTR64 || t == TOK_VOID ||
+    t == TOK_BOOL || t == TOK_CLASS || t == TOK_STRUCT || t == TOK_UNION ||
+    t == TOK_ENUM || t == TOK_INTERFACE || t == TOK_TYPENAME ||
+    t == TOK_INT64 || t == TOK_TYPEOF || t == TOK_DECLTYPE)
     return true;
 
   return false;
@@ -1725,10 +1724,9 @@ bool Parser::optIntegralTypeOrClassSpec(typet &p)
     if(
       t == TOK_CHAR || t == TOK_INT || t == TOK_SHORT || t == TOK_LONG ||
       t == TOK_SIGNED || t == TOK_WCHAR_T || t == TOK_COMPLEX // new !!!
-      ||
-      t == TOK_UNSIGNED || t == TOK_FLOAT || t == TOK_DOUBLE || t == TOK_VOID ||
-      t == TOK_INT8 || t == TOK_INT16 || t == TOK_INT32 || t == TOK_INT64 ||
-      t == TOK_BOOL)
+      || t == TOK_UNSIGNED || t == TOK_FLOAT || t == TOK_DOUBLE ||
+      t == TOK_VOID || t == TOK_INT8 || t == TOK_INT16 || t == TOK_INT32 ||
+      t == TOK_INT64 || t == TOK_BOOL)
     {
       Token tk;
       typet kw;
@@ -2033,9 +2031,8 @@ bool Parser::rDeclaratorWithInit(
   {
     cpp_declaratort declarator;
 
-    if(
-      !rDeclarator(
-        declarator, kDeclarator, false, should_be_declarator, is_statement))
+    if(!rDeclarator(
+         declarator, kDeclarator, false, should_be_declarator, is_statement))
       return false;
 
     // asm post-declarator

@@ -607,10 +607,11 @@ void build_goto_symex_classes()
       &execution_statet::get_active_state;
 
     scope fgasdf =
-      class_<execution_statet,
-             boost::noncopyable,
-             bases<goto_symext>,
-             boost::shared_ptr<execution_statet>>(
+      class_<
+        execution_statet,
+        boost::noncopyable,
+        bases<goto_symext>,
+        boost::shared_ptr<execution_statet>>(
         "execution_state", no_init) // is abstract
         .def(
           "increment_context_switch",
@@ -736,8 +737,9 @@ void build_goto_symex_classes()
       &execution_statet::ex_state_level2t::rename;
 
     // xxx base
-    class_<execution_statet::ex_state_level2t,
-           boost::shared_ptr<execution_statet::ex_state_level2t>>(
+    class_<
+      execution_statet::ex_state_level2t,
+      boost::shared_ptr<execution_statet::ex_state_level2t>>(
       "ex_state_level2t", init<execution_statet &>())
       .def("clone", &execution_statet::ex_state_level2t::clone)
       .def("rename_to", rename_to)
@@ -745,17 +747,19 @@ void build_goto_symex_classes()
       .def_readwrite("owner", &execution_statet::ex_state_level2t::owner);
 
     // Classes we can actually construct...
-    class_<ex_state_wrapper<dfs_execution_statet>,
-           bases<execution_statet>,
-           boost::shared_ptr<ex_state_wrapper<dfs_execution_statet>>>(
+    class_<
+      ex_state_wrapper<dfs_execution_statet>,
+      bases<execution_statet>,
+      boost::shared_ptr<ex_state_wrapper<dfs_execution_statet>>>(
       "dfs_execution_state",
-      init<const goto_functionst &,
-           const namespacet &,
-           reachability_treet *,
-           boost::shared_ptr<symex_targett>,
-           contextt &,
-           optionst &,
-           message_handlert &>())
+      init<
+        const goto_functionst &,
+        const namespacet &,
+        reachability_treet *,
+        boost::shared_ptr<symex_targett>,
+        contextt &,
+        optionst &,
+        message_handlert &>())
       .def(
         "symex_step",
         &goto_symext::symex_step,
@@ -765,19 +769,21 @@ void build_goto_symex_classes()
         &dfs_execution_statet::clone,
         &ex_state_wrapper<dfs_execution_statet>::default_clone);
 
-    class_<ex_state_wrapper<schedule_execution_statet>,
-           bases<execution_statet>,
-           boost::shared_ptr<ex_state_wrapper<schedule_execution_statet>>>(
+    class_<
+      ex_state_wrapper<schedule_execution_statet>,
+      bases<execution_statet>,
+      boost::shared_ptr<ex_state_wrapper<schedule_execution_statet>>>(
       "schedule_execution_state",
-      init<const goto_functionst &,
-           const namespacet &,
-           reachability_treet *,
-           boost::shared_ptr<symex_targett>,
-           contextt &,
-           optionst &,
-           unsigned int *,
-           unsigned int *,
-           message_handlert &>())
+      init<
+        const goto_functionst &,
+        const namespacet &,
+        reachability_treet *,
+        boost::shared_ptr<symex_targett>,
+        contextt &,
+        optionst &,
+        unsigned int *,
+        unsigned int *,
+        message_handlert &>())
       .def(
         "symex_step",
         &goto_symext::symex_step,
@@ -794,12 +800,13 @@ void build_goto_symex_classes()
     &reachability_treet::get_cur_state;
   class_<reachability_treet>(
     "reachability_tree",
-    init<goto_functionst &,
-         namespacet &,
-         optionst &,
-         boost::shared_ptr<symex_targett>,
-         contextt &,
-         message_handlert &>())
+    init<
+      goto_functionst &,
+      namespacet &,
+      optionst &,
+      boost::shared_ptr<symex_targett>,
+      contextt &,
+      message_handlert &>())
     .def("setup_for_new_explore", &reachability_treet::setup_for_new_explore)
     .def("get_cur_state", get_cur_state, return_internal_reference<>())
     .def("set_cur_state", &python_rt_mangler::set_cur_state)
@@ -1017,9 +1024,10 @@ void build_equation_class()
     .def_readwrite("ignore", &step::ignore);
 
   {
-    scope bar = class_<symex_targett,
-                       boost::shared_ptr<symex_targett>,
-                       boost::noncopyable>("symex_targett", no_init);
+    scope bar = class_<
+      symex_targett,
+      boost::shared_ptr<symex_targett>,
+      boost::noncopyable>("symex_targett", no_init);
 
     class_<symex_targett::sourcet>("targett")
       .def_readwrite("is_set", &symex_targett::sourcet::is_set)
@@ -1040,8 +1048,9 @@ void build_equation_class()
       .add_property("pc", make_function(get_pc), make_function(set_pc));
   }
 
-  class_<goto_symext::symex_resultt,
-         boost::shared_ptr<goto_symext::symex_resultt>>(
+  class_<
+    goto_symext::symex_resultt,
+    boost::shared_ptr<goto_symext::symex_resultt>>(
     "symex_resultt",
     init<boost::shared_ptr<symex_targett>, unsigned, unsigned>())
     .def_readwrite("target", &goto_symext::symex_resultt::target)
@@ -1051,9 +1060,10 @@ void build_equation_class()
 
   init<const namespacet &> eq_init;
   init<const ste_wrapper<symex_target_equationt> &> cpy_init;
-  class_<ste_wrapper<symex_target_equationt>,
-         boost::shared_ptr<ste_wrapper<symex_target_equationt>>,
-         bases<symex_targett>>("equation", eq_init)
+  class_<
+    ste_wrapper<symex_target_equationt>,
+    boost::shared_ptr<ste_wrapper<symex_target_equationt>>,
+    bases<symex_targett>>("equation", eq_init)
     .def(cpy_init)
     .def(
       "assignment",

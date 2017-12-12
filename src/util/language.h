@@ -31,8 +31,8 @@ public:
 
   // add modules provided by currently parsed file to set
 
-  virtual void
-  modules_provided(std::set<std::string> &modules __attribute__((unused)))
+  virtual void modules_provided(std::set<std::string> &modules
+                                __attribute__((unused)))
   {
   }
 

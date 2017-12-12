@@ -192,7 +192,7 @@ std::string configt::this_architecture()
 {
   std::string this_arch;
 
-// following http://wiki.debian.org/ArchitectureSpecificsMemo
+  // following http://wiki.debian.org/ArchitectureSpecificsMemo
 
 #ifdef __alpha__
   this_arch = "alpha";

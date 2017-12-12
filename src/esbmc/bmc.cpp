@@ -56,9 +56,8 @@ bmct::bmct(
 
   if(options.get_bool_option("smt-during-symex"))
   {
-    runtime_solver = boost::shared_ptr<smt_convt>(
-      create_solver_factory(
-        "", opts.get_bool_option("int-encoding"), ns, options));
+    runtime_solver = boost::shared_ptr<smt_convt>(create_solver_factory(
+      "", opts.get_bool_option("int-encoding"), ns, options));
 
     symex = std::make_shared<reachability_treet>(
       funcs,
@@ -89,8 +88,8 @@ void bmct::do_cbmc(
   eq->convert(*smt_conv.get());
 }
 
-void bmct::successful_trace(
-  boost::shared_ptr<symex_target_equationt> &eq __attribute__((unused)))
+void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq
+                            __attribute__((unused)))
 {
   if(options.get_bool_option("result-only"))
     return;
@@ -145,7 +144,7 @@ void bmct::error_trace(
   {
   case ui_message_handlert::GRAPHML:
     violation_graphml_goto_trace(options, ns, goto_trace);
-  /* fallthrough */
+    /* fallthrough */
 
   case ui_message_handlert::PLAIN:
     std::cout << std::endl << "Counterexample:" << std::endl;
@@ -627,9 +626,8 @@ bmct::run_thread(boost::shared_ptr<symex_target_equationt> &eq)
 
     if(!options.get_bool_option("smt-during-symex"))
     {
-      runtime_solver = boost::shared_ptr<smt_convt>(
-        create_solver_factory(
-          "", options.get_bool_option("int-encoding"), ns, options));
+      runtime_solver = boost::shared_ptr<smt_convt>(create_solver_factory(
+        "", options.get_bool_option("int-encoding"), ns, options));
     }
 
     return run_decision_procedure(runtime_solver, eq);

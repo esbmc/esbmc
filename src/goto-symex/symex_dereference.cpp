@@ -27,8 +27,8 @@ protected:
   goto_symext::statet &state;
 
   // overloads from dereference_callbackt
-  bool
-  is_valid_object(const irep_idt &identifier __attribute__((unused))) override
+  bool is_valid_object(const irep_idt &identifier
+                       __attribute__((unused))) override
   {
     return true;
   }

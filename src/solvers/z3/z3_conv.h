@@ -22,24 +22,39 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <vector>
 #include <z3pp.h>
 
-class z3_smt_sort : public smt_sort {
+class z3_smt_sort : public smt_sort
+{
 public:
 #define z3_sort_downcast(x) static_cast<const z3_smt_sort *>(x)
   z3_smt_sort(smt_sort_kind i, z3::sort _s)
-    : smt_sort(i), s(_s), rangesort(NULL) { }
+    : smt_sort(i), s(_s), rangesort(NULL)
+  {
+  }
 
   z3_smt_sort(smt_sort_kind i, z3::sort _s, const type2tc &_tupletype)
-    : smt_sort(i), s(_s), rangesort(NULL), tupletype(_tupletype) { }
+    : smt_sort(i), s(_s), rangesort(NULL), tupletype(_tupletype)
+  {
+  }
 
   z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w)
-    : smt_sort(i, w), s(_s), rangesort(NULL) { }
+    : smt_sort(i, w), s(_s), rangesort(NULL)
+  {
+  }
 
   z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w, size_t sw)
-    : smt_sort(i, w, sw), s(_s), rangesort(NULL) { }
+    : smt_sort(i, w, sw), s(_s), rangesort(NULL)
+  {
+  }
 
-  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w, size_t dw,
-              const smt_sort *_rangesort)
-    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
+  z3_smt_sort(
+    smt_sort_kind i,
+    z3::sort _s,
+    size_t w,
+    size_t dw,
+    const smt_sort *_rangesort)
+    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort)
+  {
+  }
 
   ~z3_smt_sort() = default;
 
@@ -48,30 +63,41 @@ public:
   type2tc tupletype;
 };
 
-class z3_smt_ast : public smt_ast {
+class z3_smt_ast : public smt_ast
+{
 public:
 #define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
-  z3_smt_ast(smt_convt *ctx, z3::expr _e, const smt_sort *_s) :
-            smt_ast(ctx, _s), e(_e) { }
+  z3_smt_ast(smt_convt *ctx, z3::expr _e, const smt_sort *_s)
+    : smt_ast(ctx, _s), e(_e)
+  {
+  }
   ~z3_smt_ast() = default;
   z3::expr e;
 
-  const smt_ast *update(smt_convt *ctx, const smt_ast *value,
-                                unsigned int idx, expr2tc idx_expr) const override;
+  const smt_ast *update(
+    smt_convt *ctx,
+    const smt_ast *value,
+    unsigned int idx,
+    expr2tc idx_expr) const override;
   const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const override;
   const smt_ast *project(smt_convt *ctx, unsigned int elem) const override;
 
   void dump() const override;
 };
 
-class z3_convt: public smt_convt, public tuple_iface, public array_iface, public fp_convt
+class z3_convt : public smt_convt,
+                 public tuple_iface,
+                 public array_iface,
+                 public fp_convt
 {
 public:
   z3_convt(bool int_encoding, const namespacet &ns);
   ~z3_convt() override;
+
 private:
   void intr_push_ctx();
   void intr_pop_ctx();
+
 public:
   void push_ctx() override;
   void pop_ctx() override;
@@ -89,30 +115,34 @@ public:
   void setup_pointer_sort();
   void convert_type(const type2tc &type, z3::sort &outtype);
 
-  void convert_struct(const std::vector<expr2tc> &members,
-                      const std::vector<type2tc> &member_types,
-                      const type2tc &type, z3::expr &bv);
+  void convert_struct(
+    const std::vector<expr2tc> &members,
+    const std::vector<type2tc> &member_types,
+    const type2tc &type,
+    z3::expr &bv);
 
-  void convert_struct_type(const std::vector<type2tc> &members,
-                           const std::vector<irep_idt> &member_names,
-                           const irep_idt &name, z3::sort &s);
+  void convert_struct_type(
+    const std::vector<type2tc> &members,
+    const std::vector<irep_idt> &member_names,
+    const irep_idt &name,
+    z3::sort &s);
 
-  z3::expr mk_tuple_update(const z3::expr &t, unsigned i,
-                           const z3::expr &new_val);
+  z3::expr
+  mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &new_val);
   z3::expr mk_tuple_select(const z3::expr &t, unsigned i);
 
   // SMT-abstraction migration:
-  smt_astt mk_func_app(const smt_sort *s, smt_func_kind k,
-                               const smt_ast * const *args,
-                               unsigned int numargs) override;
+  smt_astt mk_func_app(
+    const smt_sort *s,
+    smt_func_kind k,
+    const smt_ast *const *args,
+    unsigned int numargs) override;
   smt_sortt mk_sort(const smt_sort_kind k, ...) override;
 
   smt_astt mk_smt_int(const mp_integer &theint, bool sign) override;
   smt_astt mk_smt_real(const std::string &str) override;
-  smt_astt mk_smt_bvint(
-    const mp_integer &theint,
-    bool sign,
-    unsigned int w) override;
+  smt_astt
+  mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w) override;
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
   smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw) override;
   smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw) override;
@@ -150,11 +180,11 @@ public:
 
   smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override;
   smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
-  smt_astt tuple_array_of(const expr2tc &init,
-                                  unsigned long domain_width) override;
+  smt_astt
+  tuple_array_of(const expr2tc &init, unsigned long domain_width) override;
 
-  const smt_ast *convert_array_of(smt_astt init_val,
-                                          unsigned long domain_width) override;
+  const smt_ast *
+  convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
   void add_array_constraints_for_solving() override;
   void add_tuple_constraints_for_solving() override;
@@ -170,7 +200,7 @@ public:
   void assert_formula(const z3::expr &ast);
   void assert_ast(const smt_ast *a) override;
 
-  void debug_label_formula(const std::string&& name, const z3::expr &formula);
+  void debug_label_formula(const std::string &&name, const z3::expr &formula);
   void init_addr_space_array();
 
   const std::string solver_text() override
@@ -186,9 +216,8 @@ public:
 
   // Some useful types
 public:
-
-  inline z3_smt_ast *
-  new_ast(z3::expr _e, const smt_sort *_s) {
+  inline z3_smt_ast *new_ast(z3::expr _e, const smt_sort *_s)
+  {
     return new z3_smt_ast(this, _e, _s);
   }
 

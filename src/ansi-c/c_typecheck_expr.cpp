@@ -1659,8 +1659,8 @@ void c_typecheck_baset::typecheck_function_call_arguments(
   }
 }
 
-void c_typecheck_baset::typecheck_expr_constant(
-  exprt &expr __attribute__((unused)))
+void c_typecheck_baset::typecheck_expr_constant(exprt &expr
+                                                __attribute__((unused)))
 {
   // Do nothing
 }

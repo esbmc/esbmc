@@ -193,9 +193,8 @@ bool language_filest::typecheck_module(
 
   status("Type-checking " + module.name);
 
-  if(
-    module.file->language->typecheck(
-      context, module.name, *get_message_handler()))
+  if(module.file->language->typecheck(
+       context, module.name, *get_message_handler()))
   {
     module.in_progress = false;
     return true;

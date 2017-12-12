@@ -523,11 +523,12 @@ public:
 
   // Template for extracting instructions /from/ a goto program, to a type
   // abstract something else.
-  template <typename OutList,
-            typename ListAppender,
-            typename OutElem,
-            typename SetAttrObj,
-            typename SetAttrNil>
+  template <
+    typename OutList,
+    typename ListAppender,
+    typename OutElem,
+    typename SetAttrObj,
+    typename SetAttrNil>
   void extract_instructions(
     OutList &list,
     ListAppender listappend,
@@ -536,12 +537,13 @@ public:
 
   // Template for extracting instructions /from/ a type abstract something,
   // to a goto program.
-  template <typename InList,
-            typename InElem,
-            typename FetchElem,
-            typename ElemToInsn,
-            typename GetAttr,
-            typename IsAttrNil>
+  template <
+    typename InList,
+    typename InElem,
+    typename FetchElem,
+    typename ElemToInsn,
+    typename GetAttr,
+    typename IsAttrNil>
   void inject_instructions(
     InList list,
     unsigned int len,
@@ -555,11 +557,12 @@ bool operator<(
   const goto_programt::const_targett i1,
   const goto_programt::const_targett i2);
 
-template <typename OutList,
-          typename ListAppender,
-          typename OutElem,
-          typename SetAttrObj,
-          typename SetAttrNil>
+template <
+  typename OutList,
+  typename ListAppender,
+  typename OutElem,
+  typename SetAttrObj,
+  typename SetAttrNil>
 void goto_programt::extract_instructions(
   OutList &list,
   ListAppender listappend,
@@ -622,12 +625,13 @@ void goto_programt::extract_instructions(
   }
 }
 
-template <typename InList,
-          typename InElem,
-          typename FetchElem,
-          typename ElemToInsn,
-          typename GetAttr,
-          typename IsAttrNil>
+template <
+  typename InList,
+  typename InElem,
+  typename FetchElem,
+  typename ElemToInsn,
+  typename GetAttr,
+  typename IsAttrNil>
 void goto_programt::inject_instructions(
   InList list,
   unsigned int len,

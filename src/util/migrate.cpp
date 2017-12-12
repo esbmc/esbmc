@@ -663,15 +663,8 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
 
   node_num = atoi(andstr.c_str());
   level2_num = atoi(hashstr.c_str());
-  return expr2tc(
-    new symbol2t(
-      type,
-      thename,
-      target_level,
-      level1_num,
-      level2_num,
-      thread_num,
-      node_num));
+  return expr2tc(new symbol2t(
+    type, thename, target_level, level1_num, level2_num, thread_num, node_num));
 }
 
 // Functions to flatten union literals to not contain anything of union type.
@@ -1560,10 +1553,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if(expr.op1().id() == "member_name")
     {
-      idx = expr2tc(
-        new constant_string2t(
-          type2tc(new string_type2t(1)),
-          expr.op1().get_string("component_name")));
+      idx = expr2tc(new constant_string2t(
+        type2tc(new string_type2t(1)),
+        expr.op1().get_string("component_name")));
     }
     else
     {

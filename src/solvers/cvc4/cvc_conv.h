@@ -9,17 +9,29 @@ class cvc_smt_sort : public smt_sort
 public:
 #define cvc_sort_downcast(x) static_cast<const cvc_smt_sort *>(x)
   cvc_smt_sort(smt_sort_kind i, CVC4::Type _s)
-    : smt_sort(i), s(_s), rangesort(nullptr) { }
+    : smt_sort(i), s(_s), rangesort(nullptr)
+  {
+  }
 
   cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w)
-    : smt_sort(i, w), s(_s), rangesort(nullptr) { }
+    : smt_sort(i, w), s(_s), rangesort(nullptr)
+  {
+  }
 
   cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w, size_t sw)
-    : smt_sort(i, w, sw), s(_s), rangesort(nullptr) { }
+    : smt_sort(i, w, sw), s(_s), rangesort(nullptr)
+  {
+  }
 
-  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w, size_t dw,
-              const smt_sort *_rangesort)
-    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
+  cvc_smt_sort(
+    smt_sort_kind i,
+    CVC4::Type _s,
+    size_t w,
+    size_t dw,
+    const smt_sort *_rangesort)
+    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort)
+  {
+  }
 
   ~cvc_smt_sort() override = default;
 
@@ -32,9 +44,14 @@ class cvc_smt_ast : public smt_ast
 public:
 #define cvc_ast_downcast(x) static_cast<const cvc_smt_ast *>(x)
   cvc_smt_ast(smt_convt *ctx, const smt_sort *_s, CVC4::Expr &_e)
-    : smt_ast(ctx, _s), e(_e) { }
+    : smt_ast(ctx, _s), e(_e)
+  {
+  }
   ~cvc_smt_ast() override = default;
-  void dump() const override { abort(); }
+  void dump() const override
+  {
+    abort();
+  }
 
   CVC4::Expr e;
 };
@@ -53,15 +70,13 @@ public:
   smt_ast *mk_func_app(
     const smt_sort *s,
     smt_func_kind k,
-    const smt_ast * const *args,
+    const smt_ast *const *args,
     unsigned int numargs) override;
   smt_sortt mk_sort(const smt_sort_kind k, ...) override;
   smt_ast *mk_smt_int(const mp_integer &theint, bool sign) override;
   smt_ast *mk_smt_real(const std::string &str) override;
-  smt_ast *mk_smt_bvint(
-    const mp_integer &theint,
-    bool sign,
-    unsigned int w) override;
+  smt_ast *
+  mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w) override;
   smt_ast *mk_smt_bool(bool val) override;
   smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) override;
   smt_ast *mk_array_symbol(
@@ -75,9 +90,8 @@ public:
     unsigned int low,
     const smt_sort *s) override;
 
-  const smt_ast *convert_array_of(
-    smt_astt init_val,
-    unsigned long domain_width) override;
+  const smt_ast *
+  convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
   void add_array_constraints_for_solving() override;
   void push_array_ctx() override;

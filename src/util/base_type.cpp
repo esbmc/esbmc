@@ -109,9 +109,8 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
   if(is_symbol_type(type1) && is_symbol_type(type2))
   {
     // already in same set?
-    if(
-      identifiers.make_union(
-        to_symbol_type(type1).symbol_name, to_symbol_type(type2).symbol_name))
+    if(identifiers.make_union(
+         to_symbol_type(type1).symbol_name, to_symbol_type(type2).symbol_name))
       return true;
   }
 
@@ -223,9 +222,8 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
   }
   else if(is_array_type(type1))
   {
-    if(
-      !base_type_eq_rec(
-        to_array_type(type1).subtype, to_array_type(type2).subtype))
+    if(!base_type_eq_rec(
+         to_array_type(type1).subtype, to_array_type(type2).subtype))
       return false;
 
     // TODO: check size

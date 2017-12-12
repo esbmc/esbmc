@@ -478,9 +478,8 @@ bool cpp_typecheckt::standard_conversion_sequence(
       {
         if(!standard_conversion_integral_conversion(curr_expr, type, new_expr))
         {
-          if(
-            !standard_conversion_floating_integral_conversion(
-              curr_expr, type, new_expr))
+          if(!standard_conversion_floating_integral_conversion(
+               curr_expr, type, new_expr))
             return false;
         }
         rank.rank += 3;
