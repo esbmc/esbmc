@@ -188,9 +188,15 @@ public:
   {
   }
 
-  irep_container(const irep_container &ref) : std::shared_ptr<T>(ref)
-  {
-  }
+  // Copy construct from any std::shared_ptr of this type. That just copies
+  // a reference. Obviously this is fairly unwise because any std::shared_ptr
+  // won't be using the detach facility to manipulate things, however it's
+  // necessary for std::make_shared.
+  explicit irep_container(std::shared_ptr<T> &&p) : std::shared_ptr<T>(p)
+    { }
+
+  irep_container(const irep_container &ref)
+    : std::shared_ptr<T>(ref) {}
 
   template <class Y>
   irep_container(const irep_container<Y> &ref)
