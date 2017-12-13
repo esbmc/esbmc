@@ -424,6 +424,11 @@ struct hooked_header clang_headers[] = {
 
 void clang_c_languaget::dump_clang_headers(const std::string &tmp_dir)
 {
+  static bool dumped = false;
+  if (dumped)
+      return;
+  dumped = true;
+
   for(struct hooked_header *h = &clang_headers[0]; h->basename != nullptr; h++)
   {
     std::ofstream header;
