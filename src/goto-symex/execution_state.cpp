@@ -805,7 +805,7 @@ void execution_statet::get_expr_globals(
   {
     return;
   }
-  else if(is_symbol2t(expr))
+  if(is_symbol2t(expr))
   {
     expr2tc newexpr = expr;
     get_active_state().get_original_name(newexpr);
@@ -826,7 +826,7 @@ void execution_statet::get_expr_globals(
     {
       return;
     }
-    else if((symbol->static_lifetime || symbol->type.is_dynamic_set()))
+    if((symbol->static_lifetime || symbol->type.is_dynamic_set()))
     {
       std::list<unsigned int> threadId_list;
       std::map<expr2tc, std::list<unsigned int>>::iterator it_find;

@@ -220,7 +220,7 @@ void value_sett::get_value_set_rec(
     insert(dest, unknown2tc(original_type), mp_integer(0));
     return;
   }
-  else if(is_index2t(expr))
+  if(is_index2t(expr))
   {
     // This is an index, fetch values from the array being indexed.
     const index2t &idx = to_index2t(expr);
@@ -679,7 +679,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     insert(dest, expr, objectt(true, 0));
     return;
   }
-  else if(is_dereference2t(expr))
+  if(is_dereference2t(expr))
   {
     // The set of variables referred to here are the set of things the operand
     // may point at. So, find its value set, and return that.
@@ -1332,7 +1332,7 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
     unsigned no = to_struct_type(type).get_component_number(component_name);
     return to_constant_struct2t(src).datatype_members[no];
   }
-  else if(is_with2t(src))
+  if(is_with2t(src))
   {
     const with2t &with = to_with2t(src);
     assert(is_constant_string2t(with.update_field));
@@ -1342,9 +1342,9 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
     if(component_name == memb_name.value)
       // yes! just take op2
       return with.update_value;
-    else
-      // no! do this recursively
-      return make_member(with.source_value, component_name);
+
+    // no! do this recursively
+    return make_member(with.source_value, component_name);
   }
   else if(is_typecast2t(src))
   {

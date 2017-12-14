@@ -88,15 +88,13 @@ cpp_idt &cpp_scopest::put_into_scope(
       id_map[symbol.name] = &id;
     return id;
   }
-  else
-  {
-    cpp_idt &id = scope.insert(symbol.base_name);
-    id.identifier = symbol.name;
-    id.id_class = cpp_idt::SYMBOL;
-    if(id_map.find(symbol.name) == id_map.end())
-      id_map[symbol.name] = &id;
-    return id;
-  }
+
+  cpp_idt &id = scope.insert(symbol.base_name);
+  id.identifier = symbol.name;
+  id.id_class = cpp_idt::SYMBOL;
+  if(id_map.find(symbol.name) == id_map.end())
+    id_map[symbol.name] = &id;
+  return id;
 }
 
 void cpp_scopest::print_current(std::ostream &out) const

@@ -292,12 +292,10 @@ exprt cpp_typecheck_resolvet::convert_template_argument(
 
     return e2;
   }
-  else
-  {
-    // Just return what was in the template map.
-    e.location() = location;
-    return e;
-  }
+
+  // Just return what was in the template map.
+  e.location() = location;
+  return e;
 }
 
 exprt cpp_typecheck_resolvet::convert_identifier(
@@ -998,7 +996,7 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
           cpp_typecheck.str << "scope `" << final_base_name << "' not found";
           throw 0;
         }
-        else if(id_set.size() >= 2)
+        if(id_set.size() >= 2)
         {
           cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
           cpp_typecheck.err_location(location);
@@ -1306,7 +1304,7 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_namespace(const cpp_namet &cpp_name)
     cpp_typecheck.str << "namespace `" << base_name << "' not found";
     throw 0;
   }
-  else if(id_set.size() == 1)
+  if(id_set.size() == 1)
   {
     cpp_idt &id = **id_set.begin();
     return (cpp_scopet &)id;
@@ -1453,7 +1451,7 @@ exprt cpp_typecheck_resolvet::resolve(
       result.location() = location;
       return result;
     }
-    else if(base_name == "false")
+    if(base_name == "false")
     {
       exprt result;
       result.make_false();
@@ -1945,10 +1943,8 @@ bool cpp_typecheck_resolvet::guess_template_args(
               has_args = true;
               break;
             }
-            else
-            {
-              parent_size = parent.parents_size();
-            }
+
+            parent_size = parent.parents_size();
           }
         }
       }
@@ -2394,20 +2390,18 @@ bool cpp_typecheck_resolvet::disambiguate_functions(
         new_fargs.add_object(object);
         return new_fargs.match(type, args_distance, cpp_typecheck);
       }
-      else
+
+      if(
+        expr.type().get_bool("#is_operator") &&
+        fargs.operands.size() == arguments.size())
       {
-        if(
-          expr.type().get_bool("#is_operator") &&
-          fargs.operands.size() == arguments.size())
-        {
-          return fargs.match(type, args_distance, cpp_typecheck);
-        }
-
-        cpp_typecheck_fargst new_fargs(fargs);
-        new_fargs.add_object(expr.op0());
-
-        return new_fargs.match(type, args_distance, cpp_typecheck);
+        return fargs.match(type, args_distance, cpp_typecheck);
       }
+
+      cpp_typecheck_fargst new_fargs(fargs);
+      new_fargs.add_object(expr.op0());
+
+      return new_fargs.match(type, args_distance, cpp_typecheck);
     }
   }
   else if(fargs.has_object)
@@ -2475,7 +2469,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
           new_set.insert(&class_id);
           break;
         }
-        else if(symbol.type.id() == "symbol")
+        if(symbol.type.id() == "symbol")
           identifier = symbol.type.identifier();
         else
           break;
@@ -2523,8 +2517,8 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
             new_set.insert(&class_id);
             break;
           }
-          else // give up
-            break;
+          // give up
+          break;
         }
       }
     }

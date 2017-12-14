@@ -713,8 +713,8 @@ inline int BigInt::ucompare(BigInt const &b) const
     return -1;
   if(length > b.length)
     return 1;
-  else
-    return digit_cmp(digit, b.digit, length);
+
+  return digit_cmp(digit, b.digit, length);
 }
 
 // Comparision primitives.

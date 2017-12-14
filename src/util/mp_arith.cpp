@@ -20,16 +20,14 @@ mp_integer operator>>(const mp_integer &a, const mp_integer &b)
 
   if(a >= 0)
     return a / power;
-  else
-  {
-    // arithmetic shift right isn't division for negative numbers!
-    // http://en.wikipedia.org/wiki/Arithmetic_shift
 
-    if((a % power) == 0)
-      return a / power;
-    else
-      return a / power - 1;
-  }
+  // arithmetic shift right isn't division for negative numbers!
+  // http://en.wikipedia.org/wiki/Arithmetic_shift
+
+  if((a % power) == 0)
+    return a / power;
+
+  return a / power - 1;
 }
 
 mp_integer operator<<(const mp_integer &a, const mp_integer &b)

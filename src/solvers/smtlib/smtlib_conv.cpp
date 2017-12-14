@@ -359,7 +359,7 @@ smt_convt::resultt smtlib_convt::dec_solve()
   {
     return smt_convt::P_SATISFIABLE;
   }
-  else if(smtlib_output->token == TOK_KW_UNSAT)
+  if(smtlib_output->token == TOK_KW_UNSAT)
   {
     return smt_convt::P_UNSATISFIABLE;
   }

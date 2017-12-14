@@ -42,7 +42,7 @@ void convert_character_literal(const std::string &src, exprt &dest)
 
   if(value.size() == 0)
     throw "empty character literal";
-  else if(value.size() == 1)
+  if(value.size() == 1)
   {
     type = char_type();
     type.set("#cpp_type", "char");

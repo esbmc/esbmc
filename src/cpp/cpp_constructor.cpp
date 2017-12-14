@@ -306,11 +306,9 @@ codet cpp_typecheckt::cpp_constructor(
 
     if(block.operands().empty())
       return to_code(initializer);
-    else
-    {
-      block.move_to_operands(initializer);
-      return block;
-    }
+
+    block.move_to_operands(initializer);
+    return block;
   }
   else
     assert(false);

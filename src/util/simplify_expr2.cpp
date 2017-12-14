@@ -173,10 +173,8 @@ expr2tc attempt_associative_simplify(
 
     return accuml;
   }
-  else
-  {
-    return expr2tc();
-  }
+
+  return expr2tc();
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -615,7 +613,7 @@ expr2tc with2t::do_simplify(bool second __attribute__((unused))) const
     s->datatype_members[no] = update_value;
     return expr2tc(s);
   }
-  else if(is_constant_union2t(source_value))
+  if(is_constant_union2t(source_value))
   {
     const constant_union2t &c_union = to_constant_union2t(source_value);
     const union_type2t &thetype = to_union_type(c_union.type);
@@ -669,8 +667,8 @@ expr2tc with2t::do_simplify(bool second __attribute__((unused))) const
     // as the initializer.
     if(update_value == array.initializer)
       return source_value;
-    else
-      return expr2tc();
+
+    return expr2tc();
   }
   else
   {
@@ -718,10 +716,8 @@ expr2tc member2t::do_simplify(bool second __attribute__((unused))) const
 
     return s;
   }
-  else
-  {
-    return expr2tc();
-  }
+
+  return expr2tc();
 }
 
 expr2tc pointer_offs_simplify_2(const expr2tc &offs, const type2tc &type)
@@ -730,7 +726,7 @@ expr2tc pointer_offs_simplify_2(const expr2tc &offs, const type2tc &type)
   {
     return constant_int2tc(type, BigInt(0));
   }
-  else if(is_index2t(offs))
+  if(is_index2t(offs))
   {
     const index2t &index = to_index2t(offs);
 
@@ -744,7 +740,7 @@ expr2tc pointer_offs_simplify_2(const expr2tc &offs, const type2tc &type)
       val *= widthbytes;
       return constant_int2tc(type, val);
     }
-    else if(
+    if(
       is_constant_string2t(index.source_value) &&
       is_constant_int2t(index.index))
     {
@@ -773,7 +769,7 @@ expr2tc pointer_offset2t::do_simplify(bool second) const
     const address_of2t &addrof = to_address_of2t(ptr_obj);
     return pointer_offs_simplify_2(addrof.ptr_obj, type);
   }
-  else if(is_typecast2t(ptr_obj))
+  if(is_typecast2t(ptr_obj))
   {
     const typecast2t &cast = to_typecast2t(ptr_obj);
     expr2tc new_ptr_offs = pointer_offset2tc(type, cast.from);
@@ -835,8 +831,8 @@ expr2tc pointer_offset2t::do_simplify(bool second) const
     expr2tc tmp = new_add->simplify();
     if(is_nil_expr(tmp))
       return new_add;
-    else
-      return tmp;
+
+    return tmp;
   }
   else
   {
@@ -857,7 +853,7 @@ expr2tc index2t::do_simplify(bool second __attribute__((unused))) const
 
     return expr2tc();
   }
-  else if(is_constant_array2t(source_value) && is_constant_int2t(index))
+  if(is_constant_array2t(source_value) && is_constant_int2t(index))
   {
     const constant_array2t &arr = to_constant_array2t(source_value);
     const constant_int2t &idx = to_constant_int2t(index);
@@ -1227,10 +1223,8 @@ static expr2tc do_bit_munge_operation(
       // Too large to fit, negative, in an int64_t.
       return expr2tc();
     }
-    else
-    {
-      val1 = -val1;
-    }
+
+    val1 = -val1;
   }
 
   if(int2.value.is_negative())
@@ -1240,10 +1234,8 @@ static expr2tc do_bit_munge_operation(
       // Too large to fit, negative, in an int64_t.
       return expr2tc();
     }
-    else
-    {
-      val2 = -val2;
-    }
+
+    val2 = -val2;
   }
 
   val1 = opfunc(val1, val2);
@@ -1376,7 +1368,7 @@ expr2tc typecast2t::do_simplify(bool second) const
         // bool to int
         return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
       }
-      else if(is_fixedbv_type(type))
+      if(is_fixedbv_type(type))
       {
         fixedbvt fbv;
         fbv.spec = to_fixedbv_type(migrate_type_back(type));
@@ -1416,7 +1408,7 @@ expr2tc typecast2t::do_simplify(bool second) const
 
         return constant_int2tc(type, new_number);
       }
-      else if(is_fixedbv_type(type))
+      if(is_fixedbv_type(type))
       {
         fixedbvt fbv;
         fbv.spec = to_fixedbv_type(migrate_type_back(type));
@@ -1453,7 +1445,7 @@ expr2tc typecast2t::do_simplify(bool second) const
       {
         return constant_int2tc(type, fbv.to_integer());
       }
-      else if(is_fixedbv_type(type))
+      if(is_fixedbv_type(type))
       {
         fbv.round(to_fixedbv_type(migrate_type_back(type)));
         return constant_fixedbv2tc(fbv);
@@ -1479,7 +1471,7 @@ expr2tc typecast2t::do_simplify(bool second) const
       {
         return constant_int2tc(type, fpbv.to_integer());
       }
-      else if(is_floatbv_type(type))
+      if(is_floatbv_type(type))
       {
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
         return constant_floatbv2tc(fpbv);
@@ -1532,8 +1524,8 @@ expr2tc typecast2t::do_simplify(bool second) const
 
       if(to_width == from_width)
         return simp;
-      else
-        return expr2tc();
+
+      return expr2tc();
     }
     catch(array_type2t::dyn_sized_array_excp *e)
     {
@@ -1612,10 +1604,8 @@ expr2tc address_of2t::do_simplify(bool second __attribute__((unused))) const
 
     return add2tc(type, sub_addr_of, new_index);
   }
-  else
-  {
-    return expr2tc();
-  }
+
+  return expr2tc();
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -1974,10 +1964,8 @@ expr2tc if2t::do_simplify(bool second __attribute__((unused))) const
       {
         return true_value;
       }
-      else
-      {
-        return false_value;
-      }
+
+      return false_value;
     }
     else
     {
@@ -1993,10 +1981,8 @@ expr2tc if2t::do_simplify(bool second __attribute__((unused))) const
       {
         return true_value;
       }
-      else
-      {
-        return false_value;
-      }
+
+      return false_value;
     }
   }
   else
@@ -2038,8 +2024,8 @@ static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
     bool val = (to_constant_string2t(a).value == to_constant_string2t(b).value);
     if(val)
       return gen_true_expr();
-    else
-      return gen_false_expr();
+
+    return gen_false_expr();
   }
 
   return expr2tc();
@@ -2110,10 +2096,8 @@ expr2tc extract2t::do_simplify(bool second __attribute__((unused))) const
     totallytmp.nosign = theval;
     return constant_int2tc(type, BigInt(totallytmp.sign));
   }
-  else
-  {
-    return constant_int2tc(type, BigInt(theval));
-  }
+
+  return constant_int2tc(type, BigInt(theval));
 }
 
 template <template <typename> class TFunctor, typename constructor>

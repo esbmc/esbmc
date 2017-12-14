@@ -56,7 +56,7 @@ public:
     {
       if(base_name.get_no() < ref.base_name.get_no())
         return -1;
-      else if(base_name.get_no() > ref.base_name.get_no())
+      if(base_name.get_no() > ref.base_name.get_no())
         return 1;
 
       return 0;
@@ -159,27 +159,27 @@ public:
     {
       if(hash < ref.hash)
         return -1;
-      else if(hash > ref.hash)
+      if(hash > ref.hash)
         return 1;
 
       if(base_name < ref.base_name)
         return -1;
-      else if(ref.base_name < base_name)
+      if(ref.base_name < base_name)
         return 1;
 
       if(lev < ref.lev)
         return -1;
-      else if(lev > ref.lev)
+      if(lev > ref.lev)
         return 1;
 
       if(l1_num < ref.l1_num)
         return -1;
-      else if(l1_num > ref.l1_num)
+      if(l1_num > ref.l1_num)
         return 1;
 
       if(t_num < ref.t_num)
         return -1;
-      else if(t_num > ref.t_num)
+      if(t_num > ref.t_num)
         return 1;
 
       return 0;

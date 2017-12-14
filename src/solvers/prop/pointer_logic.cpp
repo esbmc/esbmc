@@ -25,7 +25,7 @@ unsigned pointer_logict::add_object(const expr2tc &expr)
     const index2t &index = static_cast<const index2t &>(*expr.get());
     return add_object(index.source_value);
   }
-  else if(expr->expr_id == expr2t::member_id)
+  if(expr->expr_id == expr2t::member_id)
   {
     const member2t &memb = static_cast<const member2t &>(*expr.get());
     return add_object(memb.source_value);
@@ -57,7 +57,7 @@ pointer_logict::pointer_expr(const pointert &pointer, const type2tc &type) const
   {
     return symbol2tc(type, irep_idt("NULL"));
   }
-  else if(pointer.object == invalid_object) // INVALID?
+  if(pointer.object == invalid_object) // INVALID?
   {
     return symbol2tc(type, irep_idt("INVALID"));
   }
@@ -97,7 +97,7 @@ expr2tc pointer_logict::object_rec(
 
     return object_rec(rest, pointer_type, newindex);
   }
-  else if(is_structure_type(src))
+  if(is_structure_type(src))
   {
     const struct_union_data &data_ref =
       dynamic_cast<const struct_union_data &>(*src->type);

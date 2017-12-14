@@ -162,56 +162,54 @@ symbolt &cpp_declarator_convertert::convert(
 
     return symbol;
   }
-  else
+
+  // no, it's no way a method
+
+  // we won't allow the constructor/destructor type
+  if(
+    final_type.id() == "code" &&
+    to_code_type(final_type).return_type().id() == "constructor")
   {
-    // no, it's no way a method
-
-    // we won't allow the constructor/destructor type
-    if(
-      final_type.id() == "code" &&
-      to_code_type(final_type).return_type().id() == "constructor")
-    {
-      cpp_typecheck.err_location(declarator.name().location());
-      cpp_typecheck.str << "function must have return type";
-      throw 0;
-    }
-
-    // already there?
-    symbolt *s = cpp_typecheck.context.find_symbol(final_identifier);
-
-    if(s == nullptr)
-      return convert_new_symbol(storage_spec, member_spec, declarator);
-
-    symbolt &symbol = *s;
-
-    if(!storage_spec.is_extern())
-      symbol.is_extern = false;
-
-    if(declarator.get_bool("#template_case"))
-      return symbol;
-
-    combine_types(declarator.name().location(), final_type, symbol);
-    enforce_rules(symbol);
-
-    // initializer?
-    handle_initializer(symbol, declarator);
-
-    if(symbol.type.id() == "cpp-template-type")
-    {
-      cpp_scopet::id_sett id_set;
-
-      scope->lookup_id(symbol.name, cpp_idt::TEMPLATE_ARGUMENT, id_set);
-
-      if(id_set.empty())
-      {
-        cpp_idt &identifier =
-          cpp_typecheck.cpp_scopes.put_into_scope(symbol, *scope);
-        identifier.id_class = cpp_idt::TEMPLATE_ARGUMENT;
-      }
-    }
-
-    return symbol;
+    cpp_typecheck.err_location(declarator.name().location());
+    cpp_typecheck.str << "function must have return type";
+    throw 0;
   }
+
+  // already there?
+  symbolt *s = cpp_typecheck.context.find_symbol(final_identifier);
+
+  if(s == nullptr)
+    return convert_new_symbol(storage_spec, member_spec, declarator);
+
+  symbolt &symbol = *s;
+
+  if(!storage_spec.is_extern())
+    symbol.is_extern = false;
+
+  if(declarator.get_bool("#template_case"))
+    return symbol;
+
+  combine_types(declarator.name().location(), final_type, symbol);
+  enforce_rules(symbol);
+
+  // initializer?
+  handle_initializer(symbol, declarator);
+
+  if(symbol.type.id() == "cpp-template-type")
+  {
+    cpp_scopet::id_sett id_set;
+
+    scope->lookup_id(symbol.name, cpp_idt::TEMPLATE_ARGUMENT, id_set);
+
+    if(id_set.empty())
+    {
+      cpp_idt &identifier =
+        cpp_typecheck.cpp_scopes.put_into_scope(symbol, *scope);
+      identifier.id_class = cpp_idt::TEMPLATE_ARGUMENT;
+    }
+  }
+
+  return symbol;
 }
 
 void cpp_declarator_convertert::combine_types(

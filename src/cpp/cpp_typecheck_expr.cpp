@@ -442,7 +442,7 @@ bool cpp_typecheckt::operator_is_overloaded(exprt &expr)
 
   if(!overloadable(expr))
     return false;
-  else if(expr.id() == "dereference" && expr.implicit())
+  if(expr.id() == "dereference" && expr.implicit())
     return false;
 
   assert(expr.operands().size() >= 1);
@@ -1026,26 +1026,24 @@ void cpp_typecheckt::typecheck_expr_member(
             << "' is a constructor";
         throw 0;
       }
-      else
-      {
-        // it must be a static component
-        const struct_typet::componentt pcomp =
-          type.get_component(to_symbol_expr(symbol_expr).get_identifier());
 
-        if(pcomp.is_nil())
-        {
-          err_location(expr);
-          str << "error: `" << symbol_expr.identifier()
-              << "' is not static member "
-              << "of class `" << struct_symbol.base_name << "'";
-          throw 0;
-        }
+      // it must be a static component
+      const struct_typet::componentt pcomp =
+        type.get_component(to_symbol_expr(symbol_expr).get_identifier());
+
+      if(pcomp.is_nil())
+      {
+        err_location(expr);
+        str << "error: `" << symbol_expr.identifier()
+            << "' is not static member "
+            << "of class `" << struct_symbol.base_name << "'";
+        throw 0;
       }
 
       expr = symbol_expr;
       return;
     }
-    else if(symbol_expr.id() == "constant")
+    if(symbol_expr.id() == "constant")
     {
       expr = symbol_expr;
       return;
@@ -1551,7 +1549,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
     add_implicit_dereference(expr);
     return;
   }
-  else if(expr.function().id() == "cpp_dummy_destructor")
+  if(expr.function().id() == "cpp_dummy_destructor")
   {
     // these don't do anything, e.g., (char*)->~char()
     expr.statement("skip");

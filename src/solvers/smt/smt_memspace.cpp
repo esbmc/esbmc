@@ -117,10 +117,8 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
         smt_astt the_ptr = convert_ast(side1);
         return the_ptr->update(this, convert_ast(the_ptr_offs), 1);
       }
-      else
-      {
-        return convert_ast(the_ptr_offs);
-      }
+
+      return convert_ast(the_ptr_offs);
     }
     else
     {
@@ -261,8 +259,6 @@ smt_astt smt_convt::convert_identifier_pointer(
     {
       // For null, other pieces of code will have already initialized its
       // value, so we can just refer to a symbol.
-      obj_num = pointer_logic.back().get_null_object();
-
       type2tc t(new pointer_type2t(get_empty_type()));
       a = tuple_api->mk_tuple_symbol(symbol, convert_sort(t));
 

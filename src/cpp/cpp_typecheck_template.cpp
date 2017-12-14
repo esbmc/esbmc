@@ -317,7 +317,7 @@ void cpp_typecheckt::typecheck_class_template_member(
         << "' not found";
     throw 0;
   }
-  else if(id_set.size() > 1)
+  if(id_set.size() > 1)
   {
     err_location(cpp_name);
     str << "class template `" << cpp_name.get_sub().front().identifier()
@@ -502,7 +502,7 @@ void cpp_typecheckt::convert_class_template_specialization(
     str << "class template `" << base_name << "' not found";
     throw 0;
   }
-  else if(id_set.size() > 1)
+  if(id_set.size() > 1)
   {
     err_location(type);
     str << "class template `" << base_name << "' is ambiguous";
@@ -596,7 +596,7 @@ void cpp_typecheckt::convert_template_function_or_member_specialization(
       str << "template function `" << base_name << "' not found";
       throw 0;
     }
-    else if(id_set.size() > 1)
+    if(id_set.size() > 1)
     {
       err_location(cpp_name.location());
       str << "template function `" << base_name << "' is ambiguous";
@@ -806,7 +806,7 @@ cpp_template_args_tct cpp_typecheckt::typecheck_template_args(
         str << "expected expression, but got type";
         throw 0;
       }
-      else if(arg.id() == "ambiguous")
+      if(arg.id() == "ambiguous")
       {
         exprt e;
         e.swap(arg.type());
@@ -886,36 +886,35 @@ void cpp_typecheckt::convert_template_declaration(cpp_declarationt &declaration)
     typecheck_class_template(declaration);
     return;
   }
-  else // maybe function template, maybe class template member
+  // maybe function template, maybe class template member
+
+  // there should be declarators in either case
+  if(declaration.declarators().empty())
   {
-    // there should be declarators in either case
-    if(declaration.declarators().empty())
-    {
-      err_location(declaration);
-      throw "function template or class template member expected to have declarator";
-    }
+    err_location(declaration);
+    throw "function template or class template member expected to have declarator";
+  }
 
-    // Is it function template specialization?
-    // Only full specialization is allowed!
-    if(declaration.template_type().parameters().empty())
-    {
-      convert_template_function_or_member_specialization(declaration);
-      return;
-    }
-
-    // Explicit qualification is forbidden for function templates,
-    // which we can use to distinguish them.
-
-    assert(declaration.declarators().size() >= 1);
-
-    cpp_declaratort &declarator = declaration.declarators()[0];
-    const cpp_namet &cpp_name = to_cpp_name(declarator.add("name"));
-
-    if(cpp_name.is_qualified() || cpp_name.has_template_args())
-      return typecheck_class_template_member(declaration);
-
-    // must be function template
-    typecheck_function_template(declaration);
+  // Is it function template specialization?
+  // Only full specialization is allowed!
+  if(declaration.template_type().parameters().empty())
+  {
+    convert_template_function_or_member_specialization(declaration);
     return;
   }
+
+  // Explicit qualification is forbidden for function templates,
+  // which we can use to distinguish them.
+
+  assert(declaration.declarators().size() >= 1);
+
+  cpp_declaratort &declarator = declaration.declarators()[0];
+  const cpp_namet &cpp_name = to_cpp_name(declarator.add("name"));
+
+  if(cpp_name.is_qualified() || cpp_name.has_template_args())
+    return typecheck_class_template_member(declaration);
+
+  // must be function template
+  typecheck_function_template(declaration);
+  return;
 }

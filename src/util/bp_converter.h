@@ -58,8 +58,8 @@ private:
     {
       if(AllowNone)
         return p;
-      else
-        return NULL;
+
+      return NULL;
     }
 
     objects::instance<> *inst = reinterpret_cast<objects::instance<> *>(p);

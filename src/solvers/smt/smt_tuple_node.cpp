@@ -211,10 +211,8 @@ smt_astt smt_tuple_node_flattener::tuple_fresh(smt_sortt s, std::string name)
     smt_sortt subtype = ctx->convert_sort(to_array_type(sort->thetype).subtype);
     return array_conv.mk_array_symbol(name, s, subtype);
   }
-  else
-  {
-    return new tuple_node_smt_ast(*this, ctx, s, name);
-  }
+
+  return new tuple_node_smt_ast(*this, ctx, s, name);
 }
 
 smt_astt
@@ -224,7 +222,7 @@ smt_tuple_node_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
   // table, there are some special names that need to be intercepted.
   if(name == "0" || name == "NULL")
     return ctx->null_ptr_ast;
-  else if(name == "INVALID")
+  if(name == "INVALID")
     return ctx->invalid_ptr_ast;
 
   // We put a '.' on the end of all symbols to deliminate the rest of the
@@ -279,7 +277,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
     // Guarentee nothing, this is modelling only.
     return newsym;
   }
-  else if(!is_constant_int2t(arr_type.array_size))
+  if(!is_constant_int2t(arr_type.array_size))
   {
     std::cerr << "Non-constant sized array of type constant_array_of2t"
               << std::endl;
@@ -408,10 +406,8 @@ smt_sortt smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
     // NB: the range value is a dummy.
     return new tuple_smt_sort(type, 1, dom_width);
   }
-  else
-  {
-    return new tuple_smt_sort(type);
-  }
+
+  return new tuple_smt_sort(type);
 }
 
 void smt_tuple_node_flattener::add_tuple_constraints_for_solving()

@@ -1449,10 +1449,10 @@ inline bool operator==(const type2tc &a, const type2tc &b)
   // Handle nil ireps
   if(is_nil_type(a) && is_nil_type(b))
     return true;
-  else if(is_nil_type(a) || is_nil_type(b))
+  if(is_nil_type(a) || is_nil_type(b))
     return false;
-  else
-    return (*a.get() == *b.get());
+
+  return (*a.get() == *b.get());
 }
 
 inline bool operator!=(const type2tc &a, const type2tc &b)
@@ -1464,10 +1464,10 @@ inline bool operator<(const type2tc &a, const type2tc &b)
 {
   if(is_nil_type(a))        // nil is lower than non-nil
     return !is_nil_type(b); // true if b is non-nil, so a is lower
-  else if(is_nil_type(b))
+  if(is_nil_type(b))
     return false; // If b is nil, nothing can be lower
-  else
-    return (*a.get() < *b.get());
+
+  return (*a.get() < *b.get());
 }
 
 inline bool operator>(const type2tc &a, const type2tc &b)
@@ -1482,10 +1482,10 @@ inline bool operator==(const expr2tc &a, const expr2tc &b)
 {
   if(is_nil_expr(a) && is_nil_expr(b))
     return true;
-  else if(is_nil_expr(a) || is_nil_expr(b))
+  if(is_nil_expr(a) || is_nil_expr(b))
     return false;
-  else
-    return (*a.get() == *b.get());
+
+  return (*a.get() == *b.get());
 }
 
 inline bool operator!=(const expr2tc &a, const expr2tc &b)
@@ -1497,10 +1497,10 @@ inline bool operator<(const expr2tc &a, const expr2tc &b)
 {
   if(is_nil_expr(a))        // nil is lower than non-nil
     return !is_nil_expr(b); // true if b is non-nil, so a is lower
-  else if(is_nil_expr(b))
+  if(is_nil_expr(b))
     return false; // If b is nil, nothing can be lower
-  else
-    return (*a.get() < *b.get());
+
+  return (*a.get() < *b.get());
 }
 
 inline bool operator>(const expr2tc &a, const expr2tc &b)

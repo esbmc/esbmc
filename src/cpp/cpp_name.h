@@ -22,9 +22,8 @@ public:
   {
     if(get_sub().empty())
       return static_cast<const locationt &>(get_nil_irep());
-    else
-      return static_cast<const locationt &>(
-        get_sub().front().find("#location"));
+
+    return static_cast<const locationt &>(get_sub().front().find("#location"));
   }
 
   void convert(std::string &identifier, std::string &base_name) const;

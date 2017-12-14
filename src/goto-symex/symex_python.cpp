@@ -137,8 +137,8 @@ public:
     using namespace boost::python;
     if(override f = this->get_override("clone"))
       return f();
-    else
-      return Base::clone();
+
+    return Base::clone();
   }
 
   boost::shared_ptr<execution_statet> default_clone() const
@@ -174,8 +174,8 @@ static symex_targett::sourcet get_frame_source(const stack_framet &ref)
 {
   if(ref.src)
     return *ref.src;
-  else
-    throw "";
+
+  throw "";
 }
 
 class dummy_symex_class
@@ -289,10 +289,10 @@ public:
     using namespace boost::python;
     if(override f = this->get_override("clone"))
       return f();
-    else
-      // The returned object is _not_ an ste_wrapper. Which is the right
-      // behaviour: otherwise we'd have two c++ objs reffing the python obj
-      return Base::clone();
+
+    // The returned object is _not_ an ste_wrapper. Which is the right
+    // behaviour: otherwise we'd have two c++ objs reffing the python obj
+    return Base::clone();
   }
 
   boost::shared_ptr<symex_targett> default_clone(void) const

@@ -91,16 +91,14 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     // symex_free that occurred above should trigger a dereference failure.
     return;
   }
-  else
+
+  result = expr2tc();
+  for(auto const &it : result_list)
   {
-    result = expr2tc();
-    for(auto const &it : result_list)
-    {
-      if(is_nil_expr(result))
-        result = it.first;
-      else
-        result = if2tc(result->type, it.second, it.first, result);
-    }
+    if(is_nil_expr(result))
+      result = it.first;
+    else
+      result = if2tc(result->type, it.second, it.first, result);
   }
 
   // Install pointer modelling data into the relevant arrays.

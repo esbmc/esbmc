@@ -330,8 +330,8 @@ smt_astt tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
     sym_name = sym_name + ".";
     if(is_tuple_array_ast_type(restype))
       return new array_sym_smt_ast(ctx, s, sym_name);
-    else
-      return new tuple_sym_smt_ast(ctx, s, sym_name);
+
+    return new tuple_sym_smt_ast(ctx, s, sym_name);
   }
   else
   {
@@ -367,11 +367,9 @@ smt_astt array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
     sym_name = sym_name + ".";
     return new array_sym_smt_ast(ctx, s, sym_name);
   }
-  else
-  {
-    // This is a normal variable, so create a normal symbol of its name.
-    return ctx->mk_smt_symbol(sym_name, s);
-  }
+
+  // This is a normal variable, so create a normal symbol of its name.
+  return ctx->mk_smt_symbol(sym_name, s);
 }
 
 void array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
@@ -424,8 +422,8 @@ smt_astt smt_tuple_sym_flattener::tuple_fresh(smt_sortt s, std::string name)
 
   if(s->id == SMT_SORT_ARRAY)
     return new array_sym_smt_ast(ctx, s, n);
-  else
-    return new tuple_sym_smt_ast(ctx, s, n);
+
+  return new tuple_sym_smt_ast(ctx, s, n);
 }
 
 smt_astt
@@ -473,7 +471,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
     // Guarentee nothing, this is modelling only.
     return newsym;
   }
-  else if(!is_constant_int2t(arr_type.array_size))
+  if(!is_constant_int2t(arr_type.array_size))
   {
     std::cerr << "Non-constant sized array of type constant_array_of2t"
               << std::endl;
@@ -495,16 +493,14 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
 
     return newsym;
   }
-  else
-  {
-    // Repeatedly store operands into this.
-    for(unsigned int i = 0; i < sz; i++)
-    {
-      newsym = newsym->update(ctx, inputargs[i], i);
-    }
 
-    return newsym;
+  // Repeatedly store operands into this.
+  for(unsigned int i = 0; i < sz; i++)
+  {
+    newsym = newsym->update(ctx, inputargs[i], i);
   }
+
+  return newsym;
 }
 
 expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
@@ -596,10 +592,8 @@ smt_sortt smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
     unsigned int dom_width = ctx->calculate_array_domain_width(arrtype);
     return new tuple_smt_sort(type, 1, dom_width);
   }
-  else
-  {
-    return new tuple_smt_sort(type);
-  }
+
+  return new tuple_smt_sort(type);
 }
 
 void smt_tuple_sym_flattener::add_tuple_constraints_for_solving()

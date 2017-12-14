@@ -337,7 +337,7 @@ get_function_list(const expr2tc &expr)
     l1.splice(l1.begin(), l2);
     return l1;
   }
-  else if(is_symbol2t(expr))
+  if(is_symbol2t(expr))
   {
     guardt guard;
     guard.make_true();
@@ -436,7 +436,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
       // Where it probably shouldn't, as that var is defined. Module name
       // difference?
     }
-    else if(!fit->second.body_available)
+    if(!fit->second.body_available)
     {
       if(body_warnings.insert(it.second->thename).second)
       {

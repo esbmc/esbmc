@@ -16,7 +16,7 @@ const char *ui_message_handlert::level_string(unsigned level)
 {
   if(level == 1)
     return "ERROR";
-  else if(level == 2)
+  if(level == 2)
     return "WARNING";
   else
     return "STATUS-MESSAGE";

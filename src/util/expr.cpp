@@ -89,7 +89,7 @@ void exprt::make_not()
     make_false();
     return;
   }
-  else if(is_false())
+  if(is_false())
   {
     make_true();
     return;
@@ -243,7 +243,7 @@ bool exprt::sum(const exprt &expr)
         atoi(type().width().c_str())));
     return false;
   }
-  else if(type_id == "fixedbv")
+  if(type_id == "fixedbv")
   {
     fixedbvt f(to_constant_expr(*this));
     f += fixedbvt(to_constant_expr(expr));
@@ -280,7 +280,7 @@ bool exprt::mul(const exprt &expr)
         atoi(type().width().c_str())));
     return false;
   }
-  else if(type_id == "fixedbv")
+  if(type_id == "fixedbv")
   {
     fixedbvt f(to_constant_expr(*this));
     f *= fixedbvt(to_constant_expr(expr));
@@ -318,7 +318,7 @@ bool exprt::subtract(const exprt &expr)
         atoi(type().width().c_str())));
     return false;
   }
-  else if(type_id == "fixedbv")
+  if(type_id == "fixedbv")
   {
     fixedbvt f(to_constant_expr(*this));
     f -= fixedbvt(to_constant_expr(expr));

@@ -114,12 +114,12 @@ public:
   {
     if(function != ref.function)
       return false;
-    else if(src == nullptr && ref.src == src)
+    if(src == nullptr && ref.src == src)
       return true;
-    else if(src == nullptr || ref.src == nullptr)
+    if(src == nullptr || ref.src == nullptr)
       return false;
-    else
-      return src->pc->location_number == ref.src->pc->location_number;
+
+    return src->pc->location_number == ref.src->pc->location_number;
   }
 
   irep_idt function;

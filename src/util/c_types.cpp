@@ -20,31 +20,29 @@ typet build_float_type(unsigned width)
     result.set_integer_bits(width / 2);
     return result;
   }
-  else
+
+  floatbv_typet result;
+  result.set_width(width);
+
+  switch(width)
   {
-    floatbv_typet result;
-    result.set_width(width);
-
-    switch(width)
-    {
-    case 32:
-      result.set_f(23);
-      break;
-    case 64:
-      result.set_f(52);
-      break;
-    case 96:
-      result.set_f(80);
-      break;
-    case 128:
-      result.set_f(112);
-      break;
-    default:
-      assert(false);
-    }
-
-    return result;
+  case 32:
+    result.set_f(23);
+    break;
+  case 64:
+    result.set_f(52);
+    break;
+  case 96:
+    result.set_f(80);
+    break;
+  case 128:
+    result.set_f(112);
+    break;
+  default:
+    assert(false);
   }
+
+  return result;
 }
 
 type2tc build_float_type2(unsigned width)
@@ -54,27 +52,25 @@ type2tc build_float_type2(unsigned width)
     fixedbv_type2tc result(width, width / 2);
     return result;
   }
-  else
-  {
-    unsigned fraction = 0;
-    switch(width)
-    {
-    case 32:
-      fraction = 23;
-      break;
-    case 64:
-      fraction = 52;
-      break;
-    case 128:
-      fraction = 112;
-      break;
-    default:
-      assert(false);
-    }
 
-    floatbv_type2tc result(fraction, width - fraction - 1);
-    return result;
+  unsigned fraction = 0;
+  switch(width)
+  {
+  case 32:
+    fraction = 23;
+    break;
+  case 64:
+    fraction = 52;
+    break;
+  case 128:
+    fraction = 112;
+    break;
+  default:
+    assert(false);
   }
+
+  floatbv_type2tc result(fraction, width - fraction - 1);
+  return result;
 }
 
 typet index_type()
@@ -210,8 +206,8 @@ type2tc char_type2()
 {
   if(config.ansi_c.char_is_unsigned)
     return type_pool.get_uint(config.ansi_c.char_width);
-  else
-    return type_pool.get_int(config.ansi_c.char_width);
+
+  return type_pool.get_int(config.ansi_c.char_width);
 }
 
 typet float_type()

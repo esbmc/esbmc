@@ -91,7 +91,7 @@ void goto_convertt::remove_sideeffects(
     remove_sideeffects(expr, dest, result_is_used);
     return;
   }
-  else if(expr.id() == "if")
+  if(expr.id() == "if")
   {
     // first clean condition
     remove_sideeffects(expr.op0(), dest);
@@ -224,7 +224,7 @@ void goto_convertt::remove_sideeffects(
       remove_gcc_conditional_expression(expr, dest);
       return;
     }
-    else if(statement == "statement_expression")
+    if(statement == "statement_expression")
     {
       remove_statement_expression(expr, dest, result_is_used);
       return;

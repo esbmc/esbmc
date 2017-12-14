@@ -97,6 +97,31 @@ void mathsat_convt::assert_ast(const smt_ast *a)
   msat_assert_formula(env, mast->t);
 }
 
+static void print_model(msat_env env)
+{
+  /* we use a model iterator to retrieve the model values for all the
+     * variables, and the necessary function instantiations */
+  msat_model_iterator iter = msat_create_model_iterator(env);
+  assert(!MSAT_ERROR_MODEL_ITERATOR(iter));
+
+  printf("Model:\n");
+  while(msat_model_iterator_has_next(iter))
+  {
+    msat_term t, v;
+    char *s;
+    msat_model_iterator_next(iter, &t, &v);
+    s = msat_term_repr(t);
+    assert(s);
+    printf(" %s = ", s);
+    msat_ free(s);
+    s = msat_term_repr(v);
+    assert(s);
+    printf("%s\n", s);
+    msat_free(s);
+  }
+  msat_destroy_model_iterator(iter);
+}
+
 smt_convt::resultt mathsat_convt::dec_solve()
 {
   pre_solve();
@@ -104,9 +129,12 @@ smt_convt::resultt mathsat_convt::dec_solve()
   msat_result r = msat_solve(env);
   if(r == MSAT_SAT)
   {
+    if(config.options.get_bool_option("show-smt-model"))
+      print_model(env);
+
     return P_SATISFIABLE;
   }
-  else if(r == MSAT_UNSAT)
+  if(r == MSAT_UNSAT)
   {
     return P_UNSATISFIABLE;
   }
@@ -555,11 +583,8 @@ smt_sortt mathsat_convt::mk_sort(const smt_sort_kind k, ...)
       range);
   }
   case SMT_SORT_BOOL:
-  {
-    auto b = new mathsat_smt_sort(k, msat_get_bool_type(env));
-    std::cout << b << std::endl;
-    return b;
-  }
+    return new mathsat_smt_sort(k, msat_get_bool_type(env));
+
   case SMT_SORT_STRUCT:
   case SMT_SORT_UNION:
     std::cerr << "MathSAT does not support tuples" << std::endl;

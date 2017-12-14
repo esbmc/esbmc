@@ -53,7 +53,7 @@ static inline expr2tc get_base_dereference(const expr2tc &e)
   {
     return get_base_dereference(to_member2t(e).source_value);
   }
-  else if(is_index2t(e) && is_pointer_type(to_index2t(e).source_value))
+  if(is_index2t(e) && is_pointer_type(to_index2t(e).source_value))
   {
     return e;
   }
@@ -99,7 +99,7 @@ const expr2tc &dereferencet::get_symbol(const expr2tc &expr)
 {
   if(is_member2t(expr))
     return get_symbol(to_member2t(expr).source_value);
-  else if(is_index2t(expr))
+  if(is_index2t(expr))
     return get_symbol(to_index2t(expr).source_value);
 
   return expr;
@@ -199,38 +199,36 @@ void dereferencet::dereference_guard_expr(
     guard.swap(old_guards);
     return;
   }
-  else
+
+  assert(is_if2t(expr));
+  // Only one side of this if gets evaluated according to the condition, which
+  // means that pointer dereference assertion failures should have the
+  // relevant guard applied. This makes sure they don't fire even when their
+  // expression isn't evaluated.
+  if2t &ifref = to_if2t(expr);
+  dereference_expr(ifref.cond, guard, dereferencet::READ);
+
+  bool o1 = has_dereference(ifref.true_value);
+  bool o2 = has_dereference(ifref.false_value);
+
+  if(o1)
   {
-    assert(is_if2t(expr));
-    // Only one side of this if gets evaluated according to the condition, which
-    // means that pointer dereference assertion failures should have the
-    // relevant guard applied. This makes sure they don't fire even when their
-    // expression isn't evaluated.
-    if2t &ifref = to_if2t(expr);
-    dereference_expr(ifref.cond, guard, dereferencet::READ);
-
-    bool o1 = has_dereference(ifref.true_value);
-    bool o2 = has_dereference(ifref.false_value);
-
-    if(o1)
-    {
-      guardt old_guards(guard);
-      guard.add(ifref.cond);
-      dereference_expr(ifref.true_value, guard, mode);
-      guard.swap(old_guards);
-    }
-
-    if(o2)
-    {
-      guardt old_guards(guard);
-      not2tc tmp(ifref.cond);
-      guard.add(tmp);
-      dereference_expr(ifref.false_value, guard, mode);
-      guard.swap(old_guards);
-    }
-
-    return;
+    guardt old_guards(guard);
+    guard.add(ifref.cond);
+    dereference_expr(ifref.true_value, guard, mode);
+    guard.swap(old_guards);
   }
+
+  if(o2)
+  {
+    guardt old_guards(guard);
+    not2tc tmp(ifref.cond);
+    guard.add(tmp);
+    dereference_expr(ifref.false_value, guard, mode);
+    guard.swap(old_guards);
+  }
+
+  return;
 }
 
 void dereferencet::dereference_addrof_expr(
@@ -350,7 +348,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
       dereference(deref.value, to_type, guard, mode, offset_to_scalar);
     return result;
   }
-  else if(is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
+  if(is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
   {
     index2t &index = to_index2t(expr);
 
@@ -640,7 +638,7 @@ expr2tc dereferencet::build_reference_to(
     // solver will only get confused.
     return value;
   }
-  else if(is_null_object2t(root_object) && (mode == FREE || mode == INTERNAL))
+  if(is_null_object2t(root_object) && (mode == FREE || mode == INTERNAL))
   {
     // Freeing NULL is completely legit according to C
     return value;
@@ -1128,12 +1126,11 @@ void dereferencet::construct_from_const_struct_offset(
         value = expr2tc();
         return;
       }
-      else
-      {
-        // This is a valid access to this field. Extract it, recurse.
-        value = member2tc(it, value, struct_type.member_names[i]);
-        build_reference_rec(value, gen_ulong(0), type, guard, mode);
-      }
+
+      // This is a valid access to this field. Extract it, recurse.
+      value = member2tc(it, value, struct_type.member_names[i]);
+      build_reference_rec(value, gen_ulong(0), type, guard, mode);
+
       return;
     }
     else if(
@@ -1457,12 +1454,10 @@ void dereferencet::construct_struct_ref_from_const_offset(
       "Memory model", "Object accessed with illegal offset", guard);
     return;
   }
-  else
-  {
-    std::cerr << "Unexpectedly " << get_type_id(value->type) << " type'd";
-    std::cerr << " argument to construct_struct_ref" << std::endl;
-    abort();
-  }
+
+  std::cerr << "Unexpectedly " << get_type_id(value->type) << " type'd";
+  std::cerr << " argument to construct_struct_ref" << std::endl;
+  abort();
 }
 
 void dereferencet::construct_struct_ref_from_dyn_offset(
@@ -1560,7 +1555,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       index, new_offset, type, range_guard, mode, output);
     return;
   }
-  else if(is_struct_type(value->type))
+  if(is_struct_type(value->type))
   {
     // OK. If this type is compatible and matches, we're good. There can't
     // be any subtypes in this struct that match because then it'd be defined

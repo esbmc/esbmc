@@ -1295,10 +1295,8 @@ array_ast::eq(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
   {
     return array_ctx->encode_array_equality(this, other);
   }
-  else
-  {
-    return array_ctx->mk_bounded_array_equality(this, other);
-  }
+
+  return array_ctx->mk_bounded_array_equality(this, other);
 }
 
 void array_ast::assign(smt_convt *ctx __attribute__((unused)), smt_astt sym)

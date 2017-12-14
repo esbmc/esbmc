@@ -77,10 +77,8 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
       smt_sortt s = mk_sort(SMT_SORT_UBV, 8);
       return mk_smt_symbol("out_of_bounds_byte_extract", s);
     }
-    else
-    {
-      return mk_extract(source_ast, upper, lower, convert_sort(expr->type));
-    }
+
+    return mk_extract(source_ast, upper, lower, convert_sort(expr->type));
   }
 }
 

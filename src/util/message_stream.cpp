@@ -32,7 +32,7 @@ void message_streamt::error_parse_line(unsigned level, const std::string &line)
         tptr += 6;
         continue;
       }
-      else if(strncmp(tptr, " column ", 8) == 0 && state != 4)
+      if(strncmp(tptr, " column ", 8) == 0 && state != 4)
       {
         state = 2;
         tptr += 8;

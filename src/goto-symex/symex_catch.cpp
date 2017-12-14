@@ -356,8 +356,8 @@ int goto_symext::handle_throw_decl(
         claim(gen_false_expr(), msg);
         return 0;
       }
-      else
-        return 1;
+
+      return 1;
     }
   }
   return 2;
@@ -385,12 +385,10 @@ bool goto_symext::handle_rethrow(
 
       return true;
     }
-    else
-    {
-      const std::string &msg = "Trying to re-throw without last exception.";
-      claim(gen_false_expr(), msg);
-      return true;
-    }
+
+    const std::string &msg = "Trying to re-throw without last exception.";
+    claim(gen_false_expr(), msg);
+    return true;
   }
   return false;
 }

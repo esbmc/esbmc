@@ -23,7 +23,7 @@ static inline void round_up_to_word(mp_integer &mp)
   {
     return;
   }
-  else if(mp < word_bytes)
+  if(mp < word_bytes)
   {
     mp = mp_integer(word_bytes);
     // Or if it's an array of chars etc. that doesn't end on a boundry,
@@ -43,7 +43,7 @@ static inline void round_up_to_int64(mp_integer &mp)
   {
     return;
   }
-  else if(mp < word_bytes)
+  if(mp < word_bytes)
   {
     mp = mp_integer(word_bytes);
     // Or if it's an array of chars etc. that doesn't end on a boundry,
@@ -251,7 +251,7 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
 {
   if(is_symbol2t(expr))
     return gen_ulong(0);
-  else if(is_index2t(expr))
+  if(is_index2t(expr))
   {
     const index2t &index = to_index2t(expr);
     mp_integer sub_size;
@@ -356,7 +356,7 @@ const expr2tc &get_base_object(const expr2tc &expr)
   {
     return get_base_object(to_index2t(expr).source_value);
   }
-  else if(is_member2t(expr))
+  if(is_member2t(expr))
   {
     return get_base_object(to_member2t(expr).source_value);
   }

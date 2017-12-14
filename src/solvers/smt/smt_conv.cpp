@@ -1460,8 +1460,8 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     unsigned int width = expr->type->get_width();
     if(int_encoding)
       return mk_smt_int(theint.value, sign);
-    else
-      return mk_smt_bvint(theint.value, sign, width);
+
+    return mk_smt_bvint(theint.value, sign, width);
   }
   case expr2t::constant_fixedbv_id:
   {
@@ -1472,28 +1472,26 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
       std::string result = fixed_point(val, thereal.value.spec.width);
       return mk_smt_real(result);
     }
-    else
-    {
-      assert(
-        thereal.type->get_width() <= 64 &&
-        "Converting fixedbv constant to"
-        " SMT, too large to fit into a uint64_t");
 
-      uint64_t magnitude, fraction, fin;
-      unsigned int bitwidth = thereal.type->get_width();
-      std::string m, f, c;
-      std::string theval = thereal.value.to_expr().value().as_string();
+    assert(
+      thereal.type->get_width() <= 64 &&
+      "Converting fixedbv constant to"
+      " SMT, too large to fit into a uint64_t");
 
-      m = extract_magnitude(theval, bitwidth);
-      f = extract_fraction(theval, bitwidth);
-      magnitude = strtoll(m.c_str(), nullptr, 10);
-      fraction = strtoll(f.c_str(), nullptr, 10);
+    uint64_t magnitude, fraction, fin;
+    unsigned int bitwidth = thereal.type->get_width();
+    std::string m, f, c;
+    std::string theval = thereal.value.to_expr().value().as_string();
 
-      magnitude <<= (bitwidth / 2);
-      fin = magnitude | fraction;
+    m = extract_magnitude(theval, bitwidth);
+    f = extract_fraction(theval, bitwidth);
+    magnitude = strtoll(m.c_str(), nullptr, 10);
+    fraction = strtoll(f.c_str(), nullptr, 10);
 
-      return mk_smt_bvint(mp_integer(fin), false, bitwidth);
-    }
+    magnitude <<= (bitwidth / 2);
+    fin = magnitude | fraction;
+
+    return mk_smt_bvint(mp_integer(fin), false, bitwidth);
   }
   case expr2t::constant_floatbv_id:
   {
@@ -1504,19 +1502,17 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
       std::string result = fixed_point(val, thereal.value.spec.width());
       return mk_smt_real(result);
     }
-    else
-    {
-      unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
-      unsigned int exponent_width = to_floatbv_type(thereal.type).exponent;
-      if(thereal.value.is_NaN())
-        return fp_api->mk_smt_fpbv_nan(exponent_width, fraction_width);
 
-      bool sign = thereal.value.get_sign();
-      if(thereal.value.is_infinity())
-        return fp_api->mk_smt_fpbv_inf(sign, exponent_width, fraction_width);
+    unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
+    unsigned int exponent_width = to_floatbv_type(thereal.type).exponent;
+    if(thereal.value.is_NaN())
+      return fp_api->mk_smt_fpbv_nan(exponent_width, fraction_width);
 
-      return fp_api->mk_smt_fpbv(thereal.value);
-    }
+    bool sign = thereal.value.get_sign();
+    if(thereal.value.is_infinity())
+      return fp_api->mk_smt_fpbv_inf(sign, exponent_width, fraction_width);
+
+    return fp_api->mk_smt_fpbv(thereal.value);
   }
   case expr2t::constant_bool_id:
   {
@@ -1584,7 +1580,7 @@ smt_astt smt_convt::mk_fresh(
   {
     return tuple_api->mk_tuple_symbol(newname, s);
   }
-  else if(s->id == SMT_SORT_ARRAY)
+  if(s->id == SMT_SORT_ARRAY)
   {
     assert(
       array_subtype != nullptr &&
@@ -1950,10 +1946,8 @@ unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
     constant_int2tc thesize = arr.array_size;
     return size_to_bit_width(thesize->value.to_ulong());
   }
-  else
-  {
-    return config.ansi_c.word_size;
-  }
+
+  return config.ansi_c.word_size;
 }
 
 smt_sortt smt_convt::make_array_domain_sort(const array_type2t &arr)
@@ -1974,22 +1968,20 @@ type2tc smt_convt::make_array_domain_sort_exp(const array_type2t &arr)
 
     return get_uint_type(calculate_array_domain_width(arr));
   }
-  else
+
+  // This is an array of arrays -- we're going to convert this into a single
+  // array that has an extended domain. Work out that width.
+
+  unsigned int domwidth = calculate_array_domain_width(arr);
+
+  type2tc subarr = arr.subtype;
+  while(is_array_type(subarr))
   {
-    // This is an array of arrays -- we're going to convert this into a single
-    // array that has an extended domain. Work out that width.
-
-    unsigned int domwidth = calculate_array_domain_width(arr);
-
-    type2tc subarr = arr.subtype;
-    while(is_array_type(subarr))
-    {
-      domwidth += calculate_array_domain_width(to_array_type(subarr));
-      subarr = to_array_type(subarr).subtype;
-    }
-
-    return get_uint_type(domwidth);
+    domwidth += calculate_array_domain_width(to_array_type(subarr));
+    subarr = to_array_type(subarr).subtype;
   }
+
+  return get_uint_type(domwidth);
 }
 
 expr2tc smt_convt::array_domain_to_width(const type2tc &type)
@@ -2718,7 +2710,7 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
 
   if(is_structure_type(base_init->type))
     return tuple_api->tuple_array_of(base_init, array_size);
-  else if(is_pointer_type(base_init->type))
+  if(is_pointer_type(base_init->type))
     return pointer_array_of(base_init, array_size);
   else
     return array_api->convert_array_of(convert_ast(base_init), array_size);
@@ -2801,20 +2793,18 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
 
     return tuple_api->tuple_array_create(arr_type, &arg, true, domain);
   }
-  else
-  {
-    assert(is_constant_array2t(expr));
-    const constant_array2t &arr = to_constant_array2t(expr);
-    smt_astt args[arr.datatype_members.size()];
-    unsigned int i = 0;
-    for(auto const &it : arr.datatype_members)
-    {
-      args[i] = convert_ast(it);
-      i++;
-    }
 
-    return tuple_api->tuple_array_create(arr_type, args, false, domain);
+  assert(is_constant_array2t(expr));
+  const constant_array2t &arr = to_constant_array2t(expr);
+  smt_astt args[arr.datatype_members.size()];
+  unsigned int i = 0;
+  for(auto const &it : arr.datatype_members)
+  {
+    args[i] = convert_ast(it);
+    i++;
   }
+
+  return tuple_api->tuple_array_create(arr_type, args, false, domain);
 }
 
 void smt_convt::rewrite_ptrs_to_structs(type2tc &type)

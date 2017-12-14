@@ -139,7 +139,7 @@ smt_convt::resultt z3_convt::dec_solve()
 
   if(result == z3::unsat)
     return smt_convt::P_UNSATISFIABLE;
-  else if(result == z3::unknown)
+  if(result == z3::unknown)
     return smt_convt::P_ERROR;
   else
     return smt_convt::P_SATISFIABLE;
@@ -657,8 +657,8 @@ smt_astt z3_convt::mk_smt_int(const mp_integer &theint, bool sign)
   smt_sortt s = mk_sort(SMT_SORT_INT, sign);
   if(theint.is_negative())
     return new_ast(z3_ctx.int_val(theint.to_int64()), s);
-  else
-    return new_ast(z3_ctx.int_val(theint.to_uint64()), s);
+
+  return new_ast(z3_ctx.int_val(theint.to_uint64()), s);
 }
 
 smt_astt z3_convt::mk_smt_real(const std::string &str)
@@ -673,8 +673,8 @@ z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
   smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
   if(theint.is_negative())
     return new_ast(z3_ctx.bv_val(theint.to_int64(), width), s);
-  else
-    return new_ast(z3_ctx.bv_val(theint.to_uint64(), width), s);
+
+  return new_ast(z3_ctx.bv_val(theint.to_uint64(), width), s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
@@ -757,7 +757,7 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
     return new_ast(
       z3_ctx.fpa_to_ubv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
   }
-  else if(is_signedbv_type(cast.type))
+  if(is_signedbv_type(cast.type))
   {
     s = mk_sort(SMT_SORT_SBV, cast.type->get_width());
 
@@ -986,10 +986,8 @@ smt_sort *z3_convt::mk_struct_sort(const type2tc &type)
     return new z3_smt_sort(
       SMT_SORT_ARRAY, s, 1, domain_width, convert_sort(arrtype.subtype));
   }
-  else
-  {
-    return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
-  }
+
+  return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
 }
 
 const smt_ast *z3_smt_ast::update(
@@ -1004,17 +1002,13 @@ const smt_ast *z3_smt_ast::update(
   {
     return smt_ast::update(conv, value, idx, idx_expr);
   }
-  else
-  {
-    assert(sort->id == SMT_SORT_STRUCT || sort->id == SMT_SORT_UNION);
-    assert(
-      is_nil_expr(idx_expr) && "Can only update constant index tuple elems");
 
-    z3_convt *z3_conv = static_cast<z3_convt *>(conv);
-    const z3_smt_ast *updateval = z3_smt_downcast(value);
-    return z3_conv->new_ast(
-      z3_conv->mk_tuple_update(e, idx, updateval->e), sort);
-  }
+  assert(sort->id == SMT_SORT_STRUCT || sort->id == SMT_SORT_UNION);
+  assert(is_nil_expr(idx_expr) && "Can only update constant index tuple elems");
+
+  z3_convt *z3_conv = static_cast<z3_convt *>(conv);
+  const z3_smt_ast *updateval = z3_smt_downcast(value);
+  return z3_conv->new_ast(z3_conv->mk_tuple_update(e, idx, updateval->e), sort);
 }
 
 const smt_ast *z3_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const

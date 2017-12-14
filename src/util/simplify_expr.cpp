@@ -135,7 +135,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
           expr = from_integer(1, expr.type());
           return false;
         }
-        else if(operand.is_false())
+        if(operand.is_false())
         {
           expr = gen_zero(new_expr.type());
           return false;
@@ -205,7 +205,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
         expr = from_integer(f.to_integer(), expr.type());
         return false;
       }
-      else if(expr_type_id == "fixedbv")
+      if(expr_type_id == "fixedbv")
       {
         // float to double or double to float
         fixedbvt f(to_constant_expr(expr.op0()));
@@ -223,7 +223,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
         expr = from_integer(f.to_integer(), expr.type());
         return false;
       }
-      else if(expr_type_id == "floatbv")
+      if(expr_type_id == "floatbv")
       {
         // float to double or double to float
         ieee_floatt f(to_constant_expr(expr.op0()));
@@ -323,7 +323,7 @@ bool simplify_exprt::simplify_address_of(exprt &expr)
     expr.swap(constant);
     return false;
   }
-  else if(expr.op0().id() == "index")
+  if(expr.op0().id() == "index")
   {
     exprt &index_expr = expr.op0();
 
@@ -354,7 +354,7 @@ exprt simplify_exprt::pointer_offset(const exprt &expr, const typet &type)
   {
     return gen_zero(type);
   }
-  else if(expr.id() == "member")
+  if(expr.id() == "member")
   {
     assert(expr.operands().size() == 1);
     // need to count members here
@@ -759,7 +759,7 @@ bool simplify_exprt::simplify_addition_substraction(exprt &expr)
       expr = gen_zero(expr.type());
       return false;
     }
-    else if(operands.size() == 1)
+    if(operands.size() == 1)
     {
       exprt tmp(operands.front());
       expr.swap(tmp);
@@ -794,10 +794,8 @@ bool simplify_exprt::simplify_addition_substraction(exprt &expr)
         expr.swap(minuend);
         return false;
       }
-      else
-      {
-        return true;
-      }
+
+      return true;
     }
 
     // A large subtract; so collect subtrahend portions
@@ -832,15 +830,13 @@ bool simplify_exprt::simplify_addition_substraction(exprt &expr)
       expr.swap(tmp);
       return false;
     }
-    else
-    {
-      // Reconstruct a subtract expr
-      expr.operands().clear();
-      expr.operands().push_back(minuend);
-      for(it = subtrahends.begin(); it != subtrahends.end(); it++)
-        expr.operands().push_back(*it);
-      // result variable will determine whether we've simplified at all.
-    }
+
+    // Reconstruct a subtract expr
+    expr.operands().clear();
+    expr.operands().push_back(minuend);
+    for(it = subtrahends.begin(); it != subtrahends.end(); it++)
+      expr.operands().push_back(*it);
+    // result variable will determine whether we've simplified at all.
   }
 
   return result;
@@ -1012,7 +1008,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
         expr = gen_zero(expr.type());
         return false;
       }
-      else if(distance >= 0)
+      if(distance >= 0)
       {
         value /= power(2, distance);
         expr = from_integer(value, expr.type());
@@ -1042,7 +1038,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
         expr = gen_zero(expr.type());
         return false;
       }
-      else if(distance >= 0)
+      if(distance >= 0)
       {
         value *= power(2, distance);
         expr = from_integer(value, expr.type());
@@ -1145,11 +1141,9 @@ bool simplify_exprt::simplify_if_recursive(
         expr.make_true();
         return false;
       }
-      else
-      {
-        expr.make_false();
-        return false;
-      }
+
+      expr.make_false();
+      return false;
     }
   }
 
@@ -1307,7 +1301,7 @@ bool simplify_exprt::simplify_if(exprt &expr)
           expr.swap(tmp);
           return false;
         }
-        else if(truevalue.is_false() && falsevalue.is_true())
+        if(truevalue.is_false() && falsevalue.is_true())
         {
           exprt tmp;
           tmp.swap(cond);
@@ -1418,7 +1412,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr)
     simplify_node(expr);
     return false;
   }
-  else if(expr.id() == "<=>")
+  if(expr.id() == "<=>")
   {
     if(
       operands.size() != 2 || !operands.front().type().is_bool() ||
@@ -1431,7 +1425,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr)
       operands.erase(operands.begin());
       return false;
     }
-    else if(operands.front().is_true())
+    if(operands.front().is_true())
     {
       exprt tmp(operands.back());
       expr.swap(tmp);
@@ -1473,7 +1467,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr)
         expr.make_false();
         return false;
       }
-      else if(expr.id() == "or" && is_true)
+      if(expr.id() == "or" && is_true)
       {
         expr.make_true();
         return false;
@@ -1534,7 +1528,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr)
 
       return false;
     }
-    else if(operands.size() == 1)
+    if(operands.size() == 1)
     {
       exprt tmp(operands.front());
       expr.swap(tmp);
@@ -1552,11 +1546,9 @@ bool simplify_exprt::simplify_boolean(exprt &expr)
         expr.make_true();
         return false;
       }
-      else
-      {
-        expr.make_false();
-        return false;
-      }
+
+      expr.make_false();
+      return false;
     }
   }
 
@@ -1611,7 +1603,7 @@ bool simplify_exprt::get_values(const exprt &expr, value_listt &value_list)
 
     return false;
   }
-  else if(expr.id() == "if")
+  if(expr.id() == "if")
   {
     if(expr.operands().size() != 3)
       return true;
@@ -1654,7 +1646,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr)
         expr.make_bool(v0 == v1);
         return false;
       }
-      else if(expr.id() == "notequal")
+      if(expr.id() == "notequal")
       {
         expr.make_bool(v0 != v1);
         return false;
@@ -1777,7 +1769,7 @@ bool simplify_exprt::eliminate_common_addends(exprt &op0, exprt &op1)
 
     return result;
   }
-  else if(op1.id() == "+")
+  if(op1.id() == "+")
   {
     bool result = true;
 
@@ -1811,7 +1803,7 @@ bool simplify_exprt::simplify_inequality_not_constant(exprt &expr)
     simplify_not(expr);
     return false;
   }
-  else if(expr.id() == ">")
+  if(expr.id() == ">")
   {
     expr.id(">=");
     // swap operands
@@ -1985,7 +1977,7 @@ bool simplify_exprt::simplify_inequality_constant(exprt &expr)
         operand.swap(tmp);
         return false;
       }
-      else if(operand.id() == "+")
+      if(operand.id() == "+")
       {
         // simplify a+-b=0 to a=b
 
@@ -2198,36 +2190,34 @@ bool simplify_exprt::simplify_index(index_exprt &expr)
       expr.swap(tmp);
       return false;
     }
-    else
-    {
-      // turn (a with i:=x)[j] into (i==j)?x:a[j]
-      // watch out that the type of i and j might be different
-      equality_exprt equality_expr(expr.op1(), with_expr.op1());
 
-      if(equality_expr.lhs().type() != equality_expr.rhs().type())
-        equality_expr.rhs().make_typecast(equality_expr.lhs().type());
+    // turn (a with i:=x)[j] into (i==j)?x:a[j]
+    // watch out that the type of i and j might be different
+    equality_exprt equality_expr(expr.op1(), with_expr.op1());
 
-      simplify_relation(equality_expr);
+    if(equality_expr.lhs().type() != equality_expr.rhs().type())
+      equality_expr.rhs().make_typecast(equality_expr.lhs().type());
 
-      index_exprt new_index_expr;
-      new_index_expr.type() = expr.type();
-      new_index_expr.array() = with_expr.op0();
-      new_index_expr.index() = expr.op1();
+    simplify_relation(equality_expr);
 
-      simplify_index(new_index_expr); // recursive call
+    index_exprt new_index_expr;
+    new_index_expr.type() = expr.type();
+    new_index_expr.array() = with_expr.op0();
+    new_index_expr.index() = expr.op1();
 
-      exprt if_expr("if", expr.type());
-      if_expr.reserve_operands(3);
-      if_expr.move_to_operands(equality_expr);
-      if_expr.copy_to_operands(with_expr.op2());
-      if_expr.move_to_operands(new_index_expr);
+    simplify_index(new_index_expr); // recursive call
 
-      simplify_if(if_expr);
+    exprt if_expr("if", expr.type());
+    if_expr.reserve_operands(3);
+    if_expr.move_to_operands(equality_expr);
+    if_expr.copy_to_operands(with_expr.op2());
+    if_expr.move_to_operands(new_index_expr);
 
-      expr.swap(if_expr);
+    simplify_if(if_expr);
 
-      return false;
-    }
+    expr.swap(if_expr);
+
+    return false;
   }
   else if(expr.op0().id() == "constant" || expr.op0().is_array())
   {
@@ -2398,7 +2388,7 @@ bool simplify_exprt::simplify_same_object(exprt &expr)
     expr.make_true();
     return false;
   }
-  else if(res.is_false())
+  if(res.is_false())
   {
     expr.make_false();
     return false;
@@ -2455,8 +2445,8 @@ bool simplify_exprt::simplify_member(member_exprt &expr)
           expr.swap(tmp);
           return false;
         }
-        else // something else, get rid of it
-          operands.resize(operands.size() - 2);
+        // something else, get rid of it
+        operands.resize(operands.size() - 2);
       }
 
       if(op.operands().size() == 1)
@@ -2610,7 +2600,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
     expr.swap(tmp);
     return false;
   }
-  else if(operand.is_constant())
+  if(operand.is_constant())
   {
     if(expr.type().is_signedbv() || expr.type().is_unsignedbv())
     {
@@ -2628,7 +2618,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
 
       return false;
     }
-    else if(expr.type().is_fixedbv())
+    if(expr.type().is_fixedbv())
     {
       fixedbvt f(to_constant_expr(expr.op0()));
       f.negate();
