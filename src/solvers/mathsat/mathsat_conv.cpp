@@ -113,7 +113,7 @@ static void print_model(msat_env env)
     s = msat_term_repr(t);
     assert(s);
     printf(" %s = ", s);
-    msat_ free(s);
+    msat_free(s);
     s = msat_term_repr(v);
     assert(s);
     printf("%s\n", s);
