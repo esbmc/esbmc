@@ -1,3 +1,6 @@
+#ifndef SOLVERS_SMT_SMT_TUPLE_FLAT_H_
+#define SOLVERS_SMT_SMT_TUPLE_FLAT_H_
+
 #include <solvers/smt/array_conv.h>
 #include <solvers/smt/smt_conv.h>
 #include <util/namespace.h>
@@ -37,6 +40,21 @@ public:
 
   ~tuple_smt_sort() override = default;
 };
+
+#define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
+
+inline bool is_tuple_array_ast_type(const type2tc &t)
+{
+  if(!is_array_type(t))
+    return false;
+
+  const array_type2t &arr_type = to_array_type(t);
+  type2tc range = arr_type.subtype;
+  while(is_array_type(range))
+    range = to_array_type(range).subtype;
+
+  return is_tuple_ast_type(range);
+}
 
 /** Function app representing a tuple sorted value.
  *  This AST represents any kind of SMT function that results in something of
@@ -239,3 +257,5 @@ public:
   smt_convt *ctx;
   const namespacet &ns;
 };
+
+#endif

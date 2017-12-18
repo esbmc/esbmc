@@ -8,7 +8,8 @@
 #ifndef SOLVERS_SMT_FP_CONV_H_
 #define SOLVERS_SMT_FP_CONV_H_
 
-#include "smt_conv.h"
+#include <solvers/smt/smt_ast.h>
+#include <solvers/smt/smt_sort.h>
 
 class fp_convt
 {

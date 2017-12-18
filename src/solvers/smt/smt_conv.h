@@ -88,25 +88,6 @@
 class fp_convt;
 class smt_convt;
 
-/** Identifier for SMT sort kinds
- *  Each different kind of sort (i.e. arrays, bv's, bools, etc) gets its own
- *  identifier. To be able to describe multiple kinds at the same time, they
- *  take binary values, so that they can be used as bits in an integer. */
-enum smt_sort_kind
-{
-  SMT_SORT_INT = 1,
-  SMT_SORT_REAL = 2,
-  SMT_SORT_SBV = 4,
-  SMT_SORT_UBV = 8,
-  SMT_SORT_FIXEDBV = 16,
-  SMT_SORT_ARRAY = 32,
-  SMT_SORT_BOOL = 64,
-  SMT_SORT_STRUCT = 128,
-  SMT_SORT_UNION = 256, // Contencious
-  SMT_SORT_FLOATBV = 512,
-  SMT_SORT_FLOATBV_RM = 1024
-};
-
 /** Identifiers for SMT functions.
  *  Each SMT function gets a unique identifier, representing its interpretation
  *  when applied to some arguments. This can be used to describe a function
@@ -218,6 +199,10 @@ enum smt_func_kind
   SMT_FUNC_FLOAT2BV,
 };
 
+#include <solvers/smt/smt_array.h>
+#include <solvers/smt/smt_tuple.h>
+#include <solvers/smt/fp_conv.h>
+
 /** Class that will hold information about which operation
  *  will be applied for a particular type
  */
@@ -229,176 +214,6 @@ struct expr_op_convert
   smt_func_kind fixedbv_func;
   smt_func_kind floatbv_func;
 };
-
-/** A class for storing an SMT sort.
- *  This class abstractly represents an SMT sort: solver converter classes are
- *  expected to extend this and add fields that store their solvers
- *  representation of the sort. Then, this base class is used as a handle
- *  through the rest of the SMT conversion code.
- *
- *  Only a few piece of sort information are used to make conversion decisions,
- *  and are thus actually stored in the sort object itself.
- *  @see smt_ast
- */
-
-class smt_sort;
-typedef const smt_sort *smt_sortt;
-
-class smt_sort
-{
-public:
-  /** Identifies what /kind/ of sort this is.
-   *  The specific sort itself may be parameterised with widths and domains,
-   *  for example. */
-  smt_sort_kind id;
-
-  smt_sort(smt_sort_kind i) : id(i), data_width(0), secondary_width(0)
-  {
-    assert(id != SMT_SORT_ARRAY);
-  }
-
-  smt_sort(smt_sort_kind i, size_t width)
-    : id(i), data_width(width), secondary_width(0)
-  {
-    assert(width != 0 || i == SMT_SORT_INT);
-    assert(id != SMT_SORT_ARRAY);
-  }
-
-  smt_sort(smt_sort_kind i, size_t rwidth, size_t domwidth)
-    : id(i), data_width(rwidth), secondary_width(domwidth)
-  {
-    assert(id == SMT_SORT_ARRAY || id == SMT_SORT_FLOATBV);
-    // assert(secondary_width != 0);
-    // XXX not applicable during int mode?
-  }
-
-  size_t get_data_width() const
-  {
-    return data_width;
-  }
-
-  size_t get_domain_width() const
-  {
-    assert(id == SMT_SORT_ARRAY);
-    return secondary_width;
-  }
-
-  size_t get_significand_width() const
-  {
-    assert(id == SMT_SORT_FLOATBV);
-    return secondary_width;
-  }
-
-  virtual ~smt_sort() = default;
-
-private:
-  /** Data size of the sort.
-   * For bitvectors and floating-points this is the bit width,
-   * for arrays the range BV bit width,
-   * For everything else, undefined */
-  size_t data_width;
-
-  /** Secondary width
-   * For floating-points this is the significand width,
-   * for arrays this is the width of array domain,
-   * For everything else, undefined */
-  size_t secondary_width;
-};
-
-#define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
-
-inline bool is_tuple_array_ast_type(const type2tc &t)
-{
-  if(!is_array_type(t))
-    return false;
-
-  const array_type2t &arr_type = to_array_type(t);
-  type2tc range = arr_type.subtype;
-  while(is_array_type(range))
-    range = to_array_type(range).subtype;
-
-  return is_tuple_ast_type(range);
-}
-
-/** Storage of an SMT function application.
- *  This class represents a single SMT function app, abstractly. Solver
- *  converter classes must extend this and add whatever fields are necessary
- *  to represent a function application in the solver they support. A converted
- *  expression becomes an SMT function application; that is then handed around
- *  the rest of the SMT conversion code as an smt_ast.
- *
- *  While an expression becomes an smt_ast, the inverse is not true, and a
- *  single expression may in fact become many smt_asts in various places. See
- *  smt_convt for more detail on how conversion occurs.
- *
- *  The function arguments, and the actual function application itself are all
- *  abstract and dealt with by the solver converter class. Only the sort needs
- *  to be available for us to make conversion decisions.
- *  @see smt_convt
- *  @see smt_sort
- */
-
-class smt_ast;
-typedef const smt_ast *smt_astt;
-
-class smt_ast
-{
-public:
-  /** The sort of this function application. */
-  smt_sortt sort;
-
-  smt_ast(smt_convt *ctx, smt_sortt s);
-  virtual ~smt_ast() = default;
-
-  // "this" is the true operand.
-  virtual smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const;
-
-  /** Abstractly produce an equality. Does the right thing (TM) whether it's
-   *  a normal piece of AST or a tuple / array.
-   *  @param ctx SMT context to produce the equality in.
-   *  @param other Piece of AST to compare 'this' with.
-   *  @return Boolean typed AST representing an equality */
-  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-
-  /** Abstractly produce an assign. Defaults to being an equality, however
-   *  for some special cases up to the backend, there may be optimisations made
-   *  for array or tuple assigns, and so forth.
-   *  @param ctx SMT context to do the assignment in.
-   *  @param sym Symbol to assign to
-   *  @return AST representing the assigned symbol */
-  virtual void assign(smt_convt *ctx, smt_astt sym) const;
-
-  /** Abstractly produce an "update", i.e. an array 'with' or tuple 'with'.
-   *  @param ctx SMT context to make this update in.
-   *  @param value Value to insert into the updated field
-   *  @param idx Array index or tuple field
-   *  @param idx_expr If an array, expression representing the index
-   *  @return AST of this' type, representing the update */
-  virtual smt_astt update(
-    smt_convt *ctx,
-    smt_astt value,
-    unsigned int idx,
-    expr2tc idx_expr = expr2tc()) const;
-
-  /** Select a value from an array, for both normal arrays and tuple arrays.
-   *  @param ctx SMT context to produce this in.
-   *  @param idx Index to select the value from.
-   *  @return AST of the array's range sort representing the selected item */
-  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
-
-  /** Project a member from a structure, or an field-array from a struct array.
-   *  @param ctx SMT context to produce this in.
-   *  @param elem Struct index to project.
-   *  @return AST representing the chosen element / element-array */
-  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
-
-  virtual void dump() const = 0;
-};
-
-// Pull in the tuple interface definitions. _after_ the AST defs.
-#include <solvers/smt/fp_conv.h>
-#include <solvers/smt/smt_array.h>
-#include <solvers/smt/smt_tuple.h>
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
