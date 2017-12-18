@@ -5,7 +5,8 @@
  *      Author: mramalho
  */
 
-#include "fp_conv.h"
+#include <cassert>
+#include <solvers/smt/fp_conv.h>
 
 fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
 {

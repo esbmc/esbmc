@@ -1,7 +1,8 @@
 #ifndef _ESBMC_SOLVERS_SMT_SMT_ARRAY_H_
 #define _ESBMC_SOLVERS_SMT_SMT_ARRAY_H_
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_ast.h>
+#include <solvers/smt/smt_sort.h>
 
 // Interface definition for array manipulation
 

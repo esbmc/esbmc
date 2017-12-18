@@ -1,3 +1,4 @@
+#include <cassert>
 #include <gmp.h>
 #include <mathsat_conv.h>
 #include <sstream>
