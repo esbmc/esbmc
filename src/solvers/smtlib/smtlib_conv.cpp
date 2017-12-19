@@ -215,8 +215,9 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
   }
 }
 
-unsigned int
-smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
+unsigned int smtlib_convt::emit_terminal_ast(
+  const smtlib_smt_ast *ast,
+  std::string &output)
 {
   std::stringstream ss;
   const smtlib_smt_sort *sort = static_cast<const smtlib_smt_sort *>(ast->sort);
@@ -269,8 +270,9 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
   }
 }
 
-unsigned int
-smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
+unsigned int smtlib_convt::emit_ast(
+  const smtlib_smt_ast *ast,
+  std::string &output)
 {
   unsigned int brace_level = 0, i;
   std::string args[4];
@@ -761,7 +763,9 @@ smt_sort *smtlib_convt::mk_sort(const smt_sort_kind k, ...)
   return s;
 }
 
-smt_ast *smtlib_convt::mk_smt_int(const mp_integer &theint, bool sign)
+smt_ast *smtlib_convt::mk_smt_int(
+  const mp_integer &theint,
+  bool sign __attribute__((unused)))
 {
   smt_sortt s = mk_sort(SMT_SORT_INT, sign);
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_INT);
@@ -878,8 +882,9 @@ void smtlib_convt::pop_ctx()
   smt_convt::pop_ctx();
 }
 
-const smt_ast *
-smtlib_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
+const smt_ast *smtlib_convt::convert_array_of(
+  smt_astt init_val,
+  unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
 }

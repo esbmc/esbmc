@@ -134,15 +134,11 @@ smt_convt::resultt mathsat_convt::dec_solve()
 
     return P_SATISFIABLE;
   }
+
   if(r == MSAT_UNSAT)
-  {
     return P_UNSATISFIABLE;
-  }
-  else
-  {
-    std::cerr << "MathSAT returned MSAT_UNKNOWN for formula" << std::endl;
-    abort();
-  }
+
+  return smt_convt::P_ERROR;
 }
 
 expr2tc mathsat_convt::get_bool(const smt_ast *a)

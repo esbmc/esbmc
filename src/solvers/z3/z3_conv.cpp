@@ -70,11 +70,7 @@ z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
 
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB_COMPLIANT);
 
-  setup_pointer_sort();
-
   assumpt_ctx_stack.push_back(assumpt.begin());
-
-  z3_convt::init_addr_space_array();
 }
 
 z3_convt::~z3_convt()
@@ -124,64 +120,22 @@ smt_convt::resultt z3_convt::dec_solve()
 {
   pre_solve();
 
-  z3::check_result result = check2_z3_properties();
+  z3::check_result result = solver.check();
+
+  if(result == z3::sat)
+  {
+    model = solver.get_model();
+
+    if(config.options.get_bool_option("show-smt-model") && result == z3::sat)
+      std::cout << Z3_model_to_string(z3_ctx, model);
+
+    return P_SATISFIABLE;
+  }
 
   if(result == z3::unsat)
     return smt_convt::P_UNSATISFIABLE;
 
-  if(result == z3::unknown)
-    return smt_convt::P_ERROR;
-
-  return smt_convt::P_SATISFIABLE;
-}
-
-z3::check_result z3_convt::check2_z3_properties()
-{
-  z3::check_result result;
-  unsigned i;
-  std::string literal;
-  z3::expr_vector assumptions(z3_ctx);
-
-  if(assumpt_mode)
-  {
-    std::list<z3::expr>::const_iterator it;
-    for(it = assumpt.begin(), i = 0; it != assumpt.end(); it++, i++)
-    {
-      assumptions.push_back(*it);
-    }
-  }
-
-  // XXX XXX XXX jmorse: as of 5dd8a432 running with --smt-during-symex on tests
-  // like 03_exor_01 caused a significant performance hit for no known reason.
-  // Solving got progressively slower as more interleavings were checked.
-  // Profiling said a lot of time was spent in Z3's
-  // bv_simplifier_plugin::bit2bool_simplify method. This doesn't happen if you
-  // run with no additional options. No idea why, but the belief is that the
-  // solver is caching something, bloats, and leads to a performance hit.
-  //
-  // So during debugging I added the following line to see whether some asserts
-  // were being left in the solver accidentally leading to the bloat and... it
-  // just stopped. Presumably this accidentally flushes some kind of internal
-  // cache and kills bloatage; I've no idea why; but if you remove it there's
-  // a significant performance hit.
-  z3::expr_vector vec = solver.assertions();
-
-  if(assumpt_mode)
-  {
-    result = solver.check(assumptions);
-  }
-  else
-  {
-    result = solver.check();
-  }
-
-  if(result == z3::sat)
-    model = solver.get_model();
-
-  if(config.options.get_bool_option("show-smt-model") && result == z3::sat)
-    std::cout << Z3_model_to_string(z3_ctx, model);
-
-  return result;
+  return smt_convt::P_ERROR;
 }
 
 void z3_convt::convert_struct_type(
@@ -251,15 +205,6 @@ void z3_convt::convert_struct_type(
   delete[] proj_names;
   delete[] proj_types;
   delete[] proj_decls;
-}
-
-void z3_convt::setup_pointer_sort()
-{
-  z3::sort s;
-  convert_type(pointer_struct, s);
-  pointer_sort = s;
-  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, s);
-  pointer_decl = z3::func_decl(z3_ctx, decl);
 }
 
 void z3_convt::convert_struct(
@@ -1043,8 +988,9 @@ smt_astt z3_convt::tuple_fresh(const smt_sort *s, std::string name)
   return new_ast(output, zs);
 }
 
-const smt_ast *
-z3_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
+const smt_ast *z3_convt::convert_array_of(
+  smt_astt init_val,
+  unsigned long domain_width)
 {
   z3::sort dom_sort =
     (int_encoding) ? z3_ctx.int_sort() : z3_ctx.bv_sort(domain_width);
@@ -1144,8 +1090,9 @@ smt_astt z3_convt::mk_tuple_array_symbol(const expr2tc &expr)
   return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
 }
 
-smt_astt
-z3_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
+smt_astt z3_convt::tuple_array_of(
+  const expr2tc &init,
+  unsigned long domain_width)
 {
   return convert_array_of(convert_ast(init), domain_width);
 }

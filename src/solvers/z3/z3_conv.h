@@ -102,7 +102,6 @@ public:
   void push_ctx() override;
   void pop_ctx() override;
   smt_convt::resultt dec_solve() override;
-  z3::check_result check2_z3_properties();
 
   expr2tc get_bool(const smt_ast *a) override;
   expr2tc get_bv(const type2tc &type, smt_astt a) override;
@@ -112,7 +111,6 @@ public:
     uint64_t index,
     const type2tc &subtype) override;
 
-  void setup_pointer_sort();
   void convert_type(const type2tc &type, z3::sort &outtype);
 
   void convert_struct(
@@ -233,9 +231,6 @@ public:
 
   // Debug map, for naming pieces of AST and auto-numbering them
   std::map<std::string, unsigned> debug_label_map;
-
-  z3::sort pointer_sort;
-  z3::func_decl pointer_decl;
 };
 
 #endif
