@@ -201,7 +201,6 @@ public:
   void assert_ast(const smt_ast *a) override;
 
   void debug_label_formula(const std::string &&name, const z3::expr &formula);
-  void init_addr_space_array();
 
   const std::string solver_text() override
   {
@@ -231,11 +230,6 @@ public:
 
   std::list<z3::expr> assumpt;
   std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
-
-  // Array of obj ID -> address range tuples
-  z3::sort addr_space_tuple_sort;
-  z3::sort addr_space_arr_sort;
-  z3::func_decl addr_space_tuple_decl;
 
   // Debug map, for naming pieces of AST and auto-numbering them
   std::map<std::string, unsigned> debug_label_map;

@@ -120,17 +120,6 @@ void z3_convt::intr_pop_ctx()
   assumpt_ctx_stack.pop_back();
 }
 
-void z3_convt::init_addr_space_array()
-{
-  convert_type(addr_space_type, addr_space_tuple_sort);
-  Z3_func_decl tmp_addr_space_decl =
-    Z3_get_tuple_sort_mk_decl(z3_ctx, addr_space_tuple_sort);
-  addr_space_tuple_decl = z3::func_decl(z3_ctx, tmp_addr_space_decl);
-
-  addr_space_arr_sort =
-    z3_ctx.array_sort(z3_ctx.esbmc_int_sort(), addr_space_tuple_sort);
-}
-
 smt_convt::resultt z3_convt::dec_solve()
 {
   pre_solve();
@@ -139,10 +128,11 @@ smt_convt::resultt z3_convt::dec_solve()
 
   if(result == z3::unsat)
     return smt_convt::P_UNSATISFIABLE;
+
   if(result == z3::unknown)
     return smt_convt::P_ERROR;
-  else
-    return smt_convt::P_SATISFIABLE;
+
+  return smt_convt::P_SATISFIABLE;
 }
 
 z3::check_result z3_convt::check2_z3_properties()
