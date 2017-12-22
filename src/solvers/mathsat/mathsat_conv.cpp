@@ -837,14 +837,6 @@ smt_astt mathsat_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
     case expr2t::ieee_div_id:
       t = msat_make_fp_div(env, mrm->t, ms1->t, ms2->t);
       break;
-    case expr2t::ieee_fma_id:
-    {
-      // Mathsat doesn't support fma for now, if we force
-      // the multiplication, it will provide the wrong answer
-      std::cerr << "Mathsat doesn't support the fused multiply-add "
-                   "(fp.fma) operator"
-                << std::endl;
-    }
     default:
       abort();
     }
