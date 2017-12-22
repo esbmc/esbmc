@@ -150,6 +150,8 @@ public:
   smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) override;
   smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr) override;
   smt_astt mk_smt_fpbv_fma(const expr2tc &expr) override;
+  smt_astt mk_smt_fpbv_sqrt(const expr2tc &expr) override;
+
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_array_symbol(
     const std::string &name,
