@@ -619,7 +619,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 2);
-    a = fp_api->mk_smt_fpbv_fma(expr);
+    a = fp_api->mk_smt_fpbv_arith_ops(expr);
     break;
   }
   case expr2t::modulus_id:
