@@ -2911,6 +2911,12 @@ void smt_convt::dump_smt()
   std::cerr << "SMT dump not implemented for " << solver_text() << "\n";
 }
 
+void smt_convt::print_model()
+{
+  std::cerr << "SMT model printing not implemented for " << solver_text()
+            << "\n";
+}
+
 tvt smt_convt::l_get(smt_astt a)
 {
   expr2tc b = get_bool(a);
