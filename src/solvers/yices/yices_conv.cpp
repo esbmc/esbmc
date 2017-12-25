@@ -740,3 +740,8 @@ void yices_convt::push_tuple_ctx()
 void yices_convt::pop_tuple_ctx()
 {
 }
+
+void yices_convt::print_model()
+{
+  yices_print_model(stdout, sat_model);
+}
