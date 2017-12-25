@@ -33,6 +33,9 @@ public:
   /** The sort of this function application. */
   smt_sortt sort;
 
+  /** The solver context */
+  const smt_convt *context;
+
   smt_ast(smt_convt *ctx, smt_sortt s);
   virtual ~smt_ast() = default;
 
