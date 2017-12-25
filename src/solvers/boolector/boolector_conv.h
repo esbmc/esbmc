@@ -130,6 +130,7 @@ public:
     smt_sortt res_sort);
 
   void dump_smt() override;
+  void print_model() override;
 
   // Members
 

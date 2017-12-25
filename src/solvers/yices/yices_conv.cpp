@@ -94,22 +94,17 @@ smt_convt::resultt yices_convt::dec_solve()
   pre_solve();
 
   smt_status_t result = yices_check_context(yices_ctx, nullptr);
-
   if(result == STATUS_SAT)
   {
     sat_model = yices_get_model(yices_ctx, 1);
     return smt_convt::P_SATISFIABLE;
   }
-  else if(result == STATUS_UNSAT)
-  {
-    sat_model = nullptr;
+
+  sat_model = nullptr;
+  if(result == STATUS_UNSAT)
     return smt_convt::P_UNSATISFIABLE;
-  }
-  else
-  {
-    sat_model = nullptr;
-    return smt_convt::P_ERROR;
-  }
+
+  return smt_convt::P_ERROR;
 }
 
 const std::string yices_convt::solver_text()

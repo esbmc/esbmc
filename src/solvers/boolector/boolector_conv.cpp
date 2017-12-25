@@ -585,3 +585,8 @@ void btor_smt_ast::dump() const
 {
   boolector_dump_smt2_node(boolector_get_btor(e), stdout, e);
 }
+
+void boolector_convt::print_model()
+{
+  boolector_print_model(btor, const_cast<char *>("smt2"), stdout);
+}

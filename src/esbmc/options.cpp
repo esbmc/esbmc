@@ -26,7 +26,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "ssa-no-location", switc, ""},
   {0, "smt-formula-only", switc, ""},
   {0, "smt-formula-too", switc, ""},
-  {0, "show-smt-model", switc, ""},
+  {0, "smt-model", switc, ""},
 
   // Trace
   {0, "quiet", switc, ""},

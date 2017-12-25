@@ -125,10 +125,6 @@ smt_convt::resultt z3_convt::dec_solve()
   if(result == z3::sat)
   {
     model = solver.get_model();
-
-    if(config.options.get_bool_option("show-smt-model") && result == z3::sat)
-      std::cout << Z3_model_to_string(z3_ctx, model);
-
     return P_SATISFIABLE;
   }
 
@@ -1359,4 +1355,9 @@ smt_sortt z3_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 void z3_convt::dump_smt()
 {
   std::cout << solver << std::endl;
+}
+
+void z3_convt::print_model()
+{
+  std::cout << Z3_model_to_string(z3_ctx, model);
 }

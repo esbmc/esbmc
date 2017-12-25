@@ -1680,7 +1680,7 @@ void esbmc_parseoptionst::help()
        "all solvers)\n"
        " --smt-formula-too            show SMT formula (not supported by all "
        "solvers) and verify\n"
-       " --show-smt-model             show SMT model (not supported by all "
+       " --smt-model                  show SMT model (not supported by all "
        "solvers), if the formula is SAT\n"
 
        "\nTrace options\n"

@@ -24,27 +24,12 @@ static const char *mathsat_config =
   "theory.fp.bv_combination_enabled = true\n"
   "theory.arr.enable_witness = true";
 
-// Ahem
-msat_env *_env = nullptr;
-
-void print_mathsat_formula()
-{
-  size_t num_of_asserted;
-  msat_term *asserted_formulas =
-    msat_get_asserted_formulas(*_env, &num_of_asserted);
-
-  for(unsigned i = 0; i < num_of_asserted; i++)
-    std::cout << msat_to_smtlib2(*_env, asserted_formulas[i]) << "\n";
-
-  msat_free(asserted_formulas);
-}
-
-void check_msat_error(msat_term &r)
+void mathsat_convt::check_msat_error(msat_term &r)
 {
   if(MSAT_ERROR_TERM(r))
   {
     std::cerr << "Error creating SMT " << std::endl;
-    std::cerr << "Error text: \"" << msat_last_error_message(*_env) << "\""
+    std::cerr << "Error text: \"" << msat_last_error_message(env) << "\""
               << std::endl;
     abort();
   }
@@ -70,13 +55,11 @@ mathsat_convt::mathsat_convt(bool int_encoding, const namespacet &ns)
   cfg = msat_parse_config(mathsat_config);
   msat_set_option(cfg, "model_generation", "true");
   env = msat_create_env(cfg);
-  _env = &env;
 }
 
 mathsat_convt::~mathsat_convt()
 {
   msat_destroy_env(env);
-  _env = nullptr;
 }
 
 void mathsat_convt::push_ctx()
@@ -97,43 +80,13 @@ void mathsat_convt::assert_ast(const smt_ast *a)
   msat_assert_formula(env, mast->t);
 }
 
-static void print_model(msat_env env)
-{
-  /* we use a model iterator to retrieve the model values for all the
-     * variables, and the necessary function instantiations */
-  msat_model_iterator iter = msat_create_model_iterator(env);
-  assert(!MSAT_ERROR_MODEL_ITERATOR(iter));
-
-  printf("Model:\n");
-  while(msat_model_iterator_has_next(iter))
-  {
-    msat_term t, v;
-    char *s;
-    msat_model_iterator_next(iter, &t, &v);
-    s = msat_term_repr(t);
-    assert(s);
-    printf(" %s = ", s);
-    msat_free(s);
-    s = msat_term_repr(v);
-    assert(s);
-    printf("%s\n", s);
-    msat_free(s);
-  }
-  msat_destroy_model_iterator(iter);
-}
-
 smt_convt::resultt mathsat_convt::dec_solve()
 {
   pre_solve();
 
   msat_result r = msat_solve(env);
   if(r == MSAT_SAT)
-  {
-    if(config.options.get_bool_option("show-smt-model"))
-      print_model(env);
-
     return P_SATISFIABLE;
-  }
 
   if(r == MSAT_UNSAT)
     return P_UNSATISFIABLE;
@@ -953,7 +906,11 @@ const smt_ast *mathsat_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 
 void mathsat_smt_ast::dump() const
 {
-  std::cout << msat_to_smtlib2(*_env, t) << std::endl;
+  // We need to get the env
+  auto convt = dynamic_cast<const mathsat_convt *>(context);
+  assert(convt != nullptr);
+
+  std::cout << msat_to_smtlib2(convt->env, t) << std::endl;
 }
 
 smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
@@ -964,5 +921,37 @@ smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 
 void mathsat_convt::dump_smt()
 {
-  print_mathsat_formula();
+  size_t num_of_asserted;
+  msat_term *asserted_formulas =
+    msat_get_asserted_formulas(env, &num_of_asserted);
+
+  for(unsigned i = 0; i < num_of_asserted; i++)
+    std::cout << msat_to_smtlib2(env, asserted_formulas[i]) << "\n";
+
+  msat_free(asserted_formulas);
+}
+
+void mathsat_convt::print_model()
+{
+  /* we use a model iterator to retrieve the model values for all the
+     * variables, and the necessary function instantiations */
+  msat_model_iterator iter = msat_create_model_iterator(env);
+  assert(!MSAT_ERROR_MODEL_ITERATOR(iter));
+
+  printf("Model:\n");
+  while(msat_model_iterator_has_next(iter))
+  {
+    msat_term t, v;
+    char *s;
+    msat_model_iterator_next(iter, &t, &v);
+    s = msat_term_repr(t);
+    assert(s);
+    printf(" %s = ", s);
+    msat_free(s);
+    s = msat_term_repr(v);
+    assert(s);
+    printf("%s\n", s);
+    msat_free(s);
+  }
+  msat_destroy_model_iterator(iter);
 }

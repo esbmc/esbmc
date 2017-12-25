@@ -212,6 +212,7 @@ public:
   }
 
   void dump_smt() override;
+  void print_model() override;
 
   // Some useful types
 public:

@@ -121,7 +121,10 @@ public:
   void push_array_ctx() override;
   void pop_array_ctx() override;
 
+  void check_msat_error(msat_term &r);
+
   void dump_smt() override;
+  void print_model() override;
 
   // MathSAT data.
   msat_config cfg;
