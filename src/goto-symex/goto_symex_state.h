@@ -332,9 +332,8 @@ public:
   /**
    *  Perform both levels of renaming on an expression.
    *  @param expr Expression to rename contents of.
-   *  @param rename_only Flag to enable constant propagation
    */
-  void rename(expr2tc &expr, bool rename_only = false);
+  void rename(expr2tc &expr);
 
   /**
    *  Perform renaming of contents of an address_of operation.
