@@ -227,7 +227,7 @@ public:
     const expr2tc &constant_value,
     const expr2tc &assigned_value);
 
-  virtual void rename(expr2tc &expr, bool rename_only = false);
+  void rename(expr2tc &expr) override;
   virtual void rename(expr2tc &expr, unsigned count) = 0;
 
   void get_ident_name(expr2tc &symbol) const override;

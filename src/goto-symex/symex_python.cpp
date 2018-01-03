@@ -368,7 +368,7 @@ void build_goto_symex_classes()
       &level2t::current_number;
     unsigned (level2t::*current_number_rec)(const level2t::name_record &rec)
       const = &level2t::current_number;
-    void (level2t::*rename)(expr2tc &, bool rename_only) = &level2t::rename;
+    void (level2t::*rename)(expr2tc &) = &level2t::rename;
     void (level2t::*rename_num)(expr2tc &, unsigned) = &level2t::rename;
     void (level2t::*remove)(const expr2tc &) = &level2t::remove;
     void (level2t::*remove_rec)(const level2t::name_record &) =
