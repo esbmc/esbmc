@@ -21,7 +21,6 @@ static const char *mathsat_config =
   "theory.fp.mode = 1\n"
   "theory.fp.bit_blast_mode = 2\n"
   "theory.fp.bv_combination_enabled = true\n"
-  "theory.arr.permanent_lemma_inst = true\n"
   "theory.arr.enable_witness = true";
 
 // Ahem
