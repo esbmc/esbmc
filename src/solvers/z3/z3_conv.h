@@ -15,7 +15,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <set>
 #include <solvers/prop/pointer_logic.h>
 #include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_tuple.h>
 #include <util/hash_cont.h>
 #include <util/irep2.h>
 #include <util/namespace.h>

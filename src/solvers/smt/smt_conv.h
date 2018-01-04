@@ -200,7 +200,7 @@ enum smt_func_kind
 };
 
 #include <solvers/smt/smt_array.h>
-#include <solvers/smt/smt_tuple.h>
+#include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/smt/fp_conv.h>
 
 /** Class that will hold information about which operation

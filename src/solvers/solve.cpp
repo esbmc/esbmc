@@ -3,8 +3,8 @@
 #include <solvers/smt/array_conv.h>
 #include <solvers/smt/fp_conv.h>
 #include <solvers/smt/smt_array.h>
-#include <solvers/smt/smt_tuple.h>
-#include <solvers/smt/smt_tuple_flat.h>
+#include <solvers/smt/tuple/smt_tuple_node.h>
+#include <solvers/smt/tuple/smt_tuple_sym.h>
 
 solver_creator create_new_smtlib_solver;
 solver_creator create_new_z3_solver;

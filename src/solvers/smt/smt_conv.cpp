@@ -2,7 +2,6 @@
 #include <set>
 #include <solvers/prop/literal.h>
 #include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_tuple_flat.h>
 #include <sstream>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
@@ -2223,7 +2222,7 @@ expr2tc smt_convt::flatten_array_body(const expr2tc &expr)
   if(!is_array_type(arr_type.subtype))
     return expr;
 
-    // This should be an array of arrays, glue the sub arrays together
+// This should be an array of arrays, glue the sub arrays together
 #ifndef NDEBUG
   for(auto const &elem : the_array.datatype_members)
     // Must only contain constant arrays, for now. No indirection should be
