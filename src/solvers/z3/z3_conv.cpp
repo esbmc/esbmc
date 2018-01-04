@@ -53,8 +53,6 @@ z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
     fp_convt(ctx),
     z3_ctx(false)
 {
-  assumpt_mode = false;
-
   z3::config conf;
   z3_ctx.init(conf, int_encoding);
 
@@ -313,23 +311,6 @@ void z3_convt::assert_ast(const smt_ast *a)
   z3::expr theval = za->e;
   solver.add(theval);
   assumpt.push_back(theval);
-}
-
-void z3_convt::assert_formula(const z3::expr &ast)
-{
-  // If we're not going to be using the assumptions (ie, for unwidening and for
-  // smtlib) then just assert the fact to be true.
-  if(!assumpt_mode)
-  {
-    solver.add(ast);
-    return;
-  }
-
-  z3::expr newvar = z3_ctx.fresh_const("", z3_ctx.bool_sort());
-  z3::expr formula = z3::to_expr(z3_ctx, Z3_mk_iff(z3_ctx, newvar, ast));
-  solver.add(formula);
-
-  assumpt.push_back(newvar);
 }
 
 z3::expr
@@ -1268,21 +1249,6 @@ expr2tc z3_convt::get_array_elem(
 
   z3_smt_ast *value = new_ast(e, convert_sort(subtype));
   return get_by_ast(subtype, value);
-}
-
-void z3_convt::debug_label_formula(
-  const std::string &&name,
-  const z3::expr &formula)
-{
-  std::stringstream ss;
-  unsigned &num = debug_label_map[name];
-  ss << "__ESBMC_" << name << num;
-  std::string the_name = ss.str();
-  num++;
-
-  z3::expr sym = z3_ctx.constant(the_name.c_str(), formula.get_sort());
-  z3::expr eq = sym == formula;
-  assert_formula(eq);
 }
 
 const smt_ast *z3_convt::make_disjunct(const ast_vec &v)

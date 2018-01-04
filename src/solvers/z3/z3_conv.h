@@ -199,8 +199,6 @@ public:
   void assert_formula(const z3::expr &ast);
   void assert_ast(const smt_ast *a) override;
 
-  void debug_label_formula(const std::string &&name, const z3::expr &formula);
-
   const std::string solver_text() override
   {
     unsigned int major, minor, build, revision;
@@ -225,14 +223,8 @@ public:
   z3::solver solver;
   z3::model model;
 
-  bool smtlib, assumpt_mode;
-  std::string filename;
-
   std::list<z3::expr> assumpt;
   std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
-
-  // Debug map, for naming pieces of AST and auto-numbering them
-  std::map<std::string, unsigned> debug_label_map;
 };
 
 #endif
