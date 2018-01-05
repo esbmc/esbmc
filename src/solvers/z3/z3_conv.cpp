@@ -35,7 +35,6 @@
 smt_convt *create_new_z3_solver(
   bool int_encoding,
   const namespacet &ns,
-  const optionst &opts __attribute__((unused)),
   tuple_iface **tuple_api,
   array_iface **array_api,
   fp_convt **fp_api)

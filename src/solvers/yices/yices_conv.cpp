@@ -19,18 +19,14 @@
 smt_convt *create_new_yices_solver(
   bool int_encoding,
   const namespacet &ns,
-  const optionst &opts __attribute__((unused)),
-  tuple_iface **tuple_api __attribute__((unused)),
+  tuple_iface **tuple_api,
   array_iface **array_api,
   fp_convt **fp_api)
 {
   yices_convt *conv = new yices_convt(int_encoding, ns);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
-  // As illustrated by 01_cbmc_Pointer4, there is something broken in yices
-  // tuples. Specifically, the implication of (p != NULL) doesn't seem to feed
-  // through to the later dereference, which fails.
-  //  *tuple_api = static_cast<tuple_iface*>(conv);
+  *tuple_api = static_cast<tuple_iface *>(conv);
   return conv;
 }
 

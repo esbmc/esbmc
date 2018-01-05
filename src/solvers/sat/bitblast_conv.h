@@ -46,9 +46,6 @@ public:
 class bitblast_convt : public smt_convt
 {
 public:
-  typedef hash_map_cont<std::string, smt_astt, std::hash<std::string>>
-    symtable_type;
-
   typedef enum { LEFT, LRIGHT, ARIGHT } shiftt;
 
   bitblast_convt(bool int_encoding, const namespacet &_ns, sat_iface *sat_api);
@@ -156,12 +153,6 @@ public:
   }
 
   // Members
-
-  // This is placed here because (IMO) this class is connection between a bunch
-  // of literals and actual things that we give names to. So it's the logical
-  // place for these things to come together.
-  symtable_type sym_table;
-
   sat_iface *sat_api;
 };
 

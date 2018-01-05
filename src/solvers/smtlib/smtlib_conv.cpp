@@ -16,25 +16,18 @@ extern sexpr *smtlib_output;
 smt_convt *create_new_smtlib_solver(
   bool int_encoding,
   const namespacet &ns,
-  const optionst &opts __attribute__((unused)),
   tuple_iface **tuple_api __attribute__((unused)),
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  smtlib_convt *conv = new smtlib_convt(int_encoding, ns, opts);
+  smtlib_convt *conv = new smtlib_convt(int_encoding, ns);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-smtlib_convt::smtlib_convt(
-  bool int_encoding,
-  const namespacet &_ns,
-  const optionst &_opts)
-  : smt_convt(int_encoding, _ns),
-    array_iface(false, false),
-    fp_convt(ctx),
-    options(_opts)
+smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
+  : smt_convt(int_encoding, _ns), array_iface(false, false), fp_convt(ctx)
 {
   temp_sym_count.push_back(1);
   std::string cmd;
@@ -42,10 +35,10 @@ smtlib_convt::smtlib_convt(
   std::string logic = (int_encoding) ? "QF_AUFLIRA" : "QF_AUFBV";
 
   // We may be being instructed to just output to a file.
-  cmd = options.get_option("output");
+  cmd = config.options.get_option("output");
   if(cmd != "")
   {
-    if(options.get_option("smtlib-solver-prog") != "")
+    if(config.options.get_option("smtlib-solver-prog") != "")
     {
       std::cerr << "Can't solve SMTLIB output and write to a file, sorry"
                 << std::endl;
@@ -77,7 +70,7 @@ smtlib_convt::smtlib_convt(
 
   int inpipe[2], outpipe[2];
 
-  cmd = options.get_option("smtlib-solver-prog");
+  cmd = config.options.get_option("smtlib-solver-prog");
   if(cmd == "")
   {
     std::cerr << "Must specify an smtlib solver program in smtlib mode"

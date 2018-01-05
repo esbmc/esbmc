@@ -4,10 +4,9 @@
 smt_convt *create_new_cvc_solver(
   bool int_encoding,
   const namespacet &ns,
-  const optionst &opts __attribute__((unused)),
   tuple_iface **tuple_api __attribute__((unused)),
   array_iface **array_api,
-  fp_convt **fp_api __attribute__((unused)))
+  fp_convt **fp_api)
 {
   cvc_convt *conv = new cvc_convt(int_encoding, ns);
   *array_api = static_cast<array_iface *>(conv);

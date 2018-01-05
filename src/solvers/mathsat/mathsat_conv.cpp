@@ -38,7 +38,6 @@ void mathsat_convt::check_msat_error(msat_term &r)
 smt_convt *create_new_mathsat_solver(
   bool int_encoding,
   const namespacet &ns,
-  const optionst &opts __attribute__((unused)),
   tuple_iface **tuple_api __attribute__((unused)),
   array_iface **array_api,
   fp_convt **fp_api)
