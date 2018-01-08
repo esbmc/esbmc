@@ -65,7 +65,7 @@ z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
   p.set("proof", false);
   solver.set(p);
 
-  Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB_COMPLIANT);
+  Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
 
   assumpt_ctx_stack.push_back(assumpt.begin());
 }
@@ -1201,19 +1201,15 @@ expr2tc z3_convt::get_fpbv(const type2tc &t, smt_astt a)
   // Z3_fpa_is_numeral_positive. We can replace the following
   // code when the new version is released
 
-  z3::expr v1;
-  v1 = model.eval(z3::to_expr(z3_ctx, Z3_mk_fpa_is_nan(z3_ctx, e)));
-  if(v1.is_bool() && Z3_get_bool_value(z3_ctx, v1) == Z3_L_TRUE)
+  if(Z3_fpa_is_numeral_nan(z3_ctx, e))
   {
     number.make_NaN();
     return constant_floatbv2tc(number);
   }
 
-  v1 = model.eval(z3::to_expr(z3_ctx, Z3_mk_fpa_is_infinite(z3_ctx, e)));
-  if(v1.is_bool() && Z3_get_bool_value(z3_ctx, v1) == Z3_L_TRUE)
+  if(Z3_fpa_is_numeral_inf(z3_ctx, e))
   {
-    v1 = model.eval(z3::to_expr(z3_ctx, Z3_mk_fpa_is_positive(z3_ctx, e)));
-    if(v1.is_bool() && Z3_get_bool_value(z3_ctx, v1) == Z3_L_TRUE)
+    if(Z3_fpa_is_numeral_positive(z3_ctx, e))
       number.make_plus_infinity();
     else
       number.make_minus_infinity();
@@ -1226,7 +1222,6 @@ expr2tc z3_convt::get_fpbv(const type2tc &t, smt_astt a)
     return expr2tc();
 
   number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
-
   return constant_floatbv2tc(number);
 }
 
