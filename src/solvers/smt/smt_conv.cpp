@@ -1265,13 +1265,16 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if((to_float && !from_float) || (!to_float && from_float))
     {
       smt_func_kind k;
-
       if(to_float)
         k = SMT_FUNC_BV2FLOAT;
       else
         k = SMT_FUNC_FLOAT2BV;
 
-      a = convert_ast(expr, expr->type, args, expr_op_convert{k, k, k, k, k});
+      a = convert_ast(
+        expr,
+        expr->type,
+        args,
+        expr_op_convert{SMT_FUNC_INVALID, k, k, SMT_FUNC_INVALID, k});
     }
     else
     {
