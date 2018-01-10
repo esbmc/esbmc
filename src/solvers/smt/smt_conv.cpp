@@ -373,17 +373,13 @@ smt_astt smt_convt::convert_ast(
 
 smt_astt smt_convt::convert_ast(const expr2tc &expr)
 {
-  // Variable length array; constant array's and so forth can have hundreds
-  // of fields.
-  smt_astt args[expr->get_num_sub_exprs()];
-  smt_sortt sort;
-  smt_astt a;
-
   smt_cachet::const_iterator cache_result = smt_cache.find(expr);
   if(cache_result != smt_cache.end())
     return (cache_result->ast);
 
-  unsigned int i = 0;
+  // Variable length array; constant array's and so forth can have hundreds
+  // of fields.
+  smt_astt args[expr->get_num_sub_exprs()];
 
   switch(expr->expr_id)
   {
@@ -395,13 +391,17 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break; // Don't convert their operands
 
   default:
+  {
     // Convert /all the arguments/. Via magical delegates.
+    unsigned int i = 0;
     expr->foreach_operand(
       [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
   }
+  }
 
-  sort = convert_sort(expr->type);
+  smt_sortt sort = convert_sort(expr->type);
 
+  smt_astt a;
   switch(expr->expr_id)
   {
   case expr2t::constant_int_id:
