@@ -320,6 +320,10 @@ smt_ast *boolector_convt::mk_array_symbol(
 smt_ast *
 boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
+  symtable_type::iterator it = symtable.find(name);
+  if(it != symtable.end())
+    return it->second;
+
   BoolectorNode *node;
 
   switch(s->id)
@@ -342,7 +346,10 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     return nullptr; // Hax.
   }
 
-  return new_ast(s, node);
+  btor_smt_ast *ast = new_ast(s, node);
+
+  symtable.insert(symtable_type::value_type(name, ast));
+  return ast;
 }
 
 smt_sort *boolector_convt::mk_struct_sort(const type2tc &type

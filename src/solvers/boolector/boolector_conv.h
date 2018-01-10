@@ -127,4 +127,7 @@ public:
 
   // Members
   Btor *btor;
+
+  typedef hash_map_cont<std::string, smt_ast *> symtable_type;
+  symtable_type symtable;
 };
