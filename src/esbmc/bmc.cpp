@@ -297,9 +297,7 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
     ::show_symbol_table_plain(ns, std::cout);
 
   languagest languages(ns, MODE_C);
-  std::cout << "\n"
-            << "Program constraints: "
-            << "\n";
+  std::cout << "\nProgram constraints: \n";
 
   bool print_guard = config.options.get_bool_option("ssa-guards");
   bool sparse = config.options.get_bool_option("ssa-no-location");
