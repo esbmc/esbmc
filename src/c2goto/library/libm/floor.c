@@ -5,37 +5,26 @@
 
 #include "../intrinsics.h"
 
-#undef floorf
-#undef floor
-#undef floorl
+#define floor_def(type, name, rint_func)                                       \
+  type name(type f)                                                            \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    type result;                                                               \
+    int save_round = fegetround();                                             \
+    fesetround(FE_DOWNWARD);                                                   \
+    result = rint_func(f);                                                     \
+    fesetround(save_round);                                                    \
+    return result;                                                             \
+  }                                                                            \
+                                                                               \
+  type __##name(type f)                                                        \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(f);                                                            \
+  }
 
-float floorf(float f)
-{
-  float result;
-  int save_round = fegetround();
-  fesetround(FE_DOWNWARD);
-  result = rintf(f);
-  fesetround(save_round);
-  return result;
-}
+floor_def(float, floorf, rintf);
+floor_def(double, floor, rint);
+floor_def(long double, floorl, rintl);
 
-double floor(double d)
-{
-  double result;
-  int save_round = fegetround();
-  fesetround(FE_DOWNWARD);
-  result = rint(d);
-  fesetround(save_round);
-  return result;
-}
-
-long double floorl(long double ld)
-{
-  long double result;
-  int save_round = fegetround();
-  fesetround(FE_DOWNWARD);
-  result = rintl(ld);
-  fesetround(save_round);
-  return result;
-}
-
+#undef floor_def
