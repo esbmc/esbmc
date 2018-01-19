@@ -720,56 +720,43 @@ expr2tc member2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-expr2tc pointer_offs_simplify_2(const expr2tc &offs, const type2tc &type)
-{
-  if(is_symbol2t(offs) || is_constant_string2t(offs))
-  {
-    return constant_int2tc(type, BigInt(0));
-  }
-  if(is_index2t(offs))
-  {
-    const index2t &index = to_index2t(offs);
-
-    if(is_symbol2t(index.source_value) && is_constant_int2t(index.index))
-    {
-      // We can reduce to that index offset.
-      const array_type2t &arr = to_array_type(index.source_value->type);
-      unsigned int widthbits = arr.subtype->get_width();
-      unsigned int widthbytes = widthbits / 8;
-      BigInt val = to_constant_int2t(index.index).value;
-      val *= widthbytes;
-      return constant_int2tc(type, val);
-    }
-    if(
-      is_constant_string2t(index.source_value) &&
-      is_constant_int2t(index.index))
-    {
-      // This can also be simplified to an array offset. Just return the index,
-      // as the string elements are all 8 bit bytes.
-      return index.index;
-    }
-    else
-    {
-      return expr2tc();
-    }
-  }
-  else
-  {
-    return expr2tc();
-  }
-}
-
-expr2tc pointer_offset2t::do_simplify(bool second) const
+expr2tc pointer_offset2t::do_simplify(bool second __attribute__((unused))) const
 {
   // XXX - this could be better. But the current implementation catches most
   // cases that ESBMC produces internally.
 
-  if(second && is_address_of2t(ptr_obj))
+  if(is_address_of2t(ptr_obj))
   {
     const address_of2t &addrof = to_address_of2t(ptr_obj);
-    return pointer_offs_simplify_2(addrof.ptr_obj, type);
+    if(is_symbol2t(addrof.ptr_obj) || is_constant_string2t(addrof.ptr_obj))
+      return gen_zero(type);
+
+    if(is_index2t(addrof.ptr_obj))
+    {
+      const index2t &index = to_index2t(addrof.ptr_obj);
+      if(is_constant_int2t(index.index))
+      {
+        if(is_symbol2t(index.source_value))
+        {
+          // We can reduce to that index offset.
+          const array_type2t &arr = to_array_type(index.source_value->type);
+          unsigned int widthbits = arr.subtype->get_width();
+          unsigned int widthbytes = widthbits / 8;
+          BigInt val = to_constant_int2t(index.index).value;
+          val *= widthbytes;
+          return constant_int2tc(type, val);
+        }
+
+        if(is_constant_string2t(index.source_value))
+        {
+          // This can also be simplified to an array offset. Just return the index,
+          // as the string elements are all 8 bit bytes.
+          return index.index;
+        }
+      }
+    }
   }
-  if(is_typecast2t(ptr_obj))
+  else if(is_typecast2t(ptr_obj))
   {
     const typecast2t &cast = to_typecast2t(ptr_obj);
     expr2tc new_ptr_offs = pointer_offset2tc(type, cast.from);
@@ -785,7 +772,6 @@ expr2tc pointer_offset2t::do_simplify(bool second) const
 
     // If it didn't reduce to zero, give up. Not sure why this is the case,
     // but it's what the old irep code does.
-    return expr2tc();
   }
   else if(is_add2t(ptr_obj))
   {
@@ -834,10 +820,8 @@ expr2tc pointer_offset2t::do_simplify(bool second) const
 
     return tmp;
   }
-  else
-  {
-    return expr2tc();
-  }
+
+  return expr2tc();
 }
 
 expr2tc index2t::do_simplify(bool second __attribute__((unused))) const
