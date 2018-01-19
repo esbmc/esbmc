@@ -1347,7 +1347,7 @@ expr2tc ashr2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<ashr2t>(op, type, side_1, side_2);
 }
 
-expr2tc typecast2t::do_simplify(bool second) const
+expr2tc typecast2t::do_simplify(bool second __attribute__((unused))) const
 {
   // Follow approach of old irep, i.e., copy it
   if(type == from->type)
@@ -1539,33 +1539,6 @@ expr2tc typecast2t::do_simplify(bool second) const
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
     return expr2tc(new typecast2t(type, to_typecast2t(simp).from));
-  }
-  else if(
-    second && is_bv_type(type) && is_bv_type(simp) && is_arith_type(simp) &&
-    (simp->type->get_width() <= type->get_width()))
-  {
-    // So, if this is an integer type, performing an integer arith operation,
-    // and the type we're casting to isn't _supposed_ to result in a loss of
-    // information, push the cast downwards.
-    std::list<expr2tc> set2;
-    simp->foreach_operand([&set2, this](const expr2tc &e) {
-      expr2tc cast = typecast2tc(type, e);
-      set2.push_back(cast);
-    });
-
-    // Now clone the expression and update its operands.
-    expr2tc newobj = simp;
-    newobj->type = type;
-
-    std::list<expr2tc>::const_iterator it2 = set2.begin();
-    newobj->Foreach_operand([this, &it2](expr2tc &e) {
-      e = *it2;
-      it2++;
-    });
-
-    // Caller won't simplify us further if it's called us with second=true, so
-    // give simplification another shot ourselves.
-    return try_simplification(newobj);
   }
 
   return expr2tc();
