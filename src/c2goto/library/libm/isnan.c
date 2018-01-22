@@ -20,6 +20,6 @@
 
 isnan_def(float, isnanf, __ESBMC_isnanf);
 isnan_def(double, isnan, __ESBMC_isnand);
-isnan_def(long double, isnand, __ESBMC_isnanld);
+isnan_def(long double, isnanl, __ESBMC_isnanld);
 
 #undef isnan_def

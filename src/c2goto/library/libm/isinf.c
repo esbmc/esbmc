@@ -20,6 +20,6 @@
 
 isinf_def(float, isinff, __ESBMC_isinff);
 isinf_def(double, isinf, __ESBMC_isinfd);
-isinf_def(long double, isinfd, __ESBMC_isinfld);
+isinf_def(long double, isinfl, __ESBMC_isinfld);
 
 #undef isinf_def
