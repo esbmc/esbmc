@@ -234,3 +234,72 @@ class Exprs(unittest.TestCase):
             pass
         else:
             self.assertTrue(False, "Null-to-expr conversion should have failed")
+
+    def test_iter(self):
+        import esbmc
+        # Build a nontrivial expr
+        foo = self.make_int()
+        ubv = self.make_unsigned()
+        idt = esbmc.irep_idt("fgasfd")
+        lev = esbmc.expr.symbol_renaming.level0
+        sym = esbmc.expr.symbol.make(ubv, idt, lev, 0, 0, 0, 0)
+        add = esbmc.expr.add.make(ubv, foo, sym)
+
+        it = iter(add)
+        obj1 = next(it)
+        self.assertTrue(obj1 == foo, "Object iterator obj1 not as expected")
+        obj2 = next(it)
+        self.assertTrue(obj2 == sym, "Object iterator obj2 not as expected")
+        try:
+            next(it)
+            self.assertTrue(False, "Object iterator should not have completed 3rd time")
+        except StopIteration:
+            pass
+
+    # When we iterate over an expression, we should detach from the original
+    # expressions to avoid unexpected mutations.
+    def test_iter_detach(self):
+        import esbmc
+        # Build a nontrivial expr
+        foo = self.make_int()
+        ubv = self.make_unsigned()
+        idt = esbmc.irep_idt("fgasfd")
+        lev = esbmc.expr.symbol_renaming.level0
+        sym = esbmc.expr.symbol.make(ubv, idt, lev, 0, 0, 0, 0)
+        add = esbmc.expr.add.make(ubv, foo, sym)
+
+        addclone = add.clone()
+        it = iter(addclone)
+        obj1 = next(it)
+        self.assertTrue(obj1 == foo, "Object iterator obj1 not as expected")
+        obj2 = next(it)
+        self.assertTrue(obj2 == sym, "Object iterator obj2 not as expected")
+
+        try:
+            next(it)
+            self.assertTrue(False, "Object iterator should not have completed 3rd time")
+        except StopIteration:
+            pass
+
+        obj2 = esbmc.downcast_expr(obj2)
+        self.assertTrue(esbmc.expr.expr_ids.symbol == obj2.expr_id, "Downcasted symbol should be sym id'd")
+        obj2.iknowwhatimdoing_level2_num = 1
+        self.assertTrue(obj2.level2_num != sym.level2_num, "Iterated object should have detached from original")
+
+    def test_in(self):
+        import esbmc
+        # Build a nontrivial expr
+        foo = self.make_int()
+        ubv = self.make_unsigned()
+        idt = esbmc.irep_idt("fgasfd")
+        lev = esbmc.expr.symbol_renaming.level0
+        sym = esbmc.expr.symbol.make(ubv, idt, lev, 0, 0, 0, 0)
+        add = esbmc.expr.add.make(ubv, foo, sym)
+
+        nonzero = self.make_int(value=1)
+
+        # Assert that the sub expressions are "in" the composite
+        self.assertTrue(foo in add, "Couldn't find subexpression 1 in expr")
+        self.assertTrue(sym in add, "Couldn't find subexpression 1 in expr")
+        self.assertFalse(nonzero in add, "Separate expr shouldn't be in main expr")
+        self.assertTrue(add in add, "Couldn't find expr in itself")
