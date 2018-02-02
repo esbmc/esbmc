@@ -2951,6 +2951,38 @@ public:
 
 #endif /* WITH PYTHON */
 
+// Misery cakes to add readwrite modifier for non-const fields.
+namespace esbmct {
+  template <class Reg, class targfield>
+  struct magical_mystery_modifier {
+  public:
+    void operator()(Reg &reg, const char *fname, targfield foo) {
+      (void)reg;
+      (void)fname;
+      (void)foo;
+    }
+  };
+
+  template <class Reg, class foo, class bar>
+  struct magical_mystery_modifier<Reg, foo bar::*> {
+  public:
+    void operator()(Reg &reg, const char *fname, foo bar::* baz, typename boost::disable_if<typename boost::is_const<foo>::type, bool>::type qux=false) {
+      (void)qux;
+      reg.def_readwrite(fname, baz);
+    }
+  };
+
+  template <class Reg, class foo, class bar>
+  struct magical_mystery_modifier<Reg, const foo bar::*> {
+  public:
+    void operator()(Reg &reg, const char *fname, const foo bar::* baz) {
+      (void)reg;
+      (void)fname;
+      (void)baz;
+    }
+  };
+}
+
 template <
   class derived,
   class baseclass,
@@ -2973,10 +3005,18 @@ void esbmct::
   }
 
   // Add this field record to the python class obj, get name from field_names
-  // field, and increment the index we're working on.
-  superclass::build_python_class_rec(
-    obj.def_readonly(derived::field_names[idx].c_str(), membr_ptr::value),
-    idx + 1);
+  // field.
+  obj.def_readonly(derived::field_names[idx].c_str(), membr_ptr::value);
+
+  // If the user is particularly confident that they know what they're doing,
+  // they can assign (and thus mutate) fields in an expression. This is almost
+  // always a bad idea. XXX undocumented? XXX not expr id...
+  std::string mutable_name = "iknowwhatimdoing_" + std::string(derived::field_names[idx].c_str());
+  esbmct::magical_mystery_modifier<T, typename membr_ptr::membr_ptr> foo;
+  foo(obj, mutable_name.c_str(), membr_ptr::value);
+
+  // Recurse.
+  superclass::build_python_class_rec(obj, idx+1);
   return;
 #else
   (void)obj;
