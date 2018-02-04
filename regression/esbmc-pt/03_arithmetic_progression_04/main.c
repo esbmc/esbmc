@@ -1,7 +1,7 @@
 #include <pthread.h>
 #include <assert.h>
 
-#define N 4
+#define N 1
 
 int  num;
 unsigned long total;
@@ -22,10 +22,7 @@ void *thread1(void * arg)
       pthread_cond_wait(&empty, &m);
     
     num++;
-
-    printf ("produce ....%d\n", i);
     pthread_mutex_unlock(&m);
-
     pthread_cond_signal(&full);
 
     i++;
@@ -47,19 +44,14 @@ void *thread2(void *arg)
       pthread_cond_wait(&full, &m);
 
     total=total+j;
-    printf("total ....%d\n",total);
     num--;
-    printf("consume ....%d\n",j);
     pthread_mutex_unlock(&m);
     
     pthread_cond_signal(&empty);
     j++;    
   }
   total=total+j;
-  printf("total ....%d\n",total);
   flag=1;
-//    assert(total!=((N*(N+1))/2));
-//assert(0);
 }
 
 int main()
@@ -75,10 +67,6 @@ int main()
   
   pthread_create(&t1, 0, thread1, 0);
   pthread_create(&t2, 0, thread2, 0);
-
-//  pthread_join(t1, 0);
-//  pthread_join(t2, 0);
-//  pthread_join(t3, 0);
 
   if (flag)
     assert(total!=((N*(N+1))/2));
