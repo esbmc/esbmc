@@ -18,7 +18,10 @@
   }
 
 nan_def(float, nanf);
+// avoid conflicting types for '__nan' on the Mac
+#ifndef __APPLE__
 nan_def(double, nan);
+#endif
 nan_def(long double, nanl);
 
 #undef nan_def
