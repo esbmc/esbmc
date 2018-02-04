@@ -379,8 +379,12 @@ pthread_cond_init(
 {
   __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+#ifdef __APPLE__
+  *((unsigned *)cond) = (unsigned)0;
+#else
   __ESBMC_cond_lock_field(*cond) = 0;
   __ESBMC_cond_broadcast_seq_field(*cond) = 0;
+#endif  
   __ESBMC_atomic_end();
   return 0;
 }
@@ -389,7 +393,11 @@ int
 pthread_cond_destroy(pthread_cond_t *__cond)
 {
   __ESBMC_HIDE:;
+#ifdef __APPLE__
+  *((unsigned *)__cond) = (unsigned)0;
+#else
   __ESBMC_cond_lock_field(*__cond) = 0;
+#endif  
   return 0;
 }
 
@@ -397,7 +405,11 @@ extern int
 pthread_cond_signal(pthread_cond_t *__cond)
 {
   __ESBMC_HIDE:;
+#ifdef __APPLE__
+  *((unsigned *)__cond) = (unsigned)0;
+#else
   __ESBMC_cond_lock_field(*__cond) = 0;
+#endif
   return 0;
 }
 
@@ -413,7 +425,11 @@ do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, _Bool assrt)
 
   // Unlock mutex; register us as waiting on condvar; context switch
   __ESBMC_mutex_lock_field(*mutex) = 0;
+#ifdef __APPLE__
+  *((unsigned *)cond) = (unsigned)1;
+#else
   __ESBMC_cond_lock_field(*cond) = 1;
+#endif
 
   // Technically in the gap below, we are blocked. So mark ourselves thus. If
   // all other threads are (or become) blocked, then deadlock occurred, which
@@ -430,7 +446,11 @@ do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, _Bool assrt)
   __ESBMC_atomic_begin();
 
   // Have we been signalled?
+#ifdef __APPLE__
+  _Bool signalled = *((unsigned *)cond) == 0;
+#else
   _Bool signalled = __ESBMC_cond_lock_field(*cond) == 0;
+#endif
 
   // Don't consider any other interleavings aside from the ones where we've
   // been signalled. As with mutexes, we should discard this trace and look
