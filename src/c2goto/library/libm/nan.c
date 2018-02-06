@@ -5,11 +5,8 @@
 
 #ifdef __APPLE__
 #define __nan_def(type, name)                                                  \
-  type __##name()                                                              \
-  {                                                                            \
-  __ESBMC_HIDE:;                                                               \
-    return name("");                                                           \
-  }
+  ;                                                                            \
+
 #else
 #define __nan_def(type, name)                                                  \
   type __##name(const char *arg)                                               \
