@@ -3,7 +3,7 @@
 #include <math.h>
 #include "../intrinsics.h"
 
-#ifndef __APPLE__
+#ifdef __APPLE__
 #define __nan_def(type, name)                                                  \
   type __##name()                                                              \
   {                                                                            \
