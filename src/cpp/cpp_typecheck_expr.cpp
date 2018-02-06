@@ -1077,7 +1077,7 @@ void cpp_typecheckt::typecheck_expr_member(
   {
     err_location(expr);
     str << "error: member `" << component_name << "' of `"
-        << struct_symbol.pretty_name << "' not found";
+        << struct_symbol.base_name << "' not found";
     throw 0;
   }
 

@@ -155,9 +155,6 @@ void cpp_typecheckt::typecheck_class_template(cpp_declarationt &declaration)
   symbol.is_macro = false;
   symbol.value = exprt("template_decls");
 
-  symbol.pretty_name =
-    cpp_scopes.current_scope().prefix + id2string(symbol.base_name);
-
   symbolt *new_symbol;
   if(context.move(symbol, new_symbol))
     throw "cpp_typecheckt::typecheck_compound_type: context.move() failed";
@@ -249,8 +246,6 @@ void cpp_typecheckt::typecheck_function_template(cpp_declarationt &declaration)
   symbol.value.make_nil();
 
   symbol.type.swap(declaration);
-  symbol.pretty_name =
-    cpp_scopes.current_scope().prefix + id2string(symbol.base_name);
 
   symbolt *new_symbol;
   if(context.move(symbol, new_symbol))

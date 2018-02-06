@@ -25,9 +25,6 @@ public:
   irep_idt module;
   irep_idt base_name;
   irep_idt mode;
-  irep_idt pretty_name;
-
-  const irep_idt &display_name() const;
 
   // global use
   bool is_type, is_macro, is_parameter, is_used;

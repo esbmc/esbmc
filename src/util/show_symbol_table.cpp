@@ -46,7 +46,6 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
       p->from_expr(s.value, value_str, ns);
 
     out << "Symbol......: " << s.name << std::endl;
-    out << "Pretty name.: " << s.pretty_name << std::endl;
     out << "Module......: " << s.module << std::endl;
     out << "Base name...: " << s.base_name << std::endl;
     out << "Mode........: " << s.mode << " (" << mode << ")" << std::endl;

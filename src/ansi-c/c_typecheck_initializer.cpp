@@ -484,7 +484,7 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
         if(zero_initializer(symbol.value, symbol.type))
         {
           err_location(symbol.location);
-          str << "failed to zero-initialize symbol `" << symbol.display_name()
+          str << "failed to zero-initialize symbol `" << symbol.base_name
               << "' with type `" << to_string(symbol.type) << "'";
           throw 0;
         }

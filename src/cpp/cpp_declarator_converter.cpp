@@ -245,7 +245,7 @@ void cpp_declarator_convertert::combine_types(
           if(i != 0 || !symbol_code_type.get_bool("#is_virtual"))
           {
             cpp_typecheck.err_location(location);
-            cpp_typecheck.str << "symbol `" << symbol.display_name()
+            cpp_typecheck.str << "symbol `" << symbol.base_name
                               << "': argument " << (i + 1) << " type mismatch"
                               << std::endl;
             cpp_typecheck.str << "previous type: "
@@ -280,7 +280,7 @@ void cpp_declarator_convertert::combine_types(
   }
 
   cpp_typecheck.err_location(location);
-  cpp_typecheck.str << "symbol `" << symbol.display_name()
+  cpp_typecheck.str << "symbol `" << symbol.base_name
                     << "' already declared with different type" << std::endl;
   cpp_typecheck.str << "previous type: " << cpp_typecheck.to_string(symbol.type)
                     << std::endl;
@@ -368,8 +368,6 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   const cpp_member_spect &member_spec,
   cpp_declaratort &declarator)
 {
-  irep_idt pretty_name = get_pretty_name();
-
   symbolt symbol;
 
   symbol.name = final_identifier;
@@ -381,7 +379,6 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   symbol.type = final_type;
   symbol.is_type = is_typedef;
   symbol.is_macro = is_typedef && !is_template_argument;
-  symbol.pretty_name = pretty_name;
   symbol.mode = cpp_typecheck.current_mode;
 
   // We always insert throw_decl to the begin of the function

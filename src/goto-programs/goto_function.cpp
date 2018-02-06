@@ -182,7 +182,7 @@ void goto_functionst::output(const namespacet &ns, std::ostream &out) const
       out << std::endl;
 
       const symbolt &symbol = ns.lookup(it.first);
-      out << symbol.display_name() << " (" << symbol.name << "):" << std::endl;
+      out << symbol.base_name << " (" << symbol.name << "):" << std::endl;
       it.second.body.output(ns, symbol.name, out);
     }
   }

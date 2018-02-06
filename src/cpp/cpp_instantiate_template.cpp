@@ -88,7 +88,7 @@ void cpp_typecheckt::show_instantiation_stack(std::ostream &out)
       s_it++)
   {
     const symbolt &symbol = lookup(s_it->identifier);
-    out << "instantiating `" << symbol.pretty_name << "' with <";
+    out << "instantiating `" << symbol.base_name << "' with <";
 
     forall_expr(a_it, s_it->full_template_args.arguments())
     {
@@ -213,7 +213,6 @@ const symbolt *cpp_typecheckt::handle_recursive_template_instance(
       symbol.type = symbol_typet(instance);
       symbol.is_macro = false;
       symbol.is_type = true;
-      symbol.pretty_name = template_symbol.base_name;
 
       // Insert.
       symbolt *new_symbol;
@@ -243,7 +242,7 @@ bool cpp_typecheckt::has_incomplete_args(cpp_template_args_tct template_args_tc)
       {
         std::cerr
           << "**** WARNING: template instantiation with incomplete type "
-          << arg_sym->pretty_name << " at " << arg_sym->location << std::endl;
+          << arg_sym->base_name << " at " << arg_sym->location << std::endl;
         return true;
       }
     }
@@ -638,7 +637,6 @@ void cpp_typecheckt::put_template_arg_into_scope(
   symbol.module = module;        // uuuhu.
   symbol.type = argument.type(); // BAM
   symbol.is_macro = false;
-  symbol.pretty_name = orig_symbol.base_name;
 
   // Install this concrete type symbol into the context.
   symbolt *new_symbol;

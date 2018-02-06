@@ -37,7 +37,7 @@ void c_finalize_expression(
       {
         message_streamt message_stream(message_handler);
         message_stream.err_location(symbol.location);
-        message_stream.str << "symbol `" << symbol.display_name()
+        message_stream.str << "symbol `" << symbol.base_name
                            << "' has incomplete type";
         message_stream.error();
         throw 0;
@@ -46,7 +46,7 @@ void c_finalize_expression(
       {
         message_streamt message_stream(message_handler);
         message_stream.err_location(symbol.location);
-        message_stream.str << "symbol `" << symbol.display_name()
+        message_stream.str << "symbol `" << symbol.base_name
                            << "' has unexpected type";
         message_stream.error();
         throw 0;
