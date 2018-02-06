@@ -8,7 +8,7 @@
   type __##name()                                                              \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    return name();                                                             \
+    return name("");                                                           \
   }
 #else
 #define __nan_def(type, name)                                                  \
