@@ -107,6 +107,11 @@ private:
     std::string &name,
     std::string &pretty_name);
 
+  void get_decl_name(
+    const clang::NamedDecl &d,
+    std::string &name,
+    std::string &pretty_name);
+
   void get_var_name(const clang::VarDecl &vd, std::string &name);
 
   void get_function_param_name(const clang::ParmVarDecl &pd, std::string &name);

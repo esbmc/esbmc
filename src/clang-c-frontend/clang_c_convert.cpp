@@ -6,7 +6,8 @@
  */
 
 #include <clang/AST/Attr.h>
-#include <clang/AST/QualTypeNames.h>
+#include <clang/Index/USRGeneration.h>
+#include <clang/Tooling/Core/QualTypeNames.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -282,7 +283,8 @@ bool clang_c_convertert::get_struct_union_class(
     t,
     identifier,
     "tag-" + identifier,
-    location_begin);
+    location_begin,
+    true);
 
   // Save the struct/union/class type address and name to the type map
   std::string symbol_name = symbol.name.as_string();
@@ -324,7 +326,10 @@ bool clang_c_convertert::get_struct_union_class(
     }
   }
 
-  added_symbol.type = has_bitfields(t) ? fix_bitfields(t) : t;
+  added_symbol.type = t;
+
+  if(has_bitfields(t))
+    added_symbol.type = fix_bitfields(t);
 
   // This change on the pretty_name is just to beautify the output
   if(recordd.isStruct())
@@ -401,7 +406,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     t,
     vd.getName().str(),
     identifier,
-    location_begin);
+    location_begin,
+    true);
 
   symbol.lvalue = true;
   symbol.static_lifetime =
@@ -491,6 +497,11 @@ bool clang_c_convertert::get_function(
   std::string base_name, pretty_name;
   get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
 
+  // special case for is_used: we'll always convert the entry point,
+  // either the main function or the user defined entry point
+  bool is_used =
+    fd.isMain() || (fd.getName().str() == config.main) || fd.isUsed();
+
   symbolt symbol;
   get_default_symbol(
     symbol,
@@ -498,7 +509,8 @@ bool clang_c_convertert::get_function(
     type,
     base_name,
     pretty_name,
-    location_begin);
+    location_begin,
+    is_used);
 
   std::string symbol_name = symbol.name.as_string();
 
@@ -591,7 +603,8 @@ bool clang_c_convertert::get_function_params(
     param_type,
     name,
     pretty_name,
-    location_begin);
+    location_begin,
+    true); // function parameter cannot be static
 
   param_symbol.lvalue = true;
   param_symbol.is_parameter = true;
@@ -1029,11 +1042,6 @@ bool clang_c_convertert::get_builtin_type(
   case clang::BuiltinType::LongLong:
     new_type = long_long_int_type();
     c_type = "signed_long_long";
-    break;
-
-  case clang::BuiltinType::Half:
-    new_type = half_float_type();
-    c_type = "_Float16";
     break;
 
   case clang::BuiltinType::Float:
@@ -2410,7 +2418,8 @@ void clang_c_convertert::get_default_symbol(
   typet type,
   std::string base_name,
   std::string pretty_name,
-  locationt location)
+  locationt location,
+  bool is_used)
 {
   symbol.mode = "C";
   symbol.module = module_name;
@@ -2419,6 +2428,24 @@ void clang_c_convertert::get_default_symbol(
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
   symbol.name = pretty_name;
+  symbol.is_used = is_used;
+}
+
+void clang_c_convertert::get_decl_name(
+  const clang::NamedDecl &d,
+  std::string &name,
+  std::string &pretty_name)
+{
+  llvm::SmallString<128> declUSR;
+  if(clang::index::generateUSRForDecl(&d, declUSR))
+  {
+    std::cerr << "**** ERROR: Can't generate unique name for decl:";
+    d.dumpColor();
+    abort();
+  }
+
+  name = declUSR.str().str();
+  pretty_name = d.getName().str();
 }
 
 void clang_c_convertert::get_field_name(
@@ -2440,13 +2467,7 @@ void clang_c_convertert::get_field_name(
       t.width(width.cformat());
     }
 
-    clang::PrintingPolicy Policy(ASTContext->getPrintingPolicy());
-    Policy.SuppressScope = false;
-    Policy.AnonymousTagLocations = true;
-    Policy.PolishForDeclaration = true;
-    Policy.SuppressUnwrittenScope = true;
-    name =
-      clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext, Policy);
+    name = clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext);
     pretty_name = "anon";
   }
 }
@@ -2511,13 +2532,8 @@ bool clang_c_convertert::get_tag_name(
   const clang::RecordDecl &rd,
   std::string &name)
 {
-  clang::PrintingPolicy Policy(ASTContext->getPrintingPolicy());
-  Policy.SuppressScope = false;
-  Policy.AnonymousTagLocations = true;
-  Policy.PolishForDeclaration = true;
-  Policy.SuppressUnwrittenScope = true;
   name = clang::TypeName::getFullyQualifiedName(
-    ASTContext->getTagDeclType(&rd), *ASTContext, Policy);
+    ASTContext->getTagDeclType(&rd), *ASTContext);
   return false;
 }
 
@@ -2650,6 +2666,9 @@ symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
       if(symbol.type.is_not_nil() && !s->type.is_not_nil())
         s->swap(symbol);
     }
+
+    // Update is_used
+    s->is_used |= symbol.is_used;
   }
 
   return s;
@@ -2778,7 +2797,7 @@ bool clang_c_convertert::has_bitfields(const typet &_type, typet *converted)
   return false;
 }
 
-static std::string gen_bitfield_blob_name(unsigned int num)
+std::string clang_c_convertert::gen_bitfield_blob_name(unsigned int num)
 {
   return "#BITFIELD" + std::to_string(num);
 }
@@ -2803,7 +2822,7 @@ typet clang_c_convertert::fix_bitfields(const typet &_type)
 
   std::map<irep_idt, bitfield_map> backmap;
 
-  auto pop_blob = [is_packed, &bit_offs, &blob_count, &new_components]() {
+  auto pop_blob = [this, is_packed, &bit_offs, &blob_count, &new_components]() {
     // We have to pop the current bitfield blob into the struct and create
     // a new one to make space.
 
@@ -2889,7 +2908,7 @@ void clang_c_convertert::fix_constant_bitfields(exprt &expr)
 
   unsigned int bit_offs = 0;
 
-  auto pop_blob = [is_packed, &accuml, &bit_offs, &new_expr]() {
+  auto pop_blob = [this, is_packed, &accuml, &bit_offs, &new_expr]() {
     if(is_packed)
     {
       // Round number of bits up to nearest byte,
