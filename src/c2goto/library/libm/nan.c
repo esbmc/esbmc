@@ -3,6 +3,22 @@
 #include <math.h>
 #include "../intrinsics.h"
 
+#ifndef __APPLE__
+#define __nan_def(type, name)                                                  \
+  type __##name()                                                              \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name();                                                             \
+  }
+#else
+#define __nan_def(type, name)                                                  \
+  type __##name(const char *arg)                                               \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(arg);                                                          \
+  }
+#endif
+
 #define nan_def(type, name)                                                    \
   type name(const char *arg)                                                   \
   {                                                                            \
@@ -10,18 +26,11 @@
     (void)arg;                                                                 \
     return NAN;                                                                \
   }                                                                            \
-                                                                               \
-  type __##name(const char *arg)                                               \
-  {                                                                            \
-  __ESBMC_HIDE:;                                                               \
-    return name(arg);                                                          \
-  }
+  __nan_def(type, name)
 
 nan_def(float, nanf);
-// avoid conflicting types for '__nan' on the Mac
-#ifndef __APPLE__
 nan_def(double, nan);
-#endif
 nan_def(long double, nanl);
 
 #undef nan_def
+#undef __nan_def
