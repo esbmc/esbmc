@@ -6,6 +6,7 @@
  */
 
 #include <clang/AST/Attr.h>
+#include <clang/Index/USRGeneration.h>
 #include <clang/Tooling/Core/QualTypeNames.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
@@ -2428,6 +2429,23 @@ void clang_c_convertert::get_default_symbol(
   symbol.pretty_name = pretty_name;
   symbol.name = pretty_name;
   symbol.is_used = is_used;
+}
+
+void clang_c_convertert::get_decl_name(
+  const clang::NamedDecl &d,
+  std::string &name,
+  std::string &pretty_name)
+{
+  llvm::SmallString<128> declUSR;
+  if(clang::index::generateUSRForDecl(&d, declUSR))
+  {
+    std::cerr << "**** ERROR: Can't generate unique name for decl:";
+    d.dumpColor();
+    abort();
+  }
+
+  name = declUSR.str().str();
+  pretty_name = d.getName().str();
 }
 
 void clang_c_convertert::get_field_name(
