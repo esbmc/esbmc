@@ -93,30 +93,6 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     symbol.name = new_name;
   }
 
-  // set the pretty name
-  if(
-    symbol.is_type &&
-    (final_type.id() == "struct" || final_type.id() == "incomplete_struct"))
-  {
-    symbol.pretty_name = "struct " + id2string(symbol.base_name);
-  }
-  else if(
-    symbol.is_type &&
-    (final_type.id() == "union" || final_type.id() == "incomplete_union"))
-  {
-    symbol.pretty_name = "union " + id2string(symbol.base_name);
-  }
-  else if(
-    symbol.is_type &&
-    (final_type.id() == "c_enum" || final_type.id() == "incomplete_c_enum"))
-  {
-    symbol.pretty_name = "enum " + id2string(symbol.base_name);
-  }
-  else
-  {
-    symbol.pretty_name = new_name;
-  }
-
   // see if we have it already
   symbolt *s = context.find_symbol(symbol.name);
   if(s == nullptr)
@@ -226,7 +202,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
       {
         err_location(new_symbol.location);
         str << "error: conflicting defintion of type symbol `"
-            << new_symbol.display_name() << "'";
+            << new_symbol.base_name << "'";
         throw 0;
       }
     }
@@ -249,7 +225,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
           // arg! new tag type
           err_location(new_symbol.location);
           str << "error: conflicting defintion of tag symbol `"
-              << new_symbol.display_name() << "'";
+              << new_symbol.base_name << "'";
           throw 0;
         }
       }
@@ -259,7 +235,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         if(new_symbol.type != old_symbol.type)
         {
           err_location(new_symbol.location);
-          str << "error: type symbol `" << new_symbol.display_name()
+          str << "error: type symbol `" << new_symbol.base_name
               << "' defined twice:" << std::endl;
           str << "Original: " << to_string(old_symbol.type) << std::endl;
           str << "     New: " << to_string(new_symbol.type);
@@ -324,7 +300,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
       else
       {
         err_location(new_symbol.location);
-        str << "error: symbol `" << new_symbol.display_name()
+        str << "error: symbol `" << new_symbol.base_name
             << "' defined twice with different types:" << std::endl;
         str << "Original: " << to_string(old_symbol.type) << std::endl;
         str << "     New: " << to_string(new_symbol.type);
@@ -351,7 +327,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         if(old_symbol.value.is_not_nil())
         {
           err_location(new_symbol.location);
-          str << "function `" << new_symbol.display_name() << "' defined twice";
+          str << "function `" << new_symbol.base_name << "' defined twice";
           error();
         }
         else
@@ -403,7 +379,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
             else
             {
               err_location(new_symbol.value);
-              str << "symbol `" << new_symbol.display_name()
+              str << "symbol `" << new_symbol.base_name
                   << "' already has an initial value";
               warning();
             }

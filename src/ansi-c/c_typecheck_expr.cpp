@@ -289,8 +289,8 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   if(symbol.is_type)
   {
     err_location(expr);
-    str << "did not expect a type symbol here, but got `"
-        << symbol.display_name() << "'";
+    str << "did not expect a type symbol here, but got `" << symbol.base_name
+        << "'";
     throw 0;
   }
 

@@ -210,9 +210,8 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     symbol.type.swap(type);
     symbol.is_type = true;
     symbol.is_macro = false;
-    symbol.pretty_name =
-      cpp_scopes.current_scope().prefix + id2string(symbol.base_name);
-    symbol.type.tag(symbol.pretty_name);
+    symbol.type.tag(
+      cpp_scopes.current_scope().prefix + id2string(symbol.base_name));
 
     // move early, must be visible before doing body
     symbolt *new_symbol;
@@ -495,7 +494,6 @@ void cpp_typecheckt::typecheck_compound_declarator(
         vt_symb_type.name = vt_name;
         vt_symb_type.base_name =
           "virtual_table::" + symbol.base_name.as_string();
-        vt_symb_type.pretty_name = vt_symb_type.base_name;
         vt_symb_type.mode = current_mode;
         vt_symb_type.module = module;
         vt_symb_type.location = symbol.location;
@@ -548,7 +546,6 @@ void cpp_typecheckt::typecheck_compound_declarator(
         func_symb.name =
           component.get_name().as_string() + "::" + virtual_base.as_string();
         func_symb.base_name = component.base_name();
-        func_symb.pretty_name = component.base_name();
         func_symb.mode = current_mode;
         func_symb.module = module;
         func_symb.location = component.location();
@@ -573,7 +570,6 @@ void cpp_typecheckt::typecheck_compound_declarator(
           arg_symb.name =
             func_symb.name.as_string() + "::" + base_name.as_string();
           arg_symb.base_name = base_name;
-          arg_symb.pretty_name = base_name;
           arg_symb.mode = current_mode;
           arg_symb.location = func_symb.location;
           arg_symb.type = arg.type();

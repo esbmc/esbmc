@@ -122,7 +122,6 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
     symbol.type.swap(type);
     symbol.is_type = true;
     symbol.is_macro = false;
-    symbol.pretty_name = pretty_name;
 
     // move early, must be visible before doing body
     symbolt *new_symbol;

@@ -194,11 +194,8 @@ std::string expr2cppt::convert_rec(
       else
         dest += "struct";
 
-      if(symbol.pretty_name != irep_idt())
-        dest += " " + id2string(symbol.pretty_name);
-
+      dest += " " + id2string(symbol.base_name);
       dest += d;
-
       return dest;
     }
     if(symbol.type.id() == "c_enum")
@@ -207,11 +204,8 @@ std::string expr2cppt::convert_rec(
 
       dest += "enum";
 
-      if(symbol.pretty_name != irep_idt())
-        dest += " " + id2string(symbol.pretty_name);
-
+      dest += " " + id2string(symbol.base_name);
       dest += d;
-
       return dest;
     }
     else

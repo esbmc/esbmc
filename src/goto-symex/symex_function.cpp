@@ -43,9 +43,8 @@ bool goto_symext::get_unwind_recursion(
 
     const symbolt &symbol = ns.lookup(identifier);
 
-    std::string msg = "Unwinding recursion " +
-                      id2string(symbol.display_name()) + " iteration " +
-                      integer2string(unwind);
+    std::string msg = "Unwinding recursion " + id2string(symbol.base_name) +
+                      " iteration " + integer2string(unwind);
 
     if(this_loop_max_unwind != 0)
       msg += " (" + integer2string(this_loop_max_unwind) + " max)";

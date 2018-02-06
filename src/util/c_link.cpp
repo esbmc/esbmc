@@ -148,8 +148,8 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
   if(is_code_in_context != is_code_new_symbol)
   {
     err_location(new_symbol.location);
-    str << "error: conflicting definition for symbol \""
-        << in_context.display_name() << "\"" << std::endl;
+    str << "error: conflicting definition for symbol \"" << in_context.base_name
+        << "\"" << std::endl;
     str << "old definition: " << to_string(in_context.type) << std::endl;
     str << "Module: " << in_context.module << std::endl;
     str << "new definition: " << to_string(new_symbol.type) << std::endl;

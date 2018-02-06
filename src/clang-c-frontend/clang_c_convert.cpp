@@ -331,12 +331,6 @@ bool clang_c_convertert::get_struct_union_class(
   if(has_bitfields(t))
     added_symbol.type = fix_bitfields(t);
 
-  // This change on the pretty_name is just to beautify the output
-  if(recordd.isStruct())
-    added_symbol.pretty_name = "struct " + identifier;
-  else if(recordd.isUnion())
-    added_symbol.pretty_name = "union " + identifier;
-
   return false;
 }
 
@@ -2382,7 +2376,6 @@ void clang_c_convertert::get_default_symbol(
   symbol.location = std::move(location);
   symbol.type = std::move(type);
   symbol.base_name = base_name;
-  symbol.pretty_name = pretty_name;
   symbol.name = pretty_name;
   symbol.is_used = is_used;
 }
