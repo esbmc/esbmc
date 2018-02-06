@@ -60,7 +60,7 @@ private:
 
   bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
 
-  bool get_function_params(const clang::ParmVarDecl &pdecl, exprt &param);
+  bool get_function_params(const clang::ParmVarDecl &pd, exprt &param);
 
   bool get_struct_union_class(const clang::RecordDecl &recordd);
 
@@ -110,15 +110,6 @@ private:
   void get_decl_name(
     const clang::NamedDecl &d,
     std::string &name,
-    std::string &pretty_name);
-
-  void get_var_name(const clang::VarDecl &vd, std::string &name);
-
-  void get_function_param_name(const clang::ParmVarDecl &pd, std::string &name);
-
-  void get_function_name(
-    const clang::FunctionDecl &fd,
-    std::string &base_name,
     std::string &pretty_name);
 
   bool get_tag_name(const clang::RecordDecl &recordd, std::string &identifier);

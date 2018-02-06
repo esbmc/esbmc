@@ -393,8 +393,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     }
   }
 
-  std::string identifier;
-  get_var_name(vd, identifier);
+  std::string base_name, pretty_name;
+  get_decl_name(vd, base_name, pretty_name);
 
   locationt location_begin;
   get_location_from_decl(vd, location_begin);
@@ -404,8 +404,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     symbol,
     get_modulename_from_path(location_begin.file().as_string()),
     t,
-    vd.getName().str(),
-    identifier,
+    base_name,
+    pretty_name,
     location_begin,
     true);
 
@@ -435,7 +435,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   // completely wrong but allowed by the language
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
-  code_declt decl(symbol_exprt(identifier, t));
+  code_declt decl(symbol_exprt(pretty_name, t));
 
   if(vd.hasInit())
   {
@@ -495,7 +495,7 @@ bool clang_c_convertert::get_function(
   get_location_from_decl(fd, location_begin);
 
   std::string base_name, pretty_name;
-  get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
+  get_decl_name(fd, base_name, pretty_name);
 
   // special case for is_used: we'll always convert the entry point,
   // either the main function or the user defined entry point
@@ -555,13 +555,11 @@ bool clang_c_convertert::get_function(
 }
 
 bool clang_c_convertert::get_function_params(
-  const clang::ParmVarDecl &pdecl,
+  const clang::ParmVarDecl &pd,
   exprt &param)
 {
-  std::string name = pdecl.getName().str();
-
   typet param_type;
-  if(get_type(pdecl.getOriginalType(), param_type))
+  if(get_type(pd.getOriginalType(), param_type))
     return true;
 
   if(param_type.is_array())
@@ -571,22 +569,22 @@ bool clang_c_convertert::get_function_params(
     param_type.remove("#constant");
   }
 
+  std::string base_name, pretty_name;
+  get_decl_name(pd, base_name, pretty_name);
+
   param = code_typet::argumentt();
   param.type() = param_type;
-  param.cmt_base_name(name);
+  param.cmt_base_name(base_name);
 
   // If the name is empty, this is an function definition that we don't
   // need to worry about as the function params name's will be defined
   // when the function is defined, the exprt is filled for the sake of
   // beautification
-  if(name.empty())
+  if(base_name.empty())
     return false;
 
   locationt location_begin;
-  get_location_from_decl(pdecl, location_begin);
-
-  std::string pretty_name;
-  get_function_param_name(pdecl, pretty_name);
+  get_location_from_decl(pd, location_begin);
 
   param.cmt_identifier(pretty_name);
   param.location() = location_begin;
@@ -601,7 +599,7 @@ bool clang_c_convertert::get_function_params(
     param_symbol,
     get_modulename_from_path(location_begin.file().as_string()),
     param_type,
-    name,
+    base_name,
     pretty_name,
     location_begin,
     true); // function parameter cannot be static
@@ -611,11 +609,11 @@ bool clang_c_convertert::get_function_params(
   param_symbol.file_local = true;
 
   // Save the function's param address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(pdecl.getFirstDecl());
+  std::size_t address = reinterpret_cast<std::size_t>(pd.getFirstDecl());
   object_map[address] = param_symbol.name.as_string();
 
-  const clang::FunctionDecl &fd = static_cast<const clang::FunctionDecl &>(
-    *pdecl.getParentFunctionOrMethod());
+  const clang::FunctionDecl &fd =
+    static_cast<const clang::FunctionDecl &>(*pd.getParentFunctionOrMethod());
 
   // If the function is not defined, we don't need to add it's parameter
   // to the context, they will never be used
@@ -2010,83 +2008,41 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   return false;
 }
 
-bool clang_c_convertert::get_decl_ref(const clang::Decl &decl, exprt &new_expr)
+bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 {
-  std::string identifier;
-  typet type;
-
-  switch(decl.getKind())
+  // Special case for Enums, we return the constant instead of a reference
+  // to the name
+  if(const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d))
   {
-  case clang::Decl::Var:
-  {
-    const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(decl);
-
-    std::size_t address = reinterpret_cast<std::size_t>(vd.getFirstDecl());
-    identifier = object_map.find(address)->second;
-
-    if(get_type(vd.getType(), type))
-      return true;
-
-    break;
-  }
-
-  case clang::Decl::ParmVar:
-  {
-    const clang::ParmVarDecl &vd =
-      static_cast<const clang::ParmVarDecl &>(decl);
-
-    std::size_t address = reinterpret_cast<std::size_t>(vd.getFirstDecl());
-    identifier = object_map.find(address)->second;
-
-    if(get_type(vd.getType(), type))
-      return true;
-
-    break;
-  }
-
-  case clang::Decl::Function:
-  {
-    const clang::FunctionDecl &fd =
-      static_cast<const clang::FunctionDecl &>(decl);
-
-    std::string base_name, pretty_name;
-    get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
-
-    identifier = pretty_name;
-
-    if(get_type(fd.getType(), type))
-      return true;
-
-    break;
-  }
-
-  case clang::Decl::EnumConstant:
-  {
-    const clang::EnumConstantDecl &enumcd =
-      static_cast<const clang::EnumConstantDecl &>(decl);
-
     // For enum constants, we get their value directly
     new_expr = constant_exprt(
-      integer2binary(enumcd.getInitVal().getSExtValue(), bv_width(int_type())),
-      integer2string(enumcd.getInitVal().getSExtValue()),
+      integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
+      integer2string(e->getInitVal().getSExtValue()),
       int_type());
 
     return false;
   }
+  else if(const auto *nd = llvm::dyn_cast<clang::ValueDecl>(&d))
+  {
+    // Everything else should be a value decl
+    std::string base_name, pretty_name;
+    get_decl_name(*nd, base_name, pretty_name);
 
-  default:
-    std::cerr << "Conversion of unsupported clang decl ref: \"";
-    std::cerr << decl.getDeclKindName() << "\" to expression" << std::endl;
-    decl.dumpColor();
-    return true;
+    typet type;
+    if(get_type(nd->getType(), type))
+      return true;
+
+    new_expr = exprt("symbol", type);
+    new_expr.identifier(pretty_name);
+    new_expr.cmt_lvalue(true);
+    new_expr.name(pretty_name);
+    return false;
   }
 
-  new_expr = exprt("symbol", type);
-  new_expr.identifier(identifier);
-  new_expr.cmt_lvalue(true);
-  new_expr.name(identifier);
-
-  return false;
+  std::cerr << "Conversion of unsupported clang decl ref: \"";
+  std::cerr << d.getDeclKindName() << "\" to expression" << std::endl;
+  d.dumpColor();
+  return true;
 }
 
 bool clang_c_convertert::get_cast_expr(
@@ -2436,16 +2392,29 @@ void clang_c_convertert::get_decl_name(
   std::string &name,
   std::string &pretty_name)
 {
+  name = d.getName().str();
+
+  // Special cases:
+  switch(d.getKind())
+  {
+  case clang::Decl::ParmVar:
+    // It can be empty and it's not a problem for us
+    if(name.empty())
+      return;
+
+  default:
+    break;
+  }
+
   llvm::SmallString<128> declUSR;
   if(clang::index::generateUSRForDecl(&d, declUSR))
   {
-    std::cerr << "**** ERROR: Can't generate unique name for decl:";
+    std::cerr << "**** ERROR: Can't generate unique name for decl:\n";
     d.dumpColor();
     abort();
   }
 
-  name = declUSR.str().str();
-  pretty_name = d.getName().str();
+  pretty_name = declUSR.str().str();
 }
 
 void clang_c_convertert::get_field_name(
@@ -2457,74 +2426,8 @@ void clang_c_convertert::get_field_name(
 
   if(name.empty())
   {
-    typet t;
-    get_type(fd.getType(), t);
-
-    if(fd.isBitField())
-    {
-      exprt width;
-      get_expr(*fd.getBitWidth(), width);
-      t.width(width.cformat());
-    }
-
     name = clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext);
     pretty_name = "anon";
-  }
-}
-
-void clang_c_convertert::get_var_name(
-  const clang::VarDecl &vd,
-  std::string &name)
-{
-  if(!vd.isExternallyVisible())
-  {
-    locationt vd_location;
-    get_location_from_decl(vd, vd_location);
-
-    name += get_modulename_from_path(vd_location.file().as_string()) + "::";
-  }
-
-  if(vd.getDeclContext()->isFunctionOrMethod())
-  {
-    const clang::FunctionDecl &funcd =
-      static_cast<const clang::FunctionDecl &>(*vd.getDeclContext());
-
-    name += funcd.getName().str() + "::";
-    name += integer2string(current_scope_var_num++) + "::";
-  }
-
-  name += vd.getName().str();
-}
-
-void clang_c_convertert::get_function_param_name(
-  const clang::ParmVarDecl &pd,
-  std::string &name)
-{
-  locationt pd_location;
-  get_location_from_decl(pd, pd_location);
-
-  const clang::FunctionDecl &fd =
-    static_cast<const clang::FunctionDecl &>(*pd.getParentFunctionOrMethod());
-
-  name = get_modulename_from_path(pd_location.file().as_string()) + "::";
-  name += fd.getName().str() + "::";
-  name += pd.getName().str();
-}
-
-void clang_c_convertert::get_function_name(
-  const clang::FunctionDecl &fd,
-  std::string &base_name,
-  std::string &pretty_name)
-{
-  base_name = pretty_name = fd.getName().str();
-
-  if(!fd.isExternallyVisible())
-  {
-    locationt fd_location;
-    get_location_from_decl(fd, fd_location);
-
-    pretty_name = get_modulename_from_path(fd_location.file().as_string());
-    pretty_name += "::" + base_name;
   }
 }
 
