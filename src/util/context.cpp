@@ -56,20 +56,28 @@ void contextt::dump() const
 
 symbolt *contextt::find_symbol(irep_idt name)
 {
-  symbolst::iterator it = symbols.find(name);
+  auto it = symbols.find(name);
 
   if(it != symbols.end())
     return &(it->second);
+
+  auto it1 = symbol_base_map.find(name);
+  if(it1 != symbol_base_map.end())
+    return find_symbol(it1->second);
 
   return nullptr;
 }
 
 const symbolt *contextt::find_symbol(irep_idt name) const
 {
-  symbolst::const_iterator it = symbols.find(name);
+  auto it = symbols.find(name);
 
   if(it != symbols.end())
     return &(it->second);
+
+  auto it1 = symbol_base_map.find(name);
+  if(it1 != symbol_base_map.end())
+    return find_symbol(it1->second);
 
   return nullptr;
 }
