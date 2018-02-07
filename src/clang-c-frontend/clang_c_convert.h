@@ -102,11 +102,6 @@ private:
     std::string pretty_name,
     locationt location);
 
-  void get_field_name(
-    const clang::FieldDecl &fd,
-    std::string &name,
-    std::string &pretty_name);
-
   void get_decl_name(
     const clang::NamedDecl &d,
     std::string &name,
