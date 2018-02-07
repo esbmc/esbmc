@@ -139,7 +139,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       return true;
 
     std::string name, pretty_name;
-    get_field_name(fd, name, pretty_name);
+    get_decl_name(fd, name, pretty_name);
 
     struct_union_typet::componentt comp(name, pretty_name, t);
     if(fd.isBitField())
@@ -166,7 +166,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       return true;
 
     std::string name, pretty_name;
-    get_field_name(*fd.getAnonField(), name, pretty_name);
+    get_decl_name(*fd.getAnonField(), name, pretty_name);
 
     struct_union_typet::componentt comp(name, pretty_name, t);
     if(fd.getAnonField()->isBitField())
@@ -2394,6 +2394,21 @@ void clang_c_convertert::get_decl_name(
     // It can be empty and it's not a problem for us
     if(name.empty())
       return;
+    break;
+
+  case clang::Decl::Field:
+  case clang::Decl::IndirectField:
+    // If it's empty, we generate the name using the type
+    if(name.empty())
+    {
+      const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(d);
+      name = clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext);
+      pretty_name = "anon";
+    }
+    else
+      // Otherwise, just use the same name for both the names
+      pretty_name = name;
+    return;
 
   default:
     break;
@@ -2408,20 +2423,6 @@ void clang_c_convertert::get_decl_name(
   }
 
   pretty_name = declUSR.str().str();
-}
-
-void clang_c_convertert::get_field_name(
-  const clang::FieldDecl &fd,
-  std::string &name,
-  std::string &pretty_name)
-{
-  name = pretty_name = fd.getName().str();
-
-  if(name.empty())
-  {
-    name = clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext);
-    pretty_name = "anon";
-  }
 }
 
 bool clang_c_convertert::get_tag_name(

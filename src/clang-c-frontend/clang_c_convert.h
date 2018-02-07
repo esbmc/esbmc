@@ -103,11 +103,6 @@ private:
     locationt location,
     bool is_used);
 
-  void get_field_name(
-    const clang::FieldDecl &fd,
-    std::string &name,
-    std::string &pretty_name);
-
   void get_decl_name(
     const clang::NamedDecl &d,
     std::string &name,
