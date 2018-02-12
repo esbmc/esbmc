@@ -92,30 +92,25 @@ void goto_convertt::do_printf(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  const irep_idt &f_id = function.identifier();
+  exprt printf_code(
+    "sideeffect", static_cast<const typet &>(function.type().return_type()));
 
-  if(f_id == CPROVER_PREFIX "printf" || f_id == "printf")
+  printf_code.statement("printf");
+
+  printf_code.operands() = arguments;
+  printf_code.location() = function.location();
+
+  if(lhs.is_not_nil())
   {
-    exprt printf_code(
-      "sideeffect", static_cast<const typet &>(function.type().return_type()));
-
-    printf_code.statement("printf");
-
-    printf_code.operands() = arguments;
-    printf_code.location() = function.location();
-
-    if(lhs.is_not_nil())
-    {
-      code_assignt assignment(lhs, printf_code);
-      assignment.location() = function.location();
-      copy(assignment, ASSIGN, dest);
-    }
-    else
-    {
-      printf_code.id("code");
-      printf_code.type() = typet("code");
-      copy(to_code(printf_code), OTHER, dest);
-    }
+    code_assignt assignment(lhs, printf_code);
+    assignment.location() = function.location();
+    copy(assignment, ASSIGN, dest);
+  }
+  else
+  {
+    printf_code.id("code");
+    printf_code.type() = typet("code");
+    copy(to_code(printf_code), OTHER, dest);
   }
 }
 
