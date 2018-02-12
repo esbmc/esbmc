@@ -224,6 +224,7 @@ exprt symbol_expr(const symbolt &symbol)
 {
   exprt tmp("symbol", symbol.type);
   tmp.identifier(symbol.name);
+  tmp.name(symbol.base_name);
   return tmp;
 }
 

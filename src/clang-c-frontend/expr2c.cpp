@@ -902,7 +902,7 @@ std::string expr2ct::convert_symbol(
   const exprt &src,
   unsigned &precedence __attribute__((unused)))
 {
-  const irep_idt &id = src.identifier();
+  const irep_idt &id = src.name();
   std::string dest;
 
   if(!fullname && ns_collision.find(id) == ns_collision.end())

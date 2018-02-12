@@ -662,7 +662,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
   // some built-in functions
   if(f_op.is_symbol())
   {
-    const irep_idt &identifier = to_symbol_expr(f_op).get_identifier();
+    const irep_idt &identifier = to_symbol_expr(f_op).name();
 
     if(identifier == CPROVER_PREFIX "same_object")
     {

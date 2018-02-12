@@ -224,7 +224,7 @@ void goto_symext::symex_step(reachability_treet &art)
     if(is_symbol2t(call.function))
     {
       const irep_idt &id = to_symbol2t(call.function).thename;
-      if(has_prefix(id.as_string(), "__ESBMC"))
+      if(has_prefix(id.as_string(), "c:@F@__ESBMC"))
       {
         cur_state->source.pc++;
         run_intrinsic(call, art, id.as_string());
@@ -338,63 +338,63 @@ void goto_symext::run_intrinsic(
   reachability_treet &art,
   const std::string &symname)
 {
-  if(symname == "__ESBMC_yield")
+  if(symname == "c:@F@__ESBMC_yield")
   {
     intrinsic_yield(art);
   }
-  else if(symname == "__ESBMC_switch_to")
+  else if(symname == "c:@F@__ESBMC_switch_to")
   {
     intrinsic_switch_to(func_call, art);
   }
-  else if(symname == "__ESBMC_switch_away_from")
+  else if(symname == "c:@F@__ESBMC_switch_away_from")
   {
     intrinsic_switch_from(art);
   }
-  else if(symname == "__ESBMC_get_thread_id")
+  else if(symname == "c:@F@__ESBMC_get_thread_id")
   {
     intrinsic_get_thread_id(func_call, art);
   }
-  else if(symname == "__ESBMC_set_thread_internal_data")
+  else if(symname == "c:@F@__ESBMC_set_thread_internal_data")
   {
     intrinsic_set_thread_data(func_call, art);
   }
-  else if(symname == "__ESBMC_get_thread_internal_data")
+  else if(symname == "c:@F@__ESBMC_get_thread_internal_data")
   {
     intrinsic_get_thread_data(func_call, art);
   }
-  else if(symname == "__ESBMC_spawn_thread")
+  else if(symname == "c:@F@__ESBMC_spawn_thread")
   {
     intrinsic_spawn_thread(func_call, art);
   }
-  else if(symname == "__ESBMC_terminate_thread")
+  else if(symname == "c:@F@__ESBMC_terminate_thread")
   {
     intrinsic_terminate_thread(art);
   }
-  else if(symname == "__ESBMC_get_thread_state")
+  else if(symname == "c:@F@__ESBMC_get_thread_state")
   {
     intrinsic_get_thread_state(func_call, art);
   }
-  else if(symname == "__ESBMC_really_atomic_begin")
+  else if(symname == "c:@F@__ESBMC_really_atomic_begin")
   {
     intrinsic_really_atomic_begin(art);
   }
-  else if(symname == "__ESBMC_really_atomic_end")
+  else if(symname == "c:@F@__ESBMC_really_atomic_end")
   {
     intrinsic_really_atomic_end(art);
   }
-  else if(symname == "__ESBMC_switch_to_monitor")
+  else if(symname == "c:@F@__ESBMC_switch_to_monitor")
   {
     intrinsic_switch_to_monitor(art);
   }
-  else if(symname == "__ESBMC_switch_from_monitor")
+  else if(symname == "c:@F@__ESBMC_switch_from_monitor")
   {
     intrinsic_switch_from_monitor(art);
   }
-  else if(symname == "__ESBMC_register_monitor")
+  else if(symname == "c:@F@__ESBMC_register_monitor")
   {
     intrinsic_register_monitor(func_call, art);
   }
-  else if(symname == "__ESBMC_kill_monitor")
+  else if(symname == "c:@F@__ESBMC_kill_monitor")
   {
     intrinsic_kill_monitor(art);
   }
