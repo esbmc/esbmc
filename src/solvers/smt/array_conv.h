@@ -176,7 +176,7 @@ public:
     unsigned int arr2_id,
     unsigned int arr1_update,
     unsigned int arr2_update,
-    smt_astt result,
+    smt_astt &result,
     unsigned int start_pos = 0);
   void execute_array_trans(
     array_update_vect &data,
@@ -275,8 +275,11 @@ public:
   {
     unsigned int src_array_update_num;
     expr2tc idx;
-    smt_astt val;
+    // Mutable because this might be used as a vehicle to read from
+    // array_valuations
+    mutable smt_astt val;
     unsigned int ctx_level;
+    mutable bool converted;
   };
   typedef struct array_select array_selectt;
 
@@ -309,7 +312,9 @@ public:
     unsigned int arr1_update_num;
     unsigned int arr2_update_num;
 
-    smt_astt result;
+    // Mutable to allow the creation of an equality without a symbol, then
+    // reading that from this structure.
+    mutable smt_astt result;
   };
 
   std::multimap<unsigned int, struct array_equality> array_equalities;
@@ -345,6 +350,7 @@ public:
     } u;
     unsigned int ctx_level;
     unsigned int update_level;
+    mutable bool converted;
   };
   typedef struct array_with array_witht;
 

@@ -165,6 +165,8 @@ public:
     }
   }
 
+  void print_model();
+
   context_t *yices_ctx;
   model_t *sat_model;
 };

@@ -8,21 +8,17 @@ extern "C" {
 smt_convt *create_new_boolector_solver(
   bool int_encoding,
   const namespacet &ns,
-  const optionst &options,
   tuple_iface **tuple_api __attribute__((unused)),
   array_iface **array_api,
-  fp_convt **fp_api __attribute__((unused)))
+  fp_convt **fp_api)
 {
-  boolector_convt *conv = new boolector_convt(int_encoding, ns, options);
+  boolector_convt *conv = new boolector_convt(int_encoding, ns);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-boolector_convt::boolector_convt(
-  bool int_encoding,
-  const namespacet &ns,
-  const optionst &options)
+boolector_convt::boolector_convt(bool int_encoding, const namespacet &ns)
   : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
 {
   if(int_encoding)
@@ -35,25 +31,12 @@ boolector_convt::boolector_convt(
   btor = boolector_new();
   boolector_set_opt(btor, BTOR_OPT_MODEL_GEN, 1);
   boolector_set_opt(btor, BTOR_OPT_AUTO_CLEANUP, 1);
-
-  if(options.get_option("output") != "")
-  {
-    debugfile = fopen(options.get_option("output").c_str(), "w");
-  }
-  else
-  {
-    debugfile = nullptr;
-  }
 }
 
 boolector_convt::~boolector_convt()
 {
   boolector_delete(btor);
-
   btor = nullptr;
-  if(debugfile)
-    fclose(debugfile);
-  debugfile = nullptr;
 }
 
 smt_convt::resultt boolector_convt::dec_solve()
@@ -584,4 +567,9 @@ void boolector_convt::dump_smt()
 void btor_smt_ast::dump() const
 {
   boolector_dump_smt2_node(boolector_get_btor(e), stdout, e);
+}
+
+void boolector_convt::print_model()
+{
+  boolector_print_model(btor, const_cast<char *>("smt2"), stdout);
 }

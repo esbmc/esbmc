@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
---control-flow-test --no-slice
+--no-slice
 ^VERIFICATION FAILED$

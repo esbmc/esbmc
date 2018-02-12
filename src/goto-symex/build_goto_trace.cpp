@@ -26,10 +26,7 @@ expr2tc build_lhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
 
 expr2tc build_rhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &rhs)
 {
-  if(is_nil_expr(rhs))
-    return rhs;
-
-  if(is_constant_number(rhs))
+  if(is_nil_expr(rhs) || is_constant_expr(rhs))
     return rhs;
 
   auto new_rhs = smt_conv->get(rhs);

@@ -2,7 +2,6 @@
 #include <set>
 #include <solvers/prop/literal.h>
 #include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_tuple_flat.h>
 #include <sstream>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
@@ -374,17 +373,13 @@ smt_astt smt_convt::convert_ast(
 
 smt_astt smt_convt::convert_ast(const expr2tc &expr)
 {
-  // Variable length array; constant array's and so forth can have hundreds
-  // of fields.
-  smt_astt args[expr->get_num_sub_exprs()];
-  smt_sortt sort;
-  smt_astt a;
-
   smt_cachet::const_iterator cache_result = smt_cache.find(expr);
   if(cache_result != smt_cache.end())
     return (cache_result->ast);
 
-  unsigned int i = 0;
+  // Variable length array; constant array's and so forth can have hundreds
+  // of fields.
+  smt_astt args[expr->get_num_sub_exprs()];
 
   switch(expr->expr_id)
   {
@@ -396,13 +391,17 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break; // Don't convert their operands
 
   default:
+  {
     // Convert /all the arguments/. Via magical delegates.
+    unsigned int i = 0;
     expr->foreach_operand(
       [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
   }
+  }
 
-  sort = convert_sort(expr->type);
+  smt_sortt sort = convert_sort(expr->type);
 
+  smt_astt a;
   switch(expr->expr_id)
   {
   case expr2t::constant_int_id:
@@ -619,7 +618,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 2);
-    a = fp_api->mk_smt_fpbv_fma(expr);
+    a = fp_api->mk_smt_fpbv_sqrt(expr);
     break;
   }
   case expr2t::modulus_id:
@@ -1266,13 +1265,16 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if((to_float && !from_float) || (!to_float && from_float))
     {
       smt_func_kind k;
-
       if(to_float)
         k = SMT_FUNC_BV2FLOAT;
       else
         k = SMT_FUNC_FLOAT2BV;
 
-      a = convert_ast(expr, expr->type, args, expr_op_convert{k, k, k, k, k});
+      a = convert_ast(
+        expr,
+        expr->type,
+        args,
+        expr_op_convert{SMT_FUNC_INVALID, k, k, SMT_FUNC_INVALID, k});
     }
     else
     {
@@ -2223,7 +2225,7 @@ expr2tc smt_convt::flatten_array_body(const expr2tc &expr)
   if(!is_array_type(arr_type.subtype))
     return expr;
 
-    // This should be an array of arrays, glue the sub arrays together
+// This should be an array of arrays, glue the sub arrays together
 #ifndef NDEBUG
   for(auto const &elem : the_array.datatype_members)
     // Must only contain constant arrays, for now. No indirection should be
@@ -2909,6 +2911,12 @@ smt_astt smt_ast::project(
 void smt_convt::dump_smt()
 {
   std::cerr << "SMT dump not implemented for " << solver_text() << "\n";
+}
+
+void smt_convt::print_model()
+{
+  std::cerr << "SMT model printing not implemented for " << solver_text()
+            << "\n";
 }
 
 tvt smt_convt::l_get(smt_astt a)

@@ -3,8 +3,6 @@
 
 #include <list>
 #include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_tuple.h>
-#include <solvers/smt/smt_tuple_flat.h>
 #include <string>
 #include <unistd.h>
 #include <util/irep2.h>
@@ -69,10 +67,7 @@ public:
 class smtlib_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  smtlib_convt(
-    bool int_encoding,
-    const namespacet &_ns,
-    const optionst &_options);
+  smtlib_convt(bool int_encoding, const namespacet &_ns);
   ~smtlib_convt() override;
 
   resultt dec_solve() override;
@@ -124,7 +119,6 @@ public:
   void pop_ctx() override;
 
   // Members
-  const optionst &options;
   pid_t solver_proc_pid;
   FILE *out_stream;
   FILE *in_stream;

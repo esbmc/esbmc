@@ -4,10 +4,9 @@
 smt_convt *create_new_cvc_solver(
   bool int_encoding,
   const namespacet &ns,
-  const optionst &opts __attribute__((unused)),
   tuple_iface **tuple_api __attribute__((unused)),
   array_iface **array_api,
-  fp_convt **fp_api __attribute__((unused)))
+  fp_convt **fp_api)
 {
   cvc_convt *conv = new cvc_convt(int_encoding, ns);
   *array_api = static_cast<array_iface *>(conv);
@@ -38,14 +37,11 @@ smt_convt::resultt cvc_convt::dec_solve()
   CVC4::Result r = smt.checkSat();
   if(r.isSat())
     return P_SATISFIABLE;
-  else if(!r.isUnknown())
-    return P_UNSATISFIABLE;
-  else
-  {
-    std::cerr << "Error solving satisfiability of formula with CVC"
-              << std::endl;
-    abort();
-  }
+
+  if(!r.isUnknown())
+    return P_ERROR;
+
+  return P_UNSATISFIABLE;
 }
 
 expr2tc cvc_convt::get_bool(const smt_ast *a)

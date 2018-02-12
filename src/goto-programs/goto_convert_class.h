@@ -100,7 +100,10 @@ protected:
 
   bool rewrite_vla_decl(typet &var_type, goto_programt &dest);
   bool rewrite_vla_decl_size(exprt &size, goto_programt &dest);
-  void generate_dynamic_size_vla(exprt &var, goto_programt &dest);
+  void generate_dynamic_size_vla(
+    exprt &var,
+    const locationt &loc,
+    goto_programt &dest);
 
   bool has_sideeffect(const exprt &expr);
 

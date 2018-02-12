@@ -62,6 +62,11 @@ public:
    *  @return The newly created cast smt_ast. */
   virtual smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr);
 
+  /** Convert the ieee arithmetic square-root (sqrt)
+   *  @param expr the sqrt operation
+   *  @return The newly created sqrt smt_ast */
+  virtual smt_astt mk_smt_fpbv_sqrt(const expr2tc &expr);
+
   /** Convert the ieee arithmetic fused-multiply add (fma)
    *  @param expr the fma operation
    *  @return The newly created fma smt_ast */

@@ -365,11 +365,6 @@ smt_ast *bitblast_convt::mk_smt_bool(bool boolval)
 
 smt_astt bitblast_convt::mk_smt_symbol(const std::string &name, smt_sortt sort)
 {
-  // Like metasmt, bitblast doesn't have a symbol table. So, build our own.
-  symtable_type::iterator it = sym_table.find(name);
-  if(it != sym_table.end())
-    return it->second;
-
   // Otherwise, we need to build this AST ourselves.
   bitblast_smt_ast *a = new_ast(sort);
   smt_astt result = a;
@@ -395,7 +390,6 @@ smt_astt bitblast_convt::mk_smt_symbol(const std::string &name, smt_sortt sort)
     abort();
   }
 
-  sym_table.insert(symtable_type::value_type(name, result));
   return result;
 }
 

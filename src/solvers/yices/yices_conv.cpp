@@ -19,18 +19,14 @@
 smt_convt *create_new_yices_solver(
   bool int_encoding,
   const namespacet &ns,
-  const optionst &opts __attribute__((unused)),
-  tuple_iface **tuple_api __attribute__((unused)),
+  tuple_iface **tuple_api,
   array_iface **array_api,
   fp_convt **fp_api)
 {
   yices_convt *conv = new yices_convt(int_encoding, ns);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
-  // As illustrated by 01_cbmc_Pointer4, there is something broken in yices
-  // tuples. Specifically, the implication of (p != NULL) doesn't seem to feed
-  // through to the later dereference, which fails.
-  //  *tuple_api = static_cast<tuple_iface*>(conv);
+  *tuple_api = static_cast<tuple_iface *>(conv);
   return conv;
 }
 
@@ -94,22 +90,17 @@ smt_convt::resultt yices_convt::dec_solve()
   pre_solve();
 
   smt_status_t result = yices_check_context(yices_ctx, nullptr);
-
   if(result == STATUS_SAT)
   {
     sat_model = yices_get_model(yices_ctx, 1);
     return smt_convt::P_SATISFIABLE;
   }
-  else if(result == STATUS_UNSAT)
-  {
-    sat_model = nullptr;
+
+  sat_model = nullptr;
+  if(result == STATUS_UNSAT)
     return smt_convt::P_UNSATISFIABLE;
-  }
-  else
-  {
-    sat_model = nullptr;
-    return smt_convt::P_ERROR;
-  }
+
+  return smt_convt::P_ERROR;
 }
 
 const std::string yices_convt::solver_text()
@@ -744,4 +735,9 @@ void yices_convt::push_tuple_ctx()
 
 void yices_convt::pop_tuple_ctx()
 {
+}
+
+void yices_convt::print_model()
+{
+  yices_print_model(stdout, sat_model);
 }

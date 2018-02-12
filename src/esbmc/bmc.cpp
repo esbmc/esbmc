@@ -297,9 +297,7 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
     ::show_symbol_table_plain(ns, std::cout);
 
   languagest languages(ns, MODE_C);
-  std::cout << "\n"
-            << "Program constraints: "
-            << "\n";
+  std::cout << "\nProgram constraints: \n";
 
   bool print_guard = config.options.get_bool_option("ssa-guards");
   bool sparse = config.options.get_bool_option("ssa-no-location");
@@ -479,10 +477,13 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
 
-    if(
-      (res == smt_convt::P_SATISFIABLE) ||
-      ((res == smt_convt::P_UNSATISFIABLE) && (interleaving_number == 1)))
+    if(res == smt_convt::P_SATISFIABLE)
+    {
+      if(config.options.get_bool_option("smt-model"))
+        runtime_solver->print_model();
+
       report_trace(res, eq);
+    }
 
     if(res)
     {

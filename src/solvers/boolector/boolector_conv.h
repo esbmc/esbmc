@@ -1,6 +1,5 @@
 #include <cstdio>
 #include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_tuple_flat.h>
 #include <util/irep2.h>
 #include <util/namespace.h>
 
@@ -63,13 +62,7 @@ public:
 class boolector_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  typedef hash_map_cont<std::string, smt_ast *, std::hash<std::string>>
-    symtable_type;
-
-  boolector_convt(
-    bool int_encoding,
-    const namespacet &ns,
-    const optionst &options);
+  boolector_convt(bool int_encoding, const namespacet &ns);
   ~boolector_convt() override;
 
   resultt dec_solve() override;
@@ -130,10 +123,11 @@ public:
     smt_sortt res_sort);
 
   void dump_smt() override;
+  void print_model() override;
 
   // Members
-
   Btor *btor;
+
+  typedef hash_map_cont<std::string, smt_ast *> symtable_type;
   symtable_type symtable;
-  FILE *debugfile;
 };

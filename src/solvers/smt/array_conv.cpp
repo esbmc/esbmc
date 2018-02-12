@@ -61,6 +61,7 @@ unsigned int array_convt::new_array_id()
   // Aimless piece of data, just to keep indexes in iarray_updates and
   // array_selects in sync.
   struct array_with w;
+  w.converted = false;
   w.is_ite = false;
   w.idx = expr2tc();
   w.ctx_level = UINT_MAX; // ahem
@@ -160,19 +161,18 @@ smt_astt array_convt::mk_select(
   smt_astt fresh = ctx->mk_fresh(ressort, "array_mk_select::");
   smt_astt real_idx = ctx->convert_ast(idx);
   size_t dom_width = ma->sort->get_domain_width();
-  smt_sortt bool_sort = ctx->boolean_sort;
 
+  assert(ma->array_fields.size() >= 1);
+  smt_astt theval = fresh; // Failed-to-look-up value
   for(unsigned long i = 0; i < ma->array_fields.size(); i++)
   {
     smt_astt tmp_idx = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
     smt_astt idx_eq = real_idx->eq(ctx, tmp_idx);
-    smt_astt val_eq = fresh->eq(ctx, ma->array_fields[i]);
+    theval = ma->array_fields[i]->ite(ctx, idx_eq, theval);
 
-    ctx->assert_ast(
-      ctx->mk_func_app(bool_sort, SMT_FUNC_IMPLIES, idx_eq, val_eq));
   }
 
-  return fresh;
+  return theval;
 }
 
 smt_astt array_convt::mk_store(
@@ -224,7 +224,7 @@ smt_astt array_convt::mk_store(
 smt_astt array_convt::mk_unbounded_select(
   const array_ast *ma,
   const expr2tc &real_idx,
-  smt_sortt ressort)
+  smt_sortt ressort __attribute__((unused)))
 {
   // Store everything about this select, and return a free variable, that then
   // gets constrained at the end of conversion to tie up with the correct
@@ -261,22 +261,24 @@ smt_astt array_convt::mk_unbounded_select(
     }
   }
 
-  // Generate a new free variable
-  smt_astt a = ctx->mk_fresh(ressort, "mk_unbounded_select");
-
   struct array_select sel;
+  sel.converted = false;
   sel.src_array_update_num = ma->array_update_num;
   sel.idx = real_idx;
-  sel.val = a;
+  sel.val = NULL;
   sel.ctx_level = ctx->ctx_level;
+
   // Record this index
-  array_selects[ma->base_array_id].insert(sel);
+  auto it = array_selects[ma->base_array_id].insert(sel);
 
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
   ctx->convert_ast(real_idx);
 
-  return a;
+  add_new_indexes();
+  apply_new_selects();
+
+  return it.first->val;
 }
 
 smt_astt array_convt::mk_unbounded_store(
@@ -299,6 +301,7 @@ smt_astt array_convt::mk_unbounded_store(
 
   // Record update
   struct array_with w;
+  w.converted = false;
   w.is_ite = false;
   w.idx = idx;
   w.u.w.src_array_update_num = ma->array_update_num;
@@ -313,6 +316,9 @@ smt_astt array_convt::mk_unbounded_store(
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
   ctx->convert_ast(idx);
+
+  add_new_indexes();
+  execute_new_updates();
 
   // Result is the new array id goo.
   return newarr;
@@ -363,6 +369,7 @@ smt_astt array_convt::unbounded_array_ite(
   newarr->array_update_num = array_updates[true_arr->base_array_id].size();
 
   struct array_with w;
+  w.converted = false;
   w.is_ite = true;
   w.idx = expr2tc();
   w.u.i.true_arr_ast = true_arr;
@@ -374,6 +381,11 @@ smt_astt array_convt::unbounded_array_ite(
 
   // Add storage for the eventual collation of all these values
   array_valuation[new_arr_id].emplace_back();
+
+  add_new_indexes();
+  join_array_indexes();
+  execute_new_updates();
+  add_array_equalities();
 
   return newarr;
 }
@@ -436,10 +448,14 @@ array_convt::encode_array_equality(const array_ast *a1, const array_ast *a2)
   e.arr1_update_num = a1->array_update_num;
   e.arr2_update_num = a2->array_update_num;
 
-  e.result = ctx->mk_fresh(ctx->boolean_sort, "");
+  e.result = NULL;
 
-  array_equalities.insert(std::make_pair(ctx->ctx_level, e));
-  return e.result;
+  auto it = array_equalities.insert(std::make_pair(ctx->ctx_level, e));
+
+  add_new_indexes();
+  add_array_equalities();
+
+  return it->second.result;
 }
 
 smt_astt
@@ -776,6 +792,7 @@ void array_convt::add_new_indexes()
 
     // We're guarenteed that each of these indexes are _new_ to this array.
     // Enumerate them, giving them a location in the expr_index_map.
+    // NB: if, actually they're not new, insert will fail, safely
     index_map_containert &idx_map = expr_index_map[arrid];
     for(auto &it = pair.first; it != pair.second; it++)
     {
@@ -860,10 +877,9 @@ void array_convt::execute_new_updates()
     // level.
 
     std::list<const array_witht *> withs;
-    auto rit = update_index.rbegin();
-    while(rit != update_index.rend())
-    {
-      if(rit->ctx_level == ctx->ctx_level)
+    auto rit = update_index.begin();
+    while (rit != update_index.end()) {
+      if (rit->ctx_level == ctx->ctx_level && !rit->converted)
         withs.push_back(&(*rit));
       else if(rit->ctx_level != UINT_MAX) // ahem
         break;
@@ -879,6 +895,7 @@ void array_convt::execute_new_updates()
     {
       execute_array_trans(
         array_valuation[arrid], arrid, ptr->update_level - 1, subtype, 0);
+      ptr->converted = true;
     }
   }
 }
@@ -907,6 +924,10 @@ void array_convt::apply_new_selects()
     // Go through each of these selects.
     for(auto &it = pair.first; it != pair.second; it++)
     {
+      if (it->converted)
+        continue;
+      it->converted = true;
+
       // Look up where in the valuation this is.
       auto index_rec = expr_index_map[arrid].find(it->idx);
       smt_astt &dest =
@@ -919,8 +940,15 @@ void array_convt::apply_new_selects()
       if(dest == it->val)
         continue;
 
-      // OK, bind this select in through an equality.
-      ctx->assert_ast(dest->eq(ctx, it->val));
+      // Symbol avoidance: if no valuation was given (NULL) then the creator
+      // of this index is trying to read directly from the array valuations
+      if (!it->val) {
+        it->val = dest;
+      } else {
+        // "Old" code?
+        // OK, bind this select in through an equality.
+        ctx->assert_ast(dest->eq(ctx, it->val));
+      }
     }
   }
 }
@@ -991,7 +1019,7 @@ void array_convt::add_array_equality(
   unsigned int arr2_id,
   unsigned int arr1_update,
   unsigned int arr2_update,
-  smt_astt result,
+  smt_astt &result,
   unsigned int start_pos)
 {
   // Simply get a handle on two vectors of valuations in array_valuation,
@@ -1007,7 +1035,9 @@ void array_convt::add_array_equality(
   }
 
   smt_astt conj = ctx->make_conjunct(lits);
-  ctx->assert_ast(result->eq(ctx, conj));
+  assert(result == NULL);
+  result = conj;
+  return;
 }
 
 void array_convt::execute_array_trans(

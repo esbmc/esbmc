@@ -1,3 +1,5 @@
+#include <type_traits>
+
 #include <ac_config.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/functional/hash.hpp>
@@ -435,6 +437,7 @@ public:
     o.def("pretty", &type2t::pretty);
     o.def("crc", &type2t::crc);
     o.def("clone", &type2t::clone);
+    o.def("get_width", &type2t::get_width);
     o.def_readonly("type_id", &type2t::type_id);
 
     // Operators. Can't use built-in boost.python way because it only
@@ -887,6 +890,73 @@ public:
 };
 
 #ifdef WITH_PYTHON
+namespace esbmct {
+  template <class Container>
+  class irep_iter_obj {
+  public:
+    irep_iter_obj(Container &_irep) : weak_irep(_irep), idx(0) { }
+    std::weak_ptr<typename Container::element_type> weak_irep;
+    unsigned int idx;
+
+    static irep_iter_obj *from_container(Container& c) {
+      // Force detachment of this container. That means that whenever you
+      // iterate over subexpressions you clone away from the original tree.
+      // If you're reading this is inefficient; if you're writing it's vital.
+      c.get();
+      return new irep_iter_obj(c);
+    }
+
+    Container *next() {
+      if (weak_irep.expired()) {
+        PyErr_SetString(PyExc_RuntimeError,
+            "esbmct::irep_iter_obj: source obj expired during iter");
+        boost::python::throw_error_already_set();
+      }
+
+      auto irep = weak_irep.lock();
+
+      if (idx >= irep->get_num_sub_exprs()) {
+        PyErr_SetObject(PyExc_StopIteration, NULL);
+        boost::python::throw_error_already_set();
+      }
+
+      const Container *foo = irep->get_sub_expr(idx++);
+      // Const correctness just doesn't work with python
+      Container *bar = const_cast<Container *>(foo);
+      // Force detachment in case the receiver of this ptr decides to fiddle
+      // with the object. Note that this only works because it's a _pointer_
+      // to the field _within_ the expr2t subclass.
+      bar->get();
+      return bar;
+    }
+  };
+}
+
+// If you're calling this, you are very likely doing something wrong
+static void
+invalidate_irep_crc_cache(expr2tc &expr)
+{
+  expr.get()->crc_val = 0;
+  expr.get()->Foreach_operand([] (expr2tc &e) {
+      invalidate_irep_crc_cache(e);
+    }
+  );
+}
+
+static const char *expr_pyfuncs[1][2] = {
+{ "__contains__",
+"\
+def __contains__(self, value):\n\
+    if self == value:\n\
+        return True\n\
+    for x in self:\n\
+        if value in x:\n\
+            return True\n\
+    return False\n\
+"
+}
+};
+
 template <>
 class register_irep_methods<expr2t>
 {
@@ -894,6 +964,8 @@ public:
   template <typename O>
   void operator()(O &o, const std::string &irep_name)
   {
+    using namespace boost::python;
+
     // Define standard methods
     o.def("clone", &expr2t::clone);
     o.def("pretty", &expr2t::pretty);
@@ -901,6 +973,7 @@ public:
     o.def("depth", &expr2t::depth);
     o.def("crc", &expr2t::crc);
     o.def("simplify", &expr2t::simplify);
+    o.def("invalidate_crc", &invalidate_irep_crc_cache);
     o.def_readonly("type", &expr2t::type);
     o.def_readonly("expr_id", &expr2t::expr_id);
 
@@ -923,6 +996,65 @@ public:
     // Register super special irep methods
     if(irep_name == "symbol")
       o.def("get_symbol_name", &symbol2t::get_symbol_name);
+
+    // Iter method returns a new iteration object
+    o.def("__iter__", &esbmct::irep_iter_obj<expr2tc>::from_container,
+        return_value_policy<manage_new_object>());
+
+    // OK: now try for the iterator object class...
+    init<expr2tc&> iter_init;
+    class_<esbmct::irep_iter_obj<expr2tc>, boost::noncopyable> bar("expr_iter_obj", iter_init);
+    // And defines a __next__ method. Returns a ptr to the _field_ inside an
+    // expression, which is technically an internal reference.
+    bar.def("__next__", &esbmct::irep_iter_obj<expr2tc>::next,
+        return_internal_reference<>());
+
+    // And finally: evaluate some python-text to define methods for this class.
+    // We have to evaluate the text to define the function; and the code itself
+    // isn't a function so can't be called. Thus we have to evaluate the bare
+    // text, and then extract the defined function from inside it.
+    for (const auto &elem : expr_pyfuncs) {
+      object globals = dict();
+      // Compile python text string into code
+      PyObject *newcode_ptr = Py_CompileString(elem[1], "<esbmc internal>", Py_file_input);
+      if (!newcode_ptr)
+        boost::python::throw_error_already_set();
+      object newcode = object(handle<>(newcode_ptr));
+
+      // Evaluate the parsed code to define the desired function. We discard the
+      // result, but may need to decref it.
+      PyObject *code_ret_ptr = PyEval_EvalCode(newcode.ptr(), globals.ptr(), globals.ptr());
+      if (!code_ret_ptr)
+        boost::python::throw_error_already_set();
+      object newfunc = object(handle<>(code_ret_ptr));
+
+      // Evaluating that code should (TM) have defined a function; do some
+      // checks for sanity.
+      if (len(globals) != 1) {
+        std::string err = "esbmc: irep method \"" + std::string(elem[0]) +
+          "\" defined more than one function?";
+        PyErr_SetString(PyExc_RuntimeError, err.c_str());
+        boost::python::throw_error_already_set();
+      }
+
+      object func = globals[elem[0]];
+      if (func.is_none()) {
+        std::string err = "esbmc: irep method \"" + std::string(elem[0]) +
+          "\" didn't define itself";
+        PyErr_SetString(PyExc_RuntimeError, err.c_str());
+        boost::python::throw_error_already_set();
+      }
+
+      if (!PyFunction_Check(func.ptr())) {
+        std::string err = "esbmc: irep method \"" + std::string(elem[0]) +
+          "\" didn't define a function";
+        PyErr_SetString(PyExc_RuntimeError, err.c_str());
+        boost::python::throw_error_already_set();
+      }
+
+      o.attr(elem[0]) = func;
+    }
+
     return;
   }
 };
@@ -2819,6 +2951,38 @@ public:
 
 #endif /* WITH PYTHON */
 
+// Misery cakes to add readwrite modifier for non-const fields.
+namespace esbmct {
+  template <class Reg, class targfield>
+  struct magical_mystery_modifier {
+  public:
+    void operator()(Reg &reg, const char *fname, targfield foo) {
+      (void)reg;
+      (void)fname;
+      (void)foo;
+    }
+  };
+
+  template <class Reg, class foo, class bar>
+  struct magical_mystery_modifier<Reg, foo bar::*> {
+  public:
+    void operator()(Reg &reg, const char *fname, foo bar::* baz, typename boost::disable_if<typename boost::is_const<foo>::type, bool>::type qux=false) {
+      (void)qux;
+      reg.def_readwrite(fname, baz);
+    }
+  };
+
+  template <class Reg, class foo, class bar>
+  struct magical_mystery_modifier<Reg, const foo bar::*> {
+  public:
+    void operator()(Reg &reg, const char *fname, const foo bar::* baz) {
+      (void)reg;
+      (void)fname;
+      (void)baz;
+    }
+  };
+}
+
 template <
   class derived,
   class baseclass,
@@ -2841,10 +3005,18 @@ void esbmct::
   }
 
   // Add this field record to the python class obj, get name from field_names
-  // field, and increment the index we're working on.
-  superclass::build_python_class_rec(
-    obj.def_readonly(derived::field_names[idx].c_str(), membr_ptr::value),
-    idx + 1);
+  // field.
+  obj.def_readonly(derived::field_names[idx].c_str(), membr_ptr::value);
+
+  // If the user is particularly confident that they know what they're doing,
+  // they can assign (and thus mutate) fields in an expression. This is almost
+  // always a bad idea. XXX undocumented? XXX not expr id...
+  std::string mutable_name = "iknowwhatimdoing_" + std::string(derived::field_names[idx].c_str());
+  esbmct::magical_mystery_modifier<T, typename membr_ptr::membr_ptr> foo;
+  foo(obj, mutable_name.c_str(), membr_ptr::value);
+
+  // Recurse.
+  superclass::build_python_class_rec(obj, idx+1);
   return;
 #else
   (void)obj;

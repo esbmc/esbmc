@@ -302,14 +302,18 @@ void goto_symext::symex_free(const expr2tc &expr)
   tmp = dereference2tc(get_uint8_type(), tmp);
   dereference(tmp, dereferencet::INTERNAL);
 
-  for(auto const &item : internal_deref_items)
+  // Only add assertions to check pointer offset if pointer check is enabled
+  if(!options.get_bool_option("no-pointer-check"))
   {
-    guardt g = cur_state->guard;
-    g.add(item.guard);
-    expr2tc offset = item.offset;
-    expr2tc eq = equality2tc(offset, gen_ulong(0));
-    g.guard_expr(eq);
-    claim(eq, "Operand of free must have zero pointer offset");
+    for(auto const &item : internal_deref_items)
+    {
+      guardt g = cur_state->guard;
+      g.add(item.guard);
+      expr2tc offset = item.offset;
+      expr2tc eq = equality2tc(offset, gen_ulong(0));
+      g.guard_expr(eq);
+      claim(eq, "Operand of free must have zero pointer offset");
+    }
   }
 
   // Clear the alloc bit, and set the deallocated bit.

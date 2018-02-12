@@ -685,6 +685,9 @@ public:
 // Generate some "is-this-a-blah" macros, and type conversion macros. This is
 // fine in terms of using/ keywords in syntax, because the preprocessor
 // preprocesses everything out.
+#ifdef NDEBUG
+#define dynamic_cast static_cast
+#endif
 #define type_macros(name)                                                      \
   inline bool is_##name##_type(const expr2tc &e)                               \
   {                                                                            \

@@ -22,30 +22,14 @@ static const char *mathsat_config =
   "theory.fp.mode = 1\n"
   "theory.fp.bit_blast_mode = 2\n"
   "theory.fp.bv_combination_enabled = true\n"
-  "theory.arr.permanent_lemma_inst = true\n"
   "theory.arr.enable_witness = true";
 
-// Ahem
-msat_env *_env = nullptr;
-
-void print_mathsat_formula()
-{
-  size_t num_of_asserted;
-  msat_term *asserted_formulas =
-    msat_get_asserted_formulas(*_env, &num_of_asserted);
-
-  for(unsigned i = 0; i < num_of_asserted; i++)
-    std::cout << msat_to_smtlib2(*_env, asserted_formulas[i]) << "\n";
-
-  msat_free(asserted_formulas);
-}
-
-void check_msat_error(msat_term &r)
+void mathsat_convt::check_msat_error(msat_term &r)
 {
   if(MSAT_ERROR_TERM(r))
   {
     std::cerr << "Error creating SMT " << std::endl;
-    std::cerr << "Error text: \"" << msat_last_error_message(*_env) << "\""
+    std::cerr << "Error text: \"" << msat_last_error_message(env) << "\""
               << std::endl;
     abort();
   }
@@ -54,7 +38,6 @@ void check_msat_error(msat_term &r)
 smt_convt *create_new_mathsat_solver(
   bool int_encoding,
   const namespacet &ns,
-  const optionst &opts __attribute__((unused)),
   tuple_iface **tuple_api __attribute__((unused)),
   array_iface **array_api,
   fp_convt **fp_api)
@@ -71,13 +54,11 @@ mathsat_convt::mathsat_convt(bool int_encoding, const namespacet &ns)
   cfg = msat_parse_config(mathsat_config);
   msat_set_option(cfg, "model_generation", "true");
   env = msat_create_env(cfg);
-  _env = &env;
 }
 
 mathsat_convt::~mathsat_convt()
 {
   msat_destroy_env(env);
-  _env = nullptr;
 }
 
 void mathsat_convt::push_ctx()
@@ -98,52 +79,18 @@ void mathsat_convt::assert_ast(const smt_ast *a)
   msat_assert_formula(env, mast->t);
 }
 
-static void print_model(msat_env env)
-{
-  /* we use a model iterator to retrieve the model values for all the
-     * variables, and the necessary function instantiations */
-  msat_model_iterator iter = msat_create_model_iterator(env);
-  assert(!MSAT_ERROR_MODEL_ITERATOR(iter));
-
-  printf("Model:\n");
-  while(msat_model_iterator_has_next(iter))
-  {
-    msat_term t, v;
-    char *s;
-    msat_model_iterator_next(iter, &t, &v);
-    s = msat_term_repr(t);
-    assert(s);
-    printf(" %s = ", s);
-    msat_free(s);
-    s = msat_term_repr(v);
-    assert(s);
-    printf("%s\n", s);
-    msat_free(s);
-  }
-  msat_destroy_model_iterator(iter);
-}
-
 smt_convt::resultt mathsat_convt::dec_solve()
 {
   pre_solve();
 
   msat_result r = msat_solve(env);
   if(r == MSAT_SAT)
-  {
-    if(config.options.get_bool_option("show-smt-model"))
-      print_model(env);
-
     return P_SATISFIABLE;
-  }
+
   if(r == MSAT_UNSAT)
-  {
     return P_UNSATISFIABLE;
-  }
-  else
-  {
-    std::cerr << "MathSAT returned MSAT_UNKNOWN for formula" << std::endl;
-    abort();
-  }
+
+  return smt_convt::P_ERROR;
 }
 
 expr2tc mathsat_convt::get_bool(const smt_ast *a)
@@ -810,50 +757,56 @@ smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t &expr)
 
 smt_astt mathsat_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
 {
+  const ieee_arith_2ops &op = dynamic_cast<const ieee_arith_2ops &>(*expr);
+
   // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(0));
+  smt_astt rm = convert_rounding_mode(op.rounding_mode);
   const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
 
   // Sides
-  smt_astt s1 = convert_ast(*expr->get_sub_expr(1));
+  smt_astt s1 = convert_ast(op.side_1);
   const mathsat_smt_ast *ms1 = mathsat_ast_downcast(s1);
 
-  msat_term t;
-  if(is_ieee_sqrt2t(expr))
-  {
-    t = msat_make_fp_sqrt(env, mrm->t, ms1->t);
-  }
-  else
-  {
-    smt_astt s2 = convert_ast(*expr->get_sub_expr(2));
-    const mathsat_smt_ast *ms2 = mathsat_ast_downcast(s2);
+  smt_astt s2 = convert_ast(op.side_2);
+  const mathsat_smt_ast *ms2 = mathsat_ast_downcast(s2);
 
-    switch(expr->expr_id)
-    {
-    case expr2t::ieee_add_id:
-      t = msat_make_fp_plus(env, mrm->t, ms1->t, ms2->t);
-      break;
-    case expr2t::ieee_sub_id:
-      t = msat_make_fp_minus(env, mrm->t, ms1->t, ms2->t);
-      break;
-    case expr2t::ieee_mul_id:
-      t = msat_make_fp_times(env, mrm->t, ms1->t, ms2->t);
-      break;
-    case expr2t::ieee_div_id:
-      t = msat_make_fp_div(env, mrm->t, ms1->t, ms2->t);
-      break;
-    case expr2t::ieee_fma_id:
-    {
-      // Mathsat doesn't support fma for now, if we force
-      // the multiplication, it will provide the wrong answer
-      std::cerr << "Mathsat doesn't support the fused multiply-add "
-                   "(fp.fma) operator"
-                << std::endl;
-    }
-    default:
-      abort();
-    }
+  msat_term t;
+  switch(expr->expr_id)
+  {
+  case expr2t::ieee_add_id:
+    t = msat_make_fp_plus(env, mrm->t, ms1->t, ms2->t);
+    break;
+  case expr2t::ieee_sub_id:
+    t = msat_make_fp_minus(env, mrm->t, ms1->t, ms2->t);
+    break;
+  case expr2t::ieee_mul_id:
+    t = msat_make_fp_times(env, mrm->t, ms1->t, ms2->t);
+    break;
+  case expr2t::ieee_div_id:
+    t = msat_make_fp_div(env, mrm->t, ms1->t, ms2->t);
+    break;
+  default:
+    abort();
   }
+  check_msat_error(t);
+
+  smt_sortt s = convert_sort(expr->type);
+  return new mathsat_smt_ast(this, s, t);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_sqrt(const expr2tc &expr)
+{
+  const ieee_sqrt2t sqrt = to_ieee_sqrt2t(expr);
+
+  // Rounding mode symbol
+  smt_astt rm = convert_rounding_mode(sqrt.rounding_mode);
+  const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
+
+  // Value
+  smt_astt v = convert_ast(sqrt.value);
+  const mathsat_smt_ast *mv = mathsat_ast_downcast(v);
+
+  msat_term t = msat_make_fp_sqrt(env, mrm->t, mv->t);
   check_msat_error(t);
 
   smt_sortt s = convert_sort(expr->type);
@@ -952,7 +905,11 @@ const smt_ast *mathsat_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 
 void mathsat_smt_ast::dump() const
 {
-  std::cout << msat_to_smtlib2(*_env, t) << std::endl;
+  // We need to get the env
+  auto convt = dynamic_cast<const mathsat_convt *>(context);
+  assert(convt != nullptr);
+
+  std::cout << msat_to_smtlib2(convt->env, t) << std::endl;
 }
 
 smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
@@ -963,5 +920,37 @@ smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 
 void mathsat_convt::dump_smt()
 {
-  print_mathsat_formula();
+  size_t num_of_asserted;
+  msat_term *asserted_formulas =
+    msat_get_asserted_formulas(env, &num_of_asserted);
+
+  for(unsigned i = 0; i < num_of_asserted; i++)
+    std::cout << msat_to_smtlib2(env, asserted_formulas[i]) << "\n";
+
+  msat_free(asserted_formulas);
+}
+
+void mathsat_convt::print_model()
+{
+  /* we use a model iterator to retrieve the model values for all the
+     * variables, and the necessary function instantiations */
+  msat_model_iterator iter = msat_create_model_iterator(env);
+  assert(!MSAT_ERROR_MODEL_ITERATOR(iter));
+
+  printf("Model:\n");
+  while(msat_model_iterator_has_next(iter))
+  {
+    msat_term t, v;
+    char *s;
+    msat_model_iterator_next(iter, &t, &v);
+    s = msat_term_repr(t);
+    assert(s);
+    printf(" %s = ", s);
+    msat_free(s);
+    s = msat_term_repr(v);
+    assert(s);
+    printf("%s\n", s);
+    msat_free(s);
+  }
+  msat_destroy_model_iterator(iter);
 }

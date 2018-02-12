@@ -16,25 +16,18 @@ extern sexpr *smtlib_output;
 smt_convt *create_new_smtlib_solver(
   bool int_encoding,
   const namespacet &ns,
-  const optionst &opts __attribute__((unused)),
   tuple_iface **tuple_api __attribute__((unused)),
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  smtlib_convt *conv = new smtlib_convt(int_encoding, ns, opts);
+  smtlib_convt *conv = new smtlib_convt(int_encoding, ns);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-smtlib_convt::smtlib_convt(
-  bool int_encoding,
-  const namespacet &_ns,
-  const optionst &_opts)
-  : smt_convt(int_encoding, _ns),
-    array_iface(false, false),
-    fp_convt(ctx),
-    options(_opts)
+smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
+  : smt_convt(int_encoding, _ns), array_iface(false, false), fp_convt(ctx)
 {
   temp_sym_count.push_back(1);
   std::string cmd;
@@ -42,10 +35,10 @@ smtlib_convt::smtlib_convt(
   std::string logic = (int_encoding) ? "QF_AUFLIRA" : "QF_AUFBV";
 
   // We may be being instructed to just output to a file.
-  cmd = options.get_option("output");
+  cmd = config.options.get_option("output");
   if(cmd != "")
   {
-    if(options.get_option("smtlib-solver-prog") != "")
+    if(config.options.get_option("smtlib-solver-prog") != "")
     {
       std::cerr << "Can't solve SMTLIB output and write to a file, sorry"
                 << std::endl;
@@ -77,7 +70,7 @@ smtlib_convt::smtlib_convt(
 
   int inpipe[2], outpipe[2];
 
-  cmd = options.get_option("smtlib-solver-prog");
+  cmd = config.options.get_option("smtlib-solver-prog");
   if(cmd == "")
   {
     std::cerr << "Must specify an smtlib solver program in smtlib mode"
@@ -215,8 +208,9 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
   }
 }
 
-unsigned int
-smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
+unsigned int smtlib_convt::emit_terminal_ast(
+  const smtlib_smt_ast *ast,
+  std::string &output)
 {
   std::stringstream ss;
   const smtlib_smt_sort *sort = static_cast<const smtlib_smt_sort *>(ast->sort);
@@ -269,8 +263,9 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
   }
 }
 
-unsigned int
-smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
+unsigned int smtlib_convt::emit_ast(
+  const smtlib_smt_ast *ast,
+  std::string &output)
 {
   unsigned int brace_level = 0, i;
   std::string args[4];
@@ -761,7 +756,9 @@ smt_sort *smtlib_convt::mk_sort(const smt_sort_kind k, ...)
   return s;
 }
 
-smt_ast *smtlib_convt::mk_smt_int(const mp_integer &theint, bool sign)
+smt_ast *smtlib_convt::mk_smt_int(
+  const mp_integer &theint,
+  bool sign __attribute__((unused)))
 {
   smt_sortt s = mk_sort(SMT_SORT_INT, sign);
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_INT);
@@ -878,8 +875,9 @@ void smtlib_convt::pop_ctx()
   smt_convt::pop_ctx();
 }
 
-const smt_ast *
-smtlib_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
+const smt_ast *smtlib_convt::convert_array_of(
+  smt_astt init_val,
+  unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
 }

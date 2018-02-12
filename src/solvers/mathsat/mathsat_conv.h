@@ -3,7 +3,6 @@
 
 #include <mathsat.h>
 #include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_tuple_flat.h>
 #include <solvers/smt/fp_conv.h>
 
 class mathsat_smt_sort : public smt_sort
@@ -101,6 +100,7 @@ public:
   smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) override;
   smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr) override;
   smt_astt mk_smt_fpbv_fma(const expr2tc &expr) override;
+  smt_astt mk_smt_fpbv_sqrt(const expr2tc &expr) override;
 
   void push_ctx() override;
   void pop_ctx() override;
@@ -120,7 +120,10 @@ public:
   void push_array_ctx() override;
   void pop_array_ctx() override;
 
+  void check_msat_error(msat_term &r);
+
   void dump_smt() override;
+  void print_model() override;
 
   // MathSAT data.
   msat_config cfg;

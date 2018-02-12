@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
---unwind 4 --context-bound 2
-^VERIFICATION SUCCESSFUL$
+--unwind 2
+^VERIFICATION FAILED$

@@ -280,26 +280,20 @@ void goto_symext::symex_assign_symbol(
   symex_targett::assignment_typet type)
 {
   // put assignment guard in rhs
-
   if(!guard.is_true())
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
-
-  // There are a number of cases to consider here
-  expr2tc orig_name_lhs = full_lhs;
-
-  // If the original code is an assignment, use the original target instead
-  if(
-    !is_nil_expr(cur_state->source.pc->code) &&
-    is_code_assign2t(cur_state->source.pc->code))
-    orig_name_lhs = to_code_assign2t(cur_state->source.pc->code).target;
-
-  cur_state->rename(orig_name_lhs, true);
 
   cur_state->rename(rhs);
   do_simplify(rhs);
 
   expr2tc renamed_lhs = lhs;
   cur_state->assignment(renamed_lhs, rhs, constant_propagation);
+
+  // Special case when the lhs is an array access, we need to get the
+  // right symbol for the index
+  expr2tc new_lhs = full_lhs;
+  if(is_index2t(new_lhs))
+    cur_state->rename(to_index2t(new_lhs).index);
 
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
@@ -308,7 +302,7 @@ void goto_symext::symex_assign_symbol(
   target->assignment(
     tmp_guard.as_expr(),
     renamed_lhs,
-    orig_name_lhs,
+    new_lhs,
     rhs,
     cur_state->source,
     cur_state->gen_stack_trace(),
