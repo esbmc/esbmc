@@ -69,10 +69,10 @@ goto_symext::goto_symext(
 
   art1 = nullptr;
 
-  valid_ptr_arr_name = "__ESBMC_alloc";
-  alloc_size_arr_name = "__ESBMC_alloc_size";
-  deallocd_arr_name = "__ESBMC_deallocated";
-  dyn_info_arr_name = "__ESBMC_is_dynamic";
+  valid_ptr_arr_name = "c:@__ESBMC_alloc";
+  alloc_size_arr_name = "c:@__ESBMC_alloc_size";
+  deallocd_arr_name = "c:@__ESBMC_deallocated";
+  dyn_info_arr_name = "c:@__ESBMC_is_dynamic";
 
   symbolt sym;
   sym.name = "symex_throw::thrown_obj";
