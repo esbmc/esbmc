@@ -66,6 +66,7 @@ public:
 
   size_t get_data_width() const
   {
+    assert(id != SMT_SORT_ARRAY);
     return data_width;
   }
 
