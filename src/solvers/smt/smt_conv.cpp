@@ -399,8 +399,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   }
 
-  smt_sortt sort = convert_sort(expr->type);
-
   smt_astt a;
   switch(expr->expr_id)
   {
@@ -433,6 +431,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     const array_type2t &arr = to_array_type(expr->type);
     if(!array_api->can_init_infinite_arrays && arr.size_is_infinite)
     {
+      smt_sortt sort = convert_sort(expr->type);
+
       // Don't honour inifinite sized array initializers. Modelling only.
       // If we have an array of tuples and no tuple support, use tuple_fresh.
       // Otherwise, mk_fresh.
@@ -680,6 +680,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(expr->get_num_sub_exprs() == 2);
 
+    smt_sortt sort = convert_sort(expr->type);
+
     // Two projects, then comparison.
     args[0] = args[0]->project(this, 0);
     args[1] = args[1]->project(this, 0);
@@ -807,6 +809,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     // going to turn up is pointers though.
     assert(expr->get_num_sub_exprs() == 2);
 
+    smt_sortt sort = convert_sort(expr->type);
+
     expr2tc side1 = *expr->get_sub_expr(0);
     expr2tc side2 = *expr->get_sub_expr(1);
     if(is_floatbv_type(side1) && is_floatbv_type(side2))
@@ -831,6 +835,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     if(int_encoding)
     {
+      smt_sortt sort = convert_sort(expr->type);
+
       // Raise 2^shift, then multiply first operand by that value. If it's
       // negative, what to do? FIXME.
       smt_astt powval = int_shift_op_array->select(this, shl.side_2);
@@ -866,6 +872,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     if(int_encoding)
     {
+      smt_sortt sort = convert_sort(expr->type);
+
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
       smt_astt powval = int_shift_op_array->select(this, ashr.side_2);
@@ -903,6 +911,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     if(int_encoding)
     {
+      smt_sortt sort = convert_sort(expr->type);
+
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
       smt_astt powval = int_shift_op_array->select(this, lshr.side_2);
@@ -935,6 +945,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else if(is_floatbv_type(abs.value))
     {
+      smt_sortt sort = convert_sort(expr->type);
       a = mk_func_app(sort, SMT_FUNC_FABS, &args[0], 1);
     }
     else
@@ -1187,7 +1198,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::not_id:
   {
-    assert(sort->id == SMT_SORT_BOOL);
+    assert(is_bool_type(expr));
     assert(expr->get_num_sub_exprs() == 1);
 
     a = convert_ast(
@@ -1286,6 +1297,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::extract_id:
   {
+    smt_sortt sort = convert_sort(expr->type);
+
     const extract2t &ex = to_extract2t(expr);
     a = convert_ast(ex.from);
     a = mk_extract(a, ex.upper, ex.lower, sort);
