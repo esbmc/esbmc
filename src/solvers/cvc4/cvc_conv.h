@@ -8,35 +8,27 @@ class cvc_smt_sort : public smt_sort
 {
 public:
 #define cvc_sort_downcast(x) static_cast<const cvc_smt_sort *>(x)
-  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s)
-    : smt_sort(i), s(_s), rangesort(nullptr)
+  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s) : smt_sort(i), s(_s)
   {
   }
 
-  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w)
-    : smt_sort(i, w), s(_s), rangesort(nullptr)
+  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w) : smt_sort(i, w), s(_s)
   {
   }
 
   cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w, size_t sw)
-    : smt_sort(i, w, sw), s(_s), rangesort(nullptr)
+    : smt_sort(i, w, sw), s(_s)
   {
   }
 
-  cvc_smt_sort(
-    smt_sort_kind i,
-    CVC4::Type _s,
-    size_t w,
-    size_t dw,
-    const smt_sort *_rangesort)
-    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort)
+  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w, smt_sortt _rangesort)
+    : smt_sort(i, w, _rangesort), s(_s)
   {
   }
 
   ~cvc_smt_sort() override = default;
 
   CVC4::Type s;
-  const smt_sort *rangesort;
 };
 
 class cvc_smt_ast : public smt_ast

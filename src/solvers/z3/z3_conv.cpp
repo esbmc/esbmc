@@ -258,11 +258,8 @@ void z3_convt::convert_type(const type2tc &type, z3::sort &sort)
     const array_type2t &arr = to_array_type(type);
     unsigned int domain_width = calculate_array_domain_width(arr);
 
-    smt_sortt domain;
-    if(int_encoding)
-      domain = mk_sort(SMT_SORT_INT);
-    else
-      domain = mk_sort(SMT_SORT_UBV, domain_width);
+    smt_sortt domain = int_encoding ? mk_sort(SMT_SORT_INT)
+                                    : mk_sort(SMT_SORT_UBV, domain_width);
 
     smt_sortt range = convert_sort(arr.subtype);
     sort = z3_sort_downcast(mk_sort(SMT_SORT_ARRAY, domain, range))->s;
@@ -877,24 +874,12 @@ smt_sortt z3_convt::mk_sort(const smt_sort_kind k, ...)
   }
   case SMT_SORT_ARRAY:
   {
-    z3_smt_sort *dom = va_arg(ap, z3_smt_sort *); // Consider constness?
-    z3_smt_sort *range = va_arg(ap, z3_smt_sort *);
+    const z3_smt_sort *dom = va_arg(ap, z3_smt_sort *); // Consider constness?
+    const z3_smt_sort *range = va_arg(ap, z3_smt_sort *);
     assert(int_encoding || dom->get_data_width() != 0);
 
-    // The range data width is allowed to be zero, which happens if the range
-    // is not a bitvector / integer
-    unsigned int data_width = range->get_data_width();
-    if(
-      range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL ||
-      range->id == SMT_SORT_UNION)
-      data_width = 1;
-
     s = new z3_smt_sort(
-      k,
-      z3_ctx.array_sort(dom->s, range->s),
-      data_width,
-      dom->get_data_width(),
-      range);
+      k, z3_ctx.array_sort(dom->s, range->s), dom->get_data_width(), range);
     break;
   }
   case SMT_SORT_BOOL:
@@ -921,7 +906,7 @@ smt_sortt z3_convt::mk_sort(const smt_sort_kind k, ...)
   return s;
 }
 
-smt_sort *z3_convt::mk_struct_sort(const type2tc &type)
+smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
 {
   z3::sort s;
   convert_type(type, s);
@@ -929,16 +914,9 @@ smt_sort *z3_convt::mk_struct_sort(const type2tc &type)
   if(is_array_type(type))
   {
     const array_type2t &arrtype = to_array_type(type);
-    unsigned int domain_width;
-    if(int_encoding)
-      domain_width = 0;
-    else
-      domain_width = s.array_domain().bv_size();
-
-    // The '1' range is a dummy, seeing how smt_sortt has no representation of
-    // tuple sort ranges
-    return new z3_smt_sort(
-      SMT_SORT_ARRAY, s, 1, domain_width, convert_sort(arrtype.subtype));
+    smt_sortt subtypesort = convert_sort(arrtype.subtype);
+    smt_sortt d = make_array_domain_sort(arrtype);
+    return mk_sort(SMT_SORT_ARRAY, d, subtypesort);
   }
 
   return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
@@ -965,15 +943,6 @@ const smt_ast *z3_smt_ast::update(
   return z3_conv->new_ast(z3_conv->mk_tuple_update(e, idx, updateval->e), sort);
 }
 
-const smt_ast *z3_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
-{
-  const smt_ast *args[2];
-  args[0] = this;
-  args[1] = ctx->convert_ast(idx);
-  const smt_sort *rangesort = z3_sort_downcast(sort)->rangesort;
-  return ctx->mk_func_app(rangesort, SMT_FUNC_SELECT, args, 2);
-}
-
 const smt_ast *z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
 {
   z3_convt *z3_conv = static_cast<z3_convt *>(conv);
@@ -995,7 +964,7 @@ smt_astt z3_convt::tuple_create(const expr2tc &structdef)
     static_cast<const struct_union_data &>(*strct.type);
 
   convert_struct(strct.datatype_members, type.members, strct.type, e);
-  smt_sort *s = mk_struct_sort(structdef->type);
+  smt_sortt s = mk_struct_sort(structdef->type);
   return new_ast(e, s);
 }
 
@@ -1007,30 +976,17 @@ smt_astt z3_convt::tuple_fresh(const smt_sort *s, std::string name)
   return new_ast(output, zs);
 }
 
-const smt_ast *z3_convt::convert_array_of(
-  smt_astt init_val,
-  unsigned long domain_width)
+const smt_ast *
+z3_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
-  z3::sort dom_sort =
-    (int_encoding) ? z3_ctx.int_sort() : z3_ctx.bv_sort(domain_width);
-  const z3_smt_sort *range = z3_sort_downcast(init_val->sort);
-  z3::sort range_sort = range->s;
-  z3::sort array_sort = z3_ctx.array_sort(dom_sort, range_sort);
+  smt_sortt dom_sort = (int_encoding) ? mk_sort(SMT_SORT_INT)
+                                      : mk_sort(SMT_SORT_UBV, domain_width);
 
   z3::expr val = z3_smt_downcast(init_val)->e;
-  z3::expr output =
-    z3::to_expr(z3_ctx, Z3_mk_const_array(z3_ctx, dom_sort, val));
+  z3::expr output = z3::to_expr(
+    z3_ctx, Z3_mk_const_array(z3_ctx, z3_sort_downcast(dom_sort)->s, val));
 
-  size_t range_width = range->get_data_width();
-  if(
-    range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL ||
-    range->id == SMT_SORT_UNION)
-    range_width = 1;
-
-  size_t dom_width = (int_encoding) ? 0 : dom_sort.bv_size();
-  smt_sort *s =
-    new z3_smt_sort(SMT_SORT_ARRAY, array_sort, range_width, dom_width, range);
-  return new_ast(output, s);
+  return new_ast(output, mk_sort(SMT_SORT_ARRAY, dom_sort, init_val->sort));
 }
 
 const smt_ast *z3_convt::tuple_array_create(
@@ -1093,7 +1049,7 @@ const smt_ast *z3_convt::tuple_array_create(
     }
   }
 
-  smt_sort *ssort = mk_struct_sort(arrtype.subtype);
+  smt_sortt ssort = mk_struct_sort(arrtype.subtype);
   smt_sortt asort = mk_sort(SMT_SORT_ARRAY, domain, ssort);
   return new_ast(output, asort);
 }
@@ -1109,9 +1065,8 @@ smt_astt z3_convt::mk_tuple_array_symbol(const expr2tc &expr)
   return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
 }
 
-smt_astt z3_convt::tuple_array_of(
-  const expr2tc &init,
-  unsigned long domain_width)
+smt_astt
+z3_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
 {
   return convert_array_of(convert_ast(init), domain_width);
 }

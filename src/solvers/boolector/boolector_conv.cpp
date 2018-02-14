@@ -194,21 +194,11 @@ smt_sortt boolector_convt::mk_sort(const smt_sort_kind k, ...)
     const boolector_smt_sort *dom =
       va_arg(ap, boolector_smt_sort *); // Consider constness?
     const boolector_smt_sort *range = va_arg(ap, boolector_smt_sort *);
-
     assert(int_encoding || dom->get_data_width() != 0);
-
-    // The range data width is allowed to be zero, which happens if the range
-    // is not a bitvector / integer
-    unsigned int data_width = range->get_data_width();
-    if(
-      range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL ||
-      range->id == SMT_SORT_UNION)
-      data_width = 1;
 
     return new boolector_smt_sort(
       k,
       boolector_array_sort(btor, dom->s, range->s),
-      data_width,
       dom->get_data_width(),
       range);
   }
@@ -548,15 +538,6 @@ smt_ast *boolector_convt::fix_up_shift(
     shift = boolector_slice(btor, shift, res_sort->get_data_width() - 1, 0);
 
   return new_ast(res_sort, shift);
-}
-
-const smt_ast *btor_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
-{
-  const smt_ast *args[2];
-  args[0] = this;
-  args[1] = ctx->convert_ast(idx);
-  const smt_sort *rangesort = boolector_sort_downcast(sort)->rangesort;
-  return ctx->mk_func_app(rangesort, SMT_FUNC_SELECT, args, 2);
 }
 
 void boolector_convt::dump_smt()

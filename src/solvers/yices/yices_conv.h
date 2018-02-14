@@ -8,40 +8,32 @@ class yices_smt_sort : public smt_sort
 {
 public:
 #define yices_sort_downcast(x) static_cast<const yices_smt_sort *>(x)
-  yices_smt_sort(smt_sort_kind i, type_t _s)
-    : smt_sort(i), s(_s), rangesort(nullptr)
+  yices_smt_sort(smt_sort_kind i, type_t _s) : smt_sort(i), s(_s)
   {
   }
 
   yices_smt_sort(smt_sort_kind i, type_t _s, const type2tc &_tupletype)
-    : smt_sort(i), s(_s), rangesort(nullptr), tupletype(_tupletype)
+    : smt_sort(i), s(_s), tupletype(_tupletype)
   {
   }
 
-  yices_smt_sort(smt_sort_kind i, type_t _s, size_t w)
-    : smt_sort(i, w), s(_s), rangesort(nullptr)
+  yices_smt_sort(smt_sort_kind i, type_t _s, size_t w) : smt_sort(i, w), s(_s)
   {
   }
 
   yices_smt_sort(smt_sort_kind i, type_t _s, size_t w, size_t sw)
-    : smt_sort(i, w, sw), s(_s), rangesort(nullptr)
+    : smt_sort(i, w, sw), s(_s)
   {
   }
 
-  yices_smt_sort(
-    smt_sort_kind i,
-    type_t _s,
-    size_t w,
-    size_t dw,
-    const smt_sort *_rangesort)
-    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort)
+  yices_smt_sort(smt_sort_kind i, type_t _s, size_t w, smt_sortt _rangesort)
+    : smt_sort(i, w, _rangesort), s(_s)
   {
   }
 
-  virtual ~yices_smt_sort() = default;
+  virtual ~yices_smt_sort() override = default;
 
   type_t s;
-  const smt_sort *rangesort;
   type2tc tupletype;
 };
 
@@ -71,7 +63,6 @@ public:
     smt_astt value,
     unsigned int idx,
     expr2tc idx_expr = expr2tc()) const override;
-  smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
   void dump() const override
   {
     abort();

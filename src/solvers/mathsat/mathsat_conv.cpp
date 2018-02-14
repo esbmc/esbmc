@@ -515,18 +515,9 @@ smt_sortt mathsat_convt::mk_sort(const smt_sort_kind k, ...)
     const mathsat_smt_sort *range = va_arg(ap, const mathsat_smt_sort *);
     assert(int_encoding || dom->get_data_width() != 0);
 
-    // The range data width is allowed to be zero, which happens if the range
-    // is not a bitvector / integer
-    unsigned int data_width = range->get_data_width();
-    if(
-      range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL ||
-      range->id == SMT_SORT_UNION)
-      data_width = 1;
-
     return new mathsat_smt_sort(
       k,
       msat_get_array_type(env, dom->s, range->s),
-      data_width,
       dom->get_data_width(),
       range);
   }
@@ -892,15 +883,6 @@ void mathsat_convt::push_array_ctx()
 
 void mathsat_convt::pop_array_ctx()
 {
-}
-
-const smt_ast *mathsat_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
-{
-  const smt_ast *args[2];
-  args[0] = this;
-  args[1] = ctx->convert_ast(idx);
-  const smt_sort *rangesort = mathsat_sort_downcast(sort)->rangesort;
-  return ctx->mk_func_app(rangesort, SMT_FUNC_SELECT, args, 2);
 }
 
 void mathsat_smt_ast::dump() const

@@ -44,24 +44,30 @@ public:
    *  for example. */
   smt_sort_kind id;
 
-  smt_sort(smt_sort_kind i) : id(i), data_width(0), secondary_width(0)
+  smt_sort(smt_sort_kind i)
+    : id(i), data_width(0), secondary_width(0), range_sort(nullptr)
   {
     assert(id != SMT_SORT_ARRAY);
   }
 
   smt_sort(smt_sort_kind i, std::size_t width)
-    : id(i), data_width(width), secondary_width(0)
+    : id(i), data_width(width), secondary_width(0), range_sort(nullptr)
   {
     assert(width != 0 || i == SMT_SORT_INT);
     assert(id != SMT_SORT_ARRAY);
   }
 
-  smt_sort(smt_sort_kind i, std::size_t rwidth, std::size_t domwidth)
-    : id(i), data_width(rwidth), secondary_width(domwidth)
+  smt_sort(smt_sort_kind i, std::size_t width, std::size_t sigwidth)
+    : id(i), data_width(width), secondary_width(sigwidth), range_sort(nullptr)
   {
-    assert(id == SMT_SORT_ARRAY || id == SMT_SORT_FLOATBV);
+    assert(id == SMT_SORT_FLOATBV);
     // assert(secondary_width != 0);
     // XXX not applicable during int mode?
+  }
+
+  smt_sort(smt_sort_kind i, std::size_t domwidth, smt_sortt rsort)
+    : id(i), data_width(domwidth), secondary_width(0), range_sort(rsort)
+  {
   }
 
   size_t get_data_width() const
@@ -73,13 +79,14 @@ public:
   size_t get_domain_width() const
   {
     assert(id == SMT_SORT_ARRAY);
-    return secondary_width;
+    return data_width;
   }
 
-  size_t get_range_width() const
+  smt_sortt get_range_sort() const
   {
     assert(id == SMT_SORT_ARRAY);
-    return secondary_width;
+    assert(range_sort != nullptr);
+    return range_sort;
   }
 
   size_t get_significand_width() const
@@ -99,9 +106,13 @@ private:
 
   /** Secondary width
    * For floating-points this is the significand width,
-   * for arrays this is the width of array domain,
    * For everything else, undefined */
   size_t secondary_width;
+
+  /** Range sort
+   * For arrays this is the type of the element
+   * For everything else, undefined */
+  smt_sortt range_sort;
 };
 
 #endif /* SOLVERS_SMT_SMT_SORT_H_ */

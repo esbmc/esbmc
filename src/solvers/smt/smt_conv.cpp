@@ -2898,19 +2898,12 @@ smt_astt smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 {
   assert(
     sort->id == SMT_SORT_ARRAY &&
-    "Select operation applied to non-array "
-    "scalar AST");
+    "Select operation applied to non-array scalar AST");
 
-  // Just apply a select operation to the current array. Index should be fixed.
-  // Guess the resulting sort. This could be a lot, lot better.
-  smt_sortt range_sort = nullptr;
-  if(sort->get_data_width() == 1 && ctx->array_api->supports_bools_in_arrays)
-    range_sort = ctx->boolean_sort;
-  else
-    range_sort = ctx->mk_sort(SMT_SORT_UBV, sort->get_data_width());
-
-  return ctx->mk_func_app(
-    range_sort, SMT_FUNC_SELECT, this, ctx->convert_ast(idx));
+  const smt_ast *args[2];
+  args[0] = this;
+  args[1] = ctx->convert_ast(idx);
+  return ctx->mk_func_app(sort->get_range_sort(), SMT_FUNC_SELECT, args, 2);
 }
 
 smt_astt smt_ast::project(

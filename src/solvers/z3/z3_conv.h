@@ -25,40 +25,32 @@ class z3_smt_sort : public smt_sort
 {
 public:
 #define z3_sort_downcast(x) static_cast<const z3_smt_sort *>(x)
-  z3_smt_sort(smt_sort_kind i, z3::sort _s)
-    : smt_sort(i), s(_s), rangesort(NULL)
+  z3_smt_sort(smt_sort_kind i, z3::sort _s) : smt_sort(i), s(_s)
   {
   }
 
   z3_smt_sort(smt_sort_kind i, z3::sort _s, const type2tc &_tupletype)
-    : smt_sort(i), s(_s), rangesort(NULL), tupletype(_tupletype)
+    : smt_sort(i), s(_s), tupletype(_tupletype)
   {
   }
 
-  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w)
-    : smt_sort(i, w), s(_s), rangesort(NULL)
+  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w) : smt_sort(i, w), s(_s)
   {
   }
 
   z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w, size_t sw)
-    : smt_sort(i, w, sw), s(_s), rangesort(NULL)
+    : smt_sort(i, w, sw), s(_s)
   {
   }
 
-  z3_smt_sort(
-    smt_sort_kind i,
-    z3::sort _s,
-    size_t w,
-    size_t dw,
-    const smt_sort *_rangesort)
-    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort)
+  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w, smt_sortt _rangesort)
+    : smt_sort(i, w, _rangesort), s(_s)
   {
   }
 
-  ~z3_smt_sort() = default;
+  ~z3_smt_sort() override = default;
 
   z3::sort s;
-  const smt_sort *rangesort;
   type2tc tupletype;
 };
 
@@ -78,7 +70,6 @@ public:
     const smt_ast *value,
     unsigned int idx,
     expr2tc idx_expr) const override;
-  const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const override;
   const smt_ast *project(smt_convt *ctx, unsigned int elem) const override;
 
   void dump() const override;
@@ -157,7 +148,7 @@ public:
     const smt_sort *s,
     smt_sortt array_subtype) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
-  smt_sort *mk_struct_sort(const type2tc &type) override;
+  smt_sortt mk_struct_sort(const type2tc &type) override;
   smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) override;
   smt_astt mk_extract(
     const smt_ast *a,

@@ -38,9 +38,8 @@ smt_astt smt_tuple_sym_flattener::tuple_fresh(smt_sortt s, std::string name)
   return new tuple_sym_smt_ast(ctx, s, n);
 }
 
-smt_astt smt_tuple_sym_flattener::mk_tuple_symbol(
-  const std::string &name,
-  smt_sortt s)
+smt_astt
+smt_tuple_sym_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
 {
   // We put a '.' on the end of all symbols to deliminate the rest of the
   // name. However, these names may become expressions again, then be converted
@@ -203,7 +202,8 @@ smt_sortt smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
       "Arrays dimensions should be flattened by the time they reach tuple "
       "interface");
     unsigned int dom_width = ctx->calculate_array_domain_width(arrtype);
-    return new tuple_smt_sort(type, 1, dom_width);
+    return new tuple_smt_sort(
+      type, dom_width, ctx->convert_sort(arrtype.subtype));
   }
 
   return new tuple_smt_sort(type);

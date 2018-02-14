@@ -9,18 +9,17 @@ class mathsat_smt_sort : public smt_sort
 {
 public:
 #define mathsat_sort_downcast(x) static_cast<const mathsat_smt_sort *>(x)
-  mathsat_smt_sort(smt_sort_kind i, msat_type _s)
-    : smt_sort(i), s(_s), rangesort(nullptr)
+  mathsat_smt_sort(smt_sort_kind i, msat_type _s) : smt_sort(i), s(_s)
   {
   }
 
   mathsat_smt_sort(smt_sort_kind i, msat_type _s, size_t w)
-    : smt_sort(i, w), s(_s), rangesort(nullptr)
+    : smt_sort(i, w), s(_s)
   {
   }
 
   mathsat_smt_sort(smt_sort_kind i, msat_type _s, size_t w, size_t sw)
-    : smt_sort(i, w, sw), s(_s), rangesort(nullptr)
+    : smt_sort(i, w, sw), s(_s)
   {
   }
 
@@ -28,16 +27,14 @@ public:
     smt_sort_kind i,
     msat_type _s,
     size_t w,
-    size_t dw,
-    const smt_sort *_rangesort)
-    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort)
+    smt_sortt _rangesort)
+    : smt_sort(i, w, _rangesort), s(_s)
   {
   }
 
   ~mathsat_smt_sort() override = default;
 
   msat_type s;
-  const smt_sort *rangesort;
 };
 
 class mathsat_smt_ast : public smt_ast
@@ -50,7 +47,6 @@ public:
   }
   ~mathsat_smt_ast() override = default;
 
-  const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const override;
   void dump() const override;
 
   msat_term t;

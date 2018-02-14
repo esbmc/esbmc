@@ -243,20 +243,9 @@ smt_sortt cvc_convt::mk_sort(const smt_sort_kind k, ...)
     const cvc_smt_sort *range = va_arg(ap, const cvc_smt_sort *);
     assert(int_encoding || dom->get_data_width() != 0);
 
-    // The range data width is allowed to be zero, which happens if the range
-    // is not a bitvector / integer
-    unsigned int data_width = range->get_data_width();
-    if(
-      range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL ||
-      range->id == SMT_SORT_UNION)
-      data_width = 1;
-
     return new cvc_smt_sort(
-      k,
-      em.mkArrayType(dom->s, range->s),
-      data_width,
-      dom->get_data_width(),
-      range);
+      k, em.mkArrayType(dom->s, range->s), dom->get_data_width(), range);
+
     break;
   }
   case SMT_SORT_FLOATBV:

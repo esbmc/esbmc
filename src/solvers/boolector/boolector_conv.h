@@ -11,18 +11,17 @@ class boolector_smt_sort : public smt_sort
 {
 public:
 #define boolector_sort_downcast(x) static_cast<const boolector_smt_sort *>(x)
-  boolector_smt_sort(smt_sort_kind i, BoolectorSort _s)
-    : smt_sort(i), s(_s), rangesort(nullptr)
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _s) : smt_sort(i), s(_s)
   {
   }
 
   boolector_smt_sort(smt_sort_kind i, BoolectorSort _s, size_t w)
-    : smt_sort(i, w), s(_s), rangesort(nullptr)
+    : smt_sort(i, w), s(_s)
   {
   }
 
   boolector_smt_sort(smt_sort_kind i, BoolectorSort _s, size_t w, size_t sw)
-    : smt_sort(i, w, sw), s(_s), rangesort(nullptr)
+    : smt_sort(i, w, sw), s(_s)
   {
   }
 
@@ -30,16 +29,14 @@ public:
     smt_sort_kind i,
     BoolectorSort _s,
     size_t w,
-    size_t dw,
-    const smt_sort *_rangesort)
-    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort)
+    smt_sortt _rangesort)
+    : smt_sort(i, w, _rangesort), s(_s)
   {
   }
 
-  virtual ~boolector_smt_sort() = default;
+  virtual ~boolector_smt_sort() override = default;
 
   BoolectorSort s;
-  const smt_sort *rangesort;
 };
 
 class btor_smt_ast : public smt_ast
@@ -50,8 +47,6 @@ public:
     : smt_ast(ctx, _s), e(_e)
   {
   }
-
-  const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const override;
 
   ~btor_smt_ast() override = default;
   void dump() const override;

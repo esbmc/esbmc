@@ -310,13 +310,13 @@ smt_sortt yices_convt::mk_sort(const smt_sort_kind k, ...)
     // the given domain as a single dimension.
     yices_smt_sort *dom = va_arg(ap, yices_smt_sort *);
     yices_smt_sort *range = va_arg(ap, yices_smt_sort *);
-    type_t t = yices_function_type(1, &dom->s, range->s);
+    assert(int_encoding || dom->get_data_width() != 0);
 
-    unsigned int tmp = range->get_data_width();
-    if(range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_UNION)
-      tmp = 1;
-
-    return new yices_smt_sort(k, t, tmp, dom->get_data_width(), range);
+    return new yices_smt_sort(
+      k,
+      yices_function_type(1, &dom->s, range->s),
+      dom->get_data_width(),
+      range);
   }
   case SMT_SORT_FIXEDBV:
   case SMT_SORT_UBV:
@@ -540,17 +540,6 @@ smt_astt yices_smt_ast::update(
   const yices_smt_ast *yast = yices_ast_downcast(value);
   term_t result = yices_tuple_update(term, idx + 1, yast->term);
   return new yices_smt_ast(ctx, sort, result);
-}
-
-smt_astt yices_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
-{
-  smt_astt idx_ast = ctx->convert_ast(idx);
-  term_t temp_term = yices_ast_downcast(idx_ast)->term;
-
-  const yices_smt_sort *ys = yices_sort_downcast(sort);
-
-  return new yices_smt_ast(
-    ctx, ys->rangesort, yices_application(this->term, 1, &temp_term));
 }
 
 smt_sortt yices_convt::mk_struct_sort(const type2tc &type)

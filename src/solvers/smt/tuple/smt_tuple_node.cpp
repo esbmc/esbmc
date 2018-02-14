@@ -43,9 +43,8 @@ smt_astt smt_tuple_node_flattener::tuple_fresh(smt_sortt s, std::string name)
   return new tuple_node_smt_ast(*this, ctx, s, name);
 }
 
-smt_astt smt_tuple_node_flattener::mk_tuple_symbol(
-  const std::string &name,
-  smt_sortt s)
+smt_astt
+smt_tuple_node_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
 {
   // Because this tuple flattening doesn't join tuples through the symbol
   // table, there are some special names that need to be intercepted.
@@ -214,9 +213,9 @@ smt_astt smt_tuple_node_flattener::tuple_array_of(
   unsigned long array_size)
 {
   uint64_t elems = 1ULL << array_size;
-  type2tc array_type =
-    type2tc(new array_type2t(init_val->type, gen_ulong(elems), false));
-  smt_sortt array_sort = new tuple_smt_sort(array_type, 1, array_size);
+  array_type2tc array_type(init_val->type, gen_ulong(elems), false);
+  smt_sortt array_sort = new tuple_smt_sort(
+    array_type, array_size, ctx->convert_sort(array_type->subtype));
 
   return array_conv.convert_array_of_wsort(
     ctx->convert_ast(init_val), array_size, array_sort);
@@ -232,8 +231,9 @@ smt_sortt smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
       "Arrays dimensions should be flattened by the time they reach tuple "
       "interface");
     unsigned int dom_width = ctx->calculate_array_domain_width(arrtype);
-    // NB: the range value is a dummy.
-    return new tuple_smt_sort(type, 1, dom_width);
+
+    return new tuple_smt_sort(
+      type, dom_width, ctx->convert_sort(arrtype.subtype));
   }
 
   return new tuple_smt_sort(type);
