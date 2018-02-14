@@ -76,6 +76,12 @@ public:
     return secondary_width;
   }
 
+  size_t get_range_width() const
+  {
+    assert(id == SMT_SORT_ARRAY);
+    return secondary_width;
+  }
+
   size_t get_significand_width() const
   {
     assert(id == SMT_SORT_FLOATBV);
