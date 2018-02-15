@@ -1378,9 +1378,11 @@ void c_typecheck_baset::do_special_functions(
       expr.swap(isinf_expr);
     }
     else if(
+      identifier == CPROVER_PREFIX "isnormal" ||
       identifier == CPROVER_PREFIX "isnormalf" ||
       identifier == CPROVER_PREFIX "isnormald" ||
       identifier == CPROVER_PREFIX "isnormalld" ||
+      identifier == "__builtin_isnormal" ||
       identifier == "__builtin_isnormalf" ||
       identifier == "__builtin_isnormald" ||
       identifier == "__builtin_isnormalld")
