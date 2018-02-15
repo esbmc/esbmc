@@ -100,20 +100,6 @@ public:
     uint64_t index,
     const type2tc &subtype) override;
 
-  void convert_type(const type2tc &type, z3::sort &outtype);
-
-  void convert_struct(
-    const std::vector<expr2tc> &members,
-    const std::vector<type2tc> &member_types,
-    const type2tc &type,
-    z3::expr &bv);
-
-  void convert_struct_type(
-    const std::vector<type2tc> &members,
-    const std::vector<irep_idt> &member_names,
-    const irep_idt &name,
-    z3::sort &s);
-
   z3::expr
   mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &new_val);
   z3::expr mk_tuple_select(const z3::expr &t, unsigned i);

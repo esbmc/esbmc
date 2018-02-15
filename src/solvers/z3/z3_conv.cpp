@@ -131,175 +131,6 @@ smt_convt::resultt z3_convt::dec_solve()
   return smt_convt::P_ERROR;
 }
 
-void z3_convt::convert_struct_type(
-  const std::vector<type2tc> &members,
-  const std::vector<irep_idt> &member_names,
-  const irep_idt &struct_name,
-  z3::sort &sort)
-{
-  z3::symbol mk_tuple_name, *proj_names;
-  z3::sort *proj_types;
-  Z3_func_decl mk_tuple_decl, *proj_decls;
-  std::string name;
-  u_int num_elems;
-
-  num_elems = members.size();
-
-  proj_names = new z3::symbol[num_elems];
-  proj_types = new z3::sort[num_elems];
-  proj_decls = new Z3_func_decl[num_elems];
-
-  name = "struct";
-  name += "_type_" + struct_name.as_string();
-  mk_tuple_name = z3::symbol(z3_ctx, name.c_str());
-
-  if(!members.size())
-  {
-    sort = z3::to_sort(
-      z3_ctx,
-      Z3_mk_tuple_sort(
-        z3_ctx, mk_tuple_name, 0, nullptr, nullptr, &mk_tuple_decl, nullptr));
-    return;
-  }
-
-  u_int i = 0;
-  std::vector<irep_idt>::const_iterator mname = member_names.begin();
-  for(std::vector<type2tc>::const_iterator it = members.begin();
-      it != members.end();
-      it++, mname++, i++)
-  {
-    proj_names[i] = z3::symbol(z3_ctx, mname->as_string().c_str());
-    const z3_smt_sort *tmp = z3_sort_downcast(convert_sort(*it));
-    proj_types[i] = tmp->s;
-  }
-
-  // Unpack pointers from Z3++ objects.
-  Z3_symbol *unpacked_symbols = new Z3_symbol[num_elems];
-  Z3_sort *unpacked_sorts = new Z3_sort[num_elems];
-  for(i = 0; i < num_elems; i++)
-  {
-    unpacked_symbols[i] = proj_names[i];
-    unpacked_sorts[i] = proj_types[i];
-  }
-
-  sort = z3::to_sort(
-    z3_ctx,
-    Z3_mk_tuple_sort(
-      z3_ctx,
-      mk_tuple_name,
-      num_elems,
-      unpacked_symbols,
-      unpacked_sorts,
-      &mk_tuple_decl,
-      proj_decls));
-
-  delete[] unpacked_symbols;
-  delete[] unpacked_sorts;
-  delete[] proj_names;
-  delete[] proj_types;
-  delete[] proj_decls;
-}
-
-void z3_convt::convert_struct(
-  const std::vector<expr2tc> &members,
-  const std::vector<type2tc> &member_types,
-  const type2tc &type,
-  z3::expr &output)
-{
-  // Converts a static struct - IE, one that hasn't had any "with"
-  // operations applied to it, perhaps due to initialization or constant
-  // propagation.
-  z3::sort sort;
-  convert_type(type, sort);
-
-  unsigned size = member_types.size();
-
-  z3::expr *args = new z3::expr[size];
-
-#ifndef NDEBUG
-  unsigned int numoperands = members.size();
-  assert(
-    numoperands == member_types.size() &&
-    "Too many / few struct fields for struct type");
-#endif
-
-  // Populate tuple with members of that struct
-  for(unsigned int i = 0; i < member_types.size(); i++)
-  {
-    const z3_smt_ast *tmp = z3_smt_downcast(convert_ast(members[i]));
-    args[i] = tmp->e;
-  }
-
-  // Create tuple itself, return to caller. This is a lump of data, we don't
-  // need to bind it to a name or symbol.
-  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, sort);
-  z3::func_decl d(z3_ctx, decl);
-  output = d.make_tuple_from_array(size, args);
-  delete[] args;
-}
-
-void z3_convt::convert_type(const type2tc &type, z3::sort &sort)
-{
-  switch(type->type_id)
-  {
-  case type2t::bool_id:
-    sort = z3_ctx.bool_sort();
-    break;
-  case type2t::struct_id:
-  {
-    const struct_type2t &strct = to_struct_type(type);
-    convert_struct_type(strct.members, strct.member_names, strct.name, sort);
-    break;
-  }
-  case type2t::array_id:
-  {
-    // Because of crazy domain sort rewriting, pass this via all the other smt
-    // processing code.
-    const array_type2t &arr = to_array_type(type);
-    unsigned int domain_width = calculate_array_domain_width(arr);
-
-    smt_sortt domain = mk_int_bv_sort(SMT_SORT_UBV, domain_width);
-
-    smt_sortt range = convert_sort(arr.subtype);
-    sort = z3_sort_downcast(mk_array_sort(domain, range))->s;
-    break;
-  }
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-  {
-    if(int_encoding)
-    {
-      sort = z3_ctx.esbmc_int_sort();
-    }
-    else
-    {
-      unsigned int width = type->get_width();
-      sort = z3_ctx.bv_sort(width);
-    }
-    break;
-  }
-  case type2t::fixedbv_id:
-  {
-    unsigned int width = type->get_width();
-
-    if(int_encoding)
-      sort = z3_ctx.real_sort();
-    else
-      sort = z3_ctx.bv_sort(width);
-    break;
-  }
-  case type2t::pointer_id:
-    convert_type(pointer_struct, sort);
-    break;
-  case type2t::string_id:
-  case type2t::code_id:
-  default:
-    std::cerr << "Invalid type ID being converted to Z3 sort" << std::endl;
-    type->dump();
-    abort();
-  }
-}
-
 void z3_convt::assert_ast(const smt_ast *a)
 {
   const z3_smt_ast *za = z3_smt_downcast(a);
@@ -853,9 +684,6 @@ smt_astt z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 
 smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
 {
-  z3::sort s;
-  convert_type(type, s);
-
   if(is_array_type(type))
   {
     const array_type2t &arrtype = to_array_type(type);
@@ -864,7 +692,74 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
     return mk_array_sort(d, subtypesort);
   }
 
-  return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
+  const struct_type2t &strct = to_struct_type(type);
+  const std::vector<type2tc> &members = strct.members;
+  const std::vector<irep_idt> &member_names = strct.member_names;
+  const irep_idt &struct_name = strct.name;
+
+  z3::symbol mk_tuple_name, *proj_names;
+  z3::sort *proj_types;
+  Z3_func_decl mk_tuple_decl, *proj_decls;
+  std::string name;
+  u_int num_elems = members.size();
+
+  proj_names = new z3::symbol[num_elems];
+  proj_types = new z3::sort[num_elems];
+  proj_decls = new Z3_func_decl[num_elems];
+
+  name = "struct";
+  name += "_type_" + struct_name.as_string();
+  mk_tuple_name = z3::symbol(z3_ctx, name.c_str());
+
+  z3::sort sort;
+  if(!members.size())
+  {
+    sort = z3::to_sort(
+      z3_ctx,
+      Z3_mk_tuple_sort(
+        z3_ctx, mk_tuple_name, 0, nullptr, nullptr, &mk_tuple_decl, nullptr));
+  }
+  else
+  {
+    u_int i = 0;
+    std::vector<irep_idt>::const_iterator mname = member_names.begin();
+    for(std::vector<type2tc>::const_iterator it = members.begin();
+        it != members.end();
+        it++, mname++, i++)
+    {
+      proj_names[i] = z3::symbol(z3_ctx, mname->as_string().c_str());
+      const z3_smt_sort *tmp = z3_sort_downcast(convert_sort(*it));
+      proj_types[i] = tmp->s;
+    }
+
+    // Unpack pointers from Z3++ objects.
+    Z3_symbol *unpacked_symbols = new Z3_symbol[num_elems];
+    Z3_sort *unpacked_sorts = new Z3_sort[num_elems];
+    for(i = 0; i < num_elems; i++)
+    {
+      unpacked_symbols[i] = proj_names[i];
+      unpacked_sorts[i] = proj_types[i];
+    }
+
+    sort = z3::to_sort(
+      z3_ctx,
+      Z3_mk_tuple_sort(
+        z3_ctx,
+        mk_tuple_name,
+        num_elems,
+        unpacked_symbols,
+        unpacked_sorts,
+        &mk_tuple_decl,
+        proj_decls));
+
+    delete[] unpacked_symbols;
+    delete[] unpacked_sorts;
+    delete[] proj_names;
+    delete[] proj_types;
+    delete[] proj_decls;
+  }
+
+  return new z3_smt_sort(SMT_SORT_STRUCT, sort, type);
 }
 
 const smt_ast *z3_smt_ast::update(
@@ -873,12 +768,8 @@ const smt_ast *z3_smt_ast::update(
   unsigned int idx,
   expr2tc idx_expr) const
 {
-  expr2tc index;
-
   if(sort->id == SMT_SORT_ARRAY)
-  {
     return smt_ast::update(conv, value, idx, idx_expr);
-  }
 
   assert(sort->id == SMT_SORT_STRUCT || sort->id == SMT_SORT_UNION);
   assert(is_nil_expr(idx_expr) && "Can only update constant index tuple elems");
@@ -903,13 +794,43 @@ const smt_ast *z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
 
 smt_astt z3_convt::tuple_create(const expr2tc &structdef)
 {
-  z3::expr e;
   const constant_struct2t &strct = to_constant_struct2t(structdef);
   const struct_union_data &type =
     static_cast<const struct_union_data &>(*strct.type);
 
-  convert_struct(strct.datatype_members, type.members, strct.type, e);
+  // Converts a static struct - IE, one that hasn't had any "with"
+  // operations applied to it, perhaps due to initialization or constant
+  // propagation.
+  const std::vector<expr2tc> &members = strct.datatype_members;
+  const std::vector<type2tc> &member_types = type.members;
+
+  unsigned size = member_types.size();
+
+  z3::expr *args = new z3::expr[size];
+
+#ifndef NDEBUG
+  unsigned int numoperands = members.size();
+  assert(
+    numoperands == member_types.size() &&
+    "Too many / few struct fields for struct type");
+#endif
+
+  // Populate tuple with members of that struct
+  for(unsigned int i = 0; i < member_types.size(); i++)
+  {
+    const z3_smt_ast *tmp = z3_smt_downcast(convert_ast(members[i]));
+    args[i] = tmp->e;
+  }
+
+  // Create tuple itself, return to caller. This is a lump of data, we don't
+  // need to bind it to a name or symbol.
   smt_sortt s = mk_struct_sort(structdef->type);
+
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, z3_sort_downcast(s)->s);
+  z3::func_decl d(z3_ctx, decl);
+  z3::expr e = d.make_tuple_from_array(size, args);
+  delete[] args;
+
   return new_ast(e, s);
 }
 
