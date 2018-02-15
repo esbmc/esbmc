@@ -552,19 +552,27 @@ smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 
 smt_astt mathsat_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
-  msat_term t = msat_make_fp_nan(env, ew, sw);
+  smt_sortt s = mk_real_fp_sort(ew, sw);
+  unsigned swidth = s->get_significand_width();
+  unsigned ewidth = s->get_data_width() - swidth;
+
+  msat_term t = msat_make_fp_nan(env, ewidth, swidth);
   check_msat_error(t);
 
-  return new mathsat_smt_ast(this, mk_real_fp_sort(ew, sw), t);
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
-  msat_term t = sgn ? msat_make_fp_minus_inf(env, ew, sw)
-                    : msat_make_fp_plus_inf(env, ew, sw);
+  smt_sortt s = mk_real_fp_sort(ew, sw);
+  unsigned swidth = s->get_significand_width();
+  unsigned ewidth = s->get_data_width() - swidth;
+
+  msat_term t = sgn ? msat_make_fp_minus_inf(env, ewidth, swidth)
+                    : msat_make_fp_plus_inf(env, ewidth, swidth);
   check_msat_error(t);
 
-  return new mathsat_smt_ast(this, mk_real_fp_sort(ew, sw), t);
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
@@ -878,8 +886,8 @@ void mathsat_convt::print_model()
 
 smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
-  auto t = msat_get_fp_type(env, ew, sw + 1);
-  return new mathsat_smt_sort(SMT_SORT_FLOATBV, t, ew + sw + 1, sw);
+  auto t = msat_get_fp_type(env, ew, sw);
+  return new mathsat_smt_sort(SMT_SORT_FLOATBV, t, ew + sw, sw);
 }
 
 smt_sortt mathsat_convt::mk_fpbv_rm_sort()
