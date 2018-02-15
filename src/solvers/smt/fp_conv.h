@@ -73,9 +73,15 @@ public:
   virtual smt_astt mk_smt_fpbv_fma(const expr2tc &expr);
 
   /** Create a sort representing a floating-point number.
-   *  @param type The floating-point type.
+   *  @param ew Exponent width, in bits, of the bitvector to create.
+   *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The floating-point representation of the type, wrapped in an smt_sort. */
   virtual smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw);
+
+  /** Create a sort representing a floating-point rounding mode.
+   *  @return The floating-point rounding mode representation of the type,
+   *  wrapped in an smt_sort. */
+  virtual smt_sortt mk_fpbv_rm_sort();
 
   /** Extract the assignment to a floating-point from the SMT solvers model.
    *  @param t The AST type

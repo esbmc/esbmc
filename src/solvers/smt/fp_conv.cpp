@@ -108,3 +108,9 @@ expr2tc fp_convt::get_fpbv(const type2tc &t, smt_astt a)
   (void)a;
   abort();
 }
+
+smt_sortt fp_convt::mk_fpbv_rm_sort()
+{
+  std::cerr << "Rounding mode sort not implemented for the chosen solver\n";
+  abort();
+}
