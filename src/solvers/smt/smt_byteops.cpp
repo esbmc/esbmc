@@ -180,8 +180,8 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     abort();
   }
 
-    // Assertion some of our assumptions, which broadly mean that we'll only work
-    // on bytes that are going into non-byte words
+// Assertion some of our assumptions, which broadly mean that we'll only work
+// on bytes that are going into non-byte words
 #ifndef NDEBUG
   unsigned int width_op2 = data.update_value->type->get_width();
   assert(width_op2 == 8 && "Can't byte update non-byte operations");

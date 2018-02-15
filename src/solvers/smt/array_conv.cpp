@@ -169,7 +169,6 @@ smt_astt array_convt::mk_select(
     smt_astt tmp_idx = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
     smt_astt idx_eq = real_idx->eq(ctx, tmp_idx);
     theval = ma->array_fields[i]->ite(ctx, idx_eq, theval);
-
   }
 
   return theval;
@@ -878,8 +877,9 @@ void array_convt::execute_new_updates()
 
     std::list<const array_witht *> withs;
     auto rit = update_index.begin();
-    while (rit != update_index.end()) {
-      if (rit->ctx_level == ctx->ctx_level && !rit->converted)
+    while(rit != update_index.end())
+    {
+      if(rit->ctx_level == ctx->ctx_level && !rit->converted)
         withs.push_back(&(*rit));
       else if(rit->ctx_level != UINT_MAX) // ahem
         break;
@@ -924,7 +924,7 @@ void array_convt::apply_new_selects()
     // Go through each of these selects.
     for(auto &it = pair.first; it != pair.second; it++)
     {
-      if (it->converted)
+      if(it->converted)
         continue;
       it->converted = true;
 
@@ -942,9 +942,12 @@ void array_convt::apply_new_selects()
 
       // Symbol avoidance: if no valuation was given (NULL) then the creator
       // of this index is trying to read directly from the array valuations
-      if (!it->val) {
+      if(!it->val)
+      {
         it->val = dest;
-      } else {
+      }
+      else
+      {
         // "Old" code?
         // OK, bind this select in through an equality.
         ctx->assert_ast(dest->eq(ctx, it->val));

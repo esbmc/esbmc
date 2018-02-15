@@ -262,9 +262,8 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
   }
 }
 
-unsigned int smtlib_convt::emit_ast(
-  const smtlib_smt_ast *ast,
-  std::string &output)
+unsigned int
+smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
 {
   unsigned int brace_level = 0, i;
   std::string args[4];
@@ -833,9 +832,8 @@ void smtlib_convt::pop_ctx()
   smt_convt::pop_ctx();
 }
 
-const smt_ast *smtlib_convt::convert_array_of(
-  smt_astt init_val,
-  unsigned long domain_width)
+const smt_ast *
+smtlib_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
 }
