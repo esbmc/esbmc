@@ -208,9 +208,8 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
   }
 }
 
-unsigned int smtlib_convt::emit_terminal_ast(
-  const smtlib_smt_ast *ast,
-  std::string &output)
+unsigned int
+smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
 {
   std::stringstream ss;
   const smtlib_smt_sort *sort = static_cast<const smtlib_smt_sort *>(ast->sort);
@@ -295,7 +294,7 @@ unsigned int smtlib_convt::emit_ast(
   // Get a temporary sym name
   unsigned int tempnum = temp_sym_count.back()++;
   std::stringstream ss;
-  ss << temp_prefix << tempnum;
+  ss << "?x" << tempnum;
   std::string tempname = ss.str();
 
   // Emit a let, assigning the result of this AST func to the sym.
@@ -716,51 +715,11 @@ smt_ast *smtlib_convt::mk_func_app(
   return a;
 }
 
-smt_sort *smtlib_convt::mk_sort(const smt_sort_kind k, ...)
-{
-  va_list ap;
-  smtlib_smt_sort *s = nullptr;
-
-  va_start(ap, k);
-  switch(k)
-  {
-  case SMT_SORT_INT:
-    s = new smtlib_smt_sort(k);
-    break;
-  case SMT_SORT_REAL:
-    s = new smtlib_smt_sort(k);
-    break;
-  case SMT_SORT_FIXEDBV:
-  case SMT_SORT_UBV:
-  case SMT_SORT_SBV:
-  {
-    unsigned long uint = va_arg(ap, unsigned long);
-    assert(uint != 0);
-    s = new smtlib_smt_sort(k, uint);
-    break;
-  }
-  case SMT_SORT_ARRAY:
-  {
-    smtlib_smt_sort *dom = va_arg(ap, smtlib_smt_sort *); // Consider constness?
-    smtlib_smt_sort *range = va_arg(ap, smtlib_smt_sort *);
-    s = new smtlib_smt_sort(k, dom, range);
-    break;
-  }
-  case SMT_SORT_BOOL:
-    s = new smtlib_smt_sort(k);
-    break;
-  default:
-    assert(0);
-  }
-
-  return s;
-}
-
 smt_ast *smtlib_convt::mk_smt_int(
   const mp_integer &theint,
   bool sign __attribute__((unused)))
 {
-  smt_sortt s = mk_sort(SMT_SORT_INT, sign);
+  smt_sortt s = mk_int_sort();
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_INT);
   a->intval = theint;
   return a;
@@ -768,7 +727,7 @@ smt_ast *smtlib_convt::mk_smt_int(
 
 smt_ast *smtlib_convt::mk_smt_real(const std::string &str)
 {
-  smt_sortt s = mk_sort(SMT_SORT_REAL);
+  smt_sortt s = mk_real_sort();
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_REAL);
   a->realval = str;
   return a;
@@ -777,7 +736,7 @@ smt_ast *smtlib_convt::mk_smt_real(const std::string &str)
 smt_ast *
 smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 {
-  smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, w);
+  smt_sortt s = mk_int_bv_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, w);
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_BVINT);
   a->intval = theint;
   return a;
@@ -785,8 +744,7 @@ smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 
 smt_ast *smtlib_convt::mk_smt_bool(bool val)
 {
-  smtlib_smt_ast *a =
-    new smtlib_smt_ast(this, mk_sort(SMT_SORT_BOOL), SMT_FUNC_BOOL);
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BOOL);
   a->boolval = val;
   return a;
 }
@@ -895,4 +853,28 @@ void smtlib_convt::pop_array_ctx()
 {
 }
 
-const std::string smtlib_convt::temp_prefix = "?x";
+smt_sortt smtlib_convt::mk_bool_sort()
+{
+  return new smt_sort(SMT_SORT_BOOL, 1);
+}
+
+smt_sortt smtlib_convt::mk_real_sort()
+{
+  return new smt_sort(SMT_SORT_INT);
+}
+
+smt_sortt smtlib_convt::mk_int_sort()
+{
+  return new smt_sort(SMT_SORT_REAL);
+}
+
+smt_sortt smtlib_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
+{
+  return new smt_sort(k, width);
+}
+
+smt_sortt smtlib_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
+{
+  return new smt_sort(
+    SMT_SORT_ARRAY, domain->get_data_width(), range->get_data_width());
+}

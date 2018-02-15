@@ -168,59 +168,6 @@ smt_ast *boolector_convt::mk_func_app(
   }
 }
 
-smt_sortt boolector_convt::mk_sort(const smt_sort_kind k, ...)
-{
-  // Boolector doesn't have any special handling for sorts, they're all always
-  // explicit arguments to functions. So, just use the base smt_sort class.
-  va_list ap;
-
-  va_start(ap, k);
-  switch(k)
-  {
-  case SMT_SORT_INT:
-  case SMT_SORT_REAL:
-    std::cerr << "Boolector does not support integer encoding mode"
-              << std::endl;
-    abort();
-  case SMT_SORT_FIXEDBV:
-  case SMT_SORT_UBV:
-  case SMT_SORT_SBV:
-  {
-    unsigned long uint = va_arg(ap, unsigned long);
-    return new boolector_smt_sort(k, boolector_bitvec_sort(btor, uint), uint);
-  }
-  case SMT_SORT_ARRAY:
-  {
-    const boolector_smt_sort *dom =
-      va_arg(ap, boolector_smt_sort *); // Consider constness?
-    const boolector_smt_sort *range = va_arg(ap, boolector_smt_sort *);
-    assert(int_encoding || dom->get_data_width() != 0);
-
-    return new boolector_smt_sort(
-      k,
-      boolector_array_sort(btor, dom->s, range->s),
-      dom->get_data_width(),
-      range);
-  }
-
-  case SMT_SORT_BOOL:
-    return new boolector_smt_sort(k, boolector_bool_sort(btor));
-
-  case SMT_SORT_FLOATBV:
-  {
-    unsigned ew = va_arg(ap, unsigned long);
-    unsigned sw = va_arg(ap, unsigned long) + 1;
-    return mk_fpbv_sort(ew, sw);
-  }
-
-  default:
-    break;
-  }
-
-  std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;
-  abort();
-}
-
 smt_ast *boolector_convt::mk_smt_int(
   const mp_integer &theint __attribute__((unused)),
   bool sign __attribute__((unused)))
@@ -241,9 +188,7 @@ smt_ast *boolector_convt::mk_smt_bvint(
   bool sign,
   unsigned int width)
 {
-  smt_sortt s = mk_sort(
-    ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV,
-    width);
+  smt_sortt s = mk_int_bv_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
 
   if(width > 32)
   {
@@ -522,7 +467,7 @@ smt_ast *boolector_convt::fix_up_shift(
     bwidth++;
     unsigned int new_size = pow(2.0, bwidth);
     unsigned int diff = new_size - op0->sort->get_data_width();
-    smt_sortt newsort = mk_sort(SMT_SORT_UBV, new_size);
+    smt_sortt newsort = mk_int_bv_sort(SMT_SORT_UBV, new_size);
     smt_astt zeroext = convert_zero_ext(op0, newsort, diff);
     data_op = btor_ast_downcast(zeroext)->e;
     need_to_shift_down = true;
@@ -553,4 +498,24 @@ void btor_smt_ast::dump() const
 void boolector_convt::print_model()
 {
   boolector_print_model(btor, const_cast<char *>("smt2"), stdout);
+}
+
+smt_sortt boolector_convt::mk_bool_sort()
+{
+  return new boolector_smt_sort(SMT_SORT_BOOL, boolector_bool_sort(btor), 1);
+}
+
+smt_sortt boolector_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
+{
+  return new boolector_smt_sort(k, boolector_bitvec_sort(btor, width), width);
+}
+
+smt_sortt boolector_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
+{
+  auto domain_sort = boolector_sort_downcast(domain);
+  auto range_sort = boolector_sort_downcast(range);
+
+  auto t = boolector_array_sort(btor, domain_sort->s, range_sort->s);
+  return new boolector_smt_sort(
+    SMT_SORT_ARRAY, t, domain_sort->get_data_width(), range);
 }

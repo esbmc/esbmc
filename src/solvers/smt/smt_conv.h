@@ -462,19 +462,41 @@ public:
     return mk_func_app(s, k, args, 4);
   }
 
-  /** Create an SMT sort. The sort kind k indicates what kind of sort to create,
-   *  and the parameters of the sort are passed in as varargs. Briefly, these
-   *  arguments are:
-   *  * Bools: None
-   *  * Int's: None
-   *  * BV's:  Width as a machine integer
-   *  * Arrays: Two pointers to smt_sort's: the domain sort, and the range sort
-   *
-   *  Structs and unions use @ref mk_struct_sort and @ref mk_union_sort.
-   *
-   *  @param k The kind of SMT sort that will be created.
-   *  @return The smt_sort wrapper for the sort. Lifetime currently undefined */
-  virtual smt_sortt mk_sort(const smt_sort_kind k, ...) = 0;
+  /** Create an integer or SBV/UBV sort */
+  smt_sortt mk_int_bv_sort(const smt_sort_kind k, std::size_t width)
+  {
+    if(int_encoding)
+      return mk_int_sort();
+
+    return mk_bv_sort(k, width);
+  }
+
+  /** Create an real or floating-point/fixed-point sort */
+  smt_sortt mk_real_fp_sort(std::size_t ew, std::size_t sw)
+  {
+    if(int_encoding)
+      return mk_real_sort();
+
+    if(config.ansi_c.use_fixed_for_float)
+      return mk_bv_sort(SMT_SORT_FIXEDBV, ew + sw);
+
+    return fp_api->mk_fpbv_sort(ew, sw);
+  }
+
+  /** Create a bool sort */
+  virtual smt_sortt mk_bool_sort();
+
+  /** Create a real sort */
+  virtual smt_sortt mk_real_sort();
+
+  /** Create a int sort */
+  virtual smt_sortt mk_int_sort();
+
+  /** Create a bv sort */
+  virtual smt_sortt mk_bv_sort(const smt_sort_kind k, std::size_t width);
+
+  /** Create an array sort */
+  virtual smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range);
 
   /** Create an integer smt_ast. That is, an integer in QF_AUFLIRA, rather than
    *  a bitvector.
@@ -698,9 +720,6 @@ public:
   void assert_expr(const expr2tc &e);
   /** Convert constant_array2tc's and constant_array_of2tc's */
   smt_astt array_create(const expr2tc &expr);
-  /** Mangle constant_array / array_of data with tuple array type, into a
-   *  more convenient format, acceptable by tuple_array_create */
-  smt_astt tuple_array_create(const expr2tc &expr, smt_sortt domain);
 
   /** Initialize tracking data for the address space records. This also sets
    *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */

@@ -68,7 +68,15 @@ public:
     smt_func_kind k,
     const smt_ast *const *args,
     unsigned int numargs) override;
-  smt_sortt mk_sort(const smt_sort_kind k, ...) override;
+
+  smt_sortt mk_bool_sort() override;
+  smt_sortt mk_real_sort() override;
+  smt_sortt mk_int_sort() override;
+  smt_sortt mk_bv_sort(const smt_sort_kind k, std::size_t width) override;
+  smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range) override;
+  smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) override;
+  smt_sortt mk_fpbv_rm_sort() override;
+
   smt_astt mk_smt_int(const mp_integer &theint, bool sign) override;
   smt_ast *mk_smt_real(const std::string &str) override;
   smt_ast *mk_smt_bool(bool val) override;
@@ -86,7 +94,6 @@ public:
   smt_astt
   mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w) override;
 
-  smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) override;
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
   smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw) override;
   smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw) override;

@@ -100,8 +100,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     // Zero extend; multiply; Make a decision based on the top half.
     unsigned int sz = zero->type->get_width();
 
-    smt_sortt normalsort = mk_sort(SMT_SORT_UBV, sz);
-    smt_sortt bigsort = mk_sort(SMT_SORT_UBV, sz * 2);
+    smt_sortt normalsort = mk_int_bv_sort(SMT_SORT_UBV, sz);
+    smt_sortt bigsort = mk_int_bv_sort(SMT_SORT_UBV, sz * 2);
 
     smt_astt arg1_ext = convert_ast(opers.side_1);
     arg1_ext = is_signedbv_type(opers.side_1)
@@ -190,8 +190,8 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   unsigned int pos_zero_bits = width - bits;
   unsigned int neg_one_bits = (width - bits) + 1;
 
-  smt_sortt pos_zero_bits_sort = mk_sort(SMT_SORT_UBV, pos_zero_bits);
-  smt_sortt neg_one_bits_sort = mk_sort(SMT_SORT_UBV, neg_one_bits);
+  smt_sortt pos_zero_bits_sort = mk_int_bv_sort(SMT_SORT_UBV, pos_zero_bits);
+  smt_sortt neg_one_bits_sort = mk_int_bv_sort(SMT_SORT_UBV, neg_one_bits);
 
   smt_astt pos_bits = mk_smt_bvint(BigInt(0), false, pos_zero_bits);
   smt_astt neg_bits =

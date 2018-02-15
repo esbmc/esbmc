@@ -285,71 +285,19 @@ smt_astt yices_convt::mk_func_app(
   }
 }
 
-smt_sortt yices_convt::mk_sort(const smt_sort_kind k, ...)
-{
-  va_list ap;
-
-  va_start(ap, k);
-  switch(k)
-  {
-  case SMT_SORT_BOOL:
-  {
-    return new yices_smt_sort(k, yices_bool_type());
-  }
-  case SMT_SORT_INT:
-  {
-    return new yices_smt_sort(k, yices_int_type(), 0);
-  }
-  case SMT_SORT_REAL:
-  {
-    return new yices_smt_sort(k, yices_real_type());
-  }
-  case SMT_SORT_ARRAY:
-  {
-    // Arrays are uninterpreted functions with updates. Create an array with
-    // the given domain as a single dimension.
-    yices_smt_sort *dom = va_arg(ap, yices_smt_sort *);
-    yices_smt_sort *range = va_arg(ap, yices_smt_sort *);
-    assert(int_encoding || dom->get_data_width() != 0);
-
-    return new yices_smt_sort(
-      k,
-      yices_function_type(1, &dom->s, range->s),
-      dom->get_data_width(),
-      range);
-  }
-  case SMT_SORT_FIXEDBV:
-  case SMT_SORT_UBV:
-  case SMT_SORT_SBV:
-  {
-    unsigned long uint = va_arg(ap, unsigned long);
-    return new yices_smt_sort(k, yices_bv_type(uint), uint);
-  }
-  case SMT_SORT_FLOATBV:
-  {
-    unsigned ew = va_arg(ap, unsigned long);
-    unsigned sw = va_arg(ap, unsigned long);
-    return mk_fpbv_sort(ew, sw);
-  }
-  default:
-    std::cerr << "Unimplemented sort " << k << " in yices mk_sort" << std::endl;
-    abort();
-  }
-}
-
 smt_astt yices_convt::mk_smt_int(
   const mp_integer &theint,
   bool sign __attribute__((unused)))
 {
   term_t term = yices_int64(theint.to_int64());
-  smt_sortt s = mk_sort(SMT_SORT_INT);
+  smt_sortt s = mk_int_sort();
   return new_ast(s, term);
 }
 
 smt_astt yices_convt::mk_smt_real(const std::string &str)
 {
   term_t term = yices_parse_rational(str.c_str());
-  smt_sortt s = mk_sort(SMT_SORT_REAL);
+  smt_sortt s = mk_real_sort();
   return new_ast(s, term);
 }
 
@@ -358,16 +306,14 @@ smt_astt yices_convt::mk_smt_bvint(
   bool sign,
   unsigned int width)
 {
-  smt_sortt s = mk_sort(
-    ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV,
-    width);
+  smt_sortt s = mk_int_bv_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
   term_t term = yices_bvconst_uint64(width, theint.to_int64());
   return new yices_smt_ast(this, s, term);
 }
 
 smt_astt yices_convt::mk_smt_bool(bool val)
 {
-  smt_sortt s = mk_sort(SMT_SORT_BOOL);
+  smt_sortt s = boolean_sort;
   if(val)
     return new_ast(s, yices_true());
   else
@@ -551,7 +497,7 @@ smt_sortt yices_convt::mk_struct_sort(const type2tc &type)
     const array_type2t &arrtype = to_array_type(type);
     smt_sortt subtypesort = convert_sort(arrtype.subtype);
     smt_sortt d = make_array_domain_sort(arrtype);
-    return mk_sort(SMT_SORT_ARRAY, d, subtypesort);
+    return mk_array_sort(d, subtypesort);
   }
 
   std::vector<type_t> sorts;
@@ -729,4 +675,34 @@ void yices_convt::pop_tuple_ctx()
 void yices_convt::print_model()
 {
   yices_print_model(stdout, sat_model);
+}
+
+smt_sortt yices_convt::mk_bool_sort()
+{
+  return new yices_smt_sort(SMT_SORT_BOOL, yices_bool_type(), 1);
+}
+
+smt_sortt yices_convt::mk_real_sort()
+{
+  return new yices_smt_sort(SMT_SORT_REAL, yices_int_type());
+}
+
+smt_sortt yices_convt::mk_int_sort()
+{
+  return new yices_smt_sort(SMT_SORT_INT, yices_real_type());
+}
+
+smt_sortt yices_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
+{
+  return new yices_smt_sort(k, yices_bv_type(width), width);
+}
+
+smt_sortt yices_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
+{
+  auto domain_sort = yices_sort_downcast(domain);
+  auto range_sort = yices_sort_downcast(range);
+
+  auto t = yices_function_type(1, &domain_sort->s, range_sort->s);
+  return new yices_smt_sort(
+    SMT_SORT_ARRAY, t, domain_sort->get_data_width(), range);
 }

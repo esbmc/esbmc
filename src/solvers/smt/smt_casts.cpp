@@ -60,13 +60,13 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
   }
   else if(from_width > to_integer_bits)
   {
-    smt_sortt tmp = mk_sort(SMT_SORT_UBV, from_width - to_integer_bits);
+    smt_sortt tmp = mk_int_bv_sort(SMT_SORT_UBV, from_width - to_integer_bits);
     frontpart = mk_extract(a, to_integer_bits - 1, 0, tmp);
   }
   else
   {
     assert(from_width < to_integer_bits);
-    smt_sortt tmp = mk_sort(SMT_SORT_UBV, to_integer_bits);
+    smt_sortt tmp = mk_int_bv_sort(SMT_SORT_UBV, to_integer_bits);
     frontpart =
       convert_sign_ext(a, tmp, from_width, to_integer_bits - from_width);
   }
@@ -90,7 +90,7 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
   smt_sortt intsort;
   smt_astt zero = mk_smt_bvint(BigInt(0), false, to_integer_bits);
   smt_astt one = mk_smt_bvint(BigInt(1), false, to_integer_bits);
-  intsort = mk_sort(SMT_SORT_UBV, to_integer_bits);
+  intsort = mk_int_bv_sort(SMT_SORT_UBV, to_integer_bits);
   smt_astt switched = mk_func_app(intsort, SMT_FUNC_ITE, a, zero, one);
   return mk_func_app(s, SMT_FUNC_CONCAT, switched, zero);
 }
@@ -120,7 +120,7 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   // Start with the magnitude
   if(to_integer_bits <= from_integer_bits)
   {
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, to_integer_bits);
+    smt_sortt tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, to_integer_bits);
     magnitude = mk_extract(
       a,
       (from_fraction_bits + to_integer_bits - 1),
@@ -130,11 +130,12 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   else
   {
     assert(to_integer_bits > from_integer_bits);
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, from_integer_bits);
+    smt_sortt tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, from_integer_bits);
     smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits, tmp_sort);
 
     unsigned int additional_bits = to_integer_bits - from_integer_bits;
-    tmp_sort = mk_sort(SMT_SORT_UBV, from_integer_bits + additional_bits);
+    tmp_sort =
+      mk_int_bv_sort(SMT_SORT_UBV, from_integer_bits + additional_bits);
     magnitude =
       convert_sign_ext(ext, tmp_sort, from_integer_bits, additional_bits);
   }
@@ -142,7 +143,7 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   // Followed by the fraction part
   if(to_fraction_bits <= from_fraction_bits)
   {
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, to_fraction_bits);
+    smt_sortt tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, to_fraction_bits);
     fraction = mk_extract(
       a,
       from_fraction_bits - 1,
@@ -155,12 +156,12 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
 
     // Increase the size of the fraction by adding zeros on the end. This is
     // not a zero extension because they're at the end, not the start
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, from_fraction_bits);
+    smt_sortt tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, from_fraction_bits);
     smt_astt src_fraction = mk_extract(a, from_fraction_bits - 1, 0, tmp_sort);
     smt_astt zeros =
       mk_smt_bvint(BigInt(0), false, to_fraction_bits - from_fraction_bits);
 
-    tmp_sort = mk_sort(SMT_SORT_UBV, to_fraction_bits);
+    tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, to_fraction_bits);
     fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, src_fraction, zeros);
   }
 

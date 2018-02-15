@@ -74,7 +74,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
     unsigned int sort_sz = data.source_value->type->get_width();
     if(sort_sz <= upper)
     {
-      smt_sortt s = mk_sort(SMT_SORT_UBV, 8);
+      smt_sortt s = mk_int_bv_sort(SMT_SORT_UBV, 8);
       return mk_smt_symbol("out_of_bounds_byte_extract", s);
     }
 
@@ -209,7 +209,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   }
   else
   {
-    smt_sortt s = mk_sort(SMT_SORT_UBV, width_op0 - top_of_update);
+    smt_sortt s = mk_int_bv_sort(SMT_SORT_UBV, width_op0 - top_of_update);
     top = mk_extract(src_value, width_op0 - 1, top_of_update, s);
   }
 
@@ -229,7 +229,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   }
   else
   {
-    smt_sortt s = mk_sort(SMT_SORT_UBV, bottom_of_update);
+    smt_sortt s = mk_int_bv_sort(SMT_SORT_UBV, bottom_of_update);
     bottom = mk_extract(src_value, bottom_of_update - 1, 0, s);
   }
 
@@ -238,7 +238,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
 
   if(middle != nullptr)
   {
-    smt_sortt s = mk_sort(SMT_SORT_UBV, width_op0 - bottom_of_update);
+    smt_sortt s = mk_int_bv_sort(SMT_SORT_UBV, width_op0 - bottom_of_update);
     concat = mk_func_app(s, SMT_FUNC_CONCAT, top, middle);
   }
   else

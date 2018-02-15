@@ -143,18 +143,10 @@ void smt_convt::delete_all_asts()
 
 void smt_convt::smt_post_init()
 {
-  if(int_encoding)
-  {
-    machine_int_sort = mk_sort(SMT_SORT_INT, false);
-    machine_uint_sort = machine_int_sort;
-  }
-  else
-  {
-    machine_int_sort = mk_sort(SMT_SORT_SBV, config.ansi_c.int_width);
-    machine_uint_sort = mk_sort(SMT_SORT_UBV, config.ansi_c.int_width);
-  }
+  machine_int_sort = mk_int_bv_sort(SMT_SORT_SBV, config.ansi_c.int_width);
+  machine_uint_sort = mk_int_bv_sort(SMT_SORT_UBV, config.ansi_c.int_width);
 
-  boolean_sort = mk_sort(SMT_SORT_BOOL);
+  boolean_sort = mk_bool_sort();
 
   init_addr_space_array();
 
@@ -454,7 +446,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else
     {
-      domain = mk_sort(SMT_SORT_UBV, calculate_array_domain_width(arr));
+      domain = mk_int_bv_sort(SMT_SORT_UBV, calculate_array_domain_width(arr));
     }
 
     expr2tc flat_expr = expr;
@@ -1064,7 +1056,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     unsigned long accuml_side =
       cat.side_1->type->get_width() + cat.side_2->type->get_width();
-    smt_sortt s = mk_sort(SMT_SORT_UBV, accuml_side);
+    smt_sortt s = mk_int_bv_sort(SMT_SORT_UBV, accuml_side);
     a = mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
 
     break;
@@ -1345,38 +1337,26 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     break;
   case type2t::unsignedbv_id:
   {
-    if(int_encoding)
-      result = mk_sort(SMT_SORT_INT);
-    else
-      result = mk_sort(SMT_SORT_UBV, type->get_width());
+    result = mk_int_bv_sort(SMT_SORT_UBV, type->get_width());
     break;
   }
   case type2t::signedbv_id:
   {
-    if(int_encoding)
-      result = mk_sort(SMT_SORT_INT);
-    else
-      result = mk_sort(SMT_SORT_SBV, type->get_width());
+    result = mk_int_bv_sort(SMT_SORT_SBV, type->get_width());
     break;
   }
   case type2t::fixedbv_id:
   {
-    if(int_encoding)
-      result = mk_sort(SMT_SORT_REAL);
-    else
-      result = mk_sort(SMT_SORT_FIXEDBV, type->get_width());
+    unsigned int int_bits = to_fixedbv_type(type).integer_bits;
+    unsigned int width = type->get_width();
+    result = mk_real_fp_sort(int_bits, width - int_bits);
     break;
   }
   case type2t::floatbv_id:
   {
-    if(int_encoding)
-      result = mk_sort(SMT_SORT_REAL);
-    else
-    {
-      unsigned int sw = to_floatbv_type(type).fraction;
-      unsigned int ew = to_floatbv_type(type).exponent;
-      result = mk_sort(SMT_SORT_FLOATBV, ew, sw);
-    }
+    unsigned int sw = to_floatbv_type(type).fraction;
+    unsigned int ew = to_floatbv_type(type).exponent;
+    result = mk_real_fp_sort(ew, sw);
     break;
   }
   case type2t::string_id:
@@ -1412,14 +1392,14 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     smt_sortt r;
     if(is_bool_type(range) && !array_api->supports_bools_in_arrays)
     {
-      r = mk_sort(SMT_SORT_UBV, 1);
+      r = mk_int_bv_sort(SMT_SORT_UBV, 1);
     }
     else
     {
       r = convert_sort(range);
     }
 
-    result = mk_sort(SMT_SORT_ARRAY, d, r);
+    result = mk_array_sort(d, r);
     break;
   }
   default:
@@ -1755,13 +1735,13 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
   smt_astt ze = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
 
   smt_astt ite2 =
-    mk_func_app(mk_sort(SMT_SORT_FLOATBV_RM), SMT_FUNC_ITE, is_eq_two, pi, ze);
+    mk_func_app(fp_api->mk_fpbv_rm_sort(), SMT_FUNC_ITE, is_eq_two, pi, ze);
 
-  smt_astt ite1 = mk_func_app(
-    mk_sort(SMT_SORT_FLOATBV_RM), SMT_FUNC_ITE, is_eq_one, mi, ite2);
+  smt_astt ite1 =
+    mk_func_app(fp_api->mk_fpbv_rm_sort(), SMT_FUNC_ITE, is_eq_one, mi, ite2);
 
-  smt_astt ite0 = mk_func_app(
-    mk_sort(SMT_SORT_FLOATBV_RM), SMT_FUNC_ITE, is_eq_zero, ne, ite1);
+  smt_astt ite0 =
+    mk_func_app(fp_api->mk_fpbv_rm_sort(), SMT_FUNC_ITE, is_eq_zero, ne, ite1);
 
   return ite0;
 }
@@ -1786,7 +1766,7 @@ smt_astt smt_convt::convert_sign_ext(
   unsigned int topbit,
   unsigned int topwidth)
 {
-  smt_sortt bit = mk_sort(SMT_SORT_UBV, 1);
+  smt_sortt bit = mk_int_bv_sort(SMT_SORT_UBV, 1);
   smt_astt the_top_bit = mk_extract(a, topbit - 1, topbit - 1, bit);
   smt_astt zero_bit = mk_smt_bvint(BigInt(0), false, 1);
   smt_sortt b = boolean_sort;
@@ -1802,7 +1782,7 @@ smt_astt smt_convt::convert_sign_ext(
   BigInt big_int(big);
   smt_astt f = mk_smt_bvint(big_int, false, topwidth);
 
-  smt_sortt topsort = mk_sort(SMT_SORT_UBV, topwidth);
+  smt_sortt topsort = mk_int_bv_sort(SMT_SORT_UBV, topwidth);
   smt_astt topbits = mk_func_app(topsort, SMT_FUNC_ITE, t, z, f);
 
   return mk_func_app(s, SMT_FUNC_CONCAT, topbits, a);
@@ -1821,8 +1801,8 @@ smt_astt smt_convt::round_real_to_int(smt_astt a)
   // the same. (Technically, it's also platform dependant). To get around this,
   // add one to the result in all circumstances, except where the value was
   // already an integer.
-  smt_sortt realsort = mk_sort(SMT_SORT_REAL);
-  smt_sortt intsort = mk_sort(SMT_SORT_INT);
+  smt_sortt realsort = mk_real_sort();
+  smt_sortt intsort = mk_int_sort();
   smt_sortt boolsort = boolean_sort;
   smt_astt is_lt_zero = mk_func_app(realsort, SMT_FUNC_LT, a, mk_smt_real("0"));
 
@@ -1853,9 +1833,9 @@ smt_astt smt_convt::round_fixedbv_to_int(
   unsigned int frac_width = fromwidth / 2;
 
   // Sorts
-  smt_sortt bit = mk_sort(SMT_SORT_UBV, 1);
-  smt_sortt halfwidth = mk_sort(SMT_SORT_UBV, frac_width);
-  smt_sortt tosort = mk_sort(SMT_SORT_UBV, towidth);
+  smt_sortt bit = mk_int_bv_sort(SMT_SORT_UBV, 1);
+  smt_sortt halfwidth = mk_int_bv_sort(SMT_SORT_UBV, frac_width);
+  smt_sortt tosort = mk_int_bv_sort(SMT_SORT_UBV, towidth);
   smt_sortt boolsort = boolean_sort;
 
   // Determine whether the source is signed from its topmost bit.
@@ -1967,9 +1947,8 @@ unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
 
 smt_sortt smt_convt::make_array_domain_sort(const array_type2t &arr)
 {
-  return mk_sort(
-    int_encoding ? SMT_SORT_INT : SMT_SORT_UBV,
-    make_array_domain_sort_exp(arr)->get_width());
+  return mk_int_bv_sort(
+    SMT_SORT_UBV, make_array_domain_sort_exp(arr)->get_width());
 }
 
 type2tc smt_convt::make_array_domain_sort_exp(const array_type2t &arr)
@@ -2744,12 +2723,12 @@ smt_astt array_iface::default_convert_array_of(
   {
     smt_astt zero = ctx->mk_smt_bvint(BigInt(0), false, 1);
     smt_astt one = ctx->mk_smt_bvint(BigInt(0), false, 1);
-    smt_sortt result_sort = ctx->mk_sort(SMT_SORT_UBV, 1);
+    smt_sortt result_sort = ctx->mk_int_bv_sort(SMT_SORT_UBV, 1);
     init_val = ctx->mk_func_app(result_sort, SMT_FUNC_ITE, init_val, one, zero);
   }
 
-  smt_sortt domwidth = ctx->mk_sort(SMT_SORT_UBV, array_size);
-  smt_sortt arrsort = ctx->mk_sort(SMT_SORT_ARRAY, domwidth, init_val->sort);
+  smt_sortt domwidth = ctx->mk_int_bv_sort(SMT_SORT_UBV, array_size);
+  smt_sortt arrsort = ctx->mk_array_sort(domwidth, init_val->sort);
   smt_astt newsym_ast =
     ctx->mk_fresh(arrsort, "default_array_of::", init_val->sort);
 
@@ -2882,8 +2861,7 @@ smt_astt smt_ast::update(
   {
     size_t dom_width =
       ctx->int_encoding ? config.ansi_c.int_width : sort->get_domain_width();
-    index =
-      constant_int2tc(type2tc(new unsignedbv_type2t(dom_width)), BigInt(idx));
+    index = constant_int2tc(unsignedbv_type2tc(dom_width), BigInt(idx));
   }
   else
   {
@@ -2949,4 +2927,38 @@ expr2tc smt_convt::build_bv(const type2tc &type, BigInt value)
   }
   assert(is_bv_type(type));
   return constant_int2tc(type, value);
+}
+
+smt_sortt smt_convt::mk_bool_sort()
+{
+  std::cerr << "Chosen solver doesn't support boolean sorts\n";
+  abort();
+}
+
+smt_sortt smt_convt::mk_real_sort()
+{
+  std::cerr << "Chosen solver doesn't support real sorts\n";
+  abort();
+}
+
+smt_sortt smt_convt::mk_int_sort()
+{
+  std::cerr << "Chosen solver doesn't support integer sorts\n";
+  abort();
+}
+
+smt_sortt smt_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
+{
+  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
+  (void)k;
+  (void)width;
+  abort();
+}
+
+smt_sortt smt_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
+{
+  std::cerr << "Chosen solver doesn't support array sorts\n";
+  (void)domain;
+  (void)range;
+  abort();
 }

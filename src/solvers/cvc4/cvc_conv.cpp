@@ -221,46 +221,6 @@ smt_ast *cvc_convt::mk_func_app(
   return new cvc_smt_ast(this, s, e);
 }
 
-smt_sortt cvc_convt::mk_sort(const smt_sort_kind k, ...)
-{
-  va_list ap;
-
-  va_start(ap, k);
-  switch(k)
-  {
-  case SMT_SORT_BOOL:
-    return new cvc_smt_sort(k, em.booleanType());
-  case SMT_SORT_FIXEDBV:
-  case SMT_SORT_UBV:
-  case SMT_SORT_SBV:
-  {
-    unsigned long uint = va_arg(ap, unsigned long);
-    return new cvc_smt_sort(k, em.mkBitVectorType(uint), uint);
-  }
-  case SMT_SORT_ARRAY:
-  {
-    const cvc_smt_sort *dom = va_arg(ap, const cvc_smt_sort *);
-    const cvc_smt_sort *range = va_arg(ap, const cvc_smt_sort *);
-    assert(int_encoding || dom->get_data_width() != 0);
-
-    return new cvc_smt_sort(
-      k, em.mkArrayType(dom->s, range->s), dom->get_data_width(), range);
-
-    break;
-  }
-  case SMT_SORT_FLOATBV:
-  {
-    unsigned ew = va_arg(ap, unsigned long);
-    unsigned sw = va_arg(ap, unsigned long);
-    return mk_fpbv_sort(ew, sw);
-  }
-  default:
-    std::cerr << "Unimplemented smt sort " << k << " in CVC mk_sort"
-              << std::endl;
-    abort();
-  }
-}
-
 smt_ast *cvc_convt::mk_smt_int(
   const mp_integer &theint __attribute__((unused)),
   bool sign __attribute__((unused)))
@@ -276,9 +236,7 @@ smt_ast *cvc_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 smt_ast *
 cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
-  smt_sortt s = mk_sort(
-    ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV,
-    width);
+  smt_sortt s = mk_int_bv_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
 
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.
@@ -360,4 +318,23 @@ void cvc_convt::push_array_ctx()
 
 void cvc_convt::pop_array_ctx()
 {
+}
+
+smt_sortt cvc_convt::mk_bool_sort()
+{
+  return new cvc_smt_sort(SMT_SORT_BOOL, em.booleanType(), 1);
+}
+
+smt_sortt cvc_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
+{
+  return new cvc_smt_sort(k, em.mkBitVectorType(width), width);
+}
+
+smt_sortt cvc_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
+{
+  auto domain_sort = cvc_sort_downcast(domain);
+  auto range_sort = cvc_sort_downcast(range);
+
+  auto t = em.mkArrayType(domain_sort->s, range_sort->s);
+  return new cvc_smt_sort(SMT_SORT_ARRAY, t, domain->get_data_width(), range);
 }
