@@ -7,8 +7,6 @@
 class array_sym_smt_ast;
 typedef const array_sym_smt_ast *array_sym_smt_astt;
 
-class smt_tuple_node_flattener;
-
 class array_sym_smt_ast : public tuple_sym_smt_ast
 {
 public:

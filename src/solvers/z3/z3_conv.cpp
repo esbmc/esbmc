@@ -893,8 +893,8 @@ const smt_ast *z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
   z3_convt *z3_conv = static_cast<z3_convt *>(conv);
 
   const z3_smt_sort *thesort = z3_sort_downcast(sort);
-  assert(!is_nil_type(thesort->tupletype));
-  const struct_union_data &data = conv->get_type_def(thesort->tupletype);
+  assert(!is_nil_type(thesort->get_tuple_type()));
+  const struct_union_data &data = conv->get_type_def(thesort->get_tuple_type());
   assert(elem < data.members.size());
   const smt_sort *idx_sort = conv->convert_sort(data.members[elem]);
 

@@ -1,7 +1,7 @@
 #ifndef SOLVERS_SMT_SMT_SORT_H_
 #define SOLVERS_SMT_SMT_SORT_H_
 
-#include <cstdlib>
+#include <util/irep2_type.h>
 
 /** Identifier for SMT sort kinds
  *  Each different kind of sort (i.e. arrays, bv's, bools, etc) gets its own
@@ -50,6 +50,16 @@ public:
     assert(id != SMT_SORT_ARRAY);
   }
 
+  smt_sort(smt_sort_kind i, const type2tc &type)
+    : id(i),
+      data_width(0),
+      secondary_width(0),
+      range_sort(nullptr),
+      tupletype(type)
+  {
+    assert(i == SMT_SORT_STRUCT);
+  }
+
   smt_sort(smt_sort_kind i, std::size_t width)
     : id(i), data_width(width), secondary_width(0), range_sort(nullptr)
   {
@@ -65,9 +75,23 @@ public:
     // XXX not applicable during int mode?
   }
 
-  smt_sort(smt_sort_kind i, std::size_t domwidth, smt_sortt rsort)
-    : id(i), data_width(domwidth), secondary_width(0), range_sort(rsort)
+  smt_sort(smt_sort_kind i, std::size_t dom_width, smt_sortt range_sort)
+    : id(i), data_width(dom_width), secondary_width(0), range_sort(range_sort)
   {
+  }
+
+  smt_sort(
+    smt_sort_kind i,
+    const type2tc &type,
+    std::size_t dom_width,
+    smt_sortt range_sort)
+    : id(i),
+      data_width(dom_width),
+      secondary_width(0),
+      range_sort(range_sort),
+      tupletype(type)
+  {
+    assert(i == SMT_SORT_ARRAY);
   }
 
   size_t get_data_width() const
@@ -95,6 +119,12 @@ public:
     return secondary_width;
   }
 
+  const type2tc &get_tuple_type() const
+  {
+    assert(!is_nil_type(tupletype));
+    return tupletype;
+  }
+
   virtual ~smt_sort() = default;
 
 private:
@@ -113,6 +143,13 @@ private:
    * For arrays this is the type of the element
    * For everything else, undefined */
   smt_sortt range_sort;
+
+  /** Type of the tuple
+   * For structs this is actual type (struct or array of structs) of a tuple
+   * that's been flattened
+   * For everything else, undefined
+   */
+  const type2tc tupletype;
 };
 
 #endif /* SOLVERS_SMT_SMT_SORT_H_ */

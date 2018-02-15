@@ -34,9 +34,9 @@ smt_astt smt_tuple_node_flattener::tuple_fresh(smt_sortt s, std::string name)
 
   if(s->id == SMT_SORT_ARRAY)
   {
-    tuple_smt_sortt sort = to_tuple_sort(s);
-    assert(is_array_type(sort->thetype));
-    smt_sortt subtype = ctx->convert_sort(to_array_type(sort->thetype).subtype);
+    assert(is_array_type(s->get_tuple_type()));
+    smt_sortt subtype =
+      ctx->convert_sort(to_array_type(s->get_tuple_type()).subtype);
     return array_conv.mk_array_symbol(name, s, subtype);
   }
 
@@ -50,6 +50,7 @@ smt_tuple_node_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
   // table, there are some special names that need to be intercepted.
   if(name == "0" || name == "NULL")
     return ctx->null_ptr_ast;
+
   if(name == "INVALID")
     return ctx->invalid_ptr_ast;
 
@@ -136,11 +137,11 @@ expr2tc smt_tuple_node_flattener::tuple_get(const expr2tc &expr)
 
 expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 {
-  tuple_smt_sortt sort = to_tuple_sort(tuple->sort);
-
   // XXX - what's the correct type to return here.
-  constant_struct2tc outstruct(sort->thetype, std::vector<expr2tc>());
-  const struct_union_data &strct = ctx->get_type_def(sort->thetype);
+  constant_struct2tc outstruct(
+    tuple->sort->get_tuple_type(), std::vector<expr2tc>());
+  const struct_union_data &strct =
+    ctx->get_type_def(tuple->sort->get_tuple_type());
 
   // If this tuple was free and never read, don't attempt to extract data from
   // it. There isn't any.
@@ -190,7 +191,9 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
   }
 
   // If it's a pointer, rewrite.
-  if(is_pointer_type(sort->thetype) || sort->thetype == ctx->pointer_struct)
+  if(
+    is_pointer_type(tuple->sort->get_tuple_type()) ||
+    tuple->sort->get_tuple_type() == ctx->pointer_struct)
   {
     // Guard against a free pointer though
     if(is_nil_expr(outstruct->datatype_members[0]))
@@ -214,8 +217,11 @@ smt_astt smt_tuple_node_flattener::tuple_array_of(
 {
   uint64_t elems = 1ULL << array_size;
   array_type2tc array_type(init_val->type, gen_ulong(elems), false);
-  smt_sortt array_sort = new tuple_smt_sort(
-    array_type, array_size, ctx->convert_sort(array_type->subtype));
+  smt_sortt array_sort = new smt_sort(
+    SMT_SORT_ARRAY,
+    array_type,
+    array_size,
+    ctx->convert_sort(array_type->subtype));
 
   return array_conv.convert_array_of_wsort(
     ctx->convert_ast(init_val), array_size, array_sort);
@@ -232,11 +238,11 @@ smt_sortt smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
       "interface");
     unsigned int dom_width = ctx->calculate_array_domain_width(arrtype);
 
-    return new tuple_smt_sort(
-      type, dom_width, ctx->convert_sort(arrtype.subtype));
+    return new smt_sort(
+      SMT_SORT_ARRAY, type, dom_width, ctx->convert_sort(arrtype.subtype));
   }
 
-  return new tuple_smt_sort(type);
+  return new smt_sort(SMT_SORT_STRUCT, type);
 }
 
 void smt_tuple_node_flattener::add_tuple_constraints_for_solving()

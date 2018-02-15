@@ -30,7 +30,7 @@ public:
   }
 
   z3_smt_sort(smt_sort_kind i, z3::sort _s, const type2tc &_tupletype)
-    : smt_sort(i), s(_s), tupletype(_tupletype)
+    : smt_sort(i, _tupletype), s(_s)
   {
   }
 
@@ -51,7 +51,6 @@ public:
   ~z3_smt_sort() override = default;
 
   z3::sort s;
-  type2tc tupletype;
 };
 
 class z3_smt_ast : public smt_ast
