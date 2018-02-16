@@ -688,7 +688,8 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
   {
     const array_type2t &arrtype = to_array_type(type);
     smt_sortt subtypesort = convert_sort(arrtype.subtype);
-    smt_sortt d = make_array_domain_sort(arrtype);
+    smt_sortt d = mk_int_bv_sort(
+      SMT_SORT_UBV, make_array_domain_type(arrtype)->get_width());
     return mk_array_sort(d, subtypesort);
   }
 

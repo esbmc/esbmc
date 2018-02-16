@@ -1370,8 +1370,8 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     // Unless it's either infinite or dynamic in size, in which case use the
     // machine int size. Also, faff about if it's an array of arrays, extending
     // the domain.
-    smt_sortt d =
-      make_array_domain_sort(to_array_type(flatten_array_type(type)));
+    type2tc t = make_array_domain_type(to_array_type(flatten_array_type(type)));
+    smt_sortt d = mk_int_bv_sort(SMT_SORT_UBV, t->get_width());
 
     // Determine the range if we have arrays of arrays.
     type2tc range = get_flattened_array_subtype(type);
@@ -1941,13 +1941,7 @@ unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
   return config.ansi_c.word_size;
 }
 
-smt_sortt smt_convt::make_array_domain_sort(const array_type2t &arr)
-{
-  return mk_int_bv_sort(
-    SMT_SORT_UBV, make_array_domain_sort_exp(arr)->get_width());
-}
-
-type2tc smt_convt::make_array_domain_sort_exp(const array_type2t &arr)
+type2tc smt_convt::make_array_domain_type(const array_type2t &arr)
 {
   // Start special casing if this is an array of arrays.
   if(!is_array_type(arr.subtype))
@@ -2010,7 +2004,7 @@ expr2tc smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
   while(is_index2t(idx->source_value))
     idx = idx->source_value;
 
-  type2tc subtype = make_array_domain_sort_exp(
+  type2tc subtype = make_array_domain_type(
     to_array_type(flatten_array_type(idx->source_value->type)));
 
   // Rewrite the store chain as additions and multiplications
@@ -2057,7 +2051,7 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &update_val)
   // First we need to find the flatten_array_type, to cast symbols/constants
   // with different types during the addition and multiplication. They'll be
   // casted to the flattened array index type
-  type2tc subtype = make_array_domain_sort_exp(
+  type2tc subtype = make_array_domain_type(
     to_array_type(flatten_array_type(with->source_value->type)));
 
   // Multiplications will hold of the mult2tc terms, we have to

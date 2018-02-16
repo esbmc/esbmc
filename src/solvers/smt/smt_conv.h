@@ -788,10 +788,8 @@ public:
    *  nondeterministically or infinite sized arrays, this defaults to the
    *  machine integer width. */
   unsigned long calculate_array_domain_width(const array_type2t &arr);
-  /** Given an array type, create an smt sort representing its domain. */
-  smt_sortt make_array_domain_sort(const array_type2t &arr);
-  /** Like make_array_domain_sort, but a type2tc not an smt_sort */
-  type2tc make_array_domain_sort_exp(const array_type2t &arr);
+  /** Given an array type, create a type2tc representing its domain. */
+  type2tc make_array_domain_type(const array_type2t &arr);
   /** For a multi-dimensional array, convert the type into a single dimension
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */
