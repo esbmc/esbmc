@@ -1,3 +1,6 @@
+#ifndef _ESBMC_SOLVERS_BOOLECTOR_BOOLECTOR_CONV_H_
+#define _ESBMC_SOLVERS_BOOLECTOR_BOOLECTOR_CONV_H_
+
 #include <cstdio>
 #include <solvers/smt/smt_conv.h>
 #include <util/irep2.h>
@@ -130,3 +133,5 @@ public:
   typedef hash_map_cont<std::string, smt_ast *> symtable_type;
   symtable_type symtable;
 };
+
+#endif /* _ESBMC_SOLVERS_BOOLECTOR_BOOLECTOR_CONV_H_ */

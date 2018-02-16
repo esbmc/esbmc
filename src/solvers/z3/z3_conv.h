@@ -6,8 +6,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
-#ifndef CPROVER_PROP_Z3_CONV_H
-#define CPROVER_PROP_Z3_CONV_H
+#ifndef _ESBMC_SOLVERS_Z3_Z3_CONV_H
+#define _ESBMC_SOLVERS_Z3_Z3_CONV_H
 
 #include <cstdint>
 #include <cstring>
@@ -209,4 +209,4 @@ public:
   std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
 };
 
-#endif
+#endif /* _ESBMC_SOLVERS_Z3_Z3_CONV_H_ */
