@@ -327,8 +327,7 @@ smt_astt yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
   if(term == NULL_TERM)
   {
     // No: create a new one.
-    const yices_smt_sort *sort = yices_sort_downcast(s);
-    term = yices_new_uninterpreted_term(sort->s);
+    term = yices_new_uninterpreted_term(to_solver_smt_sort<type_t>(s)->s);
 
     // If that wasn't the error term, set it's name.
     if(term != NULL_TERM)
@@ -505,13 +504,12 @@ smt_sortt yices_convt::mk_struct_sort(const type2tc &type)
   for(auto const &it : def.members)
   {
     smt_sortt s = convert_sort(it);
-    const yices_smt_sort *sort = yices_sort_downcast(s);
-    sorts.push_back(sort->s);
+    sorts.push_back(to_solver_smt_sort<type_t>(s)->s);
   }
 
   // We now have an array of types, ready for sort creation
   type_t tuple_sort = yices_tuple_type(def.members.size(), sorts.data());
-  return new yices_smt_sort(SMT_SORT_STRUCT, tuple_sort, type);
+  return new solver_smt_sort<type_t>(SMT_SORT_STRUCT, tuple_sort, type);
 }
 
 smt_astt yices_convt::tuple_create(const expr2tc &structdef)
@@ -533,8 +531,7 @@ smt_astt yices_convt::tuple_create(const expr2tc &structdef)
 
 smt_astt yices_convt::tuple_fresh(smt_sortt s, std::string name)
 {
-  const yices_smt_sort *sort = yices_sort_downcast(s);
-  term_t t = yices_new_uninterpreted_term(sort->s);
+  term_t t = yices_new_uninterpreted_term(to_solver_smt_sort<type_t>(s)->s);
   yices_set_term_name(t, name.c_str());
   return new yices_smt_ast(this, s, t);
 }
@@ -581,14 +578,14 @@ smt_astt yices_convt::tuple_array_of(
   unsigned long domain_width)
 {
   smt_sortt subs = convert_sort(init_value->type);
-  const yices_smt_sort *subsort = yices_sort_downcast(subs);
 
-  type2tc domtype = type2tc(new unsignedbv_type2t(domain_width));
+  type2tc domtype = unsignedbv_type2tc(domain_width);
   smt_sortt doms = convert_sort(domtype);
-  const yices_smt_sort *domsort = yices_sort_downcast(doms);
 
-  type_t domsort_type = domsort->s;
-  type_t tuplearr = yices_function_type(1, &domsort_type, subsort->s);
+  type_t tuplearr = yices_function_type(
+    1,
+    &to_solver_smt_sort<type_t>(doms)->s,
+    to_solver_smt_sort<type_t>(subs)->s);
   term_t theterm = yices_new_uninterpreted_term(tuplearr);
 
   smt_astt a = convert_ast(init_value);
@@ -599,17 +596,13 @@ smt_astt yices_convt::tuple_array_of(
     to_constant_int2t(array_domain_to_width(domtype)).value.to_ulong();
   for(unsigned long i = 0; i < elems; i++)
   {
-    term_t idxterm;
-
-    if(int_encoding)
-      idxterm = yices_int64(i);
-    else
-      idxterm = yices_bvconst_uint64(domain_width, i);
+    term_t idxterm =
+      int_encoding ? yices_int64(i) : yices_bvconst_uint64(domain_width, i);
 
     theterm = yices_update(theterm, 1, &idxterm, yast->term);
   }
 
-  smt_sortt retsort = new yices_smt_sort(SMT_SORT_STRUCT, tuplearr);
+  smt_sortt retsort = new solver_smt_sort<type_t>(SMT_SORT_STRUCT, tuplearr);
   return new_ast(retsort, theterm);
 }
 
@@ -679,30 +672,30 @@ void yices_convt::print_model()
 
 smt_sortt yices_convt::mk_bool_sort()
 {
-  return new yices_smt_sort(SMT_SORT_BOOL, yices_bool_type(), 1);
+  return new solver_smt_sort<type_t>(SMT_SORT_BOOL, yices_bool_type(), 1);
 }
 
 smt_sortt yices_convt::mk_real_sort()
 {
-  return new yices_smt_sort(SMT_SORT_REAL, yices_int_type());
+  return new solver_smt_sort<type_t>(SMT_SORT_REAL, yices_int_type());
 }
 
 smt_sortt yices_convt::mk_int_sort()
 {
-  return new yices_smt_sort(SMT_SORT_INT, yices_real_type());
+  return new solver_smt_sort<type_t>(SMT_SORT_INT, yices_real_type());
 }
 
 smt_sortt yices_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
 {
-  return new yices_smt_sort(k, yices_bv_type(width), width);
+  return new solver_smt_sort<type_t>(k, yices_bv_type(width), width);
 }
 
 smt_sortt yices_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  auto domain_sort = yices_sort_downcast(domain);
-  auto range_sort = yices_sort_downcast(range);
+  auto domain_sort = to_solver_smt_sort<type_t>(domain);
+  auto range_sort = to_solver_smt_sort<type_t>(range);
 
   auto t = yices_function_type(1, &domain_sort->s, range_sort->s);
-  return new yices_smt_sort(
+  return new solver_smt_sort<type_t>(
     SMT_SORT_ARRAY, t, domain_sort->get_data_width(), range);
 }

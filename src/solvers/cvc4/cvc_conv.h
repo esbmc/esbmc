@@ -4,33 +4,6 @@
 #include <solvers/smt/smt_conv.h>
 #include <cvc4/cvc4.h>
 
-class cvc_smt_sort : public smt_sort
-{
-public:
-#define cvc_sort_downcast(x) static_cast<const cvc_smt_sort *>(x)
-  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s) : smt_sort(i), s(_s)
-  {
-  }
-
-  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w) : smt_sort(i, w), s(_s)
-  {
-  }
-
-  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w, size_t sw)
-    : smt_sort(i, w, sw), s(_s)
-  {
-  }
-
-  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w, smt_sortt _rangesort)
-    : smt_sort(i, w, _rangesort), s(_s)
-  {
-  }
-
-  ~cvc_smt_sort() override = default;
-
-  CVC4::Type s;
-};
-
 class cvc_smt_ast : public smt_ast
 {
 public:

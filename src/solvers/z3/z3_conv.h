@@ -21,38 +21,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <vector>
 #include <z3pp.h>
 
-class z3_smt_sort : public smt_sort
-{
-public:
-#define z3_sort_downcast(x) static_cast<const z3_smt_sort *>(x)
-  z3_smt_sort(smt_sort_kind i, z3::sort _s) : smt_sort(i), s(_s)
-  {
-  }
-
-  z3_smt_sort(smt_sort_kind i, z3::sort _s, const type2tc &_tupletype)
-    : smt_sort(i, _tupletype), s(_s)
-  {
-  }
-
-  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w) : smt_sort(i, w), s(_s)
-  {
-  }
-
-  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w, size_t sw)
-    : smt_sort(i, w, sw), s(_s)
-  {
-  }
-
-  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w, smt_sortt _rangesort)
-    : smt_sort(i, w, _rangesort), s(_s)
-  {
-  }
-
-  ~z3_smt_sort() override = default;
-
-  z3::sort s;
-};
-
 class z3_smt_ast : public smt_ast
 {
 public:

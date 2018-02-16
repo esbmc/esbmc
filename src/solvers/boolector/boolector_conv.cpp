@@ -226,12 +226,13 @@ smt_ast *boolector_convt::mk_smt_bvint(
   BoolectorNode *node;
   if(sign)
   {
-    node = boolector_int(btor, theint.to_long(), boolector_sort_downcast(s)->s);
+    node = boolector_int(
+      btor, theint.to_long(), to_solver_smt_sort<BoolectorSort>(s)->s);
   }
   else
   {
     node = boolector_unsigned_int(
-      btor, theint.to_ulong(), boolector_sort_downcast(s)->s);
+      btor, theint.to_ulong(), to_solver_smt_sort<BoolectorSort>(s)->s);
   }
 
   return new_ast(s, node);
@@ -266,15 +267,18 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   case SMT_SORT_SBV:
   case SMT_SORT_UBV:
   case SMT_SORT_FIXEDBV:
-    node = boolector_var(btor, boolector_sort_downcast(s)->s, name.c_str());
+    node = boolector_var(
+      btor, to_solver_smt_sort<BoolectorSort>(s)->s, name.c_str());
     break;
 
   case SMT_SORT_BOOL:
-    node = boolector_var(btor, boolector_sort_downcast(s)->s, name.c_str());
+    node = boolector_var(
+      btor, to_solver_smt_sort<BoolectorSort>(s)->s, name.c_str());
     break;
 
   case SMT_SORT_ARRAY:
-    node = boolector_array(btor, boolector_sort_downcast(s)->s, name.c_str());
+    node = boolector_array(
+      btor, to_solver_smt_sort<BoolectorSort>(s)->s, name.c_str());
     break;
 
   default:
@@ -502,20 +506,22 @@ void boolector_convt::print_model()
 
 smt_sortt boolector_convt::mk_bool_sort()
 {
-  return new boolector_smt_sort(SMT_SORT_BOOL, boolector_bool_sort(btor), 1);
+  return new solver_smt_sort<BoolectorSort>(
+    SMT_SORT_BOOL, boolector_bool_sort(btor), 1);
 }
 
 smt_sortt boolector_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
 {
-  return new boolector_smt_sort(k, boolector_bitvec_sort(btor, width), width);
+  return new solver_smt_sort<BoolectorSort>(
+    k, boolector_bitvec_sort(btor, width), width);
 }
 
 smt_sortt boolector_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  auto domain_sort = boolector_sort_downcast(domain);
-  auto range_sort = boolector_sort_downcast(range);
+  auto domain_sort = to_solver_smt_sort<BoolectorSort>(domain);
+  auto range_sort = to_solver_smt_sort<BoolectorSort>(range);
 
   auto t = boolector_array_sort(btor, domain_sort->s, range_sort->s);
-  return new boolector_smt_sort(
+  return new solver_smt_sort<BoolectorSort>(
     SMT_SORT_ARRAY, t, domain_sort->get_data_width(), range);
 }

@@ -10,38 +10,6 @@ extern "C" {
 #include <boolector.h>
 }
 
-class boolector_smt_sort : public smt_sort
-{
-public:
-#define boolector_sort_downcast(x) static_cast<const boolector_smt_sort *>(x)
-  boolector_smt_sort(smt_sort_kind i, BoolectorSort _s) : smt_sort(i), s(_s)
-  {
-  }
-
-  boolector_smt_sort(smt_sort_kind i, BoolectorSort _s, size_t w)
-    : smt_sort(i, w), s(_s)
-  {
-  }
-
-  boolector_smt_sort(smt_sort_kind i, BoolectorSort _s, size_t w, size_t sw)
-    : smt_sort(i, w, sw), s(_s)
-  {
-  }
-
-  boolector_smt_sort(
-    smt_sort_kind i,
-    BoolectorSort _s,
-    size_t w,
-    smt_sortt _rangesort)
-    : smt_sort(i, w, _rangesort), s(_s)
-  {
-  }
-
-  virtual ~boolector_smt_sort() override = default;
-
-  BoolectorSort s;
-};
-
 class btor_smt_ast : public smt_ast
 {
 public:

@@ -780,9 +780,9 @@ smt_ast *mathsat_convt::mk_array_symbol(
 smt_ast *
 mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  const mathsat_smt_sort *ms = mathsat_sort_downcast(s);
   // XXX - does 'd' leak?
-  msat_decl d = msat_declare_function(env, name.c_str(), ms->s);
+  msat_decl d = msat_declare_function(
+    env, name.c_str(), to_solver_smt_sort<msat_type>(s)->s);
   assert(!MSAT_ERROR_DECL(d) && "Invalid function symbol declaration sort");
 
   msat_term t = msat_make_constant(env, d);
@@ -887,41 +887,44 @@ void mathsat_convt::print_model()
 smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
   auto t = msat_get_fp_type(env, ew, sw);
-  return new mathsat_smt_sort(SMT_SORT_FLOATBV, t, ew + sw, sw);
+  return new solver_smt_sort<msat_type>(SMT_SORT_FLOATBV, t, ew + sw, sw);
 }
 
 smt_sortt mathsat_convt::mk_fpbv_rm_sort()
 {
   auto t = msat_get_fp_roundingmode_type(env);
-  return new mathsat_smt_sort(SMT_SORT_FLOATBV_RM, t, 1);
+  return new solver_smt_sort<msat_type>(SMT_SORT_FLOATBV_RM, t, 1);
 }
 
 smt_sortt mathsat_convt::mk_bool_sort()
 {
-  return new mathsat_smt_sort(SMT_SORT_BOOL, msat_get_bool_type(env), 1);
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_BOOL, msat_get_bool_type(env), 1);
 }
 
 smt_sortt mathsat_convt::mk_real_sort()
 {
-  return new mathsat_smt_sort(SMT_SORT_REAL, msat_get_rational_type(env), 0);
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_REAL, msat_get_rational_type(env), 0);
 }
 
 smt_sortt mathsat_convt::mk_int_sort()
 {
-  return new mathsat_smt_sort(SMT_SORT_INT, msat_get_integer_type(env), 0);
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_INT, msat_get_integer_type(env), 0);
 }
 
 smt_sortt mathsat_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
 {
-  return new mathsat_smt_sort(k, msat_get_bv_type(env, width), width);
+  return new solver_smt_sort<msat_type>(k, msat_get_bv_type(env, width), width);
 }
 
 smt_sortt mathsat_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  auto domain_sort = mathsat_sort_downcast(domain);
-  auto range_sort = mathsat_sort_downcast(range);
+  auto domain_sort = to_solver_smt_sort<msat_type>(domain);
+  auto range_sort = to_solver_smt_sort<msat_type>(range);
 
   auto t = msat_get_array_type(env, domain_sort->s, range_sort->s);
-  return new mathsat_smt_sort(
+  return new solver_smt_sort<msat_type>(
     SMT_SORT_ARRAY, t, domain->get_data_width(), range);
 }

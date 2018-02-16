@@ -263,13 +263,6 @@ smt_ast *cvc_convt::mk_array_symbol(
 
 smt_ast *cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  const cvc_smt_sort *sort = cvc_sort_downcast(s);
-
-  // If someone's making a tuple-symbol, wave our hands and do nothing. It's
-  // the tuple modelling code doing some symbol sillyness.
-  if(s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
-    return nullptr;
-
   // Standard arrangement: if we already have the name, return the expression
   // from the symbol table. If not, time for a new name.
   if(sym_tab.isBound(name))
@@ -279,7 +272,8 @@ smt_ast *cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   }
 
   // Time for a new one.
-  CVC4::Expr e = em.mkVar(name, sort->s); // "global", eh?
+  CVC4::Expr e =
+    em.mkVar(name, to_solver_smt_sort<CVC4::Type>(s)->s); // "global", eh?
   sym_tab.bind(name, e, true);
   return new cvc_smt_ast(this, s, e);
 }
@@ -322,19 +316,20 @@ void cvc_convt::pop_array_ctx()
 
 smt_sortt cvc_convt::mk_bool_sort()
 {
-  return new cvc_smt_sort(SMT_SORT_BOOL, em.booleanType(), 1);
+  return new solver_smt_sort<CVC4::Type>(SMT_SORT_BOOL, em.booleanType(), 1);
 }
 
 smt_sortt cvc_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
 {
-  return new cvc_smt_sort(k, em.mkBitVectorType(width), width);
+  return new solver_smt_sort<CVC4::Type>(k, em.mkBitVectorType(width), width);
 }
 
 smt_sortt cvc_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  auto domain_sort = cvc_sort_downcast(domain);
-  auto range_sort = cvc_sort_downcast(range);
+  auto domain_sort = to_solver_smt_sort<CVC4::Type>(domain);
+  auto range_sort = to_solver_smt_sort<CVC4::Type>(range);
 
   auto t = em.mkArrayType(domain_sort->s, range_sort->s);
-  return new cvc_smt_sort(SMT_SORT_ARRAY, t, domain->get_data_width(), range);
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_ARRAY, t, domain->get_data_width(), range);
 }

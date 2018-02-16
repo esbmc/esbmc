@@ -150,4 +150,67 @@ private:
   const type2tc tupletype;
 };
 
+template <typename solver_sort>
+class solver_smt_sort : public smt_sort
+{
+public:
+  solver_smt_sort(smt_sort_kind i, solver_sort _s) : smt_sort(i), s(_s)
+  {
+  }
+
+  solver_smt_sort(smt_sort_kind i, solver_sort _s, const type2tc &_tupletype)
+    : smt_sort(i, _tupletype), s(_s)
+  {
+  }
+
+  solver_smt_sort(smt_sort_kind i, solver_sort _s, unsigned int w)
+    : smt_sort(i, w), s(_s)
+  {
+  }
+
+  solver_smt_sort(
+    smt_sort_kind i,
+    solver_sort _s,
+    unsigned int w,
+    unsigned int sw)
+    : smt_sort(i, w, sw), s(_s)
+  {
+  }
+
+  solver_smt_sort(
+    smt_sort_kind i,
+    solver_sort _s,
+    std::size_t dw,
+    const smt_sort *_rangesort)
+    : smt_sort(i, dw, _rangesort), s(_s)
+  {
+  }
+
+  solver_smt_sort(
+    smt_sort_kind i,
+    solver_sort _s,
+    const type2tc &type,
+    std::size_t width,
+    smt_sortt range_sort)
+    : smt_sort(i, type, width, range_sort), s(_s)
+  {
+  }
+
+  ~solver_smt_sort() override = default;
+
+  solver_sort s;
+};
+
+#ifdef NDEBUG
+#define dynamic_cast static_cast
+#endif
+template <typename T>
+const solver_smt_sort<T> *to_solver_smt_sort(smt_sortt s)
+{
+  return dynamic_cast<const solver_smt_sort<T> *>(s);
+}
+#ifdef dynamic_cast
+#undef dynamic_cast
+#endif
+
 #endif /* SOLVERS_SMT_SMT_SORT_H_ */

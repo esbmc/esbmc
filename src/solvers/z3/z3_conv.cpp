@@ -362,7 +362,8 @@ smt_astt z3_convt::mk_func_app(
   case SMT_FUNC_IS_INT:
     return new_ast(z3::to_expr(z3_ctx, Z3_mk_is_int(z3_ctx, asts[0]->e)), s);
   case SMT_FUNC_BV2FLOAT:
-    return new_ast(z3_ctx.fpa_from_bv(asts[0]->e, z3_sort_downcast(s)->s), s);
+    return new_ast(
+      z3_ctx.fpa_from_bv(asts[0]->e, to_solver_smt_sort<z3::sort>(s)->s), s);
   case SMT_FUNC_FLOAT2BV:
     return new_ast(z3_ctx.fpa_to_ieeebv(asts[0]->e), s);
   default:
@@ -442,17 +443,13 @@ smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 smt_astt z3_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_real_fp_sort(ew, sw);
-  const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
-
-  return new_ast(z3_ctx.fpa_nan(zs->s), s);
+  return new_ast(z3_ctx.fpa_nan(to_solver_smt_sort<z3::sort>(s)->s), s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_real_fp_sort(ew, sw);
-  const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
-
-  return new_ast(z3_ctx.fpa_inf(sgn, zs->s), s);
+  return new_ast(z3_ctx.fpa_inf(sgn, to_solver_smt_sort<z3::sort>(s)->s), s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
@@ -515,13 +512,15 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
     unsigned sw = to_floatbv_type(cast.type).fraction;
 
     s = mk_real_fp_sort(ew, sw);
-    const z3_smt_sort *zs = z3_sort_downcast(s);
 
     // Use the round mode
     rm_const = convert_rounding_mode(cast.rounding_mode);
     const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
-    return new_ast(z3_ctx.fpa_to_fpa(mrm_const->e, mfrom->e, zs->s), s);
+    return new_ast(
+      z3_ctx.fpa_to_fpa(
+        mrm_const->e, mfrom->e, to_solver_smt_sort<z3::sort>(s)->s),
+      s);
   }
 
   abort();
@@ -542,7 +541,6 @@ smt_astt z3_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
   unsigned sw = to_floatbv_type(cast.type).fraction;
 
   smt_sortt s = mk_real_fp_sort(ew, sw);
-  const z3_smt_sort *zs = z3_sort_downcast(s);
 
   // Convert each type
   if(is_bool_type(cast.from))
@@ -556,6 +554,8 @@ smt_astt z3_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
 
     return mk_func_app(s, SMT_FUNC_ITE, args, 3);
   }
+
+  auto zs = to_solver_smt_sort<z3::sort>(s);
 
   if(is_unsignedbv_type(cast.from))
     return new_ast(z3_ctx.fpa_from_unsigned(mrm_const->e, mfrom->e, zs->s), s);
@@ -664,8 +664,7 @@ smt_astt z3_convt::mk_smt_fpbv_sqrt(const expr2tc &expr)
 
 smt_astt z3_convt::mk_smt_bool(bool val)
 {
-  smt_sortt s = boolean_sort;
-  return new_ast(z3_ctx.bool_val(val), s);
+  return new_ast(z3_ctx.bool_val(val), boolean_sort);
 }
 
 smt_astt z3_convt::mk_array_symbol(
@@ -678,8 +677,8 @@ smt_astt z3_convt::mk_array_symbol(
 
 smt_astt z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  const z3_smt_sort *zs = z3_sort_downcast(s);
-  return new_ast(z3_ctx.constant(name.c_str(), zs->s), s);
+  return new_ast(
+    z3_ctx.constant(name.c_str(), to_solver_smt_sort<z3::sort>(s)->s), s);
 }
 
 smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
@@ -729,7 +728,7 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
         it++, mname++, i++)
     {
       proj_names[i] = z3::symbol(z3_ctx, mname->as_string().c_str());
-      const z3_smt_sort *tmp = z3_sort_downcast(convert_sort(*it));
+      auto tmp = to_solver_smt_sort<z3::sort>(convert_sort(*it));
       proj_types[i] = tmp->s;
     }
 
@@ -760,7 +759,7 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
     delete[] proj_decls;
   }
 
-  return new z3_smt_sort(SMT_SORT_STRUCT, sort, type);
+  return new solver_smt_sort<z3::sort>(SMT_SORT_STRUCT, sort, type);
 }
 
 const smt_ast *z3_smt_ast::update(
@@ -784,9 +783,9 @@ const smt_ast *z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
 {
   z3_convt *z3_conv = static_cast<z3_convt *>(conv);
 
-  const z3_smt_sort *thesort = z3_sort_downcast(sort);
-  assert(!is_nil_type(thesort->get_tuple_type()));
-  const struct_union_data &data = conv->get_type_def(thesort->get_tuple_type());
+  assert(!is_nil_type(sort->get_tuple_type()));
+  const struct_union_data &data = conv->get_type_def(sort->get_tuple_type());
+
   assert(elem < data.members.size());
   const smt_sort *idx_sort = conv->convert_sort(data.members[elem]);
 
@@ -827,7 +826,8 @@ smt_astt z3_convt::tuple_create(const expr2tc &structdef)
   // need to bind it to a name or symbol.
   smt_sortt s = mk_struct_sort(structdef->type);
 
-  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, z3_sort_downcast(s)->s);
+  Z3_func_decl decl =
+    Z3_get_tuple_sort_mk_decl(z3_ctx, to_solver_smt_sort<z3::sort>(s)->s);
   z3::func_decl d(z3_ctx, decl);
   z3::expr e = d.make_tuple_from_array(size, args);
   delete[] args;
@@ -837,10 +837,9 @@ smt_astt z3_convt::tuple_create(const expr2tc &structdef)
 
 smt_astt z3_convt::tuple_fresh(const smt_sort *s, std::string name)
 {
-  const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
   const char *n = (name == "") ? nullptr : name.c_str();
-  z3::expr output = z3_ctx.fresh_const(n, zs->s);
-  return new_ast(output, zs);
+  z3::expr output = z3_ctx.fresh_const(n, to_solver_smt_sort<z3::sort>(s)->s);
+  return new_ast(output, s);
 }
 
 const smt_ast *
@@ -850,7 +849,8 @@ z3_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
   z3::expr val = z3_smt_downcast(init_val)->e;
   z3::expr output = z3::to_expr(
-    z3_ctx, Z3_mk_const_array(z3_ctx, z3_sort_downcast(dom_sort)->s, val));
+    z3_ctx,
+    Z3_mk_const_array(z3_ctx, to_solver_smt_sort<z3::sort>(dom_sort)->s, val));
 
   return new_ast(output, mk_array_sort(dom_sort, init_val->sort));
 }
@@ -870,7 +870,7 @@ const smt_ast *z3_convt::tuple_array_create(
     z3::sort array_type, dom_type;
     std::string tmp, identifier;
 
-    array_type = z3_sort_downcast(convert_sort(arr_type))->s;
+    array_type = to_solver_smt_sort<z3::sort>(convert_sort(arr_type))->s;
     dom_type = array_type.array_domain();
 
     const z3_smt_ast *tmpast = z3_smt_downcast(*input_args);
@@ -902,7 +902,7 @@ const smt_ast *z3_convt::tuple_array_create(
     int64_t size;
     size = sz.as_long();
 
-    z3_array_type = z3_sort_downcast(convert_sort(arr_type))->s;
+    z3_array_type = to_solver_smt_sort<z3::sort>(convert_sort(arr_type))->s;
     domain_sort = z3_array_type.array_domain();
 
     output = z3_ctx.fresh_const(nullptr, z3_array_type);
@@ -1136,41 +1136,42 @@ smt_sortt z3_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
   // We need to add an extra bit to the significand size,
   // as it has no hidden bit
-  return new z3_smt_sort(
+  return new solver_smt_sort<z3::sort>(
     SMT_SORT_FLOATBV, z3_ctx.fpa_sort(ew, sw + 1), ew + sw + 1, sw);
 }
 
 smt_sortt z3_convt::mk_fpbv_rm_sort()
 {
   auto t = z3_ctx.fpa_rm_sort();
-  return new z3_smt_sort(SMT_SORT_FLOATBV_RM, t, 1);
+  return new solver_smt_sort<z3::sort>(SMT_SORT_FLOATBV_RM, t, 1);
 }
 
 smt_sortt z3_convt::mk_bool_sort()
 {
-  return new z3_smt_sort(SMT_SORT_BOOL, z3_ctx.bool_sort(), 1);
+  return new solver_smt_sort<z3::sort>(SMT_SORT_BOOL, z3_ctx.bool_sort(), 1);
 }
 
 smt_sortt z3_convt::mk_real_sort()
 {
-  return new z3_smt_sort(SMT_SORT_REAL, z3_ctx.real_sort());
+  return new solver_smt_sort<z3::sort>(SMT_SORT_REAL, z3_ctx.real_sort());
 }
 
 smt_sortt z3_convt::mk_int_sort()
 {
-  return new z3_smt_sort(SMT_SORT_INT, z3_ctx.int_sort());
+  return new solver_smt_sort<z3::sort>(SMT_SORT_INT, z3_ctx.int_sort());
 }
 
 smt_sortt z3_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
 {
-  return new z3_smt_sort(k, z3_ctx.bv_sort(width), width);
+  return new solver_smt_sort<z3::sort>(k, z3_ctx.bv_sort(width), width);
 }
 
 smt_sortt z3_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  auto domain_sort = z3_sort_downcast(domain);
-  auto range_sort = z3_sort_downcast(range);
+  auto domain_sort = to_solver_smt_sort<z3::sort>(domain);
+  auto range_sort = to_solver_smt_sort<z3::sort>(range);
 
   auto t = z3_ctx.array_sort(domain_sort->s, range_sort->s);
-  return new z3_smt_sort(SMT_SORT_ARRAY, t, domain->get_data_width(), range);
+  return new solver_smt_sort<z3::sort>(
+    SMT_SORT_ARRAY, t, domain->get_data_width(), range);
 }
