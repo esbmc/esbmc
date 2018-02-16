@@ -21,22 +21,18 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <vector>
 #include <z3pp.h>
 
-class z3_smt_ast : public smt_ast
+class z3_smt_ast : public solver_smt_ast<z3::expr>
 {
 public:
-#define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
-  z3_smt_ast(smt_convt *ctx, z3::expr _e, const smt_sort *_s)
-    : smt_ast(ctx, _s), e(_e)
-  {
-  }
-  ~z3_smt_ast() = default;
-  z3::expr e;
+  using solver_smt_ast<z3::expr>::solver_smt_ast;
+  ~z3_smt_ast() override = default;
 
   const smt_ast *update(
     smt_convt *ctx,
     const smt_ast *value,
     unsigned int idx,
     expr2tc idx_expr) const override;
+
   const smt_ast *project(smt_convt *ctx, unsigned int elem) const override;
 
   void dump() const override;
@@ -165,7 +161,7 @@ public:
 public:
   inline z3_smt_ast *new_ast(z3::expr _e, const smt_sort *_s)
   {
-    return new z3_smt_ast(this, _e, _s);
+    return new z3_smt_ast(this, _s, _e);
   }
 
   //  Must be first member; that way it's the last to be destroyed.

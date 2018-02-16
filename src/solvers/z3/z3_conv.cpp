@@ -133,8 +133,7 @@ smt_convt::resultt z3_convt::dec_solve()
 
 void z3_convt::assert_ast(const smt_ast *a)
 {
-  const z3_smt_ast *za = z3_smt_downcast(a);
-  z3::expr theval = za->e;
+  z3::expr theval = to_solver_smt_ast<z3_smt_ast>(a)->a;
   solver.add(theval);
   assumpt.push_back(theval);
 }
@@ -225,147 +224,147 @@ smt_astt z3_convt::mk_func_app(
 
   assert(numargs <= 4);
   for(i = 0; i < numargs; i++)
-    asts[i] = z3_smt_downcast(args[i]);
+    asts[i] = to_solver_smt_ast<z3_smt_ast>(args[i]);
 
   switch(k)
   {
   case SMT_FUNC_ADD:
   case SMT_FUNC_BVADD:
-    return new_ast((asts[0]->e + asts[1]->e), s);
+    return new_ast((asts[0]->a + asts[1]->a), s);
   case SMT_FUNC_SUB:
   case SMT_FUNC_BVSUB:
-    return new_ast((asts[0]->e - asts[1]->e), s);
+    return new_ast((asts[0]->a - asts[1]->a), s);
   case SMT_FUNC_MUL:
   case SMT_FUNC_BVMUL:
-    return new_ast((asts[0]->e * asts[1]->e), s);
+    return new_ast((asts[0]->a * asts[1]->a), s);
   case SMT_FUNC_MOD:
     if(s->id == SMT_SORT_FLOATBV)
       return new_ast(
-        z3::to_expr(z3_ctx, Z3_mk_fpa_rem(z3_ctx, asts[0]->e, asts[1]->e)), s);
+        z3::to_expr(z3_ctx, Z3_mk_fpa_rem(z3_ctx, asts[0]->a, asts[1]->a)), s);
     else
       return new_ast(
-        z3::to_expr(z3_ctx, Z3_mk_mod(z3_ctx, asts[0]->e, asts[1]->e)), s);
+        z3::to_expr(z3_ctx, Z3_mk_mod(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_BVSMOD:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvsrem(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_bvsrem(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_BVUMOD:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvurem(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_bvurem(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_DIV:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_div(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_div(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_BVSDIV:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvsdiv(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_bvsdiv(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_BVUDIV:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvudiv(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_bvudiv(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_SHL:
-    return new_ast(asts[0]->e * pw(z3_ctx.int_val(2), asts[1]->e), s);
+    return new_ast(asts[0]->a * pw(z3_ctx.int_val(2), asts[1]->a), s);
   case SMT_FUNC_BVSHL:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvshl(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_bvshl(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_BVASHR:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvashr(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_bvashr(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_NEG:
   case SMT_FUNC_BVNEG:
-    return new_ast((-asts[0]->e), s);
+    return new_ast((-asts[0]->a), s);
   case SMT_FUNC_BVLSHR:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvlshr(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_bvlshr(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_BVNOT:
-    return new_ast((~asts[0]->e), s);
+    return new_ast((~asts[0]->a), s);
   case SMT_FUNC_BVNXOR:
-    return new_ast(!(asts[0]->e ^ asts[1]->e), s);
+    return new_ast(!(asts[0]->a ^ asts[1]->a), s);
   case SMT_FUNC_BVNOR:
-    return new_ast(!(asts[0]->e | asts[1]->e), s);
+    return new_ast(!(asts[0]->a | asts[1]->a), s);
   case SMT_FUNC_BVNAND:
-    return new_ast(!(asts[0]->e & asts[1]->e), s);
+    return new_ast(!(asts[0]->a & asts[1]->a), s);
   case SMT_FUNC_BVXOR:
-    return new_ast((asts[0]->e ^ asts[1]->e), s);
+    return new_ast((asts[0]->a ^ asts[1]->a), s);
   case SMT_FUNC_BVOR:
-    return new_ast((asts[0]->e | asts[1]->e), s);
+    return new_ast((asts[0]->a | asts[1]->a), s);
   case SMT_FUNC_BVAND:
-    return new_ast((asts[0]->e & asts[1]->e), s);
+    return new_ast((asts[0]->a & asts[1]->a), s);
   case SMT_FUNC_IMPLIES:
-    return new_ast(implies(asts[0]->e, asts[1]->e), s);
+    return new_ast(implies(asts[0]->a, asts[1]->a), s);
   case SMT_FUNC_XOR:
-    return new_ast(mk_xor(asts[0]->e, asts[1]->e), s);
+    return new_ast(mk_xor(asts[0]->a, asts[1]->a), s);
   case SMT_FUNC_OR:
-    return new_ast((asts[0]->e || asts[1]->e), s);
+    return new_ast((asts[0]->a || asts[1]->a), s);
   case SMT_FUNC_AND:
-    return new_ast((asts[0]->e && asts[1]->e), s);
+    return new_ast((asts[0]->a && asts[1]->a), s);
   case SMT_FUNC_NOT:
-    return new_ast(!asts[0]->e, s);
+    return new_ast(!asts[0]->a, s);
   // NB: mk_{l,g}t{,e} ignore unsigned arg in integer mode.
   case SMT_FUNC_LT:
   case SMT_FUNC_BVULT:
-    return new_ast(mk_lt(asts[0]->e, asts[1]->e, true), s);
+    return new_ast(mk_lt(asts[0]->a, asts[1]->a, true), s);
   case SMT_FUNC_BVSLT:
-    return new_ast(mk_lt(asts[0]->e, asts[1]->e, false), s);
+    return new_ast(mk_lt(asts[0]->a, asts[1]->a, false), s);
   case SMT_FUNC_GT:
   case SMT_FUNC_BVUGT:
-    return new_ast(mk_gt(asts[0]->e, asts[1]->e, true), s);
+    return new_ast(mk_gt(asts[0]->a, asts[1]->a, true), s);
   case SMT_FUNC_BVSGT:
-    return new_ast(mk_gt(asts[0]->e, asts[1]->e, false), s);
+    return new_ast(mk_gt(asts[0]->a, asts[1]->a, false), s);
   case SMT_FUNC_LTE:
   case SMT_FUNC_BVULTE:
-    return new_ast(mk_le(asts[0]->e, asts[1]->e, true), s);
+    return new_ast(mk_le(asts[0]->a, asts[1]->a, true), s);
   case SMT_FUNC_BVSLTE:
-    return new_ast(mk_le(asts[0]->e, asts[1]->e, false), s);
+    return new_ast(mk_le(asts[0]->a, asts[1]->a, false), s);
   case SMT_FUNC_GTE:
   case SMT_FUNC_BVUGTE:
-    return new_ast(mk_ge(asts[0]->e, asts[1]->e, true), s);
+    return new_ast(mk_ge(asts[0]->a, asts[1]->a, true), s);
   case SMT_FUNC_BVSGTE:
-    return new_ast(mk_ge(asts[0]->e, asts[1]->e, false), s);
+    return new_ast(mk_ge(asts[0]->a, asts[1]->a, false), s);
   case SMT_FUNC_EQ:
-    return new_ast((asts[0]->e == asts[1]->e), s);
+    return new_ast((asts[0]->a == asts[1]->a), s);
   case SMT_FUNC_NOTEQ:
-    return new_ast((asts[0]->e != asts[1]->e), s);
+    return new_ast((asts[0]->a != asts[1]->a), s);
   case SMT_FUNC_FABS:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_abs(z3_ctx, asts[0]->e)), s);
+    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_abs(z3_ctx, asts[0]->a)), s);
   case SMT_FUNC_ISNAN:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_nan(z3_ctx, asts[0]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_nan(z3_ctx, asts[0]->a)), s);
   case SMT_FUNC_ISINF:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_infinite(z3_ctx, asts[0]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_infinite(z3_ctx, asts[0]->a)), s);
   case SMT_FUNC_ISNORMAL:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_normal(z3_ctx, asts[0]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_normal(z3_ctx, asts[0]->a)), s);
   case SMT_FUNC_ISZERO:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_zero(z3_ctx, asts[0]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_zero(z3_ctx, asts[0]->a)), s);
   case SMT_FUNC_ISNEG:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_negative(z3_ctx, asts[0]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_negative(z3_ctx, asts[0]->a)), s);
   case SMT_FUNC_ISPOS:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_positive(z3_ctx, asts[0]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_positive(z3_ctx, asts[0]->a)), s);
   case SMT_FUNC_IEEE_EQ:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_eq(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_fpa_eq(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_ITE:
-    return new_ast(ite(asts[0]->e, asts[1]->e, asts[2]->e), s);
+    return new_ast(ite(asts[0]->a, asts[1]->a, asts[2]->a), s);
   case SMT_FUNC_STORE:
-    return new_ast(store(asts[0]->e, asts[1]->e, asts[2]->e), s);
+    return new_ast(store(asts[0]->a, asts[1]->a, asts[2]->a), s);
   case SMT_FUNC_SELECT:
-    return new_ast(select(asts[0]->e, asts[1]->e), s);
+    return new_ast(select(asts[0]->a, asts[1]->a), s);
   case SMT_FUNC_CONCAT:
     return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_concat(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_concat(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_REAL2INT:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_real2int(z3_ctx, asts[0]->e)), s);
+    return new_ast(z3::to_expr(z3_ctx, Z3_mk_real2int(z3_ctx, asts[0]->a)), s);
   case SMT_FUNC_INT2REAL:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_int2real(z3_ctx, asts[0]->e)), s);
+    return new_ast(z3::to_expr(z3_ctx, Z3_mk_int2real(z3_ctx, asts[0]->a)), s);
   case SMT_FUNC_IS_INT:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_is_int(z3_ctx, asts[0]->e)), s);
+    return new_ast(z3::to_expr(z3_ctx, Z3_mk_is_int(z3_ctx, asts[0]->a)), s);
   case SMT_FUNC_BV2FLOAT:
     return new_ast(
-      z3_ctx.fpa_from_bv(asts[0]->e, to_solver_smt_sort<z3::sort>(s)->s), s);
+      z3_ctx.fpa_from_bv(asts[0]->a, to_solver_smt_sort<z3::sort>(s)->s), s);
   case SMT_FUNC_FLOAT2BV:
-    return new_ast(z3_ctx.fpa_to_ieeebv(asts[0]->e), s);
+    return new_ast(z3_ctx.fpa_to_ieeebv(asts[0]->a), s);
   default:
     std::cerr << "Unhandled SMT func in z3 conversion" << std::endl;
     abort();
@@ -378,17 +377,15 @@ smt_astt z3_convt::mk_extract(
   unsigned int low,
   const smt_sort *s)
 {
-  const z3_smt_ast *za = z3_smt_downcast(a);
-
   // If it's a floatbv, convert it to bv
   if(a->sort->id == SMT_SORT_FLOATBV)
-  {
-    smt_ast *bv = new_ast(z3_ctx.fpa_to_ieeebv(za->e), s);
-    za = z3_smt_downcast(bv);
-  }
+    a = new_ast(z3_ctx.fpa_to_ieeebv(to_solver_smt_ast<z3_smt_ast>(a)->a), s);
 
   return new_ast(
-    z3::to_expr(z3_ctx, Z3_mk_extract(z3_ctx, high, low, za->e)), s);
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_extract(z3_ctx, high, low, to_solver_smt_ast<z3_smt_ast>(a)->a)),
+    s);
 }
 
 smt_astt z3_convt::mk_smt_int(
@@ -434,9 +431,9 @@ smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 
   return new_ast(
     z3_ctx.fpa_val(
-      z3_smt_downcast(sgn_bv)->e,
-      z3_smt_downcast(exp_bv)->e,
-      z3_smt_downcast(sig_bv)->e),
+      to_solver_smt_ast<z3_smt_ast>(sgn_bv)->a,
+      to_solver_smt_ast<z3_smt_ast>(exp_bv)->a,
+      to_solver_smt_ast<z3_smt_ast>(sig_bv)->a),
     s);
 }
 
@@ -479,7 +476,7 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
   smt_astt rm_const;
 
   smt_astt from = convert_ast(cast.from);
-  const z3_smt_ast *mfrom = z3_smt_downcast(from);
+  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
 
   smt_sortt s;
   if(is_unsignedbv_type(cast.type))
@@ -489,10 +486,10 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
     // Conversion from float to integers always truncate, so we assume
     // the round mode to be toward zero
     rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
-    const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
+    const z3_smt_ast *mrm_const = to_solver_smt_ast<z3_smt_ast>(rm_const);
 
     return new_ast(
-      z3_ctx.fpa_to_ubv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
+      z3_ctx.fpa_to_ubv(mrm_const->a, mfrom->a, cast.type->get_width()), s);
   }
   if(is_signedbv_type(cast.type))
   {
@@ -501,10 +498,10 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
     // Conversion from float to integers always truncate, so we assume
     // the round mode to be toward zero
     rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
-    const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
+    const z3_smt_ast *mrm_const = to_solver_smt_ast<z3_smt_ast>(rm_const);
 
     return new_ast(
-      z3_ctx.fpa_to_sbv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
+      z3_ctx.fpa_to_sbv(mrm_const->a, mfrom->a, cast.type->get_width()), s);
   }
   else if(is_floatbv_type(cast.type))
   {
@@ -515,11 +512,11 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
 
     // Use the round mode
     rm_const = convert_rounding_mode(cast.rounding_mode);
-    const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
+    const z3_smt_ast *mrm_const = to_solver_smt_ast<z3_smt_ast>(rm_const);
 
     return new_ast(
       z3_ctx.fpa_to_fpa(
-        mrm_const->e, mfrom->e, to_solver_smt_sort<z3::sort>(s)->s),
+        mrm_const->a, mfrom->a, to_solver_smt_sort<z3::sort>(s)->s),
       s);
   }
 
@@ -530,11 +527,11 @@ smt_astt z3_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
 {
   // Rounding mode symbol
   smt_astt rm_const = convert_rounding_mode(cast.rounding_mode);
-  const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
+  const z3_smt_ast *mrm_const = to_solver_smt_ast<z3_smt_ast>(rm_const);
 
   // Convert the expr to be casted
   smt_astt from = convert_ast(cast.from);
-  const z3_smt_ast *mfrom = z3_smt_downcast(from);
+  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
 
   // The target type
   unsigned ew = to_floatbv_type(cast.type).exponent;
@@ -558,13 +555,13 @@ smt_astt z3_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
   auto zs = to_solver_smt_sort<z3::sort>(s);
 
   if(is_unsignedbv_type(cast.from))
-    return new_ast(z3_ctx.fpa_from_unsigned(mrm_const->e, mfrom->e, zs->s), s);
+    return new_ast(z3_ctx.fpa_from_unsigned(mrm_const->a, mfrom->a, zs->s), s);
 
   if(is_signedbv_type(cast.from))
-    return new_ast(z3_ctx.fpa_from_signed(mrm_const->e, mfrom->e, zs->s), s);
+    return new_ast(z3_ctx.fpa_from_signed(mrm_const->a, mfrom->a, zs->s), s);
 
   if(is_floatbv_type(cast.from))
-    return new_ast(z3_ctx.fpa_to_fpa(mrm_const->e, mfrom->e, zs->s), s);
+    return new_ast(z3_ctx.fpa_to_fpa(mrm_const->a, mfrom->a, zs->s), s);
 
   abort();
 }
@@ -573,13 +570,13 @@ smt_astt z3_convt::mk_smt_nearbyint_from_float(const nearbyint2t &expr)
 {
   // Rounding mode symbol
   smt_astt rm = convert_rounding_mode(expr.rounding_mode);
-  const z3_smt_ast *mrm = z3_smt_downcast(rm);
+  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
 
   smt_astt from = convert_ast(expr.from);
-  const z3_smt_ast *mfrom = z3_smt_downcast(from);
+  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
 
   smt_sortt s = convert_sort(expr.type);
-  return new_ast(z3_ctx.fpa_to_integral(mrm->e, mfrom->e), s);
+  return new_ast(z3_ctx.fpa_to_integral(mrm->a, mfrom->a), s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
@@ -588,7 +585,7 @@ smt_astt z3_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
 
   // Rounding mode symbol
   smt_astt rm = convert_rounding_mode(op.rounding_mode);
-  const z3_smt_ast *mrm = z3_smt_downcast(rm);
+  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
 
   unsigned ew = to_floatbv_type(expr->type).exponent;
   unsigned sw = to_floatbv_type(expr->type).fraction;
@@ -596,21 +593,21 @@ smt_astt z3_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
 
   // Sides
   smt_astt s1 = convert_ast(op.side_1);
-  const z3_smt_ast *ms1 = z3_smt_downcast(s1);
+  const z3_smt_ast *ms1 = to_solver_smt_ast<z3_smt_ast>(s1);
 
   smt_astt s2 = convert_ast(op.side_2);
-  const z3_smt_ast *ms2 = z3_smt_downcast(s2);
+  const z3_smt_ast *ms2 = to_solver_smt_ast<z3_smt_ast>(s2);
 
   switch(expr->expr_id)
   {
   case expr2t::ieee_add_id:
-    return new_ast(z3_ctx.fpa_add(mrm->e, ms1->e, ms2->e), s);
+    return new_ast(z3_ctx.fpa_add(mrm->a, ms1->a, ms2->a), s);
   case expr2t::ieee_sub_id:
-    return new_ast(z3_ctx.fpa_sub(mrm->e, ms1->e, ms2->e), s);
+    return new_ast(z3_ctx.fpa_sub(mrm->a, ms1->a, ms2->a), s);
   case expr2t::ieee_mul_id:
-    return new_ast(z3_ctx.fpa_mul(mrm->e, ms1->e, ms2->e), s);
+    return new_ast(z3_ctx.fpa_mul(mrm->a, ms1->a, ms2->a), s);
   case expr2t::ieee_div_id:
-    return new_ast(z3_ctx.fpa_div(mrm->e, ms1->e, ms2->e), s);
+    return new_ast(z3_ctx.fpa_div(mrm->a, ms1->a, ms2->a), s);
   default:
     break;
   }
@@ -624,7 +621,7 @@ smt_astt z3_convt::mk_smt_fpbv_fma(const expr2tc &expr)
 
   // Rounding mode symbol
   smt_astt rm = convert_rounding_mode(fma.rounding_mode);
-  const z3_smt_ast *mrm = z3_smt_downcast(rm);
+  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
 
   unsigned ew = to_floatbv_type(expr->type).exponent;
   unsigned sw = to_floatbv_type(expr->type).fraction;
@@ -632,15 +629,15 @@ smt_astt z3_convt::mk_smt_fpbv_fma(const expr2tc &expr)
 
   // Operands
   smt_astt s1 = convert_ast(fma.value_1);
-  const z3_smt_ast *ms1 = z3_smt_downcast(s1);
+  const z3_smt_ast *ms1 = to_solver_smt_ast<z3_smt_ast>(s1);
 
   smt_astt s2 = convert_ast(fma.value_2);
-  const z3_smt_ast *ms2 = z3_smt_downcast(s2);
+  const z3_smt_ast *ms2 = to_solver_smt_ast<z3_smt_ast>(s2);
 
   smt_astt s3 = convert_ast(fma.value_3);
-  const z3_smt_ast *mv3 = z3_smt_downcast(s3);
+  const z3_smt_ast *mv3 = to_solver_smt_ast<z3_smt_ast>(s3);
 
-  return new_ast(z3_ctx.fpa_fma(mrm->e, ms1->e, ms2->e, mv3->e), s);
+  return new_ast(z3_ctx.fpa_fma(mrm->a, ms1->a, ms2->a, mv3->a), s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_sqrt(const expr2tc &expr)
@@ -649,7 +646,7 @@ smt_astt z3_convt::mk_smt_fpbv_sqrt(const expr2tc &expr)
 
   // Rounding mode symbol
   smt_astt rm = convert_rounding_mode(sqrt.rounding_mode);
-  const z3_smt_ast *mrm = z3_smt_downcast(rm);
+  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
 
   unsigned ew = to_floatbv_type(expr->type).exponent;
   unsigned sw = to_floatbv_type(expr->type).fraction;
@@ -657,9 +654,9 @@ smt_astt z3_convt::mk_smt_fpbv_sqrt(const expr2tc &expr)
 
   // Value
   smt_astt v = convert_ast(sqrt.value);
-  const z3_smt_ast *mv = z3_smt_downcast(v);
+  const z3_smt_ast *mv = to_solver_smt_ast<z3_smt_ast>(v);
 
-  return new_ast(z3_ctx.fpa_sqrt(mrm->e, mv->e), s);
+  return new_ast(z3_ctx.fpa_sqrt(mrm->a, mv->a), s);
 }
 
 smt_astt z3_convt::mk_smt_bool(bool val)
@@ -775,8 +772,8 @@ const smt_ast *z3_smt_ast::update(
   assert(is_nil_expr(idx_expr) && "Can only update constant index tuple elems");
 
   z3_convt *z3_conv = static_cast<z3_convt *>(conv);
-  const z3_smt_ast *updateval = z3_smt_downcast(value);
-  return z3_conv->new_ast(z3_conv->mk_tuple_update(e, idx, updateval->e), sort);
+  const z3_smt_ast *updateval = to_solver_smt_ast<z3_smt_ast>(value);
+  return z3_conv->new_ast(z3_conv->mk_tuple_update(a, idx, updateval->a), sort);
 }
 
 const smt_ast *z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
@@ -789,7 +786,7 @@ const smt_ast *z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
   assert(elem < data.members.size());
   const smt_sort *idx_sort = conv->convert_sort(data.members[elem]);
 
-  return z3_conv->new_ast(z3_conv->mk_tuple_select(e, elem), idx_sort);
+  return z3_conv->new_ast(z3_conv->mk_tuple_select(a, elem), idx_sort);
 }
 
 smt_astt z3_convt::tuple_create(const expr2tc &structdef)
@@ -818,8 +815,9 @@ smt_astt z3_convt::tuple_create(const expr2tc &structdef)
   // Populate tuple with members of that struct
   for(unsigned int i = 0; i < member_types.size(); i++)
   {
-    const z3_smt_ast *tmp = z3_smt_downcast(convert_ast(members[i]));
-    args[i] = tmp->e;
+    const z3_smt_ast *tmp =
+      to_solver_smt_ast<z3_smt_ast>(convert_ast(members[i]));
+    args[i] = tmp->a;
   }
 
   // Create tuple itself, return to caller. This is a lump of data, we don't
@@ -847,7 +845,7 @@ z3_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   smt_sortt dom_sort = mk_int_bv_sort(SMT_SORT_UBV, domain_width);
 
-  z3::expr val = z3_smt_downcast(init_val)->e;
+  z3::expr val = to_solver_smt_ast<z3_smt_ast>(init_val)->a;
   z3::expr output = z3::to_expr(
     z3_ctx,
     Z3_mk_const_array(z3_ctx, to_solver_smt_sort<z3::sort>(dom_sort)->s, val));
@@ -873,8 +871,8 @@ const smt_ast *z3_convt::tuple_array_create(
     array_type = to_solver_smt_sort<z3::sort>(convert_sort(arr_type))->s;
     dom_type = array_type.array_domain();
 
-    const z3_smt_ast *tmpast = z3_smt_downcast(*input_args);
-    value = tmpast->e;
+    const z3_smt_ast *tmpast = to_solver_smt_ast<z3_smt_ast>(*input_args);
+    value = tmpast->a;
 
     if(is_bool_type(arrtype.subtype))
     {
@@ -910,8 +908,8 @@ const smt_ast *z3_convt::tuple_array_create(
     for(i = 0; i < size; i++)
     {
       int_cte = z3_ctx.num_val(i, domain_sort);
-      const z3_smt_ast *tmpast = z3_smt_downcast(input_args[i]);
-      output = z3::store(output, int_cte, tmpast->e);
+      const z3_smt_ast *tmpast = to_solver_smt_ast<z3_smt_ast>(input_args[i]);
+      output = z3::store(output, int_cte, tmpast->a);
     }
   }
 
@@ -975,8 +973,8 @@ expr2tc z3_convt::get_bool(const smt_ast *a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
 
-  const z3_smt_ast *za = z3_smt_downcast(a);
-  z3::expr e = model.eval(za->e, false);
+  const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
+  z3::expr e = model.eval(za->a, false);
 
   if(Z3_get_bool_value(z3_ctx, e) == Z3_L_TRUE)
     return gen_true_expr();
@@ -988,8 +986,8 @@ expr2tc z3_convt::get_bv(const type2tc &type, smt_astt a)
 {
   assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
 
-  const z3_smt_ast *za = z3_smt_downcast(a);
-  z3::expr e = model.eval(za->e, false);
+  const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
+  z3::expr e = model.eval(za->a, false);
 
   // Not a numeral? Let's not try to convert it
   if(Z3_get_ast_kind(z3_ctx, e) != Z3_NUMERAL_AST)
@@ -1003,8 +1001,8 @@ expr2tc z3_convt::get_fpbv(const type2tc &t, smt_astt a)
 {
   assert(is_floatbv_type(t));
 
-  const z3_smt_ast *za = z3_smt_downcast(a);
-  z3::expr e = model.eval(za->e, false);
+  const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
+  z3::expr e = model.eval(za->a, false);
 
   assert(Z3_get_ast_kind(z3_ctx, e) == Z3_APP_AST);
 
@@ -1051,15 +1049,16 @@ expr2tc z3_convt::get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  const z3_smt_ast *za = z3_smt_downcast(array);
+  const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(array);
   unsigned long array_bound = array->sort->get_domain_width();
   const z3_smt_ast *idx;
   if(int_encoding)
-    idx = z3_smt_downcast(mk_smt_int(BigInt(index), false));
+    idx = to_solver_smt_ast<z3_smt_ast>(mk_smt_int(BigInt(index), false));
   else
-    idx = z3_smt_downcast(mk_smt_bvint(BigInt(index), false, array_bound));
+    idx = to_solver_smt_ast<z3_smt_ast>(
+      mk_smt_bvint(BigInt(index), false, array_bound));
 
-  z3::expr e = model.eval(select(za->e, idx->e), false);
+  z3::expr e = model.eval(select(za->a, idx->a), false);
 
   z3_smt_ast *value = new_ast(e, convert_sort(subtype));
   return get_by_ast(subtype, value);
@@ -1071,8 +1070,8 @@ const smt_ast *z3_convt::make_disjunct(const ast_vec &v)
   Z3_ast arr[v.size()];
 
   size_t i = 0;
-  for(ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++)
-    arr[i] = z3_smt_downcast(*it)->e;
+  for(auto const it : v)
+    arr[i++] = to_solver_smt_ast<z3_smt_ast>(it)->a.operator Z3_ast();
 
   z3::expr e = z3::to_expr(z3_ctx, Z3_mk_or(z3_ctx, v.size(), arr));
   return new_ast(e, boolean_sort);
@@ -1084,8 +1083,8 @@ const smt_ast *z3_convt::make_conjunct(const ast_vec &v)
   Z3_ast arr[v.size()];
 
   size_t i = 0;
-  for(ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++)
-    arr[i] = z3_smt_downcast(*it)->e;
+  for(auto const it : v)
+    arr[i++] = to_solver_smt_ast<z3_smt_ast>(it)->a.operator Z3_ast();
 
   z3::expr e = z3::to_expr(z3_ctx, Z3_mk_and(z3_ctx, v.size(), arr));
   return new_ast(e, boolean_sort);
@@ -1117,8 +1116,8 @@ void z3_convt::pop_tuple_ctx()
 
 void z3_smt_ast::dump() const
 {
-  std::cout << Z3_ast_to_string(e.ctx(), e) << std::endl;
-  std::cout << "sort is " << Z3_sort_to_string(e.ctx(), Z3_get_sort(e.ctx(), e))
+  std::cout << Z3_ast_to_string(a.ctx(), a) << std::endl;
+  std::cout << "sort is " << Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a))
             << std::endl;
 }
 

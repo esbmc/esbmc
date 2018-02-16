@@ -4,15 +4,14 @@
 #include <solvers/smt/smt_conv.h>
 #include <yices.h>
 
-class yices_smt_ast : public smt_ast
+class yices_smt_ast : public solver_smt_ast<term_t>
 {
 public:
-#define yices_ast_downcast(x) static_cast<const yices_smt_ast *>(x)
   yices_smt_ast(smt_convt *ctx, const smt_sort *_s, term_t _t)
-    : smt_ast(ctx, _s), term(_t)
+    : solver_smt_ast<term_t>(ctx, _s, _t)
   {
     // Detect term errors
-    if(term == NULL_TERM)
+    if(a == NULL_TERM)
     {
       std::cerr << "Error creating yices term" << std::endl;
       yices_print_error(stderr);
@@ -24,14 +23,15 @@ public:
   // Provide assign semantics for arrays. While yices will swallow array
   // equalities, it appears to silently not honour them? From observation.
   void assign(smt_convt *ctx, smt_astt sym) const override;
+
   smt_astt project(smt_convt *ctx, unsigned int elem) const override;
+
   smt_astt update(
     smt_convt *ctx,
     smt_astt value,
     unsigned int idx,
     expr2tc idx_expr = expr2tc()) const override;
 
-  term_t term;
   std::string symname;
 };
 

@@ -5,19 +5,13 @@
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/fp_conv.h>
 
-class mathsat_smt_ast : public smt_ast
+class mathsat_smt_ast : public solver_smt_ast<msat_term>
 {
 public:
-#define mathsat_ast_downcast(x) static_cast<const mathsat_smt_ast *>(x)
-  mathsat_smt_ast(smt_convt *ctx, const smt_sort *_s, msat_term _t)
-    : smt_ast(ctx, _s), t(_t)
-  {
-  }
+  using solver_smt_ast<msat_term>::solver_smt_ast;
   ~mathsat_smt_ast() override = default;
 
   void dump() const override;
-
-  msat_term t;
 };
 
 class mathsat_convt : public smt_convt, public array_iface, public fp_convt

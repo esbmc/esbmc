@@ -87,4 +87,28 @@ public:
   }
 };
 
+template <typename solver_ast>
+class solver_smt_ast : public smt_ast
+{
+public:
+  solver_smt_ast(smt_convt *ctx, smt_sortt s, solver_ast _a)
+    : smt_ast(ctx, s), a(_a)
+  {
+  }
+
+  solver_ast a;
+};
+
+#ifdef NDEBUG
+#define dynamic_cast static_cast
+#endif
+template <typename derived_class>
+const derived_class *to_solver_smt_ast(smt_astt s)
+{
+  return dynamic_cast<const derived_class *>(s);
+}
+#ifdef dynamic_cast
+#undef dynamic_cast
+#endif
+
 #endif /* SOLVERS_SMT_SMT_AST_H_ */

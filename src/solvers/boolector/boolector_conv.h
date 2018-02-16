@@ -10,19 +10,13 @@ extern "C" {
 #include <boolector.h>
 }
 
-class btor_smt_ast : public smt_ast
+class btor_smt_ast : public solver_smt_ast<BoolectorNode *>
 {
 public:
-#define btor_ast_downcast(x) static_cast<const btor_smt_ast *>(x)
-  btor_smt_ast(smt_convt *ctx, const smt_sort *_s, BoolectorNode *_e)
-    : smt_ast(ctx, _s), e(_e)
-  {
-  }
-
+  using solver_smt_ast<BoolectorNode *>::solver_smt_ast;
   ~btor_smt_ast() override = default;
-  void dump() const override;
 
-  BoolectorNode *e;
+  void dump() const override;
 };
 
 class boolector_convt : public smt_convt, public array_iface, public fp_convt

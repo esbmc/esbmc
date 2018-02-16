@@ -112,8 +112,8 @@ const std::string yices_convt::solver_text()
 
 void yices_convt::assert_ast(smt_astt a)
 {
-  const yices_smt_ast *ast = yices_ast_downcast(a);
-  yices_assert_formula(yices_ctx, ast->term);
+  const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
+  yices_assert_formula(yices_ctx, ast->a);
 }
 
 smt_astt yices_convt::mk_func_app(
@@ -128,7 +128,7 @@ smt_astt yices_convt::mk_func_app(
 
   assert(numargs <= 4);
   for(i = 0; i < numargs; i++)
-    asts[i] = yices_ast_downcast(args[i]);
+    asts[i] = to_solver_smt_ast<yices_smt_ast>(args[i]);
 
   switch(k)
   {
@@ -138,15 +138,15 @@ smt_astt yices_convt::mk_func_app(
       "Yices array assignment "
       "made its way through to an equality");
     if(asts[0]->sort->id == SMT_SORT_BOOL)
-      return new_ast(s, yices_eq(asts[0]->term, asts[1]->term));
+      return new_ast(s, yices_eq(asts[0]->a, asts[1]->a));
     else if(
       asts[0]->sort->id == SMT_SORT_STRUCT ||
       asts[0]->sort->id == SMT_SORT_UNION)
-      return new_ast(s, yices_eq(asts[0]->term, asts[1]->term));
+      return new_ast(s, yices_eq(asts[0]->a, asts[1]->a));
     else if(int_encoding)
-      return new_ast(s, yices_arith_eq_atom(asts[0]->term, asts[1]->term));
+      return new_ast(s, yices_arith_eq_atom(asts[0]->a, asts[1]->a));
     else
-      return new_ast(s, yices_bveq_atom(asts[0]->term, asts[1]->term));
+      return new_ast(s, yices_bveq_atom(asts[0]->a, asts[1]->a));
 
   case SMT_FUNC_NOTEQ:
     if(
@@ -155,56 +155,56 @@ smt_astt yices_convt::mk_func_app(
     {
       if(!int_encoding)
       {
-        term_t comp = yices_redcomp(asts[0]->term, asts[1]->term);
+        term_t comp = yices_redcomp(asts[0]->a, asts[1]->a);
         term_t zero = yices_bvconst_uint64(1, 0);
         return new_ast(s, yices_bveq_atom(comp, zero));
       }
       else
-        return new_ast(s, yices_arith_neq_atom(asts[0]->term, asts[1]->term));
+        return new_ast(s, yices_arith_neq_atom(asts[0]->a, asts[1]->a));
     }
     else
-      return new_ast(s, yices_neq(asts[0]->term, asts[1]->term));
+      return new_ast(s, yices_neq(asts[0]->a, asts[1]->a));
 
   case SMT_FUNC_GT:
-    return new_ast(s, yices_arith_gt_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_arith_gt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_GTE:
-    return new_ast(s, yices_arith_geq_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_arith_geq_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_LT:
-    return new_ast(s, yices_arith_lt_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_arith_lt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_LTE:
-    return new_ast(s, yices_arith_leq_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_arith_leq_atom(asts[0]->a, asts[1]->a));
 
   case SMT_FUNC_BVUGT:
-    return new_ast(s, yices_bvgt_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvgt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVUGTE:
-    return new_ast(s, yices_bvge_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvge_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVULT:
-    return new_ast(s, yices_bvlt_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvlt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVULTE:
-    return new_ast(s, yices_bvle_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvle_atom(asts[0]->a, asts[1]->a));
 
   case SMT_FUNC_BVSGT:
-    return new_ast(s, yices_bvsgt_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvsgt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSGTE:
-    return new_ast(s, yices_bvsge_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvsge_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSLT:
-    return new_ast(s, yices_bvslt_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvslt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSLTE:
-    return new_ast(s, yices_bvsle_atom(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvsle_atom(asts[0]->a, asts[1]->a));
 
   case SMT_FUNC_AND:
-    return new_ast(s, yices_and2(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_and2(asts[0]->a, asts[1]->a));
   case SMT_FUNC_OR:
-    return new_ast(s, yices_or2(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_or2(asts[0]->a, asts[1]->a));
   case SMT_FUNC_XOR:
-    return new_ast(s, yices_xor2(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_xor2(asts[0]->a, asts[1]->a));
   case SMT_FUNC_NOT:
-    return new_ast(s, yices_not(asts[0]->term));
+    return new_ast(s, yices_not(asts[0]->a));
   case SMT_FUNC_IMPLIES:
-    return new_ast(s, yices_implies(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_implies(asts[0]->a, asts[1]->a));
 
   case SMT_FUNC_ITE:
-    return new_ast(s, yices_ite(asts[0]->term, asts[1]->term, asts[2]->term));
+    return new_ast(s, yices_ite(asts[0]->a, asts[1]->a, asts[2]->a));
 
   case SMT_FUNC_IS_INT:
     std::cerr << "Yices does not support an is-integer operation on reals, "
@@ -214,69 +214,68 @@ smt_astt yices_convt::mk_func_app(
 
   case SMT_FUNC_STORE:
     // Crazy "function update" situation.
-    temp_term = asts[1]->term;
-    return new_ast(
-      s, yices_update(asts[0]->term, 1, &temp_term, asts[2]->term));
+    temp_term = asts[1]->a;
+    return new_ast(s, yices_update(asts[0]->a, 1, &temp_term, asts[2]->a));
   case SMT_FUNC_SELECT:
-    temp_term = asts[1]->term;
-    return new_ast(s, yices_application(asts[0]->term, 1, &temp_term));
+    temp_term = asts[1]->a;
+    return new_ast(s, yices_application(asts[0]->a, 1, &temp_term));
 
   case SMT_FUNC_ADD:
-    return new_ast(s, yices_add(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_add(asts[0]->a, asts[1]->a));
   case SMT_FUNC_SUB:
-    return new_ast(s, yices_sub(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_sub(asts[0]->a, asts[1]->a));
   case SMT_FUNC_MUL:
-    return new_ast(s, yices_mul(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_mul(asts[0]->a, asts[1]->a));
   case SMT_FUNC_DIV:
-    return new_ast(s, yices_division(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_division(asts[0]->a, asts[1]->a));
   case SMT_FUNC_MOD:
-    temp_term = yices_division(asts[0]->term, asts[1]->term);
-    temp_term = yices_mul(temp_term, asts[1]->term);
-    temp_term = yices_sub(asts[0]->term, temp_term);
+    temp_term = yices_division(asts[0]->a, asts[1]->a);
+    temp_term = yices_mul(temp_term, asts[1]->a);
+    temp_term = yices_sub(asts[0]->a, temp_term);
     return new_ast(s, temp_term);
   case SMT_FUNC_NEG:
-    return new_ast(s, yices_neg(asts[0]->term));
+    return new_ast(s, yices_neg(asts[0]->a));
 
   case SMT_FUNC_BVADD:
-    return new_ast(s, yices_bvadd(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvadd(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSUB:
-    return new_ast(s, yices_bvsub(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvsub(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVMUL:
-    return new_ast(s, yices_bvmul(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvmul(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVUDIV:
-    return new_ast(s, yices_bvdiv(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvdiv(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSDIV:
-    return new_ast(s, yices_bvsdiv(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvsdiv(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVUMOD:
-    return new_ast(s, yices_bvrem(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvrem(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSMOD:
-    return new_ast(s, yices_bvsrem(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvsrem(asts[0]->a, asts[1]->a));
 
   case SMT_FUNC_CONCAT:
-    return new_ast(s, yices_bvconcat(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvconcat(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSHL:
-    return new_ast(s, yices_bvshl(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvshl(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVASHR:
-    return new_ast(s, yices_bvashr(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvashr(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVLSHR:
-    return new_ast(s, yices_bvlshr(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvlshr(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVNEG:
-    return new_ast(s, yices_bvneg(asts[0]->term));
+    return new_ast(s, yices_bvneg(asts[0]->a));
   case SMT_FUNC_BVNOT:
-    return new_ast(s, yices_bvnot(asts[0]->term));
+    return new_ast(s, yices_bvnot(asts[0]->a));
 
   case SMT_FUNC_BVNXOR:
-    return new_ast(s, yices_bvxnor(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvxnor(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVNOR:
-    return new_ast(s, yices_bvnor(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvnor(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVNAND:
-    return new_ast(s, yices_bvnand(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvnand(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVXOR:
-    return new_ast(s, yices_bvxor(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvxor(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVAND:
-    return new_ast(s, yices_bvand(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvand(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVOR:
-    return new_ast(s, yices_bvor(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_bvor(asts[0]->a, asts[1]->a));
 
   default:
     std::cerr << "Unimplemented SMT function '" << smt_func_name_table[k]
@@ -344,7 +343,8 @@ smt_astt yices_convt::mk_array_symbol(
 {
   // For array symbols, store the symbol name in the ast to implement
   // assign semantics
-  const yices_smt_ast *ast = yices_ast_downcast(mk_smt_symbol(name, s));
+  const yices_smt_ast *ast =
+    to_solver_smt_ast<yices_smt_ast>(mk_smt_symbol(name, s));
   const_cast<yices_smt_ast *>(ast)->symname = name;
   return ast;
 }
@@ -355,8 +355,8 @@ smt_astt yices_convt::mk_extract(
   unsigned int low,
   smt_sortt s)
 {
-  const yices_smt_ast *ast = yices_ast_downcast(a);
-  term_t term = yices_bvextract(ast->term, low, high);
+  const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
+  term_t term = yices_bvextract(ast->a, low, high);
   return new_ast(s, term);
 }
 
@@ -381,8 +381,8 @@ void yices_convt::pop_array_ctx()
 expr2tc yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
-  const yices_smt_ast *ast = yices_ast_downcast(a);
-  if(yices_get_bool_value(sat_model, ast->term, &val) != 0)
+  const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
+  if(yices_get_bool_value(sat_model, ast->a, &val) != 0)
     return expr2tc();
 
   if(val)
@@ -393,12 +393,12 @@ expr2tc yices_convt::get_bool(smt_astt a)
 
 expr2tc yices_convt::get_bv(const type2tc &type, smt_astt a)
 {
-  const yices_smt_ast *ast = yices_ast_downcast(a);
+  const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
 
   int64_t val = 0;
   if(int_encoding)
   {
-    yices_get_int64_value(sat_model, ast->term, &val);
+    yices_get_int64_value(sat_model, ast->a, &val);
     return build_bv(type, BigInt(val));
   }
 
@@ -406,7 +406,7 @@ expr2tc yices_convt::get_bv(const type2tc &type, smt_astt a)
   assert(width <= 64);
 
   int32_t data[64];
-  yices_get_bv_value(sat_model, ast->term, data);
+  yices_get_bv_value(sat_model, ast->a, data);
 
   int i;
   for(i = width - 1; i >= 0; i--)
@@ -424,7 +424,7 @@ expr2tc yices_convt::get_array_elem(
   const type2tc &subtype)
 {
   // Construct a term accessing that element, and get_bv it.
-  const yices_smt_ast *ast = yices_ast_downcast(array);
+  const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(array);
   term_t idx;
   if(int_encoding)
   {
@@ -435,7 +435,7 @@ expr2tc yices_convt::get_array_elem(
     idx = yices_bvconst_uint64(array->sort->get_domain_width(), index);
   }
 
-  term_t app = yices_application(ast->term, 1, &idx);
+  term_t app = yices_application(ast->a, 1, &idx);
   smt_sortt subsort = convert_sort(subtype);
   smt_astt container = new_ast(subsort, app);
   return get_by_ast(subtype, container);
@@ -446,12 +446,12 @@ void yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   if(sort->id == SMT_SORT_ARRAY)
   {
     // Perform assign semantics, of this to the given sym
-    const yices_smt_ast *ast = yices_ast_downcast(sym);
+    const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(sym);
     yices_remove_term_name(ast->symname.c_str());
-    yices_set_term_name(term, ast->symname.c_str());
+    yices_set_term_name(a, ast->symname.c_str());
 
     // set the other ast too
-    const_cast<yices_smt_ast *>(ast)->term = term;
+    const_cast<yices_smt_ast *>(ast)->a = a;
   }
   else
   {
@@ -465,7 +465,7 @@ smt_astt yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
   const struct_union_data &data = ctx->get_type_def(type);
   smt_sortt elemsort = ctx->convert_sort(data.members[elem]);
 
-  return new yices_smt_ast(ctx, elemsort, yices_select(elem + 1, term));
+  return new yices_smt_ast(ctx, elemsort, yices_select(elem + 1, a));
 }
 
 smt_astt yices_smt_ast::update(
@@ -481,8 +481,8 @@ smt_astt yices_smt_ast::update(
   assert(sort->id == SMT_SORT_STRUCT || sort->id == SMT_SORT_UNION);
   assert(is_nil_expr(idx_expr) && "Tuple updates must be explicitly numbered");
 
-  const yices_smt_ast *yast = yices_ast_downcast(value);
-  term_t result = yices_tuple_update(term, idx + 1, yast->term);
+  const yices_smt_ast *yast = to_solver_smt_ast<yices_smt_ast>(value);
+  term_t result = yices_tuple_update(a, idx + 1, yast->a);
   return new yices_smt_ast(ctx, sort, result);
 }
 
@@ -521,8 +521,8 @@ smt_astt yices_convt::tuple_create(const expr2tc &structdef)
   for(auto const &it : strct.datatype_members)
   {
     smt_astt a = convert_ast(it);
-    const yices_smt_ast *yast = yices_ast_downcast(a);
-    terms.push_back(yast->term);
+    const yices_smt_ast *yast = to_solver_smt_ast<yices_smt_ast>(a);
+    terms.push_back(yast->a);
   }
 
   term_t thetuple = yices_tuple(type.members.size(), terms.data());
@@ -589,7 +589,7 @@ smt_astt yices_convt::tuple_array_of(
   term_t theterm = yices_new_uninterpreted_term(tuplearr);
 
   smt_astt a = convert_ast(init_value);
-  const yices_smt_ast *yast = yices_ast_downcast(a);
+  const yices_smt_ast *yast = to_solver_smt_ast<yices_smt_ast>(a);
 
   // Now repeatedly store Things into it
   unsigned long elems =
@@ -599,7 +599,7 @@ smt_astt yices_convt::tuple_array_of(
     term_t idxterm =
       int_encoding ? yices_int64(i) : yices_bvconst_uint64(domain_width, i);
 
-    theterm = yices_update(theterm, 1, &idxterm, yast->term);
+    theterm = yices_update(theterm, 1, &idxterm, yast->a);
   }
 
   smt_sortt retsort = new solver_smt_sort<type_t>(SMT_SORT_STRUCT, tuplearr);

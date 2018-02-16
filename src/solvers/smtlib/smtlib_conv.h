@@ -48,10 +48,6 @@ public:
   {
   }
   ~smtlib_smt_ast() override = default;
-  void dump() const override
-  {
-    abort();
-  }
 
   smt_func_kind kind;
   std::string symname;

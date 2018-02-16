@@ -4,19 +4,6 @@
 #include <solvers/smt/smt_conv.h>
 #include <cvc4/cvc4.h>
 
-class cvc_smt_ast : public smt_ast
-{
-public:
-#define cvc_ast_downcast(x) static_cast<const cvc_smt_ast *>(x)
-  cvc_smt_ast(smt_convt *ctx, const smt_sort *_s, CVC4::Expr &_e)
-    : smt_ast(ctx, _s), e(_e)
-  {
-  }
-  ~cvc_smt_ast() override = default;
-
-  CVC4::Expr e;
-};
-
 class cvc_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:

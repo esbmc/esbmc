@@ -46,16 +46,16 @@ smt_convt::resultt cvc_convt::dec_solve()
 
 expr2tc cvc_convt::get_bool(const smt_ast *a)
 {
-  const cvc_smt_ast *ca = cvc_ast_downcast(a);
-  CVC4::Expr e = smt.getValue(ca->e);
+  auto const *ca = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a);
+  CVC4::Expr e = smt.getValue(ca->a);
   bool foo = e.getConst<bool>();
   return foo ? gen_true_expr() : gen_false_expr();
 }
 
 expr2tc cvc_convt::get_bv(const type2tc &type, smt_astt a)
 {
-  const cvc_smt_ast *ca = cvc_ast_downcast(a);
-  CVC4::Expr e = smt.getValue(ca->e);
+  auto const *ca = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a);
+  CVC4::Expr e = smt.getValue(ca->a);
   CVC4::BitVector foo = e.getConst<CVC4::BitVector>();
   return build_bv(type, BigInt(foo.toInteger().getUnsignedLong()));
 }
@@ -65,15 +65,16 @@ expr2tc cvc_convt::get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  const cvc_smt_ast *carray = cvc_ast_downcast(array);
+  auto const *carray = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(array);
   size_t orig_w = array->sort->get_domain_width();
 
   smt_ast *tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
-  const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
-  CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->e, tmpa->e);
+  auto const *tmpa = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(tmpast);
+  CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->a, tmpa->a);
   free(tmpast);
 
-  cvc_smt_ast *tmpb = new cvc_smt_ast(this, convert_sort(subtype), e);
+  solver_smt_ast<CVC4::Expr> *tmpb =
+    new solver_smt_ast<CVC4::Expr>(this, convert_sort(subtype), e);
   expr2tc result = get_bv(subtype, tmpb);
   free(tmpb);
 
@@ -89,8 +90,8 @@ const std::string cvc_convt::solver_text()
 
 void cvc_convt::assert_ast(const smt_ast *a)
 {
-  const cvc_smt_ast *ca = cvc_ast_downcast(a);
-  smt.assertFormula(ca->e);
+  auto const *ca = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a);
+  smt.assertFormula(ca->a);
 }
 
 smt_ast *cvc_convt::mk_func_app(
@@ -99,118 +100,118 @@ smt_ast *cvc_convt::mk_func_app(
   const smt_ast *const *_args,
   unsigned int numargs)
 {
-  const cvc_smt_ast *args[4];
+  const solver_smt_ast<CVC4::Expr> *args[4];
   unsigned int i;
 
   assert(numargs <= 4);
   for(i = 0; i < numargs; i++)
-    args[i] = cvc_ast_downcast(_args[i]);
+    args[i] = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(_args[i]);
 
   CVC4::Expr e;
 
   switch(k)
   {
   case SMT_FUNC_EQ:
-    e = em.mkExpr(CVC4::kind::EQUAL, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::EQUAL, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_NOTEQ:
-    e = em.mkExpr(CVC4::kind::DISTINCT, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::DISTINCT, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_AND:
-    e = em.mkExpr(CVC4::kind::AND, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::AND, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_OR:
-    e = em.mkExpr(CVC4::kind::OR, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::OR, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_XOR:
-    e = em.mkExpr(CVC4::kind::XOR, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::XOR, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_IMPLIES:
-    e = em.mkExpr(CVC4::kind::IMPLIES, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::IMPLIES, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_ITE:
-    e = em.mkExpr(CVC4::kind::ITE, args[0]->e, args[1]->e, args[2]->e);
+    e = em.mkExpr(CVC4::kind::ITE, args[0]->a, args[1]->a, args[2]->a);
     break;
   case SMT_FUNC_NOT:
-    e = em.mkExpr(CVC4::kind::NOT, args[0]->e);
+    e = em.mkExpr(CVC4::kind::NOT, args[0]->a);
     break;
   case SMT_FUNC_BVNOT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_NOT, args[0]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_NOT, args[0]->a);
     break;
   case SMT_FUNC_BVNEG:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_NEG, args[0]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_NEG, args[0]->a);
     break;
   case SMT_FUNC_BVADD:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_PLUS, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_PLUS, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVSUB:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SUB, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SUB, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVMUL:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_MULT, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_MULT, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVSDIV:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SDIV, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SDIV, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVUDIV:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_UDIV, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_UDIV, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVSMOD:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SREM, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SREM, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVUMOD:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_UREM, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_UREM, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVLSHR:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_LSHR, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_LSHR, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVASHR:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_ASHR, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_ASHR, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVSHL:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SHL, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SHL, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVUGT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_UGT, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_UGT, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVUGTE:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_UGE, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_UGE, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVULT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_ULT, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_ULT, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVULTE:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_ULE, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_ULE, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVSGT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SGT, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SGT, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVSGTE:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SGE, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SGE, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVSLT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SLT, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SLT, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVSLTE:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SLE, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SLE, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVAND:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_AND, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_AND, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVOR:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_OR, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_OR, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVXOR:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_XOR, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_XOR, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_STORE:
-    e = em.mkExpr(CVC4::kind::STORE, args[0]->e, args[1]->e, args[2]->e);
+    e = em.mkExpr(CVC4::kind::STORE, args[0]->a, args[1]->a, args[2]->a);
     break;
   case SMT_FUNC_SELECT:
-    e = em.mkExpr(CVC4::kind::SELECT, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::SELECT, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_CONCAT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_CONCAT, args[0]->e, args[1]->e);
+    e = em.mkExpr(CVC4::kind::BITVECTOR_CONCAT, args[0]->a, args[1]->a);
     break;
   default:
     std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[k]
@@ -218,7 +219,7 @@ smt_ast *cvc_convt::mk_func_app(
     abort();
   }
 
-  return new cvc_smt_ast(this, s, e);
+  return new solver_smt_ast<CVC4::Expr>(this, s, e);
 }
 
 smt_ast *cvc_convt::mk_smt_int(
@@ -243,14 +244,14 @@ cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
   CVC4::BitVector bv =
     CVC4::BitVector(width, (unsigned long int)theint.to_int64());
   CVC4::Expr e = em.mkConst(bv);
-  return new cvc_smt_ast(this, s, e);
+  return new solver_smt_ast<CVC4::Expr>(this, s, e);
 }
 
 smt_ast *cvc_convt::mk_smt_bool(bool val)
 {
   const smt_sort *s = boolean_sort;
   CVC4::Expr e = em.mkConst(val);
-  return new cvc_smt_ast(this, s, e);
+  return new solver_smt_ast<CVC4::Expr>(this, s, e);
 }
 
 smt_ast *cvc_convt::mk_array_symbol(
@@ -268,14 +269,14 @@ smt_ast *cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   if(sym_tab.isBound(name))
   {
     CVC4::Expr e = sym_tab.lookup(name);
-    return new cvc_smt_ast(this, s, e);
+    return new solver_smt_ast<CVC4::Expr>(this, s, e);
   }
 
   // Time for a new one.
   CVC4::Expr e =
     em.mkVar(name, to_solver_smt_sort<CVC4::Type>(s)->s); // "global", eh?
   sym_tab.bind(name, e, true);
-  return new cvc_smt_ast(this, s, e);
+  return new solver_smt_ast<CVC4::Expr>(this, s, e);
 }
 
 smt_sort *cvc_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
@@ -289,11 +290,11 @@ smt_ast *cvc_convt::mk_extract(
   unsigned int low,
   const smt_sort *s)
 {
-  const cvc_smt_ast *ca = cvc_ast_downcast(a);
+  auto const *ca = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a);
   CVC4::BitVectorExtract ext(high, low);
   CVC4::Expr ext2 = em.mkConst(ext);
-  CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_EXTRACT, ext2, ca->e);
-  return new cvc_smt_ast(this, s, fin);
+  CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_EXTRACT, ext2, ca->a);
+  return new solver_smt_ast<CVC4::Expr>(this, s, fin);
 }
 
 const smt_ast *
