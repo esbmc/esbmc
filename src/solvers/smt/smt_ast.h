@@ -81,7 +81,10 @@ public:
    *  @return AST representing the chosen element / element-array */
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 
-  virtual void dump() const = 0;
+  virtual void dump() const
+  {
+    std::cout << "Chosen solver doesn't support printing the AST\n";
+  }
 };
 
 #endif /* SOLVERS_SMT_SMT_AST_H_ */

@@ -40,10 +40,6 @@ public:
   {
   }
   ~cvc_smt_ast() override = default;
-  void dump() const override
-  {
-    abort();
-  }
 
   CVC4::Expr e;
 };

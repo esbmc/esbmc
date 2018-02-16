@@ -62,10 +62,6 @@ public:
     smt_astt value,
     unsigned int idx,
     expr2tc idx_expr = expr2tc()) const override;
-  void dump() const override
-  {
-    abort();
-  }
 
   term_t term;
   std::string symname;
