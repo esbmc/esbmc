@@ -63,21 +63,19 @@ public:
   smt_sort(smt_sort_kind i, std::size_t width)
     : id(i), data_width(width), secondary_width(0), range_sort(nullptr)
   {
-    assert(width != 0 || i == SMT_SORT_INT);
-    assert(id != SMT_SORT_ARRAY);
+    assert(id >= SMT_SORT_SBV || id <= SMT_SORT_FIXEDBV);
   }
 
   smt_sort(smt_sort_kind i, std::size_t width, std::size_t sigwidth)
     : id(i), data_width(width), secondary_width(sigwidth), range_sort(nullptr)
   {
     assert(id == SMT_SORT_FLOATBV);
-    // assert(secondary_width != 0);
-    // XXX not applicable during int mode?
   }
 
   smt_sort(smt_sort_kind i, std::size_t dom_width, smt_sortt range_sort)
     : id(i), data_width(dom_width), secondary_width(0), range_sort(range_sort)
   {
+    assert(id == SMT_SORT_ARRAY);
   }
 
   smt_sort(
