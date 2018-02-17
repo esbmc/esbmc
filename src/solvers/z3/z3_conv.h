@@ -91,8 +91,18 @@ public:
   smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw) override;
   smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw) override;
   smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm) override;
-  smt_astt mk_smt_typecast_from_fpbv(const typecast2t &cast) override;
-  smt_astt mk_smt_typecast_to_fpbv(const typecast2t &cast) override;
+  smt_astt mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, smt_sortt to)
+    override;
+  smt_astt mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, smt_sortt to)
+    override;
+  smt_astt mk_smt_typecast_from_fpbv_to_fpbv(
+    smt_astt from,
+    smt_sortt to,
+    smt_astt rm) override;
+  smt_astt mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+    override;
+  smt_astt mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+    override;
   smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) override;
   smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr) override;
   smt_astt mk_smt_fpbv_fma(const expr2tc &expr) override;

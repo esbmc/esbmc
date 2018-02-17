@@ -5,7 +5,6 @@
  *      Author: mramalho
  */
 
-#include <cassert>
 #include <solvers/smt/fp_conv.h>
 
 fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
@@ -42,22 +41,6 @@ smt_astt fp_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   std::cout << "Chosen solver doesn't support floating-point numbers "
             << "(rounding mode)\n";
   (void)rm;
-  abort();
-}
-
-smt_astt fp_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
-{
-  std::cout << "Chosen solver doesn't support cast from floating-point "
-            << "numbers\n";
-  (void)cast;
-  abort();
-}
-
-smt_astt fp_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
-{
-  std::cout << "Chosen solver doesn't support cast to floating-point "
-            << "numbers\n";
-  (void)cast;
   abort();
 }
 
@@ -98,6 +81,59 @@ smt_sortt fp_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
   std::cout << "Chosen solver doesn't support floating-point numbers (type)\n";
   (void)ew;
   (void)sw;
+  abort();
+}
+
+smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, smt_sortt to)
+{
+  std::cout << "Chosen solver doesn't support cast from floating-point "
+            << "numbers\n";
+  (void)from;
+  (void)to;
+  abort();
+}
+
+smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, smt_sortt to)
+{
+  std::cout << "Chosen solver doesn't support cast from floating-point "
+            << "numbers\n";
+  (void)from;
+  (void)to;
+  abort();
+}
+
+smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  std::cout << "Chosen solver doesn't support cast from floating-point "
+            << "numbers\n";
+  (void)from;
+  (void)to;
+  (void)rm;
+  abort();
+}
+
+smt_astt
+fp_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+{
+  std::cout << "Chosen solver doesn't support cast to floating-point "
+            << "numbers\n";
+  (void)from;
+  (void)to;
+  (void)rm;
+  abort();
+}
+
+smt_astt
+fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+{
+  std::cout << "Chosen solver doesn't support cast to floating-point "
+            << "numbers\n";
+  (void)from;
+  (void)to;
+  (void)rm;
   abort();
 }
 

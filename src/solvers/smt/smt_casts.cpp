@@ -169,6 +169,71 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   return mk_func_app(s, SMT_FUNC_CONCAT, magnitude, fraction);
 }
 
+smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
+{
+  smt_astt rm = convert_rounding_mode(cast.rounding_mode);
+  smt_astt from = convert_ast(cast.from);
+
+  // The target type
+  unsigned ew = to_floatbv_type(cast.type).exponent;
+  unsigned sw = to_floatbv_type(cast.type).fraction;
+
+  smt_sortt s = mk_real_fp_sort(ew, sw);
+
+  // Convert each type
+  if(is_bool_type(cast.from))
+  {
+    // For bools, there is no direct conversion, so the cast is
+    // transformed into fpa = b ? 1 : 0;
+    const smt_ast *args[3];
+    args[0] = from;
+    args[1] = convert_ast(gen_one(cast.type));
+    args[2] = convert_ast(gen_zero(cast.type));
+
+    return mk_func_app(s, SMT_FUNC_ITE, args, 3);
+  }
+
+  if(is_unsignedbv_type(cast.from))
+    return fp_api->mk_smt_typecast_ubv_to_fpbv(from, s, rm);
+
+  if(is_signedbv_type(cast.from))
+    return fp_api->mk_smt_typecast_sbv_to_fpbv(from, s, rm);
+
+  if(is_floatbv_type(cast.from))
+    return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(from, s, rm);
+
+  std::cerr << "Unexpected type in typecast to fpbv\n";
+  abort();
+}
+
+smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
+{
+  smt_astt from = convert_ast(cast.from);
+
+  if(is_unsignedbv_type(cast.type))
+    return fp_api->mk_smt_typecast_from_fpbv_to_ubv(
+      from, mk_int_bv_sort(SMT_SORT_UBV, cast.type->get_width()));
+
+  if(is_signedbv_type(cast.type))
+    return fp_api->mk_smt_typecast_from_fpbv_to_sbv(
+      from, mk_int_bv_sort(SMT_SORT_SBV, cast.type->get_width()));
+
+  if(is_floatbv_type(cast.type))
+  {
+    unsigned ew = to_floatbv_type(cast.type).exponent;
+    unsigned sw = to_floatbv_type(cast.type).fraction;
+
+    smt_sortt s = mk_real_fp_sort(ew, sw);
+
+    // Use the round mode
+    smt_astt rm = convert_rounding_mode(cast.rounding_mode);
+    return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(from, s, rm);
+  }
+
+  std::cerr << "Unexpected type in typecast from fpbv\n";
+  abort();
+}
+
 smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
 {
   if(int_encoding)
@@ -184,7 +249,7 @@ smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
   }
   else if(is_floatbv_type(cast.from))
   {
-    return fp_api->mk_smt_typecast_from_fpbv(cast);
+    return convert_typecast_from_fpbv(cast);
   }
   else if(is_bool_type(cast.from))
   {
@@ -589,7 +654,7 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
   }
   else if(is_floatbv_type(cast.type))
   {
-    return fp_api->mk_smt_typecast_to_fpbv(cast);
+    return convert_typecast_to_fpbv(cast);
   }
   else if(is_struct_type(cast.type))
   {

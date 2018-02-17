@@ -761,6 +761,10 @@ public:
   smt_astt convert_typecast_to_struct(const typecast2t &cast);
   /** Despatch a typecast expression to a more specific typecast method */
   smt_astt convert_typecast(const expr2tc &expr);
+  /** Typecast to a floatbv*/
+  smt_astt convert_typecast_to_fpbv(const typecast2t &cast);
+  /** Typecast from a floatbv */
+  smt_astt convert_typecast_from_fpbv(const typecast2t &cast);
   /** Round a real to an integer; not straightforwards at all. */
   smt_astt round_real_to_int(smt_astt a);
   /** Round a fixedbv to an integer. */

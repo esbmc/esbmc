@@ -470,102 +470,6 @@ smt_astt z3_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   abort();
 }
 
-smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
-{
-  // Rounding mode symbol
-  smt_astt rm_const;
-
-  smt_astt from = convert_ast(cast.from);
-  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
-
-  smt_sortt s;
-  if(is_unsignedbv_type(cast.type))
-  {
-    s = mk_int_bv_sort(SMT_SORT_UBV, cast.type->get_width());
-
-    // Conversion from float to integers always truncate, so we assume
-    // the round mode to be toward zero
-    rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
-    const z3_smt_ast *mrm_const = to_solver_smt_ast<z3_smt_ast>(rm_const);
-
-    return new_ast(
-      z3_ctx.fpa_to_ubv(mrm_const->a, mfrom->a, cast.type->get_width()), s);
-  }
-  if(is_signedbv_type(cast.type))
-  {
-    s = mk_int_bv_sort(SMT_SORT_SBV, cast.type->get_width());
-
-    // Conversion from float to integers always truncate, so we assume
-    // the round mode to be toward zero
-    rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
-    const z3_smt_ast *mrm_const = to_solver_smt_ast<z3_smt_ast>(rm_const);
-
-    return new_ast(
-      z3_ctx.fpa_to_sbv(mrm_const->a, mfrom->a, cast.type->get_width()), s);
-  }
-  else if(is_floatbv_type(cast.type))
-  {
-    unsigned ew = to_floatbv_type(cast.type).exponent;
-    unsigned sw = to_floatbv_type(cast.type).fraction;
-
-    s = mk_real_fp_sort(ew, sw);
-
-    // Use the round mode
-    rm_const = convert_rounding_mode(cast.rounding_mode);
-    const z3_smt_ast *mrm_const = to_solver_smt_ast<z3_smt_ast>(rm_const);
-
-    return new_ast(
-      z3_ctx.fpa_to_fpa(
-        mrm_const->a, mfrom->a, to_solver_smt_sort<z3::sort>(s)->s),
-      s);
-  }
-
-  abort();
-}
-
-smt_astt z3_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
-{
-  // Rounding mode symbol
-  smt_astt rm_const = convert_rounding_mode(cast.rounding_mode);
-  const z3_smt_ast *mrm_const = to_solver_smt_ast<z3_smt_ast>(rm_const);
-
-  // Convert the expr to be casted
-  smt_astt from = convert_ast(cast.from);
-  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
-
-  // The target type
-  unsigned ew = to_floatbv_type(cast.type).exponent;
-  unsigned sw = to_floatbv_type(cast.type).fraction;
-
-  smt_sortt s = mk_real_fp_sort(ew, sw);
-
-  // Convert each type
-  if(is_bool_type(cast.from))
-  {
-    // For bools, there is no direct conversion, so the cast is
-    // transformed into fpa = b ? 1 : 0;
-    const smt_ast *args[3];
-    args[0] = from;
-    args[1] = convert_ast(gen_one(cast.type));
-    args[2] = convert_ast(gen_zero(cast.type));
-
-    return mk_func_app(s, SMT_FUNC_ITE, args, 3);
-  }
-
-  auto zs = to_solver_smt_sort<z3::sort>(s);
-
-  if(is_unsignedbv_type(cast.from))
-    return new_ast(z3_ctx.fpa_from_unsigned(mrm_const->a, mfrom->a, zs->s), s);
-
-  if(is_signedbv_type(cast.from))
-    return new_ast(z3_ctx.fpa_from_signed(mrm_const->a, mfrom->a, zs->s), s);
-
-  if(is_floatbv_type(cast.from))
-    return new_ast(z3_ctx.fpa_to_fpa(mrm_const->a, mfrom->a, zs->s), s);
-
-  abort();
-}
-
 smt_astt z3_convt::mk_smt_nearbyint_from_float(const nearbyint2t &expr)
 {
   // Rounding mode symbol
@@ -1173,4 +1077,62 @@ smt_sortt z3_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
   auto t = z3_ctx.array_sort(domain_sort->s, range_sort->s);
   return new solver_smt_sort<z3::sort>(
     SMT_SORT_ARRAY, t, domain->get_data_width(), range);
+}
+
+smt_astt z3_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, smt_sortt to)
+{
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
+  const z3_smt_ast *mrm =
+    to_solver_smt_ast<z3_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
+  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
+  return new_ast(z3_ctx.fpa_to_ubv(mrm->a, mfrom->a, to->get_data_width()), to);
+}
+
+smt_astt z3_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, smt_sortt to)
+{
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
+  const z3_smt_ast *mrm =
+    to_solver_smt_ast<z3_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
+  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
+
+  return new_ast(z3_ctx.fpa_to_sbv(mrm->a, mfrom->a, to->get_data_width()), to);
+}
+
+smt_astt z3_convt::mk_smt_typecast_from_fpbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
+  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
+
+  return new_ast(
+    z3_ctx.fpa_to_fpa(mrm->a, mfrom->a, to_solver_smt_sort<z3::sort>(to)->s),
+    to);
+}
+
+smt_astt
+z3_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+{
+  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
+  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
+
+  return new_ast(
+    z3_ctx.fpa_from_unsigned(
+      mrm->a, mfrom->a, to_solver_smt_sort<z3::sort>(to)->s),
+    to);
+}
+
+smt_astt
+z3_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+{
+  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
+  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
+
+  return new_ast(
+    z3_ctx.fpa_from_signed(
+      mrm->a, mfrom->a, to_solver_smt_sort<z3::sort>(to)->s),
+    to);
 }

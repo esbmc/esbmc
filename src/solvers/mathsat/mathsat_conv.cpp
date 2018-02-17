@@ -600,88 +600,6 @@ smt_astt mathsat_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   return new mathsat_smt_ast(this, mk_fpbv_rm_sort(), t);
 }
 
-smt_astt mathsat_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
-{
-  // Rounding mode symbol
-  smt_astt rm_const;
-
-  smt_astt from = convert_ast(cast.from);
-  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
-
-  msat_term t;
-  smt_sortt s = nullptr;
-  if(is_bv_type(cast.type))
-  {
-    s = mk_int_bv_sort(
-      is_signedbv_type(cast.type) ? SMT_SORT_SBV : SMT_SORT_UBV,
-      cast.type->get_width());
-
-    // Conversion from float to integers always truncate, so we assume
-    // the round mode to be toward zero
-    rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
-    const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm_const);
-
-    t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->a, mfrom->a);
-  }
-  else if(is_floatbv_type(cast.type))
-  {
-    s = convert_sort(cast.type);
-    unsigned sw = s->get_significand_width();
-    unsigned ew = s->get_data_width() - sw;
-
-    // Use the round mode
-    rm_const = convert_rounding_mode(cast.rounding_mode);
-    const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm_const);
-
-    t = msat_make_fp_cast(env, ew, sw, mrm->a, mfrom->a);
-  }
-  else
-    abort();
-
-  check_msat_error(t);
-  assert(s != nullptr);
-
-  return new mathsat_smt_ast(this, s, t);
-}
-
-smt_astt mathsat_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
-{
-  smt_astt rm = convert_rounding_mode(cast.rounding_mode);
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-
-  smt_astt from = convert_ast(cast.from);
-  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
-
-  smt_sortt s = convert_sort(cast.type);
-  unsigned sw = s->get_significand_width();
-  unsigned ew = s->get_data_width() - sw;
-
-  msat_term t;
-  if(is_bool_type(cast.from))
-  {
-    // For bools, there is no direct conversion, so the cast is
-    // transformed into fpa = b ? 1 : 0;
-    const smt_ast *args[3];
-    args[0] = from;
-    args[1] = convert_ast(gen_one(cast.type));
-    args[2] = convert_ast(gen_zero(cast.type));
-
-    return mk_func_app(s, SMT_FUNC_ITE, args, 3);
-  }
-
-  if(is_unsignedbv_type(cast.from))
-    t = msat_make_fp_from_ubv(env, ew, sw, mrm->a, mfrom->a);
-
-  if(is_signedbv_type(cast.from))
-    t = msat_make_fp_from_sbv(env, ew, sw, mrm->a, mfrom->a);
-
-  if(is_floatbv_type(cast.from))
-    t = msat_make_fp_cast(env, ew, sw, mrm->a, mfrom->a);
-
-  check_msat_error(t);
-  return new mathsat_smt_ast(this, s, t);
-}
-
 smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t &expr)
 {
   // Rounding mode symbol
@@ -927,4 +845,82 @@ smt_sortt mathsat_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
   auto t = msat_get_array_type(env, domain_sort->s, range_sort->s);
   return new solver_smt_sort<msat_type>(
     SMT_SORT_ARRAY, t, domain->get_data_width(), range);
+}
+
+smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_ubv(
+  smt_astt from,
+  smt_sortt to)
+{
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(
+    mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+
+  msat_term t = msat_make_fp_to_bv(env, to->get_data_width(), mrm->a, mfrom->a);
+  check_msat_error(t);
+  return new mathsat_smt_ast(this, to, t);
+}
+
+smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_sbv(
+  smt_astt from,
+  smt_sortt to)
+{
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(
+    mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+
+  msat_term t = msat_make_fp_to_bv(env, to->get_data_width(), mrm->a, mfrom->a);
+  check_msat_error(t);
+  return new mathsat_smt_ast(this, to, t);
+}
+
+smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  unsigned sw = to->get_significand_width();
+  unsigned ew = to->get_data_width() - sw;
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+
+  msat_term t = msat_make_fp_cast(env, ew, sw, mrm->a, mfrom->a);
+  check_msat_error(t);
+  return new mathsat_smt_ast(this, to, t);
+}
+
+smt_astt mathsat_convt::mk_smt_typecast_ubv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  unsigned sw = to->get_significand_width();
+  unsigned ew = to->get_data_width() - sw;
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+
+  msat_term t = msat_make_fp_from_ubv(env, ew, sw, mrm->a, mfrom->a);
+  check_msat_error(t);
+  return new mathsat_smt_ast(this, to, t);
+}
+
+smt_astt mathsat_convt::mk_smt_typecast_sbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  unsigned sw = to->get_significand_width();
+  unsigned ew = to->get_data_width() - sw;
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+
+  msat_term t = msat_make_fp_from_sbv(env, ew, sw, mrm->a, mfrom->a);
+  check_msat_error(t);
+  return new mathsat_smt_ast(this, to, t);
 }
