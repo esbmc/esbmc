@@ -1,7 +1,7 @@
 #include <solve.h>
 #include <solver_config.h>
 #include <solvers/smt/array_conv.h>
-#include <solvers/smt/fp_conv.h>
+#include <solvers/smt/fp/fp_conv.h>
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>

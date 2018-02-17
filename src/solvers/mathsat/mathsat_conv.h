@@ -3,7 +3,7 @@
 
 #include <mathsat.h>
 #include <solvers/smt/smt_conv.h>
-#include <solvers/smt/fp_conv.h>
+#include <solvers/smt/fp/fp_conv.h>
 
 class mathsat_smt_ast : public solver_smt_ast<msat_term>
 {
