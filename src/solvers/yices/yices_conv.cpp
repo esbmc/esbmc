@@ -135,18 +135,17 @@ smt_astt yices_convt::mk_func_app(
   case SMT_FUNC_EQ:
     assert(
       asts[0]->sort->id != SMT_SORT_ARRAY &&
-      "Yices array assignment "
-      "made its way through to an equality");
+      "Yices array assignment made its way through to an equality");
     if(asts[0]->sort->id == SMT_SORT_BOOL)
       return new_ast(s, yices_eq(asts[0]->a, asts[1]->a));
-    else if(
-      asts[0]->sort->id == SMT_SORT_STRUCT ||
-      asts[0]->sort->id == SMT_SORT_UNION)
+
+    if(asts[0]->sort->id == SMT_SORT_STRUCT)
       return new_ast(s, yices_eq(asts[0]->a, asts[1]->a));
-    else if(int_encoding)
+
+    if(int_encoding)
       return new_ast(s, yices_arith_eq_atom(asts[0]->a, asts[1]->a));
-    else
-      return new_ast(s, yices_bveq_atom(asts[0]->a, asts[1]->a));
+
+    return new_ast(s, yices_bveq_atom(asts[0]->a, asts[1]->a));
 
   case SMT_FUNC_NOTEQ:
     if(
@@ -478,7 +477,7 @@ smt_astt yices_smt_ast::update(
     return smt_ast::update(ctx, value, idx, idx_expr);
 
   // Otherwise, it's a struct
-  assert(sort->id == SMT_SORT_STRUCT || sort->id == SMT_SORT_UNION);
+  assert(sort->id == SMT_SORT_STRUCT);
   assert(is_nil_expr(idx_expr) && "Tuple updates must be explicitly numbered");
 
   const yices_smt_ast *yast = to_solver_smt_ast<yices_smt_ast>(value);

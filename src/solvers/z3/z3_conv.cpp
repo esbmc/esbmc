@@ -579,7 +579,7 @@ const smt_ast *z3_smt_ast::update(
   if(sort->id == SMT_SORT_ARRAY)
     return smt_ast::update(conv, value, idx, idx_expr);
 
-  assert(sort->id == SMT_SORT_STRUCT || sort->id == SMT_SORT_UNION);
+  assert(sort->id == SMT_SORT_STRUCT);
   assert(is_nil_expr(idx_expr) && "Can only update constant index tuple elems");
 
   z3_convt *z3_conv = static_cast<z3_convt *>(conv);

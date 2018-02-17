@@ -1603,10 +1603,9 @@ smt_astt smt_convt::mk_fresh(
 {
   std::string newname = mk_fresh_name(tag);
 
-  if(s->id == SMT_SORT_UNION || s->id == SMT_SORT_STRUCT)
-  {
+  if(s->id == SMT_SORT_STRUCT)
     return tuple_api->mk_tuple_symbol(newname, s);
-  }
+
   if(s->id == SMT_SORT_ARRAY)
   {
     assert(
@@ -1614,10 +1613,8 @@ smt_astt smt_convt::mk_fresh(
       "Must call mk_fresh for arrays with a subtype");
     return array_api->mk_array_symbol(newname, s, array_subtype);
   }
-  else
-  {
-    return mk_smt_symbol(newname, s);
-  }
+
+  return mk_smt_symbol(newname, s);
 }
 
 smt_astt smt_convt::convert_is_nan(const expr2tc &expr)

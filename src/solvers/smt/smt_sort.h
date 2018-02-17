@@ -10,16 +10,17 @@
 enum smt_sort_kind
 {
   SMT_SORT_INT = 1,
-  SMT_SORT_REAL = 2,
-  SMT_SORT_SBV = 4,
-  SMT_SORT_UBV = 8,
-  SMT_SORT_FIXEDBV = 16,
-  SMT_SORT_ARRAY = 32,
-  SMT_SORT_BOOL = 64,
-  SMT_SORT_STRUCT = 128,
-  SMT_SORT_UNION = 256, // Contencious
-  SMT_SORT_FLOATBV = 512,
-  SMT_SORT_FLOATBV_RM = 1024
+  SMT_SORT_REAL = 1 << 1,
+  SMT_SORT_SBV = 1 << 2,
+  SMT_SORT_UBV = 1 << 3,
+  SMT_SORT_FIXEDBV = 1 << 4,
+  SMT_SORT_ARRAY = 1 << 5,
+  SMT_SORT_BOOL = 1 << 6,
+  SMT_SORT_STRUCT = 1 << 7,
+  SMT_SORT_FLOATBV = 1 << 8,
+  SMT_SORT_FAKE_FLOATBV = 1 << 9,
+  SMT_SORT_FLOATBV_RM = 1 << 10,
+  SMT_SORT_FAKE_FLOATBV_RM = 1 << 11,
 };
 
 /** A class for storing an SMT sort.

@@ -200,8 +200,6 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
     return ss.str();
   case SMT_SORT_BOOL:
     return "Bool";
-  case SMT_SORT_STRUCT:
-  case SMT_SORT_UNION:
   default:
     std::cerr << "Unexpected sort in smtlib_convt" << std::endl;
     abort();
@@ -770,7 +768,7 @@ smt_ast *smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   struct symbol_table_rec record = {name, ctx_level, s};
   symbol_table.insert(record);
 
-  if(s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
+  if(s->id == SMT_SORT_STRUCT)
     return a;
 
   // As this is the first time, declare that symbol to the solver.

@@ -651,8 +651,7 @@ void build_smt_conv_python_class(void)
     .value("fixedbv", SMT_SORT_FIXEDBV)
     .value("array", SMT_SORT_ARRAY)
     .value("bool", SMT_SORT_BOOL)
-    .value("struct", SMT_SORT_STRUCT)
-    .value("union", SMT_SORT_UNION);
+    .value("struct", SMT_SORT_STRUCT);
 
   enum_<smt_func_kind>("smt_func_kind")
     .value("hacks", SMT_FUNC_HACKS)     // Not really to be used
