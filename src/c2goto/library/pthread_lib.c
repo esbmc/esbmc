@@ -289,12 +289,19 @@ pthread_mutex_unlock_check(pthread_mutex_t *mutex)
 int
 pthread_mutex_trylock(pthread_mutex_t *mutex)
 {
-  if (__ESBMC_mutex_lock_field(*mutex) != 0) {
-    return EBUSY;
-  } else {
-    pthread_mutex_lock(mutex);
-    return 0;
-  }
+  __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  int res = EBUSY;
+  if (__ESBMC_mutex_lock_field(*mutex) != 0)
+    goto PTHREAD_MUTEX_TRYLOCK_END;
+
+  pthread_mutex_lock(mutex);
+  res = 0;
+
+PTHREAD_MUTEX_TRYLOCK_END:
+  __ESBMC_atomic_end();
+  return res;
 }
 
 int
@@ -336,13 +343,17 @@ pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 {
   __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  if (__ESBMC_rwlock_field(*lock)) {
-    __ESBMC_atomic_end();
-    return 1;
-  }
+
+  int res = 1;
+  if (__ESBMC_rwlock_field(*lock))
+    goto PTHREAD_RWLOCK_TRYWRLOCK_END;
+
   __ESBMC_rwlock_field(*lock) = 1;
+  res = 0;
+
+PTHREAD_RWLOCK_TRYWRLOCK_END:
   __ESBMC_atomic_end();
-  return 0;
+  return res;
 }
 
 int
