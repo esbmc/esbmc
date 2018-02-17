@@ -600,45 +600,6 @@ smt_astt mathsat_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   return new mathsat_smt_ast(this, mk_fpbv_rm_sort(), t);
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
-{
-  const ieee_arith_2ops &op = dynamic_cast<const ieee_arith_2ops &>(*expr);
-
-  // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(op.rounding_mode);
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-
-  // Sides
-  smt_astt s1 = convert_ast(op.side_1);
-  const mathsat_smt_ast *ms1 = to_solver_smt_ast<mathsat_smt_ast>(s1);
-
-  smt_astt s2 = convert_ast(op.side_2);
-  const mathsat_smt_ast *ms2 = to_solver_smt_ast<mathsat_smt_ast>(s2);
-
-  msat_term t;
-  switch(expr->expr_id)
-  {
-  case expr2t::ieee_add_id:
-    t = msat_make_fp_plus(env, mrm->a, ms1->a, ms2->a);
-    break;
-  case expr2t::ieee_sub_id:
-    t = msat_make_fp_minus(env, mrm->a, ms1->a, ms2->a);
-    break;
-  case expr2t::ieee_mul_id:
-    t = msat_make_fp_times(env, mrm->a, ms1->a, ms2->a);
-    break;
-  case expr2t::ieee_div_id:
-    t = msat_make_fp_div(env, mrm->a, ms1->a, ms2->a);
-    break;
-  default:
-    abort();
-  }
-  check_msat_error(t);
-
-  smt_sortt s = convert_sort(expr->type);
-  return new mathsat_smt_ast(this, s, t);
-}
-
 smt_ast *mathsat_convt::mk_smt_bool(bool val)
 {
   const smt_sort *s = boolean_sort;
@@ -905,4 +866,52 @@ smt_astt mathsat_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
   check_msat_error(t);
 
   return new mathsat_smt_ast(this, rd->sort, t);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+
+  msat_term t = msat_make_fp_plus(env, mrm->a, mlhs->a, mrhs->a);
+  check_msat_error(t);
+
+  return new mathsat_smt_ast(this, lhs->sort, t);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+
+  msat_term t = msat_make_fp_minus(env, mrm->a, mlhs->a, mrhs->a);
+  check_msat_error(t);
+
+  return new mathsat_smt_ast(this, lhs->sort, t);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+
+  msat_term t = msat_make_fp_times(env, mrm->a, mlhs->a, mrhs->a);
+  check_msat_error(t);
+
+  return new mathsat_smt_ast(this, lhs->sort, t);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+
+  msat_term t = msat_make_fp_div(env, mrm->a, mlhs->a, mrhs->a);
+  check_msat_error(t);
+
+  return new mathsat_smt_ast(this, lhs->sort, t);
 }

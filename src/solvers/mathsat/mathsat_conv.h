@@ -73,7 +73,10 @@ public:
   smt_astt mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
     override;
   smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm) override;
-  smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr) override;
+  smt_astt mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
+  smt_astt mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
+  smt_astt mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
+  smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
   smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) override;
 
   void push_ctx() override;

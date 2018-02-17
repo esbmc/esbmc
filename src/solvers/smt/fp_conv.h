@@ -88,10 +88,33 @@ public:
    *  @return The newly created cast smt_ast. */
   virtual smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm);
 
-  /** Convert the ieee arithmetic operations (add, sub, mul, div, mod)
-   *  @param expr the arithmetic operations
+  /** Convert a ieee addition
+   *  @param lhs left hand side of the addition
+   *  @param rhs right hand side of the addition
+   *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr);
+  virtual smt_astt mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm);
+
+  /** Convert a ieee subtraction
+   *  @param lhs left hand side of the subtraction
+   *  @param rhs right hand side of the subtraction
+   *  @param rm the rounding mode
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm);
+
+  /** Convert a ieee multiplication
+   *  @param lhs left hand side of the multiplication
+   *  @param rhs right hand side of the multiplication
+   *  @param rm the rounding mode
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm);
+
+  /** Convert the ieee division
+   *  @param lhs left hand side of the division
+   *  @param rhs right hand side of the division
+   *  @param rm the rounding mode
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm);
 
   /** Convert the ieee arithmetic square-root (sqrt)
    *  @param op the sqrt radicand

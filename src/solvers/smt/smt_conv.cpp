@@ -592,20 +592,44 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   case expr2t::ieee_add_id:
+  {
+    assert(is_floatbv_type(expr));
+    smt_astt lhs = convert_ast(to_ieee_add2t(expr).side_1);
+    smt_astt rhs = convert_ast(to_ieee_add2t(expr).side_2);
+    smt_astt rm = convert_rounding_mode(to_ieee_add2t(expr).rounding_mode);
+    a = fp_api->mk_smt_fpbv_add(lhs, rhs, rm);
+    break;
+  }
   case expr2t::ieee_sub_id:
+  {
+    assert(is_floatbv_type(expr));
+    smt_astt lhs = convert_ast(to_ieee_sub2t(expr).side_1);
+    smt_astt rhs = convert_ast(to_ieee_sub2t(expr).side_2);
+    smt_astt rm = convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode);
+    a = fp_api->mk_smt_fpbv_sub(lhs, rhs, rm);
+    break;
+  }
   case expr2t::ieee_mul_id:
+  {
+    assert(is_floatbv_type(expr));
+    smt_astt lhs = convert_ast(to_ieee_mul2t(expr).side_1);
+    smt_astt rhs = convert_ast(to_ieee_mul2t(expr).side_2);
+    smt_astt rm = convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode);
+    a = fp_api->mk_smt_fpbv_mul(lhs, rhs, rm);
+    break;
+  }
   case expr2t::ieee_div_id:
   {
     assert(is_floatbv_type(expr));
-    assert(expr->get_num_sub_exprs() == 3);
-    a = fp_api->mk_smt_fpbv_arith_ops(expr);
+    smt_astt lhs = convert_ast(to_ieee_div2t(expr).side_1);
+    smt_astt rhs = convert_ast(to_ieee_div2t(expr).side_2);
+    smt_astt rm = convert_rounding_mode(to_ieee_div2t(expr).rounding_mode);
+    a = fp_api->mk_smt_fpbv_div(lhs, rhs, rm);
     break;
   }
   case expr2t::ieee_fma_id:
   {
     assert(is_floatbv_type(expr));
-    assert(expr->get_num_sub_exprs() == 4);
-
     smt_astt v1 = convert_ast(to_ieee_fma2t(expr).value_1);
     smt_astt v2 = convert_ast(to_ieee_fma2t(expr).value_2);
     smt_astt v3 = convert_ast(to_ieee_fma2t(expr).value_3);

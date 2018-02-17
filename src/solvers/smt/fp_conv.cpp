@@ -53,14 +53,6 @@ smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
   abort();
 }
 
-smt_astt fp_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
-{
-  std::cout << "Chosen solver doesn't support arithmetic operations with "
-            << "floating-point numbers\n";
-  (void)expr;
-  abort();
-}
-
 smt_astt fp_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
 {
   std::cout << "Chosen solver doesn't support square-rooting"
@@ -154,5 +146,41 @@ expr2tc fp_convt::get_fpbv(const type2tc &t, smt_astt a)
 smt_sortt fp_convt::mk_fpbv_rm_sort()
 {
   std::cerr << "Rounding mode sort not implemented for the chosen solver\n";
+  abort();
+}
+
+smt_astt fp_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  std::cout << "Chosen solver doesn't support floating-point addition\n";
+  (void)lhs;
+  (void)rhs;
+  (void)rm;
+  abort();
+}
+
+smt_astt fp_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  std::cout << "Chosen solver doesn't support floating-points subtraction\n";
+  (void)lhs;
+  (void)rhs;
+  (void)rm;
+  abort();
+}
+
+smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  std::cout << "Chosen solver doesn't support floating-points multiplication\n";
+  (void)lhs;
+  (void)rhs;
+  (void)rm;
+  abort();
+}
+
+smt_astt fp_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  std::cout << "Chosen solver doesn't support floating-points division\n";
+  (void)lhs;
+  (void)rhs;
+  (void)rm;
   abort();
 }
