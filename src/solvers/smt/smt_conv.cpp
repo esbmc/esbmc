@@ -2546,7 +2546,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
     return get_bv(type, a);
 
   case type2t::floatbv_id:
-    return fp_api->get_fpbv(type, a);
+    return constant_floatbv2tc(fp_api->get_fpbv(a));
 
   default:
     std::cerr << "Unimplemented type'd expression (" << type->type_id

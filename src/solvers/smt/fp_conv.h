@@ -18,7 +18,7 @@ public:
   virtual ~fp_convt() = default;
 
   /** Create a floating point bitvector
-   *  @param thereal the ieee float number
+   *  @param thereal the floating-point number
    *  @param ew Exponent width, in bits, of the bitvector to create.
    *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
@@ -143,10 +143,9 @@ public:
   virtual smt_sortt mk_fpbv_rm_sort();
 
   /** Extract the assignment to a floating-point from the SMT solvers model.
-   *  @param t The AST type
-   *  @param a The AST whos value we wish to know.
-   *  @return Expression representation of a's value, as a constant_floatbv2tc */
-  virtual expr2tc get_fpbv(const type2tc &t, smt_astt a);
+   *  @param a the AST whos value we wish to know.
+   *  @return the ieee floating-point */
+  virtual ieee_floatt get_fpbv(smt_astt a);
 
   smt_convt *ctx;
 };

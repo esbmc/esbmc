@@ -810,10 +810,8 @@ expr2tc z3_convt::get_bv(const type2tc &type, smt_astt a)
   return build_bv(type, val);
 }
 
-expr2tc z3_convt::get_fpbv(const type2tc &t, smt_astt a)
+ieee_floatt z3_convt::get_fpbv(smt_astt a)
 {
-  assert(is_floatbv_type(t));
-
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
   z3::expr e = model.eval(za->a, false);
 
@@ -825,36 +823,26 @@ expr2tc z3_convt::get_fpbv(const type2tc &t, smt_astt a)
   // because we represent the hidden bit like Z3 does
   unsigned sw = Z3_fpa_get_sbits(z3_ctx, e.get_sort()) - 1;
 
-  ieee_float_spect spec(sw, ew);
-  ieee_floatt number(spec);
-
-  // TODO: The next version of Z3 provides new functions:
-  // Z3_fpa_is_numeral_nan, Z3_fpa_is_numeral_inf and
-  // Z3_fpa_is_numeral_positive. We can replace the following
-  // code when the new version is released
+  ieee_floatt number(ieee_float_spect(sw, ew));
+  number.make_zero();
 
   if(Z3_fpa_is_numeral_nan(z3_ctx, e))
-  {
     number.make_NaN();
-    return constant_floatbv2tc(number);
-  }
-
-  if(Z3_fpa_is_numeral_inf(z3_ctx, e))
+  else if(Z3_fpa_is_numeral_inf(z3_ctx, e))
   {
     if(Z3_fpa_is_numeral_positive(z3_ctx, e))
       number.make_plus_infinity();
     else
       number.make_minus_infinity();
-
-    return constant_floatbv2tc(number);
+  }
+  else
+  {
+    Z3_ast v;
+    if(Z3_model_eval(z3_ctx, model, Z3_mk_fpa_to_ieee_bv(z3_ctx, e), 1, &v))
+      number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
   }
 
-  Z3_ast v;
-  if(!Z3_model_eval(z3_ctx, model, Z3_mk_fpa_to_ieee_bv(z3_ctx, e), 1, &v))
-    return expr2tc();
-
-  number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
-  return constant_floatbv2tc(number);
+  return number;
 }
 
 expr2tc z3_convt::get_array_elem(

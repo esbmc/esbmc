@@ -149,10 +149,8 @@ expr2tc mathsat_convt::get_bv(const type2tc &type, smt_astt a)
   return build_bv(type, BigInt(finval));
 }
 
-expr2tc mathsat_convt::get_fpbv(const type2tc &_t, smt_astt a)
+ieee_floatt mathsat_convt::get_fpbv(smt_astt a)
 {
-  assert(is_floatbv_type(_t));
-
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
   msat_term t = msat_get_model_value(env, mast->a);
   check_msat_error(t);
@@ -171,13 +169,14 @@ expr2tc mathsat_convt::get_fpbv(const type2tc &_t, smt_astt a)
   char buffer[mpz_sizeinbase(num, 10) + 2];
   mpz_get_str(buffer, 10, num);
 
-  ieee_float_spect spec(
-    to_floatbv_type(_t).fraction, to_floatbv_type(_t).exponent);
+  size_t ew, sw;
+  int ret =
+    msat_is_fp_type(env, to_solver_smt_sort<msat_type>(a->sort)->s, &ew, &sw);
+  assert(ret != 0 && "Non FP type passed to mathsat_convt::get_exp_width");
 
-  ieee_floatt number(spec);
+  ieee_floatt number(ieee_float_spect(sw, ew));
   number.unpack(BigInt(buffer));
-
-  return constant_floatbv2tc(number);
+  return number;
 }
 
 expr2tc mathsat_convt::get_array_elem(

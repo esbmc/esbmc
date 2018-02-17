@@ -135,10 +135,9 @@ fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
   abort();
 }
 
-expr2tc fp_convt::get_fpbv(const type2tc &t, smt_astt a)
+ieee_floatt fp_convt::get_fpbv(smt_astt a)
 {
-  std::cout << "Chosen solver doesn't support floating-point numbers (cex)\n";
-  (void)t;
+  std::cout << "Chosen solver doesn't support getting a floating-point\n";
   (void)a;
   abort();
 }
