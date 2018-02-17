@@ -542,10 +542,7 @@ smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal)
   msat_term t = msat_from_string(env, smt_str.c_str());
   check_msat_error(t);
 
-  type2tc new_fp_type;
-  migrate_type(thereal.spec.to_type(), new_fp_type);
-  smt_sortt s = convert_sort(new_fp_type);
-
+  smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);
   return new mathsat_smt_ast(this, s, t);
 }
 
