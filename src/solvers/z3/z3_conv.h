@@ -106,8 +106,9 @@ public:
     override;
   smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm) override;
   smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr) override;
-  smt_astt mk_smt_fpbv_fma(const expr2tc &expr) override;
-  smt_astt mk_smt_fpbv_sqrt(const expr2tc &expr) override;
+  smt_astt mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
+    override;
+  smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) override;
 
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_array_symbol(

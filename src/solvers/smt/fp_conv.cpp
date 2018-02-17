@@ -61,19 +61,24 @@ smt_astt fp_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
   abort();
 }
 
-smt_astt fp_convt::mk_smt_fpbv_sqrt(const expr2tc &expr)
+smt_astt fp_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
 {
   std::cout << "Chosen solver doesn't support square-rooting"
             << "floating-point numbers\n";
-  (void)expr;
+  (void)rd;
+  (void)rm;
   abort();
 }
 
-smt_astt fp_convt::mk_smt_fpbv_fma(const expr2tc &expr)
+smt_astt
+fp_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
 {
   std::cout << "Chosen solver doesn't support fused-multiply add "
             << "floating-point numbers\n";
-  (void)expr;
+  (void)v1;
+  (void)v2;
+  (void)v3;
+  (void)rm;
   abort();
 }
 

@@ -506,50 +506,6 @@ smt_astt z3_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
   abort();
 }
 
-smt_astt z3_convt::mk_smt_fpbv_fma(const expr2tc &expr)
-{
-  const ieee_fma2t fma = to_ieee_fma2t(expr);
-
-  // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(fma.rounding_mode);
-  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
-
-  unsigned ew = to_floatbv_type(expr->type).exponent;
-  unsigned sw = to_floatbv_type(expr->type).fraction;
-  smt_sortt s = mk_fpbv_sort(ew, sw);
-
-  // Operands
-  smt_astt s1 = convert_ast(fma.value_1);
-  const z3_smt_ast *ms1 = to_solver_smt_ast<z3_smt_ast>(s1);
-
-  smt_astt s2 = convert_ast(fma.value_2);
-  const z3_smt_ast *ms2 = to_solver_smt_ast<z3_smt_ast>(s2);
-
-  smt_astt s3 = convert_ast(fma.value_3);
-  const z3_smt_ast *mv3 = to_solver_smt_ast<z3_smt_ast>(s3);
-
-  return new_ast(z3_ctx.fpa_fma(mrm->a, ms1->a, ms2->a, mv3->a), s);
-}
-
-smt_astt z3_convt::mk_smt_fpbv_sqrt(const expr2tc &expr)
-{
-  const ieee_sqrt2t sqrt = to_ieee_sqrt2t(expr);
-
-  // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(sqrt.rounding_mode);
-  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
-
-  unsigned ew = to_floatbv_type(expr->type).exponent;
-  unsigned sw = to_floatbv_type(expr->type).fraction;
-  smt_sortt s = mk_fpbv_sort(ew, sw);
-
-  // Value
-  smt_astt v = convert_ast(sqrt.value);
-  const z3_smt_ast *mv = to_solver_smt_ast<z3_smt_ast>(v);
-
-  return new_ast(z3_ctx.fpa_sqrt(mrm->a, mv->a), s);
-}
-
 smt_astt z3_convt::mk_smt_bool(bool val)
 {
   return new_ast(z3_ctx.bool_val(val), boolean_sort);
@@ -1131,4 +1087,21 @@ smt_astt z3_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
   const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
   const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
   return new_ast(z3_ctx.fpa_to_integral(mrm->a, mfrom->a), from->sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
+{
+  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
+  const z3_smt_ast *mrd = to_solver_smt_ast<z3_smt_ast>(rd);
+  return new_ast(z3_ctx.fpa_sqrt(mrm->a, mrd->a), rd->sort);
+}
+
+smt_astt
+z3_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
+{
+  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
+  const z3_smt_ast *mv1 = to_solver_smt_ast<z3_smt_ast>(v1);
+  const z3_smt_ast *mv2 = to_solver_smt_ast<z3_smt_ast>(v2);
+  const z3_smt_ast *mv3 = to_solver_smt_ast<z3_smt_ast>(v3);
+  return new_ast(z3_ctx.fpa_fma(mrm->a, mv1->a, mv2->a, mv3->a), v1->sort);
 }

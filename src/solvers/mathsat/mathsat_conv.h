@@ -74,8 +74,7 @@ public:
     override;
   smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm) override;
   smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr) override;
-  smt_astt mk_smt_fpbv_fma(const expr2tc &expr) override;
-  smt_astt mk_smt_fpbv_sqrt(const expr2tc &expr) override;
+  smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) override;
 
   void push_ctx() override;
   void pop_ctx() override;

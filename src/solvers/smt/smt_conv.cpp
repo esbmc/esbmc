@@ -605,14 +605,21 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 4);
-    a = fp_api->mk_smt_fpbv_fma(expr);
+
+    smt_astt v1 = convert_ast(to_ieee_fma2t(expr).value_1);
+    smt_astt v2 = convert_ast(to_ieee_fma2t(expr).value_2);
+    smt_astt v3 = convert_ast(to_ieee_fma2t(expr).value_3);
+    smt_astt rm = convert_rounding_mode(to_ieee_fma2t(expr).rounding_mode);
+    a = fp_api->mk_smt_fpbv_fma(v1, v2, v3, rm);
     break;
   }
   case expr2t::ieee_sqrt_id:
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 2);
-    a = fp_api->mk_smt_fpbv_sqrt(expr);
+    smt_astt rd = convert_ast(to_ieee_sqrt2t(expr).value);
+    smt_astt rm = convert_rounding_mode(to_ieee_sqrt2t(expr).rounding_mode);
+    a = fp_api->mk_smt_fpbv_sqrt(rd, rm);
     break;
   }
   case expr2t::modulus_id:

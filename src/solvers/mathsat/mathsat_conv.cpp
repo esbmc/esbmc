@@ -639,30 +639,6 @@ smt_astt mathsat_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv_sqrt(const expr2tc &expr)
-{
-  const ieee_sqrt2t sqrt = to_ieee_sqrt2t(expr);
-
-  // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(sqrt.rounding_mode);
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-
-  // Value
-  smt_astt v = convert_ast(sqrt.value);
-  const mathsat_smt_ast *mv = to_solver_smt_ast<mathsat_smt_ast>(v);
-
-  msat_term t = msat_make_fp_sqrt(env, mrm->a, mv->a);
-  check_msat_error(t);
-
-  smt_sortt s = convert_sort(expr->type);
-  return new mathsat_smt_ast(this, s, t);
-}
-
-smt_astt mathsat_convt::mk_smt_fpbv_fma(const expr2tc &expr)
-{
-  return fp_convt::mk_smt_fpbv_fma(expr);
-}
-
 smt_ast *mathsat_convt::mk_smt_bool(bool val)
 {
   const smt_sort *s = boolean_sort;
@@ -918,4 +894,15 @@ smt_astt mathsat_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
   // Conversion from float, using the correct rounding mode
   msat_term t = msat_make_fp_round_to_int(env, mrm->a, mfrom->a);
   return new mathsat_smt_ast(this, from->sort, t);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
+{
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mrd = to_solver_smt_ast<mathsat_smt_ast>(rd);
+
+  msat_term t = msat_make_fp_sqrt(env, mrm->a, mrd->a);
+  check_msat_error(t);
+
+  return new mathsat_smt_ast(this, rd->sort, t);
 }

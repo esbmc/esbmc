@@ -94,14 +94,19 @@ public:
   virtual smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr);
 
   /** Convert the ieee arithmetic square-root (sqrt)
-   *  @param expr the sqrt operation
+   *  @param op the sqrt radicand
+   *  @param rm the rounding mode
    *  @return The newly created sqrt smt_ast */
-  virtual smt_astt mk_smt_fpbv_sqrt(const expr2tc &expr);
+  virtual smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm);
 
-  /** Convert the ieee arithmetic fused-multiply add (fma)
-   *  @param expr the fma operation
+  /** Convert the ieee arithmetic fused-multiply add (fma): round((v1 * v2) + v3)
+   *  @param v1 in the equation
+   *  @param v2 in the equation
+   *  @param v3 in the equation
+   *  @param rm the rounding mode
    *  @return The newly created fma smt_ast */
-  virtual smt_astt mk_smt_fpbv_fma(const expr2tc &expr);
+  virtual smt_astt
+  mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm);
 
   /** Create a sort representing a floating-point number.
    *  @param ew Exponent width, in bits, of the bitvector to create.
