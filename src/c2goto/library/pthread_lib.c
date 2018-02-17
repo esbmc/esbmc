@@ -12,8 +12,8 @@ struct __pthread_start_data {
   void *start_arg;
 };
 
-struct __pthread_start_data __ESBMC_get_thread_internal_data(unsigned int tid);
-void __ESBMC_set_thread_internal_data(unsigned int tid,
+struct __pthread_start_data __ESBMC_get_thread_internal_data(pthread_t tid);
+void __ESBMC_set_thread_internal_data(pthread_t tid,
                                       struct __pthread_start_data data);
 
 #define __ESBMC_mutex_lock_field(a) ((a).__data.__lock)
