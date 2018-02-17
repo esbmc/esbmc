@@ -1,7 +1,6 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
 #define fma_def(type, name, isnan_func, isinf_func, signbit_func, fma_func)        \
   type name(type x, type y, type z)                                                \

@@ -2,7 +2,6 @@
 
 #include <math.h>
 #include <fenv.h>
-#include "../intrinsics.h"
 
 #define ceil_def(type, name, rint_func)                                        \
   type name(type f)                                                            \

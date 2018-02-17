@@ -1,7 +1,6 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
 #define copysign_def(type, name, signbit_func, isnan_func, abs_func)           \
   type name(type x, type y)                                                    \

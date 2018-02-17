@@ -1,5 +1,4 @@
 #include <assert.h>
-#include "intrinsics.h"
 
 #define CLOCK		16000000
 #define CYCLE		1/CLOCK

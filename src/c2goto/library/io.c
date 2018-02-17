@@ -6,8 +6,6 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-#include "intrinsics.h"
-
 #ifdef _MSVC
 #include <BaseTsd.h>
 #define ssize_t SSIZE_T

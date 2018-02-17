@@ -8,8 +8,6 @@
 #undef atol
 #undef getenv
 
-#include "intrinsics.h"
-
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void exit(int status)

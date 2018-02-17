@@ -2,7 +2,6 @@
 
 #include <math.h>
 #include <fenv.h>
-#include "../intrinsics.h"
 
 #define modff_def(type, name, nearbyint_func, copysign_func, isinf_func)       \
   type name(type value, type *iptr)                                            \

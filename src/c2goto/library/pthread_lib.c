@@ -1,7 +1,6 @@
 #include <errno.h>
 
 #include "../headers/pthreadtypes.hs"
-#include "intrinsics.h"
 
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);

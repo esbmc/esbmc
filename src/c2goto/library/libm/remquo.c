@@ -2,7 +2,6 @@
 
 #include <math.h>
 #include <fenv.h>
-#include "../intrinsics.h"
 
 #define remquo_def(type, name, isnan_func, isinf_func, llrint_func)                    \
   type name(type x, type y, int *quo)                                                  \

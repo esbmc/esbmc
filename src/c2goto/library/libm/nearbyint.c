@@ -1,7 +1,6 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
 #define nearbyint_def(type, name, isinf_func, isnan_func, nearbyint_func)      \
   type name(type f)                                                            \
