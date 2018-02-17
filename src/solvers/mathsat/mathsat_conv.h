@@ -53,8 +53,8 @@ public:
     unsigned int high,
     unsigned int low,
     const smt_sort *s) override;
-  smt_astt
-  mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w) override;
+  smt_astt mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
+    override;
 
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
   smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw) override;
@@ -88,8 +88,8 @@ public:
     uint64_t index,
     const type2tc &subtype) override;
 
-  const smt_ast *
-  convert_array_of(smt_astt init_val, unsigned long domain_width) override;
+  const smt_ast *convert_array_of(smt_astt init_val, unsigned long domain_width)
+    override;
 
   void add_array_constraints_for_solving() override;
   void push_array_ctx() override;

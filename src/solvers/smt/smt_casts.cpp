@@ -38,8 +38,8 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
   abort();
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
+smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
@@ -76,8 +76,8 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
   return mk_func_app(s, SMT_FUNC_CONCAT, frontpart, zero_fracbits);
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
+smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
@@ -95,8 +95,8 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
   return mk_func_app(s, SMT_FUNC_CONCAT, switched, zero);
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
+smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   assert(is_fixedbv_type(cast.from));
@@ -310,8 +310,8 @@ smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
   return round_real_to_int(a);
 }
 
-smt_astt
-smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
+smt_astt smt_convt::convert_typecast_to_ints_from_fbv_sint(
+  const typecast2t &cast)
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
@@ -352,8 +352,8 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
   abort();
 }
 
-smt_astt
-smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
+smt_astt smt_convt::convert_typecast_to_ints_from_unsigned(
+  const typecast2t &cast)
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
@@ -631,41 +631,31 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
 
   // Casts to and from pointers need to be addressed all as one
   if(is_pointer_type(cast.type))
-  {
     return convert_typecast_to_ptr(cast);
-  }
+
   if(is_pointer_type(cast.from))
-  {
     return convert_typecast_from_ptr(cast);
-  }
 
   // Otherwise, look at the result type.
   if(is_bool_type(cast.type))
-  {
     return convert_typecast_to_bool(cast);
-  }
+
   if(is_fixedbv_type(cast.type) && !int_encoding)
-  {
     return convert_typecast_to_fixedbv_nonint(expr);
-  }
-  else if(is_bv_type(cast.type) || is_fixedbv_type(cast.type))
-  {
+
+  if(is_bv_type(cast.type) || is_fixedbv_type(cast.type))
     return convert_typecast_to_ints(cast);
-  }
-  else if(is_floatbv_type(cast.type))
-  {
+
+  if(is_floatbv_type(cast.type))
     return convert_typecast_to_fpbv(cast);
-  }
-  else if(is_struct_type(cast.type))
-  {
+
+  if(is_struct_type(cast.type))
     return convert_typecast_to_struct(cast);
-  }
-  else if(is_union_type(cast.type))
+
+  if(is_union_type(cast.type))
   {
     if(base_type_eq(cast.type, cast.from->type, ns))
-    {
       return convert_ast(cast.from); // No additional conversion required
-    }
 
     std::cerr << "Can't typecast between unions" << std::endl;
     abort();

@@ -677,8 +677,9 @@ public:
    *  @param expr The symbol2tc expression of this symbol.
    *  @param sym The textual representation of this symbol.
    *  @return A pointer-typed AST representing the address of this symbol. */
-  smt_astt
-  convert_identifier_pointer(const expr2tc &expr, const std::string &sym);
+  smt_astt convert_identifier_pointer(
+    const expr2tc &expr,
+    const std::string &sym);
 
   smt_astt init_pointer_obj(unsigned int obj_num, const expr2tc &size);
 
@@ -831,10 +832,10 @@ public:
    *  formatting. */
   std::string get_fixed_point(const unsigned width, std::string value) const;
 
-  unsigned int
-  get_member_name_field(const type2tc &t, const irep_idt &name) const;
-  unsigned int
-  get_member_name_field(const type2tc &t, const expr2tc &name) const;
+  unsigned int get_member_name_field(const type2tc &t, const irep_idt &name)
+    const;
+  unsigned int get_member_name_field(const type2tc &t, const expr2tc &name)
+    const;
 
   // Ours:
   /** Given an array expression, attempt to extract its valuation from the

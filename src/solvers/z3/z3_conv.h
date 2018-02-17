@@ -85,8 +85,9 @@ public:
 
   smt_astt mk_smt_int(const mp_integer &theint, bool sign) override;
   smt_astt mk_smt_real(const std::string &str) override;
-  smt_astt
-  mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w) override;
+  smt_astt mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
+    override;
+
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
   smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw) override;
   smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw) override;
@@ -135,11 +136,11 @@ public:
 
   smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override;
   smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
-  smt_astt
-  tuple_array_of(const expr2tc &init, unsigned long domain_width) override;
+  smt_astt tuple_array_of(const expr2tc &init, unsigned long domain_width)
+    override;
 
-  const smt_ast *
-  convert_array_of(smt_astt init_val, unsigned long domain_width) override;
+  const smt_ast *convert_array_of(smt_astt init_val, unsigned long domain_width)
+    override;
 
   void add_array_constraints_for_solving() override;
   void add_tuple_constraints_for_solving() override;

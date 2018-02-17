@@ -695,8 +695,9 @@ smt_ast *mathsat_convt::mk_array_symbol(
   return mk_smt_symbol(name, s);
 }
 
-smt_ast *
-mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
+smt_ast *mathsat_convt::mk_smt_symbol(
+  const std::string &name,
+  const smt_sort *s)
 {
   // XXX - does 'd' leak?
   msat_decl d = msat_declare_function(
@@ -738,8 +739,9 @@ smt_ast *mathsat_convt::mk_extract(
   return new mathsat_smt_ast(this, s, t);
 }
 
-const smt_ast *
-mathsat_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
+const smt_ast *mathsat_convt::convert_array_of(
+  smt_astt init_val,
+  unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
 }
