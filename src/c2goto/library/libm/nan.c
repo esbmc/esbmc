@@ -3,8 +3,7 @@
 #include <math.h>
 
 #ifdef __APPLE__
-#define __nan_def(type, name)                                                  \
-  ;                                                                            \
+#define __nan_def(type, name) ;
 
 #else
 #define __nan_def(type, name)                                                  \
