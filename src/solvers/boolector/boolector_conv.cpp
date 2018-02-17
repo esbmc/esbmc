@@ -277,7 +277,8 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     break;
 
   default:
-    return nullptr; // Hax.
+    std::cerr << "Unknown type for symbol\n";
+    abort();
   }
 
   btor_smt_ast *ast = new_ast(s, node);
