@@ -72,7 +72,7 @@ public:
     override;
   smt_astt mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
     override;
-  smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) override;
+  smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm) override;
   smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr) override;
   smt_astt mk_smt_fpbv_fma(const expr2tc &expr) override;
   smt_astt mk_smt_fpbv_sqrt(const expr2tc &expr) override;

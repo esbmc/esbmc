@@ -44,11 +44,12 @@ smt_astt fp_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   abort();
 }
 
-smt_astt fp_convt::mk_smt_nearbyint_from_float(const nearbyint2t &expr)
+smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
 {
   std::cout << "Chosen solver doesn't support nearby int from floating-point "
             << "numbers\n";
-  (void)expr;
+  (void)from;
+  (void)rm;
   abort();
 }
 

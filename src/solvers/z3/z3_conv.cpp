@@ -470,19 +470,6 @@ smt_astt z3_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   abort();
 }
 
-smt_astt z3_convt::mk_smt_nearbyint_from_float(const nearbyint2t &expr)
-{
-  // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(expr.rounding_mode);
-  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
-
-  smt_astt from = convert_ast(expr.from);
-  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
-
-  smt_sortt s = convert_sort(expr.type);
-  return new_ast(z3_ctx.fpa_to_integral(mrm->a, mfrom->a), s);
-}
-
 smt_astt z3_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
 {
   const ieee_arith_2ops &op = dynamic_cast<const ieee_arith_2ops &>(*expr);
@@ -1137,4 +1124,11 @@ z3_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
     z3_ctx.fpa_from_signed(
       mrm->a, mfrom->a, to_solver_smt_sort<z3::sort>(to)->s),
     to);
+}
+
+smt_astt z3_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
+{
+  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
+  const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
+  return new_ast(z3_ctx.fpa_to_integral(mrm->a, mfrom->a), from->sort);
 }

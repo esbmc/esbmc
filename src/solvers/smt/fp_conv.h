@@ -83,9 +83,10 @@ public:
   mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm);
 
   /** Calculate the nearby int from a floating point, considering the rounding mode
-   *  @param expr the nearby int expression
+   *  @param from the floating-point
+   *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr);
+  virtual smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm);
 
   /** Convert the ieee arithmetic operations (add, sub, mul, div, mod)
    *  @param expr the arithmetic operations

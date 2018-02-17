@@ -713,7 +713,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::nearbyint_id:
   {
-    a = fp_api->mk_smt_nearbyint_from_float(to_nearbyint2t(expr));
+    smt_astt from = convert_ast(to_nearbyint2t(expr).from);
+    smt_astt rm = convert_rounding_mode(to_nearbyint2t(expr).rounding_mode);
+    a = fp_api->mk_smt_nearbyint_from_float(from, rm);
     break;
   }
   case expr2t::if_id:
