@@ -153,11 +153,6 @@ public:
   void push_tuple_ctx() override;
   void pop_tuple_ctx() override;
 
-  // Assert a formula; needs_literal indicates a new literal should be allocated
-  // for this assertion (Z3_check_assumptions refuses to deal with assumptions
-  // that are not "propositional variables or their negation". So we associate
-  // the ast with a literal.
-  void assert_formula(const z3::expr &ast);
   void assert_ast(const smt_ast *a) override;
 
   const std::string solver_text() override

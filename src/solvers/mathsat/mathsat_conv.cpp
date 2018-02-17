@@ -625,12 +625,6 @@ smt_ast *mathsat_convt::mk_smt_symbol(
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_sort *mathsat_convt::mk_struct_sort(const type2tc &type
-                                        __attribute__((unused)))
-{
-  abort();
-}
-
 smt_ast *mathsat_convt::mk_extract(
   const smt_ast *a,
   unsigned int high,

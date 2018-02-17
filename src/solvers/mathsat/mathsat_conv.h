@@ -47,7 +47,6 @@ public:
     const std::string &name,
     const smt_sort *s,
     smt_sortt array_subtype) override;
-  virtual smt_sort *mk_struct_sort(const type2tc &type);
   smt_ast *mk_extract(
     const smt_ast *a,
     unsigned int high,

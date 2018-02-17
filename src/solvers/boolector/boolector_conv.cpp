@@ -287,12 +287,6 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return ast;
 }
 
-smt_sort *boolector_convt::mk_struct_sort(const type2tc &type
-                                          __attribute__((unused)))
-{
-  abort();
-}
-
 smt_ast *boolector_convt::mk_extract(
   const smt_ast *a,
   unsigned int high,
