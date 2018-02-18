@@ -81,6 +81,8 @@ public:
   smt_sortt mk_int_sort() override;
   smt_sortt mk_bv_sort(const smt_sort_kind k, std::size_t width) override;
   smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range) override;
+  smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) override;
+  smt_sortt mk_fpbv_rm_sort() override;
 
   smt_ast *mk_smt_int(const mp_integer &theint, bool sign) override;
   smt_ast *mk_smt_real(const std::string &str) override;

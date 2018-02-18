@@ -517,3 +517,18 @@ smt_sortt boolector_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
   return new solver_smt_sort<BoolectorSort>(
     SMT_SORT_ARRAY, t, domain_sort->get_data_width(), range);
 }
+
+smt_sortt boolector_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  return new solver_smt_sort<BoolectorSort>(
+    SMT_SORT_FAKE_FLOATBV,
+    boolector_bitvec_sort(btor, ew + sw + 1),
+    ew + sw + 1,
+    sw + 1);
+}
+
+smt_sortt boolector_convt::mk_fpbv_rm_sort()
+{
+  return new solver_smt_sort<BoolectorSort>(
+    SMT_SORT_FAKE_FLOATBV_RM, boolector_bitvec_sort(btor, 2), 2);
+}

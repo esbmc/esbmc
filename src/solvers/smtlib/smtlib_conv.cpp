@@ -874,3 +874,13 @@ smt_sortt smtlib_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
   return new smt_sort(
     SMT_SORT_ARRAY, domain->get_data_width(), range->get_data_width());
 }
+
+smt_sortt smtlib_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  return new smt_sort(SMT_SORT_FAKE_FLOATBV, ew + sw + 1, sw + 1);
+}
+
+smt_sortt smtlib_convt::mk_fpbv_rm_sort()
+{
+  return new smt_sort(SMT_SORT_FAKE_FLOATBV_RM, 2);
+}

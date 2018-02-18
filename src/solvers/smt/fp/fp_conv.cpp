@@ -1,11 +1,4 @@
-/*
- * fp_conv.cpp
- *
- *  Created on: Mar 3, 2017
- *      Author: mramalho
- */
-
-#include <solvers/smt/fp/fp_conv.h>
+#include <solvers/smt/smt_conv.h>
 
 fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
 {
@@ -15,6 +8,19 @@ smt_astt fp_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
   std::cout << "Chosen solver doesn't support floating-point numbers\n";
   (void)thereal;
+}
+
+smt_sortt fp_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  std::cout << "Missing implementation for" << __FUNCTION__ << '\n';
+  (void)ew;
+  (void)sw;
+  abort();
+}
+
+smt_sortt fp_convt::mk_fpbv_rm_sort()
+{
+  std::cout << "Missing implementation for" << __FUNCTION__ << '\n';
   abort();
 }
 
@@ -71,14 +77,6 @@ fp_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
   (void)v2;
   (void)v3;
   (void)rm;
-  abort();
-}
-
-smt_sortt fp_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
-{
-  std::cout << "Chosen solver doesn't support floating-point numbers (type)\n";
-  (void)ew;
-  (void)sw;
   abort();
 }
 
@@ -139,12 +137,6 @@ ieee_floatt fp_convt::get_fpbv(smt_astt a)
 {
   std::cout << "Chosen solver doesn't support getting a floating-point\n";
   (void)a;
-  abort();
-}
-
-smt_sortt fp_convt::mk_fpbv_rm_sort()
-{
-  std::cerr << "Rounding mode sort not implemented for the chosen solver\n";
   abort();
 }
 

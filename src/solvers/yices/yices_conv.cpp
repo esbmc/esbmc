@@ -698,3 +698,15 @@ smt_sortt yices_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
   return new solver_smt_sort<type_t>(
     SMT_SORT_ARRAY, t, domain_sort->get_data_width(), range);
 }
+
+smt_sortt yices_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  return new solver_smt_sort<type_t>(
+    SMT_SORT_FAKE_FLOATBV, yices_bv_type(ew + sw + 1), ew + sw + 1, sw + 1);
+}
+
+smt_sortt yices_convt::mk_fpbv_rm_sort()
+{
+  return new solver_smt_sort<type_t>(
+    SMT_SORT_FAKE_FLOATBV_RM, yices_bv_type(2), 2);
+}

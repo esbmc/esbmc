@@ -70,7 +70,7 @@ public:
   smt_sort(smt_sort_kind i, std::size_t width, std::size_t sigwidth)
     : id(i), data_width(width), secondary_width(sigwidth), range_sort(nullptr)
   {
-    assert(id == SMT_SORT_FLOATBV);
+    assert(id >= SMT_SORT_FLOATBV || id <= SMT_SORT_FAKE_FLOATBV);
   }
 
   smt_sort(smt_sort_kind i, std::size_t dom_width, smt_sortt range_sort)

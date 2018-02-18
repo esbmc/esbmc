@@ -334,3 +334,18 @@ smt_sortt cvc_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
   return new solver_smt_sort<CVC4::Type>(
     SMT_SORT_ARRAY, t, domain->get_data_width(), range);
 }
+
+smt_sortt cvc_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_FAKE_FLOATBV,
+    em.mkBitVectorType(ew + sw + 1),
+    ew + sw + 1,
+    sw + 1);
+}
+
+smt_sortt cvc_convt::mk_fpbv_rm_sort()
+{
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_FAKE_FLOATBV_RM, em.mkBitVectorType(2), 2);
+}
