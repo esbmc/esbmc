@@ -6,8 +6,7 @@ fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
 
 smt_astt fp_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
-  std::cout << "Chosen solver doesn't support floating-point numbers\n";
-  (void)thereal;
+  return ctx->mk_smt_bvint(thereal.pack(), true, thereal.spec.width());
 }
 
 smt_sortt fp_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
