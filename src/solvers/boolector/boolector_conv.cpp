@@ -262,6 +262,8 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   case SMT_SORT_SBV:
   case SMT_SORT_UBV:
   case SMT_SORT_FIXEDBV:
+  case SMT_SORT_FAKE_FLOATBV:
+  case SMT_SORT_FAKE_FLOATBV_RM:
     node = boolector_var(
       btor, to_solver_smt_sort<BoolectorSort>(s)->s, name.c_str());
     break;
