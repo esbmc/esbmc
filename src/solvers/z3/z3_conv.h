@@ -113,6 +113,15 @@ public:
     override;
   smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) override;
 
+  smt_astt mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs) override;
+  smt_astt mk_smt_fpbv_is_nan(smt_astt op) override;
+  smt_astt mk_smt_fpbv_is_inf(smt_astt op) override;
+  smt_astt mk_smt_fpbv_is_normal(smt_astt op) override;
+  smt_astt mk_smt_fpbv_is_zero(smt_astt op) override;
+  smt_astt mk_smt_fpbv_is_negative(smt_astt op) override;
+  smt_astt mk_smt_fpbv_is_positive(smt_astt op) override;
+  smt_astt mk_smt_fpbv_abs(smt_astt op) override;
+
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_array_symbol(
     const std::string &name,

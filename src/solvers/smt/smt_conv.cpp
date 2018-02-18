@@ -826,7 +826,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     expr2tc side2 = *expr->get_sub_expr(1);
 
     if(is_floatbv_type(side1) && is_floatbv_type(side2))
-      a = convert_ieee_equal(expr);
+      a = fp_api->mk_smt_fpbv_eq(convert_ast(side1), convert_ast(side2));
     else
       a = args[0]->eq(this, args[1]);
     break;
@@ -842,7 +842,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     expr2tc side1 = *expr->get_sub_expr(0);
     expr2tc side2 = *expr->get_sub_expr(1);
     if(is_floatbv_type(side1) && is_floatbv_type(side2))
-      a = convert_ieee_equal(expr);
+      a = fp_api->mk_smt_fpbv_eq(convert_ast(side1), convert_ast(side2));
     else
       a = args[0]->eq(this, args[1]);
     a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
@@ -973,8 +973,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else if(is_floatbv_type(abs.value))
     {
-      smt_sortt sort = convert_sort(expr->type);
-      a = mk_func_app(sort, SMT_FUNC_FABS, &args[0], 1);
+      a = fp_api->mk_smt_fpbv_abs(args[0]);
     }
     else
     {
@@ -1625,9 +1624,8 @@ smt_astt smt_convt::convert_is_nan(const expr2tc &expr)
   if(!is_floatbv_type(isnan.value))
     return mk_smt_bool(false);
 
-  smt_sortt bs = boolean_sort;
   smt_astt operand = convert_ast(isnan.value);
-  return mk_func_app(bs, SMT_FUNC_ISNAN, operand);
+  return fp_api->mk_smt_fpbv_is_nan(operand);
 }
 
 smt_astt smt_convt::convert_is_inf(const expr2tc &expr)
@@ -1638,9 +1636,8 @@ smt_astt smt_convt::convert_is_inf(const expr2tc &expr)
   if(!is_floatbv_type(isinf.value))
     return mk_smt_bool(false);
 
-  smt_sortt bs = boolean_sort;
   smt_astt operand = convert_ast(isinf.value);
-  return mk_func_app(bs, SMT_FUNC_ISINF, operand);
+  return fp_api->mk_smt_fpbv_is_inf(operand);
 }
 
 smt_astt smt_convt::convert_is_normal(const expr2tc &expr)
@@ -1651,9 +1648,8 @@ smt_astt smt_convt::convert_is_normal(const expr2tc &expr)
   if(!is_floatbv_type(isnormal.value))
     return mk_smt_bool(true);
 
-  smt_sortt bs = boolean_sort;
   smt_astt operand = convert_ast(isnormal.value);
-  return mk_func_app(bs, SMT_FUNC_ISNORMAL, operand);
+  return fp_api->mk_smt_fpbv_is_normal(operand);
 }
 
 smt_astt smt_convt::convert_is_finite(const expr2tc &expr)
@@ -1664,17 +1660,14 @@ smt_astt smt_convt::convert_is_finite(const expr2tc &expr)
   if(!is_floatbv_type(isfinite.value))
     return mk_smt_bool(true);
 
-  smt_sortt bs = boolean_sort;
+  smt_astt value = convert_ast(isfinite.value);
 
   // isfinite = !(isinf || isnan)
-  auto is_inf = expr2tc(new isinf2t(isfinite.value->clone()));
-  smt_astt isinf = convert_is_inf(is_inf);
+  smt_astt isinf = fp_api->mk_smt_fpbv_is_inf(value);
+  smt_astt isnan = fp_api->mk_smt_fpbv_is_nan(value);
 
-  auto is_nan = expr2tc(new isnan2t(isfinite.value->clone()));
-  smt_astt isnan = convert_is_nan(is_nan);
-
-  smt_astt or_op = mk_func_app(bs, SMT_FUNC_OR, isinf, isnan);
-  return mk_func_app(bs, SMT_FUNC_NOT, or_op);
+  smt_astt or_op = mk_func_app(boolean_sort, SMT_FUNC_OR, isinf, isnan);
+  return mk_func_app(boolean_sort, SMT_FUNC_NOT, or_op);
 }
 
 smt_astt smt_convt::convert_signbit(const expr2tc &expr)
@@ -1687,18 +1680,16 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
   auto sort = convert_sort(signbit.type);
 
   // Create is_neg
-  // For fixedbvs, we check if it's < 0
   smt_astt is_neg;
   if(!config.ansi_c.use_fixed_for_float && !int_encoding)
-    is_neg = mk_func_app(boolean_sort, SMT_FUNC_ISNEG, value);
+    is_neg = fp_api->mk_smt_fpbv_is_negative(value);
   else
-  {
+    // For fixedbvs, we check if it's < 0
     is_neg = mk_func_app(
       boolean_sort,
       SMT_FUNC_LT,
       value,
       convert_ast(gen_zero(signbit.operand->type)));
-  }
 
   // If it's true, return 1. Return 0, othewise.
   return mk_func_app(
@@ -1707,15 +1698,6 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
     is_neg,
     convert_ast(gen_one(signbit.type)),
     convert_ast(gen_zero(signbit.type)));
-}
-
-smt_astt smt_convt::convert_ieee_equal(const expr2tc &expr)
-{
-  smt_sortt bs = boolean_sort;
-  smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
-  smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
-
-  return mk_func_app(bs, SMT_FUNC_IEEE_EQ, s1, s2);
 }
 
 smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)

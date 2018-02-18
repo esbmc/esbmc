@@ -322,29 +322,6 @@ smt_astt z3_convt::mk_func_app(
     return new_ast((asts[0]->a == asts[1]->a), s);
   case SMT_FUNC_NOTEQ:
     return new_ast((asts[0]->a != asts[1]->a), s);
-  case SMT_FUNC_FABS:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_abs(z3_ctx, asts[0]->a)), s);
-  case SMT_FUNC_ISNAN:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_nan(z3_ctx, asts[0]->a)), s);
-  case SMT_FUNC_ISINF:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_infinite(z3_ctx, asts[0]->a)), s);
-  case SMT_FUNC_ISNORMAL:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_normal(z3_ctx, asts[0]->a)), s);
-  case SMT_FUNC_ISZERO:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_zero(z3_ctx, asts[0]->a)), s);
-  case SMT_FUNC_ISNEG:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_negative(z3_ctx, asts[0]->a)), s);
-  case SMT_FUNC_ISPOS:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_is_positive(z3_ctx, asts[0]->a)), s);
-  case SMT_FUNC_IEEE_EQ:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_fpa_eq(z3_ctx, asts[0]->a, asts[1]->a)), s);
   case SMT_FUNC_ITE:
     return new_ast(ite(asts[0]->a, asts[1]->a, asts[2]->a), s);
   case SMT_FUNC_STORE:
@@ -1088,4 +1065,76 @@ smt_astt z3_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
   const z3_smt_ast *mrhs = to_solver_smt_ast<z3_smt_ast>(rhs);
   const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
   return new_ast(z3_ctx.fpa_div(mrm->a, mlhs->a, mrhs->a), lhs->sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_fpa_eq(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(lhs)->a,
+        to_solver_smt_ast<z3_smt_ast>(rhs)->a)),
+    lhs->sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_is_nan(smt_astt op)
+{
+  return new_ast(
+    z3::to_expr(
+      z3_ctx, Z3_mk_fpa_is_nan(z3_ctx, to_solver_smt_ast<z3_smt_ast>(op)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_is_inf(smt_astt op)
+{
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_fpa_is_infinite(z3_ctx, to_solver_smt_ast<z3_smt_ast>(op)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_is_normal(smt_astt op)
+{
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_fpa_is_normal(z3_ctx, to_solver_smt_ast<z3_smt_ast>(op)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_is_zero(smt_astt op)
+{
+  return new_ast(
+    z3::to_expr(
+      z3_ctx, Z3_mk_fpa_is_zero(z3_ctx, to_solver_smt_ast<z3_smt_ast>(op)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_is_negative(smt_astt op)
+{
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_fpa_is_negative(z3_ctx, to_solver_smt_ast<z3_smt_ast>(op)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_is_positive(smt_astt op)
+{
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_fpa_is_positive(z3_ctx, to_solver_smt_ast<z3_smt_ast>(op)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_abs(smt_astt op)
+{
+  return new_ast(
+    z3::to_expr(
+      z3_ctx, Z3_mk_fpa_abs(z3_ctx, to_solver_smt_ast<z3_smt_ast>(op)->a)),
+    op->sort);
 }

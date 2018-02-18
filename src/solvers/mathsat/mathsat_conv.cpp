@@ -438,30 +438,6 @@ smt_ast *mathsat_convt::mk_func_app(
   case SMT_FUNC_SELECT:
     r = msat_make_array_read(env, args[0]->a, args[1]->a);
     break;
-  case SMT_FUNC_ISZERO:
-    r = msat_make_fp_iszero(env, args[0]->a);
-    break;
-  case SMT_FUNC_FABS:
-    r = msat_make_fp_abs(env, args[0]->a);
-    break;
-  case SMT_FUNC_ISNAN:
-    r = msat_make_fp_isnan(env, args[0]->a);
-    break;
-  case SMT_FUNC_ISINF:
-    r = msat_make_fp_isinf(env, args[0]->a);
-    break;
-  case SMT_FUNC_ISNORMAL:
-    r = msat_make_fp_isnormal(env, args[0]->a);
-    break;
-  case SMT_FUNC_ISNEG:
-    r = msat_make_fp_isneg(env, args[0]->a);
-    break;
-  case SMT_FUNC_ISPOS:
-    r = msat_make_fp_ispos(env, args[0]->a);
-    break;
-  case SMT_FUNC_IEEE_EQ:
-    r = msat_make_fp_equal(env, args[0]->a, args[1]->a);
-    break;
   case SMT_FUNC_BV2FLOAT:
   {
     unsigned sw = s->get_significand_width();
@@ -904,4 +880,78 @@ smt_astt mathsat_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
   check_msat_error(t);
 
   return new mathsat_smt_ast(this, lhs->sort, t);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
+{
+  msat_term r = msat_make_fp_equal(
+    env,
+    to_solver_smt_ast<mathsat_smt_ast>(lhs)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(rhs)->a);
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, boolean_sort, r);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_nan(smt_astt op)
+{
+  msat_term r =
+    msat_make_fp_isnan(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, boolean_sort, r);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_inf(smt_astt op)
+{
+  msat_term r =
+    msat_make_fp_isinf(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, boolean_sort, r);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_normal(smt_astt op)
+{
+  msat_term r =
+    msat_make_fp_isnormal(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, boolean_sort, r);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_zero(smt_astt op)
+{
+  msat_term r =
+    msat_make_fp_iszero(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, boolean_sort, r);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_negative(smt_astt op)
+{
+  msat_term r =
+    msat_make_fp_isneg(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, boolean_sort, r);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_positive(smt_astt op)
+{
+  msat_term r =
+    msat_make_fp_ispos(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, boolean_sort, r);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_abs(smt_astt op)
+{
+  msat_term r =
+    msat_make_fp_abs(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, op->sort, r);
 }
