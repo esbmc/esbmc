@@ -135,6 +135,47 @@ public:
   virtual smt_astt
   mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm);
 
+  /** Convert an ieee equality
+   *  @param lhs left hand side
+   *  @param rhs right hand side
+   *  @return The newly created fp.eq smt_ast. */
+  virtual smt_astt mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs);
+
+  /** Convert an ieee is_nan operation
+   *  @param op the operand
+   *  @return The newly created fp.isNaN smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_nan(smt_astt op);
+
+  /** Convert an ieee is_inf operation
+   *  @param op the operand
+   *  @return The newly created fp.isInfinite smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_inf(smt_astt op);
+
+  /** Convert an ieee is_normal operation
+   *  @param op the operand
+   *  @return The newly created fp.isNormal smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_normal(smt_astt op);
+
+  /** Convert an ieee is_zero operation
+   *  @param op the operand
+   *  @return The newly created fp.isZero smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_zero(smt_astt op);
+
+  /** Convert an ieee is_neg operation
+   *  @param op the operand
+   *  @return The newly created fp.isNegative smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_negative(smt_astt op);
+
+  /** Convert an ieee is_pos operation
+   *  @param op the operand
+   *  @return The newly created fp.isPositive smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_positive(smt_astt op);
+
+  /** Convert an ieee abs operation
+   *  @param op the operand
+   *  @return The newly created fp.abs smt_ast. */
+  virtual smt_astt mk_smt_fpbv_abs(smt_astt op);
+
   /** Extract the assignment to a floating-point from the SMT solvers model.
    *  @param a the AST whos value we wish to know.
    *  @return the ieee floating-point */
