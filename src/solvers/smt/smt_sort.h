@@ -114,7 +114,7 @@ public:
 
   size_t get_significand_width() const
   {
-    assert(id == SMT_SORT_FLOATBV);
+    assert(id >= SMT_SORT_FLOATBV || id <= SMT_SORT_FAKE_FLOATBV);
     return secondary_width;
   }
 
