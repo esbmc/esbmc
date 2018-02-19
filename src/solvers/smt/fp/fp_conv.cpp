@@ -134,10 +134,12 @@ fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
 
 ieee_floatt fp_convt::get_fpbv(smt_astt a)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)a;
-  abort();
+  std::size_t width = a->sort->get_data_width();
+  std::size_t swidth = a->sort->get_significand_width();
+
+  ieee_floatt number(ieee_float_spect(swidth, width - swidth - 1));
+  number.unpack(ctx->get_bv(a));
+  return number;
 }
 
 smt_astt fp_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
