@@ -333,7 +333,7 @@ smt_sortt cvc_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
     SMT_SORT_ARRAY, t, domain->get_data_width(), range);
 }
 
-smt_sortt cvc_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+smt_sortt cvc_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
 {
   return new solver_smt_sort<CVC4::Type>(
     SMT_SORT_FAKE_FLOATBV,

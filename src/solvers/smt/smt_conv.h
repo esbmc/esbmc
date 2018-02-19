@@ -495,6 +495,9 @@ public:
   /** Create a bv sort */
   virtual smt_sortt mk_bv_sort(const smt_sort_kind k, std::size_t width);
 
+  /** Create a floating-point sort, using bitvectors */
+  virtual smt_sortt mk_bv_fp_sort(std::size_t ew, std::size_t sw);
+
   /** Create an array sort */
   virtual smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range);
 

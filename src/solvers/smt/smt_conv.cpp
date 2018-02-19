@@ -2971,3 +2971,11 @@ smt_sortt smt_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
   (void)range;
   abort();
 }
+
+smt_sortt smt_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
+{
+  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
+  (void)ew;
+  (void)sw;
+  abort();
+}
