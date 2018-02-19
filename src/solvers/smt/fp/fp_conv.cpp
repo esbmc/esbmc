@@ -215,8 +215,8 @@ smt_astt fp_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
 smt_astt fp_convt::mk_smt_fpbv_is_nan(smt_astt op)
 {
   // Extract the exponent bits
-  std::size_t exp_top = op->sort->get_data_width() - 1;
-  std::size_t exp_bot = op->sort->get_significand_width() - 1;
+  std::size_t exp_top = op->sort->get_data_width() - 2;
+  std::size_t exp_bot = op->sort->get_significand_width() - 2;
   std::size_t exp_width = exp_top - exp_bot;
   smt_astt exp = ctx->mk_extract(
     op, exp_top, exp_bot + 1, ctx->mk_bv_sort(SMT_SORT_UBV, exp_width));
