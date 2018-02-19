@@ -759,32 +759,25 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
 
 // ***************************** 'get' api *******************************
 
-expr2tc z3_convt::get_bool(const smt_ast *a)
+bool z3_convt::get_bool(const smt_ast *a)
 {
-  assert(a->sort->id == SMT_SORT_BOOL);
-
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
   z3::expr e = model.eval(za->a, false);
 
   if(Z3_get_bool_value(z3_ctx, e) == Z3_L_TRUE)
-    return gen_true_expr();
+    return true;
 
-  return gen_false_expr();
+  return false;
 }
 
-expr2tc z3_convt::get_bv(const type2tc &type, smt_astt a)
+BigInt z3_convt::get_bv(smt_astt a)
 {
-  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
-
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
   z3::expr e = model.eval(za->a, false);
 
   // Not a numeral? Let's not try to convert it
-  if(Z3_get_ast_kind(z3_ctx, e) != Z3_NUMERAL_AST)
-    return expr2tc();
-
-  BigInt val = string2integer(Z3_get_numeral_string(z3_ctx, e));
-  return build_bv(type, val);
+  assert(Z3_get_ast_kind(z3_ctx, e) != Z3_NUMERAL_AST);
+  return string2integer(Z3_get_numeral_string(z3_ctx, e));
 }
 
 ieee_floatt z3_convt::get_fpbv(smt_astt a)

@@ -167,11 +167,12 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     }
     else if(is_bool_type(it))
     {
-      res = ctx->get_bool(tuple->elements[i]);
+      res =
+        ctx->get_bool(tuple->elements[i]) ? gen_true_expr() : gen_false_expr();
     }
     else if(is_number_type(it))
     {
-      res = ctx->get_bv(it, tuple->elements[i]);
+      res = ctx->build_bv(it, ctx->get_bv(tuple->elements[i]));
     }
     else if(is_array_type(it))
     {

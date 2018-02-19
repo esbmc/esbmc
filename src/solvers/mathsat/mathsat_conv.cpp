@@ -93,17 +93,17 @@ smt_convt::resultt mathsat_convt::dec_solve()
   return smt_convt::P_ERROR;
 }
 
-expr2tc mathsat_convt::get_bool(const smt_ast *a)
+bool mathsat_convt::get_bool(const smt_ast *a)
 {
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
   msat_term t = msat_get_model_value(env, mast->a);
   check_msat_error(t);
 
-  expr2tc res;
+  bool res;
   if(msat_term_is_true(env, t))
-    res = gen_true_expr();
+    res = true;
   else if(msat_term_is_false(env, t))
-    res = gen_false_expr();
+    res = false;
   else
   {
     std::cerr << "Boolean model value is neither true or false" << std::endl;
@@ -114,10 +114,8 @@ expr2tc mathsat_convt::get_bool(const smt_ast *a)
   return res;
 }
 
-expr2tc mathsat_convt::get_bv(const type2tc &type, smt_astt a)
+BigInt mathsat_convt::get_bv(smt_astt a)
 {
-  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
-
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
   msat_term t = msat_get_model_value(env, mast->a);
   check_msat_error(t);
@@ -146,7 +144,7 @@ expr2tc mathsat_convt::get_bv(const type2tc &type, smt_astt a)
     abort();
   }
 
-  return build_bv(type, BigInt(finval));
+  return BigInt(finval);
 }
 
 ieee_floatt mathsat_convt::get_fpbv(smt_astt a)
@@ -194,7 +192,7 @@ expr2tc mathsat_convt::get_array_elem(
   check_msat_error(t);
 
   mathsat_smt_ast *tmpb = new mathsat_smt_ast(this, convert_sort(subtype), t);
-  expr2tc result = get_bv(subtype, tmpb);
+  expr2tc result = get_by_ast(subtype, tmpb);
   free(tmpb);
 
   msat_free(msat_term_repr(t));

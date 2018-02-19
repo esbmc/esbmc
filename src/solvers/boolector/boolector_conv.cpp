@@ -297,22 +297,21 @@ smt_ast *boolector_convt::mk_extract(
   return new_ast(s, b);
 }
 
-expr2tc boolector_convt::get_bool(const smt_ast *a)
+bool boolector_convt::get_bool(const smt_ast *a)
 {
-  assert(a->sort->id == SMT_SORT_BOOL);
   const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
   const char *result = boolector_bv_assignment(btor, ast->a);
 
   assert(result != NULL && "Boolector returned null bv assignment string");
 
-  expr2tc res;
+  bool res;
   switch(*result)
   {
   case '1':
-    res = gen_true_expr();
+    res = true;
     break;
   case '0':
-    res = gen_false_expr();
+    res = false;
     break;
   }
 
@@ -320,16 +319,15 @@ expr2tc boolector_convt::get_bool(const smt_ast *a)
   return res;
 }
 
-expr2tc boolector_convt::get_bv(const type2tc &type, smt_astt a)
+BigInt boolector_convt::get_bv(smt_astt a)
 {
-  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
   const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
 
   const char *result = boolector_bv_assignment(btor, ast->a);
   BigInt val = string2integer(result, 2);
   boolector_free_bv_assignment(btor, result);
 
-  return build_bv(type, val);
+  return val;
 }
 
 expr2tc boolector_convt::get_array_elem(

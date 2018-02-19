@@ -56,8 +56,8 @@ public:
   void pop_ctx() override;
   smt_convt::resultt dec_solve() override;
 
-  expr2tc get_bool(const smt_ast *a) override;
-  expr2tc get_bv(const type2tc &type, smt_astt a) override;
+  bool get_bool(const smt_ast *a) override;
+  BigInt get_bv(smt_astt a) override;
   ieee_floatt get_fpbv(smt_astt a) override;
   expr2tc get_array_elem(
     const smt_ast *array,

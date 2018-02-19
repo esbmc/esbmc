@@ -2519,12 +2519,12 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   switch(type->type_id)
   {
   case type2t::bool_id:
-    return get_bool(a);
+    return get_bool(a) ? gen_true_expr() : gen_false_expr();
 
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
-    return get_bv(type, a);
+    return build_bv(type, get_bv(a));
 
   case type2t::floatbv_id:
     return constant_floatbv2tc(fp_api->get_fpbv(a));
@@ -2914,14 +2914,7 @@ void smt_convt::print_model()
 
 tvt smt_convt::l_get(smt_astt a)
 {
-  expr2tc b = get_bool(a);
-  if(is_true(b))
-    return tvt(true);
-
-  if(is_false(b))
-    return tvt(false);
-
-  return tvt(tvt::TV_UNKNOWN);
+  return get_bool(a) ? tvt(true) : tvt(false);
 }
 
 expr2tc smt_convt::build_bv(const type2tc &type, BigInt value)

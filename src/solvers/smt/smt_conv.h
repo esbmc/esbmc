@@ -564,12 +564,12 @@ public:
   /** Extract the assignment to a boolean variable from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
    *  @return Expression representation of a's value, as a constant_bool2tc */
-  virtual expr2tc get_bool(smt_astt a) = 0;
+  virtual bool get_bool(smt_astt a) = 0;
 
   /** Extract the assignment to a bitvector from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
    *  @return Expression representation of a's value */
-  virtual expr2tc get_bv(const type2tc &type, smt_astt a) = 0;
+  virtual BigInt get_bv(smt_astt a) = 0;
 
   /** Builds the bitvector based on the value retrieved from the solver.
    *  @param type the type (fixedbv or (un)signedbv),

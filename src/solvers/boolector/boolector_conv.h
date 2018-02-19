@@ -64,8 +64,8 @@ public:
   void push_array_ctx() override;
   void pop_array_ctx() override;
 
-  expr2tc get_bool(const smt_ast *a) override;
-  expr2tc get_bv(const type2tc &type, smt_astt a) override;
+  bool get_bool(const smt_ast *a) override;
+  BigInt get_bv(smt_astt a) override;
   expr2tc get_array_elem(
     const smt_ast *array,
     uint64_t index,

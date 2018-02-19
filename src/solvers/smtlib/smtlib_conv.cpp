@@ -368,7 +368,7 @@ smt_convt::resultt smtlib_convt::dec_solve()
   }
 }
 
-expr2tc smtlib_convt::get_bv(const type2tc &type, smt_astt a)
+BigInt smtlib_convt::get_bv(smt_astt a)
 {
   // This should always be a symbol.
   const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(a);
@@ -434,17 +434,7 @@ expr2tc smtlib_convt::get_bv(const type2tc &type, smt_astt a)
   }
 
   delete smtlib_output;
-
-  if(is_fixedbv_type(type))
-  {
-    fixedbvt fbv(constant_exprt(
-      integer2binary(m, type->get_width()),
-      integer2string(m),
-      migrate_type_back(type)));
-    return constant_fixedbv2tc(fbv);
-  }
-
-  return constant_int2tc(type, m);
+  return m;
 }
 
 expr2tc smtlib_convt::get_array_elem(
@@ -596,7 +586,7 @@ expr2tc smtlib_convt::get_array_elem(
   return result;
 }
 
-expr2tc smtlib_convt::get_bool(smt_astt a)
+bool smtlib_convt::get_bool(smt_astt a)
 {
   fprintf(out_stream, "(get-value (");
 
@@ -646,14 +636,14 @@ expr2tc smtlib_convt::get_bool(smt_astt a)
   //         "Unexpected valuation variable from smtlib solver");
 
   // And finally we have our value. It should be true or false.
-  expr2tc result;
+  bool result;
   if(second.token == TOK_KW_TRUE)
   {
-    result = gen_true_expr();
+    result = true;
   }
   else if(second.token == TOK_KW_FALSE)
   {
-    result = gen_false_expr();
+    result = false;
   }
 
   delete smtlib_output;

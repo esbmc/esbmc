@@ -44,20 +44,19 @@ smt_convt::resultt cvc_convt::dec_solve()
   return P_UNSATISFIABLE;
 }
 
-expr2tc cvc_convt::get_bool(const smt_ast *a)
+bool cvc_convt::get_bool(const smt_ast *a)
 {
   auto const *ca = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a);
   CVC4::Expr e = smt.getValue(ca->a);
-  bool foo = e.getConst<bool>();
-  return foo ? gen_true_expr() : gen_false_expr();
+  return e.getConst<bool>();
 }
 
-expr2tc cvc_convt::get_bv(const type2tc &type, smt_astt a)
+BigInt cvc_convt::get_bv(smt_astt a)
 {
   auto const *ca = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a);
   CVC4::Expr e = smt.getValue(ca->a);
   CVC4::BitVector foo = e.getConst<CVC4::BitVector>();
-  return build_bv(type, BigInt(foo.toInteger().getUnsignedLong()));
+  return BigInt(foo.toInteger().getUnsignedLong());
 }
 
 expr2tc cvc_convt::get_array_elem(
@@ -75,7 +74,7 @@ expr2tc cvc_convt::get_array_elem(
 
   solver_smt_ast<CVC4::Expr> *tmpb =
     new solver_smt_ast<CVC4::Expr>(this, convert_sort(subtype), e);
-  expr2tc result = get_bv(subtype, tmpb);
+  expr2tc result = get_by_ast(subtype, tmpb);
   delete tmpb;
 
   return result;

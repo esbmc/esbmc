@@ -374,20 +374,16 @@ void yices_convt::pop_array_ctx()
 {
 }
 
-expr2tc yices_convt::get_bool(smt_astt a)
+bool yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
-  if(yices_get_bool_value(sat_model, ast->a, &val) != 0)
-    return expr2tc();
-
-  if(val)
-    return gen_true_expr();
-
-  return gen_false_expr();
+  auto res = yices_get_bool_value(sat_model, ast->a, &val);
+  assert(!res && "Can't get boolean value from Yices");
+  return val ? true : false;
 }
 
-expr2tc yices_convt::get_bv(const type2tc &type, smt_astt a)
+BigInt yices_convt::get_bv(smt_astt a)
 {
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
 
@@ -395,7 +391,7 @@ expr2tc yices_convt::get_bv(const type2tc &type, smt_astt a)
   if(int_encoding)
   {
     yices_get_int64_value(sat_model, ast->a, &val);
-    return build_bv(type, BigInt(val));
+    return BigInt(val);
   }
 
   unsigned int width = a->sort->get_data_width();
@@ -411,7 +407,7 @@ expr2tc yices_convt::get_bv(const type2tc &type, smt_astt a)
     val |= data[i];
   }
 
-  return build_bv(type, BigInt(val));
+  return BigInt(val);
 }
 
 expr2tc yices_convt::get_array_elem(

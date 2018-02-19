@@ -14,13 +14,13 @@ enum smt_sort_kind
   SMT_SORT_SBV = 1 << 2,
   SMT_SORT_UBV = 1 << 3,
   SMT_SORT_FIXEDBV = 1 << 4,
-  SMT_SORT_ARRAY = 1 << 5,
-  SMT_SORT_BOOL = 1 << 6,
-  SMT_SORT_STRUCT = 1 << 7,
-  SMT_SORT_FLOATBV = 1 << 8,
-  SMT_SORT_FAKE_FLOATBV = 1 << 9,
-  SMT_SORT_FLOATBV_RM = 1 << 10,
-  SMT_SORT_FAKE_FLOATBV_RM = 1 << 11,
+  SMT_SORT_FAKE_FLOATBV = 1 << 5,
+  SMT_SORT_FAKE_FLOATBV_RM = 1 << 6,
+  SMT_SORT_ARRAY = 1 << 7,
+  SMT_SORT_BOOL = 1 << 8,
+  SMT_SORT_STRUCT = 1 << 9,
+  SMT_SORT_FLOATBV = 1 << 10,
+  SMT_SORT_FLOATBV_RM = 1 << 11,
 };
 
 /** A class for storing an SMT sort.
