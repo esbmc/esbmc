@@ -279,18 +279,32 @@ smt_astt fp_convt::mk_smt_fpbv_is_zero(smt_astt op)
 
 smt_astt fp_convt::mk_smt_fpbv_is_negative(smt_astt op)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)op;
-  abort();
+  smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+
+  // Extract the sign bit
+  smt_astt sign = ctx->mk_extract(
+    op,
+    op->sort->get_data_width() - 1,
+    op->sort->get_data_width() - 1,
+    zero->sort);
+
+  // Compare with '0'
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sign, zero);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_is_positive(smt_astt op)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)op;
-  abort();
+  smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+
+  // Extract the sign bit
+  smt_astt sign = ctx->mk_extract(
+    op,
+    op->sort->get_data_width() - 1,
+    op->sort->get_data_width() - 1,
+    zero->sort);
+
+  // Compare with '0'
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOTEQ, sign, zero);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_abs(smt_astt op)
