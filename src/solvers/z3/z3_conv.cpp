@@ -402,9 +402,10 @@ smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
   const mp_integer exp =
     thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
 
-  smt_astt sgn_bv = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(thereal.get_sign()), 1);
-  smt_astt exp_bv = ctx->mk_smt_bv(SMT_SORT_UBV, exp, thereal.spec.e);
-  smt_astt sig_bv = ctx->mk_smt_bv(SMT_SORT_UBV, sig, thereal.spec.f);
+  smt_astt sgn_bv =
+    mk_smt_bv(mk_bv_sort(SMT_SORT_UBV, 1), BigInt(thereal.get_sign()));
+  smt_astt exp_bv = mk_smt_bv(mk_bv_sort(SMT_SORT_UBV, thereal.spec.e), exp);
+  smt_astt sig_bv = mk_smt_bv(mk_bv_sort(SMT_SORT_UBV, thereal.spec.f), sig);
 
   return new_ast(
     z3_ctx.fpa_val(
