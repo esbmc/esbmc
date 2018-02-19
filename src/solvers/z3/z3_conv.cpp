@@ -776,7 +776,6 @@ BigInt z3_convt::get_bv(smt_astt a)
   z3::expr e = model.eval(za->a, false);
 
   // Not a numeral? Let's not try to convert it
-  assert(Z3_get_ast_kind(z3_ctx, e) != Z3_NUMERAL_AST);
   return string2integer(Z3_get_numeral_string(z3_ctx, e));
 }
 
