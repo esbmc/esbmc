@@ -1,5 +1,23 @@
 #include <solvers/smt/smt_conv.h>
 
+static smt_astt extract_exponent(smt_convt *ctx, smt_astt fp)
+{
+  std::size_t exp_top = fp->sort->get_data_width() - 2;
+  std::size_t exp_bot = fp->sort->get_significand_width() - 2;
+  std::size_t exp_width = exp_top - exp_bot;
+  return ctx->mk_extract(
+    fp, exp_top, exp_bot + 1, ctx->mk_bv_sort(SMT_SORT_UBV, exp_width));
+}
+
+static smt_astt extract_significand(smt_convt *ctx, smt_astt fp)
+{
+  return ctx->mk_extract(
+    fp,
+    fp->sort->get_significand_width() - 1,
+    0,
+    ctx->mk_bv_sort(SMT_SORT_UBV, fp->sort->get_significand_width()));
+}
+
 fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
 {
 }
@@ -215,22 +233,14 @@ smt_astt fp_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
 smt_astt fp_convt::mk_smt_fpbv_is_nan(smt_astt op)
 {
   // Extract the exponent bits
-  std::size_t exp_top = op->sort->get_data_width() - 2;
-  std::size_t exp_bot = op->sort->get_significand_width() - 2;
-  std::size_t exp_width = exp_top - exp_bot;
-  smt_astt exp = ctx->mk_extract(
-    op, exp_top, exp_bot + 1, ctx->mk_bv_sort(SMT_SORT_UBV, exp_width));
+  smt_astt exp = extract_exponent(ctx, op);
 
   // Extract the significand bits
-  smt_astt sig = ctx->mk_extract(
-    op,
-    op->sort->get_significand_width() - 1,
-    0,
-    ctx->mk_bv_sort(SMT_SORT_UBV, op->sort->get_significand_width()));
+  smt_astt sig = extract_significand(ctx, op);
 
   // A fp is NaN if all bits in the exponent are ones
-  smt_astt all_ones =
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), exp_width);
+  smt_astt all_ones = ctx->mk_smt_bv(
+    SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), exp->sort->get_data_width());
 
   smt_astt exp_all_ones =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp, all_ones);
