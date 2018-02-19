@@ -393,22 +393,16 @@ smt_ast *mathsat_convt::mk_func_app(
   {
     // This is !SLT
     assert(s->id == SMT_SORT_BOOL);
-    const smt_ast *a = mk_func_app(s, SMT_FUNC_BVSLT, _args, numargs);
+    const smt_ast *a = mk_func_app(s, SMT_FUNC_LT, _args, numargs);
     return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
   }
   case SMT_FUNC_GT:
   case SMT_FUNC_BVSGT:
   {
     assert(s->id == SMT_SORT_BOOL);
-
     // (a > b) iff (b < a)
-    if(
-      (args[0]->sort->id == SMT_SORT_FLOATBV) &&
-      (args[1]->sort->id == SMT_SORT_FLOATBV))
-      r = msat_make_fp_lt(env, args[1]->a, args[0]->a);
-    else
-      r = msat_make_bv_slt(env, args[1]->a, args[0]->a);
-    break;
+    std::swap(args[0], args[1]);
+    return mk_func_app(s, SMT_FUNC_LT, _args, numargs);
   }
   case SMT_FUNC_LTE:
     if(
