@@ -336,8 +336,8 @@ smt_sortt cvc_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
 {
   return new solver_smt_sort<CVC4::Type>(
     SMT_SORT_FAKE_FLOATBV,
-    em.mkBitVectorType(ew + sw + 1),
-    ew + sw + 1,
+    em.mkBitVectorType(ew + sw + 2),
+    ew + sw + 2,
     sw + 1);
 }
 
