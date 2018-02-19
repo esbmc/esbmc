@@ -6,17 +6,13 @@ fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
 
 smt_astt fp_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
-  return ctx->mk_smt_bv(
-    SMT_SORT_FAKE_FLOATBV, thereal.pack(), thereal.spec.width());
+  smt_sortt s = ctx->mk_bv_fp_sort(thereal.spec.e, thereal.spec.f);
+  return ctx->mk_smt_bv(s, thereal.pack());
 }
 
 smt_sortt fp_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)ew;
-  (void)sw;
-  abort();
+  return ctx->mk_bv_fp_sort(ew, sw);
 }
 
 smt_sortt fp_convt::mk_fpbv_rm_sort()
