@@ -242,10 +242,17 @@ smt_astt fp_convt::mk_smt_fpbv_is_normal(smt_astt op)
 
 smt_astt fp_convt::mk_smt_fpbv_is_zero(smt_astt op)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)op;
-  abort();
+  // Both -0 and 0 should return true
+
+  // Compare with '0'
+  smt_astt zero =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), op->sort->get_data_width() - 1);
+
+  // Extract everything but the sign bit
+  smt_astt ew_sw =
+    ctx->mk_extract(op, op->sort->get_data_width() - 2, 0, zero->sort);
+
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, ew_sw, zero);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_is_negative(smt_astt op)
