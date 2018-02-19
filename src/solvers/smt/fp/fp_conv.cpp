@@ -91,10 +91,19 @@ smt_astt fp_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 
 smt_astt fp_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)rm;
-  abort();
+  switch(rm)
+  {
+  case ieee_floatt::ROUND_TO_EVEN:
+    return ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 2);
+  case ieee_floatt::ROUND_TO_MINUS_INF:
+    return ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 2);
+  case ieee_floatt::ROUND_TO_PLUS_INF:
+    return ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(2), 2);
+  case ieee_floatt::ROUND_TO_ZERO:
+    return ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(3), 2);
+  default:
+    abort();
+  }
 }
 
 smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
