@@ -40,21 +40,53 @@ smt_sortt fp_convt::mk_fpbv_rm_sort()
 
 smt_astt fp_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)ew;
-  (void)sw;
-  abort();
+  // TODO: we always create the same positive NaN:
+  // 01111111100000000000000000000001
+
+  // Create sign
+  smt_astt sign = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+
+  // All exponent bits are one
+  smt_astt exp_all_ones =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), ew);
+
+  // and significand is not zero
+  smt_astt sig_all_zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), sw);
+
+  // concat them all
+  smt_sortt tmp_sort = ctx->mk_bv_sort(
+    SMT_SORT_UBV,
+    sign->sort->get_data_width() + exp_all_ones->sort->get_data_width());
+
+  smt_astt sign_exp =
+    ctx->mk_func_app(tmp_sort, SMT_FUNC_CONCAT, sign, exp_all_ones);
+
+  smt_sortt s = ctx->mk_bv_fp_sort(ew, sw);
+  return ctx->mk_func_app(s, SMT_FUNC_CONCAT, sign_exp, sig_all_zero);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)sgn;
-  (void)ew;
-  (void)sw;
-  abort();
+  // Create sign
+  smt_astt sign = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(sgn), 1);
+
+  // All exponent bits are one
+  smt_astt exp_all_ones =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), ew);
+
+  // and all signficand bits are zero
+  smt_astt sig_all_zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw);
+
+  // concat them all
+  smt_sortt tmp_sort = ctx->mk_bv_sort(
+    SMT_SORT_UBV,
+    sign->sort->get_data_width() + exp_all_ones->sort->get_data_width());
+
+  smt_astt sign_exp =
+    ctx->mk_func_app(tmp_sort, SMT_FUNC_CONCAT, sign, exp_all_ones);
+
+  smt_sortt s = ctx->mk_bv_fp_sort(ew, sw);
+  return ctx->mk_func_app(s, SMT_FUNC_CONCAT, sign_exp, sig_all_zero);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
