@@ -229,9 +229,8 @@ smt_astt fp_convt::mk_smt_fpbv_is_nan(smt_astt op)
     ctx->mk_bv_sort(SMT_SORT_UBV, op->sort->get_significand_width()));
 
   // A fp is NaN if all bits in the exponent are ones
-  std::string all_ones_str(exp_width, '1');
   smt_astt all_ones =
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(all_ones_str.c_str()), exp_width);
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), exp_width);
 
   smt_astt exp_all_ones =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp, all_ones);
