@@ -524,7 +524,7 @@ smt_sortt boolector_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
     sw + 1);
 }
 
-smt_sortt boolector_convt::mk_fpbv_rm_sort()
+smt_sortt boolector_convt::mk_bv_fp_rm_sort()
 {
   return new solver_smt_sort<BoolectorSort>(
     SMT_SORT_FAKE_FLOATBV_RM, boolector_bitvec_sort(btor, 2), 2);

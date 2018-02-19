@@ -707,6 +707,12 @@ smt_sortt mathsat_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
     sw + 1);
 }
 
+smt_sortt mathsat_convt::mk_bv_fp_rm_sort()
+{
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_FAKE_FLOATBV_RM, msat_get_bv_type(env, 2), 2);
+}
+
 smt_sortt mathsat_convt::mk_bool_sort()
 {
   return new solver_smt_sort<msat_type>(

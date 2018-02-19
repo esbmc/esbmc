@@ -35,9 +35,7 @@ smt_sortt fp_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 
 smt_sortt fp_convt::mk_fpbv_rm_sort()
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  abort();
+  return ctx->mk_bv_fp_rm_sort();
 }
 
 smt_astt fp_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)

@@ -2972,3 +2972,9 @@ smt_sortt smt_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
   (void)sw;
   abort();
 }
+
+smt_sortt smt_convt::mk_bv_fp_rm_sort()
+{
+  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
+  abort();
+}

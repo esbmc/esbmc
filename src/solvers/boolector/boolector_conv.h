@@ -40,7 +40,7 @@ public:
   smt_sortt mk_bv_sort(const smt_sort_kind k, std::size_t width) override;
   smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range) override;
   smt_sortt mk_bv_fp_sort(std::size_t width, std::size_t swidth) override;
-  smt_sortt mk_fpbv_rm_sort() override;
+  smt_sortt mk_bv_fp_rm_sort() override;
 
   smt_ast *mk_smt_int(const mp_integer &theint, bool sign) override;
   smt_ast *mk_smt_real(const std::string &str) override;
