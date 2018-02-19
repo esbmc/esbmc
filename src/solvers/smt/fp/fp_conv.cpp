@@ -258,18 +258,54 @@ smt_astt fp_convt::mk_smt_fpbv_is_nan(smt_astt op)
 
 smt_astt fp_convt::mk_smt_fpbv_is_inf(smt_astt op)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)op;
-  abort();
+  // Extract the exponent bits
+  smt_astt exp = extract_exponent(ctx, op);
+
+  // Extract the significand bits
+  smt_astt sig = extract_significand(ctx, op);
+
+  // A fp is inf if all bits in the exponent are ones
+  smt_astt all_ones = ctx->mk_smt_bv(
+    SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), exp->sort->get_data_width());
+
+  smt_astt exp_all_ones =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp, all_ones);
+
+  // and the significand is zero
+  smt_astt zero =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sig->sort->get_data_width());
+
+  smt_astt sig_all_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sig, zero);
+
+  return ctx->mk_func_app(
+    ctx->boolean_sort, SMT_FUNC_AND, exp_all_ones, sig_all_zero);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_is_normal(smt_astt op)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)op;
-  abort();
+  // Extract the exponent bits
+  smt_astt exp = extract_exponent(ctx, op);
+
+  // Extract the significand bits
+  smt_astt sig = extract_significand(ctx, op);
+
+  // A fp is normal if the exponent is not zero
+  smt_astt zero =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), exp->sort->get_data_width());
+
+  smt_astt exp_not_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOTEQ, exp, zero);
+
+  // and the all bits in the significand are not one
+  smt_astt all_ones = ctx->mk_smt_bv(
+    SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), sig->sort->get_data_width());
+
+  smt_astt sig_not_all_ones =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOTEQ, sig, all_ones);
+
+  return ctx->mk_func_app(
+    ctx->boolean_sort, SMT_FUNC_AND, exp_not_zero, sig_not_all_ones);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_is_zero(smt_astt op)
