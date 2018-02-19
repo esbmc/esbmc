@@ -191,10 +191,37 @@ smt_astt fp_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
 
 smt_astt fp_convt::mk_smt_fpbv_is_nan(smt_astt op)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)op;
-  abort();
+  // Extract the exponent bits
+  std::size_t exp_top = op->sort->get_data_width() - 1;
+  std::size_t exp_bot = op->sort->get_significand_width() - 1;
+  std::size_t exp_width = exp_top - exp_bot;
+  smt_astt exp = ctx->mk_extract(
+    op, exp_top, exp_bot + 1, ctx->mk_bv_sort(SMT_SORT_UBV, exp_width));
+
+  // Extract the significand bits
+  smt_astt sig = ctx->mk_extract(
+    op,
+    op->sort->get_significand_width() - 1,
+    0,
+    ctx->mk_bv_sort(SMT_SORT_UBV, op->sort->get_significand_width()));
+
+  // A fp is NaN if all bits in the exponent are ones
+  std::string all_ones_str(exp_width, '1');
+  smt_astt all_ones =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(all_ones_str.c_str()), exp_width);
+
+  smt_astt exp_all_ones =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp, all_ones);
+
+  // and all bits in the significand are not zero
+  smt_astt zero =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sig->sort->get_data_width());
+
+  smt_astt sig_all_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOTEQ, sig, zero);
+
+  return ctx->mk_func_app(
+    ctx->boolean_sort, SMT_FUNC_AND, exp_all_ones, sig_all_zero);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_is_inf(smt_astt op)
