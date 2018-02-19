@@ -85,9 +85,7 @@ public:
 
   smt_astt mk_smt_int(const mp_integer &theint, bool sign) override;
   smt_astt mk_smt_real(const std::string &str) override;
-  smt_astt mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
-    override;
-
+  smt_astt mk_smt_bv(smt_sortt s, const mp_integer &theint) override;
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
   smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw) override;
   smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw) override;

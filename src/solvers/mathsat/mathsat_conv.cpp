@@ -187,7 +187,7 @@ expr2tc mathsat_convt::get_array_elem(
   size_t orig_w = array->sort->get_domain_width();
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(array);
 
-  smt_astt tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
+  smt_astt tmpast = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(index), orig_w);
   const mathsat_smt_ast *tmpa = to_solver_smt_ast<mathsat_smt_ast>(tmpast);
 
   msat_term t = msat_make_array_read(env, mast->a, tmpa->a);
@@ -482,10 +482,9 @@ smt_ast *mathsat_convt::mk_smt_real(const std::string &str)
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt
-mathsat_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
+smt_astt mathsat_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
 {
-  std::stringstream ss;
+  std::size_t w = s->get_data_width();
 
   // MathSAT refuses to parse negative integers. So, feed it binary.
   std::string str = integer2binary(theint, w);
@@ -494,7 +493,6 @@ mathsat_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
   msat_term t = msat_make_bv_number(env, str.c_str(), w, 2);
   check_msat_error(t);
 
-  smt_sortt s = mk_int_bv_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, w);
   return new mathsat_smt_ast(this, s, t);
 }
 

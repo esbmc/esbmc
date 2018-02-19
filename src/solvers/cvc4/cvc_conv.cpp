@@ -68,15 +68,15 @@ expr2tc cvc_convt::get_array_elem(
   auto const *carray = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(array);
   size_t orig_w = array->sort->get_domain_width();
 
-  smt_ast *tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
+  smt_astt tmpast = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(index), orig_w);
   auto const *tmpa = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(tmpast);
   CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->a, tmpa->a);
-  free(tmpast);
+  delete tmpast;
 
   solver_smt_ast<CVC4::Expr> *tmpb =
     new solver_smt_ast<CVC4::Expr>(this, convert_sort(subtype), e);
   expr2tc result = get_bv(subtype, tmpb);
-  free(tmpb);
+  delete tmpb;
 
   return result;
 }
@@ -234,15 +234,13 @@ smt_ast *cvc_convt::mk_smt_real(const std::string &str __attribute__((unused)))
   abort();
 }
 
-smt_ast *
-cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
+smt_ast *cvc_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
 {
-  smt_sortt s = mk_int_bv_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
+  std::size_t w = s->get_data_width();
 
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv =
-    CVC4::BitVector(width, (unsigned long int)theint.to_int64());
+  CVC4::BitVector bv = CVC4::BitVector(w, (unsigned long int)theint.to_int64());
   CVC4::Expr e = em.mkConst(bv);
   return new solver_smt_ast<CVC4::Expr>(this, s, e);
 }

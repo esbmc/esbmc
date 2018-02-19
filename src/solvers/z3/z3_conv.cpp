@@ -382,14 +382,14 @@ smt_astt z3_convt::mk_smt_real(const std::string &str)
   return new_ast(z3_ctx.real_val(str.c_str()), s);
 }
 
-smt_astt
-z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
+smt_astt z3_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
 {
-  smt_sortt s = mk_int_bv_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
-  if(theint.is_negative())
-    return new_ast(z3_ctx.bv_val(theint.to_int64(), width), s);
+  std::size_t w = s->get_data_width();
 
-  return new_ast(z3_ctx.bv_val(theint.to_uint64(), width), s);
+  if(theint.is_negative())
+    return new_ast(z3_ctx.bv_val(theint.to_int64(), w), s);
+
+  return new_ast(z3_ctx.bv_val(theint.to_uint64(), w), s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
@@ -402,9 +402,9 @@ smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
   const mp_integer exp =
     thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
 
-  smt_astt sgn_bv = mk_smt_bvint(BigInt(thereal.get_sign()), false, 1);
-  smt_astt exp_bv = mk_smt_bvint(exp, false, thereal.spec.e);
-  smt_astt sig_bv = mk_smt_bvint(sig, false, thereal.spec.f);
+  smt_astt sgn_bv = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(thereal.get_sign()), 1);
+  smt_astt exp_bv = ctx->mk_smt_bv(SMT_SORT_UBV, exp, thereal.spec.e);
+  smt_astt sig_bv = ctx->mk_smt_bv(SMT_SORT_UBV, sig, thereal.spec.f);
 
   return new_ast(
     z3_ctx.fpa_val(
@@ -834,7 +834,7 @@ expr2tc z3_convt::get_array_elem(
     idx = to_solver_smt_ast<z3_smt_ast>(mk_smt_int(BigInt(index), false));
   else
     idx = to_solver_smt_ast<z3_smt_ast>(
-      mk_smt_bvint(BigInt(index), false, array_bound));
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(index), array_bound));
 
   z3::expr e = model.eval(select(za->a, idx->a), false);
 

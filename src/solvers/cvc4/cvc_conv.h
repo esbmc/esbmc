@@ -29,8 +29,7 @@ public:
 
   smt_ast *mk_smt_int(const mp_integer &theint, bool sign) override;
   smt_ast *mk_smt_real(const std::string &str) override;
-  smt_ast *
-  mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w) override;
+  smt_ast *mk_smt_bv(smt_sortt s, const mp_integer &theint) override;
   smt_ast *mk_smt_bool(bool val) override;
   smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) override;
   smt_ast *mk_array_symbol(

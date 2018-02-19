@@ -568,7 +568,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       args[1] =
         convert_sign_ext(convert_ast(div.side_2), s2, topbit, fraction_bits);
 
-      smt_astt zero = mk_smt_bvint(BigInt(0), false, fraction_bits);
+      smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), fraction_bits);
       smt_astt op0 = convert_ast(div.side_1);
 
       args[0] = mk_func_app(s2, SMT_FUNC_CONCAT, op0, zero);
@@ -1481,13 +1481,15 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
   {
   case expr2t::constant_int_id:
   {
-    bool sign = is_signedbv_type(expr);
     const constant_int2t &theint = to_constant_int2t(expr);
     unsigned int width = expr->type->get_width();
     if(int_encoding)
-      return mk_smt_int(theint.value, sign);
+      return mk_smt_int(theint.value, is_signedbv_type(expr));
 
-    return mk_smt_bvint(theint.value, sign, width);
+    return mk_smt_bv(
+      is_signedbv_type(expr) ? SMT_SORT_SBV : SMT_SORT_UBV,
+      theint.value,
+      width);
   }
   case expr2t::constant_fixedbv_id:
   {
@@ -1517,7 +1519,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     magnitude <<= (bitwidth / 2);
     fin = magnitude | fraction;
 
-    return mk_smt_bvint(mp_integer(fin), false, bitwidth);
+    return mk_smt_bv(SMT_SORT_UBV, mp_integer(fin), bitwidth);
   }
   case expr2t::constant_floatbv_id:
   {
@@ -1726,19 +1728,19 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
     bs,
     SMT_FUNC_EQ,
     symbol,
-    mk_smt_bvint(BigInt(0), false, get_int32_type()->get_width()));
+    mk_smt_bv(SMT_SORT_UBV, BigInt(0), get_int32_type()->get_width()));
 
   smt_astt is_eq_one = mk_func_app(
     bs,
     SMT_FUNC_EQ,
     symbol,
-    mk_smt_bvint(BigInt(1), false, get_int32_type()->get_width()));
+    mk_smt_bv(SMT_SORT_UBV, BigInt(1), get_int32_type()->get_width()));
 
   smt_astt is_eq_two = mk_func_app(
     bs,
     SMT_FUNC_EQ,
     symbol,
-    mk_smt_bvint(BigInt(2), false, get_int32_type()->get_width()));
+    mk_smt_bv(SMT_SORT_UBV, BigInt(2), get_int32_type()->get_width()));
 
   smt_astt ne = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
   smt_astt mi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
@@ -1779,11 +1781,11 @@ smt_astt smt_convt::convert_sign_ext(
 {
   smt_sortt bit = mk_int_bv_sort(SMT_SORT_UBV, 1);
   smt_astt the_top_bit = mk_extract(a, topbit - 1, topbit - 1, bit);
-  smt_astt zero_bit = mk_smt_bvint(BigInt(0), false, 1);
+  smt_astt zero_bit = mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
   smt_sortt b = boolean_sort;
   smt_astt t = mk_func_app(b, SMT_FUNC_EQ, the_top_bit, zero_bit);
 
-  smt_astt z = mk_smt_bvint(BigInt(0), false, topwidth);
+  smt_astt z = mk_smt_bv(SMT_SORT_UBV, BigInt(0), topwidth);
 
   // Calculate the exact value; SMTLIB text parsers don't like taking an
   // over-full integer literal.
@@ -1791,7 +1793,7 @@ smt_astt smt_convt::convert_sign_ext(
   unsigned int num_topbits = 64 - topwidth;
   big >>= num_topbits;
   BigInt big_int(big);
-  smt_astt f = mk_smt_bvint(big_int, false, topwidth);
+  smt_astt f = mk_smt_bv(SMT_SORT_UBV, big_int, topwidth);
 
   smt_sortt topsort = mk_int_bv_sort(SMT_SORT_UBV, topwidth);
   smt_astt topbits = mk_func_app(topsort, SMT_FUNC_ITE, t, z, f);
@@ -1802,7 +1804,7 @@ smt_astt smt_convt::convert_sign_ext(
 smt_astt
 smt_convt::convert_zero_ext(smt_astt a, smt_sortt s, unsigned int topwidth)
 {
-  smt_astt z = mk_smt_bvint(BigInt(0), false, topwidth);
+  smt_astt z = mk_smt_bv(SMT_SORT_UBV, BigInt(0), topwidth);
   return mk_func_app(s, SMT_FUNC_CONCAT, z, a);
 }
 
@@ -1851,7 +1853,7 @@ smt_astt smt_convt::round_fixedbv_to_int(
 
   // Determine whether the source is signed from its topmost bit.
   smt_astt is_neg_bit = mk_extract(a, fromwidth - 1, fromwidth - 1, bit);
-  smt_astt true_bit = mk_smt_bvint(BigInt(1), false, 1);
+  smt_astt true_bit = mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
 
   // Also collect data for dealing with the magnitude.
   smt_astt magnitude = mk_extract(a, fromwidth - 1, frac_width, halfwidth);
@@ -1860,7 +1862,7 @@ smt_astt smt_convt::round_fixedbv_to_int(
 
   // Data for inspecting fraction part
   smt_astt frac_part = mk_extract(a, frac_width - 1, 0, bit);
-  smt_astt zero = mk_smt_bvint(BigInt(0), false, frac_width);
+  smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), frac_width);
   smt_astt is_zero_frac = mk_func_app(boolsort, SMT_FUNC_EQ, frac_part, zero);
 
   // So, we have a base number (the magnitude), and need to decide whether to
@@ -1868,7 +1870,7 @@ smt_astt smt_convt::round_fixedbv_to_int(
   // and the fraction is zero, leave it, otherwise round towards zero.
 
   // We may need a value + 1.
-  smt_astt one = mk_smt_bvint(BigInt(1), false, towidth);
+  smt_astt one = mk_smt_bv(SMT_SORT_UBV, BigInt(1), towidth);
   smt_astt intvalue_plus_one =
     mk_func_app(tosort, SMT_FUNC_BVADD, intvalue, one);
 
@@ -1888,9 +1890,9 @@ smt_astt smt_convt::make_bool_bit(smt_astt a)
     "Wrong sort fed to "
     "smt_convt::make_bool_bit");
   smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
-                                : mk_smt_bvint(BigInt(1), false, 1);
+                                : mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
   smt_astt zero = (int_encoding) ? mk_smt_int(BigInt(0), false)
-                                 : mk_smt_bvint(BigInt(0), false, 1);
+                                 : mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
   return mk_func_app(one->sort, SMT_FUNC_ITE, a, one, zero);
 }
 
@@ -1905,7 +1907,7 @@ smt_astt smt_convt::make_bit_bool(smt_astt a)
 
   smt_sortt boolsort = boolean_sort;
   smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
-                                : mk_smt_bvint(BigInt(1), false, 1);
+                                : mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
   return mk_func_app(boolsort, SMT_FUNC_EQ, a, one);
 }
 
@@ -2727,8 +2729,8 @@ smt_astt array_iface::default_convert_array_of(
 
   if(init_val->sort->id == SMT_SORT_BOOL && !supports_bools_in_arrays)
   {
-    smt_astt zero = ctx->mk_smt_bvint(BigInt(0), false, 1);
-    smt_astt one = ctx->mk_smt_bvint(BigInt(0), false, 1);
+    smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+    smt_astt one = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
     smt_sortt result_sort = ctx->mk_int_bv_sort(SMT_SORT_UBV, 1);
     init_val = ctx->mk_func_app(result_sort, SMT_FUNC_ITE, init_val, one, zero);
   }

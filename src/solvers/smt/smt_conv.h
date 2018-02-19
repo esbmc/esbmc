@@ -513,14 +513,26 @@ public:
    *  @return The newly created terminal smt_ast of this real. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
 
-  /** Create a bitvector.
+  /** Create a bitvector. Creates the sort and calls the solver.
+   *  @param k The sort kind, SBV, UBV, or FAKE_FP.
    *  @param theint Integer representation of the bitvector. Any excess bits
    *         in the stored integer should be ignored.
-   *  @param sign Whether this bitvector is to be considered signed or not.
    *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
   virtual smt_astt
-  mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w) = 0;
+  mk_smt_bv(const smt_sort_kind k, const mp_integer &theint, std::size_t w)
+  {
+    smt_sortt sort = mk_int_bv_sort(k, w);
+    return mk_smt_bv(sort, theint);
+  }
+
+  /** Create a bitvector.
+   *  @param s the sort.
+   *  @param theint Integer representation of the bitvector. Any excess bits
+   *         in the stored integer should be ignored.
+   *  @param w Width, in bits, of the bitvector to create.
+   *  @return The newly created terminal smt_ast of this bitvector. */
+  virtual smt_astt mk_smt_bv(smt_sortt s, const mp_integer &theint) = 0;
 
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.

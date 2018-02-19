@@ -178,20 +178,17 @@ smt_ast *boolector_convt::mk_smt_real(const std::string &str
   abort();
 }
 
-smt_ast *boolector_convt::mk_smt_bvint(
-  const mp_integer &theint,
-  bool sign,
-  unsigned int width)
+smt_astt boolector_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
 {
-  smt_sortt s = mk_int_bv_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
+  std::size_t w = s->get_data_width();
 
-  if(width > 32)
+  if(w > 32)
   {
     // We have to pass things around via means of strings, becausae boolector
     // uses native int types as arguments to its functions, rather than fixed
     // width integers. Seeing how amd64 is LP64, there's no way to pump 64 bit
     // ints to boolector natively.
-    if(width > 64)
+    if(w > 64)
     {
       std::cerr << "Boolector backend assumes maximum bitwidth is 64, sorry"
                 << std::endl;
@@ -203,8 +200,8 @@ smt_ast *boolector_convt::mk_smt_bvint(
 
     // Note that boolector has the most significant bit first in bit strings.
     int64_t num = theint.to_int64();
-    uint64_t bit = 1ULL << (width - 1);
-    for(unsigned int i = 0; i < width; i++)
+    uint64_t bit = 1ULL << (w - 1);
+    for(unsigned int i = 0; i < w; i++)
     {
       if(num & bit)
         buffer[i] = '1';
@@ -219,7 +216,7 @@ smt_ast *boolector_convt::mk_smt_bvint(
   }
 
   BoolectorNode *node;
-  if(sign)
+  if(s->id == SMT_SORT_SBV)
   {
     node = boolector_int(
       btor, theint.to_long(), to_solver_smt_sort<BoolectorSort>(s)->s);

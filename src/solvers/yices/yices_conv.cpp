@@ -299,13 +299,10 @@ smt_astt yices_convt::mk_smt_real(const std::string &str)
   return new_ast(s, term);
 }
 
-smt_astt yices_convt::mk_smt_bvint(
-  const mp_integer &theint,
-  bool sign,
-  unsigned int width)
+smt_astt yices_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
 {
-  smt_sortt s = mk_int_bv_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
-  term_t term = yices_bvconst_uint64(width, theint.to_int64());
+  std::size_t w = s->get_data_width();
+  term_t term = yices_bvconst_uint64(w, theint.to_int64());
   return new yices_smt_ast(this, s, term);
 }
 

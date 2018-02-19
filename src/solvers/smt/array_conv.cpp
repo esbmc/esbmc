@@ -166,7 +166,7 @@ smt_astt array_convt::mk_select(
   smt_astt theval = fresh; // Failed-to-look-up value
   for(unsigned long i = 0; i < ma->array_fields.size(); i++)
   {
-    smt_astt tmp_idx = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
+    smt_astt tmp_idx = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(i), dom_width);
     smt_astt idx_eq = real_idx->eq(ctx, tmp_idx);
     theval = ma->array_fields[i]->ite(ctx, idx_eq, theval);
   }
@@ -210,7 +210,7 @@ smt_astt array_convt::mk_store(
 
   for(unsigned long i = 0; i < mast->array_fields.size(); i++)
   {
-    smt_astt this_idx = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
+    smt_astt this_idx = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(i), dom_width);
     smt_astt idx_eq = real_idx->eq(ctx, this_idx);
 
     smt_astt new_val = real_value->ite(ctx, idx_eq, mast->array_fields[i]);

@@ -72,7 +72,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(
   }
 
   // Make all zeros fraction bits
-  smt_astt zero_fracbits = mk_smt_bvint(BigInt(0), false, to_fraction_bits);
+  smt_astt zero_fracbits = mk_smt_bv(SMT_SORT_UBV, BigInt(0), to_fraction_bits);
   return mk_func_app(s, SMT_FUNC_CONCAT, frontpart, zero_fracbits);
 }
 
@@ -88,8 +88,8 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(
   smt_sortt s = convert_sort(cast.type);
 
   smt_sortt intsort;
-  smt_astt zero = mk_smt_bvint(BigInt(0), false, to_integer_bits);
-  smt_astt one = mk_smt_bvint(BigInt(1), false, to_integer_bits);
+  smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), to_integer_bits);
+  smt_astt one = mk_smt_bv(SMT_SORT_UBV, BigInt(1), to_integer_bits);
   intsort = mk_int_bv_sort(SMT_SORT_UBV, to_integer_bits);
   smt_astt switched = mk_func_app(intsort, SMT_FUNC_ITE, a, zero, one);
   return mk_func_app(s, SMT_FUNC_CONCAT, switched, zero);
@@ -159,7 +159,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
     smt_sortt tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, from_fraction_bits);
     smt_astt src_fraction = mk_extract(a, from_fraction_bits - 1, 0, tmp_sort);
     smt_astt zeros =
-      mk_smt_bvint(BigInt(0), false, to_fraction_bits - from_fraction_bits);
+      mk_smt_bv(SMT_SORT_UBV, BigInt(0), to_fraction_bits - from_fraction_bits);
 
     tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, to_fraction_bits);
     fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, src_fraction, zeros);
@@ -386,8 +386,8 @@ smt_astt smt_convt::convert_typecast_to_ints_from_bool(const typecast2t &cast)
   smt_astt zero, one;
   unsigned width = cast.type->get_width();
 
-  zero = mk_smt_bvint(BigInt(0), false, width);
-  one = mk_smt_bvint(BigInt(1), false, width);
+  zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), width);
+  one = mk_smt_bv(SMT_SORT_UBV, BigInt(1), width);
 
   return mk_func_app(s, SMT_FUNC_ITE, a, one, zero);
 }

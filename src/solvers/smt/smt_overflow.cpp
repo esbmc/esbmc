@@ -193,9 +193,9 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   smt_sortt pos_zero_bits_sort = mk_int_bv_sort(SMT_SORT_UBV, pos_zero_bits);
   smt_sortt neg_one_bits_sort = mk_int_bv_sort(SMT_SORT_UBV, neg_one_bits);
 
-  smt_astt pos_bits = mk_smt_bvint(BigInt(0), false, pos_zero_bits);
+  smt_astt pos_bits = mk_smt_bv(SMT_SORT_UBV, BigInt(0), pos_zero_bits);
   smt_astt neg_bits =
-    mk_smt_bvint(BigInt((1 << neg_one_bits) - 1), false, neg_one_bits);
+    mk_smt_bv(SMT_SORT_UBV, BigInt((1 << neg_one_bits) - 1), neg_one_bits);
 
   smt_astt pos_sel =
     mk_extract(orig_val, width - 1, width - pos_zero_bits, pos_zero_bits_sort);

@@ -730,10 +730,8 @@ smt_ast *smtlib_convt::mk_smt_real(const std::string &str)
   return a;
 }
 
-smt_ast *
-smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
+smt_astt smtlib_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
 {
-  smt_sortt s = mk_int_bv_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, w);
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_BVINT);
   a->intval = theint;
   return a;
