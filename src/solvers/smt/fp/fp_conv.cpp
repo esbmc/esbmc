@@ -182,11 +182,32 @@ smt_astt fp_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
 
 smt_astt fp_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)lhs;
-  (void)rhs;
-  abort();
+  // Check if they are NaN
+  smt_astt lhs_is_nan = mk_smt_fpbv_is_nan(lhs);
+  smt_astt rhs_is_nan = mk_smt_fpbv_is_nan(rhs);
+  smt_astt either_is_nan =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, lhs_is_nan, rhs_is_nan);
+
+  // +0 and -0 should return true
+  smt_astt lhs_is_zero = mk_smt_fpbv_is_zero(lhs);
+  smt_astt rhs_is_zero = mk_smt_fpbv_is_zero(rhs);
+  smt_astt both_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, lhs_is_zero, rhs_is_zero);
+
+  // Otherwise compare them bitwise
+  smt_astt are_equal =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, lhs, rhs);
+
+  // They are equal if they are either +0 and -0 (and vice-versa) or bitwise
+  // equal and neither is NaN
+  smt_astt either_zero_or_equal =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, both_zero, are_equal);
+
+  smt_astt not_nan =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, either_is_nan);
+
+  return ctx->mk_func_app(
+    ctx->boolean_sort, SMT_FUNC_AND, either_zero_or_equal, not_nan);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_is_nan(smt_astt op)
