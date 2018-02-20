@@ -897,6 +897,46 @@ void z3_convt::dump_smt()
   std::cout << solver << std::endl;
 }
 
+smt_astt z3_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    mk_gt(
+      to_solver_smt_ast<z3_smt_ast>(lhs)->a,
+      to_solver_smt_ast<z3_smt_ast>(rhs)->a,
+      false),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    mk_lt(
+      to_solver_smt_ast<z3_smt_ast>(lhs)->a,
+      to_solver_smt_ast<z3_smt_ast>(rhs)->a,
+      false),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    mk_ge(
+      to_solver_smt_ast<z3_smt_ast>(lhs)->a,
+      to_solver_smt_ast<z3_smt_ast>(rhs)->a,
+      false),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    mk_le(
+      to_solver_smt_ast<z3_smt_ast>(lhs)->a,
+      to_solver_smt_ast<z3_smt_ast>(rhs)->a,
+      false),
+    boolean_sort);
+}
+
 void z3_convt::print_model()
 {
   std::cout << Z3_model_to_string(z3_ctx, model);

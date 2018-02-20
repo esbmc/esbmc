@@ -141,6 +141,30 @@ public:
    *  @return The newly created fp.eq smt_ast. */
   virtual smt_astt mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs);
 
+  /** Convert an ieee greater than
+   *  @param lhs left hand side
+   *  @param rhs right hand side
+   *  @return The newly created fp.gt smt_ast. */
+  virtual smt_astt mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs);
+
+  /** Convert an ieee less than
+   *  @param lhs left hand side
+   *  @param rhs right hand side
+   *  @return The newly created fp.lt smt_ast. */
+  virtual smt_astt mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs);
+
+  /** Convert an ieee greater than or equal
+   *  @param lhs left hand side
+   *  @param rhs right hand side
+   *  @return The newly created fp.gt smt_ast. */
+  virtual smt_astt mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs);
+
+  /** Convert an ieee less than or equal
+   *  @param lhs left hand side
+   *  @param rhs right hand side
+   *  @return The newly created fp.lt smt_ast. */
+  virtual smt_astt mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs);
+
   /** Convert an ieee is_nan operation
    *  @param op the operand
    *  @return The newly created fp.isNaN smt_ast. */

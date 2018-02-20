@@ -257,6 +257,42 @@ smt_astt fp_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
     ctx->boolean_sort, SMT_FUNC_AND, either_zero_or_equal, not_nan);
 }
 
+smt_astt fp_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
+{
+  std::cout << "Missing implementation of " << __FUNCTION__
+            << " for the chosen solver\n";
+  (void)lhs;
+  (void)rhs;
+  abort();
+}
+
+smt_astt fp_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
+{
+  std::cout << "Missing implementation of " << __FUNCTION__
+            << " for the chosen solver\n";
+  (void)lhs;
+  (void)rhs;
+  abort();
+}
+
+smt_astt fp_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
+{
+  std::cout << "Missing implementation of " << __FUNCTION__
+            << " for the chosen solver\n";
+  (void)lhs;
+  (void)rhs;
+  abort();
+}
+
+smt_astt fp_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
+{
+  std::cout << "Missing implementation of " << __FUNCTION__
+            << " for the chosen solver\n";
+  (void)lhs;
+  (void)rhs;
+  abort();
+}
+
 smt_astt fp_convt::mk_smt_fpbv_is_nan(smt_astt op)
 {
   // Extract the exponent bits

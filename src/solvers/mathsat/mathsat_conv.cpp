@@ -405,24 +405,14 @@ smt_ast *mathsat_convt::mk_func_app(
     return mk_func_app(s, SMT_FUNC_LT, _args, numargs);
   }
   case SMT_FUNC_LTE:
-    if(
-      (args[0]->sort->id == SMT_SORT_FLOATBV) &&
-      (args[1]->sort->id == SMT_SORT_FLOATBV))
-      r = msat_make_fp_leq(env, args[0]->a, args[1]->a);
-    else
-      r = msat_make_leq(env, args[0]->a, args[1]->a);
+    r = msat_make_leq(env, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_BVSLTE:
     r = msat_make_bv_sleq(env, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_LT:
   case SMT_FUNC_BVSLT:
-    if(
-      (args[0]->sort->id == SMT_SORT_FLOATBV) &&
-      (args[1]->sort->id == SMT_SORT_FLOATBV))
-      r = msat_make_fp_lt(env, args[0]->a, args[1]->a);
-    else
-      r = msat_make_bv_slt(env, args[0]->a, args[1]->a);
+    r = msat_make_bv_slt(env, args[0]->a, args[1]->a);
     break;
   case SMT_FUNC_STORE:
     r = msat_make_array_write(env, args[0]->a, args[1]->a, args[2]->a);
@@ -890,6 +880,41 @@ smt_astt mathsat_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
 smt_astt mathsat_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
 {
   msat_term r = msat_make_fp_equal(
+    env,
+    to_solver_smt_ast<mathsat_smt_ast>(lhs)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(rhs)->a);
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, boolean_sort, r);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
+{
+  // (a > b) iff (b < a)
+  return mk_smt_fpbv_lt(rhs, lhs);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
+{
+  msat_term r = msat_make_fp_lt(
+    env,
+    to_solver_smt_ast<mathsat_smt_ast>(lhs)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(rhs)->a);
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, boolean_sort, r);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
+{
+  // This is !FPLT
+  const smt_ast *a = mk_smt_fpbv_lt(lhs, rhs);
+  return mk_func_app(boolean_sort, SMT_FUNC_NOT, &a, 1);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
+{
+  msat_term r = msat_make_fp_leq(
     env,
     to_solver_smt_ast<mathsat_smt_ast>(lhs)->a,
     to_solver_smt_ast<mathsat_smt_ast>(rhs)->a);

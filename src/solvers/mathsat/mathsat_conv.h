@@ -79,6 +79,10 @@ public:
   smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) override;
 
   smt_astt mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs) override;
+  smt_astt mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs) override;
+  smt_astt mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs) override;
+  smt_astt mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs) override;
+  smt_astt mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs) override;
   smt_astt mk_smt_fpbv_is_nan(smt_astt op) override;
   smt_astt mk_smt_fpbv_is_inf(smt_astt op) override;
   smt_astt mk_smt_fpbv_is_normal(smt_astt op) override;

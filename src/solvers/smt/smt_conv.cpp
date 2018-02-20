@@ -995,6 +995,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(lt.side_1, lt.side_2, expr);
     }
+    else if(is_floatbv_type(lt.side_1) && is_floatbv_type(lt.side_2))
+    {
+      a = fp_api->mk_smt_fpbv_lt(args[0], args[1]);
+    }
     else
     {
       a = convert_ast(
@@ -1005,7 +1009,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
                         SMT_FUNC_BVSLT,
                         SMT_FUNC_BVULT,
                         SMT_FUNC_BVSLT,
-                        SMT_FUNC_LT});
+                        SMT_FUNC_INVALID});
     }
     break;
   }
@@ -1019,6 +1023,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(lte.side_1, lte.side_2, expr);
     }
+    else if(is_floatbv_type(lte.side_1) && is_floatbv_type(lte.side_2))
+    {
+      a = fp_api->mk_smt_fpbv_lte(args[0], args[1]);
+    }
     else
     {
       a = convert_ast(
@@ -1029,7 +1037,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
                         SMT_FUNC_BVSLTE,
                         SMT_FUNC_BVULTE,
                         SMT_FUNC_BVSLTE,
-                        SMT_FUNC_LTE});
+                        SMT_FUNC_INVALID});
     }
     break;
   }
@@ -1043,6 +1051,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(gt.side_1, gt.side_2, expr);
     }
+    else if(is_floatbv_type(gt.side_1) && is_floatbv_type(gt.side_2))
+    {
+      a = fp_api->mk_smt_fpbv_gt(args[0], args[1]);
+    }
     else
     {
       a = convert_ast(
@@ -1053,7 +1065,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
                         SMT_FUNC_BVSGT,
                         SMT_FUNC_BVUGT,
                         SMT_FUNC_BVSGT,
-                        SMT_FUNC_GT});
+                        SMT_FUNC_INVALID});
     }
     break;
   }
@@ -1067,6 +1079,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(gte.side_1, gte.side_2, expr);
     }
+    else if(is_floatbv_type(gte.side_1) && is_floatbv_type(gte.side_2))
+    {
+      a = fp_api->mk_smt_fpbv_gte(args[0], args[1]);
+    }
     else
     {
       a = convert_ast(
@@ -1077,7 +1093,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
                         SMT_FUNC_BVSGTE,
                         SMT_FUNC_BVUGTE,
                         SMT_FUNC_BVSGTE,
-                        SMT_FUNC_GTE});
+                        SMT_FUNC_INVALID});
     }
     break;
   }
