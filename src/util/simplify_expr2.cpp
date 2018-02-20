@@ -2401,3 +2401,13 @@ expr2tc ieee_div2t::do_simplify(bool second __attribute__((unused))) const
   return simplify_floatbv_2ops<IEEE_divtor, ieee_div2t>(
     type, side_1, side_2, rounding_mode);
 }
+
+expr2tc ieee_fma2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
+
+expr2tc ieee_sqrt2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}

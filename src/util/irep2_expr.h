@@ -2497,6 +2497,8 @@ public:
   }
   ieee_fma2t(const ieee_fma2t &ref) = default;
 
+  expr2tc do_simplify(bool second) const override;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2516,6 +2518,8 @@ public:
   {
   }
   ieee_sqrt2t(const ieee_sqrt2t &ref) = default;
+
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
