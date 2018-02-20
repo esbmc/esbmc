@@ -259,11 +259,8 @@ smt_astt fp_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
 
 smt_astt fp_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)lhs;
-  (void)rhs;
-  abort();
+  // (a > b) iff (b < a)
+  return mk_smt_fpbv_lt(rhs, lhs);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
@@ -277,11 +274,9 @@ smt_astt fp_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
 
 smt_astt fp_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)lhs;
-  (void)rhs;
-  abort();
+  // This is !FPLT
+  smt_astt a = mk_smt_fpbv_lt(lhs, rhs);
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, a);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)

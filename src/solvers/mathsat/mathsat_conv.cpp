@@ -888,12 +888,6 @@ smt_astt mathsat_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
   return new mathsat_smt_ast(this, boolean_sort, r);
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
-{
-  // (a > b) iff (b < a)
-  return mk_smt_fpbv_lt(rhs, lhs);
-}
-
 smt_astt mathsat_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
 {
   msat_term r = msat_make_fp_lt(
@@ -903,13 +897,6 @@ smt_astt mathsat_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
   check_msat_error(r);
 
   return new mathsat_smt_ast(this, boolean_sort, r);
-}
-
-smt_astt mathsat_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
-{
-  // This is !FPLT
-  const smt_ast *a = mk_smt_fpbv_lt(lhs, rhs);
-  return mk_func_app(boolean_sort, SMT_FUNC_NOT, &a, 1);
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
