@@ -28,26 +28,9 @@ __ESBMC_HIDE:;
   type name(type n)                                                            \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-                                                                               \
     /* If not running in floatbv mode, using our old method */                 \
     if(!__ESBMC_floatbv_mode())                                                \
       return babylonian_sqrt(n);                                               \
-                                                                               \
-    /* If n is NaN, return NaN*/                                               \
-    if(isnan_func(n))                                                          \
-      return NAN;                                                              \
-                                                                               \
-    /* If n == +/-0.0, return +/- 0.0 */                                       \
-    if(n == 0.0)                                                               \
-      return n;                                                                \
-                                                                               \
-    /* if n < 0.0, return NAN */                                               \
-    if(n < 0.0)                                                                \
-      return NAN;                                                              \
-                                                                               \
-    /* if +inf, return +inf */                                                 \
-    if(isinf_func(n))                                                          \
-      return INFINITY;                                                         \
                                                                                \
     return sqrt_func(n);                                                       \
   }                                                                            \

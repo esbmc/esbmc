@@ -6,8 +6,6 @@
   type name(type f)                                                            \
   {                                                                            \
   __ESBMC_HIDE:                                                                \
-    if(f == 0.0 || isinf_func(f) || isnan_func(f))                             \
-      return f;                                                                \
     return nearbyint_func(f);                                                  \
   }                                                                            \
                                                                                \

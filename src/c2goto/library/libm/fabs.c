@@ -6,12 +6,6 @@
   type name(type f)                                                            \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    if(f == 0.0)                                                               \
-      return 0.0;                                                              \
-    if(isinf_func(f))                                                          \
-      return INFINITY;                                                         \
-    if(isnan_func(f))                                                          \
-      return NAN;                                                              \
     return abs_func(f);                                                        \
   }                                                                            \
                                                                                \
