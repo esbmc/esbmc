@@ -313,6 +313,8 @@ bool boolector_convt::get_bool(const smt_ast *a)
   case '0':
     res = false;
     break;
+  default:
+    abort();
   }
 
   boolector_free_bv_assignment(btor, result);

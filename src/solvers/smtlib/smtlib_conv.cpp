@@ -638,13 +638,11 @@ bool smtlib_convt::get_bool(smt_astt a)
   // And finally we have our value. It should be true or false.
   bool result;
   if(second.token == TOK_KW_TRUE)
-  {
     result = true;
-  }
   else if(second.token == TOK_KW_FALSE)
-  {
     result = false;
-  }
+  else
+    abort();
 
   delete smtlib_output;
   return result;
