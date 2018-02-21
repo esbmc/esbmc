@@ -18,6 +18,24 @@ static smt_astt extract_significand(smt_convt *ctx, smt_astt fp)
     ctx->mk_bv_sort(SMT_SORT_UBV, fp->sort->get_significand_width()));
 }
 
+static smt_astt extract_signbit(smt_convt *ctx, smt_astt fp)
+{
+  return ctx->mk_extract(
+    fp,
+    fp->sort->get_data_width() - 1,
+    fp->sort->get_data_width() - 1,
+    ctx->mk_bv_sort(SMT_SORT_UBV, 1));
+}
+
+static smt_astt extract_exp_sig(smt_convt *ctx, smt_astt fp)
+{
+  return ctx->mk_extract(
+    fp,
+    fp->sort->get_data_width() - 2,
+    0,
+    ctx->mk_bv_sort(SMT_SORT_UBV, fp->sort->get_data_width() - 1));
+}
+
 fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
 {
 }
@@ -373,8 +391,7 @@ smt_astt fp_convt::mk_smt_fpbv_is_zero(smt_astt op)
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), op->sort->get_data_width() - 1);
 
   // Extract everything but the sign bit
-  smt_astt ew_sw =
-    ctx->mk_extract(op, op->sort->get_data_width() - 2, 0, zero->sort);
+  smt_astt ew_sw = extract_exp_sig(ctx, op);
 
   return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, ew_sw, zero);
 }
@@ -384,11 +401,7 @@ smt_astt fp_convt::mk_smt_fpbv_is_negative(smt_astt op)
   smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
 
   // Extract the sign bit
-  smt_astt sign = ctx->mk_extract(
-    op,
-    op->sort->get_data_width() - 1,
-    op->sort->get_data_width() - 1,
-    zero->sort);
+  smt_astt sign = extract_signbit(ctx, op);
 
   // Compare with '0'
   return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sign, zero);
@@ -399,11 +412,7 @@ smt_astt fp_convt::mk_smt_fpbv_is_positive(smt_astt op)
   smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
 
   // Extract the sign bit
-  smt_astt sign = ctx->mk_extract(
-    op,
-    op->sort->get_data_width() - 1,
-    op->sort->get_data_width() - 1,
-    zero->sort);
+  smt_astt sign = extract_signbit(ctx, op);
 
   // Compare with '0'
   return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOTEQ, sign, zero);
@@ -411,12 +420,8 @@ smt_astt fp_convt::mk_smt_fpbv_is_positive(smt_astt op)
 
 smt_astt fp_convt::mk_smt_fpbv_abs(smt_astt op)
 {
-  smt_sortt no_sign_width =
-    ctx->mk_bv_sort(SMT_SORT_UBV, op->sort->get_data_width() - 1);
-
   // Extract everything but the sign bit
-  smt_astt ew_sw =
-    ctx->mk_extract(op, op->sort->get_data_width() - 2, 0, no_sign_width);
+  smt_astt ew_sw = extract_exp_sig(ctx, op);
 
   // Concat that with '0'
   smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
