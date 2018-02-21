@@ -283,11 +283,52 @@ smt_astt fp_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
 
 smt_astt fp_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)lhs;
-  (void)rhs;
-  abort();
+  // Check if they are NaN
+  smt_astt lhs_is_nan = mk_smt_fpbv_is_nan(lhs);
+  smt_astt rhs_is_nan = mk_smt_fpbv_is_nan(rhs);
+  smt_astt either_is_nan =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, lhs_is_nan, rhs_is_nan);
+  smt_astt not_nan =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, either_is_nan);
+
+  // +0 and -0 should return false
+  smt_astt lhs_is_zero = mk_smt_fpbv_is_zero(lhs);
+  smt_astt rhs_is_zero = mk_smt_fpbv_is_zero(rhs);
+  smt_astt both_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, lhs_is_zero, rhs_is_zero);
+  smt_astt not_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, both_zero);
+
+  // Extract the exponents, significands and signs
+  smt_astt lhs_exp_sig = extract_exp_sig(ctx, lhs);
+  smt_astt lhs_sign = extract_signbit(ctx, lhs);
+
+  smt_astt rhs_exp_sig = extract_exp_sig(ctx, rhs);
+  smt_astt rhs_sign = extract_signbit(ctx, lhs);
+
+  // Compare signs
+  smt_astt signs_equal =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, lhs_sign, rhs_sign);
+
+  // Compare the exp_sign
+  smt_astt ult = ctx->mk_func_app(
+    ctx->boolean_sort, SMT_FUNC_BVULT, lhs_exp_sig, rhs_exp_sig);
+
+  // If the signs are equal, return x < y, otherwise return the sign of y
+  smt_astt lhs_sign_eq_1 = ctx->mk_func_app(
+    ctx->boolean_sort,
+    SMT_FUNC_EQ,
+    lhs_sign,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1));
+
+  smt_astt comp = ctx->mk_func_app(
+    ctx->boolean_sort, SMT_FUNC_ITE, signs_equal, ult, lhs_sign_eq_1);
+
+  smt_astt not_zeros_not_nan =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, not_zero, not_nan);
+
+  return ctx->mk_func_app(
+    ctx->boolean_sort, SMT_FUNC_AND, not_zeros_not_nan, comp);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
