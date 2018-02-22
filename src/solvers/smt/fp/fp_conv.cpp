@@ -142,22 +142,25 @@ fp_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
   abort();
 }
 
-smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, smt_sortt to)
+static smt_astt fpbv_to_bv(smt_convt *ctx, smt_astt from, smt_sortt to, bool s)
 {
   std::cout << "Missing implementation of " << __FUNCTION__
             << " for the chosen solver\n";
+  (void)ctx;
   (void)from;
   (void)to;
+  (void)s;
   abort();
+}
+
+smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, smt_sortt to)
+{
+  return fpbv_to_bv(ctx, from, to, false);
 }
 
 smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, smt_sortt to)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)from;
-  (void)to;
-  abort();
+  return fpbv_to_bv(ctx, from, to, true);
 }
 
 smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_fpbv(
