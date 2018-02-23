@@ -429,7 +429,7 @@ smt_astt z3_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 
 smt_astt z3_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
-  smt_sortt s = fp_api->mk_fpbv_rm_sort();
+  smt_sortt s = mk_fpbv_rm_sort();
 
   switch(rm)
   {
