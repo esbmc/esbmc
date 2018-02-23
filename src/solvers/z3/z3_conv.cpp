@@ -953,7 +953,7 @@ smt_sortt z3_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 smt_sortt z3_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
 {
   return new solver_smt_sort<z3::sort>(
-    SMT_SORT_FAKE_FLOATBV, z3_ctx.bv_sort(ew + sw + 2), ew + sw + 2, sw + 1);
+    SMT_SORT_FAKE_FLOATBV, z3_ctx.bv_sort(ew + sw + 1), ew + sw + 1, sw);
 }
 
 smt_sortt z3_convt::mk_bv_fp_rm_sort()

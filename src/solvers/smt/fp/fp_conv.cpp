@@ -203,7 +203,7 @@ ieee_floatt fp_convt::get_fpbv(smt_astt a)
   std::size_t width = a->sort->get_data_width();
   std::size_t swidth = a->sort->get_significand_width();
 
-  ieee_floatt number(ieee_float_spect(swidth - 1, width - swidth - 1));
+  ieee_floatt number(ieee_float_spect(swidth, width - swidth - 1));
   number.unpack(ctx->get_bv(a));
   return number;
 }
