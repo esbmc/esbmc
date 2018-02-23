@@ -2,7 +2,7 @@ SUBDIRS = tuple fp
 
 noinst_LTLIBRARIES = libsmt.la
 libsmt_la_SOURCES = array_conv.cpp smt_byteops.cpp smt_casts.cpp \
-      smt_conv.cpp smt_memspace.cpp smt_overflow.cpp
+      smt_conv.cpp smt_memspace.cpp smt_overflow.cpp fp_irep2_conv.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir)
 
 smtincludedir = $(includedir)/solvers/smt

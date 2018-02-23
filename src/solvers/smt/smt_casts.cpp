@@ -171,9 +171,6 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
 
 smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
 {
-  smt_astt rm = convert_rounding_mode(cast.rounding_mode);
-  smt_astt from = convert_ast(cast.from);
-
   // The target type
   unsigned ew = to_floatbv_type(cast.type).exponent;
   unsigned sw = to_floatbv_type(cast.type).fraction;
@@ -186,7 +183,7 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
     // For bools, there is no direct conversion, so the cast is
     // transformed into fpa = b ? 1 : 0;
     const smt_ast *args[3];
-    args[0] = from;
+    args[0] = convert_ast(cast.from);
     args[1] = convert_ast(gen_one(cast.type));
     args[2] = convert_ast(gen_zero(cast.type));
 
@@ -194,13 +191,16 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
   }
 
   if(is_unsignedbv_type(cast.from))
-    return fp_api->mk_smt_typecast_ubv_to_fpbv(from, s, rm);
+    return mk_smt_typecast_ubv_to_fpbv(
+      cast.from, cast.type, cast.rounding_mode);
 
   if(is_signedbv_type(cast.from))
-    return fp_api->mk_smt_typecast_sbv_to_fpbv(from, s, rm);
+    return mk_smt_typecast_sbv_to_fpbv(
+      cast.from, cast.type, cast.rounding_mode);
 
   if(is_floatbv_type(cast.from))
-    return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(from, s, rm);
+    return mk_smt_typecast_from_fpbv_to_fpbv(
+      cast.from, cast.rounding_mode, cast.type->get_width());
 
   std::cerr << "Unexpected type in typecast to fpbv\n";
   abort();
@@ -208,27 +208,15 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
 
 smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
 {
-  smt_astt from = convert_ast(cast.from);
-
   if(is_unsignedbv_type(cast.type))
-    return fp_api->mk_smt_typecast_from_fpbv_to_ubv(
-      from, mk_int_bv_sort(SMT_SORT_UBV, cast.type->get_width()));
+    return mk_smt_typecast_from_fpbv_to_ubv(cast.from, cast.type->get_width());
 
   if(is_signedbv_type(cast.type))
-    return fp_api->mk_smt_typecast_from_fpbv_to_sbv(
-      from, mk_int_bv_sort(SMT_SORT_SBV, cast.type->get_width()));
+    return mk_smt_typecast_from_fpbv_to_sbv(cast.from, cast.type->get_width());
 
   if(is_floatbv_type(cast.type))
-  {
-    unsigned ew = to_floatbv_type(cast.type).exponent;
-    unsigned sw = to_floatbv_type(cast.type).fraction;
-
-    smt_sortt s = mk_real_fp_sort(ew, sw);
-
-    // Use the round mode
-    smt_astt rm = convert_rounding_mode(cast.rounding_mode);
-    return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(from, s, rm);
-  }
+    return mk_smt_typecast_from_fpbv_to_fpbv(
+      cast.from, cast.rounding_mode, cast.type->get_width());
 
   std::cerr << "Unexpected type in typecast from fpbv\n";
   abort();
