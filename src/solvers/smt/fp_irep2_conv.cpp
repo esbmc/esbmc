@@ -42,11 +42,11 @@ smt_convt::mk_smt_typecast_from_fpbv_to_sbv(expr2tc from, std::size_t width)
 
 smt_astt smt_convt::mk_smt_typecast_from_fpbv_to_fpbv(
   expr2tc from,
-  expr2tc rm,
-  std::size_t width)
+  type2tc to,
+  expr2tc rm)
 {
   smt_astt _from = convert_ast(from);
-  smt_sortt _to = mk_int_bv_sort(SMT_SORT_SBV, width);
+  smt_sortt _to = convert_sort(to);
   smt_astt _rm = convert_rounding_mode(rm);
   return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(_from, _to, _rm);
 }

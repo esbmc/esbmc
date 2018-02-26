@@ -200,7 +200,7 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
 
   if(is_floatbv_type(cast.from))
     return mk_smt_typecast_from_fpbv_to_fpbv(
-      cast.from, cast.rounding_mode, cast.type->get_width());
+      cast.from, cast.type, cast.rounding_mode);
 
   std::cerr << "Unexpected type in typecast to fpbv\n";
   abort();
@@ -216,7 +216,7 @@ smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
 
   if(is_floatbv_type(cast.type))
     return mk_smt_typecast_from_fpbv_to_fpbv(
-      cast.from, cast.rounding_mode, cast.type->get_width());
+      cast.from, cast.type, cast.rounding_mode);
 
   std::cerr << "Unexpected type in typecast from fpbv\n";
   abort();
