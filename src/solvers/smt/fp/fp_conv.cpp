@@ -302,6 +302,9 @@ smt_astt fp_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
   smt_astt not_zero =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, both_zero);
 
+  // TODO: we do an unsigned comparison, but due to the bias, we should safe
+  // to do a signed comparison.
+
   // Extract the exponents, significands and signs
   smt_astt lhs_exp_sig = extract_exp_sig(ctx, lhs);
   smt_astt lhs_sign = extract_signbit(ctx, lhs);
