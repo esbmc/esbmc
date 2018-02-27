@@ -149,7 +149,7 @@ expr2tc float_bvt::to_integer(
 
   // if the exponent is negative, we have zero anyways
   expr2tc result = shift_result;
-  expr2tc exponent_sign = signbit2tc(unpacked.exponent);
+  expr2tc exponent_sign = expr2tc(new signbit2t(unpacked.exponent));
 
   result = if2tc(result->type, exponent_sign, gen_zero(result->type), result);
 
@@ -283,7 +283,7 @@ expr2tc float_bvt::add_sub(
 
   // figure out which operand has the bigger exponent
   const expr2tc exponent_difference = subtract_exponents(unpacked1, unpacked2);
-  expr2tc src2_bigger = signbit2tc(exponent_difference);
+  expr2tc src2_bigger = expr2tc(new signbit2t(exponent_difference));
 
   const expr2tc bigger_exponent = if2tc(
     unpacked2.exponent->type,
@@ -354,8 +354,8 @@ expr2tc float_bvt::add_sub(
 
   // sign of result
   std::size_t width = result.fraction->type->get_width();
-  expr2tc fraction_sign =
-    signbit2tc(typecast2tc(type_pool.get_uint(width), result.fraction));
+  expr2tc fraction_sign = expr2tc(
+    new signbit2t(typecast2tc(type_pool.get_uint(width), result.fraction)));
   result.fraction = typecast2tc(
     type_pool.get_int(width),
     abs2tc(
@@ -692,7 +692,7 @@ void float_bvt::denormalization_shift(
 
   // use sign bit
   expr2tc denormal = and2tc(
-    not2tc(signbit2tc(distance)),
+    not2tc(expr2tc(new signbit2t(distance))),
     notequal2tc(distance, gen_zero(distance->type)));
 
   // Care must be taken to not loose information required for the
