@@ -1692,7 +1692,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
 
   // Since we can't extract the top bit, from the fpbv, we'll
   // convert it to return if(is_neg) ? 1 : 0;
-  auto value = convert_ast(signbit.operand);
+  auto value = convert_ast(signbit.value);
   auto sort = convert_sort(signbit.type);
 
   // Create is_neg
@@ -1705,7 +1705,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
       boolean_sort,
       SMT_FUNC_LT,
       value,
-      convert_ast(gen_zero(signbit.operand->type)));
+      convert_ast(gen_zero(signbit.value->type)));
 
   // If it's true, return 1. Return 0, othewise.
   return mk_func_app(

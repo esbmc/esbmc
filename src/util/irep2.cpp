@@ -4048,6 +4048,6 @@ expr_typedefs1(code_cpp_throw_decl_end, code_cpp_throw_decl_data);
 expr_typedefs1(isinf, bool_1op);
 expr_typedefs1(isnormal, bool_1op);
 expr_typedefs1(isfinite, bool_1op);
-expr_typedefs1(signbit, overflow_ops);
+expr_typedefs1(signbit, arith_1op);
 expr_typedefs2(concat, bit_2ops);
 expr_typedefs3(extract, extract_data);

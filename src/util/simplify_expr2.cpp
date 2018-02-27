@@ -2191,7 +2191,7 @@ struct Signbittor
 
 expr2tc signbit2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return simplify_floatbv_1op<Signbittor, signbit2t>(type, operand);
+  return simplify_floatbv_1op<Signbittor, signbit2t>(type, value);
 }
 
 template <template <typename> class TFunctor, typename constructor>
