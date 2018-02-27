@@ -1,4 +1,5 @@
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/fp/float_bv.h>
 
 smt_astt smt_convt::mk_smt_nearbyint_from_float(expr2tc from, expr2tc rm)
 {
@@ -27,17 +28,15 @@ smt_convt::mk_smt_fpbv_fma(expr2tc v1, expr2tc v2, expr2tc v3, expr2tc rm)
 smt_astt
 smt_convt::mk_smt_typecast_from_fpbv_to_ubv(expr2tc from, std::size_t width)
 {
-  smt_astt _from = convert_ast(from);
-  smt_sortt _to = mk_int_bv_sort(SMT_SORT_SBV, width);
-  return fp_api->mk_smt_typecast_from_fpbv_to_sbv(_from, _to);
+  return convert_ast(
+    float_bvt::to_unsigned_integer(from, width, float_bvt::get_spec(from)));
 }
 
 smt_astt
 smt_convt::mk_smt_typecast_from_fpbv_to_sbv(expr2tc from, std::size_t width)
 {
-  smt_astt _from = convert_ast(from);
-  smt_sortt _to = mk_int_bv_sort(SMT_SORT_SBV, width);
-  return fp_api->mk_smt_typecast_from_fpbv_to_sbv(_from, _to);
+  return convert_ast(
+    float_bvt::to_signed_integer(from, width, float_bvt::get_spec(from)));
 }
 
 smt_astt smt_convt::mk_smt_typecast_from_fpbv_to_fpbv(
@@ -45,58 +44,47 @@ smt_astt smt_convt::mk_smt_typecast_from_fpbv_to_fpbv(
   type2tc to,
   expr2tc rm)
 {
-  smt_astt _from = convert_ast(from);
-  smt_sortt _to = convert_sort(to);
-  smt_astt _rm = convert_rounding_mode(rm);
-  return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(_from, _to, _rm);
+  return convert_ast(float_bvt::conversion(
+    from,
+    rm,
+    float_bvt::get_spec(from),
+    ieee_float_spect(to_floatbv_type(to))));
 }
 
 smt_astt
 smt_convt::mk_smt_typecast_ubv_to_fpbv(expr2tc from, type2tc to, expr2tc rm)
 {
-  smt_astt _from = convert_ast(from);
-  smt_sortt _to = convert_sort(to);
-  smt_astt _rm = convert_rounding_mode(rm);
-  return fp_api->mk_smt_typecast_ubv_to_fpbv(_from, _to, _rm);
+  return convert_ast(float_bvt::from_unsigned_integer(
+    from, rm, ieee_float_spect(to_floatbv_type(to))));
 }
 
 smt_astt
 smt_convt::mk_smt_typecast_sbv_to_fpbv(expr2tc from, type2tc to, expr2tc rm)
 {
-  smt_astt _from = convert_ast(from);
-  smt_sortt _to = convert_sort(to);
-  smt_astt _rm = convert_rounding_mode(rm);
-  return fp_api->mk_smt_typecast_sbv_to_fpbv(_from, _to, _rm);
+  return convert_ast(float_bvt::from_signed_integer(
+    from, rm, ieee_float_spect(to_floatbv_type(to))));
 }
 
 smt_astt smt_convt::mk_smt_fpbv_add(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  smt_astt _lhs = convert_ast(lhs);
-  smt_astt _rhs = convert_ast(rhs);
-  smt_astt _rm = convert_rounding_mode(rm);
-  return fp_api->mk_smt_fpbv_add(_lhs, _rhs, _rm);
+  return convert_ast(float_bvt::add_sub(
+    false, lhs, rhs, rm, ieee_float_spect(to_floatbv_type(lhs->type))));
 }
 
 smt_astt smt_convt::mk_smt_fpbv_sub(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  smt_astt _lhs = convert_ast(lhs);
-  smt_astt _rhs = convert_ast(rhs);
-  smt_astt _rm = convert_rounding_mode(rm);
-  return fp_api->mk_smt_fpbv_sub(_lhs, _rhs, _rm);
+  return convert_ast(float_bvt::add_sub(
+    true, lhs, rhs, rm, ieee_float_spect(to_floatbv_type(lhs->type))));
 }
 
 smt_astt smt_convt::mk_smt_fpbv_mul(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  smt_astt _lhs = convert_ast(lhs);
-  smt_astt _rhs = convert_ast(rhs);
-  smt_astt _rm = convert_rounding_mode(rm);
-  return fp_api->mk_smt_fpbv_mul(_lhs, _rhs, _rm);
+  return convert_ast(
+    float_bvt::mul(lhs, rhs, rm, ieee_float_spect(to_floatbv_type(lhs->type))));
 }
 
 smt_astt smt_convt::mk_smt_fpbv_div(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  smt_astt _lhs = convert_ast(lhs);
-  smt_astt _rhs = convert_ast(rhs);
-  smt_astt _rm = convert_rounding_mode(rm);
-  return fp_api->mk_smt_fpbv_div(_lhs, _rhs, _rm);
+  return convert_ast(
+    float_bvt::div(lhs, rhs, rm, ieee_float_spect(to_floatbv_type(lhs->type))));
 }
