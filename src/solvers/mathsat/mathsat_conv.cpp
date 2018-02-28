@@ -727,151 +727,185 @@ smt_sortt mathsat_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
     SMT_SORT_ARRAY, t, domain->get_data_width(), range);
 }
 
-smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_ubv(
-  smt_astt from,
-  smt_sortt to)
+smt_astt
+mathsat_convt::mk_smt_typecast_from_fpbv_to_ubv(expr2tc from, std::size_t width)
 {
+  smt_astt _from = convert_ast(from);
+  smt_sortt _to = mk_bv_sort(SMT_SORT_UBV, width);
+
   // Conversion from float to integers always truncate, so we assume
   // the round mode to be toward zero
   const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(
     mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
-  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(_from);
 
-  msat_term t = msat_make_fp_to_bv(env, to->get_data_width(), mrm->a, mfrom->a);
+  msat_term t = msat_make_fp_to_bv(env, width, mrm->a, mfrom->a);
   check_msat_error(t);
-  return new mathsat_smt_ast(this, to, t);
+  return new mathsat_smt_ast(this, _to, t);
 }
 
-smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_sbv(
-  smt_astt from,
-  smt_sortt to)
+smt_astt
+mathsat_convt::mk_smt_typecast_from_fpbv_to_sbv(expr2tc from, std::size_t width)
 {
+  smt_astt _from = convert_ast(from);
+  smt_sortt _to = mk_bv_sort(SMT_SORT_SBV, width);
+
   // Conversion from float to integers always truncate, so we assume
   // the round mode to be toward zero
   const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(
     mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
-  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(_from);
 
-  msat_term t = msat_make_fp_to_bv(env, to->get_data_width(), mrm->a, mfrom->a);
+  msat_term t = msat_make_fp_to_bv(env, width, mrm->a, mfrom->a);
   check_msat_error(t);
-  return new mathsat_smt_ast(this, to, t);
+  return new mathsat_smt_ast(this, _to, t);
 }
 
 smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_fpbv(
-  smt_astt from,
-  smt_sortt to,
-  smt_astt rm)
+  expr2tc from,
+  type2tc to,
+  expr2tc rm)
 {
-  unsigned sw = to->get_significand_width();
-  unsigned ew = to->get_data_width() - sw;
+  smt_astt _from = convert_ast(from);
+  smt_sortt _to = convert_sort(to);
+  smt_astt _rm = convert_rounding_mode(rm);
 
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+  unsigned sw = _to->get_significand_width();
+  unsigned ew = _to->get_data_width() - sw;
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(_rm);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(_from);
 
   msat_term t = msat_make_fp_cast(env, ew, sw, mrm->a, mfrom->a);
   check_msat_error(t);
-  return new mathsat_smt_ast(this, to, t);
+  return new mathsat_smt_ast(this, _to, t);
 }
 
-smt_astt mathsat_convt::mk_smt_typecast_ubv_to_fpbv(
-  smt_astt from,
-  smt_sortt to,
-  smt_astt rm)
+smt_astt
+mathsat_convt::mk_smt_typecast_ubv_to_fpbv(expr2tc from, type2tc to, expr2tc rm)
 {
-  unsigned sw = to->get_significand_width();
-  unsigned ew = to->get_data_width() - sw;
+  smt_astt _from = convert_ast(from);
+  smt_sortt _to = convert_sort(to);
+  smt_astt _rm = convert_rounding_mode(rm);
 
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+  unsigned sw = _to->get_significand_width();
+  unsigned ew = _to->get_data_width() - sw;
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(_rm);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(_from);
 
   msat_term t = msat_make_fp_from_ubv(env, ew, sw, mrm->a, mfrom->a);
   check_msat_error(t);
-  return new mathsat_smt_ast(this, to, t);
+  return new mathsat_smt_ast(this, _to, t);
 }
 
-smt_astt mathsat_convt::mk_smt_typecast_sbv_to_fpbv(
-  smt_astt from,
-  smt_sortt to,
-  smt_astt rm)
+smt_astt
+mathsat_convt::mk_smt_typecast_sbv_to_fpbv(expr2tc from, type2tc to, expr2tc rm)
 {
-  unsigned sw = to->get_significand_width();
-  unsigned ew = to->get_data_width() - sw;
+  smt_astt _from = convert_ast(from);
+  smt_sortt _to = convert_sort(to);
+  smt_astt _rm = convert_rounding_mode(rm);
 
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+  unsigned sw = _to->get_significand_width();
+  unsigned ew = _to->get_data_width() - sw;
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(_rm);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(_from);
 
   msat_term t = msat_make_fp_from_sbv(env, ew, sw, mrm->a, mfrom->a);
   check_msat_error(t);
-  return new mathsat_smt_ast(this, to, t);
+  return new mathsat_smt_ast(this, _to, t);
 }
 
-smt_astt mathsat_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
+smt_astt mathsat_convt::mk_smt_nearbyint_from_float(expr2tc from, expr2tc rm)
 {
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+  smt_astt _from = convert_ast(from);
+  smt_astt _rm = convert_rounding_mode(rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(_rm);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(_from);
 
   // Conversion from float, using the correct rounding mode
   msat_term t = msat_make_fp_round_to_int(env, mrm->a, mfrom->a);
-  return new mathsat_smt_ast(this, from->sort, t);
+  return new mathsat_smt_ast(this, _from->sort, t);
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
+smt_astt mathsat_convt::mk_smt_fpbv_sqrt(expr2tc rd, expr2tc rm)
 {
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-  const mathsat_smt_ast *mrd = to_solver_smt_ast<mathsat_smt_ast>(rd);
+  smt_astt _rd = convert_ast(rd);
+  smt_astt _rm = convert_rounding_mode(rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(_rm);
+  const mathsat_smt_ast *mrd = to_solver_smt_ast<mathsat_smt_ast>(_rd);
 
   msat_term t = msat_make_fp_sqrt(env, mrm->a, mrd->a);
   check_msat_error(t);
 
-  return new mathsat_smt_ast(this, rd->sort, t);
+  return new mathsat_smt_ast(this, _rd->sort, t);
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
+smt_astt mathsat_convt::mk_smt_fpbv_add(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
-  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+  smt_astt _lhs = convert_ast(lhs);
+  smt_astt _rhs = convert_ast(rhs);
+  smt_astt _rm = convert_rounding_mode(rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(_rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(_lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(_rhs);
 
   msat_term t = msat_make_fp_plus(env, mrm->a, mlhs->a, mrhs->a);
   check_msat_error(t);
 
-  return new mathsat_smt_ast(this, lhs->sort, t);
+  return new mathsat_smt_ast(this, _lhs->sort, t);
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
+smt_astt mathsat_convt::mk_smt_fpbv_sub(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
-  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+  smt_astt _lhs = convert_ast(lhs);
+  smt_astt _rhs = convert_ast(rhs);
+  smt_astt _rm = convert_rounding_mode(rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(_rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(_lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(_rhs);
 
   msat_term t = msat_make_fp_minus(env, mrm->a, mlhs->a, mrhs->a);
   check_msat_error(t);
 
-  return new mathsat_smt_ast(this, lhs->sort, t);
+  return new mathsat_smt_ast(this, _lhs->sort, t);
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
+smt_astt mathsat_convt::mk_smt_fpbv_mul(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
-  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+  smt_astt _lhs = convert_ast(lhs);
+  smt_astt _rhs = convert_ast(rhs);
+  smt_astt _rm = convert_rounding_mode(rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(_rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(_lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(_rhs);
 
   msat_term t = msat_make_fp_times(env, mrm->a, mlhs->a, mrhs->a);
   check_msat_error(t);
 
-  return new mathsat_smt_ast(this, lhs->sort, t);
+  return new mathsat_smt_ast(this, _lhs->sort, t);
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
+smt_astt mathsat_convt::mk_smt_fpbv_div(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
-  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
-  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+  smt_astt _lhs = convert_ast(lhs);
+  smt_astt _rhs = convert_ast(rhs);
+  smt_astt _rm = convert_rounding_mode(rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(_rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(_lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(_rhs);
 
   msat_term t = msat_make_fp_div(env, mrm->a, mlhs->a, mrhs->a);
   check_msat_error(t);
 
-  return new mathsat_smt_ast(this, lhs->sort, t);
+  return new mathsat_smt_ast(this, _lhs->sort, t);
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)

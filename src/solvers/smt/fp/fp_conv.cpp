@@ -1,4 +1,5 @@
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/fp/float_bv.h>
 
 static smt_astt extract_exponent(smt_convt *ctx, smt_astt fp)
 {
@@ -112,7 +113,7 @@ smt_astt fp_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   return ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(rm), 2);
 }
 
-smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
+smt_astt fp_convt::mk_smt_nearbyint_from_float(expr2tc from, expr2tc rm)
 {
   std::cout << "Missing implementation of " << __FUNCTION__
             << " for the chosen solver\n";
@@ -121,7 +122,7 @@ smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
   abort();
 }
 
-smt_astt fp_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
+smt_astt fp_convt::mk_smt_fpbv_sqrt(expr2tc rd, expr2tc rm)
 {
   std::cout << "Missing implementation of " << __FUNCTION__
             << " for the chosen solver\n";
@@ -131,7 +132,7 @@ smt_astt fp_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
 }
 
 smt_astt
-fp_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
+fp_convt::mk_smt_fpbv_fma(expr2tc v1, expr2tc v2, expr2tc v3, expr2tc rm)
 {
   std::cout << "Missing implementation of " << __FUNCTION__
             << " for the chosen solver\n";
@@ -142,60 +143,44 @@ fp_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
   abort();
 }
 
-static smt_astt fpbv_to_bv(smt_convt *ctx, smt_astt from, smt_sortt to, bool s)
+smt_astt
+fp_convt::mk_smt_typecast_from_fpbv_to_ubv(expr2tc from, std::size_t width)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)ctx;
-  (void)from;
-  (void)to;
-  (void)s;
-  abort();
+  return ctx->convert_ast(
+    float_bvt::to_unsigned_integer(from, width, float_bvt::get_spec(from)));
 }
 
-smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, smt_sortt to)
+smt_astt
+fp_convt::mk_smt_typecast_from_fpbv_to_sbv(expr2tc from, std::size_t width)
 {
-  return fpbv_to_bv(ctx, from, to, false);
-}
-
-smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, smt_sortt to)
-{
-  return fpbv_to_bv(ctx, from, to, true);
+  return ctx->convert_ast(
+    float_bvt::to_signed_integer(from, width, float_bvt::get_spec(from)));
 }
 
 smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_fpbv(
-  smt_astt from,
-  smt_sortt to,
-  smt_astt rm)
+  expr2tc from,
+  type2tc to,
+  expr2tc rm)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)from;
-  (void)to;
-  (void)rm;
-  abort();
+  return ctx->convert_ast(float_bvt::conversion(
+    from,
+    rm,
+    float_bvt::get_spec(from),
+    ieee_float_spect(to_floatbv_type(to))));
 }
 
 smt_astt
-fp_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+fp_convt::mk_smt_typecast_ubv_to_fpbv(expr2tc from, type2tc to, expr2tc rm)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)from;
-  (void)to;
-  (void)rm;
-  abort();
+  return ctx->convert_ast(float_bvt::from_unsigned_integer(
+    from, rm, ieee_float_spect(to_floatbv_type(to))));
 }
 
 smt_astt
-fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+fp_convt::mk_smt_typecast_sbv_to_fpbv(expr2tc from, type2tc to, expr2tc rm)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)from;
-  (void)to;
-  (void)rm;
-  abort();
+  return ctx->convert_ast(float_bvt::from_signed_integer(
+    from, rm, ieee_float_spect(to_floatbv_type(to))));
 }
 
 ieee_floatt fp_convt::get_fpbv(smt_astt a)
@@ -208,44 +193,28 @@ ieee_floatt fp_convt::get_fpbv(smt_astt a)
   return number;
 }
 
-smt_astt fp_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
+smt_astt fp_convt::mk_smt_fpbv_add(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)lhs;
-  (void)rhs;
-  (void)rm;
-  abort();
+  return ctx->convert_ast(float_bvt::add_sub(
+    false, lhs, rhs, rm, ieee_float_spect(to_floatbv_type(lhs->type))));
 }
 
-smt_astt fp_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
+smt_astt fp_convt::mk_smt_fpbv_sub(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)lhs;
-  (void)rhs;
-  (void)rm;
-  abort();
+  return ctx->convert_ast(float_bvt::add_sub(
+    true, lhs, rhs, rm, ieee_float_spect(to_floatbv_type(lhs->type))));
 }
 
-smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
+smt_astt fp_convt::mk_smt_fpbv_mul(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)lhs;
-  (void)rhs;
-  (void)rm;
-  abort();
+  return ctx->convert_ast(
+    float_bvt::mul(lhs, rhs, rm, ieee_float_spect(to_floatbv_type(lhs->type))));
 }
 
-smt_astt fp_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
+smt_astt fp_convt::mk_smt_fpbv_div(expr2tc lhs, expr2tc rhs, expr2tc rm)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)lhs;
-  (void)rhs;
-  (void)rm;
-  abort();
+  return ctx->convert_ast(
+    float_bvt::div(lhs, rhs, rm, ieee_float_spect(to_floatbv_type(lhs->type))));
 }
 
 smt_astt fp_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)

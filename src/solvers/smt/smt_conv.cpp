@@ -594,7 +594,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::ieee_add_id:
   {
     assert(is_floatbv_type(expr));
-    a = mk_smt_fpbv_add(
+    a = fp_api->mk_smt_fpbv_add(
       to_ieee_add2t(expr).side_1,
       to_ieee_add2t(expr).side_2,
       to_ieee_add2t(expr).rounding_mode);
@@ -603,7 +603,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::ieee_sub_id:
   {
     assert(is_floatbv_type(expr));
-    a = mk_smt_fpbv_sub(
+    a = fp_api->mk_smt_fpbv_sub(
       to_ieee_sub2t(expr).side_1,
       to_ieee_sub2t(expr).side_2,
       to_ieee_sub2t(expr).rounding_mode);
@@ -612,7 +612,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::ieee_mul_id:
   {
     assert(is_floatbv_type(expr));
-    a = mk_smt_fpbv_mul(
+    a = fp_api->mk_smt_fpbv_mul(
       to_ieee_mul2t(expr).side_1,
       to_ieee_mul2t(expr).side_2,
       to_ieee_mul2t(expr).rounding_mode);
@@ -621,7 +621,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::ieee_div_id:
   {
     assert(is_floatbv_type(expr));
-    a = mk_smt_fpbv_div(
+    a = fp_api->mk_smt_fpbv_div(
       to_ieee_div2t(expr).side_1,
       to_ieee_div2t(expr).side_2,
       to_ieee_div2t(expr).rounding_mode);
@@ -630,7 +630,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::ieee_fma_id:
   {
     assert(is_floatbv_type(expr));
-    a = mk_smt_fpbv_fma(
+    a = fp_api->mk_smt_fpbv_fma(
       to_ieee_fma2t(expr).value_1,
       to_ieee_fma2t(expr).value_2,
       to_ieee_fma2t(expr).value_3,
@@ -641,7 +641,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 2);
-    a = mk_smt_fpbv_sqrt(
+    a = fp_api->mk_smt_fpbv_sqrt(
       to_ieee_sqrt2t(expr).value, to_ieee_sqrt2t(expr).rounding_mode);
     break;
   }
@@ -744,7 +744,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::nearbyint_id:
   {
     assert(is_floatbv_type(expr));
-    a = mk_smt_nearbyint_from_float(
+    a = fp_api->mk_smt_nearbyint_from_float(
       to_nearbyint2t(expr).from, to_nearbyint2t(expr).rounding_mode);
     break;
   }

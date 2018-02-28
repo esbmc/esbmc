@@ -191,15 +191,15 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
   }
 
   if(is_unsignedbv_type(cast.from))
-    return mk_smt_typecast_ubv_to_fpbv(
+    return fp_api->mk_smt_typecast_ubv_to_fpbv(
       cast.from, cast.type, cast.rounding_mode);
 
   if(is_signedbv_type(cast.from))
-    return mk_smt_typecast_sbv_to_fpbv(
+    return fp_api->mk_smt_typecast_sbv_to_fpbv(
       cast.from, cast.type, cast.rounding_mode);
 
   if(is_floatbv_type(cast.from))
-    return mk_smt_typecast_from_fpbv_to_fpbv(
+    return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(
       cast.from, cast.type, cast.rounding_mode);
 
   std::cerr << "Unexpected type in typecast to fpbv\n";
@@ -209,13 +209,15 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
 smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
 {
   if(is_unsignedbv_type(cast.type))
-    return mk_smt_typecast_from_fpbv_to_ubv(cast.from, cast.type->get_width());
+    return fp_api->mk_smt_typecast_from_fpbv_to_ubv(
+      cast.from, cast.type->get_width());
 
   if(is_signedbv_type(cast.type))
-    return mk_smt_typecast_from_fpbv_to_sbv(cast.from, cast.type->get_width());
+    return fp_api->mk_smt_typecast_from_fpbv_to_sbv(
+      cast.from, cast.type->get_width());
 
   if(is_floatbv_type(cast.type))
-    return mk_smt_typecast_from_fpbv_to_fpbv(
+    return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(
       cast.from, cast.type, cast.rounding_mode);
 
   std::cerr << "Unexpected type in typecast from fpbv\n";

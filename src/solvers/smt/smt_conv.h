@@ -615,20 +615,6 @@ public:
 
   /** @} */
 
-  smt_astt mk_smt_fpbv_fma(expr2tc v1, expr2tc v2, expr2tc v3, expr2tc rm);
-  smt_astt mk_smt_typecast_from_fpbv_to_ubv(expr2tc from, std::size_t width);
-  smt_astt mk_smt_typecast_from_fpbv_to_sbv(expr2tc from, std::size_t width);
-  smt_astt
-  mk_smt_typecast_from_fpbv_to_fpbv(expr2tc from, type2tc to, expr2tc rm);
-  smt_astt mk_smt_typecast_ubv_to_fpbv(expr2tc from, type2tc to, expr2tc rm);
-  smt_astt mk_smt_typecast_sbv_to_fpbv(expr2tc from, type2tc to, expr2tc rm);
-  smt_astt mk_smt_fpbv_add(expr2tc lhs, expr2tc rhs, expr2tc rm);
-  smt_astt mk_smt_fpbv_sub(expr2tc lhs, expr2tc rhs, expr2tc rm);
-  smt_astt mk_smt_fpbv_mul(expr2tc lhs, expr2tc rhs, expr2tc rm);
-  smt_astt mk_smt_fpbv_div(expr2tc lhs, expr2tc rhs, expr2tc rm);
-  smt_astt mk_smt_nearbyint_from_float(expr2tc from, expr2tc rm);
-  smt_astt mk_smt_fpbv_sqrt(expr2tc rd, expr2tc rm);
-
   /** @{
    *  @name Array operations solver-converter API. */
 
