@@ -198,6 +198,11 @@ public:
    *  @return The newly created fp.abs smt_ast. */
   virtual smt_astt mk_smt_fpbv_abs(smt_astt op);
 
+  /** Convert an ieee negation operation
+   *  @param op the operand
+   *  @return The newly created fp.neg smt_ast. */
+  virtual smt_astt mk_smt_fpbv_neg(smt_astt op);
+
   /** Extract the assignment to a floating-point from the SMT solvers model.
    *  @param a the AST whos value we wish to know.
    *  @return the ieee floating-point */

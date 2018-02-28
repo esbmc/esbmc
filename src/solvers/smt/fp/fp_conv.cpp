@@ -443,3 +443,14 @@ smt_astt fp_convt::mk_smt_fpbv_abs(smt_astt op)
   smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
   return ctx->mk_func_app(op->sort, SMT_FUNC_CONCAT, zero, ew_sw);
 }
+
+smt_astt fp_convt::mk_smt_fpbv_neg(smt_astt op)
+{
+  // We xor the sign bit with '1'
+  smt_astt one = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
+  smt_astt zeros =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), op->sort->get_data_width() - 1);
+
+  smt_astt one_zeros = ctx->mk_func_app(op->sort, SMT_FUNC_CONCAT, one, zeros);
+  return ctx->mk_func_app(op->sort, SMT_FUNC_XOR, one_zeros, op);
+}
