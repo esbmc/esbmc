@@ -1099,15 +1099,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(
       !int_encoding &&
-      "Concatonate encountered in integer mode; "
-      "unimplemented (and funky)");
-    const concat2t &cat = to_concat2t(expr);
-
-    unsigned long accuml_side =
-      cat.side_1->type->get_width() + cat.side_2->type->get_width();
-    smt_sortt s = mk_int_bv_sort(SMT_SORT_UBV, accuml_side);
-    a = mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
-
+      "Concatonate encountered in integer mode; unimplemented (and funky)");
+    smt_sortt sort = convert_sort(expr->type);
+    a = mk_func_app(sort, SMT_FUNC_CONCAT, args, 2);
     break;
   }
   case expr2t::implies_id:
