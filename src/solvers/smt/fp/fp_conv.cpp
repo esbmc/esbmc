@@ -420,7 +420,7 @@ smt_astt fp_convt::mk_smt_fpbv_is_negative(smt_astt op)
   smt_astt sign = extract_signbit(ctx, op);
 
   // Compare with '0'
-  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sign, zero);
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOTEQ, sign, zero);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_is_positive(smt_astt op)
@@ -431,7 +431,7 @@ smt_astt fp_convt::mk_smt_fpbv_is_positive(smt_astt op)
   smt_astt sign = extract_signbit(ctx, op);
 
   // Compare with '0'
-  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOTEQ, sign, zero);
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sign, zero);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_abs(smt_astt op)
