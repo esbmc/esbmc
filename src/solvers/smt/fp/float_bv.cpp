@@ -359,7 +359,7 @@ expr2tc float_bvt::add_sub(
   std::size_t width = result.fraction->type->get_width();
   expr2tc fraction_sign = sign_bit(result.fraction);
   result.fraction = typecast2tc(
-    type_pool.get_int(width),
+    type_pool.get_uint(width),
     abs2tc(
       result.fraction->type,
       typecast2tc(type_pool.get_int(width), result.fraction)));
@@ -407,14 +407,20 @@ expr2tc float_bvt::add_sub(
   expr2tc zero_sign = if2tc(
     type_pool.get_bool(),
     rounding_mode_bits.round_to_minus_inf,
-    or2tc(unpacked1.sign, unpacked2.sign),
-    and2tc(unpacked1.sign, unpacked2.sign));
+    or2tc(
+      typecast2tc(type_pool.get_bool(), unpacked1.sign),
+      typecast2tc(type_pool.get_bool(), unpacked2.sign)),
+    and2tc(
+      typecast2tc(type_pool.get_bool(), unpacked1.sign),
+      typecast2tc(type_pool.get_bool(), unpacked2.sign)));
 
   result.sign = if2tc(
     infinity_sign->type,
     result.infinity,
     infinity_sign,
-    if2tc(zero_sign->type, result.zero, zero_sign, add_sub_sign));
+    typecast2tc(
+      type_pool.get_uint(1),
+      if2tc(zero_sign->type, result.zero, zero_sign, add_sub_sign)));
 
   return rounder(result, rm, spec);
 }
@@ -800,23 +806,28 @@ expr2tc float_bvt::fraction_rounding_decision(
 
   // the rounding bit is the last extra bit
   assert(extra_bits >= 1);
-  expr2tc rounding_bit =
-    extract2tc(type_pool.get_uint(1), fraction, extra_bits - 1, extra_bits - 1);
+  expr2tc rounding_bit = typecast2tc(
+    type_pool.get_bool(),
+    extract2tc(
+      type_pool.get_uint(1), fraction, extra_bits - 1, extra_bits - 1));
 
   // we get one bit of the fraction for some rounding decisions
-  expr2tc rounding_least =
-    extract2tc(type_pool.get_uint(1), fraction, extra_bits, extra_bits);
+  expr2tc rounding_least = typecast2tc(
+    type_pool.get_bool(),
+    extract2tc(type_pool.get_uint(1), fraction, extra_bits, extra_bits));
 
   // round-to-nearest (ties to even)
   expr2tc round_to_even =
     and2tc(rounding_bit, or2tc(rounding_least, sticky_bit));
 
   // round up
-  expr2tc round_to_plus_inf =
-    and2tc(not2tc(sign), or2tc(rounding_bit, sticky_bit));
+  expr2tc round_to_plus_inf = and2tc(
+    not2tc(typecast2tc(type_pool.get_bool(), sign)),
+    or2tc(rounding_bit, sticky_bit));
 
   // round down
-  expr2tc round_to_minus_inf = and2tc(sign, or2tc(rounding_bit, sticky_bit));
+  expr2tc round_to_minus_inf = and2tc(
+    typecast2tc(type_pool.get_bool(), sign), or2tc(rounding_bit, sticky_bit));
 
   // round to zero
   expr2tc round_to_zero = gen_false_expr();
@@ -888,11 +899,13 @@ void float_bvt::round_fraction(
     //  2. If the number is the largest subnormal, the increment
     //     can change the MSB making it normal.  Thus the exponent
     //     must be incremented but the fraction will be OK.
-    expr2tc oldMSB = extract2tc(
-      type_pool.get_uint(1),
-      result.fraction,
-      fraction_size - 1,
-      fraction_size - 1);
+    expr2tc oldMSB = typecast2tc(
+      type_pool.get_bool(),
+      extract2tc(
+        type_pool.get_uint(1),
+        result.fraction,
+        fraction_size - 1,
+        fraction_size - 1));
 
     // increment if 'increment' is true
     result.fraction = add2tc(
@@ -901,11 +914,13 @@ void float_bvt::round_fraction(
       typecast2tc(result.fraction->type, increment));
 
     // Normal overflow when old MSB == 1 and new MSB == 0
-    expr2tc newMSB = extract2tc(
-      type_pool.get_uint(1),
-      result.fraction,
-      fraction_size - 1,
-      fraction_size - 1);
+    expr2tc newMSB = typecast2tc(
+      type_pool.get_bool(),
+      extract2tc(
+        type_pool.get_uint(1),
+        result.fraction,
+        fraction_size - 1,
+        fraction_size - 1));
 
     expr2tc overflow = and2tc(oldMSB, not2tc(newMSB));
 
@@ -976,8 +991,12 @@ void float_bvt::round_exponent(
     expr2tc overflow_to_inf = or2tc(
       rounding_mode_bits.round_to_even,
       or2tc(
-        and2tc(rounding_mode_bits.round_to_plus_inf, not2tc(result.sign)),
-        and2tc(rounding_mode_bits.round_to_minus_inf, result.sign)));
+        and2tc(
+          rounding_mode_bits.round_to_plus_inf,
+          not2tc(typecast2tc(type_pool.get_bool(), result.sign))),
+        and2tc(
+          rounding_mode_bits.round_to_minus_inf,
+          typecast2tc(type_pool.get_bool(), result.sign))));
 
     expr2tc set_to_max = and2tc(exponent_too_large, not2tc(overflow_to_inf));
 
@@ -1019,7 +1038,7 @@ float_bvt::bias(const unbiased_floatt &src, const ieee_float_spect &spec)
 
   expr2tc hidden_bit =
     extract2tc(type_pool.get_uint(1), src.fraction, spec.f, spec.f);
-  expr2tc denormal = not2tc(hidden_bit);
+  expr2tc denormal = not2tc(typecast2tc(type_pool.get_bool(), hidden_bit));
 
   result.fraction =
     extract2tc(type_pool.get_uint(spec.f), src.fraction, spec.f - 1, 0);
@@ -1058,8 +1077,10 @@ float_bvt::unpack(const expr2tc &src, const ieee_float_spect &spec)
 
   // add hidden bit
   expr2tc hidden_bit = isnormal(src, spec);
-  result.fraction =
-    concat2tc(type_pool.get_uint(spec.f + 1), hidden_bit, result.fraction);
+  result.fraction = concat2tc(
+    type_pool.get_uint(spec.f + 1),
+    typecast2tc(type_pool.get_uint(1), hidden_bit),
+    result.fraction);
 
   result.exponent = get_exponent(src, spec);
 
@@ -1138,7 +1159,9 @@ expr2tc float_bvt::sticky_right_shift(
     else
       lost_bits = result;
 
-    expr2tc dist_bit = extract2tc(dist->type, dist, stage, stage);
+    expr2tc dist_bit = typecast2tc(
+      type_pool.get_bool(),
+      extract2tc(type_pool.get_uint(1), dist, stage, stage));
 
     sticky = or2tc(
       and2tc(dist_bit, notequal2tc(lost_bits, gen_zero(lost_bits->type))),
@@ -1149,5 +1172,6 @@ expr2tc float_bvt::sticky_right_shift(
     d = d << 1;
   }
 
+  sticky = typecast2tc(type_pool.get_uint(1), sticky);
   return result;
 }
