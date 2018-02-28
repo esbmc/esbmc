@@ -283,7 +283,8 @@ expr2tc float_bvt::add_sub(
 
   // figure out which operand has the bigger exponent
   const expr2tc exponent_difference = subtract_exponents(unpacked1, unpacked2);
-  expr2tc src2_bigger = expr2tc(new signbit2t(exponent_difference));
+  expr2tc src2_sign = expr2tc(new signbit2t(exponent_difference));
+  expr2tc src2_bigger = notequal2tc(gen_zero(src2_sign->type), src2_sign);
 
   const expr2tc bigger_exponent = if2tc(
     unpacked2.exponent->type,
