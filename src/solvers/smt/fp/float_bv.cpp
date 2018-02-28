@@ -314,7 +314,7 @@ expr2tc float_bvt::add_sub(
   const expr2tc limited_dist = limit_distance(distance, spec.f + 3);
 
   // pad fractions with 3 zeros from below
-  expr2tc three_zeros = gen_zero(unsignedbv_type2tc(3));
+  expr2tc three_zeros = gen_zero(type_pool.get_uint(3));
 
   // add 4 to spec.f because unpacked new_fraction has the hidden bit
   const expr2tc fraction1_padded =
