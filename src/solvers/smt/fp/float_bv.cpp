@@ -294,13 +294,13 @@ expr2tc float_bvt::add_sub(
 
   // swap fractions as needed
   const expr2tc new_fraction1 = if2tc(
-    unpacked2.exponent->type,
+    unpacked2.fraction->type,
     src2_bigger,
     unpacked2.fraction,
     unpacked1.fraction);
 
   const expr2tc new_fraction2 = if2tc(
-    unpacked2.exponent->type,
+    unpacked1.fraction->type,
     src2_bigger,
     unpacked1.fraction,
     unpacked2.fraction);
@@ -334,7 +334,9 @@ expr2tc float_bvt::add_sub(
     fraction2_shifted->type,
     fraction2_shifted,
     concat2tc(
-      fraction2_shifted->type, gen_zero(unsignedbv_type2tc(3)), sticky_bit));
+      fraction2_shifted->type,
+      gen_zero(type_pool.get_uint(spec.f + 3)),
+      sticky_bit));
 
   // need to have two extra fraction bits for addition and rounding
   const expr2tc fraction1_ext =
