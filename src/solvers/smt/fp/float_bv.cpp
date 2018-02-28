@@ -279,7 +279,7 @@ expr2tc float_bvt::add_sub(
 
   // subtract?
   if(subtract)
-    unpacked2.sign = not2tc(unpacked2.sign);
+    unpacked2.sign = neg2tc(unpacked2.sign->type, unpacked2.sign);
 
   // figure out which operand has the bigger exponent
   const expr2tc exponent_difference = subtract_exponents(unpacked1, unpacked2);
