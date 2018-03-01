@@ -2407,6 +2407,8 @@ const std::string smt_convt::smt_func_name_table[expr2t::end_expr_id] = {
   "ieee_rm_zr",
   "ieee_rm_pi",
   "ieee_rm_mi",
+  "bv2fp_cast",
+  "fp2bv_cast",
 };
 
 // Debris from prop_convt: to be reorganized.
