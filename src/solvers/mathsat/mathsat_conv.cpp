@@ -305,14 +305,7 @@ smt_ast *mathsat_convt::mk_func_app(
     break;
   case SMT_FUNC_NEG:
   case SMT_FUNC_BVNEG:
-    if(s->id == SMT_SORT_FLOATBV)
-    {
-      r = msat_make_fp_neg(env, args[0]->a);
-    }
-    else
-    {
-      r = msat_make_bv_neg(env, args[0]->a);
-    }
+    r = msat_make_bv_neg(env, args[0]->a);
     break;
   case SMT_FUNC_BVAND:
     r = msat_make_bv_and(env, args[0]->a, args[1]->a);
@@ -939,6 +932,15 @@ smt_astt mathsat_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
   check_msat_error(r);
 
   return new mathsat_smt_ast(this, boolean_sort, r);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_neg(smt_astt op)
+{
+  msat_term r =
+    msat_make_fp_neg(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, op->sort, r);
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_is_nan(smt_astt op)

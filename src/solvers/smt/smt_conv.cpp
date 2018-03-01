@@ -1248,15 +1248,23 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(expr->get_num_sub_exprs() == 1);
 
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{SMT_FUNC_NEG,
-                      SMT_FUNC_BVNEG,
-                      SMT_FUNC_BVNEG,
-                      SMT_FUNC_BVNEG,
-                      SMT_FUNC_NEG});
+    const neg2t &neg = to_neg2t(expr);
+    if(is_floatbv_type(neg.value))
+    {
+      a = fp_api->mk_smt_fpbv_neg(args[0]);
+    }
+    else
+    {
+      a = convert_ast(
+        expr,
+        expr->type,
+        args,
+        expr_op_convert{SMT_FUNC_NEG,
+                        SMT_FUNC_BVNEG,
+                        SMT_FUNC_BVNEG,
+                        SMT_FUNC_BVNEG,
+                        SMT_FUNC_INVALID});
+    }
     break;
   }
   case expr2t::and_id:
@@ -2380,6 +2388,7 @@ const std::string smt_convt::smt_func_name_table[expr2t::end_expr_id] = {
   "int2real",
   "real2int",
   "is_int",
+  "fneg",
   "fabs",
   "is_zero",
   "is_nan",
