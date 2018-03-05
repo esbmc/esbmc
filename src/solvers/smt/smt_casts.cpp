@@ -219,21 +219,15 @@ smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
     return convert_typecast_to_ints_intmode(cast);
 
   if(is_signedbv_type(cast.from) || is_fixedbv_type(cast.from))
-  {
     return convert_typecast_to_ints_from_fbv_sint(cast);
-  }
+
   if(is_unsignedbv_type(cast.from))
-  {
     return convert_typecast_to_ints_from_unsigned(cast);
-  }
-  else if(is_floatbv_type(cast.from))
-  {
+  if(is_floatbv_type(cast.from))
     return convert_typecast_from_fpbv(cast);
-  }
-  else if(is_bool_type(cast.from))
-  {
+
+  if(is_bool_type(cast.from))
     return convert_typecast_to_ints_from_bool(cast);
-  }
 
   std::cerr << "Unexpected type in int/ptr typecast" << std::endl;
   abort();
@@ -301,23 +295,19 @@ smt_astt smt_convt::convert_typecast_to_ints_from_fbv_sint(
   if(from_width == to_width)
   {
     if(is_fixedbv_type(cast.from) && is_bv_type(cast.type))
-    {
       return round_fixedbv_to_int(a, from_width, to_width);
-    }
+
     if(
       (is_signedbv_type(cast.type) && is_unsignedbv_type(cast.from)) ||
       (is_unsignedbv_type(cast.type) && is_signedbv_type(cast.from)))
-    {
       // Operands have differing signs (and same width). Just return.
       return convert_ast(cast.from);
-    }
-    else
-    {
-      std::cerr << "Unrecognized equal-width int typecast format" << std::endl;
-      abort();
-    }
+
+    std::cerr << "Unrecognized equal-width int typecast format" << std::endl;
+    abort();
   }
-  else if(from_width < to_width)
+
+  if(from_width < to_width)
   {
     smt_sortt s = convert_sort(cast.type);
     return convert_sign_ext(a, s, from_width, (to_width - from_width));
@@ -341,9 +331,8 @@ smt_astt smt_convt::convert_typecast_to_ints_from_unsigned(
   unsigned from_width = cast.from->type->get_width();
 
   if(from_width == to_width)
-  {
     return a; // output = output
-  }
+
   if(from_width < to_width)
   {
     smt_sortt s = convert_sort(cast.type);
@@ -374,9 +363,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   // First, sanity check -- typecast from one kind of a pointer to another kind
   // is a simple operation. Check for that first.
   if(is_pointer_type(cast.from))
-  {
     return convert_ast(cast.from);
-  }
 
   // Unpleasentness; we don't know what pointer this integer is going to
   // correspond to, and there's no way of telling statically, so we have
