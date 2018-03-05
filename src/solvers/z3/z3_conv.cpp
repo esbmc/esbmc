@@ -365,6 +365,26 @@ z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
     s);
 }
 
+smt_astt z3_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
+{
+  smt_sortt s = mk_bv_sort(SMT_SORT_SBV, a->sort->get_data_width() + topwidth);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_sign_ext(z3_ctx, topwidth, to_solver_smt_ast<z3_smt_ast>(a)->a)),
+    s);
+}
+
+smt_astt z3_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
+{
+  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_zero_ext(z3_ctx, topwidth, to_solver_smt_ast<z3_smt_ast>(a)->a)),
+    s);
+}
+
 smt_astt z3_convt::mk_smt_int(
   const mp_integer &theint,
   bool sign __attribute__((unused)))

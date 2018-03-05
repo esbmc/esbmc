@@ -293,6 +293,28 @@ cvc_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
   return new solver_smt_ast<CVC4::Expr>(this, s, fin);
 }
 
+smt_astt cvc_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
+{
+  auto const *ca = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a);
+  CVC4::BitVectorSignExtend ext(topwidth);
+  CVC4::Expr ext2 = em.mkConst(ext);
+  CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_SIGN_EXTEND, ext2, ca->a);
+
+  smt_sortt s = mk_bv_sort(SMT_SORT_SBV, a->sort->get_data_width() + topwidth);
+  return new solver_smt_ast<CVC4::Expr>(this, s, fin);
+}
+
+smt_astt cvc_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
+{
+  auto const *ca = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a);
+  CVC4::BitVectorZeroExtend ext(topwidth);
+  CVC4::Expr ext2 = em.mkConst(ext);
+  CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_ZERO_EXTEND, ext2, ca->a);
+
+  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth);
+  return new solver_smt_ast<CVC4::Expr>(this, s, fin);
+}
+
 const smt_ast *
 cvc_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {

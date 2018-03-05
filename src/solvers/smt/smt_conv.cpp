@@ -1779,43 +1779,6 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
   return src->project(this, idx);
 }
 
-smt_astt smt_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
-{
-  std::size_t topbit = a->sort->get_data_width();
-  smt_astt the_top_bit = mk_extract(a, topbit - 1, topbit - 1);
-  smt_astt zero_bit = mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
-  smt_astt t = mk_func_app(boolean_sort, SMT_FUNC_EQ, the_top_bit, zero_bit);
-
-  smt_astt z = mk_smt_bv(SMT_SORT_UBV, BigInt(0), topwidth);
-
-  // Calculate the exact value; SMTLIB text parsers don't like taking an
-  // over-full integer literal.
-  uint64_t big = 0xFFFFFFFFFFFFFFFFULL;
-  unsigned int num_topbits = 64 - topwidth;
-  big >>= num_topbits;
-  BigInt big_int(big);
-  smt_astt f = mk_smt_bv(SMT_SORT_UBV, big_int, topwidth);
-
-  smt_sortt topsort = mk_int_bv_sort(SMT_SORT_UBV, topwidth);
-  smt_astt topbits = mk_func_app(topsort, SMT_FUNC_ITE, t, z, f);
-
-  return mk_func_app(
-    mk_bv_sort(SMT_SORT_SBV, a->sort->get_data_width() + topwidth),
-    SMT_FUNC_CONCAT,
-    topbits,
-    a);
-}
-
-smt_astt smt_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
-{
-  smt_astt z = mk_smt_bv(SMT_SORT_UBV, BigInt(0), topwidth);
-  return mk_func_app(
-    mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth),
-    SMT_FUNC_CONCAT,
-    z,
-    a);
-}
-
 smt_astt smt_convt::round_real_to_int(smt_astt a)
 {
   // SMT truncates downwards; however C truncates towards zero, which is not

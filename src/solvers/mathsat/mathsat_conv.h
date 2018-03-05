@@ -51,6 +51,9 @@ public:
     smt_sortt array_subtype) override;
   smt_astt
   mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
+  smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
+  smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
+
   smt_astt mk_smt_bv(smt_sortt s, const mp_integer &theint) override;
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
   smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw) override;

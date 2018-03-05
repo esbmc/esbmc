@@ -569,10 +569,10 @@ public:
    *  @param a The bitvector to upcast.
    *  @param topwidth The number of bits to extend the input by
    *  @return A bitvector with topwidth more bits, of the appropriate sign. */
-  smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth);
+  virtual smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) = 0;
 
   /** Identical to mk_sign_ext, but extends AST with zeros */
-  smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth);
+  virtual smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) = 0;
 
   /** Extract the assignment to a boolean variable from the SMT solvers model.
    *  @param a The AST whos value we wish to know.

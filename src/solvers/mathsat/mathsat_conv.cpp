@@ -597,9 +597,30 @@ mathsat_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
   return new mathsat_smt_ast(this, s, t);
 }
 
-const smt_ast *mathsat_convt::convert_array_of(
-  smt_astt init_val,
-  unsigned long domain_width)
+smt_astt mathsat_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
+{
+  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
+
+  msat_term t = msat_make_bv_sext(env, topwidth, mast->a);
+  check_msat_error(t);
+
+  smt_sortt s = mk_bv_sort(SMT_SORT_SBV, a->sort->get_data_width() + topwidth);
+  return new mathsat_smt_ast(this, s, t);
+}
+
+smt_astt mathsat_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
+{
+  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
+
+  msat_term t = msat_make_bv_zext(env, topwidth, mast->a);
+  check_msat_error(t);
+
+  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth);
+  return new mathsat_smt_ast(this, s, t);
+}
+
+const smt_ast *
+mathsat_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
 }

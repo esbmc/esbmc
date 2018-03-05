@@ -297,6 +297,22 @@ smt_astt boolector_convt::mk_extract(
   return new_ast(s, b);
 }
 
+smt_astt boolector_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
+{
+  smt_sortt s = mk_bv_sort(SMT_SORT_SBV, a->sort->get_data_width() + topwidth);
+  const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
+  BoolectorNode *b = boolector_sext(btor, ast->a, topwidth);
+  return new_ast(s, b);
+}
+
+smt_astt boolector_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
+{
+  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth);
+  const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
+  BoolectorNode *b = boolector_uext(btor, ast->a, topwidth);
+  return new_ast(s, b);
+}
+
 bool boolector_convt::get_bool(const smt_ast *a)
 {
   const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);

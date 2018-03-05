@@ -137,6 +137,9 @@ public:
   smt_sortt mk_struct_sort(const type2tc &type) override;
   smt_astt
   mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
+  smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
+  smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
+
   const smt_ast *make_disjunct(const ast_vec &v) override;
   const smt_ast *make_conjunct(const ast_vec &v) override;
 

@@ -74,6 +74,8 @@ public:
     smt_sortt array_subtype) override;
   smt_astt
   mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
+  smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
+  smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
 
   void push_ctx() override;
   void pop_ctx() override;

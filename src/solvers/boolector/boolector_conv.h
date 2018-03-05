@@ -53,6 +53,8 @@ public:
     smt_sortt array_subtype) override;
   smt_astt
   mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
+  smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
+  smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
 
   const smt_ast *
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;

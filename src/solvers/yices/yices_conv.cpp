@@ -354,6 +354,22 @@ yices_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
   return new_ast(s, term);
 }
 
+smt_astt yices_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
+{
+  smt_sortt s = mk_bv_sort(SMT_SORT_SBV, a->sort->get_data_width() + topwidth);
+  const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
+  term_t term = yices_sign_extend(ast->a, topwidth);
+  return new_ast(s, term);
+}
+
+smt_astt yices_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
+{
+  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth);
+  const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
+  term_t term = yices_zero_extend(ast->a, topwidth);
+  return new_ast(s, term);
+}
+
 smt_astt
 yices_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
