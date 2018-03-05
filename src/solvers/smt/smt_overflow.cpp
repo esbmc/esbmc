@@ -105,12 +105,12 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     smt_astt arg1_ext = convert_ast(opers.side_1);
     arg1_ext = is_signedbv_type(opers.side_1)
                  ? convert_sign_ext(arg1_ext, bigsort, sz, sz)
-                 : convert_zero_ext(arg1_ext, bigsort, sz);
+                 : mk_zero_ext(arg1_ext, sz);
 
     smt_astt arg2_ext = convert_ast(opers.side_2);
     arg2_ext = is_signedbv_type(opers.side_2)
                  ? convert_sign_ext(arg2_ext, bigsort, sz, sz)
-                 : convert_zero_ext(arg2_ext, bigsort, sz);
+                 : mk_zero_ext(arg2_ext, sz);
 
     smt_astt result = mk_func_app(
       bigsort,

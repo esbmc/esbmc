@@ -564,6 +564,9 @@ public:
   virtual smt_astt
   mk_extract(smt_astt a, unsigned int high, unsigned int low) = 0;
 
+  /** Identical to convert_sign_ext, but extends AST with zeros */
+  smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth);
+
   /** Extract the assignment to a boolean variable from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
    *  @return Expression representation of a's value, as a constant_bool2tc */
@@ -713,8 +716,6 @@ public:
     smt_sortt s,
     unsigned int topbit,
     unsigned int topwidth);
-  /** Identical to convert_sign_ext, but extends AST with zeros */
-  smt_astt convert_zero_ext(smt_astt a, smt_sortt s, unsigned int topwidth);
   /** Checks for equality with NaN representation. */
   smt_astt convert_is_nan(const expr2tc &expr);
   /** Checks for equality with inf representation. */

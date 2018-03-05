@@ -1813,11 +1813,14 @@ smt_astt smt_convt::convert_sign_ext(
   return mk_func_app(s, SMT_FUNC_CONCAT, topbits, a);
 }
 
-smt_astt
-smt_convt::convert_zero_ext(smt_astt a, smt_sortt s, unsigned int topwidth)
+smt_astt smt_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
   smt_astt z = mk_smt_bv(SMT_SORT_UBV, BigInt(0), topwidth);
-  return mk_func_app(s, SMT_FUNC_CONCAT, z, a);
+  return mk_func_app(
+    mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth),
+    SMT_FUNC_CONCAT,
+    z,
+    a);
 }
 
 smt_astt smt_convt::round_real_to_int(smt_astt a)

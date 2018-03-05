@@ -461,9 +461,7 @@ smt_ast *boolector_convt::fix_up_shift(
     // Zero extend up to bwidth + 1
     bwidth++;
     unsigned int new_size = pow(2.0, bwidth);
-    unsigned int diff = new_size - op0->sort->get_data_width();
-    smt_sortt newsort = mk_int_bv_sort(SMT_SORT_UBV, new_size);
-    smt_astt zeroext = convert_zero_ext(op0, newsort, diff);
+    smt_astt zeroext = mk_zero_ext(op0, new_size - op0->sort->get_data_width());
     data_op = to_solver_smt_ast<btor_smt_ast>(zeroext)->a;
     need_to_shift_down = true;
   }

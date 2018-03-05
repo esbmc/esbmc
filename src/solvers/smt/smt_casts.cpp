@@ -334,10 +334,7 @@ smt_astt smt_convt::convert_typecast_to_ints_from_unsigned(
     return a; // output = output
 
   if(from_width < to_width)
-  {
-    smt_sortt s = convert_sort(cast.type);
-    return convert_zero_ext(a, s, (to_width - from_width));
-  }
+    return mk_zero_ext(a, (to_width - from_width));
 
   assert(from_width > to_width);
   return mk_extract(a, to_width - 1, 0);
