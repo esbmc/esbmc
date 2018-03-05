@@ -523,10 +523,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       auto fbvt = to_fixedbv_type(mul.type);
 
       unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
-      unsigned int topbit = mul.side_1->type->get_width();
 
-      args[0] = mk_sign_ext(convert_ast(mul.side_1), topbit, fraction_bits);
-      args[1] = mk_sign_ext(convert_ast(mul.side_2), topbit, fraction_bits);
+      args[0] = mk_sign_ext(convert_ast(mul.side_1), fraction_bits);
+      args[1] = mk_sign_ext(convert_ast(mul.side_2), fraction_bits);
 
       smt_sortt sort = convert_sort(expr->type);
       a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
@@ -557,10 +556,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       auto fbvt = to_fixedbv_type(div.type);
 
       unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
-      unsigned int topbit = div.side_2->type->get_width();
 
       smt_sortt s2 = convert_sort(div.side_2->type);
-      args[1] = mk_sign_ext(convert_ast(div.side_2), topbit, fraction_bits);
+      args[1] = mk_sign_ext(convert_ast(div.side_2), fraction_bits);
 
       smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), fraction_bits);
       smt_astt op0 = convert_ast(div.side_1);
@@ -1781,9 +1779,9 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
   return src->project(this, idx);
 }
 
-smt_astt
-smt_convt::mk_sign_ext(smt_astt a, unsigned int topbit, unsigned int topwidth)
+smt_astt smt_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
+  std::size_t topbit = a->sort->get_data_width();
   smt_astt the_top_bit = mk_extract(a, topbit - 1, topbit - 1);
   smt_astt zero_bit = mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
   smt_astt t = mk_func_app(boolean_sort, SMT_FUNC_EQ, the_top_bit, zero_bit);
@@ -1865,7 +1863,7 @@ smt_astt smt_convt::round_fixedbv_to_int(
 
   // Also collect data for dealing with the magnitude.
   smt_astt magnitude = mk_extract(a, fromwidth - 1, frac_width);
-  smt_astt intvalue = mk_sign_ext(magnitude, frac_width, frac_width);
+  smt_astt intvalue = mk_sign_ext(magnitude, frac_width);
 
   // Data for inspecting fraction part
   smt_astt frac_part = mk_extract(a, frac_width - 1, 0);

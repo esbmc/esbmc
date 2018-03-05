@@ -567,10 +567,9 @@ public:
   /** Given a signed, upwards cast, extends the sign of the given AST to the
    *  desired length.
    *  @param a The bitvector to upcast.
-   *  @param topbit The highest bit of the bitvector (1-based)
    *  @param topwidth The number of bits to extend the input by
    *  @return A bitvector with topwidth more bits, of the appropriate sign. */
-  smt_astt mk_sign_ext(smt_astt a, unsigned int topbit, unsigned int topwidth);
+  smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth);
 
   /** Identical to mk_sign_ext, but extends AST with zeros */
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth);
