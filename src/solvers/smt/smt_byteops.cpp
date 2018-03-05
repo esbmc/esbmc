@@ -38,7 +38,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
     lshr2tc shr(source->type, source, offs);
     smt_astt ext = convert_ast(shr);
-    smt_astt res = mk_extract(ext, 7, 0, convert_sort(get_uint8_type()));
+    smt_astt res = mk_extract(ext, 7, 0);
     return res;
   }
 
@@ -78,7 +78,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
       return mk_smt_symbol("out_of_bounds_byte_extract", s);
     }
 
-    return mk_extract(source_ast, upper, lower, convert_sort(expr->type));
+    return mk_extract(source_ast, upper, lower);
   }
 }
 
@@ -208,10 +208,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     top = value;
   }
   else
-  {
-    smt_sortt s = mk_int_bv_sort(SMT_SORT_UBV, width_op0 - top_of_update);
-    top = mk_extract(src_value, width_op0 - 1, top_of_update, s);
-  }
+    top = mk_extract(src_value, width_op0 - 1, top_of_update);
 
   if(top == value)
   {
@@ -228,10 +225,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     bottom = value;
   }
   else
-  {
-    smt_sortt s = mk_int_bv_sort(SMT_SORT_UBV, bottom_of_update);
-    bottom = mk_extract(src_value, bottom_of_update - 1, 0, s);
-  }
+    bottom = mk_extract(src_value, bottom_of_update - 1, 0);
 
   // Concatenate the top and bottom, and possible middle, together.
   smt_astt concat;

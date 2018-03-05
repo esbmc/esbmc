@@ -49,11 +49,8 @@ public:
     const std::string &name,
     const smt_sort *s,
     smt_sortt array_subtype) override;
-  smt_ast *mk_extract(
-    const smt_ast *a,
-    unsigned int high,
-    unsigned int low,
-    const smt_sort *s) override;
+  smt_astt
+  mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
   smt_astt mk_smt_bv(smt_sortt s, const mp_integer &theint) override;
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
   smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw) override;

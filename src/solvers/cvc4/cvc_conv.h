@@ -37,11 +37,8 @@ public:
     const smt_sort *s,
     smt_sortt array_subtype) override;
   virtual smt_sort *mk_struct_sort(const type2tc &type);
-  smt_ast *mk_extract(
-    const smt_ast *a,
-    unsigned int high,
-    unsigned int low,
-    const smt_sort *s) override;
+  smt_astt
+  mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
 
   const smt_ast *
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;

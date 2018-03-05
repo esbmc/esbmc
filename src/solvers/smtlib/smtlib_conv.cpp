@@ -775,12 +775,10 @@ smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type
   abort();
 }
 
-smt_ast *smtlib_convt::mk_extract(
-  const smt_ast *a,
-  unsigned int high,
-  unsigned int low,
-  const smt_sort *s)
+smt_astt
+smtlib_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 {
+  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, high - low + 1);
   smtlib_smt_ast *n = new smtlib_smt_ast(this, s, SMT_FUNC_EXTRACT);
   n->extract_high = high;
   n->extract_low = low;

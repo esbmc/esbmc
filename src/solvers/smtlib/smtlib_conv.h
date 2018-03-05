@@ -94,11 +94,8 @@ public:
     const smt_sort *s,
     smt_sortt array_subtype) override;
   smt_sort *mk_struct_sort(const type2tc &type);
-  smt_ast *mk_extract(
-    const smt_ast *a,
-    unsigned int high,
-    unsigned int low,
-    const smt_sort *s) override;
+  smt_astt
+  mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
 
   void add_array_constraints_for_solving() override;
 

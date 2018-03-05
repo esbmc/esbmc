@@ -560,10 +560,9 @@ public:
    *  call.
    *  @param a The source piece of ast to extract a value from.
    *  @param high The topmost bit to select from the source, down to low.
-   *  @param low The lowest bit to select from the source.
-   *  @param s The sort of the resulting piece of ast. */
+   *  @param low The lowest bit to select from the source. */
   virtual smt_astt
-  mk_extract(smt_astt a, unsigned int high, unsigned int low, smt_sortt s) = 0;
+  mk_extract(smt_astt a, unsigned int high, unsigned int low) = 0;
 
   /** Extract the assignment to a boolean variable from the SMT solvers model.
    *  @param a The AST whos value we wish to know.

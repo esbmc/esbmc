@@ -345,12 +345,10 @@ smt_astt yices_convt::mk_array_symbol(
   return ast;
 }
 
-smt_astt yices_convt::mk_extract(
-  smt_astt a,
-  unsigned int high,
-  unsigned int low,
-  smt_sortt s)
+smt_astt
+yices_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
+  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, high - low + 1);
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   term_t term = yices_bvextract(ast->a, low, high);
   return new_ast(s, term);

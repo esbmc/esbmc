@@ -574,11 +574,8 @@ smt_ast *mathsat_convt::mk_smt_symbol(
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_ast *mathsat_convt::mk_extract(
-  const smt_ast *a,
-  unsigned int high,
-  unsigned int low,
-  const smt_sort *s)
+smt_astt
+mathsat_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 {
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
 
@@ -588,13 +585,15 @@ smt_ast *mathsat_convt::mk_extract(
     msat_term t = msat_make_fp_as_ieeebv(env, mast->a);
     check_msat_error(t);
 
-    smt_ast *bv = new mathsat_smt_ast(this, s, t);
+    smt_ast *bv =
+      new mathsat_smt_ast(this, mk_bv_sort(SMT_SORT_SBV, high - low + 1), t);
     mast = to_solver_smt_ast<mathsat_smt_ast>(bv);
   }
 
   msat_term t = msat_make_bv_extract(env, high, low, mast->a);
   check_msat_error(t);
 
+  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, high - low + 1);
   return new mathsat_smt_ast(this, s, t);
 }
 

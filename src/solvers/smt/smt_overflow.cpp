@@ -100,7 +100,6 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     // Zero extend; multiply; Make a decision based on the top half.
     unsigned int sz = zero->type->get_width();
 
-    smt_sortt normalsort = mk_int_bv_sort(SMT_SORT_UBV, sz);
     smt_sortt bigsort = mk_int_bv_sort(SMT_SORT_UBV, sz * 2);
 
     smt_astt arg1_ext = convert_ast(opers.side_1);
@@ -122,7 +121,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     if(is_signed)
     {
       // Extract top half plus one (for the sign)
-      smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz - 1, normalsort);
+      smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz - 1);
 
       // Create a now base 2 type
       unsignedbv_type2tc newtype(sz + 1);
@@ -144,7 +143,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     }
 
     // Extract top half.
-    smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz, normalsort);
+    smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz);
 
     // It should be zero; if not, overflow
     smt_astt iseq =
@@ -190,17 +189,12 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   unsigned int pos_zero_bits = width - bits;
   unsigned int neg_one_bits = (width - bits) + 1;
 
-  smt_sortt pos_zero_bits_sort = mk_int_bv_sort(SMT_SORT_UBV, pos_zero_bits);
-  smt_sortt neg_one_bits_sort = mk_int_bv_sort(SMT_SORT_UBV, neg_one_bits);
-
   smt_astt pos_bits = mk_smt_bv(SMT_SORT_UBV, BigInt(0), pos_zero_bits);
   smt_astt neg_bits =
     mk_smt_bv(SMT_SORT_UBV, BigInt((1 << neg_one_bits) - 1), neg_one_bits);
 
-  smt_astt pos_sel =
-    mk_extract(orig_val, width - 1, width - pos_zero_bits, pos_zero_bits_sort);
-  smt_astt neg_sel =
-    mk_extract(orig_val, width - 1, width - neg_one_bits, neg_one_bits_sort);
+  smt_astt pos_sel = mk_extract(orig_val, width - 1, width - pos_zero_bits);
+  smt_astt neg_sel = mk_extract(orig_val, width - 1, width - neg_one_bits);
 
   smt_astt pos_eq = mk_func_app(boolean_sort, SMT_FUNC_EQ, pos_bits, pos_sel);
   smt_astt neg_eq = mk_func_app(boolean_sort, SMT_FUNC_EQ, neg_bits, neg_sel);

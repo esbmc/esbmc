@@ -135,11 +135,8 @@ public:
     smt_sortt array_subtype) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
   smt_sortt mk_struct_sort(const type2tc &type) override;
-  smt_astt mk_extract(
-    const smt_ast *a,
-    unsigned int high,
-    unsigned int low,
-    const smt_sort *s) override;
+  smt_astt
+  mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
   const smt_ast *make_disjunct(const ast_vec &v) override;
   const smt_ast *make_conjunct(const ast_vec &v) override;
 

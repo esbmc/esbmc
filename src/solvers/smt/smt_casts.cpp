@@ -60,8 +60,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(
   }
   else if(from_width > to_integer_bits)
   {
-    smt_sortt tmp = mk_int_bv_sort(SMT_SORT_UBV, from_width - to_integer_bits);
-    frontpart = mk_extract(a, to_integer_bits - 1, 0, tmp);
+    frontpart = mk_extract(a, to_integer_bits - 1, 0);
   }
   else
   {
@@ -120,21 +119,16 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
   // Start with the magnitude
   if(to_integer_bits <= from_integer_bits)
   {
-    smt_sortt tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, to_integer_bits);
     magnitude = mk_extract(
-      a,
-      (from_fraction_bits + to_integer_bits - 1),
-      from_fraction_bits,
-      tmp_sort);
+      a, (from_fraction_bits + to_integer_bits - 1), from_fraction_bits);
   }
   else
   {
     assert(to_integer_bits > from_integer_bits);
-    smt_sortt tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, from_integer_bits);
-    smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits, tmp_sort);
+    smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits);
 
     unsigned int additional_bits = to_integer_bits - from_integer_bits;
-    tmp_sort =
+    smt_sortt tmp_sort =
       mk_int_bv_sort(SMT_SORT_UBV, from_integer_bits + additional_bits);
     magnitude =
       convert_sign_ext(ext, tmp_sort, from_integer_bits, additional_bits);
@@ -143,12 +137,8 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
   // Followed by the fraction part
   if(to_fraction_bits <= from_fraction_bits)
   {
-    smt_sortt tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, to_fraction_bits);
     fraction = mk_extract(
-      a,
-      from_fraction_bits - 1,
-      from_fraction_bits - to_fraction_bits,
-      tmp_sort);
+      a, from_fraction_bits - 1, from_fraction_bits - to_fraction_bits);
   }
   else
   {
@@ -156,12 +146,11 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
 
     // Increase the size of the fraction by adding zeros on the end. This is
     // not a zero extension because they're at the end, not the start
-    smt_sortt tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, from_fraction_bits);
-    smt_astt src_fraction = mk_extract(a, from_fraction_bits - 1, 0, tmp_sort);
+    smt_astt src_fraction = mk_extract(a, from_fraction_bits - 1, 0);
     smt_astt zeros =
       mk_smt_bv(SMT_SORT_UBV, BigInt(0), to_fraction_bits - from_fraction_bits);
 
-    tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, to_fraction_bits);
+    smt_sortt tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, to_fraction_bits);
     fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, src_fraction, zeros);
   }
 
@@ -305,7 +294,6 @@ smt_astt smt_convt::convert_typecast_to_ints_from_fbv_sint(
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
-  smt_sortt s = convert_sort(cast.type);
   smt_astt a = convert_ast(cast.from);
 
   unsigned from_width = cast.from->type->get_width();
@@ -331,12 +319,12 @@ smt_astt smt_convt::convert_typecast_to_ints_from_fbv_sint(
   }
   else if(from_width < to_width)
   {
+    smt_sortt s = convert_sort(cast.type);
     return convert_sign_ext(a, s, from_width, (to_width - from_width));
   }
-  else if(from_width > to_width)
-  {
-    return mk_extract(a, to_width - 1, 0, s);
-  }
+
+  if(from_width > to_width)
+    return mk_extract(a, to_width - 1, 0);
 
   std::cerr << "Malformed cast from signedbv/fixedbv" << std::endl;
   abort();
@@ -347,7 +335,7 @@ smt_astt smt_convt::convert_typecast_to_ints_from_unsigned(
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
-  smt_sortt s = convert_sort(cast.type);
+
   smt_astt a = convert_ast(cast.from);
 
   unsigned from_width = cast.from->type->get_width();
@@ -358,13 +346,12 @@ smt_astt smt_convt::convert_typecast_to_ints_from_unsigned(
   }
   if(from_width < to_width)
   {
+    smt_sortt s = convert_sort(cast.type);
     return convert_zero_ext(a, s, (to_width - from_width));
   }
-  else
-  {
-    assert(from_width > to_width);
-    return mk_extract(a, to_width - 1, 0, s);
-  }
+
+  assert(from_width > to_width);
+  return mk_extract(a, to_width - 1, 0);
 }
 
 smt_astt smt_convt::convert_typecast_to_ints_from_bool(const typecast2t &cast)

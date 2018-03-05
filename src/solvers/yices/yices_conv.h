@@ -72,11 +72,8 @@ public:
     const std::string &name,
     const smt_sort *s,
     smt_sortt array_subtype) override;
-  smt_astt mk_extract(
-    const smt_ast *a,
-    unsigned int high,
-    unsigned int low,
-    const smt_sort *s) override;
+  smt_astt
+  mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
 
   void push_ctx() override;
   void pop_ctx() override;

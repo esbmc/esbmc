@@ -286,12 +286,12 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return ast;
 }
 
-smt_ast *boolector_convt::mk_extract(
+smt_astt boolector_convt::mk_extract(
   const smt_ast *a,
   unsigned int high,
-  unsigned int low,
-  const smt_sort *s)
+  unsigned int low)
 {
+  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, high - low + 1);
   const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
   BoolectorNode *b = boolector_slice(btor, ast->a, high, low);
   return new_ast(s, b);

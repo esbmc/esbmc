@@ -348,16 +348,16 @@ smt_astt z3_convt::mk_func_app(
   }
 }
 
-smt_astt z3_convt::mk_extract(
-  const smt_ast *a,
-  unsigned int high,
-  unsigned int low,
-  const smt_sort *s)
+smt_astt
+z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 {
   // If it's a floatbv, convert it to bv
   if(a->sort->id == SMT_SORT_FLOATBV)
-    a = new_ast(z3_ctx.fpa_to_ieeebv(to_solver_smt_ast<z3_smt_ast>(a)->a), s);
+    a = new_ast(
+      z3_ctx.fpa_to_ieeebv(to_solver_smt_ast<z3_smt_ast>(a)->a),
+      mk_bv_sort(SMT_SORT_SBV, high - low + 1));
 
+  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, high - low + 1);
   return new_ast(
     z3::to_expr(
       z3_ctx,

@@ -5,36 +5,23 @@ static smt_astt extract_exponent(smt_convt *ctx, smt_astt fp)
 {
   std::size_t exp_top = fp->sort->get_data_width() - 2;
   std::size_t exp_bot = fp->sort->get_significand_width() - 2;
-  std::size_t exp_width = exp_top - exp_bot;
-  return ctx->mk_extract(
-    fp, exp_top, exp_bot + 1, ctx->mk_bv_sort(SMT_SORT_UBV, exp_width));
+  return ctx->mk_extract(fp, exp_top, exp_bot + 1);
 }
 
 static smt_astt extract_significand(smt_convt *ctx, smt_astt fp)
 {
-  return ctx->mk_extract(
-    fp,
-    fp->sort->get_significand_width() - 1,
-    0,
-    ctx->mk_bv_sort(SMT_SORT_UBV, fp->sort->get_significand_width()));
+  return ctx->mk_extract(fp, fp->sort->get_significand_width() - 1, 0);
 }
 
 static smt_astt extract_signbit(smt_convt *ctx, smt_astt fp)
 {
   return ctx->mk_extract(
-    fp,
-    fp->sort->get_data_width() - 1,
-    fp->sort->get_data_width() - 1,
-    ctx->mk_bv_sort(SMT_SORT_UBV, 1));
+    fp, fp->sort->get_data_width() - 1, fp->sort->get_data_width() - 1);
 }
 
 static smt_astt extract_exp_sig(smt_convt *ctx, smt_astt fp)
 {
-  return ctx->mk_extract(
-    fp,
-    fp->sort->get_data_width() - 2,
-    0,
-    ctx->mk_bv_sort(SMT_SORT_UBV, fp->sort->get_data_width() - 1));
+  return ctx->mk_extract(fp, fp->sort->get_data_width() - 2, 0);
 }
 
 fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)

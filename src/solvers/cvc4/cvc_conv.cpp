@@ -281,16 +281,15 @@ smt_sort *cvc_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
   abort();
 }
 
-smt_ast *cvc_convt::mk_extract(
-  const smt_ast *a,
-  unsigned int high,
-  unsigned int low,
-  const smt_sort *s)
+smt_astt
+cvc_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 {
   auto const *ca = to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a);
   CVC4::BitVectorExtract ext(high, low);
   CVC4::Expr ext2 = em.mkConst(ext);
   CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_EXTRACT, ext2, ca->a);
+
+  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, high - low + 1);
   return new solver_smt_ast<CVC4::Expr>(this, s, fin);
 }
 

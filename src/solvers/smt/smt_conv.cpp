@@ -535,7 +535,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
       smt_sortt sort = convert_sort(expr->type);
       a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
-      a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort);
+      a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits);
     }
     else
     {
@@ -575,7 +575,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
       // Sorts.
       a = mk_func_app(s2, SMT_FUNC_BVSDIV, args, 2);
-      a = mk_extract(a, fbvt.width - 1, 0, s2);
+      a = mk_extract(a, fbvt.width - 1, 0);
     }
     else
     {
@@ -1336,11 +1336,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::extract_id:
   {
-    smt_sortt sort = convert_sort(expr->type);
-
     const extract2t &ex = to_extract2t(expr);
     a = convert_ast(ex.from);
-    a = mk_extract(a, ex.upper, ex.lower, sort);
+    a = mk_extract(a, ex.upper, ex.lower);
     break;
   }
   default:
@@ -1795,11 +1793,9 @@ smt_astt smt_convt::convert_sign_ext(
   unsigned int topbit,
   unsigned int topwidth)
 {
-  smt_sortt bit = mk_int_bv_sort(SMT_SORT_UBV, 1);
-  smt_astt the_top_bit = mk_extract(a, topbit - 1, topbit - 1, bit);
+  smt_astt the_top_bit = mk_extract(a, topbit - 1, topbit - 1);
   smt_astt zero_bit = mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
-  smt_sortt b = boolean_sort;
-  smt_astt t = mk_func_app(b, SMT_FUNC_EQ, the_top_bit, zero_bit);
+  smt_astt t = mk_func_app(boolean_sort, SMT_FUNC_EQ, the_top_bit, zero_bit);
 
   smt_astt z = mk_smt_bv(SMT_SORT_UBV, BigInt(0), topwidth);
 
@@ -1862,22 +1858,20 @@ smt_astt smt_convt::round_fixedbv_to_int(
   unsigned int frac_width = fromwidth / 2;
 
   // Sorts
-  smt_sortt bit = mk_int_bv_sort(SMT_SORT_UBV, 1);
-  smt_sortt halfwidth = mk_int_bv_sort(SMT_SORT_UBV, frac_width);
   smt_sortt tosort = mk_int_bv_sort(SMT_SORT_UBV, towidth);
   smt_sortt boolsort = boolean_sort;
 
   // Determine whether the source is signed from its topmost bit.
-  smt_astt is_neg_bit = mk_extract(a, fromwidth - 1, fromwidth - 1, bit);
+  smt_astt is_neg_bit = mk_extract(a, fromwidth - 1, fromwidth - 1);
   smt_astt true_bit = mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
 
   // Also collect data for dealing with the magnitude.
-  smt_astt magnitude = mk_extract(a, fromwidth - 1, frac_width, halfwidth);
+  smt_astt magnitude = mk_extract(a, fromwidth - 1, frac_width);
   smt_astt intvalue =
     convert_sign_ext(magnitude, tosort, frac_width, frac_width);
 
   // Data for inspecting fraction part
-  smt_astt frac_part = mk_extract(a, frac_width - 1, 0, bit);
+  smt_astt frac_part = mk_extract(a, frac_width - 1, 0);
   smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), frac_width);
   smt_astt is_zero_frac = mk_func_app(boolsort, SMT_FUNC_EQ, frac_part, zero);
 
