@@ -118,6 +118,14 @@ public:
     return secondary_width;
   }
 
+  size_t get_exponent_width() const
+  {
+    assert(id >= SMT_SORT_FLOATBV || id <= SMT_SORT_FAKE_FLOATBV);
+    std::size_t exp_top = get_data_width() - 2;
+    std::size_t exp_bot = get_significand_width() - 2;
+    return (exp_top - exp_bot);
+  }
+
   const type2tc &get_tuple_type() const
   {
     assert(!is_nil_type(tupletype));

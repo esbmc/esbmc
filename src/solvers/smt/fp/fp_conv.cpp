@@ -441,3 +441,133 @@ smt_astt fp_convt::mk_smt_fpbv_neg(smt_astt op)
   smt_astt one_zeros = ctx->mk_func_app(op->sort, SMT_FUNC_CONCAT, one, zeros);
   return ctx->mk_func_app(op->sort, SMT_FUNC_XOR, one_zeros, op);
 }
+
+fp_convt::unpacked_floatt fp_convt::unpack(smt_astt &src, bool normalize)
+{
+  unpacked_floatt res;
+
+  unsigned sbits = src->sort->get_significand_width();
+  unsigned ebits = src->sort->get_exponent_width();
+
+  // Extract the sign bit
+  res.sgn = extract_signbit(ctx, src);
+
+  // Extract the exponent bits
+  smt_astt exp = extract_exponent(ctx, src);
+
+  // Extract the significand bits
+  smt_astt sig = extract_significand(ctx, src);
+
+  smt_astt is_normal = mk_smt_fpbv_is_normal(src);
+  smt_astt normal_sig = ctx->mk_func_app(
+    ctx->mk_bv_sort(SMT_SORT_UBV, sbits + 1),
+    SMT_FUNC_CONCAT,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1),
+    sig);
+  smt_astt normal_exp = mk_unbias(exp);
+
+  smt_astt denormal_sig = ctx->mk_zero_ext(sig, 1);
+  smt_astt denormal_exp = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), ebits);
+  denormal_exp = mk_unbias(denormal_exp);
+
+  smt_astt zero_e = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), ebits);
+  if(normalize)
+  {
+    smt_astt zero_s = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sbits);
+    smt_astt is_sig_zero =
+      ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, zero_s, denormal_sig);
+
+    smt_astt lz_d = mk_leading_zeros(denormal_sig, ebits);
+    smt_astt norm_or_zero =
+      ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, is_normal, is_sig_zero);
+    res.lz =
+      ctx->mk_func_app(lz_d->sort, SMT_FUNC_ITE, norm_or_zero, zero_e, lz_d);
+
+    smt_astt shift =
+      ctx->mk_func_app(lz_d->sort, SMT_FUNC_ITE, is_sig_zero, zero_e, res.lz);
+    if(ebits <= sbits)
+    {
+      smt_astt q = ctx->mk_zero_ext(shift, sbits - ebits);
+      denormal_sig =
+        ctx->mk_func_app(denormal_sig->sort, SMT_FUNC_SHL, denormal_sig, q);
+    }
+    else
+    {
+      // the maximum shift is `sbits', because after that the mantissa
+      // would be zero anyways. So we can safely cut the shift variable down,
+      // as long as we check the higher bits.
+      smt_astt zero_ems =
+        ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), ebits - sbits);
+      smt_astt sbits_s = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(sbits), sbits);
+      smt_astt sh = ctx->mk_extract(shift, ebits - 1, sbits);
+      smt_astt is_sh_zero =
+        ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, zero_ems, sh);
+      smt_astt short_shift = ctx->mk_extract(shift, sbits - 1, 0);
+      smt_astt sl = ctx->mk_func_app(
+        sbits_s->sort, SMT_FUNC_ITE, is_sh_zero, short_shift, sbits_s);
+      denormal_sig =
+        ctx->mk_func_app(denormal_sig->sort, SMT_FUNC_SHL, denormal_sig, sl);
+    }
+  }
+  else
+    res.lz = zero_e;
+
+  res.sig = ctx->mk_func_app(
+    sig->sort, SMT_FUNC_ITE, is_normal, normal_sig, denormal_sig);
+
+  res.exp = ctx->mk_func_app(
+    sig->sort, SMT_FUNC_ITE, is_normal, normal_exp, denormal_exp);
+
+  return res;
+}
+
+smt_astt fp_convt::mk_unbias(smt_astt &src)
+{
+  unsigned ebits = src->sort->get_data_width();
+
+  smt_astt e_plus_one = ctx->mk_func_app(
+    src->sort,
+    SMT_FUNC_BVADD,
+    src,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), ebits));
+
+  smt_astt leading = ctx->mk_extract(e_plus_one, ebits - 1, ebits - 1);
+  smt_astt n_leading = ctx->mk_func_app(leading->sort, SMT_FUNC_NOT, leading);
+  smt_astt rest = ctx->mk_extract(e_plus_one, ebits - 2, 0);
+  return ctx->mk_func_app(src->sort, SMT_FUNC_CONCAT, n_leading, rest);
+}
+
+smt_astt fp_convt::mk_leading_zeros(smt_astt &src, std::size_t max_bits)
+{
+  std::size_t bv_sz = src->sort->get_data_width();
+
+  if(bv_sz == 0)
+    return ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), max_bits);
+  else if(bv_sz == 1)
+  {
+    smt_astt nil_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+    smt_astt one_m = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), max_bits);
+    smt_astt nil_m = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), max_bits);
+
+    smt_astt eq = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, src, nil_1);
+    return ctx->mk_func_app(one_m->sort, SMT_FUNC_ITE, eq, one_m, nil_m);
+  }
+  else
+  {
+    smt_astt H = ctx->mk_extract(src, bv_sz - 1, bv_sz / 2);
+    smt_astt L = ctx->mk_extract(src, bv_sz / 2 - 1, 0);
+
+    unsigned H_size = H->sort->get_data_width();
+
+    smt_astt lzH = mk_leading_zeros(H, max_bits); /* recursive! */
+    smt_astt lzL = mk_leading_zeros(L, max_bits);
+
+    smt_astt nil_h = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), H_size);
+    smt_astt H_is_zero =
+      ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, H, nil_h);
+
+    smt_astt h_m = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(H_size), max_bits);
+    smt_astt sum = ctx->mk_func_app(lzL->sort, SMT_FUNC_ADD, h_m, lzL);
+    return ctx->mk_func_app(lzH->sort, SMT_FUNC_ITE, H_is_zero, sum, lzH);
+  }
+}

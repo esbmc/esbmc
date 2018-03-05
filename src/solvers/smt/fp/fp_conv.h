@@ -209,6 +209,34 @@ public:
   virtual ieee_floatt get_fpbv(smt_astt a);
 
   smt_convt *ctx;
+
+private:
+  struct unpacked_floatt
+  {
+    smt_astt sgn, sig, exp, lz;
+
+    unpacked_floatt() = default;
+
+    void dump()
+    {
+      std::cout << "Sign: ";
+      sgn->dump();
+
+      std::cout << "Significand: ";
+      sig->dump();
+
+      std::cout << "Exponent: ";
+      exp->dump();
+
+      std::cout << "lz: ";
+      lz->dump();
+    }
+  };
+
+  unpacked_floatt unpack(smt_astt &src, bool normalize);
+
+  smt_astt mk_unbias(smt_astt &src);
+  smt_astt mk_leading_zeros(smt_astt &src, std::size_t max_bits);
 };
 
 #endif /* SOLVERS_SMT_FP_CONV_H_ */
