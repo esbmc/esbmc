@@ -564,7 +564,15 @@ public:
   virtual smt_astt
   mk_extract(smt_astt a, unsigned int high, unsigned int low) = 0;
 
-  /** Identical to convert_sign_ext, but extends AST with zeros */
+  /** Given a signed, upwards cast, extends the sign of the given AST to the
+   *  desired length.
+   *  @param a The bitvector to upcast.
+   *  @param topbit The highest bit of the bitvector (1-based)
+   *  @param topwidth The number of bits to extend the input by
+   *  @return A bitvector with topwidth more bits, of the appropriate sign. */
+  smt_astt mk_sign_ext(smt_astt a, unsigned int topbit, unsigned int topwidth);
+
+  /** Identical to mk_sign_ext, but extends AST with zeros */
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth);
 
   /** Extract the assignment to a boolean variable from the SMT solvers model.
@@ -698,24 +706,11 @@ public:
    *  @param expr The symbol2tc expression of this symbol.
    *  @param sym The textual representation of this symbol.
    *  @return A pointer-typed AST representing the address of this symbol. */
-  smt_astt convert_identifier_pointer(
-    const expr2tc &expr,
-    const std::string &sym);
+  smt_astt
+  convert_identifier_pointer(const expr2tc &expr, const std::string &sym);
 
   smt_astt init_pointer_obj(unsigned int obj_num, const expr2tc &size);
 
-  /** Given a signed, upwards cast, extends the sign of the given AST to the
-   *  desired length.
-   *  @param a The bitvector to upcast.
-   *  @param s The resulting sort of this extension operation
-   *  @param topbit The highest bit of the bitvector (1-based)
-   *  @param topwidth The number of bits to extend the input by
-   *  @return A bitvector with topwidth more bits, of the appropriate sign. */
-  smt_astt convert_sign_ext(
-    smt_astt a,
-    smt_sortt s,
-    unsigned int topbit,
-    unsigned int topwidth);
   /** Checks for equality with NaN representation. */
   smt_astt convert_is_nan(const expr2tc &expr);
   /** Checks for equality with inf representation. */

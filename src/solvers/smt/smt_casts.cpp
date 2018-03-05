@@ -65,9 +65,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(
   else
   {
     assert(from_width < to_integer_bits);
-    smt_sortt tmp = mk_int_bv_sort(SMT_SORT_UBV, to_integer_bits);
-    frontpart =
-      convert_sign_ext(a, tmp, from_width, to_integer_bits - from_width);
+    frontpart = mk_sign_ext(a, from_width, to_integer_bits - from_width);
   }
 
   // Make all zeros fraction bits
@@ -128,10 +126,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
     smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits);
 
     unsigned int additional_bits = to_integer_bits - from_integer_bits;
-    smt_sortt tmp_sort =
-      mk_int_bv_sort(SMT_SORT_UBV, from_integer_bits + additional_bits);
-    magnitude =
-      convert_sign_ext(ext, tmp_sort, from_integer_bits, additional_bits);
+    magnitude = mk_sign_ext(ext, from_integer_bits, additional_bits);
   }
 
   // Followed by the fraction part
@@ -308,10 +303,7 @@ smt_astt smt_convt::convert_typecast_to_ints_from_fbv_sint(
   }
 
   if(from_width < to_width)
-  {
-    smt_sortt s = convert_sort(cast.type);
-    return convert_sign_ext(a, s, from_width, (to_width - from_width));
-  }
+    return mk_sign_ext(a, from_width, (to_width - from_width));
 
   if(from_width > to_width)
     return mk_extract(a, to_width - 1, 0);
