@@ -583,3 +583,72 @@ smt_astt fp_convt::mk_max_exp(std::size_t ebits)
   BigInt z = power2m1(ebits - 1, false);
   return ctx->mk_smt_bv(SMT_SORT_UBV, z, ebits);
 }
+
+smt_astt fp_convt::mk_rounding_decision(
+  smt_astt &rm,
+  smt_astt &sgn,
+  smt_astt &last,
+  smt_astt &round,
+  smt_astt &sticky)
+{
+  smt_astt last_or_sticky =
+    ctx->mk_func_app(last->sort, SMT_FUNC_BVOR, last, sticky);
+  smt_astt round_or_sticky =
+    ctx->mk_func_app(round->sort, SMT_FUNC_BVOR, round, sticky);
+
+  smt_astt not_round = ctx->mk_func_app(round->sort, SMT_FUNC_BVNOT, round);
+  smt_astt not_lors =
+    ctx->mk_func_app(last_or_sticky->sort, SMT_FUNC_BVNOT, last_or_sticky);
+  smt_astt not_rors =
+    ctx->mk_func_app(round_or_sticky->sort, SMT_FUNC_BVNOT, round_or_sticky);
+  smt_astt not_sgn = ctx->mk_func_app(sgn->sort, SMT_FUNC_BVNOT, sgn);
+
+  smt_astt inc_teven = ctx->mk_func_app(
+    not_round->sort,
+    SMT_FUNC_BVNOT,
+    ctx->mk_func_app(last->sort, SMT_FUNC_BVOR, not_round, not_lors));
+  smt_astt inc_taway = round;
+  smt_astt inc_pos = ctx->mk_func_app(
+    sgn->sort,
+    SMT_FUNC_BVNOT,
+    ctx->mk_func_app(sgn->sort, SMT_FUNC_BVOR, sgn, not_rors));
+  smt_astt inc_neg = ctx->mk_func_app(
+    not_sgn->sort,
+    SMT_FUNC_BVNOT,
+    ctx->mk_func_app(not_sgn->sort, SMT_FUNC_BVOR, not_sgn, not_rors));
+
+  smt_astt nil_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+
+  smt_astt rm_is_to_neg = mk_is_rm(rm, ieee_floatt::ROUND_TO_MINUS_INF);
+  smt_astt rm_is_to_pos = mk_is_rm(rm, ieee_floatt::ROUND_TO_PLUS_INF);
+  smt_astt rm_is_away = mk_is_rm(rm, ieee_floatt::ROUND_TO_AWAY);
+  smt_astt rm_is_even = mk_is_rm(rm, ieee_floatt::ROUND_TO_EVEN);
+
+  smt_astt inc_c4 =
+    ctx->mk_func_app(inc_neg->sort, SMT_FUNC_ITE, rm_is_to_neg, inc_neg, nil_1);
+  smt_astt inc_c3 = ctx->mk_func_app(
+    inc_pos->sort, SMT_FUNC_ITE, rm_is_to_pos, inc_pos, inc_c4);
+  smt_astt inc_c2 = ctx->mk_func_app(
+    rm_is_away->sort, SMT_FUNC_ITE, rm_is_away, inc_taway, inc_c3);
+  return ctx->mk_func_app(
+    rm_is_even->sort, SMT_FUNC_ITE, rm_is_even, inc_teven, inc_c2);
+}
+
+smt_astt fp_convt::mk_is_rm(smt_astt &rme, ieee_floatt::rounding_modet rm)
+{
+  smt_astt rm_num = ctx->mk_smt_bv(SMT_SORT_UBV, rm, 3);
+  switch(rm)
+  {
+  case ieee_floatt::ROUND_TO_EVEN:
+  case ieee_floatt::ROUND_TO_AWAY:
+  case ieee_floatt::ROUND_TO_PLUS_INF:
+  case ieee_floatt::ROUND_TO_MINUS_INF:
+  case ieee_floatt::ROUND_TO_ZERO:
+    return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, rme, rm_num);
+  default:
+    break;
+  }
+
+  std::cerr << "Unknown rounding mode\n";
+  abort();
+}

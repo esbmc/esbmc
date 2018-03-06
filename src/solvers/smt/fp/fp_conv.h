@@ -238,6 +238,15 @@ private:
   smt_astt mk_unbias(smt_astt &src);
   smt_astt mk_leading_zeros(smt_astt &src, std::size_t max_bits);
 
+  smt_astt mk_rounding_decision(
+    smt_astt &rm,
+    smt_astt &sgn,
+    smt_astt &last,
+    smt_astt &round,
+    smt_astt &sticky);
+
+  smt_astt mk_is_rm(smt_astt &rme, ieee_floatt::rounding_modet rm);
+
   smt_astt mk_min_exp(std::size_t ebits);
   smt_astt mk_max_exp(std::size_t ebits);
 
