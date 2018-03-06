@@ -247,8 +247,11 @@ private:
 
   smt_astt mk_is_rm(smt_astt &rme, ieee_floatt::rounding_modet rm);
 
+  smt_astt mk_top_exp(std::size_t sz);
+  smt_astt mk_bot_exp(std::size_t sz);
   smt_astt mk_min_exp(std::size_t ebits);
   smt_astt mk_max_exp(std::size_t ebits);
+  smt_astt mk_bias(smt_astt e);
 
   BigInt power2(std::size_t n, bool negated)
   {

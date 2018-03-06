@@ -584,6 +584,16 @@ smt_astt fp_convt::mk_max_exp(std::size_t ebits)
   return ctx->mk_smt_bv(SMT_SORT_UBV, z, ebits);
 }
 
+smt_astt fp_convt::mk_top_exp(std::size_t sz)
+{
+  return ctx->mk_smt_bv(SMT_SORT_UBV, power2m1(sz, false), sz);
+}
+
+smt_astt fp_convt::mk_bot_exp(std::size_t sz)
+{
+  return ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sz);
+}
+
 smt_astt fp_convt::mk_rounding_decision(
   smt_astt &rm,
   smt_astt &sgn,
@@ -651,4 +661,13 @@ smt_astt fp_convt::mk_is_rm(smt_astt &rme, ieee_floatt::rounding_modet rm)
 
   std::cerr << "Unknown rounding mode\n";
   abort();
+}
+
+smt_astt fp_convt::mk_bias(smt_astt e)
+{
+  std::size_t ebits = e->sort->get_data_width();
+
+  smt_astt bias =
+    ctx->mk_smt_bv(SMT_SORT_SBV, power2m1(ebits - 1, false), ebits);
+  return ctx->mk_func_app(e->sort, SMT_FUNC_BVADD, e, bias);
 }
