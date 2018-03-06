@@ -590,6 +590,18 @@ public:
    *  @return Expression representation of a's value */
   expr2tc build_bv(const type2tc &type, BigInt value);
 
+  /** Reduction or: equals bit0 iff all bits are 0
+   * @param op the expr to be reduced
+   * @return reduced op
+   */
+  smt_astt mk_bvredor(smt_astt op);
+
+  /** Reduction and: equals bit1 iff all bits are 1
+   * @param op the expr to be reduced
+   * @return reduced op
+   */
+  smt_astt mk_bvredand(smt_astt op);
+
   /** @} */
 
   /** @{

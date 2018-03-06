@@ -2949,3 +2949,44 @@ smt_sortt smt_convt::mk_bv_fp_rm_sort()
   std::cerr << "Chosen solver doesn't support bit vector sorts\n";
   abort();
 }
+
+smt_astt smt_convt::mk_bvredor(smt_astt op)
+{
+  // bvredor = bvnot(bvcomp(x,0)) ? bv1 : bv0;
+
+  smt_astt comp = mk_func_app(
+    boolean_sort,
+    SMT_FUNC_EQ,
+    op,
+    mk_smt_bv(SMT_SORT_UBV, 0, op->sort->get_data_width()));
+
+  smt_astt ncomp = mk_func_app(boolean_sort, SMT_FUNC_NOT, comp);
+
+  // If it's true, return 1. Return 0, othewise.
+  return mk_func_app(
+    mk_bv_sort(SMT_SORT_UBV, 1),
+    SMT_FUNC_ITE,
+    ncomp,
+    mk_smt_bv(SMT_SORT_UBV, 1, 1),
+    mk_smt_bv(SMT_SORT_UBV, 0, 1));
+}
+
+smt_astt smt_convt::mk_bvredand(smt_astt op)
+{
+  // bvredand = bvcomp(x,-1) ? bv1 : bv0;
+
+  smt_astt comp = mk_func_app(
+    boolean_sort,
+    SMT_FUNC_EQ,
+    op,
+    mk_smt_bv(
+      SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), op->sort->get_data_width()));
+
+  // If it's true, return 1. Return 0, othewise.
+  return mk_func_app(
+    mk_bv_sort(SMT_SORT_UBV, 1),
+    SMT_FUNC_ITE,
+    comp,
+    mk_smt_bv(SMT_SORT_UBV, 1, 1),
+    mk_smt_bv(SMT_SORT_UBV, 0, 1));
+}
