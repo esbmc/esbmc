@@ -9,11 +9,11 @@ __ESBMC_HIDE:;
   {
   case 0:
     return FE_TONEAREST;
-  case 1:
-    return FE_DOWNWARD;
   case 2:
     return FE_UPWARD;
   case 3:
+    return FE_DOWNWARD;
+  case 4:
     return FE_TOWARDZERO;
   default:
     break;
@@ -29,14 +29,14 @@ __ESBMC_HIDE:;
   case FE_TONEAREST:
     __ESBMC_rounding_mode = 0;
     break;
-  case FE_DOWNWARD:
-    __ESBMC_rounding_mode = 1;
-    break;
   case FE_UPWARD:
     __ESBMC_rounding_mode = 2;
     break;
-  case FE_TOWARDZERO:
+  case FE_DOWNWARD:
     __ESBMC_rounding_mode = 3;
+    break;
+  case FE_TOWARDZERO:
+    __ESBMC_rounding_mode = 4;
     break;
   default:
     break;

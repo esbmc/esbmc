@@ -715,5 +715,5 @@ smt_sortt yices_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
 smt_sortt yices_convt::mk_bv_fp_rm_sort()
 {
   return new solver_smt_sort<type_t>(
-    SMT_SORT_FAKE_FLOATBV_RM, yices_bv_type(2), 2);
+    SMT_SORT_FAKE_FLOATBV_RM, yices_bv_type(3), 3);
 }
