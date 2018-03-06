@@ -571,3 +571,15 @@ smt_astt fp_convt::mk_leading_zeros(smt_astt &src, std::size_t max_bits)
     return ctx->mk_func_app(lzH->sort, SMT_FUNC_ITE, H_is_zero, sum, lzH);
   }
 }
+
+smt_astt fp_convt::mk_min_exp(std::size_t ebits)
+{
+  BigInt z = power2m1(ebits - 1, true) + 1;
+  return ctx->mk_smt_bv(SMT_SORT_SBV, z, ebits);
+}
+
+smt_astt fp_convt::mk_max_exp(std::size_t ebits)
+{
+  BigInt z = power2m1(ebits - 1, false);
+  return ctx->mk_smt_bv(SMT_SORT_UBV, z, ebits);
+}

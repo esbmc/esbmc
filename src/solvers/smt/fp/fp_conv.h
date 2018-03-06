@@ -237,6 +237,28 @@ private:
 
   smt_astt mk_unbias(smt_astt &src);
   smt_astt mk_leading_zeros(smt_astt &src, std::size_t max_bits);
+
+  smt_astt mk_min_exp(std::size_t ebits);
+  smt_astt mk_max_exp(std::size_t ebits);
+
+  BigInt power2(std::size_t n, bool negated)
+  {
+    BigInt b;
+    b.setPower2(n);
+    if(negated)
+      b.negate();
+    return b;
+  }
+
+  BigInt power2m1(std::size_t n, bool negated)
+  {
+    BigInt b;
+    b.setPower2(n);
+    b -= 1;
+    if(negated)
+      b.negate();
+    return b;
+  }
 };
 
 #endif /* SOLVERS_SMT_FP_CONV_H_ */
