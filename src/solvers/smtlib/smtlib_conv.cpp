@@ -805,31 +805,20 @@ smt_astt smtlib_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
   BigInt big_int(big);
   smt_astt f = ctx->mk_smt_bv(SMT_SORT_UBV, big_int, topwidth);
 
-  smt_sortt topsort = mk_int_bv_sort(SMT_SORT_UBV, topwidth);
-  smt_astt topbits = ctx->mk_func_app(topsort, SMT_FUNC_ITE, t, z, f);
+  smt_astt topbits = ctx->mk_ite(t, z, f);
 
-  return ctx->mk_func_app(
-    mk_bv_sort(SMT_SORT_SBV, a->sort->get_data_width() + topwidth),
-    SMT_FUNC_CONCAT,
-    topbits,
-    a);
+  return ctx->mk_concat(topbits, a);
 }
 
 smt_astt smtlib_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
   smt_astt z = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), topwidth);
-  return ctx->mk_func_app(
-    mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth),
-    SMT_FUNC_CONCAT,
-    z,
-    a);
+  return ctx->mk_concat(z, a);
 }
 
 smt_astt smtlib_convt::mk_concat(smt_astt a, smt_astt b)
 {
-  smt_sortt s = mk_bv_sort(
-    SMT_SORT_UBV, a->sort->get_data_width() + b->sort->get_data_width());
-  return ctx->mk_func_app(s, SMT_FUNC_CONCAT, a, b);
+  return ctx->mk_concat(a, b);
 }
 
 smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
@@ -838,7 +827,7 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
   assert(t->sort->id == f->sort->id);
   assert(t->sort->get_data_width() == f->sort->get_data_width());
 
-  return ctx->mk_func_app(t->sort, SMT_FUNC_ITE, cond, t, f);
+  return ctx->mk_ite(cond, t, f);
 }
 
 int smtliberror(int startsym __attribute__((unused)), const std::string &error)

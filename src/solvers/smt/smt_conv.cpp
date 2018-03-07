@@ -563,7 +563,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), fraction_bits);
       smt_astt op0 = convert_ast(div.side_1);
 
-      args[0] = mk_func_app(s2, SMT_FUNC_CONCAT, op0, zero);
+      args[0] = mk_concat(op0, zero);
 
       // Sorts.
       a = mk_func_app(s2, SMT_FUNC_BVSDIV, args, 2);
@@ -1092,8 +1092,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     assert(
       !int_encoding &&
       "Concatonate encountered in integer mode; unimplemented (and funky)");
-    smt_sortt sort = convert_sort(expr->type);
-    a = mk_func_app(sort, SMT_FUNC_CONCAT, args, 2);
+    a = mk_concat(args[0], args[1]);
     break;
   }
   case expr2t::implies_id:
@@ -1685,7 +1684,6 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
   // Since we can't extract the top bit, from the fpbv, we'll
   // convert it to return if(is_neg) ? 1 : 0;
   auto value = convert_ast(signbit.value);
-  auto sort = convert_sort(signbit.type);
 
   // Create is_neg
   smt_astt is_neg;
@@ -1700,9 +1698,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
       convert_ast(gen_zero(signbit.value->type)));
 
   // If it's true, return 1. Return 0, othewise.
-  return mk_func_app(
-    sort,
-    SMT_FUNC_ITE,
+  return mk_ite(
     is_neg,
     convert_ast(gen_one(signbit.type)),
     convert_ast(gen_zero(signbit.type)));
@@ -1753,14 +1749,9 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
   smt_astt pi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF);
   smt_astt ze = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
 
-  smt_astt ite2 =
-    mk_func_app(fp_api->mk_fpbv_rm_sort(), SMT_FUNC_ITE, is_eq_two, pi, ze);
-
-  smt_astt ite1 =
-    mk_func_app(fp_api->mk_fpbv_rm_sort(), SMT_FUNC_ITE, is_eq_one, mi, ite2);
-
-  smt_astt ite0 =
-    mk_func_app(fp_api->mk_fpbv_rm_sort(), SMT_FUNC_ITE, is_eq_zero, ne, ite1);
+  smt_astt ite2 = mk_ite(is_eq_two, pi, ze);
+  smt_astt ite1 = mk_ite(is_eq_one, mi, ite2);
+  smt_astt ite0 = mk_ite(is_eq_zero, ne, ite1);
 
   return ite0;
 }
@@ -1798,11 +1789,10 @@ smt_astt smt_convt::round_real_to_int(smt_astt a)
 
   // If it's an integer, just keep it's untruncated value.
   smt_astt is_int = mk_func_app(boolsort, SMT_FUNC_IS_INT, &a, 1);
-  smt_astt selected =
-    mk_func_app(intsort, SMT_FUNC_ITE, is_int, as_int, plus_one);
+  smt_astt selected = mk_ite(is_int, as_int, plus_one);
 
   // Switch on whether it's > or < 0.
-  return mk_func_app(intsort, SMT_FUNC_ITE, is_lt_zero, selected, as_int);
+  return mk_ite(is_lt_zero, selected, as_int);
 }
 
 smt_astt smt_convt::round_fixedbv_to_int(
@@ -1842,13 +1832,12 @@ smt_astt smt_convt::round_fixedbv_to_int(
   smt_astt intvalue_plus_one =
     mk_func_app(tosort, SMT_FUNC_BVADD, intvalue, one);
 
-  smt_astt neg_val = mk_func_app(
-    tosort, SMT_FUNC_ITE, is_zero_frac, intvalue, intvalue_plus_one);
+  smt_astt neg_val = mk_ite(is_zero_frac, intvalue, intvalue_plus_one);
 
   smt_astt is_neg = mk_func_app(boolsort, SMT_FUNC_EQ, true_bit, is_neg_bit);
 
   // final switch
-  return mk_func_app(tosort, SMT_FUNC_ITE, is_neg, neg_val, intvalue);
+  return mk_ite(is_neg, neg_val, intvalue);
 }
 
 smt_astt smt_convt::make_bool_bit(smt_astt a)
@@ -1861,7 +1850,7 @@ smt_astt smt_convt::make_bool_bit(smt_astt a)
                                 : mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
   smt_astt zero = (int_encoding) ? mk_smt_int(BigInt(0), false)
                                  : mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
-  return mk_func_app(one->sort, SMT_FUNC_ITE, a, one, zero);
+  return mk_ite(a, one, zero);
 }
 
 smt_astt smt_convt::make_bit_bool(smt_astt a)
@@ -2702,8 +2691,7 @@ smt_astt array_iface::default_convert_array_of(
   {
     smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
     smt_astt one = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
-    smt_sortt result_sort = ctx->mk_int_bv_sort(SMT_SORT_UBV, 1);
-    init_val = ctx->mk_func_app(result_sort, SMT_FUNC_ITE, init_val, one, zero);
+    init_val = ctx->mk_ite(init_val, one, zero);
   }
 
   smt_sortt domwidth = ctx->mk_int_bv_sort(SMT_SORT_UBV, array_size);
@@ -2816,7 +2804,7 @@ void smt_ast::assign(smt_convt *ctx, smt_astt sym) const
 
 smt_astt smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
-  return ctx->mk_func_app(sort, SMT_FUNC_ITE, cond, this, falseop);
+  return ctx->mk_ite(cond, this, falseop);
 }
 
 smt_astt smt_ast::eq(smt_convt *ctx, smt_astt other) const
@@ -2963,12 +2951,8 @@ smt_astt smt_convt::mk_bvredor(smt_astt op)
   smt_astt ncomp = mk_func_app(boolean_sort, SMT_FUNC_NOT, comp);
 
   // If it's true, return 1. Return 0, othewise.
-  return mk_func_app(
-    mk_bv_sort(SMT_SORT_UBV, 1),
-    SMT_FUNC_ITE,
-    ncomp,
-    mk_smt_bv(SMT_SORT_UBV, 1, 1),
-    mk_smt_bv(SMT_SORT_UBV, 0, 1));
+  return mk_ite(
+    ncomp, mk_smt_bv(SMT_SORT_UBV, 1, 1), mk_smt_bv(SMT_SORT_UBV, 0, 1));
 }
 
 smt_astt smt_convt::mk_bvredand(smt_astt op)
@@ -2983,10 +2967,6 @@ smt_astt smt_convt::mk_bvredand(smt_astt op)
       SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), op->sort->get_data_width()));
 
   // If it's true, return 1. Return 0, othewise.
-  return mk_func_app(
-    mk_bv_sort(SMT_SORT_UBV, 1),
-    SMT_FUNC_ITE,
-    comp,
-    mk_smt_bv(SMT_SORT_UBV, 1, 1),
-    mk_smt_bv(SMT_SORT_UBV, 0, 1));
+  return mk_ite(
+    comp, mk_smt_bv(SMT_SORT_UBV, 1, 1), mk_smt_bv(SMT_SORT_UBV, 0, 1));
 }

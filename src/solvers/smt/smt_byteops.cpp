@@ -231,14 +231,9 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   smt_astt concat;
 
   if(middle != nullptr)
-  {
-    smt_sortt s = mk_int_bv_sort(SMT_SORT_UBV, width_op0 - bottom_of_update);
-    concat = mk_func_app(s, SMT_FUNC_CONCAT, top, middle);
-  }
+    concat = mk_concat(top, middle);
   else
-  {
     concat = top;
-  }
 
-  return mk_func_app(src_value->sort, SMT_FUNC_CONCAT, concat, bottom);
+  return mk_concat(concat, bottom);
 }

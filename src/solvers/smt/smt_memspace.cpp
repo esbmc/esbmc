@@ -222,8 +222,7 @@ void smt_convt::renumber_symbol_address(
 
     // Now merge with the old value for all future address-of's
 
-    it->second = mk_func_app(
-      output->sort, SMT_FUNC_ITE, convert_ast(guard), output, it->second);
+    it->second = mk_ite(convert_ast(guard), output, it->second);
   }
   else
   {

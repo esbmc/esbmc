@@ -48,7 +48,6 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(
   assert(is_bv_type(cast.from));
 
   smt_astt a = convert_ast(cast.from);
-  smt_sortt s = convert_sort(cast.type);
 
   unsigned from_width = cast.from->type->get_width();
 
@@ -70,7 +69,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(
 
   // Make all zeros fraction bits
   smt_astt zero_fracbits = mk_smt_bv(SMT_SORT_UBV, BigInt(0), to_fraction_bits);
-  return mk_func_app(s, SMT_FUNC_CONCAT, frontpart, zero_fracbits);
+  return mk_concat(frontpart, zero_fracbits);
 }
 
 smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(
@@ -82,14 +81,11 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(
   assert(is_bool_type(cast.from));
 
   smt_astt a = convert_ast(cast.from);
-  smt_sortt s = convert_sort(cast.type);
 
-  smt_sortt intsort;
   smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), to_integer_bits);
   smt_astt one = mk_smt_bv(SMT_SORT_UBV, BigInt(1), to_integer_bits);
-  intsort = mk_int_bv_sort(SMT_SORT_UBV, to_integer_bits);
-  smt_astt switched = mk_func_app(intsort, SMT_FUNC_ITE, a, zero, one);
-  return mk_func_app(s, SMT_FUNC_CONCAT, switched, zero);
+  smt_astt switched = mk_ite(a, zero, one);
+  return mk_concat(switched, zero);
 }
 
 smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
@@ -106,7 +102,6 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
   unsigned from_width = from_fbvt.width;
   smt_astt magnitude, fraction;
   smt_astt a = convert_ast(cast.from);
-  smt_sortt s = convert_sort(cast.type);
 
   // FIXME: conversion here for to_int_bits > from_int_bits is factually
   // broken, run 01_cbmc_Fixedbv8 with --no-simplify
@@ -145,33 +140,24 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
     smt_astt zeros =
       mk_smt_bv(SMT_SORT_UBV, BigInt(0), to_fraction_bits - from_fraction_bits);
 
-    smt_sortt tmp_sort = mk_int_bv_sort(SMT_SORT_UBV, to_fraction_bits);
-    fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, src_fraction, zeros);
+    fraction = mk_concat(src_fraction, zeros);
   }
 
   // Finally, concatenate the adjusted magnitude / fraction
-  return mk_func_app(s, SMT_FUNC_CONCAT, magnitude, fraction);
+  return mk_concat(magnitude, fraction);
 }
 
 smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
 {
-  // The target type
-  unsigned ew = to_floatbv_type(cast.type).exponent;
-  unsigned sw = to_floatbv_type(cast.type).fraction;
-
-  smt_sortt s = mk_real_fp_sort(ew, sw);
-
   // Convert each type
   if(is_bool_type(cast.from))
   {
     // For bools, there is no direct conversion, so the cast is
     // transformed into fpa = b ? 1 : 0;
-    const smt_ast *args[3];
-    args[0] = convert_ast(cast.from);
-    args[1] = convert_ast(gen_one(cast.type));
-    args[2] = convert_ast(gen_zero(cast.type));
-
-    return mk_func_app(s, SMT_FUNC_ITE, args, 3);
+    return mk_ite(
+      convert_ast(cast.from),
+      convert_ast(gen_one(cast.type)),
+      convert_ast(gen_zero(cast.type)));
   }
 
   if(is_unsignedbv_type(cast.from))
@@ -263,7 +249,7 @@ smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
       one = mk_smt_real("1");
     }
 
-    return mk_func_app(convert_sort(cast.type), SMT_FUNC_ITE, a, one, zero);
+    return mk_ite(a, one, zero);
   }
 
   // Otherwise, we're looking at a cast between reals and int sorts.
@@ -335,7 +321,6 @@ smt_astt smt_convt::convert_typecast_to_ints_from_unsigned(
 smt_astt smt_convt::convert_typecast_to_ints_from_bool(const typecast2t &cast)
 {
   assert(!int_encoding);
-  smt_sortt s = convert_sort(cast.type);
   smt_astt a = convert_ast(cast.from);
 
   smt_astt zero, one;
@@ -344,7 +329,7 @@ smt_astt smt_convt::convert_typecast_to_ints_from_bool(const typecast2t &cast)
   zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), width);
   one = mk_smt_bv(SMT_SORT_UBV, BigInt(1), width);
 
-  return mk_func_app(s, SMT_FUNC_ITE, a, one, zero);
+  return mk_ite(a, one, zero);
 }
 
 smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
