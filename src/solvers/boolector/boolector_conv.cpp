@@ -147,15 +147,11 @@ smt_ast *boolector_convt::mk_func_app(
     return new_ast(s, boolector_eq(btor, asts[0]->a, asts[1]->a));
   case SMT_FUNC_NOTEQ:
     return new_ast(s, boolector_ne(btor, asts[0]->a, asts[1]->a));
-  case SMT_FUNC_ITE:
-    return new_ast(s, boolector_cond(btor, asts[0]->a, asts[1]->a, asts[2]->a));
   case SMT_FUNC_STORE:
     return new_ast(
       s, boolector_write(btor, asts[0]->a, asts[1]->a, asts[2]->a));
   case SMT_FUNC_SELECT:
     return new_ast(s, boolector_read(btor, asts[0]->a, asts[1]->a));
-  case SMT_FUNC_CONCAT:
-    return new_ast(s, boolector_concat(btor, asts[0]->a, asts[1]->a));
   default:
     std::cerr << "Unhandled SMT func \"" << smt_func_name_table[k]
               << "\" in boolector conv" << std::endl;
@@ -311,6 +307,33 @@ smt_astt boolector_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
   const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
   BoolectorNode *b = boolector_uext(btor, ast->a, topwidth);
   return new_ast(s, b);
+}
+
+smt_astt boolector_convt::mk_concat(smt_astt a, smt_astt b)
+{
+  smt_sortt s = mk_bv_sort(
+    SMT_SORT_SBV, a->sort->get_data_width() + b->sort->get_data_width());
+
+  return new_ast(
+    s,
+    boolector_concat(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a));
+}
+
+smt_astt boolector_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
+{
+  assert(cond->sort->id == SMT_SORT_BOOL);
+  assert(t->sort == f->sort);
+
+  return new_ast(
+    t->sort,
+    boolector_cond(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(cond)->a,
+      to_solver_smt_ast<btor_smt_ast>(t)->a,
+      to_solver_smt_ast<btor_smt_ast>(f)->a));
 }
 
 bool boolector_convt::get_bool(const smt_ast *a)

@@ -128,9 +128,6 @@ smt_ast *cvc_convt::mk_func_app(
   case SMT_FUNC_IMPLIES:
     e = em.mkExpr(CVC4::kind::IMPLIES, args[0]->a, args[1]->a);
     break;
-  case SMT_FUNC_ITE:
-    e = em.mkExpr(CVC4::kind::ITE, args[0]->a, args[1]->a, args[2]->a);
-    break;
   case SMT_FUNC_NOT:
     e = em.mkExpr(CVC4::kind::NOT, args[0]->a);
     break;
@@ -208,9 +205,6 @@ smt_ast *cvc_convt::mk_func_app(
     break;
   case SMT_FUNC_SELECT:
     e = em.mkExpr(CVC4::kind::SELECT, args[0]->a, args[1]->a);
-    break;
-  case SMT_FUNC_CONCAT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_CONCAT, args[0]->a, args[1]->a);
     break;
   default:
     std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[k]
@@ -313,6 +307,33 @@ smt_astt cvc_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 
   smt_sortt s = mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth);
   return new solver_smt_ast<CVC4::Expr>(this, s, fin);
+}
+
+smt_astt cvc_convt::mk_concat(smt_astt a, smt_astt b)
+{
+  smt_sortt s = mk_bv_sort(
+    SMT_SORT_UBV, a->sort->get_data_width() + b->sort->get_data_width());
+
+  CVC4::Expr e = em.mkExpr(
+    CVC4::kind::BITVECTOR_CONCAT,
+    to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a,
+    to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a);
+
+  return new solver_smt_ast<CVC4::Expr>(this, s, e);
+}
+
+smt_astt cvc_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
+{
+  assert(cond->sort->id == SMT_SORT_BOOL);
+  assert(t->sort == f->sort);
+
+  CVC4::Expr e = em.mkExpr(
+    CVC4::kind::ITE,
+    to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(cond)->a,
+    to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(t)->a,
+    to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(f)->a);
+
+  return new solver_smt_ast<CVC4::Expr>(this, t->sort, e);
 }
 
 const smt_ast *

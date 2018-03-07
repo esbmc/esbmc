@@ -574,6 +574,19 @@ public:
   /** Identical to mk_sign_ext, but extends AST with zeros */
   virtual smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) = 0;
 
+  /** Concatenate two smt expressions
+   * @param a the first part of the concatenation
+   * @param b the second part of the concatenation
+   * @return the concatenation of a and b */
+  virtual smt_astt mk_concat(smt_astt a, smt_astt b) = 0;
+
+  /** Create an ite operation
+   * @param cond the ite condition
+   * @param t the true case
+   * @param f the false case
+   * @return an ite expression */
+  virtual smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) = 0;
+
   /** Extract the assignment to a boolean variable from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
    *  @return Expression representation of a's value, as a constant_bool2tc */

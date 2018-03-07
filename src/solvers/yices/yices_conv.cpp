@@ -146,7 +146,6 @@ smt_astt yices_convt::mk_func_app(
       return new_ast(s, yices_arith_eq_atom(asts[0]->a, asts[1]->a));
 
     return new_ast(s, yices_bveq_atom(asts[0]->a, asts[1]->a));
-
   case SMT_FUNC_NOTEQ:
     if(
       asts[0]->sort->id >= SMT_SORT_SBV ||
@@ -163,7 +162,6 @@ smt_astt yices_convt::mk_func_app(
     }
     else
       return new_ast(s, yices_neq(asts[0]->a, asts[1]->a));
-
   case SMT_FUNC_GT:
     return new_ast(s, yices_arith_gt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_GTE:
@@ -172,7 +170,6 @@ smt_astt yices_convt::mk_func_app(
     return new_ast(s, yices_arith_lt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_LTE:
     return new_ast(s, yices_arith_leq_atom(asts[0]->a, asts[1]->a));
-
   case SMT_FUNC_BVUGT:
     return new_ast(s, yices_bvgt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVUGTE:
@@ -181,7 +178,6 @@ smt_astt yices_convt::mk_func_app(
     return new_ast(s, yices_bvlt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVULTE:
     return new_ast(s, yices_bvle_atom(asts[0]->a, asts[1]->a));
-
   case SMT_FUNC_BVSGT:
     return new_ast(s, yices_bvsgt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSGTE:
@@ -190,7 +186,6 @@ smt_astt yices_convt::mk_func_app(
     return new_ast(s, yices_bvslt_atom(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSLTE:
     return new_ast(s, yices_bvsle_atom(asts[0]->a, asts[1]->a));
-
   case SMT_FUNC_AND:
     return new_ast(s, yices_and2(asts[0]->a, asts[1]->a));
   case SMT_FUNC_OR:
@@ -201,16 +196,11 @@ smt_astt yices_convt::mk_func_app(
     return new_ast(s, yices_not(asts[0]->a));
   case SMT_FUNC_IMPLIES:
     return new_ast(s, yices_implies(asts[0]->a, asts[1]->a));
-
-  case SMT_FUNC_ITE:
-    return new_ast(s, yices_ite(asts[0]->a, asts[1]->a, asts[2]->a));
-
   case SMT_FUNC_IS_INT:
     std::cerr << "Yices does not support an is-integer operation on reals, "
               << "therefore certain casts and operations don't work, sorry"
               << std::endl;
     abort();
-
   case SMT_FUNC_STORE:
     // Crazy "function update" situation.
     temp_term = asts[1]->a;
@@ -218,7 +208,6 @@ smt_astt yices_convt::mk_func_app(
   case SMT_FUNC_SELECT:
     temp_term = asts[1]->a;
     return new_ast(s, yices_application(asts[0]->a, 1, &temp_term));
-
   case SMT_FUNC_ADD:
     return new_ast(s, yices_add(asts[0]->a, asts[1]->a));
   case SMT_FUNC_SUB:
@@ -234,7 +223,6 @@ smt_astt yices_convt::mk_func_app(
     return new_ast(s, temp_term);
   case SMT_FUNC_NEG:
     return new_ast(s, yices_neg(asts[0]->a));
-
   case SMT_FUNC_BVADD:
     return new_ast(s, yices_bvadd(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSUB:
@@ -249,9 +237,6 @@ smt_astt yices_convt::mk_func_app(
     return new_ast(s, yices_bvrem(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSMOD:
     return new_ast(s, yices_bvsrem(asts[0]->a, asts[1]->a));
-
-  case SMT_FUNC_CONCAT:
-    return new_ast(s, yices_bvconcat(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVSHL:
     return new_ast(s, yices_bvshl(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVASHR:
@@ -262,7 +247,6 @@ smt_astt yices_convt::mk_func_app(
     return new_ast(s, yices_bvneg(asts[0]->a));
   case SMT_FUNC_BVNOT:
     return new_ast(s, yices_bvnot(asts[0]->a));
-
   case SMT_FUNC_BVNXOR:
     return new_ast(s, yices_bvxnor(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVNOR:
@@ -275,7 +259,6 @@ smt_astt yices_convt::mk_func_app(
     return new_ast(s, yices_bvand(asts[0]->a, asts[1]->a));
   case SMT_FUNC_BVOR:
     return new_ast(s, yices_bvor(asts[0]->a, asts[1]->a));
-
   default:
     std::cerr << "Unimplemented SMT function '" << smt_func_name_table[k]
               << "' in yices_convt::mk_func_app" << std::endl;
@@ -368,6 +351,31 @@ smt_astt yices_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   term_t term = yices_zero_extend(ast->a, topwidth);
   return new_ast(s, term);
+}
+
+smt_astt yices_convt::mk_concat(smt_astt a, smt_astt b)
+{
+  smt_sortt s = mk_bv_sort(
+    SMT_SORT_UBV, a->sort->get_data_width() + b->sort->get_data_width());
+
+  return new_ast(
+    s,
+    yices_bvconcat(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a));
+}
+
+smt_astt yices_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
+{
+  assert(cond->sort->id == SMT_SORT_BOOL);
+  assert(t->sort == f->sort);
+
+  return new_ast(
+    t->sort,
+    yices_ite(
+      to_solver_smt_ast<yices_smt_ast>(cond)->a,
+      to_solver_smt_ast<yices_smt_ast>(t)->a,
+      to_solver_smt_ast<yices_smt_ast>(f)->a));
 }
 
 smt_astt

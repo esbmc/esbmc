@@ -41,6 +41,8 @@ public:
   mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
+  smt_astt mk_concat(smt_astt a, smt_astt b) override;
+  smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
   const smt_ast *
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;

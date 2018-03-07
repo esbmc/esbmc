@@ -273,33 +273,6 @@ smt_ast *mathsat_convt::mk_func_app(
     r = msat_make_or(env, nota, args[1]->a);
     break;
   }
-  case SMT_FUNC_ITE:
-    if(s->id == SMT_SORT_BOOL)
-    {
-      // MathSAT shows a dislike of implementing this with booleans. Follow
-      // CBMC's CNF flattening and make this
-      // (with c = cond, t = trueval, f = falseval):
-      //
-      //   or(and(c,t),and(not(c), f))
-      msat_term land1 = msat_make_and(env, args[0]->a, args[1]->a);
-      check_msat_error(land1);
-
-      msat_term notval = msat_make_not(env, args[0]->a);
-      check_msat_error(notval);
-
-      msat_term land2 = msat_make_and(env, notval, args[2]->a);
-      check_msat_error(land2);
-
-      r = msat_make_or(env, land1, land2);
-    }
-    else
-    {
-      r = msat_make_term_ite(env, args[0]->a, args[1]->a, args[2]->a);
-    }
-    break;
-  case SMT_FUNC_CONCAT:
-    r = msat_make_bv_concat(env, args[0]->a, args[1]->a);
-    break;
   case SMT_FUNC_BVNOT:
     r = msat_make_bv_not(env, args[0]->a);
     break;
@@ -617,6 +590,61 @@ smt_astt mathsat_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 
   smt_sortt s = mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth);
   return new mathsat_smt_ast(this, s, t);
+}
+
+smt_astt mathsat_convt::mk_concat(smt_astt a, smt_astt b)
+{
+  msat_term t = msat_make_bv_concat(
+    env,
+    to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(b)->a);
+  check_msat_error(t);
+
+  smt_sortt s = mk_bv_sort(
+    SMT_SORT_UBV, a->sort->get_data_width() + b->sort->get_data_width());
+  return new mathsat_smt_ast(this, s, t);
+}
+
+smt_astt mathsat_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
+{
+  assert(cond->sort->id == SMT_SORT_BOOL);
+  assert(t->sort == f->sort);
+
+  msat_term r;
+  if(t->sort->id == SMT_SORT_BOOL)
+  {
+    // MathSAT shows a dislike of implementing this with booleans. Follow
+    // CBMC's CNF flattening and make this
+    // (with c = cond, t = trueval, f = falseval):
+    //
+    //   or(and(c,t),and(not(c), f))
+    msat_term land1 = msat_make_and(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(cond)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(t)->a);
+    check_msat_error(land1);
+
+    msat_term notval =
+      msat_make_not(env, to_solver_smt_ast<mathsat_smt_ast>(cond)->a);
+    check_msat_error(notval);
+
+    msat_term land2 =
+      msat_make_and(env, notval, to_solver_smt_ast<mathsat_smt_ast>(f)->a);
+    check_msat_error(land2);
+
+    r = msat_make_or(env, land1, land2);
+  }
+  else
+  {
+    r = msat_make_term_ite(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(cond)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(t)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(f)->a);
+  }
+  check_msat_error(r);
+
+  return new mathsat_smt_ast(this, t->sort, r);
 }
 
 const smt_ast *
