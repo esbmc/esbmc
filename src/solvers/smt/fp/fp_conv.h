@@ -255,6 +255,16 @@ private:
   smt_astt mk_max_exp(std::size_t ebits);
   smt_astt mk_bias(smt_astt e);
 
+  smt_astt mk_pzero(unsigned ew, unsigned sw);
+  smt_astt mk_nzero(unsigned ew, unsigned sw);
+  smt_astt mk_pinf(unsigned ew, unsigned sw);
+  smt_astt mk_ninf(unsigned ew, unsigned sw);
+
+  smt_astt mk_is_pzero(smt_astt op);
+  smt_astt mk_is_nzero(smt_astt op);
+  smt_astt mk_is_pinf(smt_astt op);
+  smt_astt mk_is_ninf(smt_astt op);
+
   BigInt power2(std::size_t n, bool negated)
   {
     BigInt b;

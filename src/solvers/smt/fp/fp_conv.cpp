@@ -48,37 +48,18 @@ smt_astt fp_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
   // TODO: we always create the same positive NaN:
   // 01111111100000000000000000000001
-
-  // Create sign
-  smt_astt sign = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
-
-  // All exponent bits are one
-  smt_astt exp_all_ones =
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), ew);
-
-  // and significand is not zero
-  smt_astt sig_all_zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), sw);
-
-  // concat them all
-  smt_astt sign_exp = ctx->mk_concat(sign, exp_all_ones);
-  return ctx->mk_concat(sign_exp, sig_all_zero);
+  smt_astt top_exp = mk_top_exp(ew);
+  return ctx->mk_concat(
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1),
+    ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), sw - 1)));
 }
 
 smt_astt fp_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
-  // Create sign
-  smt_astt sign = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(sgn), 1);
-
-  // All exponent bits are one
-  smt_astt exp_all_ones =
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), ew);
-
-  // and all signficand bits are zero
-  smt_astt sig_all_zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw);
-
-  // concat them all
-  smt_astt sign_exp = ctx->mk_concat(sign, exp_all_ones);
-  return ctx->mk_concat(sign_exp, sig_all_zero);
+  smt_astt top_exp = mk_top_exp(ew);
+  return ctx->mk_concat(
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(sgn), 1),
+    ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1)));
 }
 
 smt_astt fp_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
@@ -860,4 +841,72 @@ smt_astt fp_convt::mk_bias(smt_astt e)
   smt_astt bias =
     ctx->mk_smt_bv(SMT_SORT_SBV, power2m1(ebits - 1, false), ebits);
   return ctx->mk_func_app(e->sort, SMT_FUNC_BVADD, e, bias);
+}
+
+smt_astt fp_convt::mk_pzero(unsigned ew, unsigned sw)
+{
+  smt_astt bot_exp = mk_bot_exp(ew);
+  return ctx->mk_concat(
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1),
+    ctx->mk_concat(bot_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1)));
+}
+
+smt_astt fp_convt::mk_nzero(unsigned ew, unsigned sw)
+{
+  smt_astt bot_exp = mk_bot_exp(ew);
+  return ctx->mk_concat(
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1),
+    ctx->mk_concat(bot_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1)));
+}
+
+smt_astt fp_convt::mk_pinf(unsigned ew, unsigned sw)
+{
+  smt_astt top_exp = mk_top_exp(ew);
+  return ctx->mk_concat(
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1),
+    ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1)));
+}
+
+smt_astt fp_convt::mk_ninf(unsigned ew, unsigned sw)
+{
+  smt_astt top_exp = mk_top_exp(ew);
+  return ctx->mk_concat(
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1),
+    ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1)));
+}
+
+smt_astt fp_convt::mk_is_pzero(smt_astt op)
+{
+  return ctx->mk_func_app(
+    ctx->boolean_sort,
+    SMT_FUNC_AND,
+    ctx->fp_api->mk_smt_fpbv_is_zero(op),
+    ctx->fp_api->mk_smt_fpbv_is_positive(op));
+}
+
+smt_astt fp_convt::mk_is_nzero(smt_astt op)
+{
+  return ctx->mk_func_app(
+    ctx->boolean_sort,
+    SMT_FUNC_AND,
+    ctx->fp_api->mk_smt_fpbv_is_zero(op),
+    ctx->fp_api->mk_smt_fpbv_is_negative(op));
+}
+
+smt_astt fp_convt::mk_is_pinf(smt_astt op)
+{
+  return ctx->mk_func_app(
+    ctx->boolean_sort,
+    SMT_FUNC_AND,
+    ctx->fp_api->mk_smt_fpbv_is_inf(op),
+    ctx->fp_api->mk_smt_fpbv_is_positive(op));
+}
+
+smt_astt fp_convt::mk_is_ninf(smt_astt op)
+{
+  return ctx->mk_func_app(
+    ctx->boolean_sort,
+    SMT_FUNC_AND,
+    ctx->fp_api->mk_smt_fpbv_is_inf(op),
+    ctx->fp_api->mk_smt_fpbv_is_negative(op));
 }
