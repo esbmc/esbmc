@@ -608,40 +608,14 @@ smt_astt mathsat_convt::mk_concat(smt_astt a, smt_astt b)
 smt_astt mathsat_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 {
   assert(cond->sort->id == SMT_SORT_BOOL);
-  assert(t->sort == f->sort);
+  assert(t->sort->id == f->sort->id);
+  assert(t->sort->get_data_width() == f->sort->get_data_width());
 
-  msat_term r;
-  if(t->sort->id == SMT_SORT_BOOL)
-  {
-    // MathSAT shows a dislike of implementing this with booleans. Follow
-    // CBMC's CNF flattening and make this
-    // (with c = cond, t = trueval, f = falseval):
-    //
-    //   or(and(c,t),and(not(c), f))
-    msat_term land1 = msat_make_and(
-      env,
-      to_solver_smt_ast<mathsat_smt_ast>(cond)->a,
-      to_solver_smt_ast<mathsat_smt_ast>(t)->a);
-    check_msat_error(land1);
-
-    msat_term notval =
-      msat_make_not(env, to_solver_smt_ast<mathsat_smt_ast>(cond)->a);
-    check_msat_error(notval);
-
-    msat_term land2 =
-      msat_make_and(env, notval, to_solver_smt_ast<mathsat_smt_ast>(f)->a);
-    check_msat_error(land2);
-
-    r = msat_make_or(env, land1, land2);
-  }
-  else
-  {
-    r = msat_make_term_ite(
-      env,
-      to_solver_smt_ast<mathsat_smt_ast>(cond)->a,
-      to_solver_smt_ast<mathsat_smt_ast>(t)->a,
-      to_solver_smt_ast<mathsat_smt_ast>(f)->a);
-  }
+  msat_term r = msat_make_term_ite(
+    env,
+    to_solver_smt_ast<mathsat_smt_ast>(cond)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(t)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(f)->a);
   check_msat_error(r);
 
   return new mathsat_smt_ast(this, t->sort, r);

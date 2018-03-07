@@ -325,7 +325,8 @@ smt_astt boolector_convt::mk_concat(smt_astt a, smt_astt b)
 smt_astt boolector_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 {
   assert(cond->sort->id == SMT_SORT_BOOL);
-  assert(t->sort == f->sort);
+  assert(t->sort->id == f->sort->id);
+  assert(t->sort->get_data_width() == f->sort->get_data_width());
 
   return new_ast(
     t->sort,
