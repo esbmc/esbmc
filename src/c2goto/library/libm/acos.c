@@ -3,10 +3,14 @@
 #include <math.h>
 #include "../intrinsics.h"
 
-#undef acos
-
 double acos(double x)
 {
-  return 1/cos(x);
+__ESBMC_HIDE:;
+  return 1 / cos(x);
 }
 
+double __acos(double x)
+{
+__ESBMC_HIDE:;
+  return acos(x);
+}

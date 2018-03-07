@@ -109,9 +109,8 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
   if(is_symbol_type(type1) && is_symbol_type(type2))
   {
     // already in same set?
-    if(
-      identifiers.make_union(
-        to_symbol_type(type1).symbol_name, to_symbol_type(type2).symbol_name))
+    if(identifiers.make_union(
+         to_symbol_type(type1).symbol_name, to_symbol_type(type2).symbol_name))
       return true;
   }
 
@@ -192,7 +191,7 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
 
     return true;
   }
-  else if(is_code_type(type1))
+  if(is_code_type(type1))
   {
     const code_type2t &code1 = to_code_type(type1);
     const code_type2t &code2 = to_code_type(type2);
@@ -223,9 +222,8 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
   }
   else if(is_array_type(type1))
   {
-    if(
-      !base_type_eq_rec(
-        to_array_type(type1).subtype, to_array_type(type2).subtype))
+    if(!base_type_eq_rec(
+         to_array_type(type1).subtype, to_array_type(type2).subtype))
       return false;
 
     // TODO: check size
@@ -308,7 +306,7 @@ bool base_type_eqt::base_type_eq_rec(const typet &type1, const typet &type2)
 
     return true;
   }
-  else if(type1.id() == "incomplete_struct")
+  if(type1.id() == "incomplete_struct")
   {
     return true;
   }
@@ -382,7 +380,7 @@ bool base_type_eqt::base_type_eq_rec(const expr2tc &expr1, const expr2tc &expr2)
     // Check for nil exprs, which are permitted.
     if(is_nil_expr(*e1) && is_nil_expr(*e2))
       continue;
-    else if(is_nil_expr(*e1) || is_nil_expr(*e2))
+    if(is_nil_expr(*e1) || is_nil_expr(*e2))
       return false;
 
     if(!base_type_eq(*e1, *e2))
@@ -481,7 +479,7 @@ static bool is_subclass_of_rec(
         // Success
         return true;
       }
-      else if(is_subclass_of_rec(basename, subname, ns))
+      if(is_subclass_of_rec(basename, subname, ns))
       {
         return true;
       }

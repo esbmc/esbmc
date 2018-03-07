@@ -124,9 +124,8 @@ bool cpp_typecheck_fargst::match(
     exprt new_expr;
 
     // can we do the standard conversion sequence?
-    if(
-      cpp_typecheck.implicit_conversion_sequence(
-        operand, argument.type(), new_expr, rank))
+    if(cpp_typecheck.implicit_conversion_sequence(
+         operand, argument.type(), new_expr, rank))
     {
       operand.swap(new_expr);
 

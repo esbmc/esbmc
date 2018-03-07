@@ -259,7 +259,7 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
           expr.id("lshr");
           return;
         }
-        else if(type0.id() == "signedbv")
+        if(type0.id() == "signedbv")
         {
           expr.id("ashr");
           return;
@@ -525,7 +525,7 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     gen_typecast(ns, op1, type0);
     return;
   }
-  else if(statement == "assign_shl" || statement == "assign_shr")
+  if(statement == "assign_shl" || statement == "assign_shr")
   {
     gen_typecast_arithmetic(ns, op1);
 
@@ -535,18 +535,16 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
       {
         return;
       }
-      else
+
+      if(type0.id() == "unsignedbv")
       {
-        if(type0.id() == "unsignedbv")
-        {
-          expr.statement("assign_lshr");
-          return;
-        }
-        else if(type0.id() == "signedbv")
-        {
-          expr.statement("assign_ashr");
-          return;
-        }
+        expr.statement("assign_lshr");
+        return;
+      }
+      if(type0.id() == "signedbv")
+      {
+        expr.statement("assign_ashr");
+        return;
       }
     }
   }

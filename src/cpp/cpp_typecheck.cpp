@@ -275,7 +275,7 @@ void cpp_typecheckt::clean_up()
       context.erase_symbol(s.name);
       return;
     }
-    else if(s.type.is_struct() || s.type.is_union())
+    if(s.type.is_struct() || s.type.is_union())
     {
       struct_typet &struct_type = to_struct_type(s.type);
 

@@ -98,8 +98,8 @@ void convert_integer_literal(const std::string &src, exprt &dest)
     type.width(config.ansi_c.long_long_int_width);
     cpp_type = "signed_long_long_int";
   }
-  else if(
-    FITS(config.ansi_c.long_long_int_width, false)) // unsigned long long int
+  else if(FITS(
+            config.ansi_c.long_long_int_width, false)) // unsigned long long int
   {
     type.width(config.ansi_c.long_long_int_width);
     cpp_type = "unsigned_long_long_int";

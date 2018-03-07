@@ -45,7 +45,7 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
       str << "base type is incomplete";
       throw 0;
     }
-    else if(base_symbol.type.id() != "struct")
+    if(base_symbol.type.id() != "struct")
     {
       err_location(name.location());
       str << "expected struct or class as base, but got `"

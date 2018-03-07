@@ -80,7 +80,7 @@ public:
   {
     if(rank < ref.rank)
       return true;
-    else if(rank > ref.rank)
+    if(rank > ref.rank)
       return false;
 
     // Put funkier rules here. Note that less-than means a better match.
@@ -88,7 +88,7 @@ public:
     // Prefer functions with the fewest template parameters.
     if(templ_distance < ref.templ_distance)
       return true;
-    else if(templ_distance > ref.templ_distance)
+    if(templ_distance > ref.templ_distance)
       return false;
 
     if(!has_ptr_to_bool && ref.has_ptr_to_bool)

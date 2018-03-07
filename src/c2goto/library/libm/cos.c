@@ -3,10 +3,9 @@
 #include <math.h>
 #include "../intrinsics.h"
 
-#undef cos
-
 double cos(double x)
 {
+__ESBMC_HIDE:;
   double t, s;
   int p;
   p = 0;
@@ -25,3 +24,8 @@ double cos(double x)
   return s;
 }
 
+double __cos(double x)
+{
+__ESBMC_HIDE:;
+  return cos(x);
+}

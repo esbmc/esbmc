@@ -1,10 +1,12 @@
-#ifndef _ESBMC_SOLVERS_SMT_SMT_TUPLE_H_
-#define _ESBMC_SOLVERS_SMT_SMT_TUPLE_H_
+#ifndef _ESBMC_SOLVERS_SMT_TUPLE_SMT_TUPLE_H_
+#define _ESBMC_SOLVERS_SMT_TUPLE_SMT_TUPLE_H_
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_ast.h>
+#include <solvers/smt/tuple/smt_tuple_sort.h>
 
 // Abstract class defining the interface required for creating tuples.
-class tuple_iface {
+class tuple_iface
+{
 public:
   /** Create a sort representing a struct. i.e., a tuple. Ideally this should
    *  actually be part of the overridden tuple api, but due to history it isn't
@@ -25,10 +27,11 @@ public:
   virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "") = 0;
 
   // XXX XXX XXX docs gap
-  virtual smt_astt tuple_array_create(const type2tc &array_type,
-                              smt_astt *inputargs,
-                              bool const_array,
-                              smt_sortt domain) = 0;
+  virtual smt_astt tuple_array_create(
+    const type2tc &array_type,
+    smt_astt *inputargs,
+    bool const_array,
+    smt_sortt domain) = 0;
 
   /** Create a potentially /large/ array of tuples. This is called when we
    *  encounter an array_of operation, with a very large array size, of tuple
@@ -36,8 +39,9 @@ public:
    *  @param Expression of tuple value to populate this array with.
    *  @param domain_width The size of array to create, in domain bits.
    *  @return An AST representing an array of the tuple value, init_value. */
-  virtual smt_astt tuple_array_of(const expr2tc &init_value,
-                                        unsigned long domain_width) = 0;
+  virtual smt_astt tuple_array_of(
+    const expr2tc &init_value,
+    unsigned long domain_width) = 0;
 
   /** Convert a symbol to a tuple_smt_ast */
   virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) = 0;
@@ -52,6 +56,8 @@ public:
   virtual void add_tuple_constraints_for_solving() = 0;
   virtual void push_tuple_ctx() = 0;
   virtual void pop_tuple_ctx() = 0;
+
+  virtual ~tuple_iface() = default;
 };
 
-#endif /* _ESBMC_SOLVERS_SMT_SMT_TUPLE_H_ */
+#endif /* _ESBMC_SOLVERS_SMT_TUPLE_SMT_TUPLE_H_ */

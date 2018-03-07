@@ -3,8 +3,6 @@
 
 #include <functional>
 #include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_tuple.h>
-#include <solvers/smt/smt_array.h>
 #include <boost/python.hpp>
 #include <boost/python/class.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
@@ -108,8 +106,8 @@ smt_ast_wrapper::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   using namespace boost::python;
   if(override f = get_override_checked(this, "ite"))
     return f(conv_down(ctx), ast_down(cond), ast_down(falseop));
-  else
-    return smt_ast::ite(ctx, cond, falseop);
+
+  return smt_ast::ite(ctx, cond, falseop);
 }
 
 smt_astt smt_ast_wrapper::default_ite(
@@ -125,8 +123,8 @@ smt_astt smt_ast_wrapper::eq(smt_convt *ctx, smt_astt other) const
   using namespace boost::python;
   if(override f = get_override_checked(this, "eq"))
     return f(conv_down(ctx), ast_down(other));
-  else
-    return smt_ast::eq(ctx, other);
+
+  return smt_ast::eq(ctx, other);
 }
 
 smt_astt smt_ast_wrapper::default_eq(smt_convt *ctx, smt_astt other) const
@@ -157,8 +155,8 @@ smt_astt smt_ast_wrapper::update(
   using namespace boost::python;
   if(override f = get_override_checked(this, "update"))
     return f(conv_down(ctx), ast_down(value), idx, idx_expr);
-  else
-    return smt_ast::update(ctx, value, idx, idx_expr);
+
+  return smt_ast::update(ctx, value, idx, idx_expr);
 }
 
 smt_astt smt_ast_wrapper::default_update(
@@ -175,8 +173,8 @@ smt_astt smt_ast_wrapper::select(smt_convt *ctx, const expr2tc &idx) const
   using namespace boost::python;
   if(override f = get_override_checked(this, "select"))
     return f(conv_down(ctx), idx);
-  else
-    return smt_ast::select(ctx, idx);
+
+  return smt_ast::select(ctx, idx);
 }
 
 smt_astt
@@ -190,8 +188,8 @@ smt_astt smt_ast_wrapper::project(smt_convt *ctx, unsigned int elem) const
   using namespace boost::python;
   if(override f = get_override_checked(this, "project"))
     return f(conv_down(ctx), elem);
-  else
-    return smt_ast::project(ctx, elem);
+
+  return smt_ast::project(ctx, elem);
 }
 
 smt_astt
@@ -382,8 +380,8 @@ const smt_ast *smt_convt_wrapper::convert_array_of(
   using namespace boost::python;
   if(override f = this->get_override("convert_array_of"))
     return f(ast_down(init_val), domain_width);
-  else
-    return default_convert_array_of(init_val, domain_width, this);
+
+  return default_convert_array_of(init_val, domain_width, this);
 }
 
 void smt_convt_wrapper::add_array_constraints_for_solving()

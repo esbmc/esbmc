@@ -397,10 +397,8 @@ void runtime_encoded_equationt::flush_latest_instructions()
       // There is in fact, nothing to do
       return;
     }
-    else
-    {
-      // Just roll on
-    }
+
+    // Just roll on
   }
 
   // Now iterate from the start insn to convert, to the end of the list.

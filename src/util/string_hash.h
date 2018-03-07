@@ -50,7 +50,7 @@ public:
   {
     if(hash < ref.hash)
       return true;
-    else if(hash > ref.hash)
+    if(hash > ref.hash)
       return false;
 
     // Hashes match,

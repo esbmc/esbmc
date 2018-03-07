@@ -47,7 +47,7 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
           << "' is declared as reference but is not initialized";
       throw 0;
     }
-    else if(symbol.type.id() == "incomplete_array")
+    if(symbol.type.id() == "incomplete_array")
     {
       err_location(symbol.location);
       str << "storage size of `" << symbol.base_name << "' isn't know";

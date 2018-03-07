@@ -31,7 +31,7 @@ codet &codet::first_statement()
   {
     if(statement == "block")
       return to_code(op0()).first_statement();
-    else if(statement == "label")
+    if(statement == "label")
       return to_code(op0()).first_statement();
   }
 
@@ -46,7 +46,7 @@ const codet &codet::first_statement() const
   {
     if(statement == "block")
       return to_code(op0()).first_statement();
-    else if(statement == "label")
+    if(statement == "label")
       return to_code(op0()).first_statement();
   }
 
@@ -61,7 +61,7 @@ codet &codet::last_statement()
   {
     if(statement == "block")
       return to_code(operands().back()).last_statement();
-    else if(statement == "label")
+    if(statement == "label")
       return to_code(operands().back()).last_statement();
   }
 
@@ -76,7 +76,7 @@ const codet &codet::last_statement() const
   {
     if(statement == "block")
       return to_code(operands().back()).last_statement();
-    else if(statement == "label")
+    if(statement == "label")
       return to_code(operands().back()).last_statement();
   }
 

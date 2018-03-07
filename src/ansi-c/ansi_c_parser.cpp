@@ -60,7 +60,7 @@ static void insert_base_type(typet &dest, const typet &base_type)
       t = base_type;
       break;
     }
-    else if(t.id() == "merged_type")
+    if(t.id() == "merged_type")
     {
       assert(!t.subtypes().empty());
       // Is this the final point in this chain of types? It could be either a
@@ -121,7 +121,7 @@ void ansi_c_parsert::convert_declarator(
       t = type;
       break;
     }
-    else if(t.id() == "")
+    if(t.id() == "")
     {
       std::cout << "D: " << declarator.pretty() << std::endl;
       assert(0);
@@ -204,8 +204,7 @@ ansi_c_id_classt ansi_c_parsert::get_class(const typet &type)
 {
   if(type.id() == "typedef")
     return ANSI_C_TYPEDEF;
-  else if(
-    type.id() == "struct" || type.id() == "union" || type.id() == "c_enum")
+  if(type.id() == "struct" || type.id() == "union" || type.id() == "c_enum")
     return ANSI_C_TAG;
   else if(type.id() == "merged_type")
   {

@@ -26,71 +26,63 @@
 #include <z3_conv.h>
 
 #ifdef DEBUG
-#define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \
-                          "[" << __LINE__ << "]" << std::endl;
+#define DEBUGLOC                                                               \
+  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #else
 #define DEBUGLOC
 #endif
 
-smt_convt *
-create_new_z3_solver(bool int_encoding, const namespacet &ns,
-                     const optionst &opts __attribute__((unused)),
-                     tuple_iface **tuple_api, array_iface **array_api,
-                     fp_convt **fp_api)
+smt_convt *create_new_z3_solver(
+  bool int_encoding,
+  const namespacet &ns,
+  tuple_iface **tuple_api,
+  array_iface **array_api,
+  fp_convt **fp_api)
 {
   z3_convt *conv = new z3_convt(int_encoding, ns);
-  *tuple_api = static_cast<tuple_iface*>(conv);
-  *array_api = static_cast<array_iface*>(conv);
-  *fp_api = static_cast<fp_convt*>(conv);
+  *tuple_api = static_cast<tuple_iface *>(conv);
+  *array_api = static_cast<array_iface *>(conv);
+  *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
 z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
-: smt_convt(int_encoding, _ns), array_iface(true, true), fp_convt(ctx), z3_ctx(false)
+  : smt_convt(int_encoding, _ns),
+    array_iface(true, true),
+    fp_convt(ctx),
+    z3_ctx(false)
 {
-  assumpt_mode = false;
-
   z3::config conf;
   z3_ctx.init(conf, int_encoding);
 
-  solver =
-     (z3::tactic(z3_ctx, "simplify") &
-      z3::tactic(z3_ctx, "solve-eqs") &
-      z3::tactic(z3_ctx, "simplify") &
-      z3::tactic(z3_ctx, "smt")).mk_solver();
+  solver = (z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "solve-eqs") &
+            z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "smt"))
+             .mk_solver();
 
   z3::params p(z3_ctx);
-  p.set("relevancy", (unsigned int) 0);
+  p.set("relevancy", (unsigned int)0);
   p.set("model", true);
   p.set("proof", false);
   solver.set(p);
 
-  Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB_COMPLIANT);
-
-  setup_pointer_sort();
+  Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
 
   assumpt_ctx_stack.push_back(assumpt.begin());
-
-  z3_convt::init_addr_space_array();
 }
 
 z3_convt::~z3_convt()
 {
 }
 
-void
-z3_convt::push_ctx()
+void z3_convt::push_ctx()
 {
-
   smt_convt::push_ctx();
   intr_push_ctx();
   solver.push();
 }
 
-void
-z3_convt::pop_ctx()
+void z3_convt::pop_ctx()
 {
-
   solver.pop();
   intr_pop_ctx();
   smt_convt::pop_ctx();
@@ -99,10 +91,8 @@ z3_convt::pop_ctx()
   model = z3::model();
 }
 
-void
-z3_convt::intr_push_ctx()
+void z3_convt::intr_push_ctx()
 {
-
   // Also push/duplicate pointer logic state.
   pointer_logic.push_back(pointer_logic.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
@@ -114,10 +104,8 @@ z3_convt::intr_push_ctx()
   assumpt_ctx_stack.push_back(it);
 }
 
-void
-z3_convt::intr_pop_ctx()
+void z3_convt::intr_pop_ctx()
 {
-
   // Erase everything on stack since last push_ctx
   std::list<z3::expr>::iterator it = assumpt_ctx_stack.back();
   ++it;
@@ -125,83 +113,29 @@ z3_convt::intr_pop_ctx()
   assumpt_ctx_stack.pop_back();
 }
 
-void
-z3_convt::init_addr_space_array()
-{
-
-  convert_type(addr_space_type, addr_space_tuple_sort);
-  Z3_func_decl tmp_addr_space_decl =
-    Z3_get_tuple_sort_mk_decl(z3_ctx, addr_space_tuple_sort);
-  addr_space_tuple_decl = z3::func_decl(z3_ctx, tmp_addr_space_decl);
-
-  addr_space_arr_sort =
-    z3_ctx.array_sort(z3_ctx.esbmc_int_sort(), addr_space_tuple_sort);
-}
-
-smt_convt::resultt
-z3_convt::dec_solve()
+smt_convt::resultt z3_convt::dec_solve()
 {
   pre_solve();
 
-  z3::check_result result = check2_z3_properties();
+  z3::check_result result = solver.check();
 
-  if (result == z3::unsat)
-    return smt_convt::P_UNSATISFIABLE;
-  else if (result == z3::unknown)
-    return smt_convt::P_ERROR;
-  else
-    return smt_convt::P_SATISFIABLE;
-}
-
-z3::check_result
-z3_convt::check2_z3_properties()
-{
-  z3::check_result result;
-  unsigned i;
-  std::string literal;
-  z3::expr_vector assumptions(z3_ctx);
-
-  if (assumpt_mode) {
-    std::list<z3::expr>::const_iterator it;
-    for (it = assumpt.begin(), i = 0; it != assumpt.end(); it++, i++) {
-      assumptions.push_back(*it);
-    }
-  }
-
-  // XXX XXX XXX jmorse: as of 5dd8a432 running with --smt-during-symex on tests
-  // like 03_exor_01 caused a significant performance hit for no known reason.
-  // Solving got progressively slower as more interleavings were checked.
-  // Profiling said a lot of time was spent in Z3's
-  // bv_simplifier_plugin::bit2bool_simplify method. This doesn't happen if you
-  // run with no additional options. No idea why, but the belief is that the
-  // solver is caching something, bloats, and leads to a performance hit.
-  //
-  // So during debugging I added the following line to see whether some asserts
-  // were being left in the solver accidentally leading to the bloat and... it
-  // just stopped. Presumably this accidentally flushes some kind of internal
-  // cache and kills bloatage; I've no idea why; but if you remove it there's
-  // a significant performance hit.
-  z3::expr_vector vec = solver.assertions();
-
-  if (assumpt_mode) {
-    result = solver.check(assumptions);
-  } else {
-    result = solver.check();
-  }
-
-  if (result == z3::sat)
+  if(result == z3::sat)
+  {
     model = solver.get_model();
+    return P_SATISFIABLE;
+  }
 
-  if (config.options.get_bool_option("show-smt-model") && result == z3::sat)
-    std::cout << Z3_model_to_string(z3_ctx, model);
+  if(result == z3::unsat)
+    return smt_convt::P_UNSATISFIABLE;
 
-  return result;
+  return smt_convt::P_ERROR;
 }
 
-void
-z3_convt::convert_struct_type(const std::vector<type2tc> &members,
-                                    const std::vector<irep_idt> &member_names,
-                                    const irep_idt &struct_name, z3::sort &sort)
+void z3_convt::convert_struct_type(
+  const std::vector<type2tc> &members,
+  const std::vector<irep_idt> &member_names,
+  const irep_idt &struct_name,
+  z3::sort &sort)
 {
   z3::symbol mk_tuple_name, *proj_names;
   z3::sort *proj_types;
@@ -219,32 +153,45 @@ z3_convt::convert_struct_type(const std::vector<type2tc> &members,
   name += "_type_" + struct_name.as_string();
   mk_tuple_name = z3::symbol(z3_ctx, name.c_str());
 
-  if (!members.size()) {
-    sort = z3::to_sort(z3_ctx, Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, 0, nullptr, nullptr, &mk_tuple_decl, nullptr));
+  if(!members.size())
+  {
+    sort = z3::to_sort(
+      z3_ctx,
+      Z3_mk_tuple_sort(
+        z3_ctx, mk_tuple_name, 0, nullptr, nullptr, &mk_tuple_decl, nullptr));
     return;
   }
 
   u_int i = 0;
   std::vector<irep_idt>::const_iterator mname = member_names.begin();
-  for (std::vector<type2tc>::const_iterator it = members.begin();
-       it != members.end(); it++, mname++, i++)
+  for(std::vector<type2tc>::const_iterator it = members.begin();
+      it != members.end();
+      it++, mname++, i++)
   {
     proj_names[i] = z3::symbol(z3_ctx, mname->as_string().c_str());
-    const z3_smt_sort* tmp = z3_sort_downcast(convert_sort(*it));
+    const z3_smt_sort *tmp = z3_sort_downcast(convert_sort(*it));
     proj_types[i] = tmp->s;
   }
 
   // Unpack pointers from Z3++ objects.
   Z3_symbol *unpacked_symbols = new Z3_symbol[num_elems];
   Z3_sort *unpacked_sorts = new Z3_sort[num_elems];
-  for (i = 0; i < num_elems; i++) {
+  for(i = 0; i < num_elems; i++)
+  {
     unpacked_symbols[i] = proj_names[i];
     unpacked_sorts[i] = proj_types[i];
   }
 
-  sort = z3::to_sort(z3_ctx, Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, num_elems,
-                           unpacked_symbols, unpacked_sorts, &mk_tuple_decl,
-                           proj_decls));
+  sort = z3::to_sort(
+    z3_ctx,
+    Z3_mk_tuple_sort(
+      z3_ctx,
+      mk_tuple_name,
+      num_elems,
+      unpacked_symbols,
+      unpacked_sorts,
+      &mk_tuple_decl,
+      proj_decls));
 
   delete[] unpacked_symbols;
   delete[] unpacked_sorts;
@@ -253,20 +200,11 @@ z3_convt::convert_struct_type(const std::vector<type2tc> &members,
   delete[] proj_decls;
 }
 
-void
-z3_convt::setup_pointer_sort()
-{
-  z3::sort s;
-  convert_type(pointer_struct, s);
-  pointer_sort = s;
-  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, s);
-  pointer_decl = z3::func_decl(z3_ctx, decl);
-}
-
-void
-z3_convt::convert_struct(const std::vector<expr2tc> &members,
-                         const std::vector<type2tc> &member_types,
-                         const type2tc &type, z3::expr &output)
+void z3_convt::convert_struct(
+  const std::vector<expr2tc> &members,
+  const std::vector<type2tc> &member_types,
+  const type2tc &type,
+  z3::expr &output)
 {
   // Converts a static struct - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
@@ -280,8 +218,9 @@ z3_convt::convert_struct(const std::vector<expr2tc> &members,
 
 #ifndef NDEBUG
   unsigned int numoperands = members.size();
-  assert(numoperands == member_types.size() &&
-         "Too many / few struct fields for struct type");
+  assert(
+    numoperands == member_types.size() &&
+    "Too many / few struct fields for struct type");
 #endif
 
   // Populate tuple with members of that struct
@@ -299,11 +238,10 @@ z3_convt::convert_struct(const std::vector<expr2tc> &members,
   delete[] args;
 }
 
-void
-z3_convt::convert_type(const type2tc &type, z3::sort &sort)
+void z3_convt::convert_type(const type2tc &type, z3::sort &sort)
 {
-
-  switch (type->type_id) {
+  switch(type->type_id)
+  {
   case type2t::bool_id:
     sort = z3_ctx.bool_sort();
     break;
@@ -321,7 +259,7 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
     unsigned int domain_width = calculate_array_domain_width(arr);
 
     smt_sortt domain;
-    if (int_encoding)
+    if(int_encoding)
       domain = mk_sort(SMT_SORT_INT);
     else
       domain = mk_sort(SMT_SORT_UBV, domain_width);
@@ -333,9 +271,12 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   {
-    if (int_encoding) {
+    if(int_encoding)
+    {
       sort = z3_ctx.esbmc_int_sort();
-    } else {
+    }
+    else
+    {
       unsigned int width = type->get_width();
       sort = z3_ctx.bv_sort(width);
     }
@@ -345,7 +286,7 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   {
     unsigned int width = type->get_width();
 
-    if (int_encoding)
+    if(int_encoding)
       sort = z3_ctx.real_sort();
     else
       sort = z3_ctx.bv_sort(width);
@@ -363,31 +304,12 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   }
 }
 
-void
-z3_convt::assert_ast(const smt_ast *a)
+void z3_convt::assert_ast(const smt_ast *a)
 {
   const z3_smt_ast *za = z3_smt_downcast(a);
   z3::expr theval = za->e;
   solver.add(theval);
   assumpt.push_back(theval);
-}
-
-void
-z3_convt::assert_formula(const z3::expr &ast)
-{
-
-  // If we're not going to be using the assumptions (ie, for unwidening and for
-  // smtlib) then just assert the fact to be true.
-  if (!assumpt_mode) {
-    solver.add(ast);
-    return;
-  }
-
-  z3::expr newvar = z3_ctx.fresh_const("", z3_ctx.bool_sort());
-  z3::expr formula = z3::to_expr(z3_ctx, Z3_mk_iff(z3_ctx, newvar, ast));
-  solver.add(formula);
-
-  assumpt.push_back(newvar);
 }
 
 z3::expr
@@ -398,25 +320,31 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
 
   ty = t.get_sort();
 
-  if (!ty.is_datatype()) {
+  if(!ty.is_datatype())
+  {
     std::cerr << "argument must be a tuple";
     abort();
   }
 
   num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
 
-  if (i >= num_fields) {
+  if(i >= num_fields)
+  {
     std::cerr << "invalid tuple update, index is too big";
     abort();
   }
 
   std::vector<z3::expr> new_fields;
   new_fields.resize(num_fields);
-  for (j = 0; j < num_fields; j++) {
-    if (i == j) {
+  for(j = 0; j < num_fields; j++)
+  {
+    if(i == j)
+    {
       /* use new_val at position i */
       new_fields[j] = newval;
-    } else   {
+    }
+    else
+    {
       /* use field j of t */
       z3::func_decl proj_decl =
         z3::to_func_decl(z3_ctx, Z3_get_tuple_sort_field_decl(z3_ctx, ty, j));
@@ -430,22 +358,23 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
   return mk_tuple_decl.make_tuple_from_array(num_fields, new_fields.data());
 }
 
-z3::expr
-z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
+z3::expr z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 {
   z3::sort ty;
   unsigned num_fields;
 
   ty = t.get_sort();
 
-  if (!ty.is_datatype()) {
+  if(!ty.is_datatype())
+  {
     std::cerr << "Z3 conversion: argument must be a tuple" << std::endl;
     abort();
   }
 
   num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
 
-  if (i >= num_fields) {
+  if(i >= num_fields)
+  {
     std::cerr << "Z3 conversion: invalid tuple select, index is too large"
               << std::endl;
     abort();
@@ -458,19 +387,21 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 
 // SMT-abstraction migration routines.
 
-smt_astt
-z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
-                      const smt_ast * const *args,
-                      unsigned int numargs)
+smt_astt z3_convt::mk_func_app(
+  const smt_sort *s,
+  smt_func_kind k,
+  const smt_ast *const *args,
+  unsigned int numargs)
 {
   const z3_smt_ast *asts[4];
   unsigned int i;
 
   assert(numargs <= 4);
-  for (i = 0; i < numargs; i++)
+  for(i = 0; i < numargs; i++)
     asts[i] = z3_smt_downcast(args[i]);
 
-  switch (k) {
+  switch(k)
+  {
   case SMT_FUNC_ADD:
   case SMT_FUNC_BVADD:
     return new_ast((asts[0]->e + asts[1]->e), s);
@@ -482,42 +413,40 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     return new_ast((asts[0]->e * asts[1]->e), s);
   case SMT_FUNC_MOD:
     if(s->id == SMT_SORT_FLOATBV)
-      return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_rem(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      return new_ast(
+        z3::to_expr(z3_ctx, Z3_mk_fpa_rem(z3_ctx, asts[0]->e, asts[1]->e)), s);
     else
-      return new_ast(z3::to_expr(z3_ctx, Z3_mk_mod(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      return new_ast(
+        z3::to_expr(z3_ctx, Z3_mk_mod(z3_ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_BVSMOD:
     return new_ast(
-                 z3::to_expr(z3_ctx, Z3_mk_bvsrem(z3_ctx, asts[0]->e, asts[1]->e)),
-                 s);
+      z3::to_expr(z3_ctx, Z3_mk_bvsrem(z3_ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_BVUMOD:
     return new_ast(
-                 z3::to_expr(z3_ctx, Z3_mk_bvurem(z3_ctx, asts[0]->e, asts[1]->e)),
-                 s);
+      z3::to_expr(z3_ctx, Z3_mk_bvurem(z3_ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_DIV:
     return new_ast(
-                 z3::to_expr(z3_ctx, Z3_mk_div(z3_ctx, asts[0]->e, asts[1]->e)),s);
+      z3::to_expr(z3_ctx, Z3_mk_div(z3_ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_BVSDIV:
     return new_ast(
-                 z3::to_expr(z3_ctx, Z3_mk_bvsdiv(z3_ctx, asts[0]->e, asts[1]->e)),
-                 s);
+      z3::to_expr(z3_ctx, Z3_mk_bvsdiv(z3_ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_BVUDIV:
     return new_ast(
-                 z3::to_expr(z3_ctx, Z3_mk_bvudiv(z3_ctx, asts[0]->e, asts[1]->e)),
-                 s);
+      z3::to_expr(z3_ctx, Z3_mk_bvudiv(z3_ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_SHL:
     return new_ast(asts[0]->e * pw(z3_ctx.int_val(2), asts[1]->e), s);
   case SMT_FUNC_BVSHL:
     return new_ast(
-                 z3::to_expr(z3_ctx, Z3_mk_bvshl(z3_ctx, asts[0]->e, asts[1]->e)), s);
+      z3::to_expr(z3_ctx, Z3_mk_bvshl(z3_ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_BVASHR:
     return new_ast(
-                 z3::to_expr(z3_ctx, Z3_mk_bvashr(z3_ctx, asts[0]->e, asts[1]->e)),s);
+      z3::to_expr(z3_ctx, Z3_mk_bvashr(z3_ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_NEG:
   case SMT_FUNC_BVNEG:
     return new_ast((-asts[0]->e), s);
   case SMT_FUNC_BVLSHR:
     return new_ast(
-                 z3::to_expr(z3_ctx, Z3_mk_bvlshr(z3_ctx, asts[0]->e, asts[1]->e)),s);
+      z3::to_expr(z3_ctx, Z3_mk_bvlshr(z3_ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_BVNOT:
     return new_ast((~asts[0]->e), s);
   case SMT_FUNC_BVNXOR:
@@ -568,21 +497,28 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_NOTEQ:
     return new_ast((asts[0]->e != asts[1]->e), s);
   case SMT_FUNC_FABS:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_abs(z3_ctx, asts[0]->e)),s);
+    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_abs(z3_ctx, asts[0]->e)), s);
   case SMT_FUNC_ISNAN:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_is_nan(z3_ctx, asts[0]->e)),s);
+    return new_ast(
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_nan(z3_ctx, asts[0]->e)), s);
   case SMT_FUNC_ISINF:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_is_infinite(z3_ctx, asts[0]->e)),s);
+    return new_ast(
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_infinite(z3_ctx, asts[0]->e)), s);
   case SMT_FUNC_ISNORMAL:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_is_normal(z3_ctx, asts[0]->e)),s);
+    return new_ast(
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_normal(z3_ctx, asts[0]->e)), s);
   case SMT_FUNC_ISZERO:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_is_zero(z3_ctx, asts[0]->e)),s);
+    return new_ast(
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_zero(z3_ctx, asts[0]->e)), s);
   case SMT_FUNC_ISNEG:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_is_negative(z3_ctx, asts[0]->e)),s);
+    return new_ast(
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_negative(z3_ctx, asts[0]->e)), s);
   case SMT_FUNC_ISPOS:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_is_positive(z3_ctx, asts[0]->e)),s);
+    return new_ast(
+      z3::to_expr(z3_ctx, Z3_mk_fpa_is_positive(z3_ctx, asts[0]->e)), s);
   case SMT_FUNC_IEEE_EQ:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_eq(z3_ctx, asts[0]->e, asts[1]->e)),s);
+    return new_ast(
+      z3::to_expr(z3_ctx, Z3_mk_fpa_eq(z3_ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_ITE:
     return new_ast(ite(asts[0]->e, asts[1]->e, asts[2]->e), s);
   case SMT_FUNC_STORE:
@@ -591,8 +527,7 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     return new_ast(select(asts[0]->e, asts[1]->e), s);
   case SMT_FUNC_CONCAT:
     return new_ast(
-                   z3::to_expr(z3_ctx, Z3_mk_concat(z3_ctx, asts[0]->e, asts[1]->e)),
-                   s);
+      z3::to_expr(z3_ctx, Z3_mk_concat(z3_ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_REAL2INT:
     return new_ast(z3::to_expr(z3_ctx, Z3_mk_real2int(z3_ctx, asts[0]->e)), s);
   case SMT_FUNC_INT2REAL:
@@ -609,34 +544,35 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
 }
 
-smt_astt
-z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low,
-                     const smt_sort *s)
+smt_astt z3_convt::mk_extract(
+  const smt_ast *a,
+  unsigned int high,
+  unsigned int low,
+  const smt_sort *s)
 {
   const z3_smt_ast *za = z3_smt_downcast(a);
 
   // If it's a floatbv, convert it to bv
   if(a->sort->id == SMT_SORT_FLOATBV)
   {
-    smt_ast * bv = new_ast(z3_ctx.fpa_to_ieeebv(za->e), s);
+    smt_ast *bv = new_ast(z3_ctx.fpa_to_ieeebv(za->e), s);
     za = z3_smt_downcast(bv);
   }
 
-  return new_ast(z3::to_expr(z3_ctx, Z3_mk_extract(z3_ctx, high, low, za->e)), s);
+  return new_ast(
+    z3::to_expr(z3_ctx, Z3_mk_extract(z3_ctx, high, low, za->e)), s);
 }
 
-smt_astt
-z3_convt::mk_smt_int(const mp_integer &theint, bool sign)
+smt_astt z3_convt::mk_smt_int(const mp_integer &theint, bool sign)
 {
   smt_sortt s = mk_sort(SMT_SORT_INT, sign);
-  if (theint.is_negative())
+  if(theint.is_negative())
     return new_ast(z3_ctx.int_val(theint.to_int64()), s);
-  else
-    return new_ast(z3_ctx.int_val(theint.to_uint64()), s);
+
+  return new_ast(z3_ctx.int_val(theint.to_uint64()), s);
 }
 
-smt_astt
-z3_convt::mk_smt_real(const std::string &str)
+smt_astt z3_convt::mk_smt_real(const std::string &str)
 {
   smt_sortt s = mk_sort(SMT_SORT_REAL);
   return new_ast(z3_ctx.real_val(str.c_str()), s);
@@ -646,22 +582,21 @@ smt_astt
 z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
   smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
-  if (theint.is_negative())
+  if(theint.is_negative())
     return new_ast(z3_ctx.bv_val(theint.to_int64(), width), s);
-  else
-    return new_ast(z3_ctx.bv_val(theint.to_uint64(), width), s);
+
+  return new_ast(z3_ctx.bv_val(theint.to_uint64(), width), s);
 }
 
-smt_astt
-z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
+smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
   smt_sortt s = mk_sort(SMT_SORT_FLOATBV, thereal.spec.e, thereal.spec.f);
 
   const mp_integer sig = thereal.get_fraction();
 
   // If the number is denormal, we set the exponent to -bias
-  const mp_integer exp = thereal.is_normal() ?
-    thereal.get_exponent() + thereal.spec.bias() : 0;
+  const mp_integer exp =
+    thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
 
   smt_astt sgn_bv = mk_smt_bvint(BigInt(thereal.get_sign()), false, 1);
   smt_astt exp_bv = mk_smt_bvint(exp, false, thereal.spec.e);
@@ -671,7 +606,8 @@ z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
     z3_ctx.fpa_val(
       z3_smt_downcast(sgn_bv)->e,
       z3_smt_downcast(exp_bv)->e,
-      z3_smt_downcast(sig_bv)->e), s);
+      z3_smt_downcast(sig_bv)->e),
+    s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
@@ -696,16 +632,16 @@ smt_astt z3_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 
   switch(rm)
   {
-    case ieee_floatt::ROUND_TO_EVEN:
-      return new_ast(z3_ctx.fpa_rm_ne(), s);
-    case ieee_floatt::ROUND_TO_MINUS_INF:
-      return new_ast(z3_ctx.fpa_rm_mi(), s);
-    case ieee_floatt::ROUND_TO_PLUS_INF:
-      return new_ast(z3_ctx.fpa_rm_pi(), s);
-    case ieee_floatt::ROUND_TO_ZERO:
-      return new_ast(z3_ctx.fpa_rm_ze(), s);
-    default:
-      break;
+  case ieee_floatt::ROUND_TO_EVEN:
+    return new_ast(z3_ctx.fpa_rm_ne(), s);
+  case ieee_floatt::ROUND_TO_MINUS_INF:
+    return new_ast(z3_ctx.fpa_rm_mi(), s);
+  case ieee_floatt::ROUND_TO_PLUS_INF:
+    return new_ast(z3_ctx.fpa_rm_pi(), s);
+  case ieee_floatt::ROUND_TO_ZERO:
+    return new_ast(z3_ctx.fpa_rm_ze(), s);
+  default:
+    break;
   }
 
   abort();
@@ -720,7 +656,8 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
   const z3_smt_ast *mfrom = z3_smt_downcast(from);
 
   smt_sortt s;
-  if(is_unsignedbv_type(cast.type)) {
+  if(is_unsignedbv_type(cast.type))
+  {
     s = mk_sort(SMT_SORT_UBV, cast.type->get_width());
 
     // Conversion from float to integers always truncate, so we assume
@@ -728,8 +665,11 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
     rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
     const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
-    return new_ast(z3_ctx.fpa_to_ubv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
-  } else if(is_signedbv_type(cast.type)) {
+    return new_ast(
+      z3_ctx.fpa_to_ubv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
+  }
+  if(is_signedbv_type(cast.type))
+  {
     s = mk_sort(SMT_SORT_SBV, cast.type->get_width());
 
     // Conversion from float to integers always truncate, so we assume
@@ -737,8 +677,11 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
     rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
     const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
-    return new_ast(z3_ctx.fpa_to_sbv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
-  } else if(is_floatbv_type(cast.type)) {
+    return new_ast(
+      z3_ctx.fpa_to_sbv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
+  }
+  else if(is_floatbv_type(cast.type))
+  {
     unsigned ew = to_floatbv_type(cast.type).exponent;
     unsigned sw = to_floatbv_type(cast.type).fraction;
 
@@ -797,7 +740,7 @@ smt_astt z3_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
   abort();
 }
 
-smt_astt z3_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+smt_astt z3_convt::mk_smt_nearbyint_from_float(const nearbyint2t &expr)
 {
   // Rounding mode symbol
   smt_astt rm = convert_rounding_mode(expr.rounding_mode);
@@ -810,10 +753,12 @@ smt_astt z3_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
   return new_ast(z3_ctx.fpa_to_integral(mrm->e, mfrom->e), s);
 }
 
-smt_astt z3_convt::mk_smt_fpbv_arith_ops(const expr2tc& expr)
+smt_astt z3_convt::mk_smt_fpbv_arith_ops(const expr2tc &expr)
 {
+  const ieee_arith_2ops &op = dynamic_cast<const ieee_arith_2ops &>(*expr);
+
   // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(0));
+  smt_astt rm = convert_rounding_mode(op.rounding_mode);
   const z3_smt_ast *mrm = z3_smt_downcast(rm);
 
   unsigned ew = to_floatbv_type(expr->type).exponent;
@@ -821,60 +766,101 @@ smt_astt z3_convt::mk_smt_fpbv_arith_ops(const expr2tc& expr)
   smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
 
   // Sides
-  smt_astt s1 = convert_ast(*expr->get_sub_expr(1));
+  smt_astt s1 = convert_ast(op.side_1);
   const z3_smt_ast *ms1 = z3_smt_downcast(s1);
 
-  if(is_ieee_sqrt2t(expr))
-    return new_ast(z3_ctx.fpa_sqrt(mrm->e, ms1->e), s);
-
-  smt_astt s2 = convert_ast(*expr->get_sub_expr(2));
+  smt_astt s2 = convert_ast(op.side_2);
   const z3_smt_ast *ms2 = z3_smt_downcast(s2);
 
-  switch (expr->expr_id) {
-    case expr2t::ieee_add_id:
-      return new_ast(z3_ctx.fpa_add(mrm->e, ms1->e, ms2->e), s);
-    case expr2t::ieee_sub_id:
-      return new_ast(z3_ctx.fpa_sub(mrm->e, ms1->e, ms2->e), s);
-    case expr2t::ieee_mul_id:
-      return new_ast(z3_ctx.fpa_mul(mrm->e, ms1->e, ms2->e), s);
-    case expr2t::ieee_div_id:
-      return new_ast(z3_ctx.fpa_div(mrm->e, ms1->e, ms2->e), s);
-    default:
-      break;
+  switch(expr->expr_id)
+  {
+  case expr2t::ieee_add_id:
+    return new_ast(z3_ctx.fpa_add(mrm->e, ms1->e, ms2->e), s);
+  case expr2t::ieee_sub_id:
+    return new_ast(z3_ctx.fpa_sub(mrm->e, ms1->e, ms2->e), s);
+  case expr2t::ieee_mul_id:
+    return new_ast(z3_ctx.fpa_mul(mrm->e, ms1->e, ms2->e), s);
+  case expr2t::ieee_div_id:
+    return new_ast(z3_ctx.fpa_div(mrm->e, ms1->e, ms2->e), s);
+  default:
+    break;
   }
 
   abort();
 }
 
-smt_astt
-z3_convt::mk_smt_bool(bool val)
+smt_astt z3_convt::mk_smt_fpbv_fma(const expr2tc &expr)
+{
+  const ieee_fma2t fma = to_ieee_fma2t(expr);
+
+  // Rounding mode symbol
+  smt_astt rm = convert_rounding_mode(fma.rounding_mode);
+  const z3_smt_ast *mrm = z3_smt_downcast(rm);
+
+  unsigned ew = to_floatbv_type(expr->type).exponent;
+  unsigned sw = to_floatbv_type(expr->type).fraction;
+  smt_sortt s = mk_fpbv_sort(ew, sw);
+
+  // Operands
+  smt_astt s1 = convert_ast(fma.value_1);
+  const z3_smt_ast *ms1 = z3_smt_downcast(s1);
+
+  smt_astt s2 = convert_ast(fma.value_2);
+  const z3_smt_ast *ms2 = z3_smt_downcast(s2);
+
+  smt_astt s3 = convert_ast(fma.value_3);
+  const z3_smt_ast *mv3 = z3_smt_downcast(s3);
+
+  return new_ast(z3_ctx.fpa_fma(mrm->e, ms1->e, ms2->e, mv3->e), s);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_sqrt(const expr2tc &expr)
+{
+  const ieee_sqrt2t sqrt = to_ieee_sqrt2t(expr);
+
+  // Rounding mode symbol
+  smt_astt rm = convert_rounding_mode(sqrt.rounding_mode);
+  const z3_smt_ast *mrm = z3_smt_downcast(rm);
+
+  unsigned ew = to_floatbv_type(expr->type).exponent;
+  unsigned sw = to_floatbv_type(expr->type).fraction;
+  smt_sortt s = mk_fpbv_sort(ew, sw);
+
+  // Value
+  smt_astt v = convert_ast(sqrt.value);
+  const z3_smt_ast *mv = z3_smt_downcast(v);
+
+  return new_ast(z3_ctx.fpa_sqrt(mrm->e, mv->e), s);
+}
+
+smt_astt z3_convt::mk_smt_bool(bool val)
 {
   smt_sortt s = mk_sort(SMT_SORT_BOOL);
   return new_ast(z3_ctx.bool_val(val), s);
 }
 
-smt_astt
-z3_convt::mk_array_symbol(const std::string &name, const smt_sort *s,
-                          smt_sortt array_subtype __attribute__((unused)))
+smt_astt z3_convt::mk_array_symbol(
+  const std::string &name,
+  const smt_sort *s,
+  smt_sortt array_subtype __attribute__((unused)))
 {
   return mk_smt_symbol(name, s);
 }
 
-smt_astt
-z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
+smt_astt z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
   return new_ast(z3_ctx.constant(name.c_str(), zs->s), s);
 }
 
-smt_sortt
-z3_convt::mk_sort(const smt_sort_kind k, ...)
+smt_sortt z3_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
   z3_smt_sort *s = nullptr;
 
   va_start(ap, k);
-  switch (k) {
+  switch(k)
+  {
   case SMT_SORT_INT:
     s = new z3_smt_sort(k, z3_ctx.int_sort(), 0);
     break;
@@ -898,11 +884,17 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
     // The range data width is allowed to be zero, which happens if the range
     // is not a bitvector / integer
     unsigned int data_width = range->get_data_width();
-    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
+    if(
+      range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL ||
+      range->id == SMT_SORT_UNION)
       data_width = 1;
 
-    s = new z3_smt_sort(k, z3_ctx.array_sort(dom->s, range->s),
-                        data_width, dom->get_data_width(), range);
+    s = new z3_smt_sort(
+      k,
+      z3_ctx.array_sort(dom->s, range->s),
+      data_width,
+      dom->get_data_width(),
+      range);
     break;
   }
   case SMT_SORT_BOOL:
@@ -911,7 +903,8 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_FLOATBV:
   {
     unsigned ew = va_arg(ap, unsigned long);
-    unsigned sw = va_arg(ap, unsigned long) + 1; // significand width + hidden bit
+    unsigned sw =
+      va_arg(ap, unsigned long) + 1; // significand width + hidden bit
 
     // We need to add an extra bit to the significand size,
     // as it has no hidden bit
@@ -928,53 +921,51 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   return s;
 }
 
-smt_sort *
-z3_convt::mk_struct_sort(const type2tc &type)
+smt_sort *z3_convt::mk_struct_sort(const type2tc &type)
 {
   z3::sort s;
   convert_type(type, s);
 
-  if (is_array_type(type)) {
+  if(is_array_type(type))
+  {
     const array_type2t &arrtype = to_array_type(type);
     unsigned int domain_width;
-    if (int_encoding)
+    if(int_encoding)
       domain_width = 0;
     else
       domain_width = s.array_domain().bv_size();
 
     // The '1' range is a dummy, seeing how smt_sortt has no representation of
     // tuple sort ranges
-    return new z3_smt_sort(SMT_SORT_ARRAY, s, 1, domain_width,
-                           convert_sort(arrtype.subtype));
-  } else {
-    return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
+    return new z3_smt_sort(
+      SMT_SORT_ARRAY, s, 1, domain_width, convert_sort(arrtype.subtype));
   }
+
+  return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
 }
 
-const smt_ast *
-z3_smt_ast::update(smt_convt *conv, const smt_ast *value,
-                   unsigned int idx, expr2tc idx_expr) const
+const smt_ast *z3_smt_ast::update(
+  smt_convt *conv,
+  const smt_ast *value,
+  unsigned int idx,
+  expr2tc idx_expr) const
 {
   expr2tc index;
 
-  if (sort->id == SMT_SORT_ARRAY)
+  if(sort->id == SMT_SORT_ARRAY)
   {
     return smt_ast::update(conv, value, idx, idx_expr);
   }
-  else
-  {
-    assert(sort->id == SMT_SORT_STRUCT || sort->id == SMT_SORT_UNION);
-    assert(is_nil_expr(idx_expr) &&
-           "Can only update constant index tuple elems");
 
-    z3_convt *z3_conv = static_cast<z3_convt*>(conv);
-    const z3_smt_ast *updateval = z3_smt_downcast(value);
-    return z3_conv->new_ast(z3_conv->mk_tuple_update(e, idx, updateval->e), sort);
-  }
+  assert(sort->id == SMT_SORT_STRUCT || sort->id == SMT_SORT_UNION);
+  assert(is_nil_expr(idx_expr) && "Can only update constant index tuple elems");
+
+  z3_convt *z3_conv = static_cast<z3_convt *>(conv);
+  const z3_smt_ast *updateval = z3_smt_downcast(value);
+  return z3_conv->new_ast(z3_conv->mk_tuple_update(e, idx, updateval->e), sort);
 }
 
-const smt_ast *
-z3_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+const smt_ast *z3_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 {
   const smt_ast *args[2];
   args[0] = this;
@@ -983,10 +974,9 @@ z3_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   return ctx->mk_func_app(rangesort, SMT_FUNC_SELECT, args, 2);
 }
 
-const smt_ast *
-z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
+const smt_ast *z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
 {
-  z3_convt *z3_conv = static_cast<z3_convt*>(conv);
+  z3_convt *z3_conv = static_cast<z3_convt *>(conv);
 
   const z3_smt_sort *thesort = z3_sort_downcast(sort);
   assert(!is_nil_type(thesort->tupletype));
@@ -997,8 +987,7 @@ z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
   return z3_conv->new_ast(z3_conv->mk_tuple_select(e, elem), idx_sort);
 }
 
-smt_astt
-z3_convt::tuple_create(const expr2tc &structdef)
+smt_astt z3_convt::tuple_create(const expr2tc &structdef)
 {
   z3::expr e;
   const constant_struct2t &strct = to_constant_struct2t(structdef);
@@ -1010,29 +999,32 @@ z3_convt::tuple_create(const expr2tc &structdef)
   return new_ast(e, s);
 }
 
-smt_astt
-z3_convt::tuple_fresh(const smt_sort *s, std::string name)
+smt_astt z3_convt::tuple_fresh(const smt_sort *s, std::string name)
 {
-  const z3_smt_sort *zs = static_cast<const z3_smt_sort*>(s);
+  const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
   const char *n = (name == "") ? nullptr : name.c_str();
   z3::expr output = z3_ctx.fresh_const(n, zs->s);
   return new_ast(output, zs);
 }
 
-const smt_ast *
-z3_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
+const smt_ast *z3_convt::convert_array_of(
+  smt_astt init_val,
+  unsigned long domain_width)
 {
   z3::sort dom_sort =
-    (int_encoding)? z3_ctx.int_sort() : z3_ctx.bv_sort(domain_width);
+    (int_encoding) ? z3_ctx.int_sort() : z3_ctx.bv_sort(domain_width);
   const z3_smt_sort *range = z3_sort_downcast(init_val->sort);
   z3::sort range_sort = range->s;
   z3::sort array_sort = z3_ctx.array_sort(dom_sort, range_sort);
 
   z3::expr val = z3_smt_downcast(init_val)->e;
-  z3::expr output = z3::to_expr(z3_ctx, Z3_mk_const_array(z3_ctx, dom_sort, val));
+  z3::expr output =
+    z3::to_expr(z3_ctx, Z3_mk_const_array(z3_ctx, dom_sort, val));
 
   size_t range_width = range->get_data_width();
-  if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
+  if(
+    range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL ||
+    range->id == SMT_SORT_UNION)
     range_width = 1;
 
   size_t dom_width = (int_encoding) ? 0 : dom_sort.bv_size();
@@ -1041,15 +1033,17 @@ z3_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return new_ast(output, s);
 }
 
-const smt_ast *
-z3_convt::tuple_array_create(const type2tc &arr_type,
-                              const smt_ast **input_args, bool const_array,
-                              const smt_sort *domain)
+const smt_ast *z3_convt::tuple_array_create(
+  const type2tc &arr_type,
+  const smt_ast **input_args,
+  bool const_array,
+  const smt_sort *domain)
 {
   z3::expr output;
   const array_type2t &arrtype = to_array_type(arr_type);
 
-  if (const_array) {
+  if(const_array)
+  {
     z3::expr value, index;
     z3::sort array_type, dom_type;
     std::string tmp, identifier;
@@ -1060,22 +1054,28 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
     const z3_smt_ast *tmpast = z3_smt_downcast(*input_args);
     value = tmpast->e;
 
-    if (is_bool_type(arrtype.subtype)) {
+    if(is_bool_type(arrtype.subtype))
+    {
       value = z3_ctx.bool_val(false);
     }
 
     output = z3::to_expr(z3_ctx, Z3_mk_const_array(z3_ctx, dom_type, value));
-  } else {
+  }
+  else
+  {
     u_int i = 0;
     z3::sort z3_array_type;
     z3::expr int_cte, val_cte;
     z3::sort domain_sort;
 
-    assert(!is_nil_expr(arrtype.array_size) && "Non-const array-of's can't be infinitely sized");
+    assert(
+      !is_nil_expr(arrtype.array_size) &&
+      "Non-const array-of's can't be infinitely sized");
     const constant_int2t &sz = to_constant_int2t(arrtype.array_size);
 
-    assert(is_constant_int2t(arrtype.array_size) &&
-           "array_of sizes should be constant");
+    assert(
+      is_constant_int2t(arrtype.array_size) &&
+      "array_of sizes should be constant");
 
     int64_t size;
     size = sz.as_long();
@@ -1085,7 +1085,8 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
 
     output = z3_ctx.fresh_const(nullptr, z3_array_type);
 
-    for (i = 0; i < size; i++) {
+    for(i = 0; i < size; i++)
+    {
       int_cte = z3_ctx.num_val(i, domain_sort);
       const z3_smt_ast *tmpast = z3_smt_downcast(input_args[i]);
       output = z3::store(output, int_cte, tmpast->e);
@@ -1097,27 +1098,25 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
   return new_ast(output, asort);
 }
 
-smt_astt
-z3_convt::mk_tuple_symbol(const std::string &name, smt_sortt s)
+smt_astt z3_convt::mk_tuple_symbol(const std::string &name, smt_sortt s)
 {
   return mk_smt_symbol(name, s);
 }
 
-smt_astt
-z3_convt::mk_tuple_array_symbol(const expr2tc &expr)
+smt_astt z3_convt::mk_tuple_array_symbol(const expr2tc &expr)
 {
   const symbol2t &sym = to_symbol2t(expr);
   return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
 }
 
-smt_astt
-z3_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
+smt_astt z3_convt::tuple_array_of(
+  const expr2tc &init,
+  unsigned long domain_width)
 {
   return convert_array_of(convert_ast(init), domain_width);
 }
 
-expr2tc
-z3_convt::tuple_get(const expr2tc &expr)
+expr2tc z3_convt::tuple_get(const expr2tc &expr)
 {
   if(is_pointer_type(expr->type))
     return expr2tc();
@@ -1136,11 +1135,12 @@ z3_convt::tuple_get(const expr2tc &expr)
   }
 
   // If it's a pointer, rewrite.
-  if (is_pointer_type(expr->type)) {
-    uint64_t num = to_constant_int2t(outstruct->datatype_members[0])
-                                    .value.to_uint64();
-    uint64_t offs = to_constant_int2t(outstruct->datatype_members[1])
-                                     .value.to_uint64();
+  if(is_pointer_type(expr->type))
+  {
+    uint64_t num =
+      to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
+    uint64_t offs =
+      to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, expr->type);
   }
@@ -1150,22 +1150,20 @@ z3_convt::tuple_get(const expr2tc &expr)
 
 // ***************************** 'get' api *******************************
 
-expr2tc
-z3_convt::get_bool(const smt_ast *a)
+expr2tc z3_convt::get_bool(const smt_ast *a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
 
   const z3_smt_ast *za = z3_smt_downcast(a);
   z3::expr e = model.eval(za->e, false);
 
-  if (Z3_get_bool_value(z3_ctx, e) == Z3_L_TRUE)
+  if(Z3_get_bool_value(z3_ctx, e) == Z3_L_TRUE)
     return gen_true_expr();
 
   return gen_false_expr();
 }
 
-expr2tc
-z3_convt::get_bv(const type2tc &type, smt_astt a)
+expr2tc z3_convt::get_bv(const type2tc &type, smt_astt a)
 {
   assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
 
@@ -1180,7 +1178,7 @@ z3_convt::get_bv(const type2tc &type, smt_astt a)
   return build_bv(type, val);
 }
 
-expr2tc z3_convt::get_fpbv(const type2tc& t, smt_astt a)
+expr2tc z3_convt::get_fpbv(const type2tc &t, smt_astt a)
 {
   assert(is_floatbv_type(t));
 
@@ -1203,19 +1201,15 @@ expr2tc z3_convt::get_fpbv(const type2tc& t, smt_astt a)
   // Z3_fpa_is_numeral_positive. We can replace the following
   // code when the new version is released
 
-  z3::expr v1;
-  v1 = model.eval(z3::to_expr(z3_ctx, Z3_mk_fpa_is_nan(z3_ctx, e)));
-  if(v1.is_bool() && Z3_get_bool_value(z3_ctx, v1) == Z3_L_TRUE)
+  if(Z3_fpa_is_numeral_nan(z3_ctx, e))
   {
     number.make_NaN();
     return constant_floatbv2tc(number);
   }
 
-  v1 = model.eval(z3::to_expr(z3_ctx, Z3_mk_fpa_is_infinite(z3_ctx, e)));
-  if(v1.is_bool() && Z3_get_bool_value(z3_ctx, v1) == Z3_L_TRUE)
+  if(Z3_fpa_is_numeral_inf(z3_ctx, e))
   {
-    v1 = model.eval(z3::to_expr(z3_ctx, Z3_mk_fpa_is_positive(z3_ctx, e)));
-    if(v1.is_bool() && Z3_get_bool_value(z3_ctx, v1) == Z3_L_TRUE)
+    if(Z3_fpa_is_numeral_positive(z3_ctx, e))
       number.make_plus_infinity();
     else
       number.make_minus_infinity();
@@ -1228,12 +1222,10 @@ expr2tc z3_convt::get_fpbv(const type2tc& t, smt_astt a)
     return expr2tc();
 
   number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
-
   return constant_floatbv2tc(number);
 }
 
-expr2tc
-z3_convt::get_array_elem(
+expr2tc z3_convt::get_array_elem(
   const smt_ast *array,
   uint64_t index,
   const type2tc &subtype)
@@ -1241,10 +1233,11 @@ z3_convt::get_array_elem(
   const z3_smt_ast *za = z3_smt_downcast(array);
   unsigned long array_bound = array->sort->get_domain_width();
   const z3_smt_ast *idx;
-  if (int_encoding)
-    idx = static_cast<const z3_smt_ast*>(mk_smt_int(BigInt(index), false));
+  if(int_encoding)
+    idx = static_cast<const z3_smt_ast *>(mk_smt_int(BigInt(index), false));
   else
-    idx = static_cast<const z3_smt_ast*>(mk_smt_bvint(BigInt(index), false, array_bound));
+    idx = static_cast<const z3_smt_ast *>(
+      mk_smt_bvint(BigInt(index), false, array_bound));
 
   z3::expr e = model.eval(select(za->e, idx->e), false);
 
@@ -1252,28 +1245,13 @@ z3_convt::get_array_elem(
   return get_by_ast(subtype, value);
 }
 
-void
-z3_convt::debug_label_formula(const std::string&& name, const z3::expr &formula)
-{
-  std::stringstream ss;
-  unsigned &num = debug_label_map[name];
-  ss << "__ESBMC_" << name << num;
-  std::string the_name = ss.str();
-  num++;
-
-  z3::expr sym = z3_ctx.constant(the_name.c_str(), formula.get_sort());
-  z3::expr eq = sym == formula;
-  assert_formula(eq);
-}
-
-const smt_ast *
-z3_convt::make_disjunct(const ast_vec &v)
+const smt_ast *z3_convt::make_disjunct(const ast_vec &v)
 {
   // Make a gigantic 'or'.
   Z3_ast arr[v.size()];
 
   size_t i = 0;
-  for (ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++)
+  for(ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++)
     arr[i] = z3_smt_downcast(*it)->e;
 
   z3::expr e = z3::to_expr(z3_ctx, Z3_mk_or(z3_ctx, v.size(), arr));
@@ -1281,14 +1259,13 @@ z3_convt::make_disjunct(const ast_vec &v)
   return new_ast(e, s);
 }
 
-const smt_ast *
-z3_convt::make_conjunct(const ast_vec &v)
+const smt_ast *z3_convt::make_conjunct(const ast_vec &v)
 {
   // Make a gigantic 'and'.
   Z3_ast arr[v.size()];
 
   size_t i = 0;
-  for (ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++)
+  for(ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++)
     arr[i] = z3_smt_downcast(*it)->e;
 
   z3::expr e = z3::to_expr(z3_ctx, Z3_mk_and(z3_ctx, v.size(), arr));
@@ -1296,73 +1273,51 @@ z3_convt::make_conjunct(const ast_vec &v)
   return new_ast(e, s);
 }
 
-smt_astt z3_convt::mk_smt_fpbv_fma(const expr2tc &expr)
-{
-  // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(2));
-  const z3_smt_ast *mrm = z3_smt_downcast(rm);
-
-  unsigned ew = to_floatbv_type(expr->type).exponent;
-  unsigned sw = to_floatbv_type(expr->type).fraction;
-  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
-
-  // Operands
-  smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
-  const z3_smt_ast *ms1 = z3_smt_downcast(s1);
-
-  smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
-  const z3_smt_ast *ms2 = z3_smt_downcast(s2);
-
-  smt_astt s3 = convert_ast(*expr->get_sub_expr(3));
-  const z3_smt_ast *mv3 = z3_smt_downcast(s3);
-
-  return new_ast(z3_ctx.fpa_fma(mrm->e, ms1->e, ms2->e, mv3->e), s);
-}
-
-void
-z3_convt::add_array_constraints_for_solving()
+void z3_convt::add_array_constraints_for_solving()
 {
 }
 
-void
-z3_convt::push_array_ctx()
+void z3_convt::push_array_ctx()
 {
 }
 
-void
-z3_convt::pop_array_ctx()
+void z3_convt::pop_array_ctx()
 {
 }
 
-void
-z3_convt::add_tuple_constraints_for_solving()
+void z3_convt::add_tuple_constraints_for_solving()
 {
 }
 
-void
-z3_convt::push_tuple_ctx()
+void z3_convt::push_tuple_ctx()
 {
 }
 
-void
-z3_convt::pop_tuple_ctx()
+void z3_convt::pop_tuple_ctx()
 {
 }
 
 void z3_smt_ast::dump() const
 {
   std::cout << Z3_ast_to_string(e.ctx(), e) << std::endl;
-  std::cout << "sort is " << Z3_sort_to_string(e.ctx(), Z3_get_sort(e.ctx(), e)) << std::endl;
+  std::cout << "sort is " << Z3_sort_to_string(e.ctx(), Z3_get_sort(e.ctx(), e))
+            << std::endl;
 }
 
 smt_sortt z3_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
   // We need to add an extra bit to the significand size,
   // as it has no hidden bit
-  return new z3_smt_sort(SMT_SORT_FLOATBV, z3_ctx.fpa_sort(ew, sw), ew + sw, sw);
+  return new z3_smt_sort(
+    SMT_SORT_FLOATBV, z3_ctx.fpa_sort(ew, sw), ew + sw, sw);
 }
 
 void z3_convt::dump_smt()
 {
   std::cout << solver << std::endl;
+}
+
+void z3_convt::print_model()
+{
+  std::cout << Z3_model_to_string(z3_ctx, model);
 }

@@ -9,43 +9,46 @@
 #include <util/parseoptions.h>
 #include <util/ui_message.h>
 
-const struct opt_templ c2goto_options[] = {
-{ 0,	"16",		switc,		"" },
-{ 0,	"32",		switc,		"" },
-{ 0,	"64",		switc,		"" },
-{ 0,  "floatbv",   switc,    "" },
-{ 0,	"output",	string,		"" },
-{ 'I',	"",		string,		"" },
-{ 'D',	"",		string,		"" },
-{ 0,	"",		switc,		"" }
-};
+const struct opt_templ c2goto_options[] = {{0, "16", switc, ""},
+                                           {0, "32", switc, ""},
+                                           {0, "64", switc, ""},
+                                           {0, "floatbv", switc, ""},
+                                           {0, "output", string, ""},
+                                           {'I', "", string, ""},
+                                           {'D', "", string, ""},
+                                           {0, "", switc, ""}};
 
 class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
-  public:
-  c2goto_parseopt(int argc, const char **argv):
-    parseoptions_baset(c2goto_options, argc, argv),
-    language_uit(cmdline)
+public:
+  c2goto_parseopt(int argc, const char **argv)
+    : parseoptions_baset(c2goto_options, argc, argv), language_uit(cmdline)
   {
   }
 
-  int doit() override {
+  int doit() override
+  {
     goto_functionst goto_functions;
 
     config.set(cmdline);
     config.options.set_option("keep-unused", true);
 
-    if (!cmdline.isset("output")) {
+    if(!cmdline.isset("output"))
+    {
       std::cerr << "Must set output file" << std::endl;
       return 1;
     }
 
-    if (parse()) return 1;
-    if (typecheck()) return 1;
+    if(parse())
+      return 1;
+    if(typecheck())
+      return 1;
 
-    std::ofstream out(cmdline.getval("output"), std::ios::out | std::ios::binary);
+    std::ofstream out(
+      cmdline.getval("output"), std::ios::out | std::ios::binary);
 
-    if (write_goto_binary(out, context, goto_functions)) {
+    if(write_goto_binary(out, context, goto_functions))
+    {
       std::cerr << "Failed to write C library to binary obj" << std::endl;
       return 1;
     }
@@ -64,10 +67,7 @@ int main(int argc, const char **argv)
   return parseopt.main();
 }
 
-const mode_table_et mode_table[] =
-{
-  LANGAPI_HAVE_MODE_CLANG_C,
-  LANGAPI_HAVE_MODE_C,
-  LANGAPI_HAVE_MODE_CPP,
-  LANGAPI_HAVE_MODE_END
-};
+const mode_table_et mode_table[] = {LANGAPI_HAVE_MODE_CLANG_C,
+                                    LANGAPI_HAVE_MODE_C,
+                                    LANGAPI_HAVE_MODE_CPP,
+                                    LANGAPI_HAVE_MODE_END};

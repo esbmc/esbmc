@@ -4,38 +4,35 @@
 #include <util/c_types.h>
 #include <utility>
 
-static inline bool
-array_indexes_are_same(
-    const array_convt::idx_record_containert &a,
-    const array_convt::idx_record_containert &b)
+static inline bool array_indexes_are_same(
+  const array_convt::idx_record_containert &a,
+  const array_convt::idx_record_containert &b)
 {
-  if (a.size() != b.size())
+  if(a.size() != b.size())
     return false;
 
-  for (auto const &e : a) {
-    if (b.find(e.idx) == b.end())
+  for(auto const &e : a)
+  {
+    if(b.find(e.idx) == b.end())
       return false;
   }
 
   return true;
 }
 
-array_convt::array_convt(smt_convt *_ctx)
- : array_iface(true, true), ctx(_ctx)
+array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true), ctx(_ctx)
 {
 }
 
-void
-array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
+void array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
 {
-
   // Implement array assignments by simply making the destination AST track the
   // same array. No new variables need be introduced, saving lots of searching
   // hopefully. This works because we're working with an SSA program where the
   // source array will never be modified.
 
   // Get a mutable reference to the destination
-  array_ast *destination = const_cast<array_ast*>(array_downcast(sym));
+  array_ast *destination = const_cast<array_ast *>(array_downcast(sym));
   const array_ast *source = src;
 
   // And copy across it's valuation
@@ -44,8 +41,7 @@ array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
   destination->array_update_num = source->array_update_num;
 }
 
-unsigned int
-array_convt::new_array_id()
+unsigned int array_convt::new_array_id()
 {
   unsigned int new_base_array_id = array_indexes.size();
 
@@ -65,6 +61,7 @@ array_convt::new_array_id()
   // Aimless piece of data, just to keep indexes in iarray_updates and
   // array_selects in sync.
   struct array_with w;
+  w.converted = false;
   w.is_ite = false;
   w.idx = expr2tc();
   w.ctx_level = UINT_MAX; // ahem
@@ -87,12 +84,15 @@ array_convt::new_array_id()
   return new_base_array_id;
 }
 
-smt_ast *
-array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
-                             smt_sortt subtype)
+smt_ast *array_convt::mk_array_symbol(
+  const std::string &name,
+  smt_sortt ms,
+  smt_sortt subtype)
 {
-  assert(subtype->id != SMT_SORT_ARRAY && "Can't create array of arrays with "
-         "array flattener. Should be flattened elsewhere");
+  assert(
+    subtype->id != SMT_SORT_ARRAY &&
+    "Can't create array of arrays with "
+    "array flattener. Should be flattened elsewhere");
 
   // Create either a new bounded or unbounded array.
   size_t domain_width = ms->get_domain_width();
@@ -102,7 +102,8 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
   array_ast *mast = new_ast(ms);
   mast->symname = name;
 
-  if (is_unbounded_array(mast->sort)) {
+  if(is_unbounded_array(mast->sort))
+  {
     // Don't attempt to initialize: this array is of unbounded size. Instead,
     // record a fresh new array.
 
@@ -122,7 +123,8 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
   mast->array_fields.reserve(array_size);
 
   unsigned long i;
-  for (i = 0; i < array_size; i++) {
+  for(i = 0; i < array_size; i++)
+  {
     smt_astt a = ctx->mk_fresh(subtype, "array_fresh_array::");
     mast->array_fields.push_back(a);
   }
@@ -130,23 +132,24 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
   return mast;
 }
 
-smt_astt
-array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
-                         smt_sortt ressort)
+smt_astt array_convt::mk_select(
+  const array_ast *ma,
+  const expr2tc &idx,
+  smt_sortt ressort)
 {
-
   // Create a select: either hand off to the unbounded implementation, or
   // continue for bounded-size arrays
-  if (is_unbounded_array(ma->sort))
+  if(is_unbounded_array(ma->sort))
     return mk_unbounded_select(ma, idx, ressort);
 
   assert(ma->array_fields.size() != 0);
 
   // If this is a constant index, then simply access the designated element.
-  if (is_constant_int2t(idx)) {
+  if(is_constant_int2t(idx))
+  {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned long intval = intref.value.to_ulong();
-    if (intval > ma->array_fields.size())
+    if(intval > ma->array_fields.size())
       // Return a fresh value.
       return ctx->mk_fresh(ressort, "array_mk_select_badidx::");
 
@@ -158,28 +161,29 @@ array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
   smt_astt fresh = ctx->mk_fresh(ressort, "array_mk_select::");
   smt_astt real_idx = ctx->convert_ast(idx);
   size_t dom_width = ma->sort->get_domain_width();
-  smt_sortt bool_sort = ctx->boolean_sort;
 
-  for (unsigned long i = 0; i < ma->array_fields.size(); i++) {
+  assert(ma->array_fields.size() >= 1);
+  smt_astt theval = fresh; // Failed-to-look-up value
+  for(unsigned long i = 0; i < ma->array_fields.size(); i++)
+  {
     smt_astt tmp_idx = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
     smt_astt idx_eq = real_idx->eq(ctx, tmp_idx);
-    smt_astt val_eq = fresh->eq(ctx, ma->array_fields[i]);
+    theval = ma->array_fields[i]->ite(ctx, idx_eq, theval);
 
-    ctx->assert_ast(ctx->mk_func_app(bool_sort, SMT_FUNC_IMPLIES,
-                                     idx_eq, val_eq));
   }
 
-  return fresh;
+  return theval;
 }
 
-smt_astt
-array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
-                                smt_astt value, smt_sortt ressort)
+smt_astt array_convt::mk_store(
+  const array_ast *ma,
+  const expr2tc &idx,
+  smt_astt value,
+  smt_sortt ressort)
 {
-
   // Create a store: initially, consider whether to hand off to the unbounded
   // implementation.
-  if (is_unbounded_array(ma->sort))
+  if(is_unbounded_array(ma->sort))
     return mk_unbounded_store(ma, idx, value, ressort);
 
   assert(ma->array_fields.size() != 0);
@@ -187,10 +191,11 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
   array_ast *mast = new_ast(ressort, ma->array_fields);
 
   // If this is a constant index, simply update that particular field.
-  if (is_constant_int2t(idx)) {
+  if(is_constant_int2t(idx))
+  {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned long intval = intref.value.to_ulong();
-    if (intval > ma->array_fields.size())
+    if(intval > ma->array_fields.size())
       return ma;
 
     // Otherwise,
@@ -204,7 +209,8 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
   smt_astt real_value = value;
   size_t dom_width = mast->sort->get_domain_width();
 
-  for (unsigned long i = 0; i < mast->array_fields.size(); i++) {
+  for(unsigned long i = 0; i < mast->array_fields.size(); i++)
+  {
     smt_astt this_idx = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
     smt_astt idx_eq = real_idx->eq(ctx, this_idx);
 
@@ -215,25 +221,26 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
   return mast;
 }
 
-smt_astt
-array_convt::mk_unbounded_select(const array_ast *ma,
-                                   const expr2tc &real_idx,
-                                   smt_sortt ressort)
+smt_astt array_convt::mk_unbounded_select(
+  const array_ast *ma,
+  const expr2tc &real_idx,
+  smt_sortt ressort __attribute__((unused)))
 {
   // Store everything about this select, and return a free variable, that then
   // gets constrained at the end of conversion to tie up with the correct
   // value.
 
   // Record that we've accessed this index.
-  idx_record new_idx_rec = { real_idx, ctx->ctx_level };
+  idx_record new_idx_rec = {real_idx, ctx->ctx_level};
   array_indexes[ma->base_array_id].insert(new_idx_rec);
 
   // Corner case: if the idx we're selecting is the last one updated, just
   // use that piece of AST. This simplifies things later.
-  const array_with &w = get_array_update(ma->base_array_id,
-                                         ma->array_update_num);
-  if (ma->array_update_num != 0 && !w.is_ite){
-    if (real_idx == w.idx)
+  const array_with &w =
+    get_array_update(ma->base_array_id, ma->array_update_num);
+  if(ma->array_update_num != 0 && !w.is_ite)
+  {
+    if(real_idx == w.idx)
       return w.u.w.val;
   }
 
@@ -245,41 +252,46 @@ array_convt::mk_unbounded_select(const array_ast *ma,
     array_selects[ma->base_array_id].get<0>();
   auto pair = array_num_idx.equal_range(ma->array_update_num);
 
-  for (auto &it = pair.first; it != pair.second; it++) {
-    if (it->idx == real_idx) {
+  for(auto &it = pair.first; it != pair.second; it++)
+  {
+    if(it->idx == real_idx)
+    {
       // Aha.
       return it->val;
     }
   }
 
-  // Generate a new free variable
-  smt_astt a = ctx->mk_fresh(ressort, "mk_unbounded_select");
-
   struct array_select sel;
+  sel.converted = false;
   sel.src_array_update_num = ma->array_update_num;
   sel.idx = real_idx;
-  sel.val = a;
+  sel.val = NULL;
   sel.ctx_level = ctx->ctx_level;
+
   // Record this index
-  array_selects[ma->base_array_id].insert(sel);
+  auto it = array_selects[ma->base_array_id].insert(sel);
 
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
   ctx->convert_ast(real_idx);
 
-  return a;
+  add_new_indexes();
+  apply_new_selects();
+
+  return it.first->val;
 }
 
-smt_astt
-array_convt::mk_unbounded_store(const array_ast *ma,
-                                  const expr2tc &idx, smt_astt value,
-                                  smt_sortt ressort)
+smt_astt array_convt::mk_unbounded_store(
+  const array_ast *ma,
+  const expr2tc &idx,
+  smt_astt value,
+  smt_sortt ressort)
 {
   // Store everything about this store, and suitably adjust all fields in the
   // array at the end of conversion so that they're all consistent.
 
   // Record that we've accessed this index.
-  idx_record new_idx_rec = { idx, ctx->ctx_level };
+  idx_record new_idx_rec = {idx, ctx->ctx_level};
   array_indexes[ma->base_array_id].insert(new_idx_rec);
 
   // More nuanced: allocate a new array representation.
@@ -289,6 +301,7 @@ array_convt::mk_unbounded_store(const array_ast *ma,
 
   // Record update
   struct array_with w;
+  w.converted = false;
   w.is_ite = false;
   w.idx = idx;
   w.u.w.src_array_update_num = ma->array_update_num;
@@ -304,41 +317,45 @@ array_convt::mk_unbounded_store(const array_ast *ma,
   // fiddles with other arrays.
   ctx->convert_ast(idx);
 
+  add_new_indexes();
+  execute_new_updates();
+
   // Result is the new array id goo.
   return newarr;
 }
 
-smt_astt
-array_convt::array_ite(smt_astt cond,
-                         const array_ast *true_arr,
-                         const array_ast *false_arr,
-                         smt_sortt thesort)
+smt_astt array_convt::array_ite(
+  smt_astt cond,
+  const array_ast *true_arr,
+  const array_ast *false_arr,
+  smt_sortt thesort)
 {
-
   // As ever, switch between ite's of unbounded arrays or bounded ones.
-  if (is_unbounded_array(true_arr->sort))
+  if(is_unbounded_array(true_arr->sort))
     return unbounded_array_ite(cond, true_arr, false_arr, thesort);
 
   // For each element, make an ite.
-  assert(true_arr->array_fields.size() != 0 &&
-         true_arr->array_fields.size() == false_arr->array_fields.size());
+  assert(
+    true_arr->array_fields.size() != 0 &&
+    true_arr->array_fields.size() == false_arr->array_fields.size());
   array_ast *mast = new_ast(thesort);
   unsigned long i;
-  for (i = 0; i < true_arr->array_fields.size(); i++) {
+  for(i = 0; i < true_arr->array_fields.size(); i++)
+  {
     // One ite pls.
-    smt_astt res = true_arr->array_fields[i]->ite(ctx, cond,
-                                                  false_arr->array_fields[i]);
+    smt_astt res =
+      true_arr->array_fields[i]->ite(ctx, cond, false_arr->array_fields[i]);
     mast->array_fields.push_back(array_downcast(res));
   }
 
   return mast;
 }
 
-smt_astt
-array_convt::unbounded_array_ite(smt_astt cond,
-                                   const array_ast *true_arr,
-                                   const array_ast *false_arr,
-                                   smt_sortt thesort)
+smt_astt array_convt::unbounded_array_ite(
+  smt_astt cond,
+  const array_ast *true_arr,
+  const array_ast *false_arr,
+  smt_sortt thesort)
 {
   // We can perform ite's between distinct array id's, however the precondition
   // is that they must share the same set of array indexes, otherwise there's
@@ -352,6 +369,7 @@ array_convt::unbounded_array_ite(smt_astt cond,
   newarr->array_update_num = array_updates[true_arr->base_array_id].size();
 
   struct array_with w;
+  w.converted = false;
   w.is_ite = true;
   w.idx = expr2tc();
   w.u.i.true_arr_ast = true_arr;
@@ -363,6 +381,11 @@ array_convt::unbounded_array_ite(smt_astt cond,
 
   // Add storage for the eventual collation of all these values
   array_valuation[new_arr_id].emplace_back();
+
+  add_new_indexes();
+  join_array_indexes();
+  execute_new_updates();
+  add_array_equalities();
 
   return newarr;
 }
@@ -378,19 +401,21 @@ array_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return convert_array_of_wsort(init_val, domain_width, arr_sort);
 }
 
-smt_astt
-array_convt::convert_array_of_wsort(smt_astt init_val,
-    unsigned long domain_width, smt_sortt arr_sort)
+smt_astt array_convt::convert_array_of_wsort(
+  smt_astt init_val,
+  unsigned long domain_width,
+  smt_sortt arr_sort)
 {
   smt_sortt idx_sort = init_val->sort;
   array_ast *mast = new_ast(arr_sort);
 
-  if (is_unbounded_array(arr_sort)) {
+  if(is_unbounded_array(arr_sort))
+  {
     // If this is an unbounded array, simply store the value of the initializer
     // and constraint values at a later date. Heavy lifting is performed by
     // mk_array_symbol.
     std::string name = ctx->mk_fresh_name("array_of_unbounded::");
-    mast = static_cast<array_ast*>(mk_array_symbol(name, arr_sort, idx_sort));
+    mast = static_cast<array_ast *>(mk_array_symbol(name, arr_sort, idx_sort));
 
     struct array_of_val_rec v;
     v.array_id = mast->base_array_id;
@@ -398,11 +423,13 @@ array_convt::convert_array_of_wsort(smt_astt init_val,
     v.ctx_level = ctx->ctx_level;
 
     array_of_vals.insert(v);
-  } else {
+  }
+  else
+  {
     // For bounded arrays, simply store the initializer in the explicit vector
     // of elements, x times.
     unsigned long array_size = 1UL << domain_width;
-    for (unsigned long i = 0; i < array_size; i++)
+    for(unsigned long i = 0; i < array_size; i++)
       mast->array_fields.push_back(init_val);
   }
 
@@ -421,10 +448,14 @@ array_convt::encode_array_equality(const array_ast *a1, const array_ast *a2)
   e.arr1_update_num = a1->array_update_num;
   e.arr2_update_num = a2->array_update_num;
 
-  e.result = ctx->mk_fresh(ctx->boolean_sort, "");
+  e.result = NULL;
 
-  array_equalities.insert(std::make_pair(ctx->ctx_level, e));
-  return e.result;
+  auto it = array_equalities.insert(std::make_pair(ctx->ctx_level, e));
+
+  add_new_indexes();
+  add_array_equalities();
+
+  return it->second.result;
 }
 
 smt_astt
@@ -433,7 +464,8 @@ array_convt::mk_bounded_array_equality(const array_ast *a1, const array_ast *a2)
   assert(a1->array_fields.size() == a2->array_fields.size());
 
   smt_convt::ast_vec eqs;
-  for (unsigned int i = 0; i < a1->array_fields.size(); i++) {
+  for(unsigned int i = 0; i < a1->array_fields.size(); i++)
+  {
     eqs.push_back(a1->array_fields[i]->eq(ctx, a2->array_fields[i]));
   }
 
@@ -447,7 +479,7 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
   // index.
   const array_ast *mast = array_downcast(a);
 
-  if (!is_unbounded_array(a->sort) && (index < mast->array_fields.size()))
+  if(!is_unbounded_array(a->sort) && (index < mast->array_fields.size()))
     return ctx->get_by_ast(subtype, mast->array_fields[index]);
 
   // This is an array that was not previously converted, therefore doesn't
@@ -461,15 +493,15 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
   // Basically, we have to do a linear search of all the indexes to find one
   // that matches the index argument.
   idx_record_containert::const_iterator it;
-  for (it = indexes.begin(); it != indexes.end(); it++, i++)
+  for(it = indexes.begin(); it != indexes.end(); it++, i++)
   {
     const expr2tc &e = it->idx;
     expr2tc e2 = ctx->get(e);
-    if (is_nil_expr(e2))
+    if(is_nil_expr(e2))
       continue;
 
     const constant_int2t &intval = to_constant_int2t(e2);
-    if (intval.value.to_uint64() == index)
+    if(intval.value.to_uint64() == index)
       break;
   }
 
@@ -483,10 +515,8 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
   return ctx->get_by_ast(subtype, solver_values[i]);
 }
 
-void
-array_convt::add_array_constraints_for_solving()
+void array_convt::add_array_constraints_for_solving()
 {
-
   join_array_indexes();
   add_new_indexes();
   execute_new_updates();
@@ -494,8 +524,7 @@ array_convt::add_array_constraints_for_solving()
   add_array_equalities();
 }
 
-void
-array_convt::push_array_ctx()
+void array_convt::push_array_ctx()
 {
   // The most important factor in this process is to make sure that new indexes
   // in arrays are accounted for, as everything else is straightforwards. Thus,
@@ -524,8 +553,7 @@ array_convt::push_array_ctx()
   num_arrays_history.push_back(array_valuation.size());
 }
 
-void
-array_convt::pop_array_ctx()
+void array_convt::pop_array_ctx()
 {
   // Order of service:
   //  * Erase old array IDs
@@ -557,38 +585,46 @@ array_convt::pop_array_ctx()
 
   // Now go through each storage Thing erasing any operations, indexes, or
   // whatever that were added in the old context level.
-  for (auto &selects : array_selects) {
+  for(auto &selects : array_selects)
+  {
     auto &ctx_level_idx = selects.get<1>();
     ctx_level_idx.erase(target_ctx);
   }
 
-  for (auto &updates : array_updates) {
+  for(auto &updates : array_updates)
+  {
     auto &ctx_level_idx = updates.get<1>();
     ctx_level_idx.erase(target_ctx);
   }
 
-  for (auto &indexes : array_indexes) {
+  for(auto &indexes : array_indexes)
+  {
     auto &ctx_level_idx = indexes.get<1>();
     ctx_level_idx.erase(target_ctx);
   }
 
-  for (auto &indexes : expr_index_map) {
+  for(auto &indexes : expr_index_map)
+  {
     auto &ctx_level_idx = indexes.get<1>();
     ctx_level_idx.erase(target_ctx);
   }
 
-  for (auto &relation : array_relations) {
+  for(auto &relation : array_relations)
+  {
     auto &ctx_level_idx = relation.get<1>();
     ctx_level_idx.erase(target_ctx);
   }
 
   // And now, in an intensely expensive operation, resize all the array value
   // vectors if they've had a change in number of indexes.
-  for (unsigned int arrid = 0; arrid < array_updates.size(); arrid++) {
+  for(unsigned int arrid = 0; arrid < array_updates.size(); arrid++)
+  {
     unsigned int num_indexes = array_indexes[arrid].size();
-    if (array_valuation[arrid][0].size() != num_indexes) {
+    if(array_valuation[arrid][0].size() != num_indexes)
+    {
       // Index size has changed. Resize /all the things/
-      for (ast_vect &vec : array_valuation[arrid]) {
+      for(ast_vect &vec : array_valuation[arrid])
+      {
         vec.resize(num_indexes);
       }
     }
@@ -597,8 +633,7 @@ array_convt::pop_array_ctx()
   // Uh. Fini?
 }
 
-void
-array_convt::join_array_indexes()
+void array_convt::join_array_indexes()
 {
   // Identify the set of array ID's that, due to equalities and ITE's, are
   // effectively joined into the same array. For each of these sets, join their
@@ -611,13 +646,18 @@ array_convt::join_array_indexes()
 
   // Collect together the set of array id's touched by each array id.
   unsigned int arrid = 0;
-  for (unsigned int arrid = 0; arrid < array_updates.size(); arrid++) {
+  for(unsigned int arrid = 0; arrid < array_updates.size(); arrid++)
+  {
     touched_array_sett &joined_array_ids = array_relations[arrid];
 
-    for (auto const &update : array_updates[arrid]) {
-      if (update.is_ite) {
-        if (update.u.i.true_arr_ast->base_array_id !=
-            update.u.i.false_arr_ast->base_array_id) {
+    for(auto const &update : array_updates[arrid])
+    {
+      if(update.is_ite)
+      {
+        if(
+          update.u.i.true_arr_ast->base_array_id !=
+          update.u.i.false_arr_ast->base_array_id)
+        {
           touched_arrayt t;
 
           t.array_id = update.u.i.true_arr_ast->base_array_id;
@@ -632,7 +672,8 @@ array_convt::join_array_indexes()
     }
   }
 
-  for (auto const &equality : array_equalities) {
+  for(auto const &equality : array_equalities)
+  {
     touched_arrayt t;
 
     t.array_id = equality.second.arr2_id;
@@ -647,11 +688,14 @@ array_convt::join_array_indexes()
   // K; now compute a fixedpoint joining the sets of things that touch each
   // other.
   bool modified = false;
-  do {
+  do
+  {
     modified = false;
 
-    for (auto const &arrset : array_relations) {
-      for (auto const &touched_arr_rec : arrset) {
+    for(auto const &arrset : array_relations)
+    {
+      for(auto const &touched_arr_rec : arrset)
+      {
         // It the other array recorded as touching all the arrays that this one
         // does? Try inserting this set, and see if the size changes. Slightly
         // ghetto, but avoids additional allocations.
@@ -661,7 +705,8 @@ array_convt::join_array_indexes()
         // Attempt insertions, modfiying context level to the current one.
         // This is necessary because this relation needs to not exist after a
         // pop of this operation.
-        for (auto const &other_arr_rec : arrset) {
+        for(auto const &other_arr_rec : arrset)
+        {
           touched_arrayt t = other_arr_rec;
           t.ctx_level = ctx->ctx_level;
 
@@ -670,24 +715,28 @@ array_convt::join_array_indexes()
           array_relations[touched_arr_rec.array_id].insert(t);
         }
 
-        if (original_size != array_relations[touched_arr_rec.array_id].size())
+        if(original_size != array_relations[touched_arr_rec.array_id].size())
           modified = true;
       }
     }
-  } while (modified);
+  } while(modified);
 
   // Right -- now join all ther indexes. This can be optimised, but not now.
-  for (arrid = 0; arrid < array_updates.size(); arrid++) {
+  for(arrid = 0; arrid < array_updates.size(); arrid++)
+  {
     auto const &arrset = array_relations[arrid];
-    for (auto const &touched_arr_rec : arrset) {
+    for(auto const &touched_arr_rec : arrset)
+    {
       // Only juggle indexes for relations that were just encoded
-      if (touched_arr_rec.ctx_level != ctx->ctx_level)
+      if(touched_arr_rec.ctx_level != ctx->ctx_level)
         continue;
 
       // Go through each index of the other array and bake it into the current
       // selected one if it isn't already.
-      for (auto const &idx : array_indexes[touched_arr_rec.array_id]) {
-        if (array_indexes[arrid].find(idx.idx) == array_indexes[arrid].end()) {
+      for(auto const &idx : array_indexes[touched_arr_rec.array_id])
+      {
+        if(array_indexes[arrid].find(idx.idx) == array_indexes[arrid].end())
+        {
           idx_record r;
           r.idx = idx.idx;
           r.ctx_level = ctx->ctx_level;
@@ -700,8 +749,7 @@ array_convt::join_array_indexes()
   // Le fin
 }
 
-void
-array_convt::add_new_indexes()
+void array_convt::add_new_indexes()
 {
   // In the context of a push/pop, we may have collected some new indexes in an
   // array as the result of, well, any array operation. These make their way
@@ -725,11 +773,13 @@ array_convt::add_new_indexes()
   std::vector<bool> re_execute;
   std::vector<unsigned int> start_pos;
   unsigned int arrid = 0;
-  for (const idx_record_containert &rec : array_indexes) {
+  for(const idx_record_containert &rec : array_indexes)
+  {
     auto &ctx_index = rec.get<1>();
     auto pair = ctx_index.equal_range(ctx->ctx_level);
 
-    if (pair.first == pair.second) {
+    if(pair.first == pair.second)
+    {
       // Nothing new in this ctx level
       re_execute.push_back(false);
       start_pos.push_back(0);
@@ -742,8 +792,10 @@ array_convt::add_new_indexes()
 
     // We're guarenteed that each of these indexes are _new_ to this array.
     // Enumerate them, giving them a location in the expr_index_map.
+    // NB: if, actually they're not new, insert will fail, safely
     index_map_containert &idx_map = expr_index_map[arrid];
-    for (auto &it = pair.first; it != pair.second; it++) {
+    for(auto &it = pair.first; it != pair.second; it++)
+    {
       struct index_map_rec r;
       r.idx = it->idx;
       r.vec_idx = idx_map.size();
@@ -757,13 +809,16 @@ array_convt::add_new_indexes()
   // Now that we've allocated vector index locations, resize the array valuation
   // vector(s) to have storage for that many ast members.
   arrid = 0;
-  for (arrid = 0; arrid < array_valuation.size(); arrid++ ) {
+  for(arrid = 0; arrid < array_valuation.size(); arrid++)
+  {
     array_update_vect &valuation = array_valuation[arrid];
     unsigned int num_indexes = array_indexes[arrid].size();
 
-    for (ast_vect &vec : valuation) {
-        assert(vec.size() <= num_indexes &&
-               "Array valuations should only ever increase in size in a push");
+    for(ast_vect &vec : valuation)
+    {
+      assert(
+        vec.size() <= num_indexes &&
+        "Array valuations should only ever increase in size in a push");
       vec.resize(num_indexes);
     }
   }
@@ -772,8 +827,9 @@ array_convt::add_new_indexes()
   // with valuations. Start by populating the initial set of values and applying
   // the initial ackerman constraints to them.
 
-  for (arrid = 0; arrid < array_updates.size(); arrid++) {
-    if (!re_execute[arrid])
+  for(arrid = 0; arrid < array_updates.size(); arrid++)
+  {
+    if(!re_execute[arrid])
       continue;
 
     array_update_vect &array_values = array_valuation[arrid];
@@ -784,30 +840,33 @@ array_convt::add_new_indexes()
       array_of_vals.get<0>();
     auto it = array_num_idx.find(arrid);
 
-    if (it != array_num_idx.end()) {
-      collate_array_values(array_values[0], arrid, 0, subtype, start_pos[arrid],
-          it->value);
-    } else {
-      collate_array_values(array_values[0], arrid, 0, subtype,
-          start_pos[arrid]);
+    if(it != array_num_idx.end())
+    {
+      collate_array_values(
+        array_values[0], arrid, 0, subtype, start_pos[arrid], it->value);
+    }
+    else
+    {
+      collate_array_values(
+        array_values[0], arrid, 0, subtype, start_pos[arrid]);
     }
 
     // Apply inital ackerman constraints
-    add_initial_ackerman_constraints(array_values[0], expr_index_map[arrid],
-        start_pos[arrid]);
+    add_initial_ackerman_constraints(
+      array_values[0], expr_index_map[arrid], start_pos[arrid]);
 
     // And finally, re-execute the relevant array transitions
-    for (unsigned int i = 0; i < array_updates[arrid].size() - 1; i++)
+    for(unsigned int i = 0; i < array_updates[arrid].size() - 1; i++)
       execute_array_trans(array_values, arrid, i, subtype, start_pos[arrid]);
   }
 }
 
-void
-array_convt::execute_new_updates()
+void array_convt::execute_new_updates()
 {
   // Identify new array updates, and execute them.
 
-  for (unsigned int arrid = 0; arrid < array_updates.size(); arrid++) {
+  for(unsigned int arrid = 0; arrid < array_updates.size(); arrid++)
+  {
     smt_sortt subtype = array_subtypes[arrid];
     array_update_containert &updates = array_updates[arrid];
     auto &update_index = updates.get<0>();
@@ -818,29 +877,30 @@ array_convt::execute_new_updates()
     // level.
 
     std::list<const array_witht *> withs;
-    auto rit = update_index.rbegin();
-    while (rit != update_index.rend()) {
-      if (rit->ctx_level == ctx->ctx_level)
+    auto rit = update_index.begin();
+    while (rit != update_index.end()) {
+      if (rit->ctx_level == ctx->ctx_level && !rit->converted)
         withs.push_back(&(*rit));
-      else if (rit->ctx_level != UINT_MAX) // ahem
+      else if(rit->ctx_level != UINT_MAX) // ahem
         break;
       rit++;
     }
 
-    if (withs.size() == 0)
+    if(withs.size() == 0)
       continue;
 
     // We've identified where to start encoding transitions -- from rit back
     // to the beginning. Go backwards through the iterator, encoding them.
-    for (auto const &ptr : withs) {
-      execute_array_trans(array_valuation[arrid], arrid, ptr->update_level - 1,
-          subtype, 0);
+    for(auto const &ptr : withs)
+    {
+      execute_array_trans(
+        array_valuation[arrid], arrid, ptr->update_level - 1, subtype, 0);
+      ptr->converted = true;
     }
   }
 }
 
-void
-array_convt::apply_new_selects()
+void array_convt::apply_new_selects()
 {
   // In the push context procedure, two kinds of new selects have already been
   // encoded. They're ones that either apply to a new index expr (through the
@@ -850,18 +910,24 @@ array_convt::apply_new_selects()
   // values. We can just pick those straight out of the array valuation vector.
   // This could be optimised, but not now.
 
-  for (unsigned int arrid = 0; arrid < array_selects.size(); arrid++) {
+  for(unsigned int arrid = 0; arrid < array_selects.size(); arrid++)
+  {
     array_select_containert &selects = array_selects[arrid];
     // Look up selects by context level
     auto &ctx_level_index = selects.get<1>();
     auto pair = ctx_level_index.equal_range(ctx->ctx_level);
 
     // No selects?
-    if (pair.first == pair.second)
+    if(pair.first == pair.second)
       continue;
 
     // Go through each of these selects.
-    for (auto &it = pair.first; it != pair.second; it++) {
+    for(auto &it = pair.first; it != pair.second; it++)
+    {
+      if (it->converted)
+        continue;
+      it->converted = true;
+
       // Look up where in the valuation this is.
       auto index_rec = expr_index_map[arrid].find(it->idx);
       smt_astt &dest =
@@ -871,17 +937,23 @@ array_convt::apply_new_selects()
       // have happened, if the current AST pointer is the one from this select.
       // If it isn't one of those cases, it will have been filled with a free
       // value, then constrained as appropriate
-      if (dest == it->val)
+      if(dest == it->val)
         continue;
 
-      // OK, bind this select in through an equality.
-      ctx->assert_ast(dest->eq(ctx, it->val));
+      // Symbol avoidance: if no valuation was given (NULL) then the creator
+      // of this index is trying to read directly from the array valuations
+      if (!it->val) {
+        it->val = dest;
+      } else {
+        // "Old" code?
+        // OK, bind this select in through an equality.
+        ctx->assert_ast(dest->eq(ctx, it->val));
+      }
     }
   }
 }
 
-void
-array_convt::add_array_equalities()
+void array_convt::add_array_equalities()
 {
   // Precondition: all constraints have already been added and constrained into
   // the array_valuation vectors. Also that the array ID's being used all share
@@ -890,28 +962,32 @@ array_convt::add_array_equalities()
   // Pick only equalities that have been encoded in the current ctx.
   auto pair = array_equalities.equal_range(ctx->ctx_level);
 
-  for (auto &it = pair.first; it != pair.second; it++) {
-    assert(array_indexes_are_same(array_indexes[it->second.arr1_id],
-                                  array_indexes[it->second.arr2_id]));
+  for(auto &it = pair.first; it != pair.second; it++)
+  {
+    assert(array_indexes_are_same(
+      array_indexes[it->second.arr1_id], array_indexes[it->second.arr2_id]));
 
-    add_array_equality(it->second.arr1_id, it->second.arr2_id,
-                       it->second.arr1_update_num, it->second.arr2_update_num,
-                       it->second.result);
+    add_array_equality(
+      it->second.arr1_id,
+      it->second.arr2_id,
+      it->second.arr1_update_num,
+      it->second.arr2_update_num,
+      it->second.result);
   }
 
   // Second phase: look at all past equalities to see whether or not they need
   // to be extended to account for new indexes.
-  for (auto const &it : array_equalities)
+  for(auto const &it : array_equalities)
   {
     // Don't touch equalities we've already done
-    if (it.first == ctx->ctx_level)
+    if(it.first == ctx->ctx_level)
       continue;
 
     idx_record_containert &idxs = array_indexes[it.second.arr1_id];
     idx_record_containert::nth_index<1>::type &ctx_level_idx = idxs.get<1>();
     auto pair = ctx_level_idx.equal_range(ctx->ctx_level);
 
-    if (pair.first == pair.second)
+    if(pair.first == pair.second)
       // No indexes added in this context level, no additional constraints
       // required
       continue;
@@ -919,7 +995,7 @@ array_convt::add_array_equalities()
     // Ugh. We need to know how many new indexes there are, and where to start
     // in the array valuation array. So, count them.
     unsigned int ctx_count = 0;
-    for (auto &it2 = pair.first; it2 != pair.second; it2++)
+    for(auto &it2 = pair.first; it2 != pair.second; it2++)
       ctx_count++;
 
     // All the new indexes will have been appended to the vector, so the start
@@ -933,16 +1009,18 @@ array_convt::add_array_equalities()
       it.second.arr2_id,
       it.second.arr1_update_num,
       it.second.arr2_update_num,
-      it.second.result, start_pos);
+      it.second.result,
+      start_pos);
   }
 }
 
-void
-array_convt::add_array_equality(unsigned int arr1_id, unsigned int arr2_id,
-                                unsigned int arr1_update,
-                                unsigned int arr2_update,
-                                smt_astt result,
-                                unsigned int start_pos)
+void array_convt::add_array_equality(
+  unsigned int arr1_id,
+  unsigned int arr2_id,
+  unsigned int arr1_update,
+  unsigned int arr2_update,
+  smt_astt &result,
+  unsigned int start_pos)
 {
   // Simply get a handle on two vectors of valuations in array_valuation,
   // and encode an equality.
@@ -951,18 +1029,23 @@ array_convt::add_array_equality(unsigned int arr1_id, unsigned int arr2_id,
 
   smt_convt::ast_vec lits;
   assert(start_pos < a1.size());
-  for (unsigned int i = start_pos; i < a1.size(); i++) {
+  for(unsigned int i = start_pos; i < a1.size(); i++)
+  {
     lits.push_back(a1[i]->eq(ctx, a2[i]));
   }
 
   smt_astt conj = ctx->make_conjunct(lits);
-  ctx->assert_ast(result->eq(ctx, conj));
+  assert(result == NULL);
+  result = conj;
+  return;
 }
 
-void
-array_convt::execute_array_trans(array_update_vect &data,
-    unsigned int arr, unsigned int idx, smt_sortt subtype,
-    unsigned int start_point)
+void array_convt::execute_array_trans(
+  array_update_vect &data,
+  unsigned int arr,
+  unsigned int idx,
+  smt_sortt subtype,
+  unsigned int start_point)
 {
   // Encode the constraints for a particular array update.
 
@@ -973,42 +1056,60 @@ array_convt::execute_array_trans(array_update_vect &data,
 
   // The destination vector: representing the values of each element in the
   // next updated state.
-  assert(idx+1 < data.size());
-  ast_vect &dest_data = data[idx+1];
+  assert(idx + 1 < data.size());
+  ast_vect &dest_data = data[idx + 1];
 
   // Fill dest_data with ASTs: if a select has been applied for a particular
   // index, then that value is inserted there. Otherwise, a free value is
   // inserted.
-  collate_array_values(dest_data, arr, idx+1, subtype, start_point);
+  collate_array_values(dest_data, arr, idx + 1, subtype, start_point);
 
   // Two updates that could have occurred for this array: a simple with, or
   // an ite.
-  assert(idx+1 < array_updates[arr].size());
-  const array_with &w = get_array_update(arr, idx+1);
-  if (w.is_ite) {
-    if (w.u.i.true_arr_ast->base_array_id !=
-        w.u.i.false_arr_ast->base_array_id) {
-      execute_array_joining_ite(dest_data, arr, w.u.i.true_arr_ast,
-                                w.u.i.false_arr_ast,
-                                expr_index_map[arr],
-                                w.u.i.cond,
-                                subtype,
-                                start_point);
-    } else {
+  assert(idx + 1 < array_updates[arr].size());
+  const array_with &w = get_array_update(arr, idx + 1);
+  if(w.is_ite)
+  {
+    if(w.u.i.true_arr_ast->base_array_id != w.u.i.false_arr_ast->base_array_id)
+    {
+      execute_array_joining_ite(
+        dest_data,
+        arr,
+        w.u.i.true_arr_ast,
+        w.u.i.false_arr_ast,
+        expr_index_map[arr],
+        w.u.i.cond,
+        subtype,
+        start_point);
+    }
+    else
+    {
       unsigned int true_idx = w.u.i.true_arr_ast->array_update_num;
       unsigned int false_idx = w.u.i.false_arr_ast->array_update_num;
       assert(true_idx < idx + 1 && false_idx < idx + 1);
-      execute_array_ite(dest_data, data[true_idx], data[false_idx],
-                        expr_index_map[arr], w.u.i.cond, start_point);
+      execute_array_ite(
+        dest_data,
+        data[true_idx],
+        data[false_idx],
+        expr_index_map[arr],
+        w.u.i.cond,
+        start_point);
     }
-  } else {
-    execute_array_update(dest_data, data[w.u.w.src_array_update_num],
-                         expr_index_map[arr], w.idx, w.u.w.val, start_point);
+  }
+  else
+  {
+    execute_array_update(
+      dest_data,
+      data[w.u.w.src_array_update_num],
+      expr_index_map[arr],
+      w.idx,
+      w.u.w.val,
+      start_point);
   }
 }
 
-void
-array_convt::execute_array_update(ast_vect &dest_data,
+void array_convt::execute_array_update(
+  ast_vect &dest_data,
   ast_vect &source_data,
   const index_map_containert &idx_map,
   const expr2tc &idx,
@@ -1030,12 +1131,12 @@ array_convt::execute_array_update(ast_vect &dest_data,
   // encoded.
   dest_data[updated_idx] = updated_value;
 
-  for (auto const &it2 : idx_map)
+  for(auto const &it2 : idx_map)
   {
-    if (it2.vec_idx == updated_idx)
+    if(it2.vec_idx == updated_idx)
       continue;
 
-    if (it2.vec_idx < start_point)
+    if(it2.vec_idx < start_point)
       continue;
 
     // Generate an ITE. If the index is nondeterministically equal to the
@@ -1047,74 +1148,82 @@ array_convt::execute_array_update(ast_vect &dest_data,
     smt_astt dest_ite = updated_value->ite(ctx, cond, source_data[it2.vec_idx]);
     ctx->assert_ast(dest_data[it2.vec_idx]->eq(ctx, dest_ite));
   }
+}
 
-  }
-
-void
-array_convt::execute_array_ite(ast_vect &dest,
-    const ast_vect &true_vals,
-    const ast_vect &false_vals,
-    const index_map_containert &idx_map,
-    smt_astt cond,
-    unsigned int start_point)
+void array_convt::execute_array_ite(
+  ast_vect &dest,
+  const ast_vect &true_vals,
+  const ast_vect &false_vals,
+  const index_map_containert &idx_map,
+  smt_astt cond,
+  unsigned int start_point)
 {
-
   // Each index value becomes an ITE between each source value.
-  for (unsigned int i = start_point; i < idx_map.size(); i++) {
+  for(unsigned int i = start_point; i < idx_map.size(); i++)
+  {
     smt_astt updated_elem = true_vals[i]->ite(ctx, cond, false_vals[i]);
     ctx->assert_ast(dest[i]->eq(ctx, updated_elem));
   }
 }
 
-void
-array_convt::execute_array_joining_ite(ast_vect &dest,
-    unsigned int cur_id, const array_ast *true_arr_ast,
-    const array_ast *false_arr_ast, const index_map_containert &idx_map,
-    smt_astt cond, smt_sortt subtype, unsigned int start_point)
+void array_convt::execute_array_joining_ite(
+  ast_vect &dest,
+  unsigned int cur_id,
+  const array_ast *true_arr_ast,
+  const array_ast *false_arr_ast,
+  const index_map_containert &idx_map,
+  smt_astt cond,
+  smt_sortt subtype,
+  unsigned int start_point)
 {
-
   const array_ast *local_ast, *remote_ast;
   bool local_arr_values_are_true = (true_arr_ast->base_array_id == cur_id);
-  if (local_arr_values_are_true) {
+  if(local_arr_values_are_true)
+  {
     local_ast = true_arr_ast;
     remote_ast = false_arr_ast;
-  } else {
+  }
+  else
+  {
     local_ast = false_arr_ast;
     remote_ast = true_arr_ast;
   }
 
   ast_vect selects;
   selects.reserve(array_indexes[cur_id].size());
-  assert(array_indexes_are_same(array_indexes[cur_id],
-                                array_indexes[remote_ast->base_array_id]));
+  assert(array_indexes_are_same(
+    array_indexes[cur_id], array_indexes[remote_ast->base_array_id]));
 
-  for (auto const &elem : array_indexes[remote_ast->base_array_id]) {
+  for(auto const &elem : array_indexes[remote_ast->base_array_id])
+  {
     selects.push_back(mk_unbounded_select(remote_ast, elem.idx, subtype));
   }
 
   // Now select which values are true or false
   const ast_vect *true_vals, *false_vals;
-  if (local_arr_values_are_true) {
+  if(local_arr_values_are_true)
+  {
     true_vals =
       &array_valuation[local_ast->base_array_id][local_ast->array_update_num];
     false_vals = &selects;
-  } else {
+  }
+  else
+  {
     false_vals =
       &array_valuation[local_ast->base_array_id][local_ast->array_update_num];
     true_vals = &selects;
   }
 
-  execute_array_ite(dest, *true_vals, *false_vals, idx_map, cond,
-      start_point);
+  execute_array_ite(dest, *true_vals, *false_vals, idx_map, cond, start_point);
 }
 
-void
-array_convt::collate_array_values(ast_vect &vals,
-                                    unsigned int base_array_id,
-                                    unsigned int array_update_num,
-                                    smt_sortt subtype,
-                                    unsigned int start_point,
-                                    smt_astt init_val)
+void array_convt::collate_array_values(
+  ast_vect &vals,
+  unsigned int base_array_id,
+  unsigned int array_update_num,
+  smt_sortt subtype,
+  unsigned int start_point,
+  smt_astt init_val)
 {
   // IIRC, this translates the history of an array + any selects applied to it,
   // into a vector mapping a particular index to the variable representing the
@@ -1126,7 +1235,7 @@ array_convt::collate_array_values(ast_vect &vals,
   assert(vals.size() == idx_map.size());
 
   // First, make everything null,
-  for (unsigned int i = start_point; i < vals.size(); i++)
+  for(unsigned int i = start_point; i < vals.size(); i++)
     vals[i] = nullptr;
 
   // Get the range of values with this update array num.
@@ -1135,30 +1244,39 @@ array_convt::collate_array_values(ast_vect &vals,
   auto pair = array_num_idx.equal_range(array_update_num);
 
   // Now assign in all free variables created as a result of selects.
-  for (auto &it = pair.first; it != pair.second; it++) {
+  for(auto &it = pair.first; it != pair.second; it++)
+  {
     auto it2 = idx_map.find(it->idx);
     assert(it2 != idx_map.end());
 
-    if (it2->vec_idx < start_point)
+    if(it2->vec_idx < start_point)
       continue;
 
     vals[it2->vec_idx] = it->val;
   }
 
   // Initialize everything else to either a free variable or the initial value.
-  if (init_val == nullptr) {
+  if(init_val == nullptr)
+  {
     // Free variables, except where free variables tied to selects have occurred
-    for (auto & val : vals) {
-      if (val == nullptr)
+    for(auto &val : vals)
+    {
+      if(val == nullptr)
         val = ctx->mk_fresh(subtype, "collate_array_vals::");
     }
-  } else {
+  }
+  else
+  {
     // We need to assign the initial value in, except where there's already
     // a select/index, in which case we assert that the values are equal.
-    for (auto &it : vals) {
-      if (it == nullptr) {
+    for(auto &it : vals)
+    {
+      if(it == nullptr)
+      {
         it = init_val;
-      } else {
+      }
+      else
+      {
         ctx->assert_ast(it->eq(ctx, init_val));
       }
     }
@@ -1167,24 +1285,24 @@ array_convt::collate_array_values(ast_vect &vals,
   // Fin.
 }
 
-void
-array_convt::add_initial_ackerman_constraints(
-                                  const ast_vect &vals,
-                                  const index_map_containert &idx_map,
-                                  unsigned int start_point)
+void array_convt::add_initial_ackerman_constraints(
+  const ast_vect &vals,
+  const index_map_containert &idx_map,
+  unsigned int start_point)
 {
   // Add ackerman constraints: these state that for each element of an array,
   // where the indexes are equivalent (in the solver), then the value of the
   // elements are equivalent. The cost is quadratic, alas.
 
   smt_sortt boolsort = ctx->boolean_sort;
-  for (auto const &it : idx_map)
+  for(auto const &it : idx_map)
   {
-     if (it.vec_idx < start_point)
-       continue;
+    if(it.vec_idx < start_point)
+      continue;
 
     smt_astt outer_idx = ctx->convert_ast(it.idx);
-    for (auto const &it2 : idx_map) {
+    for(auto const &it2 : idx_map)
+    {
       smt_astt inner_idx = ctx->convert_ast(it2.idx);
 
       // If they're the same idx, they're the same value.
@@ -1192,8 +1310,8 @@ array_convt::add_initial_ackerman_constraints(
 
       smt_astt valeq = vals[it.vec_idx]->eq(ctx, vals[it2.vec_idx]);
 
-      ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_IMPLIES,
-                                       idxeq, valeq));
+      ctx->assert_ast(
+        ctx->mk_func_app(boolsort, SMT_FUNC_IMPLIES, idxeq, valeq));
     }
   }
 }
@@ -1203,38 +1321,41 @@ array_ast::eq(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
 {
   const array_ast *other = array_downcast(sym);
 
-  if (is_unbounded_array(sort)) {
+  if(is_unbounded_array(sort))
+  {
     return array_ctx->encode_array_equality(this, other);
-  } else {
-    return array_ctx->mk_bounded_array_equality(this, other);
   }
+
+  return array_ctx->mk_bounded_array_equality(this, other);
 }
 
-void
-array_ast::assign(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
+void array_ast::assign(smt_convt *ctx __attribute__((unused)), smt_astt sym)
+  const
 {
   array_ctx->convert_array_assign(this, sym);
 }
 
-smt_astt
-array_ast::update(smt_convt *ctx __attribute__((unused)), smt_astt value,
-                                unsigned int idx,
-                                expr2tc idx_expr) const
+smt_astt array_ast::update(
+  smt_convt *ctx __attribute__((unused)),
+  smt_astt value,
+  unsigned int idx,
+  expr2tc idx_expr) const
 {
-  if (is_nil_expr(idx_expr))
-    idx_expr = constant_int2tc(get_uint_type(sort->get_domain_width()), BigInt(idx));
+  if(is_nil_expr(idx_expr))
+    idx_expr =
+      constant_int2tc(get_uint_type(sort->get_domain_width()), BigInt(idx));
 
   return array_ctx->mk_store(this, idx_expr, value, sort);
 }
 
-smt_astt
-array_ast::select(smt_convt *ctx __attribute__((unused)),
-                  const expr2tc &idx) const
+smt_astt array_ast::select(
+  smt_convt *ctx __attribute__((unused)),
+  const expr2tc &idx) const
 {
   // Look up the array subtype sort. If we're unbounded, use the base array id
   // to do that, otherwise pull the subtype out of an element.
   smt_sortt s;
-  if (!array_fields.empty())
+  if(!array_fields.empty())
     s = array_fields[0]->sort;
   else
     s = array_ctx->array_subtypes[base_array_id];
@@ -1242,10 +1363,10 @@ array_ast::select(smt_convt *ctx __attribute__((unused)),
   return array_ctx->mk_select(this, idx, s);
 }
 
-smt_astt
-array_ast::ite(smt_convt *ctx __attribute__((unused)),
-               smt_astt cond, smt_astt falseop) const
+smt_astt array_ast::ite(
+  smt_convt *ctx __attribute__((unused)),
+  smt_astt cond,
+  smt_astt falseop) const
 {
-
   return array_ctx->array_ite(cond, this, array_downcast(falseop), sort);
 }

@@ -29,11 +29,12 @@ boost::python::object get_instructions(const goto_programt &prog)
 
   auto setnone = [](object &o) { o.attr("target") = object(); };
 
-  prog.extract_instructions<list,
-                            decltype(listappend),
-                            object,
-                            decltype(setattr),
-                            decltype(setnone)>(l, listappend, setattr, setnone);
+  prog.extract_instructions<
+    list,
+    decltype(listappend),
+    object,
+    decltype(setattr),
+    decltype(setnone)>(l, listappend, setattr, setnone);
 
   return l;
 }
@@ -55,12 +56,13 @@ void set_instructions(goto_programt &prog, boost::python::object o)
 
   auto isattrnil = [](object &&o) { return o.is_none(); };
 
-  prog.inject_instructions<list,
-                           object,
-                           decltype(fetchelem),
-                           decltype(elemtoinsn),
-                           decltype(getattr),
-                           decltype(isattrnil)>(
+  prog.inject_instructions<
+    list,
+    object,
+    decltype(fetchelem),
+    decltype(elemtoinsn),
+    decltype(getattr),
+    decltype(isattrnil)>(
     pylist, len(pylist), fetchelem, elemtoinsn, getattr, isattrnil);
   return;
 }

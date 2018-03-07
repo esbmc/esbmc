@@ -69,15 +69,15 @@ void namespacet::follow_symbol(irept &irep) const
     {
       if(symbol.type.is_nil())
         return;
-      else
-        irep = symbol.type;
+
+      irep = symbol.type;
     }
     else
     {
       if(symbol.value.is_nil())
         return;
-      else
-        irep = symbol.value;
+
+      irep = symbol.value;
     }
   }
 }

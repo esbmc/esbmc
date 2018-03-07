@@ -20,19 +20,19 @@ unsigned pointer_logict::add_object(const expr2tc &expr)
 {
   // remove any index/member
 
-  if (expr->expr_id == expr2t::index_id)
+  if(expr->expr_id == expr2t::index_id)
   {
     const index2t &index = static_cast<const index2t &>(*expr.get());
     return add_object(index.source_value);
   }
-  else if (expr->expr_id == expr2t::member_id)
+  if(expr->expr_id == expr2t::member_id)
   {
     const member2t &memb = static_cast<const member2t &>(*expr.get());
     return add_object(memb.source_value);
   }
-  std::pair<objectst::iterator, bool> ret = objects.insert(
-                                     std::pair<expr2tc,unsigned int>(expr, 0));
-  if (!ret.second)
+  std::pair<objectst::iterator, bool> ret =
+    objects.insert(std::pair<expr2tc, unsigned int>(expr, 0));
+  if(!ret.second)
     return ret.first->second;
 
   // Initialize object number.
@@ -42,30 +42,27 @@ unsigned pointer_logict::add_object(const expr2tc &expr)
   return objects.size() - 1 + obj_num_offset;
 }
 
-expr2tc pointer_logict::pointer_expr(
-  unsigned object,
-  const type2tc &type) const
+expr2tc pointer_logict::pointer_expr(unsigned object, const type2tc &type) const
 {
   pointert pointer(object, 0);
   return pointer_expr(pointer, type);
 }
 
-expr2tc pointer_logict::pointer_expr(
-  const pointert &pointer,
-  const type2tc &type) const
+expr2tc
+pointer_logict::pointer_expr(const pointert &pointer, const type2tc &type) const
 {
   type2tc pointer_type(new pointer_type2t(type2tc(new empty_type2t())));
 
-  if(pointer.object==null_object) // NULL?
+  if(pointer.object == null_object) // NULL?
   {
     return symbol2tc(type, irep_idt("NULL"));
   }
-  else if(pointer.object==invalid_object) // INVALID?
+  if(pointer.object == invalid_object) // INVALID?
   {
     return symbol2tc(type, irep_idt("INVALID"));
   }
 
-  if(pointer.object>=objects.size())
+  if(pointer.object >= objects.size())
   {
     return symbol2tc(type, irep_idt("INVALID" + i2string(pointer.object)));
   }
@@ -83,25 +80,24 @@ expr2tc pointer_logict::object_rec(
   const type2tc &pointer_type,
   const expr2tc &src) const
 {
-
   if(src->type->type_id == type2t::array_id)
   {
-    const array_type2t &arrtype = dynamic_cast<const array_type2t&>
-                                              (*src->type.get());
-    mp_integer size=type_byte_size(arrtype.subtype);
+    const array_type2t &arrtype =
+      dynamic_cast<const array_type2t &>(*src->type.get());
+    mp_integer size = type_byte_size(arrtype.subtype);
 
-    if (size == 0)
+    if(size == 0)
       return src;
 
-    mp_integer index=offset/size;
-    mp_integer rest=offset%size;
+    mp_integer index = offset / size;
+    mp_integer rest = offset % size;
 
     type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
     index2tc newindex(arrtype.subtype, src, constant_int2tc(inttype, index));
 
     return object_rec(rest, pointer_type, newindex);
   }
-  else if (is_structure_type(src))
+  if(is_structure_type(src))
   {
     const struct_union_data &data_ref =
       dynamic_cast<const struct_union_data &>(*src->type);
@@ -109,36 +105,36 @@ expr2tc pointer_logict::object_rec(
     const std::vector<irep_idt> &member_names =
       data_ref.get_structure_member_names();
 
-    assert(offset>=0);
+    assert(offset >= 0);
 
-    if(offset==0) // the struct itself
+    if(offset == 0) // the struct itself
       return src;
 
-    mp_integer current_offset=1;
+    mp_integer current_offset = 1;
 
-    assert(offset>=current_offset);
+    assert(offset >= current_offset);
 
     unsigned int idx = 0;
     for(auto const &it : members)
     {
-      assert(offset>=current_offset);
+      assert(offset >= current_offset);
 
       mp_integer sub_size = type_byte_size(it);
 
-      if(sub_size==0)
+      if(sub_size == 0)
         return src;
 
-      mp_integer new_offset=current_offset+sub_size;
-      if(new_offset>offset)
+      mp_integer new_offset = current_offset + sub_size;
+      if(new_offset > offset)
       {
         // found it
         member2tc tmp(it, src, member_names[idx]);
-        return object_rec(offset-current_offset, pointer_type, tmp);
+        return object_rec(offset - current_offset, pointer_type, tmp);
       }
 
-      assert(new_offset<=offset);
-      current_offset=new_offset;
-      assert(current_offset<=offset);
+      assert(new_offset <= offset);
+      current_offset = new_offset;
+      assert(current_offset <= offset);
       idx++;
     }
   }
@@ -159,6 +155,4 @@ pointer_logict::pointer_logict()
   // add INVALID
   symbol2tc invalid(type, "INVALID");
   invalid_object = add_object(invalid);
-
 }
-

@@ -60,14 +60,14 @@ exprt from_integer(const mp_integer &int_value, const typet &type)
     expr.value(integer2binary(int_value, bv_width(type)));
     return expr;
   }
-  else if(type_id == "bool")
+  if(type_id == "bool")
   {
     if(int_value == 0)
     {
       expr.make_false();
       return expr;
     }
-    else if(int_value == 1)
+    if(int_value == 1)
     {
       expr.make_true();
       return expr;

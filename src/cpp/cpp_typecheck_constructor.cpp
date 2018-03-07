@@ -601,21 +601,20 @@ void cpp_typecheckt::check_member_initializers(
             ok = true;
             break;
           }
-          else
-          { // check for a indirect parent
-            irep_idt identifier = parent_it->type().identifier();
-            const symbolt &isymb = lookup(identifier);
-            const typet &type = isymb.type;
-            assert(type.id() == "struct");
-            const irept &ibase = type.find("bases");
-            forall_irep(iparent_it, ibase.get_sub())
+
+          // check for a indirect parent
+          irep_idt identifier = parent_it->type().identifier();
+          const symbolt &isymb = lookup(identifier);
+          const typet &type = isymb.type;
+          assert(type.id() == "struct");
+          const irept &ibase = type.find("bases");
+          forall_irep(iparent_it, ibase.get_sub())
+          {
+            assert(iparent_it->get("type") == "symbol");
+            if(member_type.identifier() == iparent_it->type().identifier())
             {
-              assert(iparent_it->get("type") == "symbol");
-              if(member_type.identifier() == iparent_it->type().identifier())
-              {
-                ok = true;
-                break;
-              }
+              ok = true;
+              break;
             }
           }
         }
@@ -708,9 +707,6 @@ void cpp_typecheckt::full_member_initialization(
     forall_irep(m_it, initializers.get_sub())
     {
       irept initializer = *m_it;
-      std::string identifier;
-      std::string base_name;
-
       assert(initializer.get("member") == "cpp-name");
 
       const cpp_namet &member_name = to_cpp_name(initializer.member_irep());
@@ -719,6 +715,8 @@ void cpp_typecheckt::full_member_initialization(
 
       if(!has_template_args)
       {
+        std::string identifier;
+        std::string base_name;
         member_name.convert(identifier, base_name);
 
         // check if the initializer is a data
@@ -752,22 +750,21 @@ void cpp_typecheckt::full_member_initialization(
         found = true;
         break;
       }
-      else
-      { // initialize the indirect parent
-        irep_idt identifier = parent_it->type().identifier();
-        const symbolt &isymb = lookup(identifier);
-        const typet &type = isymb.type;
-        assert(type.id() == "struct");
-        const irept &ibase = type.find("bases");
-        forall_irep(iparent_it, ibase.get_sub())
+
+      // initialize the indirect parent
+      irep_idt identifier = parent_it->type().identifier();
+      const symbolt &isymb = lookup(identifier);
+      const typet &type = isymb.type;
+      assert(type.id() == "struct");
+      const irept &ibase = type.find("bases");
+      forall_irep(iparent_it, ibase.get_sub())
+      {
+        assert(iparent_it->get("type") == "symbol");
+        if(member_type.identifier() == iparent_it->type().identifier())
         {
-          assert(iparent_it->get("type") == "symbol");
-          if(member_type.identifier() == iparent_it->type().identifier())
-          {
-            final_initializers.move_to_sub(initializer);
-            found = true;
-            break;
-          }
+          final_initializers.move_to_sub(initializer);
+          found = true;
+          break;
         }
       }
     }

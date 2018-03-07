@@ -91,16 +91,14 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     // symex_free that occurred above should trigger a dereference failure.
     return;
   }
-  else
+
+  result = expr2tc();
+  for(auto const &it : result_list)
   {
-    result = expr2tc();
-    for(auto const &it : result_list)
-    {
-      if(is_nil_expr(result))
-        result = it.first;
-      else
-        result = if2tc(result->type, it.second, it.first, result);
-    }
+    if(is_nil_expr(result))
+      result = it.first;
+    else
+      result = if2tc(result->type, it.second, it.first, result);
   }
 
   // Install pointer modelling data into the relevant arrays.
@@ -304,14 +302,18 @@ void goto_symext::symex_free(const expr2tc &expr)
   tmp = dereference2tc(get_uint8_type(), tmp);
   dereference(tmp, dereferencet::INTERNAL);
 
-  for(auto const &item : internal_deref_items)
+  // Only add assertions to check pointer offset if pointer check is enabled
+  if(!options.get_bool_option("no-pointer-check"))
   {
-    guardt g = cur_state->guard;
-    g.add(item.guard);
-    expr2tc offset = item.offset;
-    expr2tc eq = equality2tc(offset, gen_ulong(0));
-    g.guard_expr(eq);
-    claim(eq, "Operand of free must have zero pointer offset");
+    for(auto const &item : internal_deref_items)
+    {
+      guardt g = cur_state->guard;
+      g.add(item.guard);
+      expr2tc offset = item.offset;
+      expr2tc eq = equality2tc(offset, gen_ulong(0));
+      g.guard_expr(eq);
+      claim(eq, "Operand of free must have zero pointer offset");
+    }
   }
 
   // Clear the alloc bit, and set the deallocated bit.

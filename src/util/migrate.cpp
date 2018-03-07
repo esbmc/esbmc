@@ -383,10 +383,8 @@ void migrate_type(
       typet followed = ns->follow(type);
       return migrate_type(followed, new_type_ref, ns, cache);
     }
-    else
-    {
-      new_type_ref = type_pool.get_symbol(type);
-    }
+
+    new_type_ref = type_pool.get_symbol(type);
   }
   else if(type.id() == typet::t_struct)
   {
@@ -458,7 +456,7 @@ static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
   // First, if either are pointers, use that.
   if(side1.type().id() == typet::t_pointer)
     return side1.type();
-  else if(side2.type().id() == typet::t_pointer)
+  if(side2.type().id() == typet::t_pointer)
     return side2.type();
 
   // Then, fixedbv's/floatbv's take precedence.
@@ -475,7 +473,7 @@ static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
   // have a higher rank.
   if(side1.type().id() == typet::t_bool)
     return side2.type();
-  else if(side2.type().id() == typet::t_bool)
+  if(side2.type().id() == typet::t_bool)
     return side1.type();
 
   assert(
@@ -492,8 +490,8 @@ static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
   {
     if(side1_width > side2_width)
       return side1.type();
-    else
-      return side2.type();
+
+    return side2.type();
   }
 
   // Differing between signed/unsigned bv type. Take unsigned if greatest.
@@ -506,8 +504,8 @@ static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
   // Otherwise return the signed one;
   if(side1.type().id() == typet::t_signedbv)
     return side1.type();
-  else
-    return side2.type();
+
+  return side2.type();
 }
 
 // Called when we have an expression (such as 'add') with more than two
@@ -597,7 +595,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     migrate_type(sym->type, type);
     return expr2tc(new symbol2t(type, init, symbol2t::level0, 0, 0, 0, 0));
   }
-  else if(
+  if(
     init.as_string().compare(0, 3, "cs$") == 0 ||
     init.as_string().compare(0, 8, "kindice$") == 0 ||
     init.as_string().compare(0, 2, "s$") == 0 ||
@@ -663,15 +661,8 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
 
   node_num = atoi(andstr.c_str());
   level2_num = atoi(hashstr.c_str());
-  return expr2tc(
-    new symbol2t(
-      type,
-      thename,
-      target_level,
-      level1_num,
-      level2_num,
-      thread_num,
-      node_num));
+  return expr2tc(new symbol2t(
+    type, thename, target_level, level1_num, level2_num, thread_num, node_num));
 }
 
 // Functions to flatten union literals to not contain anything of union type.
@@ -1560,10 +1551,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if(expr.op1().id() == "member_name")
     {
-      idx = expr2tc(
-        new constant_string2t(
-          type2tc(new string_type2t(1)),
-          expr.op1().get_string("component_name")));
+      idx = expr2tc(new constant_string2t(
+        type2tc(new string_type2t(1)),
+        expr.op1().get_string("component_name")));
     }
     else
     {
@@ -1807,15 +1797,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     else if(expr.statement() == "va_arg")
       t = sideeffect2t::va_arg;
     else if(expr.statement() == "function_call")
+    {
       t = sideeffect2t::function_call;
-    else
-    {
-      std::cerr << "Unexpected side-effect statement\n";
-      abort();
-    }
-
-    if(t == sideeffect2t::function_call)
-    {
       const exprt &arguments = expr.op1();
       forall_operands(it, arguments)
       {
@@ -1823,9 +1806,25 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         migrate_expr(*it, args.back());
       }
     }
+    else if(expr.statement() == "printf")
+    {
+      for(auto const &it : expr.operands())
+      {
+        expr2tc tmp_op;
+        migrate_expr(it, tmp_op);
+        args.push_back(tmp_op);
+      }
+      new_expr_ref = code_printf2tc(args);
+      return;
+    }
+    else
+    {
+      std::cerr << "Unexpected side-effect statement\n";
+      abort();
+    }
 
     new_expr_ref =
-      expr2tc(new sideeffect2t(plaintype, operand, thesize, args, cmt_type, t));
+      sideeffect2tc(plaintype, operand, thesize, args, cmt_type, t);
   }
   else if(expr.id() == irept::id_code && expr.statement() == "assign")
   {
@@ -2240,8 +2239,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     const constant_bool2t &ref2 = to_constant_bool2t(ref);
     if(ref2.value)
       return true_exprt();
-    else
-      return false_exprt();
+
+    return false_exprt();
   }
   case expr2t::constant_string_id:
   {
@@ -2306,7 +2305,7 @@ exprt migrate_expr_back(const expr2tc &ref)
         irep_idt(std::string(ref2.get_symbol_name().c_str() + 7)));
       return thesym;
     }
-    else if(ref2.thename == "NULL")
+    if(ref2.thename == "NULL")
     {
       // Special case.
       constant_exprt const_expr(migrate_type_back(ref2.type));

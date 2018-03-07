@@ -159,8 +159,9 @@ public:
      *  assigns the result of this function call to at a higher level. */
     expr2tc return_value;
 
-    typedef hash_set_cont<renaming::level2t::name_record,
-                          renaming::level2t::name_rec_hash>
+    typedef hash_set_cont<
+      renaming::level2t::name_record,
+      renaming::level2t::name_rec_hash>
       local_variablest;
     /** Set of local variable l1 names. */
     local_variablest local_variables;
@@ -183,8 +184,9 @@ public:
      *  resulting function invocations with. */
     expr2tc orig_func_ptr_call;
 
-    typedef hash_set_cont<renaming::level2t::name_record,
-                          renaming::level2t::name_rec_hash>
+    typedef hash_set_cont<
+      renaming::level2t::name_record,
+      renaming::level2t::name_rec_hash>
       declaration_historyt;
     /** Set of variables names that have been declared. Used to detect when we
      *  are in some kind of block that is entered then exited repeatedly -
@@ -330,9 +332,8 @@ public:
   /**
    *  Perform both levels of renaming on an expression.
    *  @param expr Expression to rename contents of.
-   *  @param rename_only Flag to enable constant propagation
    */
-  void rename(expr2tc &expr, bool rename_only = false);
+  void rename(expr2tc &expr);
 
   /**
    *  Perform renaming of contents of an address_of operation.

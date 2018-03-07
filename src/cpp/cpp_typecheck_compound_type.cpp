@@ -22,7 +22,7 @@ bool cpp_typecheckt::has_const(const typet &type)
 {
   if(type.id() == "const")
     return true;
-  else if(type.id() == "merged_type")
+  if(type.id() == "merged_type")
   {
     forall_subtypes(it, type)
       if(has_const(*it))
@@ -38,7 +38,7 @@ bool cpp_typecheckt::has_volatile(const typet &type)
 {
   if(type.id() == "volatile")
     return true;
-  else if(type.id() == "merged_type")
+  if(type.id() == "merged_type")
   {
     forall_subtypes(it, type)
       if(has_volatile(*it))
@@ -103,21 +103,19 @@ std::string cpp_typecheckt::fetch_compound_name(const typet &type)
     // Name is unpredictable until it's actually made, sorry.
     return "";
   }
-  else
+
+  const cpp_namet &cpp_name = to_cpp_name(type.find("tag"));
+
+  cpp_name.convert(identifier, base_name);
+
+  if(identifier != base_name)
   {
-    const cpp_namet &cpp_name = to_cpp_name(type.find("tag"));
-
-    cpp_name.convert(identifier, base_name);
-
-    if(identifier != base_name)
-    {
-      //err_location(cpp_name.location());
-      throw "no namespaces allowed in compound names";
-    }
-
-    dest_scope = &const_cast<cpp_typecheckt *>(this)->tag_scope(
-      base_name, has_body, tag_only_declaration);
+    //err_location(cpp_name.location());
+    throw "no namespaces allowed in compound names";
   }
+
+  dest_scope = &const_cast<cpp_typecheckt *>(this)->tag_scope(
+    base_name, has_body, tag_only_declaration);
 
   // See: typecheck_compound_type for full details.
   const std::string symbol_name = dest_scope->prefix + "tag." + identifier;
@@ -414,10 +412,9 @@ void cpp_typecheckt::typecheck_compound_declarator(
     component.set("is_inline", declaration.member_spec().is_inline());
 
     // the 'virtual' name of the function
-    std::string virtual_name =
-      component.get_string("base_name") +
-      id2string(
-        function_identifier(static_cast<const typet &>(component.type())));
+    std::string virtual_name = component.get_string("base_name") +
+                               id2string(function_identifier(
+                                 static_cast<const typet &>(component.type())));
 
     if(has_const(method_qualifier))
       virtual_name += "$const";
@@ -609,9 +606,8 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
           for(unsigned i = 1; i < args.size(); i++)
           {
-            expr_call.arguments().push_back(
-              symbol_expr(
-                namespacet(context).lookup(args[i].cmt_identifier())));
+            expr_call.arguments().push_back(symbol_expr(
+              namespacet(context).lookup(args[i].cmt_identifier())));
           }
 
           code_returnt code_return;
@@ -629,9 +625,8 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
           for(unsigned i = 1; i < args.size(); i++)
           {
-            code_func.arguments().push_back(
-              symbol_expr(
-                namespacet(context).lookup(args[i].cmt_identifier())));
+            code_func.arguments().push_back(symbol_expr(
+              namespacet(context).lookup(args[i].cmt_identifier())));
           }
 
           func_symb.value = code_func;
@@ -1540,7 +1535,7 @@ bool cpp_typecheckt::get_component(
 
       return true; // component found
     }
-    else if(follow(component.type()).find("#unnamed_object").is_not_nil())
+    if(follow(component.type()).find("#unnamed_object").is_not_nil())
     {
       // anonymous union
       assert(follow(component.type()).id() == "union");
@@ -1599,8 +1594,7 @@ bool cpp_typecheckt::check_component_access(
       if(subtype_typecast(struct_type, scope_struct))
         return false; // ok
 
-      else
-        break;
+      break;
     }
     pscope = &(pscope->get_parent());
   }

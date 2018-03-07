@@ -173,10 +173,8 @@ expr2tc attempt_associative_simplify(
 
     return accuml;
   }
-  else
-  {
-    return expr2tc();
-  }
+
+  return expr2tc();
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -527,14 +525,14 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
   if(is_bv_type(value))
   {
     std::function<constant_int2t &(expr2tc &)> to_constant =
-      (constant_int2t & (*)(expr2tc &))to_constant_int2t;
+      (constant_int2t & (*)(expr2tc &)) to_constant_int2t;
 
     simpl_res = TFunctor<constant_int2t>::simplify(to_simplify, to_constant);
   }
   else if(is_fixedbv_type(value))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
-      (constant_fixedbv2t & (*)(expr2tc &))to_constant_fixedbv2t;
+      (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
 
     simpl_res =
       TFunctor<constant_fixedbv2t>::simplify(to_simplify, to_constant);
@@ -542,7 +540,7 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
   else if(is_floatbv_type(value))
   {
     std::function<constant_floatbv2t &(expr2tc &)> to_constant =
-      (constant_floatbv2t & (*)(expr2tc &))to_constant_floatbv2t;
+      (constant_floatbv2t & (*)(expr2tc &)) to_constant_floatbv2t;
 
     simpl_res =
       TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
@@ -550,7 +548,7 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
   else if(is_bool_type(value))
   {
     std::function<constant_bool2t &(expr2tc &)> to_constant =
-      (constant_bool2t & (*)(expr2tc &))to_constant_bool2t;
+      (constant_bool2t & (*)(expr2tc &)) to_constant_bool2t;
 
     simpl_res = TFunctor<constant_bool2t>::simplify(to_simplify, to_constant);
   }
@@ -615,7 +613,7 @@ expr2tc with2t::do_simplify(bool second __attribute__((unused))) const
     s->datatype_members[no] = update_value;
     return expr2tc(s);
   }
-  else if(is_constant_union2t(source_value))
+  if(is_constant_union2t(source_value))
   {
     const constant_union2t &c_union = to_constant_union2t(source_value);
     const union_type2t &thetype = to_union_type(c_union.type);
@@ -669,8 +667,8 @@ expr2tc with2t::do_simplify(bool second __attribute__((unused))) const
     // as the initializer.
     if(update_value == array.initializer)
       return source_value;
-    else
-      return expr2tc();
+
+    return expr2tc();
   }
   else
   {
@@ -718,60 +716,45 @@ expr2tc member2t::do_simplify(bool second __attribute__((unused))) const
 
     return s;
   }
-  else
-  {
-    return expr2tc();
-  }
+
+  return expr2tc();
 }
 
-expr2tc pointer_offs_simplify_2(const expr2tc &offs, const type2tc &type)
-{
-  if(is_symbol2t(offs) || is_constant_string2t(offs))
-  {
-    return constant_int2tc(type, BigInt(0));
-  }
-  else if(is_index2t(offs))
-  {
-    const index2t &index = to_index2t(offs);
-
-    if(is_symbol2t(index.source_value) && is_constant_int2t(index.index))
-    {
-      // We can reduce to that index offset.
-      const array_type2t &arr = to_array_type(index.source_value->type);
-      unsigned int widthbits = arr.subtype->get_width();
-      unsigned int widthbytes = widthbits / 8;
-      BigInt val = to_constant_int2t(index.index).value;
-      val *= widthbytes;
-      return constant_int2tc(type, val);
-    }
-    else if(
-      is_constant_string2t(index.source_value) &&
-      is_constant_int2t(index.index))
-    {
-      // This can also be simplified to an array offset. Just return the index,
-      // as the string elements are all 8 bit bytes.
-      return index.index;
-    }
-    else
-    {
-      return expr2tc();
-    }
-  }
-  else
-  {
-    return expr2tc();
-  }
-}
-
-expr2tc pointer_offset2t::do_simplify(bool second) const
+expr2tc pointer_offset2t::do_simplify(bool second __attribute__((unused))) const
 {
   // XXX - this could be better. But the current implementation catches most
   // cases that ESBMC produces internally.
 
-  if(second && is_address_of2t(ptr_obj))
+  if(is_address_of2t(ptr_obj))
   {
     const address_of2t &addrof = to_address_of2t(ptr_obj);
-    return pointer_offs_simplify_2(addrof.ptr_obj, type);
+    if(is_symbol2t(addrof.ptr_obj) || is_constant_string2t(addrof.ptr_obj))
+      return gen_zero(type);
+
+    if(is_index2t(addrof.ptr_obj))
+    {
+      const index2t &index = to_index2t(addrof.ptr_obj);
+      if(is_constant_int2t(index.index))
+      {
+        if(is_symbol2t(index.source_value))
+        {
+          // We can reduce to that index offset.
+          const array_type2t &arr = to_array_type(index.source_value->type);
+          unsigned int widthbits = arr.subtype->get_width();
+          unsigned int widthbytes = widthbits / 8;
+          BigInt val = to_constant_int2t(index.index).value;
+          val *= widthbytes;
+          return constant_int2tc(type, val);
+        }
+
+        if(is_constant_string2t(index.source_value))
+        {
+          // This can also be simplified to an array offset. Just return the index,
+          // as the string elements are all 8 bit bytes.
+          return index.index;
+        }
+      }
+    }
   }
   else if(is_typecast2t(ptr_obj))
   {
@@ -789,7 +772,6 @@ expr2tc pointer_offset2t::do_simplify(bool second) const
 
     // If it didn't reduce to zero, give up. Not sure why this is the case,
     // but it's what the old irep code does.
-    return expr2tc();
   }
   else if(is_add2t(ptr_obj))
   {
@@ -835,13 +817,11 @@ expr2tc pointer_offset2t::do_simplify(bool second) const
     expr2tc tmp = new_add->simplify();
     if(is_nil_expr(tmp))
       return new_add;
-    else
-      return tmp;
+
+    return tmp;
   }
-  else
-  {
-    return expr2tc();
-  }
+
+  return expr2tc();
 }
 
 expr2tc index2t::do_simplify(bool second __attribute__((unused))) const
@@ -857,7 +837,7 @@ expr2tc index2t::do_simplify(bool second __attribute__((unused))) const
 
     return expr2tc();
   }
-  else if(is_constant_array2t(source_value) && is_constant_int2t(index))
+  if(is_constant_array2t(source_value) && is_constant_int2t(index))
   {
     const constant_array2t &arr = to_constant_array2t(source_value);
     const constant_int2t &idx = to_constant_int2t(index);
@@ -1225,10 +1205,8 @@ static expr2tc do_bit_munge_operation(
       // Too large to fit, negative, in an int64_t.
       return expr2tc();
     }
-    else
-    {
-      val1 = -val1;
-    }
+
+    val1 = -val1;
   }
 
   if(int2.value.is_negative())
@@ -1238,10 +1216,8 @@ static expr2tc do_bit_munge_operation(
       // Too large to fit, negative, in an int64_t.
       return expr2tc();
     }
-    else
-    {
-      val2 = -val2;
-    }
+
+    val2 = -val2;
   }
 
   val1 = opfunc(val1, val2);
@@ -1353,7 +1329,7 @@ expr2tc ashr2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<ashr2t>(op, type, side_1, side_2);
 }
 
-expr2tc typecast2t::do_simplify(bool second) const
+expr2tc typecast2t::do_simplify(bool second __attribute__((unused))) const
 {
   // Follow approach of old irep, i.e., copy it
   if(type == from->type)
@@ -1374,7 +1350,7 @@ expr2tc typecast2t::do_simplify(bool second) const
         // bool to int
         return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
       }
-      else if(is_fixedbv_type(type))
+      if(is_fixedbv_type(type))
       {
         fixedbvt fbv;
         fbv.spec = to_fixedbv_type(migrate_type_back(type));
@@ -1414,7 +1390,7 @@ expr2tc typecast2t::do_simplify(bool second) const
 
         return constant_int2tc(type, new_number);
       }
-      else if(is_fixedbv_type(type))
+      if(is_fixedbv_type(type))
       {
         fixedbvt fbv;
         fbv.spec = to_fixedbv_type(migrate_type_back(type));
@@ -1451,7 +1427,7 @@ expr2tc typecast2t::do_simplify(bool second) const
       {
         return constant_int2tc(type, fbv.to_integer());
       }
-      else if(is_fixedbv_type(type))
+      if(is_fixedbv_type(type))
       {
         fbv.round(to_fixedbv_type(migrate_type_back(type)));
         return constant_fixedbv2tc(fbv);
@@ -1477,7 +1453,7 @@ expr2tc typecast2t::do_simplify(bool second) const
       {
         return constant_int2tc(type, fpbv.to_integer());
       }
-      else if(is_floatbv_type(type))
+      if(is_floatbv_type(type))
       {
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
         return constant_floatbv2tc(fpbv);
@@ -1530,8 +1506,8 @@ expr2tc typecast2t::do_simplify(bool second) const
 
       if(to_width == from_width)
         return simp;
-      else
-        return expr2tc();
+
+      return expr2tc();
     }
     catch(array_type2t::dyn_sized_array_excp *e)
     {
@@ -1545,33 +1521,6 @@ expr2tc typecast2t::do_simplify(bool second) const
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
     return expr2tc(new typecast2t(type, to_typecast2t(simp).from));
-  }
-  else if(
-    second && is_bv_type(type) && is_bv_type(simp) && is_arith_type(simp) &&
-    (simp->type->get_width() <= type->get_width()))
-  {
-    // So, if this is an integer type, performing an integer arith operation,
-    // and the type we're casting to isn't _supposed_ to result in a loss of
-    // information, push the cast downwards.
-    std::list<expr2tc> set2;
-    simp->foreach_operand([&set2, this](const expr2tc &e) {
-      expr2tc cast = typecast2tc(type, e);
-      set2.push_back(cast);
-    });
-
-    // Now clone the expression and update its operands.
-    expr2tc newobj = simp;
-    newobj->type = type;
-
-    std::list<expr2tc>::const_iterator it2 = set2.begin();
-    newobj->Foreach_operand([this, &it2](expr2tc &e) {
-      e = *it2;
-      it2++;
-    });
-
-    // Caller won't simplify us further if it's called us with second=true, so
-    // give simplification another shot ourselves.
-    return try_simplification(newobj);
   }
 
   return expr2tc();
@@ -1610,10 +1559,8 @@ expr2tc address_of2t::do_simplify(bool second __attribute__((unused))) const
 
     return add2tc(type, sub_addr_of, new_index);
   }
-  else
-  {
-    return expr2tc();
-  }
+
+  return expr2tc();
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -1950,8 +1897,8 @@ struct Greaterthanequaltor
   }
 };
 
-expr2tc
-greaterthanequal2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc greaterthanequal2t::do_simplify(bool second
+                                        __attribute__((unused))) const
 {
   return simplify_relations<Greaterthanequaltor, greaterthanequal2t>(
     type, side_1, side_2);
@@ -1968,10 +1915,8 @@ expr2tc if2t::do_simplify(bool second __attribute__((unused))) const
       {
         return true_value;
       }
-      else
-      {
-        return false_value;
-      }
+
+      return false_value;
     }
     else
     {
@@ -1987,10 +1932,8 @@ expr2tc if2t::do_simplify(bool second __attribute__((unused))) const
       {
         return true_value;
       }
-      else
-      {
-        return false_value;
-      }
+
+      return false_value;
     }
   }
   else
@@ -2032,8 +1975,8 @@ static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
     bool val = (to_constant_string2t(a).value == to_constant_string2t(b).value);
     if(val)
       return gen_true_expr();
-    else
-      return gen_false_expr();
+
+    return gen_false_expr();
   }
 
   return expr2tc();
@@ -2104,10 +2047,8 @@ expr2tc extract2t::do_simplify(bool second __attribute__((unused))) const
     totallytmp.nosign = theval;
     return constant_int2tc(type, BigInt(totallytmp.sign));
   }
-  else
-  {
-    return constant_int2tc(type, BigInt(theval));
-  }
+
+  return constant_int2tc(type, BigInt(theval));
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -2135,7 +2076,7 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
   if(is_fixedbv_type(value))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
-      (constant_fixedbv2t & (*)(expr2tc &))to_constant_fixedbv2t;
+      (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
 
     simpl_res =
       TFunctor<constant_fixedbv2t>::simplify(to_simplify, to_constant);
@@ -2143,7 +2084,7 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
   else if(is_floatbv_type(value))
   {
     std::function<constant_floatbv2t &(expr2tc &)> to_constant =
-      (constant_floatbv2t & (*)(expr2tc &))to_constant_floatbv2t;
+      (constant_floatbv2t & (*)(expr2tc &)) to_constant_floatbv2t;
 
     simpl_res =
       TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);

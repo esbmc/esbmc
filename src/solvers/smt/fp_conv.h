@@ -8,7 +8,8 @@
 #ifndef SOLVERS_SMT_FP_CONV_H_
 #define SOLVERS_SMT_FP_CONV_H_
 
-#include "smt_conv.h"
+#include <solvers/smt/smt_ast.h>
+#include <solvers/smt/smt_sort.h>
 
 class fp_convt
 {
@@ -60,6 +61,11 @@ public:
    *  @param expr the arithmetic operations
    *  @return The newly created cast smt_ast. */
   virtual smt_astt mk_smt_fpbv_arith_ops(const expr2tc &expr);
+
+  /** Convert the ieee arithmetic square-root (sqrt)
+   *  @param expr the sqrt operation
+   *  @return The newly created sqrt smt_ast */
+  virtual smt_astt mk_smt_fpbv_sqrt(const expr2tc &expr);
 
   /** Convert the ieee arithmetic fused-multiply add (fma)
    *  @param expr the fma operation

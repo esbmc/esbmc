@@ -15,12 +15,13 @@
 // Rvalue: Enable rvalue converter
 // Lvalue: Enable lvalue converter
 // ValueCvt: Converter functions to make rvalue / lvalue
-template <typename Output,
-          typename InPython,
-          bool AllowNone,
-          bool Rvalue,
-          bool Lvalue,
-          typename ValueCvt>
+template <
+  typename Output,
+  typename InPython,
+  bool AllowNone,
+  bool Rvalue,
+  bool Lvalue,
+  typename ValueCvt>
 struct esbmc_python_cvt
 {
   esbmc_python_cvt()
@@ -57,8 +58,8 @@ private:
     {
       if(AllowNone)
         return p;
-      else
-        return NULL;
+
+      return NULL;
     }
 
     objects::instance<> *inst = reinterpret_cast<objects::instance<> *>(p);

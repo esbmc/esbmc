@@ -85,7 +85,7 @@ std::string expr2ct::convert_rec(
   {
     return q + "_Bool" + d;
   }
-  else if(src.id() == "empty")
+  if(src.id() == "empty")
   {
     return q + "void" + d;
   }
@@ -100,7 +100,7 @@ std::string expr2ct::convert_rec(
     {
       return q + sign_str + "int" + d;
     }
-    else if(width == config.ansi_c.long_int_width)
+    if(width == config.ansi_c.long_int_width)
     {
       return q + sign_str + "long int" + d;
     }
@@ -123,7 +123,7 @@ std::string expr2ct::convert_rec(
 
     if(width == config.ansi_c.single_width)
       return q + "float" + d;
-    else if(width == config.ansi_c.double_width)
+    if(width == config.ansi_c.double_width)
       return q + "double" + d;
     else if(width == config.ansi_c.long_double_width)
       return q + "long double" + d;
@@ -218,15 +218,13 @@ std::string expr2ct::convert_rec(
 
       return dest;
     }
-    else
-    {
-      std::string tmp = convert(src.subtype());
 
-      if(q == "")
-        return tmp + " *" + d;
-      else
-        return q + " (" + tmp + " *)" + d;
-    }
+    std::string tmp = convert(src.subtype());
+
+    if(q == "")
+      return tmp + " *" + d;
+
+    return q + " (" + tmp + " *)" + d;
   }
   else if(src.is_array())
   {
@@ -316,7 +314,7 @@ std::string expr2ct::convert_typecast(const exprt &src, unsigned &precedence)
     dest += " " + tag;
     return dest;
   }
-  else if(type.id() == "union")
+  if(type.id() == "union")
   {
     std::string dest;
     const std::string &tag = type.tag().as_string();
@@ -2007,28 +2005,28 @@ std::string expr2ct::convert(const exprt &src, unsigned &precedence)
   if(src.id() == "+")
     return convert_binary(src, "+", precedence = 12, false);
 
-  else if(src.id() == "-")
+  if(src.id() == "-")
   {
     if(src.operands().size() == 1)
       return convert_norep(src, precedence);
-    else
-      return convert_binary(src, "-", precedence = 12, true);
+
+    return convert_binary(src, "-", precedence = 12, true);
   }
 
   else if(src.id() == "unary-")
   {
     if(src.operands().size() != 1)
       return convert_norep(src, precedence);
-    else
-      return convert_unary(src, "-", precedence = 15);
+
+    return convert_unary(src, "-", precedence = 15);
   }
 
   else if(src.id() == "unary+")
   {
     if(src.operands().size() != 1)
       return convert_norep(src, precedence);
-    else
-      return convert_unary(src, "+", precedence = 15);
+
+    return convert_unary(src, "+", precedence = 15);
   }
 
   else if(src.id() == "invalid-pointer")
@@ -2180,7 +2178,7 @@ std::string expr2ct::convert(const exprt &src, unsigned &precedence)
   {
     if(src.operands().size() != 1)
       return convert_norep(src, precedence);
-    else if(src.op0().id() == "label")
+    if(src.op0().id() == "label")
       return "&&" + src.op0().get_string("identifier");
     else
       return convert_unary(src, "&", precedence = 15);
@@ -2190,8 +2188,8 @@ std::string expr2ct::convert(const exprt &src, unsigned &precedence)
   {
     if(src.operands().size() != 1)
       return convert_norep(src, precedence);
-    else
-      return convert_unary(src, "*", precedence = 15);
+
+    return convert_unary(src, "*", precedence = 15);
   }
 
   else if(src.id() == "index")
@@ -2211,7 +2209,7 @@ std::string expr2ct::convert(const exprt &src, unsigned &precedence)
     const irep_idt &statement = src.statement();
     if(statement == "preincrement")
       return convert_unary(src, "++", precedence = 15);
-    else if(statement == "predecrement")
+    if(statement == "predecrement")
       return convert_unary(src, "--", precedence = 15);
     else if(statement == "postincrement")
       return convert_unary_post(src, "++", precedence = 16);

@@ -607,7 +607,7 @@ void ieee_floatt::align()
 
     return; // done
   }
-  else if(biased_exponent <= 0) // exponent too small?
+  if(biased_exponent <= 0) // exponent too small?
   {
     // produce a denormal (or zero)
     mp_integer new_exponent = mp_integer(1) - spec.bias();
@@ -751,7 +751,7 @@ ieee_floatt &ieee_floatt::operator/=(const ieee_floatt &other)
 
     return *this;
   } // inf/x = inf
-  else if(infinity_flag)
+  if(infinity_flag)
   {
     if(other.sign_flag)
       negate();
@@ -829,7 +829,7 @@ ieee_floatt &ieee_floatt::operator+=(const ieee_floatt &other)
     make_NaN();
     return *this;
   }
-  else if(infinity_flag)
+  if(infinity_flag)
     return *this;
   else if(other.infinity_flag)
   {
@@ -843,19 +843,15 @@ ieee_floatt &ieee_floatt::operator+=(const ieee_floatt &other)
   {
     if(get_sign() == other.get_sign())
       return *this;
-    else
+
+    if(rounding_mode == ROUND_TO_MINUS_INF)
     {
-      if(rounding_mode == ROUND_TO_MINUS_INF)
-      {
-        set_sign(true);
-        return *this;
-      }
-      else
-      {
-        set_sign(false);
-        return *this;
-      }
+      set_sign(true);
+      return *this;
     }
+
+    set_sign(false);
+    return *this;
   }
 
   // get smaller exponent
@@ -924,7 +920,7 @@ bool operator<(const ieee_floatt &a, const ieee_floatt &b)
   // check sign
   if(a.is_zero())
     return !b.sign_flag;
-  else if(b.is_zero())
+  if(b.is_zero())
     return a.sign_flag;
 
   // check sign
@@ -936,8 +932,8 @@ bool operator<(const ieee_floatt &a, const ieee_floatt &b)
   {
     if(b.infinity_flag)
       return false;
-    else
-      return a.sign_flag;
+
+    return a.sign_flag;
   }
   else if(b.infinity_flag)
     return !a.sign_flag;
@@ -947,15 +943,15 @@ bool operator<(const ieee_floatt &a, const ieee_floatt &b)
   {
     if(a.sign_flag) // both negative
       return a.exponent > b.exponent;
-    else
-      return a.exponent < b.exponent;
+
+    return a.exponent < b.exponent;
   }
 
   // check significand
   if(a.sign_flag) // both negative
     return a.fraction > b.fraction;
-  else
-    return a.fraction < b.fraction;
+
+  return a.fraction < b.fraction;
 }
 
 bool operator<=(const ieee_floatt &a, const ieee_floatt &b)
@@ -1190,16 +1186,16 @@ double ieee_floatt::to_double() const
   {
     if(sign_flag)
       return -std::numeric_limits<double>::infinity();
-    else
-      return std::numeric_limits<double>::infinity();
+
+    return std::numeric_limits<double>::infinity();
   }
 
   if(NaN_flag)
   {
     if(sign_flag)
       return -std::numeric_limits<double>::quiet_NaN();
-    else
-      return std::numeric_limits<double>::quiet_NaN();
+
+    return std::numeric_limits<double>::quiet_NaN();
   }
 
   mp_integer i = pack();
@@ -1225,16 +1221,16 @@ float ieee_floatt::to_float() const
   {
     if(sign_flag)
       return -std::numeric_limits<float>::infinity();
-    else
-      return std::numeric_limits<float>::infinity();
+
+    return std::numeric_limits<float>::infinity();
   }
 
   if(NaN_flag)
   {
     if(sign_flag)
       return -std::numeric_limits<float>::quiet_NaN();
-    else
-      return std::numeric_limits<float>::quiet_NaN();
+
+    return std::numeric_limits<float>::quiet_NaN();
   }
 
   mp_integer i = pack();

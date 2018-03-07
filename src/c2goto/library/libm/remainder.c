@@ -3,25 +3,22 @@
 #include <math.h>
 #include "../intrinsics.h"
 
-#undef remainderf
-#undef remainder
-#undef remainderl
+#define remainder_def(type, name, remquo_func)                                 \
+  type name(type x, type y)                                                    \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    int quo;                                                                   \
+    return remquo_func(x, y, &quo);                                            \
+  }                                                                            \
+                                                                               \
+  type __##name(type x, type y)                                                \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(x, y);                                                         \
+  }
 
-float remainderf(float x, float y)
-{
-  int quo;
-  return remquof(x, y, &quo);
-}
+remainder_def(float, remainderf, remquof);
+remainder_def(double, remainder, remquo);
+remainder_def(long double, remainderl, remquol);
 
-double remainder(double x, double y)
-{
-  int quo;
-  return remquo(x, y, &quo);
-}
-
-long double remainderl(long double x, long double y)
-{
-  int quo;
-  return remquol(x, y, &quo);
-}
-
+#undef remainder_def

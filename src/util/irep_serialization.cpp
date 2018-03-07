@@ -190,10 +190,8 @@ irep_idt irep_serializationt::read_string_ref(std::istream &in)
   {
     return ireps_container.string_rev_map[id].second;
   }
-  else
-  {
-    dstring s = read_string(in);
-    ireps_container.string_rev_map[id] = std::pair<bool, dstring>(true, s);
-    return ireps_container.string_rev_map[id].second;
-  }
+
+  dstring s = read_string(in);
+  ireps_container.string_rev_map[id] = std::pair<bool, dstring>(true, s);
+  return ireps_container.string_rev_map[id].second;
 }

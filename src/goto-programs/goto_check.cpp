@@ -496,7 +496,7 @@ void goto_checkt::check_rec(
   case expr2t::div_id:
   case expr2t::modulus_id:
     div_by_zero_check(expr, guard, loc);
-  /* fallthrough */
+    /* fallthrough */
 
   case expr2t::shl_id:
   case expr2t::neg_id:

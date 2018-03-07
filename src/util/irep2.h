@@ -917,8 +917,8 @@ class type2t_traits
 public:
   typedef field_traits<type2t::type_ids, type2t, &type2t::type_id>
     type_id_field;
-  typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>,
-                                          type_id_field>::type fields;
+  typedef typename boost::mpl::
+    push_front<boost::mpl::vector<Args...>, type_id_field>::type fields;
   static constexpr bool always_construct = false;
   typedef type2t base2t;
 
@@ -939,8 +939,8 @@ public:
     expr_id_field;
   typedef field_traits<type2tc, expr2t, &expr2t::type> type_field;
   typedef typename boost::mpl::push_front<
-    typename boost::mpl::push_front<boost::mpl::vector<Args...>,
-                                    type_field>::type,
+    typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::
+      type,
     expr_id_field>::type fields;
   static constexpr bool always_construct = false;
   static constexpr unsigned int num_fields =
@@ -965,8 +965,8 @@ public:
     expr_id_field;
   typedef field_traits<type2tc, expr2t, &expr2t::type> type_field;
   typedef typename boost::mpl::push_front<
-    typename boost::mpl::push_front<boost::mpl::vector<Args...>,
-                                    type_field>::type,
+    typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::
+      type,
     expr_id_field>::type fields;
   static constexpr bool always_construct = false;
   static constexpr unsigned int num_fields =
@@ -985,8 +985,8 @@ class expr2t_traits_always_construct
 public:
   typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
     expr_id_field;
-  typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>,
-                                          expr_id_field>::type fields;
+  typedef typename boost::mpl::
+    push_front<boost::mpl::vector<Args...>, expr_id_field>::type fields;
   static constexpr bool always_construct = true;
   static constexpr unsigned int num_fields =
     boost::mpl::size<fields>::type::value;
@@ -997,26 +997,29 @@ public:
 };
 
 // Declaration of irep and expr methods templates.
-template <class derived,
-          class baseclass,
-          typename traits,
-          typename container,
-          typename fields = typename traits::fields,
-          typename enable = void>
+template <
+  class derived,
+  class baseclass,
+  typename traits,
+  typename container,
+  typename fields = typename traits::fields,
+  typename enable = void>
 class irep_methods2;
-template <class derived,
-          class baseclass,
-          typename traits,
-          typename container,
-          typename fields = typename traits::fields,
-          typename enable = void>
+template <
+  class derived,
+  class baseclass,
+  typename traits,
+  typename container,
+  typename fields = typename traits::fields,
+  typename enable = void>
 class expr_methods2;
-template <class derived,
-          class baseclass,
-          typename traits,
-          typename container,
-          typename fields = typename traits::fields,
-          typename enable = void>
+template <
+  class derived,
+  class baseclass,
+  typename traits,
+  typename container,
+  typename fields = typename traits::fields,
+  typename enable = void>
 class type_methods2;
 
 /** Definition of irep methods template.
@@ -1050,25 +1053,27 @@ class type_methods2;
    *  decades worth of template errors if a programmer uses the irep
    *  incorrectly.
    */
-template <class derived,
-          class baseclass,
-          typename traits,
-          typename container,
-          typename fields,
-          typename enable>
-class irep_methods2
-  : public irep_methods2<derived,
-                         baseclass,
-                         traits,
-                         container,
-                         typename boost::mpl::pop_front<fields>::type>
-{
-public:
-  typedef irep_methods2<derived,
+template <
+  class derived,
+  class baseclass,
+  typename traits,
+  typename container,
+  typename fields,
+  typename enable>
+class irep_methods2 : public irep_methods2<
+                        derived,
                         baseclass,
                         traits,
                         container,
                         typename boost::mpl::pop_front<fields>::type>
+{
+public:
+  typedef irep_methods2<
+    derived,
+    baseclass,
+    traits,
+    container,
+    typename boost::mpl::pop_front<fields>::type>
     superclass;
   typedef container container2tc;
   typedef typename container::base_container base_container2tc;
@@ -1138,11 +1143,12 @@ protected:
 // Base instance of irep_methods2. This is a template specialization that
 // matches (via boost::enable_if) when the list of fields to operate on is
 // now empty. Finish up the remaining computation, if any.
-template <class derived,
-          class baseclass,
-          typename traits,
-          typename container,
-          typename fields>
+template <
+  class derived,
+  class baseclass,
+  typename traits,
+  typename container,
+  typename fields>
 class irep_methods2<
   derived,
   baseclass,
@@ -1260,12 +1266,13 @@ protected:
    *  protected; here we provide the head methods publically to allow the
    *  programmer to call in.
    *  */
-template <class derived,
-          class baseclass,
-          typename traits,
-          typename container,
-          typename fields,
-          typename enable>
+template <
+  class derived,
+  class baseclass,
+  typename traits,
+  typename container,
+  typename fields,
+  typename enable>
 class expr_methods2
   : public irep_methods2<derived, baseclass, traits, container, fields, enable>
 {
@@ -1295,12 +1302,13 @@ public:
 /** Type methods template for type ireps.
    *  Like @expr_methods2, but for types. Also; written on the quick.
    *  */
-template <class derived,
-          class baseclass,
-          typename traits,
-          typename container,
-          typename fields,
-          typename enable>
+template <
+  class derived,
+  class baseclass,
+  typename traits,
+  typename container,
+  typename fields,
+  typename enable>
 class type_methods2
   : public irep_methods2<derived, baseclass, traits, container, fields, enable>
 {
@@ -1329,12 +1337,13 @@ public:
 //
 // We need a class derived from expr2tc that takes the correct set of
 // constructor arguments, which means yet more template goo.
-template <class base,
-          class contained,
-          unsigned int expid,
-          typename idtype,
-          idtype base::*idfield,
-          class superclass>
+template <
+  class base,
+  class contained,
+  unsigned int expid,
+  typename idtype,
+  idtype base::*idfield,
+  class superclass>
 class something2tc : public irep_container<base>
 {
 public:
@@ -1429,12 +1438,13 @@ class variadic_vector<>
 // In global namespace: to get boost to recognize something2tc's as being a
 // shared pointer type, we need to define get_pointer for it:
 
-template <typename T1,
-          typename T2,
-          unsigned int T3,
-          typename T4,
-          T4 T1::*T5,
-          typename T6>
+template <
+  typename T1,
+  typename T2,
+  unsigned int T3,
+  typename T4,
+  T4 T1::*T5,
+  typename T6>
 T2 *get_pointer(esbmct::something2tc<T1, T2, T3, T4, T5, T6> const &p)
 {
   return const_cast<T2 *>(p.get());
@@ -1445,10 +1455,10 @@ inline bool operator==(const type2tc &a, const type2tc &b)
   // Handle nil ireps
   if(is_nil_type(a) && is_nil_type(b))
     return true;
-  else if(is_nil_type(a) || is_nil_type(b))
+  if(is_nil_type(a) || is_nil_type(b))
     return false;
-  else
-    return (*a.get() == *b.get());
+
+  return (*a.get() == *b.get());
 }
 
 inline bool operator!=(const type2tc &a, const type2tc &b)
@@ -1460,10 +1470,10 @@ inline bool operator<(const type2tc &a, const type2tc &b)
 {
   if(is_nil_type(a))        // nil is lower than non-nil
     return !is_nil_type(b); // true if b is non-nil, so a is lower
-  else if(is_nil_type(b))
+  if(is_nil_type(b))
     return false; // If b is nil, nothing can be lower
-  else
-    return (*a.get() < *b.get());
+
+  return (*a.get() < *b.get());
 }
 
 inline bool operator>(const type2tc &a, const type2tc &b)
@@ -1478,10 +1488,10 @@ inline bool operator==(const expr2tc &a, const expr2tc &b)
 {
   if(is_nil_expr(a) && is_nil_expr(b))
     return true;
-  else if(is_nil_expr(a) || is_nil_expr(b))
+  if(is_nil_expr(a) || is_nil_expr(b))
     return false;
-  else
-    return (*a.get() == *b.get());
+
+  return (*a.get() == *b.get());
 }
 
 inline bool operator!=(const expr2tc &a, const expr2tc &b)
@@ -1493,10 +1503,10 @@ inline bool operator<(const expr2tc &a, const expr2tc &b)
 {
   if(is_nil_expr(a))        // nil is lower than non-nil
     return !is_nil_expr(b); // true if b is non-nil, so a is lower
-  else if(is_nil_expr(b))
+  if(is_nil_expr(b))
     return false; // If b is nil, nothing can be lower
-  else
-    return (*a.get() < *b.get());
+
+  return (*a.get() < *b.get());
 }
 
 inline bool operator>(const expr2tc &a, const expr2tc &b)

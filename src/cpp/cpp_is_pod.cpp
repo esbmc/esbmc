@@ -69,7 +69,7 @@ bool cpp_typecheckt::cpp_is_pod(const typet &type) const
 
     return true;
   }
-  else if(type.id() == "array")
+  if(type.id() == "array")
   {
     return cpp_is_pod(type.subtype());
   }

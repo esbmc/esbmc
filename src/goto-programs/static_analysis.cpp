@@ -311,8 +311,8 @@ void static_analysis_baset::do_function_call_rec(
       // recursion detected!
       return;
     }
-    else
-      recursion_set.insert(identifier);
+
+    recursion_set.insert(identifier);
 
     goto_functionst::function_mapt::const_iterator it =
       goto_functions.function_map.find(identifier);

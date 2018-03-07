@@ -225,15 +225,13 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
       found = true;
       break;
     }
-    else
-    {
-      const typet &type = it->type();
-      exprt size_expr = c_sizeof(type, *this);
 
-      mp_integer i;
-      to_integer(size_expr, i);
-      offset += i;
-    }
+    const typet &type = it->type();
+    exprt size_expr = c_sizeof(type, *this);
+
+    mp_integer i;
+    to_integer(size_expr, i);
+    offset += i;
   }
 
   if(!found)
@@ -1659,8 +1657,8 @@ void c_typecheck_baset::typecheck_function_call_arguments(
   }
 }
 
-void c_typecheck_baset::typecheck_expr_constant(
-  exprt &expr __attribute__((unused)))
+void c_typecheck_baset::typecheck_expr_constant(exprt &expr
+                                                __attribute__((unused)))
 {
   // Do nothing
 }
@@ -1739,7 +1737,7 @@ void c_typecheck_baset::typecheck_expr_binary_arithmetic(exprt &expr)
           expr.id("lshr");
           return;
         }
-        else if(op0_type.id() == "signedbv")
+        if(op0_type.id() == "signedbv")
         {
           expr.id("ashr");
           return;
@@ -1765,7 +1763,7 @@ void c_typecheck_baset::typecheck_expr_binary_arithmetic(exprt &expr)
         typecheck_expr_pointer_arithmetic(expr);
         return;
       }
-      else if(type0 == type1)
+      if(type0 == type1)
       {
         if(is_number(type0))
         {
@@ -1933,7 +1931,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
     implicit_typecast(op1, o_type0);
     return;
   }
-  else if(statement == "assign_shl" || statement == "assign_shr")
+  if(statement == "assign_shl" || statement == "assign_shr")
   {
     implicit_typecast_arithmetic(op1);
 
@@ -1945,18 +1943,16 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
       {
         return;
       }
-      else
+
+      if(type0.id() == "unsignedbv")
       {
-        if(type0.id() == "unsignedbv")
-        {
-          expr.statement("assign_lshr");
-          return;
-        }
-        else if(type0.id() == "signedbv")
-        {
-          expr.statement("assign_ashr");
-          return;
-        }
+        expr.statement("assign_lshr");
+        return;
+      }
+      if(type0.id() == "signedbv")
+      {
+        expr.statement("assign_ashr");
+        return;
       }
     }
   }
@@ -1969,7 +1965,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
       typecheck_expr_pointer_arithmetic(expr);
       return;
     }
-    else if(
+    if(
       final_type0.is_bool() || final_type0.id() == "c_enum" ||
       final_type0.id() == "incomplete_c_enum")
     {

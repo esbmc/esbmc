@@ -455,11 +455,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       process_type = PROCESS_TYPE(p);
       break;
     }
-    else // Parent process
-    {
-      children_pid[p] = pid;
-      ++num_p;
-    }
+    // Parent process
+
+    children_pid[p] = pid;
+    ++num_p;
   }
 
   if(process_type == PARENT && num_p != 3)
@@ -798,7 +797,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
           // Client hung up; continue on, but don't interpret the result.
           continue;
         }
-        else if(read_size == -1 && errno == EAGAIN)
+        if(read_size == -1 && errno == EAGAIN)
         {
           // No data available yet
           continue;
@@ -823,11 +822,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       if(a_result.k >= k_step)
         break;
-      else
-      {
-        // Otherwise, we just need to check the base case for k = a_result.k
-        k_step = max_k_step = a_result.k;
-      }
+
+      // Otherwise, we just need to check the base case for k = a_result.k
+      k_step = max_k_step = a_result.k;
     }
 
     // Send information to parent that a bug was not found
@@ -1683,7 +1680,7 @@ void esbmc_parseoptionst::help()
        "all solvers)\n"
        " --smt-formula-too            show SMT formula (not supported by all "
        "solvers) and verify\n"
-       " --show-smt-model             show SMT model (not supported by all "
+       " --smt-model                  show SMT model (not supported by all "
        "solvers), if the formula is SAT\n"
 
        "\nTrace options\n"

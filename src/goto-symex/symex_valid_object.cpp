@@ -16,7 +16,7 @@ static const expr2tc *get_object(const expr2tc &expr)
   {
     return &expr;
   }
-  else if(is_member2t(expr))
+  if(is_member2t(expr))
   {
     return get_object(to_member2t(expr).source_value);
   }

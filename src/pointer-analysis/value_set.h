@@ -280,10 +280,8 @@ public:
       const array_type2t &arr = to_array_type(t);
       return type_byte_size_default(arr.subtype, 8).to_ulong();
     }
-    else
-    {
-      return 8;
-    }
+
+    return 8;
   }
 
   inline unsigned int offset2align(const expr2tc &e, const mp_integer &m) const
@@ -293,24 +291,22 @@ public:
     {
       return nat_align;
     }
-    else if((m % nat_align) == 0)
+    if((m % nat_align) == 0)
     {
       return nat_align;
     }
-    else
+
+    // What's the least alignment available?
+    unsigned int max_align = 8;
+    do
     {
-      // What's the least alignment available?
-      unsigned int max_align = 8;
-      do
-      {
-        // Repeatedly decrease the word size by powers of two, and test to see
-        // whether the offset meets that alignment. This will always succeed
-        // and exit the loop when the alignment reaches 1.
-        if((m % max_align) == 0)
-          return max_align;
-        max_align /= 2;
-      } while(true);
-    }
+      // Repeatedly decrease the word size by powers of two, and test to see
+      // whether the offset meets that alignment. This will always succeed
+      // and exit the loop when the alignment reaches 1.
+      if((m % max_align) == 0)
+        return max_align;
+      max_align /= 2;
+    } while(true);
   }
 
   /** Convert an object map element to an expression. Formulates either an
@@ -368,56 +364,48 @@ public:
       dest.insert(object_mapt::value_type(n, object));
       return true;
     }
-    else
-    {
-      object_mapt::iterator it2 = dest.find(n);
-      objectt &old = it2->second;
-      const expr2tc &expr_obj = object_numbering[n];
 
-      if(old.offset_is_set && object.offset_is_set)
-      {
-        if(old.offset == object.offset)
-          return false;
-        else
-        {
-          // Merge the tracking for two offsets; take the minimum alignment
-          // guarenteed by them.
-          unsigned long old_align = offset2align(expr_obj, old.offset);
-          unsigned long new_align = offset2align(expr_obj, object.offset);
-          old.offset_is_set = false;
-          old.offset_alignment = std::min(old_align, new_align);
-          return true;
-        }
-      }
-      else if(!old.offset_is_set)
-      {
-        unsigned int oldalign = old.offset_alignment;
-        if(!object.offset_is_set)
-        {
-          // Both object offsets not set; update alignment to minimum of the two
-          old.offset_alignment =
-            std::min(old.offset_alignment, object.offset_alignment);
-          return !(old.offset_alignment == oldalign);
-        }
-        else
-        {
-          // Old offset unset; new offset set. Compute the alignment of the
-          // new object's offset, and take the minimum of that and the old
-          // alignment.
-          unsigned int new_alignment = offset2align(expr_obj, object.offset);
-          old.offset_alignment = std::min(old.offset_alignment, new_alignment);
-          return !(old.offset_alignment == oldalign);
-        }
-      }
-      else
-      {
-        // Old offset alignment is set; new isn't.
-        unsigned int old_align = offset2align(expr_obj, old.offset);
-        old.offset_alignment = std::min(old_align, object.offset_alignment);
-        old.offset_is_set = false;
-        return true;
-      }
+    object_mapt::iterator it2 = dest.find(n);
+    objectt &old = it2->second;
+    const expr2tc &expr_obj = object_numbering[n];
+
+    if(old.offset_is_set && object.offset_is_set)
+    {
+      if(old.offset == object.offset)
+        return false;
+
+      // Merge the tracking for two offsets; take the minimum alignment
+      // guarenteed by them.
+      unsigned long old_align = offset2align(expr_obj, old.offset);
+      unsigned long new_align = offset2align(expr_obj, object.offset);
+      old.offset_is_set = false;
+      old.offset_alignment = std::min(old_align, new_align);
+      return true;
     }
+    if(!old.offset_is_set)
+    {
+      unsigned int oldalign = old.offset_alignment;
+      if(!object.offset_is_set)
+      {
+        // Both object offsets not set; update alignment to minimum of the two
+        old.offset_alignment =
+          std::min(old.offset_alignment, object.offset_alignment);
+        return !(old.offset_alignment == oldalign);
+      }
+
+      // Old offset unset; new offset set. Compute the alignment of the
+      // new object's offset, and take the minimum of that and the old
+      // alignment.
+      unsigned int new_alignment = offset2align(expr_obj, object.offset);
+      old.offset_alignment = std::min(old.offset_alignment, new_alignment);
+      return !(old.offset_alignment == oldalign);
+    }
+
+    // Old offset alignment is set; new isn't.
+    unsigned int old_align = offset2align(expr_obj, old.offset);
+    old.offset_alignment = std::min(old_align, object.offset_alignment);
+    old.offset_is_set = false;
+    return true;
   }
 
   bool

@@ -434,7 +434,7 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
     assignment.reserve_operands(2);
     assignment.copy_to_operands(size);
     assignment.copy_to_operands(old_size);
-    assignment.location() = size.location();
+    assignment.location() = old_size.location();
     copy(assignment, ASSIGN, dest);
 
     return true;
@@ -465,7 +465,10 @@ bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
   return res;
 }
 
-void goto_convertt::generate_dynamic_size_vla(exprt &var, goto_programt &dest)
+void goto_convertt::generate_dynamic_size_vla(
+  exprt &var,
+  const locationt &loc,
+  goto_programt &dest)
 {
   assert(var.type().is_array());
 
@@ -501,12 +504,11 @@ void goto_convertt::generate_dynamic_size_vla(exprt &var, goto_programt &dest)
   address_of_exprt addrof(var);
   exprt dynamic_size("dynamic_size", int_type());
   dynamic_size.copy_to_operands(addrof);
-  dynamic_size.location() = var.location();
 
   goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
   exprt assign = code_assignt(dynamic_size, mult);
   migrate_expr(assign, t_s_s->code);
-  t_s_s->location = var.location();
+  t_s_s->location = loc;
 }
 
 void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
@@ -573,7 +575,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   copy(new_code, OTHER, dest);
 
   if(is_vla)
-    generate_dynamic_size_vla(var, dest);
+    generate_dynamic_size_vla(var, new_code.location(), dest);
 
   if(!initializer.is_nil())
   {
@@ -857,7 +859,7 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
   if(expr.is_address_of())
     return 0;
 
-  else if(expr.id() == "symbol")
+  if(expr.id() == "symbol")
   {
     const irep_idt &identifier = expr.identifier();
     const symbolt &symbol = ns.lookup(identifier);
@@ -866,7 +868,7 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
     {
       return 0;
     }
-    else if(symbol.static_lifetime || symbol.type.is_dynamic_set())
+    if(symbol.static_lifetime || symbol.type.is_dynamic_set())
     {
       return 1;
     }
@@ -894,7 +896,7 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
 
   if(is_address_of2t(expr))
     return 0;
-  else if(is_symbol2t(expr))
+  if(is_symbol2t(expr))
   {
     irep_idt identifier = to_symbol2t(expr).get_symbol_name();
     const symbolt &symbol = ns.lookup(identifier);
@@ -903,7 +905,7 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
     {
       return 0;
     }
-    else if(symbol.static_lifetime || symbol.type.is_dynamic_set())
+    if(symbol.static_lifetime || symbol.type.is_dynamic_set())
     {
       return 1;
     }
@@ -1761,7 +1763,7 @@ void goto_convertt::generate_conditional_branch(
 
     return;
   }
-  else if(guard.id() == "or")
+  if(guard.id() == "or")
   {
     // turn
     //   if(a || b) goto target_true; else goto target_false;

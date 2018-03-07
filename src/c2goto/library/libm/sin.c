@@ -3,10 +3,14 @@
 #include <math.h>
 #include "../intrinsics.h"
 
-#undef sin
-
 double sin(double x)
 {
+__ESBMC_HIDE:;
   return cos(x - M_PI_2);
 }
 
+double __sin(double x)
+{
+__ESBMC_HIDE:;
+  return sin(x - M_PI_2);
+}

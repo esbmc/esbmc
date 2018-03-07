@@ -113,7 +113,7 @@ std::string expr2cppt::convert_constant(const exprt &src, unsigned &precedence)
     // C++ has built-in Boolean constants, in contrast to C
     if(src.is_true())
       return "true";
-    else if(src.is_false())
+    if(src.is_false())
       return "false";
   }
 
@@ -136,7 +136,7 @@ std::string expr2cppt::convert_rec(
   {
     return new_qualifiers.as_string() + convert(src.subtype()) + " &" + d;
   }
-  else if(is_rvalue_reference(src))
+  if(is_rvalue_reference(src))
   {
     return new_qualifiers.as_string() + convert(src.subtype()) + " &&" + d;
   }
@@ -146,7 +146,7 @@ std::string expr2cppt::convert_rec(
 
     if(cpp_type == "signed_char")
       return new_qualifiers.as_string() + "signed char" + d;
-    else if(cpp_type == "unsigned_char")
+    if(cpp_type == "unsigned_char")
       return new_qualifiers.as_string() + "unsigned char" + d;
     else if(cpp_type == "char")
       return new_qualifiers.as_string() + "char" + d;
@@ -201,7 +201,7 @@ std::string expr2cppt::convert_rec(
 
       return dest;
     }
-    else if(symbol.type.id() == "c_enum")
+    if(symbol.type.id() == "c_enum")
     {
       std::string dest = new_qualifiers.as_string();
 
@@ -361,7 +361,7 @@ std::string expr2cppt::convert(const exprt &src, unsigned &precedence)
 {
   if(src.id() == "cpp-this")
     return convert_cpp_this(src, precedence = 15);
-  else if(
+  if(
     src.id() == "sideeffect" &&
     (src.statement() == "cpp_new" || src.statement() == "cpp_new[]"))
     return convert_cpp_new(src, precedence = 15);

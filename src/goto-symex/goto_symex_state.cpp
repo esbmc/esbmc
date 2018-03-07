@@ -165,7 +165,7 @@ bool goto_symex_statet::constant_propagation_reference(
 {
   if(is_symbol2t(expr))
     return true;
-  else if(is_index2t(expr))
+  if(is_index2t(expr))
   {
     const index2t &index = to_index2t(expr);
     return constant_propagation_reference(index.source_value) &&
@@ -218,7 +218,7 @@ void goto_symex_statet::assignment(
   }
 }
 
-void goto_symex_statet::rename(expr2tc &expr, bool rename_only)
+void goto_symex_statet::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
@@ -229,7 +229,7 @@ void goto_symex_statet::rename(expr2tc &expr, bool rename_only)
   {
     type2tc origtype = expr->type;
     top().level1.rename(expr);
-    level2.rename(expr, rename_only);
+    level2.rename(expr);
     fixup_renamed_type(expr, origtype);
   }
   else if(is_address_of2t(expr))
@@ -240,8 +240,7 @@ void goto_symex_statet::rename(expr2tc &expr, bool rename_only)
   else
   {
     // do this recursively
-    expr->Foreach_operand(
-      [this, &rename_only](expr2tc &e) { rename(e, rename_only); });
+    expr->Foreach_operand([this](expr2tc &e) { rename(e); });
   }
 }
 
@@ -253,7 +252,7 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   {
     return;
   }
-  else if(is_symbol2t(expr))
+  if(is_symbol2t(expr))
   {
     // only do L1
     type2tc origtype = expr->type;
@@ -291,7 +290,7 @@ void goto_symex_statet::fixup_renamed_type(
   {
     return;
   }
-  else if(is_pointer_type(orig_type))
+  if(is_pointer_type(orig_type))
   {
     assert(is_pointer_type(expr));
 
@@ -427,8 +426,7 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
     { // Top level call
       break;
     }
-    else if(
-      it->function_identifier == "main" && src.pc->location == get_nil_irep())
+    if(it->function_identifier == "main" && src.pc->location == get_nil_irep())
     {
       trace.emplace_back(it->function_identifier);
     }

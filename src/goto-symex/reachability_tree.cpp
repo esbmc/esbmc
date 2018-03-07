@@ -73,30 +73,28 @@ void reachability_treet::setup_for_new_explore()
   {
     schedule_target = target_template->clone();
     targ = schedule_target;
-    s = reinterpret_cast<execution_statet *>(
-      new schedule_execution_statet(
-        goto_functions,
-        ns,
-        this,
-        schedule_target,
-        permanent_context,
-        options,
-        &schedule_total_claims,
-        &schedule_remaining_claims,
-        message_handler));
+    s = reinterpret_cast<execution_statet *>(new schedule_execution_statet(
+      goto_functions,
+      ns,
+      this,
+      schedule_target,
+      permanent_context,
+      options,
+      &schedule_total_claims,
+      &schedule_remaining_claims,
+      message_handler));
   }
   else
   {
     targ = target_template->clone();
-    s = reinterpret_cast<execution_statet *>(
-      new dfs_execution_statet(
-        goto_functions,
-        ns,
-        this,
-        targ,
-        permanent_context,
-        options,
-        message_handler));
+    s = reinterpret_cast<execution_statet *>(new dfs_execution_statet(
+      goto_functions,
+      ns,
+      this,
+      targ,
+      permanent_context,
+      options,
+      message_handler));
     schedule_target = nullptr;
   }
 
@@ -714,10 +712,8 @@ reachability_treet::get_next_formula()
         post_hash_collision_cleanup();
         break;
       }
-      else
-      {
-        update_hash_collision_set();
-      }
+
+      update_hash_collision_set();
     }
 
     if(por)
@@ -771,10 +767,8 @@ reachability_treet::generate_schedule_formula()
         go_next_state();
         continue;
       }
-      else
-      {
-        update_hash_collision_set();
-      }
+
+      update_hash_collision_set();
     }
 
     next_thread_id = decide_ileave_direction(get_cur_state());
@@ -789,8 +783,8 @@ reachability_treet::generate_schedule_formula()
       schedule_target, schedule_total_claims, schedule_remaining_claims));
 }
 
-bool reachability_treet::restore_from_dfs_state(
-  void *_dfs __attribute__((unused)))
+bool reachability_treet::restore_from_dfs_state(void *_dfs
+                                                __attribute__((unused)))
 {
   abort();
 #if 0
@@ -850,8 +844,8 @@ bool reachability_treet::restore_from_dfs_state(
   return false;
 }
 
-void reachability_treet::save_checkpoint(
-  const std::string &&fname __attribute__((unused))) const
+void reachability_treet::save_checkpoint(const std::string &&fname
+                                         __attribute__((unused))) const
 {
 #if 0
   reachability_treet::dfs_position pos(*this);

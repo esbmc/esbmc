@@ -14,7 +14,7 @@ code_function_callt get_destructor(const namespacet &ns, const typet &type)
   {
     return get_destructor(ns, ns.follow(type));
   }
-  else if(type.id() == "struct")
+  if(type.id() == "struct")
   {
     const struct_typet &struct_type = to_struct_type(type);
 

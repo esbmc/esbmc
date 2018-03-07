@@ -478,9 +478,8 @@ bool cpp_typecheckt::standard_conversion_sequence(
       {
         if(!standard_conversion_integral_conversion(curr_expr, type, new_expr))
         {
-          if(
-            !standard_conversion_floating_integral_conversion(
-              curr_expr, type, new_expr))
+          if(!standard_conversion_floating_integral_conversion(
+               curr_expr, type, new_expr))
             return false;
         }
         rank.rank += 3;
@@ -1269,7 +1268,7 @@ bool cpp_typecheckt::const_typecast(
     new_expr.swap(address_of);
     return true;
   }
-  else if(type.id() == "pointer")
+  if(type.id() == "pointer")
   {
     if(type != new_expr.type())
       return false;
@@ -1335,7 +1334,7 @@ bool cpp_typecheckt::dynamic_typecast(
       return false;
     }
   }
-  else if(type.id() == "pointer")
+  if(type.id() == "pointer")
   {
     if(type.find("to-member").is_not_nil())
       return false;
@@ -1444,7 +1443,7 @@ bool cpp_typecheckt::dynamic_typecast(
         new_expr.swap(null_expr);
         return true;
       }
-      else if(
+      if(
         type.find("to-member").is_not_nil() &&
         e.type().find("to-member").is_not_nil())
       {
@@ -1470,13 +1469,11 @@ bool cpp_typecheckt::dynamic_typecast(
 
     return false;
   }
-  else
-  {
-    err_location(expr.location());
-    str << "expr: " << e << std::endl;
-    str << "totype: " << type << std::endl;
-    throw "Could not cast types in dynamic cast";
-  }
+
+  err_location(expr.location());
+  str << "expr: " << e << std::endl;
+  str << "totype: " << type << std::endl;
+  throw "Could not cast types in dynamic cast";
 
   return false;
 }
@@ -1565,7 +1562,7 @@ bool cpp_typecheckt::reinterpret_typecast(
   {
     if(e.type().subtype().id() == "code" && type.subtype().id() != "code")
       return false;
-    else if(e.type().subtype().id() != "code" && type.subtype().id() == "code")
+    if(e.type().subtype().id() != "code" && type.subtype().id() == "code")
       return false;
 
     // this is more generous than the standard
@@ -1727,7 +1724,7 @@ bool cpp_typecheckt::static_typecast(
 
       return false;
     }
-    else if(
+    if(
       type.find("to-member").is_not_nil() &&
       e.type().find("to-member").is_not_nil())
     {

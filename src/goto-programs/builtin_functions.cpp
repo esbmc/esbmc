@@ -487,7 +487,7 @@ bool is_lvalue(const exprt &expr)
 {
   if(expr.is_index())
     return is_lvalue(to_index_expr(expr).op0());
-  else if(expr.is_member())
+  if(expr.is_member())
     return is_lvalue(to_member_expr(expr).op0());
   else if(expr.is_dereference())
     return true;

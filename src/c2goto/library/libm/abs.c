@@ -3,13 +3,20 @@
 #include <math.h>
 #include "../intrinsics.h"
 
-#undef abs
-#undef labs
-#undef llabs
+int abs(int i)
+{
+__ESBMC_HIDE:;
+  return __ESBMC_abs(i);
+}
 
-int abs(int i) { return __ESBMC_abs(i); }
+long labs(long i)
+{
+__ESBMC_HIDE:;
+  return __ESBMC_labs(i);
+}
 
-long labs(long i) { return __ESBMC_labs(i); }
-
-long long llabs(long long i) { return __ESBMC_llabs(i); }
-
+long long llabs(long long i)
+{
+__ESBMC_HIDE:;
+  return __ESBMC_llabs(i);
+}

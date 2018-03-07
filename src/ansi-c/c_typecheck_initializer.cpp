@@ -28,7 +28,7 @@ bool c_typecheck_baset::zero_initializer(exprt &value, const typet &type) const
     value.make_false();
     return false;
   }
-  else if(
+  if(
     type_id == "unsignedbv" || type_id == "signedbv" || type_id == "floatbv" ||
     type_id == "fixedbv" || type_id == "pointer")
   {
@@ -191,7 +191,7 @@ exprt c_typecheck_baset::do_initializer_rec(
       init_statet state(value);
       return do_initializer_rec(state, type, force_constant, false);
     }
-    else if(value.id() == "string-constant")
+    if(value.id() == "string-constant")
     {
       // we only do this for arrays, not for structs
       if(full_type.is_array() || full_type.id() == "incomplete_array")
@@ -201,12 +201,10 @@ exprt c_typecheck_baset::do_initializer_rec(
         init_statet state(tmp);
         return do_initializer_rec(state, type, force_constant, false);
       }
-      else
-      {
-        err_location(value);
-        str << "string constants cannot initialize struct types";
-        throw 0;
-      }
+
+      err_location(value);
+      str << "string constants cannot initialize struct types";
+      throw 0;
     }
     else if(follow(value.type()) == full_type)
     {
@@ -261,7 +259,7 @@ exprt c_typecheck_baset::do_initializer_rec(
   if(full_type.is_array())
     return do_initializer_array(
       state, to_array_type(full_type), force_constant);
-  else if(full_type.id() == "incomplete_array")
+  if(full_type.id() == "incomplete_array")
     return do_initializer_incomplete_array(state, full_type, force_constant);
   else if(full_type.id() == "struct")
     return do_initializer_struct(

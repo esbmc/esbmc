@@ -140,7 +140,7 @@ bool value_set_analysist::check_type(const typet &type)
 {
   if(type.id() == "pointer")
     return true;
-  else if(type.id() == "struct" || type.id() == "union")
+  if(type.id() == "struct" || type.id() == "union")
   {
     const struct_typet &struct_type = to_struct_type(type);
 

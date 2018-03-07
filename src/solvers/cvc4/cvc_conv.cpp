@@ -1,22 +1,26 @@
 #include <util/c_types.h>
 #include <cvc_conv.h>
 
-smt_convt *
-create_new_cvc_solver(bool int_encoding, const namespacet &ns,
-                      const optionst &opts __attribute__((unused)),
-                      tuple_iface **tuple_api __attribute__((unused)),
-                      array_iface **array_api,
-                      fp_convt **fp_api __attribute__((unused)))
+smt_convt *create_new_cvc_solver(
+  bool int_encoding,
+  const namespacet &ns,
+  tuple_iface **tuple_api __attribute__((unused)),
+  array_iface **array_api,
+  fp_convt **fp_api)
 {
   cvc_convt *conv = new cvc_convt(int_encoding, ns);
-  *array_api = static_cast<array_iface*>(conv);
-  *fp_api = static_cast<fp_convt*>(conv);
+  *array_api = static_cast<array_iface *>(conv);
+  *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
 cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
-   : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this),
-     em(), smt(&em), sym_tab()
+  : smt_convt(int_encoding, ns),
+    array_iface(false, false),
+    fp_convt(this),
+    em(),
+    smt(&em),
+    sym_tab()
 {
   // Already initialized stuff in the constructor list,
 
@@ -26,25 +30,21 @@ cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
   assert(!int_encoding && "Integer encoding mode for CVC unimplemented");
 }
 
-smt_convt::resultt
-cvc_convt::dec_solve()
+smt_convt::resultt cvc_convt::dec_solve()
 {
   pre_solve();
 
   CVC4::Result r = smt.checkSat();
-  if (r.isSat())
+  if(r.isSat())
     return P_SATISFIABLE;
-  else if (!r.isUnknown())
-    return P_UNSATISFIABLE;
-  else {
-    std::cerr << "Error solving satisfiability of formula with CVC"
-              << std::endl;
-    abort();
-  }
+
+  if(!r.isUnknown())
+    return P_ERROR;
+
+  return P_UNSATISFIABLE;
 }
 
-expr2tc
-cvc_convt::get_bool(const smt_ast *a)
+expr2tc cvc_convt::get_bool(const smt_ast *a)
 {
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::Expr e = smt.getValue(ca->e);
@@ -52,8 +52,7 @@ cvc_convt::get_bool(const smt_ast *a)
   return foo ? gen_true_expr() : gen_false_expr();
 }
 
-expr2tc
-cvc_convt::get_bv(const type2tc &type, smt_astt a)
+expr2tc cvc_convt::get_bv(const type2tc &type, smt_astt a)
 {
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::Expr e = smt.getValue(ca->e);
@@ -61,8 +60,7 @@ cvc_convt::get_bv(const type2tc &type, smt_astt a)
   return build_bv(type, BigInt(foo.toInteger().getUnsignedLong()));
 }
 
-expr2tc
-cvc_convt::get_array_elem(
+expr2tc cvc_convt::get_array_elem(
   const smt_ast *array,
   uint64_t index,
   const type2tc &subtype)
@@ -82,36 +80,36 @@ cvc_convt::get_array_elem(
   return result;
 }
 
-const std::string
-cvc_convt::solver_text()
+const std::string cvc_convt::solver_text()
 {
   std::stringstream ss;
   ss << "CVC " << CVC4::Configuration::getVersionString();
   return ss.str();
 }
 
-void
-cvc_convt::assert_ast(const smt_ast *a)
+void cvc_convt::assert_ast(const smt_ast *a)
 {
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   smt.assertFormula(ca->e);
 }
 
-smt_ast *
-cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
-                             const smt_ast * const *_args,
-                             unsigned int numargs)
+smt_ast *cvc_convt::mk_func_app(
+  const smt_sort *s,
+  smt_func_kind k,
+  const smt_ast *const *_args,
+  unsigned int numargs)
 {
   const cvc_smt_ast *args[4];
   unsigned int i;
 
   assert(numargs <= 4);
-  for (i = 0; i < numargs; i++)
+  for(i = 0; i < numargs; i++)
     args[i] = cvc_ast_downcast(_args[i]);
 
   CVC4::Expr e;
 
-  switch (k) {
+  switch(k)
+  {
   case SMT_FUNC_EQ:
     e = em.mkExpr(CVC4::kind::EQUAL, args[0]->e, args[1]->e);
     break;
@@ -223,13 +221,13 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   return new cvc_smt_ast(this, s, e);
 }
 
-smt_sortt
-cvc_convt::mk_sort(const smt_sort_kind k, ...)
+smt_sortt cvc_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
 
   va_start(ap, k);
-  switch (k) {
+  switch(k)
+  {
   case SMT_SORT_BOOL:
     return new cvc_smt_sort(k, em.booleanType());
   case SMT_SORT_FIXEDBV:
@@ -241,18 +239,24 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
   }
   case SMT_SORT_ARRAY:
   {
-    const cvc_smt_sort *dom = va_arg(ap, const cvc_smt_sort*);
-    const cvc_smt_sort *range = va_arg(ap, const cvc_smt_sort*);
+    const cvc_smt_sort *dom = va_arg(ap, const cvc_smt_sort *);
+    const cvc_smt_sort *range = va_arg(ap, const cvc_smt_sort *);
     assert(int_encoding || dom->get_data_width() != 0);
 
     // The range data width is allowed to be zero, which happens if the range
     // is not a bitvector / integer
     unsigned int data_width = range->get_data_width();
-    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
+    if(
+      range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL ||
+      range->id == SMT_SORT_UNION)
       data_width = 1;
 
-    return new cvc_smt_sort(k, em.mkArrayType(dom->s, range->s), data_width,
-                            dom->get_data_width(), range);
+    return new cvc_smt_sort(
+      k,
+      em.mkArrayType(dom->s, range->s),
+      data_width,
+      dom->get_data_width(),
+      range);
     break;
   }
   case SMT_SORT_FLOATBV:
@@ -268,14 +272,14 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
   }
 }
 
-smt_ast *
-cvc_convt::mk_smt_int(const mp_integer &theint __attribute__((unused)), bool sign __attribute__((unused)))
+smt_ast *cvc_convt::mk_smt_int(
+  const mp_integer &theint __attribute__((unused)),
+  bool sign __attribute__((unused)))
 {
   abort();
 }
 
-smt_ast *
-cvc_convt::mk_smt_real(const std::string &str __attribute__((unused)))
+smt_ast *cvc_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 {
   abort();
 }
@@ -283,43 +287,46 @@ cvc_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 smt_ast *
 cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
-  smt_sortt s = mk_sort(ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
+  smt_sortt s = mk_sort(
+    ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV,
+    width);
 
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv = CVC4::BitVector(width, (unsigned long int)theint.to_int64());
+  CVC4::BitVector bv =
+    CVC4::BitVector(width, (unsigned long int)theint.to_int64());
   CVC4::Expr e = em.mkConst(bv);
   return new cvc_smt_ast(this, s, e);
 }
 
-smt_ast *
-cvc_convt::mk_smt_bool(bool val)
+smt_ast *cvc_convt::mk_smt_bool(bool val)
 {
   const smt_sort *s = boolean_sort;
   CVC4::Expr e = em.mkConst(val);
   return new cvc_smt_ast(this, s, e);
 }
 
-smt_ast *
-cvc_convt::mk_array_symbol(const std::string &name, const smt_sort *s,
-                           smt_sortt array_subtype)
+smt_ast *cvc_convt::mk_array_symbol(
+  const std::string &name,
+  const smt_sort *s,
+  smt_sortt array_subtype)
 {
   return mk_smt_symbol(name, s);
 }
 
-smt_ast *
-cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
+smt_ast *cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   const cvc_smt_sort *sort = cvc_sort_downcast(s);
 
   // If someone's making a tuple-symbol, wave our hands and do nothing. It's
   // the tuple modelling code doing some symbol sillyness.
-  if (s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
+  if(s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
     return nullptr;
 
   // Standard arrangement: if we already have the name, return the expression
   // from the symbol table. If not, time for a new name.
-  if (sym_tab.isBound(name)) {
+  if(sym_tab.isBound(name))
+  {
     CVC4::Expr e = sym_tab.lookup(name);
     return new cvc_smt_ast(this, s, e);
   }
@@ -330,15 +337,16 @@ cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return new cvc_smt_ast(this, s, e);
 }
 
-smt_sort *
-cvc_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
+smt_sort *cvc_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
 {
   abort();
 }
 
-smt_ast *
-cvc_convt::mk_extract(const smt_ast *a, unsigned int high,
-                            unsigned int low, const smt_sort *s)
+smt_ast *cvc_convt::mk_extract(
+  const smt_ast *a,
+  unsigned int high,
+  unsigned int low,
+  const smt_sort *s)
 {
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::BitVectorExtract ext(high, low);
@@ -353,17 +361,14 @@ cvc_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return default_convert_array_of(init_val, domain_width, this);
 }
 
-void
-cvc_convt::add_array_constraints_for_solving()
+void cvc_convt::add_array_constraints_for_solving()
 {
 }
 
-void
-cvc_convt::push_array_ctx()
+void cvc_convt::push_array_ctx()
 {
 }
 
-void
-cvc_convt::pop_array_ctx()
+void cvc_convt::pop_array_ctx()
 {
 }

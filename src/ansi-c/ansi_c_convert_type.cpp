@@ -184,7 +184,7 @@ void ansi_c_convert_typet::write(typet &type)
       error("conflicting type modifiers");
       throw 0;
     }
-    else if(unsigned_cnt)
+    if(unsigned_cnt)
       type.id("unsignedbv");
     else if(signed_cnt)
       type.id("signedbv");

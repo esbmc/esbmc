@@ -36,11 +36,9 @@ typet cpp_declaratort::merge_type(const typet &declaration_type) const
       t = declaration_type;
       break;
     }
-    else
-    {
-      assert(t.id() != "");
-      p = &t.subtype();
-    }
+
+    assert(t.id() != "");
+    p = &t.subtype();
   }
 
   return dest_type;
