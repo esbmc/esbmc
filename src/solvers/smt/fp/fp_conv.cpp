@@ -10,7 +10,7 @@ static smt_astt extract_exponent(smt_convt *ctx, smt_astt fp)
 
 static smt_astt extract_significand(smt_convt *ctx, smt_astt fp)
 {
-  return ctx->mk_extract(fp, fp->sort->get_significand_width() - 1, 0);
+  return ctx->mk_extract(fp, fp->sort->get_significand_width() - 2, 0);
 }
 
 static smt_astt extract_signbit(smt_convt *ctx, smt_astt fp)
