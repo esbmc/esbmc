@@ -390,80 +390,77 @@ smt_astt fp_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
 
 smt_astt fp_convt::mk_smt_fpbv_is_nan(smt_astt op)
 {
-  // Extract the exponent bits
+  // Extract the exponent and significand
   smt_astt exp = extract_exponent(ctx, op);
-
-  // Extract the significand bits
   smt_astt sig = extract_significand(ctx, op);
 
-  // A fp is NaN if all bits in the exponent are ones
-  smt_astt all_ones = ctx->mk_smt_bv(
-    SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), exp->sort->get_data_width());
+  // exp == 1^n , sig != 0
+  smt_astt top_exp = mk_top_exp(exp->sort->get_data_width());
 
-  smt_astt exp_all_ones =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp, all_ones);
-
-  // and all bits in the significand are not zero
   smt_astt zero =
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sig->sort->get_data_width());
-
-  smt_astt sig_all_zero =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOTEQ, sig, zero);
-
+  smt_astt sig_is_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sig, zero);
+  smt_astt sig_is_not_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, sig_is_zero);
+  smt_astt exp_is_top =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp, top_exp);
   return ctx->mk_func_app(
-    ctx->boolean_sort, SMT_FUNC_AND, exp_all_ones, sig_all_zero);
+    ctx->boolean_sort, SMT_FUNC_AND, exp_is_top, sig_is_not_zero);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_is_inf(smt_astt op)
 {
-  // Extract the exponent bits
+  // Extract the exponent and significand
   smt_astt exp = extract_exponent(ctx, op);
-
-  // Extract the significand bits
   smt_astt sig = extract_significand(ctx, op);
 
-  // A fp is inf if all bits in the exponent are ones
-  smt_astt all_ones = ctx->mk_smt_bv(
-    SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), exp->sort->get_data_width());
+  // exp == 1^n , sig == 0
+  smt_astt top_exp = mk_top_exp(exp->sort->get_data_width());
 
-  smt_astt exp_all_ones =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp, all_ones);
-
-  // and the significand is zero
   smt_astt zero =
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sig->sort->get_data_width());
-
-  smt_astt sig_all_zero =
+  smt_astt sig_is_zero =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sig, zero);
-
+  smt_astt exp_is_top =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp, top_exp);
   return ctx->mk_func_app(
-    ctx->boolean_sort, SMT_FUNC_AND, exp_all_ones, sig_all_zero);
+    ctx->boolean_sort, SMT_FUNC_AND, exp_is_top, sig_is_zero);
+}
+
+smt_astt fp_convt::mk_is_denormal(smt_astt op)
+{
+  // Extract the exponent and significand
+  smt_astt exp = extract_exponent(ctx, op);
+
+  smt_astt zero =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), exp->sort->get_data_width());
+  smt_astt zexp = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp, zero);
+  smt_astt is_zero = mk_smt_fpbv_is_zero(op);
+  smt_astt n_is_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, is_zero);
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, n_is_zero, zexp);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_is_normal(smt_astt op)
 {
-  // Extract the exponent bits
+  // Extract the exponent and significand
   smt_astt exp = extract_exponent(ctx, op);
 
-  // Extract the significand bits
-  smt_astt sig = extract_significand(ctx, op);
+  smt_astt is_denormal = mk_is_denormal(op);
+  smt_astt is_zero = mk_smt_fpbv_is_zero(op);
 
-  // A fp is normal if the exponent is not zero
-  smt_astt zero =
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), exp->sort->get_data_width());
+  unsigned ebits = exp->sort->get_data_width();
+  smt_astt p =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(power2m1(ebits, false)), ebits);
 
-  smt_astt exp_not_zero =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOTEQ, exp, zero);
+  smt_astt is_special =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp, p);
 
-  // and the all bits in the significand are not one
-  smt_astt all_ones = ctx->mk_smt_bv(
-    SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), sig->sort->get_data_width());
-
-  smt_astt sig_not_all_ones =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOTEQ, sig, all_ones);
-
-  return ctx->mk_func_app(
-    ctx->boolean_sort, SMT_FUNC_AND, exp_not_zero, sig_not_all_ones);
+  smt_astt or_ex =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, is_special, is_denormal);
+  or_ex = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, is_zero, or_ex);
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, or_ex);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_is_zero(smt_astt op)
