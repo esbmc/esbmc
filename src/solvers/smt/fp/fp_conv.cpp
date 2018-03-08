@@ -882,10 +882,8 @@ smt_astt fp_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
 
 smt_astt fp_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
 {
-  (void)lhs;
-  (void)rhs;
-  (void)rm;
-  abort();
+  smt_astt t = mk_smt_fpbv_neg(rhs);
+  return mk_smt_fpbv_add(lhs, t, rm);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
