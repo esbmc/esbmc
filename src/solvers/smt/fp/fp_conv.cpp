@@ -1028,7 +1028,7 @@ smt_astt fp_convt::mk_unbias(smt_astt &src)
   smt_astt leading = ctx->mk_extract(e_plus_one, ebits - 1, ebits - 1);
   smt_astt n_leading = ctx->mk_func_app(leading->sort, SMT_FUNC_BVNOT, leading);
   smt_astt rest = ctx->mk_extract(e_plus_one, ebits - 2, 0);
-  return mk_from_bv_to_fp(ctx->mk_concat(n_leading, rest), src->sort);
+  return ctx->mk_concat(n_leading, rest);
 }
 
 smt_astt fp_convt::mk_leading_zeros(smt_astt &src, std::size_t max_bits)
