@@ -90,13 +90,139 @@ smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
   abort();
 }
 
-smt_astt fp_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
+smt_astt fp_convt::mk_smt_fpbv_sqrt(smt_astt x, smt_astt rm)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)rd;
-  (void)rm;
-  abort();
+  unsigned ebits = x->sort->get_exponent_width();
+  unsigned sbits = x->sort->get_significand_width();
+
+  smt_astt nan = mk_smt_fpbv_nan(ebits, sbits);
+
+  smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
+
+  smt_astt zero1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+  smt_astt one1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
+
+  // (x is NaN) -> NaN
+  smt_astt c1 = x_is_nan;
+  smt_astt v1 = x;
+
+  // (x is +oo) -> +oo
+  smt_astt c2 = mk_is_pinf(x);
+  smt_astt v2 = x;
+
+  // (x is +-0) -> +-0
+  smt_astt c3 = mk_smt_fpbv_is_zero(x);
+  smt_astt v3 = x;
+
+  // (x < 0) -> NaN
+  smt_astt c4 = mk_smt_fpbv_is_negative(x);
+  smt_astt v4 = nan;
+
+  // else comes the actual square root.
+
+  smt_astt a_sgn, a_sig, a_exp, a_lz;
+  unpack(x, a_sgn, a_sig, a_exp, a_lz, true);
+
+  dbg_decouple("fpa2bv_sqrt_sig", a_sig);
+  dbg_decouple("fpa2bv_sqrt_exp", a_exp);
+
+  assert(a_sig->sort->get_data_width() == sbits);
+  assert(a_exp->sort->get_data_width() == ebits);
+
+  smt_astt res_sgn = zero1;
+
+  smt_astt real_exp = ctx->mk_func_app(
+    ctx->mk_bv_sort(SMT_SORT_UBV, a_exp->sort->get_data_width() + 1),
+    SMT_FUNC_BVSUB,
+    ctx->mk_sign_ext(a_exp, 1),
+    ctx->mk_zero_ext(a_lz, 1));
+  smt_astt res_exp = ctx->mk_sign_ext(ctx->mk_extract(real_exp, ebits, 1), 2);
+
+  smt_astt e_is_odd = ctx->mk_func_app(
+    ctx->boolean_sort, SMT_FUNC_EQ, ctx->mk_extract(real_exp, 0, 0), one1);
+
+  dbg_decouple("fpa2bv_sqrt_e_is_odd", e_is_odd);
+  dbg_decouple("fpa2bv_sqrt_real_exp", real_exp);
+
+  smt_astt a_z = ctx->mk_concat(a_sig, zero1);
+  smt_astt z_a = ctx->mk_concat(zero1, a_sig);
+  smt_astt sig_prime = ctx->mk_ite(e_is_odd, a_z, z_a);
+  assert(sig_prime->sort->get_data_width() == sbits + 1);
+  dbg_decouple("fpa2bv_sqrt_sig_prime", sig_prime);
+
+  // This is algorithm 10.2 in the Handbook of Floating-Point Arithmetic
+  auto p2 = power2(sbits + 3, false);
+  smt_astt Q = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(p2), sbits + 5);
+  smt_astt R = ctx->mk_func_app(
+    Q->sort,
+    SMT_FUNC_BVSUB,
+    ctx->mk_concat(sig_prime, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 4)),
+    Q);
+  smt_astt S = Q;
+
+  smt_astt T;
+  for(unsigned i = 0; i < sbits + 3; i++)
+  {
+    dbg_decouple("fpa2bv_sqrt_Q", Q);
+    dbg_decouple("fpa2bv_sqrt_R", R);
+
+    S = ctx->mk_concat(zero1, ctx->mk_extract(S, sbits + 4, 1));
+
+    smt_astt twoQ_plus_S = ctx->mk_func_app(
+      ctx->mk_bv_sort(
+        SMT_SORT_UBV,
+        S->sort->get_data_width() + zero1->sort->get_data_width()),
+      SMT_FUNC_BVADD,
+      ctx->mk_concat(Q, zero1),
+      ctx->mk_concat(zero1, S));
+    T = ctx->mk_func_app(
+      twoQ_plus_S->sort, SMT_FUNC_BVSUB, ctx->mk_concat(R, zero1), twoQ_plus_S);
+
+    dbg_decouple("fpa2bv_sqrt_T", T);
+
+    assert(Q->sort->get_data_width() == sbits + 5);
+    assert(R->sort->get_data_width() == sbits + 5);
+    assert(S->sort->get_data_width() == sbits + 5);
+    assert(T->sort->get_data_width() == sbits + 6);
+
+    smt_astt T_lsds5 = ctx->mk_extract(T, sbits + 5, sbits + 5);
+    smt_astt t_lt_0 =
+      ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, T_lsds5, one1);
+
+    smt_astt Q_or_S = ctx->mk_func_app(Q->sort, SMT_FUNC_BVOR, Q, S);
+    Q = ctx->mk_ite(t_lt_0, Q, Q_or_S);
+    smt_astt R_shftd = ctx->mk_concat(ctx->mk_extract(R, sbits + 3, 0), zero1);
+    smt_astt T_lsds4 = ctx->mk_extract(T, sbits + 4, 0);
+    R = ctx->mk_ite(t_lt_0, R_shftd, T_lsds4);
+  }
+
+  smt_astt zero_sbits5 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sbits + 5);
+  smt_astt is_exact =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, R, zero_sbits5);
+  dbg_decouple("fpa2bv_sqrt_is_exact", is_exact);
+
+  smt_astt last = ctx->mk_extract(Q, 0, 0);
+  smt_astt rest = ctx->mk_extract(Q, sbits + 3, 1);
+  dbg_decouple("fpa2bv_sqrt_last", last);
+  dbg_decouple("fpa2bv_sqrt_rest", rest);
+  smt_astt rest_ext = ctx->mk_zero_ext(rest, 1);
+  smt_astt last_ext = ctx->mk_zero_ext(last, sbits + 3);
+  smt_astt one_sbits4 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), sbits + 4);
+  smt_astt sticky = ctx->mk_ite(is_exact, last_ext, one_sbits4);
+  smt_astt res_sig =
+    ctx->mk_func_app(rest_ext->sort, SMT_FUNC_BVOR, rest_ext, sticky);
+
+  assert(res_sig->sort->get_data_width() == sbits + 4);
+
+  smt_astt rounded;
+  round(rm, res_sgn, res_sig, res_exp, ebits, sbits, rounded);
+  smt_astt v5 = rounded;
+
+  // And finally, we tie them together.
+  smt_astt result = ctx->mk_ite(c4, v4, v5);
+  result = ctx->mk_ite(c3, v3, result);
+  result = ctx->mk_ite(c2, v2, result);
+  return ctx->mk_ite(c1, v1, result);
 }
 
 smt_astt
