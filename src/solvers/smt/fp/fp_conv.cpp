@@ -59,17 +59,21 @@ smt_astt fp_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
   // TODO: we always create the same positive NaN:
   // 01111111100000000000000000000001
   smt_astt top_exp = mk_top_exp(ew);
-  return ctx->mk_concat(
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1),
-    ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), sw - 1)));
+  return mk_from_bv_to_fp(
+    ctx->mk_concat(
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1),
+      ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), sw - 1))),
+    mk_fpbv_sort(ew, sw - 1));
 }
 
 smt_astt fp_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
   smt_astt top_exp = mk_top_exp(ew);
-  return ctx->mk_concat(
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(sgn), 1),
-    ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1)));
+  return mk_from_bv_to_fp(
+    ctx->mk_concat(
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(sgn), 1),
+      ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1))),
+    mk_fpbv_sort(ew, sw - 1));
 }
 
 smt_astt fp_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
@@ -781,7 +785,7 @@ smt_astt fp_convt::mk_smt_fpbv_abs(smt_astt op)
 
   // Concat that with '0'
   smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
-  return ctx->mk_concat(zero, ew_sw);
+  return mk_from_bv_to_fp(ctx->mk_concat(zero, ew_sw), op->sort);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_neg(smt_astt op)
@@ -897,7 +901,7 @@ smt_astt fp_convt::mk_unbias(smt_astt &src)
   smt_astt leading = ctx->mk_extract(e_plus_one, ebits - 1, ebits - 1);
   smt_astt n_leading = ctx->mk_func_app(leading->sort, SMT_FUNC_BVNOT, leading);
   smt_astt rest = ctx->mk_extract(e_plus_one, ebits - 2, 0);
-  return ctx->mk_concat(n_leading, rest);
+  return mk_from_bv_to_fp(ctx->mk_concat(n_leading, rest), src->sort);
 }
 
 smt_astt fp_convt::mk_leading_zeros(smt_astt &src, std::size_t max_bits)
@@ -1133,7 +1137,9 @@ void fp_convt::round(
   smt_astt rest_sig = ctx->mk_extract(sig, sbits - 2, 0);
   sig = ctx->mk_ite(OVF, ovfl_sig, rest_sig);
 
-  result = ctx->mk_concat(sgn, ctx->mk_concat(exp, sig));
+  result = mk_from_bv_to_fp(
+    ctx->mk_concat(sgn, ctx->mk_concat(exp, sig)),
+    mk_fpbv_sort(ebits, sbits - 1));
 }
 
 smt_astt fp_convt::mk_min_exp(std::size_t ebits)
@@ -1235,33 +1241,41 @@ smt_astt fp_convt::mk_bias(smt_astt e)
 smt_astt fp_convt::mk_pzero(unsigned ew, unsigned sw)
 {
   smt_astt bot_exp = mk_bot_exp(ew);
-  return ctx->mk_concat(
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1),
-    ctx->mk_concat(bot_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1)));
+  return mk_from_bv_to_fp(
+    ctx->mk_concat(
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1),
+      ctx->mk_concat(bot_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1))),
+    mk_fpbv_sort(ew, sw - 1));
 }
 
 smt_astt fp_convt::mk_nzero(unsigned ew, unsigned sw)
 {
   smt_astt bot_exp = mk_bot_exp(ew);
-  return ctx->mk_concat(
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1),
-    ctx->mk_concat(bot_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1)));
+  return mk_from_bv_to_fp(
+    ctx->mk_concat(
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1),
+      ctx->mk_concat(bot_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1))),
+    mk_fpbv_sort(ew, sw - 1));
 }
 
 smt_astt fp_convt::mk_pinf(unsigned ew, unsigned sw)
 {
   smt_astt top_exp = mk_top_exp(ew);
-  return ctx->mk_concat(
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1),
-    ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1)));
+  return mk_from_bv_to_fp(
+    ctx->mk_concat(
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1),
+      ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1))),
+    mk_fpbv_sort(ew, sw - 1));
 }
 
 smt_astt fp_convt::mk_ninf(unsigned ew, unsigned sw)
 {
   smt_astt top_exp = mk_top_exp(ew);
-  return ctx->mk_concat(
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1),
-    ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1)));
+  return mk_from_bv_to_fp(
+    ctx->mk_concat(
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1),
+      ctx->mk_concat(top_exp, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1))),
+    mk_fpbv_sort(ew, sw - 1));
 }
 
 smt_astt fp_convt::mk_is_pzero(smt_astt op)
@@ -1302,13 +1316,13 @@ smt_astt fp_convt::mk_is_ninf(smt_astt op)
 
 smt_astt fp_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 {
-  (void)op;
-  (void)to;
-  abort();
+  // Tricky, we need to change the type
+  const_cast<smt_ast *>(op)->sort = to;
+  return op;
 }
 
 smt_astt fp_convt::mk_from_fp_to_bv(smt_astt op)
 {
-  (void)op;
-  abort();
+  // Do nothing, it's already a bv
+  return op;
 }
