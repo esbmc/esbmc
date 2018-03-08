@@ -1014,3 +1014,16 @@ smt_astt fp_convt::mk_is_ninf(smt_astt op)
     ctx->fp_api->mk_smt_fpbv_is_inf(op),
     ctx->fp_api->mk_smt_fpbv_is_negative(op));
 }
+
+smt_astt fp_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
+{
+  (void)op;
+  (void)to;
+  abort();
+}
+
+smt_astt fp_convt::mk_from_fp_to_bv(smt_astt op)
+{
+  (void)op;
+  abort();
+}

@@ -92,6 +92,8 @@ public:
   smt_astt mk_smt_fpbv_is_positive(smt_astt op) override;
   smt_astt mk_smt_fpbv_abs(smt_astt op) override;
   smt_astt mk_smt_fpbv_neg(smt_astt op) override;
+  smt_astt mk_from_bv_to_fp(smt_astt op, smt_sortt to) override;
+  smt_astt mk_from_fp_to_bv(smt_astt op) override;
 
   void push_ctx() override;
   void pop_ctx() override;

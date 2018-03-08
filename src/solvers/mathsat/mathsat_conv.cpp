@@ -386,16 +386,6 @@ smt_ast *mathsat_convt::mk_func_app(
   case SMT_FUNC_SELECT:
     r = msat_make_array_read(env, args[0]->a, args[1]->a);
     break;
-  case SMT_FUNC_BV2FLOAT:
-  {
-    unsigned sw = s->get_significand_width();
-    unsigned ew = s->get_data_width() - sw;
-    r = msat_make_fp_from_ieeebv(env, ew, sw, args[0]->a);
-    break;
-  }
-  case SMT_FUNC_FLOAT2BV:
-    r = msat_make_fp_as_ieeebv(env, args[0]->a);
-    break;
   default:
     std::cerr << "Unhandled SMT function \"" << smt_func_name_table[k] << "\" "
               << "in mathsat conversion" << std::endl;
@@ -554,14 +544,7 @@ mathsat_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 
   // If it's a floatbv, convert it to bv
   if(a->sort->id == SMT_SORT_FLOATBV)
-  {
-    msat_term t = msat_make_fp_as_ieeebv(env, mast->a);
-    check_msat_error(t);
-
-    smt_ast *bv =
-      new mathsat_smt_ast(this, mk_bv_sort(SMT_SORT_SBV, high - low + 1), t);
-    mast = to_solver_smt_ast<mathsat_smt_ast>(bv);
-  }
+    a = mk_from_fp_to_bv(a);
 
   msat_term t = msat_make_bv_extract(env, high, low, mast->a);
   check_msat_error(t);
@@ -742,6 +725,28 @@ smt_sortt mathsat_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
   auto t = msat_get_array_type(env, domain_sort->s, range_sort->s);
   return new solver_smt_sort<msat_type>(
     SMT_SORT_ARRAY, t, domain->get_data_width(), range);
+}
+
+smt_astt mathsat_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
+{
+  msat_term t = msat_make_fp_from_ieeebv(
+    env,
+    to->get_exponent_width(),
+    to->get_significand_width(),
+    to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(t);
+
+  return new mathsat_smt_ast(this, to, t);
+}
+
+smt_astt mathsat_convt::mk_from_fp_to_bv(smt_astt op)
+{
+  msat_term t =
+    msat_make_fp_as_ieeebv(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(t);
+
+  smt_sortt to = mk_bv_sort(SMT_SORT_SBV, op->sort->get_data_width());
+  return new mathsat_smt_ast(this, to, t);
 }
 
 smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_ubv(

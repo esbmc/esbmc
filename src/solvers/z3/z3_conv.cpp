@@ -332,11 +332,6 @@ smt_astt z3_convt::mk_func_app(
     return new_ast(z3::to_expr(z3_ctx, Z3_mk_int2real(z3_ctx, asts[0]->a)), s);
   case SMT_FUNC_IS_INT:
     return new_ast(z3::to_expr(z3_ctx, Z3_mk_is_int(z3_ctx, asts[0]->a)), s);
-  case SMT_FUNC_BV2FLOAT:
-    return new_ast(
-      z3_ctx.fpa_from_bv(asts[0]->a, to_solver_smt_sort<z3::sort>(s)->s), s);
-  case SMT_FUNC_FLOAT2BV:
-    return new_ast(z3_ctx.fpa_to_ieeebv(asts[0]->a), s);
   default:
     std::cerr << "Unhandled SMT func in z3 conversion" << std::endl;
     abort();
@@ -348,9 +343,7 @@ z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 {
   // If it's a floatbv, convert it to bv
   if(a->sort->id == SMT_SORT_FLOATBV)
-    a = new_ast(
-      z3_ctx.fpa_to_ieeebv(to_solver_smt_ast<z3_smt_ast>(a)->a),
-      mk_bv_sort(SMT_SORT_SBV, high - low + 1));
+    a = mk_from_fp_to_bv(a);
 
   smt_sortt s = mk_bv_sort(SMT_SORT_UBV, high - low + 1);
   return new_ast(
@@ -1044,6 +1037,22 @@ smt_sortt z3_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
   auto t = z3_ctx.array_sort(domain_sort->s, range_sort->s);
   return new solver_smt_sort<z3::sort>(
     SMT_SORT_ARRAY, t, domain->get_data_width(), range);
+}
+
+smt_astt z3_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
+{
+  return new_ast(
+    z3_ctx.fpa_from_bv(
+      to_solver_smt_ast<z3_smt_ast>(op)->a,
+      to_solver_smt_sort<z3::sort>(to)->s),
+    to);
+}
+
+smt_astt z3_convt::mk_from_fp_to_bv(smt_astt op)
+{
+  smt_sortt to = mk_bv_sort(SMT_SORT_SBV, op->sort->get_data_width());
+  return new_ast(
+    z3_ctx.fpa_to_ieeebv(to_solver_smt_ast<z3_smt_ast>(op)->a), to);
 }
 
 smt_astt

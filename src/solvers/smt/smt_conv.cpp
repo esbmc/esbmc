@@ -1311,13 +1311,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     if((to_float && !from_float) || (!to_float && from_float))
     {
-      smt_func_kind k = to_float ? SMT_FUNC_BV2FLOAT : SMT_FUNC_FLOAT2BV;
-
-      a = convert_ast(
-        expr,
-        expr->type,
-        args,
-        expr_op_convert{SMT_FUNC_INVALID, k, k, SMT_FUNC_INVALID, k});
+      a = to_float ? fp_api->mk_from_bv_to_fp(args[0], convert_sort(cast.type))
+                   : fp_api->mk_from_fp_to_bv(args[0]);
     }
     else
     {

@@ -208,6 +208,17 @@ public:
    *  @return the ieee floating-point */
   virtual ieee_floatt get_fpbv(smt_astt a);
 
+  /** Convert BV to FP
+   * @param op the bitvector
+   * @param to the floating-point type
+   */
+  virtual smt_astt mk_from_bv_to_fp(smt_astt op, smt_sortt to);
+
+  /** Convert FP to BV
+   * @param op the floating-point
+   */
+  virtual smt_astt mk_from_fp_to_bv(smt_astt op);
+
   smt_convt *ctx;
 
 private:
