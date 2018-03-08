@@ -268,6 +268,8 @@ private:
   smt_astt mk_is_ninf(smt_astt op);
   smt_astt mk_is_denormal(smt_astt op);
 
+  smt_astt mk_to_bv(smt_astt from, bool is_signed, std::size_t width);
+
   BigInt power2(std::size_t n, bool negated)
   {
     BigInt b;
