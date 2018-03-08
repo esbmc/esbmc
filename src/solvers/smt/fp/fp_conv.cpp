@@ -1,5 +1,13 @@
 #include <solvers/smt/smt_conv.h>
 
+static void dbg_decouple(const char *prefix, smt_astt e)
+{
+#if DEBUG
+  std::cout << prefix << std::endl;
+  e->dump();
+#endif
+}
+
 static smt_astt extract_exponent(smt_convt *ctx, smt_astt fp)
 {
   std::size_t exp_top = fp->sort->get_data_width() - 2;
@@ -188,6 +196,13 @@ smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
   smt_astt y_is_zero = mk_smt_fpbv_is_zero(y);
   smt_astt y_is_pos = mk_smt_fpbv_is_positive(y);
 
+  dbg_decouple("fpa2bv_mul_x_is_nan", x_is_nan);
+  dbg_decouple("fpa2bv_mul_x_is_zero", x_is_zero);
+  dbg_decouple("fpa2bv_mul_x_is_pos", x_is_pos);
+  dbg_decouple("fpa2bv_mul_y_is_nan", y_is_nan);
+  dbg_decouple("fpa2bv_mul_y_is_zero", y_is_zero);
+  dbg_decouple("fpa2bv_mul_y_is_pos", y_is_pos);
+
   // (x is NaN) || (y is NaN) -> NaN
   smt_astt c1 =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, x_is_nan, y_is_nan);
@@ -225,8 +240,16 @@ smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
   unpack(x, a_sgn, a_sig, a_exp, a_lz, true);
   unpack(y, b_sgn, b_sig, b_exp, b_lz, true);
 
+  dbg_decouple("fpa2bv_mul_a_sig", a_sig);
+  dbg_decouple("fpa2bv_mul_a_exp", a_exp);
+  dbg_decouple("fpa2bv_mul_b_sig", b_sig);
+  dbg_decouple("fpa2bv_mul_b_exp", b_exp);
+
   smt_astt a_lz_ext = ctx->mk_zero_ext(a_lz, 2);
   smt_astt b_lz_ext = ctx->mk_zero_ext(b_lz, 2);
+
+  dbg_decouple("fpa2bv_mul_lz_a", a_lz);
+  dbg_decouple("fpa2bv_mul_lz_b", b_lz);
 
   smt_astt a_sig_ext = ctx->mk_zero_ext(a_sig, sbits);
   smt_astt b_sig_ext = ctx->mk_zero_ext(b_sig, sbits);
@@ -237,6 +260,8 @@ smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
   smt_astt res_sgn, res_sig, res_exp;
   res_sgn = ctx->mk_func_app(a_sgn->sort, SMT_FUNC_BVXOR, a_sgn, b_sgn);
 
+  dbg_decouple("fpa2bv_mul_res_sgn", res_sgn);
+
   res_exp = ctx->mk_func_app(
     a_exp_ext->sort,
     SMT_FUNC_BVADD,
@@ -245,6 +270,8 @@ smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
 
   smt_astt product =
     ctx->mk_func_app(a_sig_ext->sort, SMT_FUNC_BVMUL, a_sig_ext, b_sig_ext);
+
+  dbg_decouple("fpa2bv_mul_product", product);
 
   assert(product->sort->get_data_width() == 2 * sbits);
 
@@ -540,14 +567,20 @@ void fp_convt::unpack(
   assert(exp->sort->get_data_width() == ebits);
   assert(sig->sort->get_data_width() == sbits - 1);
 
+  dbg_decouple("fpa2bv_unpack_sgn", sgn);
+  dbg_decouple("fpa2bv_unpack_exp", exp);
+  dbg_decouple("fpa2bv_unpack_sig", sig);
+
   smt_astt is_normal = mk_smt_fpbv_is_normal(src);
   smt_astt normal_sig =
     ctx->mk_concat(ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1), sig);
   smt_astt normal_exp = mk_unbias(exp);
+  dbg_decouple("fpa2bv_unpack_normal_exp", normal_exp);
 
   smt_astt denormal_sig = ctx->mk_zero_ext(sig, 1);
   smt_astt denormal_exp = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), ebits);
   denormal_exp = mk_unbias(denormal_exp);
+  dbg_decouple("fpa2bv_unpack_denormal_exp", denormal_exp);
 
   smt_astt zero_e = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), ebits);
   if(normalize)
@@ -557,11 +590,15 @@ void fp_convt::unpack(
       ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, zero_s, denormal_sig);
 
     smt_astt lz_d = mk_leading_zeros(denormal_sig, ebits);
+    dbg_decouple("fpa2bv_unpack_lz_d", lz_d);
+
     smt_astt norm_or_zero =
       ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, is_normal, is_sig_zero);
     lz = ctx->mk_ite(norm_or_zero, zero_e, lz_d);
+    dbg_decouple("fpa2bv_unpack_lz", lz);
 
     smt_astt shift = ctx->mk_ite(is_sig_zero, zero_e, lz);
+    dbg_decouple("fpa2bv_unpack_shift", shift);
     assert(shift->sort->get_data_width() == ebits);
     if(ebits <= sbits)
     {
@@ -588,6 +625,8 @@ void fp_convt::unpack(
   }
   else
     lz = zero_e;
+
+  dbg_decouple("fpa2bv_unpack_is_normal", is_normal);
 
   sig = ctx->mk_ite(is_normal, normal_sig, denormal_sig);
   exp = ctx->mk_ite(is_normal, normal_exp, denormal_exp);
