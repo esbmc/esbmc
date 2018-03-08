@@ -903,10 +903,10 @@ smt_astt fp_convt::mk_unbias(smt_astt &src)
 smt_astt fp_convt::mk_leading_zeros(smt_astt &src, std::size_t max_bits)
 {
   std::size_t bv_sz = src->sort->get_data_width();
-
   if(bv_sz == 0)
     return ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), max_bits);
-  else if(bv_sz == 1)
+
+  if(bv_sz == 1)
   {
     smt_astt nil_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
     smt_astt one_m = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), max_bits);
@@ -915,24 +915,22 @@ smt_astt fp_convt::mk_leading_zeros(smt_astt &src, std::size_t max_bits)
     smt_astt eq = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, src, nil_1);
     return ctx->mk_ite(eq, one_m, nil_m);
   }
-  else
-  {
-    smt_astt H = ctx->mk_extract(src, bv_sz - 1, bv_sz / 2);
-    smt_astt L = ctx->mk_extract(src, bv_sz / 2 - 1, 0);
 
-    unsigned H_size = H->sort->get_data_width();
+  smt_astt H = ctx->mk_extract(src, bv_sz - 1, bv_sz / 2);
+  smt_astt L = ctx->mk_extract(src, bv_sz / 2 - 1, 0);
 
-    smt_astt lzH = mk_leading_zeros(H, max_bits); /* recursive! */
-    smt_astt lzL = mk_leading_zeros(L, max_bits);
+  unsigned H_size = H->sort->get_data_width();
 
-    smt_astt nil_h = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), H_size);
-    smt_astt H_is_zero =
-      ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, H, nil_h);
+  smt_astt lzH = mk_leading_zeros(H, max_bits); /* recursive! */
+  smt_astt lzL = mk_leading_zeros(L, max_bits);
 
-    smt_astt h_m = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(H_size), max_bits);
-    smt_astt sum = ctx->mk_func_app(lzL->sort, SMT_FUNC_BVADD, h_m, lzL);
-    return ctx->mk_ite(H_is_zero, sum, lzH);
-  }
+  smt_astt nil_h = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), H_size);
+  smt_astt H_is_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, H, nil_h);
+
+  smt_astt h_m = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(H_size), max_bits);
+  smt_astt sum = ctx->mk_func_app(lzL->sort, SMT_FUNC_BVADD, h_m, lzL);
+  return ctx->mk_ite(H_is_zero, sum, lzH);
 }
 
 void fp_convt::round(
