@@ -587,18 +587,18 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     a = fp_api->mk_smt_fpbv_add(
-      to_ieee_add2t(expr).side_1,
-      to_ieee_add2t(expr).side_2,
-      to_ieee_add2t(expr).rounding_mode);
+      convert_ast(to_ieee_add2t(expr).side_1),
+      convert_ast(to_ieee_add2t(expr).side_2),
+      convert_rounding_mode(to_ieee_add2t(expr).rounding_mode));
     break;
   }
   case expr2t::ieee_sub_id:
   {
     assert(is_floatbv_type(expr));
     a = fp_api->mk_smt_fpbv_sub(
-      to_ieee_sub2t(expr).side_1,
-      to_ieee_sub2t(expr).side_2,
-      to_ieee_sub2t(expr).rounding_mode);
+      convert_ast(to_ieee_sub2t(expr).side_1),
+      convert_ast(to_ieee_sub2t(expr).side_2),
+      convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode));
     break;
   }
   case expr2t::ieee_mul_id:
@@ -614,19 +614,19 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     a = fp_api->mk_smt_fpbv_div(
-      to_ieee_div2t(expr).side_1,
-      to_ieee_div2t(expr).side_2,
-      to_ieee_div2t(expr).rounding_mode);
+      convert_ast(to_ieee_div2t(expr).side_1),
+      convert_ast(to_ieee_div2t(expr).side_2),
+      convert_rounding_mode(to_ieee_div2t(expr).rounding_mode));
     break;
   }
   case expr2t::ieee_fma_id:
   {
     assert(is_floatbv_type(expr));
     a = fp_api->mk_smt_fpbv_fma(
-      to_ieee_fma2t(expr).value_1,
-      to_ieee_fma2t(expr).value_2,
-      to_ieee_fma2t(expr).value_3,
-      to_ieee_fma2t(expr).rounding_mode);
+      convert_ast(to_ieee_fma2t(expr).value_1),
+      convert_ast(to_ieee_fma2t(expr).value_2),
+      convert_ast(to_ieee_fma2t(expr).value_3),
+      convert_rounding_mode(to_ieee_fma2t(expr).rounding_mode));
     break;
   }
   case expr2t::ieee_sqrt_id:
@@ -634,7 +634,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 2);
     a = fp_api->mk_smt_fpbv_sqrt(
-      to_ieee_sqrt2t(expr).value, to_ieee_sqrt2t(expr).rounding_mode);
+      convert_ast(to_ieee_sqrt2t(expr).value),
+      convert_rounding_mode(to_ieee_sqrt2t(expr).rounding_mode));
     break;
   }
   case expr2t::modulus_id:
@@ -737,7 +738,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     a = fp_api->mk_smt_nearbyint_from_float(
-      to_nearbyint2t(expr).from, to_nearbyint2t(expr).rounding_mode);
+      convert_ast(to_nearbyint2t(expr).from),
+      convert_rounding_mode(to_nearbyint2t(expr).rounding_mode));
     break;
   }
   case expr2t::if_id:

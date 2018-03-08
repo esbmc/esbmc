@@ -51,14 +51,14 @@ public:
    *  @param to the unsigned bitvector resulting type
    *  @return The newly created cast smt_ast. */
   virtual smt_astt
-  mk_smt_typecast_from_fpbv_to_ubv(expr2tc from, std::size_t width);
+  mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width);
 
   /** Typecast from a floating point
    *  @param from the floating point being casted to signed bitvector
    *  @param to the signed bitvector resulting type
    *  @return The newly created cast smt_ast. */
   virtual smt_astt
-  mk_smt_typecast_from_fpbv_to_sbv(expr2tc from, std::size_t width);
+  mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width);
 
   /** Typecast from a floating point
    *  @param from the floating point being casted to floating-point
@@ -66,7 +66,7 @@ public:
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
   virtual smt_astt
-  mk_smt_typecast_from_fpbv_to_fpbv(expr2tc from, type2tc to, expr2tc rm);
+  mk_smt_typecast_from_fpbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm);
 
   /** Typecast to a floating point
    *  @param from the unsigned bitvector being casted to a floating-point
@@ -74,7 +74,7 @@ public:
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
   virtual smt_astt
-  mk_smt_typecast_ubv_to_fpbv(expr2tc from, type2tc to, expr2tc rm);
+  mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm);
 
   /** Typecast to a floating point
    *  @param from the signed bitvector being casted to a floating-point
@@ -82,27 +82,27 @@ public:
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
   virtual smt_astt
-  mk_smt_typecast_sbv_to_fpbv(expr2tc from, type2tc to, expr2tc rm);
+  mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm);
 
   /** Calculate the nearby int from a floating point, considering the rounding mode
    *  @param from the floating-point
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_nearbyint_from_float(expr2tc from, expr2tc rm);
+  virtual smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm);
 
   /** Convert a ieee addition
    *  @param lhs left hand side of the addition
    *  @param rhs right hand side of the addition
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_fpbv_add(expr2tc lhs, expr2tc rhs, expr2tc rm);
+  virtual smt_astt mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm);
 
   /** Convert a ieee subtraction
    *  @param lhs left hand side of the subtraction
    *  @param rhs right hand side of the subtraction
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_fpbv_sub(expr2tc lhs, expr2tc rhs, expr2tc rm);
+  virtual smt_astt mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm);
 
   /** Convert a ieee multiplication
    *  @param lhs left hand side of the multiplication
@@ -116,13 +116,13 @@ public:
    *  @param rhs right hand side of the division
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_fpbv_div(expr2tc lhs, expr2tc rhs, expr2tc rm);
+  virtual smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm);
 
   /** Convert the ieee arithmetic square-root (sqrt)
    *  @param op the sqrt radicand
    *  @param rm the rounding mode
    *  @return The newly created sqrt smt_ast */
-  virtual smt_astt mk_smt_fpbv_sqrt(expr2tc rd, expr2tc rm);
+  virtual smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm);
 
   /** Convert the ieee arithmetic fused-multiply add (fma): round((v1 * v2) + v3)
    *  @param v1 in the equation
@@ -131,7 +131,7 @@ public:
    *  @param rm the rounding mode
    *  @return The newly created fma smt_ast */
   virtual smt_astt
-  mk_smt_fpbv_fma(expr2tc v1, expr2tc v2, expr2tc v3, expr2tc rm);
+  mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm);
 
   /** Convert an ieee equality
    *  @param lhs left hand side

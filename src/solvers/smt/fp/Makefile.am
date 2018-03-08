@@ -1,5 +1,5 @@
 noinst_LTLIBRARIES = libsmtfp.la
-libsmtfp_la_SOURCES = fp_conv.cpp float_bv.cpp
+libsmtfp_la_SOURCES = fp_conv.cpp
 
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir)
 

@@ -63,23 +63,23 @@ public:
   smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm) override;
 
   smt_astt
-  mk_smt_typecast_from_fpbv_to_ubv(expr2tc from, std::size_t width) override;
+  mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width) override;
   smt_astt
-  mk_smt_typecast_from_fpbv_to_sbv(expr2tc from, std::size_t width) override;
+  mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width) override;
   smt_astt mk_smt_typecast_from_fpbv_to_fpbv(
-    expr2tc from,
-    type2tc to,
-    expr2tc rm) override;
-  smt_astt
-  mk_smt_typecast_ubv_to_fpbv(expr2tc from, type2tc to, expr2tc rm) override;
-  smt_astt
-  mk_smt_typecast_sbv_to_fpbv(expr2tc from, type2tc to, expr2tc rm) override;
-  smt_astt mk_smt_fpbv_add(expr2tc lhs, expr2tc rhs, expr2tc rm) override;
-  smt_astt mk_smt_fpbv_sub(expr2tc lhs, expr2tc rhs, expr2tc rm) override;
+    smt_astt from,
+    smt_sortt to,
+    smt_astt rm) override;
+  smt_astt mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+    override;
+  smt_astt mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+    override;
+  smt_astt mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
+  smt_astt mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
   smt_astt mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
-  smt_astt mk_smt_fpbv_div(expr2tc lhs, expr2tc rhs, expr2tc rm) override;
-  smt_astt mk_smt_nearbyint_from_float(expr2tc from, expr2tc rm) override;
-  smt_astt mk_smt_fpbv_sqrt(expr2tc rd, expr2tc rm) override;
+  smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
+  smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm) override;
+  smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) override;
 
   smt_astt mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs) override;
   smt_astt mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs) override;
