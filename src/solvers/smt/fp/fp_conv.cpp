@@ -916,13 +916,14 @@ smt_astt fp_convt::mk_smt_fpbv_abs(smt_astt op)
 
 smt_astt fp_convt::mk_smt_fpbv_neg(smt_astt op)
 {
-  // We xor the sign bit with '1'
-  smt_astt one = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
-  smt_astt zeros =
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), op->sort->get_data_width() - 1);
+  // Extract everything but the sign bit
+  smt_astt ew_sw = extract_exp_sig(ctx, op);
+  smt_astt sgn = extract_signbit(ctx, op);
 
-  smt_astt one_zeros = ctx->mk_concat(one, zeros);
-  return ctx->mk_func_app(op->sort, SMT_FUNC_XOR, one_zeros, op);
+  smt_astt c = mk_smt_fpbv_is_nan(op);
+  smt_astt nsgn = ctx->mk_func_app(sgn->sort, SMT_FUNC_BVNOT, sgn);
+  smt_astt r_sgn = ctx->mk_ite(c, sgn, nsgn);
+  return mk_from_bv_to_fp(ctx->mk_concat(r_sgn, ew_sw), op->sort);
 }
 
 void fp_convt::unpack(
