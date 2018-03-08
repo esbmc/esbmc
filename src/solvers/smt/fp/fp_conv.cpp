@@ -159,10 +159,113 @@ smt_astt fp_convt::mk_smt_fpbv_sub(expr2tc lhs, expr2tc rhs, expr2tc rm)
     true, lhs, rhs, rm, ieee_float_spect(to_floatbv_type(lhs->type))));
 }
 
-smt_astt fp_convt::mk_smt_fpbv_mul(expr2tc lhs, expr2tc rhs, expr2tc rm)
+smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
 {
-  return ctx->convert_ast(
-    float_bvt::mul(lhs, rhs, rm, ieee_float_spect(to_floatbv_type(lhs->type))));
+  assert(x->sort->get_data_width() == y->sort->get_data_width());
+  assert(x->sort->get_exponent_width() == y->sort->get_exponent_width());
+
+  std::size_t ebits = x->sort->get_exponent_width();
+  std::size_t sbits = x->sort->get_significand_width();
+
+  smt_astt nan = mk_smt_fpbv_nan(ebits, sbits);
+  smt_astt nzero = mk_nzero(ebits, sbits);
+  smt_astt pzero = mk_pzero(ebits, sbits);
+  smt_astt ninf = mk_ninf(ebits, sbits);
+  smt_astt pinf = mk_pinf(ebits, sbits);
+
+  smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
+  smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
+  smt_astt x_is_pos = mk_smt_fpbv_is_positive(x);
+  smt_astt y_is_nan = mk_smt_fpbv_is_nan(y);
+  smt_astt y_is_zero = mk_smt_fpbv_is_zero(y);
+  smt_astt y_is_pos = mk_smt_fpbv_is_positive(y);
+
+  // (x is NaN) || (y is NaN) -> NaN
+  smt_astt c1 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, x_is_nan, y_is_nan);
+  smt_astt v1 = nan;
+
+  // (x is +oo) -> if (y is 0) then NaN else inf with y's sign.
+  smt_astt c2 = mk_is_pinf(x);
+  smt_astt y_sgn_inf = ctx->mk_ite(y_is_pos, pinf, ninf);
+  smt_astt v2 = ctx->mk_ite(y_is_zero, nan, y_sgn_inf);
+
+  // (y is +oo) -> if (x is 0) then NaN else inf with x's sign.
+  smt_astt c3 = mk_is_pinf(y);
+  smt_astt x_sgn_inf = ctx->mk_ite(x_is_pos, pinf, ninf);
+  smt_astt v3 = ctx->mk_ite(x_is_zero, nan, x_sgn_inf);
+
+  // (x is -oo) -> if (y is 0) then NaN else inf with -y's sign.
+  smt_astt c4 = mk_is_ninf(x);
+  smt_astt neg_y_sgn_inf = ctx->mk_ite(y_is_pos, ninf, pinf);
+  smt_astt v4 = ctx->mk_ite(y_is_zero, nan, neg_y_sgn_inf);
+
+  // (y is -oo) -> if (x is 0) then NaN else inf with -x's sign.
+  smt_astt c5 = mk_is_ninf(y);
+  smt_astt neg_x_sgn_inf = ctx->mk_ite(x_is_pos, ninf, pinf);
+  smt_astt v5 = ctx->mk_ite(x_is_zero, nan, neg_x_sgn_inf);
+
+  // (x is 0) || (y is 0) -> x but with sign = x.sign ^ y.sign
+  smt_astt c6 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, x_is_zero, y_is_zero);
+  smt_astt sign_xor =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_XOR, x_is_pos, y_is_pos);
+  smt_astt v6 = ctx->mk_ite(sign_xor, nzero, pzero);
+
+  // else comes the actual multiplication.
+  unpacked_floatt a = unpack(x, true);
+  unpacked_floatt b = unpack(y, true);
+
+  smt_astt a_lz_ext = ctx->mk_zero_ext(a.lz, 2);
+  smt_astt b_lz_ext = ctx->mk_zero_ext(b.lz, 2);
+
+  smt_astt a_sig_ext = ctx->mk_zero_ext(a.sig, sbits);
+  smt_astt b_sig_ext = ctx->mk_zero_ext(b.sig, sbits);
+
+  smt_astt a_exp_ext = ctx->mk_zero_ext(a.exp, 2);
+  smt_astt b_exp_ext = ctx->mk_zero_ext(b.exp, 2);
+
+  unpacked_floatt res;
+  res.sgn = ctx->mk_func_app(a.sgn->sort, SMT_FUNC_BVXOR, a.sgn, b.sgn);
+
+  res.exp = ctx->mk_func_app(
+    a_exp_ext->sort,
+    SMT_FUNC_BVADD,
+    ctx->mk_func_app(a_exp_ext->sort, SMT_FUNC_BVSUB, a_exp_ext, a_lz_ext),
+    ctx->mk_func_app(b_exp_ext->sort, SMT_FUNC_BVSUB, b_exp_ext, b_lz_ext));
+
+  smt_astt product =
+    ctx->mk_func_app(a_sig_ext->sort, SMT_FUNC_BVMUL, a_sig_ext, b_sig_ext);
+
+  assert(product->sort->get_data_width() == 2 * sbits);
+
+  smt_astt h_p = ctx->mk_extract(product, 2 * sbits - 1, sbits);
+  smt_astt l_p = ctx->mk_extract(product, sbits - 1, 0);
+
+  smt_astt rbits;
+  if(sbits >= 4)
+  {
+    smt_astt sticky = ctx->mk_bvredor(ctx->mk_extract(product, sbits - 4, 0));
+    rbits =
+      ctx->mk_concat(ctx->mk_extract(product, sbits - 1, sbits - 3), sticky);
+  }
+  else
+    rbits =
+      ctx->mk_concat(l_p, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 4 - sbits));
+
+  assert(rbits->sort->get_data_width() == 4);
+  res.sig = ctx->mk_concat(h_p, rbits);
+
+  smt_astt v7 = round(res, rm, ebits, sbits);
+
+  // And finally, we tie them together.
+  smt_astt result = ctx->mk_ite(c6, v6, v7);
+  result = ctx->mk_ite(c5, v5, result);
+  result = ctx->mk_ite(c4, v4, result);
+  result = ctx->mk_ite(c3, v3, result);
+  result = ctx->mk_ite(c2, v2, result);
+  result = ctx->mk_ite(c1, v1, result);
+  return result;
 }
 
 smt_astt fp_convt::mk_smt_fpbv_div(expr2tc lhs, expr2tc rhs, expr2tc rm)

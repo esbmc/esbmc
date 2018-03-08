@@ -109,7 +109,7 @@ public:
    *  @param rhs right hand side of the multiplication
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_fpbv_mul(expr2tc lhs, expr2tc rhs, expr2tc rm);
+  virtual smt_astt mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm);
 
   /** Convert the ieee division
    *  @param lhs left hand side of the division

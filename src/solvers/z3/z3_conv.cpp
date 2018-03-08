@@ -1184,16 +1184,12 @@ smt_astt z3_convt::mk_smt_fpbv_sub(expr2tc lhs, expr2tc rhs, expr2tc rm)
   return new_ast(z3_ctx.fpa_sub(mrm->a, mlhs->a, mrhs->a), _lhs->sort);
 }
 
-smt_astt z3_convt::mk_smt_fpbv_mul(expr2tc lhs, expr2tc rhs, expr2tc rm)
+smt_astt z3_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
 {
-  smt_astt _lhs = convert_ast(lhs);
-  smt_astt _rhs = convert_ast(rhs);
-  smt_astt _rm = convert_rounding_mode(rm);
-
-  const z3_smt_ast *mlhs = to_solver_smt_ast<z3_smt_ast>(_lhs);
-  const z3_smt_ast *mrhs = to_solver_smt_ast<z3_smt_ast>(_rhs);
-  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(_rm);
-  return new_ast(z3_ctx.fpa_mul(mrm->a, mlhs->a, mrhs->a), _lhs->sort);
+  const z3_smt_ast *mlhs = to_solver_smt_ast<z3_smt_ast>(lhs);
+  const z3_smt_ast *mrhs = to_solver_smt_ast<z3_smt_ast>(rhs);
+  const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
+  return new_ast(z3_ctx.fpa_mul(mrm->a, mlhs->a, mrhs->a), lhs->sort);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_div(expr2tc lhs, expr2tc rhs, expr2tc rm)

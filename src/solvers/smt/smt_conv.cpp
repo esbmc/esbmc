@@ -605,9 +605,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     a = fp_api->mk_smt_fpbv_mul(
-      to_ieee_mul2t(expr).side_1,
-      to_ieee_mul2t(expr).side_2,
-      to_ieee_mul2t(expr).rounding_mode);
+      convert_ast(to_ieee_mul2t(expr).side_1),
+      convert_ast(to_ieee_mul2t(expr).side_2),
+      convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode));
     break;
   }
   case expr2t::ieee_div_id:

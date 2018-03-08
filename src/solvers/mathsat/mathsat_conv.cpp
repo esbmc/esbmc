@@ -893,20 +893,16 @@ smt_astt mathsat_convt::mk_smt_fpbv_sub(expr2tc lhs, expr2tc rhs, expr2tc rm)
   return new mathsat_smt_ast(this, _lhs->sort, t);
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv_mul(expr2tc lhs, expr2tc rhs, expr2tc rm)
+smt_astt mathsat_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
 {
-  smt_astt _lhs = convert_ast(lhs);
-  smt_astt _rhs = convert_ast(rhs);
-  smt_astt _rm = convert_rounding_mode(rm);
-
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(_rm);
-  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(_lhs);
-  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(_rhs);
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
 
   msat_term t = msat_make_fp_times(env, mrm->a, mlhs->a, mrhs->a);
   check_msat_error(t);
 
-  return new mathsat_smt_ast(this, _lhs->sort, t);
+  return new mathsat_smt_ast(this, lhs->sort, t);
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_div(expr2tc lhs, expr2tc rhs, expr2tc rm)
