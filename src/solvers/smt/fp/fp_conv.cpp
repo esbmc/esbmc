@@ -132,21 +132,266 @@ smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_fpbv(
 }
 
 smt_astt
-fp_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+fp_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
 {
-  (void)from;
-  (void)to;
-  (void)rm;
-  abort();
+  // This is a conversion from unsigned bitvector to float:
+  // ((_ to_fp_unsigned eb sb) RoundingMode (_ BitVec m) (_ FloatingPoint eb sb))
+  // Semantics:
+  //    Let b in[[(_ BitVec m)]] and let n be the unsigned integer represented by b.
+  //    [[(_ to_fp_unsigned eb sb)]](r, x) = +infinity if n is too large to be
+  //    represented as a finite number of[[(_ FloatingPoint eb sb)]];
+  //    [[(_ to_fp_unsigned eb sb)]](r, x) = y otherwise, where y is the finite number
+  //    such that[[fp.to_real]](y) is closest to n according to rounding mode r.
+
+  dbg_decouple("fpa2bv_to_fp_unsigned_x", x);
+
+  unsigned ebits = to->get_exponent_width();
+  unsigned sbits = to->get_significand_width();
+  unsigned bv_sz = x->sort->get_data_width();
+
+  smt_astt bv0_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+  smt_astt bv0_sz = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), bv_sz);
+
+  smt_astt is_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, x, bv0_sz);
+
+  smt_astt pzero = mk_pzero(ebits, sbits);
+
+  // Special case: x == 0 -> p/n zero
+  smt_astt c1 = is_zero;
+  smt_astt v1 = pzero;
+
+  // Special case: x != 0
+  // x is [bv_sz-1] . [bv_sz-2 ... 0] * 2^(bv_sz-1)
+  // bv_sz-1 is the "1.0" bit for the rounder.
+
+  smt_astt lz = mk_leading_zeros(x, bv_sz);
+  smt_astt e_bv_sz = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(bv_sz), bv_sz);
+  assert(lz->sort->get_data_width() == e_bv_sz->sort->get_data_width());
+  dbg_decouple("fpa2bv_to_fp_unsigned_lz", lz);
+  smt_astt shifted_sig = ctx->mk_func_app(x->sort, SMT_FUNC_BVSHL, x, lz);
+
+  // shifted_sig is [bv_sz-1] . [bv_sz-2 ... 0] * 2^(bv_sz-1) * 2^(-lz)
+  unsigned sig_sz = sbits + 4; // we want extra rounding bits.
+
+  smt_astt sig_4, sticky;
+  if(sig_sz <= bv_sz)
+  {
+    // one short
+    sig_4 = ctx->mk_extract(shifted_sig, bv_sz - 1, bv_sz - sig_sz + 1);
+
+    smt_astt sig_rest = ctx->mk_extract(shifted_sig, bv_sz - sig_sz, 0);
+    sticky = ctx->mk_bvredor(sig_rest);
+    sig_4 = ctx->mk_concat(sig_4, sticky);
+  }
+  else
+  {
+    unsigned extra_bits = sig_sz - bv_sz;
+    smt_astt extra_zeros = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), extra_bits);
+    sig_4 = ctx->mk_concat(shifted_sig, extra_zeros);
+    lz = ctx->mk_func_app(
+      ctx->mk_bv_sort(SMT_SORT_UBV, sig_sz),
+      SMT_FUNC_BVADD,
+      ctx->mk_concat(extra_zeros, lz),
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(extra_bits), sig_sz));
+    bv_sz = bv_sz + extra_bits;
+  }
+  assert(sig_4->sort->get_data_width() == sig_sz);
+
+  smt_astt s_exp = ctx->mk_func_app(
+    lz->sort,
+    SMT_FUNC_BVSUB,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(bv_sz - 2), bv_sz),
+    lz);
+
+  // s_exp = (bv_sz-2) + (-lz) signed
+  assert(s_exp->sort->get_data_width() == bv_sz);
+
+  unsigned exp_sz = ebits + 2; // (+2 for rounder)
+  smt_astt exp_2 = ctx->mk_extract(s_exp, exp_sz - 1, 0);
+
+  // the remaining bits are 0 if ebits is large enough.
+  smt_astt exp_too_large = ctx->mk_smt_bool(false); // This is always in range.
+
+  // The exponent is at most bv_sz, i.e., we need ld(bv_sz)+1 ebits.
+  // exp < bv_sz (+sign bit which is [0])
+  unsigned exp_worst_case_sz =
+    (unsigned)((log((double)bv_sz) / log((double)2)) + 1.0);
+
+  if(exp_sz < exp_worst_case_sz)
+  {
+    // exp_sz < exp_worst_case_sz and exp >= 0.
+    // Take the maximum legal exponent; this
+    // allows us to keep the most precision.
+    smt_astt max_exp = mk_max_exp(exp_sz);
+    smt_astt max_exp_bvsz = ctx->mk_zero_ext(max_exp, bv_sz - exp_sz);
+
+    exp_too_large = ctx->mk_func_app(
+      ctx->boolean_sort,
+      SMT_FUNC_BVULTE,
+      ctx->mk_func_app(
+        max_exp_bvsz->sort,
+        SMT_FUNC_BVADD,
+        max_exp_bvsz,
+        ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), bv_sz)),
+      s_exp);
+    smt_astt zero_sig_sz = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sig_sz);
+    sig_4 = ctx->mk_ite(exp_too_large, zero_sig_sz, sig_4);
+    exp_2 = ctx->mk_ite(exp_too_large, max_exp, exp_2);
+  }
+  dbg_decouple("fpa2bv_to_fp_unsigned_exp_too_large", exp_too_large);
+
+  smt_astt sgn, sig, exp;
+  sgn = bv0_1;
+  sig = sig_4;
+  exp = exp_2;
+
+  dbg_decouple("fpa2bv_to_fp_unsigned_sgn", sgn);
+  dbg_decouple("fpa2bv_to_fp_unsigned_sig", sig);
+  dbg_decouple("fpa2bv_to_fp_unsigned_exp", exp);
+
+  assert(sig->sort->get_data_width() == sbits + 4);
+  assert(exp->sort->get_data_width() == ebits + 2);
+
+  smt_astt v2;
+  round(rm, sgn, sig, exp, ebits, sbits, v2);
+
+  return ctx->mk_ite(c1, v1, v2);
 }
 
 smt_astt
-fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
 {
-  (void)from;
-  (void)to;
-  (void)rm;
-  abort();
+  // This is a conversion from unsigned bitvector to float:
+  // ((_ to_fp_unsigned eb sb) RoundingMode (_ BitVec m) (_ FloatingPoint eb sb))
+  // Semantics:
+  //    Let b in[[(_ BitVec m)]] and let n be the unsigned integer represented by b.
+  //    [[(_ to_fp_unsigned eb sb)]](r, x) = +infinity if n is too large to be
+  //    represented as a finite number of[[(_ FloatingPoint eb sb)]];
+  //    [[(_ to_fp_unsigned eb sb)]](r, x) = y otherwise, where y is the finite number
+  //    such that[[fp.to_real]](y) is closest to n according to rounding mode r.
+
+  dbg_decouple("fpa2bv_to_fp_signed_x", x);
+
+  unsigned ebits = to->get_exponent_width();
+  unsigned sbits = to->get_significand_width();
+  unsigned bv_sz = x->sort->get_data_width();
+
+  smt_astt bv0_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+  smt_astt bv1_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
+  smt_astt bv0_sz = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), bv_sz);
+
+  smt_astt is_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, x, bv0_sz);
+
+  smt_astt pzero = mk_pzero(ebits, sbits);
+
+  // Special case: x == 0 -> p/n zero
+  smt_astt c1 = is_zero;
+  smt_astt v1 = pzero;
+
+  // Special case: x != 0
+  smt_astt is_neg_bit = ctx->mk_extract(x, bv_sz - 1, bv_sz - 1);
+  smt_astt is_neg =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, is_neg_bit, bv1_1);
+  smt_astt neg_x = ctx->mk_func_app(x->sort, SMT_FUNC_BVNEG, x);
+  smt_astt x_abs = ctx->mk_ite(is_neg, neg_x, x);
+  dbg_decouple("fpa2bv_to_fp_signed_is_neg", is_neg);
+  // x is [bv_sz-1] . [bv_sz-2 ... 0] * 2^(bv_sz-1)
+  // bv_sz-1 is the "1.0" bit for the rounder.
+
+  smt_astt lz = mk_leading_zeros(x_abs, bv_sz);
+  smt_astt e_bv_sz = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(bv_sz), bv_sz);
+  assert(lz->sort->get_data_width() == e_bv_sz->sort->get_data_width());
+  dbg_decouple("fpa2bv_to_fp_signed_lz", lz);
+  smt_astt shifted_sig = ctx->mk_func_app(x->sort, SMT_FUNC_BVSHL, x_abs, lz);
+
+  // shifted_sig is [bv_sz-1] . [bv_sz-2 ... 0] * 2^(bv_sz-1) * 2^(-lz)
+  unsigned sig_sz = sbits + 4; // we want extra rounding bits.
+
+  smt_astt sig_4, sticky;
+  if(sig_sz <= bv_sz)
+  {
+    // one short
+    sig_4 = ctx->mk_extract(shifted_sig, bv_sz - 1, bv_sz - sig_sz + 1);
+
+    smt_astt sig_rest = ctx->mk_extract(shifted_sig, bv_sz - sig_sz, 0);
+    sticky = ctx->mk_bvredor(sig_rest);
+    sig_4 = ctx->mk_concat(sig_4, sticky);
+  }
+  else
+  {
+    unsigned extra_bits = sig_sz - bv_sz;
+    smt_astt extra_zeros = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), extra_bits);
+    sig_4 = ctx->mk_concat(shifted_sig, extra_zeros);
+    lz = ctx->mk_func_app(
+      ctx->mk_bv_sort(SMT_SORT_UBV, sig_sz),
+      SMT_FUNC_BVADD,
+      ctx->mk_concat(extra_zeros, lz),
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(extra_bits), sig_sz));
+    bv_sz = bv_sz + extra_bits;
+  }
+  assert(sig_4->sort->get_data_width() == sig_sz);
+
+  smt_astt s_exp = ctx->mk_func_app(
+    lz->sort,
+    SMT_FUNC_BVSUB,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(bv_sz - 2), bv_sz),
+    lz);
+
+  // s_exp = (bv_sz-2) + (-lz) signed
+  assert(s_exp->sort->get_data_width() == bv_sz);
+
+  unsigned exp_sz = ebits + 2; // (+2 for rounder)
+  smt_astt exp_2 = ctx->mk_extract(s_exp, exp_sz - 1, 0);
+
+  // the remaining bits are 0 if ebits is large enough.
+  smt_astt exp_too_large = ctx->mk_smt_bool(false); // This is always in range.
+
+  // The exponent is at most bv_sz, i.e., we need ld(bv_sz)+1 ebits.
+  // exp < bv_sz (+sign bit which is [0])
+  unsigned exp_worst_case_sz =
+    (unsigned)((log((double)bv_sz) / log((double)2)) + 1.0);
+
+  if(exp_sz < exp_worst_case_sz)
+  {
+    // exp_sz < exp_worst_case_sz and exp >= 0.
+    // Take the maximum legal exponent; this
+    // allows us to keep the most precision.
+    smt_astt max_exp = mk_max_exp(exp_sz);
+    smt_astt max_exp_bvsz = ctx->mk_zero_ext(max_exp, bv_sz - exp_sz);
+
+    exp_too_large = ctx->mk_func_app(
+      ctx->boolean_sort,
+      SMT_FUNC_BVULTE,
+      ctx->mk_func_app(
+        max_exp_bvsz->sort,
+        SMT_FUNC_BVADD,
+        max_exp_bvsz,
+        ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), bv_sz)),
+      s_exp);
+    smt_astt zero_sig_sz = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sig_sz);
+    sig_4 = ctx->mk_ite(exp_too_large, zero_sig_sz, sig_4);
+    exp_2 = ctx->mk_ite(exp_too_large, max_exp, exp_2);
+  }
+  dbg_decouple("fpa2bv_to_fp_unsigned_exp_too_large", exp_too_large);
+
+  smt_astt sgn, sig, exp;
+  sgn = bv0_1;
+  sig = sig_4;
+  exp = exp_2;
+
+  dbg_decouple("fpa2bv_to_fp_unsigned_sgn", sgn);
+  dbg_decouple("fpa2bv_to_fp_unsigned_sig", sig);
+  dbg_decouple("fpa2bv_to_fp_unsigned_exp", exp);
+
+  assert(sig->sort->get_data_width() == sbits + 4);
+  assert(exp->sort->get_data_width() == ebits + 2);
+
+  smt_astt v2;
+  round(rm, sgn, sig, exp, ebits, sbits, v2);
+
+  return ctx->mk_ite(c1, v1, v2);
 }
 
 ieee_floatt fp_convt::get_fpbv(smt_astt a)
