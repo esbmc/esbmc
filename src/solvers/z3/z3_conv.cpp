@@ -1013,7 +1013,7 @@ smt_sortt z3_convt::mk_bv_fp_rm_sort()
 smt_sortt z3_convt::mk_fpbv_rm_sort()
 {
   return new solver_smt_sort<z3::sort>(
-    SMT_SORT_FLOATBV_RM, z3_ctx.fpa_rm_sort(), 2);
+    SMT_SORT_FLOATBV_RM, z3_ctx.fpa_rm_sort(), 3);
 }
 
 smt_sortt z3_convt::mk_bool_sort()

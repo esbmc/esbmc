@@ -693,7 +693,7 @@ smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 smt_sortt mathsat_convt::mk_fpbv_rm_sort()
 {
   auto t = msat_get_fp_roundingmode_type(env);
-  return new solver_smt_sort<msat_type>(SMT_SORT_FLOATBV_RM, t, 1);
+  return new solver_smt_sort<msat_type>(SMT_SORT_FLOATBV_RM, t, 3);
 }
 
 smt_sortt mathsat_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)

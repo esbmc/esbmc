@@ -64,7 +64,7 @@ smt_astt fp_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 
 smt_astt fp_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
-  return ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(rm), 2);
+  return ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(rm), 3);
 }
 
 smt_astt fp_convt::mk_smt_nearbyint_from_float(expr2tc from, expr2tc rm)
