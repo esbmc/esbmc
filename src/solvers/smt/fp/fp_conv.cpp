@@ -5,6 +5,9 @@ static void dbg_decouple(const char *prefix, smt_astt e)
 #if DEBUG
   std::cout << prefix << std::endl;
   e->dump();
+#else
+  (void)prefix;
+  (void)e;
 #endif
 }
 
