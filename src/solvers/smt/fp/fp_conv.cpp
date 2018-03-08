@@ -436,14 +436,167 @@ fp_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
 }
 
 smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_fpbv(
-  smt_astt from,
+  smt_astt x,
   smt_sortt to,
   smt_astt rm)
 {
-  (void)from;
-  (void)to;
-  (void)rm;
-  abort();
+  unsigned from_sbits = x->sort->get_significand_width();
+  unsigned from_ebits = x->sort->get_exponent_width();
+  unsigned to_sbits = to->get_significand_width();
+  unsigned to_ebits = to->get_exponent_width();
+
+  if(from_sbits == to_sbits && from_ebits == to_ebits)
+    return x;
+
+  smt_astt one1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
+  smt_astt pinf = mk_pinf(to_ebits, to_sbits);
+  smt_astt ninf = mk_ninf(to_ebits, to_sbits);
+
+  // NaN -> NaN
+  smt_astt c1 = mk_smt_fpbv_is_nan(x);
+  smt_astt v1 = mk_smt_fpbv_nan(to_ebits, to_sbits);
+
+  // +0 -> +0
+  smt_astt c2 = mk_is_pzero(x);
+  smt_astt v2 = mk_pzero(to_ebits, to_sbits);
+
+  // -0 -> -0
+  smt_astt c3 = mk_is_nzero(x);
+  smt_astt v3 = mk_nzero(to_ebits, to_sbits);
+
+  // +oo -> +oo
+  smt_astt c4 = mk_is_pinf(x);
+  smt_astt v4 = pinf;
+
+  // -oo -> -oo
+  smt_astt c5 = mk_is_ninf(x);
+  smt_astt v5 = ninf;
+
+  // otherwise: the actual conversion with rounding.
+  smt_astt sgn, sig, exp, lz;
+  unpack(x, sgn, sig, exp, lz, true);
+
+  dbg_decouple("fpa2bv_to_float_x_sgn", sgn);
+  dbg_decouple("fpa2bv_to_float_x_sig", sig);
+  dbg_decouple("fpa2bv_to_float_x_exp", exp);
+  dbg_decouple("fpa2bv_to_float_lz", lz);
+
+  smt_astt res_sgn = sgn;
+
+  assert(sgn->sort->get_data_width() == 1);
+  assert(sig->sort->get_data_width() == from_sbits);
+  assert(exp->sort->get_data_width() == from_ebits);
+  assert(lz->sort->get_data_width() == from_ebits);
+
+  smt_astt res_sig;
+  if(from_sbits < (to_sbits + 3))
+  {
+    // make sure that sig has at least to_sbits + 3
+    res_sig = ctx->mk_concat(
+      sig, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), to_sbits + 3 - from_sbits));
+  }
+  else if(from_sbits > (to_sbits + 3))
+  {
+    // collapse the extra bits into a sticky bit.
+    smt_astt high =
+      ctx->mk_extract(sig, from_sbits - 1, from_sbits - to_sbits - 2);
+    assert(high->sort->get_data_width() == to_sbits + 2);
+    smt_astt low = ctx->mk_extract(sig, from_sbits - to_sbits - 3, 0);
+    smt_astt sticky = ctx->mk_bvredor(low);
+    assert(sticky->sort->get_data_width() == 1);
+    dbg_decouple("fpa2bv_to_float_sticky", sticky);
+    res_sig = ctx->mk_concat(high, sticky);
+    assert(res_sig->sort->get_data_width() == to_sbits + 3);
+  }
+  else
+    res_sig = sig;
+
+  // extra zero in the front for the rounder.
+  res_sig = ctx->mk_zero_ext(res_sig, 1);
+  assert(res_sig->sort->get_data_width() == to_sbits + 4);
+
+  smt_astt exponent_overflow = ctx->mk_smt_bool(false);
+
+  smt_astt res_exp;
+  if(from_ebits < (to_ebits + 2))
+  {
+    res_exp = ctx->mk_sign_ext(exp, to_ebits - from_ebits + 2);
+
+    // subtract lz for subnormal numbers.
+    smt_astt lz_ext = ctx->mk_zero_ext(lz, to_ebits - from_ebits + 2);
+    res_exp = ctx->mk_func_app(res_exp->sort, SMT_FUNC_BVSUB, res_exp, lz_ext);
+  }
+  else if(from_ebits > (to_ebits + 2))
+  {
+    unsigned ebits_diff = from_ebits - (to_ebits + 2);
+
+    // subtract lz for subnormal numbers.
+    smt_astt exp_sub_lz = ctx->mk_func_app(
+      ctx->mk_bv_sort(SMT_SORT_UBV, lz->sort->get_data_width() + 2),
+      SMT_FUNC_BVSUB,
+      ctx->mk_sign_ext(exp, 2),
+      ctx->mk_sign_ext(lz, 2));
+    dbg_decouple("fpa2bv_to_float_exp_sub_lz", exp_sub_lz);
+
+    // check whether exponent is within roundable (to_ebits+2) range.
+    BigInt z = power2(to_ebits + 1, true);
+    smt_astt max_exp = ctx->mk_concat(
+      ctx->mk_smt_bv(
+        SMT_SORT_UBV, BigInt(power2m1(to_ebits, false)), to_ebits + 1),
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1));
+    smt_astt min_exp =
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(z + 2), to_ebits + 2);
+    dbg_decouple("fpa2bv_to_float_max_exp", max_exp);
+    dbg_decouple("fpa2bv_to_float_min_exp", min_exp);
+
+    BigInt ovft = power2m1(to_ebits + 1, false);
+    smt_astt first_ovf_exp =
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(ovft), from_ebits + 2);
+    smt_astt first_udf_exp = ctx->mk_concat(
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(-1), ebits_diff + 3),
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), to_ebits + 1));
+    dbg_decouple("fpa2bv_to_float_first_ovf_exp", first_ovf_exp);
+    dbg_decouple("fpa2bv_to_float_first_udf_exp", first_udf_exp);
+
+    smt_astt exp_in_range = ctx->mk_extract(exp_sub_lz, to_ebits + 1, 0);
+    assert(exp_in_range->sort->get_data_width() == to_ebits + 2);
+
+    smt_astt ovf_cond = ctx->mk_func_app(
+      ctx->boolean_sort, SMT_FUNC_BVSLTE, first_ovf_exp, exp_sub_lz);
+    smt_astt udf_cond = ctx->mk_func_app(
+      ctx->boolean_sort, SMT_FUNC_BVSLTE, exp_sub_lz, first_udf_exp);
+    dbg_decouple("fpa2bv_to_float_exp_ovf", ovf_cond);
+    dbg_decouple("fpa2bv_to_float_exp_udf", udf_cond);
+
+    res_exp = exp_in_range;
+    res_exp = ctx->mk_ite(ovf_cond, max_exp, res_exp);
+    res_exp = ctx->mk_ite(udf_cond, min_exp, res_exp);
+  }
+  else
+  {
+    // from_ebits == (to_ebits + 2)
+    res_exp = ctx->mk_func_app(exp->sort, SMT_FUNC_BVSUB, exp, lz);
+  }
+
+  assert(res_exp->sort->get_data_width() == to_ebits + 2);
+
+  dbg_decouple("fpa2bv_to_float_res_sig", res_sig);
+  dbg_decouple("fpa2bv_to_float_res_exp", res_exp);
+
+  smt_astt rounded;
+  round(rm, res_sgn, res_sig, res_exp, to_ebits, to_sbits, rounded);
+
+  smt_astt is_neg = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sgn, one1);
+  smt_astt sig_inf = ctx->mk_ite(is_neg, ninf, pinf);
+
+  smt_astt v6 = ctx->mk_ite(exponent_overflow, sig_inf, rounded);
+
+  // And finally, we tie them together.
+  smt_astt result = ctx->mk_ite(c5, v5, v6);
+  result = ctx->mk_ite(c4, v4, result);
+  result = ctx->mk_ite(c3, v3, result);
+  result = ctx->mk_ite(c2, v2, result);
+  return ctx->mk_ite(c1, v1, result);
 }
 
 smt_astt
