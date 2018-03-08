@@ -377,7 +377,10 @@ smt_sortt cvc_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 smt_sortt cvc_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
 {
   return new solver_smt_sort<CVC4::Type>(
-    SMT_SORT_FAKE_FLOATBV, em.mkBitVectorType(ew + sw + 1), ew + sw + 1, sw);
+    SMT_SORT_FAKE_FLOATBV,
+    em.mkBitVectorType(ew + sw + 1),
+    ew + sw + 1,
+    sw + 1);
 }
 
 smt_sortt cvc_convt::mk_bv_fp_rm_sort()

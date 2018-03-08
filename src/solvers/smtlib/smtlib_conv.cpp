@@ -903,7 +903,7 @@ smt_sortt smtlib_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 
 smt_sortt smtlib_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
 {
-  return new smt_sort(SMT_SORT_FAKE_FLOATBV, ew + sw + 1, sw);
+  return new smt_sort(SMT_SORT_FAKE_FLOATBV, ew + sw + 1, sw + 1);
 }
 
 smt_sortt smtlib_convt::mk_bv_fp_rm_sort()

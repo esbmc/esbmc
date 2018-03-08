@@ -560,7 +560,7 @@ smt_sortt boolector_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
     SMT_SORT_FAKE_FLOATBV,
     boolector_bitvec_sort(btor, ew + sw + 1),
     ew + sw + 1,
-    sw);
+    sw + 1);
 }
 
 smt_sortt boolector_convt::mk_bv_fp_rm_sort()
