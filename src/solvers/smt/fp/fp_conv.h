@@ -211,35 +211,25 @@ public:
   smt_convt *ctx;
 
 private:
-  struct unpacked_floatt
-  {
-    smt_astt sgn, sig, exp, lz;
-
-    unpacked_floatt() = default;
-
-    void dump()
-    {
-      std::cout << "Sign: ";
-      sgn->dump();
-
-      std::cout << "Significand: ";
-      sig->dump();
-
-      std::cout << "Exponent: ";
-      exp->dump();
-
-      std::cout << "lz: ";
-      lz->dump();
-    }
-  };
-
-  unpacked_floatt unpack(smt_astt &src, bool normalize);
+  void unpack(
+    smt_astt &src,
+    smt_astt &sgn,
+    smt_astt &sig,
+    smt_astt &exp,
+    smt_astt &lz,
+    bool normalize);
 
   smt_astt mk_unbias(smt_astt &src);
   smt_astt mk_leading_zeros(smt_astt &src, std::size_t max_bits);
 
-  smt_astt
-  round(unpacked_floatt &src, smt_astt &rm, unsigned ebits, unsigned sbits);
+  void round(
+    smt_astt &rm,
+    smt_astt &sgn,
+    smt_astt &sig,
+    smt_astt &exp,
+    unsigned ebits,
+    unsigned sbits,
+    smt_astt &result);
 
   smt_astt mk_rounding_decision(
     smt_astt &rm,

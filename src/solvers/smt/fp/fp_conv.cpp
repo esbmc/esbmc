@@ -213,22 +213,23 @@ smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
   smt_astt v6 = ctx->mk_ite(sign_xor, nzero, pzero);
 
   // else comes the actual multiplication.
-  unpacked_floatt a = unpack(x, true);
-  unpacked_floatt b = unpack(y, true);
+  smt_astt a_sgn, a_sig, a_exp, a_lz, b_sgn, b_sig, b_exp, b_lz;
+  unpack(x, a_sgn, a_sig, a_exp, a_lz, true);
+  unpack(y, b_sgn, b_sig, b_exp, b_lz, true);
 
-  smt_astt a_lz_ext = ctx->mk_zero_ext(a.lz, 2);
-  smt_astt b_lz_ext = ctx->mk_zero_ext(b.lz, 2);
+  smt_astt a_lz_ext = ctx->mk_zero_ext(a_lz, 2);
+  smt_astt b_lz_ext = ctx->mk_zero_ext(b_lz, 2);
 
-  smt_astt a_sig_ext = ctx->mk_zero_ext(a.sig, sbits);
-  smt_astt b_sig_ext = ctx->mk_zero_ext(b.sig, sbits);
+  smt_astt a_sig_ext = ctx->mk_zero_ext(a_sig, sbits);
+  smt_astt b_sig_ext = ctx->mk_zero_ext(b_sig, sbits);
 
-  smt_astt a_exp_ext = ctx->mk_zero_ext(a.exp, 2);
-  smt_astt b_exp_ext = ctx->mk_zero_ext(b.exp, 2);
+  smt_astt a_exp_ext = ctx->mk_zero_ext(a_exp, 2);
+  smt_astt b_exp_ext = ctx->mk_zero_ext(b_exp, 2);
 
-  unpacked_floatt res;
-  res.sgn = ctx->mk_func_app(a.sgn->sort, SMT_FUNC_BVXOR, a.sgn, b.sgn);
+  smt_astt res_sgn, res_sig, res_exp;
+  res_sgn = ctx->mk_func_app(a_sgn->sort, SMT_FUNC_BVXOR, a_sgn, b_sgn);
 
-  res.exp = ctx->mk_func_app(
+  res_exp = ctx->mk_func_app(
     a_exp_ext->sort,
     SMT_FUNC_BVADD,
     ctx->mk_func_app(a_exp_ext->sort, SMT_FUNC_BVSUB, a_exp_ext, a_lz_ext),
@@ -254,9 +255,10 @@ smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
       ctx->mk_concat(l_p, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 4 - sbits));
 
   assert(rbits->sort->get_data_width() == 4);
-  res.sig = ctx->mk_concat(h_p, rbits);
+  res_sig = ctx->mk_concat(h_p, rbits);
 
-  smt_astt v7 = round(res, rm, ebits, sbits);
+  smt_astt v7;
+  round(rm, res_sgn, res_sig, res_exp, ebits, sbits, v7);
 
   // And finally, we tie them together.
   smt_astt result = ctx->mk_ite(c6, v6, v7);
@@ -511,28 +513,32 @@ smt_astt fp_convt::mk_smt_fpbv_neg(smt_astt op)
   return ctx->mk_func_app(op->sort, SMT_FUNC_XOR, one_zeros, op);
 }
 
-fp_convt::unpacked_floatt fp_convt::unpack(smt_astt &src, bool normalize)
+void fp_convt::unpack(
+  smt_astt &src,
+  smt_astt &sgn,
+  smt_astt &sig,
+  smt_astt &exp,
+  smt_astt &lz,
+  bool normalize)
 {
-  unpacked_floatt res;
-
   unsigned sbits = src->sort->get_significand_width();
   unsigned ebits = src->sort->get_exponent_width();
 
   // Extract parts
-  res.sgn = extract_signbit(ctx, src);
-  res.exp = extract_exponent(ctx, src);
-  res.sig = extract_significand(ctx, src);
+  sgn = extract_signbit(ctx, src);
+  exp = extract_exponent(ctx, src);
+  sig = extract_significand(ctx, src);
 
-  assert(res.sgn->sort->get_data_width() == 1);
-  assert(res.exp->sort->get_data_width() == ebits);
-  assert(res.sig->sort->get_data_width() == sbits - 1);
+  assert(sgn->sort->get_data_width() == 1);
+  assert(exp->sort->get_data_width() == ebits);
+  assert(sig->sort->get_data_width() == sbits - 1);
 
   smt_astt is_normal = mk_smt_fpbv_is_normal(src);
   smt_astt normal_sig =
-    ctx->mk_concat(ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1), res.sig);
-  smt_astt normal_exp = mk_unbias(res.exp);
+    ctx->mk_concat(ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1), sig);
+  smt_astt normal_exp = mk_unbias(exp);
 
-  smt_astt denormal_sig = ctx->mk_zero_ext(res.sig, 1);
+  smt_astt denormal_sig = ctx->mk_zero_ext(sig, 1);
   smt_astt denormal_exp = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), ebits);
   denormal_exp = mk_unbias(denormal_exp);
 
@@ -546,9 +552,9 @@ fp_convt::unpacked_floatt fp_convt::unpack(smt_astt &src, bool normalize)
     smt_astt lz_d = mk_leading_zeros(denormal_sig, ebits);
     smt_astt norm_or_zero =
       ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, is_normal, is_sig_zero);
-    res.lz = ctx->mk_ite(norm_or_zero, zero_e, lz_d);
+    lz = ctx->mk_ite(norm_or_zero, zero_e, lz_d);
 
-    smt_astt shift = ctx->mk_ite(is_sig_zero, zero_e, res.lz);
+    smt_astt shift = ctx->mk_ite(is_sig_zero, zero_e, lz);
     assert(shift->sort->get_data_width() == ebits);
     if(ebits <= sbits)
     {
@@ -574,16 +580,14 @@ fp_convt::unpacked_floatt fp_convt::unpack(smt_astt &src, bool normalize)
     }
   }
   else
-    res.lz = zero_e;
+    lz = zero_e;
 
-  res.sig = ctx->mk_ite(is_normal, normal_sig, denormal_sig);
-  res.exp = ctx->mk_ite(is_normal, normal_exp, denormal_exp);
+  sig = ctx->mk_ite(is_normal, normal_sig, denormal_sig);
+  exp = ctx->mk_ite(is_normal, normal_exp, denormal_exp);
 
-  assert(res.sgn->sort->get_data_width() == 1);
-  assert(res.sig->sort->get_data_width() == sbits);
-  assert(res.exp->sort->get_data_width() == ebits);
-
-  return res;
+  assert(sgn->sort->get_data_width() == 1);
+  assert(sig->sort->get_data_width() == sbits);
+  assert(exp->sort->get_data_width() == ebits);
 }
 
 smt_astt fp_convt::mk_unbias(smt_astt &src)
@@ -637,11 +641,14 @@ smt_astt fp_convt::mk_leading_zeros(smt_astt &src, std::size_t max_bits)
   }
 }
 
-smt_astt fp_convt::round(
-  unpacked_floatt &src,
+void fp_convt::round(
   smt_astt &rm,
+  smt_astt &sgn,
+  smt_astt &sig,
+  smt_astt &exp,
   unsigned ebits,
-  unsigned sbits)
+  unsigned sbits,
+  smt_astt &result)
 {
   // Assumptions: sig is of the form f[-1:0] . f[1:sbits-1] [guard,round,sticky],
   // i.e., it has 2 + (sbits-1) + 3 = sbits + 4 bits, where the first one is in sgn.
@@ -651,9 +658,9 @@ smt_astt fp_convt::round(
   smt_astt e_max = mk_max_exp(ebits);
 
   smt_astt one_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
-  smt_astt h_exp = ctx->mk_extract(src.exp, ebits + 1, ebits + 1);
-  smt_astt sh_exp = ctx->mk_extract(src.exp, ebits, ebits);
-  smt_astt th_exp = ctx->mk_extract(src.exp, ebits - 1, ebits - 1);
+  smt_astt h_exp = ctx->mk_extract(exp, ebits + 1, ebits + 1);
+  smt_astt sh_exp = ctx->mk_extract(exp, ebits, ebits);
+  smt_astt th_exp = ctx->mk_extract(exp, ebits - 1, ebits - 1);
   smt_astt e3 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, h_exp, one_1);
   smt_astt e2 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sh_exp, one_1);
   smt_astt e1 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, th_exp, one_1);
@@ -663,9 +670,9 @@ smt_astt fp_convt::round(
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, ne3, e21);
 
   smt_astt ext_emax = ctx->mk_zero_ext(e_max, 2);
-  smt_astt t_sig = ctx->mk_extract(src.sig, sbits + 3, sbits + 3);
+  smt_astt t_sig = ctx->mk_extract(sig, sbits + 3, sbits + 3);
   smt_astt e_eq_emax =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, ext_emax, src.exp);
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, ext_emax, exp);
   smt_astt sigm1 =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, t_sig, one_1);
   smt_astt e_eq_emax_and_sigm1 =
@@ -674,16 +681,16 @@ smt_astt fp_convt::round(
     ctx->boolean_sort, SMT_FUNC_OR, e_top_three, e_eq_emax_and_sigm1);
 
   // CMW: is this always large enough?
-  smt_astt lz = mk_leading_zeros(src.sig, ebits + 2);
+  smt_astt lz = mk_leading_zeros(sig, ebits + 2);
 
   smt_astt t = ctx->mk_func_app(
-    src.exp->sort,
+    exp->sort,
     SMT_FUNC_BVADD,
-    src.exp,
+    exp,
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), ebits + 2));
-  t = ctx->mk_func_app(src.exp->sort, SMT_FUNC_BVSUB, t, lz);
-  t = ctx->mk_func_app(
-    src.exp->sort, SMT_FUNC_BVSUB, t, ctx->mk_sign_ext(e_min, 2));
+  t = ctx->mk_func_app(exp->sort, SMT_FUNC_BVSUB, t, lz);
+  t =
+    ctx->mk_func_app(exp->sort, SMT_FUNC_BVSUB, t, ctx->mk_sign_ext(e_min, 2));
   smt_astt TINY = ctx->mk_func_app(
     ctx->boolean_sort,
     SMT_FUNC_BVSLTE,
@@ -691,13 +698,13 @@ smt_astt fp_convt::round(
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), ebits + 2));
 
   smt_astt beta = ctx->mk_func_app(
-    src.exp->sort,
+    exp->sort,
     SMT_FUNC_BVADD,
-    ctx->mk_func_app(src.exp->sort, SMT_FUNC_BVSUB, src.exp, lz),
+    ctx->mk_func_app(exp->sort, SMT_FUNC_BVSUB, exp, lz),
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), ebits + 2));
 
   smt_astt sigma_add = ctx->mk_func_app(
-    src.exp->sort, SMT_FUNC_BVSUB, src.exp, ctx->mk_sign_ext(e_min, 2));
+    exp->sort, SMT_FUNC_BVSUB, exp, ctx->mk_sign_ext(e_min, 2));
   sigma_add = ctx->mk_func_app(
     sigma_add->sort,
     SMT_FUNC_BVADD,
@@ -706,7 +713,7 @@ smt_astt fp_convt::round(
   smt_astt sigma = ctx->mk_ite(TINY, sigma_add, lz);
 
   // Normalization shift
-  std::size_t sig_size = src.sig->sort->get_data_width();
+  std::size_t sig_size = sig->sort->get_data_width();
   std::size_t sigma_size = ebits + 2;
 
   smt_astt sigma_neg = ctx->mk_func_app(sigma->sort, SMT_FUNC_BVNEG, sigma);
@@ -721,7 +728,7 @@ smt_astt fp_convt::round(
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), sigma_size));
 
   smt_astt sig_ext =
-    ctx->mk_concat(src.sig, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sig_size));
+    ctx->mk_concat(sig, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sig_size));
   smt_astt rs_sig = ctx->mk_func_app(
     sig_ext->sort,
     SMT_FUNC_BVLSHR,
@@ -735,50 +742,50 @@ smt_astt fp_convt::round(
   smt_astt big_sh_sig = ctx->mk_ite(sigma_lt_zero, rs_sig, ls_sig);
 
   std::size_t sig_extract_low_bit = (2 * sig_size - 1) - (sbits + 2) + 1;
-  src.sig = ctx->mk_extract(big_sh_sig, 2 * sig_size - 1, sig_extract_low_bit);
+  sig = ctx->mk_extract(big_sh_sig, 2 * sig_size - 1, sig_extract_low_bit);
 
   smt_astt sticky =
     ctx->mk_bvredor(ctx->mk_extract(big_sh_sig, sig_extract_low_bit - 1, 0));
 
   // put the sticky bit into the significand.
   smt_astt ext_sticky = ctx->mk_zero_ext(sticky, sbits + 1);
-  src.sig = ctx->mk_func_app(src.sig->sort, SMT_FUNC_BVOR, src.sig, ext_sticky);
+  sig = ctx->mk_func_app(sig->sort, SMT_FUNC_BVOR, sig, ext_sticky);
 
   smt_astt ext_emin = ctx->mk_zero_ext(e_min, 2);
-  src.exp = ctx->mk_ite(TINY, ext_emin, beta);
+  exp = ctx->mk_ite(TINY, ext_emin, beta);
 
   // Significand rounding
-  sticky = ctx->mk_extract(src.sig, 0, 0); // new sticky bit!
-  smt_astt round = ctx->mk_extract(src.sig, 1, 1);
-  smt_astt last = ctx->mk_extract(src.sig, 2, 2);
+  sticky = ctx->mk_extract(sig, 0, 0); // new sticky bit!
+  smt_astt round = ctx->mk_extract(sig, 1, 1);
+  smt_astt last = ctx->mk_extract(sig, 2, 2);
 
-  src.sig = ctx->mk_extract(src.sig, sbits + 1, 2);
+  sig = ctx->mk_extract(sig, sbits + 1, 2);
 
-  smt_astt inc = mk_rounding_decision(rm, src.sgn, last, round, sticky);
+  smt_astt inc = mk_rounding_decision(rm, sgn, last, round, sticky);
 
-  src.sig = ctx->mk_func_app(
-    ctx->mk_bv_sort(SMT_SORT_UBV, src.sig->sort->get_data_width() + 1),
+  sig = ctx->mk_func_app(
+    ctx->mk_bv_sort(SMT_SORT_UBV, sig->sort->get_data_width() + 1),
     SMT_FUNC_BVADD,
-    ctx->mk_zero_ext(src.sig, 1),
+    ctx->mk_zero_ext(sig, 1),
     ctx->mk_zero_ext(inc, sbits));
 
-  t_sig = ctx->mk_extract(src.sig, sbits, sbits);
+  t_sig = ctx->mk_extract(sig, sbits, sbits);
   smt_astt SIGovf =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, t_sig, one_1);
 
-  smt_astt hallbut1_sig = ctx->mk_extract(src.sig, sbits, 1);
-  smt_astt lallbut1_sig = ctx->mk_extract(src.sig, sbits - 1, 0);
-  src.sig = ctx->mk_ite(SIGovf, hallbut1_sig, lallbut1_sig);
+  smt_astt hallbut1_sig = ctx->mk_extract(sig, sbits, 1);
+  smt_astt lallbut1_sig = ctx->mk_extract(sig, sbits - 1, 0);
+  sig = ctx->mk_ite(SIGovf, hallbut1_sig, lallbut1_sig);
 
   smt_astt exp_p1 = ctx->mk_func_app(
-    src.exp->sort,
+    exp->sort,
     SMT_FUNC_BVADD,
-    src.exp,
+    exp,
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), ebits + 2));
-  src.exp = ctx->mk_ite(SIGovf, exp_p1, src.exp);
+  exp = ctx->mk_ite(SIGovf, exp_p1, exp);
 
   // Exponent adjustment and rounding
-  smt_astt biased_exp = mk_bias(ctx->mk_extract(src.exp, ebits - 1, 0));
+  smt_astt biased_exp = mk_bias(ctx->mk_extract(exp, ebits - 1, 0));
 
   // AdjustExp
   smt_astt exp_redand = ctx->mk_bvredand(biased_exp);
@@ -807,7 +814,7 @@ smt_astt fp_convt::round(
 
   smt_astt zero1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
   smt_astt sgn_is_zero =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, src.sgn, zero1);
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sgn, zero1);
 
   smt_astt max_sig =
     ctx->mk_smt_bv(SMT_SORT_UBV, power2m1(sbits - 1, false), sbits - 1);
@@ -821,22 +828,20 @@ smt_astt fp_convt::round(
   smt_astt max_inf_exp_pos = ctx->mk_ite(rm_zero_or_neg, max_exp, inf_exp);
   smt_astt ovfl_exp =
     ctx->mk_ite(sgn_is_zero, max_inf_exp_pos, max_inf_exp_neg);
-  t_sig = ctx->mk_extract(src.sig, sbits - 1, sbits - 1);
+  t_sig = ctx->mk_extract(sig, sbits - 1, sbits - 1);
   smt_astt n_d_check =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, t_sig, nil_1);
   smt_astt n_d_exp = ctx->mk_ite(n_d_check, bot_exp /* denormal */, biased_exp);
-  src.exp = ctx->mk_ite(OVF, ovfl_exp, n_d_exp);
+  exp = ctx->mk_ite(OVF, ovfl_exp, n_d_exp);
 
   smt_astt max_inf_sig_neg = ctx->mk_ite(rm_zero_or_pos, max_sig, inf_sig);
   smt_astt max_inf_sig_pos = ctx->mk_ite(rm_zero_or_neg, max_sig, inf_sig);
   smt_astt ovfl_sig =
     ctx->mk_ite(sgn_is_zero, max_inf_sig_pos, max_inf_sig_neg);
-  smt_astt rest_sig = ctx->mk_extract(src.sig, sbits - 2, 0);
-  src.sig = ctx->mk_ite(OVF, ovfl_sig, rest_sig);
+  smt_astt rest_sig = ctx->mk_extract(sig, sbits - 2, 0);
+  sig = ctx->mk_ite(OVF, ovfl_sig, rest_sig);
 
-  smt_astt res_exp_sig = ctx->mk_concat(src.exp, src.sig);
-
-  return ctx->mk_concat(src.sgn, res_exp_sig);
+  result = ctx->mk_concat(sgn, ctx->mk_concat(exp, sig));
 }
 
 smt_astt fp_convt::mk_min_exp(std::size_t ebits)
