@@ -865,12 +865,150 @@ smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
   return result;
 }
 
-smt_astt fp_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
+smt_astt fp_convt::mk_smt_fpbv_div(smt_astt x, smt_astt y, smt_astt rm)
 {
-  (void)lhs;
-  (void)rhs;
-  (void)rm;
-  abort();
+  assert(x->sort->get_data_width() == y->sort->get_data_width());
+  assert(x->sort->get_exponent_width() == y->sort->get_exponent_width());
+
+  unsigned ebits = x->sort->get_exponent_width();
+  unsigned sbits = x->sort->get_significand_width();
+
+  smt_astt nan = mk_smt_fpbv_nan(ebits, sbits);
+  smt_astt nzero = mk_nzero(ebits, sbits);
+  smt_astt pzero = mk_pzero(ebits, sbits);
+  smt_astt ninf = mk_ninf(ebits, sbits);
+  smt_astt pinf = mk_pinf(ebits, sbits);
+
+  smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
+  smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
+  smt_astt x_is_pos = mk_smt_fpbv_is_positive(x);
+  smt_astt x_is_inf = mk_smt_fpbv_is_inf(x);
+  smt_astt y_is_nan = mk_smt_fpbv_is_nan(y);
+  smt_astt y_is_zero = mk_smt_fpbv_is_zero(y);
+  smt_astt y_is_pos = mk_smt_fpbv_is_positive(y);
+  smt_astt y_is_inf = mk_smt_fpbv_is_inf(y);
+
+  dbg_decouple("fpa2bv_div_x_is_nan", x_is_nan);
+  dbg_decouple("fpa2bv_div_x_is_zero", x_is_zero);
+  dbg_decouple("fpa2bv_div_x_is_pos", x_is_pos);
+  dbg_decouple("fpa2bv_div_x_is_inf", x_is_inf);
+  dbg_decouple("fpa2bv_div_y_is_nan", y_is_nan);
+  dbg_decouple("fpa2bv_div_y_is_zero", y_is_zero);
+  dbg_decouple("fpa2bv_div_y_is_pos", y_is_pos);
+  dbg_decouple("fpa2bv_div_y_is_inf", y_is_inf);
+
+  // (x is NaN) || (y is NaN) -> NaN
+  smt_astt c1 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, x_is_nan, y_is_nan);
+  smt_astt v1 = nan;
+
+  // (x is +oo) -> if (y is oo) then NaN else inf with y's sign.
+  smt_astt c2 = mk_is_pinf(x);
+  smt_astt y_sgn_inf = ctx->mk_ite(y_is_pos, pinf, ninf);
+  smt_astt v2 = ctx->mk_ite(y_is_inf, nan, y_sgn_inf);
+
+  // (y is +oo) -> if (x is oo) then NaN else 0 with sign x.sgn ^ y.sgn
+  smt_astt c3 = mk_is_pinf(y);
+  smt_astt signs_xor =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_XOR, x_is_pos, y_is_pos);
+  smt_astt xy_zero = ctx->mk_ite(signs_xor, nzero, pzero);
+  smt_astt v3 = ctx->mk_ite(x_is_inf, nan, xy_zero);
+
+  // (x is -oo) -> if (y is oo) then NaN else inf with -y's sign.
+  smt_astt c4 = mk_is_ninf(x);
+  smt_astt neg_y_sgn_inf = ctx->mk_ite(y_is_pos, ninf, pinf);
+  smt_astt v4 = ctx->mk_ite(y_is_inf, nan, neg_y_sgn_inf);
+
+  // (y is -oo) -> if (x is oo) then NaN else 0 with sign x.sgn ^ y.sgn
+  smt_astt c5 = mk_is_ninf(y);
+  smt_astt v5 = ctx->mk_ite(x_is_inf, nan, xy_zero);
+
+  // (y is 0) -> if (x is 0) then NaN else inf with xor sign.
+  smt_astt c6 = y_is_zero;
+  smt_astt sgn_inf = ctx->mk_ite(signs_xor, ninf, pinf);
+  smt_astt v6 = ctx->mk_ite(x_is_zero, nan, sgn_inf);
+
+  // (x is 0) -> result is zero with sgn = x.sgn^y.sgn
+  // This is a special case to avoid problems with the unpacking of zero.
+  smt_astt c7 = x_is_zero;
+  smt_astt v7 = ctx->mk_ite(signs_xor, nzero, pzero);
+
+  // else comes the actual division.
+  assert(ebits <= sbits);
+
+  smt_astt a_sgn, a_sig, a_exp, a_lz, b_sgn, b_sig, b_exp, b_lz;
+  unpack(x, a_sgn, a_sig, a_exp, a_lz, true);
+  unpack(y, b_sgn, b_sig, b_exp, b_lz, true);
+
+  unsigned extra_bits = sbits + 2;
+  smt_astt a_sig_ext = ctx->mk_concat(
+    a_sig, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sbits + extra_bits));
+  smt_astt b_sig_ext = ctx->mk_zero_ext(b_sig, sbits + extra_bits);
+
+  smt_astt a_exp_ext = ctx->mk_sign_ext(a_exp, 2);
+  smt_astt b_exp_ext = ctx->mk_sign_ext(b_exp, 2);
+
+  smt_astt res_sgn =
+    ctx->mk_func_app(a_sgn->sort, SMT_FUNC_BVXOR, a_sgn, b_sgn);
+
+  smt_astt a_lz_ext = ctx->mk_zero_ext(a_lz, 2);
+  smt_astt b_lz_ext = ctx->mk_zero_ext(b_lz, 2);
+
+  smt_astt res_exp = ctx->mk_func_app(
+    a_exp_ext->sort,
+    SMT_FUNC_BVSUB,
+    ctx->mk_func_app(a_exp_ext->sort, SMT_FUNC_BVSUB, a_exp_ext, a_lz_ext),
+    ctx->mk_func_app(a_exp_ext->sort, SMT_FUNC_BVSUB, b_exp_ext, b_lz_ext));
+
+  // b_sig_ext can't be 0 here, so it's safe to use OP_BUDIV_I
+  smt_astt quotient =
+    ctx->mk_func_app(a_sig_ext->sort, SMT_FUNC_BVUDIV, a_sig_ext, b_sig_ext);
+
+  dbg_decouple("fpa2bv_div_quotient", quotient);
+
+  assert(quotient->sort->get_data_width() == (sbits + sbits + extra_bits));
+
+  smt_astt sticky =
+    ctx->mk_bvredor(ctx->mk_extract(quotient, extra_bits - 2, 0));
+  smt_astt res_sig = ctx->mk_concat(
+    ctx->mk_extract(quotient, extra_bits + sbits + 1, extra_bits - 1), sticky);
+
+  assert(res_sig->sort->get_data_width() == (sbits + 4));
+
+  smt_astt res_sig_lz = mk_leading_zeros(res_sig, sbits + 4);
+  dbg_decouple("fpa2bv_div_res_sig_lz", res_sig_lz);
+  smt_astt res_sig_shift_amount = ctx->mk_func_app(
+    res_sig_lz->sort,
+    SMT_FUNC_SUB,
+    res_sig_lz,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), sbits + 4));
+  dbg_decouple("fpa2bv_div_res_sig_shift_amount", res_sig_shift_amount);
+  smt_astt shift_cond = ctx->mk_func_app(
+    ctx->boolean_sort,
+    SMT_FUNC_BVULTE,
+    res_sig_lz,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), sbits + 4));
+  smt_astt res_sig_shifted = ctx->mk_func_app(
+    res_sig->sort, SMT_FUNC_BVSHL, res_sig, res_sig_shift_amount);
+  smt_astt res_exp_shifted = ctx->mk_func_app(
+    res_exp->sort,
+    SMT_FUNC_BVSUB,
+    res_exp,
+    ctx->mk_extract(res_sig_shift_amount, ebits + 1, 0));
+  res_sig = ctx->mk_ite(shift_cond, res_sig, res_sig_shifted);
+  res_exp = ctx->mk_ite(shift_cond, res_exp, res_exp_shifted);
+
+  smt_astt v8;
+  round(rm, res_sgn, res_sig, res_exp, ebits, sbits, v8);
+
+  // And finally, we tie them together.
+  smt_astt result = ctx->mk_ite(c7, v7, v8);
+  result = ctx->mk_ite(c6, v6, result);
+  result = ctx->mk_ite(c5, v5, result);
+  result = ctx->mk_ite(c4, v4, result);
+  result = ctx->mk_ite(c3, v3, result);
+  result = ctx->mk_ite(c2, v2, result);
+  return ctx->mk_ite(c1, v1, result);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
