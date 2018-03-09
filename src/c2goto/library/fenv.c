@@ -18,7 +18,7 @@ __ESBMC_HIDE:;
   default:
     break;
   }
-  return -1;
+  return 0;
 }
 
 inline int fesetround(int rounding_mode)
