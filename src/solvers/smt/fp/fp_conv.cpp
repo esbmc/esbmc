@@ -1544,9 +1544,22 @@ void fp_convt::round(
   unsigned sbits,
   smt_astt &result)
 {
+  dbg_decouple("fpa2bv_rnd_rm", rm);
+  dbg_decouple("fpa2bv_rnd_sgn", sgn);
+  dbg_decouple("fpa2bv_rnd_sig", sig);
+  dbg_decouple("fpa2bv_rnd_exp", exp);
+
   // Assumptions: sig is of the form f[-1:0] . f[1:sbits-1] [guard,round,sticky],
   // i.e., it has 2 + (sbits-1) + 3 = sbits + 4 bits, where the first one is in sgn.
   // Furthermore, note that sig is an unsigned bit-vector, while exp is signed.
+
+  assert(rm->sort->get_data_width() == 3);
+  assert(sgn->sort->get_data_width() == 1);
+  assert(sig->sort->get_data_width() >= 5);
+  assert(exp->sort->get_data_width() >= 4);
+
+  assert(sig->sort->get_data_width() == sbits + 4);
+  assert(exp->sort->get_data_width() == ebits + 2);
 
   smt_astt e_min = mk_min_exp(ebits);
   smt_astt e_max = mk_max_exp(ebits);
@@ -1574,8 +1587,12 @@ void fp_convt::round(
   smt_astt OVF1 = ctx->mk_func_app(
     ctx->boolean_sort, SMT_FUNC_OR, e_top_three, e_eq_emax_and_sigm1);
 
+  dbg_decouple("fpa2bv_rnd_OVF1", OVF1);
+
   // CMW: is this always large enough?
   smt_astt lz = mk_leading_zeros(sig, ebits + 2);
+
+  dbg_decouple("fpa2bv_rnd_lz", lz);
 
   smt_astt t = ctx->mk_func_app(
     exp->sort,
@@ -1585,17 +1602,23 @@ void fp_convt::round(
   t = ctx->mk_func_app(exp->sort, SMT_FUNC_BVSUB, t, lz);
   t =
     ctx->mk_func_app(exp->sort, SMT_FUNC_BVSUB, t, ctx->mk_sign_ext(e_min, 2));
+  dbg_decouple("fpa2bv_rnd_t", t);
   smt_astt TINY = ctx->mk_func_app(
     ctx->boolean_sort,
     SMT_FUNC_BVSLTE,
     t,
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), ebits + 2));
+  dbg_decouple("fpa2bv_rnd_TINY", TINY);
 
   smt_astt beta = ctx->mk_func_app(
     exp->sort,
     SMT_FUNC_BVADD,
     ctx->mk_func_app(exp->sort, SMT_FUNC_BVSUB, exp, lz),
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), ebits + 2));
+
+  dbg_decouple("fpa2bv_rnd_beta", beta);
+  dbg_decouple("fpa2bv_rnd_e_min", e_min);
+  dbg_decouple("fpa2bv_rnd_e_max", e_max);
 
   smt_astt sigma_add = ctx->mk_func_app(
     exp->sort, SMT_FUNC_BVSUB, exp, ctx->mk_sign_ext(e_min, 2));
@@ -1606,8 +1629,14 @@ void fp_convt::round(
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), ebits + 2));
   smt_astt sigma = ctx->mk_ite(TINY, sigma_add, lz);
 
+  dbg_decouple("fpa2bv_rnd_sigma", sigma);
+
   // Normalization shift
+  dbg_decouple("fpa2bv_rnd_sig_before_shift", sig);
+
   std::size_t sig_size = sig->sort->get_data_width();
+  assert(sig_size == sbits + 4);
+  assert(sigma->sort->get_data_width() == ebits + 2);
   std::size_t sigma_size = ebits + 2;
 
   smt_astt sigma_neg = ctx->mk_func_app(sigma->sort, SMT_FUNC_BVNEG, sigma);
@@ -1634,9 +1663,11 @@ void fp_convt::round(
     sig_ext,
     ctx->mk_zero_ext(sigma, 2 * sig_size - sigma_size));
   smt_astt big_sh_sig = ctx->mk_ite(sigma_lt_zero, rs_sig, ls_sig);
+  assert(big_sh_sig->sort->get_data_width() == 2 * sig_size);
 
   std::size_t sig_extract_low_bit = (2 * sig_size - 1) - (sbits + 2) + 1;
   sig = ctx->mk_extract(big_sh_sig, 2 * sig_size - 1, sig_extract_low_bit);
+  assert(sig->sort->get_data_width() == sbits + 2);
 
   smt_astt sticky =
     ctx->mk_bvredor(ctx->mk_extract(big_sh_sig, sig_extract_low_bit - 1, 0));
@@ -1647,29 +1678,42 @@ void fp_convt::round(
 
   smt_astt ext_emin = ctx->mk_zero_ext(e_min, 2);
   exp = ctx->mk_ite(TINY, ext_emin, beta);
+  assert(sig->sort->get_data_width() == sbits + 2);
 
   // Significand rounding
   sticky = ctx->mk_extract(sig, 0, 0); // new sticky bit!
   smt_astt round = ctx->mk_extract(sig, 1, 1);
   smt_astt last = ctx->mk_extract(sig, 2, 2);
 
+  dbg_decouple("fpa2bv_rnd_sticky", sticky);
+  dbg_decouple("fpa2bv_rnd_round", round);
+  dbg_decouple("fpa2bv_rnd_last", last);
+
   sig = ctx->mk_extract(sig, sbits + 1, 2);
 
   smt_astt inc = mk_rounding_decision(rm, sgn, last, round, sticky);
+
+  assert(inc->sort->get_data_width() == 1);
+  dbg_decouple("fpa2bv_rnd_inc", inc);
 
   sig = ctx->mk_func_app(
     ctx->mk_bv_sort(SMT_SORT_UBV, sig->sort->get_data_width() + 1),
     SMT_FUNC_BVADD,
     ctx->mk_zero_ext(sig, 1),
     ctx->mk_zero_ext(inc, sbits));
+  dbg_decouple("fpa2bv_rnd_sig_plus_inc", sig);
 
   t_sig = ctx->mk_extract(sig, sbits, sbits);
   smt_astt SIGovf =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, t_sig, one_1);
+  dbg_decouple("fpa2bv_rnd_SIGovf", SIGovf);
 
   smt_astt hallbut1_sig = ctx->mk_extract(sig, sbits, 1);
   smt_astt lallbut1_sig = ctx->mk_extract(sig, sbits - 1, 0);
   sig = ctx->mk_ite(SIGovf, hallbut1_sig, lallbut1_sig);
+  assert(sig->sort->get_data_width() == sbits + 1);
+
+  assert(exp->sort->get_data_width() == ebits + 2);
 
   smt_astt exp_p1 = ctx->mk_func_app(
     exp->sort,
@@ -1678,10 +1722,20 @@ void fp_convt::round(
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), ebits + 2));
   exp = ctx->mk_ite(SIGovf, exp_p1, exp);
 
+  dbg_decouple("fpa2bv_rnd_sig_postnormalized", sig);
+  dbg_decouple("fpa2bv_rnd_exp_postnormalized", exp);
+  assert(sig->sort->get_data_width() == sbits);
+  assert(exp->sort->get_data_width() == ebits + 2);
+  assert(e_max->sort->get_data_width() == ebits);
+
   // Exponent adjustment and rounding
   smt_astt biased_exp = mk_bias(ctx->mk_extract(exp, ebits - 1, 0));
+  dbg_decouple("fpa2bv_rnd_unbiased_exp", exp);
+  dbg_decouple("fpa2bv_rnd_biased_exp", biased_exp);
 
   // AdjustExp
+  assert(OVF1->sort->id == SMT_SORT_BOOL);
+
   smt_astt exp_redand = ctx->mk_bvredand(biased_exp);
   smt_astt preOVF2 =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp_redand, one_1);
@@ -1691,6 +1745,11 @@ void fp_convt::round(
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(power2m1(ebits - 2, false)), ebits);
   biased_exp = ctx->mk_ite(OVF2, pem2m1, biased_exp);
   smt_astt OVF = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, OVF1, OVF2);
+
+  assert(OVF2->sort->id == SMT_SORT_BOOL);
+  assert(OVF->sort->id == SMT_SORT_BOOL);
+  dbg_decouple("fpa2bv_rnd_OVF2", OVF2);
+  dbg_decouple("fpa2bv_rnd_OVF", OVF);
 
   // ExpRnd
   smt_astt top_exp = mk_top_exp(ebits);
@@ -1705,10 +1764,14 @@ void fp_convt::round(
     ctx->boolean_sort, SMT_FUNC_OR, rm_is_to_zero, rm_is_to_neg);
   smt_astt rm_zero_or_pos = ctx->mk_func_app(
     ctx->boolean_sort, SMT_FUNC_OR, rm_is_to_zero, rm_is_to_pos);
+  dbg_decouple("fpa2bv_rnd_rm_is_to_zero", rm_is_to_zero);
+  dbg_decouple("fpa2bv_rnd_rm_is_to_neg", rm_is_to_neg);
+  dbg_decouple("fpa2bv_rnd_rm_is_to_pos", rm_is_to_pos);
 
   smt_astt zero1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
   smt_astt sgn_is_zero =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sgn, zero1);
+  dbg_decouple("fpa2bv_rnd_sgn_is_zero", sgn_is_zero);
 
   smt_astt max_sig =
     ctx->mk_smt_bv(SMT_SORT_UBV, power2m1(sbits - 1, false), sbits - 1);
@@ -1717,6 +1780,11 @@ void fp_convt::round(
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1));
   smt_astt inf_sig = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sbits - 1);
   smt_astt inf_exp = top_exp;
+
+  dbg_decouple("fpa2bv_rnd_max_exp", max_exp);
+  dbg_decouple("fpa2bv_rnd_max_sig", max_sig);
+  dbg_decouple("fpa2bv_rnd_inf_sig", inf_sig);
+  dbg_decouple("fpa2bv_rnd_inf_exp", inf_exp);
 
   smt_astt max_inf_exp_neg = ctx->mk_ite(rm_zero_or_pos, max_exp, inf_exp);
   smt_astt max_inf_exp_pos = ctx->mk_ite(rm_zero_or_neg, max_exp, inf_exp);
@@ -1734,6 +1802,19 @@ void fp_convt::round(
     ctx->mk_ite(sgn_is_zero, max_inf_sig_pos, max_inf_sig_neg);
   smt_astt rest_sig = ctx->mk_extract(sig, sbits - 2, 0);
   sig = ctx->mk_ite(OVF, ovfl_sig, rest_sig);
+
+  dbg_decouple("fpa2bv_rnd_max_inf_sig_neg", max_inf_sig_neg);
+  dbg_decouple("fpa2bv_rnd_max_inf_sig_pos", max_inf_sig_pos);
+  dbg_decouple("fpa2bv_rnd_rm_zero_or_neg", rm_zero_or_neg);
+  dbg_decouple("fpa2bv_rnd_rm_zero_or_pos", rm_zero_or_pos);
+
+  dbg_decouple("fpa2bv_rnd_sgn_final", sgn);
+  dbg_decouple("fpa2bv_rnd_sig_final", sig);
+  dbg_decouple("fpa2bv_rnd_exp_final", exp);
+
+  assert(sgn->sort->get_data_width() == 1);
+  assert(sig->sort->get_data_width() == sbits - 1);
+  assert(exp->sort->get_data_width() == ebits);
 
   result = mk_from_bv_to_fp(
     ctx->mk_concat(sgn, ctx->mk_concat(exp, sig)),
@@ -1769,6 +1850,12 @@ smt_astt fp_convt::mk_rounding_decision(
   smt_astt &round,
   smt_astt &sticky)
 {
+  dbg_decouple("fpa2bv_rnd_dec_rm", rm);
+  dbg_decouple("fpa2bv_rnd_dec_sgn", sgn);
+  dbg_decouple("fpa2bv_rnd_dec_last", last);
+  dbg_decouple("fpa2bv_rnd_dec_round", round);
+  dbg_decouple("fpa2bv_rnd_dec_sticky", sticky);
+
   smt_astt last_or_sticky =
     ctx->mk_func_app(last->sort, SMT_FUNC_BVOR, last, sticky);
   smt_astt round_or_sticky =
@@ -1805,7 +1892,10 @@ smt_astt fp_convt::mk_rounding_decision(
   smt_astt inc_c4 = ctx->mk_ite(rm_is_to_neg, inc_neg, nil_1);
   smt_astt inc_c3 = ctx->mk_ite(rm_is_to_pos, inc_pos, inc_c4);
   smt_astt inc_c2 = ctx->mk_ite(rm_is_away, inc_taway, inc_c3);
-  return ctx->mk_ite(rm_is_even, inc_teven, inc_c2);
+  smt_astt res = ctx->mk_ite(rm_is_even, inc_teven, inc_c2);
+
+  dbg_decouple("fpa2bv_rnd_dec_res", res);
+  return res;
 }
 
 smt_astt fp_convt::mk_is_rm(smt_astt &rme, ieee_floatt::rounding_modet rm)
