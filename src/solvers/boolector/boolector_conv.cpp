@@ -184,14 +184,9 @@ smt_astt boolector_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
     // uses native int types as arguments to its functions, rather than fixed
     // width integers. Seeing how amd64 is LP64, there's no way to pump 64 bit
     // ints to boolector natively.
-    if(w > 64)
-    {
-      std::cerr << "Boolector backend assumes maximum bitwidth is 64, sorry"
-                << std::endl;
-      abort();
-    }
+    assert(w <= 256 && "Maximum bv size for Boolector is 256");
 
-    char buffer[65];
+    char buffer[257];
     memset(buffer, 0, sizeof(buffer));
 
     // Note that boolector has the most significant bit first in bit strings.
