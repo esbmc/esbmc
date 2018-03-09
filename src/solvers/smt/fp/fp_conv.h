@@ -261,6 +261,7 @@ private:
   smt_astt mk_nzero(unsigned ew, unsigned sw);
   smt_astt mk_pinf(unsigned ew, unsigned sw);
   smt_astt mk_ninf(unsigned ew, unsigned sw);
+  smt_astt mk_one(smt_astt sgn, unsigned ew, unsigned sw);
 
   smt_astt mk_is_pzero(smt_astt op);
   smt_astt mk_is_nzero(smt_astt op);

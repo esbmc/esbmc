@@ -1946,6 +1946,17 @@ smt_astt fp_convt::mk_nzero(unsigned ew, unsigned sw)
     mk_fpbv_sort(ew, sw - 1));
 }
 
+smt_astt fp_convt::mk_one(smt_astt sgn, unsigned ew, unsigned sw)
+{
+  return mk_from_bv_to_fp(
+    ctx->mk_concat(
+      sgn,
+      ctx->mk_concat(
+        ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(power2m1(ew - 1, false)), ew),
+        ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sw - 1))),
+    mk_fpbv_sort(ew, sw - 1));
+}
+
 smt_astt fp_convt::mk_pinf(unsigned ew, unsigned sw)
 {
   smt_astt top_exp = mk_top_exp(ew);
