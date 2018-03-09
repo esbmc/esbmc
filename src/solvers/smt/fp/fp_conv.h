@@ -271,6 +271,19 @@ private:
 
   smt_astt mk_to_bv(smt_astt from, bool is_signed, std::size_t width);
 
+  void add_core(
+    unsigned sbits,
+    unsigned ebits,
+    smt_astt &c_sgn,
+    smt_astt &c_sig,
+    smt_astt &c_exp,
+    smt_astt &d_sgn,
+    smt_astt &d_sig,
+    smt_astt &d_exp,
+    smt_astt &res_sgn,
+    smt_astt &res_sig,
+    smt_astt &res_exp);
+
   BigInt power2(std::size_t n, bool negated)
   {
     BigInt b;
