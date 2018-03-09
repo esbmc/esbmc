@@ -486,7 +486,8 @@ smt_astt fp_convt::mk_to_bv(smt_astt x, bool is_signed, std::size_t width)
   // NaN, Inf, or negative (except -0) -> unspecified
   smt_astt c1 =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, x_is_nan, x_is_inf);
-  smt_astt unspec_v = ctx->mk_smt_symbol("Unspecified_FP", x->sort);
+  smt_astt unspec_v =
+    ctx->mk_smt_symbol("Unspecified_FP", ctx->mk_bv_sort(SMT_SORT_UBV, width));
   smt_astt v1 = unspec_v;
   dbg_decouple("fpa2bv_to_bv_c1", c1);
 
