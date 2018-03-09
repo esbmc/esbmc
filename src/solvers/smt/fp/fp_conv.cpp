@@ -1853,15 +1853,20 @@ void fp_convt::round(
   std::size_t sigma_size = ebits + 2;
 
   smt_astt sigma_neg = ctx->mk_func_app(sigma->sort, SMT_FUNC_BVNEG, sigma);
-  smt_astt sigma_cap = ctx->mk_smt_bv(SMT_SORT_UBV, sbits + 2, sigma_size);
+  smt_astt sigma_cap =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(sbits + 2), sigma_size);
   smt_astt sigma_le_cap =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_BVULTE, sigma_neg, sigma_cap);
   smt_astt sigma_neg_capped = ctx->mk_ite(sigma_le_cap, sigma_neg, sigma_cap);
+  dbg_decouple("fpa2bv_rnd_sigma_neg", sigma_neg);
+  dbg_decouple("fpa2bv_rnd_sigma_cap", sigma_cap);
+  dbg_decouple("fpa2bv_rnd_sigma_neg_capped", sigma_neg_capped);
   smt_astt sigma_lt_zero = ctx->mk_func_app(
     ctx->boolean_sort,
     SMT_FUNC_BVSLTE,
     sigma,
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), sigma_size));
+  dbg_decouple("fpa2bv_rnd_sigma_lt_zero", sigma_lt_zero);
 
   smt_astt sig_ext =
     ctx->mk_concat(sig, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sig_size));
@@ -1878,9 +1883,13 @@ void fp_convt::round(
   smt_astt big_sh_sig = ctx->mk_ite(sigma_lt_zero, rs_sig, ls_sig);
   assert(big_sh_sig->sort->get_data_width() == 2 * sig_size);
 
+  dbg_decouple("fpa2bv_rnd_big_sh_sig", big_sh_sig);
+
   std::size_t sig_extract_low_bit = (2 * sig_size - 1) - (sbits + 2) + 1;
   sig = ctx->mk_extract(big_sh_sig, 2 * sig_size - 1, sig_extract_low_bit);
   assert(sig->sort->get_data_width() == sbits + 2);
+
+  dbg_decouple("fpa2bv_rnd_shifted_sig", sig);
 
   smt_astt sticky =
     ctx->mk_bvredor(ctx->mk_extract(big_sh_sig, sig_extract_low_bit - 1, 0));
@@ -1888,10 +1897,10 @@ void fp_convt::round(
   // put the sticky bit into the significand.
   smt_astt ext_sticky = ctx->mk_zero_ext(sticky, sbits + 1);
   sig = ctx->mk_func_app(sig->sort, SMT_FUNC_BVOR, sig, ext_sticky);
+  assert(sig->sort->get_data_width() == sbits + 2);
 
   smt_astt ext_emin = ctx->mk_zero_ext(e_min, 2);
   exp = ctx->mk_ite(TINY, ext_emin, beta);
-  assert(sig->sort->get_data_width() == sbits + 2);
 
   // Significand rounding
   sticky = ctx->mk_extract(sig, 0, 0); // new sticky bit!
@@ -1916,6 +1925,8 @@ void fp_convt::round(
     ctx->mk_zero_ext(inc, sbits));
   dbg_decouple("fpa2bv_rnd_sig_plus_inc", sig);
 
+  // Post normalization
+  assert(sig->sort->get_data_width() == sbits + 1);
   t_sig = ctx->mk_extract(sig, sbits, sbits);
   smt_astt SIGovf =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, t_sig, one_1);
@@ -1986,9 +1997,9 @@ void fp_convt::round(
   dbg_decouple("fpa2bv_rnd_sgn_is_zero", sgn_is_zero);
 
   smt_astt max_sig =
-    ctx->mk_smt_bv(SMT_SORT_UBV, power2m1(sbits - 1, false), sbits - 1);
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(power2m1(sbits - 1, false)), sbits - 1);
   smt_astt max_exp = ctx->mk_concat(
-    ctx->mk_smt_bv(SMT_SORT_UBV, power2m1(ebits - 1, false), ebits - 1),
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(power2m1(ebits - 1, false)), ebits - 1),
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1));
   smt_astt inf_sig = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sbits - 1);
   smt_astt inf_exp = top_exp;
