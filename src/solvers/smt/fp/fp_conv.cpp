@@ -1344,7 +1344,7 @@ smt_astt fp_convt::mk_smt_fpbv_div(smt_astt x, smt_astt y, smt_astt rm)
   dbg_decouple("fpa2bv_div_res_sig_lz", res_sig_lz);
   smt_astt res_sig_shift_amount = ctx->mk_func_app(
     res_sig_lz->sort,
-    SMT_FUNC_SUB,
+    SMT_FUNC_BVSUB,
     res_sig_lz,
     ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), sbits + 4));
   dbg_decouple("fpa2bv_div_res_sig_shift_amount", res_sig_shift_amount);
