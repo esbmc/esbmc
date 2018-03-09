@@ -97,13 +97,226 @@ smt_astt fp_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   return ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(rm), 3);
 }
 
-smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
+smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt x, smt_astt rm)
 {
-  std::cout << "Missing implementation of " << __FUNCTION__
-            << " for the chosen solver\n";
-  (void)from;
-  (void)rm;
-  abort();
+  unsigned ebits = x->sort->get_exponent_width();
+  unsigned sbits = x->sort->get_significand_width();
+
+  smt_astt rm_is_rta = mk_is_rm(rm, ieee_floatt::ROUND_TO_AWAY);
+  smt_astt rm_is_rte = mk_is_rm(rm, ieee_floatt::ROUND_TO_EVEN);
+  smt_astt rm_is_rtp = mk_is_rm(rm, ieee_floatt::ROUND_TO_PLUS_INF);
+  smt_astt rm_is_rtn = mk_is_rm(rm, ieee_floatt::ROUND_TO_MINUS_INF);
+  smt_astt rm_is_rtz = mk_is_rm(rm, ieee_floatt::ROUND_TO_ZERO);
+
+  smt_astt nan = mk_smt_fpbv_nan(ebits, sbits);
+  smt_astt nzero = mk_nzero(ebits, sbits);
+  smt_astt pzero = mk_pzero(ebits, sbits);
+
+  smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
+  smt_astt x_is_pos = mk_smt_fpbv_is_positive(x);
+  smt_astt x_is_neg = mk_smt_fpbv_is_negative(x);
+
+  dbg_decouple("fpa2bv_r2i_x_is_zero", x_is_zero);
+  dbg_decouple("fpa2bv_r2i_x_is_pos", x_is_pos);
+
+  // (x is NaN) -> NaN
+  smt_astt c1 = mk_smt_fpbv_is_nan(x);
+  smt_astt v1 = nan;
+
+  // (x is +-oo) -> x
+  smt_astt c2 = mk_smt_fpbv_is_inf(x);
+  smt_astt v2 = x;
+
+  // (x is +-0) -> x ; -0.0 -> -0.0, says IEEE754, Sec 5.9.
+  smt_astt c3 = mk_smt_fpbv_is_zero(x);
+  smt_astt v3 = x;
+
+  smt_astt one_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
+  smt_astt zero_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+
+  smt_astt a_sgn, a_sig, a_exp, a_lz;
+  unpack(x, a_sgn, a_sig, a_exp, a_lz, true);
+
+  dbg_decouple("fpa2bv_r2i_unpacked_sgn", a_sgn);
+  dbg_decouple("fpa2bv_r2i_unpacked_exp", a_exp);
+  dbg_decouple("fpa2bv_r2i_unpacked_sig", a_sig);
+  dbg_decouple("fpa2bv_r2i_unpacked_lz", a_lz);
+
+  smt_astt sgn_eq_1 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, a_sgn, one_1);
+  smt_astt xzero = ctx->mk_ite(sgn_eq_1, nzero, pzero);
+
+  // exponent < 0 -> 0/1
+  smt_astt exp_h = ctx->mk_extract(a_exp, ebits - 1, ebits - 1);
+  smt_astt exp_lt_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, exp_h, one_1);
+  dbg_decouple("fpa2bv_r2i_exp_lt_zero", exp_lt_zero);
+  smt_astt c4 = exp_lt_zero;
+
+  smt_astt pone = mk_one(zero_1, ebits, sbits);
+  smt_astt none = mk_one(one_1, ebits, sbits);
+  smt_astt xone = ctx->mk_ite(sgn_eq_1, none, pone);
+
+  smt_astt pow_2_sbitsm1 =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(power2(sbits - 1, false)), sbits);
+  smt_astt m1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(-1), ebits);
+  smt_astt t1 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, a_sig, pow_2_sbitsm1);
+  smt_astt t2 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, a_exp, m1);
+  smt_astt tie = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, t1, t2);
+  dbg_decouple("fpa2bv_r2i_c42_tie", tie);
+
+  smt_astt c421 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, tie, rm_is_rte);
+  smt_astt c422 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, tie, rm_is_rta);
+  smt_astt c423 = ctx->mk_func_app(
+    ctx->boolean_sort,
+    SMT_FUNC_BVSLTE,
+    a_exp,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(-2), ebits));
+
+  dbg_decouple("fpa2bv_r2i_c421", c421);
+  dbg_decouple("fpa2bv_r2i_c422", c422);
+  dbg_decouple("fpa2bv_r2i_c423", c423);
+
+  smt_astt v42 = xone;
+  v42 = ctx->mk_ite(c423, xzero, v42);
+  v42 = ctx->mk_ite(c422, xone, v42);
+  v42 = ctx->mk_ite(c421, xzero, v42);
+
+  smt_astt v4_rtp = ctx->mk_ite(x_is_neg, nzero, pone);
+  smt_astt v4_rtn = ctx->mk_ite(x_is_neg, none, pzero);
+
+  smt_astt v4 = ctx->mk_ite(rm_is_rtp, v4_rtp, v42);
+  v4 = ctx->mk_ite(rm_is_rtn, v4_rtn, v4);
+  v4 = ctx->mk_ite(rm_is_rtz, xzero, v4);
+
+  // exponent >= sbits-1
+  smt_astt exp_is_large = ctx->mk_func_app(
+    ctx->boolean_sort,
+    SMT_FUNC_BVSLTE,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(sbits - 1), ebits),
+    a_exp);
+  dbg_decouple("fpa2bv_r2i_exp_is_large", exp_is_large);
+  smt_astt c5 = exp_is_large;
+  smt_astt v5 = x;
+
+  // Actual conversion with rounding.
+  // x.exponent >= 0 && x.exponent < x.sbits - 1
+  smt_astt res_sgn = a_sgn;
+  smt_astt res_exp = a_exp;
+
+  assert(a_sig->sort->get_data_width() == sbits);
+  assert(a_exp->sort->get_data_width() == ebits);
+
+  smt_astt zero_s = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sbits);
+
+  smt_astt shift = ctx->mk_func_app(
+    ctx->mk_bv_sort(SMT_SORT_UBV, sbits),
+    SMT_FUNC_BVSUB,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(sbits - 1), sbits),
+    ctx->mk_zero_ext(a_exp, sbits - ebits));
+  smt_astt shifted_sig = ctx->mk_func_app(
+    ctx->mk_bv_sort(
+      SMT_SORT_UBV,
+      a_sig->sort->get_data_width() + zero_s->sort->get_data_width()),
+    SMT_FUNC_BVLSHR,
+    ctx->mk_concat(a_sig, zero_s),
+    ctx->mk_concat(zero_s, shift));
+  smt_astt div = ctx->mk_extract(shifted_sig, 2 * sbits - 1, sbits);
+  smt_astt rem = ctx->mk_extract(shifted_sig, sbits - 1, 0);
+
+  assert(shift->sort->get_data_width() == sbits);
+  assert(div->sort->get_data_width() == sbits);
+  assert(rem->sort->get_data_width() == sbits);
+
+  dbg_decouple("fpa2bv_r2i_shifted_sig", shifted_sig);
+  dbg_decouple("fpa2bv_r2i_shift", shift);
+  dbg_decouple("fpa2bv_r2i_div", div);
+  dbg_decouple("fpa2bv_r2i_rem", rem);
+
+  smt_astt div_p1 = ctx->mk_func_app(
+    div->sort,
+    SMT_FUNC_BVADD,
+    div,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), sbits));
+
+  smt_astt tie_pttrn =
+    ctx->mk_concat(one_1, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sbits - 1));
+  smt_astt tie2 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, rem, tie_pttrn);
+  smt_astt div_last = ctx->mk_extract(div, 0, 0);
+  smt_astt div_last_eq_1 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, div_last, one_1);
+  smt_astt rte_and_dl_eq_1 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, rm_is_rte, div_last_eq_1);
+  smt_astt rte_and_dl_eq_1_or_rta = ctx->mk_func_app(
+    ctx->boolean_sort, SMT_FUNC_OR, rte_and_dl_eq_1, rm_is_rta);
+  smt_astt tie_pttrn_ule_rem =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_BVULTE, tie_pttrn, rem);
+  smt_astt tie2_c =
+    ctx->mk_ite(tie2, rte_and_dl_eq_1_or_rta, tie_pttrn_ule_rem);
+  smt_astt v51 = ctx->mk_ite(tie2_c, div_p1, div);
+
+  dbg_decouple("fpa2bv_r2i_v51", v51);
+  dbg_decouple("fpa2bv_r2i_tie2", tie2);
+  dbg_decouple("fpa2bv_r2i_tie2_c", tie2_c);
+
+  smt_astt rem_eq_0 = ctx->mk_func_app(
+    ctx->boolean_sort,
+    SMT_FUNC_EQ,
+    rem,
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sbits));
+  smt_astt sgn_eq_zero =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, res_sgn, zero_1);
+  smt_astt c521 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, rem_eq_0);
+  c521 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, c521, sgn_eq_zero);
+  smt_astt v52 = ctx->mk_ite(c521, div_p1, div);
+
+  smt_astt sgn_eq_one =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, res_sgn, one_1);
+  smt_astt c531 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, rem_eq_0);
+  ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, c531, sgn_eq_one, c531);
+  smt_astt v53 = ctx->mk_ite(c531, div_p1, div);
+
+  smt_astt c51 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, rm_is_rte, rm_is_rta);
+  smt_astt c52 = rm_is_rtp;
+  smt_astt c53 = rm_is_rtn;
+
+  smt_astt res_sig = div;
+  res_sig = ctx->mk_ite(c53, v53, res_sig);
+  res_sig = ctx->mk_ite(c52, v52, res_sig);
+  res_sig = ctx->mk_ite(c51, v51, res_sig);
+  res_sig = ctx->mk_zero_ext(
+    ctx->mk_concat(res_sig, ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 3)),
+    1); // rounding bits are all 0.
+
+  assert(res_exp->sort->get_data_width() == ebits);
+  assert(shift->sort->get_data_width() == sbits);
+
+  smt_astt e_shift = (ebits + 2 <= sbits + 1)
+                       ? ctx->mk_extract(shift, ebits + 1, 0)
+                       : ctx->mk_sign_ext(shift, (ebits + 2) - (sbits));
+  assert(e_shift->sort->get_data_width() == ebits + 2);
+  res_exp = ctx->mk_func_app(
+    e_shift->sort, SMT_FUNC_BVADD, ctx->mk_zero_ext(res_exp, 2), e_shift);
+
+  assert(res_sgn->sort->get_data_width() == 1);
+  assert(res_sig->sort->get_data_width() == sbits + 4);
+  assert(res_exp->sort->get_data_width() == ebits + 2);
+
+  // CMW: We use the rounder for normalization.
+  smt_astt v6;
+  round(rm, res_sgn, res_sig, res_exp, ebits, sbits, v6);
+
+  // And finally, we tie them together.
+  smt_astt result = ctx->mk_ite(c5, v5, v6);
+  result = ctx->mk_ite(c4, v4, result);
+  result = ctx->mk_ite(c3, v3, result);
+  result = ctx->mk_ite(c2, v2, result);
+  return ctx->mk_ite(c1, v1, result);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_sqrt(smt_astt x, smt_astt rm)
