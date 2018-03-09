@@ -1924,7 +1924,6 @@ void fp_convt::round(
   smt_astt hallbut1_sig = ctx->mk_extract(sig, sbits, 1);
   smt_astt lallbut1_sig = ctx->mk_extract(sig, sbits - 1, 0);
   sig = ctx->mk_ite(SIGovf, hallbut1_sig, lallbut1_sig);
-  assert(sig->sort->get_data_width() == sbits + 1);
 
   assert(exp->sort->get_data_width() == ebits + 2);
 
