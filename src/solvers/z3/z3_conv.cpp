@@ -1183,7 +1183,7 @@ smt_astt z3_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
         z3_ctx,
         to_solver_smt_ast<z3_smt_ast>(lhs)->a,
         to_solver_smt_ast<z3_smt_ast>(rhs)->a)),
-    lhs->sort);
+    boolean_sort);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_is_nan(smt_astt op)
