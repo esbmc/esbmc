@@ -1,16 +1,5 @@
 #include <solvers/smt/smt_conv.h>
 
-static void dbg_decouple(const char *prefix, smt_astt e)
-{
-#if DEBUG
-  std::cout << prefix << std::endl;
-  e->dump();
-#else
-  (void)prefix;
-  (void)e;
-#endif
-}
-
 static smt_astt extract_exponent(smt_convt *ctx, smt_astt fp)
 {
   std::size_t exp_top = fp->sort->get_data_width() - 2;
@@ -32,6 +21,33 @@ static smt_astt extract_signbit(smt_convt *ctx, smt_astt fp)
 static smt_astt extract_exp_sig(smt_convt *ctx, smt_astt fp)
 {
   return ctx->mk_extract(fp, fp->sort->get_data_width() - 2, 0);
+}
+
+void fp_convt::dbg_decouple(const char *prefix, smt_astt &e)
+{
+#if DEBUG
+  smt_astt new_bv = ctx->mk_smt_symbol(
+    prefix, ctx->mk_bv_sort(SMT_SORT_UBV, e->sort->get_data_width()));
+
+  smt_astt new_e = e;
+  if(e->sort->id == SMT_SORT_BOOL)
+  {
+    smt_astt cond = ctx->mk_func_app(
+      ctx->boolean_sort, SMT_FUNC_EQ, e, ctx->mk_smt_bool(true));
+    new_e = ctx->mk_ite(
+      cond,
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1),
+      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1));
+  }
+
+  smt_astt e_eq_bv =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, new_e, new_bv);
+  ctx->assert_ast(e_eq_bv);
+
+#else
+  (void)prefix;
+  (void)e;
+#endif
 }
 
 fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)

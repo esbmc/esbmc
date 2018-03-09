@@ -288,6 +288,8 @@ private:
       b.negate();
     return b;
   }
+
+  void dbg_decouple(const char *prefix, smt_astt &e);
 };
 
 #endif /* SOLVERS_SMT_FP_CONV_H_ */
