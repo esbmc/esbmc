@@ -1712,9 +1712,43 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
   }
 
   assert(is_symbol2t(expr));
+  // 0 is round to Nearest/even
+  // 2 is round to +oo
+  // 3 is round to -oo
+  // 4 is round to zero
 
-  return mk_smt_symbol(
-    to_symbol2t(expr).thename.as_string(), fp_api->mk_fpbv_rm_sort());
+  smt_sortt bs = boolean_sort;
+
+  smt_astt symbol = convert_ast(expr);
+
+  smt_astt is_0 = mk_func_app(
+    bs,
+    SMT_FUNC_EQ,
+    symbol,
+    mk_smt_bv(SMT_SORT_UBV, BigInt(0), symbol->sort->get_data_width()));
+
+  smt_astt is_2 = mk_func_app(
+    bs,
+    SMT_FUNC_EQ,
+    symbol,
+    mk_smt_bv(SMT_SORT_UBV, BigInt(2), symbol->sort->get_data_width()));
+
+  smt_astt is_3 = mk_func_app(
+    bs,
+    SMT_FUNC_EQ,
+    symbol,
+    mk_smt_bv(SMT_SORT_UBV, BigInt(3), symbol->sort->get_data_width()));
+
+  smt_astt ne = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
+  smt_astt mi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
+  smt_astt pi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF);
+  smt_astt ze = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
+
+  smt_astt ite2 = mk_ite(is_3, mi, ze);
+  smt_astt ite1 = mk_ite(is_2, pi, ite2);
+  smt_astt ite0 = mk_ite(is_0, ne, ite1);
+
+  return ite0;
 }
 
 smt_astt smt_convt::convert_member(const expr2tc &expr)
