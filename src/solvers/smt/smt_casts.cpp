@@ -176,7 +176,7 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
     return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(
       convert_ast(cast.from),
       convert_sort(cast.type),
-      convert_ast(cast.rounding_mode));
+      convert_rounding_mode(cast.rounding_mode));
 
   std::cerr << "Unexpected type in typecast to fpbv\n";
   abort();
