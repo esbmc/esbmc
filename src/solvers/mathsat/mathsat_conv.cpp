@@ -209,7 +209,7 @@ const std::string mathsat_convt::solver_text()
   return ss.str();
 }
 
-smt_ast *mathsat_convt::mk_func_app(
+smt_astt mathsat_convt::mk_func_app(
   const smt_sort *s,
   smt_func_kind k,
   const smt_ast *const *_args,
@@ -235,7 +235,7 @@ smt_ast *mathsat_convt::mk_func_app(
     break;
   case SMT_FUNC_NOTEQ:
   {
-    smt_ast *a = mk_func_app(s, SMT_FUNC_EQ, _args, numargs);
+    smt_astt a = mk_func_app(s, SMT_FUNC_EQ, _args, numargs);
     return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
   }
   case SMT_FUNC_NOT:
@@ -367,8 +367,7 @@ smt_ast *mathsat_convt::mk_func_app(
   {
     assert(s->id == SMT_SORT_BOOL);
     // (a > b) iff (b < a)
-    std::swap(args[0], args[1]);
-    return mk_func_app(s, SMT_FUNC_LT, _args, numargs);
+    return ctx->mk_func_app(s, SMT_FUNC_LT, args[1], args[0]);
   }
   case SMT_FUNC_LTE:
     r = msat_make_leq(env, args[0]->a, args[1]->a);

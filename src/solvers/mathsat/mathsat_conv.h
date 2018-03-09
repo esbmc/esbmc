@@ -25,7 +25,7 @@ public:
 
   void assert_ast(const smt_ast *a) override;
 
-  smt_ast *mk_func_app(
+  smt_astt mk_func_app(
     const smt_sort *s,
     smt_func_kind k,
     const smt_ast *const *args,
