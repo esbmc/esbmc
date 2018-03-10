@@ -1590,21 +1590,21 @@ void fp_convt::add_core(
   smt_astt not_sign_bv =
     ctx->mk_func_app(sign_bv->sort, SMT_FUNC_BVNOT, sign_bv);
   smt_astt res_sgn_c1 = ctx->mk_func_app(
-    not_c_sgn->sort,
+    sign_bv->sort,
     SMT_FUNC_BVAND,
     ctx->mk_func_app(not_c_sgn->sort, SMT_FUNC_BVAND, not_c_sgn, d_sgn),
     sign_bv);
   smt_astt res_sgn_c2 = ctx->mk_func_app(
-    not_c_sgn->sort,
+    not_sign_bv->sort,
     SMT_FUNC_BVAND,
     ctx->mk_func_app(c_sgn->sort, SMT_FUNC_BVAND, c_sgn, not_d_sgn),
     not_sign_bv);
   smt_astt res_sgn_c3 =
     ctx->mk_func_app(c_sgn->sort, SMT_FUNC_BVAND, c_sgn, d_sgn);
   res_sgn = ctx->mk_func_app(
-    res_sgn_c1->sort,
+    res_sgn_c3->sort,
     SMT_FUNC_BVOR,
-    ctx->mk_func_app(sticky->sort, SMT_FUNC_BVOR, res_sgn_c1, res_sgn_c2),
+    ctx->mk_func_app(res_sgn_c1->sort, SMT_FUNC_BVOR, res_sgn_c1, res_sgn_c2),
     res_sgn_c3);
 
   smt_astt one_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
@@ -2752,7 +2752,7 @@ smt_astt fp_convt::mk_rounding_decision(
   smt_astt inc_teven = ctx->mk_func_app(
     not_round->sort,
     SMT_FUNC_BVNOT,
-    ctx->mk_func_app(last->sort, SMT_FUNC_BVOR, not_round, not_lors));
+    ctx->mk_func_app(not_round->sort, SMT_FUNC_BVOR, not_round, not_lors));
   smt_astt inc_taway = round;
   smt_astt inc_pos = ctx->mk_func_app(
     sgn->sort,
