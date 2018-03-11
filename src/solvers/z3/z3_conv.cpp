@@ -60,7 +60,7 @@ z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
              .mk_solver();
 
   z3::params p(z3_ctx);
-  p.set("relevancy", (unsigned int)0);
+  p.set("relevancy", 0U);
   p.set("model", true);
   p.set("proof", false);
   solver.set(p);
