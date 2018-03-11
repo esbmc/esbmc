@@ -193,7 +193,7 @@ expr2tc mathsat_convt::get_array_elem(
 
   mathsat_smt_ast *tmpb = new mathsat_smt_ast(this, convert_sort(subtype), t);
   expr2tc result = get_by_ast(subtype, tmpb);
-  free(tmpb);
+  delete tmpb;
 
   msat_free(msat_term_repr(t));
 
@@ -539,11 +539,11 @@ smt_ast *mathsat_convt::mk_smt_symbol(
 smt_astt
 mathsat_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 {
-  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
-
   // If it's a floatbv, convert it to bv
   if(a->sort->id == SMT_SORT_FLOATBV)
     a = mk_from_fp_to_bv(a);
+
+  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
 
   msat_term t = msat_make_bv_extract(env, high, low, mast->a);
   check_msat_error(t);
@@ -780,13 +780,17 @@ smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_ubv(
   smt_astt from,
   std::size_t width)
 {
-  // Conversion from float to integers always truncate, so we assume
-  // the round mode to be toward zero
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(
-    mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
   const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
 
-  msat_term t = msat_make_fp_to_bv(env, width, mrm->a, mfrom->a);
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
+  msat_term t = msat_make_fp_to_bv(
+    env,
+    width,
+    to_solver_smt_ast<mathsat_smt_ast>(
+      mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO))
+      ->a,
+    mfrom->a);
   check_msat_error(t);
 
   smt_sortt to = mk_bv_sort(SMT_SORT_UBV, width);
@@ -797,13 +801,17 @@ smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_sbv(
   smt_astt from,
   std::size_t width)
 {
-  // Conversion from float to integers always truncate, so we assume
-  // the round mode to be toward zero
-  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(
-    mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
   const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
 
-  msat_term t = msat_make_fp_to_bv(env, width, mrm->a, mfrom->a);
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
+  msat_term t = msat_make_fp_to_bv(
+    env,
+    width,
+    to_solver_smt_ast<mathsat_smt_ast>(
+      mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO))
+      ->a,
+    mfrom->a);
   check_msat_error(t);
 
   smt_sortt to = mk_bv_sort(SMT_SORT_SBV, width);
