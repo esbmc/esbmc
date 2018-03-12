@@ -975,7 +975,7 @@ smt_astt z3_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
 
 smt_astt z3_convt::mk_smt_fpbv_neg(smt_astt op)
 {
-  return new_ast(to_solver_smt_ast<z3_smt_ast>(op)->a, op->sort);
+  return new_ast(-to_solver_smt_ast<z3_smt_ast>(op)->a, op->sort);
 }
 
 void z3_convt::print_model()
