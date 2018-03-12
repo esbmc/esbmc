@@ -2068,56 +2068,60 @@ smt_astt fp_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
   return mk_smt_fpbv_lt(rhs, lhs);
 }
 
-smt_astt fp_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
+smt_astt fp_convt::mk_smt_fpbv_lt(smt_astt x, smt_astt y)
 {
-  // Check if they are NaN
-  smt_astt lhs_is_nan = mk_smt_fpbv_is_nan(lhs);
-  smt_astt rhs_is_nan = mk_smt_fpbv_is_nan(rhs);
-  smt_astt either_is_nan =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, lhs_is_nan, rhs_is_nan);
-  smt_astt not_nan =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, either_is_nan);
+  smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
+  smt_astt y_is_nan = mk_smt_fpbv_is_nan(y);
+  smt_astt c1 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_OR, x_is_nan, y_is_nan);
+  smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
+  smt_astt y_is_zero = mk_smt_fpbv_is_zero(y);
+  smt_astt c2 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, x_is_zero, y_is_zero);
 
-  // +0 and -0 should return false
-  smt_astt lhs_is_zero = mk_smt_fpbv_is_zero(lhs);
-  smt_astt rhs_is_zero = mk_smt_fpbv_is_zero(rhs);
-  smt_astt both_zero =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, lhs_is_zero, rhs_is_zero);
-  smt_astt not_zero =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, both_zero);
+  smt_astt x_sgn = extract_signbit(ctx, x);
+  smt_astt x_sig = extract_significand(ctx, x);
+  smt_astt x_exp = extract_exponent(ctx, x);
 
-  // TODO: we do an unsigned comparison, but due to the bias, we should safe
-  // to do a signed comparison.
+  smt_astt y_sgn = extract_signbit(ctx, y);
+  smt_astt y_sig = extract_significand(ctx, y);
+  smt_astt y_exp = extract_exponent(ctx, y);
 
-  // Extract the exponents, significands and signs
-  smt_astt lhs_exp_sig = extract_exp_sig(ctx, lhs);
-  smt_astt lhs_sign = extract_signbit(ctx, lhs);
+  smt_astt one_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
+  smt_astt nil_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+  smt_astt c3 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, x_sgn, one_1);
 
-  smt_astt rhs_exp_sig = extract_exp_sig(ctx, rhs);
-  smt_astt rhs_sign = extract_signbit(ctx, lhs);
+  smt_astt y_sgn_eq_0 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, y_sgn, nil_1);
+  smt_astt y_lt_x_exp =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_BVULT, y_exp, x_exp);
+  smt_astt y_lt_x_sig =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_BVULT, y_sig, x_sig);
+  smt_astt y_eq_x_exp =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, y_exp, x_exp);
+  smt_astt y_le_x_sig_exp =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, y_eq_x_exp, y_lt_x_sig);
+  smt_astt t3_or = ctx->mk_func_app(
+    ctx->boolean_sort, SMT_FUNC_OR, y_lt_x_exp, y_le_x_sig_exp);
+  smt_astt t3 = ctx->mk_ite(y_sgn_eq_0, ctx->mk_smt_bool(true), t3_or);
 
-  // Compare signs
-  smt_astt signs_equal =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, lhs_sign, rhs_sign);
+  smt_astt y_sgn_eq_1 =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, y_sgn, one_1);
+  smt_astt x_lt_y_exp =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_BVULT, x_exp, y_exp);
+  smt_astt x_eq_y_exp =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, x_exp, y_exp);
+  smt_astt x_lt_y_sig =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_BVULT, x_sig, y_sig);
+  smt_astt x_le_y_sig_exp =
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, x_eq_y_exp, x_lt_y_sig);
+  smt_astt t4_or = ctx->mk_func_app(
+    ctx->boolean_sort, SMT_FUNC_OR, x_lt_y_exp, x_le_y_sig_exp);
+  smt_astt t4 = ctx->mk_ite(y_sgn_eq_1, ctx->mk_smt_bool(false), t4_or);
 
-  // Compare the exp_sign
-  smt_astt ult = ctx->mk_func_app(
-    ctx->boolean_sort, SMT_FUNC_BVULT, lhs_exp_sig, rhs_exp_sig);
-
-  // If the signs are equal, return x < y, otherwise return the sign of y
-  smt_astt lhs_sign_eq_1 = ctx->mk_func_app(
-    ctx->boolean_sort,
-    SMT_FUNC_EQ,
-    lhs_sign,
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1));
-
-  smt_astt comp = ctx->mk_ite(signs_equal, ult, lhs_sign_eq_1);
-
-  smt_astt not_zeros_not_nan =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, not_zero, not_nan);
-
-  return ctx->mk_func_app(
-    ctx->boolean_sort, SMT_FUNC_AND, not_zeros_not_nan, comp);
+  smt_astt c3t3t4 = ctx->mk_ite(c3, t3, t4);
+  smt_astt c2else = ctx->mk_ite(c2, ctx->mk_smt_bool(false), c3t3t4);
+  return ctx->mk_ite(c1, ctx->mk_smt_bool(false), c2else);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
