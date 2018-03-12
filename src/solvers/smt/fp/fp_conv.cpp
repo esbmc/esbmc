@@ -277,7 +277,7 @@ smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt x, smt_astt rm)
   smt_astt sgn_eq_one =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, res_sgn, one_1);
   smt_astt c531 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, rem_eq_0);
-  ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, c531, sgn_eq_one, c531);
+  c531 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, c531, sgn_eq_one);
   smt_astt v53 = ctx->mk_ite(c531, div_p1, div);
 
   smt_astt c51 =
