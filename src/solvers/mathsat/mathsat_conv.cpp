@@ -459,7 +459,7 @@ smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 
 smt_astt mathsat_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
-  smt_sortt s = mk_real_fp_sort(ew, sw);
+  smt_sortt s = mk_real_fp_sort(ew, sw - 1);
   unsigned swidth = s->get_significand_width();
   unsigned ewidth = s->get_data_width() - swidth;
 
@@ -471,7 +471,7 @@ smt_astt mathsat_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 
 smt_astt mathsat_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
-  smt_sortt s = mk_real_fp_sort(ew, sw);
+  smt_sortt s = mk_real_fp_sort(ew, sw - 1);
   unsigned swidth = s->get_significand_width();
   unsigned ewidth = s->get_data_width() - swidth;
 

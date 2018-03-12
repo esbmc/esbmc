@@ -453,13 +453,13 @@ smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 
 smt_astt z3_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
-  smt_sortt s = mk_real_fp_sort(ew, sw);
+  smt_sortt s = mk_real_fp_sort(ew, sw - 1);
   return new_ast(z3_ctx.fpa_nan(to_solver_smt_sort<z3::sort>(s)->s), s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
-  smt_sortt s = mk_real_fp_sort(ew, sw);
+  smt_sortt s = mk_real_fp_sort(ew, sw - 1);
   return new_ast(z3_ctx.fpa_inf(sgn, to_solver_smt_sort<z3::sort>(s)->s), s);
 }
 
