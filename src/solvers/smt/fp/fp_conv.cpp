@@ -1836,8 +1836,8 @@ smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
   smt_astt a_sig_ext = ctx->mk_zero_ext(a_sig, sbits);
   smt_astt b_sig_ext = ctx->mk_zero_ext(b_sig, sbits);
 
-  smt_astt a_exp_ext = ctx->mk_zero_ext(a_exp, 2);
-  smt_astt b_exp_ext = ctx->mk_zero_ext(b_exp, 2);
+  smt_astt a_exp_ext = ctx->mk_sign_ext(a_exp, 2);
+  smt_astt b_exp_ext = ctx->mk_sign_ext(b_exp, 2);
 
   smt_astt res_sgn, res_sig, res_exp;
   res_sgn = ctx->mk_func_app(a_sgn->sort, SMT_FUNC_BVXOR, a_sgn, b_sgn);
@@ -1883,8 +1883,7 @@ smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
   result = ctx->mk_ite(c4, v4, result);
   result = ctx->mk_ite(c3, v3, result);
   result = ctx->mk_ite(c2, v2, result);
-  result = ctx->mk_ite(c1, v1, result);
-  return result;
+  return ctx->mk_ite(c1, v1, result);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_div(smt_astt x, smt_astt y, smt_astt rm)
