@@ -113,8 +113,8 @@ smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt x, smt_astt rm)
   smt_astt pzero = mk_pzero(ebits, sbits);
 
   smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
-  smt_astt x_is_pos = mk_smt_fpbv_is_positive(x);
-  smt_astt x_is_neg = mk_smt_fpbv_is_negative(x);
+  smt_astt x_is_pos = mk_is_pos(x);
+  smt_astt x_is_neg = mk_is_neg(x);
 
   dbg_decouple("fpa2bv_r2i_x_is_zero", x_is_zero);
   dbg_decouple("fpa2bv_r2i_x_is_pos", x_is_pos);
@@ -344,7 +344,7 @@ smt_astt fp_convt::mk_smt_fpbv_sqrt(smt_astt x, smt_astt rm)
   smt_astt v3 = x;
 
   // (x < 0) -> NaN
-  smt_astt c4 = mk_smt_fpbv_is_negative(x);
+  smt_astt c4 = mk_is_neg(x);
   smt_astt v4 = nan;
 
   // else comes the actual square root.
@@ -473,18 +473,18 @@ fp_convt::mk_smt_fpbv_fma(smt_astt x, smt_astt y, smt_astt z, smt_astt rm)
 
   smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
   smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
-  smt_astt x_is_pos = mk_smt_fpbv_is_positive(x);
-  smt_astt x_is_neg = mk_smt_fpbv_is_negative(x);
+  smt_astt x_is_pos = mk_is_pos(x);
+  smt_astt x_is_neg = mk_is_neg(x);
   smt_astt x_is_inf = mk_smt_fpbv_is_inf(x);
   smt_astt y_is_nan = mk_smt_fpbv_is_nan(y);
   smt_astt y_is_zero = mk_smt_fpbv_is_zero(y);
-  smt_astt y_is_pos = mk_smt_fpbv_is_positive(y);
-  smt_astt y_is_neg = mk_smt_fpbv_is_negative(y);
+  smt_astt y_is_pos = mk_is_pos(y);
+  smt_astt y_is_neg = mk_is_neg(y);
   smt_astt y_is_inf = mk_smt_fpbv_is_inf(y);
   smt_astt z_is_nan = mk_smt_fpbv_is_nan(z);
   smt_astt z_is_zero = mk_smt_fpbv_is_zero(z);
-  smt_astt z_is_pos = mk_smt_fpbv_is_positive(z);
-  smt_astt z_is_neg = mk_smt_fpbv_is_negative(z);
+  smt_astt z_is_pos = mk_is_pos(z);
+  smt_astt z_is_neg = mk_is_neg(z);
   smt_astt z_is_inf = mk_smt_fpbv_is_inf(z);
 
   smt_astt rm_is_to_neg = mk_is_rm(rm, ieee_floatt::ROUND_TO_MINUS_INF);
@@ -890,7 +890,7 @@ smt_astt fp_convt::mk_to_bv(smt_astt x, bool is_signed, std::size_t width)
   smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
   smt_astt x_is_inf = mk_smt_fpbv_is_inf(x);
   smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
-  smt_astt x_is_neg = mk_smt_fpbv_is_negative(x);
+  smt_astt x_is_neg = mk_is_neg(x);
 
   // NaN, Inf, or negative (except -0) -> unspecified
   smt_astt c1 =
@@ -1632,13 +1632,13 @@ smt_astt fp_convt::mk_smt_fpbv_add(smt_astt x, smt_astt y, smt_astt rm)
 
   smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
   smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
-  smt_astt x_is_pos = mk_smt_fpbv_is_positive(x);
-  smt_astt x_is_neg = mk_smt_fpbv_is_negative(x);
+  smt_astt x_is_pos = mk_is_pos(x);
+  smt_astt x_is_neg = mk_is_neg(x);
   smt_astt x_is_inf = mk_smt_fpbv_is_inf(x);
   smt_astt y_is_nan = mk_smt_fpbv_is_nan(y);
   smt_astt y_is_zero = mk_smt_fpbv_is_zero(y);
-  smt_astt y_is_pos = mk_smt_fpbv_is_positive(y);
-  smt_astt y_is_neg = mk_smt_fpbv_is_negative(y);
+  smt_astt y_is_pos = mk_is_pos(y);
+  smt_astt y_is_neg = mk_is_neg(y);
   smt_astt y_is_inf = mk_smt_fpbv_is_inf(y);
 
   dbg_decouple("fpa2bv_add_x_is_nan", x_is_nan);
@@ -1657,8 +1657,8 @@ smt_astt fp_convt::mk_smt_fpbv_add(smt_astt x, smt_astt y, smt_astt rm)
   smt_astt v1 = nan;
 
   smt_astt c2 = mk_smt_fpbv_is_inf(x);
-  smt_astt nx = mk_smt_fpbv_is_negative(x);
-  smt_astt ny = mk_smt_fpbv_is_negative(y);
+  smt_astt nx = mk_is_neg(x);
+  smt_astt ny = mk_is_neg(y);
   smt_astt nx_xor_ny =
     ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_XOR, nx, ny);
   smt_astt inf_xor =
@@ -1773,10 +1773,10 @@ smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
 
   smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
   smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
-  smt_astt x_is_pos = mk_smt_fpbv_is_positive(x);
+  smt_astt x_is_pos = mk_is_pos(x);
   smt_astt y_is_nan = mk_smt_fpbv_is_nan(y);
   smt_astt y_is_zero = mk_smt_fpbv_is_zero(y);
-  smt_astt y_is_pos = mk_smt_fpbv_is_positive(y);
+  smt_astt y_is_pos = mk_is_pos(y);
 
   dbg_decouple("fpa2bv_mul_x_is_nan", x_is_nan);
   dbg_decouple("fpa2bv_mul_x_is_zero", x_is_zero);
@@ -1902,11 +1902,11 @@ smt_astt fp_convt::mk_smt_fpbv_div(smt_astt x, smt_astt y, smt_astt rm)
 
   smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
   smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
-  smt_astt x_is_pos = mk_smt_fpbv_is_positive(x);
+  smt_astt x_is_pos = mk_is_pos(x);
   smt_astt x_is_inf = mk_smt_fpbv_is_inf(x);
   smt_astt y_is_nan = mk_smt_fpbv_is_nan(y);
   smt_astt y_is_zero = mk_smt_fpbv_is_zero(y);
-  smt_astt y_is_pos = mk_smt_fpbv_is_positive(y);
+  smt_astt y_is_pos = mk_is_pos(y);
   smt_astt y_is_inf = mk_smt_fpbv_is_inf(y);
 
   dbg_decouple("fpa2bv_div_x_is_nan", x_is_nan);
@@ -2229,24 +2229,18 @@ smt_astt fp_convt::mk_smt_fpbv_is_zero(smt_astt op)
 
 smt_astt fp_convt::mk_smt_fpbv_is_negative(smt_astt op)
 {
-  smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
-
-  // Extract the sign bit
-  smt_astt sign = extract_signbit(ctx, op);
-
-  // Compare with '0'
-  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOTEQ, sign, zero);
+  smt_astt t1 = mk_smt_fpbv_is_nan(op);
+  smt_astt t2 = mk_is_neg(op);
+  smt_astt nt1 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, t1);
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, nt1, t2);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_is_positive(smt_astt op)
 {
-  smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
-
-  // Extract the sign bit
-  smt_astt sign = extract_signbit(ctx, op);
-
-  // Compare with '0'
-  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sign, zero);
+  smt_astt t1 = mk_smt_fpbv_is_nan(op);
+  smt_astt t2 = mk_is_pos(op);
+  smt_astt nt1 = ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_NOT, t1);
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_AND, nt1, t2);
 }
 
 smt_astt fp_convt::mk_smt_fpbv_abs(smt_astt op)
@@ -2801,6 +2795,20 @@ smt_astt fp_convt::mk_is_rm(smt_astt &rme, ieee_floatt::rounding_modet rm)
   abort();
 }
 
+smt_astt fp_convt::mk_is_pos(smt_astt op)
+{
+  smt_astt zero =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), op->sort->get_data_width());
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, op, zero);
+}
+
+smt_astt fp_convt::mk_is_neg(smt_astt op)
+{
+  smt_astt one =
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), op->sort->get_data_width());
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, op, one);
+}
+
 smt_astt fp_convt::mk_bias(smt_astt e)
 {
   std::size_t ebits = e->sort->get_data_width();
@@ -2867,7 +2875,7 @@ smt_astt fp_convt::mk_is_pzero(smt_astt op)
     ctx->boolean_sort,
     SMT_FUNC_AND,
     ctx->fp_api->mk_smt_fpbv_is_zero(op),
-    ctx->fp_api->mk_smt_fpbv_is_positive(op));
+    ctx->fp_api->mk_is_pos(op));
 }
 
 smt_astt fp_convt::mk_is_nzero(smt_astt op)
@@ -2876,7 +2884,7 @@ smt_astt fp_convt::mk_is_nzero(smt_astt op)
     ctx->boolean_sort,
     SMT_FUNC_AND,
     ctx->fp_api->mk_smt_fpbv_is_zero(op),
-    ctx->fp_api->mk_smt_fpbv_is_negative(op));
+    ctx->fp_api->mk_is_neg(op));
 }
 
 smt_astt fp_convt::mk_is_pinf(smt_astt op)
@@ -2885,7 +2893,7 @@ smt_astt fp_convt::mk_is_pinf(smt_astt op)
     ctx->boolean_sort,
     SMT_FUNC_AND,
     ctx->fp_api->mk_smt_fpbv_is_inf(op),
-    ctx->fp_api->mk_smt_fpbv_is_positive(op));
+    ctx->fp_api->mk_is_pos(op));
 }
 
 smt_astt fp_convt::mk_is_ninf(smt_astt op)
@@ -2894,7 +2902,7 @@ smt_astt fp_convt::mk_is_ninf(smt_astt op)
     ctx->boolean_sort,
     SMT_FUNC_AND,
     ctx->fp_api->mk_smt_fpbv_is_inf(op),
-    ctx->fp_api->mk_smt_fpbv_is_negative(op));
+    ctx->fp_api->mk_is_neg(op));
 }
 
 smt_astt fp_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
