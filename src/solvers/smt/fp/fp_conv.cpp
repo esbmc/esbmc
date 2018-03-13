@@ -25,24 +25,13 @@ static smt_astt extract_exp_sig(smt_convt *ctx, smt_astt fp)
 
 void fp_convt::dbg_decouple(const char *prefix, smt_astt &e)
 {
-#if DEBUG
-  smt_astt new_bv = ctx->mk_smt_symbol(
-    prefix, ctx->mk_bv_sort(SMT_SORT_UBV, e->sort->get_data_width()));
-
-  smt_astt new_e = e;
-  if(e->sort->id == SMT_SORT_BOOL)
-  {
-    smt_astt cond = ctx->mk_func_app(
-      ctx->boolean_sort, SMT_FUNC_EQ, e, ctx->mk_smt_bool(true));
-    new_e = ctx->mk_ite(
-      cond,
-      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1),
-      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1));
-  }
+#if 0
+  smt_astt new_bv = ctx->mk_smt_symbol(prefix, e->sort);
 
   smt_astt e_eq_bv =
-    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, new_e, new_bv);
+    ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, e, new_bv);
   ctx->assert_ast(e_eq_bv);
+  e = new_bv;
 
 #else
   (void)prefix;
