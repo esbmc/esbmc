@@ -2786,16 +2786,18 @@ smt_astt fp_convt::mk_is_rm(smt_astt &rme, ieee_floatt::rounding_modet rm)
 
 smt_astt fp_convt::mk_is_pos(smt_astt op)
 {
+  smt_astt sgn = extract_signbit(ctx, op);
   smt_astt zero =
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), op->sort->get_data_width());
-  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, op, zero);
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), sgn->sort->get_data_width());
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sgn, zero);
 }
 
 smt_astt fp_convt::mk_is_neg(smt_astt op)
 {
+  smt_astt sgn = extract_signbit(ctx, op);
   smt_astt one =
-    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), op->sort->get_data_width());
-  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, op, one);
+    ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), sgn->sort->get_data_width());
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, sgn, one);
 }
 
 smt_astt fp_convt::mk_bias(smt_astt e)
