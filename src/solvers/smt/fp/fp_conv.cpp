@@ -1357,7 +1357,6 @@ fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
   unsigned sbits = to->get_significand_width();
   unsigned bv_sz = x->sort->get_data_width();
 
-  smt_astt bv0_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
   smt_astt bv1_1 = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
   smt_astt bv0_sz = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), bv_sz);
 
@@ -1386,7 +1385,7 @@ fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
   dbg_decouple("fpa2bv_to_fp_signed_lz", lz);
   smt_astt shifted_sig = ctx->mk_func_app(x->sort, SMT_FUNC_BVSHL, x_abs, lz);
 
-  // shifted_sig is [bv_sz-1] . [bv_sz-2 ... 0] * 2^(bv_sz-1) * 2^(-lz)
+  // shifted_sig is [bv_sz-1, bv_sz-2] . [bv_sz-3 ... 0] * 2^(bv_sz-2) * 2^(-lz)
   unsigned sig_sz = sbits + 4; // we want extra rounding bits.
 
   smt_astt sig_4, sticky;
@@ -1426,7 +1425,7 @@ fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
   smt_astt exp_2 = ctx->mk_extract(s_exp, exp_sz - 1, 0);
 
   // the remaining bits are 0 if ebits is large enough.
-  smt_astt exp_too_large = ctx->mk_smt_bool(false); // This is always in range.
+  smt_astt exp_too_large = ctx->mk_smt_bool(false);
 
   // The exponent is at most bv_sz, i.e., we need ld(bv_sz)+1 ebits.
   // exp < bv_sz (+sign bit which is [0])
@@ -1457,7 +1456,7 @@ fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
   dbg_decouple("fpa2bv_to_fp_unsigned_exp_too_large", exp_too_large);
 
   smt_astt sgn, sig, exp;
-  sgn = bv0_1;
+  sgn = is_neg_bit;
   sig = sig_4;
   exp = exp_2;
 
