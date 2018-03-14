@@ -88,133 +88,9 @@
 class fp_convt;
 class smt_convt;
 
-/** Identifiers for SMT functions.
- *  Each SMT function gets a unique identifier, representing its interpretation
- *  when applied to some arguments. This can be used to describe a function
- *  application when joined with some arguments. Initial values such as
- *  terminal functions (i.e. bool, int, symbol literals) shouldn't normally
- *  be encountered and instead converted to an smt_ast before use. The
- *  'HACKS' function represents some kind of special case, according to where
- *  it is encountered; the same for 'INVALID'.
- *
- *  @see smt_convt::convert_terminal
- *  @see smt_convt::convert_ast
- */
-enum smt_func_kind
-{
-  // Terminals
-  SMT_FUNC_INVALID = 0, // For conversion lookup table only
-  SMT_FUNC_HACKS = 1,   // indicate the solver /has/ to use the temp expr.
-  SMT_FUNC_INT = 2,
-  SMT_FUNC_BOOL,
-  SMT_FUNC_BVINT,
-  SMT_FUNC_REAL,
-  SMT_FUNC_SYMBOL,
-
-  // Nonterminals
-  SMT_FUNC_ADD,
-  SMT_FUNC_BVADD,
-  SMT_FUNC_SUB,
-  SMT_FUNC_BVSUB,
-  SMT_FUNC_MUL,
-  SMT_FUNC_BVMUL,
-  SMT_FUNC_DIV,
-  SMT_FUNC_BVUDIV,
-  SMT_FUNC_BVSDIV,
-  SMT_FUNC_MOD,
-  SMT_FUNC_BVSMOD,
-  SMT_FUNC_BVUMOD,
-  SMT_FUNC_SHL,
-  SMT_FUNC_BVSHL,
-  SMT_FUNC_BVASHR,
-  SMT_FUNC_NEG,
-  SMT_FUNC_BVNEG,
-  SMT_FUNC_BVLSHR,
-  SMT_FUNC_BVNOT,
-  SMT_FUNC_BVNXOR,
-  SMT_FUNC_BVNOR,
-  SMT_FUNC_BVNAND,
-  SMT_FUNC_BVXOR,
-  SMT_FUNC_BVOR,
-  SMT_FUNC_BVAND,
-
-  // Logic
-  SMT_FUNC_IMPLIES,
-  SMT_FUNC_XOR,
-  SMT_FUNC_OR,
-  SMT_FUNC_AND,
-  SMT_FUNC_NOT,
-
-  // Comparisons
-  SMT_FUNC_LT,
-  SMT_FUNC_BVSLT,
-  SMT_FUNC_BVULT,
-  SMT_FUNC_GT,
-  SMT_FUNC_BVSGT,
-  SMT_FUNC_BVUGT,
-  SMT_FUNC_LTE,
-  SMT_FUNC_BVSLTE,
-  SMT_FUNC_BVULTE,
-  SMT_FUNC_GTE,
-  SMT_FUNC_BVSGTE,
-  SMT_FUNC_BVUGTE,
-
-  SMT_FUNC_EQ,
-  SMT_FUNC_NOTEQ,
-
-  SMT_FUNC_ITE,
-
-  SMT_FUNC_STORE,
-  SMT_FUNC_SELECT,
-
-  SMT_FUNC_CONCAT,
-  SMT_FUNC_EXTRACT, // Not for going through mk app due to sillyness.
-
-  SMT_FUNC_INT2REAL,
-  SMT_FUNC_REAL2INT,
-  SMT_FUNC_IS_INT,
-
-  // floatbv operations
-  SMT_FUNC_FNEG,
-  SMT_FUNC_FABS,
-  SMT_FUNC_ISZERO,
-  SMT_FUNC_ISNAN,
-  SMT_FUNC_ISINF,
-  SMT_FUNC_ISNORMAL,
-  SMT_FUNC_ISNEG,
-  SMT_FUNC_ISPOS,
-  SMT_FUNC_IEEE_EQ,
-  SMT_FUNC_IEEE_ADD,
-  SMT_FUNC_IEEE_SUB,
-  SMT_FUNC_IEEE_MUL,
-  SMT_FUNC_IEEE_DIV,
-  SMT_FUNC_IEEE_FMA,
-  SMT_FUNC_IEEE_SQRT,
-
-  SMT_FUNC_IEEE_RM_NE,
-  SMT_FUNC_IEEE_RM_ZR,
-  SMT_FUNC_IEEE_RM_PI,
-  SMT_FUNC_IEEE_RM_MI,
-
-  SMT_FUNC_BV2FLOAT,
-  SMT_FUNC_FLOAT2BV,
-};
-
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/smt/fp/fp_conv.h>
-
-/** Class that will hold information about which operation
- *  will be applied for a particular type
- */
-struct expr_op_convert
-{
-  smt_func_kind int_encoding_func;
-  smt_func_kind signedbv_func;
-  smt_func_kind unsignedbv_func;
-  smt_func_kind fixedbv_func;
-  smt_func_kind floatbv_func;
-};
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
@@ -397,71 +273,55 @@ public:
   /** @{
    *  @name Internal conversion API between smt_convt and solver converter */
 
-  /** Create an SMT function application. Using the provided information,
-   *  the solver converter should create a function application in the solver
-   *  being used, then wrap it in an smt_ast, and return it. If the desired
-   *  function application is not supported by the solver, print an error and
-   *  abort.
-   *
-   *  @param s The resulting sort of the func app we are creating.
-   *  @param k The kind of function application to create.
-   *  @param args Array of function apps to use as arguments to this one.
-   *  @param numargs The number of elements in args. Should be consistent with
-   *         the function kind k.
-   *  @return The resulting function application, wrapped in an smt_ast. */
-  virtual smt_astt mk_func_app(
-    smt_sortt s,
-    smt_func_kind k,
-    smt_astt const *args,
-    unsigned int numargs) = 0;
-
-  // Some helpers
-
-  inline smt_astt mk_func_app(smt_sortt s, smt_func_kind k, smt_astt arg1)
-  {
-    smt_astt args[1];
-    args[0] = arg1;
-    return mk_func_app(s, k, args, 1);
-  }
-
-  inline smt_astt
-  mk_func_app(smt_sortt s, smt_func_kind k, smt_astt arg1, smt_astt arg2)
-  {
-    smt_astt args[2];
-    args[0] = arg1;
-    args[1] = arg2;
-    return mk_func_app(s, k, args, 2);
-  }
-
-  inline smt_astt mk_func_app(
-    smt_sortt s,
-    smt_func_kind k,
-    smt_astt arg1,
-    smt_astt arg2,
-    smt_astt arg3)
-  {
-    smt_astt args[3];
-    args[0] = arg1;
-    args[1] = arg2;
-    args[2] = arg3;
-    return mk_func_app(s, k, args, 3);
-  }
-
-  inline smt_astt mk_func_app(
-    smt_sortt s,
-    smt_func_kind k,
-    smt_astt arg1,
-    smt_astt arg2,
-    smt_astt arg3,
-    smt_astt arg4)
-  {
-    smt_astt args[4];
-    args[0] = arg1;
-    args[1] = arg2;
-    args[2] = arg3;
-    args[3] = arg4;
-    return mk_func_app(s, k, args, 4);
-  }
+  virtual smt_astt mk_add(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvadd(smt_astt a, smt_astt b);
+  virtual smt_astt mk_sub(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsub(smt_astt a, smt_astt b);
+  virtual smt_astt mk_mul(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvmul(smt_astt a, smt_astt b);
+  virtual smt_astt mk_mod(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsmod(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvumod(smt_astt a, smt_astt b);
+  virtual smt_astt mk_div(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsdiv(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvudiv(smt_astt a, smt_astt b);
+  virtual smt_astt mk_shl(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvshl(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvashr(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvlshr(smt_astt a, smt_astt b);
+  virtual smt_astt mk_neg(smt_astt a);
+  virtual smt_astt mk_bvneg(smt_astt a);
+  virtual smt_astt mk_bvnot(smt_astt a);
+  virtual smt_astt mk_bvnxor(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvnor(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvnand(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvxor(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvor(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvand(smt_astt a, smt_astt b);
+  virtual smt_astt mk_implies(smt_astt a, smt_astt b);
+  virtual smt_astt mk_xor(smt_astt a, smt_astt b);
+  virtual smt_astt mk_or(smt_astt a, smt_astt b);
+  virtual smt_astt mk_and(smt_astt a, smt_astt b);
+  virtual smt_astt mk_not(smt_astt a);
+  virtual smt_astt mk_lt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvult(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvslt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_gt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvugt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsgt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_le(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvule(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsle(smt_astt a, smt_astt b);
+  virtual smt_astt mk_ge(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvuge(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsge(smt_astt a, smt_astt b);
+  virtual smt_astt mk_eq(smt_astt a, smt_astt b);
+  virtual smt_astt mk_neq(smt_astt a, smt_astt b);
+  virtual smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c);
+  virtual smt_astt mk_select(smt_astt a, smt_astt b);
+  virtual smt_astt mk_real2int(smt_astt a);
+  virtual smt_astt mk_int2real(smt_astt a);
+  virtual smt_astt mk_isint(smt_astt a);
 
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(const smt_sort_kind k, std::size_t width)
@@ -992,9 +852,6 @@ public:
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.
   smt_astt int_shift_op_array;
-
-  /** Mapping of SMT function IDs to their names. XXX, incorrect size. */
-  static const std::string smt_func_name_table[expr2t::end_expr_id];
 };
 
 // Define here to enable inlining

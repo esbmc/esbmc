@@ -212,130 +212,578 @@ z3::expr z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 }
 
 // SMT-abstraction migration routines.
-
-smt_astt z3_convt::mk_func_app(
-  const smt_sort *s,
-  smt_func_kind k,
-  const smt_ast *const *args,
-  unsigned int numargs)
+smt_astt z3_convt::mk_add(smt_astt a, smt_astt b)
 {
-  const z3_smt_ast *asts[4];
-  unsigned int i;
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a + to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
 
-  assert(numargs <= 4);
-  for(i = 0; i < numargs; i++)
-    asts[i] = to_solver_smt_ast<z3_smt_ast>(args[i]);
+smt_astt z3_convt::mk_bvadd(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a + to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
 
-  switch(k)
-  {
-  case SMT_FUNC_ADD:
-  case SMT_FUNC_BVADD:
-    return new_ast((asts[0]->a + asts[1]->a), s);
-  case SMT_FUNC_SUB:
-  case SMT_FUNC_BVSUB:
-    return new_ast((asts[0]->a - asts[1]->a), s);
-  case SMT_FUNC_MUL:
-  case SMT_FUNC_BVMUL:
-    return new_ast((asts[0]->a * asts[1]->a), s);
-  case SMT_FUNC_MOD:
-    if(s->id == SMT_SORT_FLOATBV)
-      return new_ast(
-        z3::to_expr(z3_ctx, Z3_mk_fpa_rem(z3_ctx, asts[0]->a, asts[1]->a)), s);
-    else
-      return new_ast(
-        z3::to_expr(z3_ctx, Z3_mk_mod(z3_ctx, asts[0]->a, asts[1]->a)), s);
-  case SMT_FUNC_BVSMOD:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvsrem(z3_ctx, asts[0]->a, asts[1]->a)), s);
-  case SMT_FUNC_BVUMOD:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvurem(z3_ctx, asts[0]->a, asts[1]->a)), s);
-  case SMT_FUNC_DIV:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_div(z3_ctx, asts[0]->a, asts[1]->a)), s);
-  case SMT_FUNC_BVSDIV:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvsdiv(z3_ctx, asts[0]->a, asts[1]->a)), s);
-  case SMT_FUNC_BVUDIV:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvudiv(z3_ctx, asts[0]->a, asts[1]->a)), s);
-  case SMT_FUNC_SHL:
-    return new_ast(asts[0]->a * pw(z3_ctx.int_val(2), asts[1]->a), s);
-  case SMT_FUNC_BVSHL:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvshl(z3_ctx, asts[0]->a, asts[1]->a)), s);
-  case SMT_FUNC_BVASHR:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvashr(z3_ctx, asts[0]->a, asts[1]->a)), s);
-  case SMT_FUNC_NEG:
-  case SMT_FUNC_BVNEG:
-    return new_ast((-asts[0]->a), s);
-  case SMT_FUNC_BVLSHR:
-    return new_ast(
-      z3::to_expr(z3_ctx, Z3_mk_bvlshr(z3_ctx, asts[0]->a, asts[1]->a)), s);
-  case SMT_FUNC_BVNOT:
-    return new_ast((~asts[0]->a), s);
-  case SMT_FUNC_BVNXOR:
-    return new_ast(!(asts[0]->a ^ asts[1]->a), s);
-  case SMT_FUNC_BVNOR:
-    return new_ast(!(asts[0]->a | asts[1]->a), s);
-  case SMT_FUNC_BVNAND:
-    return new_ast(!(asts[0]->a & asts[1]->a), s);
-  case SMT_FUNC_BVXOR:
-    return new_ast((asts[0]->a ^ asts[1]->a), s);
-  case SMT_FUNC_BVOR:
-    return new_ast((asts[0]->a | asts[1]->a), s);
-  case SMT_FUNC_BVAND:
-    return new_ast((asts[0]->a & asts[1]->a), s);
-  case SMT_FUNC_IMPLIES:
-    return new_ast(implies(asts[0]->a, asts[1]->a), s);
-  case SMT_FUNC_XOR:
-    return new_ast(mk_xor(asts[0]->a, asts[1]->a), s);
-  case SMT_FUNC_OR:
-    return new_ast((asts[0]->a || asts[1]->a), s);
-  case SMT_FUNC_AND:
-    return new_ast((asts[0]->a && asts[1]->a), s);
-  case SMT_FUNC_NOT:
-    return new_ast(!asts[0]->a, s);
-  // NB: mk_{l,g}t{,e} ignore unsigned arg in integer mode.
-  case SMT_FUNC_LT:
-  case SMT_FUNC_BVULT:
-    return new_ast(mk_lt(asts[0]->a, asts[1]->a, true), s);
-  case SMT_FUNC_BVSLT:
-    return new_ast(mk_lt(asts[0]->a, asts[1]->a, false), s);
-  case SMT_FUNC_GT:
-  case SMT_FUNC_BVUGT:
-    return new_ast(mk_gt(asts[0]->a, asts[1]->a, true), s);
-  case SMT_FUNC_BVSGT:
-    return new_ast(mk_gt(asts[0]->a, asts[1]->a, false), s);
-  case SMT_FUNC_LTE:
-  case SMT_FUNC_BVULTE:
-    return new_ast(mk_le(asts[0]->a, asts[1]->a, true), s);
-  case SMT_FUNC_BVSLTE:
-    return new_ast(mk_le(asts[0]->a, asts[1]->a, false), s);
-  case SMT_FUNC_GTE:
-  case SMT_FUNC_BVUGTE:
-    return new_ast(mk_ge(asts[0]->a, asts[1]->a, true), s);
-  case SMT_FUNC_BVSGTE:
-    return new_ast(mk_ge(asts[0]->a, asts[1]->a, false), s);
-  case SMT_FUNC_EQ:
-    return new_ast((asts[0]->a == asts[1]->a), s);
-  case SMT_FUNC_NOTEQ:
-    return new_ast((asts[0]->a != asts[1]->a), s);
-  case SMT_FUNC_STORE:
-    return new_ast(store(asts[0]->a, asts[1]->a, asts[2]->a), s);
-  case SMT_FUNC_SELECT:
-    return new_ast(select(asts[0]->a, asts[1]->a), s);
-  case SMT_FUNC_REAL2INT:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_real2int(z3_ctx, asts[0]->a)), s);
-  case SMT_FUNC_INT2REAL:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_int2real(z3_ctx, asts[0]->a)), s);
-  case SMT_FUNC_IS_INT:
-    return new_ast(z3::to_expr(z3_ctx, Z3_mk_is_int(z3_ctx, asts[0]->a)), s);
-  default:
-    std::cerr << "Unhandled SMT func in z3 conversion" << std::endl;
-    abort();
-  }
+smt_astt z3_convt::mk_sub(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a - to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvsub(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a - to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_mul(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a * to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvmul(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a * to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_mod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_mod(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvsmod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvsrem(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvumod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvurem(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_div(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_div(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvsdiv(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvsdiv(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvudiv(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvudiv(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_shl(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    to_solver_smt_ast<z3_smt_ast>(a)->a *
+      pw(z3_ctx.int_val(2), to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvshl(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvshl(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvashr(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvashr(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvlshr(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvlshr(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_neg(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_INT);
+  return new_ast((-to_solver_smt_ast<z3_smt_ast>(a)->a), a->sort);
+}
+
+smt_astt z3_convt::mk_bvneg(smt_astt a)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast((-to_solver_smt_ast<z3_smt_ast>(a)->a), a->sort);
+}
+
+smt_astt z3_convt::mk_bvnot(smt_astt a)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast((~to_solver_smt_ast<z3_smt_ast>(a)->a), a->sort);
+}
+
+smt_astt z3_convt::mk_bvnxor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    !(to_solver_smt_ast<z3_smt_ast>(a)->a ^
+      to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvnor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    !(to_solver_smt_ast<z3_smt_ast>(a)->a |
+      to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvnand(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    !(to_solver_smt_ast<z3_smt_ast>(a)->a &
+      to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvxor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a ^ to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a | to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_bvand(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a & to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_implies(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    implies(
+      to_solver_smt_ast<z3_smt_ast>(a)->a, to_solver_smt_ast<z3_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_xor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_xor(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_or(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a ||
+     to_solver_smt_ast<z3_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_and(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a &&
+     to_solver_smt_ast<z3_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_not(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_BOOL);
+  return new_ast(!to_solver_smt_ast<z3_smt_ast>(a)->a, boolean_sort);
+}
+
+smt_astt z3_convt::mk_lt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_lt(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_bvult(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvult(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_bvslt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvslt(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_gt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_gt(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_bvugt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvugt(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_bvsgt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvsgt(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_le(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_le(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_bvule(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvule(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_bvsle(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvsle(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_ge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_ge(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_bvuge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvuge(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_bvsge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bvsge(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_eq(smt_astt a, smt_astt b)
+{
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a ==
+     to_solver_smt_ast<z3_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_neq(smt_astt a, smt_astt b)
+{
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    (to_solver_smt_ast<z3_smt_ast>(a)->a !=
+     to_solver_smt_ast<z3_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
+{
+  assert(a->sort->id == SMT_SORT_ARRAY);
+  assert(a->sort->get_domain_width() == b->sort->get_data_width());
+  assert(
+    a->sort->get_range_sort()->get_data_width() == c->sort->get_data_width());
+  return new_ast(
+    store(
+      to_solver_smt_ast<z3_smt_ast>(a)->a,
+      to_solver_smt_ast<z3_smt_ast>(b)->a,
+      to_solver_smt_ast<z3_smt_ast>(c)->a),
+    a->sort);
+}
+
+smt_astt z3_convt::mk_select(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_ARRAY);
+  assert(a->sort->get_domain_width() == b->sort->get_data_width());
+  return new_ast(
+    select(
+      to_solver_smt_ast<z3_smt_ast>(a)->a, to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort->get_range_sort());
+}
+
+smt_astt z3_convt::mk_real2int(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx, Z3_mk_real2int(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a)),
+    mk_int_sort());
+}
+
+smt_astt z3_convt::mk_int2real(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_INT);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx, Z3_mk_int2real(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a)),
+    mk_real_sort());
+}
+
+smt_astt z3_convt::mk_isint(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_INT);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx, Z3_mk_is_int(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a)),
+    boolean_sort);
 }
 
 smt_astt
@@ -936,40 +1384,48 @@ void z3_convt::dump_smt()
 smt_astt z3_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
 {
   return new_ast(
-    mk_gt(
-      to_solver_smt_ast<z3_smt_ast>(lhs)->a,
-      to_solver_smt_ast<z3_smt_ast>(rhs)->a,
-      false),
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_fpa_gt(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(lhs)->a,
+        to_solver_smt_ast<z3_smt_ast>(rhs)->a)),
     boolean_sort);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
 {
   return new_ast(
-    mk_lt(
-      to_solver_smt_ast<z3_smt_ast>(lhs)->a,
-      to_solver_smt_ast<z3_smt_ast>(rhs)->a,
-      false),
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_fpa_lt(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(lhs)->a,
+        to_solver_smt_ast<z3_smt_ast>(rhs)->a)),
     boolean_sort);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
 {
   return new_ast(
-    mk_ge(
-      to_solver_smt_ast<z3_smt_ast>(lhs)->a,
-      to_solver_smt_ast<z3_smt_ast>(rhs)->a,
-      false),
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_fpa_geq(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(lhs)->a,
+        to_solver_smt_ast<z3_smt_ast>(rhs)->a)),
     boolean_sort);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
 {
   return new_ast(
-    mk_le(
-      to_solver_smt_ast<z3_smt_ast>(lhs)->a,
-      to_solver_smt_ast<z3_smt_ast>(rhs)->a,
-      false),
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_fpa_leq(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(lhs)->a,
+        to_solver_smt_ast<z3_smt_ast>(rhs)->a)),
     boolean_sort);
 }
 

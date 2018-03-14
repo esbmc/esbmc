@@ -100,8 +100,6 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     // Zero extend; multiply; Make a decision based on the top half.
     unsigned int sz = zero->type->get_width();
 
-    smt_sortt bigsort = mk_int_bv_sort(SMT_SORT_UBV, sz * 2);
-
     smt_astt arg1_ext = convert_ast(opers.side_1);
     arg1_ext = is_signedbv_type(opers.side_1) ? mk_sign_ext(arg1_ext, sz)
                                               : mk_zero_ext(arg1_ext, sz);
@@ -110,11 +108,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     arg2_ext = is_signedbv_type(opers.side_2) ? mk_sign_ext(arg2_ext, sz)
                                               : mk_zero_ext(arg2_ext, sz);
 
-    smt_astt result = mk_func_app(
-      bigsort,
-      (is_mul2t(overflow.operand) ? SMT_FUNC_BVMUL : SMT_FUNC_BVSHL),
-      arg1_ext,
-      arg2_ext);
+    smt_astt result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
+                                                 : mk_bvshl(arg1_ext, arg2_ext);
 
     if(is_signed)
     {
@@ -129,24 +124,20 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       smt_astt allonesvector = convert_ast(allonesexpr);
 
       // It should either be zero or all one's;
-      smt_astt all_ones =
-        mk_func_app(boolean_sort, SMT_FUNC_EQ, toppart, allonesvector);
+      smt_astt all_ones = mk_eq(toppart, allonesvector);
 
-      smt_astt all_zeros = mk_func_app(
-        boolean_sort, SMT_FUNC_EQ, toppart, convert_ast(gen_zero(newtype)));
+      smt_astt all_zeros = mk_eq(toppart, convert_ast(gen_zero(newtype)));
 
-      smt_astt lor =
-        mk_func_app(boolean_sort, SMT_FUNC_OR, all_ones, all_zeros);
-      return mk_func_app(boolean_sort, SMT_FUNC_NOT, &lor, 1);
+      smt_astt lor = mk_or(all_ones, all_zeros);
+      return mk_not(lor);
     }
 
     // Extract top half.
     smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz);
 
     // It should be zero; if not, overflow
-    smt_astt iseq =
-      mk_func_app(boolean_sort, SMT_FUNC_EQ, toppart, convert_ast(zero));
-    return mk_func_app(boolean_sort, SMT_FUNC_NOT, &iseq, 1);
+    smt_astt iseq = mk_eq(toppart, convert_ast(zero));
+    return mk_not(iseq);
   }
 
   default:
@@ -194,16 +185,16 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   smt_astt pos_sel = mk_extract(orig_val, width - 1, width - pos_zero_bits);
   smt_astt neg_sel = mk_extract(orig_val, width - 1, width - neg_one_bits);
 
-  smt_astt pos_eq = mk_func_app(boolean_sort, SMT_FUNC_EQ, pos_bits, pos_sel);
-  smt_astt neg_eq = mk_func_app(boolean_sort, SMT_FUNC_EQ, neg_bits, neg_sel);
+  smt_astt pos_eq = mk_eq(pos_bits, pos_sel);
+  smt_astt neg_eq = mk_eq(neg_bits, neg_sel);
 
   // isneg -> neg_eq, !isneg -> pos_eq
-  smt_astt notisneg = mk_func_app(boolean_sort, SMT_FUNC_NOT, &isneg, 1);
-  smt_astt c1 = mk_func_app(boolean_sort, SMT_FUNC_IMPLIES, isneg, neg_eq);
-  smt_astt c2 = mk_func_app(boolean_sort, SMT_FUNC_IMPLIES, notisneg, pos_eq);
+  smt_astt notisneg = mk_not(isneg);
+  smt_astt c1 = mk_implies(isneg, neg_eq);
+  smt_astt c2 = mk_implies(notisneg, pos_eq);
 
-  smt_astt nooverflow = mk_func_app(boolean_sort, SMT_FUNC_AND, c1, c2);
-  return mk_func_app(boolean_sort, SMT_FUNC_NOT, &nooverflow, 1);
+  smt_astt nooverflow = mk_and(c1, c2);
+  return mk_not(nooverflow);
 }
 
 smt_astt smt_convt::overflow_neg(const expr2tc &expr)

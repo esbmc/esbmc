@@ -1296,7 +1296,6 @@ void array_convt::add_initial_ackerman_constraints(
   // where the indexes are equivalent (in the solver), then the value of the
   // elements are equivalent. The cost is quadratic, alas.
 
-  smt_sortt boolsort = ctx->boolean_sort;
   for(auto const &it : idx_map)
   {
     if(it.vec_idx < start_point)
@@ -1312,8 +1311,7 @@ void array_convt::add_initial_ackerman_constraints(
 
       smt_astt valeq = vals[it.vec_idx]->eq(ctx, vals[it2.vec_idx]);
 
-      ctx->assert_ast(
-        ctx->mk_func_app(boolsort, SMT_FUNC_IMPLIES, idxeq, valeq));
+      ctx->assert_ast(ctx->mk_implies(idxeq, valeq));
     }
   }
 }

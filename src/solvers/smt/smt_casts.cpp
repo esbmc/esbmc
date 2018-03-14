@@ -264,7 +264,7 @@ smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
   if(is_fixedbv_type(cast.type))
   {
     assert(is_bv_type(cast.from));
-    return mk_func_app(convert_sort(cast.type), SMT_FUNC_INT2REAL, &a, 1);
+    return mk_int2real(a);
   }
 
   assert(is_bv_type(cast.type));
@@ -366,9 +366,6 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   obj_ids.resize(addr_space_data.back().size());
   obj_starts.resize(addr_space_data.back().size());
 
-  smt_func_kind gek = (int_encoding) ? SMT_FUNC_GTE : SMT_FUNC_BVUGTE;
-  smt_func_kind lek = (int_encoding) ? SMT_FUNC_LTE : SMT_FUNC_BVULTE;
-
   std::map<unsigned, unsigned>::const_iterator it;
   unsigned int i;
   for(it = addr_space_data.back().begin(), i = 0;
@@ -386,9 +383,11 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 
     obj_starts[i] = ptr_start;
 
-    smt_astt ge = mk_func_app(boolean_sort, gek, target, ptr_start);
-    smt_astt le = mk_func_app(boolean_sort, lek, target, ptr_end);
-    smt_astt theand = mk_func_app(boolean_sort, SMT_FUNC_AND, ge, le);
+    smt_astt ge =
+      int_encoding ? mk_ge(target, ptr_start) : mk_bvuge(target, ptr_start);
+    smt_astt le =
+      int_encoding ? mk_le(target, ptr_end) : mk_bvule(target, ptr_end);
+    smt_astt theand = mk_and(ge, le);
     is_in_range[i] = theand;
   }
 
@@ -403,8 +402,6 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   smt_astt output_obj = output->project(this, 0);
   smt_astt output_offs = output->project(this, 1);
 
-  smt_func_kind subk = (int_encoding) ? SMT_FUNC_SUB : SMT_FUNC_BVSUB;
-
   ast_vec guards;
   for(i = 0; i < addr_space_data.back().size(); i++)
   {
@@ -412,39 +409,39 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
       continue; // Skip invalid, it contains everything.
 
     // Calculate ptr offset were it this
-    smt_astt offs = mk_func_app(int_sort, subk, target, obj_starts[i]);
+    smt_astt offs = int_encoding ? mk_sub(target, obj_starts[i])
+                                 : mk_bvsub(target, obj_starts[i]);
 
     smt_astt this_obj = obj_ids[i];
     smt_astt this_offs = offs;
 
     smt_astt obj_eq = this_obj->eq(this, output_obj);
     smt_astt offs_eq = this_offs->eq(this, output_offs);
-    smt_astt is_eq = mk_func_app(boolean_sort, SMT_FUNC_AND, obj_eq, offs_eq);
+    smt_astt is_eq = mk_and(obj_eq, offs_eq);
 
     smt_astt in_range = is_in_range[i];
     guards.push_back(in_range);
-    smt_astt imp = mk_func_app(boolean_sort, SMT_FUNC_IMPLIES, in_range, is_eq);
+    smt_astt imp = mk_implies(in_range, is_eq);
     assert_ast(imp);
   }
 
   // If none of the above, match invalid.
   smt_astt was_matched = make_disjunct(guards);
-  smt_astt not_matched = mk_func_app(boolean_sort, SMT_FUNC_NOT, was_matched);
+  smt_astt not_matched = mk_not(was_matched);
 
   smt_astt id = convert_terminal(
     constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
 
   smt_astt one = convert_terminal(gen_ulong(1));
-  smt_astt offs = mk_func_app(int_sort, subk, target, one);
+  smt_astt offs = int_encoding ? mk_sub(target, one) : mk_bvsub(target, one);
   smt_astt inv_obj = id;
   smt_astt inv_offs = offs;
 
   smt_astt obj_eq = inv_obj->eq(this, output_obj);
   smt_astt offs_eq = inv_offs->eq(this, output_offs);
-  smt_astt is_inv = mk_func_app(boolean_sort, SMT_FUNC_AND, obj_eq, offs_eq);
+  smt_astt is_inv = mk_and(obj_eq, offs_eq);
 
-  smt_astt imp =
-    mk_func_app(boolean_sort, SMT_FUNC_IMPLIES, not_matched, is_inv);
+  smt_astt imp = mk_implies(not_matched, is_inv);
   assert_ast(imp);
 
   return output;

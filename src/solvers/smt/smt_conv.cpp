@@ -235,7 +235,7 @@ smt_astt smt_convt::make_disjunct(const ast_vec &v)
     smt_astt accuml = args[0];
     for(j = 1; j < i; j++)
     {
-      accuml = mk_func_app(boolean_sort, SMT_FUNC_OR, accuml, args[j]);
+      accuml = mk_or(accuml, args[j]);
     }
     result = accuml;
   }
@@ -268,7 +268,7 @@ smt_astt smt_convt::make_conjunct(const ast_vec &v)
     smt_astt accuml = args[0];
     for(j = 1; j < i; j++)
     {
-      accuml = mk_func_app(boolean_sort, SMT_FUNC_AND, accuml, args[j]);
+      accuml = mk_and(accuml, args[j]);
     }
     result = accuml;
   }
@@ -283,13 +283,13 @@ smt_astt smt_convt::make_conjunct(const ast_vec &v)
 smt_astt smt_convt::invert_ast(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
-  return mk_func_app(a->sort, SMT_FUNC_NOT, a);
+  return mk_not(a);
 }
 
 smt_astt smt_convt::imply_ast(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
-  return mk_func_app(a->sort, SMT_FUNC_IMPLIES, a, b);
+  return mk_implies(a, b);
 }
 
 void smt_convt::set_to(const expr2tc &expr, bool value)
@@ -313,56 +313,6 @@ void smt_convt::convert_assign(const expr2tc &expr)
   // store them in the cache, rather than have a more sophisticated conversion.
   smt_cache_entryt e = {eq.side_1, side1, ctx_level};
   smt_cache.insert(e);
-}
-
-smt_astt smt_convt::convert_ast(
-  const expr2tc &expr,
-  const type2tc &type,
-  smt_astt const *args,
-  struct expr_op_convert ops)
-{
-  // Convert type
-  smt_sortt sort = convert_sort(expr->type);
-
-  // Call mk_func_app for each type
-  smt_astt a;
-
-  unsigned size = expr->get_num_sub_exprs();
-
-  if(int_encoding || is_bool_type(type))
-  {
-    assert(ops.int_encoding_func);
-    a = mk_func_app(sort, ops.int_encoding_func, args, size);
-  }
-  else if(is_signedbv_type(type))
-  {
-    assert(ops.signedbv_func);
-    a = mk_func_app(sort, ops.signedbv_func, args, size);
-  }
-  else if(is_unsignedbv_type(type))
-  {
-    assert(ops.unsignedbv_func);
-    a = mk_func_app(sort, ops.unsignedbv_func, args, size);
-  }
-  else if(is_fixedbv_type(type))
-  {
-    assert(ops.fixedbv_func);
-    a = mk_func_app(sort, ops.fixedbv_func, args, size);
-  }
-  else if(is_floatbv_type(type))
-  {
-    assert(ops.floatbv_func);
-    a = mk_func_app(sort, ops.floatbv_func, args, size);
-  }
-  else
-  {
-    abort();
-  }
-
-  struct smt_cache_entryt entry = {expr, a, ctx_level};
-  smt_cache.insert(entry);
-
-  return a;
 }
 
 smt_astt smt_convt::convert_ast(const expr2tc &expr)
@@ -416,8 +366,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   case expr2t::constant_union_id:
-    std::cerr << "Post-parse union literals are deprecated and broken, sorry";
-    std::cerr << std::endl;
+    std::cerr << "Post-parse union literals are deprecated and broken, sorry\n";
     abort();
   case expr2t::constant_array_id:
   case expr2t::constant_array_of_id:
@@ -464,8 +413,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::add_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
     const add2t &add = to_add2t(expr);
     if(
       is_pointer_type(expr->type) || is_pointer_type(add.side_1) ||
@@ -473,24 +420,18 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_pointer_arith(expr, expr->type);
     }
+    else if(int_encoding)
+    {
+      a = mk_add(args[0], args[1]);
+    }
     else
     {
-      a = convert_ast(
-        expr,
-        expr->type,
-        args,
-        expr_op_convert{SMT_FUNC_ADD,
-                        SMT_FUNC_BVADD,
-                        SMT_FUNC_BVADD,
-                        SMT_FUNC_BVADD,
-                        SMT_FUNC_INVALID});
+      a = mk_bvadd(args[0], args[1]);
     }
     break;
   }
   case expr2t::sub_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
     const sub2t &sub = to_sub2t(expr);
     if(
       is_pointer_type(expr->type) || is_pointer_type(sub.side_1) ||
@@ -498,24 +439,18 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_pointer_arith(expr, expr->type);
     }
+    else if(int_encoding)
+    {
+      a = mk_sub(args[0], args[1]);
+    }
     else
     {
-      a = convert_ast(
-        expr,
-        expr->type,
-        args,
-        expr_op_convert{SMT_FUNC_SUB,
-                        SMT_FUNC_BVSUB,
-                        SMT_FUNC_BVSUB,
-                        SMT_FUNC_BVSUB,
-                        SMT_FUNC_INVALID});
+      a = mk_bvsub(args[0], args[1]);
     }
     break;
   }
   case expr2t::mul_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
     // Fixedbvs are handled separately
     if(is_fixedbv_type(expr) && !int_encoding)
     {
@@ -527,59 +462,53 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       args[0] = mk_sign_ext(convert_ast(mul.side_1), fraction_bits);
       args[1] = mk_sign_ext(convert_ast(mul.side_2), fraction_bits);
 
-      smt_sortt sort = convert_sort(expr->type);
-      a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
+      a = mk_bvmul(args[0], args[1]);
       a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits);
+    }
+    else if(int_encoding)
+    {
+      a = mk_mul(args[0], args[1]);
     }
     else
     {
-      a = convert_ast(
-        expr,
-        expr->type,
-        args,
-        expr_op_convert{SMT_FUNC_MUL,
-                        SMT_FUNC_BVMUL,
-                        SMT_FUNC_BVMUL,
-                        SMT_FUNC_INVALID,
-                        SMT_FUNC_INVALID});
+      a = mk_bvmul(args[0], args[1]);
     }
     break;
   }
   case expr2t::div_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
+    auto d = to_div2t(expr);
 
     // Fixedbvs are handled separately
     if(is_fixedbv_type(expr) && !int_encoding)
     {
-      auto div = to_div2t(expr);
-      auto fbvt = to_fixedbv_type(div.type);
+      auto fbvt = to_fixedbv_type(d.type);
 
       unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
 
-      smt_sortt s2 = convert_sort(div.side_2->type);
-      args[1] = mk_sign_ext(convert_ast(div.side_2), fraction_bits);
+      args[1] = mk_sign_ext(convert_ast(d.side_2), fraction_bits);
 
       smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), fraction_bits);
-      smt_astt op0 = convert_ast(div.side_1);
+      smt_astt op0 = convert_ast(d.side_1);
 
       args[0] = mk_concat(op0, zero);
 
       // Sorts.
-      a = mk_func_app(s2, SMT_FUNC_BVSDIV, args, 2);
+      a = mk_bvsdiv(args[0], args[1]);
       a = mk_extract(a, fbvt.width - 1, 0);
+    }
+    else if(int_encoding)
+    {
+      a = mk_div(args[0], args[1]);
+    }
+    else if(is_unsignedbv_type(d.side_1) && is_unsignedbv_type(d.side_2))
+    {
+      a = mk_bvudiv(args[0], args[1]);
     }
     else
     {
-      a = convert_ast(
-        expr,
-        expr->type,
-        args,
-        expr_op_convert{SMT_FUNC_DIV,
-                        SMT_FUNC_BVSDIV,
-                        SMT_FUNC_BVUDIV,
-                        SMT_FUNC_INVALID,
-                        SMT_FUNC_INVALID});
+      assert(is_signedbv_type(d.side_1) && is_signedbv_type(d.side_2));
+      a = mk_bvsdiv(args[0], args[1]);
     }
     break;
   }
@@ -587,8 +516,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     a = fp_api->mk_smt_fpbv_add(
-      convert_ast(to_ieee_add2t(expr).side_1),
-      convert_ast(to_ieee_add2t(expr).side_2),
+      args[0],
+      args[1],
       convert_rounding_mode(to_ieee_add2t(expr).rounding_mode));
     break;
   }
@@ -596,8 +525,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     a = fp_api->mk_smt_fpbv_sub(
-      convert_ast(to_ieee_sub2t(expr).side_1),
-      convert_ast(to_ieee_sub2t(expr).side_2),
+      args[0],
+      args[1],
       convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode));
     break;
   }
@@ -605,8 +534,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     a = fp_api->mk_smt_fpbv_mul(
-      convert_ast(to_ieee_mul2t(expr).side_1),
-      convert_ast(to_ieee_mul2t(expr).side_2),
+      args[0],
+      args[1],
       convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode));
     break;
   }
@@ -614,8 +543,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     a = fp_api->mk_smt_fpbv_div(
-      convert_ast(to_ieee_div2t(expr).side_1),
-      convert_ast(to_ieee_div2t(expr).side_2),
+      args[0],
+      args[1],
       convert_rounding_mode(to_ieee_div2t(expr).rounding_mode));
     break;
   }
@@ -623,34 +552,40 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     a = fp_api->mk_smt_fpbv_fma(
-      convert_ast(to_ieee_fma2t(expr).value_1),
-      convert_ast(to_ieee_fma2t(expr).value_2),
-      convert_ast(to_ieee_fma2t(expr).value_3),
+      args[0],
+      args[1],
+      args[2],
       convert_rounding_mode(to_ieee_fma2t(expr).rounding_mode));
     break;
   }
   case expr2t::ieee_sqrt_id:
   {
     assert(is_floatbv_type(expr));
-    assert(expr->get_num_sub_exprs() == 2);
     a = fp_api->mk_smt_fpbv_sqrt(
-      convert_ast(to_ieee_sqrt2t(expr).value),
-      convert_rounding_mode(to_ieee_sqrt2t(expr).rounding_mode));
+      args[0], convert_rounding_mode(to_ieee_sqrt2t(expr).rounding_mode));
     break;
   }
   case expr2t::modulus_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
+    auto m = to_modulus2t(expr);
 
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{SMT_FUNC_MOD,
-                      SMT_FUNC_BVSMOD,
-                      SMT_FUNC_BVUMOD,
-                      SMT_FUNC_BVSMOD, // TODO: is this right?
-                      SMT_FUNC_INVALID});
+    if(int_encoding)
+    {
+      a = mk_mod(args[0], args[1]);
+    }
+    else if(is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
+    {
+      a = mk_bvsmod(args[0], args[1]);
+    }
+    else if(is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2))
+    {
+      a = mk_bvumod(args[0], args[1]);
+    }
+    else
+    {
+      assert(is_signedbv_type(m.side_1) && is_signedbv_type(m.side_2));
+      a = mk_bvsmod(args[0], args[1]);
+    }
     break;
   }
   case expr2t::index_id:
@@ -689,20 +624,15 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::member_id:
   {
-    assert(expr->get_num_sub_exprs() == 1);
     a = convert_member(expr);
     break;
   }
   case expr2t::same_object_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
-    smt_sortt sort = convert_sort(expr->type);
-
     // Two projects, then comparison.
     args[0] = args[0]->project(this, 0);
     args[1] = args[1]->project(this, 0);
-    a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2);
+    a = mk_eq(args[0], args[1]);
     break;
   }
   case expr2t::pointer_offset_id:
@@ -754,31 +684,26 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::isnan_id:
   {
-    assert(expr->get_num_sub_exprs() == 1);
     a = convert_is_nan(expr);
     break;
   }
   case expr2t::isinf_id:
   {
-    assert(expr->get_num_sub_exprs() == 1);
     a = convert_is_inf(expr);
     break;
   }
   case expr2t::isnormal_id:
   {
-    assert(expr->get_num_sub_exprs() == 1);
     a = convert_is_normal(expr);
     break;
   }
   case expr2t::isfinite_id:
   {
-    assert(expr->get_num_sub_exprs() == 1);
     a = convert_is_finite(expr);
     break;
   }
   case expr2t::signbit_id:
   {
-    assert(expr->get_num_sub_exprs() == 1);
     a = convert_signbit(expr);
     break;
   }
@@ -814,149 +739,85 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::equality_id:
   {
-    expr2tc side1 = *expr->get_sub_expr(0);
-    expr2tc side2 = *expr->get_sub_expr(1);
+    auto eq = to_equality2t(expr);
 
-    if(is_floatbv_type(side1) && is_floatbv_type(side2))
-      a = fp_api->mk_smt_fpbv_eq(convert_ast(side1), convert_ast(side2));
+    if(is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2))
+      a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
-      a = args[0]->eq(this, args[1]);
+      a = mk_eq(args[0], args[1]);
     break;
   }
   case expr2t::notequal_id:
   {
     // Handle all kinds of structs by inverted equality. The only that's really
     // going to turn up is pointers though.
-    assert(expr->get_num_sub_exprs() == 2);
 
-    smt_sortt sort = convert_sort(expr->type);
+    auto neq = to_notequal2t(expr);
 
-    expr2tc side1 = *expr->get_sub_expr(0);
-    expr2tc side2 = *expr->get_sub_expr(1);
-    if(is_floatbv_type(side1) && is_floatbv_type(side2))
-      a = fp_api->mk_smt_fpbv_eq(convert_ast(side1), convert_ast(side2));
+    if(is_floatbv_type(neq.side_1) && is_floatbv_type(neq.side_2))
+      a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
       a = args[0]->eq(this, args[1]);
-    a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
+    a = mk_not(a);
     break;
   }
   case expr2t::shl_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
     const shl2t &shl = to_shl2t(expr);
-
-    if(shl.side_1->type->get_width() != shl.side_2->type->get_width())
-    {
-      // FIXME: frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      typecast2tc cast(shl.side_1->type, shl.side_2);
-      args[1] = convert_ast(cast);
-    }
 
     if(int_encoding)
     {
-      smt_sortt sort = convert_sort(expr->type);
-
       // Raise 2^shift, then multiply first operand by that value. If it's
       // negative, what to do? FIXME.
       smt_astt powval = int_shift_op_array->select(this, shl.side_2);
       args[1] = powval;
-      a = mk_func_app(sort, SMT_FUNC_MUL, &args[0], 2);
+      a = mk_mul(args[0], args[1]);
     }
     else
     {
-      a = convert_ast(
-        expr,
-        expr->type,
-        args,
-        expr_op_convert{SMT_FUNC_INVALID,
-                        SMT_FUNC_BVSHL,
-                        SMT_FUNC_BVSHL,
-                        SMT_FUNC_BVSHL,
-                        SMT_FUNC_INVALID});
+      a = mk_bvshl(args[0], args[1]);
     }
     break;
   }
   case expr2t::ashr_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
     const ashr2t &ashr = to_ashr2t(expr);
-
-    if(ashr.side_1->type->get_width() != ashr.side_2->type->get_width())
-    {
-      // FIXME: frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      typecast2tc cast(ashr.side_1->type, ashr.side_2);
-      args[1] = convert_ast(cast);
-    }
 
     if(int_encoding)
     {
-      smt_sortt sort = convert_sort(expr->type);
-
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
       smt_astt powval = int_shift_op_array->select(this, ashr.side_2);
       args[1] = powval;
-      a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
+      a = mk_div(args[0], args[1]);
     }
     else
     {
-      a = convert_ast(
-        expr,
-        expr->type,
-        args,
-        expr_op_convert{SMT_FUNC_INVALID,
-                        SMT_FUNC_BVASHR,
-                        SMT_FUNC_BVASHR,
-                        SMT_FUNC_BVASHR,
-                        SMT_FUNC_INVALID});
+      a = mk_bvashr(args[0], args[1]);
     }
     break;
   }
   case expr2t::lshr_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
     // Like ashr. Haven't got around to cleaning this up yet.
     const lshr2t &lshr = to_lshr2t(expr);
 
-    if(lshr.side_1->type->get_width() != lshr.side_2->type->get_width())
-    {
-      // FIXME: frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      typecast2tc cast(lshr.side_1->type, lshr.side_2);
-      args[1] = convert_ast(cast);
-    }
-
     if(int_encoding)
     {
-      smt_sortt sort = convert_sort(expr->type);
-
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
       smt_astt powval = int_shift_op_array->select(this, lshr.side_2);
       args[1] = powval;
-      a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
+      a = mk_div(args[0], args[1]);
     }
     else
     {
-      a = convert_ast(
-        expr,
-        expr->type,
-        args,
-        expr_op_convert{SMT_FUNC_INVALID,
-                        SMT_FUNC_BVLSHR,
-                        SMT_FUNC_BVLSHR,
-                        SMT_FUNC_BVLSHR,
-                        SMT_FUNC_INVALID});
+      a = mk_bvlshr(args[0], args[1]);
     }
     break;
   }
   case expr2t::abs_id:
   {
-    assert(expr->get_num_sub_exprs() == 1);
-
     const abs2t &abs = to_abs2t(expr);
     if(is_unsignedbv_type(abs.value))
     {
@@ -979,8 +840,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::lessthan_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
     const lessthan2t &lt = to_lessthan2t(expr);
     // Pointer relation:
     if(is_pointer_type(lt.side_1))
@@ -991,24 +850,27 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = fp_api->mk_smt_fpbv_lt(args[0], args[1]);
     }
+    else if(int_encoding)
+    {
+      a = mk_lt(args[0], args[1]);
+    }
+    else if(is_fixedbv_type(lt.side_1) && is_fixedbv_type(lt.side_2))
+    {
+      a = mk_bvslt(args[0], args[1]);
+    }
+    else if(is_unsignedbv_type(lt.side_1) && is_unsignedbv_type(lt.side_2))
+    {
+      a = mk_bvult(args[0], args[1]);
+    }
     else
     {
-      a = convert_ast(
-        expr,
-        lt.side_1->type,
-        args,
-        expr_op_convert{SMT_FUNC_LT,
-                        SMT_FUNC_BVSLT,
-                        SMT_FUNC_BVULT,
-                        SMT_FUNC_BVSLT,
-                        SMT_FUNC_INVALID});
+      assert(is_signedbv_type(lt.side_1) && is_signedbv_type(lt.side_2));
+      a = mk_bvslt(args[0], args[1]);
     }
     break;
   }
   case expr2t::lessthanequal_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
     const lessthanequal2t &lte = to_lessthanequal2t(expr);
     // Pointer relation:
     if(is_pointer_type(lte.side_1))
@@ -1019,24 +881,27 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = fp_api->mk_smt_fpbv_lte(args[0], args[1]);
     }
+    else if(int_encoding)
+    {
+      a = mk_le(args[0], args[1]);
+    }
+    else if(is_fixedbv_type(lte.side_1) && is_fixedbv_type(lte.side_2))
+    {
+      a = mk_bvsle(args[0], args[1]);
+    }
+    else if(is_unsignedbv_type(lte.side_1) && is_unsignedbv_type(lte.side_2))
+    {
+      a = mk_bvule(args[0], args[1]);
+    }
     else
     {
-      a = convert_ast(
-        expr,
-        lte.side_1->type,
-        args,
-        expr_op_convert{SMT_FUNC_LTE,
-                        SMT_FUNC_BVSLTE,
-                        SMT_FUNC_BVULTE,
-                        SMT_FUNC_BVSLTE,
-                        SMT_FUNC_INVALID});
+      assert(is_signedbv_type(lte.side_1) && is_signedbv_type(lte.side_2));
+      a = mk_bvsle(args[0], args[1]);
     }
     break;
   }
   case expr2t::greaterthan_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
     const greaterthan2t &gt = to_greaterthan2t(expr);
     // Pointer relation:
     if(is_pointer_type(gt.side_1))
@@ -1047,24 +912,27 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = fp_api->mk_smt_fpbv_gt(args[0], args[1]);
     }
+    else if(int_encoding)
+    {
+      a = mk_gt(args[0], args[1]);
+    }
+    else if(is_fixedbv_type(gt.side_1) && is_fixedbv_type(gt.side_2))
+    {
+      a = mk_bvsgt(args[0], args[1]);
+    }
+    else if(is_unsignedbv_type(gt.side_1) && is_unsignedbv_type(gt.side_2))
+    {
+      a = mk_bvugt(args[0], args[1]);
+    }
     else
     {
-      a = convert_ast(
-        expr,
-        gt.side_1->type,
-        args,
-        expr_op_convert{SMT_FUNC_GT,
-                        SMT_FUNC_BVSGT,
-                        SMT_FUNC_BVUGT,
-                        SMT_FUNC_BVSGT,
-                        SMT_FUNC_INVALID});
+      assert(is_signedbv_type(gt.side_1) && is_signedbv_type(gt.side_2));
+      a = mk_bvsgt(args[0], args[1]);
     }
     break;
   }
   case expr2t::greaterthanequal_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
     const greaterthanequal2t &gte = to_greaterthanequal2t(expr);
     // Pointer relation:
     if(is_pointer_type(gte.side_1))
@@ -1075,17 +943,22 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = fp_api->mk_smt_fpbv_gte(args[0], args[1]);
     }
+    else if(int_encoding)
+    {
+      a = mk_ge(args[0], args[1]);
+    }
+    else if(is_fixedbv_type(gte.side_1) && is_fixedbv_type(gte.side_2))
+    {
+      a = mk_bvsge(args[0], args[1]);
+    }
+    else if(is_unsignedbv_type(gte.side_1) && is_unsignedbv_type(gte.side_2))
+    {
+      a = mk_bvuge(args[0], args[1]);
+    }
     else
     {
-      a = convert_ast(
-        expr,
-        gte.side_1->type,
-        args,
-        expr_op_convert{SMT_FUNC_GTE,
-                        SMT_FUNC_BVSGTE,
-                        SMT_FUNC_BVUGTE,
-                        SMT_FUNC_BVSGTE,
-                        SMT_FUNC_INVALID});
+      assert(is_signedbv_type(gte.side_1) && is_signedbv_type(gte.side_2));
+      a = mk_bvsge(args[0], args[1]);
     }
     break;
   }
@@ -1099,206 +972,91 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::implies_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{SMT_FUNC_IMPLIES,
-                      SMT_FUNC_IMPLIES,
-                      SMT_FUNC_IMPLIES,
-                      SMT_FUNC_IMPLIES,
-                      SMT_FUNC_IMPLIES});
+    a = mk_implies(args[0], args[1]);
     break;
   }
   case expr2t::bitand_id:
   {
     assert(!int_encoding);
-    assert(expr->get_num_sub_exprs() == 2);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{SMT_FUNC_INVALID,
-                      SMT_FUNC_BVAND,
-                      SMT_FUNC_BVAND,
-                      SMT_FUNC_INVALID,
-                      SMT_FUNC_INVALID});
+    a = mk_bvand(args[0], args[1]);
     break;
   }
   case expr2t::bitor_id:
   {
     assert(!int_encoding);
-    assert(expr->get_num_sub_exprs() == 2);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{SMT_FUNC_INVALID,
-                      SMT_FUNC_BVOR,
-                      SMT_FUNC_BVOR,
-                      SMT_FUNC_INVALID,
-                      SMT_FUNC_INVALID});
+    a = mk_bvor(args[0], args[1]);
     break;
   }
   case expr2t::bitxor_id:
   {
     assert(!int_encoding);
-    assert(expr->get_num_sub_exprs() == 2);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{SMT_FUNC_INVALID,
-                      SMT_FUNC_BVXOR,
-                      SMT_FUNC_BVXOR,
-                      SMT_FUNC_INVALID,
-                      SMT_FUNC_INVALID});
+    a = mk_bvxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnand_id:
   {
     assert(!int_encoding);
-    assert(expr->get_num_sub_exprs() == 2);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{SMT_FUNC_INVALID,
-                      SMT_FUNC_BVNAND,
-                      SMT_FUNC_BVNAND,
-                      SMT_FUNC_INVALID,
-                      SMT_FUNC_INVALID});
+    a = mk_bvnand(args[0], args[1]);
     break;
   }
   case expr2t::bitnor_id:
   {
     assert(!int_encoding);
-    assert(expr->get_num_sub_exprs() == 2);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{SMT_FUNC_INVALID,
-                      SMT_FUNC_BVNOR,
-                      SMT_FUNC_BVNOR,
-                      SMT_FUNC_INVALID,
-                      SMT_FUNC_INVALID});
+    a = mk_bvnor(args[0], args[1]);
     break;
   }
   case expr2t::bitnxor_id:
   {
     assert(!int_encoding);
-    assert(expr->get_num_sub_exprs() == 2);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{SMT_FUNC_INVALID,
-                      SMT_FUNC_BVNXOR,
-                      SMT_FUNC_BVNXOR,
-                      SMT_FUNC_INVALID,
-                      SMT_FUNC_INVALID});
+    a = mk_bvnxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnot_id:
   {
     assert(!int_encoding);
-    assert(expr->get_num_sub_exprs() == 1);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{SMT_FUNC_INVALID,
-                      SMT_FUNC_BVNOT,
-                      SMT_FUNC_BVNOT,
-                      SMT_FUNC_INVALID,
-                      SMT_FUNC_INVALID});
+    a = mk_bvnot(args[0]);
     break;
   }
   case expr2t::not_id:
   {
     assert(is_bool_type(expr));
-    assert(expr->get_num_sub_exprs() == 1);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{
-        SMT_FUNC_NOT, SMT_FUNC_NOT, SMT_FUNC_NOT, SMT_FUNC_NOT, SMT_FUNC_NOT});
+    a = mk_not(args[0]);
     break;
   }
   case expr2t::neg_id:
   {
-    assert(expr->get_num_sub_exprs() == 1);
-
     const neg2t &neg = to_neg2t(expr);
     if(is_floatbv_type(neg.value))
     {
       a = fp_api->mk_smt_fpbv_neg(args[0]);
     }
+    else if(int_encoding)
+    {
+      a = mk_neg(args[0]);
+    }
     else
     {
-      a = convert_ast(
-        expr,
-        expr->type,
-        args,
-        expr_op_convert{SMT_FUNC_NEG,
-                        SMT_FUNC_BVNEG,
-                        SMT_FUNC_BVNEG,
-                        SMT_FUNC_BVNEG,
-                        SMT_FUNC_INVALID});
+      a = mk_bvneg(args[0]);
     }
     break;
   }
   case expr2t::and_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{
-        SMT_FUNC_AND, SMT_FUNC_AND, SMT_FUNC_AND, SMT_FUNC_AND, SMT_FUNC_AND});
+    a = mk_and(args[0], args[1]);
     break;
   }
   case expr2t::or_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{
-        SMT_FUNC_OR, SMT_FUNC_OR, SMT_FUNC_OR, SMT_FUNC_OR, SMT_FUNC_OR});
+    a = mk_or(args[0], args[1]);
     break;
   }
   case expr2t::xor_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
-
-    a = convert_ast(
-      expr,
-      expr->type,
-      args,
-      expr_op_convert{
-        SMT_FUNC_XOR, SMT_FUNC_XOR, SMT_FUNC_XOR, SMT_FUNC_XOR, SMT_FUNC_XOR});
+    a = mk_xor(args[0], args[1]);
     break;
   }
   case expr2t::bitcast_id:
   {
-    assert(expr->get_num_sub_exprs() == 2);
     const bitcast2t &cast = to_bitcast2t(expr);
     assert(is_scalar_type(cast.type) && is_scalar_type(cast.from));
 
@@ -1330,8 +1088,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   default:
-    std::cerr << "Couldn't convert expression in unrecognised format"
-              << std::endl;
+    std::cerr << "Couldn't convert expression in unrecognised format\n";
     expr->dump();
     abort();
   }
@@ -1437,7 +1194,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
   }
   default:
     std::cerr << "Unexpected type ID " << get_type_id(type);
-    std::cerr << " reached SMT conversion" << std::endl;
+    std::cerr << " reached SMT conversion\n";
     abort();
   }
 
@@ -1585,7 +1342,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
   }
 
   default:
-    std::cerr << "Converting unrecognized terminal expr to SMT" << std::endl;
+    std::cerr << "Converting unrecognized terminal expr to SMT\n";
     expr->dump();
     abort();
   }
@@ -1670,8 +1427,8 @@ smt_astt smt_convt::convert_is_finite(const expr2tc &expr)
   smt_astt isinf = fp_api->mk_smt_fpbv_is_inf(value);
   smt_astt isnan = fp_api->mk_smt_fpbv_is_nan(value);
 
-  smt_astt or_op = mk_func_app(boolean_sort, SMT_FUNC_OR, isinf, isnan);
-  return mk_func_app(boolean_sort, SMT_FUNC_NOT, or_op);
+  smt_astt or_op = mk_or(isinf, isnan);
+  return mk_not(or_op);
 }
 
 smt_astt smt_convt::convert_signbit(const expr2tc &expr)
@@ -1688,11 +1445,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
     is_neg = fp_api->mk_smt_fpbv_is_negative(value);
   else
     // For fixedbvs, we check if it's < 0
-    is_neg = mk_func_app(
-      boolean_sort,
-      SMT_FUNC_LT,
-      value,
-      convert_ast(gen_zero(signbit.value->type)));
+    is_neg = mk_lt(value, convert_ast(gen_zero(signbit.value->type)));
 
   // If it's true, return 1. Return 0, othewise.
   return mk_ite(
@@ -1717,27 +1470,16 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
   // 3 is round to -oo
   // 4 is round to zero
 
-  smt_sortt bs = boolean_sort;
-
   smt_astt symbol = convert_ast(expr);
 
-  smt_astt is_0 = mk_func_app(
-    bs,
-    SMT_FUNC_EQ,
-    symbol,
-    mk_smt_bv(SMT_SORT_UBV, BigInt(0), symbol->sort->get_data_width()));
+  smt_astt is_0 = mk_eq(
+    symbol, mk_smt_bv(SMT_SORT_UBV, BigInt(0), symbol->sort->get_data_width()));
 
-  smt_astt is_2 = mk_func_app(
-    bs,
-    SMT_FUNC_EQ,
-    symbol,
-    mk_smt_bv(SMT_SORT_UBV, BigInt(2), symbol->sort->get_data_width()));
+  smt_astt is_2 = mk_eq(
+    symbol, mk_smt_bv(SMT_SORT_UBV, BigInt(2), symbol->sort->get_data_width()));
 
-  smt_astt is_3 = mk_func_app(
-    bs,
-    SMT_FUNC_EQ,
-    symbol,
-    mk_smt_bv(SMT_SORT_UBV, BigInt(3), symbol->sort->get_data_width()));
+  smt_astt is_3 = mk_eq(
+    symbol, mk_smt_bv(SMT_SORT_UBV, BigInt(3), symbol->sort->get_data_width()));
 
   smt_astt ne = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
   smt_astt mi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
@@ -1771,19 +1513,16 @@ smt_astt smt_convt::round_real_to_int(smt_astt a)
   // the same. (Technically, it's also platform dependant). To get around this,
   // add one to the result in all circumstances, except where the value was
   // already an integer.
-  smt_sortt realsort = mk_real_sort();
-  smt_sortt intsort = mk_int_sort();
-  smt_sortt boolsort = boolean_sort;
-  smt_astt is_lt_zero = mk_func_app(realsort, SMT_FUNC_LT, a, mk_smt_real("0"));
+  smt_astt is_lt_zero = mk_lt(a, mk_smt_real("0"));
 
   // The actual conversion
-  smt_astt as_int = mk_func_app(intsort, SMT_FUNC_REAL2INT, a);
+  smt_astt as_int = mk_real2int(a);
 
   smt_astt one = mk_smt_int(BigInt(1), false);
-  smt_astt plus_one = mk_func_app(intsort, SMT_FUNC_ADD, one, as_int);
+  smt_astt plus_one = mk_add(one, as_int);
 
   // If it's an integer, just keep it's untruncated value.
-  smt_astt is_int = mk_func_app(boolsort, SMT_FUNC_IS_INT, &a, 1);
+  smt_astt is_int = mk_isint(a);
   smt_astt selected = mk_ite(is_int, as_int, plus_one);
 
   // Switch on whether it's > or < 0.
@@ -1801,10 +1540,6 @@ smt_astt smt_convt::round_fixedbv_to_int(
   // nonzero fraction, and not if there's not.
   unsigned int frac_width = fromwidth / 2;
 
-  // Sorts
-  smt_sortt tosort = mk_int_bv_sort(SMT_SORT_UBV, towidth);
-  smt_sortt boolsort = boolean_sort;
-
   // Determine whether the source is signed from its topmost bit.
   smt_astt is_neg_bit = mk_extract(a, fromwidth - 1, fromwidth - 1);
   smt_astt true_bit = mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
@@ -1816,7 +1551,7 @@ smt_astt smt_convt::round_fixedbv_to_int(
   // Data for inspecting fraction part
   smt_astt frac_part = mk_extract(a, frac_width - 1, 0);
   smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), frac_width);
-  smt_astt is_zero_frac = mk_func_app(boolsort, SMT_FUNC_EQ, frac_part, zero);
+  smt_astt is_zero_frac = mk_eq(frac_part, zero);
 
   // So, we have a base number (the magnitude), and need to decide whether to
   // round up or down. If it's positive, round down towards zero. If it's neg
@@ -1824,12 +1559,11 @@ smt_astt smt_convt::round_fixedbv_to_int(
 
   // We may need a value + 1.
   smt_astt one = mk_smt_bv(SMT_SORT_UBV, BigInt(1), towidth);
-  smt_astt intvalue_plus_one =
-    mk_func_app(tosort, SMT_FUNC_BVADD, intvalue, one);
+  smt_astt intvalue_plus_one = mk_bvadd(intvalue, one);
 
   smt_astt neg_val = mk_ite(is_zero_frac, intvalue, intvalue_plus_one);
 
-  smt_astt is_neg = mk_func_app(boolsort, SMT_FUNC_EQ, true_bit, is_neg_bit);
+  smt_astt is_neg = mk_eq(true_bit, is_neg_bit);
 
   // final switch
   return mk_ite(is_neg, neg_val, intvalue);
@@ -1857,10 +1591,9 @@ smt_astt smt_convt::make_bit_bool(smt_astt a)
     "Wrong sort fed to "
     "smt_convt::make_bit_bool");
 
-  smt_sortt boolsort = boolean_sort;
   smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
                                 : mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
-  return mk_func_app(boolsort, SMT_FUNC_EQ, a, one);
+  return mk_eq(a, one);
 }
 
 expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
@@ -2264,91 +1997,6 @@ std::string smt_convt::get_fixed_point(const unsigned width, std::string value)
   return value;
 }
 
-const std::string smt_convt::smt_func_name_table[expr2t::end_expr_id] = {
-  "hack_func_id",
-  "invalid_func_id",
-  "int_func_id",
-  "bool_func_id",
-  "bvint_func_id",
-  "real_func_id",
-  "symbol_func_id",
-  "+",
-  "bvadd",
-  "-",
-  "bvsub",
-  "*",
-  "bvmul",
-  "/",
-  "bvudiv",
-  "bvsdiv",
-  "%",
-  "bvsmod",
-  "bvurem",
-  "shl",
-  "bvshl",
-  "bvashr",
-  "-",
-  "bvneg",
-  "bvlshr",
-  "bvnot",
-  "bvnxor",
-  "bvnor",
-  "bvnand",
-  "bvxor",
-  "bvor",
-  "bvand",
-  "=>",
-  "xor",
-  "or",
-  "and",
-  "not",
-  "<",
-  "bvslt",
-  "bvult",
-  ">",
-  "bvsgt",
-  "bvugt",
-  "<=",
-  "bvsle",
-  "bvule",
-  ">=",
-  "bvsge",
-  "bvuge",
-  "=",
-  "distinct",
-  "ite",
-  "store",
-  "select",
-  "concat",
-  "extract",
-  "int2real",
-  "real2int",
-  "is_int",
-  "fneg",
-  "fabs",
-  "is_zero",
-  "is_nan",
-  "is_inf",
-  "is_normal",
-  "is_neg",
-  "is_pos",
-  "ieee_eq",
-  "ieee_add",
-  "ieee_sub",
-  "ieee_mul",
-  "ieee_div",
-  "ieee_fma",
-  "ieee_sqrt",
-  "ieee_rm_ne",
-  "ieee_rm_zr",
-  "ieee_rm_pi",
-  "ieee_rm_mi",
-  "bv2fp_cast",
-  "fp2bv_cast",
-};
-
-// Debris from prop_convt: to be reorganized.
-
 void smt_convt::pre_solve()
 {
   // NB: always perform tuple constraint adding first, as it covers tuple
@@ -2486,7 +2134,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
 
   default:
     std::cerr << "Unimplemented type'd expression (" << type->type_id
-              << ") in smt get" << std::endl;
+              << ") in smt get\n";
     abort();
   }
 }
@@ -2511,7 +2159,7 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
 
   default:
     std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
-              << ") in smt get" << std::endl;
+              << ") in smt get\n";
     abort();
   }
 }
@@ -2569,8 +2217,7 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
 
   if(!is_constant_int2t(arr_type.array_size))
   {
-    std::cerr << "Non-constant sized array of type constant_array_of2t"
-              << std::endl;
+    std::cerr << "Non-constant sized array of type constant_array_of2t\n";
     abort();
   }
 
@@ -2805,7 +2452,7 @@ smt_astt smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 smt_astt smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
   // Simple approach: this is a leaf piece of SMT, compute a basic equality.
-  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, this, other);
+  return ctx->mk_eq(this, other);
 }
 
 smt_astt smt_ast::update(
@@ -2831,8 +2478,7 @@ smt_astt smt_ast::update(
     index = idx_expr;
   }
 
-  return ctx->mk_func_app(
-    sort, SMT_FUNC_STORE, this, ctx->convert_ast(index), value);
+  return ctx->mk_store(this, ctx->convert_ast(index), value);
 }
 
 smt_astt smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
@@ -2844,14 +2490,14 @@ smt_astt smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   const smt_ast *args[2];
   args[0] = this;
   args[1] = ctx->convert_ast(idx);
-  return ctx->mk_func_app(sort->get_range_sort(), SMT_FUNC_SELECT, args, 2);
+  return ctx->mk_select(args[0], args[1]);
 }
 
 smt_astt smt_ast::project(
   smt_convt *ctx __attribute__((unused)),
   unsigned int idx __attribute__((unused))) const
 {
-  std::cerr << "Projecting from non-tuple based AST" << std::endl;
+  std::cerr << "Projecting from non-tuple based AST\n";
   abort();
 }
 
@@ -2937,13 +2583,10 @@ smt_astt smt_convt::mk_bvredor(smt_astt op)
 {
   // bvredor = bvnot(bvcomp(x,0)) ? bv1 : bv0;
 
-  smt_astt comp = mk_func_app(
-    boolean_sort,
-    SMT_FUNC_EQ,
-    op,
-    mk_smt_bv(SMT_SORT_UBV, 0, op->sort->get_data_width()));
+  smt_astt comp =
+    mk_eq(op, mk_smt_bv(SMT_SORT_UBV, 0, op->sort->get_data_width()));
 
-  smt_astt ncomp = mk_func_app(boolean_sort, SMT_FUNC_NOT, comp);
+  smt_astt ncomp = mk_not(comp);
 
   // If it's true, return 1. Return 0, othewise.
   return mk_ite(
@@ -2954,9 +2597,7 @@ smt_astt smt_convt::mk_bvredand(smt_astt op)
 {
   // bvredand = bvcomp(x,-1) ? bv1 : bv0;
 
-  smt_astt comp = mk_func_app(
-    boolean_sort,
-    SMT_FUNC_EQ,
+  smt_astt comp = mk_eq(
     op,
     mk_smt_bv(
       SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), op->sort->get_data_width()));
@@ -2964,4 +2605,339 @@ smt_astt smt_convt::mk_bvredand(smt_astt op)
   // If it's true, return 1. Return 0, othewise.
   return mk_ite(
     comp, mk_smt_bv(SMT_SORT_UBV, 1, 1), mk_smt_bv(SMT_SORT_UBV, 0, 1));
+}
+
+smt_astt smt_convt::mk_add(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvadd(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_sub(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvsub(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_mul(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvmul(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_mod(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvsmod(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvumod(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_div(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvsdiv(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvudiv(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_shl(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvshl(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvashr(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvlshr(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_neg(smt_astt a)
+{
+  (void)a;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvneg(smt_astt a)
+{
+  (void)a;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvnot(smt_astt a)
+{
+  (void)a;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvnxor(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvnor(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvnand(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvxor(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvor(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvand(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_implies(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_xor(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_or(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_and(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_not(smt_astt a)
+{
+  (void)a;
+  abort();
+}
+
+smt_astt smt_convt::mk_lt(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvult(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvslt(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_gt(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvugt(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvsgt(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_le(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvule(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvsle(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_ge(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvuge(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_bvsge(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_eq(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_neq(smt_astt a, smt_astt b)
+{
+  return mk_not(mk_eq(a, b));
+}
+
+smt_astt smt_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
+{
+  (void)a;
+  (void)b;
+  (void)c;
+  abort();
+}
+
+smt_astt smt_convt::mk_select(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_convt::mk_real2int(smt_astt a)
+{
+  (void)a;
+  abort();
+}
+
+smt_astt smt_convt::mk_int2real(smt_astt a)
+{
+  (void)a;
+  abort();
+}
+
+smt_astt smt_convt::mk_isint(smt_astt a)
+{
+  (void)a;
+  abort();
 }

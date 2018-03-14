@@ -69,11 +69,55 @@ public:
   z3::expr mk_tuple_select(const z3::expr &t, unsigned i);
 
   // SMT-abstraction migration:
-  smt_astt mk_func_app(
-    const smt_sort *s,
-    smt_func_kind k,
-    const smt_ast *const *args,
-    unsigned int numargs) override;
+  smt_astt mk_add(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvadd(smt_astt a, smt_astt b) override;
+  smt_astt mk_sub(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsub(smt_astt a, smt_astt b) override;
+  smt_astt mk_mul(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvmul(smt_astt a, smt_astt b) override;
+  smt_astt mk_mod(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsmod(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvumod(smt_astt a, smt_astt b) override;
+  smt_astt mk_div(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsdiv(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvudiv(smt_astt a, smt_astt b) override;
+  smt_astt mk_shl(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvshl(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvashr(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvlshr(smt_astt a, smt_astt b) override;
+  smt_astt mk_neg(smt_astt a) override;
+  smt_astt mk_bvneg(smt_astt a) override;
+  smt_astt mk_bvnot(smt_astt a) override;
+  smt_astt mk_bvnxor(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvnor(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvnand(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvxor(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvor(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvand(smt_astt a, smt_astt b) override;
+  smt_astt mk_implies(smt_astt a, smt_astt b) override;
+  smt_astt mk_xor(smt_astt a, smt_astt b) override;
+  smt_astt mk_or(smt_astt a, smt_astt b) override;
+  smt_astt mk_and(smt_astt a, smt_astt b) override;
+  smt_astt mk_not(smt_astt a) override;
+  smt_astt mk_lt(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvult(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvslt(smt_astt a, smt_astt b) override;
+  smt_astt mk_gt(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvugt(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsgt(smt_astt a, smt_astt b) override;
+  smt_astt mk_le(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvule(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsle(smt_astt a, smt_astt b) override;
+  smt_astt mk_ge(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvuge(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsge(smt_astt a, smt_astt b) override;
+  smt_astt mk_eq(smt_astt a, smt_astt b) override;
+  smt_astt mk_neq(smt_astt a, smt_astt b) override;
+  smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c) override;
+  smt_astt mk_select(smt_astt a, smt_astt b) override;
+  smt_astt mk_real2int(smt_astt a) override;
+  smt_astt mk_int2real(smt_astt a) override;
+  smt_astt mk_isint(smt_astt a) override;
 
   smt_sortt mk_bool_sort() override;
   smt_sortt mk_real_sort() override;
