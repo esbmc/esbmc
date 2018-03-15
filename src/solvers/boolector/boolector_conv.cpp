@@ -70,7 +70,6 @@ smt_astt boolector_convt::mk_bvadd(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->id == b->sort->id);
   return new_ast(
     boolector_add(
       btor,
