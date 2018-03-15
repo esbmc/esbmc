@@ -590,7 +590,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else
     {
-      assert(is_signedbv_type(m.side_1) && is_signedbv_type(m.side_2));
+      assert(is_signedbv_type(m.side_1) || is_signedbv_type(m.side_2));
       a = mk_bvsmod(args[0], args[1]);
     }
     break;
