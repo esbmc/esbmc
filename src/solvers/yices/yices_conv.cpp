@@ -603,7 +603,6 @@ smt_astt yices_convt::mk_eq(smt_astt a, smt_astt b)
         to_solver_smt_ast<yices_smt_ast>(b)->a),
       boolean_sort);
 
-  assert(a->sort->id == SMT_SORT_BV || a->sort->id == SMT_SORT_FIXEDBV);
   return new_ast(
     yices_bveq_atom(
       to_solver_smt_ast<yices_smt_ast>(a)->a,
@@ -628,7 +627,6 @@ smt_astt yices_convt::mk_neq(smt_astt a, smt_astt b)
         to_solver_smt_ast<yices_smt_ast>(b)->a),
       boolean_sort);
 
-  assert(a->sort->id == SMT_SORT_BV || a->sort->id == SMT_SORT_FIXEDBV);
   return new_ast(
     yices_bvneq_atom(
       to_solver_smt_ast<yices_smt_ast>(a)->a,
