@@ -116,154 +116,559 @@ void yices_convt::assert_ast(smt_astt a)
   yices_assert_formula(yices_ctx, ast->a);
 }
 
-smt_astt yices_convt::mk_func_app(
-  const smt_sort *s,
-  smt_func_kind k,
-  const smt_ast *const *args,
-  unsigned int numargs)
+smt_astt yices_convt::mk_add(smt_astt a, smt_astt b)
 {
-  const yices_smt_ast *asts[4];
-  unsigned int i;
-  term_t temp_term;
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    yices_add(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
 
-  assert(numargs <= 4);
-  for(i = 0; i < numargs; i++)
-    asts[i] = to_solver_smt_ast<yices_smt_ast>(args[i]);
+smt_astt yices_convt::mk_bvadd(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvadd(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
 
-  switch(k)
-  {
-  case SMT_FUNC_EQ:
-    assert(
-      asts[0]->sort->id != SMT_SORT_ARRAY &&
-      "Yices array assignment made its way through to an equality");
-    if(asts[0]->sort->id == SMT_SORT_BOOL)
-      return new_ast(s, yices_eq(asts[0]->a, asts[1]->a));
+smt_astt yices_convt::mk_sub(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    yices_sub(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
 
-    if(asts[0]->sort->id == SMT_SORT_STRUCT)
-      return new_ast(s, yices_eq(asts[0]->a, asts[1]->a));
+smt_astt yices_convt::mk_bvsub(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvsub(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
 
-    if(int_encoding)
-      return new_ast(s, yices_arith_eq_atom(asts[0]->a, asts[1]->a));
+smt_astt yices_convt::mk_mul(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    yices_mul(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
 
-    return new_ast(s, yices_bveq_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_NOTEQ:
-    if(
-      asts[0]->sort->id >= SMT_SORT_SBV ||
-      asts[0]->sort->id <= SMT_SORT_FIXEDBV)
-    {
-      if(!int_encoding)
-      {
-        term_t comp = yices_redcomp(asts[0]->a, asts[1]->a);
-        term_t zero = yices_bvconst_uint64(1, 0);
-        return new_ast(s, yices_bveq_atom(comp, zero));
-      }
-      else
-        return new_ast(s, yices_arith_neq_atom(asts[0]->a, asts[1]->a));
-    }
-    else
-      return new_ast(s, yices_neq(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_GT:
-    return new_ast(s, yices_arith_gt_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_GTE:
-    return new_ast(s, yices_arith_geq_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_LT:
-    return new_ast(s, yices_arith_lt_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_LTE:
-    return new_ast(s, yices_arith_leq_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVUGT:
-    return new_ast(s, yices_bvgt_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVUGTE:
-    return new_ast(s, yices_bvge_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVULT:
-    return new_ast(s, yices_bvlt_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVULTE:
-    return new_ast(s, yices_bvle_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVSGT:
-    return new_ast(s, yices_bvsgt_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVSGTE:
-    return new_ast(s, yices_bvsge_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVSLT:
-    return new_ast(s, yices_bvslt_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVSLTE:
-    return new_ast(s, yices_bvsle_atom(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_AND:
-    return new_ast(s, yices_and2(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_OR:
-    return new_ast(s, yices_or2(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_XOR:
-    return new_ast(s, yices_xor2(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_NOT:
-    return new_ast(s, yices_not(asts[0]->a));
-  case SMT_FUNC_IMPLIES:
-    return new_ast(s, yices_implies(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_IS_INT:
-    std::cerr << "Yices does not support an is-integer operation on reals, "
-              << "therefore certain casts and operations don't work, sorry"
-              << std::endl;
-    abort();
-  case SMT_FUNC_STORE:
-    // Crazy "function update" situation.
-    temp_term = asts[1]->a;
-    return new_ast(s, yices_update(asts[0]->a, 1, &temp_term, asts[2]->a));
-  case SMT_FUNC_SELECT:
-    temp_term = asts[1]->a;
-    return new_ast(s, yices_application(asts[0]->a, 1, &temp_term));
-  case SMT_FUNC_ADD:
-    return new_ast(s, yices_add(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_SUB:
-    return new_ast(s, yices_sub(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_MUL:
-    return new_ast(s, yices_mul(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_DIV:
-    return new_ast(s, yices_division(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_MOD:
-    temp_term = yices_division(asts[0]->a, asts[1]->a);
-    temp_term = yices_mul(temp_term, asts[1]->a);
-    temp_term = yices_sub(asts[0]->a, temp_term);
-    return new_ast(s, temp_term);
-  case SMT_FUNC_NEG:
-    return new_ast(s, yices_neg(asts[0]->a));
-  case SMT_FUNC_BVADD:
-    return new_ast(s, yices_bvadd(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVSUB:
-    return new_ast(s, yices_bvsub(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVMUL:
-    return new_ast(s, yices_bvmul(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVUDIV:
-    return new_ast(s, yices_bvdiv(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVSDIV:
-    return new_ast(s, yices_bvsdiv(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVUMOD:
-    return new_ast(s, yices_bvrem(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVSMOD:
-    return new_ast(s, yices_bvsrem(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVSHL:
-    return new_ast(s, yices_bvshl(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVASHR:
-    return new_ast(s, yices_bvashr(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVLSHR:
-    return new_ast(s, yices_bvlshr(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVNEG:
-    return new_ast(s, yices_bvneg(asts[0]->a));
-  case SMT_FUNC_BVNOT:
-    return new_ast(s, yices_bvnot(asts[0]->a));
-  case SMT_FUNC_BVNXOR:
-    return new_ast(s, yices_bvxnor(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVNOR:
-    return new_ast(s, yices_bvnor(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVNAND:
-    return new_ast(s, yices_bvnand(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVXOR:
-    return new_ast(s, yices_bvxor(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVAND:
-    return new_ast(s, yices_bvand(asts[0]->a, asts[1]->a));
-  case SMT_FUNC_BVOR:
-    return new_ast(s, yices_bvor(asts[0]->a, asts[1]->a));
-  default:
-    std::cerr << "Unimplemented SMT function '" << smt_func_name_table[k]
-              << "' in yices_convt::mk_func_app" << std::endl;
-    abort();
-  }
+smt_astt yices_convt::mk_bvmul(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvmul(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_mod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  term_t temp_term = yices_division(
+    to_solver_smt_ast<yices_smt_ast>(a)->a,
+    to_solver_smt_ast<yices_smt_ast>(b)->a);
+  temp_term = yices_mul(temp_term, to_solver_smt_ast<yices_smt_ast>(b)->a);
+  temp_term = yices_sub(to_solver_smt_ast<yices_smt_ast>(a)->a, temp_term);
+  return new_ast(temp_term, a->sort);
+}
+
+smt_astt yices_convt::mk_bvsmod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvsrem(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_bvumod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvrem(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_div(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    yices_division(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_bvsdiv(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvsdiv(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_bvudiv(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvdiv(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_shl(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+
+  term_t p = yices_power(
+    to_solver_smt_ast<yices_smt_ast>(mk_smt_bv(b->sort, 2))->a,
+    to_solver_smt_ast<yices_smt_ast>(b)->a);
+  return new_ast(yices_mul(to_solver_smt_ast<yices_smt_ast>(a)->a, p), a->sort);
+}
+
+smt_astt yices_convt::mk_bvshl(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvshl(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_bvashr(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvashr(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_bvlshr(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvlshr(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_neg(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  return new_ast(yices_neg(to_solver_smt_ast<yices_smt_ast>(a)->a), a->sort);
+}
+
+smt_astt yices_convt::mk_bvneg(smt_astt a)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast(yices_bvneg(to_solver_smt_ast<yices_smt_ast>(a)->a), a->sort);
+}
+
+smt_astt yices_convt::mk_bvnot(smt_astt a)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast(yices_bvnot(to_solver_smt_ast<yices_smt_ast>(a)->a), a->sort);
+}
+
+smt_astt yices_convt::mk_bvnxor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvxnor(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_bvnor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvnor(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_bvnand(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvnand(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_bvxor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvxor(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_bvor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvor(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_bvand(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvand(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_implies(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    yices_implies(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_xor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    yices_xor2(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_or(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    yices_or2(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_and(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    yices_and2(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_not(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    yices_not(to_solver_smt_ast<yices_smt_ast>(a)->a), boolean_sort);
+}
+
+smt_astt yices_convt::mk_lt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    yices_arith_lt_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_bvult(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvlt_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_bvslt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvslt_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_gt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    yices_arith_gt_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_bvugt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvgt_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_bvsgt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvsgt_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_le(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    yices_arith_leq_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_bvule(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvle_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_bvsle(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvsle_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_ge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    yices_arith_geq_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_bvuge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvge_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_bvsge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    yices_bvsge_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_eq(smt_astt a, smt_astt b)
+{
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  if(a->sort->id == SMT_SORT_BOOL || a->sort->id == SMT_SORT_STRUCT)
+    return new_ast(
+      yices_eq(
+        to_solver_smt_ast<yices_smt_ast>(a)->a,
+        to_solver_smt_ast<yices_smt_ast>(b)->a),
+      boolean_sort);
+
+  if(int_encoding)
+    return new_ast(
+      yices_arith_eq_atom(
+        to_solver_smt_ast<yices_smt_ast>(a)->a,
+        to_solver_smt_ast<yices_smt_ast>(b)->a),
+      boolean_sort);
+
+  assert(a->sort->id == SMT_SORT_BV || a->sort->id == SMT_SORT_FIXEDBV);
+  return new_ast(
+    yices_bveq_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_neq(smt_astt a, smt_astt b)
+{
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  if(a->sort->id == SMT_SORT_BOOL || a->sort->id == SMT_SORT_STRUCT)
+    return new_ast(
+      yices_neq(
+        to_solver_smt_ast<yices_smt_ast>(a)->a,
+        to_solver_smt_ast<yices_smt_ast>(b)->a),
+      boolean_sort);
+
+  if(int_encoding)
+    return new_ast(
+      yices_arith_neq_atom(
+        to_solver_smt_ast<yices_smt_ast>(a)->a,
+        to_solver_smt_ast<yices_smt_ast>(b)->a),
+      boolean_sort);
+
+  assert(a->sort->id == SMT_SORT_BV || a->sort->id == SMT_SORT_FIXEDBV);
+  return new_ast(
+    yices_bvneq_atom(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt yices_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
+{
+  assert(a->sort->id == SMT_SORT_ARRAY);
+  assert(a->sort->get_domain_width() == b->sort->get_data_width());
+  assert(
+    a->sort->get_range_sort()->get_data_width() == c->sort->get_data_width());
+
+  term_t temp_term = to_solver_smt_ast<yices_smt_ast>(b)->a;
+  return new_ast(
+    yices_update(
+      to_solver_smt_ast<yices_smt_ast>(a)->a,
+      1,
+      &temp_term,
+      to_solver_smt_ast<yices_smt_ast>(c)->a),
+    a->sort);
+}
+
+smt_astt yices_convt::mk_select(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_ARRAY);
+  assert(a->sort->get_domain_width() == b->sort->get_data_width());
+  term_t temp_term = to_solver_smt_ast<yices_smt_ast>(b)->a;
+  return new_ast(
+    yices_application(to_solver_smt_ast<yices_smt_ast>(a)->a, 1, &temp_term),
+    a->sort->get_range_sort());
+}
+
+smt_astt yices_convt::mk_isint(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_INT);
+  std::cerr << "Yices does not support an is-integer operation on reals, "
+            << "therefore certain casts and operations don't work, sorry\n";
+  abort();
 }
 
 smt_astt yices_convt::mk_smt_int(
@@ -272,14 +677,14 @@ smt_astt yices_convt::mk_smt_int(
 {
   term_t term = yices_int64(theint.to_int64());
   smt_sortt s = mk_int_sort();
-  return new_ast(s, term);
+  return new_ast(term, s);
 }
 
 smt_astt yices_convt::mk_smt_real(const std::string &str)
 {
   term_t term = yices_parse_rational(str.c_str());
   smt_sortt s = mk_real_sort();
-  return new_ast(s, term);
+  return new_ast(term, s);
 }
 
 smt_astt yices_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
@@ -293,9 +698,9 @@ smt_astt yices_convt::mk_smt_bool(bool val)
 {
   smt_sortt s = boolean_sort;
   if(val)
-    return new_ast(s, yices_true());
+    return new_ast(yices_true(), s);
   else
-    return new_ast(s, yices_false());
+    return new_ast(yices_false(), s);
 }
 
 smt_astt yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
@@ -331,38 +736,38 @@ smt_astt yices_convt::mk_array_symbol(
 smt_astt
 yices_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
-  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, high - low + 1);
+  smt_sortt s = mk_bv_sort(high - low + 1);
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   term_t term = yices_bvextract(ast->a, low, high);
-  return new_ast(s, term);
+  return new_ast(term, s);
 }
 
 smt_astt yices_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
-  smt_sortt s = mk_bv_sort(SMT_SORT_SBV, a->sort->get_data_width() + topwidth);
+  smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   term_t term = yices_sign_extend(ast->a, topwidth);
-  return new_ast(s, term);
+  return new_ast(term, s);
 }
 
 smt_astt yices_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
-  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth);
+  smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   term_t term = yices_zero_extend(ast->a, topwidth);
-  return new_ast(s, term);
+  return new_ast(term, s);
 }
 
 smt_astt yices_convt::mk_concat(smt_astt a, smt_astt b)
 {
-  smt_sortt s = mk_bv_sort(
-    SMT_SORT_UBV, a->sort->get_data_width() + b->sort->get_data_width());
+  smt_sortt s =
+    mk_bv_sort(a->sort->get_data_width() + b->sort->get_data_width());
 
   return new_ast(
-    s,
     yices_bvconcat(
       to_solver_smt_ast<yices_smt_ast>(a)->a,
-      to_solver_smt_ast<yices_smt_ast>(b)->a));
+      to_solver_smt_ast<yices_smt_ast>(b)->a),
+    s);
 }
 
 smt_astt yices_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
@@ -371,11 +776,11 @@ smt_astt yices_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
   assert(t->sort->get_data_width() == f->sort->get_data_width());
 
   return new_ast(
-    t->sort,
     yices_ite(
       to_solver_smt_ast<yices_smt_ast>(cond)->a,
       to_solver_smt_ast<yices_smt_ast>(t)->a,
-      to_solver_smt_ast<yices_smt_ast>(f)->a));
+      to_solver_smt_ast<yices_smt_ast>(f)->a),
+    t->sort);
 }
 
 smt_astt
@@ -451,7 +856,7 @@ expr2tc yices_convt::get_array_elem(
 
   term_t app = yices_application(ast->a, 1, &idx);
   smt_sortt subsort = convert_sort(subtype);
-  smt_astt container = new_ast(subsort, app);
+  smt_astt container = new_ast(app, subsort);
   return get_by_ast(subtype, container);
 }
 
@@ -508,8 +913,7 @@ smt_sortt yices_convt::mk_struct_sort(const type2tc &type)
   {
     const array_type2t &arrtype = to_array_type(type);
     smt_sortt subtypesort = convert_sort(arrtype.subtype);
-    smt_sortt d = mk_int_bv_sort(
-      SMT_SORT_UBV, make_array_domain_type(arrtype)->get_width());
+    smt_sortt d = mk_int_bv_sort(make_array_domain_type(arrtype)->get_width());
     return mk_array_sort(d, subtypesort);
   }
 
@@ -540,7 +944,7 @@ smt_astt yices_convt::tuple_create(const expr2tc &structdef)
   }
 
   term_t thetuple = yices_tuple(type.members.size(), terms.data());
-  return new_ast(convert_sort(strct.type), thetuple);
+  return new_ast(thetuple, convert_sort(strct.type));
 }
 
 smt_astt yices_convt::tuple_fresh(smt_sortt s, std::string name)
@@ -617,7 +1021,7 @@ smt_astt yices_convt::tuple_array_of(
   }
 
   smt_sortt retsort = new solver_smt_sort<type_t>(SMT_SORT_STRUCT, tuplearr);
-  return new_ast(retsort, theterm);
+  return new_ast(theterm, retsort);
 }
 
 smt_astt yices_convt::mk_tuple_symbol(const std::string &name, smt_sortt s)
@@ -699,9 +1103,9 @@ smt_sortt yices_convt::mk_int_sort()
   return new solver_smt_sort<type_t>(SMT_SORT_INT, yices_real_type());
 }
 
-smt_sortt yices_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
+smt_sortt yices_convt::mk_bv_sort(std::size_t width)
 {
-  return new solver_smt_sort<type_t>(k, yices_bv_type(width), width);
+  return new solver_smt_sort<type_t>(SMT_SORT_BV, yices_bv_type(width), width);
 }
 
 smt_sortt yices_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
@@ -714,13 +1118,13 @@ smt_sortt yices_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
     SMT_SORT_ARRAY, t, domain_sort->get_data_width(), range);
 }
 
-smt_sortt yices_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
+smt_sortt yices_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 {
   return new solver_smt_sort<type_t>(
     SMT_SORT_BVFP, yices_bv_type(ew + sw + 1), ew + sw + 1, sw + 1);
 }
 
-smt_sortt yices_convt::mk_bv_fp_rm_sort()
+smt_sortt yices_convt::mk_bvfp_rm_sort()
 {
   return new solver_smt_sort<type_t>(SMT_SORT_BVFP_RM, yices_bv_type(3), 3);
 }
