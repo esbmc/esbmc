@@ -25,19 +25,47 @@ public:
 
   void assert_ast(const smt_ast *a) override;
 
-  smt_astt mk_func_app(
-    const smt_sort *s,
-    smt_func_kind k,
-    const smt_ast *const *args,
-    unsigned int numargs) override;
+  smt_astt mk_add(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvadd(smt_astt a, smt_astt b) override;
+  smt_astt mk_sub(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsub(smt_astt a, smt_astt b) override;
+  smt_astt mk_mul(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvmul(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsmod(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvumod(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsdiv(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvudiv(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvshl(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvashr(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvlshr(smt_astt a, smt_astt b) override;
+  smt_astt mk_neg(smt_astt a) override;
+  smt_astt mk_bvneg(smt_astt a) override;
+  smt_astt mk_bvnot(smt_astt a) override;
+  smt_astt mk_bvxor(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvor(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvand(smt_astt a, smt_astt b) override;
+  smt_astt mk_implies(smt_astt a, smt_astt b) override;
+  smt_astt mk_xor(smt_astt a, smt_astt b) override;
+  smt_astt mk_or(smt_astt a, smt_astt b) override;
+  smt_astt mk_and(smt_astt a, smt_astt b) override;
+  smt_astt mk_not(smt_astt a) override;
+  smt_astt mk_lt(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvult(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvslt(smt_astt a, smt_astt b) override;
+  smt_astt mk_le(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvule(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsle(smt_astt a, smt_astt b) override;
+  smt_astt mk_eq(smt_astt a, smt_astt b) override;
+  smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c) override;
+  smt_astt mk_select(smt_astt a, smt_astt b) override;
 
   smt_sortt mk_bool_sort() override;
   smt_sortt mk_real_sort() override;
   smt_sortt mk_int_sort() override;
-  smt_sortt mk_bv_sort(const smt_sort_kind k, std::size_t width) override;
+  smt_sortt mk_bv_sort(std::size_t width) override;
   smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range) override;
-  smt_sortt mk_bv_fp_sort(std::size_t ew, std::size_t sw) override;
-  smt_sortt mk_bv_fp_rm_sort() override;
+  smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw) override;
+  smt_sortt mk_bvfp_rm_sort() override;
   smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) override;
   smt_sortt mk_fpbv_rm_sort() override;
 
@@ -94,6 +122,11 @@ public:
   smt_astt mk_smt_fpbv_neg(smt_astt op) override;
   smt_astt mk_from_bv_to_fp(smt_astt op, smt_sortt to) override;
   smt_astt mk_from_fp_to_bv(smt_astt op) override;
+
+  inline mathsat_smt_ast *new_ast(msat_term _e, smt_sortt _s)
+  {
+    return new mathsat_smt_ast(this, _s, _e);
+  }
 
   void push_ctx() override;
   void pop_ctx() override;
