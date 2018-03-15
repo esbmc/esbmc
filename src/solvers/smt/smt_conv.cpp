@@ -751,7 +751,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if(is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2))
       a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
-      a = mk_eq(args[0], args[1]);
+      a = args[0]->eq(this, args[1]);
     break;
   }
   case expr2t::notequal_id:
