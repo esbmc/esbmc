@@ -1108,6 +1108,12 @@ smt_sortt yices_convt::mk_bv_sort(std::size_t width)
   return new solver_smt_sort<type_t>(SMT_SORT_BV, yices_bv_type(width), width);
 }
 
+smt_sortt yices_convt::mk_fbv_sort(std::size_t width)
+{
+  return new solver_smt_sort<type_t>(
+    SMT_SORT_FIXEDBV, yices_bv_type(width), width);
+}
+
 smt_sortt yices_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
   auto domain_sort = to_solver_smt_sort<type_t>(domain);

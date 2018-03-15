@@ -668,6 +668,12 @@ smt_sortt cvc_convt::mk_bv_sort(std::size_t width)
     SMT_SORT_BV, em.mkBitVectorType(width), width);
 }
 
+smt_sortt cvc_convt::mk_fbv_sort(std::size_t width)
+{
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_FIXEDBV, em.mkBitVectorType(width), width);
+}
+
 smt_sortt cvc_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
   auto domain_sort = to_solver_smt_sort<CVC4::Type>(domain);

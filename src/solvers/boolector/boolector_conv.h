@@ -69,6 +69,7 @@ public:
   smt_sortt mk_bool_sort() override;
   smt_sortt mk_bv_sort(std::size_t width) override;
   smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range) override;
+  smt_sortt mk_fbv_sort(std::size_t width) override;
   smt_sortt mk_bvfp_sort(std::size_t width, std::size_t swidth) override;
   smt_sortt mk_bvfp_rm_sort() override;
 
