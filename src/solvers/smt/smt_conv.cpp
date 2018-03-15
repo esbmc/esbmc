@@ -2107,7 +2107,12 @@ expr2tc smt_convt::get(const expr2tc &expr)
     return res;
   }
   else if(is_symbol2t(res))
+  {
+    if(is_structure_type(res))
+      return res;
+
     return get_by_type(res); // Query symbol value from the solver
+  }
 
   // Recurse on operands
   res->Foreach_operand([this](expr2tc &e) {
