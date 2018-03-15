@@ -178,9 +178,8 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   unsigned int pos_zero_bits = width - bits;
   unsigned int neg_one_bits = (width - bits) + 1;
 
-  smt_astt pos_bits = mk_smt_bv(SMT_SORT_UBV, BigInt(0), pos_zero_bits);
-  smt_astt neg_bits =
-    mk_smt_bv(SMT_SORT_UBV, BigInt((1 << neg_one_bits) - 1), neg_one_bits);
+  smt_astt pos_bits = mk_smt_bv(BigInt(0), pos_zero_bits);
+  smt_astt neg_bits = mk_smt_bv(BigInt((1 << neg_one_bits) - 1), neg_one_bits);
 
   smt_astt pos_sel = mk_extract(orig_val, width - 1, width - pos_zero_bits);
   smt_astt neg_sel = mk_extract(orig_val, width - 1, width - neg_one_bits);

@@ -273,8 +273,7 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
   case SMT_SORT_REAL:
     return "Real";
   case SMT_SORT_FIXEDBV:
-  case SMT_SORT_UBV:
-  case SMT_SORT_SBV:
+  case SMT_SORT_BV:
     ss << "(_ BitVec " << sort->get_data_width() << ")";
     return ss.str();
   case SMT_SORT_ARRAY:
@@ -841,7 +840,7 @@ smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type
 smt_astt
 smtlib_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 {
-  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, high - low + 1);
+  smt_sortt s = mk_bv_sort(high - low + 1);
   smtlib_smt_ast *n = new smtlib_smt_ast(this, s, SMT_FUNC_EXTRACT);
   n->extract_high = high;
   n->extract_low = low;
@@ -853,10 +852,10 @@ smt_astt smtlib_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
   std::size_t topbit = a->sort->get_data_width();
   smt_astt the_top_bit = mk_extract(a, topbit - 1, topbit - 1);
-  smt_astt zero_bit = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+  smt_astt zero_bit = ctx->mk_smt_bv(BigInt(0), 1);
   smt_astt t = ctx->mk_eq(the_top_bit, zero_bit);
 
-  smt_astt z = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), topwidth);
+  smt_astt z = ctx->mk_smt_bv(BigInt(0), topwidth);
 
   // Calculate the exact value; SMTLIB text parsers don't like taking an
   // over-full integer literal.
@@ -864,7 +863,7 @@ smt_astt smtlib_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
   unsigned int num_topbits = 64 - topwidth;
   big >>= num_topbits;
   BigInt big_int(big);
-  smt_astt f = ctx->mk_smt_bv(SMT_SORT_UBV, big_int, topwidth);
+  smt_astt f = ctx->mk_smt_bv(big_int, topwidth);
 
   smt_astt topbits = ctx->mk_ite(t, z, f);
 
@@ -873,7 +872,7 @@ smt_astt smtlib_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 
 smt_astt smtlib_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
-  smt_astt z = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), topwidth);
+  smt_astt z = ctx->mk_smt_bv(BigInt(0), topwidth);
   return ctx->mk_concat(z, a);
 }
 
@@ -1442,9 +1441,9 @@ smt_sortt smtlib_convt::mk_int_sort()
   return new smt_sort(SMT_SORT_REAL);
 }
 
-smt_sortt smtlib_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
+smt_sortt smtlib_convt::mk_bv_sort(std::size_t width)
 {
-  return new smt_sort(k, width);
+  return new smt_sort(SMT_SORT_BV, width);
 }
 
 smt_sortt smtlib_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
@@ -1453,12 +1452,12 @@ smt_sortt smtlib_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
     SMT_SORT_ARRAY, domain->get_data_width(), range->get_data_width());
 }
 
-smt_sortt smtlib_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
+smt_sortt smtlib_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 {
   return new smt_sort(SMT_SORT_BVFP, ew + sw + 1, sw + 1);
 }
 
-smt_sortt smtlib_convt::mk_bv_fp_rm_sort()
+smt_sortt smtlib_convt::mk_bvfp_rm_sort()
 {
   return new smt_sort(SMT_SORT_BVFP_RM, 3);
 }

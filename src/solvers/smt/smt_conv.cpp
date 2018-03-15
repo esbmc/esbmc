@@ -145,8 +145,8 @@ void smt_convt::delete_all_asts()
 
 void smt_convt::smt_post_init()
 {
-  machine_int_sort = mk_int_bv_sort(SMT_SORT_SBV, config.ansi_c.int_width);
-  machine_uint_sort = mk_int_bv_sort(SMT_SORT_UBV, config.ansi_c.int_width);
+  machine_int_sort = mk_int_bv_sort(config.ansi_c.int_width);
+  machine_uint_sort = mk_int_bv_sort(config.ansi_c.int_width);
 
   boolean_sort = mk_bool_sort();
 
@@ -403,7 +403,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else
     {
-      domain = mk_int_bv_sort(SMT_SORT_UBV, calculate_array_domain_width(arr));
+      domain = mk_int_bv_sort(calculate_array_domain_width(arr));
     }
 
     expr2tc flat_expr = expr;
@@ -494,7 +494,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
       args[1] = mk_sign_ext(convert_ast(d.side_2), fraction_bits);
 
-      smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), fraction_bits);
+      smt_astt zero = mk_smt_bv(BigInt(0), fraction_bits);
       smt_astt op0 = convert_ast(d.side_1);
 
       args[0] = mk_concat(op0, zero);
@@ -1134,12 +1134,12 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     break;
   case type2t::unsignedbv_id:
   {
-    result = mk_int_bv_sort(SMT_SORT_UBV, type->get_width());
+    result = mk_int_bv_sort(type->get_width());
     break;
   }
   case type2t::signedbv_id:
   {
-    result = mk_int_bv_sort(SMT_SORT_SBV, type->get_width());
+    result = mk_int_bv_sort(type->get_width());
     break;
   }
   case type2t::fixedbv_id:
@@ -1172,7 +1172,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     // machine int size. Also, faff about if it's an array of arrays, extending
     // the domain.
     type2tc t = make_array_domain_type(to_array_type(flatten_array_type(type)));
-    smt_sortt d = mk_int_bv_sort(SMT_SORT_UBV, t->get_width());
+    smt_sortt d = mk_int_bv_sort(t->get_width());
 
     // Determine the range if we have arrays of arrays.
     type2tc range = get_flattened_array_subtype(type);
@@ -1189,7 +1189,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     smt_sortt r;
     if(is_bool_type(range) && !array_api->supports_bools_in_arrays)
     {
-      r = mk_int_bv_sort(SMT_SORT_UBV, 1);
+      r = mk_int_bv_sort(1);
     }
     else
     {
@@ -1252,10 +1252,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     if(int_encoding)
       return mk_smt_int(theint.value, is_signedbv_type(expr));
 
-    return mk_smt_bv(
-      is_signedbv_type(expr) ? SMT_SORT_SBV : SMT_SORT_UBV,
-      theint.value,
-      width);
+    return mk_smt_bv(theint.value, width);
   }
   case expr2t::constant_fixedbv_id:
   {
@@ -1285,7 +1282,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     magnitude <<= (bitwidth / 2);
     fin = magnitude | fraction;
 
-    return mk_smt_bv(SMT_SORT_UBV, mp_integer(fin), bitwidth);
+    return mk_smt_bv(mp_integer(fin), bitwidth);
   }
   case expr2t::constant_floatbv_id:
   {
@@ -1479,14 +1476,14 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
 
   smt_astt symbol = convert_ast(expr);
 
-  smt_astt is_0 = mk_eq(
-    symbol, mk_smt_bv(SMT_SORT_UBV, BigInt(0), symbol->sort->get_data_width()));
+  smt_astt is_0 =
+    mk_eq(symbol, mk_smt_bv(BigInt(0), symbol->sort->get_data_width()));
 
-  smt_astt is_2 = mk_eq(
-    symbol, mk_smt_bv(SMT_SORT_UBV, BigInt(2), symbol->sort->get_data_width()));
+  smt_astt is_2 =
+    mk_eq(symbol, mk_smt_bv(BigInt(2), symbol->sort->get_data_width()));
 
-  smt_astt is_3 = mk_eq(
-    symbol, mk_smt_bv(SMT_SORT_UBV, BigInt(3), symbol->sort->get_data_width()));
+  smt_astt is_3 =
+    mk_eq(symbol, mk_smt_bv(BigInt(3), symbol->sort->get_data_width()));
 
   smt_astt ne = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
   smt_astt mi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
@@ -1549,7 +1546,7 @@ smt_astt smt_convt::round_fixedbv_to_int(
 
   // Determine whether the source is signed from its topmost bit.
   smt_astt is_neg_bit = mk_extract(a, fromwidth - 1, fromwidth - 1);
-  smt_astt true_bit = mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
+  smt_astt true_bit = mk_smt_bv(BigInt(1), 1);
 
   // Also collect data for dealing with the magnitude.
   smt_astt magnitude = mk_extract(a, fromwidth - 1, frac_width);
@@ -1557,7 +1554,7 @@ smt_astt smt_convt::round_fixedbv_to_int(
 
   // Data for inspecting fraction part
   smt_astt frac_part = mk_extract(a, frac_width - 1, 0);
-  smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), frac_width);
+  smt_astt zero = mk_smt_bv(BigInt(0), frac_width);
   smt_astt is_zero_frac = mk_eq(frac_part, zero);
 
   // So, we have a base number (the magnitude), and need to decide whether to
@@ -1565,7 +1562,7 @@ smt_astt smt_convt::round_fixedbv_to_int(
   // and the fraction is zero, leave it, otherwise round towards zero.
 
   // We may need a value + 1.
-  smt_astt one = mk_smt_bv(SMT_SORT_UBV, BigInt(1), towidth);
+  smt_astt one = mk_smt_bv(BigInt(1), towidth);
   smt_astt intvalue_plus_one = mk_bvadd(intvalue, one);
 
   smt_astt neg_val = mk_ite(is_zero_frac, intvalue, intvalue_plus_one);
@@ -1582,24 +1579,22 @@ smt_astt smt_convt::make_bool_bit(smt_astt a)
     a->sort->id == SMT_SORT_BOOL &&
     "Wrong sort fed to "
     "smt_convt::make_bool_bit");
-  smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
-                                : mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
-  smt_astt zero = (int_encoding) ? mk_smt_int(BigInt(0), false)
-                                 : mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+  smt_astt one =
+    (int_encoding) ? mk_smt_int(BigInt(1), false) : mk_smt_bv(BigInt(1), 1);
+  smt_astt zero =
+    (int_encoding) ? mk_smt_int(BigInt(0), false) : mk_smt_bv(BigInt(0), 1);
   return mk_ite(a, one, zero);
 }
 
 smt_astt smt_convt::make_bit_bool(smt_astt a)
 {
   assert(
-    ((!int_encoding && a->sort->id == SMT_SORT_UBV) ||
-     (!int_encoding && a->sort->id == SMT_SORT_SBV) ||
+    ((!int_encoding && a->sort->id == SMT_SORT_BV) ||
      (int_encoding && a->sort->id == SMT_SORT_INT)) &&
-    "Wrong sort fed to "
-    "smt_convt::make_bit_bool");
+    "Wrong sort fed to smt_convt::make_bit_bool");
 
-  smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
-                                : mk_smt_bv(SMT_SORT_UBV, BigInt(1), 1);
+  smt_astt one =
+    (int_encoding) ? mk_smt_int(BigInt(1), false) : mk_smt_bv(BigInt(1), 1);
   return mk_eq(a, one);
 }
 
@@ -2338,12 +2333,12 @@ smt_astt array_iface::default_convert_array_of(
 
   if(init_val->sort->id == SMT_SORT_BOOL && !supports_bools_in_arrays)
   {
-    smt_astt zero = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
-    smt_astt one = ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(0), 1);
+    smt_astt zero = ctx->mk_smt_bv(BigInt(0), 1);
+    smt_astt one = ctx->mk_smt_bv(BigInt(0), 1);
     init_val = ctx->mk_ite(init_val, one, zero);
   }
 
-  smt_sortt domwidth = ctx->mk_int_bv_sort(SMT_SORT_UBV, array_size);
+  smt_sortt domwidth = ctx->mk_int_bv_sort(array_size);
   smt_sortt arrsort = ctx->mk_array_sort(domwidth, init_val->sort);
   smt_astt newsym_ast =
     ctx->mk_fresh(arrsort, "default_array_of::", init_val->sort);
@@ -2556,10 +2551,16 @@ smt_sortt smt_convt::mk_int_sort()
   abort();
 }
 
-smt_sortt smt_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
+smt_sortt smt_convt::mk_bv_sort(std::size_t width)
 {
   std::cerr << "Chosen solver doesn't support bit vector sorts\n";
-  (void)k;
+  (void)width;
+  abort();
+}
+
+smt_sortt smt_convt::mk_fbv_sort(std::size_t width)
+{
+  std::cerr << "Chosen solver doesn't support array sorts\n";
   (void)width;
   abort();
 }
@@ -2572,7 +2573,7 @@ smt_sortt smt_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
   abort();
 }
 
-smt_sortt smt_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
+smt_sortt smt_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 {
   std::cerr << "Chosen solver doesn't support bit vector sorts\n";
   (void)ew;
@@ -2580,7 +2581,7 @@ smt_sortt smt_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
   abort();
 }
 
-smt_sortt smt_convt::mk_bv_fp_rm_sort()
+smt_sortt smt_convt::mk_bvfp_rm_sort()
 {
   std::cerr << "Chosen solver doesn't support bit vector sorts\n";
   abort();
@@ -2590,28 +2591,23 @@ smt_astt smt_convt::mk_bvredor(smt_astt op)
 {
   // bvredor = bvnot(bvcomp(x,0)) ? bv1 : bv0;
 
-  smt_astt comp =
-    mk_eq(op, mk_smt_bv(SMT_SORT_UBV, 0, op->sort->get_data_width()));
+  smt_astt comp = mk_eq(op, mk_smt_bv(BigInt(0), op->sort->get_data_width()));
 
   smt_astt ncomp = mk_not(comp);
 
   // If it's true, return 1. Return 0, othewise.
-  return mk_ite(
-    ncomp, mk_smt_bv(SMT_SORT_UBV, 1, 1), mk_smt_bv(SMT_SORT_UBV, 0, 1));
+  return mk_ite(ncomp, mk_smt_bv(1, 1), mk_smt_bv(BigInt(0), 1));
 }
 
 smt_astt smt_convt::mk_bvredand(smt_astt op)
 {
   // bvredand = bvcomp(x,-1) ? bv1 : bv0;
 
-  smt_astt comp = mk_eq(
-    op,
-    mk_smt_bv(
-      SMT_SORT_UBV, BigInt(ULONG_LONG_MAX), op->sort->get_data_width()));
+  smt_astt comp =
+    mk_eq(op, mk_smt_bv(BigInt(ULONG_LONG_MAX), op->sort->get_data_width()));
 
   // If it's true, return 1. Return 0, othewise.
-  return mk_ite(
-    comp, mk_smt_bv(SMT_SORT_UBV, 1, 1), mk_smt_bv(SMT_SORT_UBV, 0, 1));
+  return mk_ite(comp, mk_smt_bv(1, 1), mk_smt_bv(BigInt(0), 1));
 }
 
 smt_astt smt_convt::mk_add(smt_astt a, smt_astt b)

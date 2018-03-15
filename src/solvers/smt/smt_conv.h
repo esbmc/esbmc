@@ -324,12 +324,12 @@ public:
   virtual smt_astt mk_isint(smt_astt a);
 
   /** Create an integer or SBV/UBV sort */
-  smt_sortt mk_int_bv_sort(const smt_sort_kind k, std::size_t width)
+  smt_sortt mk_int_bv_sort(std::size_t width)
   {
     if(int_encoding)
       return mk_int_sort();
 
-    return mk_bv_sort(k, width);
+    return mk_bv_sort(width);
   }
 
   /** Create an real or floating-point/fixed-point sort */
@@ -339,7 +339,7 @@ public:
       return mk_real_sort();
 
     if(config.ansi_c.use_fixed_for_float)
-      return mk_bv_sort(SMT_SORT_FIXEDBV, ew + sw);
+      return mk_fbv_sort(ew + sw);
 
     return fp_api->mk_fpbv_sort(ew, sw);
   }
@@ -354,13 +354,16 @@ public:
   virtual smt_sortt mk_int_sort();
 
   /** Create a bv sort */
-  virtual smt_sortt mk_bv_sort(const smt_sort_kind k, std::size_t width);
+  virtual smt_sortt mk_bv_sort(std::size_t width);
+
+  /** Create a fixed-point sort */
+  virtual smt_sortt mk_fbv_sort(std::size_t width);
 
   /** Create a floating-point sort, using bitvectors */
-  virtual smt_sortt mk_bv_fp_sort(std::size_t ew, std::size_t sw);
+  virtual smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw);
 
   /** Create a floating-point rouding mode sort, using bitvectors */
-  virtual smt_sortt mk_bv_fp_rm_sort();
+  virtual smt_sortt mk_bvfp_rm_sort();
 
   /** Create an array sort */
   virtual smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range);
@@ -381,16 +384,13 @@ public:
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
 
   /** Create a bitvector. Creates the sort and calls the solver.
-   *  @param k The sort kind, SBV, UBV, or FAKE_FP.
    *  @param theint Integer representation of the bitvector. Any excess bits
    *         in the stored integer should be ignored.
    *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt
-  mk_smt_bv(const smt_sort_kind k, const mp_integer &theint, std::size_t w)
+  virtual smt_astt mk_smt_bv(const mp_integer &theint, std::size_t w)
   {
-    smt_sortt sort = mk_int_bv_sort(k, w);
-    return mk_smt_bv(sort, theint);
+    return mk_smt_bv(mk_int_bv_sort(w), theint);
   }
 
   /** Create a bitvector.

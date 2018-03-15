@@ -11,8 +11,7 @@ enum smt_sort_kind
 {
   SMT_SORT_INT,
   SMT_SORT_REAL,
-  SMT_SORT_SBV,
-  SMT_SORT_UBV,
+  SMT_SORT_BV,
   SMT_SORT_FIXEDBV,
   SMT_SORT_ARRAY,
   SMT_SORT_BOOL,
@@ -64,7 +63,7 @@ public:
   smt_sort(smt_sort_kind i, std::size_t width)
     : id(i), data_width(width), secondary_width(0), range_sort(nullptr)
   {
-    assert(id >= SMT_SORT_SBV || id <= SMT_SORT_FIXEDBV);
+    assert(id >= SMT_SORT_BV || id <= SMT_SORT_FIXEDBV);
   }
 
   smt_sort(smt_sort_kind i, std::size_t width, std::size_t sigwidth)

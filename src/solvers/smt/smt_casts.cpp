@@ -68,7 +68,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(
   }
 
   // Make all zeros fraction bits
-  smt_astt zero_fracbits = mk_smt_bv(SMT_SORT_UBV, BigInt(0), to_fraction_bits);
+  smt_astt zero_fracbits = mk_smt_bv(BigInt(0), to_fraction_bits);
   return mk_concat(frontpart, zero_fracbits);
 }
 
@@ -82,8 +82,8 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(
 
   smt_astt a = convert_ast(cast.from);
 
-  smt_astt zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), to_integer_bits);
-  smt_astt one = mk_smt_bv(SMT_SORT_UBV, BigInt(1), to_integer_bits);
+  smt_astt zero = mk_smt_bv(BigInt(0), to_integer_bits);
+  smt_astt one = mk_smt_bv(BigInt(1), to_integer_bits);
   smt_astt switched = mk_ite(a, zero, one);
   return mk_concat(switched, zero);
 }
@@ -138,7 +138,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
     // not a zero extension because they're at the end, not the start
     smt_astt src_fraction = mk_extract(a, from_fraction_bits - 1, 0);
     smt_astt zeros =
-      mk_smt_bv(SMT_SORT_UBV, BigInt(0), to_fraction_bits - from_fraction_bits);
+      mk_smt_bv(BigInt(0), to_fraction_bits - from_fraction_bits);
 
     fraction = mk_concat(src_fraction, zeros);
   }
@@ -334,8 +334,8 @@ smt_astt smt_convt::convert_typecast_to_ints_from_bool(const typecast2t &cast)
   smt_astt zero, one;
   unsigned width = cast.type->get_width();
 
-  zero = mk_smt_bv(SMT_SORT_UBV, BigInt(0), width);
-  one = mk_smt_bv(SMT_SORT_UBV, BigInt(1), width);
+  zero = mk_smt_bv(BigInt(0), width);
+  one = mk_smt_bv(BigInt(1), width);
 
   return mk_ite(a, one, zero);
 }

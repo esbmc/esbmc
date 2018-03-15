@@ -793,7 +793,7 @@ z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
   if(a->sort->id == SMT_SORT_FPBV)
     a = mk_from_fp_to_bv(a);
 
-  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, high - low + 1);
+  smt_sortt s = mk_bv_sort(high - low + 1);
   return new_ast(
     z3::to_expr(
       z3_ctx,
@@ -803,7 +803,7 @@ z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 
 smt_astt z3_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
-  smt_sortt s = mk_bv_sort(SMT_SORT_SBV, a->sort->get_data_width() + topwidth);
+  smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
   return new_ast(
     z3::to_expr(
       z3_ctx,
@@ -813,7 +813,7 @@ smt_astt z3_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 
 smt_astt z3_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
-  smt_sortt s = mk_bv_sort(SMT_SORT_UBV, a->sort->get_data_width() + topwidth);
+  smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
   return new_ast(
     z3::to_expr(
       z3_ctx,
@@ -823,8 +823,8 @@ smt_astt z3_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 
 smt_astt z3_convt::mk_concat(smt_astt a, smt_astt b)
 {
-  smt_sortt s = mk_bv_sort(
-    SMT_SORT_UBV, a->sort->get_data_width() + b->sort->get_data_width());
+  smt_sortt s =
+    mk_bv_sort(a->sort->get_data_width() + b->sort->get_data_width());
 
   return new_ast(
     z3::to_expr(
@@ -886,10 +886,9 @@ smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
   const mp_integer exp =
     thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
 
-  smt_astt sgn_bv =
-    mk_smt_bv(mk_bv_sort(SMT_SORT_UBV, 1), BigInt(thereal.get_sign()));
-  smt_astt exp_bv = mk_smt_bv(mk_bv_sort(SMT_SORT_UBV, thereal.spec.e), exp);
-  smt_astt sig_bv = mk_smt_bv(mk_bv_sort(SMT_SORT_UBV, thereal.spec.f), sig);
+  smt_astt sgn_bv = mk_smt_bv(mk_bv_sort(1), BigInt(thereal.get_sign()));
+  smt_astt exp_bv = mk_smt_bv(mk_bv_sort(thereal.spec.e), exp);
+  smt_astt sig_bv = mk_smt_bv(mk_bv_sort(thereal.spec.f), sig);
 
   return new_ast(
     z3_ctx.fpa_val(
@@ -957,8 +956,7 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
   {
     const array_type2t &arrtype = to_array_type(type);
     smt_sortt subtypesort = convert_sort(arrtype.subtype);
-    smt_sortt d = mk_int_bv_sort(
-      SMT_SORT_UBV, make_array_domain_type(arrtype)->get_width());
+    smt_sortt d = mk_int_bv_sort(make_array_domain_type(arrtype)->get_width());
     return mk_array_sort(d, subtypesort);
   }
 
@@ -1117,7 +1115,7 @@ const smt_ast *z3_convt::convert_array_of(
   smt_astt init_val,
   unsigned long domain_width)
 {
-  smt_sortt dom_sort = mk_int_bv_sort(SMT_SORT_UBV, domain_width);
+  smt_sortt dom_sort = mk_int_bv_sort(domain_width);
 
   z3::expr val = to_solver_smt_ast<z3_smt_ast>(init_val)->a;
   z3::expr output = z3::to_expr(
@@ -1311,7 +1309,7 @@ expr2tc z3_convt::get_array_elem(
     idx = to_solver_smt_ast<z3_smt_ast>(mk_smt_int(BigInt(index), false));
   else
     idx = to_solver_smt_ast<z3_smt_ast>(
-      ctx->mk_smt_bv(SMT_SORT_UBV, BigInt(index), array_bound));
+      mk_smt_bv(mk_bv_sort(array_bound), BigInt(index)));
 
   z3::expr e = model.eval(select(za->a, idx->a), false);
 
@@ -1453,13 +1451,13 @@ smt_sortt z3_convt::mk_fpbv_rm_sort()
     SMT_SORT_FPBV_RM, z3_ctx.fpa_rm_sort(), 3);
 }
 
-smt_sortt z3_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
+smt_sortt z3_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 {
   return new solver_smt_sort<z3::sort>(
     SMT_SORT_BVFP, z3_ctx.bv_sort(ew + sw + 1), ew + sw + 1, sw + 1);
 }
 
-smt_sortt z3_convt::mk_bv_fp_rm_sort()
+smt_sortt z3_convt::mk_bvfp_rm_sort()
 {
   return new solver_smt_sort<z3::sort>(SMT_SORT_BVFP_RM, z3_ctx.bv_sort(3), 3);
 }
@@ -1479,9 +1477,10 @@ smt_sortt z3_convt::mk_int_sort()
   return new solver_smt_sort<z3::sort>(SMT_SORT_INT, z3_ctx.int_sort());
 }
 
-smt_sortt z3_convt::mk_bv_sort(const smt_sort_kind k, std::size_t width)
+smt_sortt z3_convt::mk_bv_sort(std::size_t width)
 {
-  return new solver_smt_sort<z3::sort>(k, z3_ctx.bv_sort(width), width);
+  return new solver_smt_sort<z3::sort>(
+    SMT_SORT_BV, z3_ctx.bv_sort(width), width);
 }
 
 smt_sortt z3_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
@@ -1505,7 +1504,7 @@ smt_astt z3_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 
 smt_astt z3_convt::mk_from_fp_to_bv(smt_astt op)
 {
-  smt_sortt to = mk_bv_sort(SMT_SORT_SBV, op->sort->get_data_width());
+  smt_sortt to = mk_bv_sort(op->sort->get_data_width());
   return new_ast(
     z3_ctx.fpa_to_ieeebv(to_solver_smt_ast<z3_smt_ast>(op)->a), to);
 }
@@ -1519,7 +1518,7 @@ z3_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
     to_solver_smt_ast<z3_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
   const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
 
-  smt_sortt to = mk_bv_sort(SMT_SORT_UBV, width);
+  smt_sortt to = mk_bv_sort(width);
   return new_ast(z3_ctx.fpa_to_ubv(mrm->a, mfrom->a, width), to);
 }
 
@@ -1532,7 +1531,7 @@ z3_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
     to_solver_smt_ast<z3_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
   const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
 
-  smt_sortt to = mk_bv_sort(SMT_SORT_SBV, width);
+  smt_sortt to = mk_bv_sort(width);
   return new_ast(z3_ctx.fpa_to_sbv(mrm->a, mfrom->a, width), to);
 }
 
