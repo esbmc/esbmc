@@ -2845,23 +2845,25 @@ smt_astt smt_convt::mk_bvslt(smt_astt a, smt_astt b)
 
 smt_astt smt_convt::mk_gt(smt_astt a, smt_astt b)
 {
-  (void)a;
-  (void)b;
-  abort();
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return mk_lt(b, a);
 }
 
 smt_astt smt_convt::mk_bvugt(smt_astt a, smt_astt b)
 {
-  (void)a;
-  (void)b;
-  abort();
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return mk_not(mk_bvule(a, b));
 }
 
 smt_astt smt_convt::mk_bvsgt(smt_astt a, smt_astt b)
 {
-  (void)a;
-  (void)b;
-  abort();
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return mk_not(mk_bvsle(a, b));
 }
 
 smt_astt smt_convt::mk_le(smt_astt a, smt_astt b)
@@ -2887,23 +2889,26 @@ smt_astt smt_convt::mk_bvsle(smt_astt a, smt_astt b)
 
 smt_astt smt_convt::mk_ge(smt_astt a, smt_astt b)
 {
-  (void)a;
-  (void)b;
-  abort();
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return mk_not(mk_lt(a, b));
 }
 
 smt_astt smt_convt::mk_bvuge(smt_astt a, smt_astt b)
 {
-  (void)a;
-  (void)b;
-  abort();
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return mk_not(mk_bvult(a, b));
 }
 
 smt_astt smt_convt::mk_bvsge(smt_astt a, smt_astt b)
 {
-  (void)a;
-  (void)b;
-  abort();
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return mk_not(mk_bvslt(a, b));
 }
 
 smt_astt smt_convt::mk_eq(smt_astt a, smt_astt b)
