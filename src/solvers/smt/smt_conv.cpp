@@ -1609,7 +1609,8 @@ expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
     return idx;
 
   // Otherwise, we need to extract the lower bits out of this.
-  return typecast2tc(get_uint_type(domain_width), idx);
+  return typecast2tc(
+    get_uint_type(domain_width), idx, gen_zero(get_int32_type()));
 }
 
 unsigned long smt_convt::size_to_bit_width(unsigned long sz)
