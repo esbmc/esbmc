@@ -1201,40 +1201,45 @@ smt_astt z3_convt::mk_tuple_array_symbol(const expr2tc &expr)
   return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
 }
 
-smt_astt z3_convt::tuple_array_of(
-  const expr2tc &init,
-  unsigned long domain_width)
+smt_astt
+z3_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
 {
   return convert_array_of(convert_ast(init), domain_width);
 }
 
 expr2tc z3_convt::tuple_get(const expr2tc &expr)
 {
-  if(is_pointer_type(expr->type))
-    return expr2tc();
-
   const struct_union_data &strct = get_type_def(expr->type);
 
-  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
+  if(is_pointer_type(expr->type))
+  {
+    // Pointer have two fields, a base address and an offset, so we just
+    // need to get the two numbers and call the pointer API
 
-  // Run through all fields and despatch to 'get' again.
+    smt_astt sym = convert_ast(expr);
+
+    smt_astt object = new_ast(
+      mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 0),
+      convert_sort(strct.members[0]));
+
+    smt_astt offset = new_ast(
+      mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
+      convert_sort(strct.members[1]));
+
+    uint64_t num = get_bv(object).to_uint64();
+    uint64_t offs = get_bv(offset).to_uint64();
+    pointer_logict::pointert p(num, BigInt(offs));
+    return pointer_logic.back().pointer_expr(p, expr->type);
+  }
+
+  // Otherwise, run through all fields and despatch to 'get' again.
+  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
   unsigned int i = 0;
   for(auto const &it : strct.members)
   {
     member2tc memb(it, expr, strct.member_names[i]);
     outstruct->datatype_members.push_back(get(memb));
     i++;
-  }
-
-  // If it's a pointer, rewrite.
-  if(is_pointer_type(expr->type))
-  {
-    uint64_t num =
-      to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
-    uint64_t offs =
-      to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
-    pointer_logict::pointert p(num, BigInt(offs));
-    return pointer_logic.back().pointer_expr(p, expr->type);
   }
 
   return outstruct;
