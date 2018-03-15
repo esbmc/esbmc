@@ -230,7 +230,7 @@ smt_astt cvc_convt::mk_bvneg(smt_astt a)
 
 smt_astt cvc_convt::mk_bvnot(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_BOOL);
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   return new_ast(
     em.mkExpr(
       CVC4::kind::BITVECTOR_NOT,

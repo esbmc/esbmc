@@ -190,7 +190,7 @@ smt_astt boolector_convt::mk_bvneg(smt_astt a)
 
 smt_astt boolector_convt::mk_bvnot(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_BOOL);
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   return new_ast(
     boolector_not(btor, to_solver_smt_ast<btor_smt_ast>(a)->a), a->sort);
 }
