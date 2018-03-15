@@ -420,7 +420,7 @@ smt_astt z3_convt::mk_bvlshr(smt_astt a, smt_astt b)
 
 smt_astt z3_convt::mk_neg(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_INT);
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   return new_ast((-to_solver_smt_ast<z3_smt_ast>(a)->a), a->sort);
 }
 
@@ -547,7 +547,8 @@ smt_astt z3_convt::mk_not(smt_astt a)
 
 smt_astt z3_convt::mk_lt(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   return new_ast(
     z3::to_expr(
       z3_ctx,
@@ -590,7 +591,8 @@ smt_astt z3_convt::mk_bvslt(smt_astt a, smt_astt b)
 
 smt_astt z3_convt::mk_gt(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   return new_ast(
     z3::to_expr(
       z3_ctx,
@@ -633,7 +635,8 @@ smt_astt z3_convt::mk_bvsgt(smt_astt a, smt_astt b)
 
 smt_astt z3_convt::mk_le(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   return new_ast(
     z3::to_expr(
       z3_ctx,
@@ -676,7 +679,8 @@ smt_astt z3_convt::mk_bvsle(smt_astt a, smt_astt b)
 
 smt_astt z3_convt::mk_ge(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   return new_ast(
     z3::to_expr(
       z3_ctx,
