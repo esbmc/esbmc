@@ -219,9 +219,9 @@ public:
    */
   virtual smt_astt mk_from_fp_to_bv(smt_astt op);
 
+private:
   smt_convt *ctx;
 
-private:
   void unpack(
     smt_astt &src,
     smt_astt &sgn,

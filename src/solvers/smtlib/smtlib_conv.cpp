@@ -110,7 +110,7 @@ smt_convt *create_new_smtlib_solver(
 }
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
-  : smt_convt(int_encoding, _ns), array_iface(false, false), fp_convt(ctx)
+  : smt_convt(int_encoding, _ns), array_iface(false, false), fp_convt(this)
 {
   temp_sym_count.push_back(1);
   std::string cmd;
@@ -852,33 +852,32 @@ smt_astt smtlib_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
   std::size_t topbit = a->sort->get_data_width();
   smt_astt the_top_bit = mk_extract(a, topbit - 1, topbit - 1);
-  smt_astt zero_bit = ctx->mk_smt_bv(BigInt(0), 1);
-  smt_astt t = ctx->mk_eq(the_top_bit, zero_bit);
+  smt_astt zero_bit = mk_smt_bv(mk_bv_sort(0), 1);
+  smt_astt t = mk_eq(the_top_bit, zero_bit);
 
-  smt_astt z = ctx->mk_smt_bv(BigInt(0), topwidth);
+  smt_astt z = mk_smt_bv(mk_bv_sort(0), topwidth);
 
   // Calculate the exact value; SMTLIB text parsers don't like taking an
   // over-full integer literal.
   uint64_t big = 0xFFFFFFFFFFFFFFFFULL;
   unsigned int num_topbits = 64 - topwidth;
   big >>= num_topbits;
-  BigInt big_int(big);
-  smt_astt f = ctx->mk_smt_bv(big_int, topwidth);
+  smt_astt f = mk_smt_bv(mk_bv_sort(big), topwidth);
 
-  smt_astt topbits = ctx->mk_ite(t, z, f);
+  smt_astt topbits = mk_ite(t, z, f);
 
-  return ctx->mk_concat(topbits, a);
+  return mk_concat(topbits, a);
 }
 
 smt_astt smtlib_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
-  smt_astt z = ctx->mk_smt_bv(BigInt(0), topwidth);
-  return ctx->mk_concat(z, a);
+  smt_astt z = mk_smt_bv(mk_bv_sort(0), topwidth);
+  return mk_concat(z, a);
 }
 
 smt_astt smtlib_convt::mk_concat(smt_astt a, smt_astt b)
 {
-  return ctx->mk_concat(a, b);
+  return mk_concat(a, b);
 }
 
 smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
@@ -886,7 +885,7 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
   assert(cond->sort->id == SMT_SORT_BOOL);
   assert(t->sort->get_data_width() == f->sort->get_data_width());
 
-  return ctx->mk_ite(cond, t, f);
+  return mk_ite(cond, t, f);
 }
 
 int smtliberror(int startsym __attribute__((unused)), const std::string &error)

@@ -49,7 +49,7 @@ smt_convt *create_new_z3_solver(
 z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
   : smt_convt(int_encoding, _ns),
     array_iface(true, true),
-    fp_convt(ctx),
+    fp_convt(this),
     z3_ctx(false)
 {
   z3::config conf;
