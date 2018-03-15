@@ -765,7 +765,7 @@ smt_astt z3_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt z3_convt::mk_real2int(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   return new_ast(
     z3::to_expr(
       z3_ctx, Z3_mk_real2int(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a)),
@@ -774,7 +774,7 @@ smt_astt z3_convt::mk_real2int(smt_astt a)
 
 smt_astt z3_convt::mk_int2real(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_INT);
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   return new_ast(
     z3::to_expr(
       z3_ctx, Z3_mk_int2real(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a)),
@@ -783,7 +783,7 @@ smt_astt z3_convt::mk_int2real(smt_astt a)
 
 smt_astt z3_convt::mk_isint(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_INT);
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   return new_ast(
     z3::to_expr(
       z3_ctx, Z3_mk_is_int(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a)),
