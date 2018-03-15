@@ -698,10 +698,8 @@ smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 smt_astt mathsat_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
-  unsigned swidth = s->get_significand_width();
-  unsigned ewidth = s->get_data_width() - swidth;
 
-  msat_term t = msat_make_fp_nan(env, ewidth, swidth);
+  msat_term t = msat_make_fp_nan(env, ew, sw - 1);
   check_msat_error(t);
 
   return new_ast(t, s);
@@ -710,11 +708,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 smt_astt mathsat_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
-  unsigned swidth = s->get_significand_width();
-  unsigned ewidth = s->get_data_width() - swidth;
 
-  msat_term t = sgn ? msat_make_fp_minus_inf(env, ewidth, swidth)
-                    : msat_make_fp_plus_inf(env, ewidth, swidth);
+  msat_term t = sgn ? msat_make_fp_minus_inf(env, ew, sw - 1)
+                    : msat_make_fp_plus_inf(env, ew, sw - 1);
   check_msat_error(t);
 
   return new_ast(t, s);
@@ -935,7 +931,7 @@ void mathsat_convt::print_model()
 smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
   auto t = msat_get_fp_type(env, ew, sw);
-  return new solver_smt_sort<msat_type>(SMT_SORT_FPBV, t, ew + sw, sw);
+  return new solver_smt_sort<msat_type>(SMT_SORT_FPBV, t, ew + sw + 1, sw + 1);
 }
 
 smt_sortt mathsat_convt::mk_fpbv_rm_sort()
@@ -1001,7 +997,7 @@ smt_astt mathsat_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
   msat_term t = msat_make_fp_from_ieeebv(
     env,
     to->get_exponent_width(),
-    to->get_significand_width(),
+    to->get_significand_width() - 1,
     to_solver_smt_ast<mathsat_smt_ast>(op)->a);
   check_msat_error(t);
 
@@ -1065,8 +1061,8 @@ smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_fpbv(
   smt_sortt to,
   smt_astt rm)
 {
-  unsigned sw = to->get_significand_width();
-  unsigned ew = to->get_data_width() - sw;
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
 
   const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
   const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
@@ -1081,8 +1077,8 @@ smt_astt mathsat_convt::mk_smt_typecast_ubv_to_fpbv(
   smt_sortt to,
   smt_astt rm)
 {
-  unsigned sw = to->get_significand_width();
-  unsigned ew = to->get_data_width() - sw;
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
 
   const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
   const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
@@ -1097,8 +1093,8 @@ smt_astt mathsat_convt::mk_smt_typecast_sbv_to_fpbv(
   smt_sortt to,
   smt_astt rm)
 {
-  unsigned sw = to->get_significand_width();
-  unsigned ew = to->get_data_width() - sw;
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
 
   const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
   const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
