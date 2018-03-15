@@ -9,18 +9,18 @@
  *  take binary values, so that they can be used as bits in an integer. */
 enum smt_sort_kind
 {
-  SMT_SORT_INT = 1,
-  SMT_SORT_REAL = 1 << 1,
-  SMT_SORT_SBV = 1 << 2,
-  SMT_SORT_UBV = 1 << 3,
-  SMT_SORT_FIXEDBV = 1 << 4,
-  SMT_SORT_FAKE_FLOATBV = 1 << 5,
-  SMT_SORT_FAKE_FLOATBV_RM = 1 << 6,
-  SMT_SORT_ARRAY = 1 << 7,
-  SMT_SORT_BOOL = 1 << 8,
-  SMT_SORT_STRUCT = 1 << 9,
-  SMT_SORT_FLOATBV = 1 << 10,
-  SMT_SORT_FLOATBV_RM = 1 << 11,
+  SMT_SORT_INT,
+  SMT_SORT_REAL,
+  SMT_SORT_SBV,
+  SMT_SORT_UBV,
+  SMT_SORT_FIXEDBV,
+  SMT_SORT_ARRAY,
+  SMT_SORT_BOOL,
+  SMT_SORT_STRUCT,
+  SMT_SORT_BVFP,
+  SMT_SORT_FPBV,
+  SMT_SORT_BVFP_RM,
+  SMT_SORT_FPBV_RM,
 };
 
 /** A class for storing an SMT sort.
@@ -70,7 +70,7 @@ public:
   smt_sort(smt_sort_kind i, std::size_t width, std::size_t sigwidth)
     : id(i), data_width(width), secondary_width(sigwidth), range_sort(nullptr)
   {
-    assert(id >= SMT_SORT_FLOATBV || id <= SMT_SORT_FAKE_FLOATBV);
+    assert(id == SMT_SORT_BVFP || id == SMT_SORT_FPBV);
   }
 
   smt_sort(smt_sort_kind i, std::size_t dom_width, smt_sortt range_sort)
@@ -115,13 +115,13 @@ public:
 
   size_t get_significand_width() const
   {
-    assert(id >= SMT_SORT_FLOATBV || id <= SMT_SORT_FAKE_FLOATBV);
+    assert(id == SMT_SORT_BVFP || id == SMT_SORT_FPBV);
     return secondary_width;
   }
 
   size_t get_exponent_width() const
   {
-    assert(id >= SMT_SORT_FLOATBV || id <= SMT_SORT_FAKE_FLOATBV);
+    assert(id == SMT_SORT_BVFP || id == SMT_SORT_FPBV);
     std::size_t exp_top = get_data_width() - 2;
     std::size_t exp_bot = get_significand_width() - 2;
     return (exp_top - exp_bot);

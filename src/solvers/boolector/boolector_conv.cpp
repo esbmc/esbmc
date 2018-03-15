@@ -250,8 +250,8 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   case SMT_SORT_SBV:
   case SMT_SORT_UBV:
   case SMT_SORT_FIXEDBV:
-  case SMT_SORT_FAKE_FLOATBV:
-  case SMT_SORT_FAKE_FLOATBV_RM:
+  case SMT_SORT_BVFP:
+  case SMT_SORT_BVFP_RM:
     node = boolector_var(
       btor, to_solver_smt_sort<BoolectorSort>(s)->s, name.c_str());
     break;
@@ -552,7 +552,7 @@ smt_sortt boolector_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 smt_sortt boolector_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
 {
   return new solver_smt_sort<BoolectorSort>(
-    SMT_SORT_FAKE_FLOATBV,
+    SMT_SORT_BVFP,
     boolector_bitvec_sort(btor, ew + sw + 1),
     ew + sw + 1,
     sw + 1);
@@ -561,5 +561,5 @@ smt_sortt boolector_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
 smt_sortt boolector_convt::mk_bv_fp_rm_sort()
 {
   return new solver_smt_sort<BoolectorSort>(
-    SMT_SORT_FAKE_FLOATBV_RM, boolector_bitvec_sort(btor, 3), 3);
+    SMT_SORT_BVFP_RM, boolector_bitvec_sort(btor, 3), 3);
 }

@@ -540,7 +540,7 @@ smt_astt
 mathsat_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 {
   // If it's a floatbv, convert it to bv
-  if(a->sort->id == SMT_SORT_FLOATBV)
+  if(a->sort->id == SMT_SORT_FPBV)
     a = mk_from_fp_to_bv(a);
 
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
@@ -697,28 +697,25 @@ void mathsat_convt::print_model()
 smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
   auto t = msat_get_fp_type(env, ew, sw);
-  return new solver_smt_sort<msat_type>(SMT_SORT_FLOATBV, t, ew + sw, sw);
+  return new solver_smt_sort<msat_type>(SMT_SORT_FPBV, t, ew + sw, sw);
 }
 
 smt_sortt mathsat_convt::mk_fpbv_rm_sort()
 {
   auto t = msat_get_fp_roundingmode_type(env);
-  return new solver_smt_sort<msat_type>(SMT_SORT_FLOATBV_RM, t, 3);
+  return new solver_smt_sort<msat_type>(SMT_SORT_FPBV_RM, t, 3);
 }
 
 smt_sortt mathsat_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
 {
   return new solver_smt_sort<msat_type>(
-    SMT_SORT_FAKE_FLOATBV,
-    msat_get_bv_type(env, ew + sw + 1),
-    ew + sw + 1,
-    sw + 1);
+    SMT_SORT_BVFP, msat_get_bv_type(env, ew + sw + 1), ew + sw + 1, sw + 1);
 }
 
 smt_sortt mathsat_convt::mk_bv_fp_rm_sort()
 {
   return new solver_smt_sort<msat_type>(
-    SMT_SORT_FAKE_FLOATBV_RM, msat_get_bv_type(env, 3), 3);
+    SMT_SORT_BVFP_RM, msat_get_bv_type(env, 3), 3);
 }
 
 smt_sortt mathsat_convt::mk_bool_sort()

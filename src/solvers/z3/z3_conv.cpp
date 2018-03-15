@@ -790,7 +790,7 @@ smt_astt
 z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 {
   // If it's a floatbv, convert it to bv
-  if(a->sort->id == SMT_SORT_FLOATBV)
+  if(a->sort->id == SMT_SORT_FPBV)
     a = mk_from_fp_to_bv(a);
 
   smt_sortt s = mk_bv_sort(SMT_SORT_UBV, high - low + 1);
@@ -1444,25 +1444,24 @@ smt_sortt z3_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
   // We need to add an extra bit to the significand size,
   // as it has no hidden bit
   return new solver_smt_sort<z3::sort>(
-    SMT_SORT_FLOATBV, z3_ctx.fpa_sort(ew, sw + 1), ew + sw + 1, sw + 1);
-}
-
-smt_sortt z3_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
-{
-  return new solver_smt_sort<z3::sort>(
-    SMT_SORT_FAKE_FLOATBV, z3_ctx.bv_sort(ew + sw + 1), ew + sw + 1, sw + 1);
-}
-
-smt_sortt z3_convt::mk_bv_fp_rm_sort()
-{
-  return new solver_smt_sort<z3::sort>(
-    SMT_SORT_FAKE_FLOATBV_RM, z3_ctx.bv_sort(3), 3);
+    SMT_SORT_FPBV, z3_ctx.fpa_sort(ew, sw + 1), ew + sw + 1, sw + 1);
 }
 
 smt_sortt z3_convt::mk_fpbv_rm_sort()
 {
   return new solver_smt_sort<z3::sort>(
-    SMT_SORT_FLOATBV_RM, z3_ctx.fpa_rm_sort(), 3);
+    SMT_SORT_FPBV_RM, z3_ctx.fpa_rm_sort(), 3);
+}
+
+smt_sortt z3_convt::mk_bv_fp_sort(std::size_t ew, std::size_t sw)
+{
+  return new solver_smt_sort<z3::sort>(
+    SMT_SORT_BVFP, z3_ctx.bv_sort(ew + sw + 1), ew + sw + 1, sw + 1);
+}
+
+smt_sortt z3_convt::mk_bv_fp_rm_sort()
+{
+  return new solver_smt_sort<z3::sort>(SMT_SORT_BVFP_RM, z3_ctx.bv_sort(3), 3);
 }
 
 smt_sortt z3_convt::mk_bool_sort()
