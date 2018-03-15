@@ -1446,6 +1446,11 @@ smt_sortt smtlib_convt::mk_bv_sort(std::size_t width)
   return new smt_sort(SMT_SORT_BV, width);
 }
 
+smt_sortt smtlib_convt::mk_fbv_sort(std::size_t width)
+{
+  return new smt_sort(SMT_SORT_FIXEDBV, width);
+}
+
 smt_sortt smtlib_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
   return new smt_sort(

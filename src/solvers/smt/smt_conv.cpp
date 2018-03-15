@@ -2560,7 +2560,7 @@ smt_sortt smt_convt::mk_bv_sort(std::size_t width)
 
 smt_sortt smt_convt::mk_fbv_sort(std::size_t width)
 {
-  std::cerr << "Chosen solver doesn't support array sorts\n";
+  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
   (void)width;
   abort();
 }

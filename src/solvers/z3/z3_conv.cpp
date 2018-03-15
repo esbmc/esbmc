@@ -1483,6 +1483,12 @@ smt_sortt z3_convt::mk_bv_sort(std::size_t width)
     SMT_SORT_BV, z3_ctx.bv_sort(width), width);
 }
 
+smt_sortt z3_convt::mk_fbv_sort(std::size_t width)
+{
+  return new solver_smt_sort<z3::sort>(
+    SMT_SORT_FIXEDBV, z3_ctx.bv_sort(width), width);
+}
+
 smt_sortt z3_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
   auto domain_sort = to_solver_smt_sort<z3::sort>(domain);
