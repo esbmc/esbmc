@@ -104,7 +104,7 @@ public:
 
   const smt_ast *overflow_arith(const expr2tc &expr) override;
 
-  inline btor_smt_ast *new_ast(BoolectorNode *_e, const smt_sort *_s)
+  inline btor_smt_ast *new_ast(BoolectorNode *_e, smt_sortt _s)
   {
     return new btor_smt_ast(this, _s, _e);
   }

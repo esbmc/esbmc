@@ -233,7 +233,7 @@ public:
 
   // Some useful types
 public:
-  inline z3_smt_ast *new_ast(z3::expr _e, const smt_sort *_s)
+  inline z3_smt_ast *new_ast(z3::expr _e, smt_sortt _s)
   {
     return new z3_smt_ast(this, _s, _e);
   }
