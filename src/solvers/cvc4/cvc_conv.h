@@ -15,34 +15,68 @@ public:
 
   void assert_ast(const smt_ast *a) override;
 
-  smt_ast *mk_func_app(
-    const smt_sort *s,
-    smt_func_kind k,
-    const smt_ast *const *args,
-    unsigned int numargs) override;
+  smt_astt mk_bvadd(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsub(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvmul(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsmod(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvumod(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsdiv(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvudiv(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvshl(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvashr(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvlshr(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvneg(smt_astt a) override;
+  smt_astt mk_bvnot(smt_astt a) override;
+  smt_astt mk_bvnxor(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvnor(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvnand(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvxor(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvor(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvand(smt_astt a, smt_astt b) override;
+  smt_astt mk_implies(smt_astt a, smt_astt b) override;
+  smt_astt mk_xor(smt_astt a, smt_astt b) override;
+  smt_astt mk_or(smt_astt a, smt_astt b) override;
+  smt_astt mk_and(smt_astt a, smt_astt b) override;
+  smt_astt mk_not(smt_astt a) override;
+  smt_astt mk_bvult(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvslt(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvugt(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsgt(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvule(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsle(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvuge(smt_astt a, smt_astt b) override;
+  smt_astt mk_bvsge(smt_astt a, smt_astt b) override;
+  smt_astt mk_eq(smt_astt a, smt_astt b) override;
+  smt_astt mk_neq(smt_astt a, smt_astt b) override;
+  smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c) override;
+  smt_astt mk_select(smt_astt a, smt_astt b) override;
 
   smt_sortt mk_bool_sort() override;
-  smt_sortt mk_bv_sort(const smt_sort_kind k, std::size_t width) override;
+  smt_sortt mk_bv_sort(std::size_t width) override;
   smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range) override;
-  smt_sortt mk_bv_fp_sort(std::size_t ew, std::size_t sw) override;
-  smt_sortt mk_bv_fp_rm_sort() override;
+  smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw) override;
+  smt_sortt mk_bvfp_rm_sort() override;
 
-  smt_ast *mk_smt_int(const mp_integer &theint, bool sign) override;
-  smt_ast *mk_smt_real(const std::string &str) override;
-  smt_ast *mk_smt_bv(smt_sortt s, const mp_integer &theint) override;
-  smt_ast *mk_smt_bool(bool val) override;
-  smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) override;
-  smt_ast *mk_array_symbol(
+  smt_astt mk_smt_int(const mp_integer &theint, bool sign) override;
+  smt_astt mk_smt_real(const std::string &str) override;
+  smt_astt mk_smt_bv(smt_sortt s, const mp_integer &theint) override;
+  smt_astt mk_smt_bool(bool val) override;
+  smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_array_symbol(
     const std::string &name,
     const smt_sort *s,
     smt_sortt array_subtype) override;
-  virtual smt_sort *mk_struct_sort(const type2tc &type);
   smt_astt
   mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
+
+  inline smt_astt new_ast(CVC4::Expr _e, const smt_sort *_s)
+  {
+    return new solver_smt_ast<CVC4::Expr>(this, _s, _e);
+  }
 
   const smt_ast *
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
