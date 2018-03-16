@@ -126,6 +126,7 @@ public:
 
   inline mathsat_smt_ast *new_ast(msat_term _e, smt_sortt _s)
   {
+    check_msat_error(_e);
     return new mathsat_smt_ast(this, _s, _e);
   }
 
