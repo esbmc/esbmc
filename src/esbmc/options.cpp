@@ -168,7 +168,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "array-flattener", switc, ""},
 
   // Use floating-point to bitvector converter
-  {0, "fp-to-bv", switc, ""},
+  {0, "fp2bv", switc, ""},
 
   // Abort if the program contains a recursion
   {0, "abort-on-recursion", switc, ""},

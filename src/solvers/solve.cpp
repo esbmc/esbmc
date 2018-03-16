@@ -155,7 +155,7 @@ smt_convt *create_solver_factory(
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");
   bool array_flat = options.get_bool_option("array-flattener");
-  bool fp_to_bv = options.get_bool_option("fp-to-bv");
+  bool fp_to_bv = options.get_bool_option("fp2bv");
 
   // Pick a tuple flattener to use. If the solver has native support, and no
   // options were given, use that by default

@@ -1782,7 +1782,7 @@ void esbmc_parseoptionst::help()
        "bitvectors (default)\n"
        " --floatbv                    encode floating-point using the SMT "
        "floating-point theory\n"
-       " --fp-to-bv                   encode floating-point as bitvectors\n"
+       " --fp2bv                      encode floating-point as bitvectors\n"
 
        "\nIncremental SMT solving\n"
        " --smt-during-symex           enable incremental SMT solving "
