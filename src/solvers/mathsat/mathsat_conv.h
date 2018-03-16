@@ -92,6 +92,8 @@ public:
   smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm) override;
 
   smt_astt
+  mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm) override;
+  smt_astt
   mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width) override;
   smt_astt
   mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width) override;
@@ -156,6 +158,10 @@ public:
   // MathSAT data.
   msat_config cfg;
   msat_env env;
+
+  // Flag to workaround the fact that MathSAT does not support fma. It's
+  // set to true so every operation is converted using the fpapi
+  bool use_fp_api;
 };
 
 #endif /* _ESBMC_SOLVERS_MATHSAT_MATHSAT_CONV_H_ */

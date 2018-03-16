@@ -49,7 +49,10 @@ smt_convt *create_new_mathsat_solver(
 }
 
 mathsat_convt::mathsat_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
+  : smt_convt(int_encoding, ns),
+    array_iface(false, false),
+    fp_convt(this),
+    use_fp_api(false)
 {
   cfg = msat_parse_config(mathsat_config);
   msat_set_option(cfg, "model_generation", "true");
@@ -673,22 +676,32 @@ smt_astt mathsat_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
 
 smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
-  const mp_integer sig = thereal.get_fraction();
+  msat_term t;
+  if(use_fp_api)
+  {
+    std::size_t w = thereal.spec.e + thereal.spec.f + 1;
+    std::string str = integer2binary(thereal.pack(), w);
+    t = msat_make_bv_number(env, str.c_str(), w, 2);
+  }
+  else
+  {
+    const mp_integer sig = thereal.get_fraction();
 
-  // If the number is denormal, we set the exponent to 0
-  const mp_integer exp =
-    thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
+    // If the number is denormal, we set the exponent to 0
+    const mp_integer exp =
+      thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
 
-  std::string sgn_str = thereal.get_sign() ? "1" : "0";
-  std::string exp_str = integer2binary(exp, thereal.spec.e);
-  std::string sig_str = integer2binary(sig, thereal.spec.f);
+    std::string sgn_str = thereal.get_sign() ? "1" : "0";
+    std::string exp_str = integer2binary(exp, thereal.spec.e);
+    std::string sig_str = integer2binary(sig, thereal.spec.f);
 
-  std::string smt_str = "(fp #b" + sgn_str;
-  smt_str += " #b" + exp_str;
-  smt_str += " #b" + sig_str;
-  smt_str += ")";
+    std::string smt_str = "(fp #b" + sgn_str;
+    smt_str += " #b" + exp_str;
+    smt_str += " #b" + sig_str;
+    smt_str += ")";
 
-  msat_term t = msat_from_string(env, smt_str.c_str());
+    t = msat_from_string(env, smt_str.c_str());
+  }
   check_msat_error(t);
 
   smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);
@@ -697,6 +710,9 @@ smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 
 smt_astt mathsat_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_nan(ew, sw);
+
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
 
   msat_term t = msat_make_fp_nan(env, ew, sw - 1);
@@ -707,6 +723,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 
 smt_astt mathsat_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_inf(sgn, ew, sw);
+
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
 
   msat_term t = sgn ? msat_make_fp_minus_inf(env, ew, sw - 1)
@@ -718,6 +737,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 
 smt_astt mathsat_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_rm(rm);
+
   msat_term t;
   switch(rm)
   {
@@ -903,6 +925,49 @@ void mathsat_convt::dump_smt()
   msat_free(asserted_formulas);
 }
 
+smt_astt mathsat_convt::mk_smt_fpbv_fma(
+  smt_astt v1,
+  smt_astt v2,
+  smt_astt v3,
+  smt_astt rm)
+{
+  // MathSAT does not support FMA, so convert to BVFP and call the fp_api
+
+  // Convert the rounding mode
+  smt_astt is_ne = mk_eq(rm, mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN));
+  smt_astt is_mi = mk_eq(rm, mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF));
+  smt_astt is_pi = mk_eq(rm, mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF));
+
+  bool old_use_fp_api = use_fp_api;
+  use_fp_api = true;
+
+  // We don't need to check if we're running in the fp2bv mode, as
+  // mk_from_fp_to_bv doesn't do anything in that mode
+  smt_astt new_v1 = mk_from_fp_to_bv(v1);
+  smt_astt new_v2 = mk_from_fp_to_bv(v2);
+  smt_astt new_v3 = mk_from_fp_to_bv(v3);
+
+  smt_astt new_rm = mk_ite(
+    is_ne,
+    mk_smt_bv(mk_bvfp_rm_sort(), BigInt(0)),
+    mk_ite(
+      is_pi,
+      mk_smt_bv(mk_bvfp_rm_sort(), BigInt(2)),
+      mk_ite(
+        is_mi,
+        mk_smt_bv(mk_bvfp_rm_sort(), BigInt(3)),
+        mk_smt_bv(mk_bvfp_rm_sort(), BigInt(4)))));
+
+  // Call fma
+  smt_astt fma = fp_convt::mk_smt_fpbv_fma(new_v1, new_v2, new_v3, new_rm);
+
+  use_fp_api = old_use_fp_api;
+
+  // And convert back to FPBV. Again, no need to check if we're running in
+  // fp2bv mode, as mk_from_bv_to_fp doesn't do anything in fp2bv mode
+  return mk_from_bv_to_fp(fma, v1->sort);
+}
+
 void mathsat_convt::print_model()
 {
   /* we use a model iterator to retrieve the model values for all the
@@ -930,12 +995,18 @@ void mathsat_convt::print_model()
 
 smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
+  if(use_fp_api)
+    return fp_convt::mk_fpbv_sort(ew, sw);
+
   auto t = msat_get_fp_type(env, ew, sw);
   return new solver_smt_sort<msat_type>(SMT_SORT_FPBV, t, ew + sw + 1, sw + 1);
 }
 
 smt_sortt mathsat_convt::mk_fpbv_rm_sort()
 {
+  if(use_fp_api)
+    return mk_bvfp_rm_sort();
+
   auto t = msat_get_fp_roundingmode_type(env);
   return new solver_smt_sort<msat_type>(SMT_SORT_FPBV_RM, t, 3);
 }
@@ -994,6 +1065,9 @@ smt_sortt mathsat_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 
 smt_astt mathsat_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 {
+  if(use_fp_api)
+    return fp_convt::mk_from_bv_to_fp(op, to);
+
   msat_term t = msat_make_fp_from_ieeebv(
     env,
     to->get_exponent_width(),
@@ -1010,7 +1084,8 @@ smt_astt mathsat_convt::mk_from_fp_to_bv(smt_astt op)
     msat_make_fp_as_ieeebv(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
   check_msat_error(t);
 
-  smt_sortt to = mk_bv_sort(op->sort->get_data_width());
+  smt_sortt to = mk_bvfp_sort(
+    op->sort->get_exponent_width(), op->sort->get_significand_width() - 1);
   return new_ast(t, to);
 }
 
@@ -1018,6 +1093,9 @@ smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_ubv(
   smt_astt from,
   std::size_t width)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_typecast_from_fpbv_to_ubv(from, width);
+
   const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
 
   // Conversion from float to integers always truncate, so we assume
@@ -1039,6 +1117,9 @@ smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_sbv(
   smt_astt from,
   std::size_t width)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_typecast_from_fpbv_to_sbv(from, width);
+
   const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
 
   // Conversion from float to integers always truncate, so we assume
@@ -1061,6 +1142,9 @@ smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_fpbv(
   smt_sortt to,
   smt_astt rm)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_typecast_from_fpbv_to_fpbv(from, to, rm);
+
   unsigned sw = to->get_significand_width() - 1;
   unsigned ew = to->get_exponent_width();
 
@@ -1077,6 +1161,9 @@ smt_astt mathsat_convt::mk_smt_typecast_ubv_to_fpbv(
   smt_sortt to,
   smt_astt rm)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_typecast_ubv_to_fpbv(from, to, rm);
+
   unsigned sw = to->get_significand_width() - 1;
   unsigned ew = to->get_exponent_width();
 
@@ -1093,6 +1180,9 @@ smt_astt mathsat_convt::mk_smt_typecast_sbv_to_fpbv(
   smt_sortt to,
   smt_astt rm)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_typecast_sbv_to_fpbv(from, to, rm);
+
   unsigned sw = to->get_significand_width() - 1;
   unsigned ew = to->get_exponent_width();
 
@@ -1106,6 +1196,9 @@ smt_astt mathsat_convt::mk_smt_typecast_sbv_to_fpbv(
 
 smt_astt mathsat_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_nearbyint_from_float(from, rm);
+
   const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
   const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
 
@@ -1116,6 +1209,9 @@ smt_astt mathsat_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
 
 smt_astt mathsat_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_sqrt(rd, rm);
+
   const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
   const mathsat_smt_ast *mrd = to_solver_smt_ast<mathsat_smt_ast>(rd);
 
@@ -1127,6 +1223,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
 
 smt_astt mathsat_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_add(lhs, rhs, rm);
+
   const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
   const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
   const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
@@ -1139,6 +1238,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
 
 smt_astt mathsat_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_sub(lhs, rhs, rm);
+
   const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
   const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
   const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
@@ -1151,6 +1253,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
 
 smt_astt mathsat_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_mul(lhs, rhs, rm);
+
   const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
   const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
   const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
@@ -1163,6 +1268,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
 
 smt_astt mathsat_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_div(lhs, rhs, rm);
+
   const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
   const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
   const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
@@ -1175,6 +1283,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
 
 smt_astt mathsat_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_eq(lhs, rhs);
+
   msat_term r = msat_make_fp_equal(
     env,
     to_solver_smt_ast<mathsat_smt_ast>(lhs)->a,
@@ -1186,6 +1297,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
 
 smt_astt mathsat_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_lt(lhs, rhs);
+
   msat_term r = msat_make_fp_lt(
     env,
     to_solver_smt_ast<mathsat_smt_ast>(lhs)->a,
@@ -1197,6 +1311,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
 
 smt_astt mathsat_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_lte(lhs, rhs);
+
   msat_term r = msat_make_fp_leq(
     env,
     to_solver_smt_ast<mathsat_smt_ast>(lhs)->a,
@@ -1208,6 +1325,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
 
 smt_astt mathsat_convt::mk_smt_fpbv_neg(smt_astt op)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_neg(op);
+
   msat_term r =
     msat_make_fp_neg(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
   check_msat_error(r);
@@ -1217,6 +1337,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_neg(smt_astt op)
 
 smt_astt mathsat_convt::mk_smt_fpbv_is_nan(smt_astt op)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_nan(op);
+
   msat_term r =
     msat_make_fp_isnan(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
   check_msat_error(r);
@@ -1226,6 +1349,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_is_nan(smt_astt op)
 
 smt_astt mathsat_convt::mk_smt_fpbv_is_inf(smt_astt op)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_inf(op);
+
   msat_term r =
     msat_make_fp_isinf(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
   check_msat_error(r);
@@ -1235,6 +1361,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_is_inf(smt_astt op)
 
 smt_astt mathsat_convt::mk_smt_fpbv_is_normal(smt_astt op)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_normal(op);
+
   msat_term r =
     msat_make_fp_isnormal(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
   check_msat_error(r);
@@ -1244,6 +1373,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_is_normal(smt_astt op)
 
 smt_astt mathsat_convt::mk_smt_fpbv_is_zero(smt_astt op)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_zero(op);
+
   msat_term r =
     msat_make_fp_iszero(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
   check_msat_error(r);
@@ -1253,6 +1385,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_is_zero(smt_astt op)
 
 smt_astt mathsat_convt::mk_smt_fpbv_is_negative(smt_astt op)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_negative(op);
+
   msat_term r =
     msat_make_fp_isneg(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
   check_msat_error(r);
@@ -1262,6 +1397,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_is_negative(smt_astt op)
 
 smt_astt mathsat_convt::mk_smt_fpbv_is_positive(smt_astt op)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_positive(op);
+
   msat_term r =
     msat_make_fp_ispos(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
   check_msat_error(r);
@@ -1271,6 +1409,9 @@ smt_astt mathsat_convt::mk_smt_fpbv_is_positive(smt_astt op)
 
 smt_astt mathsat_convt::mk_smt_fpbv_abs(smt_astt op)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_abs(op);
+
   msat_term r =
     msat_make_fp_abs(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
   check_msat_error(r);
