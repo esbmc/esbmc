@@ -88,58 +88,172 @@ ieee_floatt cvc_convt::get_fpbv(smt_astt a)
 
 smt_astt cvc_convt::mk_add(smt_astt a, smt_astt b)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::PLUS,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a),
+    a->sort);
 }
 
 smt_astt cvc_convt::mk_sub(smt_astt a, smt_astt b)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::MINUS,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a),
+    a->sort);
 }
 
 smt_astt cvc_convt::mk_mul(smt_astt a, smt_astt b)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::MULT,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a),
+    a->sort);
 }
 
 smt_astt cvc_convt::mk_mod(smt_astt a, smt_astt b)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::INTS_MODULUS,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a),
+    a->sort);
 }
 
 smt_astt cvc_convt::mk_div(smt_astt a, smt_astt b)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::INTS_DIVISION,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a),
+    a->sort);
 }
 
 smt_astt cvc_convt::mk_shl(smt_astt a, smt_astt b)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+
+  CVC4::Expr p = em.mkExpr(
+    CVC4::kind::POW,
+    to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(mk_smt_bv(b->sort, 2))->a,
+    to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::MULT, to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a, p),
+    a->sort);
 }
 
 smt_astt cvc_convt::mk_neg(smt_astt a)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::UMINUS, to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a),
+    a->sort);
 }
 
 smt_astt cvc_convt::mk_lt(smt_astt a, smt_astt b)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::LT,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a),
+    boolean_sort);
 }
 
 smt_astt cvc_convt::mk_gt(smt_astt a, smt_astt b)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::GT,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a),
+    boolean_sort);
 }
 
 smt_astt cvc_convt::mk_le(smt_astt a, smt_astt b)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::LEQ,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a),
+    boolean_sort);
 }
 
 smt_astt cvc_convt::mk_ge(smt_astt a, smt_astt b)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::GEQ,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a),
+    boolean_sort);
 }
 
 smt_astt cvc_convt::mk_real2int(smt_astt a)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::TO_INTEGER,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a),
+    a->sort);
 }
 
 smt_astt cvc_convt::mk_int2real(smt_astt a)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::TO_REAL, to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a),
+    a->sort);
 }
 
 smt_astt cvc_convt::mk_isint(smt_astt a)
 {
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::IS_INTEGER,
+      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a),
+    a->sort);
 }
 
 smt_sortt cvc_convt::mk_real_sort()
