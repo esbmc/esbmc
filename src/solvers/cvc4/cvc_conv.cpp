@@ -38,7 +38,7 @@ smt_convt::resultt cvc_convt::dec_solve()
   if(r.isSat())
     return P_SATISFIABLE;
 
-  if(!r.isUnknown())
+  if(r.isUnknown())
     return P_ERROR;
 
   return P_UNSATISFIABLE;
