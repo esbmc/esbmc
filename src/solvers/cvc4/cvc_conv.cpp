@@ -51,6 +51,30 @@ bool cvc_convt::get_bool(const smt_ast *a)
   return e.getConst<bool>();
 }
 
+ieee_floatt cvc_convt::get_fpbv(smt_astt a)
+{
+  auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
+  CVC4::Expr e = smt.getValue(ca->a);
+  CVC4::FloatingPoint foo = e.getConst<CVC4::FloatingPoint>();
+
+  ieee_floatt number(ieee_float_spect(
+    a->sort->get_significand_width(), a->sort->get_exponent_width()));
+
+  if(foo.isNaN())
+    number.make_NaN();
+  else if(foo.isInfinite())
+  {
+    if(foo.isPositive())
+      number.make_plus_infinity();
+    else
+      number.make_minus_infinity();
+  }
+  else
+    number.unpack(BigInt(foo.pack().toInteger().getUnsignedLong()));
+
+  return number;
+}
+
 BigInt cvc_convt::get_bv(smt_astt a)
 {
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
@@ -82,10 +106,6 @@ const std::string cvc_convt::solver_text()
   return ss.str();
 }
 
-ieee_floatt cvc_convt::get_fpbv(smt_astt a)
-{
-}
-
 smt_astt cvc_convt::mk_add(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
@@ -94,8 +114,8 @@ smt_astt cvc_convt::mk_add(smt_astt a, smt_astt b)
   return new_ast(
     em.mkExpr(
       CVC4::kind::PLUS,
-      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(a)->a,
-      to_solver_smt_ast<solver_smt_ast<CVC4::Expr>>(b)->a),
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
     a->sort);
 }
 
@@ -252,16 +272,40 @@ smt_astt cvc_convt::mk_isint(smt_astt a)
 smt_astt
 cvc_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
 {
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_FMA,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(v1)->a,
+      to_solver_smt_ast<cvc_smt_ast>(v2)->a,
+      to_solver_smt_ast<cvc_smt_ast>(v3)->a),
+    v1->sort);
 }
 
-smt_astt
-cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
+smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(
+  smt_astt from,
+  std::size_t width)
 {
+  smt_sortt to = mk_bv_sort(width);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_UBV,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a,
+      em.mkConst(CVC4::FloatingPointToUBV(width))),
+    to);
 }
 
-smt_astt
-cvc_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
+smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_sbv(
+  smt_astt from,
+  std::size_t width)
 {
+  smt_sortt to = mk_bv_sort(width);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_SBV,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a,
+      em.mkConst(CVC4::FloatingPointToSBV(width))),
+    to);
 }
 
 smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
@@ -269,100 +313,241 @@ smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
   smt_sortt to,
   smt_astt rm)
 {
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
+
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_FP_FLOATINGPOINT,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a,
+      em.mkConst(CVC4::FloatingPointToFPFloatingPoint(ew, sw))),
+    to);
 }
 
 smt_astt
 cvc_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
 {
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
+
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_FP_UNSIGNED_BITVECTOR,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a,
+      em.mkConst(CVC4::FloatingPointToFPUnsignedBitVector(ew, sw))),
+    to);
 }
 
 smt_astt
 cvc_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
 {
-}
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
 
-smt_astt cvc_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
-{
-}
-
-smt_astt cvc_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_is_nan(smt_astt op)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_is_inf(smt_astt op)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_is_normal(smt_astt op)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_is_zero(smt_astt op)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_is_negative(smt_astt op)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_is_positive(smt_astt op)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_abs(smt_astt op)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_neg(smt_astt op)
-{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_FP_SIGNED_BITVECTOR,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a,
+      em.mkConst(CVC4::FloatingPointToFPSignedBitVector(ew, sw))),
+    to);
 }
 
 smt_astt cvc_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 {
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
+
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_FP_IEEE_BITVECTOR,
+      to_solver_smt_ast<cvc_smt_ast>(op)->a,
+      em.mkConst(CVC4::FloatingPointToFPIEEEBitVector(ew, sw))),
+    to);
 }
 
 smt_astt cvc_convt::mk_from_fp_to_bv(smt_astt op)
 {
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_PLUS,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    lhs->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_SUB,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    lhs->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_MULT,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    lhs->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_DIV,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    lhs->sort);
+}
+
+smt_astt cvc_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_RTI,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a),
+    from->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_SQRT,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rd)->a),
+    rd->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_EQ,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_GT,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_LT,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_GEQ,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_LEQ,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_nan(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISNAN, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_inf(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISINF, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_normal(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISN, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_zero(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISZ, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_negative(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISNEG, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_positive(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISPOS, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_abs(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ABS, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    op->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_neg(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_NEG, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    op->sort);
 }
 
 void cvc_convt::assert_ast(const smt_ast *a)
