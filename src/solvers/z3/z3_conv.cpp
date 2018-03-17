@@ -1519,7 +1519,8 @@ smt_astt z3_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 
 smt_astt z3_convt::mk_from_fp_to_bv(smt_astt op)
 {
-  smt_sortt to = mk_bv_sort(op->sort->get_data_width());
+  smt_sortt to = mk_bvfp_sort(
+    op->sort->get_exponent_width(), op->sort->get_significand_width() - 1);
   return new_ast(
     z3_ctx.fpa_to_ieeebv(to_solver_smt_ast<z3_smt_ast>(op)->a), to);
 }
