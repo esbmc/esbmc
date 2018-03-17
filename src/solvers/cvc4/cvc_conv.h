@@ -4,6 +4,14 @@
 #include <solvers/smt/smt_conv.h>
 #include <cvc4/cvc4.h>
 
+class cvc_smt_ast : public solver_smt_ast<CVC4::Expr>
+{
+public:
+  using solver_smt_ast<CVC4::Expr>::solver_smt_ast;
+  ~cvc_smt_ast() override = default;
+  void dump() const override;
+};
+
 class cvc_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
@@ -140,9 +148,9 @@ public:
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
-  inline smt_astt new_ast(CVC4::Expr _e, const smt_sort *_s)
+  inline cvc_smt_ast *new_ast(CVC4::Expr _e, const smt_sort *_s)
   {
-    return new solver_smt_ast<CVC4::Expr>(this, _s, _e);
+    return new cvc_smt_ast(this, _s, _e);
   }
 
   const smt_ast *
@@ -153,6 +161,8 @@ public:
   void pop_array_ctx() override;
 
   void assert_ast(const smt_ast *a) override;
+
+  void dump_smt() override;
 
   CVC4::ExprManager em;
   CVC4::SmtEngine smt;
