@@ -256,22 +256,6 @@ smt_astt cvc_convt::mk_isint(smt_astt a)
     a->sort);
 }
 
-smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
-{
-}
-
-smt_astt cvc_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
-{
-}
-
 smt_astt
 cvc_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
 {
@@ -842,6 +826,67 @@ smt_astt cvc_convt::mk_smt_real(const std::string &str)
 {
   smt_sortt s = mk_real_sort();
   return new_ast(em.mkConst(CVC4::Rational(str)), s);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
+{
+  smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);
+
+  const mp_integer sig = thereal.get_fraction();
+
+  // If the number is denormal, we set the exponent to 0
+  const mp_integer exp =
+    thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
+
+  std::string smt_str = thereal.get_sign() ? "1" : "0";
+  smt_str += integer2binary(exp, thereal.spec.e);
+  smt_str += integer2binary(sig, thereal.spec.f);
+
+  return new_ast(
+    em.mkConst(CVC4::FloatingPoint(
+      s->get_exponent_width(), s->get_significand_width(), smt_str)),
+    s);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
+{
+  smt_sortt s = mk_real_fp_sort(ew, sw - 1);
+  return new_ast(
+    em.mkConst(CVC4::FloatingPoint::makeNaN(CVC4::FloatingPointSize(
+      s->get_exponent_width(), s->get_significand_width()))),
+    s);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  smt_sortt s = mk_real_fp_sort(ew, sw - 1);
+  return new_ast(
+    em.mkConst(CVC4::FloatingPoint::makeInf(
+      CVC4::FloatingPointSize(
+        s->get_exponent_width(), s->get_significand_width()),
+      sgn)),
+    s);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
+{
+  smt_sortt s = mk_fpbv_rm_sort();
+
+  switch(rm)
+  {
+  case ieee_floatt::ROUND_TO_EVEN:
+    return new_ast(em.mkConst(CVC4::RoundingMode::roundNearestTiesToEven), s);
+  case ieee_floatt::ROUND_TO_MINUS_INF:
+    return new_ast(em.mkConst(CVC4::RoundingMode::roundTowardNegative), s);
+  case ieee_floatt::ROUND_TO_PLUS_INF:
+    return new_ast(em.mkConst(CVC4::RoundingMode::roundTowardPositive), s);
+  case ieee_floatt::ROUND_TO_ZERO:
+    return new_ast(em.mkConst(CVC4::RoundingMode::roundTowardZero), s);
+  default:
+    break;
+  }
+
+  abort();
 }
 
 smt_astt cvc_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
