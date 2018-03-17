@@ -256,14 +256,6 @@ smt_astt cvc_convt::mk_isint(smt_astt a)
     a->sort);
 }
 
-smt_sortt cvc_convt::mk_real_sort()
-{
-}
-
-smt_sortt cvc_convt::mk_int_sort()
-{
-}
-
 smt_sortt cvc_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
 }
@@ -844,17 +836,20 @@ smt_astt cvc_convt::mk_select(smt_astt a, smt_astt b)
 }
 
 smt_astt cvc_convt::mk_smt_int(
-  const mp_integer &theint __attribute__((unused)),
+  const mp_integer &theint,
   bool sign __attribute__((unused)))
 {
-  std::cerr << "CVC can't create integer sorts" << std::endl;
-  abort();
+  // TODO: Is this correct? CVC4 doesn't have any call for
+  // em.mkConst(CVC4::Integer(...));
+  smt_sortt s = mk_int_sort();
+  CVC4::Expr e = em.mkConst(CVC4::Rational(theint.to_int64()));
+  return new_ast(e, s);
 }
 
-smt_astt cvc_convt::mk_smt_real(const std::string &str __attribute__((unused)))
+smt_astt cvc_convt::mk_smt_real(const std::string &str)
 {
-  std::cerr << "CVC can't create Real sorts" << std::endl;
-  abort();
+  smt_sortt s = mk_real_sort();
+  return new_ast(em.mkConst(CVC4::Rational(str)), s);
 }
 
 smt_astt cvc_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
@@ -982,6 +977,16 @@ void cvc_convt::pop_array_ctx()
 smt_sortt cvc_convt::mk_bool_sort()
 {
   return new solver_smt_sort<CVC4::Type>(SMT_SORT_BOOL, em.booleanType(), 1);
+}
+
+smt_sortt cvc_convt::mk_real_sort()
+{
+  return new solver_smt_sort<CVC4::Type>(SMT_SORT_REAL, em.realType());
+}
+
+smt_sortt cvc_convt::mk_int_sort()
+{
+  return new solver_smt_sort<CVC4::Type>(SMT_SORT_INT, em.integerType());
 }
 
 smt_sortt cvc_convt::mk_bv_sort(std::size_t width)
