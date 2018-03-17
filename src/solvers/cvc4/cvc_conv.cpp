@@ -256,14 +256,6 @@ smt_astt cvc_convt::mk_isint(smt_astt a)
     a->sort);
 }
 
-smt_sortt cvc_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
-{
-}
-
-smt_sortt cvc_convt::mk_fpbv_rm_sort()
-{
-}
-
 smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
 }
@@ -1021,4 +1013,16 @@ smt_sortt cvc_convt::mk_bvfp_rm_sort()
 {
   return new solver_smt_sort<CVC4::Type>(
     SMT_SORT_BVFP_RM, em.mkBitVectorType(3), 3);
+}
+
+smt_sortt cvc_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_FPBV, em.mkFloatingPointType(ew, sw + 1), ew + sw + 1, sw + 1);
+}
+
+smt_sortt cvc_convt::mk_fpbv_rm_sort()
+{
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_FPBV_RM, em.roundingModeType(), 3);
 }
