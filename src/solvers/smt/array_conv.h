@@ -73,6 +73,9 @@ public:
 
   void dump() const override
   {
+    std::cout << "name: " << symname << '\n';
+    for(auto const &e : array_fields)
+      e->dump();
   }
 
   std::string symname; // Only if this was produced from mk_smt_symbol.
