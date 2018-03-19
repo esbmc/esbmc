@@ -1694,6 +1694,7 @@ void esbmc_parseoptionst::help()
        " --symex-ssa-trace            print generated SSA during symbolic "
        "execution\n"
        " --ssa-trace                  print SSA during SMT encoding\n"
+       " --ssa-smt-trace              print generated SMT during SMT encoding\n"
        " --show-goto-value-sets       show value-set analysis for the goto "
        "functions\n"
        " --show-symex-value-sets      show value-set analysis during symbolic "

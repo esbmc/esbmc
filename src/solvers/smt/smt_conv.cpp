@@ -300,7 +300,7 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
   assert_ast(a);
 }
 
-void smt_convt::convert_assign(const expr2tc &expr)
+smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
   smt_astt side1 = convert_ast(eq.side_1);
@@ -313,6 +313,8 @@ void smt_convt::convert_assign(const expr2tc &expr)
   // store them in the cache, rather than have a more sophisticated conversion.
   smt_cache_entryt e = {eq.side_1, side1, ctx_level};
   smt_cache.insert(e);
+
+  return side2;
 }
 
 smt_astt smt_convt::convert_ast(const expr2tc &expr)

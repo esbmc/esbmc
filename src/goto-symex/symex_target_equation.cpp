@@ -166,10 +166,21 @@ void symex_target_equationt::convert_internal_step(
   {
     expr2tc tmp(step.cond);
     step.cond_ast = smt_conv.convert_ast(tmp);
+
+    if(ssa_smt_trace)
+    {
+      step.cond_ast->dump();
+      std::cout << std::endl;
+    }
   }
   else if(step.is_assignment())
   {
-    smt_conv.convert_assign(step.cond);
+    smt_astt assign = smt_conv.convert_assign(step.cond);
+    if(ssa_smt_trace)
+    {
+      assign->dump();
+      std::cout << std::endl;
+    }
   }
   else if(step.is_output())
   {

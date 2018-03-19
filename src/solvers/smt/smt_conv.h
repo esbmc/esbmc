@@ -187,7 +187,7 @@ public:
     smt_astt const *args,
     struct expr_op_convert ops);
 
-  void convert_assign(const expr2tc &expr);
+  smt_astt convert_assign(const expr2tc &expr);
 
   /** Make an n-ary 'or' function application.
    *  Takes a vector of smt_ast's, all boolean sorted, and creates a single
