@@ -364,10 +364,6 @@ smt_astt cvc_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
     to);
 }
 
-smt_astt cvc_convt::mk_from_fp_to_bv(smt_astt op)
-{
-}
-
 smt_astt cvc_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
 {
   return new_ast(
