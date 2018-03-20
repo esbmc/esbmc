@@ -1443,7 +1443,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
 
   // Since we can't extract the top bit, from the fpbv, we'll
   // convert it to return if(is_neg) ? 1 : 0;
-  auto value = convert_ast(signbit.value);
+  auto value = convert_ast(signbit.operand);
 
   // Create is_neg
   smt_astt is_neg;
@@ -1451,7 +1451,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
     is_neg = fp_api->mk_smt_fpbv_is_negative(value);
   else
     // For fixedbvs, we check if it's < 0
-    is_neg = mk_lt(value, convert_ast(gen_zero(signbit.value->type)));
+    is_neg = mk_lt(value, convert_ast(gen_zero(signbit.operand->type)));
 
   // If it's true, return 1. Return 0, othewise.
   return mk_ite(

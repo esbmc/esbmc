@@ -1508,7 +1508,7 @@ irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data);
 irep_typedefs(isinf, bool_1op);
 irep_typedefs(isnormal, bool_1op);
 irep_typedefs(isfinite, bool_1op);
-irep_typedefs(signbit, arith_1op);
+irep_typedefs(signbit, overflow_ops);
 irep_typedefs(concat, bit_2ops);
 irep_typedefs(extract, extract_data);
 
