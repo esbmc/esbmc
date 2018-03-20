@@ -383,14 +383,14 @@ public:
    *  @return The newly created terminal smt_ast of this real. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
 
-  /** Create a bitvector. Creates the sort and calls the solver.
+  /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
    *         in the stored integer should be ignored.
    *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
   virtual smt_astt mk_smt_bv(const mp_integer &theint, std::size_t w)
   {
-    return mk_smt_bv(mk_int_bv_sort(w), theint);
+    return mk_smt_bv(theint, mk_int_bv_sort(w));
   }
 
   /** Create a bitvector.
@@ -399,7 +399,7 @@ public:
    *         in the stored integer should be ignored.
    *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bv(smt_sortt s, const mp_integer &theint) = 0;
+  virtual smt_astt mk_smt_bv(const mp_integer &theint, smt_sortt s) = 0;
 
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.

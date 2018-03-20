@@ -491,7 +491,7 @@ smt_ast *boolector_convt::mk_smt_real(const std::string &str
   abort();
 }
 
-smt_astt boolector_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
+smt_astt boolector_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
 {
   return new_ast(
     boolector_const(btor, integer2binary(theint, s->get_data_width()).c_str()),

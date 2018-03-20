@@ -188,7 +188,7 @@ expr2tc mathsat_convt::get_array_elem(
   size_t orig_w = array->sort->get_domain_width();
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(array);
 
-  smt_astt tmpast = mk_smt_bv(mk_bv_sort(orig_w), BigInt(index));
+  smt_astt tmpast = mk_smt_bv(BigInt(index), mk_bv_sort(orig_w));
   const mathsat_smt_ast *tmpa = to_solver_smt_ast<mathsat_smt_ast>(tmpast);
 
   msat_term t = msat_make_array_read(env, mast->a, tmpa->a);
@@ -660,7 +660,7 @@ smt_ast *mathsat_convt::mk_smt_real(const std::string &str)
   return new_ast(t, s);
 }
 
-smt_astt mathsat_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
+smt_astt mathsat_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
 
@@ -949,14 +949,14 @@ smt_astt mathsat_convt::mk_smt_fpbv_fma(
 
   smt_astt new_rm = mk_ite(
     is_ne,
-    mk_smt_bv(mk_bvfp_rm_sort(), BigInt(0)),
+    mk_smt_bv(BigInt(0), mk_bvfp_rm_sort()),
     mk_ite(
       is_pi,
-      mk_smt_bv(mk_bvfp_rm_sort(), BigInt(2)),
+      mk_smt_bv(BigInt(2), mk_bvfp_rm_sort()),
       mk_ite(
         is_mi,
-        mk_smt_bv(mk_bvfp_rm_sort(), BigInt(3)),
-        mk_smt_bv(mk_bvfp_rm_sort(), BigInt(4)))));
+        mk_smt_bv(BigInt(3), mk_bvfp_rm_sort()),
+        mk_smt_bv(BigInt(4), mk_bvfp_rm_sort()))));
 
   // Call fma
   smt_astt fma = fp_convt::mk_smt_fpbv_fma(new_v1, new_v2, new_v3, new_rm);

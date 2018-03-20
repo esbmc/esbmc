@@ -780,7 +780,7 @@ smt_ast *smtlib_convt::mk_smt_real(const std::string &str)
   return a;
 }
 
-smt_astt smtlib_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
+smt_astt smtlib_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
 {
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_BVINT);
   a->intval = theint;
@@ -852,17 +852,17 @@ smt_astt smtlib_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
   std::size_t topbit = a->sort->get_data_width();
   smt_astt the_top_bit = mk_extract(a, topbit - 1, topbit - 1);
-  smt_astt zero_bit = mk_smt_bv(mk_bv_sort(0), 1);
+  smt_astt zero_bit = mk_smt_bv(0, mk_bv_sort(1));
   smt_astt t = mk_eq(the_top_bit, zero_bit);
 
-  smt_astt z = mk_smt_bv(mk_bv_sort(0), topwidth);
+  smt_astt z = mk_smt_bv(0, mk_bv_sort(topwidth));
 
   // Calculate the exact value; SMTLIB text parsers don't like taking an
   // over-full integer literal.
   uint64_t big = 0xFFFFFFFFFFFFFFFFULL;
   unsigned int num_topbits = 64 - topwidth;
   big >>= num_topbits;
-  smt_astt f = mk_smt_bv(mk_bv_sort(big), topwidth);
+  smt_astt f = mk_smt_bv(big, mk_bv_sort(topwidth));
 
   smt_astt topbits = mk_ite(t, z, f);
 
@@ -871,7 +871,7 @@ smt_astt smtlib_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 
 smt_astt smtlib_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
-  smt_astt z = mk_smt_bv(mk_bv_sort(0), topwidth);
+  smt_astt z = mk_smt_bv(0, mk_bv_sort(topwidth));
   return mk_concat(z, a);
 }
 

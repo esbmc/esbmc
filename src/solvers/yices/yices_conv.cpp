@@ -268,7 +268,7 @@ smt_astt yices_convt::mk_shl(smt_astt a, smt_astt b)
   assert(a->sort->id == b->sort->id);
 
   term_t p = yices_power(
-    to_solver_smt_ast<yices_smt_ast>(mk_smt_bv(b->sort, 2))->a,
+    to_solver_smt_ast<yices_smt_ast>(mk_smt_bv(2, b->sort))->a,
     to_solver_smt_ast<yices_smt_ast>(b)->a);
   return new_ast(yices_mul(to_solver_smt_ast<yices_smt_ast>(a)->a, p), a->sort);
 }
@@ -685,7 +685,7 @@ smt_astt yices_convt::mk_smt_real(const std::string &str)
   return new_ast(term, s);
 }
 
-smt_astt yices_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
+smt_astt yices_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
   term_t term = yices_bvconst_uint64(w, theint.to_int64());

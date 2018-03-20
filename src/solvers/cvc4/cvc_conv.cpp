@@ -87,7 +87,7 @@ expr2tc cvc_convt::get_array_elem(
   auto const *carray = to_solver_smt_ast<cvc_smt_ast>(array);
   size_t orig_w = array->sort->get_domain_width();
 
-  smt_astt tmpast = mk_smt_bv(mk_bv_sort(orig_w), BigInt(index));
+  smt_astt tmpast = mk_smt_bv(BigInt(index), mk_bv_sort(orig_w));
   auto const *tmpa = to_solver_smt_ast<cvc_smt_ast>(tmpast);
   CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->a, tmpa->a);
   delete tmpast;
@@ -178,7 +178,7 @@ smt_astt cvc_convt::mk_shl(smt_astt a, smt_astt b)
 
   CVC4::Expr p = em.mkExpr(
     CVC4::kind::POW,
-    to_solver_smt_ast<cvc_smt_ast>(mk_smt_bv(b->sort, 2))->a,
+    to_solver_smt_ast<cvc_smt_ast>(mk_smt_bv(2, b->sort))->a,
     to_solver_smt_ast<cvc_smt_ast>(b)->a);
   return new_ast(
     em.mkExpr(CVC4::kind::MULT, to_solver_smt_ast<cvc_smt_ast>(a)->a, p),
@@ -1054,7 +1054,7 @@ smt_astt cvc_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   abort();
 }
 
-smt_astt cvc_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
+smt_astt cvc_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
 

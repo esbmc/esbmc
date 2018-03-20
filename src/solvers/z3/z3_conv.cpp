@@ -870,7 +870,7 @@ smt_astt z3_convt::mk_smt_real(const std::string &str)
   return new_ast(z3_ctx.real_val(str.c_str()), s);
 }
 
-smt_astt z3_convt::mk_smt_bv(smt_sortt s, const mp_integer &theint)
+smt_astt z3_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
 
@@ -890,9 +890,9 @@ smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
   const mp_integer exp =
     thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
 
-  smt_astt sgn_bv = mk_smt_bv(mk_bv_sort(1), BigInt(thereal.get_sign()));
-  smt_astt exp_bv = mk_smt_bv(mk_bv_sort(thereal.spec.e), exp);
-  smt_astt sig_bv = mk_smt_bv(mk_bv_sort(thereal.spec.f), sig);
+  smt_astt sgn_bv = mk_smt_bv(BigInt(thereal.get_sign()), mk_bv_sort(1));
+  smt_astt exp_bv = mk_smt_bv(exp, mk_bv_sort(thereal.spec.e));
+  smt_astt sig_bv = mk_smt_bv(sig, mk_bv_sort(thereal.spec.f));
 
   return new_ast(
     z3_ctx.fpa_val(
@@ -1318,7 +1318,7 @@ expr2tc z3_convt::get_array_elem(
     idx = to_solver_smt_ast<z3_smt_ast>(mk_smt_int(BigInt(index), false));
   else
     idx = to_solver_smt_ast<z3_smt_ast>(
-      mk_smt_bv(mk_bv_sort(array_bound), BigInt(index)));
+      mk_smt_bv(BigInt(index), mk_bv_sort(array_bound)));
 
   z3::expr e = model.eval(select(za->a, idx->a), false);
 
