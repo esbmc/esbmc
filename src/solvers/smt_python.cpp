@@ -34,8 +34,7 @@ public:
     {
       std::cerr << "Pure virtual method \"" << name
                 << "\" called during solving"
-                   "; you need to override it from python"
-                << std::endl;
+                   "; you need to override it from python\n";
       abort();
     }
 
@@ -212,29 +211,6 @@ smt_convt_wrapper::smt_convt_wrapper(
   set_array_iface(this);
 }
 
-smt_astt smt_convt_wrapper::mk_func_app(
-  smt_sortt s,
-  smt_func_kind k,
-  smt_astt const *args,
-  unsigned int numargs)
-{
-  // Python is not going to enjoy variable length argument array in any way
-  using namespace boost::python;
-  list l;
-  for(unsigned int i = 0; i < numargs; i++)
-    l.append(ast_down(args[i]));
-
-  return mk_func_app_remangled(s, k, l);
-}
-
-smt_astt smt_convt_wrapper::mk_func_app_remangled(
-  smt_sortt s,
-  smt_func_kind k,
-  boost::python::object o)
-{
-  return get_override_checked(this, "mk_func_app")(sort_down(s), k, o);
-}
-
 void smt_convt_wrapper::assert_ast(smt_astt a)
 {
   get_override_checked(this, "assert_ast")(ast_down(a));
@@ -253,56 +229,6 @@ const std::string smt_convt_wrapper::solver_text()
 tvt smt_convt_wrapper::l_get(smt_astt a)
 {
   return get_override_checked(this, "l_get")(ast_down(a));
-}
-
-smt_sortt smt_convt_wrapper::mk_sort(const smt_sort_kind k, ...)
-{
-  using namespace boost::python;
-  // Because this function is variadic (haha poor design choices) we can't
-  // just funnel it to python. Extract actual args, then call an overrider.
-  va_list ap;
-
-  boost::python::object o;
-
-  va_start(ap, k);
-  switch(k)
-  {
-  case SMT_SORT_INT:
-  case SMT_SORT_REAL:
-  case SMT_SORT_BOOL:
-    o = make_tuple(object(k));
-    break;
-  case SMT_SORT_FIXEDBV:
-  case SMT_SORT_UBV:
-  case SMT_SORT_SBV:
-  {
-    unsigned long uint = va_arg(ap, unsigned long);
-    o = make_tuple(object(k), object(uint));
-    break;
-  }
-  case SMT_SORT_ARRAY:
-  {
-    smt_sort *dom = va_arg(ap, smt_sort *); // Consider constness?
-    smt_sort *range = va_arg(ap, smt_sort *);
-    assert(int_encoding || dom->get_data_width() != 0);
-
-    // XXX: setting data_width to 1 if non-bv type?
-    // XXX: how are those types going to be convertged to python references eh
-    o = make_tuple(object(k), sort_down(dom), sort_down(range));
-    break;
-  }
-  default:
-    std::cerr << "Unexpected sort kind " << k << " in smt_convt_wrapper mk_sort"
-              << std::endl;
-    abort();
-  }
-
-  return mk_sort_remangled(o);
-}
-
-smt_sortt smt_convt_wrapper::mk_sort_remangled(boost::python::object o)
-{
-  return get_override_checked(this, "mk_sort")(o);
 }
 
 smt_astt smt_convt_wrapper::mk_smt_int(const mp_integer &theint, bool sign)
@@ -325,32 +251,19 @@ smt_astt smt_convt_wrapper::mk_smt_real(const std::string &str)
   return get_override_checked(this, "mk_smt_real")(str);
 }
 
-smt_astt smt_convt_wrapper::mk_smt_bvint(
-  const mp_integer &theint,
-  bool sign,
-  unsigned int w)
+smt_astt smt_convt_wrapper::mk_smt_bv(const mp_integer &theint, smt_sortt s)
 {
-  return get_override_checked(this, "mk_smt_bvint")(theint, sign, w);
+  return get_override_checked(this, "mk_smt_bv")(s, theint);
 }
 
-expr2tc smt_convt_wrapper::get_bool(smt_astt a)
+bool smt_convt_wrapper::get_bool(smt_astt a)
 {
   return get_override_checked(this, "get_bool")(ast_down(a));
 }
 
-expr2tc smt_convt_wrapper::get_bv(const type2tc &t, smt_astt a)
+BigInt smt_convt_wrapper::get_bv(smt_astt a)
 {
-  return get_override_checked(this, "get_bv")(t, ast_down(a));
-}
-
-smt_astt smt_convt_wrapper::mk_extract(
-  smt_astt a,
-  unsigned int high,
-  unsigned int low,
-  smt_sortt s)
-{
-  return get_override_checked(this, "mk_extract")(
-    ast_down(a), high, low, sort_down(s));
+  return get_override_checked(this, "get_bv")(ast_down(a));
 }
 
 /*************************** Array API ***********************************/
@@ -391,15 +304,15 @@ void smt_convt_wrapper::add_array_constraints_for_solving()
 
 void smt_convt_wrapper::push_array_ctx(void)
 {
-  std::cerr << "Push/pop using python-extended solver isn't supported right now"
-            << std::endl;
+  std::cerr
+    << "Push/pop using python-extended solver isn't supported right now\n";
   abort();
 }
 
 void smt_convt_wrapper::pop_array_ctx(void)
 {
-  std::cerr << "Push/pop using python-extended solver isn't supported right now"
-            << std::endl;
+  std::cerr
+    << "Push/pop using python-extended solver isn't supported right now\n";
   abort();
 }
 
@@ -486,56 +399,16 @@ void smt_convt_wrapper::add_tuple_constraints_for_solving()
 
 void smt_convt_wrapper::push_tuple_ctx()
 {
-  std::cerr << "Push/pop using python-extended solver isn't supported right now"
-            << std::endl;
+  std::cerr
+    << "Push/pop using python-extended solver isn't supported right now\n";
   abort();
 }
 
 void smt_convt_wrapper::pop_tuple_ctx()
 {
-  std::cerr << "Push/pop using python-extended solver isn't supported right now"
-            << std::endl;
+  std::cerr
+    << "Push/pop using python-extended solver isn't supported right now\n";
   abort();
-}
-
-smt_ast *smt_convt_wrapper::mk_smt_fpbv(const ieee_floatt &thereal)
-{
-  return get_override_checked(this, "mk_smt_fpbv")(thereal);
-}
-
-smt_astt smt_convt_wrapper::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
-{
-  return get_override_checked(this, "mk_smt_fpbv_nan")(ew, sw);
-}
-
-smt_astt smt_convt_wrapper::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
-{
-  return get_override_checked(this, "mk_smt_fpbv_inf")(sgn, ew, sw);
-}
-
-smt_astt smt_convt_wrapper::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
-{
-  return get_override_checked(this, "mk_smt_fpbv_rm")(rm);
-}
-
-smt_astt smt_convt_wrapper::mk_smt_typecast_from_fpbv(const typecast2t &cast)
-{
-  return get_override_checked(this, "mk_smt_typecast_from_fpbv")(cast);
-}
-
-smt_astt smt_convt_wrapper::mk_smt_typecast_to_fpbv(const typecast2t &cast)
-{
-  return get_override_checked(this, "mk_smt_typecast_to_fpbv")(cast);
-}
-
-smt_astt smt_convt_wrapper::mk_smt_nearbyint_from_float(const nearbyint2t &expr)
-{
-  return get_override_checked(this, "mk_smt_nearbyint_from_float")(expr);
-}
-
-smt_astt smt_convt_wrapper::mk_smt_fpbv_arith_ops(const expr2tc &expr)
-{
-  return get_override_checked(this, "mk_smt_fpbv_arith_ops")(expr);
 }
 
 // Method for casting an smt_convt down to the wrapped type.
@@ -646,73 +519,11 @@ void build_smt_conv_python_class(void)
   enum_<smt_sort_kind>("smt_sort_kind")
     .value("int", SMT_SORT_INT)
     .value("real", SMT_SORT_REAL)
-    .value("sbv", SMT_SORT_SBV)
-    .value("ubv", SMT_SORT_UBV)
+    .value("sbv", SMT_SORT_BV)
     .value("fixedbv", SMT_SORT_FIXEDBV)
     .value("array", SMT_SORT_ARRAY)
     .value("bool", SMT_SORT_BOOL)
     .value("struct", SMT_SORT_STRUCT);
-
-  enum_<smt_func_kind>("smt_func_kind")
-    .value("hacks", SMT_FUNC_HACKS)     // Not really to be used
-    .value("invalid", SMT_FUNC_INVALID) // see above
-    .value("int", SMT_FUNC_INT)
-    .value("bool", SMT_FUNC_BOOL)
-    .value("bvint", SMT_FUNC_BVINT)
-    .value("real", SMT_FUNC_REAL)
-    .value("symbol", SMT_FUNC_SYMBOL)
-    .value("add", SMT_FUNC_ADD)
-    .value("bvadd", SMT_FUNC_BVADD)
-    .value("sub", SMT_FUNC_SUB)
-    .value("bvsub", SMT_FUNC_BVSUB)
-    .value("mul", SMT_FUNC_MUL)
-    .value("bvmul", SMT_FUNC_BVMUL)
-    .value("div", SMT_FUNC_DIV)
-    .value("bvudiv", SMT_FUNC_BVUDIV)
-    .value("bvsdiv", SMT_FUNC_BVSDIV)
-    .value("mod", SMT_FUNC_MOD)
-    .value("bvsmod", SMT_FUNC_BVSMOD)
-    .value("bvumod", SMT_FUNC_BVUMOD)
-    .value("shl", SMT_FUNC_SHL)
-    .value("bvshl", SMT_FUNC_BVSHL)
-    .value("bvashr", SMT_FUNC_BVASHR)
-    .value("neg", SMT_FUNC_NEG)
-    .value("bvneg", SMT_FUNC_BVNEG)
-    .value("bvlshr", SMT_FUNC_BVLSHR)
-    .value("bvnot", SMT_FUNC_BVNOT)
-    .value("bvnxor", SMT_FUNC_BVNXOR)
-    .value("bvnor", SMT_FUNC_BVNOR)
-    .value("bvnand", SMT_FUNC_BVNAND)
-    .value("bvxor", SMT_FUNC_BVXOR)
-    .value("bvor", SMT_FUNC_BVOR)
-    .value("bvand", SMT_FUNC_BVAND)
-    .value("implies", SMT_FUNC_IMPLIES)
-    .value("xor", SMT_FUNC_XOR)
-    .value("_or", SMT_FUNC_OR)
-    .value("_and", SMT_FUNC_AND)
-    .value("_not", SMT_FUNC_NOT)
-    .value("lt", SMT_FUNC_LT)
-    .value("bvslt", SMT_FUNC_BVSLT)
-    .value("bvult", SMT_FUNC_BVULT)
-    .value("gt", SMT_FUNC_GT)
-    .value("bvsgt", SMT_FUNC_BVSGT)
-    .value("bvugt", SMT_FUNC_BVUGT)
-    .value("lte", SMT_FUNC_LTE)
-    .value("bvslte", SMT_FUNC_BVSLTE)
-    .value("bvulte", SMT_FUNC_BVULTE)
-    .value("gte", SMT_FUNC_GTE)
-    .value("bvsgte", SMT_FUNC_BVSGTE)
-    .value("bvugte", SMT_FUNC_BVUGTE)
-    .value("eq", SMT_FUNC_EQ)
-    .value("noteq", SMT_FUNC_NOTEQ)
-    .value("ite", SMT_FUNC_ITE)
-    .value("store", SMT_FUNC_STORE)
-    .value("select", SMT_FUNC_SELECT)
-    .value("concat", SMT_FUNC_CONCAT)
-    .value("extract", SMT_FUNC_EXTRACT)
-    .value("int2real", SMT_FUNC_INT2REAL)
-    .value("real2int", SMT_FUNC_REAL2INT)
-    .value("isint", SMT_FUNC_IS_INT);
 
   class_<smt_sort_wrapper, boost::noncopyable>(
     "smt_sort", init<smt_sort_kind>())
@@ -750,6 +561,9 @@ void build_smt_conv_python_class(void)
       &smt_ast_wrapper::default_project,
       rte());
 
+  smt_astt (smt_convt::*mk_smt_bv)(const mp_integer &, std::size_t) =
+    &smt_convt::mk_smt_bv;
+
   // Register generic smt_convt facilities: only allow the python user to do
   // expression conversion. Any new smt_convt implementation should be done
   // in C++ for example.
@@ -773,28 +587,21 @@ void build_smt_conv_python_class(void)
     .def("get", &smt_convt::get)
     .def(
       "calculate_array_domain_width", &smt_convt::calculate_array_domain_width)
-    // Funcs to be overridden by an extender. Same ptr ownership rules apply
-    .def(
-      "mk_func_app",
-      pure_virtual(&smt_convt_wrapper::mk_func_app_remangled),
-      rte())
     .def("assert_ast", pure_virtual(&smt_convt::assert_ast))
     .def("dec_solve", pure_virtual(&smt_convt::dec_solve))
     .def("l_get", pure_virtual(&smt_convt::l_get))
-    // Boost.python can't cope with variardic funcs, so work around it
-    .def("mk_sort", pure_virtual(&smt_convt_wrapper::mk_sort_remangled), rte())
     .def("mk_smt_int", pure_virtual(&smt_convt::mk_smt_int), rte())
     .def("mk_smt_bool", pure_virtual(&smt_convt::mk_smt_bool), rte())
     .def("mk_smt_symbol", pure_virtual(&smt_convt::mk_smt_symbol), rte())
     .def("mk_smt_real", pure_virtual(&smt_convt::mk_smt_real), rte())
-    .def("mk_smt_bvint", pure_virtual(&smt_convt::mk_smt_bvint), rte())
     .def("get_bool", pure_virtual(&smt_convt::get_bool))
     .def("get_bv", pure_virtual(&smt_convt::get_bv))
     .def("mk_extract", pure_virtual(&smt_convt::mk_extract), rte())
     .def(
       "tuple_array_create",
       pure_virtual(&smt_convt_wrapper::tuple_array_create_remangled),
-      rte());
+      rte())
+    .def("mk_smt_bv", mk_smt_bv, rte());
 
   // Result enum for solving
   enum_<smt_convt::resultt>("smt_result")
@@ -866,4 +673,513 @@ void build_smt_conv_python_class(void)
   to_python_converter<smt_sortt, const_smt_sort_to_python>();
   to_python_converter<smt_astt, const_smt_ast_to_python>();
 }
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv(const ieee_floatt &thereal)
+{
+  return get_override_checked(this, "mk_smt_fpbv")(thereal);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
+{
+  return get_override_checked(this, "mk_smt_fpbv_nan")(ew, sw);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  return get_override_checked(this, "mk_smt_fpbv_inf")(sgn, ew, sw);
+}
+
+smt_sortt smt_convt_wrapper::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  return get_override_checked(this, "mk_fpbv_sort")(ew, sw);
+}
+
+smt_sortt smt_convt_wrapper::mk_fpbv_rm_sort()
+{
+  return get_override_checked(this, "mk_fpbv_rm_sort")();
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
+{
+  return get_override_checked(this, "mk_smt_fpbv_rm")(rm);
+}
+
+smt_astt smt_convt_wrapper::mk_add(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_add")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvadd(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvadd")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_sub(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_sub")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvsub(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvsub")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_mul(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_mul")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvmul(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvmul")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_mod(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_mod")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvsmod(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvsmod")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvumod(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvumod")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_div(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_div")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvsdiv(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvsdiv")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvudiv(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvudiv")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_shl(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_shl")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvshl(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvshl")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvashr(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvashr")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvlshr(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvlshr")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_neg(smt_astt a)
+{
+  return get_override_checked(this, "mk_neg")(a);
+}
+
+smt_astt smt_convt_wrapper::mk_bvneg(smt_astt a)
+{
+  return get_override_checked(this, "mk_bvneg")(a);
+}
+
+smt_astt smt_convt_wrapper::mk_bvnot(smt_astt a)
+{
+  return get_override_checked(this, "mk_bvnot")(a);
+}
+
+smt_astt smt_convt_wrapper::mk_bvnxor(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvnxor")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvnor(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvnor")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvnand(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvnand")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvxor(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvxor")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvor(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvor")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvand(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvand")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_implies(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_implies")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_xor(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_xor")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_or(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_or")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_and(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_and")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_not(smt_astt a)
+{
+  return get_override_checked(this, "mk_not")(a);
+}
+
+smt_astt smt_convt_wrapper::mk_lt(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_lt")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvult(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvult")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvslt(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvslt")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_gt(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_gt")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvugt(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvugt")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvsgt(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvsgt")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_le(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_le")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvule(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvule")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvsle(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvsle")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_ge(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_ge")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvuge(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvuge")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_bvsge(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_bvsge")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_eq(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_eq")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_neq(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_neq")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_store(smt_astt a, smt_astt b, smt_astt c)
+{
+  return get_override_checked(this, "mk_store")(a, b, c);
+}
+
+smt_astt smt_convt_wrapper::mk_select(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_select")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_real2int(smt_astt a)
+{
+  return get_override_checked(this, "mk_real2int")(a);
+}
+
+smt_astt smt_convt_wrapper::mk_int2real(smt_astt a)
+{
+  return get_override_checked(this, "mk_int2real")(a);
+}
+
+smt_astt smt_convt_wrapper::mk_isint(smt_astt a)
+{
+  return get_override_checked(this, "mk_isint")(a);
+}
+
+smt_astt smt_convt_wrapper::mk_sign_ext(smt_astt a, unsigned int topwidth)
+{
+  return get_override_checked(this, "mk_sign_ext")(a, topwidth);
+}
+
+smt_astt smt_convt_wrapper::mk_zero_ext(smt_astt a, unsigned int topwidth)
+{
+  return get_override_checked(this, "mk_zero_ext")(a, topwidth);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_typecast_from_fpbv_to_ubv(
+  smt_astt from,
+  std::size_t width)
+{
+  return get_override_checked(this, "mk_smt_typecast_from_fpbv_to_ubv")(
+    from, width);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_typecast_from_fpbv_to_sbv(
+  smt_astt from,
+  std::size_t width)
+{
+  return get_override_checked(this, "mk_smt_typecast_from_fpbv_to_sbv")(
+    from, width);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_typecast_from_fpbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  return get_override_checked(this, "mk_smt_typecast_from_fpbv_to_sbv")(
+    from, to, rm);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_typecast_ubv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  return get_override_checked(this, "mk_smt_typecast_ubv_to_fpbv")(
+    from, to, rm);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_typecast_sbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  return get_override_checked(this, "mk_smt_typecast_sbv_to_fpbv")(
+    from, to, rm);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
+{
+  return get_override_checked(this, "mk_smt_nearbyint_from_float")(from, rm);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return get_override_checked(this, "mk_smt_fpbv_add")(lhs, rhs, rm);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return get_override_checked(this, "mk_smt_fpbv_sub")(lhs, rhs, rm);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return get_override_checked(this, "mk_smt_fpbv_mul")(lhs, rhs, rm);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return get_override_checked(this, "mk_smt_fpbv_div")(lhs, rhs, rm);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
+{
+  return get_override_checked(this, "mk_smt_fpbv_sqrt")(rd, rm);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_fma(
+  smt_astt v1,
+  smt_astt v2,
+  smt_astt v3,
+  smt_astt rm)
+{
+  return get_override_checked(this, "mk_smt_fpbv_fma")(v1, v2, v3, rm);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
+{
+  return get_override_checked(this, "mk_smt_fpbv_eq")(lhs, rhs);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
+{
+  return get_override_checked(this, "mk_smt_fpbv_gt")(lhs, rhs);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
+{
+  return get_override_checked(this, "mk_smt_fpbv_lt")(lhs, rhs);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
+{
+  return get_override_checked(this, "mk_smt_fpbv_gte")(lhs, rhs);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
+{
+  return get_override_checked(this, "mk_smt_fpbv_lte")(lhs, rhs);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_is_nan(smt_astt op)
+{
+  return get_override_checked(this, "mk_smt_fpbv_is_nan")(op);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_is_inf(smt_astt op)
+{
+  return get_override_checked(this, "mk_smt_fpbv_is_inf")(op);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_is_normal(smt_astt op)
+{
+  return get_override_checked(this, "mk_smt_fpbv_is_normal")(op);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_is_zero(smt_astt op)
+{
+  return get_override_checked(this, "mk_smt_fpbv_is_zero")(op);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_is_negative(smt_astt op)
+{
+  return get_override_checked(this, "mk_smt_fpbv_is_negative")(op);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_is_positive(smt_astt op)
+{
+  return get_override_checked(this, "mk_smt_fpbv_is_positive")(op);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_abs(smt_astt op)
+{
+  return get_override_checked(this, "mk_smt_fpbv_abs")(op);
+}
+
+smt_astt smt_convt_wrapper::mk_smt_fpbv_neg(smt_astt op)
+{
+  return get_override_checked(this, "mk_smt_fpbv_neg")(op);
+}
+
+ieee_floatt smt_convt_wrapper::get_fpbv(smt_astt a)
+{
+  return get_override_checked(this, "get_fpbv")(a);
+}
+
+smt_astt smt_convt_wrapper::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
+{
+  return get_override_checked(this, "mk_from_bv_to_fp")(op, to);
+}
+
+smt_astt smt_convt_wrapper::mk_from_fp_to_bv(smt_astt op)
+{
+  return get_override_checked(this, "mk_from_fp_to_bv")(op);
+}
+
+smt_astt
+smt_convt_wrapper::mk_extract(smt_astt a, unsigned int high, unsigned int low)
+{
+  return get_override_checked(this, "mk_extract")(a, high, low);
+}
+
+smt_astt smt_convt_wrapper::mk_concat(smt_astt a, smt_astt b)
+{
+  return get_override_checked(this, "mk_concat")(a, b);
+}
+
+smt_astt smt_convt_wrapper::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
+{
+  return get_override_checked(this, "mk_ite")(cond, t, f);
+}
+
+smt_sortt smt_convt_wrapper::mk_bool_sort()
+{
+  return get_override_checked(this, "mk_bool_sort")();
+}
+
+smt_sortt smt_convt_wrapper::mk_real_sort()
+{
+  return get_override_checked(this, "mk_real_sort")();
+}
+
+smt_sortt smt_convt_wrapper::mk_int_sort()
+{
+  return get_override_checked(this, "mk_int_sort")();
+}
+
+smt_sortt smt_convt_wrapper::mk_bv_sort(std::size_t width)
+{
+  return get_override_checked(this, "mk_bv_sort")(width);
+}
+
+smt_sortt smt_convt_wrapper::mk_fbv_sort(std::size_t width)
+{
+  return get_override_checked(this, "mk_fbv_sort")(width);
+}
+
+smt_sortt smt_convt_wrapper::mk_bvfp_sort(std::size_t ew, std::size_t sw)
+{
+  return get_override_checked(this, "mk_bvfp_sort")(ew, sw);
+}
+
+smt_sortt smt_convt_wrapper::mk_bvfp_rm_sort()
+{
+  return get_override_checked(this, "mk_bvfp_rm_sort")();
+}
+
+smt_sortt smt_convt_wrapper::mk_array_sort(smt_sortt domain, smt_sortt range)
+{
+  return get_override_checked(this, "mk_array_sort")(domain, range);
+}
+
 #endif
