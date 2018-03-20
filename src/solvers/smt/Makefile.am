@@ -6,6 +6,6 @@ libsmt_la_SOURCES = array_conv.cpp smt_byteops.cpp smt_casts.cpp \
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir)
 
 smtincludedir = $(includedir)/solvers/smt
-smtinclude_HEADERS = array_conv.h smt_array.h smt_conv.h array_conv.h \
-      smt_array.h smt_ast.h smt_conv.h smt_sort.h
+smtinclude_HEADERS = array_conv.h smt_ast.h smt_conv.h smt_sort.h \
+      smt_array.h
 
