@@ -1,7 +1,6 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
 #define classify_def(type, name, isnan_func, isinf_func, isnormal_func)        \
   int name(type f)                                                             \

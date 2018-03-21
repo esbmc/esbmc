@@ -32,6 +32,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "quiet", switc, ""},
   {0, "symex-trace", switc, ""},
   {0, "ssa-trace", switc, ""},
+  {0, "ssa-smt-trace", switc, ""},
   {0, "symex-ssa-trace", switc, ""},
   {0, "show-goto-value-sets", switc, ""},
   {0, "show-symex-value-sets", switc, ""},
@@ -166,6 +167,9 @@ const struct opt_templ esbmc_options[] = {
   {0, "tuple-node-flattener", switc, ""},
   {0, "tuple-sym-flattener", switc, ""},
   {0, "array-flattener", switc, ""},
+
+  // Use floating-point to bitvector converter
+  {0, "fp2bv", switc, ""},
 
   // Abort if the program contains a recursion
   {0, "abort-on-recursion", switc, ""},

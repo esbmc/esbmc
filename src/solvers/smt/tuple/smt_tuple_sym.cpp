@@ -11,6 +11,7 @@ smt_astt smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
   // From a vector of expressions, create a tuple representation by creating
   // a fresh name and assigning members into it.
   std::string name = ctx->mk_fresh_name("tuple_create::");
+
   // Add a . suffix because this is of tuple type.
   name += ".";
 
@@ -38,9 +39,8 @@ smt_astt smt_tuple_sym_flattener::tuple_fresh(smt_sortt s, std::string name)
   return new tuple_sym_smt_ast(ctx, s, n);
 }
 
-smt_astt smt_tuple_sym_flattener::mk_tuple_symbol(
-  const std::string &name,
-  smt_sortt s)
+smt_astt
+smt_tuple_sym_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
 {
   // We put a '.' on the end of all symbols to deliminate the rest of the
   // name. However, these names may become expressions again, then be converted
@@ -180,7 +180,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_of(
   for(unsigned long i = 0; i < subtype.members.size(); i++)
   {
     const expr2tc &val = data.datatype_members[i];
-    type2tc subarr_type = type2tc(new array_type2t(val->type, arrsize, false));
+    type2tc subarr_type = array_type2tc(val->type, arrsize, false);
     constant_array_of2tc sub_array_of(subarr_type, val);
 
     smt_astt tuple_arr_of_sym_ast = ctx->convert_ast(tuple_arr_of_sym);
@@ -203,10 +203,11 @@ smt_sortt smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
       "Arrays dimensions should be flattened by the time they reach tuple "
       "interface");
     unsigned int dom_width = ctx->calculate_array_domain_width(arrtype);
-    return new tuple_smt_sort(type, 1, dom_width);
+    return new smt_sort(
+      SMT_SORT_ARRAY, type, dom_width, ctx->convert_sort(arrtype.subtype));
   }
 
-  return new tuple_smt_sort(type);
+  return new smt_sort(SMT_SORT_STRUCT, type);
 }
 
 void smt_tuple_sym_flattener::add_tuple_constraints_for_solving()

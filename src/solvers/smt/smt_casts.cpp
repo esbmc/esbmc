@@ -38,8 +38,8 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
   abort();
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
+smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
@@ -48,7 +48,6 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
   assert(is_bv_type(cast.from));
 
   smt_astt a = convert_ast(cast.from);
-  smt_sortt s = convert_sort(cast.type);
 
   unsigned from_width = cast.from->type->get_width();
 
@@ -60,24 +59,21 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
   }
   else if(from_width > to_integer_bits)
   {
-    smt_sortt tmp = mk_sort(SMT_SORT_UBV, from_width - to_integer_bits);
-    frontpart = mk_extract(a, to_integer_bits - 1, 0, tmp);
+    frontpart = mk_extract(a, to_integer_bits - 1, 0);
   }
   else
   {
     assert(from_width < to_integer_bits);
-    smt_sortt tmp = mk_sort(SMT_SORT_UBV, to_integer_bits);
-    frontpart =
-      convert_sign_ext(a, tmp, from_width, to_integer_bits - from_width);
+    frontpart = mk_sign_ext(a, to_integer_bits - from_width);
   }
 
   // Make all zeros fraction bits
-  smt_astt zero_fracbits = mk_smt_bvint(BigInt(0), false, to_fraction_bits);
-  return mk_func_app(s, SMT_FUNC_CONCAT, frontpart, zero_fracbits);
+  smt_astt zero_fracbits = mk_smt_bv(BigInt(0), to_fraction_bits);
+  return mk_concat(frontpart, zero_fracbits);
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
+smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
@@ -85,18 +81,15 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
   assert(is_bool_type(cast.from));
 
   smt_astt a = convert_ast(cast.from);
-  smt_sortt s = convert_sort(cast.type);
 
-  smt_sortt intsort;
-  smt_astt zero = mk_smt_bvint(BigInt(0), false, to_integer_bits);
-  smt_astt one = mk_smt_bvint(BigInt(1), false, to_integer_bits);
-  intsort = mk_sort(SMT_SORT_UBV, to_integer_bits);
-  smt_astt switched = mk_func_app(intsort, SMT_FUNC_ITE, a, zero, one);
-  return mk_func_app(s, SMT_FUNC_CONCAT, switched, zero);
+  smt_astt zero = mk_smt_bv(BigInt(0), to_integer_bits);
+  smt_astt one = mk_smt_bv(BigInt(1), to_integer_bits);
+  smt_astt switched = mk_ite(a, zero, one);
+  return mk_concat(switched, zero);
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
+smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   assert(is_fixedbv_type(cast.from));
@@ -109,7 +102,6 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   unsigned from_width = from_fbvt.width;
   smt_astt magnitude, fraction;
   smt_astt a = convert_ast(cast.from);
-  smt_sortt s = convert_sort(cast.type);
 
   // FIXME: conversion here for to_int_bits > from_int_bits is factually
   // broken, run 01_cbmc_Fixedbv8 with --no-simplify
@@ -120,34 +112,23 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   // Start with the magnitude
   if(to_integer_bits <= from_integer_bits)
   {
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, to_integer_bits);
     magnitude = mk_extract(
-      a,
-      (from_fraction_bits + to_integer_bits - 1),
-      from_fraction_bits,
-      tmp_sort);
+      a, (from_fraction_bits + to_integer_bits - 1), from_fraction_bits);
   }
   else
   {
     assert(to_integer_bits > from_integer_bits);
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, from_integer_bits);
-    smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits, tmp_sort);
+    smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits);
 
     unsigned int additional_bits = to_integer_bits - from_integer_bits;
-    tmp_sort = mk_sort(SMT_SORT_UBV, from_integer_bits + additional_bits);
-    magnitude =
-      convert_sign_ext(ext, tmp_sort, from_integer_bits, additional_bits);
+    magnitude = mk_sign_ext(ext, additional_bits);
   }
 
   // Followed by the fraction part
   if(to_fraction_bits <= from_fraction_bits)
   {
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, to_fraction_bits);
     fraction = mk_extract(
-      a,
-      from_fraction_bits - 1,
-      from_fraction_bits - to_fraction_bits,
-      tmp_sort);
+      a, from_fraction_bits - 1, from_fraction_bits - to_fraction_bits);
   }
   else
   {
@@ -155,17 +136,70 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
 
     // Increase the size of the fraction by adding zeros on the end. This is
     // not a zero extension because they're at the end, not the start
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_UBV, from_fraction_bits);
-    smt_astt src_fraction = mk_extract(a, from_fraction_bits - 1, 0, tmp_sort);
+    smt_astt src_fraction = mk_extract(a, from_fraction_bits - 1, 0);
     smt_astt zeros =
-      mk_smt_bvint(BigInt(0), false, to_fraction_bits - from_fraction_bits);
+      mk_smt_bv(BigInt(0), to_fraction_bits - from_fraction_bits);
 
-    tmp_sort = mk_sort(SMT_SORT_UBV, to_fraction_bits);
-    fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, src_fraction, zeros);
+    fraction = mk_concat(src_fraction, zeros);
   }
 
   // Finally, concatenate the adjusted magnitude / fraction
-  return mk_func_app(s, SMT_FUNC_CONCAT, magnitude, fraction);
+  return mk_concat(magnitude, fraction);
+}
+
+smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
+{
+  // Convert each type
+  if(is_bool_type(cast.from))
+  {
+    // For bools, there is no direct conversion, so the cast is
+    // transformed into fpa = b ? 1 : 0;
+    return mk_ite(
+      convert_ast(cast.from),
+      convert_ast(gen_one(cast.type)),
+      convert_ast(gen_zero(cast.type)));
+  }
+
+  if(is_unsignedbv_type(cast.from))
+    return fp_api->mk_smt_typecast_ubv_to_fpbv(
+      convert_ast(cast.from),
+      convert_sort(cast.type),
+      convert_rounding_mode(cast.rounding_mode));
+
+  if(is_signedbv_type(cast.from))
+    return fp_api->mk_smt_typecast_sbv_to_fpbv(
+      convert_ast(cast.from),
+      convert_sort(cast.type),
+      convert_rounding_mode(cast.rounding_mode));
+
+  if(is_floatbv_type(cast.from))
+    return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(
+      convert_ast(cast.from),
+      convert_sort(cast.type),
+      convert_rounding_mode(cast.rounding_mode));
+
+  std::cerr << "Unexpected type in typecast to fpbv\n";
+  abort();
+}
+
+smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
+{
+  if(is_unsignedbv_type(cast.type))
+    return fp_api->mk_smt_typecast_from_fpbv_to_ubv(
+      convert_ast(cast.from), cast.type->get_width());
+
+  if(is_signedbv_type(cast.type))
+    return fp_api->mk_smt_typecast_from_fpbv_to_sbv(
+      convert_ast(cast.from), cast.type->get_width());
+
+  if(is_floatbv_type(cast.type))
+    return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(
+      convert_ast(cast.from),
+      convert_sort(cast.type),
+      convert_rounding_mode(cast.rounding_mode));
+
+  std::cerr << "Unexpected type in typecast from fpbv\n";
+  abort();
 }
 
 smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
@@ -174,21 +208,15 @@ smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
     return convert_typecast_to_ints_intmode(cast);
 
   if(is_signedbv_type(cast.from) || is_fixedbv_type(cast.from))
-  {
     return convert_typecast_to_ints_from_fbv_sint(cast);
-  }
+
   if(is_unsignedbv_type(cast.from))
-  {
     return convert_typecast_to_ints_from_unsigned(cast);
-  }
-  else if(is_floatbv_type(cast.from))
-  {
-    return fp_api->mk_smt_typecast_from_fpbv(cast);
-  }
-  else if(is_bool_type(cast.from))
-  {
+  if(is_floatbv_type(cast.from))
+    return convert_typecast_from_fpbv(cast);
+
+  if(is_bool_type(cast.from))
     return convert_typecast_to_ints_from_bool(cast);
-  }
 
   std::cerr << "Unexpected type in int/ptr typecast" << std::endl;
   abort();
@@ -229,14 +257,14 @@ smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
       one = mk_smt_real("1");
     }
 
-    return mk_func_app(convert_sort(cast.type), SMT_FUNC_ITE, a, one, zero);
+    return mk_ite(a, one, zero);
   }
 
   // Otherwise, we're looking at a cast between reals and int sorts.
   if(is_fixedbv_type(cast.type))
   {
     assert(is_bv_type(cast.from));
-    return mk_func_app(convert_sort(cast.type), SMT_FUNC_INT2REAL, &a, 1);
+    return mk_int2real(a);
   }
 
   assert(is_bv_type(cast.type));
@@ -244,12 +272,11 @@ smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
   return round_real_to_int(a);
 }
 
-smt_astt
-smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
+smt_astt smt_convt::convert_typecast_to_ints_from_fbv_sint(
+  const typecast2t &cast)
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
-  smt_sortt s = convert_sort(cast.type);
   smt_astt a = convert_ast(cast.from);
 
   unsigned from_width = cast.from->type->get_width();
@@ -257,73 +284,60 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
   if(from_width == to_width)
   {
     if(is_fixedbv_type(cast.from) && is_bv_type(cast.type))
-    {
       return round_fixedbv_to_int(a, from_width, to_width);
-    }
+
     if(
       (is_signedbv_type(cast.type) && is_unsignedbv_type(cast.from)) ||
       (is_unsignedbv_type(cast.type) && is_signedbv_type(cast.from)))
-    {
       // Operands have differing signs (and same width). Just return.
       return convert_ast(cast.from);
-    }
-    else
-    {
-      std::cerr << "Unrecognized equal-width int typecast format" << std::endl;
-      abort();
-    }
+
+    std::cerr << "Unrecognized equal-width int typecast format" << std::endl;
+    abort();
   }
-  else if(from_width < to_width)
-  {
-    return convert_sign_ext(a, s, from_width, (to_width - from_width));
-  }
-  else if(from_width > to_width)
-  {
-    return mk_extract(a, to_width - 1, 0, s);
-  }
+
+  if(from_width < to_width)
+    return mk_sign_ext(a, to_width - from_width);
+
+  if(from_width > to_width)
+    return mk_extract(a, to_width - 1, 0);
 
   std::cerr << "Malformed cast from signedbv/fixedbv" << std::endl;
   abort();
 }
 
-smt_astt
-smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
+smt_astt smt_convt::convert_typecast_to_ints_from_unsigned(
+  const typecast2t &cast)
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
-  smt_sortt s = convert_sort(cast.type);
+
   smt_astt a = convert_ast(cast.from);
 
   unsigned from_width = cast.from->type->get_width();
 
   if(from_width == to_width)
-  {
     return a; // output = output
-  }
+
   if(from_width < to_width)
-  {
-    return convert_zero_ext(a, s, (to_width - from_width));
-  }
-  else
-  {
-    assert(from_width > to_width);
-    return mk_extract(a, to_width - 1, 0, s);
-  }
+    return mk_zero_ext(a, (to_width - from_width));
+
+  assert(from_width > to_width);
+  return mk_extract(a, to_width - 1, 0);
 }
 
 smt_astt smt_convt::convert_typecast_to_ints_from_bool(const typecast2t &cast)
 {
   assert(!int_encoding);
-  smt_sortt s = convert_sort(cast.type);
   smt_astt a = convert_ast(cast.from);
 
   smt_astt zero, one;
   unsigned width = cast.type->get_width();
 
-  zero = mk_smt_bvint(BigInt(0), false, width);
-  one = mk_smt_bvint(BigInt(1), false, width);
+  zero = mk_smt_bv(BigInt(0), width);
+  one = mk_smt_bv(BigInt(1), width);
 
-  return mk_func_app(s, SMT_FUNC_ITE, a, one, zero);
+  return mk_ite(a, one, zero);
 }
 
 smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
@@ -331,9 +345,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   // First, sanity check -- typecast from one kind of a pointer to another kind
   // is a simple operation. Check for that first.
   if(is_pointer_type(cast.from))
-  {
     return convert_ast(cast.from);
-  }
 
   // Unpleasentness; we don't know what pointer this integer is going to
   // correspond to, and there's no way of telling statically, so we have
@@ -354,9 +366,6 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   obj_ids.resize(addr_space_data.back().size());
   obj_starts.resize(addr_space_data.back().size());
 
-  smt_func_kind gek = (int_encoding) ? SMT_FUNC_GTE : SMT_FUNC_BVUGTE;
-  smt_func_kind lek = (int_encoding) ? SMT_FUNC_LTE : SMT_FUNC_BVULTE;
-
   std::map<unsigned, unsigned>::const_iterator it;
   unsigned int i;
   for(it = addr_space_data.back().begin(), i = 0;
@@ -374,9 +383,11 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 
     obj_starts[i] = ptr_start;
 
-    smt_astt ge = mk_func_app(boolean_sort, gek, target, ptr_start);
-    smt_astt le = mk_func_app(boolean_sort, lek, target, ptr_end);
-    smt_astt theand = mk_func_app(boolean_sort, SMT_FUNC_AND, ge, le);
+    smt_astt ge =
+      int_encoding ? mk_ge(target, ptr_start) : mk_bvuge(target, ptr_start);
+    smt_astt le =
+      int_encoding ? mk_le(target, ptr_end) : mk_bvule(target, ptr_end);
+    smt_astt theand = mk_and(ge, le);
     is_in_range[i] = theand;
   }
 
@@ -391,8 +402,6 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   smt_astt output_obj = output->project(this, 0);
   smt_astt output_offs = output->project(this, 1);
 
-  smt_func_kind subk = (int_encoding) ? SMT_FUNC_SUB : SMT_FUNC_BVSUB;
-
   ast_vec guards;
   for(i = 0; i < addr_space_data.back().size(); i++)
   {
@@ -400,39 +409,39 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
       continue; // Skip invalid, it contains everything.
 
     // Calculate ptr offset were it this
-    smt_astt offs = mk_func_app(int_sort, subk, target, obj_starts[i]);
+    smt_astt offs = int_encoding ? mk_sub(target, obj_starts[i])
+                                 : mk_bvsub(target, obj_starts[i]);
 
     smt_astt this_obj = obj_ids[i];
     smt_astt this_offs = offs;
 
     smt_astt obj_eq = this_obj->eq(this, output_obj);
     smt_astt offs_eq = this_offs->eq(this, output_offs);
-    smt_astt is_eq = mk_func_app(boolean_sort, SMT_FUNC_AND, obj_eq, offs_eq);
+    smt_astt is_eq = mk_and(obj_eq, offs_eq);
 
     smt_astt in_range = is_in_range[i];
     guards.push_back(in_range);
-    smt_astt imp = mk_func_app(boolean_sort, SMT_FUNC_IMPLIES, in_range, is_eq);
+    smt_astt imp = mk_implies(in_range, is_eq);
     assert_ast(imp);
   }
 
   // If none of the above, match invalid.
   smt_astt was_matched = make_disjunct(guards);
-  smt_astt not_matched = mk_func_app(boolean_sort, SMT_FUNC_NOT, was_matched);
+  smt_astt not_matched = mk_not(was_matched);
 
   smt_astt id = convert_terminal(
     constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
 
   smt_astt one = convert_terminal(gen_ulong(1));
-  smt_astt offs = mk_func_app(int_sort, subk, target, one);
+  smt_astt offs = int_encoding ? mk_sub(target, one) : mk_bvsub(target, one);
   smt_astt inv_obj = id;
   smt_astt inv_offs = offs;
 
   smt_astt obj_eq = inv_obj->eq(this, output_obj);
   smt_astt offs_eq = inv_offs->eq(this, output_offs);
-  smt_astt is_inv = mk_func_app(boolean_sort, SMT_FUNC_AND, obj_eq, offs_eq);
+  smt_astt is_inv = mk_and(obj_eq, offs_eq);
 
-  smt_astt imp =
-    mk_func_app(boolean_sort, SMT_FUNC_IMPLIES, not_matched, is_inv);
+  smt_astt imp = mk_implies(not_matched, is_inv);
   assert_ast(imp);
 
   return output;
@@ -565,41 +574,31 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
 
   // Casts to and from pointers need to be addressed all as one
   if(is_pointer_type(cast.type))
-  {
     return convert_typecast_to_ptr(cast);
-  }
+
   if(is_pointer_type(cast.from))
-  {
     return convert_typecast_from_ptr(cast);
-  }
 
   // Otherwise, look at the result type.
   if(is_bool_type(cast.type))
-  {
     return convert_typecast_to_bool(cast);
-  }
+
   if(is_fixedbv_type(cast.type) && !int_encoding)
-  {
     return convert_typecast_to_fixedbv_nonint(expr);
-  }
-  else if(is_bv_type(cast.type) || is_fixedbv_type(cast.type))
-  {
+
+  if(is_bv_type(cast.type) || is_fixedbv_type(cast.type))
     return convert_typecast_to_ints(cast);
-  }
-  else if(is_floatbv_type(cast.type))
-  {
-    return fp_api->mk_smt_typecast_to_fpbv(cast);
-  }
-  else if(is_struct_type(cast.type))
-  {
+
+  if(is_floatbv_type(cast.type))
+    return convert_typecast_to_fpbv(cast);
+
+  if(is_struct_type(cast.type))
     return convert_typecast_to_struct(cast);
-  }
-  else if(is_union_type(cast.type))
+
+  if(is_union_type(cast.type))
   {
     if(base_type_eq(cast.type, cast.from->type, ns))
-    {
       return convert_ast(cast.from); // No additional conversion required
-    }
 
     std::cerr << "Can't typecast between unions" << std::endl;
     abort();

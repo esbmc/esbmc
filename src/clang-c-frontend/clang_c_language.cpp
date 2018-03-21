@@ -210,89 +210,141 @@ bool clang_c_languaget::final(
 std::string clang_c_languaget::internal_additions()
 {
   std::string intrinsics =
-    "# 1 \"esbmc_intrinsics.h\" 1\n"
-    "void __ESBMC_assume(_Bool assumption);\n"
-    "void assert(_Bool assertion);\n"
-    "void __ESBMC_assert(_Bool assertion, const char *description);\n"
-    "_Bool __ESBMC_same_object(const void *, const void *);\n"
-    "void __ESBMC_atomic_begin();\n"
-    "void __ESBMC_atomic_end();\n"
+    R"(
+# 1 "esbmc_intrinsics.h" 1
+void __ESBMC_assume(_Bool assumption);
+void assert(_Bool assertion);
+void __ESBMC_assert(_Bool assertion, const char *description);
+_Bool __ESBMC_same_object(const void *, const void *);
+void __ESBMC_atomic_begin();
+void __ESBMC_atomic_end();
 
-    // pointers
-    "unsigned __ESBMC_POINTER_OBJECT(const void *p);\n"
-    "signed __ESBMC_POINTER_OFFSET(const void *p);\n"
+int __ESBMC_abs(int);
+long int __ESBMC_labs(long int);
+long long int __ESBMC_llabs(long long int);
 
-    // malloc
-    "__attribute__((used))\n"
-    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
-    "_Bool __ESBMC_alloc[1];\n"
+// pointers
+unsigned __ESBMC_POINTER_OBJECT(const void *p);
+signed __ESBMC_POINTER_OFFSET(const void *p);
 
-    "__attribute__((used))\n"
-    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
-    "_Bool __ESBMC_deallocated[1];\n"
+// malloc
+__attribute__((used))
+__attribute__((annotate("__ESBMC_inf_size")))
+_Bool __ESBMC_alloc[1];
 
-    "__attribute__((used))\n"
-    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
-    "_Bool __ESBMC_is_dynamic[1];\n"
+__attribute__((used))
+__attribute__((annotate("__ESBMC_inf_size")))
+_Bool __ESBMC_deallocated[1];
 
-    "__attribute__((used))\n"
-    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
-    "unsigned long __ESBMC_alloc_size[1];\n"
+__attribute__((used))
+__attribute__((annotate("__ESBMC_inf_size")))
+_Bool __ESBMC_is_dynamic[1];
 
-    // float stuff
-    "int __ESBMC_rounding_mode = 0;\n"
-    "_Bool __ESBMC_floatbv_mode();\n"
+__attribute__((used))
+__attribute__((annotate("__ESBMC_inf_size")))
+unsigned long __ESBMC_alloc_size[1];
 
-    // Digital controllers code
-    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float "
-    "* cout, int coutsize, _Bool isDenominator);\n"
-    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float "
-    "delta);\n"
-    "_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int "
-    "iwidth, int precision);\n"
+// float stuff
+int __ESBMC_rounding_mode = 0;
+_Bool __ESBMC_floatbv_mode();
 
-    // Forward decs for pthread main thread begin/end hooks. Because they're
-    // pulled in from the C library, they need to be declared prior to pulling
-    // them in, for type checking.
-    "__attribute__((used))\n"
-    "void pthread_start_main_hook(void);\n"
-    "__attribute__((used))\n"
-    "void pthread_end_main_hook(void);\n"
+double __ESBMC_fabsd(double);
+long double __ESBMC_fabsld(long double);
+float __ESBMC_fabsf(float);
 
-    // Forward declarations for nondeterministic types.
-    "int nondet_int();\n"
-    "unsigned int nondet_uint();\n"
-    "long nondet_long();\n"
-    "unsigned long nondet_ulong();\n"
-    "short nondet_short();\n"
-    "unsigned short nondet_ushort();\n"
-    "char nondet_char();\n"
-    "unsigned char nondet_uchar();\n"
-    "signed char nondet_schar();\n"
-    "_Bool nondet_bool();\n"
-    "float nondet_float();\n"
-    "double nondet_double();"
+_Bool __ESBMC_isnanf(float f);
+_Bool __ESBMC_isnand(double f);
+_Bool __ESBMC_isnanld(long double f);
 
-    // TACAS definitions,
-    "int __VERIFIER_nondet_int();\n"
-    "unsigned int __VERIFIER_nondet_uint();\n"
-    "long __VERIFIER_nondet_long();\n"
-    "unsigned long __VERIFIER_nondet_ulong();\n"
-    "short __VERIFIER_nondet_short();\n"
-    "unsigned short __VERIFIER_nondet_ushort();\n"
-    "char __VERIFIER_nondet_char();\n"
-    "unsigned char __VERIFIER_nondet_uchar();\n"
-    "signed char __VERIFIER_nondet_schar();\n"
-    "_Bool __VERIFIER_nondet_bool();\n"
-    "float __VERIFIER_nondet_float();\n"
-    "double __VERIFIER_nondet_double();\n"
+_Bool __ESBMC_isfinite(double f);
+_Bool __ESBMC_isfinitef(float f);
+_Bool __ESBMC_isfinited(double f);
+_Bool __ESBMC_isfiniteld(long double f);
 
-    "void __VERIFIER_error();\n"
-    "void __VERIFIER_assume(int);\n"
-    "void __VERIFIER_atomic_begin();\n"
-    "void __VERIFIER_atomic_end();\n"
+_Bool __ESBMC_isinf(double f);
+_Bool __ESBMC_isinff(float f);
+_Bool __ESBMC_isinfd(double f);
+_Bool __ESBMC_isinfld(long double f);
 
-    "\n";
+_Bool __ESBMC_sign(double f);
+_Bool __ESBMC_signf(float f);
+_Bool __ESBMC_signd(double f);
+_Bool __ESBMC_signld(long double f);
+
+_Bool __ESBMC_isnormal(double f);
+_Bool __ESBMC_isnormalf(float f);
+_Bool __ESBMC_isnormald(double f);
+_Bool __ESBMC_isnormalld(long double f);
+
+double __ESBMC_inf(void);
+float __ESBMC_inff(void);
+long double __ESBMC_infld(void);
+
+float __ESBMC_nearbyintf(float d);
+double __ESBMC_nearbyintd(double d);
+long double __ESBMC_nearbyintld(long double d);
+
+float __ESBMC_fmaf(float x, float y, float z);
+double __ESBMC_fmad(double x, double y, double z);
+long double __ESBMC_fmald(long double x, long double y, long double z);
+
+float __ESBMC_sqrtf(float n);
+double __ESBMC_sqrtd(double n);
+long double __ESBMC_sqrtld(long double n);
+
+// Digital controllers code
+void __ESBMC_generate_cascade_controllers(
+  float *cden,
+  int csize,
+  float *cout,
+  int coutsize,
+  _Bool isDenominator);
+void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);
+_Bool __ESBMC_check_delta_stability(
+  double dc[],
+  double sample_time,
+  int iwidth,
+  int precision);
+
+// Forward decs for pthread main thread begin/end hooks. Because they're
+// pulled in from the C library, they need to be declared prior to pulling
+// them in, for type checking.
+__attribute__((used)) void pthread_start_main_hook(void);
+__attribute__((used)) void pthread_end_main_hook(void);
+
+// Forward declarations for nondeterministic types.
+int nondet_int();
+unsigned int nondet_uint();
+long nondet_long();
+unsigned long nondet_ulong();
+short nondet_short();
+unsigned short nondet_ushort();
+char nondet_char();
+unsigned char nondet_uchar();
+signed char nondet_schar();
+_Bool nondet_bool();
+float nondet_float();
+double nondet_double();
+
+// TACAS definitions,
+int __VERIFIER_nondet_int();
+unsigned int __VERIFIER_nondet_uint();
+long __VERIFIER_nondet_long();
+unsigned long __VERIFIER_nondet_ulong();
+short __VERIFIER_nondet_short();
+unsigned short __VERIFIER_nondet_ushort();
+char __VERIFIER_nondet_char();
+unsigned char __VERIFIER_nondet_uchar();
+signed char __VERIFIER_nondet_schar();
+_Bool __VERIFIER_nondet_bool();
+float __VERIFIER_nondet_float();
+double __VERIFIER_nondet_double();
+
+void __VERIFIER_error();
+void __VERIFIER_assume(int);
+void __VERIFIER_atomic_begin();
+void __VERIFIER_atomic_end();
+    )";
 
   return intrinsics;
 }

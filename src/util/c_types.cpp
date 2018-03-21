@@ -20,12 +20,14 @@ typet build_float_type(unsigned width)
     result.set_integer_bits(width / 2);
     return result;
   }
-
   floatbv_typet result;
   result.set_width(width);
 
   switch(width)
   {
+  case 16:
+    result.set_f(11);
+    break;
   case 32:
     result.set_f(23);
     break;
@@ -56,11 +58,17 @@ type2tc build_float_type2(unsigned width)
   unsigned fraction = 0;
   switch(width)
   {
+  case 16:
+    fraction = 11;
+    break;
   case 32:
     fraction = 23;
     break;
   case 64:
     fraction = 52;
+    break;
+  case 96:
+    fraction = 80;
     break;
   case 128:
     fraction = 112;
@@ -208,6 +216,11 @@ type2tc char_type2()
     return type_pool.get_uint(config.ansi_c.char_width);
 
   return type_pool.get_int(config.ansi_c.char_width);
+}
+
+typet half_float_type()
+{
+  return build_float_type(config.ansi_c.short_int_width);
 }
 
 typet float_type()

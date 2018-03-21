@@ -37,6 +37,7 @@ typet char32_type();
 typet unsigned_wchar_type();
 typet wchar_type();
 type2tc char_type2();
+typet half_float_type();
 typet float_type();
 type2tc float_type2();
 typet double_type();

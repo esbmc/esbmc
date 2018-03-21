@@ -603,6 +603,8 @@ void ieee_floatt::align()
       else
         make_fltmax(); // positive
       break;
+    default:
+      assert(false);
     }
 
     return; // done

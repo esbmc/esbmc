@@ -1,11 +1,9 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
 #ifdef __APPLE__
-#define __nan_def(type, name)                                                  \
-  ;                                                                            \
+#define __nan_def(type, name) ;
 
 #else
 #define __nan_def(type, name)                                                  \

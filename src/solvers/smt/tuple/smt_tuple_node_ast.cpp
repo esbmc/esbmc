@@ -18,8 +18,7 @@ void tuple_node_smt_ast::make_free(smt_convt *ctx)
   if(elements.size() != 0)
     return;
 
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  const struct_union_data &strct = ctx->get_type_def(ts->thetype);
+  const struct_union_data &strct = ctx->get_type_def(sort->get_tuple_type());
 
   elements.resize(strct.members.size());
 
@@ -63,7 +62,7 @@ tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   // ite is always true. We return the output symbol.
   tuple_node_smt_astt true_val = this;
   tuple_node_smt_astt false_val = to_tuple_node_ast(falseop);
-  tuple_smt_sortt thissort = to_tuple_sort(sort);
+
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
   tuple_node_smt_ast *result_sym =
     new tuple_node_smt_ast(flat, ctx, sort, name);
@@ -71,7 +70,7 @@ tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   const_cast<tuple_node_smt_ast *>(true_val)->make_free(ctx);
   const_cast<tuple_node_smt_ast *>(false_val)->make_free(ctx);
 
-  const struct_union_data &data = ctx->get_type_def(thissort->thetype);
+  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
   result_sym->elements.resize(data.members.size());
 
   // Iterate through each field and encode an ite.
@@ -112,8 +111,8 @@ smt_astt tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   // each of them, and then combine that into a final ast.
   tuple_node_smt_astt ta = this;
   tuple_node_smt_astt tb = to_tuple_node_ast(other);
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  const struct_union_data &data = ctx->get_type_def(ts->thetype);
+
+  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
 
   smt_convt::ast_vec eqs;
   eqs.reserve(data.members.size());
@@ -172,8 +171,7 @@ smt_astt tuple_node_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
 
 #ifndef NDEBUG
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  const struct_union_data &data = ctx->get_type_def(ts->thetype);
+  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
   assert(idx < data.members.size() && "Out-of-bounds tuple element accessed");
 #endif
   return elements[idx];
