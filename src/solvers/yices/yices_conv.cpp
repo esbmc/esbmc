@@ -1134,3 +1134,9 @@ smt_sortt yices_convt::mk_bvfp_rm_sort()
 {
   return new solver_smt_sort<type_t>(SMT_SORT_BVFP_RM, yices_bv_type(3), 3);
 }
+
+void yices_smt_ast::dump() const
+{
+  yices_pp_term(stdout, a, 80, 10, 0);
+  yices_pp_type(stdout, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
+}
