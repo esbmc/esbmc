@@ -1,7 +1,7 @@
 #include <pthread.h> 
 int x, y;
 
-void thr1() {
+void* thr1() {
   while (x>0 && y>0) {
     {
       x = x-1;
@@ -10,7 +10,7 @@ void thr1() {
   }
 }    
 
-void thr2() {
+void* thr2() {
   while (x>0 && y>0) {
     {
       x = y-2;
