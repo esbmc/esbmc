@@ -118,6 +118,12 @@ typedef union
 
 /* Data structure for conditional variable handling.  The structure of
    the attribute type is not exposed on purpose.  */
+#ifdef __APPLE__
+typedef struct {
+  long __sig;
+  char __opaque[__PTHREAD_COND_SIZE__];
+} pthread_cond_t;
+#else
 typedef union
 {
   struct
@@ -134,6 +140,7 @@ typedef union
   char __size[__SIZEOF_PTHREAD_COND_T];
   __extension__ long long int __align;
 } pthread_cond_t;
+#endif
 
 typedef union
 {

@@ -17,13 +17,14 @@ Thread::~Thread()
   pthread_attr_destroy(&_attr);
 }
 
-void* Thread::function(void* ptr)
+void *Thread::function(void *ptr)
 {
-  if (!ptr) {
+  if(!ptr)
+  {
     return nullptr;
   }
 
-  static_cast<Thread*>(ptr)->run();
+  static_cast<Thread *>(ptr)->run();
   pthread_exit(ptr);
   return nullptr;
 }

@@ -12,8 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/context.h>
 #include <util/message.h>
 
-void add_cprover_library(
-  contextt &context,
-  message_handlert &message_handler);
+void add_cprover_library(contextt &context, message_handlert &message_handler);
 
 #endif

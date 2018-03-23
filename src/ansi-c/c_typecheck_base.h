@@ -15,20 +15,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_types.h>
 #include <util/typecheck.h>
 
-class c_typecheck_baset:
-  public typecheckt,
-  public namespacet
+class c_typecheck_baset : public typecheckt, public namespacet
 {
 public:
   c_typecheck_baset(
     contextt &_context,
     const std::string &_module,
-    message_handlert &_message_handler):
-    typecheckt(_message_handler),
-    namespacet(_context),
-    context(_context),
-    module(_module),
-    mode("C")
+    message_handlert &_message_handler)
+    : typecheckt(_message_handler),
+      namespacet(_context),
+      context(_context),
+      module(_module),
+      mode("C")
   {
   }
 
@@ -36,12 +34,12 @@ public:
     contextt &_context1,
     const contextt &_context2,
     const std::string &_module,
-    message_handlert &_message_handler):
-    typecheckt(_message_handler),
-    namespacet(_context1, _context2),
-    context(_context1),
-    module(_module),
-    mode("C")
+    message_handlert &_message_handler)
+    : typecheckt(_message_handler),
+      namespacet(_context1, _context2),
+      context(_context1),
+      module(_module),
+      mode("C")
   {
   }
 
@@ -77,32 +75,32 @@ protected:
     unsigned pos;
 
   public:
-    explicit init_statet(exprt _array):array(std::move(_array)), pos(0)
+    explicit init_statet(exprt _array) : array(std::move(_array)), pos(0)
     {
     }
 
     unsigned remaining() const
     {
-      return array.operands().size()-pos;
+      return array.operands().size() - pos;
     }
 
     bool has_next() const
     {
-      return pos<array.operands().size();
+      return pos < array.operands().size();
     }
 
-    init_statet &operator ++(int x __attribute__((unused)))
+    init_statet &operator++(int x __attribute__((unused)))
     {
       pos++;
       return *this;
     }
 
-    const exprt &operator *() const
+    const exprt &operator*() const
     {
       return array.operands()[pos];
     }
 
-    const exprt *operator ->() const
+    const exprt *operator->() const
     {
       return &(array.operands()[pos]);
     }
@@ -110,10 +108,7 @@ protected:
 
   virtual bool zero_initializer(exprt &value, const typet &type) const;
 
-  virtual void do_initializer(
-    exprt &value,
-    typet &type,
-    bool force_constant);
+  virtual void do_initializer(exprt &value, typet &type, bool force_constant);
 
   virtual exprt do_initializer_rec(
     init_statet &state,
@@ -219,11 +214,15 @@ protected:
   virtual void typecheck_expr_symbol(exprt &expr);
   virtual void typecheck_expr_sizeof(exprt &expr);
   virtual void typecheck_expr_function_identifier(exprt &expr);
-  virtual void typecheck_side_effect_gcc_conditional_expression(side_effect_exprt &expr);
-  virtual void typecheck_side_effect_function_call(side_effect_expr_function_callt &expr);
+  virtual void
+  typecheck_side_effect_gcc_conditional_expression(side_effect_exprt &expr);
+  virtual void
+  typecheck_side_effect_function_call(side_effect_expr_function_callt &expr);
   virtual void typecheck_side_effect_assignment(exprt &expr);
-  virtual void typecheck_side_effect_statement_expression(side_effect_exprt &expr);
-  virtual void typecheck_function_call_arguments(side_effect_expr_function_callt &expr);
+  virtual void
+  typecheck_side_effect_statement_expression(side_effect_exprt &expr);
+  virtual void
+  typecheck_function_call_arguments(side_effect_expr_function_callt &expr);
   virtual void do_special_functions(side_effect_expr_function_callt &expr);
 
   virtual void make_constant(exprt &expr);
@@ -248,7 +247,10 @@ protected:
   // context management
   bool move_symbol(symbolt &symbol, symbolt *&new_symbol);
   bool move_symbol(symbolt &symbol)
-  { symbolt *new_symbol; return move_symbol(symbol, new_symbol); }
+  {
+    symbolt *new_symbol;
+    return move_symbol(symbol, new_symbol);
+  }
 
   // top level stuff
   void typecheck_symbol(symbolt &symbol);

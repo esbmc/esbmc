@@ -16,21 +16,20 @@ void cpp_typecheckt::typecheck_function_bodies()
 
   while(!function_bodies.empty())
   {
-    symbolt &function_symbol=*function_bodies.front().function_symbol;
+    symbolt &function_symbol = *function_bodies.front().function_symbol;
     template_map.swap(function_bodies.front().template_map);
     instantiation_stack.swap(function_bodies.front().instantiation_stack);
 
     function_bodies.pop_front();
 
-    if(function_symbol.name=="main")
+    if(function_symbol.name == "main")
       add_argc_argv(function_symbol);
 
-    exprt &body=function_symbol.value;
-    if(body.id()=="cpp_not_typechecked")
+    exprt &body = function_symbol.value;
+    if(body.id() == "cpp_not_typechecked")
       continue;
 
-    if(body.is_not_nil() &&
-       !body.is_zero())
+    if(body.is_not_nil() && !body.is_zero())
     {
       convert_function(function_symbol);
     }
@@ -38,4 +37,3 @@ void cpp_typecheckt::typecheck_function_bodies()
 
   old_instantiation_stack.swap(instantiation_stack);
 }
-

@@ -24,16 +24,23 @@ exprt c_sizeof(const typet &src, const namespacet &ns)
   // migration, but we might still run into a nondeterministically sized
   // array.
   mp_integer size;
-  try {
+  try
+  {
     size = type_byte_size(t);
-  } catch (array_type2t::dyn_sized_array_excp *e) { // Nondet'ly sized.
+  }
+  catch(array_type2t::dyn_sized_array_excp *e)
+  { // Nondet'ly sized.
     std::cerr << "Sizeof nondeterministically sized array encountered"
               << std::endl;
     abort();
-  } catch (array_type2t::inf_sized_array_excp *e) {
+  }
+  catch(array_type2t::inf_sized_array_excp *e)
+  {
     std::cerr << "Sizeof infinite sized array encountered" << std::endl;
     abort();
-  } catch (type2t::symbolic_type_excp *e) {
+  }
+  catch(type2t::symbolic_type_excp *e)
+  {
     std::cerr << "Sizeof symbolic type encountered" << std::endl;
     abort();
   }

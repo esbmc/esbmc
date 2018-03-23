@@ -1,7 +1,6 @@
 #ifndef _ESBMC_SOLVERS_SMTLIB_CONV_H_
 #define _ESBMC_SOLVERS_SMTLIB_CONV_H_
 
-
 // For the sake of...
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -20,14 +19,12 @@ typedef Minisat::Lit Lit;
 typedef Minisat::lbool lbool;
 typedef std::vector<literalt> bvt;
 
-class minisat_convt : public cnf_iface, public cnf_convt, public bitblast_convt{
+class minisat_convt : public cnf_iface, public cnf_convt, public bitblast_convt
+{
 public:
-  typedef enum {
-    LEFT, LRIGHT, ARIGHT
-  } shiftt;
+  typedef enum { LEFT, LRIGHT, ARIGHT } shiftt;
 
-  minisat_convt(bool int_encoding, const namespacet &_ns,
-                const optionst &opts);
+  minisat_convt(bool int_encoding, const namespacet &_ns, const optionst &opts);
   ~minisat_convt();
 
   // Things definitely to be done by the solver:

@@ -1,3 +1,4 @@
+KNOWNBUG
 main.c
 app.c picosat.c --unwind 1 --partial-loops --function picosat_deref_toplevel --bv
 ^VERIFICATION FAILED$

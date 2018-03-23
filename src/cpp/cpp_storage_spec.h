@@ -11,10 +11,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <util/location.h>
 
-class cpp_storage_spect:public irept
+class cpp_storage_spect : public irept
 {
 public:
-  cpp_storage_spect():irept("cpp-storage-spec")
+  cpp_storage_spect() : irept("cpp-storage-spec")
   {
   }
 
@@ -27,21 +27,51 @@ public:
   {
     return static_cast<const locationt &>(find("#location"));
   }
-  bool is_static()   const { return get("storage")=="static"; }
-  bool is_extern()   const { return get("storage")=="extern"; }
-  bool is_auto()     const { return get("storage")=="auto"; }
-  bool is_register() const { return get("storage")=="register"; }
-  bool is_mutable()  const { return get("storage")=="mutable"; }
+  bool is_static() const
+  {
+    return get("storage") == "static";
+  }
+  bool is_extern() const
+  {
+    return get("storage") == "extern";
+  }
+  bool is_auto() const
+  {
+    return get("storage") == "auto";
+  }
+  bool is_register() const
+  {
+    return get("storage") == "register";
+  }
+  bool is_mutable() const
+  {
+    return get("storage") == "mutable";
+  }
 
-  void set_static  () { set("storage", "static"); }
-  void set_extern  () { set("storage", "extern"); }
-  void set_auto    () { set("storage", "auto"); }
-  void set_register() { set("storage", "register"); }
-  void set_mutable () { set("storage", "mutable"); }
+  void set_static()
+  {
+    set("storage", "static");
+  }
+  void set_extern()
+  {
+    set("storage", "extern");
+  }
+  void set_auto()
+  {
+    set("storage", "auto");
+  }
+  void set_register()
+  {
+    set("storage", "register");
+  }
+  void set_mutable()
+  {
+    set("storage", "mutable");
+  }
 
   bool is_empty() const
   {
-    return get("storage")=="";
+    return get("storage") == "";
   }
 };
 

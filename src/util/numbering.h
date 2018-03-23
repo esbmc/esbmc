@@ -26,28 +26,26 @@ public:
   unsigned number(const T &a)
   {
     unsigned int num = next_obj_num++;
-    std::pair<typename numberst::const_iterator, bool> result=
-      numbers.insert(
-      std::pair<T, unsigned>
-      (a, num));
+    std::pair<typename numberst::const_iterator, bool> result =
+      numbers.insert(std::pair<T, unsigned>(a, num));
 
     if(result.second) // inserted?
     {
       vec[num] = a;
-      assert(vec.size()==numbers.size());
+      assert(vec.size() == numbers.size());
     }
-    
+
     return (result.first)->second;
   }
-  
+
   bool get_number(const T &a, unsigned &n) const
   {
-    typename numberst::const_iterator it=numbers.find(a);
+    typename numberst::const_iterator it = numbers.find(a);
 
-    if(it==numbers.end())
+    if(it == numbers.end())
       return true;
-      
-    n=it->second;
+
+    n = it->second;
     return false;
   }
 
@@ -75,8 +73,8 @@ public:
 
 protected:
   typedef std::map<T, unsigned> numberst;
-  typedef hash_map_cont<unsigned, T, std::hash<unsigned> > vectort;
-  numberst numbers;  
+  typedef hash_map_cont<unsigned, T, std::hash<unsigned>> vectort;
+  numberst numbers;
   vectort vec;
   unsigned int next_obj_num;
 };
@@ -93,28 +91,26 @@ public:
   unsigned number(const T &a)
   {
     unsigned int num = next_obj_num++;
-    std::pair<typename numberst::const_iterator, bool> result=
-      numbers.insert(
-      std::pair<T, unsigned>
-      (a, num));
+    std::pair<typename numberst::const_iterator, bool> result =
+      numbers.insert(std::pair<T, unsigned>(a, num));
 
     if(result.second) // inserted?
     {
       vec[num] = a;
-      assert(vec.size()==numbers.size());
+      assert(vec.size() == numbers.size());
     }
-    
+
     return (result.first)->second;
   }
-  
+
   bool get_number(const T &a, unsigned &n) const
   {
-    typename numberst::const_iterator it=numbers.find(a);
+    typename numberst::const_iterator it = numbers.find(a);
 
-    if(it==numbers.end())
+    if(it == numbers.end())
       return true;
-      
-    n=it->second;
+
+    n = it->second;
     return false;
   }
 
@@ -149,8 +145,8 @@ public:
 
 protected:
   typedef hash_map_cont<T, unsigned, hash_fkt> numberst;
-  typedef hash_map_cont<unsigned, T, std::hash<unsigned> > vectort;
-  numberst numbers;  
+  typedef hash_map_cont<unsigned, T, std::hash<unsigned>> vectort;
+  numberst numbers;
   vectort vec;
   unsigned int next_obj_num;
 };

@@ -1,0 +1,4 @@
+CORE
+main.c
+--claim 1 --unwind 8
+^VERIFICATION SUCCESSFUL$

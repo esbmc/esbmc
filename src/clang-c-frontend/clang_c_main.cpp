@@ -24,16 +24,17 @@ bool clang_main(
   irep_idt main_symbol;
 
   // find main symbol
-  if(config.main!="")
+  if(config.main != "")
   {
     std::list<irep_idt> matches;
 
     forall_symbol_base_map(it, context.symbol_base_map, config.main)
     {
       // look it up
-      symbolt* s = context.find_symbol(it->second);
+      symbolt *s = context.find_symbol(it->second);
 
-      if(s == nullptr) continue;
+      if(s == nullptr)
+        continue;
 
       if(s->type.is_code())
         matches.push_back(it->second);
@@ -42,30 +43,30 @@ bool clang_main(
     if(matches.empty())
     {
       messaget message(message_handler);
-      message.error("main symbol `"+config.main+"' not found");
+      message.error("main symbol `" + config.main + "' not found");
       return true; // give up
     }
 
-    if(matches.size()>=2)
+    if(matches.size() >= 2)
     {
       messaget message(message_handler);
-      if (matches.size()==2)
-        std::cerr << "warning: main symbol `" << config.main << "' is ambiguous" << std::endl;
+      if(matches.size() == 2)
+        std::cerr << "warning: main symbol `" << config.main << "' is ambiguous"
+                  << std::endl;
       else
       {
-      message.error("main symbol `"+config.main+"' is ambiguous");
+        message.error("main symbol `" + config.main + "' is ambiguous");
         return true;
       }
     }
 
-    main_symbol=matches.front();
-
+    main_symbol = matches.front();
   }
   else
-    main_symbol=standard_main;
+    main_symbol = standard_main;
 
   // look it up
-  symbolt* s = context.find_symbol(main_symbol);
+  symbolt *s = context.find_symbol(main_symbol);
   if(s == nullptr)
     return false; // give up, no main
 
@@ -85,19 +86,19 @@ bool clang_main(
   // build call to function
 
   code_function_callt call;
-  call.location()=symbol.location;
-  call.function()=symbol_expr(symbol);
+  call.location() = symbol.location;
+  call.function() = symbol_expr(symbol);
 
-  const code_typet::argumentst &arguments=
+  const code_typet::argumentst &arguments =
     to_code_type(symbol.type).arguments();
 
-  if(symbol.name==standard_main)
+  if(symbol.name == standard_main)
   {
-    if(arguments.size()==0)
+    if(arguments.size() == 0)
     {
       // ok
     }
-    else if(arguments.size()==2 || arguments.size()==3)
+    else if(arguments.size() == 2 || arguments.size() == 3)
     {
       namespacet ns(context);
 
@@ -131,9 +132,7 @@ bool clang_main(
 
       // assign argv[argc] to NULL
       constant_exprt null(
-        irep_idt("NULL"),
-        integer2string(0),
-        argv_symbol.type.subtype());
+        irep_idt("NULL"), integer2string(0), argv_symbol.type.subtype());
 
       exprt index_expr("index", argv_symbol.type.subtype());
 
@@ -222,18 +221,19 @@ bool clang_main(
   }
   else
   {
-    call.arguments().resize(arguments.size(), static_cast<const exprt &>(get_nil_irep()));
+    call.arguments().resize(
+      arguments.size(), static_cast<const exprt &>(get_nil_irep()));
   }
 
   // Call to main symbol is now in "call"; construct calls to thread library
   // hooks for main thread start and main thread end.
 
   code_function_callt thread_start_call;
-  thread_start_call.location()=symbol.location;
-  thread_start_call.function()=symbol_exprt("pthread_start_main_hook");
+  thread_start_call.location() = symbol.location;
+  thread_start_call.function() = symbol_exprt("pthread_start_main_hook");
   code_function_callt thread_end_call;
-  thread_end_call.location()=symbol.location;
-  thread_end_call.function()=symbol_exprt("pthread_end_main_hook");
+  thread_end_call.location() = symbol.location;
+  thread_end_call.function() = symbol_exprt("pthread_end_main_hook");
 
   init_code.move_to_operands(thread_start_call);
   init_code.move_to_operands(call);
@@ -243,9 +243,9 @@ bool clang_main(
   symbolt new_symbol;
 
   code_typet main_type;
-  main_type.return_type()=empty_typet();
+  main_type.return_type() = empty_typet();
 
-  new_symbol.name="__ESBMC_main";
+  new_symbol.name = "__ESBMC_main";
   new_symbol.type.swap(main_type);
   new_symbol.value.swap(init_code);
 

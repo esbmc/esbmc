@@ -13,20 +13,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/c_types.h>
 #include <util/string_constant.h>
 
-void convert_string_literal(
-  const std::string &src,
-  std::string &dest)
+void convert_string_literal(const std::string &src, std::string &dest)
 {
-  dest="";
+  dest = "";
 
-  assert(src.size()>=2);
-  assert(src[0]=='"' || src[0]=='L');
-  assert(src[src.size()-1]=='"');
+  assert(src.size() >= 2);
+  assert(src[0] == '"' || src[0] == 'L');
+  assert(src[src.size() - 1] == '"');
 
-  if(src[0]=='L')
-    unescape_string(std::string(src, 2, src.size()-3), dest);
+  if(src[0] == 'L')
+    unescape_string(std::string(src, 2, src.size() - 3), dest);
   else
-    unescape_string(std::string(src, 1, src.size()-2), dest);
+    unescape_string(std::string(src, 1, src.size() - 2), dest);
 }
 
 void convert_string_literal(const std::string &src, exprt &dest)

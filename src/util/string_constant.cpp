@@ -18,7 +18,7 @@ string_constantt::string_constantt(const irep_idt &value)
 {
 }
 
-string_constantt::string_constantt(const irep_idt &value, const typet& type)
+string_constantt::string_constantt(const irep_idt &value, const typet &type)
   : exprt("string-constant", type)
 {
   set_value(value);

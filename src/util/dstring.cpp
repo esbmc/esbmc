@@ -13,8 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 #include <boost/python/operators.hpp>
 
-void
-build_dstring_python_class(void)
+void build_dstring_python_class(void)
 {
   using namespace boost::python;
   using boost::python::self_ns::self;
@@ -30,8 +29,8 @@ build_dstring_python_class(void)
     .def(self != self)
     .def(self < self);
 
-  class_<std::vector<dstring> >("irep_idt_vec")
-          .def(vector_indexing_suite<std::vector<dstring> >());
+  class_<std::vector<dstring>>("irep_idt_vec")
+    .def(vector_indexing_suite<std::vector<dstring>>());
 
   class_<string_wrapper>("string_wrapper")
     .def_readwrite("the_string", &string_wrapper::the_string);

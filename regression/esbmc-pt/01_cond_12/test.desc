@@ -1,3 +1,0 @@
-main.c
---unwind 2 --no-unwinding-assertions --context-bound 2
-^VERIFICATION SUCCESSFUL$

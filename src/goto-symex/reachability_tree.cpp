@@ -25,13 +25,13 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <util/std_expr.h>
 
 reachability_treet::reachability_treet(
-    const goto_functionst &goto_functions,
-    const namespacet &ns,
-    optionst &opts,
-    boost::shared_ptr<symex_targett> target,
-    contextt &context,
-    message_handlert &_message_handler) :
-    goto_functions(goto_functions),
+  const goto_functionst &goto_functions,
+  const namespacet &ns,
+  optionst &opts,
+  boost::shared_ptr<symex_targett> target,
+  contextt &context,
+  message_handlert &_message_handler)
+  : goto_functions(goto_functions),
     permanent_context(context),
     ns(ns),
     options(opts),
@@ -52,7 +52,7 @@ reachability_treet::reachability_treet(
   round_robin = options.get_bool_option("round-robin");
   schedule = options.get_bool_option("schedule");
 
-  if (options.get_bool_option("no-por"))
+  if(options.get_bool_option("no-por"))
     por = false;
   else
     por = true;
@@ -60,8 +60,7 @@ reachability_treet::reachability_treet(
   target_template = std::move(target);
 }
 
-void
-reachability_treet::setup_for_new_explore()
+void reachability_treet::setup_for_new_explore()
 {
   boost::shared_ptr<symex_targett> targ;
 
@@ -70,22 +69,32 @@ reachability_treet::setup_for_new_explore()
   has_complete_formula = false;
 
   execution_statet *s;
-  if (schedule) {
+  if(schedule)
+  {
     schedule_target = target_template->clone();
     targ = schedule_target;
-    s = reinterpret_cast<execution_statet*>(
-                         new schedule_execution_statet(goto_functions, ns,
-                                               this, schedule_target,
-                                               permanent_context,
-                                               options, &schedule_total_claims,
-                                               &schedule_remaining_claims,
-                                               message_handler));
-  } else {
+    s = reinterpret_cast<execution_statet *>(new schedule_execution_statet(
+      goto_functions,
+      ns,
+      this,
+      schedule_target,
+      permanent_context,
+      options,
+      &schedule_total_claims,
+      &schedule_remaining_claims,
+      message_handler));
+  }
+  else
+  {
     targ = target_template->clone();
-    s = reinterpret_cast<execution_statet*>(
-                         new dfs_execution_statet(goto_functions, ns, this,
-                                               targ, permanent_context, options,
-                                               message_handler));
+    s = reinterpret_cast<execution_statet *>(new dfs_execution_statet(
+      goto_functions,
+      ns,
+      this,
+      targ,
+      permanent_context,
+      options,
+      message_handler));
     schedule_target = nullptr;
   }
 
@@ -94,15 +103,13 @@ reachability_treet::setup_for_new_explore()
   targ->push_ctx(); // Start with a depth of 1.
 }
 
-execution_statet & reachability_treet::get_cur_state()
+execution_statet &reachability_treet::get_cur_state()
 {
-
   return **cur_state_it;
 }
 
-const execution_statet & reachability_treet::get_cur_state() const
+const execution_statet &reachability_treet::get_cur_state() const
 {
-
   return **cur_state_it;
 }
 
@@ -116,32 +123,26 @@ int reachability_treet::get_CS_bound() const
   return CS_bound;
 }
 
-bool
-reachability_treet::check_for_hash_collision() const
+bool reachability_treet::check_for_hash_collision() const
 {
-
   const execution_statet &ex_state = get_cur_state();
 
   crypto_hash hash;
   hash = ex_state.generate_hash();
-  if (hit_hashes.find(hash) != hit_hashes.end())
+  if(hit_hashes.find(hash) != hit_hashes.end())
     return true;
 
   return false;
 }
 
-void
-reachability_treet::post_hash_collision_cleanup()
+void reachability_treet::post_hash_collision_cleanup()
 {
-
-  for (auto && it : get_cur_state().DFS_traversed)
+  for(auto &&it : get_cur_state().DFS_traversed)
     it = true;
 }
 
-void
-reachability_treet::update_hash_collision_set()
+void reachability_treet::update_hash_collision_set()
 {
-
   execution_statet &ex_state = get_cur_state();
 
   crypto_hash hash;
@@ -149,26 +150,27 @@ reachability_treet::update_hash_collision_set()
   hit_hashes.insert(hash);
 }
 
-void
-reachability_treet::create_next_state()
+void reachability_treet::create_next_state()
 {
   execution_statet &ex_state = get_cur_state();
 
-  if (next_thread_id != ex_state.threads_state.size()) {
+  if(next_thread_id != ex_state.threads_state.size())
+  {
     auto new_state = ex_state.clone();
     execution_states.push_back(new_state);
 
     //begin - H.Savino
-    if (round_robin) {
-        if(next_thread_id == ex_state.active_thread)
-            new_state->increment_time_slice();
-        else
-            new_state->reset_time_slice();
+    if(round_robin)
+    {
+      if(next_thread_id == ex_state.active_thread)
+        new_state->increment_time_slice();
+      else
+        new_state->reset_time_slice();
     }
     //end - H.Savino
 
     /* Make it active, make it follow on from previous state... */
-    if (new_state->get_active_state_number() != next_thread_id)
+    if(new_state->get_active_state_number() != next_thread_id)
       new_state->increment_context_switch();
 
     new_state->switch_to_thread(next_thread_id);
@@ -176,12 +178,11 @@ reachability_treet::create_next_state()
   }
 }
 
-bool
-reachability_treet::step_next_state()
+bool reachability_treet::step_next_state()
 {
-
   next_thread_id = decide_ileave_direction(get_cur_state());
-  if (next_thread_id != get_cur_state().threads_state.size()) {
+  if(next_thread_id != get_cur_state().threads_state.size())
+  {
     create_next_state();
     return true;
   }
@@ -194,28 +195,31 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 {
   unsigned int tid = 0, user_tid = 0;
 
-  if (interactive_ileaves) {
+  if(interactive_ileaves)
+  {
     tid = get_ileave_direction_from_user();
     user_tid = tid;
   }
   //begin - H.Savino
-  else if (round_robin) {
-
+  else if(round_robin)
+  {
     tid = get_ileave_direction_from_scheduling();
     user_tid = tid;
-    if(tid != ex_state.active_thread){
-        ex_state.DFS_traversed.at(ex_state.active_thread)=true;
+    if(tid != ex_state.active_thread)
+    {
+      ex_state.DFS_traversed.at(ex_state.active_thread) = true;
     }
-    if(tid == ex_state.active_thread){
-        for(tid=0; tid < ex_state.threads_state.size(); tid++)
-        {
-          if(tid==user_tid)
-              continue;
-          if(ex_state.DFS_traversed.at(tid))
-            continue;
-          ex_state.DFS_traversed.at(tid) = true;
-        }
-       tid=user_tid;
+    if(tid == ex_state.active_thread)
+    {
+      for(tid = 0; tid < ex_state.threads_state.size(); tid++)
+      {
+        if(tid == user_tid)
+          continue;
+        if(ex_state.DFS_traversed.at(tid))
+          continue;
+        ex_state.DFS_traversed.at(tid) = true;
+      }
+      tid = user_tid;
     }
   }
   //end - H.Savino
@@ -223,10 +227,10 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
   for(; tid < ex_state.threads_state.size(); tid++)
   {
     /* For all threads: */
-    if (!check_thread_viable(tid, true))
+    if(!check_thread_viable(tid, true))
       continue;
 
-    if (!ex_state.dfs_explore_thread(tid))
+    if(!ex_state.dfs_explore_thread(tid))
       continue;
 
 #if 0
@@ -238,7 +242,8 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
     break;
   }
 
-  if (interactive_ileaves && tid != user_tid){
+  if(interactive_ileaves && tid != user_tid)
+  {
     std::cerr << "Ileave code selected different thread from user choice";
     std::cerr << std::endl;
   }
@@ -248,23 +253,27 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 
 bool reachability_treet::is_has_complete_formula()
 {
-
   return has_complete_formula;
 }
 
 void reachability_treet::switch_to_next_execution_state()
 {
-
-  std::list<boost::shared_ptr<execution_statet> >::iterator it = cur_state_it;
+  std::list<boost::shared_ptr<execution_statet>>::iterator it = cur_state_it;
   it++;
 
-  if(it != execution_states.end()) {
+  if(it != execution_states.end())
+  {
     cur_state_it++;
-  } else {
-    if (step_next_state()) {
+  }
+  else
+  {
+    if(step_next_state())
+    {
       cur_state_it++;
-    } else {
-      if (config.options.get_bool_option("print-stack-traces"))
+    }
+    else
+    {
+      if(config.options.get_bool_option("print-stack-traces"))
         print_ileave_trace();
       has_complete_formula = true;
     }
@@ -284,20 +293,22 @@ bool reachability_treet::reset_to_unexplored_state()
   auto it = cur_state_it--;
   execution_states.erase(it);
 
-  while(execution_states.size() > 0 && !step_next_state()) {
+  while(execution_states.size() > 0 && !step_next_state())
+  {
     it = cur_state_it--;
     execution_states.erase(it);
   }
 
-  if (execution_states.size() > 0)
+  if(execution_states.size() > 0)
     cur_state_it++;
 
-  if (execution_states.size() != 0) {
+  if(execution_states.size() != 0)
+  {
     // When backtracking, erase all the assertions from the equation before
     // continuing forwards. They've all already been checked, in the trace we
     // just backtracked from. Thus there's no point in checking them again.
     symex_target_equationt *eq =
-      static_cast<symex_target_equationt*>((*cur_state_it)->target.get());
+      static_cast<symex_target_equationt *>((*cur_state_it)->target.get());
     unsigned int num_asserts = eq->clear_assertions();
 
     // Remove them from the count of remaining assertions to check. This allows
@@ -312,7 +323,6 @@ bool reachability_treet::reset_to_unexplored_state()
 
 void reachability_treet::go_next_state()
 {
-
   std::list<boost::shared_ptr<execution_statet>>::iterator it = cur_state_it;
   it++;
   if(it != execution_states.end())
@@ -325,7 +335,7 @@ void reachability_treet::go_next_state()
       cur_state_it--;
 
       // For the last one:
-      if (execution_states.size() == 1)
+      if(execution_states.size() == 1)
         (*it)->finish_formula();
 
       execution_states.erase(it);
@@ -342,7 +352,8 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
 
   // Iterate through each position in the DFS tree recording data into this
   // object.
-  for (it = rt.execution_states.begin(); it != rt.execution_states.end();it++){
+  for(it = rt.execution_states.begin(); it != rt.execution_states.end(); it++)
+  {
     reachability_treet::dfs_position::dfs_state state;
     auto ex = *it;
     state.location_number = ex->get_active_state().source.pc->location_number;
@@ -353,7 +364,7 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
     // instead it's whatever thread is active in the /next/ state. So, take the
     // currently active thread no and assign it to the previous dfs state
     // we recorded.
-    if (states.size() > 0)
+    if(states.size() > 0)
       states.back().cur_thread = ex->get_active_state_number();
 
     states.push_back(state);
@@ -364,19 +375,19 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
   states.back().cur_thread = 0;
 
   checksum = 0; // Use this in the future.
-  ileaves = 0; // Can use this depending on a future refactor.
+  ileaves = 0;  // Can use this depending on a future refactor.
 }
 
-reachability_treet::dfs_position::dfs_position(const std::string&& filename)
+reachability_treet::dfs_position::dfs_position(const std::string &&filename)
 {
-
   read_from_file(std::move(filename));
 }
 
-const uint32_t reachability_treet::dfs_position::file_magic = 0x4543484B; //'ECHK'
+const uint32_t reachability_treet::dfs_position::file_magic =
+  0x4543484B; //'ECHK'
 
 bool reachability_treet::dfs_position::write_to_file(
-                                       const std::string&& filename) const
+  const std::string &&filename) const
 {
   uint8_t buffer[8192];
   reachability_treet::dfs_position::file_hdr hdr;
@@ -387,7 +398,8 @@ bool reachability_treet::dfs_position::write_to_file(
   unsigned int i;
 
   f = fopen(filename.c_str(), "wb");
-  if (f == nullptr) {
+  if(f == nullptr)
+  {
     std::cerr << "Couldn't open checkpoint output file" << std::endl;
     return true;
   }
@@ -397,15 +409,16 @@ bool reachability_treet::dfs_position::write_to_file(
   hdr.num_states = htonl(states.size());
   hdr.num_ileaves = 0;
 
-  if (fwrite(&hdr, sizeof(hdr), 1, f) != 1)
+  if(fwrite(&hdr, sizeof(hdr), 1, f) != 1)
     goto fail;
 
-  for (it = states.begin(); it != states.end(); it++) {
+  for(it = states.begin(); it != states.end(); it++)
+  {
     entry.location_number = htonl(it->location_number);
     entry.num_threads = htons(it->num_threads);
     entry.cur_thread = htons(it->cur_thread);
 
-    if (fwrite(&entry, sizeof(entry), 1, f) != 1)
+    if(fwrite(&entry, sizeof(entry), 1, f) != 1)
       goto fail;
 
     assert(it->explored.size() < 65536);
@@ -413,8 +426,10 @@ bool reachability_treet::dfs_position::write_to_file(
 
     i = 0;
     memset(buffer, 0, sizeof(buffer));
-    for (ex_it = it->explored.begin(); ex_it != it->explored.end(); ex_it++) {
-      if (*ex_it) {
+    for(ex_it = it->explored.begin(); ex_it != it->explored.end(); ex_it++)
+    {
+      if(*ex_it)
+      {
         buffer[i >> 3] |= (1 << i & 7);
       }
       i++;
@@ -425,7 +440,7 @@ bool reachability_treet::dfs_position::write_to_file(
     i >>= 3;
 
     assert(i != 0); // Always at least one thread in _existance_.
-    if (fwrite(buffer, i, 1, f) != 1)
+    if(fwrite(buffer, i, 1, f) != 1)
       goto fail;
   }
 
@@ -439,7 +454,7 @@ fail:
 }
 
 bool reachability_treet::dfs_position::read_from_file(
-                                       const std::string&& filename)
+  const std::string &&filename)
 {
   reachability_treet::dfs_position::file_hdr hdr;
   reachability_treet::dfs_position::file_entry entry;
@@ -448,24 +463,27 @@ bool reachability_treet::dfs_position::read_from_file(
   char c;
 
   f = fopen(filename.c_str(), "rb");
-  if (f == nullptr) {
+  if(f == nullptr)
+  {
     std::cerr << "Couldn't open checkpoint input file" << std::endl;
     return true;
   }
 
-  if (fread(&hdr, sizeof(hdr), 1, f) != 1)
+  if(fread(&hdr, sizeof(hdr), 1, f) != 1)
     goto fail;
 
-  if (hdr.magic != htonl(file_magic)) {
+  if(hdr.magic != htonl(file_magic))
+  {
     std::cerr << "Magic number indicates that this isn't a checkpoint file"
               << std::endl;
     fclose(f);
     return true;
   }
 
-  for (i = 0; i < ntohl(hdr.num_states); i++) {
+  for(i = 0; i < ntohl(hdr.num_states); i++)
+  {
     reachability_treet::dfs_position::dfs_state state;
-    if (fread(&entry, sizeof(entry), 1, f) != 1)
+    if(fread(&entry, sizeof(entry), 1, f) != 1)
       goto fail;
 
     state.location_number = ntohl(entry.location_number);
@@ -473,15 +491,18 @@ bool reachability_treet::dfs_position::read_from_file(
     state.cur_thread = ntohs(entry.cur_thread);
 
     assert(state.num_threads < 65536);
-    if (state.cur_thread >= state.num_threads) {
+    if(state.cur_thread >= state.num_threads)
+    {
       std::cerr << "Inconsistent checkpoint data" << std::endl;
       fclose(f);
       return true;
     }
 
-    for (j = 0; j < state.num_threads; j++) {
-      if (j % 8 == 0) {
-        if (fread(&c, sizeof(c), 1, f) != 1)
+    for(j = 0; j < state.num_threads; j++)
+    {
+      if(j % 8 == 0)
+      {
+        if(fread(&c, sizeof(c), 1, f) != 1)
           goto fail;
       }
 
@@ -500,66 +521,82 @@ fail:
   return true;
 }
 
-void
-reachability_treet::print_ileave_trace() const
+void reachability_treet::print_ileave_trace() const
 {
   std::list<boost::shared_ptr<execution_statet>>::const_iterator it;
   int i = 0;
 
   std::cout << "Context switch trace for interleaving:" << std::endl;
-  for (it = execution_states.begin(); it != execution_states.end(); it++, i++) {
+  for(it = execution_states.begin(); it != execution_states.end(); it++, i++)
+  {
     std::cout << "Context switch point " << i << std::endl;
     (*it)->print_stack_traces(4);
   }
 }
 
-int
-reachability_treet::get_ileave_direction_from_user() const
+int reachability_treet::get_ileave_direction_from_user() const
 {
   std::string input;
   unsigned int tid;
 
-  if (get_cur_state().get_active_state().guard.is_false())
-    std::cout << "This trace's guard is false; it will not be evaulated." << std::endl;
+  if(get_cur_state().get_active_state().guard.is_false())
+    std::cout << "This trace's guard is false; it will not be evaulated."
+              << std::endl;
 
   // First of all, are there actually any valid context switch targets?
-  for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
-    if (check_thread_viable(tid, true))
+  for(tid = 0; tid < get_cur_state().threads_state.size(); tid++)
+  {
+    if(check_thread_viable(tid, true))
       break;
   }
 
   // If no threads were viable, don't present a choice.
-  if (tid == get_cur_state().threads_state.size())
+  if(tid == get_cur_state().threads_state.size())
     return get_cur_state().threads_state.size();
 
-  std::cout << "Context switch point encountered; please select a thread to run" << std::endl;
+  std::cout << "Context switch point encountered; please select a thread to run"
+            << std::endl;
   std::cout << "Current thread states:" << std::endl;
   execution_states.back()->print_stack_traces(4);
 
-  while (std::cout << "Input: ", std::getline(std::cin, input)) {
-    if (input == "b") {
+  while(std::cout << "Input: ", std::getline(std::cin, input))
+  {
+    if(input == "b")
+    {
       std::cout << "Back unimplemented" << std::endl;
-    } else if (input == "q") {
+    }
+    else if(input == "q")
+    {
       exit(1);
-    } else if (input.size() <= 0) {
+    }
+    else if(input.size() <= 0)
+    {
       ;
-    } else {
+    }
+    else
+    {
       const char *start;
       char *end;
       start = input.c_str();
       tid = strtol(start, &end, 10);
-      if (start == end) {
+      if(start == end)
+      {
         std::cout << "Not a valid input" << std::endl;
-      } else if (tid >= get_cur_state().threads_state.size()) {
+      }
+      else if(tid >= get_cur_state().threads_state.size())
+      {
         std::cout << "Number out of range";
-      } else {
-        if (check_thread_viable(tid, false))
+      }
+      else
+      {
+        if(check_thread_viable(tid, false))
           break;
       }
     }
   }
 
-  if (std::cin.eof()) {
+  if(std::cin.eof())
+  {
     std::cout << std::endl;
     exit(1);
   }
@@ -568,64 +605,72 @@ reachability_treet::get_ileave_direction_from_user() const
 }
 
 //begin - H.Savino
-int
-reachability_treet::get_ileave_direction_from_scheduling() const
+int reachability_treet::get_ileave_direction_from_scheduling() const
 {
   unsigned int tid;
 
-    // If the guard on this execution trace is false, no context switches are
-    // going to be run over in the future and just general randomness is going to
-    // occur. So there's absolutely no reason exploring further.
-    if (get_cur_state().get_active_state().guard.is_false()) {
-          std::cout << "This trace's guard is false; it will not be evaulated." << std::endl;
-          exit(1);
-    }
-
-    // First of all, are there actually any valid context switch targets?
-    for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
-      if (check_thread_viable(tid, true))
-        break;
-    }
-
-    // If no threads were viable, don't present a choice.
-    if (tid == get_cur_state().threads_state.size())
-      return get_cur_state().threads_state.size();
-
-  tid=get_cur_state().active_thread;
-
-  if(get_cur_state().TS_number < this->TS_slice-1){
-      if (check_thread_viable(tid, true))
-          return tid;
+  // If the guard on this execution trace is false, no context switches are
+  // going to be run over in the future and just general randomness is going to
+  // occur. So there's absolutely no reason exploring further.
+  if(get_cur_state().get_active_state().guard.is_false())
+  {
+    std::cout << "This trace's guard is false; it will not be evaulated."
+              << std::endl;
+    exit(1);
   }
-      while(1){
-        tid=(tid + 1)%get_cur_state().threads_state.size();
-        if (check_thread_viable(tid, true)){
-            break;
-        }
-      }
+
+  // First of all, are there actually any valid context switch targets?
+  for(tid = 0; tid < get_cur_state().threads_state.size(); tid++)
+  {
+    if(check_thread_viable(tid, true))
+      break;
+  }
+
+  // If no threads were viable, don't present a choice.
+  if(tid == get_cur_state().threads_state.size())
+    return get_cur_state().threads_state.size();
+
+  tid = get_cur_state().active_thread;
+
+  if(get_cur_state().TS_number < this->TS_slice - 1)
+  {
+    if(check_thread_viable(tid, true))
+      return tid;
+  }
+  while(1)
+  {
+    tid = (tid + 1) % get_cur_state().threads_state.size();
+    if(check_thread_viable(tid, true))
+    {
+      break;
+    }
+  }
   return tid;
 }
 //end - H.Savino
 
-bool
-reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
+bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
 {
   const execution_statet &ex = get_cur_state();
 
-  if (ex.DFS_traversed.at(tid) == true) {
-    if (!quiet)
-      std::cout << "Thread unschedulable as it's already been explored" << std::endl;
+  if(ex.DFS_traversed.at(tid) == true)
+  {
+    if(!quiet)
+      std::cout << "Thread unschedulable as it's already been explored"
+                << std::endl;
     return false;
   }
 
-  if (ex.threads_state.at(tid).call_stack.empty()) {
-    if (!quiet)
+  if(ex.threads_state.at(tid).call_stack.empty())
+  {
+    if(!quiet)
       std::cout << "Thread unschedulable due to empty call stack" << std::endl;
     return false;
   }
 
-  if (ex.threads_state.at(tid).thread_ended) {
-    if (!quiet)
+  if(ex.threads_state.at(tid).thread_ended)
+  {
+    if(!quiet)
       std::cout << "That thread has ended" << std::endl;
     return false;
   }
@@ -638,8 +683,9 @@ reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   }
 #endif
 
-  if (ex.tid_is_set && ex.monitor_tid == tid) {
-    if (!quiet)
+  if(ex.tid_is_set && ex.monitor_tid == tid)
+  {
+    if(!quiet)
       std::cout << "Can't context switch to a monitor thread" << std::endl;
     return false;
   }
@@ -650,31 +696,32 @@ reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
 boost::shared_ptr<goto_symext::symex_resultt>
 reachability_treet::get_next_formula()
 {
-
   assert(execution_states.size() > 0 && "Must setup RT before exploring");
 
   while(!is_has_complete_formula())
   {
-    while ((!get_cur_state().has_cswitch_point_occured() ||
+    while((!get_cur_state().has_cswitch_point_occured() ||
            get_cur_state().check_if_ileaves_blocked()) &&
-           get_cur_state().can_execution_continue())
+          get_cur_state().can_execution_continue())
       get_cur_state().symex_step(*this);
 
-    if (state_hashing) {
-      if (check_for_hash_collision()) {
+    if(state_hashing)
+    {
+      if(check_for_hash_collision())
+      {
         post_hash_collision_cleanup();
         break;
-      } else {
-        update_hash_collision_set();
       }
+
+      update_hash_collision_set();
     }
 
-    if (por) {
+    if(por)
+    {
       get_cur_state().calculate_mpor_constraints();
-      if (get_cur_state().is_transition_blocked_by_mpor())
+      if(get_cur_state().is_transition_blocked_by_mpor())
         break;
     }
-
 
     next_thread_id = decide_ileave_direction(get_cur_state());
 
@@ -682,7 +729,7 @@ reachability_treet::get_next_formula()
 
     switch_to_next_execution_state();
 
-    if (get_cur_state().interleaving_unviable)
+    if(get_cur_state().interleaving_unviable)
       break;
   }
 
@@ -693,36 +740,35 @@ reachability_treet::get_next_formula()
   return get_cur_state().get_symex_result();
 }
 
-bool
-reachability_treet::setup_next_formula()
+bool reachability_treet::setup_next_formula()
 {
-
   return reset_to_unexplored_state();
 }
 
 boost::shared_ptr<goto_symext::symex_resultt>
 reachability_treet::generate_schedule_formula()
 {
-
   int total_states = 0;
-  while (has_more_states())
+  while(has_more_states())
   {
     total_states++;
-    while ((!get_cur_state().has_cswitch_point_occured() ||
+    while((!get_cur_state().has_cswitch_point_occured() ||
            get_cur_state().check_if_ileaves_blocked()) &&
-           get_cur_state().can_execution_continue())
+          get_cur_state().can_execution_continue())
     {
       get_cur_state().symex_step(*this);
     }
 
-    if (state_hashing) {
-      if (check_for_hash_collision()) {
+    if(state_hashing)
+    {
+      if(check_for_hash_collision())
+      {
         post_hash_collision_cleanup();
         go_next_state();
         continue;
-      } else {
-        update_hash_collision_set();
       }
+
+      update_hash_collision_set();
     }
 
     next_thread_id = decide_ileave_direction(get_cur_state());
@@ -733,12 +779,12 @@ reachability_treet::generate_schedule_formula()
   }
 
   return boost::shared_ptr<goto_symext::symex_resultt>(
-    new goto_symext::symex_resultt(schedule_target, schedule_total_claims,
-                                   schedule_remaining_claims));
+    new goto_symext::symex_resultt(
+      schedule_target, schedule_total_claims, schedule_remaining_claims));
 }
 
-bool
-reachability_treet::restore_from_dfs_state(void *_dfs __attribute__((unused)))
+bool reachability_treet::restore_from_dfs_state(void *_dfs
+                                                __attribute__((unused)))
 {
   abort();
 #if 0
@@ -798,9 +844,9 @@ reachability_treet::restore_from_dfs_state(void *_dfs __attribute__((unused)))
   return false;
 }
 
-void reachability_treet::save_checkpoint(const std::string&& fname __attribute__((unused))) const
+void reachability_treet::save_checkpoint(const std::string &&fname
+                                         __attribute__((unused))) const
 {
-
 #if 0
   reachability_treet::dfs_position pos(*this);
   if (pos.write_to_file(fname))

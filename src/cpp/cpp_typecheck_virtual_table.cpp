@@ -5,29 +5,26 @@
 
 void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
 {
-
   // builds virtual-table value maps: (class x virtual_name x value)
-  std::map<irep_idt, std::map<irep_idt,exprt> > vt_value_maps;
+  std::map<irep_idt, std::map<irep_idt, exprt>> vt_value_maps;
 
   const struct_typet &struct_type = to_struct_type(symbol.type);
-  for(const auto & compo : struct_type.components())
+  for(const auto &compo : struct_type.components())
   {
     if(!compo.get_bool("is_virtual"))
       continue;
 
-    const code_typet& code_type = to_code_type(compo.type());
+    const code_typet &code_type = to_code_type(compo.type());
     assert(code_type.arguments().size() > 0);
 
-    const pointer_typet& pointer_type =
-      static_cast<const pointer_typet&>(code_type.arguments()[0].type());
+    const pointer_typet &pointer_type =
+      static_cast<const pointer_typet &>(code_type.arguments()[0].type());
 
     irep_idt class_id = pointer_type.subtype().identifier();
 
-    std::map<irep_idt,exprt>& value_map =
-      vt_value_maps[class_id];
+    std::map<irep_idt, exprt> &value_map = vt_value_maps[class_id];
 
-
-    exprt e = symbol_exprt(compo.get_name(),code_type);
+    exprt e = symbol_exprt(compo.get_name(), code_type);
 
     if(compo.get_bool("is_pure_virtual"))
     {
@@ -44,33 +41,38 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
   }
 
   // create virtual-table symbol variables
-  for(std::map<irep_idt, std::map<irep_idt,exprt> >::const_iterator cit =
-      vt_value_maps.begin(); cit != vt_value_maps.end(); cit++)
+  for(std::map<irep_idt, std::map<irep_idt, exprt>>::const_iterator cit =
+        vt_value_maps.begin();
+      cit != vt_value_maps.end();
+      cit++)
   {
-    const std::map<irep_idt,exprt>& value_map = cit->second;
+    const std::map<irep_idt, exprt> &value_map = cit->second;
 
-    const symbolt& late_cast_symb = namespacet(context).lookup(cit->first);
-    const symbolt& vt_symb_type = namespacet(context).lookup("virtual_table::"+late_cast_symb.name.as_string());
+    const symbolt &late_cast_symb = namespacet(context).lookup(cit->first);
+    const symbolt &vt_symb_type = namespacet(context).lookup(
+      "virtual_table::" + late_cast_symb.name.as_string());
 
     symbolt vt_symb_var;
-    vt_symb_var.name=  vt_symb_type.name.as_string() + "@"+ symbol.name.as_string();
-    vt_symb_var.base_name= vt_symb_type.base_name.as_string() + "@" + symbol.base_name.as_string();
-    vt_symb_var.mode=current_mode;
-    vt_symb_var.module=module;
-    vt_symb_var.location=vt_symb_type.location;
+    vt_symb_var.name =
+      vt_symb_type.name.as_string() + "@" + symbol.name.as_string();
+    vt_symb_var.base_name =
+      vt_symb_type.base_name.as_string() + "@" + symbol.base_name.as_string();
+    vt_symb_var.mode = current_mode;
+    vt_symb_var.module = module;
+    vt_symb_var.location = vt_symb_type.location;
     vt_symb_var.type = symbol_typet(vt_symb_type.name);
     vt_symb_var.lvalue = true;
     vt_symb_var.static_lifetime = true;
 
     // do the values
     const struct_typet &vt_type = to_struct_type(vt_symb_type.type);
-    exprt values("struct",symbol_typet(vt_symb_type.name));
-    for(const auto & compo : vt_type.components())
+    exprt values("struct", symbol_typet(vt_symb_type.name));
+    for(const auto &compo : vt_type.components())
     {
-      std::map<irep_idt,exprt>::const_iterator cit2 =
-        value_map.find( compo.base_name());
+      std::map<irep_idt, exprt>::const_iterator cit2 =
+        value_map.find(compo.base_name());
       assert(cit2 != value_map.end());
-      const exprt& value = cit2->second;
+      const exprt &value = cit2->second;
       assert(value.type() == compo.type());
       values.operands().push_back(value);
     }

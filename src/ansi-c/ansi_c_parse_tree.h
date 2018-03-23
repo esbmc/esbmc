@@ -20,10 +20,10 @@ public:
 
   void swap(ansi_c_parse_treet &other);
   void clear();
-  
+
   void output(std::ostream &out) const
   {
-    for(const auto & declaration : declarations)
+    for(const auto &declaration : declarations)
     {
       symbolt tmp;
       declaration.to_symbol(tmp);

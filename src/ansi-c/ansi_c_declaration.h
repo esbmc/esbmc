@@ -12,10 +12,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cassert>
 #include <util/symbol.h>
 
-class ansi_c_declarationt:public exprt
+class ansi_c_declarationt : public exprt
 {
 public:
-  ansi_c_declarationt():exprt("declaration")
+  ansi_c_declarationt() : exprt("declaration")
   {
   }
 
@@ -142,27 +142,23 @@ public:
   void to_symbol(symbolt &symbol) const
   {
     symbol.clear();
-    symbol.location=location();
-    symbol.value=decl_value();
-    symbol.type=type();
-    symbol.name=get_name();
-    symbol.base_name=get_base_name();
-    symbol.is_type=get_is_type();
-    symbol.is_extern=get_is_extern();
-    symbol.is_macro=get_is_macro();
-    symbol.is_parameter=get_is_argument();
+    symbol.location = location();
+    symbol.value = decl_value();
+    symbol.type = type();
+    symbol.name = get_name();
+    symbol.base_name = get_base_name();
+    symbol.is_type = get_is_type();
+    symbol.is_extern = get_is_extern();
+    symbol.is_macro = get_is_macro();
+    symbol.is_parameter = get_is_argument();
 
-    bool is_code=symbol.type.is_code();
+    bool is_code = symbol.type.is_code();
 
-    symbol.static_lifetime=
-      !symbol.is_macro &&
-      !symbol.is_type &&
-      (get_is_global() || get_is_static()) &&
-      !is_code;
+    symbol.static_lifetime = !symbol.is_macro && !symbol.is_type &&
+                             (get_is_global() || get_is_static()) && !is_code;
 
-    symbol.file_local=
-      get_is_static() || symbol.is_macro ||
-      (!get_is_global() && !get_is_extern() && !is_code);
+    symbol.file_local = get_is_static() || symbol.is_macro ||
+                        (!get_is_global() && !get_is_extern() && !is_code);
 
     if(get_is_inline())
       symbol.type.inlined(true);
@@ -171,13 +167,14 @@ public:
 
 extern inline ansi_c_declarationt &to_ansi_c_declaration(exprt &expr)
 {
-  assert(expr.id()=="declaration");
+  assert(expr.id() == "declaration");
   return static_cast<ansi_c_declarationt &>(expr);
 }
 
-extern inline const ansi_c_declarationt &to_ansi_c_declaration(const exprt &expr)
+extern inline const ansi_c_declarationt &
+to_ansi_c_declaration(const exprt &expr)
 {
-  assert(expr.id()=="declaration");
+  assert(expr.id() == "declaration");
   return static_cast<const ansi_c_declarationt &>(expr);
 }
 

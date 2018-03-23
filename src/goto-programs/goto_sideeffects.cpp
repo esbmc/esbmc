@@ -14,22 +14,20 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/rename.h>
 #include <util/std_expr.h>
 
-void goto_convertt::make_temp_symbol(
-  exprt &expr,
-  goto_programt &dest)
+void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
 {
-  const locationt location=expr.find_location();
+  const locationt location = expr.find_location();
 
-  symbolt &new_symbol=new_tmp_symbol(expr.type());
+  symbolt &new_symbol = new_tmp_symbol(expr.type());
 
   code_assignt assignment;
-  assignment.lhs()=symbol_expr(new_symbol);
-  assignment.rhs()=expr;
-  assignment.location()=location;
+  assignment.lhs() = symbol_expr(new_symbol);
+  assignment.rhs() = expr;
+  assignment.location() = location;
 
   convert(assignment, dest);
 
-  expr=symbol_expr(new_symbol);
+  expr = symbol_expr(new_symbol);
 }
 
 bool goto_convertt::has_sideeffect(const exprt &expr)
@@ -93,14 +91,15 @@ void goto_convertt::remove_sideeffects(
     remove_sideeffects(expr, dest, result_is_used);
     return;
   }
-  else if(expr.id() == "if")
+  if(expr.id() == "if")
   {
     // first clean condition
     remove_sideeffects(expr.op0(), dest);
 
     // possibly done now
-    if(!has_sideeffect(to_if_expr(expr).true_case())
-        && !has_sideeffect(to_if_expr(expr).false_case()))
+    if(
+      !has_sideeffect(to_if_expr(expr).true_case()) &&
+      !has_sideeffect(to_if_expr(expr).false_case()))
       return;
 
     // copy expression
@@ -225,7 +224,7 @@ void goto_convertt::remove_sideeffects(
       remove_gcc_conditional_expression(expr, dest);
       return;
     }
-    else if(statement == "statement_expression")
+    if(statement == "statement_expression")
     {
       remove_statement_expression(expr, dest, result_is_used);
       return;
@@ -235,8 +234,9 @@ void goto_convertt::remove_sideeffects(
       // we do a special treatment for x=f(...)
       assert(expr.operands().size() == 2);
 
-      if(expr.op1().id() == "sideeffect"
-          && to_side_effect_expr(expr.op1()).get_statement() == "function_call")
+      if(
+        expr.op1().id() == "sideeffect" &&
+        to_side_effect_expr(expr.op1()).get_statement() == "function_call")
       {
         remove_sideeffects(expr.op0(), dest);
         exprt lhs = expr.op0();
@@ -267,18 +267,13 @@ void goto_convertt::remove_sideeffects(
 
     if(statement == "function_call") // might do anything
       remove_function_call(expr, dest, result_is_used);
-    else if(statement == "assign" ||
-            statement == "assign+" ||
-            statement == "assign-" ||
-            statement == "assign*" ||
-            statement == "assign_div" ||
-            statement == "assign_bitor" ||
-            statement == "assign_bitxor" ||
-            statement == "assign_bitand" ||
-            statement == "assign_lshr" ||
-            statement == "assign_ashr" ||
-            statement == "assign_shl" ||
-            statement == "assign_mod")
+    else if(
+      statement == "assign" || statement == "assign+" ||
+      statement == "assign-" || statement == "assign*" ||
+      statement == "assign_div" || statement == "assign_bitor" ||
+      statement == "assign_bitxor" || statement == "assign_bitand" ||
+      statement == "assign_lshr" || statement == "assign_ashr" ||
+      statement == "assign_shl" || statement == "assign_mod")
       remove_assignment(expr, dest, result_is_used);
     else if(statement == "postincrement" || statement == "postdecrement")
       remove_post(expr, dest, result_is_used);
@@ -296,15 +291,15 @@ void goto_convertt::remove_sideeffects(
     {
       expr.make_nil();
     }
-    else if(statement=="cpp-throw")
+    else if(statement == "cpp-throw")
     {
-      goto_programt::targett t=dest.add_instruction(THROW);
+      goto_programt::targett t = dest.add_instruction(THROW);
       codet tmp("cpp-throw");
       tmp.operands().swap(expr.operands());
-      tmp.location()=expr.location();
+      tmp.location() = expr.location();
       tmp.set("exception_list", expr.find("exception_list"));
       migrate_expr(tmp, t->code);
-      t->location=expr.location();
+      t->location = expr.location();
 
       // the result can't be used, these are void
       expr.make_nil();
@@ -322,27 +317,23 @@ void goto_convertt::remove_assignment(
   goto_programt &dest,
   bool result_is_used)
 {
-  const irep_idt &statement=expr.statement();
+  const irep_idt &statement = expr.statement();
 
-  if(statement=="assign")
+  if(statement == "assign")
   {
-    exprt tmp=expr;
+    exprt tmp = expr;
     tmp.id("code");
     convert_assign(to_code_assign(to_code(tmp)), dest);
   }
-  else if(statement=="assign+"
-          || statement=="assign-"
-          || statement=="assign*"
-          || statement=="assign_div"
-          || statement=="assign_mod"
-          || statement=="assign_shl"
-          || statement=="assign_ashr"
-          || statement=="assign_lshr"
-          || statement=="assign_bitand"
-          || statement=="assign_bitxor"
-          || statement=="assign_bitor")
+  else if(
+    statement == "assign+" || statement == "assign-" ||
+    statement == "assign*" || statement == "assign_div" ||
+    statement == "assign_mod" || statement == "assign_shl" ||
+    statement == "assign_ashr" || statement == "assign_lshr" ||
+    statement == "assign_bitand" || statement == "assign_bitxor" ||
+    statement == "assign_bitor")
   {
-    if(expr.operands().size()!=2)
+    if(expr.operands().size() != 2)
     {
       err_location(expr);
       str << statement << " takes two arguments";
@@ -351,65 +342,100 @@ void goto_convertt::remove_assignment(
 
     exprt rhs;
 
-    if(statement == "assign+") {
-      if(expr.type().is_floatbv()) {
+    if(statement == "assign+")
+    {
+      if(expr.type().is_floatbv())
+      {
         rhs.id("ieee_add");
-      } else {
+      }
+      else
+      {
         rhs.id("+");
       }
-    } else if(statement == "assign-") {
-      if(expr.type().is_floatbv()) {
+    }
+    else if(statement == "assign-")
+    {
+      if(expr.type().is_floatbv())
+      {
         rhs.id("ieee_sub");
-      } else {
+      }
+      else
+      {
         rhs.id("-");
       }
-    } else if(statement == "assign*") {
-      if(expr.type().is_floatbv()) {
+    }
+    else if(statement == "assign*")
+    {
+      if(expr.type().is_floatbv())
+      {
         rhs.id("ieee_mul");
-      } else {
+      }
+      else
+      {
         rhs.id("*");
       }
-    } else if(statement == "assign_div") {
-      if(expr.type().is_floatbv()) {
+    }
+    else if(statement == "assign_div")
+    {
+      if(expr.type().is_floatbv())
+      {
         rhs.id("ieee_div");
-      } else {
+      }
+      else
+      {
         rhs.id("/");
       }
-    } else if(statement == "assign_mod") {
+    }
+    else if(statement == "assign_mod")
+    {
       rhs.id("mod");
-    } else if(statement == "assign_shl") {
+    }
+    else if(statement == "assign_shl")
+    {
       rhs.id("shl");
-    } else if(statement == "assign_ashr") {
+    }
+    else if(statement == "assign_ashr")
+    {
       rhs.id("ashr");
-    } else if(statement == "assign_lshr") {
+    }
+    else if(statement == "assign_lshr")
+    {
       rhs.id("lshr");
-    } else if(statement == "assign_bitand") {
+    }
+    else if(statement == "assign_bitand")
+    {
       rhs.id("bitand");
-    } else if(statement == "assign_bitxor") {
+    }
+    else if(statement == "assign_bitxor")
+    {
       rhs.id("bitxor");
-    } else if(statement == "assign_bitor") {
+    }
+    else if(statement == "assign_bitor")
+    {
       rhs.id("bitor");
-    } else {
+    }
+    else
+    {
       err_location(expr);
       str << statement << " not yet supported";
       throw 0;
     }
 
     rhs.copy_to_operands(expr.op0(), expr.op1());
-    rhs.type()=expr.op0().type();
+    rhs.type() = expr.op0().type();
 
     if(rhs.op0().type().is_bool())
     {
       rhs.op0().make_typecast(int_type());
       rhs.op1().make_typecast(int_type());
-      rhs.type()=int_type();
+      rhs.type() = int_type();
       rhs.make_typecast(typet("bool"));
     }
 
     exprt lhs(expr.op0());
 
     code_assignt assignment(lhs, rhs);
-    assignment.location()=expr.location();
+    assignment.location() = expr.location();
 
     convert(assignment, dest);
   }
@@ -468,7 +494,7 @@ void goto_convertt::remove_pre(
     rhs.type() = int_type();
     rhs.make_typecast(bool_type());
   }
-  else if(op_type.id()=="c_enum" || op_type.id()=="incomplete_c_enum")
+  else if(op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum")
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
@@ -486,7 +512,7 @@ void goto_convertt::remove_pre(
     else
     {
       err_location(expr);
-      throw "no constant one of type "+op_type.to_string();
+      throw "no constant one of type " + op_type.to_string();
     }
 
     exprt constant = gen_one(constant_type);
@@ -554,7 +580,7 @@ void goto_convertt::remove_post(
     rhs.type() = int_type();
     rhs.make_typecast(bool_type());
   }
-  else if(op_type.id()=="c_enum" || op_type.id()=="incomplete_c_enum")
+  else if(op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum")
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
@@ -572,7 +598,7 @@ void goto_convertt::remove_post(
     else
     {
       err_location(expr);
-      throw "no constant one of type "+op_type.to_string();
+      throw "no constant one of type " + op_type.to_string();
     }
 
     exprt constant = gen_one(constant_type);
@@ -676,8 +702,8 @@ void goto_convertt::replace_new_object(const exprt &object, exprt &dest)
   if(dest.id() == "new_object")
     dest = object;
   else
-  Forall_operands(it, dest)
-    replace_new_object(object, *it);
+    Forall_operands(it, dest)
+      replace_new_object(object, *it);
 }
 
 void goto_convertt::remove_cpp_new(
@@ -709,9 +735,7 @@ void goto_convertt::remove_cpp_new(
   convert(call, dest);
 }
 
-void goto_convertt::remove_temporary_object(
-  exprt &expr,
-  goto_programt &dest)
+void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
 {
   if(expr.operands().size() != 1 && expr.operands().size() != 0)
     throw "temporary_object takes 0 or 1 operands";

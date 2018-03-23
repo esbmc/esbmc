@@ -1,0 +1,4 @@
+CORE
+main.c
+--claim 6
+^VERIFICATION SUCCESSFUL$

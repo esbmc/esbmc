@@ -22,14 +22,13 @@ public:
 
   typedef std::list<expr2tc> valuest;
 
-  // this is not const to allow a lazy evaluation  
+  // this is not const to allow a lazy evaluation
   virtual void get_values(
     goto_programt::const_targett l,
     const expr2tc &expr,
-    valuest &dest)=0;
-    
-  virtual ~value_setst()
-  = default;
+    valuest &dest) = 0;
+
+  virtual ~value_setst() = default;
 };
 
 #endif

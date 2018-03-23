@@ -34,4 +34,3 @@ std::string format_constantt::operator()(const expr2tc &expr)
 
   return "(format-constant failed: " + get_expr_id(expr) + ")";
 }
-

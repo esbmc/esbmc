@@ -9,107 +9,106 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstring>
 #include <util/message_stream.h>
 
-void message_streamt::error_parse_line(
-  unsigned level,
-  const std::string &line)
+void message_streamt::error_parse_line(unsigned level, const std::string &line)
 {
-  std::string error_msg=line;
+  std::string error_msg = line;
 
-  const char *tptr=line.c_str();
+  const char *tptr = line.c_str();
 
-  if(strncmp(tptr, "file ", 5)==0)
+  if(strncmp(tptr, "file ", 5) == 0)
   {
-    int state=0;
+    int state = 0;
     std::string file, line_no, column, _error_msg, function;
 
-    tptr+=5;
+    tptr += 5;
 
-    char previous=0;
+    char previous = 0;
 
-    while(*tptr!=0)
+    while(*tptr != 0)
     {
-      if(strncmp(tptr, " line ", 6)==0 && state!=4)
+      if(strncmp(tptr, " line ", 6) == 0 && state != 4)
       {
-        state=1;
-        tptr+=6;
+        state = 1;
+        tptr += 6;
         continue;
       }
-      else if(strncmp(tptr, " column ", 8)==0 && state!=4)
+      if(strncmp(tptr, " column ", 8) == 0 && state != 4)
       {
-        state=2;
-        tptr+=8;
+        state = 2;
+        tptr += 8;
         continue;
       }
-      else if(strncmp(tptr, " function ", 10)==0 && state!=4)
+      else if(strncmp(tptr, " function ", 10) == 0 && state != 4)
       {
-        state=3;
-        tptr+=10;
+        state = 3;
+        tptr += 10;
         continue;
       }
-      else if(*tptr==':' && state!=4)
+      else if(*tptr == ':' && state != 4)
       {
-        if(tptr[1]==' ' && previous!=':')
+        if(tptr[1] == ' ' && previous != ':')
         {
-          state=4;
+          state = 4;
           tptr++;
-          while(*tptr==' ') tptr++;
+          while(*tptr == ' ')
+            tptr++;
           continue;
         }
       }
 
-      if(state==0) // file
-        file+=*tptr;
-      else if(state==1) // line number
-        line_no+=*tptr;
-      else if(state==2) // column
-        column+=*tptr;
-      else if(state==3) // function
-        function+=*tptr;
-      else if(state==4) // error message
-        _error_msg+=*tptr;
+      if(state == 0) // file
+        file += *tptr;
+      else if(state == 1) // line number
+        line_no += *tptr;
+      else if(state == 2) // column
+        column += *tptr;
+      else if(state == 3) // function
+        function += *tptr;
+      else if(state == 4) // error message
+        _error_msg += *tptr;
 
-      previous=*tptr;
+      previous = *tptr;
 
       tptr++;
     }
 
-    if(state==4)
+    if(state == 4)
     {
       saved_error_location.set_line(line_no);
       saved_error_location.set_file(file);
       saved_error_location.set_column(column);
-      error_msg=_error_msg;
+      error_msg = _error_msg;
       saved_error_location.set_function(function);
     }
   }
   else
   {
-    int state=0;
+    int state = 0;
     std::string file, line_no;
 
-    while(*tptr!=0)
+    while(*tptr != 0)
     {
-      if(state==0)
+      if(state == 0)
       {
-        if(*tptr==':')
+        if(*tptr == ':')
           state++;
         else
-          file+=*tptr;
+          file += *tptr;
       }
-      else if(state==1)
+      else if(state == 1)
       {
-        if(*tptr==':')
+        if(*tptr == ':')
           state++;
         else if(isdigit(*tptr))
-          line_no+=*tptr;
+          line_no += *tptr;
         else
-          state=3;
+          state = 3;
       }
 
       tptr++;
     }
 
-    if(state==2)
+    if(state == 2)
     {
       saved_error_location.set_line(line_no);
       saved_error_location.set_file(file);
@@ -118,15 +117,12 @@ void message_streamt::error_parse_line(
     }
   }
 
-  message_handler.print(
-    level, error_msg, saved_error_location);
+  message_handler.print(level, error_msg, saved_error_location);
 }
 
-void message_streamt::error_parse(
-  unsigned level,
-  const std::string &error)
+void message_streamt::error_parse(unsigned level, const std::string &error)
 {
-  const char *tptr=error.c_str();
+  const char *tptr = error.c_str();
 
   std::string line;
 
@@ -134,18 +130,19 @@ void message_streamt::error_parse(
   {
     switch(*tptr)
     {
-     case 0: return;
-     case '\n':
+    case 0:
+      return;
+    case '\n':
       error_parse_line(level, line);
       line.clear();
       break;
 
-     case '\r': break;
-     default:
-      line+=*tptr;
+    case '\r':
+      break;
+    default:
+      line += *tptr;
     }
 
     tptr++;
   }
 }
-

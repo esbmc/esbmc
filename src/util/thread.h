@@ -6,22 +6,22 @@
 
 class Thread
 {
-  public:
-    Thread();
-    virtual ~Thread();
-    virtual void start();
-    void lock();
-    void unlock();
+public:
+  Thread();
+  virtual ~Thread();
+  virtual void start();
+  void lock();
+  void unlock();
 
-  protected:
-    virtual void run()=0;
+protected:
+  virtual void run() = 0;
 
-  private:
-    pthread_t _id;
-    pthread_mutex_t _mutex;
-    pthread_attr_t _attr;
+private:
+  pthread_t _id;
+  pthread_mutex_t _mutex;
+  pthread_attr_t _attr;
 
-    static void* function(void* ptr);
+  static void *function(void *ptr);
 };
 
 #endif

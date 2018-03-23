@@ -1,3 +1,4 @@
+#include <cassert>
 #include <gmp.h>
 #include <mathsat_conv.h>
 #include <sstream>
@@ -5,7 +6,7 @@
 #include <util/c_types.h>
 #include <util/expr_util.h>
 
-static const char* mathsat_config =
+static const char *mathsat_config =
   "preprocessor.toplevel_propagation = true\n"
   "preprocessor.simplification = 1\n"
   "dpll.branching_random_frequency = 0.01\n"
@@ -21,110 +22,91 @@ static const char* mathsat_config =
   "theory.fp.mode = 1\n"
   "theory.fp.bit_blast_mode = 2\n"
   "theory.fp.bv_combination_enabled = true\n"
-  "theory.arr.permanent_lemma_inst = true\n"
   "theory.arr.enable_witness = true";
 
-// Ahem
-msat_env* _env = nullptr;
-
-void print_mathsat_formula()
+void mathsat_convt::check_msat_error(msat_term &r)
 {
-  size_t num_of_asserted;
-  msat_term * asserted_formulas =
-   msat_get_asserted_formulas(*_env, &num_of_asserted);
-
-  for (unsigned i=0; i< num_of_asserted; i++)
-    std::cout << msat_to_smtlib2(*_env, asserted_formulas[i]) << "\n";
-
-  msat_free(asserted_formulas);
-}
-
-void check_msat_error(msat_term &r)
-{
-  if (MSAT_ERROR_TERM(r)) {
+  if(MSAT_ERROR_TERM(r))
+  {
     std::cerr << "Error creating SMT " << std::endl;
-    std::cerr << "Error text: \"" << msat_last_error_message(*_env) << "\""
+    std::cerr << "Error text: \"" << msat_last_error_message(env) << "\""
               << std::endl;
     abort();
   }
 }
 
-smt_convt *
-create_new_mathsat_solver(bool int_encoding, const namespacet &ns,
-                          const optionst &opts __attribute__((unused)),
-                          tuple_iface **tuple_api __attribute__((unused)),
-                          array_iface **array_api, fp_convt **fp_api)
+smt_convt *create_new_mathsat_solver(
+  bool int_encoding,
+  const namespacet &ns,
+  tuple_iface **tuple_api __attribute__((unused)),
+  array_iface **array_api,
+  fp_convt **fp_api)
 {
   mathsat_convt *conv = new mathsat_convt(int_encoding, ns);
-  *array_api = static_cast<array_iface*>(conv);
-  *fp_api = static_cast<fp_convt*>(conv);
+  *array_api = static_cast<array_iface *>(conv);
+  *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
 mathsat_convt::mathsat_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
+  : smt_convt(int_encoding, ns),
+    array_iface(false, false),
+    fp_convt(this),
+    use_fp_api(false)
 {
   cfg = msat_parse_config(mathsat_config);
   msat_set_option(cfg, "model_generation", "true");
   env = msat_create_env(cfg);
-  _env = &env;
 }
 
 mathsat_convt::~mathsat_convt()
 {
   msat_destroy_env(env);
-  _env = nullptr;
 }
 
-void
-mathsat_convt::push_ctx()
+void mathsat_convt::push_ctx()
 {
   smt_convt::push_ctx();
   msat_push_backtrack_point(env);
 }
 
-void
-mathsat_convt::pop_ctx()
+void mathsat_convt::pop_ctx()
 {
   msat_pop_backtrack_point(env);
   smt_convt::pop_ctx();
 }
 
-void
-mathsat_convt::assert_ast(const smt_ast *a)
+void mathsat_convt::assert_ast(const smt_ast *a)
 {
-  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
-  msat_assert_formula(env, mast->t);
+  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
+  msat_assert_formula(env, mast->a);
 }
 
-smt_convt::resultt
-mathsat_convt::dec_solve()
+smt_convt::resultt mathsat_convt::dec_solve()
 {
   pre_solve();
 
   msat_result r = msat_solve(env);
-  if (r == MSAT_SAT) {
+  if(r == MSAT_SAT)
     return P_SATISFIABLE;
-  } else if (r == MSAT_UNSAT) {
+
+  if(r == MSAT_UNSAT)
     return P_UNSATISFIABLE;
-  } else {
-    std::cerr << "MathSAT returned MSAT_UNKNOWN for formula" << std::endl;
-    abort();
-  }
+
+  return smt_convt::P_ERROR;
 }
 
-expr2tc
-mathsat_convt::get_bool(const smt_ast *a)
+bool mathsat_convt::get_bool(const smt_ast *a)
 {
-  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
-  msat_term t = msat_get_model_value(env, mast->t);
+  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
+  msat_term t = msat_get_model_value(env, mast->a);
   check_msat_error(t);
 
-  expr2tc res;
-  if (msat_term_is_true(env, t))
-    res = gen_true_expr();
-  else if (msat_term_is_false(env, t))
-    res = gen_false_expr();
+  bool res;
+  if(msat_term_is_true(env, t))
+    res = true;
+  else if(msat_term_is_false(env, t))
+    res = false;
   else
   {
     std::cerr << "Boolean model value is neither true or false" << std::endl;
@@ -135,13 +117,10 @@ mathsat_convt::get_bool(const smt_ast *a)
   return res;
 }
 
-expr2tc
-mathsat_convt::get_bv(const type2tc &type, smt_astt a)
+BigInt mathsat_convt::get_bv(smt_astt a)
 {
-  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
-
-  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
-  msat_term t = msat_get_model_value(env, mast->t);
+  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
+  msat_term t = msat_get_model_value(env, mast->a);
   check_msat_error(t);
 
   // GMP rational value object.
@@ -161,21 +140,20 @@ mathsat_convt::get_bv(const type2tc &type, smt_astt a)
   char *foo = buffer;
   int64_t finval = strtoll(buffer, &foo, 10);
 
-  if (buffer[0] != '\0' && (foo == buffer || *foo != '\0')) {
-    std::cerr << "Couldn't parse string representation of number \""
-              << buffer << "\"" << std::endl;
+  if(buffer[0] != '\0' && (foo == buffer || *foo != '\0'))
+  {
+    std::cerr << "Couldn't parse string representation of number \"" << buffer
+              << "\"" << std::endl;
     abort();
   }
 
-  return smt_convt::get_bv(type, BigInt(finval));
+  return BigInt(finval);
 }
 
-expr2tc mathsat_convt::get_fpbv(const type2tc& _t, smt_astt a)
+ieee_floatt mathsat_convt::get_fpbv(smt_astt a)
 {
-  assert(is_floatbv_type(_t));
-
-  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
-  msat_term t = msat_get_model_value(env, mast->t);
+  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
+  msat_term t = msat_get_model_value(env, mast->a);
   check_msat_error(t);
 
   // GMP rational value object.
@@ -192,370 +170,475 @@ expr2tc mathsat_convt::get_fpbv(const type2tc& _t, smt_astt a)
   char buffer[mpz_sizeinbase(num, 10) + 2];
   mpz_get_str(buffer, 10, num);
 
-  ieee_float_spect spec(
-    to_floatbv_type(_t).fraction,
-    to_floatbv_type(_t).exponent);
+  size_t ew, sw;
+  int ret =
+    msat_is_fp_type(env, to_solver_smt_sort<msat_type>(a->sort)->s, &ew, &sw);
+  assert(ret != 0 && "Non FP type passed to mathsat_convt::get_exp_width");
 
-  ieee_floatt number(spec);
+  ieee_floatt number(ieee_float_spect(sw, ew));
   number.unpack(BigInt(buffer));
-
-  return constant_floatbv2tc(number);
+  return number;
 }
 
-expr2tc
-mathsat_convt::get_array_elem(
+expr2tc mathsat_convt::get_array_elem(
   const smt_ast *array,
   uint64_t index,
   const type2tc &subtype)
 {
   size_t orig_w = array->sort->get_domain_width();
-  const mathsat_smt_ast *mast = mathsat_ast_downcast(array);
+  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(array);
 
-  smt_astt tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
-  const mathsat_smt_ast *tmpa = mathsat_ast_downcast(tmpast);
+  smt_astt tmpast = mk_smt_bv(BigInt(index), mk_bv_sort(orig_w));
+  const mathsat_smt_ast *tmpa = to_solver_smt_ast<mathsat_smt_ast>(tmpast);
 
-  msat_term t = msat_make_array_read(env, mast->t, tmpa->t);
+  msat_term t = msat_make_array_read(env, mast->a, tmpa->a);
   check_msat_error(t);
 
-  mathsat_smt_ast *tmpb = new mathsat_smt_ast(this, convert_sort(subtype), t);
-  expr2tc result = get_bv(subtype, tmpb);
-  free(tmpb);
+  expr2tc result = get_by_ast(subtype, new_ast(t, convert_sort(subtype)));
 
   msat_free(msat_term_repr(t));
 
   return result;
 }
 
-const std::string
-mathsat_convt::solver_text()
+const std::string mathsat_convt::solver_text()
 {
   std::stringstream ss;
-  char * tmp = msat_get_version();
+  char *tmp = msat_get_version();
   ss << tmp;
   msat_free(tmp);
   return ss.str();
 }
 
-smt_ast *
-mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
-                             const smt_ast * const *_args,
-                             unsigned int numargs)
+smt_astt mathsat_convt::mk_add(smt_astt a, smt_astt b)
 {
-  const mathsat_smt_ast *args[4];
-  unsigned int i;
-
-  assert(numargs <= 4);
-  for (i = 0; i < numargs; i++)
-    args[i] = mathsat_ast_downcast(_args[i]);
-
-  msat_term r;
-
-  switch (k) {
-  case SMT_FUNC_EQ:
-    // MathSAT demands we use iff for boolean equivalence.
-    if (args[0]->sort->id == SMT_SORT_BOOL)
-      r = msat_make_iff(env, args[0]->t, args[1]->t);
-    else
-      r = msat_make_equal(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_NOTEQ:
-  {
-    smt_ast *a = mk_func_app(s, SMT_FUNC_EQ, _args, numargs);
-    return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
-  }
-  case SMT_FUNC_NOT:
-    r = msat_make_not(env, args[0]->t);
-    break;
-  case SMT_FUNC_AND:
-    r = msat_make_and(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_OR:
-    r = msat_make_or(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_XOR:
-  {
-    // Another thing that mathsat doesn't implement.
-    // Do this as and(or(a,b),not(and(a,b)))
-    msat_term and2 = msat_make_and(env, args[0]->t, args[1]->t);
-    check_msat_error(and2);
-
-    msat_term notand2 = msat_make_not(env, and2);
-    check_msat_error(notand2);
-
-    msat_term or1 = msat_make_or(env, args[0]->t, args[1]->t);
-    check_msat_error(or1);
-
-    r = msat_make_and(env, or1, notand2);
-    break;
-  }
-  case SMT_FUNC_IMPLIES:
-  {
-    // MathSAT doesn't seem to implement this; so do it manually. Following the
-    // CNF conversion CBMC does, this is: lor(lnot(a), b)
-    msat_term nota = msat_make_not(env, args[0]->t);
-    check_msat_error(nota);
-
-    r = msat_make_or(env, nota, args[1]->t);
-    break;
-  }
-  case SMT_FUNC_ITE:
-    if (s->id == SMT_SORT_BOOL) {
-      // MathSAT shows a dislike of implementing this with booleans. Follow
-      // CBMC's CNF flattening and make this
-      // (with c = cond, t = trueval, f = falseval):
-      //
-      //   or(and(c,t),and(not(c), f))
-      msat_term land1 = msat_make_and(env, args[0]->t, args[1]->t);
-      check_msat_error(land1);
-
-      msat_term notval = msat_make_not(env, args[0]->t);
-      check_msat_error(notval);
-
-      msat_term land2 = msat_make_and(env, notval, args[2]->t);
-      check_msat_error(land2);
-
-      r = msat_make_or(env, land1, land2);
-    } else {
-      r = msat_make_term_ite(env, args[0]->t, args[1]->t, args[2]->t);
-    }
-    break;
-  case SMT_FUNC_CONCAT:
-    r = msat_make_bv_concat(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVNOT:
-    r = msat_make_bv_not(env, args[0]->t);
-    break;
-  case SMT_FUNC_NEG:
-  case SMT_FUNC_BVNEG:
-    if (s->id == SMT_SORT_FLOATBV) {
-      r = msat_make_fp_neg(env, args[0]->t);
-    } else {
-      r = msat_make_bv_neg(env, args[0]->t);
-    }
-    break;
-  case SMT_FUNC_BVAND:
-    r = msat_make_bv_and(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVOR:
-    r = msat_make_bv_or(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVXOR:
-    r = msat_make_bv_xor(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_ADD:
-    r = msat_make_plus(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_SUB:
-  {
-    msat_term neg_b =
-      msat_make_times(env, msat_make_number(env, "-1"), args[1]->t);
-    check_msat_error(neg_b);
-
-    r = msat_make_plus(env, args[0]->t, neg_b);
-    break;
-  }
-  case SMT_FUNC_BVADD:
-    r = msat_make_bv_plus(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVSUB:
-    r = msat_make_bv_minus(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_MUL:
-    r = msat_make_times(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVMUL:
-    r = msat_make_bv_times(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVSDIV:
-    r = msat_make_bv_sdiv(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVUDIV:
-    r = msat_make_bv_udiv(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVSMOD:
-    r = msat_make_bv_srem(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVUMOD:
-    r = msat_make_bv_urem(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVSHL:
-    r = msat_make_bv_lshl(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVLSHR:
-    r = msat_make_bv_lshr(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVASHR:
-    r = msat_make_bv_ashr(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVUGTE:
-  {
-    // This is !ULT
-    assert(s->id == SMT_SORT_BOOL);
-    const smt_ast *a = mk_func_app(s, SMT_FUNC_BVULT, _args, numargs);
-    return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
-  }
-  case SMT_FUNC_BVUGT:
-  {
-    // This is !ULTE
-    assert(s->id == SMT_SORT_BOOL);
-    const smt_ast *a = mk_func_app(s, SMT_FUNC_BVULTE, _args, numargs);
-    return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
-  }
-  case SMT_FUNC_BVULTE:
-    r = msat_make_bv_uleq(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVULT:
-    r = msat_make_bv_ult(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_GTE:
-  case SMT_FUNC_BVSGTE:
-  {
-    // This is !SLT
-    assert(s->id == SMT_SORT_BOOL);
-    const smt_ast *a = mk_func_app(s, SMT_FUNC_BVSLT, _args, numargs);
-    return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
-  }
-  case SMT_FUNC_GT:
-  case SMT_FUNC_BVSGT:
-  {
-    assert(s->id == SMT_SORT_BOOL);
-
-    // (a > b) iff (b < a)
-    if((args[0]->sort->id == SMT_SORT_FLOATBV)
-        && (args[1]->sort->id == SMT_SORT_FLOATBV))
-      r = msat_make_fp_lt(env, args[1]->t, args[0]->t);
-    else
-      r = msat_make_bv_slt(env, args[1]->t, args[0]->t);
-    break;
-  }
-  case SMT_FUNC_LTE:
-    if((args[0]->sort->id == SMT_SORT_FLOATBV)
-        && (args[1]->sort->id == SMT_SORT_FLOATBV))
-      r = msat_make_fp_leq(env, args[0]->t, args[1]->t);
-    else
-      r = msat_make_leq(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BVSLTE:
-      r = msat_make_bv_sleq(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_LT:
-  case SMT_FUNC_BVSLT:
-    if((args[0]->sort->id == SMT_SORT_FLOATBV)
-        && (args[1]->sort->id == SMT_SORT_FLOATBV))
-      r = msat_make_fp_lt(env, args[0]->t, args[1]->t);
-    else
-      r = msat_make_bv_slt(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_STORE:
-    r = msat_make_array_write(env, args[0]->t, args[1]->t, args[2]->t);
-    break;
-  case SMT_FUNC_SELECT:
-    r = msat_make_array_read(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_ISZERO:
-    r = msat_make_fp_iszero(env, args[0]->t);
-    break;
-  case SMT_FUNC_FABS:
-    r = msat_make_fp_abs(env, args[0]->t);
-    break;
-  case SMT_FUNC_ISNAN:
-    r = msat_make_fp_isnan(env, args[0]->t);
-    break;
-  case SMT_FUNC_ISINF:
-    r = msat_make_fp_isinf(env, args[0]->t);
-    break;
-  case SMT_FUNC_ISNORMAL:
-    r = msat_make_fp_isnormal(env, args[0]->t);
-    break;
-  case SMT_FUNC_ISNEG:
-    r = msat_make_fp_isneg(env, args[0]->t);
-    break;
-  case SMT_FUNC_ISPOS:
-    r = msat_make_fp_ispos(env, args[0]->t);
-    break;
-  case SMT_FUNC_IEEE_EQ:
-    r = msat_make_fp_equal(env, args[0]->t, args[1]->t);
-    break;
-  case SMT_FUNC_BV2FLOAT:
-  {
-    unsigned sw = s->get_significand_width();
-    unsigned ew = s->get_data_width() - sw;
-    r = msat_make_fp_from_ieeebv(env, ew, sw, args[0]->t);
-    break;
-  }
-  case SMT_FUNC_FLOAT2BV:
-    r = msat_make_fp_as_ieeebv(env, args[0]->t);
-    break;
-  default:
-    std::cerr << "Unhandled SMT function \"" << smt_func_name_table[k] << "\" "
-              << "in mathsat conversion" << std::endl;
-    abort();
-  }
-  check_msat_error(r);
-
-  return new mathsat_smt_ast(this, s, r);
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    msat_make_plus(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
 }
 
-smt_sortt
-mathsat_convt::mk_sort(const smt_sort_kind k, ...)
+smt_astt mathsat_convt::mk_bvadd(smt_astt a, smt_astt b)
 {
-  va_list ap;
-
-  va_start(ap, k);
-  switch (k) {
-  case SMT_SORT_INT:
-    return new mathsat_smt_sort(k, msat_get_integer_type(env));
-  case SMT_SORT_REAL:
-    return new mathsat_smt_sort(k, msat_get_rational_type(env));
-  case SMT_SORT_FIXEDBV:
-  case SMT_SORT_UBV:
-  case SMT_SORT_SBV:
-  {
-    unsigned long uint = va_arg(ap, unsigned long);
-    return new mathsat_smt_sort(k, msat_get_bv_type(env, uint), uint);
-  }
-  case SMT_SORT_FLOATBV:
-  {
-    unsigned ew = va_arg(ap, unsigned long);
-    unsigned sw = va_arg(ap, unsigned long);
-    return mk_fpbv_sort(ew, sw);
-  }
-  case SMT_SORT_FLOATBV_RM:
-    return new mathsat_smt_sort(k, msat_get_fp_roundingmode_type(env));
-  case SMT_SORT_ARRAY:
-  {
-    const mathsat_smt_sort *dom = va_arg(ap, const mathsat_smt_sort *);
-    const mathsat_smt_sort *range = va_arg(ap, const mathsat_smt_sort *);
-    assert(int_encoding || dom->get_data_width() != 0);
-
-    // The range data width is allowed to be zero, which happens if the range
-    // is not a bitvector / integer
-    unsigned int data_width = range->get_data_width();
-    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
-      data_width = 1;
-
-    return new mathsat_smt_sort(k, msat_get_array_type(env, dom->s, range->s),
-                                data_width, dom->get_data_width(), range);
-  }
-  case SMT_SORT_BOOL:
-  {
-
-    auto b = new mathsat_smt_sort(k, msat_get_bool_type(env));
-    std::cout << b << std::endl;
-    return b;
-  }
-  case SMT_SORT_STRUCT:
-  case SMT_SORT_UNION:
-    std::cerr << "MathSAT does not support tuples" << std::endl;
-    abort();
-  }
-
-  std::cerr << "MathSAT sort conversion fell through" << std::endl;
-  abort();
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_plus(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
 }
 
-smt_astt
-mathsat_convt::mk_smt_int(const mp_integer &theint, bool sign __attribute__((unused)))
+smt_astt mathsat_convt::mk_sub(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  msat_term neg_b = msat_make_times(
+    env, msat_make_number(env, "-1"), to_solver_smt_ast<mathsat_smt_ast>(b)->a);
+  check_msat_error(neg_b);
+
+  return new_ast(
+    msat_make_plus(env, to_solver_smt_ast<mathsat_smt_ast>(a)->a, neg_b),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvsub(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_minus(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_mul(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    msat_make_times(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvmul(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_times(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvsmod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_srem(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvumod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_urem(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvsdiv(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_sdiv(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvudiv(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_udiv(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvshl(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_lshl(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvashr(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_ashr(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvlshr(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_lshr(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_neg(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    msat_make_times(
+      env,
+      msat_make_number(env, "-1"),
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvneg(smt_astt a)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast(
+    msat_make_bv_neg(env, to_solver_smt_ast<mathsat_smt_ast>(a)->a), a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvnot(smt_astt a)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast(
+    msat_make_bv_not(env, to_solver_smt_ast<mathsat_smt_ast>(a)->a), a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvxor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_xor(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_or(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_bvand(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_and(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_implies(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+
+  // MathSAT doesn't seem to implement this; so do it manually. Following the
+  // CNF conversion CBMC doet,shis is: lor(lnot(a), b)
+  msat_term nota = msat_make_not(env, to_solver_smt_ast<mathsat_smt_ast>(a)->a);
+  check_msat_error(nota);
+
+  return new_ast(
+    msat_make_or(env, nota, to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_xor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+
+  // Another thing that mathsat doesn't implement.
+  // Do this as and(or(a,b),not(and(a,b)))
+  msat_term and2 = msat_make_and(
+    env,
+    to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(b)->a);
+  check_msat_error(and2);
+
+  msat_term notand2 = msat_make_not(env, and2);
+  check_msat_error(notand2);
+
+  msat_term or1 = msat_make_or(
+    env,
+    to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(b)->a);
+  check_msat_error(or1);
+
+  return new_ast(msat_make_and(env, or1, notand2), a->sort);
+}
+
+smt_astt mathsat_convt::mk_or(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    msat_make_or(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_and(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    msat_make_and(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_not(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    msat_make_not(env, to_solver_smt_ast<mathsat_smt_ast>(a)->a), boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_lt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    msat_make_bv_slt(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_bvult(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_ult(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_bvslt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_slt(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_le(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    msat_make_leq(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_bvule(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_uleq(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_bvsle(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_bv_sleq(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_eq(smt_astt a, smt_astt b)
+{
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  if(a->sort->id == SMT_SORT_BOOL || a->sort->id == SMT_SORT_STRUCT)
+    return new_ast(
+      msat_make_iff(
+        env,
+        to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+        to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+      boolean_sort);
+
+  return new_ast(
+    msat_make_equal(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
+{
+  assert(a->sort->id == SMT_SORT_ARRAY);
+  assert(a->sort->get_domain_width() == b->sort->get_data_width());
+  assert(
+    a->sort->get_range_sort()->get_data_width() == c->sort->get_data_width());
+
+  return new_ast(
+    msat_make_array_write(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(c)->a),
+    a->sort);
+}
+
+smt_astt mathsat_convt::mk_select(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_ARRAY);
+  assert(a->sort->get_domain_width() == b->sort->get_data_width());
+  return new_ast(
+    msat_make_array_read(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(b)->a),
+    a->sort->get_range_sort());
+}
+
+smt_astt mathsat_convt::mk_smt_int(
+  const mp_integer &theint,
+  bool sign __attribute__((unused)))
 {
   char buffer[256], *n = nullptr;
   n = theint.as_string(buffer, 256);
@@ -564,24 +647,22 @@ mathsat_convt::mk_smt_int(const mp_integer &theint, bool sign __attribute__((unu
   msat_term t = msat_make_number(env, n);
   check_msat_error(t);
 
-  smt_sortt s = mk_sort(SMT_SORT_INT);
-  return new mathsat_smt_ast(this, s, t);
+  smt_sortt s = mk_int_sort();
+  return new_ast(t, s);
 }
 
-smt_ast *
-mathsat_convt::mk_smt_real(const std::string &str)
+smt_ast *mathsat_convt::mk_smt_real(const std::string &str)
 {
   msat_term t = msat_make_number(env, str.c_str());
   check_msat_error(t);
 
-  smt_sortt s = mk_sort(SMT_SORT_REAL);
-  return new mathsat_smt_ast(this, s, t);
+  smt_sortt s = mk_real_sort();
+  return new_ast(t, s);
 }
 
-smt_astt
-mathsat_convt:: mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
+smt_astt mathsat_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
 {
-  std::stringstream ss;
+  std::size_t w = s->get_data_width();
 
   // MathSAT refuses to parse negative integers. So, feed it binary.
   std::string str = integer2binary(theint, w);
@@ -590,286 +671,219 @@ mathsat_convt:: mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w
   msat_term t = msat_make_bv_number(env, str.c_str(), w, 2);
   check_msat_error(t);
 
-  smt_sortt s = mk_sort(ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV, w);
-  return new mathsat_smt_ast(this, s, t);
+  return new_ast(t, s);
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
-  const mp_integer sig = thereal.get_fraction();
+  msat_term t;
+  if(use_fp_api)
+  {
+    std::size_t w = thereal.spec.e + thereal.spec.f + 1;
+    std::string str = integer2binary(thereal.pack(), w);
+    t = msat_make_bv_number(env, str.c_str(), w, 2);
+  }
+  else
+  {
+    const mp_integer sig = thereal.get_fraction();
 
-  // If the number is denormal, we set the exponent to 0
-  const mp_integer exp = thereal.is_normal() ?
-    thereal.get_exponent() + thereal.spec.bias() : 0;
+    // If the number is denormal, we set the exponent to 0
+    const mp_integer exp =
+      thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
 
-  std::string sgn_str = thereal.get_sign() ? "1" : "0";
-  std::string exp_str = integer2binary(exp, thereal.spec.e);
-  std::string sig_str = integer2binary(sig, thereal.spec.f);
+    std::string sgn_str = thereal.get_sign() ? "1" : "0";
+    std::string exp_str = integer2binary(exp, thereal.spec.e);
+    std::string sig_str = integer2binary(sig, thereal.spec.f);
 
-  std::string smt_str = "(fp #b" + sgn_str;
-  smt_str += " #b" + exp_str;
-  smt_str += " #b" + sig_str;
-  smt_str += ")";
+    std::string smt_str = "(fp #b" + sgn_str;
+    smt_str += " #b" + exp_str;
+    smt_str += " #b" + sig_str;
+    smt_str += ")";
 
-  msat_term t = msat_from_string(env, smt_str.c_str());
+    t = msat_from_string(env, smt_str.c_str());
+  }
   check_msat_error(t);
 
-  type2tc new_fp_type;
-  migrate_type(thereal.spec.to_type(), new_fp_type);
-  smt_sortt s = convert_sort(new_fp_type);
-
-  return new mathsat_smt_ast(this, s, t);
+  smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);
+  return new_ast(t, s);
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
-  msat_term t = msat_make_fp_nan(env, ew, sw);
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_nan(ew, sw);
+
+  smt_sortt s = mk_real_fp_sort(ew, sw - 1);
+
+  msat_term t = msat_make_fp_nan(env, ew, sw - 1);
   check_msat_error(t);
 
-  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
-  return new mathsat_smt_ast(this, s, t);
+  return new_ast(t, s);
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
-  msat_term t =
-    sgn ? msat_make_fp_minus_inf(env, ew, sw) : msat_make_fp_plus_inf(env, ew, sw);
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_inf(sgn, ew, sw);
+
+  smt_sortt s = mk_real_fp_sort(ew, sw - 1);
+
+  msat_term t = sgn ? msat_make_fp_minus_inf(env, ew, sw - 1)
+                    : msat_make_fp_plus_inf(env, ew, sw - 1);
   check_msat_error(t);
 
-  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
-  return new mathsat_smt_ast(this, s, t);
+  return new_ast(t, s);
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_rm(rm);
+
   msat_term t;
   switch(rm)
   {
-    case ieee_floatt::ROUND_TO_EVEN:
-      t = msat_make_fp_roundingmode_nearest_even(env);
-      break;
-    case ieee_floatt::ROUND_TO_MINUS_INF:
-      t = msat_make_fp_roundingmode_minus_inf(env);
-      break;
-    case ieee_floatt::ROUND_TO_PLUS_INF:
-      t = msat_make_fp_roundingmode_plus_inf(env);
-      break;
-    case ieee_floatt::ROUND_TO_ZERO:
-      t = msat_make_fp_roundingmode_zero(env);
-      break;
-    default:
-      abort();
-  }
-  check_msat_error(t);
-
-  smt_sortt s = mk_sort(SMT_SORT_FLOATBV_RM);
-  return new mathsat_smt_ast(this, s, t);
-}
-
-smt_astt mathsat_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
-{
-  // Rounding mode symbol
-  smt_astt rm_const;
-
-  smt_astt from = convert_ast(cast.from);
-  const mathsat_smt_ast *mfrom = mathsat_ast_downcast(from);
-
-  msat_term t;
-  smt_sortt s = nullptr;
-  if(is_bv_type(cast.type)) {
-    s = mk_sort(is_signedbv_type(cast.type) ? SMT_SORT_SBV : SMT_SORT_UBV, cast.type->get_width());
-
-    // Conversion from float to integers always truncate, so we assume
-    // the round mode to be toward zero
-    rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
-    const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm_const);
-
-    t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, mfrom->t);
-  } else if(is_floatbv_type(cast.type)) {
-    s = convert_sort(cast.type);
-    unsigned sw = s->get_significand_width();
-    unsigned ew = s->get_data_width() - sw;
-
-    // Use the round mode
-    rm_const = convert_rounding_mode(cast.rounding_mode);
-    const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm_const);
-
-    t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
-  }
-  else
+  case ieee_floatt::ROUND_TO_EVEN:
+    t = msat_make_fp_roundingmode_nearest_even(env);
+    break;
+  case ieee_floatt::ROUND_TO_MINUS_INF:
+    t = msat_make_fp_roundingmode_minus_inf(env);
+    break;
+  case ieee_floatt::ROUND_TO_PLUS_INF:
+    t = msat_make_fp_roundingmode_plus_inf(env);
+    break;
+  case ieee_floatt::ROUND_TO_ZERO:
+    t = msat_make_fp_roundingmode_zero(env);
+    break;
+  default:
     abort();
-
-  check_msat_error(t);
-  assert(s != nullptr);
-
-  return new mathsat_smt_ast(this, s, t);
-}
-
-smt_astt mathsat_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
-{
-  smt_astt rm = convert_rounding_mode(cast.rounding_mode);
-  const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
-
-  smt_astt from = convert_ast(cast.from);
-  const mathsat_smt_ast *mfrom = mathsat_ast_downcast(from);
-
-  smt_sortt s = convert_sort(cast.type);
-  unsigned sw = s->get_significand_width();
-  unsigned ew = s->get_data_width() - sw;
-
-  msat_term t;
-  if(is_bool_type(cast.from))
-  {
-    // For bools, there is no direct conversion, so the cast is
-    // transformed into fpa = b ? 1 : 0;
-    const smt_ast *args[3];
-    args[0] = from;
-    args[1] = convert_ast(gen_one(cast.type));
-    args[2] = convert_ast(gen_zero(cast.type));
-
-    return mk_func_app(s, SMT_FUNC_ITE, args, 3);
-  }
-
-  if(is_unsignedbv_type(cast.from))
-    t = msat_make_fp_from_ubv(env, ew, sw, mrm->t, mfrom->t);
-
-  if(is_signedbv_type(cast.from))
-    t = msat_make_fp_from_sbv(env, ew, sw, mrm->t, mfrom->t);
-
-  if(is_floatbv_type(cast.from))
-    t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
-
-  check_msat_error(t);
-  return new mathsat_smt_ast(this, s, t);
-}
-
-smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
-{
-  // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(expr.rounding_mode);
-  const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
-
-  smt_astt from = convert_ast(expr.from);
-  const mathsat_smt_ast *mfrom = mathsat_ast_downcast(from);
-
-  // Conversion from float, using the correct rounding mode
-  msat_term t = msat_make_fp_round_to_int(env, mrm->t, mfrom->t);
-  check_msat_error(t);
-
-  smt_sortt s = convert_sort(expr.type);
-  return new mathsat_smt_ast(this, s, t);
-}
-
-smt_astt mathsat_convt::mk_smt_fpbv_arith_ops(const expr2tc& expr)
-{
-  // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(0));
-  const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
-
-  // Sides
-  smt_astt s1 = convert_ast(*expr->get_sub_expr(1));
-  const mathsat_smt_ast *ms1 = mathsat_ast_downcast(s1);
-
-  msat_term t;
-  if(is_ieee_sqrt2t(expr))
-  {
-    t = msat_make_fp_sqrt(env, mrm->t, ms1->t);
-  }
-  else
-  {
-    smt_astt s2 = convert_ast(*expr->get_sub_expr(2));
-    const mathsat_smt_ast *ms2 = mathsat_ast_downcast(s2);
-
-    switch (expr->expr_id)
-    {
-      case expr2t::ieee_add_id:
-        t = msat_make_fp_plus(env, mrm->t, ms1->t, ms2->t);
-        break;
-      case expr2t::ieee_sub_id:
-        t = msat_make_fp_minus(env, mrm->t, ms1->t, ms2->t);
-        break;
-      case expr2t::ieee_mul_id:
-        t = msat_make_fp_times(env, mrm->t, ms1->t, ms2->t);
-        break;
-      case expr2t::ieee_div_id:
-        t = msat_make_fp_div(env, mrm->t, ms1->t, ms2->t);
-        break;
-      case expr2t::ieee_fma_id:
-      {
-        // Mathsat doesn't support fma for now, if we force
-        // the multiplication, it will provide the wrong answer
-        std::cerr << "Mathsat doesn't support the fused multiply-add "
-            "(fp.fma) operator" << std::endl;
-      }
-      default:
-        abort();
-    }
   }
   check_msat_error(t);
 
-  smt_sortt s = convert_sort(expr->type);
-  return new mathsat_smt_ast(this, s, t);
+  return new_ast(t, mk_fpbv_rm_sort());
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv_fma(const expr2tc& expr)
-{
-  return fp_convt::mk_smt_fpbv_fma(expr);
-}
-
-smt_ast *
-mathsat_convt::mk_smt_bool(bool val)
+smt_ast *mathsat_convt::mk_smt_bool(bool val)
 {
   const smt_sort *s = boolean_sort;
-  return new mathsat_smt_ast(this, s, (val) ? msat_make_true(env)
-                                      : msat_make_false(env));
+  return new mathsat_smt_ast(
+    this, s, (val) ? msat_make_true(env) : msat_make_false(env));
 }
 
-smt_ast *
-mathsat_convt::mk_array_symbol(const std::string &name, const smt_sort *s,
-                               smt_sortt array_subtype __attribute__((unused)))
+smt_ast *mathsat_convt::mk_array_symbol(
+  const std::string &name,
+  const smt_sort *s,
+  smt_sortt array_subtype __attribute__((unused)))
 {
   return mk_smt_symbol(name, s);
 }
 
-smt_ast *
-mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
+smt_ast *mathsat_convt::mk_smt_symbol(
+  const std::string &name,
+  const smt_sort *s)
 {
-  const mathsat_smt_sort *ms = mathsat_sort_downcast(s);
   // XXX - does 'd' leak?
-  msat_decl d = msat_declare_function(env, name.c_str(), ms->s);
+  msat_decl d = msat_declare_function(
+    env, name.c_str(), to_solver_smt_sort<msat_type>(s)->s);
   assert(!MSAT_ERROR_DECL(d) && "Invalid function symbol declaration sort");
 
   msat_term t = msat_make_constant(env, d);
   check_msat_error(t);
-  return new mathsat_smt_ast(this, s, t);
+  return new_ast(t, s);
 }
 
-smt_sort *
-mathsat_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
+smt_astt
+mathsat_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 {
-  abort();
-}
-
-smt_ast *
-mathsat_convt::mk_extract(const smt_ast *a, unsigned int high,
-                          unsigned int low, const smt_sort *s)
-{
-  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
-
   // If it's a floatbv, convert it to bv
-  if(a->sort->id == SMT_SORT_FLOATBV)
-  {
-    msat_term t = msat_make_fp_as_ieeebv(env, mast->t);
-    check_msat_error(t);
+  if(a->sort->id == SMT_SORT_FPBV)
+    a = mk_from_fp_to_bv(a);
 
-    smt_ast * bv = new mathsat_smt_ast(this, s, t);
-    mast = mathsat_ast_downcast(bv);
-  }
+  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
 
-  msat_term t = msat_make_bv_extract(env, high, low, mast->t);
+  msat_term t = msat_make_bv_extract(env, high, low, mast->a);
   check_msat_error(t);
 
-  return new mathsat_smt_ast(this, s, t);
+  smt_sortt s = mk_bv_sort(high - low + 1);
+  return new_ast(t, s);
+}
+
+smt_astt mathsat_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
+{
+  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
+
+  msat_term t = msat_make_bv_sext(env, topwidth, mast->a);
+  check_msat_error(t);
+
+  smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
+  return new_ast(t, s);
+}
+
+smt_astt mathsat_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
+{
+  const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
+
+  msat_term t = msat_make_bv_zext(env, topwidth, mast->a);
+  check_msat_error(t);
+
+  smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
+  return new_ast(t, s);
+}
+
+smt_astt mathsat_convt::mk_concat(smt_astt a, smt_astt b)
+{
+  msat_term t = msat_make_bv_concat(
+    env,
+    to_solver_smt_ast<mathsat_smt_ast>(a)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(b)->a);
+  check_msat_error(t);
+
+  smt_sortt s =
+    mk_bv_sort(a->sort->get_data_width() + b->sort->get_data_width());
+  return new_ast(t, s);
+}
+
+smt_astt mathsat_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
+{
+  assert(cond->sort->id == SMT_SORT_BOOL);
+  assert(t->sort->get_data_width() == f->sort->get_data_width());
+
+  msat_term r;
+  if(t->sort->id == SMT_SORT_BOOL)
+  {
+    // MathSAT shows a dislike of implementing this with booleans. Follow
+    // CBMC's CNF flattening and make this
+    // (with c = cond, t = trueval, f = falseval):
+    //
+    //   or(and(c,t),and(not(c), f))
+    msat_term land1 = msat_make_and(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(cond)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(t)->a);
+    check_msat_error(land1);
+
+    msat_term notval =
+      msat_make_not(env, to_solver_smt_ast<mathsat_smt_ast>(cond)->a);
+    check_msat_error(notval);
+
+    msat_term land2 =
+      msat_make_and(env, notval, to_solver_smt_ast<mathsat_smt_ast>(f)->a);
+    check_msat_error(land2);
+
+    r = msat_make_or(env, land1, land2);
+  }
+  else
+  {
+    r = msat_make_term_ite(
+      env,
+      to_solver_smt_ast<mathsat_smt_ast>(cond)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(t)->a,
+      to_solver_smt_ast<mathsat_smt_ast>(f)->a);
+  }
+
+  check_msat_error(r);
+
+  return new_ast(r, t->sort);
 }
 
 const smt_ast *
@@ -878,42 +892,529 @@ mathsat_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return default_convert_array_of(init_val, domain_width, this);
 }
 
-void
-mathsat_convt::add_array_constraints_for_solving()
+void mathsat_convt::add_array_constraints_for_solving()
 {
 }
 
-void
-mathsat_convt::push_array_ctx()
+void mathsat_convt::push_array_ctx()
 {
 }
 
-void
-mathsat_convt::pop_array_ctx()
+void mathsat_convt::pop_array_ctx()
 {
-}
-
-const smt_ast* mathsat_smt_ast::select(smt_convt* ctx, const expr2tc& idx) const
-{
-  const smt_ast *args[2];
-  args[0] = this;
-  args[1] = ctx->convert_ast(idx);
-  const smt_sort *rangesort = mathsat_sort_downcast(sort)->rangesort;
-  return ctx->mk_func_app(rangesort, SMT_FUNC_SELECT, args, 2);
 }
 
 void mathsat_smt_ast::dump() const
 {
-  std::cout << msat_to_smtlib2(*_env, t) << std::endl;
-}
+  // We need to get the env
+  auto convt = dynamic_cast<const mathsat_convt *>(context);
+  assert(convt != nullptr);
 
-smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
-{
-  return
-    new mathsat_smt_sort(SMT_SORT_FLOATBV, msat_get_fp_type(env, ew, sw), ew + sw, sw);
+  std::cout << msat_to_smtlib2(convt->env, a) << std::endl;
 }
 
 void mathsat_convt::dump_smt()
 {
-  print_mathsat_formula();
+  size_t num_of_asserted;
+  msat_term *asserted_formulas =
+    msat_get_asserted_formulas(env, &num_of_asserted);
+
+  for(unsigned i = 0; i < num_of_asserted; i++)
+    std::cout << msat_to_smtlib2(env, asserted_formulas[i]) << "\n";
+
+  msat_free(asserted_formulas);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_fma(
+  smt_astt v1,
+  smt_astt v2,
+  smt_astt v3,
+  smt_astt rm)
+{
+  // MathSAT does not support FMA, so convert to BVFP and call the fp_api
+
+  // Convert the rounding mode
+  smt_astt is_ne = mk_eq(rm, mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN));
+  smt_astt is_mi = mk_eq(rm, mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF));
+  smt_astt is_pi = mk_eq(rm, mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF));
+
+  bool old_use_fp_api = use_fp_api;
+  use_fp_api = true;
+
+  // We don't need to check if we're running in the fp2bv mode, as
+  // mk_from_fp_to_bv doesn't do anything in that mode
+  smt_astt new_v1 = mk_from_fp_to_bv(v1);
+  smt_astt new_v2 = mk_from_fp_to_bv(v2);
+  smt_astt new_v3 = mk_from_fp_to_bv(v3);
+
+  smt_astt new_rm = mk_ite(
+    is_ne,
+    mk_smt_bv(BigInt(0), mk_bvfp_rm_sort()),
+    mk_ite(
+      is_pi,
+      mk_smt_bv(BigInt(2), mk_bvfp_rm_sort()),
+      mk_ite(
+        is_mi,
+        mk_smt_bv(BigInt(3), mk_bvfp_rm_sort()),
+        mk_smt_bv(BigInt(4), mk_bvfp_rm_sort()))));
+
+  // Call fma
+  smt_astt fma = fp_convt::mk_smt_fpbv_fma(new_v1, new_v2, new_v3, new_rm);
+
+  use_fp_api = old_use_fp_api;
+
+  // And convert back to FPBV. Again, no need to check if we're running in
+  // fp2bv mode, as mk_from_bv_to_fp doesn't do anything in fp2bv mode
+  return mk_from_bv_to_fp(fma, v1->sort);
+}
+
+void mathsat_convt::print_model()
+{
+  /* we use a model iterator to retrieve the model values for all the
+     * variables, and the necessary function instantiations */
+  msat_model_iterator iter = msat_create_model_iterator(env);
+  assert(!MSAT_ERROR_MODEL_ITERATOR(iter));
+
+  printf("Model:\n");
+  while(msat_model_iterator_has_next(iter))
+  {
+    msat_term t, v;
+    char *s;
+    msat_model_iterator_next(iter, &t, &v);
+    s = msat_term_repr(t);
+    assert(s);
+    printf(" %s = ", s);
+    msat_free(s);
+    s = msat_term_repr(v);
+    assert(s);
+    printf("%s\n", s);
+    msat_free(s);
+  }
+  msat_destroy_model_iterator(iter);
+}
+
+smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  if(use_fp_api)
+    return fp_convt::mk_fpbv_sort(ew, sw);
+
+  auto t = msat_get_fp_type(env, ew, sw);
+  return new solver_smt_sort<msat_type>(SMT_SORT_FPBV, t, ew + sw + 1, sw + 1);
+}
+
+smt_sortt mathsat_convt::mk_fpbv_rm_sort()
+{
+  if(use_fp_api)
+    return mk_bvfp_rm_sort();
+
+  auto t = msat_get_fp_roundingmode_type(env);
+  return new solver_smt_sort<msat_type>(SMT_SORT_FPBV_RM, t, 3);
+}
+
+smt_sortt mathsat_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
+{
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_BVFP, msat_get_bv_type(env, ew + sw + 1), ew + sw + 1, sw + 1);
+}
+
+smt_sortt mathsat_convt::mk_bvfp_rm_sort()
+{
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_BVFP_RM, msat_get_bv_type(env, 3), 3);
+}
+
+smt_sortt mathsat_convt::mk_bool_sort()
+{
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_BOOL, msat_get_bool_type(env), 1);
+}
+
+smt_sortt mathsat_convt::mk_real_sort()
+{
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_REAL, msat_get_rational_type(env), 0);
+}
+
+smt_sortt mathsat_convt::mk_int_sort()
+{
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_INT, msat_get_integer_type(env), 0);
+}
+
+smt_sortt mathsat_convt::mk_bv_sort(std::size_t width)
+{
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_BV, msat_get_bv_type(env, width), width);
+}
+
+smt_sortt mathsat_convt::mk_fbv_sort(std::size_t width)
+{
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_FIXEDBV, msat_get_bv_type(env, width), width);
+}
+
+smt_sortt mathsat_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
+{
+  auto domain_sort = to_solver_smt_sort<msat_type>(domain);
+  auto range_sort = to_solver_smt_sort<msat_type>(range);
+
+  auto t = msat_get_array_type(env, domain_sort->s, range_sort->s);
+  return new solver_smt_sort<msat_type>(
+    SMT_SORT_ARRAY, t, domain->get_data_width(), range);
+}
+
+smt_astt mathsat_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
+{
+  if(use_fp_api)
+    return fp_convt::mk_from_bv_to_fp(op, to);
+
+  msat_term t = msat_make_fp_from_ieeebv(
+    env,
+    to->get_exponent_width(),
+    to->get_significand_width() - 1,
+    to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(t);
+
+  return new_ast(t, to);
+}
+
+smt_astt mathsat_convt::mk_from_fp_to_bv(smt_astt op)
+{
+  msat_term t =
+    msat_make_fp_as_ieeebv(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(t);
+
+  smt_sortt to = mk_bvfp_sort(
+    op->sort->get_exponent_width(), op->sort->get_significand_width() - 1);
+  return new_ast(t, to);
+}
+
+smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_ubv(
+  smt_astt from,
+  std::size_t width)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_typecast_from_fpbv_to_ubv(from, width);
+
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
+  msat_term t = msat_make_fp_to_bv(
+    env,
+    width,
+    to_solver_smt_ast<mathsat_smt_ast>(
+      mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO))
+      ->a,
+    mfrom->a);
+  check_msat_error(t);
+
+  smt_sortt to = mk_bv_sort(width);
+  return new_ast(t, to);
+}
+
+smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_sbv(
+  smt_astt from,
+  std::size_t width)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_typecast_from_fpbv_to_sbv(from, width);
+
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
+  msat_term t = msat_make_fp_to_bv(
+    env,
+    width,
+    to_solver_smt_ast<mathsat_smt_ast>(
+      mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO))
+      ->a,
+    mfrom->a);
+  check_msat_error(t);
+
+  smt_sortt to = mk_bv_sort(width);
+  return new_ast(t, to);
+}
+
+smt_astt mathsat_convt::mk_smt_typecast_from_fpbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_typecast_from_fpbv_to_fpbv(from, to, rm);
+
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+
+  msat_term t = msat_make_fp_cast(env, ew, sw, mrm->a, mfrom->a);
+  check_msat_error(t);
+  return new_ast(t, to);
+}
+
+smt_astt mathsat_convt::mk_smt_typecast_ubv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_typecast_ubv_to_fpbv(from, to, rm);
+
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+
+  msat_term t = msat_make_fp_from_ubv(env, ew, sw, mrm->a, mfrom->a);
+  check_msat_error(t);
+  return new_ast(t, to);
+}
+
+smt_astt mathsat_convt::mk_smt_typecast_sbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_typecast_sbv_to_fpbv(from, to, rm);
+
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+
+  msat_term t = msat_make_fp_from_sbv(env, ew, sw, mrm->a, mfrom->a);
+  check_msat_error(t);
+  return new_ast(t, to);
+}
+
+smt_astt mathsat_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_nearbyint_from_float(from, rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mfrom = to_solver_smt_ast<mathsat_smt_ast>(from);
+
+  // Conversion from float, using the correct rounding mode
+  msat_term t = msat_make_fp_round_to_int(env, mrm->a, mfrom->a);
+  return new_ast(t, from->sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_sqrt(rd, rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mrd = to_solver_smt_ast<mathsat_smt_ast>(rd);
+
+  msat_term t = msat_make_fp_sqrt(env, mrm->a, mrd->a);
+  check_msat_error(t);
+
+  return new_ast(t, rd->sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_add(lhs, rhs, rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+
+  msat_term t = msat_make_fp_plus(env, mrm->a, mlhs->a, mrhs->a);
+  check_msat_error(t);
+
+  return new_ast(t, lhs->sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_sub(lhs, rhs, rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+
+  msat_term t = msat_make_fp_minus(env, mrm->a, mlhs->a, mrhs->a);
+  check_msat_error(t);
+
+  return new_ast(t, lhs->sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_mul(lhs, rhs, rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+
+  msat_term t = msat_make_fp_times(env, mrm->a, mlhs->a, mrhs->a);
+  check_msat_error(t);
+
+  return new_ast(t, lhs->sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_div(lhs, rhs, rm);
+
+  const mathsat_smt_ast *mrm = to_solver_smt_ast<mathsat_smt_ast>(rm);
+  const mathsat_smt_ast *mlhs = to_solver_smt_ast<mathsat_smt_ast>(lhs);
+  const mathsat_smt_ast *mrhs = to_solver_smt_ast<mathsat_smt_ast>(rhs);
+
+  msat_term t = msat_make_fp_div(env, mrm->a, mlhs->a, mrhs->a);
+  check_msat_error(t);
+
+  return new_ast(t, lhs->sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_eq(lhs, rhs);
+
+  msat_term r = msat_make_fp_equal(
+    env,
+    to_solver_smt_ast<mathsat_smt_ast>(lhs)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(rhs)->a);
+  check_msat_error(r);
+
+  return new_ast(r, boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_lt(lhs, rhs);
+
+  msat_term r = msat_make_fp_lt(
+    env,
+    to_solver_smt_ast<mathsat_smt_ast>(lhs)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(rhs)->a);
+  check_msat_error(r);
+
+  return new_ast(r, boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_lte(lhs, rhs);
+
+  msat_term r = msat_make_fp_leq(
+    env,
+    to_solver_smt_ast<mathsat_smt_ast>(lhs)->a,
+    to_solver_smt_ast<mathsat_smt_ast>(rhs)->a);
+  check_msat_error(r);
+
+  return new_ast(r, boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_neg(smt_astt op)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_neg(op);
+
+  msat_term r =
+    msat_make_fp_neg(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new_ast(r, op->sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_nan(smt_astt op)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_nan(op);
+
+  msat_term r =
+    msat_make_fp_isnan(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new_ast(r, boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_inf(smt_astt op)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_inf(op);
+
+  msat_term r =
+    msat_make_fp_isinf(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new_ast(r, boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_normal(smt_astt op)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_normal(op);
+
+  msat_term r =
+    msat_make_fp_isnormal(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new_ast(r, boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_zero(smt_astt op)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_zero(op);
+
+  msat_term r =
+    msat_make_fp_iszero(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new_ast(r, boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_negative(smt_astt op)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_negative(op);
+
+  msat_term r =
+    msat_make_fp_isneg(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new_ast(r, boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_is_positive(smt_astt op)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_is_positive(op);
+
+  msat_term r =
+    msat_make_fp_ispos(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new_ast(r, boolean_sort);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_abs(smt_astt op)
+{
+  if(use_fp_api)
+    return fp_convt::mk_smt_fpbv_abs(op);
+
+  msat_term r =
+    msat_make_fp_abs(env, to_solver_smt_ast<mathsat_smt_ast>(op)->a);
+  check_msat_error(r);
+
+  return new_ast(r, op->sort);
 }

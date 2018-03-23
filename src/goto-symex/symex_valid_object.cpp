@@ -12,15 +12,15 @@ Author: Daniel Kroening, kroening@kroening.com
 
 static const expr2tc *get_object(const expr2tc &expr)
 {
-  if (is_symbol2t(expr))
+  if(is_symbol2t(expr))
   {
     return &expr;
   }
-  else if (is_member2t(expr))
+  if(is_member2t(expr))
   {
     return get_object(to_member2t(expr).source_value);
   }
-  else if (is_index2t(expr))
+  else if(is_index2t(expr))
   {
     return get_object(to_index2t(expr).source_value);
   }
@@ -30,35 +30,31 @@ static const expr2tc *get_object(const expr2tc &expr)
 
 void goto_symext::replace_dynamic_allocation(expr2tc &expr)
 {
-
-  if (is_nil_expr(expr))
+  if(is_nil_expr(expr))
     return;
 
-  expr->Foreach_operand([this] (expr2tc &e) {
-      replace_dynamic_allocation(e);
-    }
-  );
+  expr->Foreach_operand([this](expr2tc &e) { replace_dynamic_allocation(e); });
 
-  if (is_valid_object2t(expr) || is_deallocated_obj2t(expr))
+  if(is_valid_object2t(expr) || is_deallocated_obj2t(expr))
   {
     expr2tc &obj_ref = (is_valid_object2t(expr))
-                        ? to_valid_object2t(expr).value
-                        : to_deallocated_obj2t(expr).value;
+                         ? to_valid_object2t(expr).value
+                         : to_deallocated_obj2t(expr).value;
 
     // check what we have
-    if (is_address_of2t(obj_ref))
+    if(is_address_of2t(obj_ref))
     {
       expr2tc &obj_operand = to_address_of2t(obj_ref).ptr_obj;
 
       // see if that is a good one!
       const expr2tc *identifier = get_object(obj_operand);
 
-      if (identifier != nullptr)
+      if(identifier != nullptr)
       {
         expr2tc base_ident = *identifier;
         cur_state->get_original_name(base_ident);
 
-        const symbolt &symbol=ns.lookup(to_symbol2t(*identifier).thename);
+        const symbolt &symbol = ns.lookup(to_symbol2t(*identifier).thename);
 
         // dynamic?
         if(symbol.type.dynamic())
@@ -76,28 +72,28 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
     // default behavior
     default_replace_dynamic_allocation(expr);
   }
-  else if (is_dynamic_size2t(expr))
+  else if(is_dynamic_size2t(expr))
   {
     // default behavior
     default_replace_dynamic_allocation(expr);
   }
-  else if (is_invalid_pointer2t(expr))
+  else if(is_invalid_pointer2t(expr))
   {
     // default behavior
     default_replace_dynamic_allocation(expr);
   }
 }
 
-bool
-goto_symext::is_valid_object(const symbolt &symbol)
+bool goto_symext::is_valid_object(const symbolt &symbol)
 {
-  if(symbol.static_lifetime) return true; // global
+  if(symbol.static_lifetime)
+    return true; // global
 
   // dynamic?
   if(symbol.type.dynamic())
     return false;
 
-  // current location?
+// current location?
 #if 0
   // XXX jmorse - disabled on moving local_variables to name records. It only
   // ever contains l1 names; any lookup of symbol.name isn't going to work

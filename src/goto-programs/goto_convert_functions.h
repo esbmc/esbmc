@@ -21,10 +21,10 @@ void goto_convert(
   goto_functionst &functions,
   message_handlert &message_handler);
 
-class goto_convert_functionst:public goto_convertt
+class goto_convert_functionst : public goto_convertt
 {
 public:
-  typedef std::map<irep_idt, std::set<irep_idt> > typename_mapt;
+  typedef std::map<irep_idt, std::set<irep_idt>> typename_mapt;
   typedef std::set<irep_idt> typename_sett;
 
   void goto_convert();
@@ -35,12 +35,12 @@ public:
 
   void collect_type(const irept &type, typename_sett &set);
   void collect_expr(const irept &expr, typename_sett &set);
-  void rename_types(irept &type, const symbolt &cur_name_sym,
-                    const irep_idt &sname);
-  void rename_exprs(irept &expr, const symbolt &cur_name_sym,
-                    const irep_idt &sname);
-  void wallop_type(irep_idt name, typename_mapt &typenames,
-                   const irep_idt &sname);
+  void
+  rename_types(irept &type, const symbolt &cur_name_sym, const irep_idt &sname);
+  void
+  rename_exprs(irept &expr, const symbolt &cur_name_sym, const irep_idt &sname);
+  void
+  wallop_type(irep_idt name, typename_mapt &typenames, const irep_idt &sname);
 
   void fix_union_type(typet &type, bool is_pointer);
   void fix_union_expr(exprt &expr);
@@ -61,13 +61,10 @@ protected:
   //
   // function calls
   //
-  void add_return(
-    goto_functiont &f,
-    const locationt &location);
+  void add_return(goto_functiont &f, const locationt &location);
 
 private:
   bool inlining;
-
 };
 
 #endif

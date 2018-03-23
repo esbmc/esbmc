@@ -17,9 +17,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/threeval.h>
 
-#define forall_value_list(it, value_list) \
-  for(simplify_exprt::value_listt::const_iterator it=(value_list).begin(); \
-      it!=(value_list).end(); it++)
+#define forall_value_list(it, value_list)                                      \
+  for(simplify_exprt::value_listt::const_iterator it = (value_list).begin();   \
+      it != (value_list).end();                                                \
+      it++)
 
 class simplify_exprt
 {
@@ -34,7 +35,11 @@ public:
   bool simplify_addition_substraction(exprt &expr);
   bool simplify_shifts(exprt &expr);
   bool simplify_bitwise(exprt &expr);
-  bool simplify_if_implies(exprt &expr, const exprt &cond, bool truth, bool &new_truth);
+  bool simplify_if_implies(
+    exprt &expr,
+    const exprt &cond,
+    bool truth,
+    bool &new_truth);
   bool simplify_if_recursive(exprt &expr, const exprt &cond, bool truth);
   bool simplify_if_conj(exprt &expr, const exprt &cond);
   bool simplify_if_disj(exprt &expr, const exprt &cond);
@@ -82,13 +87,14 @@ public:
   typedef std::set<mp_integer> value_listt;
   bool get_values(const exprt &expr, value_listt &value_list);
 
-  simplify_exprt():do_simplify_if(true)
+  simplify_exprt() : do_simplify_if(true)
   {
   }
 
   static bool is_bitvector_type(const typet &type)
   {
-    return type.id()=="unsignedbv" || type.id()=="signedbv" || type.id()=="bv";
+    return type.id() == "unsignedbv" || type.id() == "signedbv" ||
+           type.id() == "bv";
   }
 };
 

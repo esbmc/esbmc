@@ -1,18 +1,26 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
 #undef isfinite
-#undef __finite
-#undef __finitef
-#undef __finitel
 
-int isfinite(double d) { return __ESBMC_isfinited(d); }
+#define isfinite_def(type, name, isfinite_func)                                \
+  int name(type f)                                                             \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return isfinite_func(f);                                                   \
+  }                                                                            \
+                                                                               \
+  int __##name(type f)                                                         \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(f);                                                            \
+  }
 
-int __finite(double d) { return __ESBMC_isfinited(d); }
+isfinite_def(double, isfinite, __ESBMC_isfinited);
 
-int __finitef(float f) { return __ESBMC_isfinitef(f); }
+isfinite_def(float, finitef, __ESBMC_isfinitef);
+isfinite_def(double, finite, __ESBMC_isfinited);
+isfinite_def(long double, finitel, __ESBMC_isfiniteld);
 
-int __finitel(long double ld) { return __ESBMC_isfiniteld(ld); }
-
+#undef isfinite_def

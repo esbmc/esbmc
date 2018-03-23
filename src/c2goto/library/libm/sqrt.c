@@ -1,7 +1,6 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
 #undef sqrt
 
@@ -10,6 +9,7 @@
 /*http://www.geeksforgeeks.org/square-root-of-a-perfect-square/*/
 double babylonian_sqrt(double n)
 {
+__ESBMC_HIDE:;
   /*We are using n itself as initial approximation
    This can definitely be improved */
   double x = n;
@@ -24,83 +24,25 @@ double babylonian_sqrt(double n)
   return x;
 }
 
-float sqrtf(float n)
-{
-  __ESBMC_HIDE:;
+#define sqrt_def(type, name, isnan_func, isinf_func, sqrt_func)                \
+  type name(type n)                                                            \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    /* If not running in floatbv mode, using our old method */                 \
+    if(!__ESBMC_floatbv_mode())                                                \
+      return babylonian_sqrt(n);                                               \
+                                                                               \
+    return sqrt_func(n);                                                       \
+  }                                                                            \
+                                                                               \
+  type __##name(type f)                                                        \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(f);                                                            \
+  }
 
-  // If not running in floatbv mode, using our old method
-  if(!__ESBMC_floatbv_mode())
-    return babylonian_sqrt(n);
+sqrt_def(float, sqrtf, isnanf, isinff, __ESBMC_sqrtf);
+sqrt_def(double, sqrt, isnan, isinf, __ESBMC_sqrtd);
+sqrt_def(long double, sqrtl, isnanl, isinfl, __ESBMC_sqrtld);
 
-  // If n is NaN, return NaN
-  if(__ESBMC_isnanf(n))
-    return NAN;
-
-  // If n == +/-0.0, return +/- 0.0
-  if(n == 0.0)
-    return n;
-
-  // if n < 0.0, return NAN
-  if(n < 0.0)
-    return NAN;
-
-  // if +inf, return +inf
-  if(__ESBMC_isinff(n))
-    return INFINITY;
-
-  return __ESBMC_sqrtf(n);
-}
-
-double sqrt(double n)
-{
-  __ESBMC_HIDE:;
-
-  // If not running in floatbv mode, using our old method
-  if(!__ESBMC_floatbv_mode())
-    return babylonian_sqrt(n);
-
-  // If n is NaN, return NaN
-  if(__ESBMC_isnand(n))
-    return NAN;
-
-  // If n == +/-0.0, return +/- 0.0
-  if(n == 0.0)
-    return n;
-
-  // if n < 0.0, return NAN
-  if(n < 0.0)
-    return NAN;
-
-  // if +inf, return +inf
-  if(__ESBMC_isinfd(n))
-    return INFINITY;
-
-  return __ESBMC_sqrtd(n);
-}
-
-long double sqrtl(long double n)
-{
-  __ESBMC_HIDE:;
-
-  // If not running in floatbv mode, using our old method
-  if(!__ESBMC_floatbv_mode())
-    return babylonian_sqrt(n);
-
-  // If n is NaN, return NaN
-  if(__ESBMC_isnanld(n))
-    return NAN;
-
-  // If n == +/-0.0, return +/- 0.0
-  if(n == 0.0)
-    return n;
-
-  // if n < 0.0, return NAN
-  if(n < 0.0)
-    return NAN;
-
-  // if +inf, return +inf
-  if(__ESBMC_isinfld(n))
-    return INFINITY;
-
-  return __ESBMC_sqrtld(n);
-}
+#undef sqrt_def

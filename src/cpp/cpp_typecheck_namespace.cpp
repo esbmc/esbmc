@@ -14,9 +14,9 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
   // save the scope
   cpp_save_scopet saved_scope(cpp_scopes);
 
-  const irep_idt &name=namespace_spec.get_namespace();
+  const irep_idt &name = namespace_spec.get_namespace();
 
-  if(name=="")
+  if(name == "")
   {
     // "unique namespace"
     err_location(namespace_spec);
@@ -25,30 +25,28 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
 
   irep_idt final_name(name);
 
-  std::string identifier=
-    cpp_scopes.current_scope().prefix+id2string(final_name);
+  std::string identifier =
+    cpp_scopes.current_scope().prefix + id2string(final_name);
 
-  symbolt* s = context.find_symbol(identifier);
+  symbolt *s = context.find_symbol(identifier);
 
   if(s != nullptr)
   {
     if(namespace_spec.alias().is_not_nil())
     {
       err_location(namespace_spec);
-      str << "namespace alias `" << final_name
-          << "' previously declared" << std::endl;
-      str << "location of previous declaration: "
-          << s->location;
+      str << "namespace alias `" << final_name << "' previously declared"
+          << std::endl;
+      str << "location of previous declaration: " << s->location;
       throw 0;
     }
 
     if(s->type.id() != "namespace")
     {
       err_location(namespace_spec);
-      str << "namespace `" << final_name
-          << "' previously declared" << std::endl;
-      str << "location of previous declaration: "
-          << s->location;
+      str << "namespace `" << final_name << "' previously declared"
+          << std::endl;
+      str << "location of previous declaration: " << s->location;
       throw 0;
     }
 
@@ -59,13 +57,13 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
   {
     symbolt symbol;
 
-    symbol.name=identifier;
-    symbol.base_name=final_name;
+    symbol.name = identifier;
+    symbol.base_name = final_name;
     symbol.value.make_nil();
-    symbol.location=namespace_spec.location();
-    symbol.mode=current_mode;
-    symbol.module=module;
-    symbol.type=typet("namespace");
+    symbol.location = namespace_spec.location();
+    symbol.mode = current_mode;
+    symbol.module = module;
+    symbol.type = typet("namespace");
 
     if(context.move(symbol))
       throw "cpp_typecheckt::convert_namespace: context.move() failed";
@@ -81,8 +79,8 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
   }
   else
   {*/
-    // do the declarations
-    for(auto & it : namespace_spec.items())
-      convert(it);
-//  }
+  // do the declarations
+  for(auto &it : namespace_spec.items())
+    convert(it);
+  //  }
 }

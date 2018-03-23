@@ -21,17 +21,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-static const std::string &get_string_constant(
-  const exprt &expr)
+static const std::string &get_string_constant(const exprt &expr)
 {
-  if(expr.id()=="typecast" &&
-     expr.operands().size()==1)
+  if(expr.id() == "typecast" && expr.operands().size() == 1)
     return get_string_constant(expr.op0());
 
-  if(!expr.is_address_of()
-     || expr.operands().size()!=1
-     || !expr.op0().is_index()
-     || expr.op0().operands().size()!=2)
+  if(
+    !expr.is_address_of() || expr.operands().size() != 1 ||
+    !expr.op0().is_index() || expr.op0().operands().size() != 2)
   {
     std::cerr << "expected string constant, but got:\n";
     expr.dump();
@@ -41,22 +38,19 @@ static const std::string &get_string_constant(
   return expr.op0().op0().value().as_string();
 }
 
-static void get_alloc_type_rec(
-  const exprt &src,
-  typet &type,
-  exprt &size)
+static void get_alloc_type_rec(const exprt &src, typet &type, exprt &size)
 {
-  static bool is_mul=false;
+  static bool is_mul = false;
 
-  const irept &sizeof_type=src.c_sizeof_type();
+  const irept &sizeof_type = src.c_sizeof_type();
   //nec: ex33.c
   if(!sizeof_type.is_nil() && !is_mul)
   {
-    type=(typet &)sizeof_type;
+    type = (typet &)sizeof_type;
   }
-  else if(src.id()=="*")
+  else if(src.id() == "*")
   {
-	is_mul=true;
+    is_mul = true;
     forall_operands(it, src)
       get_alloc_type_rec(*it, type, size);
   }
@@ -66,10 +60,7 @@ static void get_alloc_type_rec(
   }
 }
 
-static void get_alloc_type(
-  const exprt &src,
-  typet &type,
-  exprt &size)
+static void get_alloc_type(const exprt &src, typet &type, exprt &size)
 {
   type.make_nil();
   size.make_nil();
@@ -77,11 +68,11 @@ static void get_alloc_type(
   get_alloc_type_rec(src, type, size);
 
   if(type.is_nil())
-    type=char_type();
+    type = char_type();
 
   if(size.has_operands())
   {
-    if(size.operands().size()==1)
+    if(size.operands().size() == 1)
     {
       exprt tmp;
       tmp.swap(size.op0());
@@ -90,7 +81,7 @@ static void get_alloc_type(
     else
     {
       size.id("*");
-      size.type()=size.op0().type();
+      size.type() = size.op0().type();
     }
   }
 }
@@ -101,29 +92,28 @@ void goto_convertt::do_printf(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  const irep_idt &f_id=function.identifier();
+  const irep_idt &f_id = function.identifier();
 
-  if(f_id==CPROVER_PREFIX "printf" ||
-     f_id=="printf")
+  if(f_id == CPROVER_PREFIX "printf" || f_id == "printf")
   {
-    exprt printf_code("sideeffect",
-      static_cast<const typet &>(function.type().return_type()));
+    exprt printf_code(
+      "sideeffect", static_cast<const typet &>(function.type().return_type()));
 
     printf_code.statement("printf");
 
-    printf_code.operands()=arguments;
-    printf_code.location()=function.location();
+    printf_code.operands() = arguments;
+    printf_code.location() = function.location();
 
     if(lhs.is_not_nil())
     {
       code_assignt assignment(lhs, printf_code);
-      assignment.location()=function.location();
+      assignment.location() = function.location();
       copy(assignment, ASSIGN, dest);
     }
     else
     {
       printf_code.id("code");
-      printf_code.type()=typet("code");
+      printf_code.type() = typet("code");
       copy(to_code(printf_code), OTHER, dest);
     }
   }
@@ -147,8 +137,8 @@ void goto_convertt::do_atomic_begin(
     throw "atomic_begin takes zero argument";
   }
 
-  goto_programt::targett t=dest.add_instruction(ATOMIC_BEGIN);
-  t->location=function.location();
+  goto_programt::targett t = dest.add_instruction(ATOMIC_BEGIN);
+  t->location = function.location();
 }
 
 void goto_convertt::do_atomic_end(
@@ -169,8 +159,8 @@ void goto_convertt::do_atomic_end(
     throw "atomic_end takes no arguments";
   }
 
-  goto_programt::targett t=dest.add_instruction(ATOMIC_END);
-  t->location=function.location();
+  goto_programt::targett t = dest.add_instruction(ATOMIC_END);
+  t->location = function.location();
 }
 
 void goto_convertt::do_mem(
@@ -180,9 +170,9 @@ void goto_convertt::do_mem(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  std::string func = is_malloc? "malloc" : "alloca";
+  std::string func = is_malloc ? "malloc" : "alloca";
 
-  if(arguments.size()!=1)
+  if(arguments.size() != 1)
   {
     err_location(function);
     throw func + "expected to have one argument";
@@ -191,7 +181,7 @@ void goto_convertt::do_mem(
   if(lhs.is_nil())
     return; // does nothing
 
-  locationt location=function.location();
+  locationt location = function.location();
 
   // get alloc type and size
   typet alloc_type;
@@ -200,15 +190,15 @@ void goto_convertt::do_mem(
   get_alloc_type(arguments[0], alloc_type, alloc_size);
 
   if(alloc_size.is_nil())
-    alloc_size=from_integer(1, uint_type());
+    alloc_size = from_integer(1, uint_type());
 
   if(alloc_type.is_nil())
-    alloc_type=char_type();
+    alloc_type = char_type();
 
-  if (alloc_type.id() == "symbol")
+  if(alloc_type.id() == "symbol")
     alloc_type = ns.follow(alloc_type);
 
-  if(alloc_size.type()!=uint_type())
+  if(alloc_size.type() != uint_type())
   {
     alloc_size.make_typecast(uint_type());
     simplify(alloc_size);
@@ -221,15 +211,15 @@ void goto_convertt::do_mem(
   new_expr.copy_to_operands(arguments[0]);
   new_expr.cmt_size(alloc_size);
   new_expr.cmt_type(alloc_type);
-  new_expr.location()=location;
+  new_expr.location() = location;
 
-  goto_programt::targett t_n=dest.add_instruction(ASSIGN);
+  goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
   exprt new_assign = code_assignt(lhs, new_expr);
   expr2tc new_assign_expr;
   migrate_expr(new_assign, new_assign_expr);
   t_n->code = new_assign_expr;
-  t_n->location=location;
+  t_n->location = location;
 }
 
 void goto_convertt::do_alloca(
@@ -262,15 +252,15 @@ void goto_convertt::do_realloc(
   new_expr.statement("realloc");
   new_expr.copy_to_operands(arguments[0]);
   new_expr.cmt_size(arguments[1]);
-  new_expr.location()=function.location();
+  new_expr.location() = function.location();
 
-  goto_programt::targett t_n=dest.add_instruction(ASSIGN);
+  goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
   exprt new_assign = code_assignt(lhs, new_expr);
   expr2tc new_assign_expr;
   migrate_expr(new_assign, new_assign_expr);
   t_n->code = new_assign_expr;
-  t_n->location=function.location();
+  t_n->location = function.location();
 }
 
 void goto_convertt::do_cpp_new(
@@ -290,10 +280,10 @@ void goto_convertt::do_cpp_new(
 
   exprt alloc_size;
 
-  if(rhs.statement()=="cpp_new[]")
+  if(rhs.statement() == "cpp_new[]")
   {
-    alloc_size=static_cast<const exprt &>(rhs.size_irep());
-    if(alloc_size.type()!=uint_type())
+    alloc_size = static_cast<const exprt &>(rhs.size_irep());
+    if(alloc_size.type() != uint_type())
       alloc_size.make_typecast(uint_type());
 
     remove_sideeffects(alloc_size, dest);
@@ -308,34 +298,34 @@ void goto_convertt::do_cpp_new(
     mul2tc byte_size(uint_type2(), alloc_units, sz_expr);
     alloc_size = migrate_expr_back(byte_size);
 
-    const_cast<irept&>(rhs.size_irep()) = alloc_size;
+    const_cast<irept &>(rhs.size_irep()) = alloc_size;
   }
   else
-    alloc_size=from_integer(1, uint_type());
+    alloc_size = from_integer(1, uint_type());
 
   if(alloc_size.is_nil())
-    alloc_size=from_integer(1, uint_type());
+    alloc_size = from_integer(1, uint_type());
 
-  if(alloc_size.type()!=uint_type())
+  if(alloc_size.type() != uint_type())
   {
     alloc_size.make_typecast(uint_type());
     simplify(alloc_size);
   }
 
   // produce new object
-  goto_programt::targett t_n=dest.add_instruction(ASSIGN);
+  goto_programt::targett t_n = dest.add_instruction(ASSIGN);
   exprt assign_expr = code_assignt(lhs, rhs);
   migrate_expr(assign_expr, t_n->code);
-  t_n->location=rhs.find_location();
+  t_n->location = rhs.find_location();
 
   // set up some expressions
   exprt valid_expr("valid_object", typet("bool"));
   valid_expr.copy_to_operands(lhs);
-  exprt neg_valid_expr=gen_not(valid_expr);
+  exprt neg_valid_expr = gen_not(valid_expr);
 
   exprt deallocated_expr("deallocated_object", typet("bool"));
   deallocated_expr.copy_to_operands(lhs);
-  exprt neg_deallocated_expr=gen_not(deallocated_expr);
+  exprt neg_deallocated_expr = gen_not(deallocated_expr);
 
   exprt pointer_offset_expr("pointer_offset", pointer_type());
   pointer_offset_expr.copy_to_operands(lhs);
@@ -344,8 +334,8 @@ void goto_convertt::do_cpp_new(
     pointer_offset_expr, gen_zero(pointer_type()));
 
   // first assume that it's available and that it's a dynamic object
-  goto_programt::targett t_a=dest.add_instruction(ASSUME);
-  t_a->location=rhs.find_location();
+  goto_programt::targett t_a = dest.add_instruction(ASSUME);
+  t_a->location = rhs.find_location();
   migrate_expr(neg_valid_expr, t_a->guard);
 
   migrate_expr(valid_expr, t_a->guard);
@@ -355,23 +345,23 @@ void goto_convertt::do_cpp_new(
   //nec: ex37.c
   exprt dynamic_size("dynamic_size", int_type());
   dynamic_size.copy_to_operands(lhs);
-  dynamic_size.location()=rhs.find_location();
-  goto_programt::targett t_s_s=dest.add_instruction(ASSIGN);
+  dynamic_size.location() = rhs.find_location();
+  goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
   exprt assign = code_assignt(dynamic_size, alloc_size);
   migrate_expr(assign, t_s_s->code);
-  t_s_s->location=rhs.find_location();
+  t_s_s->location = rhs.find_location();
 
   // now set alloc bit
-  goto_programt::targett t_s_a=dest.add_instruction(ASSIGN);
+  goto_programt::targett t_s_a = dest.add_instruction(ASSIGN);
   assign = code_assignt(valid_expr, true_exprt());
   migrate_expr(assign, t_s_a->code);
-  t_s_a->location=rhs.find_location();
+  t_s_a->location = rhs.find_location();
 
   //now set deallocated bit
-  goto_programt::targett t_d_i=dest.add_instruction(ASSIGN);
+  goto_programt::targett t_d_i = dest.add_instruction(ASSIGN);
   codet tmp = code_assignt(deallocated_expr, false_exprt());
   migrate_expr(tmp, t_d_i->code);
-  t_d_i->location=rhs.find_location();
+  t_d_i->location = rhs.find_location();
 
   // run initializer
   dest.destructive_append(tmp_initializer);
@@ -404,18 +394,18 @@ void goto_convertt::cpp_new_initializer(
   }
   else
   {
-    initializer = (code_expressiont&)rhs.initializer();
+    initializer = (code_expressiont &)rhs.initializer();
     // XXX jmorse, const-qual misery
-    const_cast<exprt&>(rhs).remove("initializer");
+    const_cast<exprt &>(rhs).remove("initializer");
   }
 
   if(initializer.is_not_nil())
   {
-    if(rhs.statement()=="cpp_new[]")
+    if(rhs.statement() == "cpp_new[]")
     {
       // build loop
     }
-    else if(rhs.statement()=="cpp_new")
+    else if(rhs.statement() == "cpp_new")
     {
       exprt deref_new("dereference", rhs.type().subtype());
       deref_new.copy_to_operands(lhs);
@@ -433,7 +423,7 @@ void goto_convertt::do_exit(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  if(arguments.size()!=1)
+  if(arguments.size() != 1)
   {
     err_location(function);
     throw "exit expected to have one argument";
@@ -441,9 +431,9 @@ void goto_convertt::do_exit(
 
   // same as assume(false)
 
-  goto_programt::targett t_a=dest.add_instruction(ASSUME);
+  goto_programt::targett t_a = dest.add_instruction(ASSUME);
   t_a->guard = gen_false_expr();
-  t_a->location=function.location();
+  t_a->location = function.location();
 }
 
 void goto_convertt::do_abort(
@@ -452,7 +442,7 @@ void goto_convertt::do_abort(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  if(arguments.size()!=0)
+  if(arguments.size() != 0)
   {
     err_location(function);
     throw "abort expected to have no arguments";
@@ -460,9 +450,9 @@ void goto_convertt::do_abort(
 
   // same as assume(false)
 
-  goto_programt::targett t_a=dest.add_instruction(ASSUME);
+  goto_programt::targett t_a = dest.add_instruction(ASSUME);
   t_a->guard = gen_false_expr();
-  t_a->location=function.location();
+  t_a->location = function.location();
 }
 
 void goto_convertt::do_free(
@@ -471,7 +461,7 @@ void goto_convertt::do_free(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  if(arguments.size()!=1)
+  if(arguments.size() != 1)
   {
     err_location(function);
     throw "free expected to have one argument";
@@ -485,19 +475,19 @@ void goto_convertt::do_free(
 
   // preserve the call
   codet free_statement("free");
-  free_statement.location()=function.location();
+  free_statement.location() = function.location();
   free_statement.copy_to_operands(arguments[0]);
 
-  goto_programt::targett t_f=dest.add_instruction(OTHER);
+  goto_programt::targett t_f = dest.add_instruction(OTHER);
   migrate_expr(free_statement, t_f->code);
-  t_f->location=function.location();
+  t_f->location = function.location();
 }
 
 bool is_lvalue(const exprt &expr)
 {
   if(expr.is_index())
     return is_lvalue(to_index_expr(expr).op0());
-  else if(expr.is_member())
+  if(expr.is_member())
     return is_lvalue(to_member_expr(expr).op0());
   else if(expr.is_dereference())
     return true;
@@ -514,9 +504,9 @@ exprt make_va_list(const exprt &expr)
     return make_va_list(to_typecast_expr(expr).op());
 
   // if it's an address of an lvalue, we take that
-  if(expr.is_address_of() &&
-     expr.operands().size()==1 &&
-     is_lvalue(expr.op0()))
+  if(
+    expr.is_address_of() && expr.operands().size() == 1 &&
+    is_lvalue(expr.op0()))
     return expr.op0();
 
   return expr;
@@ -532,39 +522,41 @@ void goto_convertt::do_function_call_symbol(
     return; // ignore
 
   // lookup symbol
-  const irep_idt &identifier=function.identifier();
+  const irep_idt &identifier = function.identifier();
 
   const symbolt *symbol;
   if(ns.lookup(identifier, symbol))
   {
     err_location(function);
-    throw "error: function `"+id2string(identifier)+"' not found";
+    throw "error: function `" + id2string(identifier) + "' not found";
   }
 
   if(!symbol->type.is_code())
   {
     err_location(function);
-    throw "error: function `"+id2string(identifier)+"' type mismatch: expected code";
+    throw "error: function `" + id2string(identifier) +
+      "' type mismatch: expected code";
   }
 
   std::string base_name = symbol->base_name.as_string();
 
-  bool is_assume = (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
+  bool is_assume =
+    (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
   bool is_assert = (base_name == "assert");
 
   if(is_assume || is_assert)
   {
-    if(arguments.size()!=1)
+    if(arguments.size() != 1)
     {
       err_location(function);
-      throw "`"+id2string(base_name)+"' expected to have one argument";
+      throw "`" + id2string(base_name) + "' expected to have one argument";
     }
 
     if(options.get_bool_option("no-assertions") && !is_assume)
       return;
 
-    goto_programt::targett t=dest.add_instruction(
-      is_assume ? ASSUME : ASSERT);
+    goto_programt::targett t =
+      dest.add_instruction(is_assume ? ASSUME : ASSERT);
     migrate_expr(arguments.front(), t->guard);
 
     // The user may have re-declared the assert or assume functions to take an
@@ -573,10 +565,10 @@ void goto_convertt::do_function_call_symbol(
     // ASSUME/ASSERT insns are boolean exprs.  So, if the given argument to
     // this function isn't a bool, typecast it.  We can't rely on the C/C++
     // type system to ensure that.
-    if (!is_bool_type(t->guard->type))
+    if(!is_bool_type(t->guard->type))
       t->guard = typecast2tc(get_bool_type(), t->guard);
 
-    t->location=function.location();
+    t->location = function.location();
     t->location.user_provided(true);
 
     if(is_assert)
@@ -585,25 +577,25 @@ void goto_convertt::do_function_call_symbol(
     if(lhs.is_not_nil())
     {
       err_location(function);
-      throw id2string(base_name)+" expected not to have LHS";
+      throw id2string(base_name) + " expected not to have LHS";
     }
   }
   else if(base_name == "__ESBMC_assert")
   {
-    if(arguments.size()!=2)
+    if(arguments.size() != 2)
     {
       err_location(function);
-      throw "`"+id2string(base_name)+"' expected to have two arguments";
+      throw "`" + id2string(base_name) + "' expected to have two arguments";
     }
 
     if(options.get_bool_option("no-assertions"))
       return;
 
-    goto_programt::targett t=dest.add_instruction(ASSERT);
+    goto_programt::targett t = dest.add_instruction(ASSERT);
     migrate_expr(arguments[0], t->guard);
 
     const std::string &description = get_string_constant(arguments[1]);
-    t->location=function.location();
+    t->location = function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
     t->location.comment(description);
@@ -611,61 +603,65 @@ void goto_convertt::do_function_call_symbol(
     if(lhs.is_not_nil())
     {
       err_location(function);
-      throw id2string(base_name)+" expected not to have LHS";
+      throw id2string(base_name) + " expected not to have LHS";
     }
   }
-  else if(identifier=="__VERIFIER_error")
+  else if(identifier == "__VERIFIER_error")
   {
     if(!arguments.empty())
     {
       err_location(function);
-      throw "`"+id2string(base_name)+"' expected to have no arguments";
+      throw "`" + id2string(base_name) + "' expected to have no arguments";
     }
 
-    goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard=gen_false_expr();
-    t->location=function.location();
+    goto_programt::targett t = dest.add_instruction(ASSERT);
+    t->guard = gen_false_expr();
+    t->location = function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
 
     if(lhs.is_not_nil())
     {
       err_location(function);
-      throw "`"+id2string(base_name)+"' expected not to have LHS";
+      throw "`" + id2string(base_name) + "' expected not to have LHS";
     }
 
     // __VERIFIER_error has abort() semantics, even if no assertions
     // are being checked
-    goto_programt::targett a=dest.add_instruction(ASSUME);
-    a->guard=gen_false_expr();
-    a->location=function.location();
+    goto_programt::targett a = dest.add_instruction(ASSUME);
+    a->guard = gen_false_expr();
+    a->location = function.location();
     t->location.user_provided(true);
   }
   else if(base_name == "printf")
   {
     do_printf(lhs, function, arguments, dest);
   }
-  else if((base_name == "__ESBMC_atomic_begin")
-          || (base_name == "__VERIFIER_atomic_begin"))
+  else if(
+    (base_name == "__ESBMC_atomic_begin") ||
+    (base_name == "__VERIFIER_atomic_begin"))
   {
     do_atomic_begin(lhs, function, arguments, dest);
   }
-  else if((base_name == "__ESBMC_atomic_end")
-          || (base_name == "__VERIFIER_atomic_end"))
+  else if(
+    (base_name == "__ESBMC_atomic_end") ||
+    (base_name == "__VERIFIER_atomic_end"))
   {
     do_atomic_end(lhs, function, arguments, dest);
   }
-  else if(has_prefix(id2string(base_name), "nondet_")
-          || has_prefix(id2string(base_name), "__VERIFIER_nondet_"))
+  else if(
+    has_prefix(id2string(base_name), "nondet_") ||
+    has_prefix(id2string(base_name), "__VERIFIER_nondet_"))
   {
     // make it a side effect if there is an LHS
-    if(lhs.is_nil()) return;
+    if(lhs.is_nil())
+      return;
 
-    exprt rhs=side_effect_expr_nondett(lhs.type());
-    rhs.location()=function.location();
+    exprt rhs = side_effect_expr_nondett(lhs.type());
+    rhs.location() = function.location();
 
     code_assignt assignment(lhs, rhs);
-    assignment.location()=function.location();
+    assignment.location() = function.location();
     copy(assignment, ASSIGN, dest);
   }
   else if(base_name == "exit")
@@ -692,35 +688,33 @@ void goto_convertt::do_function_call_symbol(
   {
     do_free(lhs, function, arguments, dest);
   }
-  else if(base_name == "printf" ||
-          base_name == "fprintf" ||
-          base_name == "sprintf" ||
-          base_name == "snprintf")
+  else if(
+    base_name == "printf" || base_name == "fprintf" || base_name == "sprintf" ||
+    base_name == "snprintf")
   {
     do_printf(lhs, function, arguments, dest);
   }
-  else if(base_name == "__assert_rtn" ||
-          base_name == "__assert_fail")
+  else if(base_name == "__assert_rtn" || base_name == "__assert_fail")
   {
     // __assert_fail is Linux
     // These take four arguments:
     // "expression", "file.c", line, __func__
 
-    if(arguments.size()!=4)
+    if(arguments.size() != 4)
     {
       err_location(function);
-      throw "`"+id2string(base_name)+"' expected to have four arguments";
+      throw "`" + id2string(base_name) + "' expected to have four arguments";
     }
 
-    const irep_idt description=
-      "assertion "+id2string(get_string_constant(arguments[0]));
+    const irep_idt description =
+      "assertion " + id2string(get_string_constant(arguments[0]));
 
     if(options.get_bool_option("no-assertions"))
       return;
 
-    goto_programt::targett t=dest.add_instruction(ASSERT);
+    goto_programt::targett t = dest.add_instruction(ASSERT);
     t->guard = gen_false_expr();
-    t->location=function.location();
+    t->location = function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
     t->location.comment(description);
@@ -730,21 +724,21 @@ void goto_convertt::do_function_call_symbol(
   {
     // this is Windows
 
-    if(arguments.size()!=3)
+    if(arguments.size() != 3)
     {
       err_location(function);
-      throw "`"+id2string(base_name)+"' expected to have three arguments";
+      throw "`" + id2string(base_name) + "' expected to have three arguments";
     }
 
-    const std::string description=
-      "assertion "+get_string_constant(arguments[0]);
+    const std::string description =
+      "assertion " + get_string_constant(arguments[0]);
 
     if(options.get_bool_option("no-assertions"))
       return;
 
-    goto_programt::targett t=dest.add_instruction(ASSERT);
+    goto_programt::targett t = dest.add_instruction(ASSERT);
     t->guard = gen_false_expr();
-    t->location=function.location();
+    t->location = function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
     t->location.comment(description);
@@ -752,7 +746,7 @@ void goto_convertt::do_function_call_symbol(
   }
   else if(base_name == "operatorcpp_new(unsigned_int)")
   {
-    assert(arguments.size()== 1);
+    assert(arguments.size() == 1);
 
     // Change it into a cpp_new expression
     side_effect_exprt new_function("cpp_new");
@@ -762,7 +756,7 @@ void goto_convertt::do_function_call_symbol(
     // Set return type, a allocated pointer
     // XXX jmorse, const-qual misery
     new_function.type() = pointer_typet(
-      static_cast<const typet&>(arguments.front().c_sizeof_type()));
+      static_cast<const typet &>(arguments.front().c_sizeof_type()));
     new_function.type().add("#location") = function.cmt_location();
 
     do_cpp_new(lhs, new_function, dest);
@@ -883,10 +877,10 @@ void goto_convertt::do_function_call_symbol(
   {
     // insert function call
     code_function_callt function_call;
-    function_call.lhs()=lhs;
-    function_call.function()=function;
-    function_call.arguments()=arguments;
-    function_call.location()=function.location();
+    function_call.lhs() = lhs;
+    function_call.function() = function;
+    function_call.arguments() = arguments;
+    function_call.location() = function.location();
 
     copy(function_call, FUNCTION_CALL, dest);
   }

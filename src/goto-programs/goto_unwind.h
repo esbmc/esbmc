@@ -20,7 +20,7 @@ void goto_unwind(
   unsigned unwind,
   message_handlert &message_handler);
 
-class goto_unwindt: public goto_loopst
+class goto_unwindt : public goto_loopst
 {
 public:
   goto_unwindt(
@@ -29,15 +29,15 @@ public:
     goto_functionst &_goto_functions,
     goto_functiont &_goto_function,
     unsigned _unwind,
-    message_handlert &_message_handler) :
-    goto_loopst(
-      _context,
-      _function_name,
-      _goto_functions,
-      _goto_function,
-      _message_handler),
-    unwind(_unwind),
-    tmp_goto_program()
+    message_handlert &_message_handler)
+    : goto_loopst(
+        _context,
+        _function_name,
+        _goto_functions,
+        _goto_function,
+        _message_handler),
+      unwind(_unwind),
+      tmp_goto_program()
   {
     // unwind loops
     if(function_loops.size())
@@ -51,7 +51,7 @@ protected:
   void goto_unwind();
   void unwind_program(
     goto_programt &goto_program,
-    const function_loopst::reverse_iterator& loop);
+    const function_loopst::reverse_iterator &loop);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_UNWIND_H_ */

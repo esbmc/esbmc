@@ -12,8 +12,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_typecheck_fargs.h>
 #include <util/std_types.h>
 
-std::ostream &operator<<(std::ostream &out,
-  const cpp_typecheck_fargst &fargs)
+std::ostream &operator<<(std::ostream &out, const cpp_typecheck_fargst &fargs)
 {
   out << "cpp_typecheck_fargst" << std::endl;
   out << "* in_use: " << fargs.in_use << std::endl;
@@ -22,7 +21,7 @@ std::ostream &operator<<(std::ostream &out,
   if(fargs.operands.size())
   {
     out << "* operands: " << std::endl;
-    for(unsigned i=0; i<fargs.operands.size(); ++i)
+    for(unsigned i = 0; i < fargs.operands.size(); ++i)
       out << "  " << i << ": " << fargs.operands[i] << std::endl;
   }
 
@@ -31,9 +30,9 @@ std::ostream &operator<<(std::ostream &out,
 
 bool cpp_typecheck_fargst::has_class_type() const
 {
-  for(const auto & operand : operands)
+  for(const auto &operand : operands)
   {
-    if(operand.type().id()=="struct")
+    if(operand.type().id() == "struct")
       return true;
   }
 
@@ -43,12 +42,12 @@ bool cpp_typecheck_fargst::has_class_type() const
 void cpp_typecheck_fargst::build(
   const side_effect_expr_function_callt &function_call)
 {
-  in_use=true;
+  in_use = true;
 
   operands.clear();
   operands.reserve(function_call.op1().operands().size());
 
-  for(const auto & i : function_call.op1().operands())
+  for(const auto &i : function_call.op1().operands())
     operands.push_back(i);
 }
 
@@ -60,17 +59,16 @@ bool cpp_typecheck_fargst::match(
   distance = cpp_typecast_rank();
 
   exprt::operandst ops = operands;
-  const code_typet::argumentst &arguments=code_type.arguments();
+  const code_typet::argumentst &arguments = code_type.arguments();
 
-  if(arguments.size()>ops.size())
+  if(arguments.size() > ops.size())
   {
     // Check for default values.
     ops.reserve(arguments.size());
 
-    for(unsigned i=ops.size(); i<arguments.size(); i++)
+    for(unsigned i = ops.size(); i < arguments.size(); i++)
     {
-      const exprt &default_value=
-        arguments[i].default_value();
+      const exprt &default_value = arguments[i].default_value();
 
       if(default_value.is_nil())
         return false;
@@ -78,14 +76,14 @@ bool cpp_typecheck_fargst::match(
       ops.push_back(default_value);
     }
   }
-  else if(arguments.size()<ops.size())
+  else if(arguments.size() < ops.size())
   {
     // check for ellipsis
     if(!code_type.has_ellipsis())
       return false;
   }
 
-  for(unsigned i=0; i<ops.size(); i++)
+  for(unsigned i = 0; i < ops.size(); i++)
   {
     // read
     // http://publib.boulder.ibm.com/infocenter/comphelp/v8v101/topic/com.ibm.xlcpp8a.doc/language/ref/implicit_conversion_sequences.htm
@@ -95,28 +93,28 @@ bool cpp_typecheck_fargst::match(
     // * User-defined conversion sequences
     // * Ellipsis conversion sequences
 
-    if(i>=arguments.size())
+    if(i >= arguments.size())
     {
       // Ellipsis is the 'worst' of the conversion sequences
-      distance.rank+=1000;
+      distance.rank += 1000;
       continue;
     }
 
-    exprt argument=arguments[i];
+    exprt argument = arguments[i];
 
-    exprt &operand=ops[i];
+    exprt &operand = ops[i];
 
-    #if 0
+#if 0
     // unclear, todo
     if(is_reference(operand.type()))
       std::cout << "O: " << operand.pretty() << std::endl;
 
     assert(!is_reference(operand.type()));
-    #endif
+#endif
 
     // "this" is a special case -- we turn the pointer type
     // into a reference type to do the type matching
-    if(i==0 && argument.cmt_base_name()=="this")
+    if(i == 0 && argument.cmt_base_name() == "this")
     {
       argument.type().set("#reference", true);
       argument.type().set("#this", true);
@@ -127,12 +125,12 @@ bool cpp_typecheck_fargst::match(
 
     // can we do the standard conversion sequence?
     if(cpp_typecheck.implicit_conversion_sequence(
-        operand, argument.type(), new_expr, rank))
+         operand, argument.type(), new_expr, rank))
     {
       operand.swap(new_expr);
 
       // ok
-      distance+=rank;
+      distance += rank;
     }
     else
     {

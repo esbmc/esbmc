@@ -10,276 +10,287 @@
 #include <util/irep2_expr.h>
 #include <util/std_expr.h>
 
-namespace renaming {
+namespace renaming
+{
+struct renaming_levelt
+{
+public:
+  virtual void get_original_name(expr2tc &expr) const = 0;
+  virtual void rename(expr2tc &expr) = 0;
+  virtual void remove(const expr2tc &symbol) = 0;
 
-  struct renaming_levelt
+  virtual void get_ident_name(expr2tc &symbol) const = 0;
+
+  virtual ~renaming_levelt() = default;
+  //  protected:
+  //  XXX: should leave protected enabled, but g++ 5.4 on ubuntu 16.04 does not
+  //  appear to honour the following friend directive?
+  static void get_original_name(expr2tc &expr, symbol2t::renaming_level lev);
+  friend void build_goto_symex_classes();
+};
+
+// level 1 -- function frames
+// this is to preserve locality in case of recursion
+
+struct level1t : public renaming_levelt
+{
+public:
+  struct name_rec_hash;
+  class name_record
   {
   public:
-    virtual void get_original_name(expr2tc &expr) const = 0;
-    virtual void rename(expr2tc &expr) = 0;
-    virtual void remove(const expr2tc &symbol)=0;
+    // Appease boost.python error path
+    name_record() : base_name("")
+    {
+    }
 
-    virtual void get_ident_name(expr2tc &symbol) const=0;
+    name_record(const symbol2t &sym) : base_name(sym.thename)
+    {
+    }
 
-    virtual ~renaming_levelt() = default;
-//  protected:
-//  XXX: should leave protected enabled, but g++ 5.4 on ubuntu 16.04 does not
-//  appear to honour the following friend directive?
-    static void get_original_name(expr2tc &expr, symbol2t::renaming_level lev);
-    friend void build_goto_symex_classes();
+    name_record(const irep_idt &name) : base_name(name)
+    {
+    }
+
+    int compare(const name_record &ref) const
+    {
+      if(base_name.get_no() < ref.base_name.get_no())
+        return -1;
+      if(base_name.get_no() > ref.base_name.get_no())
+        return 1;
+
+      return 0;
+    }
+
+    bool operator<(const name_record &ref) const
+    {
+      if(compare(ref) == -1)
+        return true;
+      return false;
+    }
+
+    bool operator==(const name_record &ref) const
+    {
+      if(compare(ref) == 0)
+        return true;
+      return false;
+    }
+
+    irep_idt base_name;
+
+    friend struct renaming::level1t::name_rec_hash;
   };
 
-  // level 1 -- function frames
-  // this is to preserve locality in case of recursion
+  struct name_rec_hash
+  {
+    size_t operator()(const name_record &ref) const
+    {
+      return ref.base_name.get_no();
+    }
 
-  struct level1t:public renaming_levelt
+    bool operator()(const name_record &ref, const name_record &ref2) const
+    {
+      return ref < ref2;
+    }
+  };
+
+  typedef hash_map_cont<name_record, unsigned, name_rec_hash> current_namest;
+  current_namest current_names;
+  unsigned int thread_id;
+
+  void rename(expr2tc &expr) override;
+  void get_ident_name(expr2tc &symbol) const override;
+  void remove(const expr2tc &symbol) override
+  {
+    current_names.erase(name_record(to_symbol2t(symbol)));
+  }
+
+  void rename(const expr2tc &symbol, unsigned frame)
+  {
+    // Given that this is level1, use base symbol.
+    unsigned &frameno = current_names[name_record(to_symbol2t(symbol))];
+    assert(frameno <= frame);
+    frameno = frame;
+  }
+
+  void get_original_name(expr2tc &expr) const override
+  {
+    renaming_levelt::get_original_name(expr, symbol2t::level0);
+  }
+
+  unsigned int current_number(const irep_idt &name) const;
+
+  level1t() = default;
+  ~level1t() override = default;
+
+  virtual void print(std::ostream &out) const;
+};
+
+// level 2 -- SSA
+
+struct level2t : public renaming_levelt
+{
+protected:
+  virtual void
+  coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned node_id);
+
+public:
+  class name_record
   {
   public:
-    struct name_rec_hash;
-    class name_record {
-    public:
-      // Appease boost.python error path
-      name_record() : base_name("") { }
+    // Appease boost python error paths
+    name_record() = default;
 
-      name_record(const symbol2t &sym) : base_name(sym.thename) { }
-
-      name_record(const irep_idt &name) : base_name(name) { }
-
-      int compare(const name_record &ref) const
-      {
-        if (base_name.get_no() < ref.base_name.get_no())
-          return -1;
-        else if (base_name.get_no() > ref.base_name.get_no())
-          return 1;
-
-        return 0;
-      }
-
-      bool operator<(const name_record &ref) const
-      {
-        if (compare(ref) == -1)
-          return true;
-        return false;
-      }
-
-      bool operator==(const name_record &ref) const
-      {
-        if (compare(ref) == 0)
-          return true;
-        return false;
-      }
-
-      irep_idt base_name;
-
-      friend struct renaming::level1t::name_rec_hash;
-    };
-
-    struct name_rec_hash
+    name_record(const symbol2t &sym)
+      : base_name(sym.thename),
+        lev(sym.rlevel),
+        l1_num(sym.level1_num),
+        t_num(sym.thread_num)
     {
-      size_t operator()(const name_record &ref) const
-      {
-        return ref.base_name.get_no();
-      }
-
-      bool operator()(const name_record &ref, const name_record &ref2) const
-      {
-        return ref < ref2;
-      }
-    };
-
-    typedef hash_map_cont<name_record, unsigned, name_rec_hash> current_namest;
-    current_namest current_names;
-    unsigned int thread_id;
-
-    void rename(expr2tc &expr) override ;
-    void get_ident_name(expr2tc &symbol) const override ;
-    void remove(const expr2tc &symbol) override 
-    {
-      current_names.erase(name_record(to_symbol2t(symbol)));
+      size_t seed = 0;
+      boost::hash_combine(seed, base_name.get_no());
+      boost::hash_combine(seed, (uint8_t)lev);
+      boost::hash_combine(seed, l1_num);
+      boost::hash_combine(seed, t_num);
+      hash = seed;
     }
 
-    void rename(const expr2tc &symbol, unsigned frame)
+    int compare(const name_record &ref) const
     {
-      // Given that this is level1, use base symbol.
-      unsigned &frameno = current_names[name_record(to_symbol2t(symbol))];
-      assert(frameno <= frame);
-      frameno = frame;
+      if(hash < ref.hash)
+        return -1;
+      if(hash > ref.hash)
+        return 1;
+
+      if(base_name < ref.base_name)
+        return -1;
+      if(ref.base_name < base_name)
+        return 1;
+
+      if(lev < ref.lev)
+        return -1;
+      if(lev > ref.lev)
+        return 1;
+
+      if(l1_num < ref.l1_num)
+        return -1;
+      if(l1_num > ref.l1_num)
+        return 1;
+
+      if(t_num < ref.t_num)
+        return -1;
+      if(t_num > ref.t_num)
+        return 1;
+
+      return 0;
     }
 
-    void get_original_name(expr2tc &expr) const override 
+    bool operator<(const name_record &ref) const
     {
-      renaming_levelt::get_original_name(expr, symbol2t::level0);
+      if(compare(ref) == -1)
+        return true;
+      return false;
     }
 
-    unsigned int current_number(const irep_idt &name) const;
+    bool operator==(const name_record &ref) const
+    {
+      if(compare(ref) == 0)
+        return true;
+      return false;
+    }
 
-    level1t() = default;
-    ~level1t() override = default;
+    irep_idt base_name;
+    symbol2t::renaming_level lev;
+    unsigned int l1_num;
+    unsigned int t_num;
 
-    virtual void print(std::ostream &out) const;
+    // Not a part of comparisons etc,
+    size_t hash;
   };
 
-  // level 2 -- SSA
-
-  struct level2t:public renaming_levelt
+  struct name_rec_hash
   {
-  protected:
-    virtual void coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned node_id);
-  public:
-    class name_record {
-    public:
-      // Appease boost python error paths
-      name_record() = default;
-
-      name_record(const symbol2t &sym)
-        : base_name(sym.thename), lev(sym.rlevel), l1_num(sym.level1_num),
-          t_num(sym.thread_num)
-      {
-        size_t seed = 0;
-        boost::hash_combine(seed, base_name.get_no());
-        boost::hash_combine(seed, (uint8_t)lev);
-        boost::hash_combine(seed, l1_num);
-        boost::hash_combine(seed, t_num);
-        hash = seed;
-      }
-
-      int compare(const name_record &ref) const
-      {
-        if (hash < ref.hash)
-          return -1;
-        else if (hash > ref.hash)
-          return 1;
-
-        if (base_name < ref.base_name)
-          return -1;
-        else if (ref.base_name < base_name)
-          return 1;
-
-        if (lev < ref.lev)
-          return -1;
-        else if (lev > ref.lev)
-          return 1;
-
-        if (l1_num < ref.l1_num)
-          return -1;
-        else if (l1_num > ref.l1_num)
-          return 1;
-
-        if (t_num < ref.t_num)
-          return -1;
-        else if (t_num > ref.t_num)
-          return 1;
-
-        return 0;
-      }
-
-      bool operator<(const name_record &ref) const
-      {
-        if (compare(ref) == -1)
-          return true;
-        return false;
-      }
-
-      bool operator==(const name_record &ref) const
-      {
-        if (compare(ref) == 0)
-          return true;
-        return false;
-      }
-
-      irep_idt base_name;
-      symbol2t::renaming_level lev;
-      unsigned int l1_num;
-      unsigned int t_num;
-
-      // Not a part of comparisons etc,
-      size_t hash;
-    };
-
-    struct name_rec_hash
+    size_t operator()(const name_record &ref) const
     {
-      size_t operator()(const name_record &ref) const
-      {
-        return ref.hash;
-      }
-
-      bool operator()(const name_record &ref, const name_record &ref2) const
-      {
-        return ref < ref2;
-      }
-    };
-
-  public:
-    virtual void make_assignment(expr2tc &lhs_symbol,
-                                 const expr2tc &constant_value,
-                                 const expr2tc &assigned_value);
-
-    virtual void rename(expr2tc &expr, bool rename_only = false);
-    virtual void rename(expr2tc &expr, unsigned count)=0;
-
-    void get_ident_name(expr2tc &symbol) const override ;
-
-    void remove(const expr2tc &symbol) override 
-    {
-        current_names.erase(name_record(to_symbol2t(symbol)));
+      return ref.hash;
     }
 
-    void remove(const name_record &rec)
+    bool operator()(const name_record &ref, const name_record &ref2) const
     {
-      current_names.erase(rec);
+      return ref < ref2;
     }
-
-    void get_original_name(expr2tc &expr) const override 
-    {
-      renaming_levelt::get_original_name(expr, symbol2t::level1);
-    }
-
-    struct valuet
-    {
-      unsigned count;
-      expr2tc constant;
-      unsigned node_id;
-      valuet():
-        count(0),
-        node_id(0)
-      {
-      }
-    };
-
-    void get_variables(std::set<name_record> &vars) const
-    {
-      for(const auto & current_name : current_names)
-      {
-        vars.insert(current_name.first);
-      }
-    }
-
-    unsigned current_number(const expr2tc &sym) const;
-    unsigned current_number(const name_record &rec) const;
-
-    // static method to rename a (l0) variable to the l1 number record specified
-    // in the given name_record. The use case for this is phi_function, where
-    // we have a handle on name_record's identifying the storage variable that
-    // we want to assign to, but lack the ability to address it as a symbol.
-    // In that case (or any similar) we need a facility independent of a
-    // specific level2t object.
-    static void rename_to_record(expr2tc &sym, const name_record &rec);
-
-    level2t() = default;
-    ~level2t() override = default;
-    virtual boost::shared_ptr<level2t> clone() const = 0;
-
-    virtual void print(std::ostream &out) const;
-    virtual void dump() const;
-
-    friend void build_goto_symex_classes();
-    // Repeat of the above ignored friend directive.
-    typedef hash_map_cont<name_record, valuet, name_rec_hash> current_namest;
-
-    current_namest current_names;
-    typedef std::map<const expr2tc, crypto_hash> current_state_hashest;
-    current_state_hashest current_hashes;
   };
+
+public:
+  virtual void make_assignment(
+    expr2tc &lhs_symbol,
+    const expr2tc &constant_value,
+    const expr2tc &assigned_value);
+
+  void rename(expr2tc &expr) override;
+  virtual void rename(expr2tc &expr, unsigned count) = 0;
+
+  void get_ident_name(expr2tc &symbol) const override;
+
+  void remove(const expr2tc &symbol) override
+  {
+    current_names.erase(name_record(to_symbol2t(symbol)));
+  }
+
+  void remove(const name_record &rec)
+  {
+    current_names.erase(rec);
+  }
+
+  void get_original_name(expr2tc &expr) const override
+  {
+    renaming_levelt::get_original_name(expr, symbol2t::level1);
+  }
+
+  struct valuet
+  {
+    unsigned count;
+    expr2tc constant;
+    unsigned node_id;
+    valuet() : count(0), node_id(0)
+    {
+    }
+  };
+
+  void get_variables(std::set<name_record> &vars) const
+  {
+    for(const auto &current_name : current_names)
+    {
+      vars.insert(current_name.first);
+    }
+  }
+
+  unsigned current_number(const expr2tc &sym) const;
+  unsigned current_number(const name_record &rec) const;
+
+  // static method to rename a (l0) variable to the l1 number record specified
+  // in the given name_record. The use case for this is phi_function, where
+  // we have a handle on name_record's identifying the storage variable that
+  // we want to assign to, but lack the ability to address it as a symbol.
+  // In that case (or any similar) we need a facility independent of a
+  // specific level2t object.
+  static void rename_to_record(expr2tc &sym, const name_record &rec);
+
+  level2t() = default;
+  ~level2t() override = default;
+  virtual boost::shared_ptr<level2t> clone() const = 0;
+
+  virtual void print(std::ostream &out) const;
+  virtual void dump() const;
+
+  friend void build_goto_symex_classes();
+  // Repeat of the above ignored friend directive.
+  typedef hash_map_cont<name_record, valuet, name_rec_hash> current_namest;
+
+  current_namest current_names;
+  typedef std::map<const expr2tc, crypto_hash> current_state_hashest;
+  current_state_hashest current_hashes;
+};
 
 } // namespace renaming
 

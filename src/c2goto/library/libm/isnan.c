@@ -1,26 +1,24 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
 #undef isnan
-#undef __isnan
 
-#undef isnanf
-#undef __isnanf
+#define isnan_def(type, name, isnan_func)                                      \
+  int name(type f)                                                             \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return isnan_func(f);                                                      \
+  }                                                                            \
+                                                                               \
+  int __##name(type f)                                                         \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(f);                                                            \
+  }
 
-#undef isnanl
-#undef __isnanl
+isnan_def(float, isnanf, __ESBMC_isnanf);
+isnan_def(double, isnan, __ESBMC_isnand);
+isnan_def(long double, isnanl, __ESBMC_isnanld);
 
-inline int isnan(double d) { return __ESBMC_isnand(d); }
-
-inline int __isnan(double d) { return __ESBMC_isnand(d); }
-
-inline int isnanf(float f) { return __ESBMC_isnanf(f); }
-
-inline int __isnanf(float f) { return __ESBMC_isnanf(f); }
-
-inline int isnanl(long double ld) { return __ESBMC_isnanld(ld); }
-
-inline int __isnanl(long double ld) { return __ESBMC_isnanld(ld); }
-
+#undef isnan_def

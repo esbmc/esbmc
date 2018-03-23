@@ -95,8 +95,8 @@ public:
    *  Return current execution_statet being explored / symex'd.
    *  @return Current execution_statet being explored.
    */
-  execution_statet & get_cur_state();
-  const execution_statet & get_cur_state() const;
+  execution_statet &get_cur_state();
+  const execution_statet &get_cur_state() const;
 
   /**
    *  Walks back to an unexplored context switch.
@@ -258,15 +258,19 @@ public:
    *  re-reached through symbolic execution. Not going to document it until I
    *  know that it works.
    */
-  class dfs_position {
-public:
+  class dfs_position
+  {
+  public:
     dfs_position(const reachability_treet &rt);
-    dfs_position(const std::string&& filename);
-    bool write_to_file(const std::string&& filename) const;
-protected:
-    bool read_from_file(const std::string&& filename);
-public:
-    struct dfs_state {
+    dfs_position(const std::string &&filename);
+    bool write_to_file(const std::string &&filename) const;
+
+  protected:
+    bool read_from_file(const std::string &&filename);
+
+  public:
+    struct dfs_state
+    {
       unsigned int location_number;
       unsigned int num_threads;
       unsigned int cur_thread;
@@ -275,14 +279,16 @@ public:
 
     static const uint32_t file_magic;
 
-    struct file_hdr {
+    struct file_hdr
+    {
       uint32_t magic;
       uint32_t checksum;
       uint32_t num_states;
       uint32_t num_ileaves;
     };
 
-    struct file_entry {
+    struct file_entry
+    {
       uint32_t location_number;
       uint16_t num_threads;
       uint16_t cur_thread;
@@ -312,7 +318,7 @@ public:
    *  Save RT reachability state to file.
    *  @param fname Name of file to save to.
    */
-  void save_checkpoint(const std::string&& fname) const;
+  void save_checkpoint(const std::string &&fname) const;
 
   /** GOTO functions we're operating over. */
   const goto_functionst &goto_functions;
@@ -362,7 +368,7 @@ protected:
   /** Whether partial-order-reduction is enabled */
   bool por;
   /** Set of state hashes we've discovered */
-  std::set<crypto_hash>hit_hashes;
+  std::set<crypto_hash> hit_hashes;
   /** Message handler reference. */
   message_handlert &message_handler;
   /** Flag as to whether we're picking interleaving directions explicitly.

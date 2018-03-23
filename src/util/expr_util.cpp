@@ -21,65 +21,64 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
 {
   exprt result;
 
-  const std::string type_id=type.id_string();
+  const std::string type_id = type.id_string();
 
-  result=exprt("constant", type);
+  result = exprt("constant", type);
 
-  if(type_id=="complex")
+  if(type_id == "complex")
   {
     result.value("0");
   }
-  else if(type_id=="unsignedbv" ||
-          type_id=="signedbv" ||
-          type_id=="floatbv" ||
-          type_id=="fixedbv" ||
-          type_id=="c_enum")
+  else if(
+    type_id == "unsignedbv" || type_id == "signedbv" || type_id == "floatbv" ||
+    type_id == "fixedbv" || type_id == "c_enum")
   {
     std::string value;
-    unsigned width=bv_width(type);
+    unsigned width = bv_width(type);
 
-    for(unsigned i=0; i<width; i++)
-      value+='0';
+    for(unsigned i = 0; i < width; i++)
+      value += '0';
 
     result.value(value);
   }
-  else if(type_id=="bool")
+  else if(type_id == "bool")
   {
     result.make_false();
   }
-  else if(type_id=="pointer")
+  else if(type_id == "pointer")
   {
     result.value("NULL");
   }
-  else if(type_id=="struct")
+  else if(type_id == "struct")
   {
-    result=struct_exprt(type);
+    result = struct_exprt(type);
     for(auto const &comp : to_struct_type(type).components())
       result.copy_to_operands(gen_zero(comp.type(), array_as_array_of));
   }
-  else if(type_id=="array")
+  else if(type_id == "array")
   {
     if(array_as_array_of)
     {
-      result = array_of_exprt(gen_zero(type.subtype(), array_as_array_of), type);
+      result =
+        array_of_exprt(gen_zero(type.subtype(), array_as_array_of), type);
     }
     else
     {
       array_typet arr_type = to_array_type(type);
 
       mp_integer size = string2integer(arr_type.size().value().as_string(), 2);
-      for(uint64_t i=0; i < size.to_uint64(); i++)
+      for(uint64_t i = 0; i < size.to_uint64(); i++)
         result.copy_to_operands(gen_zero(type.subtype(), array_as_array_of));
     }
   }
-  else if(type_id=="union")
+  else if(type_id == "union")
   {
     union_exprt new_result(type);
     new_result.set_component_name(
       to_union_type(type).components().begin()->name());
 
-    new_result.copy_to_operands(
-      gen_zero(to_union_type(type).components().begin()->type(), array_as_array_of));
+    new_result.copy_to_operands(gen_zero(
+      to_union_type(type).components().begin()->type(), array_as_array_of));
 
     result = new_result;
   }
@@ -91,36 +90,34 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
 
 exprt gen_one(const typet &type)
 {
-  const std::string &type_id=type.id_string();
-  exprt result=exprt("constant", type);
+  const std::string &type_id = type.id_string();
+  exprt result = exprt("constant", type);
 
-  if(type_id=="bool" ||
-     type_id=="complex")
+  if(type_id == "bool" || type_id == "complex")
   {
     result.value("1");
   }
-  else if(type_id=="unsignedbv" ||
-          type_id=="signedbv")
+  else if(type_id == "unsignedbv" || type_id == "signedbv")
   {
     std::string value;
-    for(int i=0; i<atoi(type.width().c_str())-1; i++)
-      value+='0';
-    value+='1';
+    for(int i = 0; i < atoi(type.width().c_str()) - 1; i++)
+      value += '0';
+    value += '1';
     result.value(value);
   }
-  else if(type_id=="fixedbv")
+  else if(type_id == "fixedbv")
   {
     fixedbvt fixedbv;
-    fixedbv.spec=to_fixedbv_type(type);
+    fixedbv.spec = to_fixedbv_type(type);
     fixedbv.from_integer(1);
-    result=fixedbv.to_expr();
+    result = fixedbv.to_expr();
   }
-  else if(type_id=="floatbv")
+  else if(type_id == "floatbv")
   {
     ieee_floatt ieee_float;
-    ieee_float.spec=to_floatbv_type(type);
+    ieee_float.spec = to_floatbv_type(type);
     ieee_float.from_integer(1);
-    result=ieee_float.to_expr();
+    result = ieee_float.to_expr();
   }
   else
     result.make_nil();
@@ -140,14 +137,22 @@ exprt gen_unary(const std::string &id, const typet &type, const exprt &op)
   return result;
 }
 
-exprt gen_binary(const std::string &id, const typet &type, const exprt &op1, const exprt &op2)
+exprt gen_binary(
+  const std::string &id,
+  const typet &type,
+  const exprt &op1,
+  const exprt &op2)
 {
   exprt result(id, type);
   result.copy_to_operands(op1, op2);
   return result;
 }
 
-exprt gen_binary(irep_idt &id, const typet &type, const exprt &op1, const exprt &op2)
+exprt gen_binary(
+  irep_idt &id,
+  const typet &type,
+  const exprt &op1,
+  const exprt &op2)
 {
   exprt result(id, type);
   result.copy_to_operands(op1, op2);
@@ -185,14 +190,14 @@ exprt gen_implies(const exprt &op1, const exprt &op2)
 
 void gen_binary(exprt &expr, const std::string &id, bool default_value)
 {
-  if(expr.operands().size()==0)
+  if(expr.operands().size() == 0)
   {
     if(default_value)
       expr.make_true();
     else
       expr.make_false();
   }
-  else if(expr.operands().size()==1)
+  else if(expr.operands().size() == 1)
   {
     exprt tmp;
     tmp.swap(expr.op0());
@@ -201,7 +206,7 @@ void gen_binary(exprt &expr, const std::string &id, bool default_value)
   else
   {
     expr.id(id);
-    expr.type()=typet("bool");
+    expr.type() = typet("bool");
   }
 }
 
@@ -225,7 +230,7 @@ exprt symbol_expr(const symbolt &symbol)
 pointer_typet gen_pointer_type(const typet &subtype)
 {
   pointer_typet tmp;
-  tmp.subtype()=subtype;
+  tmp.subtype() = subtype;
   return tmp;
 }
 
@@ -241,25 +246,26 @@ void make_next_state(exprt &expr)
   Forall_operands(it, expr)
     make_next_state(*it);
 
-  if(expr.id()=="symbol")
+  if(expr.id() == "symbol")
     expr.id("next_symbol");
 }
 
 exprt make_binary(const exprt &expr)
 {
-  const exprt::operandst &operands=expr.operands();
+  const exprt::operandst &operands = expr.operands();
 
-  if(operands.size()<=2) return expr;
+  if(operands.size() <= 2)
+    return expr;
 
-  exprt previous=operands[0];
+  exprt previous = operands[0];
 
-  for(unsigned i=1; i<operands.size(); i++)
+  for(unsigned i = 1; i < operands.size(); i++)
   {
-    exprt tmp=expr;
+    exprt tmp = expr;
     tmp.operands().clear();
     tmp.operands().resize(2);
     tmp.op0().swap(previous);
-    tmp.op1()=operands[i];
+    tmp.op1() = operands[i];
     previous.swap(tmp);
   }
 

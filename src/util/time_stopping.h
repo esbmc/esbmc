@@ -20,4 +20,3 @@ void output_time(const fine_timet &fine_time, std::ostream &out);
 std::string time2string(const fine_timet &fine_time);
 
 #endif
-

@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-slice --context-bound 4
+^VERIFICATION FAILED$

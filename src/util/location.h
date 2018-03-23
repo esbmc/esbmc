@@ -11,11 +11,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/irep.h>
 
-class locationt:public irept
+class locationt : public irept
 {
 public:
   std::string as_string() const;
-  
+
   const irep_idt &get_file() const
   {
     return file();
@@ -65,9 +65,8 @@ public:
   {
     this->function(function);
   }
-
 };
 
-std::ostream &operator <<(std::ostream &out, const locationt &location);
+std::ostream &operator<<(std::ostream &out, const locationt &location);
 
 #endif

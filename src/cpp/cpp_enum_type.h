@@ -13,10 +13,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/config.h>
 #include <util/type.h>
 
-class cpp_enum_typet:public typet
+class cpp_enum_typet : public typet
 {
 public:
-  cpp_enum_typet():typet("c_enum")
+  cpp_enum_typet() : typet("c_enum")
   {
     set("width", config.ansi_c.int_width);
   }
@@ -54,13 +54,13 @@ public:
 
 extern inline const cpp_enum_typet &to_cpp_enum_type(const irept &irep)
 {
-  assert(irep.id()=="c_enum");
+  assert(irep.id() == "c_enum");
   return static_cast<const cpp_enum_typet &>(irep);
 }
 
 extern inline cpp_enum_typet &to_cpp_enum_type(irept &irep)
 {
-  assert(irep.id()=="c_enum");
+  assert(irep.id() == "c_enum");
   return static_cast<cpp_enum_typet &>(irep);
 }
 

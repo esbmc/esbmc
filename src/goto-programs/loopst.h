@@ -13,9 +13,9 @@
 class loopst
 {
 public:
-  loopst(contextt &_context) :
-    context(_context)
-  {}
+  loopst(contextt &_context) : context(_context), size(0)
+  {
+  }
 
   typedef hash_set_cont<expr2tc, irep2_hash> loop_varst;
 
@@ -32,11 +32,6 @@ public:
 
   void dump();
   void dump_loop_vars();
-
-  std::size_t get_size() const
-  {
-    return size;
-  }
 
   void set_size(std::size_t size)
   {

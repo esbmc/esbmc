@@ -9,50 +9,55 @@ Author: CM Wintersteiger
 #include <cctype>
 #include <goto-programs/format_strings.h>
 
-void parse_flags(
-  std::string::const_iterator &it,
-  format_tokent &curtok)
+void parse_flags(std::string::const_iterator &it, format_tokent &curtok)
 {
-  while(*it=='#' || *it=='0' ||
-        *it=='-' || *it==' ' || *it=='+')
+  while(*it == '#' || *it == '0' || *it == '-' || *it == ' ' || *it == '+')
   {
     switch(*it)
     {
-      case '#': curtok.flags.push_back(format_tokent::ALTERNATE); break;
-      case '0': curtok.flags.push_back(format_tokent::ZERO_PAD); break;
-      case '-': curtok.flags.push_back(format_tokent::LEFT_ADJUST); break;
-      case ' ': curtok.flags.push_back(format_tokent::SIGNED_SPACE); break;
-      case '+': curtok.flags.push_back(format_tokent::SIGN); break;
-      default: throw 0;
+    case '#':
+      curtok.flags.push_back(format_tokent::ALTERNATE);
+      break;
+    case '0':
+      curtok.flags.push_back(format_tokent::ZERO_PAD);
+      break;
+    case '-':
+      curtok.flags.push_back(format_tokent::LEFT_ADJUST);
+      break;
+    case ' ':
+      curtok.flags.push_back(format_tokent::SIGNED_SPACE);
+      break;
+    case '+':
+      curtok.flags.push_back(format_tokent::SIGN);
+      break;
+    default:
+      throw 0;
     }
     it++;
   }
 }
 
-void parse_field_width(
-  std::string::const_iterator &it,
-  format_tokent &curtok)
+void parse_field_width(std::string::const_iterator &it, format_tokent &curtok)
 {
-  if(*it=='*')
+  if(*it == '*')
   {
     curtok.flags.push_back(format_tokent::ASTERISK);
     it++;
   }
 
   std::string tmp;
-  for(;isdigit(*it); it++) tmp+=*it;
-  curtok.field_width=string2integer(tmp);
+  for(; isdigit(*it); it++)
+    tmp += *it;
+  curtok.field_width = string2integer(tmp);
 }
 
-void parse_precision(
-  std::string::const_iterator &it,
-  format_tokent &curtok)
+void parse_precision(std::string::const_iterator &it, format_tokent &curtok)
 {
-  if(*it=='.')
+  if(*it == '.')
   {
     it++;
 
-    if(*it=='*')
+    if(*it == '*')
     {
       curtok.flags.push_back(format_tokent::ASTERISK);
       it++;
@@ -60,8 +65,9 @@ void parse_precision(
     else
     {
       std::string tmp;
-      for(;isdigit(*it); it++) tmp+=*it;
-      curtok.precision=string2integer(tmp);
+      for(; isdigit(*it); it++)
+        tmp += *it;
+      curtok.precision = string2integer(tmp);
     }
   }
 }
@@ -70,29 +76,31 @@ void parse_length_modifier(
   std::string::const_iterator &it,
   format_tokent &curtok)
 {
-  if(*it=='h')
+  if(*it == 'h')
   {
     it++;
-    if(*it=='h') it++;
+    if(*it == 'h')
+      it++;
     curtok.length_modifier = format_tokent::LEN_h;
   }
-  else if(*it=='l')
+  else if(*it == 'l')
   {
     it++;
-    if(*it=='l') it++;
+    if(*it == 'l')
+      it++;
     curtok.length_modifier = format_tokent::LEN_l;
   }
-  else if(*it=='L')
+  else if(*it == 'L')
   {
     it++;
     curtok.length_modifier = format_tokent::LEN_L;
   }
-  else if(*it=='j')
+  else if(*it == 'j')
   {
     it++;
     curtok.length_modifier = format_tokent::LEN_j;
   }
-  else if(*it=='t')
+  else if(*it == 't')
   {
     it++;
     curtok.length_modifier = format_tokent::LEN_L;
@@ -106,45 +114,71 @@ void parse_conversion_specifier(
 {
   switch(*it)
   {
-    case 'd':
-    case 'i': curtok.type=format_tokent::SIGNED_DEC; break;
-    case 'o': curtok.type=format_tokent::UNSIGNED_OCT; break;
-    case 'u': curtok.type=format_tokent::UNSIGNED_DEC; break;
-    case 'x':
-    case 'X': curtok.type=format_tokent::UNSIGNED_HEX; break;
-    case 'e':
-    case 'E': curtok.type=format_tokent::DOUBLE_ENG; break;
-    case 'f':
-    case 'F': curtok.type=format_tokent::DOUBLE; break;
-    case 'g':
-    case 'G': curtok.type=format_tokent::DOUBLE_G; break;
-    case 'a':
-    case 'A': curtok.type=format_tokent::DOUBLE_HEX; break;
-    case 'c': curtok.type=format_tokent::CHAR; break;
-    case 's': curtok.type=format_tokent::STRING; break;
-    case 'p': curtok.type=format_tokent::POINTER; break;
-    case '%': curtok.type=format_tokent::PERCENT; break;
-    case '[': // pattern matching in, e.g., fscanf.
+  case 'd':
+  case 'i':
+    curtok.type = format_tokent::SIGNED_DEC;
+    break;
+  case 'o':
+    curtok.type = format_tokent::UNSIGNED_OCT;
+    break;
+  case 'u':
+    curtok.type = format_tokent::UNSIGNED_DEC;
+    break;
+  case 'x':
+  case 'X':
+    curtok.type = format_tokent::UNSIGNED_HEX;
+    break;
+  case 'e':
+  case 'E':
+    curtok.type = format_tokent::DOUBLE_ENG;
+    break;
+  case 'f':
+  case 'F':
+    curtok.type = format_tokent::DOUBLE;
+    break;
+  case 'g':
+  case 'G':
+    curtok.type = format_tokent::DOUBLE_G;
+    break;
+  case 'a':
+  case 'A':
+    curtok.type = format_tokent::DOUBLE_HEX;
+    break;
+  case 'c':
+    curtok.type = format_tokent::CHAR;
+    break;
+  case 's':
+    curtok.type = format_tokent::STRING;
+    break;
+  case 'p':
+    curtok.type = format_tokent::POINTER;
+    break;
+  case '%':
+    curtok.type = format_tokent::PERCENT;
+    break;
+  case '[': // pattern matching in, e.g., fscanf.
+  {
+    std::string tmp;
+    it++;
+    if(*it == '^') // if it's there, it must be first
     {
-      std::string tmp;
+      tmp += '^';
       it++;
-      if(*it=='^') // if it's there, it must be first
+      if(*it == ']') // if it's there, it must be here
       {
-        tmp+='^'; it++;
-        if(*it==']') // if it's there, it must be here
-        {
-          tmp+=']'; it++;
-        }
+        tmp += ']';
+        it++;
       }
-
-      for(;it!=arg_string.end() && *it!=']'; it++)
-        tmp+=*it;
-
-      break;
     }
 
-    default: throw std::string("unsupported format conversion specifier: `") +
-                               *it + "'";
+    for(; it != arg_string.end() && *it != ']'; it++)
+      tmp += *it;
+
+    break;
+  }
+
+  default:
+    throw std::string("unsupported format conversion specifier: `") + *it + "'";
   }
   it++;
 }
@@ -155,18 +189,18 @@ bool parse_format_string(
 {
   token_list.clear();
 
-  if(format_arg.id()=="string-constant")
+  if(format_arg.id() == "string-constant")
   {
     const std::string &arg_string = format_arg.value().as_string();
 
-    std::string::const_iterator it=arg_string.begin();
+    std::string::const_iterator it = arg_string.begin();
 
-    while(it!=arg_string.end())
+    while(it != arg_string.end())
     {
-      if(*it=='%')
+      if(*it == '%')
       {
         token_list.push_back(format_tokent());
-        format_tokent &curtok=token_list.back();
+        format_tokent &curtok = token_list.back();
         it++;
 
         parse_flags(it, curtok);
@@ -177,14 +211,14 @@ bool parse_format_string(
       }
       else
       {
-        if(token_list.back().type!=format_tokent::TEXT)
+        if(token_list.back().type != format_tokent::TEXT)
           token_list.push_back(format_tokent(format_tokent::TEXT));
 
         std::string tmp;
-        for(;it!=arg_string.end() && *it!='%';it++)
-          tmp+=*it;
+        for(; it != arg_string.end() && *it != '%'; it++)
+          tmp += *it;
 
-        token_list.back().value=tmp;
+        token_list.back().value = tmp;
       }
     }
 

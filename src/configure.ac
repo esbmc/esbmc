@@ -553,7 +553,7 @@ AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
 AC_SUBST([ESBMC_SOLVER_LIBS], "$ESBMC_SOLVER_LIBS")
 
-AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-c-frontend/headers/Makefile clang-c-frontend/AST/Makefile clang-cpp-frontend/Makefile c2goto/headers/Makefile c2goto/Makefile esbmc/Makefile solvers/solver_config.h esbmc/version.h])
+AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/smt/tuple/Makefile solvers/smt/fp/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-c-frontend/headers/Makefile clang-c-frontend/AST/Makefile clang-cpp-frontend/Makefile c2goto/headers/Makefile c2goto/Makefile esbmc/Makefile solvers/solver_config.h esbmc/version.h])
 AC_OUTPUT
 
 AS_ECHO(["----------------------------------------"])

@@ -12,8 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/irep2.h>
 #include <util/namespace.h>
 
-void default_replace_dynamic_allocation(
-  const namespacet &ns,
-  expr2tc &expr);
+void default_replace_dynamic_allocation(const namespacet &ns, expr2tc &expr);
 
 #endif

@@ -1,0 +1,4 @@
+CORE
+spin2003.c
+--unwind 1 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

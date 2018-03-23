@@ -27,13 +27,13 @@ public:
     goto_functionst &_goto_functions,
     goto_functiont &_goto_function,
     contextt &_context,
-    message_handlert &_message_handler) :
-    goto_loopst(
-      _context,
-      _function_name,
-      _goto_functions,
-      _goto_function,
-      _message_handler)
+    message_handlert &_message_handler)
+    : goto_loopst(
+        _context,
+        _function_name,
+        _goto_functions,
+        _goto_function,
+        _message_handler)
   {
     // unwind loops
     if(function_loops.size())
@@ -49,9 +49,8 @@ protected:
     goto_programt::targett &loop_head,
     goto_programt::targett &loop_exit);
 
-  void make_nondet_assign(
-    goto_programt::targett &loop_head,
-    const loopst &loop);
+  void
+  make_nondet_assign(goto_programt::targett &loop_head, const loopst &loop);
 
   void assume_loop_cond_before_loop(
     goto_programt::targett &loop_head,

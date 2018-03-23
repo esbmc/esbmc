@@ -21,7 +21,7 @@ void get_new_name(irep_idt &new_name, const namespacet &ns)
   if(ns.lookup(new_name, symbol))
     return;
 
-  std::string prefix=id2string(new_name)+"_";
+  std::string prefix = id2string(new_name) + "_";
 
-  new_name=prefix+i2string(ns.get_max(prefix)+1);
+  new_name = prefix + i2string(ns.get_max(prefix) + 1);
 }

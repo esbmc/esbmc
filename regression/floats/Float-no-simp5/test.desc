@@ -1,3 +1,3 @@
 main.c
 --floatbv --no-simplify
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESSFUL$

@@ -6,74 +6,70 @@
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
 #include <boost/python.hpp>
 
-class dummy_goto_class { };
+class dummy_goto_class
+{
+};
 
-static bool
-insn_lt(const goto_programt::instructiont &i1, const goto_programt::instructiont &i2)
+static bool insn_lt(
+  const goto_programt::instructiont &i1,
+  const goto_programt::instructiont &i2)
 {
   return i1.location_number < i2.location_number;
 }
 
-boost::python::object
-get_instructions(const goto_programt &prog)
+boost::python::object get_instructions(const goto_programt &prog)
 {
   using namespace boost::python;
 
   list l;
 
-  auto listappend = [](list &li, object &o) {
-    li.append(o);
-  };
+  auto listappend = [](list &li, object &o) { li.append(o); };
 
-  auto setattr = [](object &o, object &target) {
-    o.attr("target") = target;
-  };
+  auto setattr = [](object &o, object &target) { o.attr("target") = target; };
 
-  auto setnone = [](object &o) {
-    o.attr("target") = object();
-  };
+  auto setnone = [](object &o) { o.attr("target") = object(); };
 
-  prog.extract_instructions
-    <list, decltype(listappend), object, decltype(setattr), decltype(setnone)>
-    (l, listappend, setattr, setnone);
+  prog.extract_instructions<
+    list,
+    decltype(listappend),
+    object,
+    decltype(setattr),
+    decltype(setnone)>(l, listappend, setattr, setnone);
 
   return l;
 }
 
-void
-set_instructions(goto_programt &prog, boost::python::object o)
+void set_instructions(goto_programt &prog, boost::python::object o)
 {
   using namespace boost::python;
 
   list pylist = extract<list>(o);
 
-  auto fetchelem = [](list &li, unsigned int idx) {
-    return li[idx];
-  };
+  auto fetchelem = [](list &li, unsigned int idx) { return li[idx]; };
 
   auto elemtoinsn = [](object &o) {
     goto_programt::instructiont insn = extract<goto_programt::instructiont>(o);
     return insn;
   };
 
-  auto getattr = [](object &o) {
-    return o.attr("target");
-  };
+  auto getattr = [](object &o) { return o.attr("target"); };
 
-  auto isattrnil = [](object &&o) {
-    return o.is_none();
-  };
+  auto isattrnil = [](object &&o) { return o.is_none(); };
 
-  prog.inject_instructions
-    <list, object, decltype(fetchelem), decltype(elemtoinsn), decltype(getattr), decltype(isattrnil)>
-    (pylist, len(pylist), fetchelem, elemtoinsn, getattr, isattrnil);
+  prog.inject_instructions<
+    list,
+    object,
+    decltype(fetchelem),
+    decltype(elemtoinsn),
+    decltype(getattr),
+    decltype(isattrnil)>(
+    pylist, len(pylist), fetchelem, elemtoinsn, getattr, isattrnil);
   return;
 }
 
 extern namespacet *pythonctx_ns;
 
-std::string
-prog_to_string(const goto_programt &prog)
+std::string prog_to_string(const goto_programt &prog)
 {
   std::stringstream ss;
   assert(pythonctx_ns != NULL);
@@ -81,9 +77,9 @@ prog_to_string(const goto_programt &prog)
   return ss.str();
 }
 
-std::string
-insn_to_string(const goto_programt::instructiont &insn,
-    bool show_location = true)
+std::string insn_to_string(
+  const goto_programt::instructiont &insn,
+  bool show_location = true)
 {
   // Stuff this insn in a list and feed it to output_instruction.
   goto_programt::instructionst list;
@@ -96,8 +92,7 @@ insn_to_string(const goto_programt::instructiont &insn,
   return ss.str();
 }
 
-void
-build_goto_func_class()
+void build_goto_func_class()
 {
   using namespace boost::python;
 
@@ -124,7 +119,9 @@ build_goto_func_class()
     .def_readwrite("inlined_funcs", &goto_functiont::inlined_funcs);
 
   enum_<goto_program_instruction_typet>("goto_program_instruction_type")
-    .value("NO_INSTRUCTION_TYPE", goto_program_instruction_typet::NO_INSTRUCTION_TYPE)
+    .value(
+      "NO_INSTRUCTION_TYPE",
+      goto_program_instruction_typet::NO_INSTRUCTION_TYPE)
     .value("GOTO", goto_program_instruction_typet::GOTO)
     .value("ASSUME", goto_program_instruction_typet::ASSUME)
     .value("ASSERT", goto_program_instruction_typet::ASSERT)
@@ -157,10 +154,13 @@ build_goto_func_class()
     .def_readwrite("location_number", &insnt::location_number)
     .def_readwrite("loop_number", &insnt::loop_number)
     .def_readwrite("target_number", &insnt::target_number)
-  // No access here to the 'targets' field, see below.
-    .def("to_string", &insn_to_string, (arg("this"), arg("show_location")=false))
-    .def("clear", &insnt::clear, (arg("this"),
-                            arg("type")=goto_program_instruction_typet::SKIP))
+    // No access here to the 'targets' field, see below.
+    .def(
+      "to_string", &insn_to_string, (arg("this"), arg("show_location") = false))
+    .def(
+      "clear",
+      &insnt::clear,
+      (arg("this"), arg("type") = goto_program_instruction_typet::SKIP))
     .def("is_goto", &insnt::is_goto)
     .def("is_return", &insnt::is_return)
     .def("is_assign", &insnt::is_assign)

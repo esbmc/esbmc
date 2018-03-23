@@ -1,9 +1,6 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
-
-#undef atan
 
 static double _atan(double f, int n)
 {
@@ -15,9 +12,9 @@ static double _atan(double f, int n)
   double q1 = 0.861573495971302425e2;
   double q2 = 0.595784361425973445e2;
   double q3 = 0.150240011600285761e2;
-  double root_eps = 0.372529029846191406e-8;        /* 2**-(t/2), t = 56    */
+  double root_eps = 0.372529029846191406e-8; /* 2**-(t/2), t = 56    */
 
-  double a[] = {0.0, M_PI/6, M_PI_2, M_PI/3};
+  double a[] = {0.0, M_PI / 6, M_PI_2, M_PI / 3};
 
   double g, q, r;
 
@@ -40,6 +37,7 @@ static double _atan(double f, int n)
 
 double atan(double x)
 {
+__ESBMC_HIDE:;
   double a;
 
   a = x < 0.0 ? -x : x;
@@ -50,3 +48,40 @@ double atan(double x)
   return (x < 0.0 ? -a : a);
 }
 
+double atan2(double v, double u)
+{
+__ESBMC_HIDE:;
+  double au, av, f;
+
+  av = v < 0.0 ? -v : v;
+  au = u < 0.0 ? -u : u;
+  if(u != 0.0)
+  {
+    if(av > au)
+    {
+      if((f = au / av) == 0.0)
+        f = M_PI_2;
+      else
+        f = _atan(f, 2);
+    }
+    else
+    {
+      if((f = av / au) == 0.0)
+        f = 0.0;
+      else
+        f = _atan(f, 0);
+    }
+  }
+  else
+  {
+    if(v != 0)
+      f = M_PI_2;
+    else
+    {
+      f = 0.0;
+    }
+  }
+  if(u < 0.0)
+    f = M_PI - f;
+  return (v < 0.0 ? -f : f);
+}

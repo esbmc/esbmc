@@ -5,7 +5,8 @@
 // SAT bitblaster. I anticipate that nothing else actually needs to use this
 // interface, except perhaps sat solvers that have non-cnf inputs.
 
-class sat_iface {
+class sat_iface
+{
 public:
   virtual void lcnf(const bvt &bv) = 0;
   virtual literalt lnot(literalt a) = 0;

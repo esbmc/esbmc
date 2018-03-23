@@ -15,17 +15,17 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void exprt::move_to_operands(exprt &expr)
 {
-  operandst &op=operands();
+  operandst &op = operands();
   op.push_back(static_cast<const exprt &>(get_nil_irep()));
   op.back().swap(expr);
 }
 
 void exprt::move_to_operands(exprt &e1, exprt &e2)
 {
-  operandst &op=operands();
-  #ifndef USE_LIST
-  op.reserve(op.size()+2);
-  #endif
+  operandst &op = operands();
+#ifndef USE_LIST
+  op.reserve(op.size() + 2);
+#endif
   op.push_back(static_cast<const exprt &>(get_nil_irep()));
   op.back().swap(e1);
   op.push_back(static_cast<const exprt &>(get_nil_irep()));
@@ -34,10 +34,10 @@ void exprt::move_to_operands(exprt &e1, exprt &e2)
 
 void exprt::move_to_operands(exprt &e1, exprt &e2, exprt &e3)
 {
-  operandst &op=operands();
-  #ifndef USE_LIST
-  op.reserve(op.size()+3);
-  #endif
+  operandst &op = operands();
+#ifndef USE_LIST
+  op.reserve(op.size() + 3);
+#endif
   op.push_back(static_cast<const exprt &>(get_nil_irep()));
   op.back().swap(e1);
   op.push_back(static_cast<const exprt &>(get_nil_irep()));
@@ -53,21 +53,20 @@ void exprt::copy_to_operands(const exprt &expr)
 
 void exprt::copy_to_operands(const exprt &e1, const exprt &e2)
 {
-  operandst &op=operands();
-  #ifndef USE_LIST
-  op.reserve(op.size()+2);
-  #endif
+  operandst &op = operands();
+#ifndef USE_LIST
+  op.reserve(op.size() + 2);
+#endif
   op.push_back(e1);
   op.push_back(e2);
 }
 
-void exprt::copy_to_operands(const exprt &e1, const exprt &e2,
-                             const exprt &e3)
+void exprt::copy_to_operands(const exprt &e1, const exprt &e2, const exprt &e3)
 {
-  operandst &op=operands();
-  #ifndef USE_LIST
-  op.reserve(op.size()+3);
-  #endif
+  operandst &op = operands();
+#ifndef USE_LIST
+  op.reserve(op.size() + 3);
+#endif
   op.push_back(e1);
   op.push_back(e2);
   op.push_back(e3);
@@ -90,7 +89,7 @@ void exprt::make_not()
     make_false();
     return;
   }
-  else if(is_false())
+  if(is_false())
   {
     make_true();
     return;
@@ -98,13 +97,13 @@ void exprt::make_not()
 
   exprt new_expr;
 
-  if(id()==i_not && operands().size()==1)
+  if(id() == i_not && operands().size() == 1)
   {
     new_expr.swap(operands().front());
   }
   else
   {
-    new_expr=exprt(i_not, type());
+    new_expr = exprt(i_not, type());
     new_expr.move_to_operands(*this);
   }
 
@@ -113,38 +112,34 @@ void exprt::make_not()
 
 bool exprt::is_constant() const
 {
-  return id()==constant;
+  return id() == constant;
 }
 
 bool exprt::is_true() const
 {
-  return is_constant() &&
-         type().is_bool() &&
-         get(a_value)!="false";
+  return is_constant() && type().is_bool() && get(a_value) != "false";
 }
 
 bool exprt::is_false() const
 {
-  return is_constant() &&
-         type().is_bool() &&
-         get(a_value)=="false";
+  return is_constant() && type().is_bool() && get(a_value) == "false";
 }
 
 void exprt::make_bool(bool value)
 {
-  *this=exprt(constant, typet("bool"));
-  set(a_value, value?i_true:i_false);
+  *this = exprt(constant, typet("bool"));
+  set(a_value, value ? i_true : i_false);
 }
 
 void exprt::make_true()
 {
-  *this=exprt(constant, typet("bool"));
+  *this = exprt(constant, typet("bool"));
   set(a_value, i_true);
 }
 
 void exprt::make_false()
 {
-  *this=exprt(constant, typet("bool"));
+  *this = exprt(constant, typet("bool"));
   set(a_value, i_false);
 }
 
@@ -155,9 +150,9 @@ bool operator<(const exprt &X, const exprt &Y)
 
 void exprt::negate()
 {
-  const irep_idt &type_id=type().id();
+  const irep_idt &type_id = type().id();
 
-  if(type_id=="bool")
+  if(type_id == "bool")
     make_not();
   else
     make_nil();
@@ -172,25 +167,29 @@ bool exprt::is_zero() const
 {
   if(is_constant())
   {
-    const std::string &value=get_string(a_value);
-    const irep_idt &type_id=type().id_string();
+    const std::string &value = get_string(a_value);
+    const irep_idt &type_id = type().id_string();
 
-    if(type_id=="unsignedbv" || type_id=="signedbv")
+    if(type_id == "unsignedbv" || type_id == "signedbv")
     {
-      mp_integer int_value=binary2integer(value, false);
-      if(int_value==0) return true;
+      mp_integer int_value = binary2integer(value, false);
+      if(int_value == 0)
+        return true;
     }
-    else if(type_id=="fixedbv")
+    else if(type_id == "fixedbv")
     {
-      if(fixedbvt(to_constant_expr(*this))==0) return true;
+      if(fixedbvt(to_constant_expr(*this)) == 0)
+        return true;
     }
-    else if(type_id=="floatbv")
+    else if(type_id == "floatbv")
     {
-      if(ieee_floatt(to_constant_expr(*this))==0) return true;
+      if(ieee_floatt(to_constant_expr(*this)) == 0)
+        return true;
     }
-    else if(type_id=="pointer")
+    else if(type_id == "pointer")
     {
-      if(value=="NULL") return true;
+      if(value == "NULL")
+        return true;
     }
   }
 
@@ -201,21 +200,24 @@ bool exprt::is_one() const
 {
   if(is_constant())
   {
-    const std::string &value=get_string(a_value);
-    const irep_idt &type_id=type().id_string();
+    const std::string &value = get_string(a_value);
+    const irep_idt &type_id = type().id_string();
 
-    if(type_id=="unsignedbv" || type_id=="signedbv")
+    if(type_id == "unsignedbv" || type_id == "signedbv")
     {
-      mp_integer int_value=binary2integer(value, false);
-      if(int_value==1) return true;
+      mp_integer int_value = binary2integer(value, false);
+      if(int_value == 1)
+        return true;
     }
-    else if(type_id=="fixedbv")
+    else if(type_id == "fixedbv")
     {
-      if(fixedbvt(to_constant_expr(*this))==1) return true;
+      if(fixedbvt(to_constant_expr(*this)) == 1)
+        return true;
     }
-    else if(type_id=="floatbv")
+    else if(type_id == "floatbv")
     {
-      if(ieee_floatt(to_constant_expr(*this))==1) return true;
+      if(ieee_floatt(to_constant_expr(*this)) == 1)
+        return true;
     }
   }
 
@@ -224,31 +226,35 @@ bool exprt::is_one() const
 
 bool exprt::sum(const exprt &expr)
 {
-  if(!is_constant() || !expr.is_constant()) return true;
-  if(type()!=expr.type()) return true;
+  if(!is_constant() || !expr.is_constant())
+    return true;
+  if(type() != expr.type())
+    return true;
 
-  const irep_idt &type_id=type().id();
+  const irep_idt &type_id = type().id();
 
-  if(type_id=="unsignedbv" || type_id=="signedbv")
+  if(type_id == "unsignedbv" || type_id == "signedbv")
   {
-    set(a_value, integer2binary(
-      binary2integer(get_string(a_value), false)+
-      binary2integer(expr.get_string(a_value), false),
-      atoi(type().width().c_str())));
+    set(
+      a_value,
+      integer2binary(
+        binary2integer(get_string(a_value), false) +
+          binary2integer(expr.get_string(a_value), false),
+        atoi(type().width().c_str())));
     return false;
   }
-  else if(type_id=="fixedbv")
+  if(type_id == "fixedbv")
   {
     fixedbvt f(to_constant_expr(*this));
-    f+=fixedbvt(to_constant_expr(expr));
-    *this=f.to_expr();
+    f += fixedbvt(to_constant_expr(expr));
+    *this = f.to_expr();
     return false;
   }
-  else if(type_id=="floatbv")
+  else if(type_id == "floatbv")
   {
     ieee_floatt f(to_constant_expr(*this));
-    f+=ieee_floatt(to_constant_expr(expr));
-    *this=f.to_expr();
+    f += ieee_floatt(to_constant_expr(expr));
+    *this = f.to_expr();
     return false;
   }
 
@@ -257,31 +263,35 @@ bool exprt::sum(const exprt &expr)
 
 bool exprt::mul(const exprt &expr)
 {
-  if(!is_constant() || !expr.is_constant()) return true;
-  if(type()!=expr.type()) return true;
+  if(!is_constant() || !expr.is_constant())
+    return true;
+  if(type() != expr.type())
+    return true;
 
-  const irep_idt &type_id=type().id();
+  const irep_idt &type_id = type().id();
 
-  if(type_id=="unsignedbv" || type_id=="signedbv")
+  if(type_id == "unsignedbv" || type_id == "signedbv")
   {
-    set(a_value, integer2binary(
-      binary2integer(get_string(a_value), false)*
-      binary2integer(expr.get_string(a_value), false),
-      atoi(type().width().c_str())));
+    set(
+      a_value,
+      integer2binary(
+        binary2integer(get_string(a_value), false) *
+          binary2integer(expr.get_string(a_value), false),
+        atoi(type().width().c_str())));
     return false;
   }
-  else if(type_id=="fixedbv")
+  if(type_id == "fixedbv")
   {
     fixedbvt f(to_constant_expr(*this));
-    f*=fixedbvt(to_constant_expr(expr));
-    *this=f.to_expr();
+    f *= fixedbvt(to_constant_expr(expr));
+    *this = f.to_expr();
     return false;
   }
-  else if(type_id=="floatbv")
+  else if(type_id == "floatbv")
   {
     ieee_floatt f(to_constant_expr(*this));
-    f*=ieee_floatt(to_constant_expr(expr));
-    *this=f.to_expr();
+    f *= ieee_floatt(to_constant_expr(expr));
+    *this = f.to_expr();
     return false;
   }
 
@@ -290,32 +300,36 @@ bool exprt::mul(const exprt &expr)
 
 bool exprt::subtract(const exprt &expr)
 {
-  if(!is_constant() || !expr.is_constant()) return true;
+  if(!is_constant() || !expr.is_constant())
+    return true;
 
-  if(type()!=expr.type()) return true;
+  if(type() != expr.type())
+    return true;
 
-  const irep_idt &type_id=type().id();
+  const irep_idt &type_id = type().id();
 
-  if(type_id=="unsignedbv" || type_id=="signedbv")
+  if(type_id == "unsignedbv" || type_id == "signedbv")
   {
-    set(a_value, integer2binary(
-      binary2integer(get_string(a_value), false)-
-      binary2integer(expr.get_string(a_value), false),
-      atoi(type().width().c_str())));
+    set(
+      a_value,
+      integer2binary(
+        binary2integer(get_string(a_value), false) -
+          binary2integer(expr.get_string(a_value), false),
+        atoi(type().width().c_str())));
     return false;
   }
-  else if(type_id=="fixedbv")
+  if(type_id == "fixedbv")
   {
     fixedbvt f(to_constant_expr(*this));
-    f-=fixedbvt(to_constant_expr(expr));
-    *this=f.to_expr();
+    f -= fixedbvt(to_constant_expr(expr));
+    *this = f.to_expr();
     return false;
   }
-  else if(type_id=="floatbv")
+  else if(type_id == "floatbv")
   {
     ieee_floatt f(to_constant_expr(*this));
-    f-=ieee_floatt(to_constant_expr(expr));
-    *this=f.to_expr();
+    f -= ieee_floatt(to_constant_expr(expr));
+    *this = f.to_expr();
     return false;
   }
 
@@ -324,14 +338,16 @@ bool exprt::subtract(const exprt &expr)
 
 const locationt &exprt::find_location() const
 {
-  const locationt &l=location();
+  const locationt &l = location();
 
-  if(l.is_not_nil()) return l;
+  if(l.is_not_nil())
+    return l;
 
   forall_operands(it, (*this))
   {
-    const locationt &l=it->find_location();
-    if(l.is_not_nil()) return l;
+    const locationt &l = it->find_location();
+    if(l.is_not_nil())
+      return l;
   }
 
   return static_cast<const locationt &>(get_nil_irep());

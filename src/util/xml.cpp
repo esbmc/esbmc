@@ -32,11 +32,8 @@ void xmlt::output(std::ostream &out, unsigned indent) const
 
   out << '<' << name;
 
-  for(const auto & attribute : attributes)
-    out << ' ' << attribute.first
-    << '=' << '"'
-    << attribute.second
-    << '"';
+  for(const auto &attribute : attributes)
+    out << ' ' << attribute.first << '=' << '"' << attribute.second << '"';
 
   out << '>';
 
@@ -46,8 +43,8 @@ void xmlt::output(std::ostream &out, unsigned indent) const
   {
     out << std::endl;
 
-    for(const auto & element : elements)
-      element.output(out, indent+2);
+    for(const auto &element : elements)
+      element.output(out, indent + 2);
 
     do_indent(out, indent);
   }
@@ -64,22 +61,22 @@ std::string xmlt::escape(const std::string &s)
     switch(ch)
     {
     case '&':
-      result+="&amp;";
+      result += "&amp;";
       break;
 
     case '<':
-      result+="&lt;";
+      result += "&lt;";
       break;
 
     case '>':
-      result+="&gt;";
+      result += "&gt;";
       break;
 
     default:
-      if(ch<' ')
-        result+="&#"+i2string((unsigned char)ch)+";";
+      if(ch < ' ')
+        result += "&#" + i2string((unsigned char)ch) + ";";
       else
-        result+=ch;
+        result += ch;
     }
   }
 
@@ -95,23 +92,23 @@ std::string xmlt::escape_attribute(const std::string &s)
     switch(ch)
     {
     case '&':
-      result+="&amp;";
+      result += "&amp;";
       break;
 
     case '<':
-      result+="&lt;";
+      result += "&lt;";
       break;
 
     case '>':
-      result+="&gt;";
+      result += "&gt;";
       break;
 
     case '"':
-      result+="&quot;";
+      result += "&quot;";
       break;
 
     default:
-      result+=ch;
+      result += ch;
     }
   }
 
@@ -120,16 +117,15 @@ std::string xmlt::escape_attribute(const std::string &s)
 
 void xmlt::do_indent(std::ostream &out, unsigned indent)
 {
-  for(unsigned i=0; i<indent; i++)
+  for(unsigned i = 0; i < indent; i++)
     out << ' ';
 }
 
 xmlt::elementst::const_iterator xmlt::find(const std::string &name) const
 {
-  for(elementst::const_iterator it=elements.begin();
-      it!=elements.end();
+  for(elementst::const_iterator it = elements.begin(); it != elements.end();
       it++)
-    if(it->name==name)
+    if(it->name == name)
       return it;
 
   return elements.end();
@@ -137,34 +133,29 @@ xmlt::elementst::const_iterator xmlt::find(const std::string &name) const
 
 xmlt::elementst::iterator xmlt::find(const std::string &name)
 {
-  for(elementst::iterator it=elements.begin();
-      it!=elements.end();
-      it++)
-    if(it->name==name)
+  for(elementst::iterator it = elements.begin(); it != elements.end(); it++)
+    if(it->name == name)
       return it;
 
   return elements.end();
 }
 
-void xmlt::set_attribute(
-  const std::string &attribute,
-  unsigned value)
+void xmlt::set_attribute(const std::string &attribute, unsigned value)
 {
   set_attribute(attribute, i2string(value));
 }
 
-void xmlt::set_attribute(
-  const std::string &attribute,
-  const std::string &value)
+void xmlt::set_attribute(const std::string &attribute, const std::string &value)
 {
-  if ((value[0]=='\"' && value[value.size()-1]=='\"') ||
-      (value[0]=='\'' && value[value.size()-1]=='\''))
+  if(
+    (value[0] == '\"' && value[value.size() - 1] == '\"') ||
+    (value[0] == '\'' && value[value.size() - 1] == '\''))
   {
-    attributes[attribute]=value.substr(1,value.size()-2);
+    attributes[attribute] = value.substr(1, value.size() - 2);
   }
   else
   {
-    attributes[attribute]=value;
+    attributes[attribute] = value;
   }
 }
 
@@ -174,31 +165,32 @@ std::string xmlt::unescape(const std::string &str)
 
   result.reserve(str.size());
 
-  for(std::string::const_iterator it=str.begin();
-      it!=str.end();
-      it++)
+  for(std::string::const_iterator it = str.begin(); it != str.end(); it++)
   {
-    if(*it=='&')
+    if(*it == '&')
     {
       std::string tmp;
       it++;
 
-      while(it!=str.end() && *it!=';')
-        tmp+=*it++;
+      while(it != str.end() && *it != ';')
+        tmp += *it++;
 
-      if(tmp=="gt") result+='>';
-      else if(tmp=="lt") result+='<';
-      else if(tmp=="amp") result+='&';
-      else if(tmp[0]=='#' && tmp[1]!='x')
+      if(tmp == "gt")
+        result += '>';
+      else if(tmp == "lt")
+        result += '<';
+      else if(tmp == "amp")
+        result += '&';
+      else if(tmp[0] == '#' && tmp[1] != 'x')
       {
-        char c = atoi(tmp.substr(1, tmp.size()-1).c_str());
-        result+=c;
+        char c = atoi(tmp.substr(1, tmp.size() - 1).c_str());
+        result += c;
       }
       else
         throw "XML escape code not implemented";
     }
     else
-      result+=*it;
+      result += *it;
   }
 
   return result;

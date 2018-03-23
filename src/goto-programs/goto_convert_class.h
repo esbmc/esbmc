@@ -20,7 +20,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/options.h>
 #include <util/std_code.h>
 
-class goto_convertt:public message_streamt
+class goto_convertt : public message_streamt
 {
 public:
   void goto_convert(const codet &code, goto_programt &dest);
@@ -28,13 +28,13 @@ public:
   goto_convertt(
     contextt &_context,
     optionst &_options,
-    message_handlert &_message_handler):
-    message_streamt(_message_handler),
-    context(_context),
-    options(_options),
-    ns(_context),
-    temporary_counter(0),
-    tmp_symbol_prefix("goto_convertt::")
+    message_handlert &_message_handler)
+    : message_streamt(_message_handler),
+      context(_context),
+      options(_options),
+      ns(_context),
+      temporary_counter(0),
+      tmp_symbol_prefix("goto_convertt::")
   {
   }
 
@@ -63,47 +63,70 @@ protected:
   //
   // side effect removal
   //
-  void make_temp_symbol(exprt &expr,goto_programt &dest);
-  unsigned int get_expr_number_globals(const exprt & expr);
-  unsigned int get_expr_number_globals(const expr2tc & expr);
-  void break_globals2assignments(exprt & rhs, goto_programt & dest,const locationt & location);
-  void break_globals2assignments(int & atomic, exprt & lhs, exprt & rhs, goto_programt & dest, const locationt & location);
-  void break_globals2assignments(int & atomic, exprt & rhs, goto_programt & dest,const locationt & location);
-  void break_globals2assignments_rec(exprt & rhs, exprt & atomic_dest, goto_programt & dest,int atomic, const locationt & location);
+  void make_temp_symbol(exprt &expr, goto_programt &dest);
+  unsigned int get_expr_number_globals(const exprt &expr);
+  unsigned int get_expr_number_globals(const expr2tc &expr);
+  void break_globals2assignments(
+    exprt &rhs,
+    goto_programt &dest,
+    const locationt &location);
+  void break_globals2assignments(
+    int &atomic,
+    exprt &lhs,
+    exprt &rhs,
+    goto_programt &dest,
+    const locationt &location);
+  void break_globals2assignments(
+    int &atomic,
+    exprt &rhs,
+    goto_programt &dest,
+    const locationt &location);
+  void break_globals2assignments_rec(
+    exprt &rhs,
+    exprt &atomic_dest,
+    goto_programt &dest,
+    int atomic,
+    const locationt &location);
 
   // this produces if(guard) dest;
-  void guard_program(
-    const guardt &guard,
-    goto_programt &dest);
+  void guard_program(const guardt &guard, goto_programt &dest);
 
-  void remove_sideeffects(exprt &expr, goto_programt &dest,
-                          bool result_is_used=true);
+  void remove_sideeffects(
+    exprt &expr,
+    goto_programt &dest,
+    bool result_is_used = true);
 
   void address_of_replace_objects(exprt &expr, goto_programt &dest);
 
   bool rewrite_vla_decl(typet &var_type, goto_programt &dest);
   bool rewrite_vla_decl_size(exprt &size, goto_programt &dest);
-  void generate_dynamic_size_vla(exprt &var, goto_programt &dest);
+  void generate_dynamic_size_vla(
+    exprt &var,
+    const locationt &loc,
+    goto_programt &dest);
 
   bool has_sideeffect(const exprt &expr);
 
   void remove_assignment(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_post(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_pre(exprt &expr, goto_programt &dest, bool result_is_used);
-  void remove_function_call(exprt &expr, goto_programt &dest, bool result_is_used);
+  void
+  remove_function_call(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_new(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_temporary_object(exprt &expr, goto_programt &dest);
-  void remove_statement_expression(exprt &expr, goto_programt &dest, bool result_is_used);
+  void remove_statement_expression(
+    exprt &expr,
+    goto_programt &dest,
+    bool result_is_used);
   void remove_gcc_conditional_expression(exprt &expr, goto_programt &dest);
 
-  virtual void do_cpp_new(const exprt &lhs, const exprt &rhs, goto_programt &dest);
+  virtual void
+  do_cpp_new(const exprt &lhs, const exprt &rhs, goto_programt &dest);
 
-  static void replace_new_object(
-    const exprt &object,
-    exprt &dest);
+  static void replace_new_object(const exprt &object, exprt &dest);
 
-  void cpp_new_initializer(
-    const exprt &lhs, const exprt &rhs, goto_programt &dest);
+  void
+  cpp_new_initializer(const exprt &lhs, const exprt &rhs, goto_programt &dest);
 
   //
   // function calls
@@ -158,16 +181,20 @@ protected:
   void convert_non_deterministic_goto(const codet &code, goto_programt &dest);
   void convert_label(const code_labelt &code, goto_programt &dest);
   void convert_switch_case(const code_switch_caset &code, goto_programt &dest);
-  void convert_function_call(const code_function_callt &code, goto_programt &dest);
+  void
+  convert_function_call(const code_function_callt &code, goto_programt &dest);
   void convert_atomic_begin(const codet &code, goto_programt &dest);
   void convert_atomic_end(const codet &code, goto_programt &dest);
   void convert(const codet &code, goto_programt &dest);
-  void copy(const codet &code, goto_program_instruction_typet type, goto_programt &dest);
+  void copy(
+    const codet &code,
+    goto_program_instruction_typet type,
+    goto_programt &dest);
 
   //
   // Try-catch conversion
   //
-  void convert_catch(const codet &code,goto_programt &dest);
+  void convert_catch(const codet &code, goto_programt &dest);
   void convert_throw_decl(const exprt &expr, goto_programt &dest);
   void convert_throw_decl_end(const exprt &expr, goto_programt &dest);
 
@@ -184,7 +211,7 @@ protected:
 
   struct break_continue_targetst
   {
-    break_continue_targetst():break_set(false), continue_set(false)
+    break_continue_targetst() : break_set(false), continue_set(false)
     {
     }
 
@@ -196,26 +223,25 @@ protected:
 
     void restore(const break_continue_targetst &targets)
     {
-      *this=targets;
+      *this = targets;
     }
 
     void set_break(goto_programt::targett _break_target)
     {
-      break_set=true;
-      break_target=_break_target;
+      break_set = true;
+      break_target = _break_target;
     }
 
     void set_continue(goto_programt::targett _continue_target)
     {
-      continue_set=true;
-      continue_target=_continue_target;
+      continue_set = true;
+      continue_target = _continue_target;
     }
   };
 
-  struct break_continue_switch_targetst:public break_continue_targetst
+  struct break_continue_switch_targetst : public break_continue_targetst
   {
-    break_continue_switch_targetst():
-      default_set(false)
+    break_continue_switch_targetst() : default_set(false)
     {
     }
 
@@ -223,13 +249,13 @@ protected:
 
     void restore(const break_continue_switch_targetst &targets)
     {
-      *this=targets;
+      *this = targets;
     }
 
     void set_default(goto_programt::targett _default_target)
     {
-      default_set=true;
-      default_target=_default_target;
+      default_set = true;
+      default_target = _default_target;
     }
 
     goto_programt::targett default_target;
@@ -237,7 +263,7 @@ protected:
     casest cases;
   };
 
-  struct targetst:public break_continue_switch_targetst
+  struct targetst : public break_continue_switch_targetst
   {
     bool return_set;
     bool return_value;
@@ -245,8 +271,7 @@ protected:
     labelst labels;
     gotost gotos;
 
-    targetst():
-      return_set(false)
+    targetst() : return_set(false)
     {
     }
 
@@ -270,10 +295,7 @@ protected:
     }
   } targets;
 
-  void case_guard(
-    const exprt &value,
-    const caset &case_op,
-    exprt &dest);
+  void case_guard(const exprt &value, const caset &case_op, exprt &dest);
 
   // if(cond) { true_case } else { false_case }
   void generate_ifthenelse(
@@ -305,18 +327,67 @@ protected:
     std::list<exprt> &dest);
 
   // some built-in functions
-  void do_abort         (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_atomic_begin  (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_atomic_end    (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_create_thread (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_malloc        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_realloc       (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_alloca        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_free          (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_sync          (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_exit          (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_mem           (bool is_malloc, const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
+  void do_abort(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_atomic_begin(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_atomic_end(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_create_thread(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_malloc(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_realloc(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_alloca(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_free(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_sync(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_exit(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_printf(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
+  void do_mem(
+    bool is_malloc,
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
 };
 
 #endif

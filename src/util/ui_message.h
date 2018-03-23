@@ -12,32 +12,32 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iostream>
 #include <util/message.h>
 
-class ui_message_handlert:public message_handlert
+class ui_message_handlert : public message_handlert
 {
 public:
   typedef enum { PLAIN, OLD_GUI, XML_UI, GRAPHML } uit;
-  
-  ui_message_handlert(uit __ui):_ui(__ui)
+
+  ui_message_handlert(uit __ui) : _ui(__ui)
   {
     switch(__ui)
     {
     case OLD_GUI:
       break;
-      
+
     case XML_UI:
       std::cout << "<cprover>" << std::endl << std::endl;
       break;
-      
+
     case PLAIN:
       break;
-      
+
     default:;
     }
   }
-   
+
   ~ui_message_handlert() override
   {
-    if(get_ui()==XML_UI)
+    if(get_ui() == XML_UI)
       std::cout << "</cprover>" << std::endl;
   }
 
@@ -48,11 +48,9 @@ public:
 
 protected:
   uit _ui;
- 
+
   // overloading
-  void print(
-    unsigned level,
-    const std::string &message) override;
+  void print(unsigned level, const std::string &message) override;
 
   // overloading
   void print(

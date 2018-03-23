@@ -27,8 +27,7 @@ public:
     bool r, w;
     exprt guard;
 
-    entryt():r(false), w(false),
-             guard(true_exprt())
+    entryt() : r(false), w(false), guard(true_exprt())
     {
     }
 
@@ -41,11 +40,11 @@ public:
     {
       std::string result;
       if(w)
-        result="W/W";
+        result = "W/W";
       else
-        result="R/W";
+        result = "R/W";
 
-      result+=" data race on " + id2string(object);
+      result += " data race on " + id2string(object);
 
       return result;
     }
@@ -56,21 +55,20 @@ public:
 
   void compute(const codet &code);
 
-  rw_sett(const namespacet &_ns,
-          value_setst &_value_sets,
-          goto_programt::const_targett _target):
-          ns(_ns),
-          value_sets(_value_sets),
-          target(_target)
+  rw_sett(
+    const namespacet &_ns,
+    value_setst &_value_sets,
+    goto_programt::const_targett _target)
+    : ns(_ns), value_sets(_value_sets), target(_target)
   {
   }
 
-  rw_sett(const namespacet &_ns,
-          value_setst &_value_sets,
-          goto_programt::const_targett _target,
-          const codet &code):ns(_ns),
-          value_sets(_value_sets),
-          target(_target)
+  rw_sett(
+    const namespacet &_ns,
+    value_setst &_value_sets,
+    goto_programt::const_targett _target,
+    const codet &code)
+    : ns(_ns), value_sets(_value_sets), target(_target)
   {
     compute(code);
   }
@@ -94,13 +92,15 @@ protected:
 
   void read_write_rec(
     const exprt &expr,
-    bool r, bool w,
+    bool r,
+    bool w,
     const std::string &suffix,
     const guardt &guard);
 };
 
-#define forall_rw_set_entries(it, rw_set) \
-  for(rw_sett::entriest::const_iterator it=(rw_set).entries.begin(); \
-      it!=(rw_set).entries.end(); it++)
+#define forall_rw_set_entries(it, rw_set)                                      \
+  for(rw_sett::entriest::const_iterator it = (rw_set).entries.begin();         \
+      it != (rw_set).entries.end();                                            \
+      it++)
 
 #endif

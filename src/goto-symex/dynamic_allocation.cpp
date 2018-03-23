@@ -17,14 +17,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
-
-  expr->Foreach_operand([this] (expr2tc &e) {
-    if (!is_nil_expr(e))
+  expr->Foreach_operand([this](expr2tc &e) {
+    if(!is_nil_expr(e))
       default_replace_dynamic_allocation(e);
-     }
-   );
+  });
 
-  if (is_valid_object2t(expr))
+  if(is_valid_object2t(expr))
   {
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
     const valid_object2t &obj = to_valid_object2t(expr);
@@ -37,7 +35,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
     expr = index_expr;
   }
-  else if (is_invalid_pointer2t(expr))
+  else if(is_invalid_pointer2t(expr))
   {
     const invalid_pointer2t &ptr = to_invalid_pointer2t(expr);
 
@@ -74,7 +72,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 
     expr = is_valid_ptr;
   }
-  else if (is_deallocated_obj2t(expr))
+  else if(is_deallocated_obj2t(expr))
   {
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
     const deallocated_obj2t &obj = to_deallocated_obj2t(expr);
@@ -87,7 +85,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
     expr = index_expr;
   }
-  else if (is_dynamic_size2t(expr))
+  else if(is_dynamic_size2t(expr))
   {
     // replace with CPROVER_alloc_size[POINTER_OBJECT(...)]
     //nec: ex37.c
