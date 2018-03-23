@@ -128,13 +128,13 @@ ErrorExit:
 
 // ====================== 2nd thread
 
-static void asyncIOCompletion (ExtendedParamBlock pbAsyncPtr_thread)
+static void* asyncIOCompletion (ExtendedParamBlock pbAsyncPtr_thread)
 { // (mozilla/nsprpub/pr/src/md/mac/macthr.c 3.13)
   while (__START_ASYNC__ == False) {}; // second thread waits until the async read is issued
     PRThread thread = pbAsyncPtr_thread;
 
     if (_PR_MD_GET_INTSOFF()) {
-		return;
+		return NULL;
     }
     _PR_MD_SET_INTSOFF(1);
 

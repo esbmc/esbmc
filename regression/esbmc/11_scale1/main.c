@@ -2,7 +2,7 @@
 #include <pthread.h> 
 int g;
 
-void thr1() {
+void *thr1(void *arg) {
   int l;
   glb_init(g>=0);
   glb_init(l==0);
