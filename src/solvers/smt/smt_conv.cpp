@@ -2016,6 +2016,9 @@ expr2tc smt_convt::get(const expr2tc &expr)
   if(is_constant_number(expr))
     return expr;
 
+  if(is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
+    return expr;
+
   expr2tc res = expr;
 
   // Special cases:
