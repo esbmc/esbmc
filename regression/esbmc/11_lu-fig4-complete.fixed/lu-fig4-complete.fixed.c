@@ -128,13 +128,13 @@ ErrorExit:
 
 // ====================== 2nd thread
 
-static void asyncIOCompletion (ExtendedParamBlock pbAsyncPtr_thread)
+static void* asyncIOCompletion (ExtendedParamBlock pbAsyncPtr_thread)
 {
   while (__START_ASYNC__ == False) {}; // second thread waits until the async read is issued
     PRThread thread = pbAsyncPtr_thread;
 
     if (_PR_MD_GET_INTSOFF()) {
-		return;
+		return NULL;
     }
     _PR_MD_SET_INTSOFF(1);
 
