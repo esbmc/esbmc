@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --control-flow-test --context-bound 3
 ^VERIFICATION FAILED$

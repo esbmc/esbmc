@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
  --no-pointer-check
 ^EXIT=0$

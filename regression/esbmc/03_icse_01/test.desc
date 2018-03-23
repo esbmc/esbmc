@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --no-slice --control-flow-test --context-bound 4
 ^VERIFICATION FAILED$
