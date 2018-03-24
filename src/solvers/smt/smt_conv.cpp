@@ -2612,7 +2612,7 @@ smt_astt smt_convt::mk_bvredand(smt_astt op)
   // bvredand = bvcomp(x,-1) ? bv1 : bv0;
 
   smt_astt comp =
-    mk_eq(op, mk_smt_bv(BigInt(ULONG_LONG_MAX), op->sort->get_data_width()));
+    mk_eq(op, mk_smt_bv(BigInt(ULLONG_MAX), op->sort->get_data_width()));
 
   // If it's true, return 1. Return 0, othewise.
   return mk_ite(comp, mk_smt_bv(1, 1), mk_smt_bv(BigInt(0), 1));
