@@ -1,4 +1,4 @@
 FUTURE
 bakery.c
---unwind 1 --no-unwinding-assertions
+--unwind 1
 ^VERIFICATION SUCCESSFUL$

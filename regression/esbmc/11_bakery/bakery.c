@@ -3,7 +3,7 @@ int choosing1 = 0, choosing2 = 0; // N boolean flags
 int number1 = 0, number2 = 0; // N natural numbers
 int x; //variable to test mutual exclusion
 
-void thr1() {
+void* thr1() {
   int tmp;
   choosing1 = 1;
   tmp = number2 + 1;
@@ -18,9 +18,10 @@ void thr1() {
   assert(x <= 0);
   // end: critical section
   number1 = 0;
+  pthread_exit(NULL);
 }
 
-void thr2() {
+void* thr2() {
   int tmp;
   choosing2 = 1;
   tmp = number1 + 1;
@@ -35,6 +36,7 @@ void thr2() {
   assert(x >= 1);
   // end: critical section
   number2 = 0;
+  pthread_exit(NULL);
 }
 
 int main() 
