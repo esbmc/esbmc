@@ -791,7 +791,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       identifier == CPROVER_PREFIX "llabs" ||
       identifier == CPROVER_PREFIX "fabsd" ||
       identifier == CPROVER_PREFIX "fabsf" ||
-      identifier == CPROVER_PREFIX "fabsld")
+      identifier == CPROVER_PREFIX "fabsld" || identifier == "__builtin_fabs" ||
+      identifier == "__builtin_fabsf")
     {
       if(expr.arguments().size() != 1)
       {

@@ -10,6 +10,7 @@ void *
 thread(void *dummy)
 {
   assert(batsignal == 0);
+  pthread_exit(NULL);
 }
 
 int

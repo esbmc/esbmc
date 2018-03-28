@@ -857,13 +857,13 @@ smt_astt fp_convt::mk_to_bv(smt_astt x, bool is_signed, std::size_t width)
   if(!is_signed)
   {
     ll = ctx->mk_smt_bv(BigInt(0), bv_sz + 3);
-    ul = ctx->mk_zero_ext(ctx->mk_smt_bv(BigInt(ULONG_LONG_MAX), bv_sz), 3);
+    ul = ctx->mk_zero_ext(ctx->mk_smt_bv(BigInt(ULLONG_MAX), bv_sz), 3);
   }
   else
   {
     ll = ctx->mk_sign_ext(
       ctx->mk_concat(bv1, ctx->mk_smt_bv(BigInt(0), bv_sz - 1)), 3);
-    ul = ctx->mk_zero_ext(ctx->mk_smt_bv(BigInt(ULONG_LONG_MAX), bv_sz - 1), 4);
+    ul = ctx->mk_zero_ext(ctx->mk_smt_bv(BigInt(ULLONG_MAX), bv_sz - 1), 4);
   }
   smt_astt in_range =
     ctx->mk_and(ctx->mk_bvsle(ll, pre_rounded), ctx->mk_bvsle(pre_rounded, ul));
@@ -2142,7 +2142,7 @@ void fp_convt::round(
   t = ctx->mk_bvsub(t, ctx->mk_sign_ext(e_min, 2));
   dbg_decouple("fpa2bv_rnd_t", t);
   smt_astt TINY =
-    ctx->mk_bvsle(t, ctx->mk_smt_bv(BigInt(ULONG_LONG_MAX), ebits + 2));
+    ctx->mk_bvsle(t, ctx->mk_smt_bv(BigInt(ULLONG_MAX), ebits + 2));
   dbg_decouple("fpa2bv_rnd_TINY", TINY);
 
   smt_astt beta =
@@ -2174,7 +2174,7 @@ void fp_convt::round(
   dbg_decouple("fpa2bv_rnd_sigma_cap", sigma_cap);
   dbg_decouple("fpa2bv_rnd_sigma_neg_capped", sigma_neg_capped);
   smt_astt sigma_lt_zero =
-    ctx->mk_bvsle(sigma, ctx->mk_smt_bv(BigInt(ULONG_LONG_MAX), sigma_size));
+    ctx->mk_bvsle(sigma, ctx->mk_smt_bv(BigInt(ULLONG_MAX), sigma_size));
   dbg_decouple("fpa2bv_rnd_sigma_lt_zero", sigma_lt_zero);
 
   smt_astt sig_ext = ctx->mk_concat(sig, ctx->mk_smt_bv(BigInt(0), sig_size));

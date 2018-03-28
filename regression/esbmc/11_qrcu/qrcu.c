@@ -54,6 +54,7 @@ void* qrcu_reader1() {
       else { ctr2--; } // use ctr2
     __ESBMC_atomic_end();
   }
+  pthread_exit(NULL);
 }
 
 /* sums the pair of counters forcing weak memory ordering */
@@ -121,7 +122,7 @@ void* qrcu_updater() {
 	sum++;
       assert(sum == 0);
       } */
-
+  pthread_exit(NULL);
 }
 
 void* qrcu_reader2() {
@@ -159,6 +160,7 @@ void* qrcu_reader2() {
       if (myidx <= 0) { ctr1--; } // use ctr1
       else { ctr2--; } // use ctr2
   }
+  pthread_exit(NULL);
 }
 
 #define acquire_thread_id(tid, l) \
