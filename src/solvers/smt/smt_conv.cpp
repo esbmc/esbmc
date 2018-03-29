@@ -214,52 +214,24 @@ void smt_convt::pop_ctx()
 
 smt_astt smt_convt::make_disjunct(const ast_vec &v)
 {
-  std::vector<smt_astt> args;
-  smt_astt result = nullptr;
-
-  // This is always true.
-  if(v.empty())
-    return mk_smt_bool(true);
-
-  // Slightly funky due to being morphed from lor:
-  args.reserve(v.size());
-  std::copy(begin(v), end(v), back_inserter(args));
+  assert(!v.empty());
 
   // Chain these.
-  result = args.front();
-  if(args.size() > 1)
-  {
-    unsigned int j;
-    for(j = 1; j < args.size(); j++)
-    {
-      result = mk_or(result, args[j]);
-    }
-  }
+  smt_astt result = v.front();
+  for(const auto &elem : v)
+    result = mk_or(result, elem);
 
   return result;
 }
 
 smt_astt smt_convt::make_conjunct(const ast_vec &v)
 {
-  std::vector<smt_astt> args;
-  smt_astt result;
-
   assert(!v.empty());
 
-  // Funky on account of conversion from land...
-  args.reserve(v.size());
-  std::copy(begin(v), end(v), back_inserter(args));
-
   // Chain these.
-  result = args[0];
-  if(args.size() > 1)
-  {
-    unsigned int j;
-    for(j = 1; j < args.size(); j++)
-    {
-      result = mk_and(result, args[j]);
-    }
-  }
+  smt_astt result = v.front();
+  for(const auto &elem : v)
+    result = mk_and(result, elem);
 
   return result;
 }
@@ -306,8 +278,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   smt_cachet::const_iterator cache_result = smt_cache.find(expr);
   if(cache_result != smt_cache.end())
     return (cache_result->ast);
-
   std::vector<smt_astt> args;
+  args.reserve(expr->get_num_sub_exprs());
 
   switch(expr->expr_id)
   {
@@ -1957,7 +1929,7 @@ std::string smt_convt::get_fixed_point(const unsigned width, std::string value)
 
   v = atof(m.c_str()) / atof(f.c_str());
 
-  magnitude = static_cast<int>(v);
+  magnitude = (int)v;
   fraction = v - magnitude;
   tmp = integer2string(power(2, width / 2), 10);
   expoent = atof(tmp.c_str());
