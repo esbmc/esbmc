@@ -726,11 +726,6 @@ public:
    *  there's no other way to initialize a pointer array in C, AFAIK. */
   smt_astt pointer_array_of(const expr2tc &init_val, unsigned long array_width);
 
-  /** Given a textual representation of a real, as one number divided by
-   *  another, create a fixedbv representation of it. For use in counterexample
-   *  formatting. */
-  std::string get_fixed_point(const unsigned width, std::string value) const;
-
   unsigned int get_member_name_field(const type2tc &t, const irep_idt &name)
     const;
   unsigned int get_member_name_field(const type2tc &t, const expr2tc &name)
