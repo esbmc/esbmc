@@ -214,34 +214,26 @@ void smt_convt::pop_ctx()
 
 smt_astt smt_convt::make_disjunct(const ast_vec &v)
 {
-  smt_astt args[v.size()];
+  std::vector<smt_astt> args;
   smt_astt result = nullptr;
-  unsigned int i = 0;
 
   // This is always true.
-  if(v.size() == 0)
+  if(v.empty())
     return mk_smt_bool(true);
 
   // Slightly funky due to being morphed from lor:
-  for(ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++)
-  {
-    args[i] = *it;
-  }
+  args.reserve(v.size());
+  std::copy(begin(v), end(v), back_inserter(args));
 
   // Chain these.
-  if(i > 1)
+  result = args.front();
+  if(args.size() > 1)
   {
     unsigned int j;
-    smt_astt accuml = args[0];
-    for(j = 1; j < i; j++)
+    for(j = 1; j < args.size(); j++)
     {
-      accuml = mk_or(accuml, args[j]);
+      result = mk_or(result, args[j]);
     }
-    result = accuml;
-  }
-  else
-  {
-    result = args[0];
   }
 
   return result;
@@ -249,32 +241,24 @@ smt_astt smt_convt::make_disjunct(const ast_vec &v)
 
 smt_astt smt_convt::make_conjunct(const ast_vec &v)
 {
-  smt_astt args[v.size()];
+  std::vector<smt_astt> args;
   smt_astt result;
-  unsigned int i;
 
-  assert(v.size() != 0);
+  assert(!v.empty());
 
   // Funky on account of conversion from land...
-  for(i = 0; i < v.size(); i++)
-  {
-    args[i] = v[i];
-  }
+  args.reserve(v.size());
+  std::copy(begin(v), end(v), back_inserter(args));
 
   // Chain these.
-  if(i > 1)
+  result = args[0];
+  if(args.size() > 1)
   {
     unsigned int j;
-    smt_astt accuml = args[0];
-    for(j = 1; j < i; j++)
+    for(j = 1; j < args.size(); j++)
     {
-      accuml = mk_and(accuml, args[j]);
+      result = mk_and(result, args[j]);
     }
-    result = accuml;
-  }
-  else
-  {
-    result = args[0];
   }
 
   return result;
@@ -323,9 +307,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   if(cache_result != smt_cache.end())
     return (cache_result->ast);
 
-  // Variable length array; constant array's and so forth can have hundreds
-  // of fields.
-  smt_astt args[expr->get_num_sub_exprs()];
+  std::vector<smt_astt> args;
 
   switch(expr->expr_id)
   {
@@ -1975,7 +1957,7 @@ std::string smt_convt::get_fixed_point(const unsigned width, std::string value)
 
   v = atof(m.c_str()) / atof(f.c_str());
 
-  magnitude = (int)v;
+  magnitude = static_cast<int>(v);
   fraction = v - magnitude;
   tmp = integer2string(power(2, width / 2), 10);
   expoent = atof(tmp.c_str());
