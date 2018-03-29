@@ -1975,7 +1975,7 @@ std::string smt_convt::get_fixed_point(const unsigned width, std::string value)
 
   v = atof(m.c_str()) / atof(f.c_str());
 
-  magnitude = (int)v;
+  magnitude = static_cast<int>(v);
   fraction = v - magnitude;
   tmp = integer2string(power(2, width / 2), 10);
   expoent = atof(tmp.c_str());
