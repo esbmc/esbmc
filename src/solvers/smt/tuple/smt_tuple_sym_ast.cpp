@@ -111,7 +111,7 @@ smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   }
 
   // Create an ast representing the fact that all the members are equal.
-  return ctx->make_conjunct(eqs);
+  return ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs);
 }
 
 smt_astt tuple_sym_smt_ast::update(
@@ -153,7 +153,7 @@ smt_astt tuple_sym_smt_ast::update(
     }
   }
 
-  ctx->assert_ast(ctx->make_conjunct(eqs));
+  ctx->assert_ast(ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs));
   return result;
 }
 

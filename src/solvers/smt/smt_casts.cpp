@@ -426,7 +426,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   }
 
   // If none of the above, match invalid.
-  smt_astt was_matched = make_disjunct(guards);
+  smt_astt was_matched = make_n_ary(this, &smt_convt::mk_or, guards);
   smt_astt not_matched = mk_not(was_matched);
 
   smt_astt id = convert_terminal(

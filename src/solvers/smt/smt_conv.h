@@ -189,19 +189,22 @@ public:
 
   smt_astt convert_assign(const expr2tc &expr);
 
-  /** Make an n-ary 'or' function application.
-   *  Takes a vector of smt_ast's, all boolean sorted, and creates a single
-   *  'or' function app over all the smt_ast's.
-   *  @param v The vector of converted boolean expressions to be 'or''d.
-   *  @return The smt_ast handle to the 'or' func app. */
-  virtual smt_astt make_disjunct(const ast_vec &v);
+  /** Make an n-ary function application.
+   *  Takes a vector of smt_ast's, and creates a single
+   *  function app over all the smt_ast's.
+   */
+  template <typename Object, typename Method>
+  smt_astt make_n_ary(const Object o, const Method m, const ast_vec &v)
+  {
+    assert(!v.empty());
 
-  /** Make an n-ary 'and' function application.
-   *  Takes a vector of smt_ast's, all boolean sorted, and creates a single
-   *  'and' function app over all the smt_ast's.
-   *  @param v The vector of converted boolean expressions to be 'and''d.
-   *  @return The smt_ast handle to the 'and' func app. */
-  virtual smt_astt make_conjunct(const ast_vec &v);
+    // Chain these.
+    smt_astt result = v.front();
+    for(std::size_t i = 1; i < v.size(); ++i)
+      result = (o->*m)(result, v[i]);
+
+    return result;
+  }
 
   /** Create the inverse of an smt_ast. Equivalent to a 'not' operation.
    *  @param a The ast to invert. Must be boolean sorted.

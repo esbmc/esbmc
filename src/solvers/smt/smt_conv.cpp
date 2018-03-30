@@ -212,30 +212,6 @@ void smt_convt::pop_ctx()
   tuple_api->pop_tuple_ctx();
 }
 
-smt_astt smt_convt::make_disjunct(const ast_vec &v)
-{
-  assert(!v.empty());
-
-  // Chain these.
-  smt_astt result = v.front();
-  for(const auto &elem : v)
-    result = mk_or(result, elem);
-
-  return result;
-}
-
-smt_astt smt_convt::make_conjunct(const ast_vec &v)
-{
-  assert(!v.empty());
-
-  // Chain these.
-  smt_astt result = v.front();
-  for(const auto &elem : v)
-    result = mk_and(result, elem);
-
-  return result;
-}
-
 smt_astt smt_convt::invert_ast(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
