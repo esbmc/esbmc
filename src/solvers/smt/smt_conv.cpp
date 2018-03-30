@@ -214,68 +214,24 @@ void smt_convt::pop_ctx()
 
 smt_astt smt_convt::make_disjunct(const ast_vec &v)
 {
-  smt_astt args[v.size()];
-  smt_astt result = nullptr;
-  unsigned int i = 0;
-
-  // This is always true.
-  if(v.size() == 0)
-    return mk_smt_bool(true);
-
-  // Slightly funky due to being morphed from lor:
-  for(ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++)
-  {
-    args[i] = *it;
-  }
+  assert(!v.empty());
 
   // Chain these.
-  if(i > 1)
-  {
-    unsigned int j;
-    smt_astt accuml = args[0];
-    for(j = 1; j < i; j++)
-    {
-      accuml = mk_or(accuml, args[j]);
-    }
-    result = accuml;
-  }
-  else
-  {
-    result = args[0];
-  }
+  smt_astt result = v.front();
+  for(const auto &elem : v)
+    result = mk_or(result, elem);
 
   return result;
 }
 
 smt_astt smt_convt::make_conjunct(const ast_vec &v)
 {
-  smt_astt args[v.size()];
-  smt_astt result;
-  unsigned int i;
-
-  assert(v.size() != 0);
-
-  // Funky on account of conversion from land...
-  for(i = 0; i < v.size(); i++)
-  {
-    args[i] = v[i];
-  }
+  assert(!v.empty());
 
   // Chain these.
-  if(i > 1)
-  {
-    unsigned int j;
-    smt_astt accuml = args[0];
-    for(j = 1; j < i; j++)
-    {
-      accuml = mk_and(accuml, args[j]);
-    }
-    result = accuml;
-  }
-  else
-  {
-    result = args[0];
-  }
+  smt_astt result = v.front();
+  for(const auto &elem : v)
+    result = mk_and(result, elem);
 
   return result;
 }
@@ -322,10 +278,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   smt_cachet::const_iterator cache_result = smt_cache.find(expr);
   if(cache_result != smt_cache.end())
     return (cache_result->ast);
-
-  // Variable length array; constant array's and so forth can have hundreds
-  // of fields.
-  smt_astt args[expr->get_num_sub_exprs()];
+  std::vector<smt_astt> args;
+  args.reserve(expr->get_num_sub_exprs());
 
   switch(expr->expr_id)
   {
