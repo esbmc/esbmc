@@ -494,36 +494,6 @@ expr2tc bitblast_convt::get_bv(const type2tc &t, smt_astt a)
   return constant_int2tc(t, BigInt(accuml));
 }
 
-smt_astt bitblast_convt::make_disjunct(const smt_convt::ast_vec &v)
-{
-  bvt bv;
-  bv.reserve(v.size());
-  for(smt_convt::ast_vec::const_iterator it = v.begin(); it != v.end(); it++)
-    bv.push_back(bitblast_ast_downcast(*it)->bv[0]);
-
-  literalt l = lor(bv);
-
-  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
-  bitblast_smt_ast *ba = new_ast(boolsort);
-  ba->bv.push_back(l);
-  return ba;
-}
-
-smt_astt bitblast_convt::make_conjunct(const smt_convt::ast_vec &v)
-{
-  bvt bv;
-  bv.reserve(v.size());
-  for(smt_convt::ast_vec::const_iterator it = v.begin(); it != v.end(); it++)
-    bv.push_back(bitblast_ast_downcast(*it)->bv[0]);
-
-  literalt l = land(bv);
-
-  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
-  bitblast_smt_ast *ba = new_ast(boolsort);
-  ba->bv.push_back(l);
-  return ba;
-}
-
 // ******************************  Bitblast foo *******************************
 
 bool bitblast_convt::process_clause(const bvt &bv, bvt &dest)

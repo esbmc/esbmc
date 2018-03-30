@@ -189,9 +189,6 @@ public:
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
-  const smt_ast *make_disjunct(const ast_vec &v) override;
-  const smt_ast *make_conjunct(const ast_vec &v) override;
-
   smt_astt tuple_create(const expr2tc &structdef) override;
   smt_astt tuple_fresh(const smt_sort *s, std::string name = "") override;
   expr2tc tuple_get(const expr2tc &expr) override;
