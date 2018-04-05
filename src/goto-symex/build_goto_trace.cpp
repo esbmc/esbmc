@@ -8,7 +8,9 @@ expr2tc build_lhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
     return lhs;
 
   expr2tc new_lhs = lhs;
-  if(is_index2t(new_lhs))
+  switch(new_lhs->expr_id)
+  {
+  case expr2t::index_id:
   {
     // An array subscription
     index2t index = to_index2t(new_lhs);
@@ -18,11 +20,20 @@ expr2tc build_lhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
     expr2tc new_source_value = build_lhs(smt_conv, index.source_value);
     expr2tc new_value = smt_conv->get(index.index);
     new_lhs = index2tc(new_lhs->type, new_source_value, new_value);
+    break;
   }
-  else if(is_typecast2t(new_lhs))
+
+  case expr2t::typecast_id:
     new_lhs = to_typecast2t(new_lhs).from;
-  else if(is_bitcast2t(new_lhs))
+    break;
+
+  case expr2t::bitcast_id:
     new_lhs = to_bitcast2t(new_lhs).from;
+    break;
+
+  default:
+    break;
+  }
 
   renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
   return new_lhs;

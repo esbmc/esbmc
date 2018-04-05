@@ -1905,7 +1905,9 @@ expr2tc smt_convt::get(const expr2tc &expr)
   expr2tc res = expr;
 
   // Special cases:
-  if(is_index2t(res))
+  switch(res->expr_id)
+  {
+  case expr2t::index_id:
   {
     // If we try to get an index from the solver, it will first
     // return the whole array and then get the index, we can
@@ -1941,8 +1943,10 @@ expr2tc smt_convt::get(const expr2tc &expr)
         to_constant_int2t(idx).value.to_uint64(),
         get_flattened_array_subtype(res->type));
     }
+    break;
   }
-  else if(is_with2t(res))
+
+  case expr2t::with_id:
   {
     // This will be converted
     with2t with = to_with2t(res);
@@ -1957,16 +1961,19 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
     return get(update_val);
   }
-  else if(is_address_of2t(res))
-  {
+
+  case expr2t::address_of_id:
     return res;
-  }
-  else if(is_symbol2t(res))
-  {
+
+  case expr2t::symbol_id:
     if(is_structure_type(res))
       return res;
 
-    return get_by_type(res); // Query symbol value from the solver
+    // Query symbol value from the solver
+    return get_by_type(res);
+
+  default:
+    break;
   }
 
   // Recurse on operands
