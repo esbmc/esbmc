@@ -1326,32 +1326,6 @@ expr2tc z3_convt::get_array_elem(
   return get_by_ast(subtype, value);
 }
 
-const smt_ast *z3_convt::make_disjunct(const ast_vec &v)
-{
-  // Make a gigantic 'or'.
-  Z3_ast arr[v.size()];
-
-  size_t i = 0;
-  for(auto const it : v)
-    arr[i++] = to_solver_smt_ast<z3_smt_ast>(it)->a.operator Z3_ast();
-
-  z3::expr e = z3::to_expr(z3_ctx, Z3_mk_or(z3_ctx, v.size(), arr));
-  return new_ast(e, boolean_sort);
-}
-
-const smt_ast *z3_convt::make_conjunct(const ast_vec &v)
-{
-  // Make a gigantic 'and'.
-  Z3_ast arr[v.size()];
-
-  size_t i = 0;
-  for(auto const it : v)
-    arr[i++] = to_solver_smt_ast<z3_smt_ast>(it)->a.operator Z3_ast();
-
-  z3::expr e = z3::to_expr(z3_ctx, Z3_mk_and(z3_ctx, v.size(), arr));
-  return new_ast(e, boolean_sort);
-}
-
 void z3_convt::add_array_constraints_for_solving()
 {
 }

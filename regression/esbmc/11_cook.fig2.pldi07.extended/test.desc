@@ -1,4 +1,4 @@
-FUTURE
+CORE
 cook.fig2.pldi07.extended.c
 --unwind 1 --no-unwinding-assertions
 ^VERIFICATION FAILED$

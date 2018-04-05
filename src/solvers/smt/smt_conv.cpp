@@ -212,30 +212,6 @@ void smt_convt::pop_ctx()
   tuple_api->pop_tuple_ctx();
 }
 
-smt_astt smt_convt::make_disjunct(const ast_vec &v)
-{
-  assert(!v.empty());
-
-  // Chain these.
-  smt_astt result = v.front();
-  for(const auto &elem : v)
-    result = mk_or(result, elem);
-
-  return result;
-}
-
-smt_astt smt_convt::make_conjunct(const ast_vec &v)
-{
-  assert(!v.empty());
-
-  // Chain these.
-  smt_astt result = v.front();
-  for(const auto &elem : v)
-    result = mk_and(result, elem);
-
-  return result;
-}
-
 smt_astt smt_convt::invert_ast(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
@@ -1909,53 +1885,6 @@ type2tc smt_convt::get_flattened_array_subtype(const type2tc &type)
   return type_rec;
 }
 
-std::string smt_convt::get_fixed_point(const unsigned width, std::string value)
-  const
-{
-  std::string m, f, tmp;
-  size_t found, size;
-  double v, magnitude, fraction, expoent;
-
-  found = value.find_first_of("/");
-  size = value.size();
-  m = value.substr(0, found);
-  if(found != std::string::npos)
-    f = value.substr(found + 1, size);
-  else
-    f = "1";
-
-  if(m.compare("0") == 0 && f.compare("0") == 0)
-    return "0";
-
-  v = atof(m.c_str()) / atof(f.c_str());
-
-  magnitude = (int)v;
-  fraction = v - magnitude;
-  tmp = integer2string(power(2, width / 2), 10);
-  expoent = atof(tmp.c_str());
-  fraction = fraction * expoent;
-  fraction = floor(fraction);
-
-  std::string integer_str, fraction_str;
-  integer_str =
-    integer2binary(string2integer(double2string(magnitude), 10), width / 2);
-
-  fraction_str =
-    integer2binary(string2integer(double2string(fraction), 10), width / 2);
-
-  value = integer_str + fraction_str;
-
-  if(magnitude == 0 && v < 0)
-  {
-    value =
-      integer2binary(
-        string2integer("-1", 10) - binary2integer(integer_str, true), width) +
-      integer2binary(string2integer(double2string(fraction), 10), width / 2);
-  }
-
-  return value;
-}
-
 void smt_convt::pre_solve()
 {
   // NB: always perform tuple constraint adding first, as it covers tuple
@@ -1968,6 +1897,9 @@ void smt_convt::pre_solve()
 expr2tc smt_convt::get(const expr2tc &expr)
 {
   if(is_constant_number(expr))
+    return expr;
+
+  if(is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
     return expr;
 
   expr2tc res = expr;
@@ -2016,47 +1948,14 @@ expr2tc smt_convt::get(const expr2tc &expr)
     with2t with = to_with2t(res);
     expr2tc update_val = with.update_value;
 
-    // if the update value is a constant, just return it
     if(
-      is_constant_number(update_val) ||
-      (is_symbol2t(update_val) && to_symbol2t(update_val).thename == "NULL"))
-      return update_val;
-
-    if(!(is_struct_type(expr) || is_pointer_type(expr)))
+      is_array_type(with.type) &&
+      is_array_type(to_array_type(with.type).subtype))
     {
-      expr2tc newidx;
-      if(
-        is_array_type(with.type) &&
-        is_array_type(to_array_type(with.type).subtype))
-      {
-        newidx = decompose_store_chain(expr, update_val);
-      }
-      else
-      {
-        newidx = fix_array_idx(with.update_field, with.type);
-      }
-
-      // if the update value is a constant, there's no need to
-      // call the array api
-      if(
-        is_constant_number(update_val) ||
-        (is_symbol2t(update_val) && to_symbol2t(update_val).thename == "NULL"))
-        return update_val;
-
-      // Convert the idx, it must be an integer
-      expr2tc idx = get(newidx);
-      if(is_constant_int2t(idx))
-      {
-        // Convert the array so we can call the array api
-        smt_astt array = convert_ast(with.source_value);
-
-        // Retrieve the element
-        res = array_api->get_array_elem(
-          array,
-          to_constant_int2t(idx).value.to_uint64(),
-          get_flattened_array_subtype(res->type));
-      }
+      decompose_store_chain(expr, update_val);
     }
+
+    return get(update_val);
   }
   else if(is_address_of2t(res))
   {

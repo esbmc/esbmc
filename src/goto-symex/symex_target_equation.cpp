@@ -132,7 +132,8 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
     convert_internal_step(smt_conv, assumpt_ast, assertions, SSA_step);
 
   if(!assertions.empty())
-    smt_conv.assert_ast(smt_conv.make_disjunct(assertions));
+    smt_conv.assert_ast(
+      smt_conv.make_n_ary(&smt_conv, &smt_convt::mk_or, assertions));
 }
 
 void symex_target_equationt::convert_internal_step(
@@ -219,7 +220,7 @@ void symex_target_equationt::convert_internal_step(
     smt_convt::ast_vec v;
     v.push_back(assumpt_ast);
     v.push_back(step.cond_ast);
-    assumpt_ast = smt_conv.make_conjunct(v);
+    assumpt_ast = smt_conv.make_n_ary(&smt_conv, &smt_convt::mk_and, v);
   }
 }
 
@@ -458,7 +459,8 @@ void runtime_encoded_equationt::convert(smt_convt &smt_conv)
 
   // Finally, we also want to assert the set of assertions.
   if(!assert_vec_list.back().empty())
-    smt_conv.assert_ast(smt_conv.make_disjunct(assert_vec_list.back()));
+    smt_conv.assert_ast(smt_conv.make_n_ary(
+      &smt_conv, &smt_convt::mk_or, assert_vec_list.back()));
 }
 
 boost::shared_ptr<symex_targett> runtime_encoded_equationt::clone() const

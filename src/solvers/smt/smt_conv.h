@@ -189,19 +189,22 @@ public:
 
   smt_astt convert_assign(const expr2tc &expr);
 
-  /** Make an n-ary 'or' function application.
-   *  Takes a vector of smt_ast's, all boolean sorted, and creates a single
-   *  'or' function app over all the smt_ast's.
-   *  @param v The vector of converted boolean expressions to be 'or''d.
-   *  @return The smt_ast handle to the 'or' func app. */
-  virtual smt_astt make_disjunct(const ast_vec &v);
+  /** Make an n-ary function application.
+   *  Takes a vector of smt_ast's, and creates a single
+   *  function app over all the smt_ast's.
+   */
+  template <typename Object, typename Method>
+  smt_astt make_n_ary(const Object o, const Method m, const ast_vec &v)
+  {
+    assert(!v.empty());
 
-  /** Make an n-ary 'and' function application.
-   *  Takes a vector of smt_ast's, all boolean sorted, and creates a single
-   *  'and' function app over all the smt_ast's.
-   *  @param v The vector of converted boolean expressions to be 'and''d.
-   *  @return The smt_ast handle to the 'and' func app. */
-  virtual smt_astt make_conjunct(const ast_vec &v);
+    // Chain these.
+    smt_astt result = v.front();
+    for(std::size_t i = 1; i < v.size(); ++i)
+      result = (o->*m)(result, v[i]);
+
+    return result;
+  }
 
   /** Create the inverse of an smt_ast. Equivalent to a 'not' operation.
    *  @param a The ast to invert. Must be boolean sorted.
@@ -722,11 +725,6 @@ public:
   /** Create an array of pointers; expects the init_val to be null, because
    *  there's no other way to initialize a pointer array in C, AFAIK. */
   smt_astt pointer_array_of(const expr2tc &init_val, unsigned long array_width);
-
-  /** Given a textual representation of a real, as one number divided by
-   *  another, create a fixedbv representation of it. For use in counterexample
-   *  formatting. */
-  std::string get_fixed_point(const unsigned width, std::string value) const;
 
   unsigned int get_member_name_field(const type2tc &t, const irep_idt &name)
     const;
