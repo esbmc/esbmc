@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <complex>
+#include <functional>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
@@ -743,4 +744,274 @@ void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
   }
 
   symex_assign(code_assign2tc(lhs, va_rhs), symex_targett::HIDDEN);
+}
+
+void goto_symext::intrinsic_memset(
+  reachability_treet &art,
+  const code_function_call2t &func_call)
+{
+  assert(func_call.operands.size() == 3 && "Wrong memset signature");
+  auto &ex_state = art.get_cur_state();
+  expr2tc ptr = func_call.operands[0];
+  expr2tc value = func_call.operands[1];
+  expr2tc size = func_call.operands[2];
+  std::map<type2tc, std::list<std::pair<type2tc, unsigned int>>> ref_types;
+
+  // This can be a conditional intrinsic
+  if(ex_state.cur_state->guard.is_false())
+    return;
+
+  // Define a local function for translating to calling the unwinding C
+  // implementation of memset
+  auto bump_call = [this, &func_call]() -> void {
+    // We're going to execute a function call, and that's going to mess with
+    // the program counter. Set it back *onto* pointing at this intrinsic, so
+    // symex_function_call calculates the right return address. Misery.
+    cur_state->source.pc--;
+
+    expr2tc newcall = func_call.clone();
+    code_function_call2t &mutable_funccall = to_code_function_call2t(newcall);
+    mutable_funccall.function = symbol2tc(get_empty_type(), "memset_impl");
+    // Execute call
+    symex_function_call(newcall);
+    return;
+  };
+
+  // Skip if the operand is not zero. Because honestly, there's very little
+  // point.
+  cur_state->rename(value);
+  if(!is_constant_int2t(value) || to_constant_int2t(value).value != 0)
+  {
+    bump_call();
+    return;
+  }
+
+  // Work out what the ptr points at.
+  internal_deref_items.clear();
+  dereference2tc deref(get_empty_type(), ptr);
+  dereference(deref, dereferencet::INTERNAL);
+
+  // Work out here whether we can construct an assignment for each thing
+  // pointed at by the ptr.
+  cur_state->rename(size);
+  bool can_construct = true;
+  for(const auto &item : internal_deref_items)
+  {
+    const expr2tc &offs = item.offset;
+
+    int64_t tmpsize;
+    try
+    {
+      tmpsize = type_byte_size(item.object->type).to_int64();
+    }
+    catch(array_type2t::dyn_sized_array_excp *e)
+    {
+      tmpsize = -1;
+    }
+    catch(array_type2t::inf_sized_array_excp *e)
+    {
+      tmpsize = -1;
+    }
+
+    if(
+      is_constant_int2t(offs) && to_constant_int2t(offs).value == 0 &&
+      is_constant_int2t(size) &&
+      to_constant_int2t(size).value.to_int64() == tmpsize)
+    {
+      continue;
+    }
+    else if(
+      !is_constant_int2t(offs) && is_constant_int2t(size) &&
+      to_constant_int2t(size).value.to_int64() == tmpsize)
+    {
+      continue;
+    }
+
+    // Alternately, we might be memsetting a field within a struct. Don't allow
+    // setting more than one field at a time, unaligned access, or the like.
+    // If you're setting a random run of bytes within a struct, best to use
+    // the C implementation.
+    if(is_struct_type(item.object->type) && is_constant_int2t(size))
+    {
+      uint64_t sz = to_constant_int2t(size).value.to_uint64();
+      ref_types.insert(std::make_pair(
+        item.object->type, std::list<std::pair<type2tc, unsigned int>>()));
+
+      std::function<bool(const type2tc &, unsigned int)> right_sized_field;
+      right_sized_field = [item, sz, &right_sized_field, &ref_types](
+        const type2tc &strct, unsigned int offs) -> bool {
+        const struct_type2t &sref = to_struct_type(strct);
+        bool retval = false;
+        unsigned int i = 0;
+        for(const auto &elem : sref.members)
+        {
+          // Is this this field?
+          uint64_t fieldsize = type_byte_size(elem).to_uint64();
+          if(fieldsize == sz)
+          {
+            unsigned int new_offs = offs;
+            new_offs += member_offset(strct, sref.member_names[i]).to_uint64();
+            ref_types[item.object->type].push_back(
+              std::make_pair(elem, new_offs));
+            retval = true;
+          }
+
+          // Or in a struct in this field?
+          if(is_struct_type(elem))
+          {
+            unsigned int new_offs = offs;
+            new_offs += member_offset(strct, sref.member_names[i]).to_uint64();
+            if(right_sized_field(elem, new_offs))
+              retval = true;
+          }
+
+          i++;
+        }
+
+        return retval;
+      };
+
+      // Is there at least one field the same size
+      if(right_sized_field(item.object->type, 0))
+        continue;
+    }
+
+    can_construct = false;
+  }
+
+  if(can_construct)
+  {
+    //uint64_t set_sz = to_constant_int2t(size).value.to_uint64();
+
+    for(const auto &item : internal_deref_items)
+    {
+      const expr2tc &offs = item.offset;
+      expr2tc val = gen_zero(item.object->type);
+      guardt curguard(cur_state->guard);
+      curguard.add(item.guard);
+
+      int64_t tmpsize;
+      try
+      {
+        tmpsize = type_byte_size(item.object->type).to_int64();
+      }
+      catch(array_type2t::dyn_sized_array_excp *e)
+      {
+        tmpsize = -1;
+      }
+      catch(array_type2t::inf_sized_array_excp *e)
+      {
+        tmpsize = -1;
+      }
+
+      if(is_constant_int2t(offs) && to_constant_int2t(offs).value == 0)
+      {
+        symex_assign(
+          code_assign2tc(item.object, val), symex_targett::STATE, curguard);
+      }
+      else if(
+        !is_constant_int2t(offs) && is_constant_int2t(size) &&
+        to_constant_int2t(size).value.to_int64() == tmpsize)
+      {
+        // It's a memset where the size is such that the only valid offset is
+        // zero.
+        symex_assign(
+          code_assign2tc(item.object, val), symex_targett::STATE, curguard);
+        expr2tc eq = equality2tc(offs, gen_zero(offs->type));
+        curguard.guard_expr(eq);
+        if(!options.get_bool_option("no-pointer-check"))
+          claim(eq, "Memset of full-object-size must have zero offset");
+      }
+      else if(is_struct_type(item.object->type) && is_constant_int2t(size))
+      {
+        // Misery time: rather than re-building the build-reference-to logic,
+        // use it here. The memset'd size might correspond to a large number
+        // of incompatible types though: so we might need to _try_ to build
+        // references to a lot of them.
+        std::list<std::tuple<type2tc, expr2tc, expr2tc>> out_list;
+        std::list<std::pair<type2tc, unsigned int>> in_list;
+        auto it = ref_types.find(item.object->type);
+        assert(it != ref_types.end());
+        in_list = it->second;
+
+        // We now have a list of types and offsets we might resolve to.
+        symex_dereference_statet sds(*this, *cur_state);
+        dereferencet dereference(ns, new_context, options, sds);
+        dereference.set_block_assertions();
+        for(const auto &cur_type : in_list)
+        {
+          expr2tc value = item.object;
+          expr2tc this_offs = gen_ulong(cur_type.second);
+
+          if(is_array_type(cur_type.first))
+          {
+            // Build a reference to the first elem.
+            const array_type2t &arrtype = to_array_type(cur_type.first);
+            dereference.build_reference_rec(
+              value, this_offs, arrtype.subtype, curguard, dereferencet::READ);
+          }
+          else
+          {
+            dereference.build_reference_rec(
+              value, this_offs, cur_type.first, curguard, dereferencet::READ);
+          }
+
+          out_list.push_back(std::make_tuple(cur_type.first, value, this_offs));
+          // XXX: what if we generate an address of a stitched expr?
+        }
+
+        // OK, we now have a list of references we might point at. Assert that
+        // we actually point at one of them.
+        expr2tc or_accuml = gen_false_expr();
+        for(const auto &ref : out_list)
+        {
+          const expr2tc &this_offs = std::get<2>(ref);
+          pointer_offset2tc ptroffs(this_offs->type, ptr);
+          equality2tc eq(this_offs, ptroffs);
+          or_accuml = or2tc(or_accuml, eq);
+        }
+
+        curguard.guard_expr(or_accuml);
+        if(!options.get_bool_option("no-pointer-check"))
+          claim(
+            or_accuml,
+            "Unaligned, cross-field or other non-field-based memset?");
+        for(const auto &ref : out_list)
+        {
+          guardt newguard(curguard);
+          pointer_offset2tc ptroffs(std::get<2>(ref)->type, ptr);
+          equality2tc eq(std::get<2>(ref), ptroffs);
+          newguard.add(eq);
+
+          expr2tc target = std::get<1>(ref);
+          if(is_array_type(std::get<0>(ref)))
+          {
+            // Actually, the deref'd operand is now an array.
+            assert(is_index2t(target));
+            const index2t &idx = to_index2t(target);
+            target = idx.source_value;
+          }
+
+          expr2tc zero = gen_zero(std::get<0>(ref));
+          symex_assign(
+            code_assign2tc(target, zero), symex_targett::STATE, newguard);
+        }
+      }
+      else
+      {
+        std::cerr << "Logic mismatch in memset intrinsic" << std::endl;
+        abort();
+      }
+    }
+
+    // Construct assignment to return value
+    expr2tc ret_ref = func_call.ret;
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(
+      code_assign2tc(ret_ref, ptr), symex_targett::STATE, cur_state->guard);
+  }
+  else
+  {
+    bump_call();
+  }
 }

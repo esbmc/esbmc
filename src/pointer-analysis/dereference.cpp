@@ -1610,7 +1610,12 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     // we don't overflow bounds. Start by encoding an assertion.
     guardt tmp;
     tmp.add(accuml_guard);
-    bounds_check(value, offs, type, tmp);
+
+    // Only encode a bounds check if we're directly accessing an array symbol:
+    // if it isn't, then it's a member of some other struct. If it's the wrong
+    // size, a higher level check will encode relevant assertions.
+    if(is_symbol2t(value))
+      bounds_check(value, offs, type, tmp);
 
     // We are left with constructing a structure from a byte array. XXX, this
     // is duplicated from above, refactor?
@@ -1655,6 +1660,9 @@ void dereferencet::dereference_failure(
   {
     dereference_callback.dereference_failure(error_class, error_name, guard);
   }
+
+  if(!options.get_bool_option("no-pointer-check") && !block_assertions)
+    dereference_callback.dereference_failure(error_class, error_name, guard);
 }
 
 void dereferencet::bad_base_type_failure(

@@ -398,6 +398,10 @@ void goto_symext::run_intrinsic(
   {
     intrinsic_kill_monitor(art);
   }
+  else if(symname == "__ESBMC_memset")
+  {
+    intrinsic_memset(art, func_call);
+  }
   else
   {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";

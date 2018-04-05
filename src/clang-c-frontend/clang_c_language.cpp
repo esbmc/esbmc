@@ -292,6 +292,8 @@ float __ESBMC_sqrtf(float n);
 double __ESBMC_sqrtd(double n);
 long double __ESBMC_sqrtld(long double n);
 
+void *__ESBMC_memset(void *s, int c, unsigned int n);
+
 // Digital controllers code
 void __ESBMC_generate_cascade_controllers(
   float *cden,
