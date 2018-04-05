@@ -10,19 +10,16 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void typet::move_to_subtypes(typet &type)
 {
-  subtypest &sub=subtypes();
+  subtypest &sub = subtypes();
   sub.push_back(static_cast<const typet &>(get_nil_irep()));
   sub.back().swap(type);
 }
 
 bool is_number(const typet &type)
 {
-  const std::string &id=type.id_string();
-  return id=="complex" ||
-         id=="unsignedbv" ||
-         id=="signedbv" ||
-         id=="floatbv" ||
-         id=="fixedbv";
+  const std::string &id = type.id_string();
+  return id == "complex" || id == "unsignedbv" || id == "signedbv" ||
+         id == "floatbv" || id == "fixedbv";
 }
 
 irep_idt typet::t_signedbv = dstring("signedbv");

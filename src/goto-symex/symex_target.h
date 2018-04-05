@@ -31,14 +31,14 @@ public:
     const goto_programt *prog;
     bool is_set;
 
-    sourcet():thread_nr(0), prog(nullptr), is_set(false)
+    sourcet() : thread_nr(0), prog(nullptr), is_set(false)
     {
     }
 
-    sourcet(goto_programt::const_targett _pc, const goto_programt *_prog):
-      thread_nr(0), pc(_pc), prog(_prog), is_set(true)
+    sourcet(goto_programt::const_targett _pc, const goto_programt *_prog)
+      : thread_nr(0), pc(_pc), prog(_prog), is_set(true)
     {
-      is_set=true;
+      is_set = true;
     }
   };
 
@@ -53,21 +53,21 @@ public:
     const expr2tc &rhs,
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
-    assignment_typet assignment_type)=0;
+    assignment_typet assignment_type) = 0;
 
   // record output
   virtual void output(
     const expr2tc &guard,
     const sourcet &source,
     const std::string &fmt,
-    const std::list<expr2tc> &args)=0;
+    const std::list<expr2tc> &args) = 0;
 
   // record an assumption
   // cond is destroyed
   virtual void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
-    const sourcet &source)=0;
+    const sourcet &source) = 0;
 
   // record an assertion
   // cond is destroyed
@@ -76,14 +76,14 @@ public:
     const expr2tc &cond,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
-    const sourcet &source)=0;
+    const sourcet &source) = 0;
 
   // Renumber the pointer object of a given symbol
   virtual void renumber(
     const expr2tc &guard,
     const expr2tc &symbol,
     const expr2tc &size,
-    const sourcet &source)=0;
+    const sourcet &source) = 0;
 
   // Abstract method, with the purpose of duplicating a symex_targett from the
   // subclass.
@@ -97,24 +97,29 @@ class stack_framet
 {
 public:
   stack_framet(const irep_idt &func, const symex_targett::sourcet &__src)
-    : function(func), _src(__src), src(&_src) { }
-  stack_framet(const irep_idt &func)
-    : function(func), src(nullptr) { }
-  stack_framet(const stack_framet &ref) {
+    : function(func), _src(__src), src(&_src)
+  {
+  }
+  stack_framet(const irep_idt &func) : function(func), src(nullptr)
+  {
+  }
+  stack_framet(const stack_framet &ref)
+  {
     *this = ref;
-    if (src != nullptr)
+    if(src != nullptr)
       src = &_src;
   }
 
-  bool _cmp(const stack_framet &ref) const {
-    if (function != ref.function)
+  bool _cmp(const stack_framet &ref) const
+  {
+    if(function != ref.function)
       return false;
-    else if (src == nullptr && ref.src == src)
+    if(src == nullptr && ref.src == src)
       return true;
-    else if (src == nullptr || ref.src == nullptr)
+    if(src == nullptr || ref.src == nullptr)
       return false;
-    else 
-      return src->pc->location_number == ref.src->pc->location_number;
+
+    return src->pc->location_number == ref.src->pc->location_number;
   }
 
   irep_idt function;
@@ -122,7 +127,7 @@ public:
   const symex_targett::sourcet *src;
 };
 
-bool operator < (
+bool operator<(
   const symex_targett::sourcet &a,
   const symex_targett::sourcet &b);
 
@@ -131,6 +136,5 @@ inline bool operator==(const stack_framet &a, const stack_framet &b)
 {
   return a._cmp(b);
 }
-
 
 #endif

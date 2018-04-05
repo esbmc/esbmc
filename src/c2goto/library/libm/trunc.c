@@ -2,39 +2,27 @@
 
 #include <math.h>
 #include <fenv.h>
-#include "../intrinsics.h"
 
-#undef truncf
-#undef trunc
-#undef truncl
+#define trunc_def(type, name, rint_func)                                       \
+  type name(type f)                                                            \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    type result;                                                               \
+    int save_round = fegetround();                                             \
+    fesetround(FE_TOWARDZERO);                                                 \
+    result = rint_func(f);                                                     \
+    fesetround(save_round);                                                    \
+    return result;                                                             \
+  }                                                                            \
+                                                                               \
+  type __##name(type f)                                                        \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(f);                                                            \
+  }
 
-float truncf(float f)
-{
-  float result;
-  int save_round = fegetround();
-  fesetround(FE_TOWARDZERO);
-  result = rintf(f);
-  fesetround(save_round);
-  return result;
-}
+trunc_def(float, truncf, rintf);
+trunc_def(double, trunc, rint);
+trunc_def(long double, truncl, rintl);
 
-double trunc(double d)
-{
-  double result;
-  int save_round = fegetround();
-  fesetround(FE_TOWARDZERO);
-  result = rint(d);
-  fesetround(save_round);
-  return result;
-}
-
-long double truncl(long double ld)
-{
-  long double result;
-  int save_round = fegetround();
-  fesetround(FE_TOWARDZERO);
-  result = rintl(ld);
-  fesetround(save_round);
-  return result;
-}
-
+#undef trunc_def

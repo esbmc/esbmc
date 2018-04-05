@@ -13,9 +13,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/format_constant.h>
 #include <util/type_byte_size.h>
 
-const expr2tc printf_formattert::make_type(
-  const expr2tc &src,
-  const type2tc &dest)
+const expr2tc
+printf_formattert::make_type(const expr2tc &src, const type2tc &dest)
 {
   if(src->type == dest)
     return src;
@@ -25,9 +24,8 @@ const expr2tc printf_formattert::make_type(
   return tmp;
 }
 
-void printf_formattert::operator()(
-  const std::string &_format,
-  const std::list<expr2tc> &_operands)
+void printf_formattert::
+operator()(const std::string &_format, const std::list<expr2tc> &_operands)
 {
   format = _format;
   operands = _operands;
@@ -93,76 +91,76 @@ void printf_formattert::process_format(std::ostream &out)
     }
   }
 
-  switch (ch)
+  switch(ch)
   {
-    case '%':
-      out << ch;
+  case '%':
+    out << ch;
+    break;
+
+  case 'e':
+  case 'E':
+    format_constant.style = format_spect::stylet::SCIENTIFIC;
+    if(next_operand == operands.end())
+      break;
+    out << format_constant(make_type(*(next_operand++), double_type2()));
+    break;
+
+  case 'f':
+  case 'F':
+    format_constant.style = format_spect::stylet::DECIMAL;
+    if(next_operand == operands.end())
+      break;
+    out << format_constant(make_type(*(next_operand++), double_type2()));
+    break;
+
+  case 'g':
+  case 'G':
+    format_constant.style = format_spect::stylet::AUTOMATIC;
+    if(format_constant.precision == 0)
+      format_constant.precision = 1;
+    if(next_operand == operands.end())
+      break;
+    out << format_constant(make_type(*(next_operand++), double_type2()));
+    break;
+
+  case 's':
+  {
+    if(next_operand == operands.end())
       break;
 
-    case 'e':
-    case 'E':
-      format_constant.style = format_spect::stylet::SCIENTIFIC;
-      if(next_operand == operands.end())
-        break;
-      out << format_constant(make_type(*(next_operand++), double_type2()));
+    // this is the address of a string
+    const expr2tc &op = *(next_operand++);
+    if(is_address_of2t(op) && is_string_type(to_address_of2t(op).ptr_obj))
+      out << format_constant(to_address_of2t(op).ptr_obj);
+  }
+  break;
+
+  case 'd':
+    if(next_operand == operands.end())
       break;
+    out << format_constant(make_type(*(next_operand++), int_type2()));
+    break;
 
-    case 'f':
-    case 'F':
-      format_constant.style = format_spect::stylet::DECIMAL;
-      if(next_operand == operands.end())
-        break;
-      out << format_constant(make_type(*(next_operand++), double_type2()));
+  case 'D':
+    if(next_operand == operands.end())
       break;
+    out << format_constant(make_type(*(next_operand++), long_int_type2()));
+    break;
 
-    case 'g':
-    case 'G':
-      format_constant.style = format_spect::stylet::AUTOMATIC;
-      if(format_constant.precision == 0)
-        format_constant.precision = 1;
-      if(next_operand == operands.end())
-        break;
-      out << format_constant(make_type(*(next_operand++), double_type2()));
+  case 'u':
+    if(next_operand == operands.end())
       break;
+    out << format_constant(make_type(*(next_operand++), uint_type2()));
+    break;
 
-    case 's':
-    {
-      if(next_operand == operands.end())
-        break;
-
-      // this is the address of a string
-      const expr2tc &op = *(next_operand++);
-      if(is_address_of2t(op) && is_string_type(to_address_of2t(op).ptr_obj))
-        out << format_constant(to_address_of2t(op).ptr_obj);
-    }
+  case 'U':
+    if(next_operand == operands.end())
       break;
+    out << format_constant(make_type(*(next_operand++), long_uint_type2()));
+    break;
 
-    case 'd':
-      if(next_operand == operands.end())
-        break;
-      out << format_constant(make_type(*(next_operand++), int_type2()));
-      break;
-
-    case 'D':
-      if(next_operand == operands.end())
-        break;
-      out << format_constant(make_type(*(next_operand++), long_int_type2()));
-      break;
-
-    case 'u':
-      if(next_operand == operands.end())
-        break;
-      out << format_constant(make_type(*(next_operand++), uint_type2()));
-      break;
-
-    case 'U':
-      if(next_operand == operands.end())
-        break;
-      out << format_constant(make_type(*(next_operand++), long_uint_type2()));
-      break;
-
-    default:
-      out << '%' << ch;
+  default:
+    out << '%' << ch;
   }
 }
 

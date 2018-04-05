@@ -18,10 +18,8 @@ irept nil_rep_storage;
 const irept::dt empty_d;
 #endif
 
-void
-irept::dump() const
+void irept::dump() const
 {
-
   std::cout << pretty(0) << std::endl;
 }
 
@@ -33,13 +31,13 @@ const irept &get_nil_irep()
 }
 
 #ifdef SHARING
-irept::irept(const irep_idt &_id):data(new dt)
+irept::irept(const irep_idt &_id) : data(new dt)
 {
   id(_id);
 
-  #ifdef IREP_DEBUG
+#ifdef IREP_DEBUG
   std::cout << "CREATED " << data << " " << _id << std::endl;
-  #endif
+#endif
 }
 #else
 irept::irept(const irep_idt &_id)
@@ -51,48 +49,47 @@ irept::irept(const irep_idt &_id)
 #ifdef SHARING
 void irept::detatch()
 {
-  #ifdef IREP_DEBUG
+#ifdef IREP_DEBUG
   std::cout << "DETATCH1: " << data << std::endl;
-  #endif
+#endif
 
-  if(data==nullptr)
+  if(data == nullptr)
   {
-    data=new dt;
+    data = new dt;
 
-    #ifdef IREP_DEBUG
+#ifdef IREP_DEBUG
     std::cout << "ALLOCATED " << data << std::endl;
-    #endif
+#endif
   }
-  else if(data->ref_count>1)
+  else if(data->ref_count > 1)
   {
     dt *old_data(data);
-    data=new dt(*old_data);
+    data = new dt(*old_data);
 
-    #ifdef IREP_DEBUG
+#ifdef IREP_DEBUG
     std::cout << "ALLOCATED " << data << std::endl;
-    #endif
+#endif
 
-    data->ref_count=1;
+    data->ref_count = 1;
     remove_ref(old_data);
   }
 
-  assert(data->ref_count==1);
+  assert(data->ref_count == 1);
 
-
-  #ifdef IREP_DEBUG
+#ifdef IREP_DEBUG
   std::cout << "DETATCH2: " << data << std::endl;
-  #endif
+#endif
 }
 #endif
 
 #ifdef SHARING
 const irept::dt &irept::read() const
 {
-  #ifdef IREP_DEBUG
+#ifdef IREP_DEBUG
   std::cout << "READ: " << data << std::endl;
-  #endif
+#endif
 
-  if(data==nullptr)
+  if(data == nullptr)
     return empty_d;
 
   return *data;
@@ -104,70 +101,69 @@ const irept::dt &irept::read() const
 #ifdef SHARING
 void irept::remove_ref(dt *old_data)
 {
-  if(old_data==nullptr) return;
+  if(old_data == nullptr)
+    return;
 
-  assert(old_data->ref_count!=0);
+  assert(old_data->ref_count != 0);
 
-  #ifdef IREP_DEBUG
+#ifdef IREP_DEBUG
   std::cout << "R: " << old_data << " " << old_data->ref_count << std::endl;
-  #endif
+#endif
 
   old_data->ref_count--;
-  if(old_data->ref_count==0)
+  if(old_data->ref_count == 0)
   {
-    #ifdef IREP_DEBUG
+#ifdef IREP_DEBUG
     std::cout << "D: " << pretty() << std::endl;
-    std::cout << "DELETING " << old_data->data
-              << " " << old_data << std::endl;
+    std::cout << "DELETING " << old_data->data << " " << old_data << std::endl;
     old_data->clear();
     std::cout << "DEALLOCATING " << old_data << "\n";
-    #endif
+#endif
 
     delete old_data;
 
-    #ifdef IREP_DEBUG
+#ifdef IREP_DEBUG
     std::cout << "DONE\n";
-    #endif
+#endif
   }
 }
 #endif
 
 void irept::clear()
 {
-  #ifdef SHARING
+#ifdef SHARING
   remove_ref(data);
-  data=nullptr;
-  #else
+  data = nullptr;
+#else
   data.clear();
-  #endif
+#endif
 }
 
 void irept::move_to_named_sub(const irep_namet &name, irept &irep)
 {
-  #ifdef SHARING
+#ifdef SHARING
   detatch();
-  #endif
+#endif
   add(name).swap(irep);
   irep.clear();
 }
 
 void irept::move_to_sub(irept &irep)
 {
-  #ifdef SHARING
+#ifdef SHARING
   detatch();
-  #endif
+#endif
   get_sub().push_back(get_nil_irep());
   get_sub().back().swap(irep);
 }
 
 const irep_idt &irept::get(const irep_namet &name) const
 {
-  const named_subt &s=
-    is_comment(name)?get_comments():get_named_sub();
+  const named_subt &s = is_comment(name) ? get_comments() : get_named_sub();
 
-  named_subt::const_iterator it=s.find(name);
+  named_subt::const_iterator it = s.find(name);
 
-  if(it==s.end())
+  if(it == s.end())
   {
     const static irep_idt empty;
     return empty;
@@ -188,27 +184,26 @@ void irept::set(const irep_namet &name, const long value)
 
 void irept::remove(const irep_namet &name)
 {
-  named_subt &s=
-    is_comment(name)?get_comments():get_named_sub();
+  named_subt &s = is_comment(name) ? get_comments() : get_named_sub();
 
-  named_subt::iterator it=s.find(name);
+  named_subt::iterator it = s.find(name);
 
-  if(it!=s.end()) s.erase(it);
+  if(it != s.end())
+    s.erase(it);
 }
 
 void irept::set(const irep_namet &name, const irept &irep)
 {
-  add(name)=irep;
+  add(name) = irep;
 }
 
 const irept &irept::find(const irep_namet &name) const
 {
-  const named_subt &s=
-    is_comment(name)?get_comments():get_named_sub();
+  const named_subt &s = is_comment(name) ? get_comments() : get_named_sub();
 
-  named_subt::const_iterator it=s.find(name);
+  named_subt::const_iterator it = s.find(name);
 
-  if(it==s.end())
+  if(it == s.end())
     return get_nil_irep();
 
   return it->second;
@@ -216,23 +211,26 @@ const irept &irept::find(const irep_namet &name) const
 
 irept &irept::add(const irep_namet &name)
 {
-  named_subt &s=
-    is_comment(name)?get_comments():get_named_sub();
+  named_subt &s = is_comment(name) ? get_comments() : get_named_sub();
 
   return s[name];
 }
 
 bool operator==(const irept &i1, const irept &i2)
 {
-  #ifdef SHARING
-  if(i1.data==i2.data) return true;
-  #endif
+#ifdef SHARING
+  if(i1.data == i2.data)
+    return true;
+#endif
 
-  if(i1.id()!=i2.id()) return false;
+  if(i1.id() != i2.id())
+    return false;
 
-  if(i1.get_sub()!=i2.get_sub()) return false; // recursive call
+  if(i1.get_sub() != i2.get_sub())
+    return false; // recursive call
 
-  if(i1.get_named_sub()!=i2.get_named_sub()) return false; // recursive call
+  if(i1.get_named_sub() != i2.get_named_sub())
+    return false; // recursive call
 
   // comments are NOT checked
 
@@ -241,44 +239,47 @@ bool operator==(const irept &i1, const irept &i2)
 
 bool full_eq(const irept &i1, const irept &i2)
 {
-  #ifdef SHARING
-  if(i1.data==i2.data) return true;
-  #endif
+#ifdef SHARING
+  if(i1.data == i2.data)
+    return true;
+#endif
 
-  if(i1.id()!=i2.id()) return false;
+  if(i1.id() != i2.id())
+    return false;
 
-  const irept::subt &i1_sub=i1.get_sub();
-  const irept::subt &i2_sub=i2.get_sub();
-  const irept::named_subt &i1_named_sub=i1.get_named_sub();
-  const irept::named_subt &i2_named_sub=i2.get_named_sub();
-  const irept::named_subt &i1_comments=i1.get_comments();
-  const irept::named_subt &i2_comments=i2.get_comments();
+  const irept::subt &i1_sub = i1.get_sub();
+  const irept::subt &i2_sub = i2.get_sub();
+  const irept::named_subt &i1_named_sub = i1.get_named_sub();
+  const irept::named_subt &i2_named_sub = i2.get_named_sub();
+  const irept::named_subt &i1_comments = i1.get_comments();
+  const irept::named_subt &i2_comments = i2.get_comments();
 
-  if(i1_sub.size()      !=i2_sub.size()) return false;
-  if(i1_named_sub.size()!=i2_named_sub.size()) return false;
-  if(i1_comments.size() !=i2_comments.size()) return false;
+  if(i1_sub.size() != i2_sub.size())
+    return false;
+  if(i1_named_sub.size() != i2_named_sub.size())
+    return false;
+  if(i1_comments.size() != i2_comments.size())
+    return false;
 
-  for(unsigned i=0; i<i1_sub.size(); i++)
+  for(unsigned i = 0; i < i1_sub.size(); i++)
     if(!full_eq(i1_sub[i], i2_sub[i]))
       return false;
 
   {
-    irept::named_subt::const_iterator i1_it=i1_named_sub.begin();
-    irept::named_subt::const_iterator i2_it=i2_named_sub.begin();
+    irept::named_subt::const_iterator i1_it = i1_named_sub.begin();
+    irept::named_subt::const_iterator i2_it = i2_named_sub.begin();
 
-    for(; i1_it!=i1_named_sub.end(); i1_it++, i2_it++)
-      if(i1_it->first!=i2_it->first ||
-         !full_eq(i1_it->second, i2_it->second))
+    for(; i1_it != i1_named_sub.end(); i1_it++, i2_it++)
+      if(i1_it->first != i2_it->first || !full_eq(i1_it->second, i2_it->second))
         return false;
   }
 
   {
-    irept::named_subt::const_iterator i1_it=i1_comments.begin();
-    irept::named_subt::const_iterator i2_it=i2_comments.begin();
+    irept::named_subt::const_iterator i1_it = i1_comments.begin();
+    irept::named_subt::const_iterator i2_it = i2_comments.begin();
 
-    for(; i1_it!=i1_comments.end(); i1_it++, i2_it++)
-      if(i1_it->first!=i2_it->first ||
-         !full_eq(i1_it->second, i2_it->second))
+    for(; i1_it != i1_comments.end(); i1_it++, i2_it++)
+      if(i1_it->first != i2_it->first || !full_eq(i1_it->second, i2_it->second))
         return false;
   }
 
@@ -290,7 +291,7 @@ std::string irept::to_string() const
   return pretty(0);
 }
 
-std::ostream& operator<< (std::ostream& out, const irept &irep)
+std::ostream &operator<<(std::ostream &out, const irept &irep)
 {
   out << irep.to_string();
   return out;
@@ -298,9 +299,9 @@ std::ostream& operator<< (std::ostream& out, const irept &irep)
 
 bool ordering(const irept &X, const irept &Y)
 {
-  return X.compare(Y)<0;
+  return X.compare(Y) < 0;
 
-  #if 0
+#if 0
   if(X.data<Y.data) return true;
   if(Y.data<X.data) return false;
 
@@ -346,56 +347,59 @@ bool ordering(const irept &X, const irept &Y)
   }
 
   return false;
-  #endif
+#endif
 }
 
 int irept::compare(const irept &i) const
 {
   int r;
 
-  r=id().compare(i.id());
-  if(r!=0) return r;
+  r = id().compare(i.id());
+  if(r != 0)
+    return r;
 
-  if(get_sub().size()<i.get_sub().size()) return -1;
-  if(get_sub().size()>i.get_sub().size()) return 1;
+  if(get_sub().size() < i.get_sub().size())
+    return -1;
+  if(get_sub().size() > i.get_sub().size())
+    return 1;
 
   {
     irept::subt::const_iterator it1, it2;
 
-    for(it1=get_sub().begin(),
-        it2=i.get_sub().begin();
-        it1!=get_sub().end() && it2!=i.get_sub().end();
-        it1++,
-        it2++)
+    for(it1 = get_sub().begin(), it2 = i.get_sub().begin();
+        it1 != get_sub().end() && it2 != i.get_sub().end();
+        it1++, it2++)
     {
-      r=it1->compare(*it2);
-      if(r!=0) return r;
+      r = it1->compare(*it2);
+      if(r != 0)
+        return r;
     }
 
-    assert(it1==get_sub().end() && it2==i.get_sub().end());
+    assert(it1 == get_sub().end() && it2 == i.get_sub().end());
   }
 
-  if(get_named_sub().size()<i.get_named_sub().size()) return -1;
-  if(get_named_sub().size()>i.get_named_sub().size()) return 1;
+  if(get_named_sub().size() < i.get_named_sub().size())
+    return -1;
+  if(get_named_sub().size() > i.get_named_sub().size())
+    return 1;
 
   {
     irept::named_subt::const_iterator it1, it2;
 
-    for(it1=get_named_sub().begin(),
-        it2=i.get_named_sub().begin();
-        it1!=get_named_sub().end() && it2!=i.get_named_sub().end();
-        it1++,
-        it2++)
+    for(it1 = get_named_sub().begin(), it2 = i.get_named_sub().begin();
+        it1 != get_named_sub().end() && it2 != i.get_named_sub().end();
+        it1++, it2++)
     {
-      r=it1->first.compare(it2->first);
-      if(r!=0) return r;
+      r = it1->first.compare(it2->first);
+      if(r != 0)
+        return r;
 
-      r=it1->second.compare(it2->second);
-      if(r!=0) return r;
+      r = it1->second.compare(it2->second);
+      if(r != 0)
+        return r;
     }
 
-    assert(it1==get_named_sub().end() &&
-           it2==i.get_named_sub().end());
+    assert(it1 == get_named_sub().end() && it2 == i.get_named_sub().end());
   }
 
   // equal
@@ -409,14 +413,15 @@ bool operator<(const irept &X, const irept &Y)
 
 size_t irept::hash() const
 {
-  size_t result=hash_string(id());
+  size_t result = hash_string(id());
 
-  forall_irep(it, get_sub()) result=result^it->hash();
+  forall_irep(it, get_sub())
+    result = result ^ it->hash();
 
   forall_named_irep(it, get_named_sub())
   {
-    result=result^hash_string(it->first);
-    result=result^it->second.hash();
+    result = result ^ hash_string(it->first);
+    result = result ^ it->second.hash();
   }
 
   return result;
@@ -424,20 +429,21 @@ size_t irept::hash() const
 
 size_t irept::full_hash() const
 {
-  size_t result=hash_string(id());
+  size_t result = hash_string(id());
 
-  forall_irep(it, get_sub()) result=result^it->full_hash();
+  forall_irep(it, get_sub())
+    result = result ^ it->full_hash();
 
   forall_named_irep(it, get_named_sub())
   {
-    result=result^hash_string(it->first);
-    result=result^it->second.full_hash();
+    result = result ^ hash_string(it->first);
+    result = result ^ it->second.full_hash();
   }
 
   forall_named_irep(it, get_comments())
   {
-    result=result^hash_string(it->first);
-    result=result^it->second.full_hash();
+    result = result ^ hash_string(it->first);
+    result = result ^ it->second.full_hash();
   }
 
   return result;
@@ -445,63 +451,63 @@ size_t irept::full_hash() const
 
 static void indent_str(std::string &s, unsigned indent)
 {
-  for(unsigned i=0; i<indent; i++)
-    s+=' ';
+  for(unsigned i = 0; i < indent; i++)
+    s += ' ';
 }
 
 std::string irept::pretty(unsigned indent) const
 {
   std::string result;
 
-  if(id()!="")
+  if(id() != "")
   {
-    result+=id_string();
-    indent+=2;
+    result += id_string();
+    indent += 2;
   }
 
   forall_named_irep(it, get_named_sub())
   {
-    result+="\n";
+    result += "\n";
     indent_str(result, indent);
 
-    result+="* ";
-    #ifdef USE_DSTRING
-    result+=it->first.as_string();
-    #else
-    result+=it->first;
-    #endif
-    result+=": ";
+    result += "* ";
+#ifdef USE_DSTRING
+    result += it->first.as_string();
+#else
+    result += it->first;
+#endif
+    result += ": ";
 
-    result+=it->second.pretty(indent+2);
+    result += it->second.pretty(indent + 2);
   }
 
   forall_named_irep(it, get_comments())
   {
-    result+="\n";
+    result += "\n";
     indent_str(result, indent);
 
-    result+="* ";
-    #ifdef USE_DSTRING
-    result+=it->first.as_string();
-    #else
-    result+=it->first;
-    #endif
-    result+=": ";
+    result += "* ";
+#ifdef USE_DSTRING
+    result += it->first.as_string();
+#else
+    result += it->first;
+#endif
+    result += ": ";
 
-    result+=it->second.pretty(indent+2);
+    result += it->second.pretty(indent + 2);
   }
 
-  unsigned count=0;
+  unsigned count = 0;
 
   forall_irep(it, get_sub())
   {
-    result+="\n";
+    result += "\n";
     indent_str(result, indent);
 
-    result+=i2string(count++);
-    result+=": ";
+    result += i2string(count++);
+    result += ": ";
 
-    result+=it->pretty(indent+2);
+    result += it->pretty(indent + 2);
   }
 
   return result;

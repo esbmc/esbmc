@@ -1,3 +1,4 @@
+CORE
 main.c
 --ir --z3
 ^VERIFICATION SUCCESSFUL$

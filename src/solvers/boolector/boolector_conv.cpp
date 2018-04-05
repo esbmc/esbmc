@@ -5,379 +5,510 @@ extern "C" {
 #include <btorcore.h>
 }
 
-smt_convt *
-create_new_boolector_solver(bool int_encoding, const namespacet &ns,
-                            const optionst &options,
-                            tuple_iface **tuple_api __attribute__((unused)),
-                            array_iface **array_api)
+smt_convt *create_new_boolector_solver(
+  bool int_encoding,
+  const namespacet &ns,
+  tuple_iface **tuple_api __attribute__((unused)),
+  array_iface **array_api,
+  fp_convt **fp_api)
 {
-  boolector_convt *conv =
-    new boolector_convt(int_encoding, ns, options);
-  *array_api = static_cast<array_iface*>(conv);
+  boolector_convt *conv = new boolector_convt(int_encoding, ns);
+  *array_api = static_cast<array_iface *>(conv);
+  *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-boolector_convt::boolector_convt(bool int_encoding,
-                                 const namespacet &ns, const optionst &options)
-  : smt_convt(int_encoding, ns), array_iface(false, false)
+boolector_convt::boolector_convt(bool int_encoding, const namespacet &ns)
+  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
 {
-
-  if (int_encoding) {
-    std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
+  if(int_encoding)
+  {
+    std::cerr << "Boolector does not support integer encoding mode"
+              << std::endl;
     abort();
   }
 
   btor = boolector_new();
   boolector_set_opt(btor, BTOR_OPT_MODEL_GEN, 1);
   boolector_set_opt(btor, BTOR_OPT_AUTO_CLEANUP, 1);
-
-  if (options.get_option("output") != "") {
-    debugfile = fopen(options.get_option("output").c_str(), "w");
-  } else {
-    debugfile = nullptr;
-  }
 }
 
 boolector_convt::~boolector_convt()
 {
   boolector_delete(btor);
-
   btor = nullptr;
-  if (debugfile)
-    fclose(debugfile);
-  debugfile = nullptr;
 }
 
-smt_convt::resultt
-boolector_convt::dec_solve()
+smt_convt::resultt boolector_convt::dec_solve()
 {
   pre_solve();
 
   int result = boolector_sat(btor);
 
-  if (result == BOOLECTOR_SAT)
+  if(result == BOOLECTOR_SAT)
     return P_SATISFIABLE;
-  else if (result == BOOLECTOR_UNSAT)
+
+  if(result == BOOLECTOR_UNSAT)
     return P_UNSATISFIABLE;
-  else
-    return P_ERROR;
+
+  return P_ERROR;
 }
 
-tvt
-boolector_convt::l_get(const smt_ast *l)
-{
-  assert(l->sort->id == SMT_SORT_BOOL);
-  const btor_smt_ast *ast = btor_ast_downcast(l);
-  const char *result = boolector_bv_assignment(btor, ast->e);
-
-  assert(result != nullptr && "Boolector returned null bv assignment string");
-
-  tvt t;
-
-  switch (*result) {
-  case '1':
-    t = tvt(tvt::TV_TRUE);
-    break;
-  case '0':
-    t = tvt(tvt::TV_FALSE);
-    break;
-  case 'x':
-    t = tvt(tvt::TV_UNKNOWN);
-    break;
-  default:
-    std::cerr << "Boolector bv model string \"" << result << "\" not of the "
-              << "expected format" << std::endl;
-    abort();
-  }
-
-  boolector_free_bv_assignment(btor, result);
-  return t;
-}
-
-const std::string
-boolector_convt::solver_text()
+const std::string boolector_convt::solver_text()
 {
   std::string ss = "Boolector ";
   ss += btor_version(btor);
   return ss;
 }
 
-void
-boolector_convt::assert_ast(const smt_ast *a)
+void boolector_convt::assert_ast(const smt_ast *a)
 {
-  const btor_smt_ast *ast = btor_ast_downcast(a);
-  boolector_assert(btor, ast->e);
-#if 0
-  if (debugfile)
-    boolector_dump_smt(btor, debugfile, ast->e);
-#endif
+  boolector_assert(btor, to_solver_smt_ast<btor_smt_ast>(a)->a);
 }
 
-smt_ast *
-boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
-                               const smt_ast * const *args,
-                               unsigned int numargs)
+smt_astt boolector_convt::mk_bvadd(smt_astt a, smt_astt b)
 {
-  const btor_smt_ast *asts[4];
-  unsigned int i;
-
-  assert(numargs <= 4);
-  for (i = 0; i < numargs; i++) {
-    asts[i] = btor_ast_downcast(args[i]);
-    // Structs should never reach the SMT solver
-    assert(asts[i]->sort->id != SMT_SORT_STRUCT);
-  }
-
-  switch (k) {
-  case SMT_FUNC_BVADD:
-    return new_ast(s, boolector_add(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVSUB:
-    return new_ast(s, boolector_sub(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVMUL:
-    return new_ast(s, boolector_mul(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVSMOD:
-    return new_ast(s, boolector_srem(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVUMOD:
-    return new_ast(s, boolector_urem(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVSDIV:
-    return new_ast(s, boolector_sdiv(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVUDIV:
-    return new_ast(s, boolector_udiv(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVSHL:
-    return fix_up_shift(boolector_sll, asts[0], asts[1], s);
-  case SMT_FUNC_BVLSHR:
-    return fix_up_shift(boolector_srl, asts[0], asts[1], s);
-  case SMT_FUNC_BVASHR:
-    return fix_up_shift(boolector_sra, asts[0], asts[1], s);
-  case SMT_FUNC_BVNEG:
-    return new_ast(s, boolector_neg(btor, asts[0]->e));
-  case SMT_FUNC_BVNOT:
-  case SMT_FUNC_NOT:
-    return new_ast(s, boolector_not(btor, asts[0]->e));
-  case SMT_FUNC_BVNXOR:
-    return new_ast(s, boolector_xnor(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVNOR:
-    return new_ast(s, boolector_nor(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVNAND:
-    return new_ast(s, boolector_nand(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVXOR:
-  case SMT_FUNC_XOR:
-    return new_ast(s, boolector_xor(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVOR:
-  case SMT_FUNC_OR:
-    return new_ast(s, boolector_or(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVAND:
-  case SMT_FUNC_AND:
-    return new_ast(s, boolector_and(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_IMPLIES:
-    return new_ast(s, boolector_implies(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVULT:
-    return new_ast(s, boolector_ult(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVSLT:
-    return new_ast(s, boolector_slt(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVULTE:
-    return new_ast(s, boolector_ulte(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVSLTE:
-    return new_ast(s, boolector_slte(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVUGT:
-    return new_ast(s, boolector_ugt(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVSGT:
-    return new_ast(s, boolector_sgt(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVUGTE:
-    return new_ast(s, boolector_ugte(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_BVSGTE:
-    return new_ast(s, boolector_sgte(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_EQ:
-    return new_ast(s, boolector_eq(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_NOTEQ:
-    return new_ast(s, boolector_ne(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_ITE:
-    return new_ast(s, boolector_cond(btor, asts[0]->e, asts[1]->e, asts[2]->e));
-  case SMT_FUNC_STORE:
-    return new_ast(s, boolector_write(btor, asts[0]->e, asts[1]->e,
-                                               asts[2]->e));
-  case SMT_FUNC_SELECT:
-    return new_ast(s, boolector_read(btor, asts[0]->e, asts[1]->e));
-  case SMT_FUNC_CONCAT:
-    return new_ast(s, boolector_concat(btor, asts[0]->e, asts[1]->e));
-  default:
-    std::cerr << "Unhandled SMT func \"" << smt_func_name_table[k]
-              << "\" in boolector conv" << std::endl;
-    abort();
-  }
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  return new_ast(
+    boolector_add(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
 }
 
-smt_sort *
-boolector_convt::mk_sort(const smt_sort_kind k, ...)
+smt_astt boolector_convt::mk_bvsub(smt_astt a, smt_astt b)
 {
-  // Boolector doesn't have any special handling for sorts, they're all always
-  // explicit arguments to functions. So, just use the base smt_sort class.
-  va_list ap;
-
-  va_start(ap, k);
-  switch (k) {
-  case SMT_SORT_INT:
-  case SMT_SORT_REAL:
-    std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
-    abort();
-  case SMT_SORT_BV:
-  {
-    unsigned long uint = va_arg(ap, unsigned long);
-    return new boolector_smt_sort(k, boolector_bitvec_sort(btor, uint), uint);
-  }
-  case SMT_SORT_ARRAY:
-  {
-    const boolector_smt_sort* dom = va_arg(ap, boolector_smt_sort *); // Consider constness?
-    const boolector_smt_sort* range = va_arg(ap, boolector_smt_sort *);
-
-    assert(int_encoding || dom->data_width != 0);
-
-    // The range data width is allowed to be zero, which happens if the range
-    // is not a bitvector / integer
-    unsigned int data_width = range->data_width;
-    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
-      data_width = 1;
-
-    return new boolector_smt_sort(k, boolector_array_sort(btor, dom->t, range->t),
-                                  data_width, dom->data_width, range);
-  }
-  case SMT_SORT_BOOL:
-    return new boolector_smt_sort(k, boolector_bool_sort(btor));
-  case SMT_SORT_FLOATBV:
-    std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-    abort();
-  }
-
-  std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;
-  abort();
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_sub(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
 }
 
-smt_ast *
-boolector_convt::mk_smt_int(const mp_integer &theint __attribute__((unused)), bool sign __attribute__((unused)))
+smt_astt boolector_convt::mk_bvmul(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_mul(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_bvsmod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_srem(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_bvumod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_urem(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_bvsdiv(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_sdiv(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_bvudiv(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_udiv(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_bvshl(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return fix_up_shift(boolector_sll, a, b, a->sort);
+}
+
+smt_astt boolector_convt::mk_bvashr(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return fix_up_shift(boolector_sra, a, b, a->sort);
+}
+
+smt_astt boolector_convt::mk_bvlshr(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return fix_up_shift(boolector_srl, a, b, a->sort);
+}
+
+smt_astt boolector_convt::mk_bvneg(smt_astt a)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast(
+    boolector_neg(btor, to_solver_smt_ast<btor_smt_ast>(a)->a), a->sort);
+}
+
+smt_astt boolector_convt::mk_bvnot(smt_astt a)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast(
+    boolector_not(btor, to_solver_smt_ast<btor_smt_ast>(a)->a), a->sort);
+}
+
+smt_astt boolector_convt::mk_bvnxor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_xnor(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_bvnor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_nor(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_bvnand(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_nand(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_bvxor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_xor(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_bvor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_or(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_bvand(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_and(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_implies(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    boolector_implies(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_xor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    boolector_xor(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_or(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    boolector_or(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_and(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    boolector_and(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_not(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    boolector_not(btor, to_solver_smt_ast<btor_smt_ast>(a)->a), boolean_sort);
+}
+
+smt_astt boolector_convt::mk_bvult(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_ult(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_bvslt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_slt(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_bvugt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_ugt(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_bvsgt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_sgt(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_bvule(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_ulte(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_bvsle(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_slte(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_bvuge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_ugte(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_bvsge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_sgte(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_eq(smt_astt a, smt_astt b)
+{
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_eq(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_neq(smt_astt a, smt_astt b)
+{
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_ne(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt boolector_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
+{
+  assert(a->sort->id == SMT_SORT_ARRAY);
+  assert(a->sort->get_domain_width() == b->sort->get_data_width());
+  assert(
+    a->sort->get_range_sort()->get_data_width() == c->sort->get_data_width());
+  return new_ast(
+    boolector_write(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a,
+      to_solver_smt_ast<btor_smt_ast>(c)->a),
+    a->sort);
+}
+
+smt_astt boolector_convt::mk_select(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_ARRAY);
+  assert(a->sort->get_domain_width() == b->sort->get_data_width());
+  return new_ast(
+    boolector_read(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort->get_range_sort());
+}
+
+smt_ast *boolector_convt::mk_smt_int(
+  const mp_integer &theint __attribute__((unused)),
+  bool sign __attribute__((unused)))
 {
   std::cerr << "Boolector can't create integer sorts" << std::endl;
   abort();
 }
 
-smt_ast *
-boolector_convt::mk_smt_real(const std::string &str __attribute__((unused)))
+smt_ast *boolector_convt::mk_smt_real(const std::string &str
+                                      __attribute__((unused)))
 {
   std::cerr << "Boolector can't create Real sorts" << std::endl;
   abort();
 }
 
-smt_ast *
-boolector_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                unsigned ew, unsigned sw)
+smt_astt boolector_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
 {
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
+  return new_ast(
+    boolector_const(btor, integer2binary(theint, s->get_data_width()).c_str()),
+    s);
 }
 
-smt_astt
-boolector_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt
-boolector_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_ast *
-boolector_convt::mk_smt_bvint(
-  const mp_integer &theint,
-  bool sign,
-  unsigned int w)
-{
-  const smt_sort *s = mk_sort(SMT_SORT_BV, w);
-
-  if (w > 32) {
-    // We have to pass things around via means of strings, becausae boolector
-    // uses native int types as arguments to its functions, rather than fixed
-    // width integers. Seeing how amd64 is LP64, there's no way to pump 64 bit
-    // ints to boolector natively.
-    if (w > 64) {
-      std::cerr <<  "Boolector backend assumes maximum bitwidth is 64, sorry"
-                << std::endl;
-      abort();
-    }
-
-    char buffer[65];
-    memset(buffer, 0, sizeof(buffer));
-
-    // Note that boolector has the most significant bit first in bit strings.
-    int64_t num = theint.to_int64();
-    uint64_t bit = 1ULL << (w - 1);
-    for (unsigned int i = 0; i < w; i++) {
-      if (num & bit)
-        buffer[i] = '1';
-      else
-        buffer[i] = '0';
-
-      bit >>= 1;
-    }
-
-    BoolectorNode *node = boolector_const(btor, buffer);
-    return new_ast(s, node);
-  }
-
-  BoolectorNode *node;
-  if (sign) {
-    node = boolector_int(btor, theint.to_long(), boolector_sort_downcast(s)->t);
-  } else {
-    node =
-      boolector_unsigned_int(btor, theint.to_ulong(), boolector_sort_downcast(s)->t);
-  }
-
-  return new_ast(s, node);
-}
-
-smt_ast *
-boolector_convt::mk_smt_bool(bool val)
+smt_ast *boolector_convt::mk_smt_bool(bool val)
 {
   BoolectorNode *node = (val) ? boolector_true(btor) : boolector_false(btor);
-  const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
-  return new_ast(sort, node);
+  const smt_sort *sort = boolean_sort;
+  return new_ast(node, sort);
 }
 
-smt_ast *
-boolector_convt::mk_array_symbol(const std::string &name, const smt_sort *s,
-                                smt_sortt array_subtype __attribute__((unused)))
+smt_ast *boolector_convt::mk_array_symbol(
+  const std::string &name,
+  const smt_sort *s,
+  smt_sortt array_subtype __attribute__((unused)))
 {
   return mk_smt_symbol(name, s);
 }
@@ -386,176 +517,221 @@ smt_ast *
 boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   symtable_type::iterator it = symtable.find(name);
-  if (it != symtable.end())
+  if(it != symtable.end())
     return it->second;
 
   BoolectorNode *node;
 
-  switch(s->id) {
+  switch(s->id)
+  {
   case SMT_SORT_BV:
-    node = boolector_var(btor, boolector_sort_downcast(s)->t, name.c_str());
+  case SMT_SORT_FIXEDBV:
+  case SMT_SORT_BVFP:
+  case SMT_SORT_BVFP_RM:
+    node = boolector_var(
+      btor, to_solver_smt_sort<BoolectorSort>(s)->s, name.c_str());
     break;
+
   case SMT_SORT_BOOL:
-    node = boolector_var(btor, boolector_sort_downcast(s)->t, name.c_str());
+    node = boolector_var(
+      btor, to_solver_smt_sort<BoolectorSort>(s)->s, name.c_str());
     break;
+
   case SMT_SORT_ARRAY:
-    node = boolector_array(btor, boolector_sort_downcast(s)->t, name.c_str());
+    node = boolector_array(
+      btor, to_solver_smt_sort<BoolectorSort>(s)->s, name.c_str());
     break;
+
   default:
-    return nullptr; // Hax.
+    std::cerr << "Unknown type for symbol\n";
+    abort();
   }
 
-  btor_smt_ast *ast = new_ast(s, node);
+  btor_smt_ast *ast = new_ast(node, s);
 
   symtable.insert(symtable_type::value_type(name, ast));
   return ast;
 }
 
-smt_sort *
-boolector_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
+smt_astt boolector_convt::mk_extract(
+  const smt_ast *a,
+  unsigned int high,
+  unsigned int low)
 {
-  abort();
+  smt_sortt s = mk_bv_sort(high - low + 1);
+  const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
+  BoolectorNode *b = boolector_slice(btor, ast->a, high, low);
+  return new_ast(b, s);
 }
 
-smt_ast *
-boolector_convt::mk_extract(const smt_ast *a, unsigned int high,
-                            unsigned int low, const smt_sort *s)
+smt_astt boolector_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
-  const btor_smt_ast *ast = btor_ast_downcast(a);
-  BoolectorNode *b = boolector_slice(btor, ast->e, high, low);
-  return new_ast(s, b);
+  smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
+  const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
+  BoolectorNode *b = boolector_sext(btor, ast->a, topwidth);
+  return new_ast(b, s);
 }
 
-expr2tc
-boolector_convt::get_bool(const smt_ast *a)
+smt_astt boolector_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
-  tvt t = l_get(a);
-  if (t.is_true())
-    return gen_true_expr();
-  else if (t.is_false())
-    return gen_false_expr();
-  else
-    return expr2tc();
+  smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
+  const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
+  BoolectorNode *b = boolector_uext(btor, ast->a, topwidth);
+  return new_ast(b, s);
 }
 
-static int64_t read_btor_string(const char *result, unsigned int len)
+smt_astt boolector_convt::mk_concat(smt_astt a, smt_astt b)
 {
-  assert(result != nullptr && "Boolector returned null bv assignment string");
+  smt_sortt s =
+    mk_bv_sort(a->sort->get_data_width() + b->sort->get_data_width());
 
-  // Assume first bit is the most significant for the moment.
-  int64_t res = 0;
+  return new_ast(
+    boolector_concat(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    s);
+}
 
-  for (unsigned int i = 0; i < len; i++) {
-    res <<= 1;
+smt_astt boolector_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
+{
+  assert(cond->sort->id == SMT_SORT_BOOL);
+  assert(t->sort->get_data_width() == f->sort->get_data_width());
 
-    assert(result[i] != '\0' && "Premature end of boolector bv assignment str");
-    switch (result[i]) {
-    case '1':
-      res |= 1;
-      break;
-    case '0':
-    case 'x':
-      break;
-    default:
-      std::cerr << "Boolector bv model string \"" << result << "\" not of the "
-                << "expected format" << std::endl;
-      abort();
-    }
+  return new_ast(
+    boolector_cond(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(cond)->a,
+      to_solver_smt_ast<btor_smt_ast>(t)->a,
+      to_solver_smt_ast<btor_smt_ast>(f)->a),
+    t->sort);
+}
 
-    if (i == 0 && res == 1)
-      res = -1;
+bool boolector_convt::get_bool(const smt_ast *a)
+{
+  const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
+  const char *result = boolector_bv_assignment(btor, ast->a);
+
+  assert(result != NULL && "Boolector returned null bv assignment string");
+
+  bool res;
+  switch(*result)
+  {
+  case '1':
+    res = true;
+    break;
+  case '0':
+    res = false;
+    break;
+  default:
+    abort();
   }
 
+  boolector_free_bv_assignment(btor, result);
   return res;
 }
 
-expr2tc
-boolector_convt::get_bv(const type2tc &t, const smt_ast *a)
+BigInt boolector_convt::get_bv(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_BV && a->sort->data_width != 0);
-  const btor_smt_ast *ast = btor_ast_downcast(a);
+  const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
 
-  const char *result = boolector_bv_assignment(btor, ast->e);
-  int64_t val = read_btor_string(result, a->sort->data_width);
+  const char *result = boolector_bv_assignment(btor, ast->a);
+  BigInt val = string2integer(result, 2);
   boolector_free_bv_assignment(btor, result);
 
-  constant_int2tc exp(t, BigInt(val));
-  return exp;
+  return val;
 }
 
-expr2tc
-boolector_convt::get_array_elem(const smt_ast *array, uint64_t index,
-                                const type2tc &subtype __attribute__((unused)))
+expr2tc boolector_convt::get_array_elem(
+  const smt_ast *array,
+  uint64_t index,
+  const type2tc &subtype)
 {
-  // Super inefficient, but never mind.
-  assert(array->sort->id == SMT_SORT_ARRAY);
-  const btor_smt_ast *ast = btor_ast_downcast(array);
+  const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(array);
 
   int size;
   char **indicies, **values;
-  boolector_array_assignment(btor, ast->e, &indicies, &values, &size);
+  boolector_array_assignment(btor, ast->a, &indicies, &values, &size);
 
-  if (size == 0)
-    // Presumably no allocation occurred either.
-    return expr2tc();
-
-  expr2tc final_result;
-
-  for (int i = 0; i < size; i++) {
-    int64_t idx = read_btor_string(indicies[i], array->sort->domain_width);
-    if (idx == (int64_t)index) {
-      int64_t value = read_btor_string(values[i], array->sort->data_width);
-      final_result =
-        constant_int2tc(get_int_type(array->sort->data_width), BigInt(value));
-      break;
+  BigInt val = 0;
+  if(size > 0)
+  {
+    for(int i = 0; i < size; i++)
+    {
+      auto idx = string2integer(indicies[i], 2);
+      if(idx.to_uint64() == index)
+      {
+        val = string2integer(values[i], 2);
+        break;
+      }
     }
+
+    boolector_free_array_assignment(btor, indicies, values, size);
+    return build_bv(subtype, val);
   }
 
-  boolector_free_array_assignment(btor, indicies, values, size);
-  return final_result;
+  return gen_zero(subtype);
 }
 
-const smt_ast *
-boolector_convt::overflow_arith(const expr2tc &expr)
+const smt_ast *boolector_convt::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
   const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
 
-  const btor_smt_ast *side1 = btor_ast_downcast(convert_ast(opers.side_1));
-  const btor_smt_ast *side2 = btor_ast_downcast(convert_ast(opers.side_2));
+  const btor_smt_ast *side1 =
+    to_solver_smt_ast<btor_smt_ast>(convert_ast(opers.side_1));
+  const btor_smt_ast *side2 =
+    to_solver_smt_ast<btor_smt_ast>(convert_ast(opers.side_2));
 
   // Guess whether we're performing a signed or unsigned comparison.
-  bool is_signed = (is_signedbv_type(opers.side_1) ||
-                    is_signedbv_type(opers.side_2));
+  bool is_signed =
+    (is_signedbv_type(opers.side_1) || is_signedbv_type(opers.side_2));
 
   BoolectorNode *res;
-  if (is_add2t(overflow.operand)) {
-    if (is_signed) {
-      res = boolector_saddo(btor, side1->e, side2->e);
-    } else {
-      res = boolector_uaddo(btor, side1->e, side2->e);
+  if(is_add2t(overflow.operand))
+  {
+    if(is_signed)
+    {
+      res = boolector_saddo(btor, side1->a, side2->a);
     }
-  } else if (is_sub2t(overflow.operand)) {
-    if (is_signed) {
-      res = boolector_ssubo(btor, side1->e, side2->e);
-    } else {
-      res = boolector_usubo(btor, side1->e, side2->e);
+    else
+    {
+      res = boolector_uaddo(btor, side1->a, side2->a);
     }
-  } else if (is_mul2t(overflow.operand)) {
-    if (is_signed) {
-      res = boolector_smulo(btor, side1->e, side2->e);
-    } else {
-      res = boolector_umulo(btor, side1->e, side2->e);
+  }
+  else if(is_sub2t(overflow.operand))
+  {
+    if(is_signed)
+    {
+      res = boolector_ssubo(btor, side1->a, side2->a);
     }
-  } else if (is_div2t(overflow.operand) || is_modulus2t(overflow.operand)) {
-    res = boolector_sdivo(btor, side1->e, side2->e);
-  } else {
-    std::cerr << "Unexpected operand to overflow_arith2t irep" << std::endl;
-    abort();
+    else
+    {
+      res = boolector_usubo(btor, side1->a, side2->a);
+    }
+  }
+  else if(is_mul2t(overflow.operand))
+  {
+    if(is_signed)
+    {
+      res = boolector_smulo(btor, side1->a, side2->a);
+    }
+    else
+    {
+      res = boolector_umulo(btor, side1->a, side2->a);
+    }
+  }
+  else if(is_div2t(overflow.operand) || is_modulus2t(overflow.operand))
+  {
+    res = boolector_sdivo(btor, side1->a, side2->a);
+  }
+  else
+  {
+    return smt_convt::overflow_arith(expr);
   }
 
-  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
-  return new_ast(s, res);
+  const smt_sort *s = boolean_sort;
+  return new_ast(res, s);
 }
 
 const smt_ast *
@@ -564,63 +740,53 @@ boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return default_convert_array_of(init_val, domain_width, this);
 }
 
-void
-boolector_convt::add_array_constraints_for_solving()
+void boolector_convt::add_array_constraints_for_solving()
 {
 }
 
-void
-boolector_convt::push_array_ctx()
+void boolector_convt::push_array_ctx()
 {
 }
 
-void
-boolector_convt::pop_array_ctx()
+void boolector_convt::pop_array_ctx()
 {
 }
 
-smt_ast *
-boolector_convt::fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
-  const btor_smt_ast *op1, smt_sortt res_sort)
+smt_ast *boolector_convt::fix_up_shift(
+  shift_func_ptr fptr,
+  smt_astt op0,
+  smt_astt op1,
+  smt_sortt res_sort)
 {
   BoolectorNode *data_op, *shift_amount;
   bool need_to_shift_down = false;
   unsigned int bwidth;
 
-  data_op = op0->e;
-  bwidth = log2(op0->sort->data_width);
+  data_op = to_solver_smt_ast<btor_smt_ast>(op0)->a;
+  bwidth = log2(op0->sort->get_data_width());
 
   // If we're a non-power-of-x number, some zero extension has to occur
-  if (pow(2.0, bwidth) < op0->sort->data_width) {
+  if(pow(2.0, bwidth) < op0->sort->get_data_width())
+  {
     // Zero extend up to bwidth + 1
     bwidth++;
     unsigned int new_size = pow(2.0, bwidth);
-    unsigned int diff = new_size - op0->sort->data_width;
-    smt_sortt newsort = mk_sort(SMT_SORT_BV, new_size);
-    smt_astt zeroext = convert_zero_ext(op0, newsort, diff);
-    data_op = btor_ast_downcast(zeroext)->e;
+    smt_astt zeroext = mk_zero_ext(op0, new_size - op0->sort->get_data_width());
+    data_op = to_solver_smt_ast<btor_smt_ast>(zeroext)->a;
     need_to_shift_down = true;
   }
 
   // We also need to reduce the shift-amount operand down to log2(data_op) len
-  shift_amount = boolector_slice(btor, op1->e, bwidth-1, 0);
+  shift_amount = boolector_slice(
+    btor, to_solver_smt_ast<btor_smt_ast>(op1)->a, bwidth - 1, 0);
 
   BoolectorNode *shift = fptr(btor, data_op, shift_amount);
 
   // If zero extension occurred, cut off the top few bits of this value.
-  if (need_to_shift_down)
-    shift = boolector_slice(btor, shift, res_sort->data_width-1, 0);
+  if(need_to_shift_down)
+    shift = boolector_slice(btor, shift, res_sort->get_data_width() - 1, 0);
 
-  return new_ast(res_sort, shift);
-}
-
-const smt_ast* btor_smt_ast::select(smt_convt* ctx, const expr2tc& idx) const
-{
-  const smt_ast *args[2];
-  args[0] = this;
-  args[1] = ctx->convert_ast(idx);
-  const smt_sort *rangesort = boolector_sort_downcast(sort)->rangesort;
-  return ctx->mk_func_app(rangesort, SMT_FUNC_SELECT, args, 2);
+  return new_ast(shift, res_sort);
 }
 
 void boolector_convt::dump_smt()
@@ -630,5 +796,53 @@ void boolector_convt::dump_smt()
 
 void btor_smt_ast::dump() const
 {
-  boolector_dump_smt2_node(boolector_get_btor(e), stdout, e);
+  boolector_dump_smt2_node(boolector_get_btor(a), stdout, a);
+}
+
+void boolector_convt::print_model()
+{
+  boolector_print_model(btor, const_cast<char *>("smt2"), stdout);
+}
+
+smt_sortt boolector_convt::mk_bool_sort()
+{
+  return new solver_smt_sort<BoolectorSort>(
+    SMT_SORT_BOOL, boolector_bool_sort(btor), 1);
+}
+
+smt_sortt boolector_convt::mk_bv_sort(std::size_t width)
+{
+  return new solver_smt_sort<BoolectorSort>(
+    SMT_SORT_BV, boolector_bitvec_sort(btor, width), width);
+}
+
+smt_sortt boolector_convt::mk_fbv_sort(std::size_t width)
+{
+  return new solver_smt_sort<BoolectorSort>(
+    SMT_SORT_FIXEDBV, boolector_bitvec_sort(btor, width), width);
+}
+
+smt_sortt boolector_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
+{
+  auto domain_sort = to_solver_smt_sort<BoolectorSort>(domain);
+  auto range_sort = to_solver_smt_sort<BoolectorSort>(range);
+
+  auto t = boolector_array_sort(btor, domain_sort->s, range_sort->s);
+  return new solver_smt_sort<BoolectorSort>(
+    SMT_SORT_ARRAY, t, domain_sort->get_data_width(), range);
+}
+
+smt_sortt boolector_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
+{
+  return new solver_smt_sort<BoolectorSort>(
+    SMT_SORT_BVFP,
+    boolector_bitvec_sort(btor, ew + sw + 1),
+    ew + sw + 1,
+    sw + 1);
+}
+
+smt_sortt boolector_convt::mk_bvfp_rm_sort()
+{
+  return new solver_smt_sort<BoolectorSort>(
+    SMT_SORT_BVFP_RM, boolector_bitvec_sort(btor, 3), 3);
 }

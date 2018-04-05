@@ -32,7 +32,8 @@ public:
 
     pointert() = default;
 
-    pointert(unsigned _obj, const mp_integer&& _off):object(_obj), offset(_off)
+    pointert(unsigned _obj, const mp_integer &&_off)
+      : object(_obj), offset(_off)
     {
     }
   };
@@ -60,7 +61,8 @@ public:
     return invalid_object;
   }
 
-  unsigned get_free_obj_num() {
+  unsigned get_free_obj_num()
+  {
     return objects.size() - 1 + ++obj_num_offset;
   }
 
@@ -69,8 +71,10 @@ protected:
 
   expr2tc pointer_expr(const mp_integer &offset, const expr2t &object) const;
 
-  expr2tc object_rec(const mp_integer &offset, const type2tc &pointer_type,
-                     const expr2tc &src) const;
+  expr2tc object_rec(
+    const mp_integer &offset,
+    const type2tc &pointer_type,
+    const expr2tc &src) const;
 };
 
 #endif

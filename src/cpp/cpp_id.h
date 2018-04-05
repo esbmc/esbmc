@@ -25,36 +25,42 @@ class cpp_idt
 public:
   cpp_idt();
 
-  typedef enum
-  {
-    UNKNOWN, SYMBOL, TYPEDEF, CLASS, ENUM, TEMPLATE,
-    TEMPLATE_ARGUMENT, NAMESPACE, BLOCK_SCOPE,
-    TEMPLATE_SCOPE, ROOT_SCOPE
+  typedef enum {
+    UNKNOWN,
+    SYMBOL,
+    TYPEDEF,
+    CLASS,
+    ENUM,
+    TEMPLATE,
+    TEMPLATE_ARGUMENT,
+    NAMESPACE,
+    BLOCK_SCOPE,
+    TEMPLATE_SCOPE,
+    ROOT_SCOPE
   } id_classt;
 
-  bool is_member, is_method, is_static_member,
-       is_scope, is_constructor;
+  bool is_member, is_method, is_static_member, is_scope, is_constructor;
 
   id_classt id_class;
 
   inline bool is_class() const
   {
-    return id_class==CLASS;
+    return id_class == CLASS;
   }
 
   inline bool is_enum() const
   {
-    return id_class==ENUM;
+    return id_class == ENUM;
   }
 
   inline bool is_namespace() const
   {
-    return id_class==NAMESPACE;
+    return id_class == NAMESPACE;
   }
 
   inline bool is_typedef() const
   {
-    return id_class==TYPEDEF;
+    return id_class == TYPEDEF;
   }
 
   irep_idt identifier, base_name;
@@ -76,26 +82,25 @@ public:
     if(use_parent)
     {
       assert(!parents.empty());
-      cpp_idt &new_id=get_parent().insert(base_name);
-      new_id.original_scope=(cpp_scopet *)(this);
+      cpp_idt &new_id = get_parent().insert(base_name);
+      new_id.original_scope = (cpp_scopet *)(this);
       return new_id;
     }
 
-    cpp_id_mapt::iterator it=
-      sub.insert(std::pair<irep_idt, cpp_idt>
-        (base_name, cpp_idt()));
+    cpp_id_mapt::iterator it =
+      sub.insert(std::pair<irep_idt, cpp_idt>(base_name, cpp_idt()));
 
-    it->second.base_name=base_name;
+    it->second.base_name = base_name;
     it->second.add_parent(*this);
-    it->second.original_scope=nullptr;
+    it->second.original_scope = nullptr;
 
     return it->second;
   }
 
-  cpp_idt &get_parent(unsigned i=0) const
+  cpp_idt &get_parent(unsigned i = 0) const
   {
-    assert(i<parents_size());
-    assert(parents[i]!=nullptr);
+    assert(i < parents_size());
+    assert(parents[i] != nullptr);
     return *parents[i];
   }
 
@@ -111,16 +116,16 @@ public:
 
   inline void clear()
   {
-    *this=cpp_idt();
+    *this = cpp_idt();
   }
 
-  void print(std::ostream &out = std::cout, unsigned indent=0) const;
-  void print_fields(std::ostream &out = std::cout, unsigned indent=0) const;
+  void print(std::ostream &out = std::cout, unsigned indent = 0) const;
+  void print_fields(std::ostream &out = std::cout, unsigned indent = 0) const;
 
   friend class cpp_scopet;
 
 public:
-  std::set<cpp_idt*> using_set;
+  std::set<cpp_idt *> using_set;
 
 protected:
   cpp_id_mapt sub;

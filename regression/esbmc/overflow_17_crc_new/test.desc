@@ -1,3 +1,4 @@
+CORE
 main.c
 --overflow-check
 ^VERIFICATION SUCCESSFUL$

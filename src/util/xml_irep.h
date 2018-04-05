@@ -12,12 +12,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/irep.h>
 #include <util/xml.h>
 
-void convert(
-  const irept &irep,
-  xmlt &xml);
-  
-void convert(
-  const xmlt &xml,
-  irept &irep);
+void convert(const irept &irep, xmlt &xml);
+
+void convert(const xmlt &xml, irept &irep);
 
 #endif

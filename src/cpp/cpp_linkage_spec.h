@@ -9,10 +9,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_LINKAGE_SPEC_H
 #define CPROVER_CPP_LINKAGE_SPEC_H
 
-class cpp_linkage_spect:public exprt
+class cpp_linkage_spect : public exprt
 {
 public:
-  cpp_linkage_spect():exprt("cpp-linkage-spec")
+  cpp_linkage_spect() : exprt("cpp-linkage-spec")
   {
   }
 

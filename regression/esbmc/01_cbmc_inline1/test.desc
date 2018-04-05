@@ -1,3 +1,4 @@
+CORE
 main.c
 module.c
 ^EXIT=0$

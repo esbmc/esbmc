@@ -47,13 +47,13 @@ bool check_var_name(const expr2tc &expr)
 
 void goto_loopst::find_function_loops()
 {
-  for(goto_programt::instructionst::iterator
-      it=goto_function.body.instructions.begin();
-      it!=goto_function.body.instructions.end();
+  for(goto_programt::instructionst::iterator it =
+        goto_function.body.instructions.begin();
+      it != goto_function.body.instructions.end();
       it++)
   {
     // We found a loop, let's record its instructions
-    if (it->is_backwards_goto())
+    if(it->is_backwards_goto())
     {
       assert(it->targets.size() == 1);
       create_function_loop(*it->targets.begin(), it);
@@ -71,7 +71,7 @@ void goto_loopst::create_function_loop(
   if(loop_head->location_number == loop_exit->location_number)
     return;
 
-  goto_programt::instructionst::iterator it=loop_head;
+  goto_programt::instructionst::iterator it = loop_head;
 
   function_loops.push_front(loopst(context));
   function_loopst::iterator it1 = function_loops.begin();
@@ -82,7 +82,7 @@ void goto_loopst::create_function_loop(
 
   std::size_t size = 0;
   // Copy the loop body
-  while (it != loop_exit)
+  while(it != loop_exit)
   {
     // This should be done only when we're running k-induction
     // Maybe a flag on the class?
@@ -94,7 +94,7 @@ void goto_loopst::create_function_loop(
   }
 
   // Include loop_exit
-  it1->set_size(size+1);
+  it1->set_size(size + 1);
 }
 
 void goto_loopst::get_modified_variables(
@@ -131,9 +131,10 @@ void goto_loopst::get_modified_variables(
     goto_functionst::function_mapt::iterator it =
       goto_functions.function_map.find(identifier);
 
-    if (it == goto_functions.function_map.end()) {
+    if(it == goto_functions.function_map.end())
+    {
       std::cerr << "failed to find `" + id2string(identifier) +
-                   "' in function_map";
+                     "' in function_map";
       abort();
     }
 
@@ -141,8 +142,8 @@ void goto_loopst::get_modified_variables(
     if(!it->second.body_available)
       return;
 
-    for(goto_programt::instructionst::iterator head=
-        it->second.body.instructions.begin();
+    for(goto_programt::instructionst::iterator head =
+          it->second.body.instructions.begin();
         head != it->second.body.instructions.end();
         ++head)
     {
@@ -151,14 +152,13 @@ void goto_loopst::get_modified_variables(
   }
 }
 
-void goto_loopst::add_loop_var(loopst &loop, const expr2tc& expr)
+void goto_loopst::add_loop_var(loopst &loop, const expr2tc &expr)
 {
   if(is_nil_expr(expr))
     return;
 
-  expr->foreach_operand([this, &loop] (const expr2tc &e) {
-    add_loop_var(loop, e);
-  });
+  expr->foreach_operand(
+    [this, &loop](const expr2tc &e) { add_loop_var(loop, e); });
 
   if(is_symbol2t(expr) && check_var_name(expr))
     loop.add_var_to_loop(expr);
@@ -166,6 +166,6 @@ void goto_loopst::add_loop_var(loopst &loop, const expr2tc& expr)
 
 void goto_loopst::dump()
 {
-  for(auto & function_loop : function_loops)
+  for(auto &function_loop : function_loops)
     function_loop.dump();
 }

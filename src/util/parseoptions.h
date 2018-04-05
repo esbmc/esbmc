@@ -22,7 +22,7 @@ public:
 
   virtual void help();
 
-  virtual int doit()=0;
+  virtual int doit() = 0;
 
   virtual int main();
   virtual ~parseoptions_baset() = default;

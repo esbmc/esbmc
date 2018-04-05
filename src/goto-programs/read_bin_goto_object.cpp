@@ -31,24 +31,25 @@ bool read_bin_goto_object(
 
   {
     char hdr[4];
-    hdr[0]=in.get();
-    hdr[1]=in.get();
-    hdr[2]=in.get();
+    hdr[0] = in.get();
+    hdr[1] = in.get();
+    hdr[2] = in.get();
 
-    if (hdr[0]!='G' || hdr[1]!='B' || hdr[2]!='F')
+    if(hdr[0] != 'G' || hdr[1] != 'B' || hdr[2] != 'F')
     {
-      hdr[3]=in.get();
+      hdr[3] = in.get();
 
-      if (hdr[0]==0x7f && hdr[1]=='E' && hdr[2]=='L' && hdr[3]=='F')
+      if(hdr[0] == 0x7f && hdr[1] == 'E' && hdr[2] == 'L' && hdr[3] == 'F')
       {
-        if (filename!="")
-          message_stream.str <<
-            "Sorry, but I can't read ELF binary `" << filename << "'";
+        if(filename != "")
+          message_stream.str << "Sorry, but I can't read ELF binary `"
+                             << filename << "'";
         else
           message_stream.str << "Sorry, but I can't read ELF binaries";
       }
       else
-        message_stream.str << "`" << filename << "' is not a goto-binary." << std::endl;
+        message_stream.str << "`" << filename << "' is not a goto-binary."
+                           << std::endl;
 
       message_stream.error();
 
@@ -62,13 +63,13 @@ bool read_bin_goto_object(
   goto_function_serializationt gfconverter(ic);
 
   {
-    unsigned version=irepconverter.read_long(in);
+    unsigned version = irepconverter.read_long(in);
 
-    if (version!=BINARY_VERSION)
+    if(version != BINARY_VERSION)
     {
-      message_stream.str <<
-        "The input was compiled with a different version of " <<
-        "goto-cc, please recompile";
+      message_stream.str
+        << "The input was compiled with a different version of "
+        << "goto-cc, please recompile";
       message_stream.warning();
       return false;
     }
@@ -76,7 +77,7 @@ bool read_bin_goto_object(
 
   unsigned count = irepconverter.read_long(in);
 
-  for (unsigned i=0; i<count; i++)
+  for(unsigned i = 0; i < count; i++)
   {
     irept t;
     symbolconverter.convert(in, t);
@@ -94,14 +95,14 @@ bool read_bin_goto_object(
   }
 
   count = irepconverter.read_long(in);
-  for (unsigned i=0; i<count; i++)
+  for(unsigned i = 0; i < count; i++)
   {
     irept t;
-    dstring fname=irepconverter.read_string(in);
+    dstring fname = irepconverter.read_string(in);
     gfconverter.convert(in, t);
     goto_functiont &f = functions.function_map[fname];
     convert(t, f.body);
-    f.body_available = f.body.instructions.size()>0;
+    f.body_available = f.body.instructions.size() > 0;
   }
 
   return false;

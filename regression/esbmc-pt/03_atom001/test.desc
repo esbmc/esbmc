@@ -1,3 +1,0 @@
-main.c
---unwind 1 --context-bound 3
-^VERIFICATION FAILED$

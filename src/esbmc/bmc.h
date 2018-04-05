@@ -21,7 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/hash_cont.h>
 #include <util/options.h>
 
-class bmct:public messaget
+class bmct : public messaget
 {
 public:
   bmct(
@@ -39,7 +39,10 @@ public:
   virtual smt_convt::resultt run(boost::shared_ptr<symex_target_equationt> &eq);
   ~bmct() override = default;
 
-  void set_ui(language_uit::uit _ui) { ui=_ui; }
+  void set_ui(language_uit::uit _ui)
+  {
+    ui = _ui;
+  }
 
 protected:
   const contextt &context;
@@ -70,13 +73,12 @@ protected:
 
   virtual void show_vcc(boost::shared_ptr<symex_target_equationt> &eq);
 
-  virtual void show_vcc(
-    std::ostream &out,
-    boost::shared_ptr<symex_target_equationt> &eq);
+  virtual void
+  show_vcc(std::ostream &out, boost::shared_ptr<symex_target_equationt> &eq);
 
   virtual void report_trace(
-      smt_convt::resultt &res,
-      boost::shared_ptr<symex_target_equationt> &eq);
+    smt_convt::resultt &res,
+    boost::shared_ptr<symex_target_equationt> &eq);
 
   virtual void report_result(smt_convt::resultt &res);
 

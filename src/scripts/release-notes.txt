@@ -1,5 +1,13 @@
 Release Notes of the ESBMC model checker
 
+*** Version 4.6
+* New support for bitfield verification
+* New option to slice assumes
+* New option to check termination
+* New floating-point API in the backend
+* Improvements to cex and witness generation
+* Removed a lot of dead code
+
 *** Version 4.5
 * We use clang to generate tag names now
 * General improvements to SSA generation

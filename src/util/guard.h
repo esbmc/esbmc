@@ -21,7 +21,10 @@ class guardt
 public:
   // Default constructors
   guardt() = default;
-  guardt(const guardt &ref) { *this = ref; }
+  guardt(const guardt &ref)
+  {
+    *this = ref;
+  }
 
   typedef std::vector<expr2tc> guard_listt;
 
@@ -38,9 +41,9 @@ public:
   void make_false();
   void swap(guardt &g);
 
-  friend guardt &operator -= (guardt &g1, const guardt &g2);
-  friend guardt &operator |= (guardt &g1, const guardt &g2);
-  friend bool operator == (const guardt &g1, const guardt &g2);
+  friend guardt &operator-=(guardt &g1, const guardt &g2);
+  friend guardt &operator|=(guardt &g1, const guardt &g2);
+  friend bool operator==(const guardt &g1, const guardt &g2);
 
   void dump() const;
 

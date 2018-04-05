@@ -15,96 +15,94 @@ Author: Daniel Kroening, kroening@kroening.com
 void ansi_c_convert_typet::read(const typet &type)
 {
   clear();
-  location=type.location();
+  location = type.location();
   read_rec(type);
 }
 
 void ansi_c_convert_typet::read_rec(const typet &type)
 {
-  if(type.id()=="merged_type")
+  if(type.id() == "merged_type")
   {
     forall_subtypes(it, type)
       read_rec(*it);
   }
-  else if(type.id()=="signed")
+  else if(type.id() == "signed")
     signed_cnt++;
-  else if(type.id()=="unsigned")
+  else if(type.id() == "unsigned")
     unsigned_cnt++;
-  else if(type.id()=="volatile")
-    c_qualifiers.is_volatile=true;
-  else if(type.id()=="const")
-    c_qualifiers.is_constant=true;
-  else if(type.id()=="restricted")
-    c_qualifiers.is_restricted=true;
-  else if(type.id()=="char")
+  else if(type.id() == "volatile")
+    c_qualifiers.is_volatile = true;
+  else if(type.id() == "const")
+    c_qualifiers.is_constant = true;
+  else if(type.id() == "restricted")
+    c_qualifiers.is_restricted = true;
+  else if(type.id() == "char")
     char_cnt++;
-  else if(type.id()=="int")
+  else if(type.id() == "int")
     int_cnt++;
-  else if(type.id()=="int8")
+  else if(type.id() == "int8")
     int8_cnt++;
-  else if(type.id()=="int16")
+  else if(type.id() == "int16")
     int16_cnt++;
-  else if(type.id()=="int32")
+  else if(type.id() == "int32")
     int32_cnt++;
-  else if(type.id()=="int64")
+  else if(type.id() == "int64")
     int64_cnt++;
-  else if(type.id()=="ptr32")
+  else if(type.id() == "ptr32")
     ptr32_cnt++;
-  else if(type.id()=="ptr64")
+  else if(type.id() == "ptr64")
     ptr64_cnt++;
-  else if(type.id()=="short")
+  else if(type.id() == "short")
     short_cnt++;
-  else if(type.id()=="long")
+  else if(type.id() == "long")
     long_cnt++;
-  else if(type.id()=="double")
+  else if(type.id() == "double")
     double_cnt++;
-  else if(type.id()=="float")
+  else if(type.id() == "float")
     float_cnt++;
   else if(type.is_bool())
     bool_cnt++;
-  else if(type.id()=="static")
-    c_storage_spec.is_static=true;
-  else if(type.id()=="inline")
-    c_storage_spec.is_inline=true;
-  else if(type.id()=="extern")
-    c_storage_spec.is_extern=true;
-  else if(type.id()=="typedef")
-    c_storage_spec.is_typedef=true;
-  else if(type.id()=="register")
-    c_storage_spec.is_register=true;
-  else if(type.id()=="auto")
+  else if(type.id() == "static")
+    c_storage_spec.is_static = true;
+  else if(type.id() == "inline")
+    c_storage_spec.is_inline = true;
+  else if(type.id() == "extern")
+    c_storage_spec.is_extern = true;
+  else if(type.id() == "typedef")
+    c_storage_spec.is_typedef = true;
+  else if(type.id() == "register")
+    c_storage_spec.is_register = true;
+  else if(type.id() == "auto")
   {
     // ignore
   }
-  else if (type == get_nil_irep())
+  else if(type == get_nil_irep())
   {
     // ignore
   }
-  else 
+  else
     other.push_back(type);
 }
 
 void ansi_c_convert_typet::write(typet &type)
 {
   type.clear();
-  
+
   // first, do "other"
 
   if(!other.empty())
   {
-    if(double_cnt || float_cnt || signed_cnt ||
-       unsigned_cnt || int_cnt || bool_cnt ||
-       short_cnt || char_cnt ||
-       int8_cnt || int16_cnt || int32_cnt || int64_cnt ||
-       ptr32_cnt || ptr64_cnt ||
-       long_cnt)
+    if(
+      double_cnt || float_cnt || signed_cnt || unsigned_cnt || int_cnt ||
+      bool_cnt || short_cnt || char_cnt || int8_cnt || int16_cnt || int32_cnt ||
+      int64_cnt || ptr32_cnt || ptr64_cnt || long_cnt)
     {
       err_location(location);
       error("illegal type modifier for defined type");
       throw 0;
     }
 
-    if(other.size()!=1)
+    if(other.size() != 1)
     {
       err_location(location);
       error("illegal combination of defined types");
@@ -115,10 +113,10 @@ void ansi_c_convert_typet::write(typet &type)
   }
   else if(double_cnt || float_cnt)
   {
-    if(signed_cnt || unsigned_cnt || int_cnt || bool_cnt ||
-       int8_cnt || int16_cnt || int32_cnt || int64_cnt ||
-       ptr32_cnt || ptr64_cnt ||
-       short_cnt || char_cnt)
+    if(
+      signed_cnt || unsigned_cnt || int_cnt || bool_cnt || int8_cnt ||
+      int16_cnt || int32_cnt || int64_cnt || ptr32_cnt || ptr64_cnt ||
+      short_cnt || char_cnt)
     {
       err_location(location);
       error("cannot conbine integer type with float");
@@ -132,17 +130,17 @@ void ansi_c_convert_typet::write(typet &type)
       throw 0;
     }
 
-    if(long_cnt==0)
+    if(long_cnt == 0)
     {
-      if(double_cnt!=0)
-        type=double_type();
+      if(double_cnt != 0)
+        type = double_type();
       else
-        type=float_type();
+        type = float_type();
     }
-    else if(long_cnt==1 || long_cnt==2)
+    else if(long_cnt == 1 || long_cnt == 2)
     {
-      if(double_cnt!=0)
-        type=long_double_type();
+      if(double_cnt != 0)
+        type = long_double_type();
       else
       {
         err_location(location);
@@ -159,10 +157,10 @@ void ansi_c_convert_typet::write(typet &type)
   }
   else if(bool_cnt)
   {
-    if(signed_cnt || unsigned_cnt || int_cnt || short_cnt ||
-       int8_cnt || int16_cnt || int32_cnt || int64_cnt ||
-       ptr32_cnt || ptr64_cnt ||
-       char_cnt || long_cnt)
+    if(
+      signed_cnt || unsigned_cnt || int_cnt || short_cnt || int8_cnt ||
+      int16_cnt || int32_cnt || int64_cnt || ptr32_cnt || ptr64_cnt ||
+      char_cnt || long_cnt)
     {
       err_location(location);
       error("illegal type modifier for boolean type");
@@ -174,7 +172,7 @@ void ansi_c_convert_typet::write(typet &type)
   else if(ptr32_cnt || ptr64_cnt)
   {
     type.id("pointer");
-    type.subtype()=typet("empty");
+    type.subtype() = typet("empty");
   }
   else
   {
@@ -186,14 +184,14 @@ void ansi_c_convert_typet::write(typet &type)
       error("conflicting type modifiers");
       throw 0;
     }
-    else if(unsigned_cnt)
+    if(unsigned_cnt)
       type.id("unsignedbv");
     else if(signed_cnt)
       type.id("signedbv");
     else
     {
       if(char_cnt)
-        type.id(config.ansi_c.char_is_unsigned?"unsignedbv":"signedbv");
+        type.id(config.ansi_c.char_is_unsigned ? "unsignedbv" : "signedbv");
       else
         type.id("signedbv");
     }
@@ -210,15 +208,15 @@ void ansi_c_convert_typet::write(typet &type)
         error("conflicting type modifiers");
         throw 0;
       }
-      
+
       if(int8_cnt)
-        width=1*8;
+        width = 1 * 8;
       else if(int16_cnt)
-        width=2*8;
+        width = 2 * 8;
       else if(int32_cnt)
-        width=4*8;
+        width = 4 * 8;
       else if(int64_cnt)
-        width=8*8;
+        width = 8 * 8;
       else
         abort();
     }
@@ -231,7 +229,7 @@ void ansi_c_convert_typet::write(typet &type)
         throw 0;
       }
 
-      width=config.ansi_c.short_int_width;
+      width = config.ansi_c.short_int_width;
     }
     else if(char_cnt)
     {
@@ -242,19 +240,19 @@ void ansi_c_convert_typet::write(typet &type)
         throw 0;
       }
 
-      width=config.ansi_c.char_width;
+      width = config.ansi_c.char_width;
     }
-    else if(long_cnt==0)
+    else if(long_cnt == 0)
     {
-      width=config.ansi_c.int_width;
+      width = config.ansi_c.int_width;
     }
-    else if(long_cnt==1)
+    else if(long_cnt == 1)
     {
-      width=config.ansi_c.long_int_width;
+      width = config.ansi_c.long_int_width;
     }
-    else if(long_cnt==2)
+    else if(long_cnt == 2)
     {
-      width=config.ansi_c.long_long_int_width;
+      width = config.ansi_c.long_long_int_width;
     }
     else
     {

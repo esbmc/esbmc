@@ -1,3 +1,4 @@
+CORE
 main.c
  -D NEW_DEFINE
 ^EXIT=0$

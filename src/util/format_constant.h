@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/irep2.h>
 
-class format_constantt:public format_spect
+class format_constantt : public format_spect
 {
 public:
   std::string operator()(const expr2tc &expr);

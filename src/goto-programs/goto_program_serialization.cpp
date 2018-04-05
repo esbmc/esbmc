@@ -14,20 +14,17 @@ Date: May 2007
 #include <sstream>
 #include <util/irep_serialization.h>
 
-void goto_program_serializationt::convert( 
-  const goto_programt& goto_program,
+void goto_program_serializationt::convert(
+  const goto_programt &goto_program,
   std::ostream &out)
 {
   irepcache.emplace_back();
-  ::convert(goto_program, irepcache.back());  
-  irepconverter.reference_convert(irepcache.back(), out);  
+  ::convert(goto_program, irepcache.back());
+  irepconverter.reference_convert(irepcache.back(), out);
 }
 
-void goto_program_serializationt::convert( 
-  std::istream &in,
-  irept& gprep)
+void goto_program_serializationt::convert(std::istream &in, irept &gprep)
 {
   irepconverter.reference_convert(in, gprep);
-  // reference is not resolved here! 
+  // reference is not resolved here!
 }
-

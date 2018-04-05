@@ -56,7 +56,7 @@ void guardt::add(const expr2tc &expr)
   }
 }
 
-void guardt::guard_expr(expr2tc& dest) const
+void guardt::guard_expr(expr2tc &dest) const
 {
   // Fills the expr only if it's not true
   if(is_true())
@@ -93,7 +93,7 @@ void guardt::build_guard_expr()
   arg1 = *it++;
   arg2 = *it++;
   and2tc res(arg1, arg2);
-  while (it != guard_list.end())
+  while(it != guard_list.end())
     res = and2tc(res, *it++);
 
   g_expr.swap(res);
@@ -105,7 +105,7 @@ void guardt::append(const guardt &guard)
     add(it);
 }
 
-guardt &operator -= (guardt &g1, const guardt &g2)
+guardt &operator-=(guardt &g1, const guardt &g2)
 {
   guardt::guard_listt diff;
   std::set_difference(
@@ -124,11 +124,16 @@ guardt &operator -= (guardt &g1, const guardt &g2)
   return g1;
 }
 
-guardt &operator |= (guardt &g1, const guardt &g2)
+guardt &operator|=(guardt &g1, const guardt &g2)
 {
   // Easy cases
-  if(g2.is_false() || g1.is_true()) return g1;
-  if(g1.is_false() || g2.is_true()) { g1 = g2; return g1; }
+  if(g2.is_false() || g1.is_true())
+    return g1;
+  if(g1.is_false() || g2.is_true())
+  {
+    g1 = g2;
+    return g1;
+  }
 
   if(g1.is_single_symbol() && g2.is_single_symbol())
   {
@@ -137,7 +142,11 @@ guardt &operator |= (guardt &g1, const guardt &g2)
     expr2tc or_expr(new or2t(*g1.guard_list.begin(), *g2.guard_list.begin()));
     simplify(or_expr);
 
-    if(::is_true(or_expr)) { g1.make_true(); return g1; }
+    if(::is_true(or_expr))
+    {
+      g1.make_true();
+      return g1;
+    }
 
     // Despite if we could simplify or not, clear and set the new guard
     g1.clear_insert(or_expr);
@@ -196,21 +205,19 @@ guardt &operator |= (guardt &g1, const guardt &g2)
   return g1;
 }
 
-void
-guardt::dump() const
+void guardt::dump() const
 {
-  for (auto const &it : guard_list)
+  for(auto const &it : guard_list)
     it->dump();
 }
 
-bool
-operator == (const guardt &g1, const guardt &g2)
+bool operator==(const guardt &g1, const guardt &g2)
 {
   // Very simple: the guard list should be identical.
   return g1.guard_list == g2.guard_list;
 }
 
-void guardt::swap(guardt& g)
+void guardt::swap(guardt &g)
 {
   guard_list.swap(g.guard_list);
   g_expr.swap(g.g_expr);
@@ -251,13 +258,13 @@ void guardt::clear()
   g_expr.reset();
 }
 
-void guardt::clear_append(const guardt& guard)
+void guardt::clear_append(const guardt &guard)
 {
   clear();
   append(guard);
 }
 
-void guardt::clear_insert(const expr2tc& expr)
+void guardt::clear_insert(const expr2tc &expr)
 {
   clear();
   add(expr);
@@ -265,8 +272,7 @@ void guardt::clear_insert(const expr2tc& expr)
 
 #ifdef WITH_PYTHON
 #include <boost/python.hpp>
-void
-build_guard_python_class()
+void build_guard_python_class()
 {
   using namespace boost::python;
 

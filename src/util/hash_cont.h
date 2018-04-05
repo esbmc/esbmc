@@ -26,13 +26,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 #include <set>
 
-template<class T1, class T2, class T3>
+template <class T1, class T2, class T3>
 typedef std::map<T1, T2> hash_map_cont;
 
-template<class T1, class T2>
+template <class T1, class T2>
 typedef std::set<T1> hash_set_cont;
 
-template<class T1, class T2>
+template <class T1, class T2>
 typedef std::multiset<T1> hash_multiset_cont;
 
 #define hash_map_hasher_superclass(type)
@@ -62,17 +62,20 @@ typedef std::multiset<T1> hash_multiset_cont;
 // maps. Provide one for unordered_map. This is fine because it doesn't use
 // the internal order of the map, only for it's own internal data structures.
 
-template <typename Key, typename ...Args>
+template <typename Key, typename... Args>
 class esbmc_map_wrapper : public std::unordered_map<Key, Args...>
 {
 public:
-  template <typename ...Args2>
-  esbmc_map_wrapper(Args2 ...args)
-  : std::unordered_map<Key, Args...>(args...) { }
+  template <typename... Args2>
+  esbmc_map_wrapper(Args2... args) : std::unordered_map<Key, Args...>(args...)
+  {
+  }
 
-  class key_compare {
+  class key_compare
+  {
   public:
-    bool operator()(const Key &a, const Key &b) {
+    bool operator()(const Key &a, const Key &b)
+    {
       return a < b;
     }
   };

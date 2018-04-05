@@ -20,13 +20,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 const struct_typet &cpp_typecheckt::this_struct_type()
 {
-  const exprt &this_expr=
-    cpp_scopes.current_scope().this_expr;
+  const exprt &this_expr = cpp_scopes.current_scope().this_expr;
 
   assert(this_expr.is_not_nil());
-  assert(this_expr.type().id()=="pointer");
+  assert(this_expr.type().id() == "pointer");
 
-  const typet &t=follow(this_expr.type().subtype());
+  const typet &t = follow(this_expr.type().subtype());
   return to_struct_type(t);
 }
 
@@ -53,16 +52,16 @@ void cpp_typecheckt::convert(cpp_itemt &item)
   else
   {
     err_location(item);
-    throw "unknown parse-tree element: "+item.id_string();
+    throw "unknown parse-tree element: " + item.id_string();
   }
 }
 
 void cpp_typecheckt::typecheck()
 {
   // default linkage is C++
-  current_mode="C++";
+  current_mode = "C++";
 
-  for(auto & item : cpp_parse_tree.items)
+  for(auto &item : cpp_parse_tree.items)
     convert(item);
 
   static_initialization();
@@ -78,7 +77,8 @@ bool cpp_typecheck(
   const std::string &module,
   message_handlert &message_handler)
 {
-  cpp_typecheckt cpp_typecheck(cpp_parse_tree, context, module, message_handler);
+  cpp_typecheckt cpp_typecheck(
+    cpp_parse_tree, context, module, message_handler);
   return cpp_typecheck.typecheck_main();
 }
 
@@ -90,8 +90,8 @@ bool cpp_typecheck(
   contextt context;
   cpp_parse_treet cpp_parse_tree;
 
-  cpp_typecheckt cpp_typecheck(cpp_parse_tree, context,
-                               ns.get_context(), "", message_handler);
+  cpp_typecheckt cpp_typecheck(
+    cpp_parse_tree, context, ns.get_context(), "", message_handler);
 
   try
   {
@@ -124,31 +124,24 @@ void cpp_typecheckt::static_initialization()
   disable_access_control = true;
 
   // first do zero initialization
-  context.foreach_operand(
-    [this, &block_sini] (const symbolt& s)
-    {
-      if(!s.static_lifetime || s.mode!=current_mode)
-        return;
+  context.foreach_operand([this, &block_sini](const symbolt &s) {
+    if(!s.static_lifetime || s.mode != current_mode)
+      return;
 
-      // it has a non-code initializer already?
-      if(s.value.is_not_nil() &&
-         s.value.id()!="code")
-        return;
+    // it has a non-code initializer already?
+    if(s.value.is_not_nil() && s.value.id() != "code")
+      return;
 
-      // it's a declaration only
-      if(s.is_extern)
-        return;
+    // it's a declaration only
+    if(s.is_extern)
+      return;
 
-      if(!s.lvalue)
-        return;
+    if(!s.lvalue)
+      return;
 
-      zero_initializer(
-        cpp_symbol_expr(s),
-        s.type,
-        s.location,
-        block_sini.operands());
-    }
-  );
+    zero_initializer(
+      cpp_symbol_expr(s), s.type, s.location, block_sini.operands());
+  });
 
   while(!dinis.empty())
   {
@@ -158,14 +151,14 @@ void cpp_typecheckt::static_initialization()
     if(symbol.is_extern)
       continue;
 
-    if(symbol.mode!=current_mode)
+    if(symbol.mode != current_mode)
       continue;
 
     assert(symbol.static_lifetime);
     assert(!symbol.is_type);
-    assert(symbol.type.id()!="code");
+    assert(symbol.type.id() != "code");
 
-    exprt symexpr=cpp_symbol_expr(symbol);
+    exprt symexpr = cpp_symbol_expr(symbol);
 
     if(symbol.value.is_not_nil())
     {
@@ -181,9 +174,9 @@ void cpp_typecheckt::static_initialization()
         codet code;
         code.set_statement("assign");
         code.copy_to_operands(symbexpr, symbol.value);
-        code.location()=symbol.location;
+        code.location() = symbol.location;
 
-        if(symbol.value.id()=="constant")
+        if(symbol.value.id() == "constant")
           block_sini.move_to_operands(code);
         else
           block_dini.move_to_operands(code);
@@ -198,9 +191,7 @@ void cpp_typecheckt::static_initialization()
     {
       exprt::operandst ops;
 
-      codet call=
-        cpp_constructor(locationt(),
-          symexpr, ops);
+      codet call = cpp_constructor(locationt(), symexpr, ops);
 
       if(call.is_not_nil())
         block_dini.move_to_operands(call);
@@ -212,20 +203,20 @@ void cpp_typecheckt::static_initialization()
   // Create the initialization procedure
   symbolt init_symbol;
 
-  init_symbol.name="#ini#"+id2string(module);
-  init_symbol.base_name="#ini#"+id2string(module);
+  init_symbol.name = "#ini#" + id2string(module);
+  init_symbol.base_name = "#ini#" + id2string(module);
   init_symbol.value.swap(block_sini);
-  init_symbol.mode=current_mode;
-  init_symbol.module=module;
-  init_symbol.type=code_typet();
-  init_symbol.type.add("return_type")=typet("empty");
+  init_symbol.mode = current_mode;
+  init_symbol.module = module;
+  init_symbol.type = code_typet();
+  init_symbol.type.add("return_type") = typet("empty");
   init_symbol.type.set("initialization", true);
-  init_symbol.is_type=false;
-  init_symbol.is_macro=false;
+  init_symbol.is_type = false;
+  init_symbol.is_macro = false;
 
   context.move(init_symbol);
 
-  disable_access_control=false;
+  disable_access_control = false;
 }
 
 void cpp_typecheckt::do_not_typechecked()
@@ -236,98 +227,84 @@ void cpp_typecheckt::do_not_typechecked()
   {
     cont = false;
 
-    std::vector<symbolt*> to_typecheck_list;
+    std::vector<symbolt *> to_typecheck_list;
 
-    context.Foreach_operand(
-      [&to_typecheck_list] (symbolt& s)
+    context.Foreach_operand([&to_typecheck_list](symbolt &s) {
+      if(s.value.id() == "cpp_not_typechecked" && s.value.get_bool("is_used"))
       {
-        if(s.value.id()=="cpp_not_typechecked" &&
-           s.value.get_bool("is_used"))
-        {
-          assert(s.type.is_code());
-          to_typecheck_list.push_back(&s);
-        }
+        assert(s.type.is_code());
+        to_typecheck_list.push_back(&s);
       }
-    );
+    });
 
-    for (symbolt *sym : to_typecheck_list) {
-      if (sym->base_name =="operator=")
+    for(symbolt *sym : to_typecheck_list)
+    {
+      if(sym->base_name == "operator=")
       {
         cpp_declaratort declarator;
         declarator.location() = sym->location;
         default_assignop_value(
-          lookup(sym->type.get("#member_name")),declarator);
+          lookup(sym->type.get("#member_name")), declarator);
         sym->value.swap(declarator.value());
         convert_function(*sym);
-        cont=true;
+        cont = true;
       }
-      else if (sym->value.operands().size() == 1)
+      else if(sym->value.operands().size() == 1)
       {
         exprt tmp = sym->value.operands()[0];
         sym->value.swap(tmp);
         convert_function(*sym);
-        cont=true;
+        cont = true;
       }
       else
         assert(0); // Don't know what to do!
     }
-  }
-  while(cont);
+  } while(cont);
 
-  context.Foreach_operand(
-    [] (symbolt& s)
-    {
-      if(s.value.id()=="cpp_not_typechecked")
-        s.value.make_nil();
-    }
-  );
+  context.Foreach_operand([](symbolt &s) {
+    if(s.value.id() == "cpp_not_typechecked")
+      s.value.make_nil();
+  });
 }
 
 void cpp_typecheckt::clean_up()
 {
-  context.Foreach_operand(
-    [this] (symbolt& s)
+  context.Foreach_operand([this](symbolt &s) {
+    if(s.type.get_bool("is_template"))
     {
-      if(s.type.get_bool("is_template"))
-      {
-        context.erase_symbol(s.name);
-        return;
-      }
-      else if(s.type.is_struct() ||
-              s.type.is_union())
-      {
-        struct_typet &struct_type = to_struct_type(s.type);
-
-        const struct_typet::componentst &components =
-          struct_type.components();
-
-        struct_typet::componentst data_members;
-        data_members.reserve(components.size());
-
-        struct_typet::componentst &function_members =
-          struct_type.methods();
-
-        function_members.reserve(components.size());
-
-        for(const auto & component : components)
-        {
-          if(component.get_bool("is_static") ||
-             component.is_type())
-          {
-            // skip it
-          }
-          else if(component.type().id()=="code")
-          {
-            function_members.push_back(component);
-          }
-          else
-          {
-            data_members.push_back(component);
-          }
-        }
-
-        struct_type.components().swap(data_members);
-      }
+      context.erase_symbol(s.name);
+      return;
     }
-  );
+    if(s.type.is_struct() || s.type.is_union())
+    {
+      struct_typet &struct_type = to_struct_type(s.type);
+
+      const struct_typet::componentst &components = struct_type.components();
+
+      struct_typet::componentst data_members;
+      data_members.reserve(components.size());
+
+      struct_typet::componentst &function_members = struct_type.methods();
+
+      function_members.reserve(components.size());
+
+      for(const auto &component : components)
+      {
+        if(component.get_bool("is_static") || component.is_type())
+        {
+          // skip it
+        }
+        else if(component.type().id() == "code")
+        {
+          function_members.push_back(component);
+        }
+        else
+        {
+          data_members.push_back(component);
+        }
+      }
+
+      struct_type.components().swap(data_members);
+    }
+  });
 }

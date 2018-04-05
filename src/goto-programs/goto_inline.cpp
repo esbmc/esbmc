@@ -24,43 +24,42 @@ void goto_inlinet::parameter_assignments(
   goto_programt &dest)
 {
   // iterates over the operands
-  exprt::operandst::const_iterator it1=arguments.begin();
+  exprt::operandst::const_iterator it1 = arguments.begin();
 
   goto_programt::local_variablest local_variables;
 
-  const code_typet::argumentst &argument_types=
-    code_type.arguments();
+  const code_typet::argumentst &argument_types = code_type.arguments();
 
   // iterates over the types of the arguments
-  for(const auto & argument_type : argument_types)
+  for(const auto &argument_type : argument_types)
   {
     // if you run out of actual arguments there was a mismatch
-    if(it1==arguments.end())
+    if(it1 == arguments.end())
     {
       err_location(location);
       throw "function call: not enough arguments";
     }
 
-    const exprt &argument=static_cast<const exprt &>(argument_type);
+    const exprt &argument = static_cast<const exprt &>(argument_type);
 
     // this is the type the n-th argument should be
-    const typet &arg_type=ns.follow(argument.type());
+    const typet &arg_type = ns.follow(argument.type());
 
-    const irep_idt &identifier=argument.cmt_identifier();
+    const irep_idt &identifier = argument.cmt_identifier();
 
-    if(identifier=="")
+    if(identifier == "")
     {
       err_location(location);
       throw "no identifier for function argument";
     }
 
     {
-      goto_programt::targett decl=dest.add_instruction();
+      goto_programt::targett decl = dest.add_instruction();
       decl->make_other();
       exprt tmp = code_declt(symbol_exprt(identifier, arg_type));
       migrate_expr(tmp, decl->code);
-      decl->location=location;
-      decl->function=location.get_function();
+      decl->location = location;
+      decl->function = location.get_function();
     }
 
     local_variables.push_front(identifier);
@@ -78,26 +77,24 @@ void goto_inlinet::parameter_assignments(
       type2tc arg_type_2, actual_type_2;
       migrate_type(arg_type, arg_type_2);
       migrate_type(actual.type(), actual_type_2);
-      if (!base_type_eq(arg_type_2, actual_type_2, ns))
+      if(!base_type_eq(arg_type_2, actual_type_2, ns))
       {
         const typet &f_argtype = ns.follow(arg_type);
         const typet &f_acttype = ns.follow(actual.type());
 
         // we are willing to do some conversion
-        if((f_argtype.id()=="pointer" &&
-            f_acttype.id()=="pointer") ||
-           (f_argtype.is_array() &&
-            f_acttype.id()=="pointer" &&
-            f_argtype.subtype()==f_acttype.subtype()))
+        if(
+          (f_argtype.id() == "pointer" && f_acttype.id() == "pointer") ||
+          (f_argtype.is_array() && f_acttype.id() == "pointer" &&
+           f_argtype.subtype() == f_acttype.subtype()))
         {
           actual.make_typecast(arg_type);
         }
-        else if((f_argtype.id()=="signedbv" ||
-            f_argtype.id()=="unsignedbv" ||
-            f_argtype.is_bool()) &&
-           (f_acttype.id()=="signedbv" ||
-            f_acttype.id()=="unsignedbv" ||
-            f_acttype.is_bool()))
+        else if(
+          (f_argtype.id() == "signedbv" || f_argtype.id() == "unsignedbv" ||
+           f_argtype.is_bool()) &&
+          (f_acttype.id() == "signedbv" || f_acttype.id() == "unsignedbv" ||
+           f_acttype.is_bool()))
         {
           actual.make_typecast(arg_type);
         }
@@ -107,8 +104,7 @@ void goto_inlinet::parameter_assignments(
 
           str << "function call: argument `" << identifier
               << "' type mismatch: got "
-              << from_type(ns, identifier, it1->type())
-              << ", expected "
+              << from_type(ns, identifier, it1->type()) << ", expected "
               << from_type(ns, identifier, arg_type);
           throw 0;
         }
@@ -116,18 +112,18 @@ void goto_inlinet::parameter_assignments(
 
       // adds an assignment of the actual parameter to the formal parameter
       code_assignt assignment(symbol_exprt(identifier, arg_type), actual);
-      assignment.location()=location;
+      assignment.location() = location;
 
       dest.add_instruction(ASSIGN);
-      dest.instructions.back().location=location;
+      dest.instructions.back().location = location;
       migrate_expr(assignment, dest.instructions.back().code);
-      dest.instructions.back().function=location.get_function();
+      dest.instructions.back().function = location.get_function();
     }
 
     it1++;
   }
 
-  if(it1!=arguments.end())
+  if(it1 != arguments.end())
   {
     // too many arguments -- we just ignore that, no harm done
   }
@@ -138,9 +134,8 @@ void goto_inlinet::replace_return(
   const exprt &lhs,
   const exprt &constrain __attribute__((unused)) /* ndebug */)
 {
-  for(goto_programt::instructionst::iterator
-      it=dest.instructions.begin();
-      it!=dest.instructions.end();
+  for(goto_programt::instructionst::iterator it = dest.instructions.begin();
+      it != dest.instructions.end();
       it++)
   {
     if(it->is_return())
@@ -148,20 +143,19 @@ void goto_inlinet::replace_return(
       if(lhs.is_not_nil())
       {
         goto_programt tmp;
-        goto_programt::targett assignment=tmp.add_instruction(ASSIGN);
+        goto_programt::targett assignment = tmp.add_instruction(ASSIGN);
 
         const code_return2t &ret = to_code_return2t(it->code);
         code_assignt code_assign(lhs, migrate_expr_back(ret.operand));
 
         // this may happen if the declared return type at the call site
         // differs from the defined return type
-        if(code_assign.lhs().type()!=
-           code_assign.rhs().type())
+        if(code_assign.lhs().type() != code_assign.rhs().type())
           code_assign.rhs().make_typecast(code_assign.lhs().type());
 
         migrate_expr(code_assign, assignment->code);
-        assignment->location=it->location;
-        assignment->function=it->location.get_function();
+        assignment->location = it->location;
+        assignment->function = it->location.get_function();
 
         assert(constrain.is_nil()); // bp_constrain gumpf reomved
 
@@ -174,11 +168,11 @@ void goto_inlinet::replace_return(
         // derefs in them still get dereferenced, even when the result is
         // discarded.
         goto_programt tmp;
-        goto_programt::targett expression=tmp.add_instruction(OTHER);
+        goto_programt::targett expression = tmp.add_instruction(OTHER);
 
         expression->make_other();
-        expression->location=it->location;
-        expression->function=it->location.get_function();
+        expression->location = it->location;
+        expression->function = it->location.get_function();
         const code_return2t &ret = to_code_return2t(it->code);
         expression->code = code_expression2tc(ret.operand);
 
@@ -201,17 +195,17 @@ void goto_inlinet::expand_function_call(
   bool full)
 {
   // look it up
-  if(function.id()!="symbol")
+  if(function.id() != "symbol")
   {
     err_location(function);
     throw "function_call expects symbol as function operand, "
           "but got `"+function.id_string()+"'";
   }
 
-  const irep_idt &identifier=function.identifier();
+  const irep_idt &identifier = function.identifier();
 
   // see if we are already expanding it
-  if(recursion_set.find(identifier)!=recursion_set.end())
+  if(recursion_set.find(identifier) != recursion_set.end())
   {
     if(!full)
     {
@@ -228,24 +222,24 @@ void goto_inlinet::expand_function_call(
     return;
   }
 
-  goto_functionst::function_mapt::iterator m_it=
+  goto_functionst::function_mapt::iterator m_it =
     goto_functions.function_map.find(identifier);
 
-  if(m_it==goto_functions.function_map.end())
+  if(m_it == goto_functions.function_map.end())
   {
     err_location(function);
-    str << "failed to find function `" << identifier
-        << "'";
+    str << "failed to find function `" << identifier << "'";
     throw 0;
   }
 
-  goto_functiont &f=m_it->second;
+  goto_functiont &f = m_it->second;
 
   // see if we need to inline this
   if(!full)
   {
-    if(!f.body_available ||
-       (!f.is_inlined() && f.body.instructions.size() > smallfunc_limit))
+    if(
+      !f.body_available ||
+      (!f.is_inlined() && f.body.instructions.size() > smallfunc_limit))
     {
       target++;
       return;
@@ -255,28 +249,30 @@ void goto_inlinet::expand_function_call(
   if(f.body_available)
   {
     inlined_funcs.insert(identifier.as_string());
-    for (const auto & inlined_func : f.inlined_funcs) {
+    for(const auto &inlined_func : f.inlined_funcs)
+    {
       inlined_funcs.insert(inlined_func);
     }
 
-    recursion_sett::iterator recursion_it=
+    recursion_sett::iterator recursion_it =
       recursion_set.insert(identifier).first;
 
     goto_programt tmp2;
     tmp2.copy_from(f.body);
 
     assert(tmp2.instructions.back().is_end_function());
-    tmp2.instructions.back().type=LOCATION;
+    tmp2.instructions.back().type = LOCATION;
 
     replace_return(tmp2, lhs, constrain);
 
     goto_programt tmp;
-    parameter_assignments(tmp2.instructions.front().location, f.type, arguments, tmp);
+    parameter_assignments(
+      tmp2.instructions.front().location, f.type, arguments, tmp);
     tmp.destructive_append(tmp2);
 
     if(f.body.hide)
     {
-      const locationt &new_location=function.find_location();
+      const locationt &new_location = function.find_location();
 
       Forall_goto_program_instructions(it, tmp)
       {
@@ -296,14 +292,14 @@ void goto_inlinet::expand_function_call(
     goto_inline_rec(tmp, full);
 
     // set up location instruction for function call
-    target->type=LOCATION;
+    target->type = LOCATION;
     target->code = expr2tc();
 
     goto_programt::targett next_target(target);
     next_target++;
 
     dest.instructions.splice(next_target, tmp.instructions);
-    target=next_target;
+    target = next_target;
 
     recursion_set.erase(recursion_it);
 
@@ -315,8 +311,7 @@ void goto_inlinet::expand_function_call(
     if(no_body_set.insert(identifier).second)
     {
       err_location(function);
-      str << "no body for function `" << identifier
-          << "'";
+      str << "no body for function `" << identifier << "'";
       warning();
     }
 
@@ -326,10 +321,10 @@ void goto_inlinet::expand_function_call(
     // pointer dereferencing or the like
     forall_expr(it, arguments)
     {
-      goto_programt::targett t=tmp.add_instruction();
+      goto_programt::targett t = tmp.add_instruction();
       t->make_other();
-      t->location=target->location;
-      t->function=target->location.get_function();
+      t->location = target->location;
+      t->function = target->location.get_function();
       expr2tc tmp_expr;
       migrate_expr(*it, tmp_expr);
       t->code = code_expression2tc(tmp_expr);
@@ -338,21 +333,21 @@ void goto_inlinet::expand_function_call(
     // return value
     if(lhs.is_not_nil())
     {
-      exprt rhs=exprt("sideeffect", lhs.type());
+      exprt rhs = exprt("sideeffect", lhs.type());
       rhs.statement("nondet");
-      rhs.location()=target->location;
+      rhs.location() = target->location;
 
       code_assignt code(lhs, rhs);
-      code.location()=target->location;
+      code.location() = target->location;
 
-      goto_programt::targett t=tmp.add_instruction(ASSIGN);
-      t->location=target->location;
-      t->function=target->location.get_function();
+      goto_programt::targett t = tmp.add_instruction(ASSIGN);
+      t->location = target->location;
+      t->function = target->location.get_function();
       migrate_expr(code, t->code);
     }
 
     // now just kill call
-    target->type=LOCATION;
+    target->type = LOCATION;
     target->code = expr2tc();
     target++;
 
@@ -364,24 +359,23 @@ void goto_inlinet::expand_function_call(
 void goto_inlinet::goto_inline(goto_programt &dest)
 {
   goto_inline_rec(dest, true);
-  replace_return(dest,
+  replace_return(
+    dest,
     static_cast<const exprt &>(get_nil_irep()),
     static_cast<const exprt &>(get_nil_irep()));
 }
 
 void goto_inlinet::goto_inline_rec(goto_programt &dest, bool full)
 {
-  bool changed=false;
+  bool changed = false;
 
-  for(goto_programt::instructionst::iterator
-      it=dest.instructions.begin();
-      it!=dest.instructions.end();
-      ) // no it++
+  for(goto_programt::instructionst::iterator it = dest.instructions.begin();
+      it != dest.instructions.end();) // no it++
   {
-    bool expanded=inline_instruction(dest, full, it);
+    bool expanded = inline_instruction(dest, full, it);
 
     if(expanded)
-      changed=true;
+      changed = true;
     else
       it++;
   }
@@ -398,25 +392,30 @@ bool goto_inlinet::inline_instruction(
   bool full,
   goto_programt::targett &it)
 {
-  bool expanded=false;
+  bool expanded = false;
 
   if(it->is_function_call())
   {
     const code_function_call2t &call = to_code_function_call2t(it->code);
 
-    if (is_symbol2t(call.function))
+    if(is_symbol2t(call.function))
     {
       exprt tmp_lhs = migrate_expr_back(call.ret);
       exprt tmp_func = migrate_expr_back(call.function);
       exprt::operandst args;
-      for (const auto & operand : call.operands)
+      for(const auto &operand : call.operands)
         args.push_back(migrate_expr_back(operand));
 
       expand_function_call(
-        dest, it, tmp_lhs, tmp_func, args,
-        static_cast<const exprt &>(get_nil_irep()), full);
+        dest,
+        it,
+        tmp_lhs,
+        tmp_func,
+        args,
+        static_cast<const exprt &>(get_nil_irep()),
+        full);
 
-      expanded=true;
+      expanded = true;
     }
   }
   else if(it->is_other())
@@ -438,10 +437,10 @@ void goto_inline(
 
   {
     // find main
-    goto_functionst::function_mapt::const_iterator it=
+    goto_functionst::function_mapt::const_iterator it =
       goto_functions.function_map.find("__ESBMC_main");
 
-    if(it==goto_functions.function_map.end())
+    if(it == goto_functions.function_map.end())
     {
       dest.clear();
       return;
@@ -474,10 +473,10 @@ void goto_inline(
     throw 0;
 
   // clean up
-  for(auto & it : goto_functions.function_map)
-    if(it.first!="__ESBMC_main")
+  for(auto &it : goto_functions.function_map)
+    if(it.first != "__ESBMC_main")
     {
-      it.second.body_available=false;
+      it.second.body_available = false;
       it.second.body.clear();
     }
 }
@@ -493,10 +492,10 @@ void goto_inline(
   try
   {
     // find main
-    goto_functionst::function_mapt::iterator it=
+    goto_functionst::function_mapt::iterator it =
       goto_functions.function_map.find("__ESBMC_main");
 
-    if(it==goto_functions.function_map.end())
+    if(it == goto_functions.function_map.end())
       return;
 
     goto_inline.goto_inline(it->second.body);
@@ -521,10 +520,10 @@ void goto_inline(
     throw 0;
 
   // clean up
-  for(auto & it : goto_functions.function_map)
-    if(it.first!="main")
+  for(auto &it : goto_functions.function_map)
+    if(it.first != "main")
     {
-      it.second.body_available=false;
+      it.second.body_available = false;
       it.second.body.clear();
     }
 }
@@ -536,17 +535,14 @@ void goto_partial_inline(
   message_handlert &message_handler,
   unsigned _smallfunc_limit)
 {
-  goto_inlinet goto_inline(
-    goto_functions,
-    options,
-    ns,
-    message_handler);
+  goto_inlinet goto_inline(goto_functions, options, ns, message_handler);
 
-  goto_inline.smallfunc_limit=_smallfunc_limit;
+  goto_inline.smallfunc_limit = _smallfunc_limit;
 
   try
   {
-    for(auto & it : goto_functions.function_map) {
+    for(auto &it : goto_functions.function_map)
+    {
       goto_inline.inlined_funcs.clear();
       if(it.second.body_available)
         goto_inline.goto_inline_rec(it.second.body, false);

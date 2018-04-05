@@ -24,16 +24,17 @@ public:
   // 'operands' is the 'this' pointer (with the object type,
   // not pointer to object type)
 
-  cpp_typecheck_fargst():in_use(false), has_object(false) { }
+  cpp_typecheck_fargst() : in_use(false), has_object(false)
+  {
+  }
 
   bool has_class_type() const;
 
-  void build(
-    const side_effect_expr_function_callt &function_call);
+  void build(const side_effect_expr_function_callt &function_call);
 
   explicit cpp_typecheck_fargst(
-    const side_effect_expr_function_callt &function_call):
-    in_use(false), has_object(false)
+    const side_effect_expr_function_callt &function_call)
+    : in_use(false), has_object(false)
   {
     build(function_call);
   }
@@ -46,7 +47,7 @@ public:
   void add_object(const exprt &expr)
   {
     //if(!in_use) return;
-    has_object=true;
+    has_object = true;
     operands.insert(operands.begin(), expr);
   }
 
@@ -58,7 +59,6 @@ public:
   }
 };
 
-std::ostream &operator<<(std::ostream &out,
-  const cpp_typecheck_fargst &fargs);
+std::ostream &operator<<(std::ostream &out, const cpp_typecheck_fargst &fargs);
 
 #endif

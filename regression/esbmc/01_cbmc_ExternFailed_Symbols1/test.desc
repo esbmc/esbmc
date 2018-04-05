@@ -1,7 +1,8 @@
+CORE
 main.c
  --no-pointer-check
 ^EXIT=0$
 ^SIGNAL=0$
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$
 --
 ^warning: ignoring

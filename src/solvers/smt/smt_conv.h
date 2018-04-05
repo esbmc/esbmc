@@ -84,285 +84,13 @@
  *  @see smt_convt::mk_func_app
  */
 
-class smt_convt; // Forward dec.
+// Forward dec.
+class fp_convt;
+class smt_convt;
 
-/** Identifier for SMT sort kinds
- *  Each different kind of sort (i.e. arrays, bv's, bools, etc) gets its own
- *  identifier. To be able to describe multiple kinds at the same time, they
- *  take binary values, so that they can be used as bits in an integer. */
-enum smt_sort_kind {
-  SMT_SORT_INT = 1,
-  SMT_SORT_REAL = 2,
-  SMT_SORT_BV = 4,
-  SMT_SORT_ARRAY = 8,
-  SMT_SORT_BOOL = 16,
-  SMT_SORT_STRUCT = 32,
-  SMT_SORT_UNION = 64, // Contencious
-  SMT_SORT_FLOATBV = 128,
-  SMT_SORT_FLOATBV_RM = 256
-};
-
-/** Identifiers for SMT functions.
- *  Each SMT function gets a unique identifier, representing its interpretation
- *  when applied to some arguments. This can be used to describe a function
- *  application when joined with some arguments. Initial values such as
- *  terminal functions (i.e. bool, int, symbol literals) shouldn't normally
- *  be encountered and instead converted to an smt_ast before use. The
- *  'HACKS' function represents some kind of special case, according to where
- *  it is encountered; the same for 'INVALID'.
- *
- *  @see smt_convt::convert_terminal
- *  @see smt_convt::convert_ast
- */
-enum smt_func_kind {
-  // Terminals
-  SMT_FUNC_INVALID = 0, // For conversion lookup table only
-  SMT_FUNC_HACKS = 1, // indicate the solver /has/ to use the temp expr.
-  SMT_FUNC_INT = 2,
-  SMT_FUNC_BOOL,
-  SMT_FUNC_BVINT,
-  SMT_FUNC_REAL,
-  SMT_FUNC_SYMBOL,
-
-  // Nonterminals
-  SMT_FUNC_ADD,
-  SMT_FUNC_BVADD,
-  SMT_FUNC_SUB,
-  SMT_FUNC_BVSUB,
-  SMT_FUNC_MUL,
-  SMT_FUNC_BVMUL,
-  SMT_FUNC_DIV,
-  SMT_FUNC_BVUDIV,
-  SMT_FUNC_BVSDIV,
-  SMT_FUNC_MOD,
-  SMT_FUNC_BVSMOD,
-  SMT_FUNC_BVUMOD,
-  SMT_FUNC_SHL,
-  SMT_FUNC_BVSHL,
-  SMT_FUNC_BVASHR,
-  SMT_FUNC_NEG,
-  SMT_FUNC_BVNEG,
-  SMT_FUNC_BVLSHR,
-  SMT_FUNC_BVNOT,
-  SMT_FUNC_BVNXOR,
-  SMT_FUNC_BVNOR,
-  SMT_FUNC_BVNAND,
-  SMT_FUNC_BVXOR,
-  SMT_FUNC_BVOR,
-  SMT_FUNC_BVAND,
-
-  // Logic
-  SMT_FUNC_IMPLIES,
-  SMT_FUNC_XOR,
-  SMT_FUNC_OR,
-  SMT_FUNC_AND,
-  SMT_FUNC_NOT,
-
-  // Comparisons
-  SMT_FUNC_LT,
-  SMT_FUNC_BVSLT,
-  SMT_FUNC_BVULT,
-  SMT_FUNC_GT,
-  SMT_FUNC_BVSGT,
-  SMT_FUNC_BVUGT,
-  SMT_FUNC_LTE,
-  SMT_FUNC_BVSLTE,
-  SMT_FUNC_BVULTE,
-  SMT_FUNC_GTE,
-  SMT_FUNC_BVSGTE,
-  SMT_FUNC_BVUGTE,
-
-  SMT_FUNC_EQ,
-  SMT_FUNC_NOTEQ,
-
-  SMT_FUNC_ITE,
-
-  SMT_FUNC_STORE,
-  SMT_FUNC_SELECT,
-
-  SMT_FUNC_CONCAT,
-  SMT_FUNC_EXTRACT, // Not for going through mk app due to sillyness.
-
-  SMT_FUNC_INT2REAL,
-  SMT_FUNC_REAL2INT,
-  SMT_FUNC_IS_INT,
-
-  // floatbv operations
-  SMT_FUNC_FABS,
-  SMT_FUNC_ISZERO,
-  SMT_FUNC_ISNAN,
-  SMT_FUNC_ISINF,
-  SMT_FUNC_ISNORMAL,
-  SMT_FUNC_ISNEG,
-  SMT_FUNC_ISPOS,
-  SMT_FUNC_IEEE_EQ,
-  SMT_FUNC_IEEE_ADD,
-  SMT_FUNC_IEEE_SUB,
-  SMT_FUNC_IEEE_MUL,
-  SMT_FUNC_IEEE_DIV,
-  SMT_FUNC_IEEE_FMA,
-  SMT_FUNC_IEEE_SQRT,
-
-  SMT_FUNC_IEEE_RM_NE,
-  SMT_FUNC_IEEE_RM_ZR,
-  SMT_FUNC_IEEE_RM_PI,
-  SMT_FUNC_IEEE_RM_MI,
-
-  SMT_FUNC_BV2FLOAT,
-  SMT_FUNC_FLOAT2BV,
-};
-
-/** Class that will hold information about which operation
- *  will be applied for a particular type
- */
-struct expr_op_convert {
-  smt_func_kind int_encoding_func;
-  smt_func_kind signedbv_func;
-  smt_func_kind unsignedbv_func;
-  smt_func_kind fixedbv_func;
-  smt_func_kind floatbv_func;
-};
-
-/** A class for storing an SMT sort.
- *  This class abstractly represents an SMT sort: solver converter classes are
- *  expected to extend this and add fields that store their solvers
- *  representation of the sort. Then, this base class is used as a handle
- *  through the rest of the SMT conversion code.
- *
- *  Only a few piece of sort information are used to make conversion decisions,
- *  and are thus actually stored in the sort object itself.
- *  @see smt_ast
- */
-
-class smt_sort;
-typedef const smt_sort * smt_sortt;
-
-class smt_sort {
-public:
-  /** Identifies what /kind/ of sort this is.
-   *  The specific sort itself may be parameterised with widths and domains,
-   *  for example. */
-  smt_sort_kind id;
-  /** Data size of the sort.
-   *  For bitvectors this is the bit width, for arrays the range BV bit width.
-   *  For everything else, undefined */
-  unsigned long data_width;
-  /** BV Width of array domain. For everything else, undefined */
-  unsigned long domain_width;
-
-  smt_sort(smt_sort_kind i) : id(i), data_width(0), domain_width(0)
-  {
-    assert(id != SMT_SORT_ARRAY);
-  }
-  smt_sort(smt_sort_kind i, unsigned long width)
-    : id(i), data_width(width), domain_width(0)
-  {
-    assert(width != 0 || i == SMT_SORT_INT);
-    assert(id != SMT_SORT_ARRAY);
-  }
-  smt_sort(smt_sort_kind i, unsigned long rwidth, unsigned long domwidth)
-    : id(i), data_width(rwidth), domain_width(domwidth) {
-      assert(id == SMT_SORT_ARRAY);
-      //assert(domain_width != 0);
-      // XXX not applicable during int mode?
-    }
-
-  virtual ~smt_sort() = default;
-};
-
-#define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
-
-inline bool is_tuple_array_ast_type(const type2tc &t)
-{
-  if (!is_array_type(t))
-    return false;
-
-  const array_type2t &arr_type = to_array_type(t);
-  type2tc range = arr_type.subtype;
-  while (is_array_type(range))
-    range = to_array_type(range).subtype;
-
-  return is_tuple_ast_type(range);
-}
-
-/** Storage of an SMT function application.
- *  This class represents a single SMT function app, abstractly. Solver
- *  converter classes must extend this and add whatever fields are necessary
- *  to represent a function application in the solver they support. A converted
- *  expression becomes an SMT function application; that is then handed around
- *  the rest of the SMT conversion code as an smt_ast.
- *
- *  While an expression becomes an smt_ast, the inverse is not true, and a
- *  single expression may in fact become many smt_asts in various places. See
- *  smt_convt for more detail on how conversion occurs.
- *
- *  The function arguments, and the actual function application itself are all
- *  abstract and dealt with by the solver converter class. Only the sort needs
- *  to be available for us to make conversion decisions.
- *  @see smt_convt
- *  @see smt_sort
- */
-
-class smt_ast;
-typedef const smt_ast * smt_astt;
-
-class smt_ast {
-public:
-  /** The sort of this function application. */
-  smt_sortt sort;
-
-  smt_ast(smt_convt *ctx, smt_sortt s);
-  virtual ~smt_ast() = default;
-
-  // "this" is the true operand.
-  virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
-      smt_astt falseop) const;
-
-  /** Abstractly produce an equality. Does the right thing (TM) whether it's
-   *  a normal piece of AST or a tuple / array.
-   *  @param ctx SMT context to produce the equality in.
-   *  @param other Piece of AST to compare 'this' with.
-   *  @return Boolean typed AST representing an equality */
-  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-
-  /** Abstractly produce an assign. Defaults to being an equality, however
-   *  for some special cases up to the backend, there may be optimisations made
-   *  for array or tuple assigns, and so forth.
-   *  @param ctx SMT context to do the assignment in.
-   *  @param sym Symbol to assign to
-   *  @return AST representing the assigned symbol */
-  virtual void assign(smt_convt *ctx, smt_astt sym) const;
-
-  /** Abstractly produce an "update", i.e. an array 'with' or tuple 'with'.
-   *  @param ctx SMT context to make this update in.
-   *  @param value Value to insert into the updated field
-   *  @param idx Array index or tuple field
-   *  @param idx_expr If an array, expression representing the index
-   *  @return AST of this' type, representing the update */
-  virtual smt_astt update(smt_convt *ctx, smt_astt value,
-                                unsigned int idx,
-                                expr2tc idx_expr = expr2tc()) const;
-
-  /** Select a value from an array, for both normal arrays and tuple arrays.
-   *  @param ctx SMT context to produce this in.
-   *  @param idx Index to select the value from.
-   *  @return AST of the array's range sort representing the selected item */
-  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
-
-  /** Project a member from a structure, or an field-array from a struct array.
-   *  @param ctx SMT context to produce this in.
-   *  @param elem Struct index to project.
-   *  @return AST representing the chosen element / element-array */
-  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
-
-  virtual void dump() const = 0;
-};
-
-// Pull in the tuple interface definitions. _after_ the AST defs.
-#include <solvers/smt/smt_tuple.h>
-
-// Also, array interface
 #include <solvers/smt/smt_array.h>
+#include <solvers/smt/tuple/smt_tuple.h>
+#include <solvers/smt/fp/fp_conv.h>
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
@@ -405,7 +133,7 @@ class smt_convt : public messaget
 {
 public:
   /** Shorthand for a vector of smt_ast's */
-  typedef std::vector<smt_astt > ast_vec;
+  typedef std::vector<smt_astt> ast_vec;
 
   /** Primary constructor. After construction, smt_post_init must be called
    *  before the object is used as a solver converter.
@@ -459,21 +187,24 @@ public:
     smt_astt const *args,
     struct expr_op_convert ops);
 
-  void convert_assign(const expr2tc &expr);
+  smt_astt convert_assign(const expr2tc &expr);
 
-  /** Make an n-ary 'or' function application.
-   *  Takes a vector of smt_ast's, all boolean sorted, and creates a single
-   *  'or' function app over all the smt_ast's.
-   *  @param v The vector of converted boolean expressions to be 'or''d.
-   *  @return The smt_ast handle to the 'or' func app. */
-  virtual smt_astt make_disjunct(const ast_vec &v);
+  /** Make an n-ary function application.
+   *  Takes a vector of smt_ast's, and creates a single
+   *  function app over all the smt_ast's.
+   */
+  template <typename Object, typename Method>
+  smt_astt make_n_ary(const Object o, const Method m, const ast_vec &v)
+  {
+    assert(!v.empty());
 
-  /** Make an n-ary 'and' function application.
-   *  Takes a vector of smt_ast's, all boolean sorted, and creates a single
-   *  'and' function app over all the smt_ast's.
-   *  @param v The vector of converted boolean expressions to be 'and''d.
-   *  @return The smt_ast handle to the 'and' func app. */
-  virtual smt_astt make_conjunct(const ast_vec &v);
+    // Chain these.
+    smt_astt result = v.front();
+    for(std::size_t i = 1; i < v.size(); ++i)
+      result = (o->*m)(result, v[i]);
+
+    return result;
+  }
 
   /** Create the inverse of an smt_ast. Equivalent to a 'not' operation.
    *  @param a The ast to invert. Must be boolean sorted.
@@ -503,6 +234,21 @@ public:
 
   void pre_solve();
 
+  /** Get the satisfying assignment using the type.
+   *  @param expr Variable to get the value of. Must be a symbol expression.
+   *  @return Explicit assigned value of expr in the solver. May be nil, in
+   *          which case the solver did not assign a value to it for some
+   *          reason. */
+  virtual expr2tc get_by_type(const expr2tc &expr);
+
+  /** Get the satisfying assignment using the ast.
+   *  @param a Variable to get the value of.
+   *  @param type The variable type.
+   *  @return Explicit assigned value of expr in the solver. May be nil, in
+   *          which case the solver did not assign a value to it for some
+   *          reason. */
+  virtual expr2tc get_by_ast(const type2tc &type, smt_astt a);
+
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the
@@ -516,88 +262,114 @@ public:
   /** Solver name fetcher. Returns a string naming the solver being used, and
    *  potentially it's version, if available.
    *  @return The name of the solver this smt_convt uses. */
-  virtual const std::string solver_text()=0;
+  virtual const std::string solver_text() = 0;
 
   /** Fetch the value of a boolean sorted smt_ast. (The 'l' is for literal, and
    *  is historic). Returns a three valued result, of true, false, or
    *  unassigned.
    *  @param a The boolean sorted ast to fetch the value of.
    *  @return A three-valued return val, of the assignment to a. */
-  virtual tvt l_get(smt_astt a)=0;
+  virtual tvt l_get(smt_astt a);
 
   /** @} */
 
   /** @{
    *  @name Internal conversion API between smt_convt and solver converter */
 
-  /** Create an SMT function application. Using the provided information,
-   *  the solver converter should create a function application in the solver
-   *  being used, then wrap it in an smt_ast, and return it. If the desired
-   *  function application is not supported by the solver, print an error and
-   *  abort.
-   *
-   *  @param s The resulting sort of the func app we are creating.
-   *  @param k The kind of function application to create.
-   *  @param args Array of function apps to use as arguments to this one.
-   *  @param numargs The number of elements in args. Should be consistent with
-   *         the function kind k.
-   *  @return The resulting function application, wrapped in an smt_ast. */
-  virtual smt_astt mk_func_app(smt_sortt s, smt_func_kind k,
-                               smt_astt  const *args,
-                               unsigned int numargs) = 0;
+  virtual smt_astt mk_add(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvadd(smt_astt a, smt_astt b);
+  virtual smt_astt mk_sub(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsub(smt_astt a, smt_astt b);
+  virtual smt_astt mk_mul(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvmul(smt_astt a, smt_astt b);
+  virtual smt_astt mk_mod(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsmod(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvumod(smt_astt a, smt_astt b);
+  virtual smt_astt mk_div(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsdiv(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvudiv(smt_astt a, smt_astt b);
+  virtual smt_astt mk_shl(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvshl(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvashr(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvlshr(smt_astt a, smt_astt b);
+  virtual smt_astt mk_neg(smt_astt a);
+  virtual smt_astt mk_bvneg(smt_astt a);
+  virtual smt_astt mk_bvnot(smt_astt a);
+  virtual smt_astt mk_bvnxor(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvnor(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvnand(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvxor(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvor(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvand(smt_astt a, smt_astt b);
+  virtual smt_astt mk_implies(smt_astt a, smt_astt b);
+  virtual smt_astt mk_xor(smt_astt a, smt_astt b);
+  virtual smt_astt mk_or(smt_astt a, smt_astt b);
+  virtual smt_astt mk_and(smt_astt a, smt_astt b);
+  virtual smt_astt mk_not(smt_astt a);
+  virtual smt_astt mk_lt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvult(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvslt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_gt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvugt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsgt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_le(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvule(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsle(smt_astt a, smt_astt b);
+  virtual smt_astt mk_ge(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvuge(smt_astt a, smt_astt b);
+  virtual smt_astt mk_bvsge(smt_astt a, smt_astt b);
+  virtual smt_astt mk_eq(smt_astt a, smt_astt b);
+  virtual smt_astt mk_neq(smt_astt a, smt_astt b);
+  virtual smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c);
+  virtual smt_astt mk_select(smt_astt a, smt_astt b);
+  virtual smt_astt mk_real2int(smt_astt a);
+  virtual smt_astt mk_int2real(smt_astt a);
+  virtual smt_astt mk_isint(smt_astt a);
 
-  // Some helpers
-
-  inline smt_astt mk_func_app(smt_sortt s, smt_func_kind k, smt_astt arg1)
+  /** Create an integer or SBV/UBV sort */
+  smt_sortt mk_int_bv_sort(std::size_t width)
   {
-    smt_astt args[1];
-    args[0] = arg1;
-    return mk_func_app(s, k, args, 1);
+    if(int_encoding)
+      return mk_int_sort();
+
+    return mk_bv_sort(width);
   }
 
-  inline smt_astt mk_func_app(smt_sortt s, smt_func_kind k, smt_astt arg1,
-      smt_astt arg2)
+  /** Create an real or floating-point/fixed-point sort */
+  smt_sortt mk_real_fp_sort(std::size_t ew, std::size_t sw)
   {
-    smt_astt args[2];
-    args[0] = arg1;
-    args[1] = arg2;
-    return mk_func_app(s, k, args, 2);
+    if(int_encoding)
+      return mk_real_sort();
+
+    if(config.ansi_c.use_fixed_for_float)
+      return mk_fbv_sort(ew + sw);
+
+    return fp_api->mk_fpbv_sort(ew, sw);
   }
 
-  inline smt_astt mk_func_app(smt_sortt s, smt_func_kind k, smt_astt arg1,
-      smt_astt arg2, smt_astt arg3)
-  {
-    smt_astt args[3];
-    args[0] = arg1;
-    args[1] = arg2;
-    args[2] = arg3;
-    return mk_func_app(s, k, args, 3);
-  }
+  /** Create a bool sort */
+  virtual smt_sortt mk_bool_sort();
 
-  inline smt_astt mk_func_app(smt_sortt s, smt_func_kind k, smt_astt arg1,
-      smt_astt arg2, smt_astt arg3, smt_astt arg4)
-  {
-    smt_astt args[4];
-    args[0] = arg1;
-    args[1] = arg2;
-    args[2] = arg3;
-    args[3] = arg4;
-    return mk_func_app(s, k, args, 4);
-  }
+  /** Create a real sort */
+  virtual smt_sortt mk_real_sort();
 
-  /** Create an SMT sort. The sort kind k indicates what kind of sort to create,
-   *  and the parameters of the sort are passed in as varargs. Briefly, these
-   *  arguments are:
-   *  * Bools: None
-   *  * Int's: None
-   *  * BV's:  Width as a machine integer, and a bool that's true if it's signed
-   *  * Arrays: Two pointers to smt_sort's: the domain sort, and the range sort
-   *
-   *  Structs and unions use @ref mk_struct_sort and @ref mk_union_sort.
-   *
-   *  @param k The kind of SMT sort that will be created.
-   *  @return The smt_sort wrapper for the sort. Lifetime currently undefined */
-  virtual smt_sortt mk_sort(const smt_sort_kind k, ...) = 0;
+  /** Create a int sort */
+  virtual smt_sortt mk_int_sort();
+
+  /** Create a bv sort */
+  virtual smt_sortt mk_bv_sort(std::size_t width);
+
+  /** Create a fixed-point sort */
+  virtual smt_sortt mk_fbv_sort(std::size_t width);
+
+  /** Create a floating-point sort, using bitvectors */
+  virtual smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw);
+
+  /** Create a floating-point rouding mode sort, using bitvectors */
+  virtual smt_sortt mk_bvfp_rm_sort();
+
+  /** Create an array sort */
+  virtual smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range);
 
   /** Create an integer smt_ast. That is, an integer in QF_AUFLIRA, rather than
    *  a bitvector.
@@ -617,57 +389,20 @@ public:
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
    *         in the stored integer should be ignored.
-   *  @param sign Whether this bitvector is to be considered signed or not.
    *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
-                                unsigned int w) = 0;
+  virtual smt_astt mk_smt_bv(const mp_integer &theint, std::size_t w)
+  {
+    return mk_smt_bv(theint, mk_int_bv_sort(w));
+  }
 
-  /** Create a floating point bitvector
-   *  @param thereal the ieee float number
-   *  @param ew Exponent width, in bits, of the bitvector to create.
-   *  @param sw Significand width, in bits, of the bitvector to create.
+  /** Create a bitvector.
+   *  @param s the sort.
+   *  @param theint Integer representation of the bitvector. Any excess bits
+   *         in the stored integer should be ignored.
+   *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bvfloat(const ieee_floatt &thereal,
-                                  unsigned ew, unsigned sw) = 0;
-
-  /** Create a NaN floating point bitvector
-   *  @param ew Exponent width, in bits, of the bitvector to create.
-   *  @param sw Significand width, in bits, of the bitvector to create.
-   *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw) = 0;
-
-  /** Create a (+/-)inf floating point bitvector
-   *  @param sgn Whether this bitvector is negative or positive.
-   *  @param ew Exponent width, in bits, of the bitvector to create.
-   *  @param sw Significand width, in bits, of the bitvector to create.
-   *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw) = 0;
-
-  /** Create a rounding mode to be used by floating point cast and arith ops
-   *  @param rm the kind of rounding mode
-   *  @return The newly created rounding mode smt_ast. */
-  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm) = 0;
-
-  /** Typecast from a floating point
-   *  @param cast the cast expression
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast) = 0;
-
-  /** Typecast to a floating point
-   *  @param cast the cast expression
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast) = 0;
-
-  /** Calculate the nearby int from a floating point, considering the rounding mode
-   *  @param expr the nearby int expression
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) = 0;
-
-  /** Convert the ieee arithmetic operations (add, sub, mul, div, mod)
-   *  @param expr the arithmetic operations
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr) = 0;
+  virtual smt_astt mk_smt_bv(const mp_integer &theint, smt_sortt s) = 0;
 
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.
@@ -680,28 +415,68 @@ public:
    *  @param name Textual name of the symbol to create.
    *  @param s The sort of the symbol we're creating.
    *  @param The newly created terminal smt_ast of this symbol. */
-  virtual smt_astt mk_smt_symbol(const std::string &name, smt_sortt s) =0;
+  virtual smt_astt mk_smt_symbol(const std::string &name, smt_sortt s) = 0;
 
-    /** Create an 'extract' func app. Due to the fact that we can't currently
+  /** Create an 'extract' func app. Due to the fact that we can't currently
    *  encode integer constants as function arguments without serious faff,
    *  this can't be performed via the medium of mk_func_app. Hence, this api
    *  call.
    *  @param a The source piece of ast to extract a value from.
    *  @param high The topmost bit to select from the source, down to low.
-   *  @param low The lowest bit to select from the source.
-   *  @param s The sort of the resulting piece of ast. */
-  virtual smt_astt mk_extract(smt_astt a, unsigned int high,
-                              unsigned int low, smt_sortt s) = 0;
+   *  @param low The lowest bit to select from the source. */
+  virtual smt_astt
+  mk_extract(smt_astt a, unsigned int high, unsigned int low) = 0;
+
+  /** Given a signed, upwards cast, extends the sign of the given AST to the
+   *  desired length.
+   *  @param a The bitvector to upcast.
+   *  @param topwidth The number of bits to extend the input by
+   *  @return A bitvector with topwidth more bits, of the appropriate sign. */
+  virtual smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) = 0;
+
+  /** Identical to mk_sign_ext, but extends AST with zeros */
+  virtual smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) = 0;
+
+  /** Concatenate two smt expressions
+   * @param a the first part of the concatenation
+   * @param b the second part of the concatenation
+   * @return the concatenation of a and b */
+  virtual smt_astt mk_concat(smt_astt a, smt_astt b) = 0;
+
+  /** Create an ite operation
+   * @param cond the ite condition
+   * @param t the true case
+   * @param f the false case
+   * @return an ite expression */
+  virtual smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) = 0;
 
   /** Extract the assignment to a boolean variable from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
    *  @return Expression representation of a's value, as a constant_bool2tc */
-  virtual expr2tc get_bool(smt_astt a) = 0;
+  virtual bool get_bool(smt_astt a) = 0;
 
   /** Extract the assignment to a bitvector from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
-   *  @return Expression representation of a's value, as a constant_int2tc */
-  virtual expr2tc get_bv(const type2tc &t, smt_astt a) = 0;
+   *  @return Expression representation of a's value */
+  virtual BigInt get_bv(smt_astt a) = 0;
+
+  /** Builds the bitvector based on the value retrieved from the solver.
+   *  @param type the type (fixedbv or (un)signedbv),
+   *  @param value the value retrieved from the solver.
+   *  @return Expression representation of a's value */
+  expr2tc build_bv(const type2tc &type, BigInt value);
+
+  /** Reduction or: equals bit0 iff all bits are 0
+   * @param op the expr to be reduced
+   * @return reduced op
+   */
+  smt_astt mk_bvredor(smt_astt op);
+
+  /** Reduction and: equals bit1 iff all bits are 1
+   * @param op the expr to be reduced
+   * @return reduced op
+   */
+  smt_astt mk_bvredand(smt_astt op);
 
   /** @} */
 
@@ -733,6 +508,9 @@ public:
   /** Method to dump the SMT formula */
   virtual void dump_smt();
 
+  /** Method to print the SMT model */
+  virtual void print_model();
+
   /** @} */
 
   /** @{
@@ -763,14 +541,15 @@ public:
 
   /** Create a free variable with the given sort, and a unique name, with the
    *  prefix given in 'tag' */
-  virtual smt_astt mk_fresh(smt_sortt s, const std::string &tag,
-                            smt_sortt st = nullptr);
+  virtual smt_astt
+  mk_fresh(smt_sortt s, const std::string &tag, smt_sortt st = nullptr);
   /** Create a previously un-used variable name with the prefix given in tag */
   std::string mk_fresh_name(const std::string &tag);
 
-  void renumber_symbol_address(const expr2tc &guard,
-                               const expr2tc &addr_symbol,
-                               const expr2tc &new_size);
+  void renumber_symbol_address(
+    const expr2tc &guard,
+    const expr2tc &addr_symbol,
+    const expr2tc &new_size);
 
   /** Convert a type2tc into an smt_sort. This despatches control to the
    *  appropriate method in the subclassing solver converter for type
@@ -795,8 +574,10 @@ public:
    *         the kind of comparison being performed, and make an appropriate
    *         decision.
    *  @return Boolean valued AST as appropriate to the requested comparision */
-  smt_astt convert_ptr_cmp(const expr2tc &expr, const expr2tc &expr2,
-                                 const expr2tc &templ_expr);
+  smt_astt convert_ptr_cmp(
+    const expr2tc &expr,
+    const expr2tc &expr2,
+    const expr2tc &templ_expr);
   /** Take the address of some kind of expression. This will abort if the given
    *  expression isn't based on some symbol in some way. (i.e., you can't take
    *  the address of an addition, but you can take the address of a member of
@@ -812,23 +593,11 @@ public:
    *  @param expr The symbol2tc expression of this symbol.
    *  @param sym The textual representation of this symbol.
    *  @return A pointer-typed AST representing the address of this symbol. */
-  smt_astt convert_identifier_pointer(const expr2tc &expr,
-                                            const std::string& sym);
+  smt_astt
+  convert_identifier_pointer(const expr2tc &expr, const std::string &sym);
 
   smt_astt init_pointer_obj(unsigned int obj_num, const expr2tc &size);
 
-  /** Given a signed, upwards cast, extends the sign of the given AST to the
-   *  desired length.
-   *  @param a The bitvector to upcast.
-   *  @param s The resulting sort of this extension operation
-   *  @param topbit The highest bit of the bitvector (1-based)
-   *  @param topwidth The number of bits to extend the input by
-   *  @return A bitvector with topwidth more bits, of the appropriate sign. */
-  smt_astt convert_sign_ext(smt_astt a, smt_sortt s,
-                                  unsigned int topbit, unsigned int topwidth);
-  /** Identical to convert_sign_ext, but extends AST with zeros */
-  smt_astt convert_zero_ext(smt_astt a, smt_sortt s,
-                                  unsigned int topwidth);
   /** Checks for equality with NaN representation. */
   smt_astt convert_is_nan(const expr2tc &expr);
   /** Checks for equality with inf representation. */
@@ -840,9 +609,7 @@ public:
   /** Converts signbit representation. */
   smt_astt convert_signbit(const expr2tc &expr);
   /** Converts rounding mode for ieee fp operations. */
-  smt_astt convert_rounding_mode(const expr2tc& expr);
-  /** Converts equality between two floatbvs. */
-  smt_astt convert_ieee_equal(const expr2tc &expr);
+  smt_astt convert_rounding_mode(const expr2tc &expr);
   /** Convert a byte_extract2tc, pulling a byte from the byte representation
    *  of some piece of data. */
   smt_astt convert_byte_extract(const expr2tc &expr);
@@ -853,9 +620,6 @@ public:
   void assert_expr(const expr2tc &e);
   /** Convert constant_array2tc's and constant_array_of2tc's */
   smt_astt array_create(const expr2tc &expr);
-  /** Mangle constant_array / array_of data with tuple array type, into a
-   *  more convenient format, acceptable by tuple_array_create */
-  smt_astt tuple_array_create(const expr2tc &expr, smt_sortt domain);
 
   /** Initialize tracking data for the address space records. This also sets
    *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */
@@ -864,6 +628,8 @@ public:
   void set_tuple_iface(tuple_iface *iface);
   /** Stores handle for the array interface. */
   void set_array_iface(array_iface *iface);
+  /** Stores handle for the floating-point interface. */
+  void set_fp_conv(fp_convt *iface);
   /** Store a new address-allocation record into the address space accounting.
    *  idx indicates the object number of this record. */
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
@@ -895,11 +661,15 @@ public:
   smt_astt convert_typecast_to_struct(const typecast2t &cast);
   /** Despatch a typecast expression to a more specific typecast method */
   smt_astt convert_typecast(const expr2tc &expr);
+  /** Typecast to a floatbv*/
+  smt_astt convert_typecast_to_fpbv(const typecast2t &cast);
+  /** Typecast from a floatbv */
+  smt_astt convert_typecast_from_fpbv(const typecast2t &cast);
   /** Round a real to an integer; not straightforwards at all. */
   smt_astt round_real_to_int(smt_astt a);
   /** Round a fixedbv to an integer. */
-  smt_astt round_fixedbv_to_int(smt_astt a, unsigned int width,
-                                      unsigned int towidth);
+  smt_astt
+  round_fixedbv_to_int(smt_astt a, unsigned int width, unsigned int towidth);
 
   /** Extract a type definition (i.e. a struct_union_data object) from a type.
    *  This method abstracts the fact that a pointer type is in fact a tuple. */
@@ -922,10 +692,8 @@ public:
    *  nondeterministically or infinite sized arrays, this defaults to the
    *  machine integer width. */
   unsigned long calculate_array_domain_width(const array_type2t &arr);
-  /** Given an array type, create an smt sort representing its domain. */
-  smt_sortt make_array_domain_sort(const array_type2t &arr);
-  /** Like make_array_domain_sort, but a type2tc not an smt_sort */
-  type2tc make_array_domain_sort_exp(const array_type2t &arr);
+  /** Given an array type, create a type2tc representing its domain. */
+  type2tc make_array_domain_type(const array_type2t &arr);
   /** For a multi-dimensional array, convert the type into a single dimension
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */
@@ -938,13 +706,6 @@ public:
   type2tc get_flattened_array_subtype(const type2tc &type);
   /** Fetch the number of elements in an array (the domain). */
   expr2tc array_domain_to_width(const type2tc &type);
-  /** Create an array domain sort */
-  smt_sortt mk_int_bv_sort(unsigned int width) {
-    if (int_encoding)
-      return mk_sort(SMT_SORT_INT);
-    else
-      return mk_sort(SMT_SORT_BV, width, false);
-  }
 
   /** For the given type, replace all instances of a pointer type with the
    *  struct representation of it. */
@@ -963,21 +724,17 @@ public:
   smt_astt convert_array_of_prep(const expr2tc &expr);
   /** Create an array of pointers; expects the init_val to be null, because
    *  there's no other way to initialize a pointer array in C, AFAIK. */
-  smt_astt pointer_array_of(const expr2tc &init_val,
-                                  unsigned long array_width);
+  smt_astt pointer_array_of(const expr2tc &init_val, unsigned long array_width);
 
-  /** Given a textual representation of a real, as one number divided by
-   *  another, create a fixedbv representation of it. For use in counterexample
-   *  formatting. */
-  std::string get_fixed_point(const unsigned width, std::string value) const;
-
-  unsigned int get_member_name_field(const type2tc &t, const irep_idt &name) const;
-  unsigned int get_member_name_field(const type2tc &t, const expr2tc &name) const;
+  unsigned int get_member_name_field(const type2tc &t, const irep_idt &name)
+    const;
+  unsigned int get_member_name_field(const type2tc &t, const expr2tc &name)
+    const;
 
   // Ours:
   /** Given an array expression, attempt to extract its valuation from the
    *  solver model, computing a constant_array2tc by calling get_array_elem. */
-  expr2tc get_array(smt_astt array, const type2tc &t);
+  expr2tc get_array(const expr2tc &expr);
 
   void delete_all_asts();
 
@@ -987,7 +744,8 @@ public:
 
   // Type for (optional) AST cache
 
-  struct smt_cache_entryt {
+  struct smt_cache_entryt
+  {
     const expr2tc val;
     smt_astt ast;
     unsigned int level;
@@ -997,14 +755,11 @@ public:
     smt_cache_entryt,
     boost::multi_index::indexed_by<
       boost::multi_index::hashed_unique<
-        BOOST_MULTI_INDEX_MEMBER(smt_cache_entryt, const expr2tc, val)
-      >,
+        BOOST_MULTI_INDEX_MEMBER(smt_cache_entryt, const expr2tc, val)>,
       boost::multi_index::ordered_non_unique<
         BOOST_MULTI_INDEX_MEMBER(smt_cache_entryt, unsigned int, level),
-        std::greater<unsigned int>
-      >
-    >
-  > smt_cachet;
+        std::greater<unsigned int>>>>
+    smt_cachet;
 
   typedef hash_map_cont<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
 
@@ -1074,7 +829,7 @@ public:
   /** List of address space allocation sizes. A map from the object number to
    *  the nubmer of bytes allocated. In a list to support pushing and
    *  popping. */
-  std::list<std::map<unsigned, unsigned> > addr_space_data;
+  std::list<std::map<unsigned, unsigned>> addr_space_data;
 
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;
@@ -1090,18 +845,17 @@ public:
 
   tuple_iface *tuple_api;
   array_iface *array_api;
+  fp_convt *fp_api;
 
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.
   smt_astt int_shift_op_array;
-
-  /** Mapping of SMT function IDs to their names. XXX, incorrect size. */
-  static const std::string smt_func_name_table[expr2t::end_expr_id];
 };
 
 // Define here to enable inlining
-extern inline
-smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s) {
+extern inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s)
+  : sort(s), context(ctx)
+{
   assert(sort != nullptr);
   ctx->live_asts.push_back(this);
 }

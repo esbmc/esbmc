@@ -20,27 +20,25 @@ void cpp_declaratort::output(std::ostream &out) const
 
 typet cpp_declaratort::merge_type(const typet &declaration_type) const
 {
-  typet dest_type=type();
+  typet dest_type = type();
 
-  if(declaration_type.id()=="cpp-cast-operator")
+  if(declaration_type.id() == "cpp-cast-operator")
     return dest_type;
 
-  typet *p=&dest_type;
+  typet *p = &dest_type;
 
   // walk down subtype until we hit nil
   while(true)
   {
-    typet &t=*p;
+    typet &t = *p;
     if(t.is_nil())
     {
-      t=declaration_type;
+      t = declaration_type;
       break;
     }
-    else
-    {
-      assert(t.id()!="");
-      p=&t.subtype();
-    }
+
+    assert(t.id() != "");
+    p = &t.subtype();
   }
 
   return dest_type;

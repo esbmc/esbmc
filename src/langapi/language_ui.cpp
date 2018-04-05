@@ -17,7 +17,7 @@ static ui_message_handlert::uit get_ui_cmdline(const cmdlinet &cmdline)
 {
   if(cmdline.isset("gui"))
     return ui_message_handlert::OLD_GUI;
-  else if(cmdline.isset("xml-ui"))
+  if(cmdline.isset("xml-ui"))
     return ui_message_handlert::XML_UI;
   else if(cmdline.isset("witness-output"))
     return ui_message_handlert::GRAPHML;
@@ -25,16 +25,15 @@ static ui_message_handlert::uit get_ui_cmdline(const cmdlinet &cmdline)
   return ui_message_handlert::PLAIN;
 }
 
-language_uit::language_uit(const cmdlinet &__cmdline):
-  ui_message_handler(get_ui_cmdline(__cmdline)),
-  _cmdline(__cmdline)
+language_uit::language_uit(const cmdlinet &__cmdline)
+  : ui_message_handler(get_ui_cmdline(__cmdline)), _cmdline(__cmdline)
 {
   set_message_handler(&ui_message_handler);
 }
 
 bool language_uit::parse()
 {
-  for(const auto & arg : _cmdline.args)
+  for(const auto &arg : _cmdline.args)
   {
     if(parse(arg))
       return true;
@@ -45,9 +44,9 @@ bool language_uit::parse()
 
 bool language_uit::parse(const std::string &filename)
 {
-  int mode=get_mode_filename(filename);
+  int mode = get_mode_filename(filename);
 
-  if(mode<0)
+  if(mode < 0)
   {
     error("failed to figure out type of file", filename);
     return true;
@@ -66,20 +65,20 @@ bool language_uit::parse(const std::string &filename)
 
   language_filet language_file;
 
-  std::pair<language_filest::filemapt::iterator, bool>
-    result=language_files.filemap.insert(
+  std::pair<language_filest::filemapt::iterator, bool> result =
+    language_files.filemap.insert(
       std::pair<std::string, language_filet>(filename, language_file));
 
-  language_filet &lf=result.first->second;
-  lf.filename=filename;
-  lf.language=mode_table[mode].new_language();
-  languaget &language=*lf.language;
+  language_filet &lf = result.first->second;
+  lf.filename = filename;
+  lf.language = mode_table[mode].new_language();
+  languaget &language = *lf.language;
 
   status("Parsing", filename);
 
   if(language.parse(filename, *get_message_handler()))
   {
-    if(get_ui()==ui_message_handlert::PLAIN)
+    if(get_ui() == ui_message_handlert::PLAIN)
       std::cerr << "PARSING ERROR" << std::endl;
 
     return true;
@@ -99,7 +98,7 @@ bool language_uit::typecheck()
 
   if(language_files.typecheck(context))
   {
-    if(get_ui()==ui_message_handlert::PLAIN)
+    if(get_ui() == ui_message_handlert::PLAIN)
       std::cerr << "CONVERSION ERROR" << std::endl;
 
     return true;
@@ -115,7 +114,7 @@ bool language_uit::final()
 
   if(language_files.final(context))
   {
-    if(get_ui()==ui_message_handlert::PLAIN)
+    if(get_ui() == ui_message_handlert::PLAIN)
       std::cerr << "CONVERSION ERROR" << std::endl;
 
     return true;

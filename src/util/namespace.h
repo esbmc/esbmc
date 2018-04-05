@@ -23,7 +23,8 @@ public:
     const symbolt *symbol;
     if(lookup(name, symbol))
     {
-      std::cerr <<  "Failed to find symbol "+id2string(name)+" not found" << std::endl;
+      std::cerr << "Failed to find symbol " + id2string(name) + " not found"
+                << std::endl;
       abort();
     }
     return *symbol;
@@ -52,13 +53,22 @@ public:
   namespacet() = delete;
 
   namespacet(const contextt &_context)
-  { context1=&_context; context2=nullptr; }
+  {
+    context1 = &_context;
+    context2 = nullptr;
+  }
 
   namespacet(const contextt &_context1, const contextt &_context2)
-  { context1=&_context1; context2=&_context2; }
+  {
+    context1 = &_context1;
+    context2 = &_context2;
+  }
 
   namespacet(const contextt *_context1, const contextt *_context2)
-  { context1=_context1; context2=_context2; }
+  {
+    context1 = _context1;
+    context2 = _context2;
+  }
 
   unsigned get_max(const std::string &prefix) const;
 
@@ -67,7 +77,7 @@ public:
     return *context1;
   }
 
- protected:
+protected:
   const contextt *context1, *context2;
 };
 

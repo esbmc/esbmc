@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
-class clang_cpp_languaget: public languaget
+class clang_cpp_languaget : public languaget
 {
 public:
   virtual bool preprocess(
@@ -22,13 +22,10 @@ public:
     std::ostream &outstream,
     message_handlert &message_handler);
 
-  bool parse(
-    const std::string &path,
-    message_handlert &message_handler) override;
+  bool
+  parse(const std::string &path, message_handlert &message_handler) override;
 
-  bool final(
-    contextt &context,
-    message_handlert &message_handler) override;
+  bool final(contextt &context, message_handlert &message_handler) override;
 
   bool typecheck(
     contextt &context,
@@ -56,16 +53,10 @@ public:
     const namespacet &ns,
     bool fullname = false) override;
 
-  // conversion from string into expression
-  bool to_expr(
-    const std::string &code,
-    const std::string &module,
-    exprt &expr,
-    message_handlert &message_handler,
-    const namespacet &ns) override;
-
   languaget *new_language() override
-  { return new clang_cpp_languaget; }
+  {
+    return new clang_cpp_languaget;
+  }
 
   // constructor, destructor
   ~clang_cpp_languaget() override = default;

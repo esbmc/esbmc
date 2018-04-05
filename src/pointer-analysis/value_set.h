@@ -52,23 +52,26 @@ Author: Daniel Kroening, kroening@kroening.com
  */
 
 typedef hash_numbering<expr2tc, irep2_hash> object_numberingt;
-typedef hash_numbering<unsigned, std::hash<unsigned> > object_number_numberingt;
+typedef hash_numbering<unsigned, std::hash<unsigned>> object_number_numberingt;
 
 class value_sett
 {
 public:
   /** Primary constructor. Does approximately nothing non-standard. */
-  value_sett(const namespacet &_ns):location_number(0), ns(_ns),
-    xchg_name("value_sett::__ESBMC_xchg_ptr"), xchg_num(0)
+  value_sett(const namespacet &_ns)
+    : location_number(0),
+      ns(_ns),
+      xchg_name("value_sett::__ESBMC_xchg_ptr"),
+      xchg_num(0)
   {
   }
 
-  value_sett(const value_sett &ref) :
-    location_number(ref.location_number),
-    values(ref.values),
-    ns(ref.ns),
-    xchg_name("value_sett::__ESBMC_xchg_ptr"),
-    xchg_num(0)
+  value_sett(const value_sett &ref)
+    : location_number(ref.location_number),
+      values(ref.values),
+      ns(ref.ns),
+      xchg_name("value_sett::__ESBMC_xchg_ptr"),
+      xchg_num(0)
   {
   }
 
@@ -82,7 +85,7 @@ public:
     return *this;
   }
 
-//*********************************** Types ************************************
+  //*********************************** Types ************************************
 
   /** A type for a set of expressions */
   typedef std::set<expr2tc> expr_sett;
@@ -100,25 +103,30 @@ public:
   class objectt
   {
   public:
-    objectt() : offset(0), offset_is_set(true), offset_alignment(0) { }
+    objectt() : offset(0), offset_is_set(true), offset_alignment(0)
+    {
+    }
 
     objectt(bool offset_set, unsigned int operand)
     {
-      if (offset_set) {
+      if(offset_set)
+      {
         offset_is_set = true;
         offset = mp_integer(operand);
         offset_alignment = 1;
-      } else {
+      }
+      else
+      {
         offset_is_set = false;
         offset_alignment = operand;
         assert(offset_alignment != 0);
       }
     }
 
-    explicit objectt(bool offset_set __attribute__((unused)),
-        const mp_integer &_offset):
-      offset(_offset),
-      offset_is_set(true)
+    explicit objectt(
+      bool offset_set __attribute__((unused)),
+      const mp_integer &_offset)
+      : offset(_offset), offset_is_set(true)
     {
       assert(offset_set);
       offset_alignment = 1;
@@ -140,7 +148,9 @@ public:
      *  Units are bytes. Zero means N/A. */
     unsigned int offset_alignment;
     bool offset_is_zero() const
-    { return offset_is_set && offset.is_zero(); }
+    {
+      return offset_is_set && offset.is_zero();
+    }
   };
 
   /** Datatype for a value set: stores a mapping between some integers and
@@ -155,7 +165,7 @@ public:
   public:
     ~object_map_dt()
     {
-      for (auto const& it : themap)
+      for(auto const &it : themap)
         value_sett::obj_numbering_deref(it.first);
     }
 
@@ -166,7 +176,7 @@ public:
     object_map_dt(const object_map_dt &ref)
     {
       *this = ref;
-      for (auto const& it : themap)
+      for(auto const &it : themap)
         value_sett::obj_numbering_ref(it.first);
     }
     typedef object_mapt::const_iterator const_iterator;
@@ -174,7 +184,7 @@ public:
 
     objectt &operator[](unsigned i)
     {
-      if (themap.find(i) == themap.end())
+      if(themap.find(i) == themap.end())
         value_sett::obj_numbering_ref(i);
       return themap[i];
     }
@@ -207,7 +217,6 @@ public:
     object_mapt themap;
   };
 
-
   /** Record for a particular value set: stores the identity of the variable
    *  that points at this set of objects, and the objects themselves (with
    *  associated offset data).
@@ -235,9 +244,8 @@ public:
 
     entryt() = default;
 
-    entryt(std::string _identifier, const std::string& _suffix):
-      identifier(std::move(_identifier)),
-      suffix(_suffix)
+    entryt(std::string _identifier, const std::string &_suffix)
+      : identifier(std::move(_identifier)), suffix(_suffix)
     {
     }
   };
@@ -263,37 +271,42 @@ public:
 
     // Null objects are allowed to have symbol types. What alignment to give?
     // Pick 8 bytes, as that's a) word aligned, b) double/uint64_t aligned.
-    if (is_null_object2t(e))
+    if(is_null_object2t(e))
       return 8;
 
     assert(!is_symbol_type(t));
-    if (is_array_type(t)) {
+    if(is_array_type(t))
+    {
       const array_type2t &arr = to_array_type(t);
       return type_byte_size_default(arr.subtype, 8).to_ulong();
-    } else {
-      return 8;
     }
+
+    return 8;
   }
 
   inline unsigned int offset2align(const expr2tc &e, const mp_integer &m) const
   {
     unsigned int nat_align = get_natural_alignment(e);
-    if (m == 0) {
+    if(m == 0)
+    {
       return nat_align;
-    } else if ((m % nat_align) == 0) {
-      return nat_align;
-    } else {
-      // What's the least alignment available?
-      unsigned int max_align = 8;
-      do {
-        // Repeatedly decrease the word size by powers of two, and test to see
-        // whether the offset meets that alignment. This will always succeed
-        // and exit the loop when the alignment reaches 1.
-        if ((m % max_align) == 0)
-          return max_align;
-        max_align /= 2;
-      } while (true);
     }
+    if((m % nat_align) == 0)
+    {
+      return nat_align;
+    }
+
+    // What's the least alignment available?
+    unsigned int max_align = 8;
+    do
+    {
+      // Repeatedly decrease the word size by powers of two, and test to see
+      // whether the offset meets that alignment. This will always succeed
+      // and exit the loop when the alignment reaches 1.
+      if((m % max_align) == 0)
+        return max_align;
+      max_align /= 2;
+    } while(true);
   }
 
   /** Convert an object map element to an expression. Formulates either an
@@ -306,11 +319,11 @@ public:
   void set(object_mapt &dest, object_mapt::const_iterator it) const
   {
     // Fetch/insert iterator
-    std::pair<object_mapt::iterator,bool> res =
+    std::pair<object_mapt::iterator, bool> res =
       dest.insert(object_mapt::value_type(it->first, it->second));
 
     // If element already existed, overwrite.
-    if (res.second)
+    if(res.second)
       res.first->second = it->second;
   }
 
@@ -319,7 +332,8 @@ public:
     return insert(dest, it->first, it->second);
   }
 
-  bool insert(object_mapt &dest, const expr2tc &src, const mp_integer &offset) const
+  bool
+  insert(object_mapt &dest, const expr2tc &src, const mp_integer &offset) const
   {
     return insert(dest, object_numbering.number(src), objectt(true, offset));
   }
@@ -344,60 +358,58 @@ public:
   bool insert(object_mapt &dest, unsigned n, const objectt &object) const
   {
     object_mapt::const_iterator it = dest.find(n);
-    if (it == dest.end())
+    if(it == dest.end())
     {
       // new
       dest.insert(object_mapt::value_type(n, object));
       return true;
     }
-    else
-    {
-      object_mapt::iterator it2 = dest.find(n);
-      objectt &old = it2->second;
-      const expr2tc &expr_obj = object_numbering[n];
 
-      if(old.offset_is_set && object.offset_is_set)
-      {
-        if(old.offset==object.offset)
-          return false;
-        else
-        {
-          // Merge the tracking for two offsets; take the minimum alignment
-          // guarenteed by them.
-          unsigned long old_align = offset2align(expr_obj, old.offset);
-          unsigned long new_align = offset2align(expr_obj, object.offset);
-          old.offset_is_set = false;
-          old.offset_alignment = std::min(old_align, new_align);
-          return true;
-        }
-      } else if(!old.offset_is_set) {
-        unsigned int oldalign = old.offset_alignment;
-        if (!object.offset_is_set) {
-          // Both object offsets not set; update alignment to minimum of the two
-          old.offset_alignment =
-            std::min(old.offset_alignment, object.offset_alignment);
-          return !(old.offset_alignment == oldalign);
-        } else {
-          // Old offset unset; new offset set. Compute the alignment of the
-          // new object's offset, and take the minimum of that and the old
-          // alignment.
-          unsigned int new_alignment = offset2align(expr_obj, object.offset);
-          old.offset_alignment = std::min(old.offset_alignment, new_alignment);
-          return !(old.offset_alignment == oldalign);
-        }
-      }
-      else
-      {
-        // Old offset alignment is set; new isn't.
-        unsigned int old_align = offset2align(expr_obj, old.offset);
-        old.offset_alignment = std::min(old_align, object.offset_alignment);
-        old.offset_is_set=false;
-        return true;
-      }
+    object_mapt::iterator it2 = dest.find(n);
+    objectt &old = it2->second;
+    const expr2tc &expr_obj = object_numbering[n];
+
+    if(old.offset_is_set && object.offset_is_set)
+    {
+      if(old.offset == object.offset)
+        return false;
+
+      // Merge the tracking for two offsets; take the minimum alignment
+      // guarenteed by them.
+      unsigned long old_align = offset2align(expr_obj, old.offset);
+      unsigned long new_align = offset2align(expr_obj, object.offset);
+      old.offset_is_set = false;
+      old.offset_alignment = std::min(old_align, new_align);
+      return true;
     }
+    if(!old.offset_is_set)
+    {
+      unsigned int oldalign = old.offset_alignment;
+      if(!object.offset_is_set)
+      {
+        // Both object offsets not set; update alignment to minimum of the two
+        old.offset_alignment =
+          std::min(old.offset_alignment, object.offset_alignment);
+        return !(old.offset_alignment == oldalign);
+      }
+
+      // Old offset unset; new offset set. Compute the alignment of the
+      // new object's offset, and take the minimum of that and the old
+      // alignment.
+      unsigned int new_alignment = offset2align(expr_obj, object.offset);
+      old.offset_alignment = std::min(old.offset_alignment, new_alignment);
+      return !(old.offset_alignment == oldalign);
+    }
+
+    // Old offset alignment is set; new isn't.
+    unsigned int old_align = offset2align(expr_obj, old.offset);
+    old.offset_alignment = std::min(old_align, object.offset_alignment);
+    old.offset_is_set = false;
+    return true;
   }
 
-  bool insert(object_mapt &dest, const expr2tc &expr, const objectt &object) const
+  bool
+  insert(object_mapt &dest, const expr2tc &expr, const objectt &object) const
   {
     return insert(dest, object_numbering.number(expr), object);
   }
@@ -467,11 +479,10 @@ public:
    *  given entryt. */
   entryt &get_entry(const entryt &e)
   {
-    std::string index=id2string(e.identifier)+e.suffix;
+    std::string index = id2string(e.identifier) + e.suffix;
 
-    std::pair<valuest::iterator, bool> r=
-      values.insert(std::pair<string_wrapper, entryt>
-                             (string_wrapper(index), e));
+    std::pair<valuest::iterator, bool> r = values.insert(
+      std::pair<string_wrapper, entryt>(string_wrapper(index), e));
 
     return r.first->second;
   }
@@ -479,7 +490,7 @@ public:
   /** Add a value set for each variable in the given list. */
   void add_vars(const std::list<entryt> &vars)
   {
-    for(const auto & var : vars)
+    for(const auto &var : vars)
       add_var(var);
   }
 
@@ -503,9 +514,9 @@ public:
    *  @param keepnew If true, add new pointer records in new_values into this
    *         object's tracking map; if not, discard them.
    *  @return True if a modification occurs. */
-  bool make_union(const valuest &new_values, bool keepnew=false);
+  bool make_union(const valuest &new_values, bool keepnew = false);
 
-  bool make_union(const value_sett &new_values, bool keepnew=false)
+  bool make_union(const value_sett &new_values, bool keepnew = false)
   {
     return make_union(new_values.values, keepnew);
   }
@@ -522,10 +533,7 @@ public:
    *  @param add_to_sets If true, merge the pointer set from rhs into the
    *         pointer set for lhs. Otherwise, overwrite it. Used for the static
    *         analysis. */
-  void assign(
-    const expr2tc &lhs,
-    const expr2tc &rhs,
-    bool add_to_sets=false);
+  void assign(const expr2tc &lhs, const expr2tc &rhs, bool add_to_sets = false);
 
   /** Interpret a function call during static analysis. Looks up the given
    *  function, and simulates the assignment of all the arguments to the
@@ -585,14 +593,11 @@ protected:
     const std::string &suffix,
     const type2tc &original_type) const;
 
-
   /** Internal get_value_set method. Just the same as the other get_value_set
    *  method, but collects into an object_mapt instead of a list of exprs.
    *  @param expr The expression to evaluate the value set of.
    *  @param dest Destination value set object map to store the result into. */
-  void get_value_set(
-    const expr2tc &expr,
-    object_mapt &dest) const;
+  void get_value_set(const expr2tc &expr, object_mapt &dest) const;
 
   /** Internal get_reference_set method. Just the same as the other
    *  get_reference_set method, but collects into an object_mapt instead of a
@@ -643,7 +648,7 @@ protected:
   static void obj_numbering_deref(unsigned int num);
 
 public:
-//********************************** Members ***********************************
+  //********************************** Members ***********************************
   /** Some crazy static analysis tool. */
   unsigned location_number;
   /** Object to assign numbers to objects -- i.e., the numbers in the map of

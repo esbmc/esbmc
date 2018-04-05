@@ -35,7 +35,7 @@ public:
 
   inline unsigned width() const
   {
-    return f+e+1;
+    return f + e + 1;
   }
 
   const floatbv_type2tc get_type() const;
@@ -62,30 +62,31 @@ public:
     return ieee_float_spect(112, 15);
   }
 
-  inline friend bool operator == (
-    const ieee_float_spect &a, const ieee_float_spect &b)
+  inline friend bool
+  operator==(const ieee_float_spect &a, const ieee_float_spect &b)
   {
-    return a.f==b.f && a.e==b.e;
+    return a.f == b.f && a.e == b.e;
   }
 
-  inline friend bool operator != (
-    const ieee_float_spect &a, const ieee_float_spect &b)
+  inline friend bool
+  operator!=(const ieee_float_spect &a, const ieee_float_spect &b)
   {
-    return !(a==b);
+    return !(a == b);
   }
 };
 
-bool operator == (const ieee_float_spect &a, const ieee_float_spect &b);
-bool operator != (const ieee_float_spect &a, const ieee_float_spect &b);
+bool operator==(const ieee_float_spect &a, const ieee_float_spect &b);
+bool operator!=(const ieee_float_spect &a, const ieee_float_spect &b);
 
 class ieee_floatt
 {
 public:
   typedef enum {
     ROUND_TO_EVEN = 0,
-    ROUND_TO_MINUS_INF = 1,
+    ROUND_TO_AWAY = 1,
     ROUND_TO_PLUS_INF = 2,
-    ROUND_TO_ZERO = 3,
+    ROUND_TO_MINUS_INF = 3,
+    ROUND_TO_ZERO = 4,
     UNKNOWN,
     NONDETERMINISTIC
   } rounding_modet;
@@ -99,19 +100,21 @@ public:
 
   void negate()
   {
-    sign_flag=!sign_flag;
+    sign_flag = !sign_flag;
   }
 
   void set_sign(bool _sign)
-  { sign_flag = _sign; }
+  {
+    sign_flag = _sign;
+  }
 
   void make_zero()
   {
-    sign_flag=false;
-    exponent=0;
-    fraction=0;
-    NaN_flag=false;
-    infinity_flag=false;
+    sign_flag = false;
+    exponent = 0;
+    fraction = 0;
+    NaN_flag = false;
+    infinity_flag = false;
   }
 
   void make_NaN();
@@ -121,24 +124,44 @@ public:
   void make_fltmin(); // minimum normalized positive floating-point number
 
   static ieee_floatt NaN(const ieee_float_spect &_spec)
-  { ieee_floatt c(_spec); c.make_NaN(); return c; }
+  {
+    ieee_floatt c(_spec);
+    c.make_NaN();
+    return c;
+  }
 
   static ieee_floatt plus_infinity(const ieee_float_spect &_spec)
-  { ieee_floatt c(_spec); c.make_plus_infinity(); return c; }
+  {
+    ieee_floatt c(_spec);
+    c.make_plus_infinity();
+    return c;
+  }
 
   static ieee_floatt minus_infinity(const ieee_float_spect &_spec)
-  { ieee_floatt c(_spec); c.make_minus_infinity(); return c; }
+  {
+    ieee_floatt c(_spec);
+    c.make_minus_infinity();
+    return c;
+  }
 
   // maximum representable finite floating-point number
   static ieee_floatt fltmax(const ieee_float_spect &_spec)
-  { ieee_floatt c(_spec); c.make_fltmax(); return c; }
+  {
+    ieee_floatt c(_spec);
+    c.make_fltmax();
+    return c;
+  }
 
   // minimum normalized positive floating-point number
   static ieee_floatt fltmin(const ieee_float_spect &_spec)
-  { ieee_floatt c(_spec); c.make_fltmin(); return c; }
+  {
+    ieee_floatt c(_spec);
+    c.make_fltmin();
+    return c;
+  }
 
   // set to next representable number towards plus infinity
-  void increment(bool distinguish_zero=false)
+  void increment(bool distinguish_zero = false)
   {
     if(is_zero() && get_sign() && distinguish_zero)
       negate();
@@ -147,7 +170,7 @@ public:
   }
 
   // set to previous representable number towards minus infinity
-  void decrement(bool distinguish_zero=false)
+  void decrement(bool distinguish_zero = false)
   {
     if(is_zero() && !get_sign() && distinguish_zero)
       negate();
@@ -155,15 +178,36 @@ public:
       next_representable(false);
   }
 
-  bool is_zero() const { return !NaN_flag && !infinity_flag && fraction==0 && exponent==0; }
-  bool get_sign() const { return sign_flag; }
-  bool is_NaN() const { return NaN_flag; }
-  bool is_infinity() const { return !NaN_flag && infinity_flag; }
-  bool is_finite() const { return !(infinity_flag && NaN_flag); }
+  bool is_zero() const
+  {
+    return !NaN_flag && !infinity_flag && fraction == 0 && exponent == 0;
+  }
+  bool get_sign() const
+  {
+    return sign_flag;
+  }
+  bool is_NaN() const
+  {
+    return NaN_flag;
+  }
+  bool is_infinity() const
+  {
+    return !NaN_flag && infinity_flag;
+  }
+  bool is_finite() const
+  {
+    return !(infinity_flag && NaN_flag);
+  }
   bool is_normal() const;
 
-  const mp_integer &get_exponent() const { return exponent; }
-  const mp_integer &get_fraction() const { return fraction; }
+  const mp_integer &get_exponent() const
+  {
+    return exponent;
+  }
+  const mp_integer &get_fraction() const
+  {
+    return fraction;
+  }
 
   // performs conversion to ieee floating point format
   void from_integer(const mp_integer &i);
@@ -195,7 +239,8 @@ public:
   std::string to_string_scientific(unsigned precision) const;
   std::string format(const format_spect &format_spec) const;
 
-  friend inline std::ostream& operator << (std::ostream &out, const ieee_floatt &f)
+  friend inline std::ostream &
+  operator<<(std::ostream &out, const ieee_floatt &f)
   {
     return out << f.to_ansi_c_string();
   }
@@ -203,28 +248,28 @@ public:
   constant_exprt to_expr() const;
   void from_expr(const constant_exprt &expr);
 
-  ieee_floatt &operator /= (const ieee_floatt &other);
-  ieee_floatt &operator *= (const ieee_floatt &other);
-  ieee_floatt &operator += (const ieee_floatt &other);
-  ieee_floatt &operator -= (const ieee_floatt &other);
+  ieee_floatt &operator/=(const ieee_floatt &other);
+  ieee_floatt &operator*=(const ieee_floatt &other);
+  ieee_floatt &operator+=(const ieee_floatt &other);
+  ieee_floatt &operator-=(const ieee_floatt &other);
 
-  ieee_floatt &operator ! ();
+  ieee_floatt &operator!();
 
-  friend bool operator < (const ieee_floatt &a, const ieee_floatt &b);
-  friend bool operator <=(const ieee_floatt &a, const ieee_floatt &b);
-  friend bool operator > (const ieee_floatt &a, const ieee_floatt &b);
-  friend bool operator >=(const ieee_floatt &a, const ieee_floatt &b);
+  friend bool operator<(const ieee_floatt &a, const ieee_floatt &b);
+  friend bool operator<=(const ieee_floatt &a, const ieee_floatt &b);
+  friend bool operator>(const ieee_floatt &a, const ieee_floatt &b);
+  friend bool operator>=(const ieee_floatt &a, const ieee_floatt &b);
 
   // warning: these do packed equality, not IEEE equality
   // e.g., NAN==NAN
-  friend bool operator ==(const ieee_floatt &a, const ieee_floatt &b);
-  friend bool operator !=(const ieee_floatt &a, const ieee_floatt &b);
+  friend bool operator==(const ieee_floatt &a, const ieee_floatt &b);
+  friend bool operator!=(const ieee_floatt &a, const ieee_floatt &b);
 
-  friend bool operator ==(const ieee_floatt &a, int i);
-  friend bool operator >(const ieee_floatt &a, int i);
-  friend bool operator <(const ieee_floatt &a, int i);
-  friend bool operator >=(const ieee_floatt &a, int i);
-  friend bool operator <=(const ieee_floatt &a, int i);
+  friend bool operator==(const ieee_floatt &a, int i);
+  friend bool operator>(const ieee_floatt &a, int i);
+  friend bool operator<(const ieee_floatt &a, int i);
+  friend bool operator>=(const ieee_floatt &a, int i);
+  friend bool operator<=(const ieee_floatt &a, int i);
 
 protected:
   void divide_and_round(mp_integer &fraction, const mp_integer &factor);
@@ -241,12 +286,12 @@ protected:
   static mp_integer base10_digits(const mp_integer &src);
 };
 
-bool operator < (const ieee_floatt &a, const ieee_floatt &b);
-bool operator <=(const ieee_floatt &a, const ieee_floatt &b);
-bool operator > (const ieee_floatt &a, const ieee_floatt &b);
-bool operator >=(const ieee_floatt &a, const ieee_floatt &b);
-bool operator ==(const ieee_floatt &a, const ieee_floatt &b);
-bool operator !=(const ieee_floatt &a, const ieee_floatt &b);
-std::ostream& operator << (std::ostream &, const ieee_floatt &);
+bool operator<(const ieee_floatt &a, const ieee_floatt &b);
+bool operator<=(const ieee_floatt &a, const ieee_floatt &b);
+bool operator>(const ieee_floatt &a, const ieee_floatt &b);
+bool operator>=(const ieee_floatt &a, const ieee_floatt &b);
+bool operator==(const ieee_floatt &a, const ieee_floatt &b);
+bool operator!=(const ieee_floatt &a, const ieee_floatt &b);
+std::ostream &operator<<(std::ostream &, const ieee_floatt &);
 
 #endif

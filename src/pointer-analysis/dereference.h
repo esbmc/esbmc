@@ -110,7 +110,7 @@ public:
 
   /** Triggers a 'valid object' check when accessing a dynamically allocated
    *  object. This is legacy, and will be deleted at some point. */
-  virtual bool is_valid_object(const irep_idt &identifier)=0;
+  virtual bool is_valid_object(const irep_idt &identifier) = 0;
 
   /** Encode a dereference failure assertion. If a dereference does, or can
    *  trigger undefined or illegal behaviour, then this method is called to
@@ -124,21 +124,19 @@ public:
   virtual void dereference_failure(
     const std::string &property,
     const std::string &msg,
-    const guardt &guard)=0;
+    const guardt &guard) = 0;
 
   /** Fetch the set of values that the given pointer variable can point at.
    *  @param expr Pointer symbol to get the value set of.
    *  @param value_set A value set to store the output of this call into.
    */
-  virtual void get_value_set(
-    const expr2tc &expr,
-    value_setst::valuest &value_set)=0;
+  virtual void
+  get_value_set(const expr2tc &expr, value_setst::valuest &value_set) = 0;
 
   /** Check whether a failed symbol already exists for the given symbol.
    *  This is legacy, and will be removed at some point soon. */
-  virtual bool has_failed_symbol(
-    const expr2tc &expr,
-    const symbolt *&symbol)=0;
+  virtual bool
+  has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) = 0;
 
   /** Optionally rename the given expression. This exists to provide potential
    *  optimisation expansion in the future, it isn't currently used by anything.
@@ -148,7 +146,8 @@ public:
   {
   }
 
-  struct internal_item {
+  struct internal_item
+  {
     expr2tc object;
     expr2tc offset;
     expr2tc guard;
@@ -181,11 +180,12 @@ public:
     const namespacet &_ns,
     contextt &_new_context,
     const optionst &_options,
-    dereference_callbackt &_dereference_callback):
-    ns(_ns),
-    new_context(_new_context),
-    options(_options),
-    dereference_callback(_dereference_callback)
+    dereference_callbackt &_dereference_callback)
+    : ns(_ns),
+      new_context(_new_context),
+      options(_options),
+      dereference_callback(_dereference_callback),
+      block_assertions(false)
   {
     is_big_endian =
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
@@ -195,9 +195,9 @@ public:
 
   /** The different ways in which a pointer may be accessed. */
   typedef enum {
-    READ,  /// The result of the expression is only read.
-    WRITE, /// The result of the expression will be written to.
-    FREE,   /// The referred to object will be freed.
+    READ,     /// The result of the expression is only read.
+    WRITE,    /// The result of the expression will be written to.
+    FREE,     /// The referred to object will be freed.
     INTERNAL, /// Calling code only wants the internal value-set data.
   } modet;
 
@@ -249,6 +249,8 @@ private:
    *  of a reference, and instead return the data to the caller via the
    *  callback. */
   std::list<dereference_callbackt::internal_item> internal_items;
+  /** Flag for discarding all assertions encoded. */
+  bool block_assertions;
 
   /** Interpret an expression that modifies the guard. i.e., an 'if' or a
    *  piece of logic that can be short-circuited.
@@ -265,8 +267,8 @@ private:
    *  @param guard Guard of this expression being evaluated.
    *  @param mode The manner iin which the result of this deref is accessed.
    */
-  virtual void dereference_addrof_expr(expr2tc &expr, guardt &guard,
-                                       modet mode);
+  virtual void
+  dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode);
 
   /** Interpret an actual dereference (or pointer-index) expression. First
    *  dereferences the pointer expression, then dereferences the pointer itself,
@@ -352,80 +354,141 @@ private:
     const expr2tc &lexical_offset,
     expr2tc &pointer_guard);
 
-  void deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode);
+  void
+  deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode);
 
   static const expr2tc &get_symbol(const expr2tc &object);
-  void bounds_check(const expr2tc &expr, const expr2tc &offset,
-                    const type2tc &type, const guardt &guard);
+  void bounds_check(
+    const expr2tc &expr,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
-  expr2tc * extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
-      const expr2tc &offset);
-  expr2tc * extract_bytes_from_scalar(const expr2tc &object, unsigned int bytes,
-      const expr2tc &offset);
-  void stitch_together_from_byte_array(expr2tc &value, const type2tc &type,
-                                       const expr2tc *bytes);
-  void wrap_in_scalar_step_list(expr2tc &value,
-                                std::list<expr2tc> *scalar_step_list,
-                                const guardt &guard);
-  void dereference_failure(const std::string &error_class,
-                           const std::string &error_name,
-                           const guardt &guard);
+  expr2tc *extract_bytes_from_array(
+    const expr2tc &array,
+    unsigned int bytes,
+    const expr2tc &offset);
+  expr2tc *extract_bytes_from_scalar(
+    const expr2tc &object,
+    unsigned int bytes,
+    const expr2tc &offset);
+  void stitch_together_from_byte_array(
+    expr2tc &value,
+    const type2tc &type,
+    const expr2tc *bytes);
+  void wrap_in_scalar_step_list(
+    expr2tc &value,
+    std::list<expr2tc> *scalar_step_list,
+    const guardt &guard);
+  void dereference_failure(
+    const std::string &error_class,
+    const std::string &error_name,
+    const guardt &guard);
   void alignment_failure(const std::string &error_name, const guardt &guard);
-  void bad_base_type_failure(const guardt &guard, const std::string &wants,
-            const std::string &have);
 
-  void check_code_access(expr2tc &value, const expr2tc &offset,
-                         const type2tc &type, const guardt &guard, modet mode);
-  void check_data_obj_access(const expr2tc &value, const expr2tc &offset,
-                             const type2tc &type, const guardt &guard);
-  void check_alignment(unsigned long minwidth, const expr2tc&& offset,
-                       const guardt &guard);
+  void bad_base_type_failure(
+    const guardt &guard,
+    const std::string &wants,
+    const std::string &have);
 
-  void build_reference_rec(expr2tc &value, const expr2tc &offset,
-                           const type2tc &type, const guardt &guard, modet mode,
-                           unsigned long alignment = 0);
-  void construct_from_const_offset(expr2tc &value, const expr2tc &offset,
-                                   const type2tc &type);
-  void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
-                                 const type2tc &type);
-  void construct_from_const_struct_offset(expr2tc &value,
-                                             const expr2tc &offset,
-                                             const type2tc &type,
-                                             const guardt &guard,
-                                             modet mode);
-  void construct_from_dyn_struct_offset(expr2tc &value,
-                                           const expr2tc &offset,
-                                           const type2tc &type,
-                                           const guardt &guard,
-                                           unsigned long alignment,
-                                           modet mode,
-                                           const expr2tc *failed_symbol = nullptr);
-  void construct_from_multidir_array(expr2tc &value, const expr2tc &offset,
-                                        const type2tc &type,
-                                        const guardt &guard,
-                                        unsigned long alignment,
-                                        modet mode);
-  void construct_struct_ref_from_const_offset_array(expr2tc &value,
-                                        const expr2tc &offs,
-                                        const type2tc &type,
-                                        const guardt &guard,
-                                        modet mode, unsigned long alignment);
-  void construct_struct_ref_from_const_offset(expr2tc &value,
-                                        const expr2tc &offs,
-                                        const type2tc &type,
-                                        const guardt &guard);
-  void construct_struct_ref_from_dyn_offset(expr2tc &value,
-                                        const expr2tc &offs,
-                                        const type2tc &type,
-                                        const guardt &guard,
-                                        modet mode);
-  void construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
-                              const expr2tc &offs, const type2tc &type,
-                              const expr2tc &accuml_guard, modet mode,
-                              std::list<std::pair<expr2tc, expr2tc> > &output);
-  void construct_from_array(expr2tc &value, const expr2tc &offset,
-                            const type2tc &type, const guardt &guard,
-                            modet mode, unsigned long alignment = 0);
+  void check_code_access(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guardt &guard,
+    modet mode);
+  void check_data_obj_access(
+    const expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guardt &guard);
+  void check_alignment(
+    unsigned long minwidth,
+    const expr2tc &&offset,
+    const guardt &guard);
+
+public:
+  void build_reference_rec(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guardt &guard,
+    modet mode,
+    unsigned long alignment = 0);
+
+private:
+  void construct_from_const_offset(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type);
+  void construct_from_dyn_offset(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type);
+  void construct_from_const_struct_offset(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guardt &guard,
+    modet mode);
+  void construct_from_dyn_struct_offset(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guardt &guard,
+    unsigned long alignment,
+    modet mode,
+    const expr2tc *failed_symbol = nullptr);
+  void construct_from_multidir_array(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guardt &guard,
+    unsigned long alignment,
+    modet mode);
+  void construct_struct_ref_from_const_offset_array(
+    expr2tc &value,
+    const expr2tc &offs,
+    const type2tc &type,
+    const guardt &guard,
+    modet mode,
+    unsigned long alignment);
+  void construct_struct_ref_from_const_offset(
+    expr2tc &value,
+    const expr2tc &offs,
+    const type2tc &type,
+    const guardt &guard);
+  void construct_struct_ref_from_dyn_offset(
+    expr2tc &value,
+    const expr2tc &offs,
+    const type2tc &type,
+    const guardt &guard,
+    modet mode);
+  void construct_struct_ref_from_dyn_offs_rec(
+    const expr2tc &value,
+    const expr2tc &offs,
+    const type2tc &type,
+    const expr2tc &accuml_guard,
+    modet mode,
+    std::list<std::pair<expr2tc, expr2tc>> &output);
+  void construct_from_array(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guardt &guard,
+    modet mode,
+    unsigned long alignment = 0);
+
+public:
+  void set_block_assertions(void)
+  {
+    block_assertions = true;
+  }
+
+  void clear_block_assertions(void)
+  {
+    block_assertions = false;
+  }
 };
 
 #endif

@@ -1,35 +1,30 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
-#undef rintf
-#undef rint
-#undef rintl
+#define rint_def(ret_type, type, name, isnan_func)                             \
+  ret_type name(type f)                                                        \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return isnan_func(f);                                                      \
+  }                                                                            \
+                                                                               \
+  ret_type __##name(type f)                                                    \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(f);                                                            \
+  }
 
-#undef lrintf
-#undef lrint
-#undef lrintl
+rint_def(float, float, rintf, nearbyintf);
+rint_def(double, double, rint, nearbyint);
+rint_def(long double, long double, rintl, nearbyintl);
 
-#undef llrintf
-#undef llrint
-#undef llrintl
+rint_def(long, float, lrintf, nearbyintf);
+rint_def(long, double, lrint, nearbyint);
+rint_def(long, long double, lrintl, nearbyintl);
 
-float rintf(float f) { return nearbyintf(f); }
+rint_def(long long, float, llrintf, nearbyintf);
+rint_def(long long, double, llrint, nearbyint);
+rint_def(long long, long double, llrintl, nearbyintl);
 
-double rint(double d) { return nearbyint(d); }
-
-long double rintl(long double ld) { return nearbyintl(ld); }
-
-long lrintf(float f) { return nearbyintf(f); }
-
-long lrint(double d)  { return nearbyint(d); }
-
-long lrintl(long double ld) { return nearbyintl(ld); }
-
-long long llrintf(float f) { return nearbyintf(f); }
-
-long long llrint(double d)  { return nearbyint(d); }
-
-long long llrintl(long double ld) { return nearbyintl(ld); }
-
+#undef rint_def

@@ -446,7 +446,6 @@ namespace z3 {
         Z3_ast_kind kind() const { Z3_ast_kind r = Z3_get_ast_kind(ctx(), m_ast); check_error(); return r; }
         unsigned hash() const { unsigned r = Z3_get_ast_hash(ctx(), m_ast); check_error(); return r; }
         friend std::ostream & operator<<(std::ostream & out, ast const & n);
-        void dump() const;
 
         /**
            \brief Return true if the ASTs are structurally identical.

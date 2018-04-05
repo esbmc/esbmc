@@ -1,3 +1,0 @@
-main.c
---unwind 3 --lock-order-check --context-bound 3
-^VERIFICATION FAILED$

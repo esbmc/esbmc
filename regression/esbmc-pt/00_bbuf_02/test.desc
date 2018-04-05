@@ -1,3 +1,0 @@
-main.c
---unwind 1 --context-bound 2 --schedule --depth 300
-^VERIFICATION FAILED$

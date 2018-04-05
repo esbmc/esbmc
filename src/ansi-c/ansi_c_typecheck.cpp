@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void ansi_c_typecheckt::typecheck()
 {
-  for(auto & declaration : parse_tree.declarations)
+  for(auto &declaration : parse_tree.declarations)
   {
     symbolt symbol;
     declaration.to_symbol(symbol);
@@ -45,8 +45,7 @@ bool ansi_c_typecheck(
     ns.get_context(), "", message_handler);
 #endif
   ansi_c_typecheckt ansi_c_typecheck(
-    ansi_c_parse_tree, context1,
-    context2, "", message_handler);
+    ansi_c_parse_tree, context1, context2, "", message_handler);
 
   try
   {
@@ -67,6 +66,6 @@ bool ansi_c_typecheck(
   {
     ansi_c_typecheck.error(e);
   }
-  
+
   return ansi_c_typecheck.get_error_found();
 }

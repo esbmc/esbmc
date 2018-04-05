@@ -2,36 +2,26 @@
 
 #include <math.h>
 #include <fenv.h>
-#include "../intrinsics.h"
 
-#undef modff
-#undef modf
-#undef modfl
+#define modff_def(type, name, nearbyint_func, copysign_func, isinf_func)       \
+  type name(type value, type *iptr)                                            \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    int save_round = fegetround();                                             \
+    fesetround(FE_TOWARDZERO);                                                 \
+    *iptr = nearbyint_func(value);                                             \
+    fesetround(save_round);                                                    \
+    return copysign_func(isinf_func(value) ? 0.0 : value - (*iptr), value);    \
+  }                                                                            \
+                                                                               \
+  type __##name(type value, type *iptr)                                        \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(value, iptr);                                                  \
+  }
 
-float modff(float value, float* iptr)
-{
-  int save_round = fegetround();
-  fesetround(FE_TOWARDZERO);
-  *iptr = nearbyint(value);
-  fesetround(save_round);
-  return copysign(isinf(value) ? 0.0 : value - (*iptr), value);
-}
+modff_def(float, modff, nearbyintf, copysignf, isinff);
+modff_def(double, modf, nearbyint, copysign, isinf);
+modff_def(long double, modfl, nearbyintl, copysignl, isinfl);
 
-double modf(double value, double* iptr)
-{
-  int save_round = fegetround();
-  fesetround(FE_TOWARDZERO);
-  *iptr = nearbyint(value);
-  fesetround(save_round);
-  return copysign(isinf(value) ? 0.0 : value - (*iptr), value);
-}
-
-long double modfl(long double value, long double* iptr)
-{
-  int save_round = fegetround();
-  fesetround(FE_TOWARDZERO);
-  *iptr = nearbyint(value);
-  fesetround(save_round);
-  return copysign(isinf(value) ? 0.0 : value - (*iptr), value);
-}
-
+#undef modff_def

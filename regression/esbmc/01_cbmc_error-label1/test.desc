@@ -1,3 +1,4 @@
+CORE
 main.c
 --error-label ERROR
 ^VERIFICATION FAILED$

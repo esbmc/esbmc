@@ -1,3 +1,4 @@
+CORE
 main.c
 --claim 1
 ^VERIFICATION SUCCESSFUL$

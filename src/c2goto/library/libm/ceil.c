@@ -2,39 +2,27 @@
 
 #include <math.h>
 #include <fenv.h>
-#include "../intrinsics.h"
 
-#undef ceilf
-#undef ceil
-#undef ceill
+#define ceil_def(type, name, rint_func)                                        \
+  type name(type f)                                                            \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    type result;                                                               \
+    int save_round = fegetround();                                             \
+    fesetround(FE_UPWARD);                                                     \
+    result = rint_func(f);                                                     \
+    fesetround(save_round);                                                    \
+    return result;                                                             \
+  }                                                                            \
+                                                                               \
+  type __##name(type f)                                                        \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(f);                                                            \
+  }
 
-float ceilf(float f)
-{
-  float result;
-  int save_round = fegetround();
-  fesetround(FE_UPWARD);
-  result = rintf(f);
-  fesetround(save_round);
-  return result;
-}
+ceil_def(float, ceilf, rintf);
+ceil_def(double, ceil, rint);
+ceil_def(long double, ceill, rintl);
 
-double ceil(double d)
-{
-  double result;
-  int save_round = fegetround();
-  fesetround(FE_UPWARD);
-  result = rint(d);
-  fesetround(save_round);
-  return result;
-}
-
-long double ceill(long double ld)
-{
-  long double result;
-  int save_round = fegetround();
-  fesetround(FE_UPWARD);
-  result = rintl(ld);
-  fesetround(save_round);
-  return result;
-}
-
+#undef ceil_def

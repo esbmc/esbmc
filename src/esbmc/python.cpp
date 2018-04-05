@@ -21,11 +21,17 @@ public:
     function = loc.get_function();
   }
 
-  location(const irep_idt &_f, unsigned int l, unsigned int c,
-      const irep_idt &_func) : file(_f), line(l), column(c), function(_func)
-  { }
+  location(
+    const irep_idt &_f,
+    unsigned int l,
+    unsigned int c,
+    const irep_idt &_func)
+    : file(_f), line(l), column(c), function(_func)
+  {
+  }
 
-  static location from_locationt(const locationt &loc) {
+  static location from_locationt(const locationt &loc)
+  {
     return location(loc);
   }
 
@@ -49,9 +55,15 @@ void build_goto_symex_classes();
 void build_equation_class();
 void build_value_set_classes();
 
-class dummy_expr_class { };
-class dummy_type_class { };
-class dummy_symex_class { };
+class dummy_expr_class
+{
+};
+class dummy_type_class
+{
+};
+class dummy_symex_class
+{
+};
 
 // Prevent more than one instance per process
 static bool python_module_engaged = false;
@@ -64,8 +76,7 @@ static type_poolt *tp = NULL;
 dict *type_to_downcast = NULL;
 dict *expr_to_downcast = NULL;
 
-static void
-its_a_trap()
+static void its_a_trap()
 {
   __asm__("int $3");
   __asm__("int $3"); // Repeat for gdb to latch onto a line number
@@ -74,84 +85,81 @@ its_a_trap()
 template <typename T>
 class migrate_func;
 
-template<>
+template <>
 class migrate_func<type2tc>
 {
 public:
   static void *rvalue_cvt(const typet *type, type2tc *out)
   {
-    new (out) type2tc();
+    new(out) type2tc();
     migrate_type(*type, *out);
-    return (void*)out;
+    return (void *)out;
   }
 
   static void *lvalue_cvt(const typet *foo)
   {
-    return const_cast<void *>(reinterpret_cast<const void*>(foo));
+    return const_cast<void *>(reinterpret_cast<const void *>(foo));
   }
 };
 
-template<>
+template <>
 class migrate_func<expr2tc>
 {
 public:
   static void *rvalue_cvt(const exprt *expr, expr2tc *out)
   {
-    new (out) expr2tc();
+    new(out) expr2tc();
     migrate_expr(*expr, *out);
-    return (void*)out;
+    return (void *)out;
   }
 
   static void *lvalue_cvt(const exprt *foo)
   {
-    return const_cast<void *>(reinterpret_cast<const void*>(foo));
+    return const_cast<void *>(reinterpret_cast<const void *>(foo));
   }
 };
 
-template<>
+template <>
 class migrate_func<typet>
 {
 public:
   static void *rvalue_cvt(const type2tc *type, typet *out)
   {
-    new (out) typet();
+    new(out) typet();
     *out = migrate_type_back(*type);
-    return (void*)out;
+    return (void *)out;
   }
 
   static void *lvalue_cvt(const type2tc *foo)
   {
-    return const_cast<void *>(reinterpret_cast<const void*>(foo));
+    return const_cast<void *>(reinterpret_cast<const void *>(foo));
   }
 };
 
-template<>
+template <>
 class migrate_func<exprt>
 {
 public:
   static void *rvalue_cvt(const expr2tc *expr, exprt *out)
   {
-    new (out) exprt();
+    new(out) exprt();
     *out = migrate_expr_back(*expr);
-    return (void*)out;
+    return (void *)out;
   }
 
   static void *lvalue_cvt(const expr2tc *foo)
   {
-    return const_cast<void *>(reinterpret_cast<const void*>(foo));
+    return const_cast<void *>(reinterpret_cast<const void *>(foo));
   }
-
 };
 
-void
-register_oldrep_to_newrep()
+void register_oldrep_to_newrep()
 {
-  esbmc_python_cvt<type2tc, typet, false, true, false, migrate_func<type2tc> >();
+  esbmc_python_cvt<type2tc, typet, false, true, false, migrate_func<type2tc>>();
   return;
 }
 
-static boost::python::object
-init_esbmc_process(boost::python::object o)
+static boost::python::object init_esbmc_process(boost::python::object o)
 {
   using namespace boost::python;
   std::vector<std::string> str_list;
@@ -167,16 +175,16 @@ init_esbmc_process(boost::python::object o)
   // Extract list from object; provoke exception if needs be.
   list l = extract<list>(o);
 
-  for (unsigned int i = 0; i < len(l); i++)
+  for(unsigned int i = 0; i < len(l); i++)
     str_list.push_back(extract<std::string>(l[i]));
 
   // Convert the list of C++ lists to C argc / argv.
   argc = str_list.size();
   argc += 2; // Extra options we add.
-  argv = (const char**)malloc(sizeof(const char *) * argc);
+  argv = (const char **)malloc(sizeof(const char *) * argc);
   i = 0;
   argv[i++] = "esbmc"; // ESBMC expects program path to be first arg
-  for (const std::string &s : str_list)
+  for(const std::string &s : str_list)
     argv[i++] = s.data();
 
   // Add skip-bmc option: causes all usual processing to happen, but we bail
@@ -196,7 +204,8 @@ init_esbmc_process(boost::python::object o)
 
   // Assuming we didn't abort; if there's an error, return None. Otherwise
   // construct a tuple of useful handles.
-  if (result != 0) {
+  if(result != 0)
+  {
     delete po;
     delete tp;
     python_module_engaged = false;
@@ -214,7 +223,7 @@ init_esbmc_process(boost::python::object o)
   // Emit internal reference to parseoptions object. It's the python users
   // problem if it calls kill_esbmc_process and then touches references to
   // this.
-  reference_existing_object::apply<esbmc_parseoptionst*>::type po_cvt;
+  reference_existing_object::apply<esbmc_parseoptionst *>::type po_cvt;
   PyObject *pop = po_cvt(po);
   handle<> poh(pop);
   object po_obj(poh);
@@ -222,10 +231,9 @@ init_esbmc_process(boost::python::object o)
   return make_tuple(nso, opts, po_obj);
 }
 
-static void
-kill_esbmc_process(void)
+static void kill_esbmc_process(void)
 {
-  if (!python_module_engaged)
+  if(!python_module_engaged)
     // Nope
     return;
 
@@ -250,8 +258,7 @@ kill_esbmc_process(void)
 // return something2tc's. And we can't register the something2tc constructor
 // as a simple function. So we get this:
 template <typename Result, typename Source>
-object
-downcast_vehicle(const Source &contained)
+object downcast_vehicle(const Source &contained)
 {
   // Just construct a new container around this.
   return object(Result(contained));
@@ -261,16 +268,14 @@ downcast_vehicle(const Source &contained)
 // constructs a new not2t object, or copies one, we actually use not2tc in a
 // useful manner here. So engage in type mangling.
 template <>
-object
-downcast_vehicle<not2tc, expr2tc>(const expr2tc &contained)
+object downcast_vehicle<not2tc, expr2tc>(const expr2tc &contained)
 {
   return object(reinterpret_cast<const not2tc &>(contained));
 }
 
-object
-downcast_type(const type2tc &type)
+object downcast_type(const type2tc &type)
 {
-  if (is_nil_type(type))
+  if(is_nil_type(type))
     return object();
 
   assert(type->type_id < type2t::end_type_id);
@@ -278,10 +283,9 @@ downcast_type(const type2tc &type)
   return o(type);
 }
 
-object
-downcast_expr(const expr2tc &expr)
+object downcast_expr(const expr2tc &expr)
 {
-  if (is_nil_expr(expr))
+  if(is_nil_expr(expr))
     return object();
 
   assert(expr->expr_id < expr2t::end_expr_id);
@@ -289,8 +293,7 @@ downcast_expr(const expr2tc &expr)
   return o(expr);
 }
 
-static void
-py_deconstructor()
+static void py_deconstructor()
 {
   // Release global reference
   delete type_to_downcast;
@@ -329,19 +332,22 @@ BOOST_PYTHON_MODULE(esbmc)
 
     // In this scope, define the old irep types to
     class_<typet>("typet", no_init);
-    class_<code_typet, bases<typet> >("code_typet", no_init);
+    class_<code_typet, bases<typet>>("code_typet", no_init);
 
-#define _ESBMC_IREP2_MPL_TYPE_SET(r, data, elem) BOOST_PP_CAT(elem,_type2t)::build_python_class(type2t::BOOST_PP_CAT(elem,_id));
-BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_TYPE_SET, foo, ESBMC_LIST_OF_TYPES)
+#define _ESBMC_IREP2_MPL_TYPE_SET(r, data, elem)                               \
+  BOOST_PP_CAT(elem, _type2t)                                                  \
+  ::build_python_class(type2t::BOOST_PP_CAT(elem, _id));
+    BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_TYPE_SET, foo, ESBMC_LIST_OF_TYPES)
 
     build_type2t_container_converters();
 
     // Build downcasting infrastructure
     type_to_downcast = new dict();
-#define _ESBMC_IREP2_TYPE_DOWNCASTING(r, data, elem) \
-    (*type_to_downcast)[type2t::BOOST_PP_CAT(elem,_id)] = \
-        make_function(downcast_vehicle<BOOST_PP_CAT(elem,_type2tc), type2tc>);
-BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_TYPE_DOWNCASTING, foo, ESBMC_LIST_OF_TYPES)
+#define _ESBMC_IREP2_TYPE_DOWNCASTING(r, data, elem)                           \
+  (*type_to_downcast)[type2t::BOOST_PP_CAT(elem, _id)] =                       \
+    make_function(downcast_vehicle<BOOST_PP_CAT(elem, _type2tc), type2tc>);
+    BOOST_PP_LIST_FOR_EACH(
+      _ESBMC_IREP2_TYPE_DOWNCASTING, foo, ESBMC_LIST_OF_TYPES)
   }
 
   {
@@ -356,18 +362,19 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_TYPE_DOWNCASTING, foo, ESBMC_LIST_OF_TYPES)
     class_<exprt>("exprt", no_init);
 
     build_base_expr2t_python_class();
-#define _ESBMC_EXPR2_MPL_EXPR_SET(r, data, elem) BOOST_PP_CAT(elem,2t)::build_python_class(expr2t::BOOST_PP_CAT(elem,_id));
-BOOST_PP_LIST_FOR_EACH(_ESBMC_EXPR2_MPL_EXPR_SET, foo, ESBMC_LIST_OF_EXPRS)
+#define _ESBMC_EXPR2_MPL_EXPR_SET(r, data, elem)                               \
+  BOOST_PP_CAT(elem, 2t)::build_python_class(expr2t::BOOST_PP_CAT(elem, _id));
+    BOOST_PP_LIST_FOR_EACH(_ESBMC_EXPR2_MPL_EXPR_SET, foo, ESBMC_LIST_OF_EXPRS)
 
     build_expr2t_container_converters();
 
     // Build downcasting infrastructure
     expr_to_downcast = new dict();
-#define _ESBMC_IREP2_EXPR_DOWNCASTING(r, data, elem) \
-    (*expr_to_downcast)[expr2t::BOOST_PP_CAT(elem,_id)] = \
-        make_function(downcast_vehicle<BOOST_PP_CAT(elem,2tc), expr2tc>);
-BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
-
+#define _ESBMC_IREP2_EXPR_DOWNCASTING(r, data, elem)                           \
+  (*expr_to_downcast)[expr2t::BOOST_PP_CAT(elem, _id)] =                       \
+    make_function(downcast_vehicle<BOOST_PP_CAT(elem, 2tc), expr2tc>);
+    BOOST_PP_LIST_FOR_EACH(
+      _ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   }
 
   // Register BigInt globally
@@ -378,7 +385,7 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   // Alas, we need to pass handles to optionst, namespace, goto funcs around.
   // User should be able to extract them from whatever execution context they
   // generate.
-  class_<optionst>("optionst", no_init); // basically opaque
+  class_<optionst>("optionst", no_init);     // basically opaque
   class_<namespacet>("namespacet", no_init); // basically opaque
 
   // Build smt solver related stuff
@@ -391,12 +398,12 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   build_fixedbv_python_class();
 
   // Register old-irep to new-irep converters
-  esbmc_python_cvt<type2tc, typet, false, true, false, migrate_func<type2tc> >();
-  esbmc_python_cvt<expr2tc, exprt, false, true, false, migrate_func<expr2tc> >();
+  esbmc_python_cvt<type2tc, typet, false, true, false, migrate_func<type2tc>>();
+  esbmc_python_cvt<expr2tc, exprt, false, true, false, migrate_func<expr2tc>>();
 
   // And backwards
-  esbmc_python_cvt<typet, type2tc, false, true, false, migrate_func<typet> >();
-  esbmc_python_cvt<exprt, expr2tc, false, true, false, migrate_func<exprt> >();
+  esbmc_python_cvt<typet, type2tc, false, true, false, migrate_func<typet>>();
+  esbmc_python_cvt<exprt, expr2tc, false, true, false, migrate_func<exprt>>();
 
   // Locationt objects now...
   class_<locationt>("locationt", no_init);
@@ -416,8 +423,10 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
 
   // Ugh.
   class_<contextt, boost::noncopyable>("contextt", no_init); // basically opaque
-  class_<message_handlert, boost::noncopyable>("message_handler", no_init); // basically opaque
-  class_<ui_message_handlert, boost::noncopyable, bases<message_handlert> >("ui_message_handler", no_init); // basically opaque
+  class_<message_handlert, boost::noncopyable>(
+    "message_handler", no_init); // basically opaque
+  class_<ui_message_handlert, boost::noncopyable, bases<message_handlert>>(
+    "ui_message_handler", no_init); // basically opaque
   class_<esbmc_parseoptionst, boost::noncopyable>("parseoptions", no_init)
     .def_readwrite("goto_functions", &esbmc_parseoptionst::goto_functions)
     .def_readonly("message_handler", &language_uit::ui_message_handler)

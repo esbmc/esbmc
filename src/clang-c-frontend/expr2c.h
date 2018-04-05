@@ -16,13 +16,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/namespace.h>
 #include <util/std_code.h>
 
-std::string expr2c(const exprt &expr, const namespacet &ns, bool fullname = false);
-std::string type2c(const typet &type, const namespacet &ns, bool fullname = false);
+std::string
+expr2c(const exprt &expr, const namespacet &ns, bool fullname = false);
+std::string
+type2c(const typet &type, const namespacet &ns, bool fullname = false);
 
 class expr2ct
 {
 public:
-  expr2ct(const namespacet &_ns, const bool _fullname) : ns(_ns), fullname(_fullname) { }
+  expr2ct(const namespacet &_ns, const bool _fullname)
+    : ns(_ns), fullname(_fullname)
+  {
+  }
   virtual ~expr2ct() = default;
 
   virtual std::string convert(const typet &src);
@@ -49,82 +54,73 @@ protected:
   void get_symbols(const exprt &expr);
   std::string id_shorthand(const exprt &expr) const;
 
-  std::string convert_typecast(
-    const exprt &src, unsigned &precedence);
+  std::string convert_typecast(const exprt &src, unsigned &precedence);
 
-  std::string convert_bitcast(
-    const exprt &src, unsigned &precedence);
+  std::string convert_bitcast(const exprt &src, unsigned &precedence);
 
-  std::string convert_implicit_address_of(
-    const exprt &src, unsigned &precedence);
+  std::string
+  convert_implicit_address_of(const exprt &src, unsigned &precedence);
 
   std::string convert_binary(
-    const exprt &src, const std::string &symbol,
-    unsigned precedence, bool full_parentheses);
+    const exprt &src,
+    const std::string &symbol,
+    unsigned precedence,
+    bool full_parentheses);
 
-  std::string convert_cond(
-    const exprt &src, unsigned precedence);
+  std::string convert_cond(const exprt &src, unsigned precedence);
 
-  std::string convert_struct_member_value(
-    const exprt &src, unsigned precedence);
+  std::string
+  convert_struct_member_value(const exprt &src, unsigned precedence);
 
-  std::string convert_array_member_value(
-    const exprt &src, unsigned precedence);
+  std::string convert_array_member_value(const exprt &src, unsigned precedence);
 
-  std::string convert_member(
-    const exprt &src, unsigned precedence);
+  std::string convert_member(const exprt &src, unsigned precedence);
 
-  std::string convert_pointer_object_has_type(
-    const exprt &src, unsigned precedence);
+  std::string
+  convert_pointer_object_has_type(const exprt &src, unsigned precedence);
 
   std::string convert_array_of(const exprt &src, unsigned precedence);
 
   std::string convert_trinary(
-    const exprt &src, const std::string &symbol1,
-    const std::string &symbol2, unsigned precedence);
+    const exprt &src,
+    const std::string &symbol1,
+    const std::string &symbol2,
+    unsigned precedence);
 
-  std::string convert_overflow(
-    const exprt &src, unsigned &precedence);
+  std::string convert_overflow(const exprt &src, unsigned &precedence);
 
   std::string convert_quantifier(
-    const exprt &src, const std::string &symbol,
-    unsigned precedence);
-
-  std::string convert_with(
-    const exprt &src, unsigned precedence);
-
-  std::string convert_index(
-    const exprt &src, unsigned precedence);
-
-  std::string convert_byte_extract(
     const exprt &src,
+    const std::string &symbol,
     unsigned precedence);
 
-  std::string convert_byte_update(
-    const exprt &src,
-    unsigned precedence);
+  std::string convert_with(const exprt &src, unsigned precedence);
 
-  std::string convert_extractbit(
-    const exprt &src,
-    unsigned precedence);
+  std::string convert_index(const exprt &src, unsigned precedence);
 
-  std::string convert_sizeof(
-    const exprt &src,
-    unsigned precedence);
+  std::string convert_byte_extract(const exprt &src, unsigned precedence);
 
-  std::string convert_extract(
-    const exprt &src);
+  std::string convert_byte_update(const exprt &src, unsigned precedence);
+
+  std::string convert_extractbit(const exprt &src, unsigned precedence);
+
+  std::string convert_sizeof(const exprt &src, unsigned precedence);
+
+  std::string convert_extract(const exprt &src);
 
   std::string convert_unary(
-    const exprt &src, const std::string &symbol,
+    const exprt &src,
+    const std::string &symbol,
     unsigned precedence);
 
   std::string convert_unary_post(
-    const exprt &src, const std::string &symbol,
+    const exprt &src,
+    const std::string &symbol,
     unsigned precedence);
 
   std::string convert_function(
-    const exprt &src, const std::string &symbol,
+    const exprt &src,
+    const std::string &symbol,
     unsigned precedence);
 
   std::string convert_Hoare(const exprt &src);
@@ -132,7 +128,8 @@ protected:
   std::string convert_code(const codet &src);
   virtual std::string convert_code(const codet &src, unsigned indent);
   std::string convert_code_label(const code_labelt &src, unsigned indent);
-  std::string convert_code_switch_case(const code_switch_caset &src, unsigned indent);
+  std::string
+  convert_code_switch_case(const code_switch_caset &src, unsigned indent);
   std::string convert_code_asm(const codet &src, unsigned indent);
   std::string convert_code_assign(const codet &src, unsigned indent);
   std::string convert_code_free(const codet &src, unsigned indent);
@@ -153,7 +150,8 @@ protected:
   std::string convert_code_continue(const codet &src, unsigned indent);
   std::string convert_code_decl(const codet &src, unsigned indent);
   std::string convert_code_decl_block(const codet &src, unsigned indent);
-  std::string convert_code_function_call(const code_function_callt &src, unsigned indent);
+  std::string
+  convert_code_function_call(const code_function_callt &src, unsigned indent);
   std::string convert_code_lock(const codet &src, unsigned indent);
   std::string convert_code_unlock(const codet &src, unsigned indent);
   std::string convert_code_printf(const codet &src, unsigned indent);
@@ -164,12 +162,13 @@ protected:
   std::string convert_malloc(const exprt &src, unsigned &precedence);
   std::string convert_alloca(const exprt &src, unsigned &precedence);
   std::string convert_nondet(const exprt &src, unsigned &precedence);
-  std::string convert_statement_expression(const exprt &src, unsigned &precedence);
-
+  std::string
+  convert_statement_expression(const exprt &src, unsigned &precedence);
 
   virtual std::string convert_symbol(const exprt &src, unsigned &precedence);
   std::string convert_predicate_symbol(const exprt &src, unsigned &precedence);
-  std::string convert_predicate_next_symbol(const exprt &src, unsigned &precedence);
+  std::string
+  convert_predicate_next_symbol(const exprt &src, unsigned &precedence);
   std::string convert_nondet_symbol(const exprt &src, unsigned &precedence);
   std::string convert_quantified_symbol(const exprt &src, unsigned &precedence);
   std::string convert_nondet_bool(const exprt &src, unsigned &precedence);

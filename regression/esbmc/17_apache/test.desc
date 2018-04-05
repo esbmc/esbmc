@@ -1,3 +1,4 @@
+CORE
 main.c
 --function ap_cpystrn --unwind 200
 ^VERIFICATION FAILED$

@@ -1,3 +1,4 @@
+CORE
 main.c
 --fixedbv --no-slice --no-simplify --ir --z3
 ^VERIFICATION FAILED$

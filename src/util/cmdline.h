@@ -13,8 +13,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string>
 #include <vector>
 
-enum opt_types {
-  switc, number, string
+enum opt_types
+{
+  switc,
+  number,
+  string
 };
 
 struct opt_templ
@@ -41,10 +44,10 @@ public:
   typedef std::vector<std::string> argst;
   argst args;
   std::string failing_option;
-  
+
   cmdlinet() = default;
   ~cmdlinet();
-  
+
 protected:
   struct optiont
   {
@@ -53,7 +56,7 @@ protected:
     std::string optstring;
     std::list<std::string> values;
   };
-   
+
   std::vector<optiont> options;
 
   int getoptnr(char option) const;

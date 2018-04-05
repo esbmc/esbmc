@@ -18,8 +18,6 @@ bool c_main(
   const std::string &standard_main,
   message_handlert &message_handler);
 
-void static_lifetime_init(
-  const contextt &context,
-  codet &dest);
+void static_lifetime_init(const contextt &context, codet &dest);
 
 #endif

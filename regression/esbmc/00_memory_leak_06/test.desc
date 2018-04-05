@@ -1,3 +1,4 @@
+CORE
 main.c
 --no-slice --memory-leak-check --unwind 10 --no-unwinding-assertions
 ^VERIFICATION FAILED$

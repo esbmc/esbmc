@@ -2,59 +2,35 @@
 
 #include <math.h>
 #include <fenv.h>
-#include "../intrinsics.h"
 
-#undef roundf
-#undef round
-#undef roundl
+#define round_def(ret_type, type, name, rint_func, copysign_func, abs_func)    \
+  ret_type name(type f)                                                        \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    type result;                                                               \
+    int save_round = fegetround();                                             \
+    fesetround(FE_TOWARDZERO);                                                 \
+    result = rint_func(copysign_func(0.5 + abs_func(f), f));                   \
+    fesetround(save_round);                                                    \
+    return result;                                                             \
+  }                                                                            \
+                                                                               \
+  ret_type __##name(type f)                                                    \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(f);                                                            \
+  }
 
-#undef lroundf
-#undef lround
-#undef lroundl
+round_def(float, float, roundf, rintf, copysignf, fabsf);
+round_def(double, double, round, rint, copysign, fabs);
+round_def(long double, long double, roundl, rintl, copysignl, fabsl);
 
-#undef llroundf
-#undef llround
-#undef llroundl
+round_def(long, float, lroundf, rintf, copysignf, fabsf);
+round_def(long, double, lround, rint, copysign, fabs);
+round_def(long, long double, lroundl, rintl, copysignl, fabsl);
 
-float roundf(float f)
-{
-  float result;
-  int save_round = fegetround();
-  fesetround(FE_TOWARDZERO);
-  result = rintf(copysign(0.5 + fabsf(f), f));
-  fesetround(save_round);
-  return result;
-}
+round_def(long long, float, llroundf, rintf, copysignf, fabsf);
+round_def(long long, double, llround, rint, copysign, fabs);
+round_def(long long, long double, llroundl, rintl, copysignl, fabsl);
 
-double round(double d)
-{
-  double result;
-  int save_round = fegetround();
-  fesetround(FE_TOWARDZERO);
-  result = rint(copysign(0.5 + fabs(d), d));
-  fesetround(save_round);
-  return result;
-}
-
-long double roundl(long double ld)
-{
-  long double result;
-  int save_round = fegetround();
-  fesetround(FE_TOWARDZERO);
-  result = rintl(copysign(0.5 + fabsl(ld), ld));
-  fesetround(save_round);
-  return result;
-}
-
-long lroundf(float f) { return roundf(f); }
-
-long lround(double d) { return round(d); }
-
-long lroundl(long double ld) { return roundl(ld); }
-
-long long llroundf(float f) { return roundf(f); }
-
-long long llround(double d) { return round(d); }
-
-long long llroundl(long double ld) { return roundl(ld); }
-
+#undef round_def

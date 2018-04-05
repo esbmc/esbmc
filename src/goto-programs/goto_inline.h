@@ -37,19 +37,19 @@ void goto_partial_inline(
   message_handlert &message_handler,
   unsigned _smallfunc_limit = 0);
 
-class goto_inlinet:public message_streamt
+class goto_inlinet : public message_streamt
 {
 public:
   goto_inlinet(
     goto_functionst &_goto_functions,
     optionst &_options,
     const namespacet &_ns,
-    message_handlert &_message_handler):
-    message_streamt(_message_handler),
-    smallfunc_limit(0),
-    goto_functions(_goto_functions),
-    options(_options),
-    ns(_ns)
+    message_handlert &_message_handler)
+    : message_streamt(_message_handler),
+      smallfunc_limit(0),
+      goto_functions(_goto_functions),
+      options(_options),
+      ns(_ns)
   {
   }
 
@@ -80,10 +80,8 @@ protected:
     const exprt &constrain,
     bool recursive);
 
-  void replace_return(
-    goto_programt &body,
-    const exprt &lhs,
-    const exprt &constrain);
+  void
+  replace_return(goto_programt &body, const exprt &lhs, const exprt &constrain);
 
   void parameter_assignments(
     const locationt &location,

@@ -14,7 +14,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <langapi/mode.h>
 #include <util/migrate.h>
 
-void bmct::show_vcc(std::ostream &out, boost::shared_ptr<symex_target_equationt> &eq)
+void bmct::show_vcc(
+  std::ostream &out,
+  boost::shared_ptr<symex_target_equationt> &eq)
 {
   switch(ui)
   {
@@ -34,22 +36,23 @@ void bmct::show_vcc(std::ostream &out, boost::shared_ptr<symex_target_equationt>
 
   languagest languages(ns, MODE_C);
 
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=eq->SSA_steps.begin();
-      it!=eq->SSA_steps.end(); it++)
+  for(symex_target_equationt::SSA_stepst::iterator it = eq->SSA_steps.begin();
+      it != eq->SSA_steps.end();
+      it++)
   {
-    if(!it->is_assert()) continue;
+    if(!it->is_assert())
+      continue;
 
     if(it->source.pc->location.is_not_nil())
       out << it->source.pc->location << std::endl;
 
-    if(it->comment!="")
+    if(it->comment != "")
       out << it->comment << std::endl;
 
-    symex_target_equationt::SSA_stepst::const_iterator
-      p_it=eq->SSA_steps.begin();
+    symex_target_equationt::SSA_stepst::const_iterator p_it =
+      eq->SSA_steps.begin();
 
-    for(unsigned count=1; p_it!=it; p_it++)
+    for(unsigned count = 1; p_it != it; p_it++)
       if(p_it->is_assume() || p_it->is_assignment())
         if(!p_it->ignore)
         {
@@ -71,9 +74,9 @@ void bmct::show_vcc(std::ostream &out, boost::shared_ptr<symex_target_equationt>
 
 void bmct::show_vcc(boost::shared_ptr<symex_target_equationt> &eq)
 {
-  const std::string &filename=options.get_option("output");
+  const std::string &filename = options.get_option("output");
 
-  if(filename.empty() || filename=="-")
+  if(filename.empty() || filename == "-")
     show_vcc(std::cout, eq);
   else
   {
@@ -84,4 +87,3 @@ void bmct::show_vcc(boost::shared_ptr<symex_target_equationt> &eq)
       show_vcc(out, eq);
   }
 }
-

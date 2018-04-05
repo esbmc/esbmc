@@ -1,26 +1,24 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
 #undef isinf
-#undef __isinf
 
-#undef isinff
-#undef __isinff
+#define isinf_def(type, name, isinf_func)                                      \
+  int name(type f)                                                             \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return isinf_func(f);                                                      \
+  }                                                                            \
+                                                                               \
+  int __##name(type f)                                                         \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(f);                                                            \
+  }
 
-#undef isinfl
-#undef __isinfl
+isinf_def(float, isinff, __ESBMC_isinff);
+isinf_def(double, isinf, __ESBMC_isinfd);
+isinf_def(long double, isinfl, __ESBMC_isinfld);
 
-inline int isinf(double d) { return __ESBMC_isinfd(d); }
-
-inline int __isinf(double d) { return __ESBMC_isinfd(d); }
-
-inline int isinff(float f) { return __ESBMC_isinff(f); }
-
-inline int __isinff(float f) { return __ESBMC_isinff(f); }
-
-inline int isinfl(long double ld) { return __ESBMC_isinfld(ld); }
-
-inline int __isinfl(long double ld) { return __ESBMC_isinfld(ld); }
-
+#undef isinf_def

@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type.h>
 
-class bool_typet:public typet
+class bool_typet : public typet
 {
 public:
   bool_typet()
@@ -23,7 +23,7 @@ public:
   }
 };
 
-class empty_typet:public typet
+class empty_typet : public typet
 {
 public:
   empty_typet()
@@ -32,14 +32,14 @@ public:
   }
 };
 
-class symbol_typet:public typet
+class symbol_typet : public typet
 {
 public:
-  symbol_typet():typet(t_symbol)
+  symbol_typet() : typet(t_symbol)
   {
   }
 
-  explicit symbol_typet(const irep_idt &identifier):typet(t_symbol)
+  explicit symbol_typet(const irep_idt &identifier) : typet(t_symbol)
   {
     set_identifier(identifier);
   }
@@ -55,7 +55,6 @@ public:
   }
 };
 
-
 /*! \brief Cast a generic typet to a \ref symbol_typet
  *
  * This is an unchecked conversion. \a type must be known to be \ref
@@ -68,7 +67,7 @@ public:
 */
 extern inline const symbol_typet &to_symbol_type(const typet &type)
 {
-  assert(type.id()=="symbol");
+  assert(type.id() == "symbol");
   return static_cast<const symbol_typet &>(type);
 }
 
@@ -77,42 +76,44 @@ extern inline const symbol_typet &to_symbol_type(const typet &type)
 */
 extern inline symbol_typet &to_symbol_type(typet &type)
 {
-  assert(type.id()=="symbol");
+  assert(type.id() == "symbol");
   return static_cast<symbol_typet &>(type);
 }
 
 // structs
 
-class struct_union_typet:public typet
+class struct_union_typet : public typet
 {
 public:
   inline explicit struct_union_typet() = default;
 
-  inline explicit struct_union_typet(const irep_idt &_id):typet(_id)
+  inline explicit struct_union_typet(const irep_idt &_id) : typet(_id)
   {
   }
 
-  class componentt:public exprt
+  class componentt : public exprt
   {
   public:
-    inline componentt():exprt(a_component)
+    inline componentt() : exprt(a_component)
     {
     }
 
-    inline componentt(const irep_idt &_name, const typet &_type):exprt(a_component)
+    inline componentt(const irep_idt &_name, const typet &_type)
+      : exprt(a_component)
     {
       set_name(_name);
-      type()=_type;
+      type() = _type;
     }
 
     inline componentt(
       const irep_idt &_name,
       const irep_idt &_pretty_name,
-      const typet &_type) : exprt(a_component)
+      const typet &_type)
+      : exprt(a_component)
     {
       set_name(_name);
       set_pretty_name(_pretty_name);
-      type()=_type;
+      type() = _type;
     }
 
     const irep_idt &get_name() const
@@ -183,8 +184,7 @@ public:
     return get_component(component_name).is_not_nil();
   }
 
-  const componentt &get_component(
-    const irep_idt &component_name) const;
+  const componentt &get_component(const irep_idt &component_name) const;
 
   unsigned component_number(const irep_idt &component_name) const;
   typet component_type(const irep_idt &component_name) const;
@@ -192,24 +192,24 @@ public:
 
 extern inline const struct_union_typet &to_struct_union_type(const typet &type)
 {
-  assert(type.id()==typet::t_struct ||
-         type.id()==typet::t_union ||
-         type.id()==typet::t_class);
+  assert(
+    type.id() == typet::t_struct || type.id() == typet::t_union ||
+    type.id() == typet::t_class);
   return static_cast<const struct_union_typet &>(type);
 }
 
 extern inline struct_union_typet &to_struct_union_type(typet &type)
 {
-  assert(type.id()==typet::t_struct ||
-         type.id()==typet::t_union ||
-         type.id()==typet::t_class);
+  assert(
+    type.id() == typet::t_struct || type.id() == typet::t_union ||
+    type.id() == typet::t_class);
   return static_cast<struct_union_typet &>(type);
 }
 
-class struct_typet:public struct_union_typet
+class struct_typet : public struct_union_typet
 {
 public:
-  struct_typet():struct_union_typet(t_struct)
+  struct_typet() : struct_union_typet(t_struct)
   {
   }
 
@@ -228,43 +228,43 @@ public:
 
 extern inline const struct_typet &to_struct_type(const typet &type)
 {
-  assert(type.id()==typet::t_struct ||
-         type.id()==typet::t_union ||
-         type.id()==typet::t_class);
+  assert(
+    type.id() == typet::t_struct || type.id() == typet::t_union ||
+    type.id() == typet::t_class);
   return static_cast<const struct_typet &>(type);
 }
 
 extern inline struct_typet &to_struct_type(typet &type)
 {
-  assert(type.id()==typet::t_struct ||
-         type.id()==typet::t_union ||
-         type.id()==typet::t_class);
+  assert(
+    type.id() == typet::t_struct || type.id() == typet::t_union ||
+    type.id() == typet::t_class);
   return static_cast<struct_typet &>(type);
 }
 
-class union_typet:public struct_union_typet
+class union_typet : public struct_union_typet
 {
 public:
-  union_typet():struct_union_typet(t_union)
+  union_typet() : struct_union_typet(t_union)
   {
   }
 };
 
 extern inline const union_typet &to_union_type(const typet &type)
 {
-  assert(type.id()==typet::t_union);
+  assert(type.id() == typet::t_union);
   return static_cast<const union_typet &>(type);
 }
 
 extern inline union_typet &to_union_type(typet &type)
 {
-  assert(type.id()==typet::t_union);
+  assert(type.id() == typet::t_union);
   return static_cast<union_typet &>(type);
 }
 
 // functions
 
-class code_typet:public typet
+class code_typet : public typet
 {
 public:
   code_typet()
@@ -272,14 +272,14 @@ public:
     id(t_code);
   }
 
-  class argumentt:public exprt
+  class argumentt : public exprt
   {
   public:
-    argumentt():exprt(argument)
+    argumentt() : exprt(argument)
     {
     }
 
-    argumentt(const typet &type):exprt(argument, type)
+    argumentt(const typet &type) : exprt(argument, type)
     {
     }
 
@@ -364,17 +364,17 @@ public:
 
 extern inline const code_typet &to_code_type(const typet &type)
 {
-  assert(type.id()==typet::t_code);
+  assert(type.id() == typet::t_code);
   return static_cast<const code_typet &>(type);
 }
 
 extern inline code_typet &to_code_type(typet &type)
 {
-  assert(type.id()==typet::t_code);
+  assert(type.id() == typet::t_code);
   return static_cast<code_typet &>(type);
 }
 
-class array_typet:public typet
+class array_typet : public typet
 {
 public:
   array_typet() : typet(t_array)
@@ -383,13 +383,13 @@ public:
 
   array_typet(const typet &_subtype) : typet(t_array)
   {
-    subtype()=_subtype;
+    subtype() = _subtype;
   }
 
   array_typet(const typet &_subtype, const exprt &_size) : typet(t_array)
   {
-    subtype()=_subtype;
-    size()=_size;
+    subtype() = _subtype;
+    size() = _size;
   }
 
   const exprt &size() const
@@ -401,22 +401,21 @@ public:
   {
     return (exprt &)add(a_size);
   }
-
 };
 
 extern inline const array_typet &to_array_type(const typet &type)
 {
-  assert(type.id()==typet::t_array);
+  assert(type.id() == typet::t_array);
   return static_cast<const array_typet &>(type);
 }
 
 extern inline array_typet &to_array_type(typet &type)
 {
-  assert(type.id()==typet::t_array);
+  assert(type.id() == typet::t_array);
   return static_cast<array_typet &>(type);
 }
 
-class pointer_typet:public typet
+class pointer_typet : public typet
 {
 public:
   pointer_typet()
@@ -427,11 +426,11 @@ public:
   explicit pointer_typet(const typet &_subtype)
   {
     id(t_pointer);
-    subtype()=_subtype;
+    subtype() = _subtype;
   }
 };
 
-class reference_typet:public pointer_typet
+class reference_typet : public pointer_typet
 {
 public:
   reference_typet()
@@ -443,7 +442,7 @@ public:
 bool is_reference(const typet &type);
 bool is_rvalue_reference(const typet &type);
 
-class bv_typet:public typet
+class bv_typet : public typet
 {
 public:
   bv_typet()
@@ -465,7 +464,7 @@ public:
   }
 };
 
-class unsignedbv_typet:public bv_typet
+class unsignedbv_typet : public bv_typet
 {
 public:
   unsignedbv_typet()
@@ -498,7 +497,7 @@ public:
 */
 inline const unsignedbv_typet &to_unsignedbv_type(const typet &type)
 {
-  assert(type.id()=="unsignedbv");
+  assert(type.id() == "unsignedbv");
   return static_cast<const unsignedbv_typet &>(type);
 }
 
@@ -507,11 +506,11 @@ inline const unsignedbv_typet &to_unsignedbv_type(const typet &type)
 */
 inline unsignedbv_typet &to_unsignedbv_type(typet &type)
 {
-  assert(type.id()=="unsignedbv");
+  assert(type.id() == "unsignedbv");
   return static_cast<unsignedbv_typet &>(type);
 }
 
-class signedbv_typet:public bv_typet
+class signedbv_typet : public bv_typet
 {
 public:
   signedbv_typet()
@@ -532,7 +531,6 @@ public:
   constant_exprt largest_expr() const;
 };
 
-
 /*! \brief Cast a generic typet to a \ref signedbv_typet
  *
  * This is an unchecked conversion. \a type must be known to be \ref
@@ -545,7 +543,7 @@ public:
 */
 inline const signedbv_typet &to_signedbv_type(const typet &type)
 {
-  assert(type.id()=="signedbv");
+  assert(type.id() == "signedbv");
   return static_cast<const signedbv_typet &>(type);
 }
 
@@ -554,10 +552,10 @@ inline const signedbv_typet &to_signedbv_type(const typet &type)
 */
 inline signedbv_typet &to_signedbv_type(typet &type)
 {
-  assert(type.id()=="signedbv");
+  assert(type.id() == "signedbv");
   return static_cast<signedbv_typet &>(type);
 }
-class fixedbv_typet:public bv_typet
+class fixedbv_typet : public bv_typet
 {
 public:
   fixedbv_typet()
@@ -567,7 +565,7 @@ public:
 
   unsigned get_fraction_bits() const
   {
-    return get_width()-get_integer_bits();
+    return get_width() - get_integer_bits();
   }
 
   unsigned get_integer_bits() const;
@@ -579,14 +577,14 @@ public:
 
   friend const fixedbv_typet &to_fixedbv_type(const typet &type)
   {
-    assert(type.id()==t_fixedbv);
+    assert(type.id() == t_fixedbv);
     return static_cast<const fixedbv_typet &>(type);
   }
 };
 
 const fixedbv_typet &to_fixedbv_type(const typet &type);
 
-class floatbv_typet:public bv_typet
+class floatbv_typet : public bv_typet
 {
 public:
   floatbv_typet()
@@ -596,7 +594,7 @@ public:
 
   unsigned get_e() const
   {
-    return get_width()-get_f()-1;
+    return get_width() - get_f() - 1;
   }
 
   unsigned get_f() const;
@@ -608,23 +606,23 @@ public:
 
   friend const floatbv_typet &to_floatbv_type(const typet &type)
   {
-    assert(type.id()==t_floatbv);
+    assert(type.id() == t_floatbv);
     return static_cast<const floatbv_typet &>(type);
   }
 };
 
 const floatbv_typet &to_floatbv_type(const typet &type);
 
-class string_typet:public typet
+class string_typet : public typet
 {
 public:
-  string_typet():typet(t_string)
+  string_typet() : typet(t_string)
   {
   }
 
   friend const string_typet &to_string_type(const typet &type)
   {
-    assert(type.id()==t_string);
+    assert(type.id() == t_string);
     return static_cast<const string_typet &>(type);
   }
 };

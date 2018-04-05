@@ -22,8 +22,16 @@ exprt gen_zero(const typet &type);
 exprt gen_one(const typet &type);
 exprt gen_not(const exprt &op);
 exprt gen_unary(const std::string &id, const typet &type, const exprt &op);
-exprt gen_binary(const std::string &id, const typet &type, const exprt &op1, const exprt &op2);
-exprt gen_binary(irep_idt &id, const typet &type, const exprt &op1, const exprt &op2);
+exprt gen_binary(
+  const std::string &id,
+  const typet &type,
+  const exprt &op1,
+  const exprt &op2);
+exprt gen_binary(
+  irep_idt &id,
+  const typet &type,
+  const exprt &op1,
+  const exprt &op2);
 exprt gen_and(const exprt &op1, const exprt &op2);
 exprt gen_and(const exprt &op1, const exprt &op2, const exprt &op3);
 exprt gen_or(const exprt &op1, const exprt &op2);

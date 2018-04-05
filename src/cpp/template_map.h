@@ -45,34 +45,30 @@ public:
     expr_map.clear();
   }
 
-  void set(
-    const template_parametert &parameter,
-    const exprt &value);
+  void set(const template_parametert &parameter, const exprt &value);
 
   void build(
     const template_typet &template_type,
     const cpp_template_args_tct &template_args);
 
-  void build_unassigned(
-    const template_typet &template_type);
+  void build_unassigned(const template_typet &template_type);
 
-  cpp_template_args_tct build_template_args(
-    const template_typet &template_type) const;
+  cpp_template_args_tct
+  build_template_args(const template_typet &template_type) const;
 };
 
 class cpp_saved_template_mapt
 {
 public:
-  cpp_saved_template_mapt(template_mapt &map):
-    old_map(map), map(map)
+  cpp_saved_template_mapt(template_mapt &map) : old_map(map), map(map)
   {
   }
 
   ~cpp_saved_template_mapt()
   {
-    #if 0
+#if 0
     std::cout << "RESTORING TEMPLATE MAP\n";
-    #endif
+#endif
     map.swap(old_map);
   }
 

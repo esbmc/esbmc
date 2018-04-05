@@ -16,16 +16,17 @@ Date: May 2007
 #include <goto-programs/goto_program_serialization.h>
 #include <util/irep_serialization.h>
 
-class goto_function_serializationt {
-  private:
-    goto_program_serializationt gpconverter;
-    
-  public:
-    goto_function_serializationt(irep_serializationt::ireps_containert &ic)
-      : gpconverter(ic) {};
-      
-  void convert(std::istream&, irept&);
-  void convert(const goto_functiont&, std::ostream& );
+class goto_function_serializationt
+{
+private:
+  goto_program_serializationt gpconverter;
+
+public:
+  goto_function_serializationt(irep_serializationt::ireps_containert &ic)
+    : gpconverter(ic){};
+
+  void convert(std::istream &, irept &);
+  void convert(const goto_functiont &, std::ostream &);
 };
 
 #endif /*GOTO_FUNCTION_SERIALIZATION_H_*/

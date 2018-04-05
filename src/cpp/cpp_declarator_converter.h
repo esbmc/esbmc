@@ -21,8 +21,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 class cpp_declarator_convertert
 {
 public:
-  cpp_declarator_convertert(
-    class cpp_typecheckt &_cpp_typecheck);
+  cpp_declarator_convertert(class cpp_typecheckt &_cpp_typecheck);
 
   bool is_typedef;
   bool is_template;
@@ -36,9 +35,8 @@ public:
     const cpp_member_spect &member_spec,
     cpp_declaratort &declarator);
 
-  symbolt &convert(
-    const cpp_declarationt &declaration,
-    cpp_declaratort &declarator)
+  symbolt &
+  convert(const cpp_declarationt &declaration, cpp_declaratort &declarator)
   {
     return convert(
       declaration.type(),
@@ -64,23 +62,19 @@ protected:
     const cpp_member_spect &member_spec,
     cpp_declaratort &declarator);
 
-  void handle_initializer(
-    symbolt &symbol,
-    cpp_declaratort &declarator);
+  void handle_initializer(symbolt &symbol, cpp_declaratort &declarator);
 
   void operator_overloading_rules(const symbolt &symbol);
   void main_function_rules(const symbolt &symbol);
 
   void enforce_rules(const symbolt &symbol);
 
-  void check_array_types(
-    typet &type,
-    bool force_constant);
+  void check_array_types(typet &type, bool force_constant);
 
   bool is_code_type(const typet &type) const
   {
-    return type.id()=="code" ||
-           (type.id()=="template" && type.subtype().id()=="code");
+    return type.id() == "code" ||
+           (type.id() == "template" && type.subtype().id() == "code");
   }
 
   void combine_types(

@@ -1,62 +1,36 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
-#undef fminf
-#undef fmin
-#undef fminl
-
-float fminf(float x, float y)
-{
-  if(__ESBMC_isnanf(x) || __ESBMC_isnanf(y))
-  {
-    // If both argument are NaN, NaN is returned
-    if(__ESBMC_isnanf(x) && __ESBMC_isnanf(y))
-      return NAN;
-
-    // Otherwise, return the side that is not NaN
-    if(__ESBMC_isnanf(x))
-      return y;
-
-    return x;
+#define fmin_def(type, name, isnan_func)                                       \
+  type name(type x, type y)                                                    \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    int x_is_nan = isnan_func(x);                                              \
+    int y_is_nan = isnan_func(y);                                              \
+                                                                               \
+    /* If both argument are NaN, NaN is returned */                            \
+    if(x_is_nan && y_is_nan)                                                   \
+      return NAN;                                                              \
+                                                                               \
+    /* If one arg is NaN, the other is returned */                             \
+    if(x_is_nan)                                                               \
+      return y;                                                                \
+                                                                               \
+    if(y_is_nan)                                                               \
+      return x;                                                                \
+                                                                               \
+    return (x < y ? x : y);                                                    \
+  }                                                                            \
+                                                                               \
+  type __##name(type x, type y)                                                \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(x, y);                                                         \
   }
 
-  return (x < y ? x : y);
-}
+fmin_def(float, fminf, isnanf);
+fmin_def(double, fmin, isnan);
+fmin_def(long double, fminl, isnanl);
 
-double fmin(double x, double y)
-{
-  if(__ESBMC_isnand(x) || __ESBMC_isnand(y))
-  {
-    // If both argument are NaN, NaN is returned
-    if(__ESBMC_isnand(x) && __ESBMC_isnand(y))
-      return NAN;
-
-    // Otherwise, return the side that is not NaN
-    if(__ESBMC_isnand(x))
-      return y;
-
-    return x;
-  }
-
-  return (x < y ? x : y);
-}
-
-long double fminl(long double x, long double y)
-{
-  if(__ESBMC_isnanld(x) || __ESBMC_isnanld(y))
-  {
-    // If both argument are NaN, NaN is returned
-    if(__ESBMC_isnanld(x) && __ESBMC_isnanld(y))
-      return NAN;
-
-    // Otherwise, return the side that is not NaN
-    if(__ESBMC_isnanld(x))
-      return y;
-
-    return x;
-  }
-
-  return (x < y ? x : y);
-}
+#undef fmin_def

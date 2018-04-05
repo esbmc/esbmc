@@ -1,3 +1,4 @@
+CORE
 main.c
 --unwind 34 --overflow-check
 ^VERIFICATION SUCCESSFUL$

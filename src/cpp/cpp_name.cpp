@@ -10,19 +10,17 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_name.h>
 #include <sstream>
 
-void cpp_namet::convert(
-  std::string &identifier,
-  std::string &base_name) const
+void cpp_namet::convert(std::string &identifier, std::string &base_name) const
 {
   forall_irep(it, get_sub())
   {
-    const irep_idt id=it->id();
+    const irep_idt id = it->id();
 
     std::string name_component;
 
-    if(id=="name")
-      name_component=it->get_string("identifier");
-    else if(id=="template_args")
+    if(id == "name")
+      name_component = it->get_string("identifier");
+    else if(id == "template_args")
     {
       std::stringstream ss;
       ss << location() << std::endl;
@@ -30,14 +28,14 @@ void cpp_namet::convert(
       throw ss.str();
     }
     else
-      name_component=it->id_string();
+      name_component = it->id_string();
 
-    identifier+=name_component;
+    identifier += name_component;
 
-    if(id=="::")
-      base_name="";
+    if(id == "::")
+      base_name = "";
     else
-      base_name+=name_component;
+      base_name += name_component;
   }
 }
 
@@ -47,12 +45,12 @@ std::string cpp_namet::to_string() const
 
   forall_irep(it, get_sub())
   {
-    if(it->id()=="::")
+    if(it->id() == "::")
       str += it->id_string();
-    else if(it->id()=="template_args")
+    else if(it->id() == "template_args")
       str += "<...>";
     else
-      str+=it->get_string("identifier");
+      str += it->get_string("identifier");
   }
 
   return str;

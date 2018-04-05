@@ -1,3 +1,0 @@
-stateful01.c
---deadlock-check --context-bound 3
-^VERIFICATION SUCCESSFUL$

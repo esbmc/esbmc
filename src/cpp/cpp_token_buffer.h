@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 class cpp_token_buffert
 {
 public:
-  cpp_token_buffert():current_pos(0)
+  cpp_token_buffert() : current_pos(0)
   {
   }
 
@@ -36,7 +36,7 @@ public:
   {
     tokens.clear();
     token_vector.clear();
-    current_pos=0;
+    current_pos = 0;
   }
 
   // the token that is currently being read from the file

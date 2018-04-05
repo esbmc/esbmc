@@ -24,15 +24,16 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/namespace.h>
 #include <vector>
 
-class symex_target_equationt:public symex_targett
+class symex_target_equationt : public symex_targett
 {
 public:
   class SSA_stept;
 
-  symex_target_equationt(const namespacet &_ns):ns(_ns)
+  symex_target_equationt(const namespacet &_ns) : ns(_ns)
   {
     debug_print = config.options.get_bool_option("symex-ssa-trace");
     ssa_trace = config.options.get_bool_option("ssa-trace");
+    ssa_smt_trace = config.options.get_bool_option("ssa-smt-trace");
   }
 
   // assignment to a variable - must be symbol
@@ -44,21 +45,21 @@ public:
     const expr2tc &rhs,
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
-    assignment_typet assignment_type) override ;
+    assignment_typet assignment_type) override;
 
   // output
   void output(
     const expr2tc &guard,
     const sourcet &source,
     const std::string &fmt,
-    const std::list<expr2tc> &args) override ;
+    const std::list<expr2tc> &args) override;
 
   // record an assumption
   // cond is destroyed
   void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
-    const sourcet &source) override ;
+    const sourcet &source) override;
 
   // record an assertion
   // cond is destroyed
@@ -67,13 +68,13 @@ public:
     const expr2tc &cond,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
-    const sourcet &source) override ;
+    const sourcet &source) override;
 
   void renumber(
     const expr2tc &guard,
     const expr2tc &symbol,
     const expr2tc &size,
-    const sourcet &source) override ;
+    const sourcet &source) override;
 
   virtual void convert(smt_convt &smt_conv);
   void convert_internal_step(
@@ -92,14 +93,32 @@ public:
     // assignment and assert steps only. In reverse order (most recent in idx
     // 0).
     std::vector<stack_framet> stack_trace;
-    
-    bool is_assert() const     { return type==goto_trace_stept::ASSERT; }
-    bool is_assume() const     { return type==goto_trace_stept::ASSUME; }
-    bool is_assignment() const { return type==goto_trace_stept::ASSIGNMENT; }
-    bool is_output() const     { return type==goto_trace_stept::OUTPUT; }
-    bool is_renumber() const   { return type==goto_trace_stept::RENUMBER; }
-    bool is_skip() const   { return type==goto_trace_stept::SKIP; }
-    
+
+    bool is_assert() const
+    {
+      return type == goto_trace_stept::ASSERT;
+    }
+    bool is_assume() const
+    {
+      return type == goto_trace_stept::ASSUME;
+    }
+    bool is_assignment() const
+    {
+      return type == goto_trace_stept::ASSIGNMENT;
+    }
+    bool is_output() const
+    {
+      return type == goto_trace_stept::OUTPUT;
+    }
+    bool is_renumber() const
+    {
+      return type == goto_trace_stept::RENUMBER;
+    }
+    bool is_skip() const
+    {
+      return type == goto_trace_stept::SKIP;
+    }
+
     expr2tc guard;
 
     // for ASSIGNMENT
@@ -126,15 +145,18 @@ public:
     }
 
     void output(const namespacet &ns, std::ostream &out) const;
-    void short_output(const namespacet &ns, std::ostream &out,
-                      bool show_ignored = false) const;
+    void short_output(
+      const namespacet &ns,
+      std::ostream &out,
+      bool show_ignored = false) const;
   };
 
   unsigned count_ignored_SSA_steps() const
   {
-    unsigned i=0;
-    for(const auto & SSA_step : SSA_steps)
-      if(SSA_step.ignore) i++;
+    unsigned i = 0;
+    for(const auto &SSA_step : SSA_steps)
+      if(SSA_step.ignore)
+        i++;
     return i;
   }
 
@@ -143,18 +165,17 @@ public:
 
   SSA_stepst::iterator get_SSA_step(unsigned s)
   {
-    SSA_stepst::iterator it=SSA_steps.begin();
-    for(; s!=0; s--)
+    SSA_stepst::iterator it = SSA_steps.begin();
+    for(; s != 0; s--)
     {
-      assert(it!=SSA_steps.end());
+      assert(it != SSA_steps.end());
       it++;
     }
     return it;
   }
 
   void output(std::ostream &out) const;
-  void short_output(std::ostream &out,
-                    bool show_ignored = false) const;
+  void short_output(std::ostream &out, bool show_ignored = false) const;
 
   void check_for_duplicate_assigns() const;
 
@@ -165,35 +186,38 @@ public:
 
   unsigned int clear_assertions();
 
-  boost::shared_ptr<symex_targett> clone() const override 
+  boost::shared_ptr<symex_targett> clone() const override
   {
     // No pointers or anything that requires ownership modification, can just
     // duplicate self.
     return boost::shared_ptr<symex_targett>(new symex_target_equationt(*this));
   }
 
-  void push_ctx() override ;
-  void pop_ctx() override ;
+  void push_ctx() override;
+  void pop_ctx() override;
 
 protected:
   const namespacet &ns;
   bool debug_print;
   bool ssa_trace;
+  bool ssa_smt_trace;
 };
 
 class runtime_encoded_equationt : public symex_target_equationt
 {
 public:
-  class dual_unsat_exception { };
+  class dual_unsat_exception
+  {
+  };
 
   runtime_encoded_equationt(const namespacet &_ns, smt_convt &conv);
 
-  void push_ctx() override ;
-  void pop_ctx() override ;
+  void push_ctx() override;
+  void pop_ctx() override;
 
-  boost::shared_ptr<symex_targett> clone() const override ;
+  boost::shared_ptr<symex_targett> clone() const override;
 
-  void convert(smt_convt &smt_conv) override ;
+  void convert(smt_convt &smt_conv) override;
   void flush_latest_instructions();
 
   tvt ask_solver_question(const expr2tc &question);
@@ -209,10 +233,12 @@ extern inline bool operator<(
   const symex_target_equationt::SSA_stepst::const_iterator a,
   const symex_target_equationt::SSA_stepst::const_iterator b)
 {
-  return &(*a)<&(*b);
+  return &(*a) < &(*b);
 }
 
-std::ostream &operator<<(std::ostream &out, const symex_target_equationt::SSA_stept &step);
-std::ostream &operator<<(std::ostream &out, const symex_target_equationt &equation);
+std::ostream &
+operator<<(std::ostream &out, const symex_target_equationt::SSA_stept &step);
+std::ostream &
+operator<<(std::ostream &out, const symex_target_equationt &equation);
 
 #endif

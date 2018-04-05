@@ -15,28 +15,25 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/namespace.h>
 #include <util/typecheck.h>
 
-class c_linkt:public typecheckt
+class c_linkt : public typecheckt
 {
 public:
   c_linkt(
     contextt &_context,
     contextt &_new_context,
     std::string _module,
-    message_handlert &_message_handler):
-    typecheckt(_message_handler),
-    context(_context),
-    new_context(_new_context),
-    module(std::move(_module)),
-    ns(_context, _new_context),
-    type_counter(0)
+    message_handlert &_message_handler)
+    : typecheckt(_message_handler),
+      context(_context),
+      new_context(_new_context),
+      module(std::move(_module)),
+      ns(_context, _new_context),
+      type_counter(0)
   {
-    context.Foreach_operand(
-      [this] (symbolt& s)
-      {
-        if (!s.module.empty())
-          known_modules.insert(s.module);
-      }
-    );
+    context.Foreach_operand([this](symbolt &s) {
+      if(!s.module.empty())
+        known_modules.insert(s.module);
+    });
   }
 
   void typecheck() override;
@@ -74,14 +71,11 @@ std::string c_linkt::to_string(const typet &type)
   return type2c(type, ns);
 }
 
-void c_linkt::duplicate(
-  symbolt &in_context,
-  symbolt &new_symbol)
+void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
 {
-  if(new_symbol.is_type!=in_context.is_type)
+  if(new_symbol.is_type != in_context.is_type)
   {
-    str << "class conflict on symbol `" << in_context.name
-        << "'";
+    str << "class conflict on symbol `" << in_context.name << "'";
     throw 0;
   }
 
@@ -91,77 +85,74 @@ void c_linkt::duplicate(
     duplicate_symbol(in_context, new_symbol);
 }
 
-void c_linkt::duplicate_type(
-  symbolt &in_context,
-  symbolt &new_symbol)
+void c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
 {
   // check if it is the same -- use base_type_eq
   if(!base_type_eq(in_context.type, new_symbol.type, ns))
   {
-    if(in_context.type.id()=="incomplete_struct" &&
-       new_symbol.type.id()=="struct")
+    if(
+      in_context.type.id() == "incomplete_struct" &&
+      new_symbol.type.id() == "struct")
     {
       // replace old symbol
-      in_context.type=new_symbol.type;
+      in_context.type = new_symbol.type;
     }
-    else if(in_context.type.id()=="struct" &&
-            new_symbol.type.id()=="incomplete_struct")
+    else if(
+      in_context.type.id() == "struct" &&
+      new_symbol.type.id() == "incomplete_struct")
     {
       // ignore
     }
-    else if(in_context.type.id()=="struct" &&
-            new_symbol.type.id()=="incomplete_struct")
+    else if(
+      in_context.type.id() == "struct" &&
+      new_symbol.type.id() == "incomplete_struct")
     {
       // ignore
     }
-    else if(ns.follow(in_context.type).id()=="incomplete_array" &&
-            ns.follow(new_symbol.type).is_array())
+    else if(
+      ns.follow(in_context.type).id() == "incomplete_array" &&
+      ns.follow(new_symbol.type).is_array())
     {
       // store new type
-      in_context.type=new_symbol.type;
+      in_context.type = new_symbol.type;
     }
-    else if(ns.follow(in_context.type).is_array() &&
-            ns.follow(new_symbol.type).id()=="incomplete_array")
+    else if(
+      ns.follow(in_context.type).is_array() &&
+      ns.follow(new_symbol.type).id() == "incomplete_array")
     {
       // ignore
     }
     else
     {
       // rename, there are no type clashes in C
-      irep_idt old_identifier=new_symbol.name;
+      irep_idt old_identifier = new_symbol.name;
 
       do
       {
-        irep_idt new_identifier=
-          id2string(old_identifier)+"#link"+i2string(type_counter++);
+        irep_idt new_identifier =
+          id2string(old_identifier) + "#link" + i2string(type_counter++);
 
-        new_symbol.name=new_identifier;
-      }
-      while(context.move(new_symbol));
+        new_symbol.name = new_identifier;
+      } while(context.move(new_symbol));
     }
   }
 }
 
-void c_linkt::duplicate_symbol(
-  symbolt &in_context,
-  symbolt &new_symbol)
+void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
 {
   // see if it is a function or a variable
 
-  bool is_code_in_context=in_context.type.is_code();
-  bool is_code_new_symbol=new_symbol.type.is_code();
+  bool is_code_in_context = in_context.type.is_code();
+  bool is_code_new_symbol = new_symbol.type.is_code();
 
-  if(is_code_in_context!=is_code_new_symbol)
+  if(is_code_in_context != is_code_new_symbol)
   {
     err_location(new_symbol.location);
     str << "error: conflicting definition for symbol \""
-        << in_context.display_name()
-        << "\"" << std::endl;
-    str << "old definition: " << to_string(in_context.type)
-        << std::endl;
+        << in_context.display_name() << "\"" << std::endl;
+    str << "old definition: " << to_string(in_context.type) << std::endl;
     str << "Module: " << in_context.module << std::endl;
-    str << "new definition: " << to_string(new_symbol.type)
-        << std::endl;
+    str << "new definition: " << to_string(new_symbol.type) << std::endl;
     str << "Module: " << new_symbol.module;
     throw 0;
   }
@@ -189,19 +180,18 @@ void c_linkt::duplicate_symbol(
       else if(base_type_eq(in_context.type, new_symbol.type, ns))
       {
         // keep the one in in_context -- libraries come last!
-        str << "warning: function `" << in_context.name << "' in module `" <<
-          new_symbol.module << "' is shadowed by a definition in module `" <<
-          in_context.module << "'";
+        str << "warning: function `" << in_context.name << "' in module `"
+            << new_symbol.module << "' is shadowed by a definition in module `"
+            << in_context.module << "'";
         warning();
       }
       else
       {
         err_location(new_symbol.value);
-        str << "error: duplicate definition of function `"
-            << in_context.name
+        str << "error: duplicate definition of function `" << in_context.name
             << "'" << std::endl;
-        str << "In module `" << in_context.module
-            << "' and module `" << new_symbol.module << "'";
+        str << "In module `" << in_context.module << "' and module `"
+            << new_symbol.module << "'";
         throw 0;
       }
     }
@@ -215,53 +205,45 @@ void c_linkt::duplicate_symbol(
       const typet &old_type = ns.follow(in_context.type);
       const typet &new_type = ns.follow(new_symbol.type);
 
-      if(old_type.is_incomplete_array() &&
-         new_type.is_array())
+      if(old_type.is_incomplete_array() && new_type.is_array())
       {
         // store new type
-        in_context.type=new_symbol.type;
+        in_context.type = new_symbol.type;
       }
       else if(old_type.is_pointer() && new_type.is_array())
       {
         // store new type
-        in_context.type=new_symbol.type;
+        in_context.type = new_symbol.type;
       }
       else if(old_type.is_array() && new_type.is_pointer())
       {
         // ignore
       }
-      else if(old_type.is_array() &&
-              new_type.is_incomplete_array())
+      else if(old_type.is_array() && new_type.is_incomplete_array())
       {
         // ignore
       }
-      else if(old_type.id()=="incomplete_struct" &&
-              new_type.is_struct())
+      else if(old_type.id() == "incomplete_struct" && new_type.is_struct())
       {
         // store new type
-        in_context.type=new_symbol.type;
+        in_context.type = new_symbol.type;
       }
-      else if(old_type.is_struct() &&
-              new_type.id()=="incomplete_struct")
+      else if(old_type.is_struct() && new_type.id() == "incomplete_struct")
       {
         // ignore
       }
-      else if(old_type.is_pointer() &&
-              new_type.is_incomplete_array())
+      else if(old_type.is_pointer() && new_type.is_incomplete_array())
       {
         // ignore
       }
       else
       {
         err_location(new_symbol.location);
-        str << "error: conflicting definition for variable `"
-            << in_context.name
+        str << "error: conflicting definition for variable `" << in_context.name
             << "'" << std::endl;
-        str << "old definition: " << to_string(in_context.type)
-            << std::endl;
+        str << "old definition: " << to_string(in_context.type) << std::endl;
         str << "Module: " << in_context.module << std::endl;
-        str << "new definition: " << to_string(new_symbol.type)
-            << std::endl;
+        str << "new definition: " << to_string(new_symbol.type) << std::endl;
         str << "Module: " << new_symbol.module;
         throw 0;
       }
@@ -269,11 +251,9 @@ void c_linkt::duplicate_symbol(
 
     // care about initializers
 
-    if(!new_symbol.value.is_nil() &&
-       !new_symbol.value.zero_initializer())
+    if(!new_symbol.value.is_nil() && !new_symbol.value.zero_initializer())
     {
-      if(in_context.value.is_nil() ||
-         in_context.value.zero_initializer())
+      if(in_context.value.is_nil() || in_context.value.zero_initializer())
       {
         in_context.value.swap(new_symbol.value);
       }
@@ -281,13 +261,10 @@ void c_linkt::duplicate_symbol(
       {
         err_location(new_symbol.value);
         str << "error: conflicting initializers for variable `"
-            << in_context.name
-            << "'" << std::endl;
-        str << "old value: " << to_string(in_context.value)
-            << std::endl;
+            << in_context.name << "'" << std::endl;
+        str << "old value: " << to_string(in_context.value) << std::endl;
         str << "Module: " << in_context.module << std::endl;
-        str << "new value: " << to_string(new_symbol.value)
-            << std::endl;
+        str << "new value: " << to_string(new_symbol.value) << std::endl;
         str << "Module: " << new_symbol.module;
         throw 0;
       }
@@ -297,47 +274,41 @@ void c_linkt::duplicate_symbol(
 
 void c_linkt::typecheck()
 {
-  new_context.Foreach_operand(
-    [this] (symbolt& s)
+  new_context.Foreach_operand([this](symbolt &s) {
+    // build module clash table
+    if(s.file_local && known_modules.find(s.module) != known_modules.end())
     {
-      // build module clash table
-      if(s.file_local && known_modules.find(s.module) != known_modules.end())
+      // we could have a clash
+      unsigned counter = 0;
+      std::string newname = id2string(s.name);
+
+      while(context.find_symbol(newname) != nullptr)
       {
-        // we could have a clash
-        unsigned counter=0;
-        std::string newname = id2string(s.name);
+        // there is a clash, rename!
+        counter++;
+        newname = id2string(s.name) + "#-mc-" + i2string(counter);
+      }
 
-        while(context.find_symbol(newname) != nullptr)
-        {
-          // there is a clash, rename!
-          counter++;
-          newname = id2string(s.name) + "#-mc-" + i2string(counter);
-        }
-
-        if(counter > 0)
-        {
-          exprt subst("symbol");
-          subst.identifier(newname);
-          subst.location() = s.location;
-          symbol_fixer.insert(
-            s.name,
-            static_cast<const typet&>(static_cast<const irept&>(subst)));
-          subst.type() = s.type;
-          symbol_fixer.insert(s.name, subst);
-        }
+      if(counter > 0)
+      {
+        exprt subst("symbol");
+        subst.identifier(newname);
+        subst.location() = s.location;
+        symbol_fixer.insert(
+          s.name,
+          static_cast<const typet &>(static_cast<const irept &>(subst)));
+        subst.type() = s.type;
+        symbol_fixer.insert(s.name, subst);
       }
     }
-  );
+  });
 
   symbol_fixer.fix_context(new_context);
 
-  new_context.Foreach_operand_in_order(
-    [this] (symbolt& s)
-    {
-      symbol_fixer.fix_symbol(s);
-      move(s);
-    }
-  );
+  new_context.Foreach_operand_in_order([this](symbolt &s) {
+    symbol_fixer.fix_symbol(s);
+    move(s);
+  });
 }
 
 void c_linkt::move(symbolt &new_symbol)
