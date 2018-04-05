@@ -19,6 +19,10 @@ expr2tc build_lhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
     expr2tc new_value = smt_conv->get(index.index);
     new_lhs = index2tc(new_lhs->type, new_source_value, new_value);
   }
+  else if(is_typecast2t(new_lhs))
+    new_lhs = to_typecast2t(new_lhs).from;
+  else if(is_bitcast2t(new_lhs))
+    new_lhs = to_bitcast2t(new_lhs).from;
 
   renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
   return new_lhs;
