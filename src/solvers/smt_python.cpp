@@ -568,7 +568,6 @@ void build_smt_conv_python_class(void)
   // expression conversion. Any new smt_convt implementation should be done
   // in C++ for example.
   // Refrain from registering enums too: basic implementation pls.
-  typedef return_value_policy<return_opaque_pointer> ropaque;
   class_<smt_convt_wrapper, boost::noncopyable>(
     "smt_convt", init<bool, const namespacet &, bool, bool>())
     .def_readonly("pointer_struct", &smt_convt::pointer_struct)
@@ -577,7 +576,7 @@ void build_smt_conv_python_class(void)
     .def("convert_ast", &bounce_convert_ast, rte())
     .def("push_ctx", &smt_convt::push_ctx)
     .def("pop_ctx", &smt_convt::pop_ctx)
-    .def("convert_assign", &smt_convt::convert_assign, ropaque())
+    .def("convert_assign", &smt_convt::convert_assign, rte())
     .def("invert_ast", &smt_convt::invert_ast, rte())
     .def("imply_ast", &smt_convt::imply_ast, rte())
     .def("assert_ast", &smt_convt::assert_ast)
