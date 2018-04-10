@@ -212,74 +212,6 @@ void smt_convt::pop_ctx()
   tuple_api->pop_tuple_ctx();
 }
 
-smt_astt smt_convt::make_disjunct(const ast_vec &v)
-{
-  smt_astt args[v.size()];
-  smt_astt result = nullptr;
-  unsigned int i = 0;
-
-  // This is always true.
-  if(v.size() == 0)
-    return mk_smt_bool(true);
-
-  // Slightly funky due to being morphed from lor:
-  for(ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++)
-  {
-    args[i] = *it;
-  }
-
-  // Chain these.
-  if(i > 1)
-  {
-    unsigned int j;
-    smt_astt accuml = args[0];
-    for(j = 1; j < i; j++)
-    {
-      accuml = mk_or(accuml, args[j]);
-    }
-    result = accuml;
-  }
-  else
-  {
-    result = args[0];
-  }
-
-  return result;
-}
-
-smt_astt smt_convt::make_conjunct(const ast_vec &v)
-{
-  smt_astt args[v.size()];
-  smt_astt result;
-  unsigned int i;
-
-  assert(v.size() != 0);
-
-  // Funky on account of conversion from land...
-  for(i = 0; i < v.size(); i++)
-  {
-    args[i] = v[i];
-  }
-
-  // Chain these.
-  if(i > 1)
-  {
-    unsigned int j;
-    smt_astt accuml = args[0];
-    for(j = 1; j < i; j++)
-    {
-      accuml = mk_and(accuml, args[j]);
-    }
-    result = accuml;
-  }
-  else
-  {
-    result = args[0];
-  }
-
-  return result;
-}
-
 smt_astt smt_convt::invert_ast(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
@@ -322,10 +254,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   smt_cachet::const_iterator cache_result = smt_cache.find(expr);
   if(cache_result != smt_cache.end())
     return (cache_result->ast);
-
-  // Variable length array; constant array's and so forth can have hundreds
-  // of fields.
-  smt_astt args[expr->get_num_sub_exprs()];
+  std::vector<smt_astt> args;
+  args.reserve(expr->get_num_sub_exprs());
 
   switch(expr->expr_id)
   {
@@ -1955,53 +1885,6 @@ type2tc smt_convt::get_flattened_array_subtype(const type2tc &type)
   return type_rec;
 }
 
-std::string smt_convt::get_fixed_point(const unsigned width, std::string value)
-  const
-{
-  std::string m, f, tmp;
-  size_t found, size;
-  double v, magnitude, fraction, expoent;
-
-  found = value.find_first_of("/");
-  size = value.size();
-  m = value.substr(0, found);
-  if(found != std::string::npos)
-    f = value.substr(found + 1, size);
-  else
-    f = "1";
-
-  if(m.compare("0") == 0 && f.compare("0") == 0)
-    return "0";
-
-  v = atof(m.c_str()) / atof(f.c_str());
-
-  magnitude = static_cast<int>(v);
-  fraction = v - magnitude;
-  tmp = integer2string(power(2, width / 2), 10);
-  expoent = atof(tmp.c_str());
-  fraction = fraction * expoent;
-  fraction = floor(fraction);
-
-  std::string integer_str, fraction_str;
-  integer_str =
-    integer2binary(string2integer(double2string(magnitude), 10), width / 2);
-
-  fraction_str =
-    integer2binary(string2integer(double2string(fraction), 10), width / 2);
-
-  value = integer_str + fraction_str;
-
-  if(magnitude == 0 && v < 0)
-  {
-    value =
-      integer2binary(
-        string2integer("-1", 10) - binary2integer(integer_str, true), width) +
-      integer2binary(string2integer(double2string(fraction), 10), width / 2);
-  }
-
-  return value;
-}
-
 void smt_convt::pre_solve()
 {
   // NB: always perform tuple constraint adding first, as it covers tuple
@@ -2016,10 +1899,15 @@ expr2tc smt_convt::get(const expr2tc &expr)
   if(is_constant_number(expr))
     return expr;
 
+  if(is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
+    return expr;
+
   expr2tc res = expr;
 
   // Special cases:
-  if(is_index2t(res))
+  switch(res->expr_id)
+  {
+  case expr2t::index_id:
   {
     // If we try to get an index from the solver, it will first
     // return the whole array and then get the index, we can
@@ -2055,65 +1943,37 @@ expr2tc smt_convt::get(const expr2tc &expr)
         to_constant_int2t(idx).value.to_uint64(),
         get_flattened_array_subtype(res->type));
     }
+    break;
   }
-  else if(is_with2t(res))
+
+  case expr2t::with_id:
   {
     // This will be converted
     with2t with = to_with2t(res);
     expr2tc update_val = with.update_value;
 
-    // if the update value is a constant, just return it
     if(
-      is_constant_number(update_val) ||
-      (is_symbol2t(update_val) && to_symbol2t(update_val).thename == "NULL"))
-      return update_val;
-
-    if(!(is_struct_type(expr) || is_pointer_type(expr)))
+      is_array_type(with.type) &&
+      is_array_type(to_array_type(with.type).subtype))
     {
-      expr2tc newidx;
-      if(
-        is_array_type(with.type) &&
-        is_array_type(to_array_type(with.type).subtype))
-      {
-        newidx = decompose_store_chain(expr, update_val);
-      }
-      else
-      {
-        newidx = fix_array_idx(with.update_field, with.type);
-      }
-
-      // if the update value is a constant, there's no need to
-      // call the array api
-      if(
-        is_constant_number(update_val) ||
-        (is_symbol2t(update_val) && to_symbol2t(update_val).thename == "NULL"))
-        return update_val;
-
-      // Convert the idx, it must be an integer
-      expr2tc idx = get(newidx);
-      if(is_constant_int2t(idx))
-      {
-        // Convert the array so we can call the array api
-        smt_astt array = convert_ast(with.source_value);
-
-        // Retrieve the element
-        res = array_api->get_array_elem(
-          array,
-          to_constant_int2t(idx).value.to_uint64(),
-          get_flattened_array_subtype(res->type));
-      }
+      decompose_store_chain(expr, update_val);
     }
+
+    return get(update_val);
   }
-  else if(is_address_of2t(res))
-  {
+
+  case expr2t::address_of_id:
     return res;
-  }
-  else if(is_symbol2t(res))
-  {
+
+  case expr2t::symbol_id:
     if(is_structure_type(res))
       return res;
 
-    return get_by_type(res); // Query symbol value from the solver
+    // Query symbol value from the solver
+    return get_by_type(res);
+
+  default:
+    break;
   }
 
   // Recurse on operands

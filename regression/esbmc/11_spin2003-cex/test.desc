@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 spin2003-cex.c
 --unwind 1 --no-unwinding-assertions
 ^VERIFICATION FAILED$

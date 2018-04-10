@@ -1035,35 +1035,37 @@ smt_astt yices_convt::mk_tuple_array_symbol(const expr2tc &expr)
 
 expr2tc yices_convt::tuple_get(const expr2tc &expr)
 {
-  const symbol2t &sym = to_symbol2t(expr);
-  term_t t = yices_get_term_by_name(sym.get_symbol_name().c_str());
-  if(t == NULL_TERM)
+  const struct_union_data &strct = get_type_def(expr->type);
+
+  if(is_pointer_type(expr->type))
   {
-    // This might be legitimate, could have been sliced or unassigned
-    return expr2tc();
+    // Pointer have two fields, a base address and an offset, so we just
+    // need to get the two numbers and call the pointer API
+
+    smt_astt sym = convert_ast(expr);
+
+    auto s1 = convert_sort(strct.members[0]);
+    smt_astt object =
+      new_ast(yices_select(1, to_solver_smt_ast<yices_smt_ast>(sym)->a), s1);
+
+    auto s2 = convert_sort(strct.members[1]);
+    smt_astt offset =
+      new_ast(yices_select(2, to_solver_smt_ast<yices_smt_ast>(sym)->a), s2);
+
+    uint64_t num = get_bv(object).to_uint64();
+    uint64_t offs = get_bv(offset).to_uint64();
+    pointer_logict::pointert p(num, BigInt(offs));
+    return pointer_logic.back().pointer_expr(p, expr->type);
   }
 
-  const struct_union_data &strct = get_type_def(expr->type);
+  // Otherwise, run through all fields and despatch to 'get' again.
   constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
-
-  // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
   for(auto const &it : strct.members)
   {
     member2tc memb(it, expr, strct.member_names[i]);
-    outstruct.get()->datatype_members.push_back(get(memb));
+    outstruct->datatype_members.push_back(get(memb));
     i++;
-  }
-
-  // If it's a pointer, rewrite.
-  if(is_pointer_type(expr->type))
-  {
-    uint64_t num =
-      to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
-    uint64_t offs =
-      to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
-    pointer_logict::pointert p(num, BigInt(offs));
-    return pointer_logic.back().pointer_expr(p, expr->type);
   }
 
   return outstruct;
@@ -1131,4 +1133,10 @@ smt_sortt yices_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 smt_sortt yices_convt::mk_bvfp_rm_sort()
 {
   return new solver_smt_sort<type_t>(SMT_SORT_BVFP_RM, yices_bv_type(3), 3);
+}
+
+void yices_smt_ast::dump() const
+{
+  yices_pp_term(stdout, a, 80, 10, 0);
+  yices_pp_type(stdout, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
 }

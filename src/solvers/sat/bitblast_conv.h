@@ -91,8 +91,6 @@ public:
     unsigned int high,
     unsigned int low,
     const smt_sort *s);
-  virtual const smt_ast *make_disjunct(const smt_convt::ast_vec &v);
-  virtual const smt_ast *make_conjunct(const smt_convt::ast_vec &v);
   virtual tvt l_get(const smt_ast *a);
   virtual void assert_ast(const smt_ast *a);
 
