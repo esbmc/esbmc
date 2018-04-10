@@ -42,7 +42,6 @@ public:
     }
   };
 
-  typedef enum { STATE, HIDDEN } assignment_typet;
   enum class step_kindt
   {
     BASE,
@@ -60,7 +59,7 @@ public:
     const expr2tc &rhs,
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
-    assignment_typet assignment_type) = 0;
+    const bool hidden) = 0;
 
   // record output
   virtual void output(

@@ -241,7 +241,7 @@ public:
    */
   void symex_assign(
     const expr2tc &code,
-    symex_targett::assignment_typet type,
+    const bool hidden,
     symex_targett::step_kindt kind,
     const guardt &guard) override;
 

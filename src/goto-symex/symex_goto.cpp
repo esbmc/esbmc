@@ -171,7 +171,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
         new_rhs,
         cur_state->source,
         cur_state->gen_stack_trace(),
-        symex_targett::HIDDEN);
+        true);
 
       if(is_constant_expr(new_rhs))
         guard_expr = new_rhs;
@@ -327,7 +327,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
       rhs,
       cur_state->source,
       cur_state->gen_stack_trace(),
-      symex_targett::HIDDEN);
+      true);
   }
 }
 

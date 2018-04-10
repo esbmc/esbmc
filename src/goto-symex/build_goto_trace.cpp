@@ -62,7 +62,7 @@ void build_goto_trace(
     if(!result.is_true())
       continue;
 
-    if(SSA_step.assignment_type == symex_target_equationt::HIDDEN)
+    if(SSA_step.hidden)
       continue;
 
     goto_trace.steps.emplace_back();

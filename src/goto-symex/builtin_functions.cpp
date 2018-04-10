@@ -106,7 +106,7 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
   pointer_object2tc ptr_obj(pointer_type2(), result);
   track_new_pointer(ptr_obj, type2tc(), realloc_size);
 
-  symex_assign(code_assign2tc(lhs, result), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(lhs, result), true);
 }
 
 expr2tc goto_symext::symex_mem(
@@ -218,7 +218,7 @@ expr2tc goto_symext::symex_mem(
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
 
-  symex_assign(code_assign2tc(lhs, rhs), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(lhs, rhs), true);
 
   pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
@@ -243,18 +243,17 @@ void goto_symext::track_new_pointer(
 
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = gen_true_expr();
-  symex_assign(code_assign2tc(idx, truth), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(idx, truth), true);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
   truth = gen_true_expr();
-  symex_assign(code_assign2tc(valid_index_expr, truth), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(valid_index_expr, truth), true);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
   expr2tc falseity = gen_false_expr();
-  symex_assign(
-    code_assign2tc(dealloc_index_expr, falseity), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(dealloc_index_expr, falseity), true);
 
   type2tc sz_sym_type =
     type2tc(new array_type2t(pointer_type2(), expr2tc(), true));
@@ -280,8 +279,7 @@ void goto_symext::track_new_pointer(
     object_size_exp = size;
   }
 
-  symex_assign(
-    code_assign2tc(sz_index_expr, object_size_exp), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true);
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
@@ -326,14 +324,12 @@ void goto_symext::symex_free(const expr2tc &expr)
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
   expr2tc truth = gen_true_expr();
-  symex_assign(
-    code_assign2tc(dealloc_index_expr, truth), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(dealloc_index_expr, truth), true);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
   expr2tc falsity = gen_false_expr();
-  symex_assign(
-    code_assign2tc(valid_index_expr, falsity), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(valid_index_expr, falsity), true);
 }
 
 void goto_symext::symex_printf(
@@ -415,7 +411,7 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
 
-  symex_assign(code_assign2tc(lhs, rhs), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(lhs, rhs), true);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   type2tc sym_type =
@@ -426,7 +422,7 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = gen_true_expr();
 
-  symex_assign(code_assign2tc(idx, truth), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(idx, truth), true);
 
   dynamic_memory.emplace_back(
     rhs_copy, cur_state->guard, false, symbol.base_name.as_string());
@@ -483,7 +479,7 @@ void goto_symext::intrinsic_get_thread_id(
 
   state.value_set.assign(call.ret, tid);
 
-  symex_assign(code_assign2tc(call.ret, tid), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(call.ret, tid), true);
 }
 
 void goto_symext::intrinsic_set_thread_data(
@@ -536,7 +532,7 @@ void goto_symext::intrinsic_get_thread_data(
   assert(base_type_eq(call.ret->type, startdata->type, ns));
 
   state.value_set.assign(call.ret, startdata);
-  symex_assign(code_assign2tc(call.ret, startdata), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(call.ret, startdata), true);
 }
 
 void goto_symext::intrinsic_spawn_thread(
@@ -585,7 +581,7 @@ void goto_symext::intrinsic_spawn_thread(
 
   state.value_set.assign(call.ret, thread_id_exp);
 
-  symex_assign(code_assign2tc(call.ret, thread_id_exp), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(call.ret, thread_id_exp), true);
 
   // Force a context switch point. If the caller is in an atomic block, it'll be
   // blocked, but a context switch will be forced when we exit the atomic block.
@@ -628,7 +624,7 @@ void goto_symext::intrinsic_get_thread_state(
 
   // Reuse threadid
   constant_int2tc flag_expr(get_uint_type(config.ansi_c.int_width), flags);
-  symex_assign(code_assign2tc(call.ret, flag_expr), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(call.ret, flag_expr), true);
 }
 
 void goto_symext::intrinsic_really_atomic_begin(reachability_treet &art)
@@ -743,7 +739,7 @@ void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
     va_rhs = gen_zero(lhs->type);
   }
 
-  symex_assign(code_assign2tc(lhs, va_rhs), symex_targett::HIDDEN);
+  symex_assign(code_assign2tc(lhs, va_rhs), true);
 }
 
 void goto_symext::intrinsic_memset(
@@ -908,7 +904,7 @@ void goto_symext::intrinsic_memset(
       {
         symex_assign(
           code_assign2tc(item.object, val),
-          symex_targett::STATE,
+          false,
           symex_targett::step_kindt::PLAIN_BMC,
           curguard);
       }
@@ -920,7 +916,7 @@ void goto_symext::intrinsic_memset(
         // zero.
         symex_assign(
           code_assign2tc(item.object, val),
-          symex_targett::STATE,
+          false,
           symex_targett::step_kindt::PLAIN_BMC,
           curguard);
         expr2tc eq = equality2tc(offs, gen_zero(offs->type));
@@ -1001,7 +997,7 @@ void goto_symext::intrinsic_memset(
           expr2tc zero = gen_zero(std::get<0>(ref));
           symex_assign(
             code_assign2tc(target, zero),
-            symex_targett::STATE,
+            false,
             symex_targett::step_kindt::PLAIN_BMC,
             newguard);
         }
@@ -1018,7 +1014,7 @@ void goto_symext::intrinsic_memset(
     dereference(ret_ref, dereferencet::READ);
     symex_assign(
       code_assign2tc(ret_ref, ptr),
-      symex_targett::STATE,
+      false,
       symex_targett::step_kindt::PLAIN_BMC,
       cur_state->guard);
   }

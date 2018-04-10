@@ -24,7 +24,7 @@ void symex_target_equationt::assignment(
   const expr2tc &rhs,
   const sourcet &source,
   std::vector<stack_framet> stack_trace,
-  assignment_typet assignment_type)
+  const bool hidden)
 {
   assert(!is_nil_expr(lhs));
 
@@ -35,7 +35,7 @@ void symex_target_equationt::assignment(
   SSA_step.lhs = lhs;
   SSA_step.original_lhs = original_lhs;
   SSA_step.rhs = rhs;
-  SSA_step.assignment_type = assignment_type;
+  SSA_step.hidden = hidden;
   SSA_step.cond = equality2tc(lhs, rhs);
   SSA_step.type = goto_trace_stept::ASSIGNMENT;
   SSA_step.source = source;
@@ -270,18 +270,7 @@ void symex_target_equationt::SSA_stept::output(
 
   case goto_trace_stept::ASSIGNMENT:
     out << "ASSIGNMENT (";
-    switch(assignment_type)
-    {
-    case HIDDEN:
-      out << "HIDDEN";
-      break;
-    case STATE:
-      out << "STATE";
-      break;
-    default:;
-    }
-
-    out << ")" << std::endl;
+    out << (hidden ? "HIDDEN" : "") << ")\n";
     break;
 
   default:

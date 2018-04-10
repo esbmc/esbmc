@@ -45,7 +45,7 @@ public:
     const expr2tc &rhs,
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
-    assignment_typet assignment_type) override;
+    const bool hidden) override;
 
   // output
   void output(
@@ -123,7 +123,6 @@ public:
 
     // for ASSIGNMENT
     expr2tc lhs, rhs, original_lhs;
-    assignment_typet assignment_type;
 
     // for ASSUME/ASSERT
     expr2tc cond;
@@ -134,16 +133,19 @@ public:
     std::list<expr2tc> output_args;
 
     // for conversion
-    const smt_ast *guard_ast, *cond_ast;
+    smt_astt guard_ast, cond_ast;
     std::list<expr2tc> converted_output_args;
 
     // for slicing
     bool ignore;
 
+    // for visibility
+    bool hidden;
+
     // for k-induction
     step_kindt instruction_kind;
 
-    SSA_stept() : ignore(false)
+    SSA_stept() : ignore(false), hidden(false)
     {
     }
 

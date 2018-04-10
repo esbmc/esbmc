@@ -499,8 +499,8 @@ protected:
    */
   virtual void symex_assign(
     const expr2tc &code,
-    symex_targett::assignment_typet type = symex_targett::STATE,
-    symex_targett::step_kindt kind = symex_targett::step_kindt::PLAIN_BMC,
+    const bool hidden = false,
+    const symex_targett::step_kindt kind = symex_targett::step_kindt::PLAIN_BMC,
     const guardt &guard = guardt());
 
   /** Recursively perform symex assign. @see symex_assign */
@@ -509,7 +509,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type,
+    const bool hidden,
     symex_targett::step_kindt kind);
 
   /**
@@ -526,7 +526,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type,
+    const bool hidden,
     symex_targett::step_kindt kind);
 
   /**
@@ -552,7 +552,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type,
+    const bool hidden,
     symex_targett::step_kindt kind);
 
   /**
@@ -573,7 +573,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type,
+    const bool hidden,
     symex_targett::step_kindt kind);
 
   /**
@@ -589,7 +589,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type,
+    const bool hidden,
     symex_targett::step_kindt kind);
 
   /**
@@ -607,7 +607,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type,
+    const bool hidden,
     symex_targett::step_kindt kind);
 
   /**
@@ -624,7 +624,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type,
+    const bool hidden,
     symex_targett::step_kindt kind);
 
   /**
@@ -641,7 +641,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type,
+    const bool hidden,
     symex_targett::step_kindt kind);
 
   /**
@@ -659,7 +659,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type,
+    const bool hidden,
     symex_targett::step_kindt kind);
 
   /**
@@ -678,7 +678,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type,
+    const bool hidden,
     symex_targett::step_kindt kind);
 
   /** Symbolic implementation of malloc. */
