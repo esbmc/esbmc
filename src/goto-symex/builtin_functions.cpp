@@ -1004,7 +1004,7 @@ void goto_symext::intrinsic_memset(
       }
       else
       {
-        std::cerr << "Logic mismatch in memset intrinsic" << std::endl;
+        std::cerr << "Logic mismatch in memset intrinsic\n";
         abort();
       }
     }
