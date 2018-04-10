@@ -333,30 +333,30 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
 
 void goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
+  if(partial_loops)
+    return;
+
   const irep_idt &loop_id = cur_state->source.pc->location.loopid();
 
   expr2tc negated_cond = guard;
   make_not(negated_cond);
 
-  if(!partial_loops)
+  if(!no_unwinding_assertions)
   {
-    if(!no_unwinding_assertions)
-    {
-      // generate unwinding assertion
-      claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
-    }
-    else
-    {
-      // generate unwinding assumption, unless we permit partial loops
-      expr2tc guarded_expr = negated_cond;
-      cur_state->guard.guard_expr(guarded_expr);
-      target->assumption(
-        cur_state->guard.as_expr(), guarded_expr, cur_state->source);
-    }
-
-    // add to state guard to prevent further assignments
-    cur_state->guard.add(negated_cond);
+    // generate unwinding assertion
+    claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
   }
+  else
+  {
+    // generate unwinding assumption, unless we permit partial loops
+    expr2tc guarded_expr = negated_cond;
+    cur_state->guard.guard_expr(guarded_expr);
+    target->assumption(
+      cur_state->guard.as_expr(), guarded_expr, cur_state->source);
+  }
+
+  // add to state guard to prevent further assignments
+  cur_state->guard.add(negated_cond);
 }
 
 bool goto_symext::get_unwind(
