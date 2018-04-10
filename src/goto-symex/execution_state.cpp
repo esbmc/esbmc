@@ -289,14 +289,9 @@ void execution_statet::symex_step(reachability_treet &art)
     {
       expr2tc thecode = instruction.code, assign;
       if(make_return_assignment(assign, thecode))
-      {
         goto_symext::symex_assign(assign);
-      }
-
       symex_return();
-
-      if(!is_nil_expr(assign))
-        analyze_assign(assign);
+      analyze_assign(assign);
     }
     state.source.pc++;
     break;
@@ -764,6 +759,9 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
 void execution_statet::analyze_assign(const expr2tc &code)
 {
+  if(is_nil_expr(code))
+    return;
+
   std::set<expr2tc> global_reads, global_writes;
   const code_assign2t &assign = to_code_assign2t(code);
   get_expr_globals(ns, assign.target, global_writes);
