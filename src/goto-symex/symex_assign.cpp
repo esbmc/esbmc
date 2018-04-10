@@ -142,6 +142,7 @@ void goto_symext::do_simplify(expr2tc &expr)
 void goto_symext::symex_assign(
   const expr2tc &code_assign,
   symex_targett::assignment_typet type,
+  symex_targett::step_kindt kind,
   const guardt &guard)
 {
   const code_assign2t &code = to_code_assign2t(code_assign);
@@ -213,7 +214,7 @@ void goto_symext::symex_assign(
     }
 
     guardt g(guard); // NOT the state guard!
-    symex_assign_rec(lhs, lhs, rhs, g, type);
+    symex_assign_rec(lhs, lhs, rhs, g, type, kind);
   }
 }
 
@@ -222,27 +223,28 @@ void goto_symext::symex_assign_rec(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   guardt &guard,
-  symex_targett::assignment_typet type)
+  symex_targett::assignment_typet type,
+  symex_targett::step_kindt kind)
 {
   if(is_symbol2t(lhs))
   {
-    symex_assign_symbol(lhs, full_lhs, rhs, guard, type);
+    symex_assign_symbol(lhs, full_lhs, rhs, guard, type, kind);
   }
   else if(is_index2t(lhs))
   {
-    symex_assign_array(lhs, full_lhs, rhs, guard, type);
+    symex_assign_array(lhs, full_lhs, rhs, guard, type, kind);
   }
   else if(is_member2t(lhs))
   {
-    symex_assign_member(lhs, full_lhs, rhs, guard, type);
+    symex_assign_member(lhs, full_lhs, rhs, guard, type, kind);
   }
   else if(is_if2t(lhs))
   {
-    symex_assign_if(lhs, full_lhs, rhs, guard, type);
+    symex_assign_if(lhs, full_lhs, rhs, guard, type, kind);
   }
   else if(is_typecast2t(lhs) || is_bitcast2t(lhs))
   {
-    symex_assign_typecast(lhs, full_lhs, rhs, guard, type);
+    symex_assign_typecast(lhs, full_lhs, rhs, guard, type, kind);
   }
   else if(is_constant_string2t(lhs) || is_null_object2t(lhs))
   {
@@ -250,19 +252,19 @@ void goto_symext::symex_assign_rec(
   }
   else if(is_byte_extract2t(lhs))
   {
-    symex_assign_byte_extract(lhs, full_lhs, rhs, guard, type);
+    symex_assign_byte_extract(lhs, full_lhs, rhs, guard, type, kind);
   }
   else if(is_concat2t(lhs))
   {
-    symex_assign_concat(lhs, full_lhs, rhs, guard, type);
+    symex_assign_concat(lhs, full_lhs, rhs, guard, type, kind);
   }
   else if(is_constant_struct2t(lhs))
   {
-    symex_assign_structure(lhs, full_lhs, rhs, guard, type);
+    symex_assign_structure(lhs, full_lhs, rhs, guard, type, kind);
   }
   else if(is_extract2t(lhs))
   {
-    symex_assign_extract(lhs, full_lhs, rhs, guard, type);
+    symex_assign_extract(lhs, full_lhs, rhs, guard, type, kind);
   }
   else
   {
@@ -277,8 +279,11 @@ void goto_symext::symex_assign_symbol(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   guardt &guard,
-  symex_targett::assignment_typet type)
+  symex_targett::assignment_typet type,
+  symex_targett::step_kindt kind)
 {
+  (void)kind;
+
   // put assignment guard in rhs
   if(!guard.is_true())
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
@@ -314,7 +319,8 @@ void goto_symext::symex_assign_structure(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   guardt &guard,
-  symex_targett::assignment_typet type)
+  symex_targett::assignment_typet type,
+  symex_targett::step_kindt kind)
 {
   const struct_type2t &structtype = to_struct_type(lhs->type);
   const constant_struct2t &the_structure = to_constant_struct2t(lhs);
@@ -328,7 +334,7 @@ void goto_symext::symex_assign_structure(
   {
     const expr2tc &lhs_memb = the_structure.datatype_members[i];
     member2tc rhs_memb(it, rhs, structtype.member_names[i]);
-    symex_assign_rec(lhs_memb, full_lhs, rhs_memb, guard, type);
+    symex_assign_rec(lhs_memb, full_lhs, rhs_memb, guard, type, kind);
     i++;
   }
 }
@@ -338,7 +344,8 @@ void goto_symext::symex_assign_typecast(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   guardt &guard,
-  symex_targett::assignment_typet type)
+  symex_targett::assignment_typet type,
+  symex_targett::step_kindt kind)
 {
   // these may come from dereferencing on the lhs
 
@@ -354,7 +361,7 @@ void goto_symext::symex_assign_typecast(
     rhs_typecasted = bitcast2tc(cast.from->type, rhs);
   }
 
-  symex_assign_rec(cast.from, full_lhs, rhs_typecasted, guard, type);
+  symex_assign_rec(cast.from, full_lhs, rhs_typecasted, guard, type, kind);
 }
 
 void goto_symext::symex_assign_array(
@@ -362,7 +369,8 @@ void goto_symext::symex_assign_array(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   guardt &guard,
-  symex_targett::assignment_typet type)
+  symex_targett::assignment_typet type,
+  symex_targett::step_kindt kind)
 {
   // lhs must be index operand
   // that takes two operands: the first must be an array
@@ -381,7 +389,7 @@ void goto_symext::symex_assign_array(
   with2tc new_rhs(
     index.source_value->type, index.source_value, index.index, rhs);
 
-  symex_assign_rec(index.source_value, full_lhs, new_rhs, guard, type);
+  symex_assign_rec(index.source_value, full_lhs, new_rhs, guard, type, kind);
 }
 
 void goto_symext::symex_assign_member(
@@ -389,7 +397,8 @@ void goto_symext::symex_assign_member(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   guardt &guard,
-  symex_targett::assignment_typet type)
+  symex_targett::assignment_typet type,
+  symex_targett::step_kindt kind)
 {
   // symbolic execution of a struct member assignment
 
@@ -433,7 +442,7 @@ void goto_symext::symex_assign_member(
     constant_string2tc(str_type, component_name),
     rhs);
 
-  symex_assign_rec(member.source_value, full_lhs, new_rhs, guard, type);
+  symex_assign_rec(member.source_value, full_lhs, new_rhs, guard, type, kind);
 }
 
 void goto_symext::symex_assign_if(
@@ -441,7 +450,8 @@ void goto_symext::symex_assign_if(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   guardt &guard,
-  symex_targett::assignment_typet type)
+  symex_targett::assignment_typet type,
+  symex_targett::step_kindt kind)
 {
   // we have (c?a:b)=e;
 
@@ -454,12 +464,12 @@ void goto_symext::symex_assign_if(
   guardt old_guard(guard);
 
   guard.add(cond);
-  symex_assign_rec(ifval.true_value, full_lhs, rhs, guard, type);
+  symex_assign_rec(ifval.true_value, full_lhs, rhs, guard, type, kind);
   guard = old_guard;
 
   not2tc not_cond(cond);
   guard.add(not_cond);
-  symex_assign_rec(ifval.false_value, full_lhs, rhs_copy, guard, type);
+  symex_assign_rec(ifval.false_value, full_lhs, rhs_copy, guard, type, kind);
   guard = old_guard;
 }
 
@@ -468,7 +478,8 @@ void goto_symext::symex_assign_byte_extract(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   guardt &guard,
-  symex_targett::assignment_typet type)
+  symex_targett::assignment_typet type,
+  symex_targett::step_kindt kind)
 {
   // we have byte_extract_X(l, b)=r
   // turn into l=byte_update_X(l, b, r)
@@ -492,7 +503,7 @@ void goto_symext::symex_assign_byte_extract(
     index2tc idx(arr_type.subtype, extract.source_value, div);
     byte_update2tc be2(arr_type.subtype, idx, mod, rhs, extract.big_endian);
     with2tc store(extract.source_value->type, extract.source_value, div, be2);
-    symex_assign_rec(extract.source_value, full_lhs, store, guard, type);
+    symex_assign_rec(extract.source_value, full_lhs, store, guard, type, kind);
   }
   else
   {
@@ -503,7 +514,8 @@ void goto_symext::symex_assign_byte_extract(
       rhs,
       extract.big_endian);
 
-    symex_assign_rec(extract.source_value, full_lhs, new_rhs, guard, type);
+    symex_assign_rec(
+      extract.source_value, full_lhs, new_rhs, guard, type, kind);
   }
 }
 
@@ -512,7 +524,8 @@ void goto_symext::symex_assign_concat(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   guardt &guard,
-  symex_targett::assignment_typet type)
+  symex_targett::assignment_typet type,
+  symex_targett::step_kindt kind)
 {
 // Right: generate a series of symex assigns.
 #ifndef NDEBUG
@@ -564,7 +577,7 @@ void goto_symext::symex_assign_concat(
   auto rhs_it = extracts.begin();
   while(lhs_it != operand_list.end())
   {
-    symex_assign_rec(*lhs_it, full_lhs, *rhs_it, guard, type);
+    symex_assign_rec(*lhs_it, full_lhs, *rhs_it, guard, type, kind);
     lhs_it++;
     rhs_it++;
   }
@@ -575,7 +588,8 @@ void goto_symext::symex_assign_extract(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   guardt &guard,
-  symex_targett::assignment_typet type)
+  symex_targett::assignment_typet type,
+  symex_targett::step_kindt kind)
 {
   const extract2t &ex = to_extract2t(lhs);
   assert(is_bv_type(ex.from));
@@ -627,7 +641,7 @@ void goto_symext::symex_assign_extract(
 
   // OK: accuml now has a bitblob sized expression that can be assigned into
   // the relevant field.
-  symex_assign_rec(ex.from, full_lhs, accuml, guard, type);
+  symex_assign_rec(ex.from, full_lhs, accuml, guard, type, kind);
 }
 
 void goto_symext::replace_nondet(expr2tc &expr)

@@ -140,6 +140,9 @@ public:
     // for slicing
     bool ignore;
 
+    // for k-induction
+    step_kindt instruction_kind;
+
     SSA_stept() : ignore(false)
     {
     }

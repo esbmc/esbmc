@@ -43,6 +43,13 @@ public:
   };
 
   typedef enum { STATE, HIDDEN } assignment_typet;
+  enum class step_kindt
+  {
+    BASE,
+    FORWARD,
+    INDUCTIVE,
+    PLAIN_BMC
+  };
 
   // write to a variable - must be symbol
   // the value is destroyed
