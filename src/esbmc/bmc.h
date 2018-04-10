@@ -69,7 +69,7 @@ protected:
     boost::shared_ptr<smt_convt> &smt_conv,
     boost::shared_ptr<symex_target_equationt> &eq);
 
-  virtual void successful_trace(boost::shared_ptr<symex_target_equationt> &eq);
+  virtual void successful_trace();
 
   virtual void show_vcc(boost::shared_ptr<symex_target_equationt> &eq);
 

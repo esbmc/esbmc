@@ -88,8 +88,7 @@ void bmct::do_cbmc(
   eq->convert(*smt_conv.get());
 }
 
-void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq
-                            __attribute__((unused)))
+void bmct::successful_trace()
 {
   if(options.get_bool_option("result-only"))
     return;
@@ -373,7 +372,7 @@ void bmct::report_trace(
   case smt_convt::P_UNSATISFIABLE:
     if(!bs)
     {
-      successful_trace(eq);
+      successful_trace();
     }
     break;
 
