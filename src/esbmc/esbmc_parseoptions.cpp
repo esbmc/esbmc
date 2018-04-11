@@ -1172,7 +1172,7 @@ int esbmc_parseoptionst::doit_termination()
 
 int esbmc_parseoptionst::do_base_case(
   optionst &opts,
-  const goto_functionst &goto_functions,
+  goto_functionst &goto_functions,
   const BigInt &k_step)
 {
   opts.set_option("base-case", true);
@@ -1209,7 +1209,7 @@ int esbmc_parseoptionst::do_base_case(
 
 int esbmc_parseoptionst::do_forward_condition(
   optionst &opts,
-  const goto_functionst &goto_functions,
+  goto_functionst &goto_functions,
   const BigInt &k_step)
 {
   if(opts.get_bool_option("disable-forward-condition"))
@@ -1262,7 +1262,7 @@ int esbmc_parseoptionst::do_forward_condition(
 
 int esbmc_parseoptionst::do_inductive_step(
   optionst &opts,
-  const goto_functionst &goto_functions,
+  goto_functionst &goto_functions,
   const BigInt &k_step)
 {
   // Don't run inductive step for k_step == 1

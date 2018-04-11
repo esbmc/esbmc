@@ -73,7 +73,7 @@ public:
    *  @param message_handler Message object for symex errors/warnings/info
    */
   reachability_treet(
-    const goto_functionst &goto_functions,
+    goto_functionst &goto_functions,
     const namespacet &ns,
     optionst &opts,
     boost::shared_ptr<symex_targett> target,
@@ -321,7 +321,7 @@ public:
   void save_checkpoint(const std::string &&fname) const;
 
   /** GOTO functions we're operating over. */
-  const goto_functionst &goto_functions;
+  goto_functionst &goto_functions;
   /** Context we're operating upon */
   contextt &permanent_context;
   /** Flag indicating we've executed all threads to exhaustion.
