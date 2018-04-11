@@ -612,9 +612,7 @@ bmct::run_thread(boost::shared_ptr<symex_target_equationt> &eq)
 
     if(result->remaining_claims == 0)
     {
-      if(
-        options.get_bool_option("smt-formula-too") ||
-        options.get_bool_option("smt-formula-only"))
+      if(options.get_bool_option("smt-formula-only"))
       {
         std::cout << "No VCC remaining, no SMT formula will be generated for"
                   << " the program\n";
