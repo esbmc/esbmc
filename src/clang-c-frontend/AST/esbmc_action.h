@@ -19,11 +19,10 @@
 class esbmc_action : public clang::ASTFrontendAction
 {
 public:
-  esbmc_action(const std::string&& esbmc_instrinsics) : intrinsics(esbmc_instrinsics) {};
+  esbmc_action(const std::string &&esbmc_instrinsics)
+    : intrinsics(esbmc_instrinsics){};
 
-  bool BeginSourceFileAction(
-    clang::CompilerInstance &CI,
-    llvm::StringRef Filename) override
+  bool BeginSourceFileAction(clang::CompilerInstance &CI) override
   {
     clang::Preprocessor &PP = CI.getPreprocessor();
 
@@ -34,9 +33,8 @@ public:
     return true;
   }
 
-  std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(
-    clang::CompilerInstance &CI,
-    StringRef InFile) override
+  std::unique_ptr<clang::ASTConsumer>
+  CreateASTConsumer(clang::CompilerInstance &CI, StringRef InFile) override
   {
     return llvm::make_unique<clang::ASTConsumer>();
   }
