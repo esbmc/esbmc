@@ -331,7 +331,7 @@ sub do_test($)
       print "  [OK] in $runtime seconds\n";
     } else {
       $failures++;
-      print "  [FAILED]\n";
+      print "  [FAILED] in $runtime seconds\n";
     }
   }
 }
