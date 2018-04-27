@@ -2,7 +2,6 @@
 
 #include <math.h>
 #include <fenv.h>
-#include "../intrinsics.h"
 
 #define round_def(ret_type, type, name, rint_func, copysign_func, abs_func)    \
   ret_type name(type f)                                                        \

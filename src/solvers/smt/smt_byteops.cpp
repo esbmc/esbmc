@@ -38,7 +38,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
     lshr2tc shr(source->type, source, offs);
     smt_astt ext = convert_ast(shr);
-    smt_astt res = mk_extract(ext, 7, 0, convert_sort(get_uint8_type()));
+    smt_astt res = mk_extract(ext, 7, 0);
     return res;
   }
 
@@ -74,11 +74,11 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
     unsigned int sort_sz = data.source_value->type->get_width();
     if(sort_sz <= upper)
     {
-      smt_sortt s = mk_sort(SMT_SORT_UBV, 8);
+      smt_sortt s = mk_int_bv_sort(8);
       return mk_smt_symbol("out_of_bounds_byte_extract", s);
     }
 
-    return mk_extract(source_ast, upper, lower, convert_sort(expr->type));
+    return mk_extract(source_ast, upper, lower);
   }
 }
 
@@ -180,8 +180,8 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     abort();
   }
 
-    // Assertion some of our assumptions, which broadly mean that we'll only work
-    // on bytes that are going into non-byte words
+// Assertion some of our assumptions, which broadly mean that we'll only work
+// on bytes that are going into non-byte words
 #ifndef NDEBUG
   unsigned int width_op2 = data.update_value->type->get_width();
   assert(width_op2 == 8 && "Can't byte update non-byte operations");
@@ -208,10 +208,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     top = value;
   }
   else
-  {
-    smt_sortt s = mk_sort(SMT_SORT_UBV, width_op0 - top_of_update);
-    top = mk_extract(src_value, width_op0 - 1, top_of_update, s);
-  }
+    top = mk_extract(src_value, width_op0 - 1, top_of_update);
 
   if(top == value)
   {
@@ -228,23 +225,15 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     bottom = value;
   }
   else
-  {
-    smt_sortt s = mk_sort(SMT_SORT_UBV, bottom_of_update);
-    bottom = mk_extract(src_value, bottom_of_update - 1, 0, s);
-  }
+    bottom = mk_extract(src_value, bottom_of_update - 1, 0);
 
   // Concatenate the top and bottom, and possible middle, together.
   smt_astt concat;
 
   if(middle != nullptr)
-  {
-    smt_sortt s = mk_sort(SMT_SORT_UBV, width_op0 - bottom_of_update);
-    concat = mk_func_app(s, SMT_FUNC_CONCAT, top, middle);
-  }
+    concat = mk_concat(top, middle);
   else
-  {
     concat = top;
-  }
 
-  return mk_func_app(src_value->sort, SMT_FUNC_CONCAT, concat, bottom);
+  return mk_concat(concat, bottom);
 }

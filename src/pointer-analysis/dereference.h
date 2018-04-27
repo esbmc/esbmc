@@ -184,7 +184,8 @@ public:
     : ns(_ns),
       new_context(_new_context),
       options(_options),
-      dereference_callback(_dereference_callback)
+      dereference_callback(_dereference_callback),
+      block_assertions(false)
   {
     is_big_endian =
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
@@ -248,6 +249,8 @@ private:
    *  of a reference, and instead return the data to the caller via the
    *  callback. */
   std::list<dereference_callbackt::internal_item> internal_items;
+  /** Flag for discarding all assertions encoded. */
+  bool block_assertions;
 
   /** Interpret an expression that modifies the guard. i.e., an 'if' or a
    *  piece of logic that can be short-circuited.
@@ -382,6 +385,7 @@ private:
     const std::string &error_name,
     const guardt &guard);
   void alignment_failure(const std::string &error_name, const guardt &guard);
+
   void bad_base_type_failure(
     const guardt &guard,
     const std::string &wants,
@@ -403,6 +407,7 @@ private:
     const expr2tc &&offset,
     const guardt &guard);
 
+public:
   void build_reference_rec(
     expr2tc &value,
     const expr2tc &offset,
@@ -410,6 +415,8 @@ private:
     const guardt &guard,
     modet mode,
     unsigned long alignment = 0);
+
+private:
   void construct_from_const_offset(
     expr2tc &value,
     const expr2tc &offset,
@@ -471,6 +478,17 @@ private:
     const guardt &guard,
     modet mode,
     unsigned long alignment = 0);
+
+public:
+  void set_block_assertions(void)
+  {
+    block_assertions = true;
+  }
+
+  void clear_block_assertions(void)
+  {
+    block_assertions = false;
+  }
 };
 
 #endif

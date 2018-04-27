@@ -1,4 +1,0 @@
-FUTURE
-lamport.c
---unwind 1 --no-unwinding-assertions
-^VERIFICATION SUCCESSFUL$

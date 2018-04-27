@@ -166,10 +166,9 @@ smt_astt array_convt::mk_select(
   smt_astt theval = fresh; // Failed-to-look-up value
   for(unsigned long i = 0; i < ma->array_fields.size(); i++)
   {
-    smt_astt tmp_idx = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
+    smt_astt tmp_idx = ctx->mk_smt_bv(BigInt(i), dom_width);
     smt_astt idx_eq = real_idx->eq(ctx, tmp_idx);
     theval = ma->array_fields[i]->ite(ctx, idx_eq, theval);
-
   }
 
   return theval;
@@ -211,7 +210,7 @@ smt_astt array_convt::mk_store(
 
   for(unsigned long i = 0; i < mast->array_fields.size(); i++)
   {
-    smt_astt this_idx = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
+    smt_astt this_idx = ctx->mk_smt_bv(BigInt(i), dom_width);
     smt_astt idx_eq = real_idx->eq(ctx, this_idx);
 
     smt_astt new_val = real_value->ite(ctx, idx_eq, mast->array_fields[i]);
@@ -394,10 +393,10 @@ smt_astt
 array_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   // Create a new array, initialized with init_val
-  smt_sortt dom_sort = ctx->mk_sort(SMT_SORT_UBV, domain_width);
+  smt_sortt dom_sort = ctx->mk_int_bv_sort(domain_width);
   smt_sortt idx_sort = init_val->sort;
 
-  smt_sortt arr_sort = ctx->mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
+  smt_sortt arr_sort = ctx->mk_array_sort(dom_sort, idx_sort);
   return convert_array_of_wsort(init_val, domain_width, arr_sort);
 }
 
@@ -469,7 +468,7 @@ array_convt::mk_bounded_array_equality(const array_ast *a1, const array_ast *a2)
     eqs.push_back(a1->array_fields[i]->eq(ctx, a2->array_fields[i]));
   }
 
-  return ctx->make_conjunct(eqs);
+  return ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs);
 }
 
 expr2tc
@@ -808,7 +807,6 @@ void array_convt::add_new_indexes()
 
   // Now that we've allocated vector index locations, resize the array valuation
   // vector(s) to have storage for that many ast members.
-  arrid = 0;
   for(arrid = 0; arrid < array_valuation.size(); arrid++)
   {
     array_update_vect &valuation = array_valuation[arrid];
@@ -878,8 +876,9 @@ void array_convt::execute_new_updates()
 
     std::list<const array_witht *> withs;
     auto rit = update_index.begin();
-    while (rit != update_index.end()) {
-      if (rit->ctx_level == ctx->ctx_level && !rit->converted)
+    while(rit != update_index.end())
+    {
+      if(rit->ctx_level == ctx->ctx_level && !rit->converted)
         withs.push_back(&(*rit));
       else if(rit->ctx_level != UINT_MAX) // ahem
         break;
@@ -924,7 +923,7 @@ void array_convt::apply_new_selects()
     // Go through each of these selects.
     for(auto &it = pair.first; it != pair.second; it++)
     {
-      if (it->converted)
+      if(it->converted)
         continue;
       it->converted = true;
 
@@ -942,9 +941,12 @@ void array_convt::apply_new_selects()
 
       // Symbol avoidance: if no valuation was given (NULL) then the creator
       // of this index is trying to read directly from the array valuations
-      if (!it->val) {
+      if(!it->val)
+      {
         it->val = dest;
-      } else {
+      }
+      else
+      {
         // "Old" code?
         // OK, bind this select in through an equality.
         ctx->assert_ast(dest->eq(ctx, it->val));
@@ -1034,7 +1036,7 @@ void array_convt::add_array_equality(
     lits.push_back(a1[i]->eq(ctx, a2[i]));
   }
 
-  smt_astt conj = ctx->make_conjunct(lits);
+  smt_astt conj = ctx->make_n_ary(ctx, &smt_convt::mk_and, lits);
   assert(result == NULL);
   result = conj;
   return;
@@ -1294,7 +1296,6 @@ void array_convt::add_initial_ackerman_constraints(
   // where the indexes are equivalent (in the solver), then the value of the
   // elements are equivalent. The cost is quadratic, alas.
 
-  smt_sortt boolsort = ctx->boolean_sort;
   for(auto const &it : idx_map)
   {
     if(it.vec_idx < start_point)
@@ -1310,8 +1311,7 @@ void array_convt::add_initial_ackerman_constraints(
 
       smt_astt valeq = vals[it.vec_idx]->eq(ctx, vals[it2.vec_idx]);
 
-      ctx->assert_ast(
-        ctx->mk_func_app(boolsort, SMT_FUNC_IMPLIES, idxeq, valeq));
+      ctx->assert_ast(ctx->mk_implies(idxeq, valeq));
     }
   }
 }

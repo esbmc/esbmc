@@ -1,4 +1,0 @@
-FUTURE
-main.c
---unwind 2 --no-unwinding-assertions
-^VERIFICATION FAILED$

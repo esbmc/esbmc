@@ -1797,15 +1797,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     else if(expr.statement() == "va_arg")
       t = sideeffect2t::va_arg;
     else if(expr.statement() == "function_call")
+    {
       t = sideeffect2t::function_call;
-    else
-    {
-      std::cerr << "Unexpected side-effect statement\n";
-      abort();
-    }
-
-    if(t == sideeffect2t::function_call)
-    {
       const exprt &arguments = expr.op1();
       forall_operands(it, arguments)
       {
@@ -1813,9 +1806,25 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         migrate_expr(*it, args.back());
       }
     }
+    else if(expr.statement() == "printf")
+    {
+      for(auto const &it : expr.operands())
+      {
+        expr2tc tmp_op;
+        migrate_expr(it, tmp_op);
+        args.push_back(tmp_op);
+      }
+      new_expr_ref = code_printf2tc(args);
+      return;
+    }
+    else
+    {
+      std::cerr << "Unexpected side-effect statement\n";
+      abort();
+    }
 
     new_expr_ref =
-      expr2tc(new sideeffect2t(plaintype, operand, thesize, args, cmt_type, t));
+      sideeffect2tc(plaintype, operand, thesize, args, cmt_type, t);
   }
   else if(expr.id() == irept::id_code && expr.statement() == "assign")
   {

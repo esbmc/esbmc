@@ -1888,6 +1888,8 @@ public:
     const expr2tc &falseval)
     : if_expr_methods(type, if_id, cond, trueval, falseval)
   {
+    assert(cond->type->type_id == type2t::bool_id);
+    assert(trueval->type->type_id == falseval->type->type_id);
   }
   if2t(const if2t &ref) = default;
 
@@ -1904,6 +1906,10 @@ public:
   equality2t(const expr2tc &v1, const expr2tc &v2)
     : equality_expr_methods(type_pool.get_bool(), equality_id, v1, v2)
   {
+    if(
+      (v1->type->type_id != type2t::array_id) &&
+      (v2->type->type_id != type2t::array_id))
+      assert(v1->type->get_width() == v2->type->get_width());
   }
   equality2t(const equality2t &ref) = default;
 
@@ -1920,6 +1926,7 @@ public:
   notequal2t(const expr2tc &v1, const expr2tc &v2)
     : notequal_expr_methods(type_pool.get_bool(), notequal_id, v1, v2)
   {
+    assert(v1->type->get_width() == v2->type->get_width());
   }
   notequal2t(const notequal2t &ref) = default;
 
@@ -2005,6 +2012,7 @@ public:
   not2t(const expr2tc &val)
     : not_expr_methods(type_pool.get_bool(), not_id, val)
   {
+    assert(val->type->type_id == type2t::bool_id);
   }
   not2t(const not2t &ref) = default;
 
@@ -2022,6 +2030,8 @@ public:
   and2t(const expr2tc &s1, const expr2tc &s2)
     : and_expr_methods(type_pool.get_bool(), and_id, s1, s2)
   {
+    assert(s1->type->type_id == type2t::bool_id);
+    assert(s2->type->type_id == type2t::bool_id);
   }
   and2t(const and2t &ref) = default;
 
@@ -2039,6 +2049,8 @@ public:
   or2t(const expr2tc &s1, const expr2tc &s2)
     : or_expr_methods(type_pool.get_bool(), or_id, s1, s2)
   {
+    assert(s1->type->type_id == type2t::bool_id);
+    assert(s2->type->type_id == type2t::bool_id);
   }
   or2t(const or2t &ref) = default;
 
@@ -2056,6 +2068,8 @@ public:
   xor2t(const expr2tc &s1, const expr2tc &s2)
     : xor_expr_methods(type_pool.get_bool(), xor_id, s1, s2)
   {
+    assert(s1->type->type_id == type2t::bool_id);
+    assert(s2->type->type_id == type2t::bool_id);
   }
   xor2t(const xor2t &ref) = default;
 
@@ -2073,6 +2087,8 @@ public:
   implies2t(const expr2tc &s1, const expr2tc &s2)
     : implies_expr_methods(type_pool.get_bool(), implies_id, s1, s2)
   {
+    assert(s1->type->type_id == type2t::bool_id);
+    assert(s2->type->type_id == type2t::bool_id);
   }
   implies2t(const implies2t &ref) = default;
 
@@ -2497,6 +2513,8 @@ public:
   }
   ieee_fma2t(const ieee_fma2t &ref) = default;
 
+  expr2tc do_simplify(bool second) const override;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2516,6 +2534,8 @@ public:
   {
   }
   ieee_sqrt2t(const ieee_sqrt2t &ref) = default;
+
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -3408,6 +3428,15 @@ public:
   concat2t(const type2tc &type, const expr2tc &forward, const expr2tc &aft)
     : concat_expr_methods(type, concat_id, forward, aft)
   {
+    assert(
+      (forward->type->type_id == type2t::unsignedbv_id) ||
+      (forward->type->type_id == type2t::signedbv_id));
+    assert(
+      (aft->type->type_id == type2t::unsignedbv_id) ||
+      (aft->type->type_id == type2t::signedbv_id));
+    assert(
+      (forward->type->get_width() + aft->type->get_width()) ==
+      type->get_width());
   }
   concat2t(const concat2t &ref) = default;
 
@@ -3426,6 +3455,7 @@ public:
     unsigned int lower)
     : extract_expr_methods(type, extract_id, from, upper, lower)
   {
+    assert((upper - lower + 1) == type->get_width());
   }
   extract2t(const extract2t &ref) = default;
 

@@ -1,5 +1,4 @@
-#include <type_traits>
-
+#include <memory>
 #include <ac_config.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/functional/hash.hpp>
@@ -2579,8 +2578,13 @@ auto esbmct::
     const -> base_container2tc
 {
   const derived *derived_this = static_cast<const derived *>(this);
-  derived *new_obj = new derived(*derived_this);
-  return base_container2tc(new_obj);
+  // Use std::make_shared to clone this with one allocation, it puts the ref
+  // counting block ahead of the data object itself. This necessitates making
+  // a bare std::shared_ptr first, and then feeding that into an expr2tc
+  // container.
+  // Generally, storing an irep in a bare std::shared_ptr loses the detach
+  // facility and breaks everything, this is an exception.
+  return base_container2tc(std::make_shared<derived>(*derived_this));
 }
 
 template <

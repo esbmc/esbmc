@@ -3,8 +3,6 @@
 #include <math.h>
 #include <fenv.h>
 
-#include "../intrinsics.h"
-
 #define floor_def(type, name, rint_func)                                       \
   type name(type f)                                                            \
   {                                                                            \

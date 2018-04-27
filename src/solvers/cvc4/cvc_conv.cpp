@@ -23,11 +23,7 @@ cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
     sym_tab()
 {
   // Already initialized stuff in the constructor list,
-
   smt.setOption("produce-models", true);
-  smt.setLogic("QF_AUFBV");
-
-  assert(!int_encoding && "Integer encoding mode for CVC unimplemented");
 }
 
 smt_convt::resultt cvc_convt::dec_solve()
@@ -38,26 +34,49 @@ smt_convt::resultt cvc_convt::dec_solve()
   if(r.isSat())
     return P_SATISFIABLE;
 
-  if(!r.isUnknown())
+  if(r.isUnknown())
     return P_ERROR;
 
   return P_UNSATISFIABLE;
 }
 
-expr2tc cvc_convt::get_bool(const smt_ast *a)
+bool cvc_convt::get_bool(const smt_ast *a)
 {
-  const cvc_smt_ast *ca = cvc_ast_downcast(a);
-  CVC4::Expr e = smt.getValue(ca->e);
-  bool foo = e.getConst<bool>();
-  return foo ? gen_true_expr() : gen_false_expr();
+  auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
+  CVC4::Expr e = smt.getValue(ca->a);
+  return e.getConst<bool>();
 }
 
-expr2tc cvc_convt::get_bv(const type2tc &type, smt_astt a)
+ieee_floatt cvc_convt::get_fpbv(smt_astt a)
 {
-  const cvc_smt_ast *ca = cvc_ast_downcast(a);
-  CVC4::Expr e = smt.getValue(ca->e);
+  auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
+  CVC4::Expr e = smt.getValue(ca->a);
+  CVC4::FloatingPoint foo = e.getConst<CVC4::FloatingPoint>();
+
+  ieee_floatt number(ieee_float_spect(
+    a->sort->get_significand_width(), a->sort->get_exponent_width()));
+
+  if(foo.isNaN())
+    number.make_NaN();
+  else if(foo.isInfinite())
+  {
+    if(foo.isPositive())
+      number.make_plus_infinity();
+    else
+      number.make_minus_infinity();
+  }
+  else
+    number.unpack(BigInt(foo.pack().toInteger().getUnsignedLong()));
+
+  return number;
+}
+
+BigInt cvc_convt::get_bv(smt_astt a)
+{
+  auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
+  CVC4::Expr e = smt.getValue(ca->a);
   CVC4::BitVector foo = e.getConst<CVC4::BitVector>();
-  return build_bv(type, BigInt(foo.toInteger().getUnsignedLong()));
+  return BigInt(foo.toInteger().getUnsignedLong());
 }
 
 expr2tc cvc_convt::get_array_elem(
@@ -65,19 +84,15 @@ expr2tc cvc_convt::get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  const cvc_smt_ast *carray = cvc_ast_downcast(array);
+  auto const *carray = to_solver_smt_ast<cvc_smt_ast>(array);
   size_t orig_w = array->sort->get_domain_width();
 
-  smt_ast *tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
-  const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
-  CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->e, tmpa->e);
-  free(tmpast);
+  smt_astt tmpast = mk_smt_bv(BigInt(index), mk_bv_sort(orig_w));
+  auto const *tmpa = to_solver_smt_ast<cvc_smt_ast>(tmpast);
+  CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->a, tmpa->a);
+  delete tmpast;
 
-  cvc_smt_ast *tmpb = new cvc_smt_ast(this, convert_sort(subtype), e);
-  expr2tc result = get_bv(subtype, tmpb);
-  free(tmpb);
-
-  return result;
+  return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }
 
 const std::string cvc_convt::solver_text()
@@ -87,226 +102,977 @@ const std::string cvc_convt::solver_text()
   return ss.str();
 }
 
+smt_astt cvc_convt::mk_add(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::PLUS,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_sub(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::MINUS,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_mul(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::MULT,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_mod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::INTS_MODULUS,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_div(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::INTS_DIVISION,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_shl(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
+
+  CVC4::Expr p = em.mkExpr(
+    CVC4::kind::POW,
+    to_solver_smt_ast<cvc_smt_ast>(mk_smt_bv(2, b->sort))->a,
+    to_solver_smt_ast<cvc_smt_ast>(b)->a);
+  return new_ast(
+    em.mkExpr(CVC4::kind::MULT, to_solver_smt_ast<cvc_smt_ast>(a)->a, p),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_neg(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(CVC4::kind::UMINUS, to_solver_smt_ast<cvc_smt_ast>(a)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_lt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::LT,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_gt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::GT,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_le(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::LEQ,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_ge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::GEQ,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_real2int(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(CVC4::kind::TO_INTEGER, to_solver_smt_ast<cvc_smt_ast>(a)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_int2real(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(CVC4::kind::TO_REAL, to_solver_smt_ast<cvc_smt_ast>(a)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_isint(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(CVC4::kind::IS_INTEGER, to_solver_smt_ast<cvc_smt_ast>(a)->a),
+    a->sort);
+}
+
+smt_astt
+cvc_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_FMA,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(v1)->a,
+      to_solver_smt_ast<cvc_smt_ast>(v2)->a,
+      to_solver_smt_ast<cvc_smt_ast>(v3)->a),
+    v1->sort);
+}
+
+smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(
+  smt_astt from,
+  std::size_t width)
+{
+  smt_sortt to = mk_bv_sort(width);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_UBV,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a,
+      em.mkConst(CVC4::FloatingPointToUBV(width))),
+    to);
+}
+
+smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_sbv(
+  smt_astt from,
+  std::size_t width)
+{
+  smt_sortt to = mk_bv_sort(width);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_SBV,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a,
+      em.mkConst(CVC4::FloatingPointToSBV(width))),
+    to);
+}
+
+smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
+
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_FP_FLOATINGPOINT,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a,
+      em.mkConst(CVC4::FloatingPointToFPFloatingPoint(ew, sw))),
+    to);
+}
+
+smt_astt
+cvc_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+{
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
+
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_FP_UNSIGNED_BITVECTOR,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a,
+      em.mkConst(CVC4::FloatingPointToFPUnsignedBitVector(ew, sw))),
+    to);
+}
+
+smt_astt
+cvc_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+{
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
+
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_FP_SIGNED_BITVECTOR,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a,
+      em.mkConst(CVC4::FloatingPointToFPSignedBitVector(ew, sw))),
+    to);
+}
+
+smt_astt cvc_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
+{
+  unsigned sw = to->get_significand_width() - 1;
+  unsigned ew = to->get_exponent_width();
+
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_TO_FP_IEEE_BITVECTOR,
+      to_solver_smt_ast<cvc_smt_ast>(op)->a,
+      em.mkConst(CVC4::FloatingPointToFPIEEEBitVector(ew, sw))),
+    to);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_PLUS,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    lhs->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_SUB,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    lhs->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_MULT,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    lhs->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_DIV,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    lhs->sort);
+}
+
+smt_astt cvc_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_RTI,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(from)->a),
+    from->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_SQRT,
+      to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rd)->a),
+    rd->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_EQ,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_GT,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_LT,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_GEQ,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_LEQ,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_nan(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISNAN, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_inf(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISINF, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_normal(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISN, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_zero(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISZ, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_negative(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISNEG, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_is_positive(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ISPOS, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_abs(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_ABS, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    op->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_neg(smt_astt op)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_NEG, to_solver_smt_ast<cvc_smt_ast>(op)->a),
+    op->sort);
+}
+
 void cvc_convt::assert_ast(const smt_ast *a)
 {
-  const cvc_smt_ast *ca = cvc_ast_downcast(a);
-  smt.assertFormula(ca->e);
+  auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
+  smt.assertFormula(ca->a);
 }
 
-smt_ast *cvc_convt::mk_func_app(
-  const smt_sort *s,
-  smt_func_kind k,
-  const smt_ast *const *_args,
-  unsigned int numargs)
+smt_astt cvc_convt::mk_bvadd(smt_astt a, smt_astt b)
 {
-  const cvc_smt_ast *args[4];
-  unsigned int i;
-
-  assert(numargs <= 4);
-  for(i = 0; i < numargs; i++)
-    args[i] = cvc_ast_downcast(_args[i]);
-
-  CVC4::Expr e;
-
-  switch(k)
-  {
-  case SMT_FUNC_EQ:
-    e = em.mkExpr(CVC4::kind::EQUAL, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_NOTEQ:
-    e = em.mkExpr(CVC4::kind::DISTINCT, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_AND:
-    e = em.mkExpr(CVC4::kind::AND, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_OR:
-    e = em.mkExpr(CVC4::kind::OR, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_XOR:
-    e = em.mkExpr(CVC4::kind::XOR, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_IMPLIES:
-    e = em.mkExpr(CVC4::kind::IMPLIES, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_ITE:
-    e = em.mkExpr(CVC4::kind::ITE, args[0]->e, args[1]->e, args[2]->e);
-    break;
-  case SMT_FUNC_NOT:
-    e = em.mkExpr(CVC4::kind::NOT, args[0]->e);
-    break;
-  case SMT_FUNC_BVNOT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_NOT, args[0]->e);
-    break;
-  case SMT_FUNC_BVNEG:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_NEG, args[0]->e);
-    break;
-  case SMT_FUNC_BVADD:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_PLUS, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVSUB:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SUB, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVMUL:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_MULT, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVSDIV:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SDIV, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVUDIV:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_UDIV, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVSMOD:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SREM, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVUMOD:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_UREM, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVLSHR:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_LSHR, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVASHR:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_ASHR, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVSHL:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SHL, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVUGT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_UGT, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVUGTE:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_UGE, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVULT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_ULT, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVULTE:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_ULE, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVSGT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SGT, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVSGTE:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SGE, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVSLT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SLT, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVSLTE:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_SLE, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVAND:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_AND, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVOR:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_OR, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_BVXOR:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_XOR, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_STORE:
-    e = em.mkExpr(CVC4::kind::STORE, args[0]->e, args[1]->e, args[2]->e);
-    break;
-  case SMT_FUNC_SELECT:
-    e = em.mkExpr(CVC4::kind::SELECT, args[0]->e, args[1]->e);
-    break;
-  case SMT_FUNC_CONCAT:
-    e = em.mkExpr(CVC4::kind::BITVECTOR_CONCAT, args[0]->e, args[1]->e);
-    break;
-  default:
-    std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[k]
-              << "\" in CVC conversion" << std::endl;
-    abort();
-  }
-
-  return new cvc_smt_ast(this, s, e);
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_PLUS,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
 }
 
-smt_sortt cvc_convt::mk_sort(const smt_sort_kind k, ...)
+smt_astt cvc_convt::mk_bvsub(smt_astt a, smt_astt b)
 {
-  va_list ap;
-
-  va_start(ap, k);
-  switch(k)
-  {
-  case SMT_SORT_BOOL:
-    return new cvc_smt_sort(k, em.booleanType());
-  case SMT_SORT_FIXEDBV:
-  case SMT_SORT_UBV:
-  case SMT_SORT_SBV:
-  {
-    unsigned long uint = va_arg(ap, unsigned long);
-    return new cvc_smt_sort(k, em.mkBitVectorType(uint), uint);
-  }
-  case SMT_SORT_ARRAY:
-  {
-    const cvc_smt_sort *dom = va_arg(ap, const cvc_smt_sort *);
-    const cvc_smt_sort *range = va_arg(ap, const cvc_smt_sort *);
-    assert(int_encoding || dom->get_data_width() != 0);
-
-    // The range data width is allowed to be zero, which happens if the range
-    // is not a bitvector / integer
-    unsigned int data_width = range->get_data_width();
-    if(
-      range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL ||
-      range->id == SMT_SORT_UNION)
-      data_width = 1;
-
-    return new cvc_smt_sort(
-      k,
-      em.mkArrayType(dom->s, range->s),
-      data_width,
-      dom->get_data_width(),
-      range);
-    break;
-  }
-  case SMT_SORT_FLOATBV:
-  {
-    unsigned ew = va_arg(ap, unsigned long);
-    unsigned sw = va_arg(ap, unsigned long);
-    return mk_fpbv_sort(ew, sw);
-  }
-  default:
-    std::cerr << "Unimplemented smt sort " << k << " in CVC mk_sort"
-              << std::endl;
-    abort();
-  }
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_SUB,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
 }
 
-smt_ast *cvc_convt::mk_smt_int(
-  const mp_integer &theint __attribute__((unused)),
+smt_astt cvc_convt::mk_bvmul(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_MULT,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvsmod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_SREM,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvumod(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_UREM,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvsdiv(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_SDIV,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvudiv(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_UDIV,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvshl(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_SHL,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvashr(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_ASHR,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvlshr(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_LSHR,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvneg(smt_astt a)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(CVC4::kind::BITVECTOR_NEG, to_solver_smt_ast<cvc_smt_ast>(a)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvnot(smt_astt a)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast(
+    em.mkExpr(CVC4::kind::BITVECTOR_NOT, to_solver_smt_ast<cvc_smt_ast>(a)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvnxor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_XNOR,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvnor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_NOR,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvnand(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_NAND,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvxor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_XOR,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_OR,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_bvand(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_AND,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_implies(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::IMPLIES,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_xor(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::XOR,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_or(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::OR,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_and(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::AND,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_not(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_BOOL);
+  return new_ast(
+    em.mkExpr(CVC4::kind::NOT, to_solver_smt_ast<cvc_smt_ast>(a)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_bvult(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_ULT,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_bvslt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_SLT,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_bvugt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_UGT,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_bvsgt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_SGT,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_bvule(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_ULE,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_bvsle(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_SLE,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_bvuge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_UGE,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_bvsge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::BITVECTOR_SGE,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_eq(smt_astt a, smt_astt b)
+{
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::EQUAL,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_neq(smt_astt a, smt_astt b)
+{
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::DISTINCT,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    boolean_sort);
+}
+
+smt_astt cvc_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
+{
+  assert(a->sort->id == SMT_SORT_ARRAY);
+  assert(a->sort->get_domain_width() == b->sort->get_data_width());
+  assert(
+    a->sort->get_range_sort()->get_data_width() == c->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::STORE,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a,
+      to_solver_smt_ast<cvc_smt_ast>(c)->a),
+    a->sort);
+}
+
+smt_astt cvc_convt::mk_select(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_ARRAY);
+  assert(a->sort->get_domain_width() == b->sort->get_data_width());
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::SELECT,
+      to_solver_smt_ast<cvc_smt_ast>(a)->a,
+      to_solver_smt_ast<cvc_smt_ast>(b)->a),
+    a->sort->get_range_sort());
+}
+
+smt_astt cvc_convt::mk_smt_int(
+  const mp_integer &theint,
   bool sign __attribute__((unused)))
 {
+  // TODO: Is this correct? CVC4 doesn't have any call for
+  // em.mkConst(CVC4::Integer(...));
+  smt_sortt s = mk_int_sort();
+  CVC4::Expr e = em.mkConst(CVC4::Rational(theint.to_int64()));
+  return new_ast(e, s);
+}
+
+smt_astt cvc_convt::mk_smt_real(const std::string &str)
+{
+  smt_sortt s = mk_real_sort();
+  return new_ast(em.mkConst(CVC4::Rational(str)), s);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
+{
+  smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);
+
+  const mp_integer sig = thereal.get_fraction();
+
+  // If the number is denormal, we set the exponent to 0
+  const mp_integer exp =
+    thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
+
+  std::string smt_str = thereal.get_sign() ? "1" : "0";
+  smt_str += integer2binary(exp, thereal.spec.e);
+  smt_str += integer2binary(sig, thereal.spec.f);
+
+  return new_ast(
+    em.mkConst(CVC4::FloatingPoint(
+      s->get_exponent_width(), s->get_significand_width(), smt_str)),
+    s);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
+{
+  smt_sortt s = mk_real_fp_sort(ew, sw - 1);
+  return new_ast(
+    em.mkConst(CVC4::FloatingPoint::makeNaN(CVC4::FloatingPointSize(
+      s->get_exponent_width(), s->get_significand_width()))),
+    s);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  smt_sortt s = mk_real_fp_sort(ew, sw - 1);
+  return new_ast(
+    em.mkConst(CVC4::FloatingPoint::makeInf(
+      CVC4::FloatingPointSize(
+        s->get_exponent_width(), s->get_significand_width()),
+      sgn)),
+    s);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
+{
+  smt_sortt s = mk_fpbv_rm_sort();
+
+  switch(rm)
+  {
+  case ieee_floatt::ROUND_TO_EVEN:
+    return new_ast(em.mkConst(CVC4::RoundingMode::roundNearestTiesToEven), s);
+  case ieee_floatt::ROUND_TO_MINUS_INF:
+    return new_ast(em.mkConst(CVC4::RoundingMode::roundTowardNegative), s);
+  case ieee_floatt::ROUND_TO_PLUS_INF:
+    return new_ast(em.mkConst(CVC4::RoundingMode::roundTowardPositive), s);
+  case ieee_floatt::ROUND_TO_ZERO:
+    return new_ast(em.mkConst(CVC4::RoundingMode::roundTowardZero), s);
+  default:
+    break;
+  }
+
   abort();
 }
 
-smt_ast *cvc_convt::mk_smt_real(const std::string &str __attribute__((unused)))
+smt_astt cvc_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
 {
-  abort();
-}
-
-smt_ast *
-cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
-{
-  smt_sortt s = mk_sort(
-    ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV,
-    width);
+  std::size_t w = s->get_data_width();
 
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv =
-    CVC4::BitVector(width, (unsigned long int)theint.to_int64());
+  CVC4::BitVector bv = CVC4::BitVector(w, (unsigned long int)theint.to_int64());
   CVC4::Expr e = em.mkConst(bv);
-  return new cvc_smt_ast(this, s, e);
+  return new_ast(e, s);
 }
 
-smt_ast *cvc_convt::mk_smt_bool(bool val)
+smt_astt cvc_convt::mk_smt_bool(bool val)
 {
   const smt_sort *s = boolean_sort;
   CVC4::Expr e = em.mkConst(val);
-  return new cvc_smt_ast(this, s, e);
+  return new_ast(e, s);
 }
 
-smt_ast *cvc_convt::mk_array_symbol(
+smt_astt cvc_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
   smt_sortt array_subtype)
@@ -314,45 +1080,82 @@ smt_ast *cvc_convt::mk_array_symbol(
   return mk_smt_symbol(name, s);
 }
 
-smt_ast *cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
+smt_astt cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  const cvc_smt_sort *sort = cvc_sort_downcast(s);
-
-  // If someone's making a tuple-symbol, wave our hands and do nothing. It's
-  // the tuple modelling code doing some symbol sillyness.
-  if(s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
-    return nullptr;
-
   // Standard arrangement: if we already have the name, return the expression
   // from the symbol table. If not, time for a new name.
   if(sym_tab.isBound(name))
   {
     CVC4::Expr e = sym_tab.lookup(name);
-    return new cvc_smt_ast(this, s, e);
+    return new_ast(e, s);
   }
 
   // Time for a new one.
-  CVC4::Expr e = em.mkVar(name, sort->s); // "global", eh?
+  CVC4::Expr e =
+    em.mkVar(name, to_solver_smt_sort<CVC4::Type>(s)->s); // "global", eh?
   sym_tab.bind(name, e, true);
-  return new cvc_smt_ast(this, s, e);
+  return new_ast(e, s);
 }
 
-smt_sort *cvc_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
+smt_astt
+cvc_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
 {
-  abort();
-}
-
-smt_ast *cvc_convt::mk_extract(
-  const smt_ast *a,
-  unsigned int high,
-  unsigned int low,
-  const smt_sort *s)
-{
-  const cvc_smt_ast *ca = cvc_ast_downcast(a);
+  auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
   CVC4::BitVectorExtract ext(high, low);
   CVC4::Expr ext2 = em.mkConst(ext);
-  CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_EXTRACT, ext2, ca->e);
-  return new cvc_smt_ast(this, s, fin);
+  CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_EXTRACT, ext2, ca->a);
+
+  smt_sortt s = mk_bv_sort(high - low + 1);
+  return new_ast(fin, s);
+}
+
+smt_astt cvc_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
+{
+  auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
+  CVC4::BitVectorSignExtend ext(topwidth);
+  CVC4::Expr ext2 = em.mkConst(ext);
+  CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_SIGN_EXTEND, ext2, ca->a);
+
+  smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
+  return new_ast(fin, s);
+}
+
+smt_astt cvc_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
+{
+  auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
+  CVC4::BitVectorZeroExtend ext(topwidth);
+  CVC4::Expr ext2 = em.mkConst(ext);
+  CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_ZERO_EXTEND, ext2, ca->a);
+
+  smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
+  return new_ast(fin, s);
+}
+
+smt_astt cvc_convt::mk_concat(smt_astt a, smt_astt b)
+{
+  smt_sortt s =
+    mk_bv_sort(a->sort->get_data_width() + b->sort->get_data_width());
+
+  CVC4::Expr e = em.mkExpr(
+    CVC4::kind::BITVECTOR_CONCAT,
+    to_solver_smt_ast<cvc_smt_ast>(a)->a,
+    to_solver_smt_ast<cvc_smt_ast>(b)->a);
+
+  return new_ast(e, s);
+}
+
+smt_astt cvc_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
+{
+  assert(cond->sort->id == SMT_SORT_BOOL);
+  assert(t->sort->get_data_width() == f->sort->get_data_width());
+
+  CVC4::Expr e = em.mkExpr(
+    CVC4::kind::ITE,
+    to_solver_smt_ast<cvc_smt_ast>(cond)->a,
+    to_solver_smt_ast<cvc_smt_ast>(t)->a,
+    to_solver_smt_ast<cvc_smt_ast>(f)->a);
+
+  return new_ast(e, t->sort);
 }
 
 const smt_ast *
@@ -371,4 +1174,75 @@ void cvc_convt::push_array_ctx()
 
 void cvc_convt::pop_array_ctx()
 {
+}
+
+smt_sortt cvc_convt::mk_bool_sort()
+{
+  return new solver_smt_sort<CVC4::Type>(SMT_SORT_BOOL, em.booleanType(), 1);
+}
+
+smt_sortt cvc_convt::mk_real_sort()
+{
+  return new solver_smt_sort<CVC4::Type>(SMT_SORT_REAL, em.realType());
+}
+
+smt_sortt cvc_convt::mk_int_sort()
+{
+  return new solver_smt_sort<CVC4::Type>(SMT_SORT_INT, em.integerType());
+}
+
+smt_sortt cvc_convt::mk_bv_sort(std::size_t width)
+{
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_BV, em.mkBitVectorType(width), width);
+}
+
+smt_sortt cvc_convt::mk_fbv_sort(std::size_t width)
+{
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_FIXEDBV, em.mkBitVectorType(width), width);
+}
+
+smt_sortt cvc_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
+{
+  auto domain_sort = to_solver_smt_sort<CVC4::Type>(domain);
+  auto range_sort = to_solver_smt_sort<CVC4::Type>(range);
+
+  auto t = em.mkArrayType(domain_sort->s, range_sort->s);
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_ARRAY, t, domain->get_data_width(), range);
+}
+
+smt_sortt cvc_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
+{
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_BVFP, em.mkBitVectorType(ew + sw + 1), ew + sw + 1, sw + 1);
+}
+
+smt_sortt cvc_convt::mk_bvfp_rm_sort()
+{
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_BVFP_RM, em.mkBitVectorType(3), 3);
+}
+
+smt_sortt cvc_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_FPBV, em.mkFloatingPointType(ew, sw + 1), ew + sw + 1, sw + 1);
+}
+
+smt_sortt cvc_convt::mk_fpbv_rm_sort()
+{
+  return new solver_smt_sort<CVC4::Type>(
+    SMT_SORT_FPBV_RM, em.roundingModeType(), 3);
+}
+
+void cvc_convt::dump_smt()
+{
+  smt.printInstantiations(std::cout);
+}
+
+void cvc_smt_ast::dump() const
+{
+  a.printAst(std::cout, 0);
 }

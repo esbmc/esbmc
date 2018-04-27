@@ -57,8 +57,8 @@
  * slower approach works.
  */
 
-smt_astt tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop)
-  const
+smt_astt
+tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
   // So - we need to generate an ite between true_val and false_val, that gets
   // switched on based on cond, and store the output into result. Do this by
@@ -67,12 +67,12 @@ smt_astt tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop)
   // ite is always true. We return the output symbol.
   tuple_sym_smt_astt true_val = this;
   tuple_sym_smt_astt false_val = to_tuple_sym_ast(falseop);
-  tuple_smt_sortt thissort = to_tuple_sort(sort);
+
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
-  symbol2tc result(thissort->thetype, name);
+  symbol2tc result(sort->get_tuple_type(), name);
   smt_astt result_sym = ctx->convert_ast(result);
 
-  const struct_union_data &data = ctx->get_type_def(thissort->thetype);
+  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
 
   // Iterate through each field and encode an ite.
   for(unsigned int i = 0; i < data.members.size(); i++)
@@ -96,8 +96,8 @@ smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   // each of them, and then combine that into a final ast.
   tuple_sym_smt_astt ta = this;
   tuple_sym_smt_astt tb = to_tuple_sym_ast(other);
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  const struct_union_data &data = ctx->get_type_def(ts->thetype);
+
+  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
 
   smt_convt::ast_vec eqs;
   eqs.reserve(data.members.size());
@@ -111,7 +111,7 @@ smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   }
 
   // Create an ast representing the fact that all the members are equal.
-  return ctx->make_conjunct(eqs);
+  return ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs);
 }
 
 smt_astt tuple_sym_smt_ast::update(
@@ -127,8 +127,7 @@ smt_astt tuple_sym_smt_ast::update(
     "structure");
 
   // XXX: future work, accept member_name exprs?
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  const struct_union_data &data = ctx->get_type_def(ts->thetype);
+  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
 
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
   tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, sort, name);
@@ -154,7 +153,7 @@ smt_astt tuple_sym_smt_ast::update(
     }
   }
 
-  ctx->assert_ast(ctx->make_conjunct(eqs));
+  ctx->assert_ast(ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs));
   return result;
 }
 
@@ -173,8 +172,7 @@ smt_astt tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   // of that name, and then return that. It now names the variable that contains
   // the value of that field. If it's actually another tuple, we instead return
   // a new tuple_sym_smt_ast containing its name.
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  const struct_union_data &data = ctx->get_type_def(ts->thetype);
+  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
 
   assert(idx < data.members.size() && "Out-of-bounds tuple element accessed");
   const std::string &fieldname = data.member_names[idx].as_string();

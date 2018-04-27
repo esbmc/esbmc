@@ -514,7 +514,6 @@ std::string expr2ct::convert_with(const exprt &src, unsigned precedence)
       assert(comp_expr.is_not_nil());
 
       op1 = comp_expr.pretty_name().as_string();
-      p1 = 10;
     }
     else
       op1 = convert(src.operands()[i], p1);

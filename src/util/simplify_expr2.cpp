@@ -21,7 +21,7 @@ static expr2tc try_simplification(const expr2tc &expr)
   return expr2tc(to_simplify->clone());
 }
 
-static expr2tc typecast_check_return(const type2tc &type, expr2tc &expr)
+static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
 {
   // If the expr is already nil, do nothing
   if(is_nil_expr(expr))
@@ -1528,9 +1528,23 @@ expr2tc typecast2t::do_simplify(bool second __attribute__((unused))) const
 
 expr2tc nearbyint2t::do_simplify(bool second __attribute__((unused))) const
 {
-  expr2tc new_from = try_simplification(from);
-  if(new_from != from)
-    return new_from;
+  if(!is_number_type(type))
+    return expr2tc();
+
+  // Try to recursively simplify nested operation, if any
+  expr2tc to_simplify = try_simplification(from);
+  if(!is_constant_floatbv2t(to_simplify))
+  {
+    // Were we able to simplify anything?
+    if(from != to_simplify)
+      return typecast_check_return(type, nearbyint2tc(type, to_simplify));
+
+    return expr2tc();
+  }
+
+  ieee_floatt n = to_constant_floatbv2t(to_simplify).value;
+  if(n.is_NaN() || n.is_zero() || n.is_infinity())
+    return typecast_check_return(type, from);
 
   return expr2tc();
 }
@@ -2400,4 +2414,112 @@ expr2tc ieee_div2t::do_simplify(bool second __attribute__((unused))) const
 {
   return simplify_floatbv_2ops<IEEE_divtor, ieee_div2t>(
     type, side_1, side_2, rounding_mode);
+}
+
+expr2tc ieee_fma2t::do_simplify(bool second __attribute__((unused))) const
+{
+  assert(is_floatbv_type(type));
+
+  if(!is_number_type(type) && !is_pointer_type(type))
+    return expr2tc();
+
+  // Try to recursively simplify nested operations both sides, if any
+  expr2tc simplied_value_1 = try_simplification(value_1);
+  expr2tc simplied_value_2 = try_simplification(value_2);
+  expr2tc simplied_value_3 = try_simplification(value_3);
+
+  if(
+    !is_constant_expr(simplied_value_1) ||
+    !is_constant_expr(simplied_value_2) ||
+    !is_constant_expr(simplied_value_3) || !is_constant_int2t(rounding_mode))
+  {
+    // Were we able to simplify the sides?
+    if(
+      (value_1 != simplied_value_1) || (value_2 != simplied_value_2) ||
+      (value_3 != simplied_value_3))
+    {
+      expr2tc new_op = ieee_fma2tc(
+        type,
+        simplied_value_1,
+        simplied_value_2,
+        simplied_value_3,
+        rounding_mode);
+
+      return typecast_check_return(type, new_op);
+    }
+
+    return expr2tc();
+  }
+
+  ieee_floatt n1 = to_constant_floatbv2t(simplied_value_1).value;
+  ieee_floatt n2 = to_constant_floatbv2t(simplied_value_2).value;
+  ieee_floatt n3 = to_constant_floatbv2t(simplied_value_3).value;
+
+  // If x or y are NaN, NaN is returned
+  if(n1.is_NaN() || n2.is_NaN())
+  {
+    n1.make_NaN();
+    return constant_floatbv2tc(n1);
+  }
+
+  // If x is zero and y is infinite or if x is infinite and y is zero,
+  // and z is not a NaN, a domain error shall occur, and either a NaN,
+  // or an implementation-defined value shall be returned.
+
+  // If x is zero and y is infinite or if x is infinite and y is zero,
+  // and z is a NaN, then NaN is returned and FE_INVALID may be raised
+  if((n1.is_zero() && n2.is_infinity()) || (n2.is_zero() && n1.is_infinity()))
+  {
+    n1.make_NaN();
+    return constant_floatbv2tc(n1);
+  }
+
+  // If z is NaN, and x*y aren't 0*Inf or Inf*0, then NaN is returned
+  // (without FE_INVALID)
+  if(n3.is_NaN())
+  {
+    n1.make_NaN();
+    return constant_floatbv2tc(n1);
+  }
+
+  // If x*y is an exact infinity and z is an infinity with the opposite sign,
+  // NaN is returned and FE_INVALID is raised
+  n1 *= n2;
+  if((n1.is_infinity() && n3.is_infinity()) && (n1.get_sign() != n3.get_sign()))
+  {
+    n1.make_NaN();
+    return constant_floatbv2tc(n1);
+  }
+
+  return expr2tc();
+}
+
+expr2tc ieee_sqrt2t::do_simplify(bool second __attribute__((unused))) const
+{
+  if(!is_number_type(type))
+    return expr2tc();
+
+  // Try to recursively simplify nested operation, if any
+  expr2tc to_simplify = try_simplification(value);
+  if(!is_constant_floatbv2t(to_simplify))
+  {
+    // Were we able to simplify anything?
+    if(value != to_simplify)
+      return typecast_check_return(
+        type, ieee_sqrt2tc(type, to_simplify, rounding_mode));
+
+    return expr2tc();
+  }
+
+  ieee_floatt n = to_constant_floatbv2t(to_simplify).value;
+  if(n < 0)
+  {
+    n.make_NaN();
+    return constant_floatbv2tc(n);
+  }
+
+  if(n.is_NaN() || n.is_zero() || n.is_infinity())
+    return typecast_check_return(type, value);
+
+  return expr2tc();
 }

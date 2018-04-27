@@ -57,6 +57,9 @@ public:
 
   void dump() const override
   {
+    std::cout << "name: " << name << '\n';
+    for(auto const &e : elements)
+      e->dump();
   }
 
   void make_free(smt_convt *ctx);

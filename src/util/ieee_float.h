@@ -83,9 +83,10 @@ class ieee_floatt
 public:
   typedef enum {
     ROUND_TO_EVEN = 0,
-    ROUND_TO_MINUS_INF = 1,
+    ROUND_TO_AWAY = 1,
     ROUND_TO_PLUS_INF = 2,
-    ROUND_TO_ZERO = 3,
+    ROUND_TO_MINUS_INF = 3,
+    ROUND_TO_ZERO = 4,
     UNKNOWN,
     NONDETERMINISTIC
   } rounding_modet;

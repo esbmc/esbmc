@@ -1,7 +1,6 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #include <math.h>
-#include "../intrinsics.h"
 
 static double _atan(double f, int n)
 {

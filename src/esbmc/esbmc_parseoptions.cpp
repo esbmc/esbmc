@@ -214,7 +214,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", true);
   }
 
-  options.set_option("fixedbv", true);
+  if(cmdline.isset("fixedbv"))
+    options.set_option("fixedbv", true);
+  else
+    options.set_option("floatbv", true);
 
   if(cmdline.isset("context-bound"))
     options.set_option("context-bound", cmdline.getval("context-bound"));
@@ -1691,6 +1694,7 @@ void esbmc_parseoptionst::help()
        " --symex-ssa-trace            print generated SSA during symbolic "
        "execution\n"
        " --ssa-trace                  print SSA during SMT encoding\n"
+       " --ssa-smt-trace              print generated SMT during SMT encoding\n"
        " --show-goto-value-sets       show value-set analysis for the goto "
        "functions\n"
        " --show-symex-value-sets      show value-set analysis during symbolic "
@@ -1779,9 +1783,14 @@ void esbmc_parseoptionst::help()
        " --output <filename>          output VCCs in SMT lib format to given "
        "file\n"
        " --fixedbv                    encode floating-point as fixed "
-       "bitvectors (default)\n"
+       "bit-vectors\n"
        " --floatbv                    encode floating-point using the SMT "
        "floating-point theory\n"
+       "                              (default)\n"
+       " --fp2bv                      encode floating-point as bit-vectors\n"
+       "                              (default for solvers that don't "
+       "support the \n"
+       "                              SMT floating-point theory)\n"
 
        "\nIncremental SMT solving\n"
        " --smt-during-symex           enable incremental SMT solving "

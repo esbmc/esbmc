@@ -1,7 +1,7 @@
 #include <solve.h>
 #include <solver_config.h>
 #include <solvers/smt/array_conv.h>
-#include <solvers/smt/fp_conv.h>
+#include <solvers/smt/fp/fp_conv.h>
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
@@ -155,6 +155,7 @@ smt_convt *create_solver_factory(
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");
   bool array_flat = options.get_bool_option("array-flattener");
+  bool fp_to_bv = options.get_bool_option("fp2bv");
 
   // Pick a tuple flattener to use. If the solver has native support, and no
   // options were given, use that by default
@@ -180,10 +181,10 @@ smt_convt *create_solver_factory(
   else
     ctx->set_array_iface(new array_convt(ctx));
 
-  if(fp_api != NULL)
-    ctx->set_fp_conv(fp_api);
-  else
+  if(fp_api == nullptr || fp_to_bv)
     ctx->set_fp_conv(new fp_convt(ctx));
+  else
+    ctx->set_fp_conv(fp_api);
 
   ctx->smt_post_init();
   return ctx;

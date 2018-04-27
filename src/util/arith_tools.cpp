@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cassert>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
+#include <util/irep2_utils.h>
 
 bool to_integer(const exprt &expr, mp_integer &int_value)
 {
@@ -78,6 +79,37 @@ exprt from_integer(const mp_integer &int_value, const typet &type)
   return expr;
 }
 
+expr2tc from_integer(const mp_integer &int_value, const type2tc &type)
+{
+  switch(type->type_id)
+  {
+  case type2t::bool_id:
+    return !int_value.is_zero() ? gen_true_expr() : gen_false_expr();
+
+  case type2t::unsignedbv_id:
+  case type2t::signedbv_id:
+    return constant_int2tc(type, int_value);
+
+  case type2t::fixedbv_id:
+  {
+    constant_fixedbv2tc f(fixedbvt(fixedbv_spect(
+      to_fixedbv_type(type).width, to_fixedbv_type(type).integer_bits)));
+    f->value.from_integer(int_value);
+    return f;
+  }
+
+  case type2t::floatbv_id:
+  {
+    constant_floatbv2tc f(ieee_floatt(ieee_float_spect(
+      to_floatbv_type(type).fraction, to_floatbv_type(type).exponent)));
+    f->value.from_integer(int_value);
+    return f;
+  }
+  default:
+    abort();
+  }
+}
+
 mp_integer power(const mp_integer &base, const mp_integer &exponent)
 {
   assert(exponent >= 0);
@@ -93,6 +125,16 @@ mp_integer power(const mp_integer &base, const mp_integer &exponent)
     result *= base;
     --count;
   }
+
+  return result;
+}
+
+/// ceil(log2(size))
+mp_integer address_bits(const mp_integer &size)
+{
+  mp_integer result, x = 2;
+  for(result = 1; x < size; result += 1, x *= 2)
+    ;
 
   return result;
 }
