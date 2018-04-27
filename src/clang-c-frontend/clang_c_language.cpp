@@ -51,15 +51,9 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
   switch(config.ansi_c.word_size)
   {
   case 16:
-    compiler_args.emplace_back("-m16");
-    break;
-
   case 32:
-    compiler_args.emplace_back("-m32");
-    break;
-
   case 64:
-    compiler_args.emplace_back("-m64");
+    compiler_args.emplace_back("-m" + std::to_string(config.ansi_c.word_size));
     break;
 
   default:
