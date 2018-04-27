@@ -9,11 +9,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Tooling/Core/QualTypeNames.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclarationName.h"
 #include "clang/AST/GlobalDecl.h"
 #include "clang/AST/Mangle.h"
+#include "clang/AST/QualTypeNames.h"
 
 #include <stdio.h>
 #include <memory>
@@ -31,7 +31,7 @@ namespace TypeName
 /// \param[in] Ctx - the ASTContext to be used.
 /// \param[in] WithGlobalNsPrefix - Indicate whether the global namespace
 /// specifier "::" should be prepended or not.
-static QualType getFullyQualifiedType(
+QualType getFullyQualifiedType(
   QualType QT,
   const ASTContext &Ctx,
   bool WithGlobalNsPrefix);
