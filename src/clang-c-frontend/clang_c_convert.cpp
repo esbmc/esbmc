@@ -1,10 +1,3 @@
-/*
- * clang_c_convert.cpp
- *
- *  Created on: Jul 23, 2015
- *      Author: mramalho
- */
-
 #include <clang/AST/Attr.h>
 #include <clang/AST/QualTypeNames.h>
 #include <clang/Index/USRGeneration.h>

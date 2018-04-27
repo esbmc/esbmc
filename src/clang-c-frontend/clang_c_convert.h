@@ -1,10 +1,3 @@
-/*
- * clang_c_convert.h
- *
- *  Created on: Jul 23, 2015
- *      Author: mramalho
- */
-
 #ifndef CLANG_C_FRONTEND_CLANG_C_CONVERT_H_
 #define CLANG_C_FRONTEND_CLANG_C_CONVERT_H_
 
