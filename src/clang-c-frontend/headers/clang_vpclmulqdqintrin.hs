@@ -1,6 +1,5 @@
-/*===---- stdarg.h - Variable argument handling ----------------------------===
+/*===------------ vpclmulqdqintrin.h - VPCLMULQDQ intrinsics ---------------===
  *
- * Copyright (c) 2008 Eli Friedman
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,30 +21,22 @@
  *
  *===-----------------------------------------------------------------------===
  */
-
-#ifndef __STDARG_H
-#define __STDARG_H
-
-#ifndef _VA_LIST
-typedef __builtin_va_list va_list;
-#define _VA_LIST
-#endif
-#define va_start(ap, param) __builtin_va_start(ap, param)
-#define va_end(ap)          __builtin_va_end(ap)
-#define va_arg(ap, type)    __builtin_va_arg(ap, type)
-
-/* GCC always defines __va_copy, but does not define va_copy unless in c99 mode
- * or -ansi is not specified, since it was not part of C90.
- */
-#define __va_copy(d,s) __builtin_va_copy(d,s)
-
-#if __STDC_VERSION__ >= 199901L || __cplusplus >= 201103L || !defined(__STRICT_ANSI__)
-#define va_copy(dest, src)  __builtin_va_copy(dest, src)
+#ifndef __IMMINTRIN_H
+#error "Never use <vpclmulqdqintrin.h> directly; include <immintrin.h> instead."
 #endif
 
-#ifndef __GNUC_VA_LIST
-#define __GNUC_VA_LIST 1
-typedef __builtin_va_list __gnuc_va_list;
-#endif
+#ifndef __VPCLMULQDQINTRIN_H
+#define __VPCLMULQDQINTRIN_H
 
-#endif /* __STDARG_H */
+#define _mm256_clmulepi64_epi128(A, B, I) __extension__ ({    \
+  (__m256i)__builtin_ia32_pclmulqdq256((__v4di)(__m256i)(A),  \
+                                       (__v4di)(__m256i)(B),  \
+                                       (char)(I)); })
+
+#define _mm512_clmulepi64_epi128(A, B, I) __extension__ ({    \
+  (__m512i)__builtin_ia32_pclmulqdq512((__v8di)(__m512i)(A),  \
+                                       (__v8di)(__m512i)(B),  \
+                                       (char)(I)); })
+
+#endif // __VPCLMULQDQINTRIN_H
+

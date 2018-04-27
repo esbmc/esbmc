@@ -1,6 +1,4 @@
-/*===---- stdarg.h - Variable argument handling ----------------------------===
- *
- * Copyright (c) 2008 Eli Friedman
+/*===---- arm64intr.h - ARM64 Windows intrinsics -------------------------------===
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,29 +21,29 @@
  *===-----------------------------------------------------------------------===
  */
 
-#ifndef __STDARG_H
-#define __STDARG_H
+/* Only include this if we're compiling for the windows platform. */
+#ifndef _MSC_VER
+#include_next <arm64intr.h>
+#else
 
-#ifndef _VA_LIST
-typedef __builtin_va_list va_list;
-#define _VA_LIST
-#endif
-#define va_start(ap, param) __builtin_va_start(ap, param)
-#define va_end(ap)          __builtin_va_end(ap)
-#define va_arg(ap, type)    __builtin_va_arg(ap, type)
+#ifndef __ARM64INTR_H
+#define __ARM64INTR_H
 
-/* GCC always defines __va_copy, but does not define va_copy unless in c99 mode
- * or -ansi is not specified, since it was not part of C90.
- */
-#define __va_copy(d,s) __builtin_va_copy(d,s)
+typedef enum
+{
+  _ARM64_BARRIER_SY    = 0xF,
+  _ARM64_BARRIER_ST    = 0xE,
+  _ARM64_BARRIER_LD    = 0xD,
+  _ARM64_BARRIER_ISH   = 0xB,
+  _ARM64_BARRIER_ISHST = 0xA,
+  _ARM64_BARRIER_ISHLD = 0x9,
+  _ARM64_BARRIER_NSH   = 0x7,
+  _ARM64_BARRIER_NSHST = 0x6,
+  _ARM64_BARRIER_NSHLD = 0x5,
+  _ARM64_BARRIER_OSH   = 0x3,
+  _ARM64_BARRIER_OSHST = 0x2,
+  _ARM64_BARRIER_OSHLD = 0x1
+} _ARM64INTR_BARRIER_TYPE;
 
-#if __STDC_VERSION__ >= 199901L || __cplusplus >= 201103L || !defined(__STRICT_ANSI__)
-#define va_copy(dest, src)  __builtin_va_copy(dest, src)
-#endif
-
-#ifndef __GNUC_VA_LIST
-#define __GNUC_VA_LIST 1
-typedef __builtin_va_list __gnuc_va_list;
-#endif
-
-#endif /* __STDARG_H */
+#endif /* __ARM64INTR_H */
+#endif /* _MSC_VER */

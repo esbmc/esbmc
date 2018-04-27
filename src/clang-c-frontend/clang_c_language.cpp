@@ -212,9 +212,9 @@ std::string clang_c_languaget::internal_additions()
   std::string intrinsics =
     R"(
 # 1 "esbmc_intrinsics.h" 1
-void __ESBMC_assume(_Bool assumption);
-void assert(_Bool assertion);
-void __ESBMC_assert(_Bool assertion, const char *description);
+void __ESBMC_assume(_Bool);
+void assert(_Bool);
+void __ESBMC_assert(_Bool, const char *);
 _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_atomic_begin();
 void __ESBMC_atomic_end();
@@ -224,8 +224,8 @@ long int __ESBMC_labs(long int);
 long long int __ESBMC_llabs(long long int);
 
 // pointers
-unsigned __ESBMC_POINTER_OBJECT(const void *p);
-signed __ESBMC_POINTER_OFFSET(const void *p);
+unsigned __ESBMC_POINTER_OBJECT(const void *);
+signed __ESBMC_POINTER_OFFSET(const void *);
 
 // malloc
 __attribute__((used))
@@ -252,61 +252,52 @@ double __ESBMC_fabsd(double);
 long double __ESBMC_fabsld(long double);
 float __ESBMC_fabsf(float);
 
-_Bool __ESBMC_isnanf(float f);
-_Bool __ESBMC_isnand(double f);
-_Bool __ESBMC_isnanld(long double f);
+_Bool __ESBMC_isnanf(float);
+_Bool __ESBMC_isnand(double);
+_Bool __ESBMC_isnanld(long double);
 
-_Bool __ESBMC_isfinite(double f);
-_Bool __ESBMC_isfinitef(float f);
-_Bool __ESBMC_isfinited(double f);
-_Bool __ESBMC_isfiniteld(long double f);
+_Bool __ESBMC_isfinite(double);
+_Bool __ESBMC_isfinitef(float);
+_Bool __ESBMC_isfinited(double);
+_Bool __ESBMC_isfiniteld(long double);
 
-_Bool __ESBMC_isinf(double f);
-_Bool __ESBMC_isinff(float f);
-_Bool __ESBMC_isinfd(double f);
-_Bool __ESBMC_isinfld(long double f);
+_Bool __ESBMC_isinf(double);
+_Bool __ESBMC_isinff(float);
+_Bool __ESBMC_isinfd(double);
+_Bool __ESBMC_isinfld(long double);
 
-_Bool __ESBMC_sign(double f);
-_Bool __ESBMC_signf(float f);
-_Bool __ESBMC_signd(double f);
-_Bool __ESBMC_signld(long double f);
+_Bool __ESBMC_sign(double);
+_Bool __ESBMC_signf(float);
+_Bool __ESBMC_signd(double);
+_Bool __ESBMC_signld(long double);
 
-_Bool __ESBMC_isnormal(double f);
-_Bool __ESBMC_isnormalf(float f);
-_Bool __ESBMC_isnormald(double f);
-_Bool __ESBMC_isnormalld(long double f);
+_Bool __ESBMC_isnormal(double);
+_Bool __ESBMC_isnormalf(float);
+_Bool __ESBMC_isnormald(double);
+_Bool __ESBMC_isnormalld(long double);
 
 double __ESBMC_inf(void);
 float __ESBMC_inff(void);
 long double __ESBMC_infld(void);
 
-float __ESBMC_nearbyintf(float d);
-double __ESBMC_nearbyintd(double d);
-long double __ESBMC_nearbyintld(long double d);
+float __ESBMC_nearbyintf(float);
+double __ESBMC_nearbyintd(double);
+long double __ESBMC_nearbyintld(long double);
 
-float __ESBMC_fmaf(float x, float y, float z);
-double __ESBMC_fmad(double x, double y, double z);
-long double __ESBMC_fmald(long double x, long double y, long double z);
+float __ESBMC_fmaf(float, float, float);
+double __ESBMC_fmad(double, double, double);
+long double __ESBMC_fmald(long double, long double, long double);
 
-float __ESBMC_sqrtf(float n);
-double __ESBMC_sqrtd(double n);
-long double __ESBMC_sqrtld(long double n);
+float __ESBMC_sqrtf(float);
+double __ESBMC_sqrtd(double);
+long double __ESBMC_sqrtld(long double);
 
-void *__ESBMC_memset(void *s, int c, unsigned int n);
+void *__ESBMC_memset(void *, int, unsigned int);
 
 // Digital controllers code
-void __ESBMC_generate_cascade_controllers(
-  float *cden,
-  int csize,
-  float *cout,
-  int coutsize,
-  _Bool isDenominator);
-void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);
-_Bool __ESBMC_check_delta_stability(
-  double dc[],
-  double sample_time,
-  int iwidth,
-  int precision);
+void __ESBMC_generate_cascade_controllers(float *, int, float *, int, _Bool);
+void __ESBMC_generate_delta_coefficients(float *, double *, float);
+_Bool __ESBMC_check_delta_stability(double *, double, int, int);
 
 // Forward decs for pthread main thread begin/end hooks. Because they're
 // pulled in from the C library, they need to be declared prior to pulling

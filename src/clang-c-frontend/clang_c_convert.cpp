@@ -6,8 +6,8 @@
  */
 
 #include <clang/AST/Attr.h>
+#include <clang/AST/QualTypeNames.h>
 #include <clang/Index/USRGeneration.h>
-#include <clang/Tooling/Core/QualTypeNames.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
