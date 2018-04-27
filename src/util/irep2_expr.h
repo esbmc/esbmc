@@ -1780,7 +1780,7 @@ public:
         type,
         nearbyint_id,
         from,
-        symbol2tc(type_pool.get_int32(), "__ESBMC_rounding_mode"))
+        symbol2tc(type_pool.get_int32(), "c:@__ESBMC_rounding_mode"))
   {
   }
 
@@ -1822,7 +1822,7 @@ public:
         type,
         typecast_id,
         from,
-        symbol2tc(type_pool.get_int32(), "__ESBMC_rounding_mode"))
+        symbol2tc(type_pool.get_int32(), "c:@__ESBMC_rounding_mode"))
   {
   }
 
@@ -1854,7 +1854,8 @@ public:
         type,
         bitcast_id,
         from,
-        expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode")))
+        expr2tc(
+          new symbol2t(type_pool.get_int32(), "c:@__ESBMC_rounding_mode")))
   {
   }
 
