@@ -102,8 +102,10 @@ private:
     std::string pretty_name,
     locationt location);
 
+  std::string get_decl_name(const clang::NamedDecl &nd);
+
   void get_decl_name(
-    const clang::NamedDecl &d,
+    const clang::ValueDecl &vd,
     std::string &name,
     std::string &pretty_name);
 

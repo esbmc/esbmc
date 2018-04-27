@@ -2016,7 +2016,8 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 
     return false;
   }
-  else if(const auto *nd = llvm::dyn_cast<clang::ValueDecl>(&d))
+
+  if(const auto *nd = llvm::dyn_cast<clang::ValueDecl>(&d))
   {
     // Everything else should be a value decl
     std::string base_name, pretty_name;
@@ -2380,49 +2381,59 @@ void clang_c_convertert::get_default_symbol(
   symbol.is_used = is_used;
 }
 
+std::string clang_c_convertert::get_decl_name(const clang::NamedDecl &nd)
+{
+  if(const clang::IdentifierInfo *identifier = nd.getIdentifier())
+    return identifier->getName().str();
+
+  std::string name;
+  llvm::raw_string_ostream rso(name);
+  nd.printName(rso);
+  return rso.str();
+}
+
 void clang_c_convertert::get_decl_name(
-  const clang::NamedDecl &d,
+  const clang::ValueDecl &nd,
   std::string &name,
   std::string &pretty_name)
 {
-  name = d.getName().str();
+  name = get_decl_name(nd);
 
-  // Special cases:
-  switch(d.getKind())
+  bool name_is_empty = name.empty();
+  clang::Decl::Kind k = nd.getKind();
+
+  // ParamVarDecl, we can safely ignore them
+  if(k == clang::Decl::ParmVar && name_is_empty)
+    return;
+
+  // Anonymous fields, generate a name based on the type
+  if(k == clang::Decl::Field || k == clang::Decl::IndirectField)
   {
-  case clang::Decl::ParmVar:
-    // It can be empty and it's not a problem for us
-    if(name.empty())
-      return;
-    break;
-
-  case clang::Decl::Field:
-  case clang::Decl::IndirectField:
-    // If it's empty, we generate the name using the type
-    if(name.empty())
+    if(name_is_empty)
     {
-      const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(d);
-      name = clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext);
+      // If it's empty, we generate the name using the type
+      name = clang::TypeName::getFullyQualifiedName(nd.getType(), *ASTContext);
       pretty_name = "anon";
     }
     else
+    {
       // Otherwise, just use the same name for both the names
       pretty_name = name;
+    }
     return;
-
-  default:
-    break;
   }
 
-  llvm::SmallString<128> declUSR;
-  if(clang::index::generateUSRForDecl(&d, declUSR))
+  clang::SmallString<128> DeclUSR;
+  if(!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    std::cerr << "**** ERROR: Can't generate unique name for decl:\n";
-    d.dumpColor();
-    abort();
+    pretty_name = DeclUSR.str().str();
+    return;
   }
 
-  pretty_name = declUSR.str().str();
+  // Otherwise, abort
+  std::cerr << "Unable to generate the USR for:\n";
+  nd.dumpColor();
+  abort();
 }
 
 bool clang_c_convertert::get_tag_name(
