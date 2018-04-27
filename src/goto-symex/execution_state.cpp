@@ -821,8 +821,8 @@ void execution_statet::get_expr_globals(
       return;
 
     if(
-      name == "__ESBMC_alloc" || name == "__ESBMC_alloc_size" ||
-      name == "__ESBMC_is_dynamic")
+      name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
+      name == "c:@__ESBMC_is_dynamic")
     {
       return;
     }

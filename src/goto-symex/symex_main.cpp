@@ -398,7 +398,7 @@ void goto_symext::run_intrinsic(
   {
     intrinsic_kill_monitor(art);
   }
-  else if(symname == "__ESBMC_memset")
+  else if(symname == "c:@F@__ESBMC_memset")
   {
     intrinsic_memset(art, func_call);
   }

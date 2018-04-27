@@ -103,8 +103,10 @@ private:
     locationt location,
     bool is_used);
 
+  std::string get_decl_name(const clang::NamedDecl &nd);
+
   void get_decl_name(
-    const clang::NamedDecl &d,
+    const clang::ValueDecl &vd,
     std::string &name,
     std::string &pretty_name);
 
