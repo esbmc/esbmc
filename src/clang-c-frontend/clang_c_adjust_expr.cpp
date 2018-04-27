@@ -58,7 +58,7 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
   if(!symbol.value.is_nil())
     adjust_expr(symbol.value);
 
-  if(symbol.type.is_code() && symbol.name == "main")
+  if(symbol.type.is_code() && symbol.name == "c:@F@main")
     adjust_argc_argv(symbol);
 }
 

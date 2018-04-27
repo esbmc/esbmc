@@ -203,7 +203,7 @@ bool clang_c_languaget::final(
   message_handlert &message_handler)
 {
   add_cprover_library(context, message_handler);
-  return clang_main(context, "main", message_handler);
+  return clang_main(context, "c:@F@main", message_handler);
 }
 
 std::string clang_c_languaget::internal_additions()
