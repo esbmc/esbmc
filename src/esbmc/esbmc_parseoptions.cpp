@@ -1832,7 +1832,7 @@ void esbmc_parseoptionst::help()
        " --max-k-step nr              set max number of iteration (default is "
        "50)\n"
        " --unlimited-k-steps          set max number of iteration to UINT_MAX\n"
-       " --show-counter-example       print the counter-example produced by "
+       " --show-cex                   print the counter-example produced by "
        "the inductive step\n"
 
        "\nScheduling approaches\n"

@@ -365,7 +365,7 @@ void bmct::report_trace(
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
-  bool show_cex = options.get_bool_option("show-counter-example");
+  bool show_cex = options.get_bool_option("show-cex");
 
   switch(res)
   {
