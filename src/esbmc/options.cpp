@@ -133,6 +133,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "max-k-step", number, "50"},
   {0, "unlimited-k-steps", switc, ""},
   {0, "show-cex", switc, ""},
+  {0, "bidirectional", switc, ""},
 
   // Scheduling
   {0, "schedule", switc, ""},

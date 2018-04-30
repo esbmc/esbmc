@@ -82,6 +82,10 @@ protected:
 
   virtual void report_result(smt_convt::resultt &res);
 
+  virtual void bidirectional_search(
+    boost::shared_ptr<smt_convt> &smt_conv,
+    boost::shared_ptr<symex_target_equationt> &eq);
+
   smt_convt::resultt run_thread(boost::shared_ptr<symex_target_equationt> &eq);
 };
 

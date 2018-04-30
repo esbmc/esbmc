@@ -482,6 +482,9 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
         runtime_solver->print_model();
 
       report_trace(res, eq);
+
+      if(config.options.get_bool_option("bidirectional"))
+        bidirectional_search(runtime_solver, eq);
     }
 
     if(res)
@@ -507,6 +510,14 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
   } while(symex->setup_next_formula());
 
   return interleaving_failed > 0 ? smt_convt::P_SATISFIABLE : res;
+}
+
+void bmct::bidirectional_search(
+  boost::shared_ptr<smt_convt> &smt_conv,
+  boost::shared_ptr<symex_target_equationt> &eq)
+{
+  (void)smt_conv;
+  (void)eq;
 }
 
 smt_convt::resultt
