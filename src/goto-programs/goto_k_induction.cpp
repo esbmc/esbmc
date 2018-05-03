@@ -33,9 +33,6 @@ void goto_k_inductiont::goto_k_induction()
     if(function_loop.get_loop_vars().empty())
       continue;
 
-    // TODO: Can we check if the loop is infinite? If so, we should
-    // disable the forward condition
-
     // Start the loop conversion
     convert_finite_loop(function_loop);
   }
@@ -175,127 +172,6 @@ void goto_k_inductiont::adjust_loop_head_and_exit(
     // And set the target to be the newly inserted assume(cond)
     loop_head->targets.push_front(_loop_exit);
   }
-}
-
-// Duplicate the loop after loop_exit, but without the backward goto
-void goto_k_inductiont::duplicate_loop_body(
-  goto_programt::targett &loop_head,
-  goto_programt::targett &loop_exit)
-{
-  goto_programt::targett _loop_exit = loop_exit;
-  ++_loop_exit;
-
-  // Iteration points will only be duplicated
-  std::vector<goto_programt::targett> iteration_points;
-  iteration_points.resize(2);
-
-  if(_loop_exit != loop_head)
-  {
-    goto_programt::targett t_before = _loop_exit;
-    t_before--;
-
-    if(t_before->is_goto() && is_true(t_before->guard))
-    {
-      // no 'fall-out'
-    }
-    else
-    {
-      // guard against 'fall-out'
-      goto_programt::targett t_goto = goto_function.body.insert(_loop_exit);
-
-      t_goto->make_goto(_loop_exit);
-      t_goto->location = _loop_exit->location;
-      t_goto->function = _loop_exit->function;
-      t_goto->guard = gen_true_expr();
-    }
-  }
-
-  goto_programt::targett t_skip = goto_function.body.insert(_loop_exit);
-  goto_programt::targett loop_iter = t_skip;
-
-  t_skip->make_skip();
-  t_skip->location = loop_head->location;
-  t_skip->function = loop_head->function;
-
-  // record the exit point of first iteration
-  iteration_points[0] = loop_iter;
-
-  // build a map for branch targets inside the loop
-  std::map<goto_programt::targett, unsigned> target_map;
-
-  {
-    unsigned count = 0;
-    for(goto_programt::targett t = loop_head; t != loop_exit; t++)
-    {
-      assert(t != goto_function.body.instructions.end());
-
-      // Don't copy instructions inserted by the inductive-step
-      // transformations
-      if(t->inductive_step_instruction)
-        continue;
-
-      target_map[t] = count++;
-    }
-  }
-
-  // we make k-1 copies, to be inserted before _loop_exit
-  goto_programt copies;
-
-  // make a copy
-  std::vector<goto_programt::targett> target_vector;
-  target_vector.reserve(target_map.size());
-
-  for(goto_programt::targett t = loop_head; t != loop_exit; t++)
-  {
-    assert(t != goto_function.body.instructions.end());
-
-    // Don't copy instructions inserted by the inductive-step
-    // transformations
-    if(t->inductive_step_instruction)
-      continue;
-
-    goto_programt::targett copied_t = copies.add_instruction();
-    *copied_t = *t;
-    target_vector.push_back(copied_t);
-  }
-
-  // record exit point of this copy
-  iteration_points[1] = target_vector.back();
-
-  // adjust the intra-loop branches
-  for(unsigned i = 0; i < target_vector.size(); i++)
-  {
-    goto_programt::targett t = target_vector[i];
-
-    for(auto &target : t->targets)
-    {
-      std::map<goto_programt::targett, unsigned>::const_iterator m_it =
-        target_map.find(target);
-
-      if(m_it != target_map.end()) // intra-loop?
-      {
-        assert(m_it->second < target_vector.size());
-        target = target_vector[m_it->second];
-      }
-    }
-  }
-
-  // now insert copies before _loop_exit
-  goto_function.body.insert_swap(loop_exit, copies);
-
-  // remove skips
-  remove_skip(goto_function.body);
-}
-
-// Convert assert into assumes on the original loop (don't touch the
-// copy made on the last step)
-void goto_k_inductiont::convert_assert_to_assume(
-  goto_programt::targett &loop_head,
-  goto_programt::targett &loop_exit)
-{
-  for(goto_programt::targett t = loop_head; t != loop_exit; t++)
-    if(t->is_assert())
-      t->type = ASSUME;
 }
 
 void goto_k_inductiont::assume_cond(

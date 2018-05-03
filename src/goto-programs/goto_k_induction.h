@@ -35,7 +35,6 @@ public:
         _goto_function,
         _message_handler)
   {
-    // unwind loops
     if(function_loops.size())
       goto_k_induction();
   }
