@@ -902,11 +902,7 @@ void goto_symext::intrinsic_memset(
 
       if(is_constant_int2t(offs) && to_constant_int2t(offs).value == 0)
       {
-        symex_assign(
-          code_assign2tc(item.object, val),
-          false,
-          symex_targett::step_kindt::PLAIN_BMC,
-          curguard);
+        symex_assign(code_assign2tc(item.object, val), false, curguard);
       }
       else if(
         !is_constant_int2t(offs) && is_constant_int2t(size) &&
@@ -914,11 +910,7 @@ void goto_symext::intrinsic_memset(
       {
         // It's a memset where the size is such that the only valid offset is
         // zero.
-        symex_assign(
-          code_assign2tc(item.object, val),
-          false,
-          symex_targett::step_kindt::PLAIN_BMC,
-          curguard);
+        symex_assign(code_assign2tc(item.object, val), false, curguard);
         expr2tc eq = equality2tc(offs, gen_zero(offs->type));
         curguard.guard_expr(eq);
         if(!options.get_bool_option("no-pointer-check"))
@@ -995,11 +987,7 @@ void goto_symext::intrinsic_memset(
           }
 
           expr2tc zero = gen_zero(std::get<0>(ref));
-          symex_assign(
-            code_assign2tc(target, zero),
-            false,
-            symex_targett::step_kindt::PLAIN_BMC,
-            newguard);
+          symex_assign(code_assign2tc(target, zero), false, newguard);
         }
       }
       else
@@ -1012,11 +1000,7 @@ void goto_symext::intrinsic_memset(
     // Construct assignment to return value
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
-    symex_assign(
-      code_assign2tc(ret_ref, ptr),
-      false,
-      symex_targett::step_kindt::PLAIN_BMC,
-      cur_state->guard);
+    symex_assign(code_assign2tc(ret_ref, ptr), false, cur_state->guard);
   }
   else
   {
