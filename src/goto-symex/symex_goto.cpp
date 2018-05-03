@@ -66,14 +66,16 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   {
     // reset unwinding counter
     if(instruction.is_backwards_goto())
+    {
       cur_state->loop_iterations[instruction.loop_number] = 0;
+
+      // Reset loop counter
+      if(instruction.loop_number == first_loop)
+        first_loop = 0;
+    }
 
     // next instruction
     cur_state->source.pc++;
-
-    // Reset loop counter
-    if(instruction.loop_number == first_loop)
-      first_loop = 0;
 
     return; // nothing to do
   }
