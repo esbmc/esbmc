@@ -72,7 +72,8 @@ protected:
     goto_programt::targett &loop_head,
     goto_programt::targett &loop_exit);
 
-  void assume_cond(const expr2tc &cond, goto_programt &dest);
+  void
+  assume_cond(const expr2tc &cond, goto_programt &dest, const locationt &loc);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

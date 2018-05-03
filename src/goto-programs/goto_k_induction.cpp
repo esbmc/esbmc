@@ -135,7 +135,7 @@ void goto_k_inductiont::assume_loop_cond_before_loop(
     return;
 
   goto_programt dest;
-  assume_cond(loop_cond, dest);
+  assume_cond(loop_cond, dest, loop_head->location);
 
   goto_function.body.insert_swap(loop_head, dest);
 }
@@ -147,7 +147,7 @@ void goto_k_inductiont::assume_neg_loop_cond_after_loop(
   goto_programt dest;
   expr2tc neg_loop_cond = loop_cond;
   make_not(neg_loop_cond);
-  assume_cond(neg_loop_cond, dest);
+  assume_cond(neg_loop_cond, dest, loop_exit->location);
 
   //  goto_programt::targett _loop_exit = loop_exit;
   //  ++_loop_exit;
@@ -298,11 +298,15 @@ void goto_k_inductiont::convert_assert_to_assume(
       t->type = ASSUME;
 }
 
-void goto_k_inductiont::assume_cond(const expr2tc &cond, goto_programt &dest)
+void goto_k_inductiont::assume_cond(
+  const expr2tc &cond,
+  goto_programt &dest,
+  const locationt &loc)
 {
   goto_programt tmp_e;
   goto_programt::targett e = tmp_e.add_instruction(ASSUME);
   e->inductive_step_instruction = true;
   e->guard = cond;
+  e->location = loc;
   dest.destructive_append(tmp_e);
 }
