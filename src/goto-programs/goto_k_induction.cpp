@@ -14,13 +14,11 @@
 
 void goto_k_induction(
   goto_functionst &goto_functions,
-  contextt &context,
   message_handlert &message_handler)
 {
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
-      goto_k_inductiont(
-        it->first, goto_functions, it->second, context, message_handler);
+      goto_k_inductiont(it->first, goto_functions, it->second, message_handler);
 
   goto_functions.update();
 }

@@ -13,7 +13,7 @@
 class loopst
 {
 public:
-  loopst(contextt &_context) : context(_context), size(0)
+  loopst() : size(0)
   {
   }
 
@@ -39,7 +39,6 @@ public:
   }
 
 protected:
-  contextt &context;
   loop_varst loop_vars;
 
   goto_programt::targett original_loop_head;

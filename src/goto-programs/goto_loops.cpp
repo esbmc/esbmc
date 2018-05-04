@@ -73,7 +73,7 @@ void goto_loopst::create_function_loop(
 
   goto_programt::instructionst::iterator it = loop_head;
 
-  function_loops.push_front(loopst(context));
+  function_loops.push_front(loopst());
   function_loopst::iterator it1 = function_loops.begin();
 
   // Set original iterators

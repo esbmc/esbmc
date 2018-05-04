@@ -17,7 +17,6 @@
 class goto_loopst : public message_streamt
 {
 protected:
-  contextt &context;
   const irep_idt function_name;
   goto_functionst &goto_functions;
   goto_functiont &goto_function;
@@ -38,13 +37,11 @@ protected:
 
 public:
   goto_loopst(
-    contextt &_context,
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
     goto_functiont &_goto_function,
     message_handlert &_message_handler)
     : message_streamt(_message_handler),
-      context(_context),
       function_name(_function_name),
       goto_functions(_goto_functions),
       goto_function(_goto_function)

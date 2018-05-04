@@ -1509,7 +1509,7 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
       cmdline.isset("k-induction-parallel"))
     {
-      goto_k_induction(goto_functions, context, ui_message_handler);
+      goto_k_induction(goto_functions, ui_message_handler);
 
       // Warn the user if the forward condition was disabled
       if(options.get_bool_option("disable-forward-condition"))
@@ -1581,7 +1581,6 @@ bool esbmc_parseoptionst::process_goto_program(
       }
 
       goto_unwind(
-        context,
         goto_functions,
         atol(options.get_option("unwind").c_str()),
         ui_message_handler);
