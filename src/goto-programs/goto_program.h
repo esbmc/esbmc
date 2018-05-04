@@ -324,6 +324,7 @@ public:
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
+      std::swap(instruction.loop_number, loop_number);
     }
 
     //! A globally unique number to identify a program location.
