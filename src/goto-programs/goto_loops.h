@@ -16,25 +16,6 @@
 
 class goto_loopst : public message_streamt
 {
-public:
-  goto_loopst(
-    contextt &_context,
-    const irep_idt &_function_name,
-    goto_functionst &_goto_functions,
-    goto_functiont &_goto_function,
-    message_handlert &_message_handler)
-    : message_streamt(_message_handler),
-      context(_context),
-      function_name(_function_name),
-      goto_functions(_goto_functions),
-      goto_function(_goto_function)
-  {
-    find_function_loops();
-  }
-
-  void find_function_loops();
-  void dump();
-
 protected:
   contextt &context;
   const irep_idt function_name;
@@ -54,6 +35,30 @@ protected:
     const irep_idt &_function_name);
 
   void add_loop_var(loopst &loop, const expr2tc &expr);
+
+public:
+  goto_loopst(
+    contextt &_context,
+    const irep_idt &_function_name,
+    goto_functionst &_goto_functions,
+    goto_functiont &_goto_function,
+    message_handlert &_message_handler)
+    : message_streamt(_message_handler),
+      context(_context),
+      function_name(_function_name),
+      goto_functions(_goto_functions),
+      goto_function(_goto_function)
+  {
+    find_function_loops();
+  }
+
+  void find_function_loops();
+  void dump();
+
+  function_loopst get_loops() const
+  {
+    return function_loops;
+  }
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_LOOPS_H_ */
