@@ -25,4 +25,7 @@ void build_successful_goto_trace(
   const namespacet &ns,
   goto_tracet &goto_trace);
 
+expr2tc build_lhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs);
+expr2tc build_rhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &rhs);
+
 #endif
