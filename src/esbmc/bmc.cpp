@@ -23,6 +23,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <esbmc/bmc.h>
 #include <esbmc/document_subgoals.h>
 #include <fstream>
+#include <goto-programs/goto_loops.h>
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/reachability_tree.h>
@@ -516,8 +517,82 @@ void bmct::bidirectional_search(
   boost::shared_ptr<smt_convt> &smt_conv,
   boost::shared_ptr<symex_target_equationt> &eq)
 {
-  (void)smt_conv;
-  (void)eq;
+  // We should only analyse the inductive step's cex and we're running
+  // in k-induction mode
+  if(!(options.get_bool_option("inductive-step") &&
+       options.get_bool_option("k-induction")))
+    return;
+
+  // Map function name -> list of constraints
+  hash_map_cont<irep_idt, std::vector<expr2tc>, irep_id_hash> func_list;
+
+  // We'll walk list of SSA steps and look for inductive assignments
+  for(auto SSA_step : eq->SSA_steps)
+  {
+    if(SSA_step.ignore)
+      continue;
+
+    tvt result = smt_conv->l_get(SSA_step.guard_ast);
+    if(!result.is_true())
+      continue;
+
+    //    SSA_step.output(smt_conv->ns, std::cout);
+    if(!SSA_step.source.pc->inductive_step_instruction)
+      continue;
+
+    // Only analyse the SSA if it's an nondet assignments by the k-induction
+    if(!SSA_step.is_assignment())
+      continue;
+
+    // Only analyse nondet assignments
+    if(
+      is_symbol2t(SSA_step.rhs) &&
+      to_symbol2t(SSA_step.rhs)
+          .thename.as_string()
+          .find("nondet$symex::nondet") != std::string::npos)
+    {
+      // Get lhs and the value
+      auto lhs = build_lhs(smt_conv, SSA_step.original_lhs);
+      auto value = build_rhs(smt_conv, SSA_step.rhs);
+
+      // Add lhs and rhs to the list of new constraints
+      func_list[SSA_step.source.pc->location.get_function()].push_back(
+        equality2tc(lhs, value));
+    }
+  }
+
+  for(auto &f : func_list)
+  {
+    // Look for the function
+    goto_functionst::function_mapt::iterator fit =
+      symex->goto_functions.function_map.find(f.first);
+    assert(fit != symex->goto_functions.function_map.end());
+
+    // Find function loops
+    goto_loopst loops(
+      f.first, symex->goto_functions, fit->second, *get_message_handler());
+    assert(loops.get_loops().size());
+
+    expr2tc constraints = gen_true_expr();
+    for(auto const &it : f.second)
+      constraints = and2tc(constraints, it);
+
+    for(auto &l : loops.get_loops())
+    {
+      goto_programt::targett loop_exit = l.get_original_loop_exit();
+
+      goto_programt::instructiont i;
+      i.make_assertion(not2tc(constraints));
+      i.location = loop_exit->location;
+      i.location.user_provided(false);
+      i.loop_number = loop_exit->loop_number;
+
+      fit->second.body.insert_swap(loop_exit, i);
+    }
+  }
+
+  // recalculate numbers, etc.
+  symex->goto_functions.update();
 }
 
 smt_convt::resultt
