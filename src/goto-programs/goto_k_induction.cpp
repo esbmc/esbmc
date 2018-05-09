@@ -74,40 +74,61 @@ const expr2tc goto_k_inductiont::get_termination_cond(
   goto_programt::targett &loop_head,
   goto_programt::targett &loop_exit)
 {
-  // Let's not change the loop_head or loop_exit
-
-  goto_programt::targett tmp_exit = loop_exit;
+  // The loop_exit actually points to the last instruction before the backward
+  // goto. If the loop was generated from a do while, the termination condition
+  // is actually on the backward goto, i.e., loop_exit + 1.
+  // It _shouldn't_ be a problem for other kinds of loops, as their guards will
+  // be true
+  goto_programt::targett after_exit = loop_exit;
+  after_exit++;
 
   // Get the loop exit number
-  auto const &exit_number = (++tmp_exit)->location_number;
+  auto const &exit_number = (after_exit)->location_number;
 
   // Collect the loop termination conditions
-  expr2tc cond = gen_false_expr();
+  std::vector<expr2tc> term_conds;
 
-  for(goto_programt::targett tmp_head = loop_head; tmp_head != loop_exit;
-      tmp_head++)
+  goto_programt::targett tmp_head = loop_head;
+  for(; tmp_head != after_exit; tmp_head++)
   {
     // If there is a jump to outside the loop, collect it
     if(
       tmp_head->is_goto() &&
       (tmp_head->targets.front()->location_number >= exit_number))
     {
-      cond = or2tc(cond, tmp_head->guard);
+      term_conds.push_back(tmp_head->guard);
     }
   }
 
-  // If we hit the loop's end and didn't find any loop condition
-  // return a nil exprt
-  if(cond == gen_false_expr())
-    return expr2tc();
+  if(!term_conds.size())
+  {
+    // Check if this is a do while, the jump from the loop_exit targets
+    // the loop_head
+    if(
+      loop_exit->is_backwards_goto() &&
+      (loop_exit->targets.front()->target_number == loop_head->target_number))
+    {
+      term_conds.push_back(loop_exit->guard);
+    }
+    else
+    {
+      // Otherwise we couldn't figure out the termination conditions, so we giveup
+      return expr2tc();
+    }
+  }
+
+  // The termination condition is the OR operation of all term_conds
+  expr2tc term_cond = gen_false_expr();
+  for(auto const &cond : term_conds)
+    term_cond = or2tc(term_cond, cond);
 
   // Remove first or (for some reason, simplification is not working)
-  cond = to_or2t(cond).side_2;
+  term_cond = to_or2t(term_cond).side_2;
 
   // We found the loop condition however it's inverted, so we
   // have to negate it before returning
-  make_not(cond);
-  return cond;
+  make_not(term_cond);
+  return term_cond;
 }
 
 void goto_k_inductiont::make_nondet_assign(
