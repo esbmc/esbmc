@@ -275,6 +275,11 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", true);
   }
 
+  if(cmdline.isset("overflow-check"))
+  {
+    options.set_option("disable-inductive-step", true);
+  }
+
   if(cmdline.isset("timeout"))
   {
 #ifdef _WIN32
