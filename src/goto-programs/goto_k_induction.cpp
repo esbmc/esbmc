@@ -44,6 +44,18 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
 
   auto loop_termination_cond = get_termination_cond(loop_head, loop_exit);
 
+  // If we didn't find a loop condition, don't change anything
+  if(is_nil_expr(loop_termination_cond))
+  {
+    std::cout
+      << "**** WARNING: we couldn't find a loop termination condition"
+      << " for the following loop, so we're disabling the inductive step\n"
+      << "Loop: ";
+    loop.dump();
+    config.options.set_option("disable-inductive-step", true);
+    return;
+  }
+
   // Assume the loop entry condition before go into the loop
   assume_loop_entry_cond_before_loop(loop_head);
 
