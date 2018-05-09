@@ -42,55 +42,58 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
-  auto loop_cond = get_loop_cond(loop_head, loop_exit);
+  auto loop_termination_cond = get_termination_cond(loop_head, loop_exit);
 
-  // If we didn't find a loop condition, don't change anything
-  if(is_nil_expr(loop_cond))
-  {
-    std::cout << "**** WARNING: we couldn't find a loop condition for the"
-              << " following loop, so we're not converting it." << std::endl
-              << "Loop: ";
-    loop.dump();
-    return;
-  }
-
-  // Assume the loop condition before go into the loop
-  assume_loop_cond_before_loop(loop_head, loop_cond);
+  // Assume the loop entry condition before go into the loop
+  assume_loop_entry_cond_before_loop(loop_head);
 
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(loop_head, loop);
-
-  // Get original head again
-  // Since we are using insert_swap to keep the targets, the
-  // original loop head as shifted to after the assume cond
-  while((++loop_head)->inductive_step_instruction)
-    ;
 
   // Check if the loop exit needs to be updated
   // We must point to the assume that was inserted in the previous
   // transformation
   adjust_loop_head_and_exit(loop_head, loop_exit);
+
+  assume_neg_loop_cond_after_loop(loop_exit, loop_termination_cond);
 }
 
-const expr2tc goto_k_inductiont::get_loop_cond(
+const expr2tc goto_k_inductiont::get_termination_cond(
   goto_programt::targett &loop_head,
   goto_programt::targett &loop_exit)
 {
-  // Let's not change the loop head
-  goto_programt::targett tmp = loop_head;
+  // Let's not change the loop_head or loop_exit
 
-  // Look for an loop condition
-  while(!tmp->is_goto())
-    ++tmp;
+  goto_programt::targett tmp_exit = loop_exit;
+
+  // Get the loop exit number
+  auto const &exit_number = (++tmp_exit)->location_number;
+
+  // Collect the loop termination conditions
+  expr2tc cond = gen_false_expr();
+
+  for(goto_programt::targett tmp_head = loop_head; tmp_head != loop_exit;
+      tmp_head++)
+  {
+    // If there is a jump to outside the loop, collect it
+    if(
+      tmp_head->is_goto() &&
+      (tmp_head->targets.front()->location_number >= exit_number))
+    {
+      cond = or2tc(cond, tmp_head->guard);
+    }
+  }
 
   // If we hit the loop's end and didn't find any loop condition
   // return a nil exprt
-  if(tmp == loop_exit)
+  if(cond == gen_false_expr())
     return expr2tc();
+
+  // Remove first or (for some reason, simplification is not working)
+  cond = to_or2t(cond).side_2;
 
   // We found the loop condition however it's inverted, so we
   // have to negate it before returning
-  auto cond = tmp->guard;
   make_not(cond);
   return cond;
 }
@@ -99,10 +102,9 @@ void goto_k_inductiont::make_nondet_assign(
   goto_programt::targett &loop_head,
   const loopst &loop)
 {
-  goto_programt dest;
-
   auto const &loop_vars = loop.get_loop_vars();
 
+  goto_programt dest;
   for(auto const &lhs : loop_vars)
   {
     expr2tc rhs = sideeffect2tc(
@@ -120,12 +122,26 @@ void goto_k_inductiont::make_nondet_assign(
   }
 
   goto_function.body.insert_swap(loop_head, dest);
+
+  // Get original head again
+  // Since we are using insert_swap to keep the targets, the
+  // original loop head as shifted to after the assume cond
+  while((++loop_head)->inductive_step_instruction)
+    ;
 }
 
-void goto_k_inductiont::assume_loop_cond_before_loop(
-  goto_programt::targett &loop_head,
-  expr2tc &loop_cond)
+void goto_k_inductiont::assume_loop_entry_cond_before_loop(
+  goto_programt::targett &loop_head)
 {
+  auto loop_cond = loop_head->guard;
+
+  // It might be nil, in case of goto loops
+  if(is_nil_expr(loop_cond))
+    return;
+
+  // Otherwise, the loop entry condition will be negated, so revert it
+  make_not(loop_cond);
+
   if(is_true(loop_cond))
     return;
 
@@ -144,10 +160,7 @@ void goto_k_inductiont::assume_neg_loop_cond_after_loop(
   make_not(neg_loop_cond);
   assume_cond(neg_loop_cond, dest, loop_exit->location);
 
-  //  goto_programt::targett _loop_exit = loop_exit;
-  //  ++_loop_exit;
-
-  goto_function.body.insert_swap(loop_exit, dest);
+  goto_function.body.insert_swap(++loop_exit, dest);
 }
 
 void goto_k_inductiont::adjust_loop_head_and_exit(

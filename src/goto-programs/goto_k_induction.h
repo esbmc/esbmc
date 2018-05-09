@@ -41,16 +41,14 @@ protected:
 
   void convert_finite_loop(loopst &loop);
 
-  const expr2tc get_loop_cond(
+  const expr2tc get_termination_cond(
     goto_programt::targett &loop_head,
     goto_programt::targett &loop_exit);
 
   void
   make_nondet_assign(goto_programt::targett &loop_head, const loopst &loop);
 
-  void assume_loop_cond_before_loop(
-    goto_programt::targett &loop_head,
-    expr2tc &loop_cond);
+  void assume_loop_entry_cond_before_loop(goto_programt::targett &loop_head);
 
   void assume_neg_loop_cond_after_loop(
     goto_programt::targett &loop_exit,
