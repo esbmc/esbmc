@@ -42,22 +42,11 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
-  auto loop_termination_cond = get_termination_cond(loop_head, loop_exit);
-
-  // If we didn't find a loop condition, don't change anything
-  if(is_nil_expr(loop_termination_cond))
-  {
-    std::cout
-      << "**** WARNING: we couldn't find a loop termination condition"
-      << " for the following loop, so we're disabling the inductive step\n"
-      << "Loop: ";
-    loop.dump();
-    config.options.set_option("disable-inductive-step", true);
-    return;
-  }
+  guardt guard;
+  get_entry_cond_rec(loop_head, loop_exit, guard);
 
   // Assume the loop entry condition before go into the loop
-  assume_loop_entry_cond_before_loop(loop_head);
+  assume_loop_entry_cond_before_loop(loop_head, guard);
 
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(loop_head, loop);
@@ -66,69 +55,71 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
   // We must point to the assume that was inserted in the previous
   // transformation
   adjust_loop_head_and_exit(loop_head, loop_exit);
-
-  assume_neg_loop_cond_after_loop(loop_exit, loop_termination_cond);
 }
 
-const expr2tc goto_k_inductiont::get_termination_cond(
-  goto_programt::targett &loop_head,
-  goto_programt::targett &loop_exit)
+bool goto_k_inductiont::get_entry_cond_rec(
+  const goto_programt::targett &loop_head,
+  const goto_programt::targett &loop_exit,
+  guardt &guard)
 {
-  // The loop_exit actually points to the last instruction before the backward
-  // goto. If the loop was generated from a do while, the termination condition
-  // is actually on the backward goto, i.e., loop_exit + 1.
-  // It _shouldn't_ be a problem for other kinds of loops, as their guards will
-  // be true
-  goto_programt::targett after_exit = loop_exit;
-  after_exit++;
+  // Let's walk the loop and collect the constraints to enter the
+  // loop. This might be messy because of side-effects
 
-  // Get the loop exit number
-  auto const &exit_number = (after_exit)->location_number;
+  // If we reached the end, return the set of constraints
+  if(loop_head == loop_exit)
+    return true;
 
-  // Collect the loop termination conditions
-  std::vector<expr2tc> term_conds;
+  // entry and exit numbers
+  auto const entry_number = loop_head->location_number;
+  auto const exit_number = loop_exit->location_number;
 
   goto_programt::targett tmp_head = loop_head;
-  for(; tmp_head != after_exit; tmp_head++)
+  for(; tmp_head != loop_exit; tmp_head++)
   {
-    // If there is a jump to outside the loop, collect it
-    if(
-      tmp_head->is_goto() &&
-      (tmp_head->targets.front()->location_number >= exit_number))
+    if(tmp_head->is_return())
+      return false;
+
+    if(tmp_head->is_assume() && is_false(tmp_head->guard))
+      return false;
+
+    if(tmp_head->is_goto() && !tmp_head->is_backwards_goto())
     {
-      term_conds.push_back(tmp_head->guard);
+      // Ignore if the guard is true
+      expr2tc g = tmp_head->guard;
+      if(is_true(g))
+        return get_entry_cond_rec(tmp_head->targets.front(), loop_exit, guard);
+
+      // This is a jump to exit the loop, so we have to collect the
+      // negated constraint (we want the loop to be executed)
+      auto const cur_number = tmp_head->targets.front()->location_number;
+      if(cur_number > exit_number || cur_number < entry_number)
+      {
+        make_not(g);
+        guard.add(g);
+        return true;
+      }
+
+      // Otherwise, is an intra-loop jump, we have to collect the
+      // constraints that lead to a loop termination
+
+      guardt new_guard;
+      new_guard.add(g);
+
+      if(get_entry_cond_rec(tmp_head->targets.front(), loop_exit, new_guard))
+      {
+        // Reached a loop exit, add to the list of guards
+        guard.append(new_guard);
+      }
+      else
+      {
+        expr2tc new_g = new_guard.as_expr();
+        make_not(new_g);
+        guard.add(new_g);
+      }
     }
   }
 
-  if(!term_conds.size())
-  {
-    // Check if this is a do while, the jump from the loop_exit targets
-    // the loop_head
-    if(
-      loop_exit->is_backwards_goto() &&
-      (loop_exit->targets.front()->target_number == loop_head->target_number))
-    {
-      term_conds.push_back(loop_exit->guard);
-    }
-    else
-    {
-      // Otherwise we couldn't figure out the termination conditions, so we giveup
-      return expr2tc();
-    }
-  }
-
-  // The termination condition is the OR operation of all term_conds
-  expr2tc term_cond = gen_false_expr();
-  for(auto const &cond : term_conds)
-    term_cond = or2tc(term_cond, cond);
-
-  // Remove first or (for some reason, simplification is not working)
-  term_cond = to_or2t(term_cond).side_2;
-
-  // We found the loop condition however it's inverted, so we
-  // have to negate it before returning
-  make_not(term_cond);
-  return term_cond;
+  return true;
 }
 
 void goto_k_inductiont::make_nondet_assign(
@@ -164,18 +155,15 @@ void goto_k_inductiont::make_nondet_assign(
 }
 
 void goto_k_inductiont::assume_loop_entry_cond_before_loop(
-  goto_programt::targett &loop_head)
+  goto_programt::targett &loop_head,
+  const guardt &guard)
 {
-  auto loop_cond = loop_head->guard;
+  auto loop_cond = guard.as_expr();
 
-  // It might be nil, in case of goto loops
   if(is_nil_expr(loop_cond))
     return;
 
-  // Otherwise, the loop entry condition will be negated, so revert it
-  make_not(loop_cond);
-
-  if(is_true(loop_cond))
+  if(is_true(loop_cond) || is_false(loop_cond))
     return;
 
   goto_programt dest;

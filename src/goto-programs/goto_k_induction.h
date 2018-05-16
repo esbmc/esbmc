@@ -10,6 +10,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_loops.h>
+#include <util/guard.h>
 #include <util/hash_cont.h>
 #include <util/message_stream.h>
 #include <util/irep2_expr.h>
@@ -41,14 +42,17 @@ protected:
 
   void convert_finite_loop(loopst &loop);
 
-  const expr2tc get_termination_cond(
-    goto_programt::targett &loop_head,
-    goto_programt::targett &loop_exit);
+  bool get_entry_cond_rec(
+    const goto_programt::targett &loop_head,
+    const goto_programt::targett &after_exit,
+    guardt &guard);
 
   void
   make_nondet_assign(goto_programt::targett &loop_head, const loopst &loop);
 
-  void assume_loop_entry_cond_before_loop(goto_programt::targett &loop_head);
+  void assume_loop_entry_cond_before_loop(
+    goto_programt::targett &loop_head,
+    const guardt &guard);
 
   void assume_neg_loop_cond_after_loop(
     goto_programt::targett &loop_exit,

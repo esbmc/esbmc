@@ -272,7 +272,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     options.set_option("inductive-step", true);
     options.set_option("no-unwinding-assertions", true);
-    options.set_option("partial-loops", true);
+    options.set_option("partial-loops", false);
   }
 
   if(cmdline.isset("overflow-check"))
