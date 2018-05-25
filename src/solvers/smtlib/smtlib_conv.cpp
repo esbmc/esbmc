@@ -226,9 +226,12 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
   assert(s.token == 0 && s.sexpr_list.size() == 2 && "Bad solver name format");
   class sexpr &keyword = s.sexpr_list.front();
   class sexpr &value = s.sexpr_list.back();
-  assert(
-    keyword.token == TOK_KEYWORD && keyword.data == ":name" &&
-    "Bad get-info :name response from solver");
+  if(!(keyword.token == TOK_KEYWORD && keyword.data == ":name"))
+  {
+    std::cerr << "Bad get-info :name response from solver";
+    abort();
+  }
+
   assert(value.token == TOK_STRINGLIT && "Non-string solver name response");
   solver_name = value.data;
   delete smtlib_output;
@@ -248,9 +251,11 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
   assert(v.token == 0 && v.sexpr_list.size() == 2 && "Bad solver version fmt");
   class sexpr &kw = v.sexpr_list.front();
   class sexpr &val = v.sexpr_list.back();
-  assert(
-    kw.token == TOK_KEYWORD && kw.data == ":version" &&
-    "Bad get-info :version response from solver");
+  if(!(kw.token == TOK_KEYWORD && kw.data == ":version"))
+  {
+    std::cerr << "Bad get-info :version response from solver";
+    abort();
+  }
   assert(val.token == TOK_STRINGLIT && "Non-string solver version response");
   solver_version = val.data;
   delete smtlib_output;
@@ -483,9 +488,11 @@ BigInt smtlib_convt::get_bv(smt_astt a)
   std::list<sexpr>::iterator it = response.sexpr_list.begin();
   sexpr &symname = *it++;
   sexpr &respval = *it++;
-  assert(
-    symname.token == TOK_SIMPLESYM && symname.data == name &&
-    "smtlib solver returned different symbol from get-value");
+  if(!(symname.token == TOK_SIMPLESYM && symname.data == name))
+  {
+    std::cerr << "smtlib solver returned different symbol from get-value";
+    abort();
+  }
 
   // Attempt to read an integer.
   BigInt m;
@@ -595,10 +602,12 @@ expr2tc smtlib_convt::get_array_elem(
   expr2tc result;
   if(is_bv_type(t))
   {
-    assert(
-      was_integer &&
-      "smtlib solver didn't provide integer response to "
-      "integer get-value");
+    if(!was_integer)
+    {
+      std::cerr
+        << "smtlib solver didn't provide integer response to integer get-value";
+      abort();
+    }
     result = constant_int2tc(t, m);
   }
   else if(is_fixedbv_type(t))

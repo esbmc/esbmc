@@ -580,7 +580,6 @@ fp_convt::mk_smt_fpbv_fma(smt_astt x, smt_astt y, smt_astt z, smt_astt rm)
   assert(sig_abs_h1_f->sort->get_data_width() == sbits + 6);
   assert(res_sig_1->sort->get_data_width() == sbits + 4);
 
-  smt_astt sticky_h2 = ctx->mk_extract(sig_abs, sbits + too_short - 1, 0);
   smt_astt sig_abs_h2 =
     ctx->mk_extract(sig_abs, 2 * sbits + too_short + 4, sbits + too_short);
   smt_astt sticky_h2_red =
@@ -588,7 +587,6 @@ fp_convt::mk_smt_fpbv_fma(smt_astt x, smt_astt y, smt_astt z, smt_astt rm)
   smt_astt sig_abs_h2_f =
     ctx->mk_zero_ext(ctx->mk_bvor(sig_abs_h2, sticky_h2_red), 1);
   smt_astt res_sig_2 = ctx->mk_extract(sig_abs_h2_f, sbits + 3, 0);
-  assert(sticky_h2->sort->get_data_width() == sbits + too_short);
   assert(sig_abs_h2->sort->get_data_width() == sbits + 5);
   assert(sticky_h2_red->sort->get_data_width() == sbits + 5);
   assert(sig_abs_h2_f->sort->get_data_width() == sbits + 6);
@@ -920,8 +918,6 @@ fp_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
   // bv_sz-1 is the "1.0" bit for the rounder.
 
   smt_astt lz = mk_leading_zeros(x, bv_sz);
-  smt_astt e_bv_sz = ctx->mk_smt_bv(BigInt(bv_sz), bv_sz);
-  assert(lz->sort->get_data_width() == e_bv_sz->sort->get_data_width());
   smt_astt shifted_sig = ctx->mk_bvshl(x, lz);
 
   // shifted_sig is [bv_sz-1] . [bv_sz-2 ... 0] * 2^(bv_sz-1) * 2^(-lz)
@@ -1031,8 +1027,6 @@ fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
   // bv_sz-1 is the "1.0" bit for the rounder.
 
   smt_astt lz = mk_leading_zeros(x_abs, bv_sz);
-  smt_astt e_bv_sz = ctx->mk_smt_bv(BigInt(bv_sz), bv_sz);
-  assert(lz->sort->get_data_width() == e_bv_sz->sort->get_data_width());
   smt_astt shifted_sig = ctx->mk_bvshl(x_abs, lz);
 
   // shifted_sig is [bv_sz-1, bv_sz-2] . [bv_sz-3 ... 0] * 2^(bv_sz-2) * 2^(-lz)
