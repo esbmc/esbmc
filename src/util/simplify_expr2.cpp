@@ -416,14 +416,6 @@ struct Divtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
-    if(is_constant(op1))
-    {
-      // Numerator is zero? Simplify to zero
-      expr2tc c1 = op1;
-      if(get_value(c1) == 0)
-        return op1;
-    }
-
     if(is_constant(op2))
     {
       expr2tc c2 = op2;
@@ -440,7 +432,14 @@ struct Divtor
     // Two constants? Simplify to result of the division
     if(is_constant(op1) && is_constant(op2))
     {
-      expr2tc c1 = op1, c2 = op2;
+      expr2tc c1 = op1;
+
+      // Numerator is zero? Simplify to zero, as we know
+      // that op2 is not zero
+      if(get_value(c1) == 0)
+        return op1;
+
+      expr2tc c2 = op2;
       get_value(c1) /= get_value(c2);
       return c1;
     }
