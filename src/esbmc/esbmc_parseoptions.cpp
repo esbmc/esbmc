@@ -379,20 +379,20 @@ int esbmc_parseoptionst::doit()
     return 0;
   }
 
+  if(cmdline.isset("termination"))
+    return doit_termination();
+
+  if(cmdline.isset("incremental-bmc"))
+    return doit_incremental();
+
+  if(cmdline.isset("falsification"))
+    return doit_falsification();
+
   if(cmdline.isset("k-induction"))
     return doit_k_induction();
 
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
-
-  if(cmdline.isset("falsification"))
-    return doit_falsification();
-
-  if(cmdline.isset("incremental-bmc"))
-    return doit_incremental();
-
-  if(cmdline.isset("termination"))
-    return doit_termination();
 
   optionst opts;
   get_command_line_options(opts);
