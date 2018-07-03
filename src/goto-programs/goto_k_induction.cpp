@@ -70,18 +70,12 @@ bool goto_k_inductiont::get_entry_cond_rec(
     return true;
 
   // entry and exit numbers
-  auto const entry_number = loop_head->location_number;
-  auto const exit_number = loop_exit->location_number;
+  auto const &entry_number = loop_head->location_number;
+  auto const &exit_number = loop_exit->location_number;
 
   goto_programt::targett tmp_head = loop_head;
   for(; tmp_head != loop_exit; tmp_head++)
   {
-    if(tmp_head->is_return())
-      return false;
-
-    if(tmp_head->is_assume() && is_false(tmp_head->guard))
-      return false;
-
     if(tmp_head->is_goto() && !tmp_head->is_backwards_goto())
     {
       // Ignore if the guard is true
@@ -91,31 +85,15 @@ bool goto_k_inductiont::get_entry_cond_rec(
 
       // This is a jump to exit the loop, so we have to collect the
       // negated constraint (we want the loop to be executed)
-      auto const cur_number = tmp_head->targets.front()->location_number;
-      if(cur_number > exit_number || cur_number < entry_number)
+      auto const &target_number = tmp_head->targets.front()->location_number;
+      if(target_number > exit_number || target_number < entry_number)
       {
         make_not(g);
         guard.add(g);
         return true;
       }
 
-      // Otherwise, is an intra-loop jump, we have to collect the
-      // constraints that lead to a loop termination
-
-      guardt new_guard;
-      new_guard.add(g);
-
-      if(get_entry_cond_rec(tmp_head->targets.front(), loop_exit, new_guard))
-      {
-        // Reached a loop exit, add to the list of guards
-        guard.append(new_guard);
-      }
-      else
-      {
-        expr2tc new_g = new_guard.as_expr();
-        make_not(new_g);
-        guard.add(new_g);
-      }
+      continue;
     }
   }
 
