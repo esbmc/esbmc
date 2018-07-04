@@ -72,6 +72,8 @@ protected:
 
   void
   assume_cond(const expr2tc &cond, goto_programt &dest, const locationt &loc);
+
+  std::set<unsigned> marked_branch;
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

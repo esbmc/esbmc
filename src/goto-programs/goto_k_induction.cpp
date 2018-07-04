@@ -65,10 +65,6 @@ bool goto_k_inductiont::get_entry_cond_rec(
   // Let's walk the loop and collect the constraints to enter the
   // loop. This might be messy because of side-effects
 
-  // If we reached the end, return the set of constraints
-  if(loop_head == loop_exit)
-    return true;
-
   // entry and exit numbers
   auto const &entry_number = loop_head->location_number;
   auto const &exit_number = loop_exit->location_number;
@@ -76,24 +72,57 @@ bool goto_k_inductiont::get_entry_cond_rec(
   goto_programt::targett tmp_head = loop_head;
   for(; tmp_head != loop_exit; tmp_head++)
   {
+    if(marked_branch.find(tmp_head->location_number) != marked_branch.end())
+      return true;
+
     if(tmp_head->is_goto() && !tmp_head->is_backwards_goto())
     {
-      // Ignore if the guard is true
       expr2tc g = tmp_head->guard;
-      if(is_true(g))
-        return get_entry_cond_rec(tmp_head->targets.front(), loop_exit, guard);
 
       // This is a jump to exit the loop, so we have to collect the
       // negated constraint (we want the loop to be executed)
       auto const &target_number = tmp_head->targets.front()->location_number;
       if(target_number > exit_number || target_number < entry_number)
       {
-        make_not(g);
-        guard.add(g);
-        return true;
+        if(!is_true(g))
+        {
+          make_not(g);
+          guard.add(g);
+        }
+        continue;
       }
 
-      continue;
+      // Walk the true branch
+      guardt true_branch_guard;
+      true_branch_guard.add(g);
+      bool true_branch = get_entry_cond_rec(
+        tmp_head->targets.front(), loop_exit, true_branch_guard);
+
+      // Walk the false branch
+      guardt false_branch_guard;
+      false_branch_guard.add(g);
+      bool false_branch =
+        get_entry_cond_rec(++tmp_head, loop_exit, false_branch_guard);
+
+      // Both branches reach the end of the loop, it's not a termination
+      // condition
+      if(false_branch && true_branch)
+      {
+        // If we evaluated both sides of the branch, mark it so we don't
+        // have to do it again.
+        marked_branch.insert(entry_number);
+        return false;
+      }
+
+      if(false_branch)
+        guard.append(false_branch_guard);
+
+      if(true_branch)
+      {
+        expr2tc branch_guard_expr = false_branch_guard.as_expr();
+        make_not(branch_guard_expr);
+        guard.add(branch_guard_expr);
+      }
     }
   }
 
