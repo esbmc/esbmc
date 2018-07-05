@@ -89,7 +89,10 @@ bool goto_k_inductiont::get_entry_cond_rec(
           make_not(g);
           guard.add(g);
         }
-        continue;
+
+        // Walk the false branch
+        get_entry_cond_rec(++tmp_head, loop_exit, guard);
+        return false;
       }
 
       // Walk the true branch
@@ -111,13 +114,13 @@ bool goto_k_inductiont::get_entry_cond_rec(
         // If we evaluated both sides of the branch, mark it so we don't
         // have to do it again.
         marked_branch.insert(entry_number);
-        return false;
+        return true;
       }
 
-      if(false_branch)
-        guard.append(false_branch_guard);
+      if(!true_branch)
+        guard.append(true_branch_guard);
 
-      if(true_branch)
+      if(!false_branch)
       {
         expr2tc branch_guard_expr = false_branch_guard.as_expr();
         make_not(branch_guard_expr);
