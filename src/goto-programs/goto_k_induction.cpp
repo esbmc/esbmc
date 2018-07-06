@@ -112,17 +112,25 @@ bool goto_k_inductiont::get_entry_cond_rec(
       auto const &branch_number = tmp_head->location_number;
 
       // Walk the true branch
+      bool true_branch = true;
       guardt true_branch_guard;
-      true_branch_guard.add(g);
-      bool true_branch = get_entry_cond_rec(
-        tmp_head->targets.front(), loop_exit, true_branch_guard);
+      if(!is_false(g))
+      {
+        true_branch_guard.add(g);
+        true_branch = get_entry_cond_rec(
+          tmp_head->targets.front(), loop_exit, true_branch_guard);
+      }
 
-      // Walk the false branch
-      make_not(g);
+      bool false_branch = true;
       guardt false_branch_guard;
-      false_branch_guard.add(g);
-      bool false_branch =
-        get_entry_cond_rec(++tmp_head, loop_exit, false_branch_guard);
+      if(!is_true(g))
+      {
+        // Walk the false branch
+        make_not(g);
+        false_branch_guard.add(g);
+        false_branch =
+          get_entry_cond_rec(++tmp_head, loop_exit, false_branch_guard);
+      }
 
       // If both side reach loop termination or if both side don't reach it
       // we can ignore it
