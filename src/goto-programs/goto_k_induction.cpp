@@ -42,11 +42,11 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
-  guardt guard;
-  get_entry_cond_rec(loop_head, loop_exit, guard);
+  guardst guards;
+  get_entry_cond_rec(loop_head, loop_exit, guards);
 
   // Assume the loop entry condition before go into the loop
-  assume_loop_entry_cond_before_loop(loop_head, guard);
+  assume_loop_entry_cond_before_loop(loop_head, loop_exit, guards);
 
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(loop_head, loop);
@@ -60,7 +60,7 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
 bool goto_k_inductiont::get_entry_cond_rec(
   const goto_programt::targett &loop_head,
   const goto_programt::targett &loop_exit,
-  guardt &guard)
+  guardst &guards)
 {
   // Let's walk the loop and collect the constraints to enter the
   // loop. This might be messy because of side-effects
@@ -93,6 +93,8 @@ bool goto_k_inductiont::get_entry_cond_rec(
       if(is_false(g))
         continue;
 
+      auto const &branch_number = tmp_head->location_number;
+
       // This is a jump to exit the loop, so we have to collect the
       // negated constraint (we want the loop to be executed)
       auto const &target_number = tmp_head->targets.front()->location_number;
@@ -103,32 +105,30 @@ bool goto_k_inductiont::get_entry_cond_rec(
           return false;
 
         make_not(g);
-        guard.add(g);
+        guards[branch_number].add(g);
 
         // We only need to walk the false branch
-        return get_entry_cond_rec(++tmp_head, loop_exit, guard);
+        return get_entry_cond_rec(++tmp_head, loop_exit, guards);
       }
 
       // Otherwise, it's an intra loop jump, walk both sides
-      auto const &branch_number = tmp_head->location_number;
 
       // Walk the true branch
       bool true_branch = true;
-      guardt true_branch_guard;
+      guardst true_branch_guard;
       if(!is_false(g))
       {
-        true_branch_guard.add(g);
+        true_branch_guard[branch_number].add(g);
         true_branch = get_entry_cond_rec(
           tmp_head->targets.front(), loop_exit, true_branch_guard);
       }
 
       bool false_branch = true;
-      guardt false_branch_guard;
+      guardst false_branch_guard;
       if(!is_true(g))
       {
         // Walk the false branch
-        make_not(g);
-        false_branch_guard.add(g);
+        false_branch_guard[branch_number].add(g);
         false_branch =
           get_entry_cond_rec(++tmp_head, loop_exit, false_branch_guard);
       }
@@ -145,13 +145,13 @@ bool goto_k_inductiont::get_entry_cond_rec(
 
       if(!true_branch)
       {
-        guard.append(true_branch_guard);
+        guards.insert(true_branch_guard.begin(), true_branch_guard.end());
         return false;
       }
 
       if(!false_branch)
       {
-        guard.append(false_branch_guard);
+        guards.insert(false_branch_guard.begin(), false_branch_guard.end());
         return false;
       }
     }
@@ -194,32 +194,29 @@ void goto_k_inductiont::make_nondet_assign(
 
 void goto_k_inductiont::assume_loop_entry_cond_before_loop(
   goto_programt::targett &loop_head,
-  const guardt &guard)
-{
-  auto loop_cond = guard.as_expr();
-
-  if(is_nil_expr(loop_cond))
-    return;
-
-  if(is_true(loop_cond) || is_false(loop_cond))
-    return;
-
-  goto_programt dest;
-  assume_cond(loop_cond, dest, loop_head->location);
-
-  goto_function.body.insert_swap(loop_head, dest);
-}
-
-void goto_k_inductiont::assume_neg_loop_cond_after_loop(
   goto_programt::targett &loop_exit,
-  expr2tc &loop_cond)
+  const guardst &guards)
 {
-  goto_programt dest;
-  expr2tc neg_loop_cond = loop_cond;
-  make_not(neg_loop_cond);
-  assume_cond(neg_loop_cond, dest, loop_exit->location);
+  goto_programt::targett tmp_head = loop_head;
+  for(; tmp_head != loop_exit; tmp_head++)
+  {
+    auto const g = guards.find(tmp_head->location_number);
+    if(g == guards.end())
+      continue;
 
-  goto_function.body.insert_swap(++loop_exit, dest);
+    expr2tc loop_cond = g->second.as_expr();
+
+    if(is_nil_expr(loop_cond))
+      return;
+
+    if(is_true(loop_cond) || is_false(loop_cond))
+      return;
+
+    goto_programt dest;
+    assume_cond(loop_cond, dest, tmp_head->location);
+
+    goto_function.body.insert_swap(tmp_head, dest);
+  }
 }
 
 void goto_k_inductiont::adjust_loop_head_and_exit(

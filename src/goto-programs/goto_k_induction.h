@@ -38,6 +38,12 @@ public:
   }
 
 protected:
+  typedef hash_set_cont<unsigned> marked_branchst;
+  marked_branchst marked_branch;
+
+  typedef hash_map_cont<unsigned, guardt> guardst;
+  guardst guards;
+
   void goto_k_induction();
 
   void convert_finite_loop(loopst &loop);
@@ -45,26 +51,15 @@ protected:
   bool get_entry_cond_rec(
     const goto_programt::targett &loop_head,
     const goto_programt::targett &after_exit,
-    guardt &guard);
+    guardst &guards);
 
   void
   make_nondet_assign(goto_programt::targett &loop_head, const loopst &loop);
 
   void assume_loop_entry_cond_before_loop(
     goto_programt::targett &loop_head,
-    const guardt &guard);
-
-  void assume_neg_loop_cond_after_loop(
     goto_programt::targett &loop_exit,
-    expr2tc &loop_cond);
-
-  void duplicate_loop_body(
-    goto_programt::targett &loop_head,
-    goto_programt::targett &loop_exit);
-
-  void convert_assert_to_assume(
-    goto_programt::targett &loop_head,
-    goto_programt::targett &loop_exit);
+    const guardst &guard);
 
   void adjust_loop_head_and_exit(
     goto_programt::targett &loop_head,
@@ -72,8 +67,6 @@ protected:
 
   void
   assume_cond(const expr2tc &cond, goto_programt &dest, const locationt &loc);
-
-  std::set<unsigned> marked_branch;
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */
