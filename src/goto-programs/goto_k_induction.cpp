@@ -109,6 +109,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
       }
 
       // Otherwise, it's an intra loop jump, walk both sides
+      auto const &branch_number = tmp_head->location_number;
 
       // Walk the true branch
       guardt true_branch_guard;
@@ -129,7 +130,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
       {
         // If we evaluated both sides of the branch, mark it so we don't
         // have to do it again.
-        marked_branch.insert(entry_number);
+        marked_branch.insert(branch_number);
         return false_branch && true_branch;
       }
 
