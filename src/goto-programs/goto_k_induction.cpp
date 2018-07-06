@@ -87,6 +87,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
     if(tmp_head->is_goto() && !tmp_head->is_backwards_goto())
     {
       expr2tc g = tmp_head->guard;
+      simplify(g);
 
       // If the guard is false, we can skip it right away
       if(is_false(g))
