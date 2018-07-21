@@ -720,7 +720,7 @@ expr2tc expr2t::simplify() const
     // An operand has been changed; clone ourselves and update.
     expr2tc new_us = clone();
     std::list<expr2tc>::iterator it2 = newoperands.begin();
-    new_us->Foreach_operand([this, &it2](expr2tc &e) {
+    new_us->Foreach_operand([&it2](expr2tc &e) {
       if((*it2) == nullptr)
         ; // No change in operand;
       else
