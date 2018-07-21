@@ -886,7 +886,10 @@ smt_astt smtlib_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 
 smt_astt smtlib_convt::mk_concat(smt_astt a, smt_astt b)
 {
-  return mk_concat(a, b);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_CONCAT);
+  ast->args.push_back(a);
+  ast->args.push_back(b);
+  return ast;
 }
 
 smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
@@ -894,7 +897,11 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
   assert(cond->sort->id == SMT_SORT_BOOL);
   assert(t->sort->get_data_width() == f->sort->get_data_width());
 
-  return mk_ite(cond, t, f);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, t->sort, SMT_FUNC_ITE);
+  ast->args.push_back(cond);
+  ast->args.push_back(t);
+  ast->args.push_back(f);
+  return ast;
 }
 
 int smtliberror(int startsym __attribute__((unused)), const std::string &error)
