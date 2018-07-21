@@ -954,8 +954,10 @@ static expr2tc simplify_logic_2ops(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-    std::function<ieee_floatt &(expr2tc &)> get_value = [](
-      expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1633,22 +1635,12 @@ static expr2tc simplify_relations(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-    std::function<ieee_floatt &(expr2tc &)> get_value = [](
-      expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
-
-    simpl_res = TFunctor<ieee_floatt>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
-  }
-  else if(is_bool_type(simplied_side_1) || is_bool_type(simplied_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_bool2t;
-
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
-      return to_constant_bool2t(c).value;
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
     };
 
-    simpl_res = TFunctor<bool>::simplify(
+    simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
   }
   else
@@ -1681,8 +1673,10 @@ static expr2tc simplify_floatbv_relations(
       std::function<bool(const expr2tc &)> is_constant =
         (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-      std::function<ieee_floatt &(expr2tc &)> get_value = [](
-        expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
+      std::function<ieee_floatt &(expr2tc &)> get_value =
+        [](expr2tc &c) -> ieee_floatt & {
+        return to_constant_floatbv2t(c).value;
+      };
 
       simpl_res = TFunctor<ieee_floatt>::simplify(
         simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -2241,8 +2235,10 @@ static expr2tc simplify_floatbv_2ops(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-    std::function<ieee_floatt &(expr2tc &)> get_value = [](
-      expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);
