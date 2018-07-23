@@ -1,5 +1,11 @@
 Release Notes of the ESBMC model checker
 
+*** Version 5.1
+* Backported fixes to the floating-point API from Z3 4.7.1
+* Fixed compilation with clang
+* Fixed wrong integer division simplification
+* Fixed infinite loop reported in #7
+
 *** Version 5.0
 * Massive update to the SMT backend:
   - New floating-point API, supporting all solvers (based on Z3)
