@@ -78,6 +78,9 @@ bool goto_k_inductiont::get_entry_cond_rec(
     if(marked_branch.find(tmp_head->location_number) != marked_branch.end())
       return true;
 
+    /* TODO: disable this for now, it will be used for termination evaluation
+     * in the future.
+
     // Return, assume(0) and assert(0) stop the execution, so ignore these
     // branches too
     if(tmp_head->is_return())
@@ -86,6 +89,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
     if(tmp_head->is_assume() || tmp_head->is_assert())
       if(is_false(tmp_head->guard))
         return true;
+    */
 
     if(tmp_head->is_goto() && !tmp_head->is_backwards_goto())
     {
