@@ -104,14 +104,24 @@ bool goto_k_inductiont::get_entry_cond_rec(
 
       if(target_number > exit_number || target_number < entry_number)
       {
-        if(is_true(g))
-          return false;
+        if(!is_true(g))
+        {
+          // We only need to walk the false branch
+          guardst false_branch_guard;
 
-        make_not(g);
-        guards[branch_number].add(g);
+          goto_programt::targett new_tmp_head = tmp_head;
+          false_branch_guard[branch_number].add(g);
+          bool false_branch =
+            get_entry_cond_rec(++new_tmp_head, loop_exit, false_branch_guard);
 
-        // We only need to walk the false branch
-        return get_entry_cond_rec(++tmp_head, loop_exit, guards);
+          if(!false_branch)
+          {
+            guards.insert(false_branch_guard.begin(), false_branch_guard.end());
+            return false;
+          }
+        }
+
+        continue;
       }
 
       // Otherwise, it's an intra loop jump, walk both sides
