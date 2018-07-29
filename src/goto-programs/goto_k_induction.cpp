@@ -126,28 +126,30 @@ bool goto_k_inductiont::get_entry_cond_rec(
 
       // Otherwise, it's an intra loop jump, walk both sides
 
+      // Walk the false branch
+      bool false_branch = true;
+      guardst false_branch_guard;
+      if(!is_true(g))
+      {
+        goto_programt::targett new_tmp_head = tmp_head;
+        false_branch_guard[branch_number].add(g);
+        false_branch =
+          get_entry_cond_rec(++new_tmp_head, loop_exit, false_branch_guard);
+      }
+
       // Walk the true branch
       bool true_branch = true;
       guardst true_branch_guard;
       if(!is_false(g))
       {
+        make_not(g);
         true_branch_guard[branch_number].add(g);
         true_branch = get_entry_cond_rec(
           tmp_head->targets.front(), loop_exit, true_branch_guard);
       }
 
-      bool false_branch = true;
-      guardst false_branch_guard;
-      if(!is_true(g))
-      {
-        // Walk the false branch
-        false_branch_guard[branch_number].add(g);
-        false_branch =
-          get_entry_cond_rec(++tmp_head, loop_exit, false_branch_guard);
-      }
-
       // If both side reach loop termination or if both side don't reach it
-      // we can ignore it
+      // we can ignore them
       if(!(false_branch ^ true_branch))
       {
         // If we evaluated both sides of the branch, mark it so we don't
