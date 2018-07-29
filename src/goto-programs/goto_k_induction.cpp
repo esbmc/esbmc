@@ -45,6 +45,9 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
   guardst guards;
   get_entry_cond_rec(loop_head, loop_exit, guards);
 
+  // Remove loop conditions not related to the written variables
+  remove_unrelated_loop_cond(guards, loop);
+
   // Assume the loop entry condition before go into the loop
   assume_loop_entry_cond_before_loop(loop_head, loop_exit, guards);
 
@@ -190,6 +193,44 @@ void goto_k_inductiont::make_nondet_assign(
   // original loop head as shifted to after the assume cond
   while((++loop_head)->inductive_step_instruction)
     ;
+}
+
+static bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
+{
+  bool res = false;
+  expr->foreach_operand([&vars, &res](const expr2tc &e) {
+    if(!is_nil_expr(e))
+      res = contains_rec(e, vars) || res;
+    return res;
+  });
+
+  if(!is_symbol2t(expr))
+    return res;
+
+  return (vars.find(expr) != vars.end()) || res;
+}
+
+void goto_k_inductiont::remove_unrelated_loop_cond(
+  guardst &guards,
+  loopst &loop)
+{
+  auto const &loop_vars = loop.get_loop_vars();
+  if(!loop_vars.size())
+  {
+    guards.clear();
+    return;
+  }
+
+  guardst::iterator g = guards.begin();
+  while(g != guards.end())
+  {
+    expr2tc g_expr = g->second.as_expr();
+
+    if(!contains_rec(g_expr, loop_vars))
+      g = guards.erase(g);
+    else
+      ++g;
+  }
 }
 
 void goto_k_inductiont::assume_loop_entry_cond_before_loop(

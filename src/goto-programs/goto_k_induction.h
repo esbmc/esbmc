@@ -56,6 +56,8 @@ protected:
   void
   make_nondet_assign(goto_programt::targett &loop_head, const loopst &loop);
 
+  void remove_unrelated_loop_cond(guardst &guards, loopst &loop);
+
   void assume_loop_entry_cond_before_loop(
     goto_programt::targett &loop_head,
     goto_programt::targett &loop_exit,
