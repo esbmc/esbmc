@@ -379,9 +379,6 @@ int esbmc_parseoptionst::doit()
     return 0;
   }
 
-  if(cmdline.isset("termination"))
-    return doit_termination();
-
   if(cmdline.isset("incremental-bmc"))
     return doit_incremental();
 
@@ -1281,7 +1278,7 @@ int esbmc_parseoptionst::do_inductive_step(
   opts.set_option("forward-condition", false);
   opts.set_option("inductive-step", true);
 
-  opts.set_option("no-unwinding-assertions", true);
+  opts.set_option("no-unwinding-assertions", !cmdline.isset("termination"));
   opts.set_option("partial-loops", true);
 
   bmct bmc(goto_functions, opts, context, ui_message_handler);
