@@ -72,6 +72,10 @@ bool goto_k_inductiont::get_entry_cond_rec(
   auto const &entry_number = loop_head->location_number;
   auto const &exit_number = loop_exit->location_number;
 
+  // We jumped outside the loop, don't collect this constraint
+  if(entry_number >= exit_number)
+    return true;
+
   goto_programt::targett tmp_head = loop_head;
   for(; tmp_head != loop_exit; tmp_head++)
   {
@@ -106,33 +110,26 @@ bool goto_k_inductiont::get_entry_cond_rec(
       // Get the branch number for caching
       auto const &branch_number = tmp_head->location_number;
 
-      // Get the target number in case it's changed
-      auto const &target_number = tmp_head->targets.front()->location_number;
+      // Walk the true branch
+      bool true_branch = true;
+      guardst true_branch_guard;
+      if(!is_false(g))
+      {
+        true_branch_guard[branch_number].add(g);
+        true_branch = get_entry_cond_rec(
+          tmp_head->targets.front(), loop_exit, true_branch_guard);
+      }
 
-      // We always walk the false branch, if the condition is not static
+      // Walk the false branch
       bool false_branch = true;
       guardst false_branch_guard;
       if(!is_true(g))
       {
         goto_programt::targett new_tmp_head = tmp_head;
+        make_not(g);
         false_branch_guard[branch_number].add(g);
         false_branch =
           get_entry_cond_rec(++new_tmp_head, loop_exit, false_branch_guard);
-      }
-
-      // If it's an intra loop jump, walk the true branch as well
-      bool true_branch = true;
-      guardst true_branch_guard;
-      if(target_number <= exit_number && target_number >= entry_number)
-      {
-        // Walk the true branch
-        if(!is_false(g))
-        {
-          make_not(g);
-          true_branch_guard[branch_number].add(g);
-          true_branch = get_entry_cond_rec(
-            tmp_head->targets.front(), loop_exit, true_branch_guard);
-        }
       }
 
       // If both side reach the end of the loop or if both side don't reach it
@@ -161,7 +158,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
     }
   }
 
-  return true;
+  return false;
 }
 
 void goto_k_inductiont::make_nondet_assign(
