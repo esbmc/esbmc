@@ -101,6 +101,10 @@ const struct opt_templ esbmc_options[] = {
   {0, "output", string, ""},
   {0, "floatbv", switc, ""},
   {0, "fixedbv", switc, ""},
+  {0, "fp2bv", switc, ""},
+  {0, "tuple-node-flattener", switc, ""},
+  {0, "tuple-sym-flattener", switc, ""},
+  {0, "array-flattener", switc, ""},
 
   // Incremental SMT
   {0, "smt-during-symex", switc, ""},
@@ -163,14 +167,6 @@ const struct opt_templ esbmc_options[] = {
 
   // Check if there is two or more assingments to the same SSA instruction
   {0, "double-assign-check", switc, ""},
-
-  // Use SMT flatteners instead of the ones provided by the solvers
-  {0, "tuple-node-flattener", switc, ""},
-  {0, "tuple-sym-flattener", switc, ""},
-  {0, "array-flattener", switc, ""},
-
-  // Use floating-point to bitvector converter
-  {0, "fp2bv", switc, ""},
 
   // Abort if the program contains a recursion
   {0, "abort-on-recursion", switc, ""},

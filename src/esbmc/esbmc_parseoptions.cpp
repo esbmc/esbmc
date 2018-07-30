@@ -1795,6 +1795,10 @@ void esbmc_parseoptionst::help()
        "                              (default for solvers that don't "
        "support the \n"
        "                              SMT floating-point theory)\n"
+       "--tuple-node-flattener        encode tuples using our tuple to node API"
+       "--tuple-sym-flattener         encode tuples using our tuple to symbol "
+       "API"
+       "--array-flattener             encode arrays using our array API"
 
        "\nIncremental SMT solving\n"
        " --smt-during-symex           enable incremental SMT solving "
