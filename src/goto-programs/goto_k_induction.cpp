@@ -100,37 +100,16 @@ bool goto_k_inductiont::get_entry_cond_rec(
       if(is_false(g))
         continue;
 
+      // We need to walk the branches and collect constraints that force
+      // the path inside the loop and reach the end of the loop body
+
+      // Get the branch number for caching
       auto const &branch_number = tmp_head->location_number;
 
-      // This is a jump to exit the loop, so we have to collect the
-      // negated constraint (we want the loop to be executed)
+      // Get the target number in case it's changed
       auto const &target_number = tmp_head->targets.front()->location_number;
 
-      if(target_number > exit_number || target_number < entry_number)
-      {
-        if(!is_true(g))
-        {
-          // We only need to walk the false branch
-          guardst false_branch_guard;
-
-          goto_programt::targett new_tmp_head = tmp_head;
-          false_branch_guard[branch_number].add(g);
-          bool false_branch =
-            get_entry_cond_rec(++new_tmp_head, loop_exit, false_branch_guard);
-
-          if(!false_branch)
-          {
-            guards.insert(false_branch_guard.begin(), false_branch_guard.end());
-            return false;
-          }
-        }
-
-        continue;
-      }
-
-      // Otherwise, it's an intra loop jump, walk both sides
-
-      // Walk the false branch
+      // We always walk the false branch, if the condition is not static
       bool false_branch = true;
       guardst false_branch_guard;
       if(!is_true(g))
@@ -141,18 +120,22 @@ bool goto_k_inductiont::get_entry_cond_rec(
           get_entry_cond_rec(++new_tmp_head, loop_exit, false_branch_guard);
       }
 
-      // Walk the true branch
+      // If it's an intra loop jump, walk the true branch as well
       bool true_branch = true;
       guardst true_branch_guard;
-      if(!is_false(g))
+      if(target_number <= exit_number && target_number >= entry_number)
       {
-        make_not(g);
-        true_branch_guard[branch_number].add(g);
-        true_branch = get_entry_cond_rec(
-          tmp_head->targets.front(), loop_exit, true_branch_guard);
+        // Walk the true branch
+        if(!is_false(g))
+        {
+          make_not(g);
+          true_branch_guard[branch_number].add(g);
+          true_branch = get_entry_cond_rec(
+            tmp_head->targets.front(), loop_exit, true_branch_guard);
+        }
       }
 
-      // If both side reach loop termination or if both side don't reach it
+      // If both side reach the end of the loop or if both side don't reach it
       // we can ignore them
       if(!(false_branch ^ true_branch))
       {
@@ -162,6 +145,8 @@ bool goto_k_inductiont::get_entry_cond_rec(
         return false_branch && true_branch;
       }
 
+      // At least only one of the branches reach the end of the loop, so
+      // collect the guards
       if(!true_branch)
       {
         guards.insert(true_branch_guard.begin(), true_branch_guard.end());
