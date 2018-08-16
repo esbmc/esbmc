@@ -151,6 +151,7 @@ public:
       const namespacet &ns,
       std::ostream &out,
       bool show_ignored = false) const;
+    void dump() const;
   };
 
   unsigned count_ignored_SSA_steps() const

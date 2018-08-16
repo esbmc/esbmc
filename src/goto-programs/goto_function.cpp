@@ -172,6 +172,11 @@ void goto_convertt::do_function_call_dereference(
   migrate_expr(function_call, t->code);
 }
 
+void goto_functionst::dump() const
+{
+  output(*migrate_namespace_lookup, std::cout);
+}
+
 void goto_functionst::output(const namespacet &ns, std::ostream &out) const
 {
   for(const auto &it : function_map)

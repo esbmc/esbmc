@@ -242,6 +242,11 @@ void symex_target_equationt::short_output(std::ostream &out, bool show_ignored)
   }
 }
 
+void symex_target_equationt::SSA_stept::dump() const
+{
+  output(*migrate_namespace_lookup, std::cout);
+}
+
 void symex_target_equationt::SSA_stept::output(
   const namespacet &ns,
   std::ostream &out) const

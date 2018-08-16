@@ -67,6 +67,7 @@ public:
   }
 
   void output(const namespacet &ns, std::ostream &out) const;
+  void dump() const;
 
   void compute_location_numbers();
   void compute_loop_numbers();
