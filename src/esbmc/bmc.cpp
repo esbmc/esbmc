@@ -524,23 +524,26 @@ void bmct::bidirectional_search(
     return;
 
   // Map function name -> list of constraints
-  hash_map_cont<irep_idt, std::vector<expr2tc>, irep_id_hash> func_list;
+  hash_map_cont<locationt, std::vector<expr2tc>, irep_hash> func_list;
 
   // We'll walk list of SSA steps and look for inductive assignments
+  unsigned assert_location_number = 0;
   for(auto SSA_step : eq->SSA_steps)
   {
-    if(SSA_step.ignore)
-      continue;
+    if(SSA_step.is_assert() && smt_conv->l_get(SSA_step.cond_ast).is_false())
+    {
+      // Save the location of the failed assertion
+      assert_location_number = SSA_step.source.pc->location_number;
 
-    tvt result = smt_conv->l_get(SSA_step.guard_ast);
-    if(!result.is_true())
-      continue;
+      // We are not interested in instructions after the failed assertion
+      break;
+    }
 
-    //    SSA_step.output(smt_conv->ns, std::cout);
+    // Skip instruction not inserted by the inductive step
     if(!SSA_step.source.pc->inductive_step_instruction)
       continue;
 
-    // Only analyse the SSA if it's an nondet assignments by the k-induction
+    // Skip assumes inserted by the inductive step
     if(!SSA_step.is_assignment())
       continue;
 
@@ -556,29 +559,47 @@ void bmct::bidirectional_search(
       auto value = build_rhs(smt_conv, SSA_step.rhs);
 
       // Add lhs and rhs to the list of new constraints
-      func_list[SSA_step.source.pc->location.get_function()].push_back(
+      func_list[SSA_step.source.pc->location].push_back(
         equality2tc(lhs, value));
     }
   }
 
+  // If there's no constraint collected, give up
+  if(!func_list.size())
+    return;
+
+  // Now, try to add the new constraints
   for(auto &f : func_list)
   {
     // Look for the function
     goto_functionst::function_mapt::iterator fit =
-      symex->goto_functions.function_map.find(f.first);
+      symex->goto_functions.function_map.find(f.first.get_function());
     assert(fit != symex->goto_functions.function_map.end());
 
     // Find function loops
     goto_loopst loops(
-      f.first, symex->goto_functions, fit->second, *get_message_handler());
-    assert(loops.get_loops().size());
-
-    expr2tc constraints = gen_true_expr();
-    for(auto const &it : f.second)
-      constraints = and2tc(constraints, it);
+      f.first.get_function(),
+      symex->goto_functions,
+      fit->second,
+      *get_message_handler());
 
     for(auto &l : loops.get_loops())
     {
+      goto_programt::targett loop_head = l.get_original_loop_head();
+
+      // Skip constraints from other loops
+      if(loop_head->location != f.first)
+        continue;
+
+      // If the failed assertion is before this loop, we can skip it
+      if(assert_location_number <= loop_head->location_number)
+        continue;
+
+      // Build new assertion
+      expr2tc constraints = f.second[0];
+      for(std::size_t i = 1; i < f.second.size(); ++i)
+        constraints = and2tc(constraints, f.second[i]);
+
       goto_programt::targett loop_exit = l.get_original_loop_exit();
 
       goto_programt::instructiont i;
@@ -586,8 +607,13 @@ void bmct::bidirectional_search(
       i.location = loop_exit->location;
       i.location.user_provided(false);
       i.loop_number = loop_exit->loop_number;
+      i.inductive_assertion = true;
 
-      fit->second.body.insert_swap(loop_exit, i);
+      // If the failed assert happens inside the loop, add before the exit
+      if(assert_location_number < loop_exit->location_number)
+        fit->second.body.insert_swap(loop_exit, i);
+      else
+        fit->second.body.insert_swap(++loop_exit, i);
     }
   }
 

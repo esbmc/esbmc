@@ -138,6 +138,8 @@ public:
     // for k-induction
     bool inductive_step_instruction;
 
+    bool inductive_assertion;
+
     //! is this node a branch target?
     inline bool is_target() const
     {
@@ -152,6 +154,7 @@ public:
       guard = gen_true_expr();
       code = expr2tc();
       inductive_step_instruction = false;
+      inductive_assertion = false;
     }
 
     inline void make_goto()
@@ -295,6 +298,7 @@ public:
       : location(static_cast<const locationt &>(get_nil_irep())),
         type(NO_INSTRUCTION_TYPE),
         inductive_step_instruction(false),
+        inductive_assertion(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -306,6 +310,7 @@ public:
       : location(static_cast<const locationt &>(get_nil_irep())),
         type(_type),
         inductive_step_instruction(false),
+        inductive_assertion(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -324,6 +329,7 @@ public:
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
+      std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(instruction.loop_number, loop_number);
     }
 
