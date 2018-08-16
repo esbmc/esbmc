@@ -79,8 +79,9 @@ bool goto_k_inductiont::get_entry_cond_rec(
   goto_programt::targett tmp_head = loop_head;
   for(; tmp_head != loop_exit; tmp_head++)
   {
-    if(marked_branch.find(tmp_head->location_number) != marked_branch.end())
-      return true;
+    auto it = marked_branch.find(tmp_head->location_number);
+    if(it != marked_branch.end())
+      return it->second;
 
     /* TODO: disable this for now, it will be used for termination evaluation
      * in the future.
@@ -108,7 +109,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
       // the path inside the loop and reach the end of the loop body
 
       // Get the branch number for caching
-      auto const &branch_number = tmp_head->location_number;
+      auto const branch_number = tmp_head->location_number;
 
       // Walk the true branch
       bool true_branch = true;
@@ -132,15 +133,14 @@ bool goto_k_inductiont::get_entry_cond_rec(
           get_entry_cond_rec(++new_tmp_head, loop_exit, false_branch_guard);
       }
 
+      // If we evaluated both sides of the branch, mark it so we don't
+      // have to do it again.
+      marked_branch[branch_number] = (false_branch ^ true_branch);
+
       // If both side reach the end of the loop or if both side don't reach it
       // we can ignore them
       if(!(false_branch ^ true_branch))
-      {
-        // If we evaluated both sides of the branch, mark it so we don't
-        // have to do it again.
-        marked_branch.insert(branch_number);
         return false_branch && true_branch;
-      }
 
       // At least only one of the branches reach the end of the loop, so
       // collect the guards

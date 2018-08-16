@@ -38,7 +38,7 @@ public:
   }
 
 protected:
-  typedef hash_set_cont<unsigned> marked_branchst;
+  typedef hash_map_cont<unsigned, bool> marked_branchst;
   marked_branchst marked_branch;
 
   typedef hash_map_cont<unsigned, guardt> guardst;
