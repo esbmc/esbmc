@@ -73,7 +73,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
   auto const &exit_number = loop_exit->location_number;
 
   // We jumped outside the loop, don't collect this constraint
-  if(entry_number >= exit_number)
+  if(entry_number > exit_number)
     return true;
 
   goto_programt::targett tmp_head = loop_head;
