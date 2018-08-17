@@ -559,7 +559,7 @@ void bmct::bidirectional_search(
     {
       // We don't support arrays yet
       if(is_array_type(SSA_step.original_lhs))
-        continue;
+        return;
 
       // Get lhs and the value
       auto lhs = build_lhs(smt_conv, SSA_step.original_lhs);
