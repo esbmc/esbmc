@@ -557,6 +557,10 @@ void bmct::bidirectional_search(
           .thename.as_string()
           .find("nondet$symex::nondet") != std::string::npos)
     {
+      // We don't support arrays yet
+      if(is_array_type(SSA_step.original_lhs))
+        continue;
+
       // Get lhs and the value
       auto lhs = build_lhs(smt_conv, SSA_step.original_lhs);
       auto value = build_rhs(smt_conv, SSA_step.rhs);
