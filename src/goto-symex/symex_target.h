@@ -74,7 +74,8 @@ public:
     const expr2tc &cond,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
-    const sourcet &source) = 0;
+    const sourcet &source,
+    unsigned loop_number) = 0;
 
   // Renumber the pointer object of a given symbol
   virtual void renumber(

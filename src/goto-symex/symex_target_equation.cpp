@@ -86,7 +86,8 @@ void symex_target_equationt::assertion(
   const expr2tc &cond,
   const std::string &msg,
   std::vector<stack_framet> stack_trace,
-  const sourcet &source)
+  const sourcet &source,
+  unsigned loop_number)
 {
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
@@ -97,6 +98,7 @@ void symex_target_equationt::assertion(
   SSA_step.source = source;
   SSA_step.comment = msg;
   SSA_step.stack_trace = stack_trace;
+  SSA_step.loop_number = loop_number;
 
   if(debug_print)
     SSA_step.short_output(ns, std::cout);

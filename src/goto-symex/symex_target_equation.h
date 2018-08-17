@@ -68,7 +68,8 @@ public:
     const expr2tc &cond,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
-    const sourcet &source) override;
+    const sourcet &source,
+    unsigned loop_number) override;
 
   void renumber(
     const expr2tc &guard,
@@ -141,6 +142,9 @@ public:
 
     // for visibility
     bool hidden;
+
+    // for bidirectional search
+    unsigned loop_number;
 
     SSA_stept() : ignore(false), hidden(false)
     {

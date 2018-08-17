@@ -62,7 +62,8 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     new_expr,
     msg,
     cur_state->gen_stack_trace(),
-    cur_state->source);
+    cur_state->source,
+    first_loop);
 }
 
 void goto_symext::assume(const expr2tc &the_assumption)
@@ -438,7 +439,8 @@ void goto_symext::finish_formula()
       eq,
       "dereference failure: forgotten memory: " + it.name,
       cur_state->gen_stack_trace(),
-      cur_state->source);
+      cur_state->source,
+      first_loop);
 
     total_claims++;
     remaining_claims++;

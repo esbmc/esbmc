@@ -533,11 +533,14 @@ void bmct::bidirectional_search(
     if(SSA_step.is_assert() && smt_conv->l_get(SSA_step.cond_ast).is_false())
     {
       // Save the location of the failed assertion
-      assert_location_number = SSA_step.source.pc->location_number;
+      assert_location_number = SSA_step.loop_number;
 
       // We are not interested in instructions after the failed assertion
       break;
     }
+
+    if(SSA_step.ignore)
+      continue;
 
     // Skip instruction not inserted by the inductive step
     if(!SSA_step.source.pc->inductive_step_instruction)
@@ -588,11 +591,7 @@ void bmct::bidirectional_search(
       goto_programt::targett loop_head = l.get_original_loop_head();
 
       // Skip constraints from other loops
-      if(loop_head->location != f.first)
-        continue;
-
-      // If the failed assertion is before this loop, we can skip it
-      if(assert_location_number <= loop_head->location_number)
+      if(loop_head->loop_number != assert_location_number)
         continue;
 
       // Build new assertion
@@ -609,11 +608,7 @@ void bmct::bidirectional_search(
       i.loop_number = loop_exit->loop_number;
       i.inductive_assertion = true;
 
-      // If the failed assert happens inside the loop, add before the exit
-      if(assert_location_number < loop_exit->location_number)
-        fit->second.body.insert_swap(loop_exit, i);
-      else
-        fit->second.body.insert_swap(++loop_exit, i);
+      fit->second.body.insert_swap(loop_exit, i);
     }
   }
 
