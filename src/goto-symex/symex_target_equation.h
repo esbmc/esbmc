@@ -45,7 +45,8 @@ public:
     const expr2tc &rhs,
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
-    const bool hidden) override;
+    const bool hidden,
+    unsigned loop_number) override;
 
   // output
   void output(
@@ -59,7 +60,8 @@ public:
   void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
-    const sourcet &source) override;
+    const sourcet &source,
+    unsigned loop_number) override;
 
   // record an assertion
   // cond is destroyed

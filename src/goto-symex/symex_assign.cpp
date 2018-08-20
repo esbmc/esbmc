@@ -304,7 +304,8 @@ void goto_symext::symex_assign_symbol(
     rhs,
     cur_state->source,
     cur_state->gen_stack_trace(),
-    hidden);
+    hidden,
+    first_loop);
 }
 
 void goto_symext::symex_assign_structure(

@@ -24,7 +24,8 @@ void symex_target_equationt::assignment(
   const expr2tc &rhs,
   const sourcet &source,
   std::vector<stack_framet> stack_trace,
-  const bool hidden)
+  const bool hidden,
+  unsigned loop_number)
 {
   assert(!is_nil_expr(lhs));
 
@@ -40,6 +41,7 @@ void symex_target_equationt::assignment(
   SSA_step.type = goto_trace_stept::ASSIGNMENT;
   SSA_step.source = source;
   SSA_step.stack_trace = stack_trace;
+  SSA_step.loop_number = loop_number;
 
   if(debug_print)
     SSA_step.short_output(ns, std::cout);
@@ -67,7 +69,8 @@ void symex_target_equationt::output(
 void symex_target_equationt::assumption(
   const expr2tc &guard,
   const expr2tc &cond,
-  const sourcet &source)
+  const sourcet &source,
+  unsigned loop_number)
 {
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
@@ -76,6 +79,7 @@ void symex_target_equationt::assumption(
   SSA_step.cond = cond;
   SSA_step.type = goto_trace_stept::ASSUME;
   SSA_step.source = source;
+  SSA_step.loop_number = loop_number;
 
   if(debug_print)
     SSA_step.short_output(ns, std::cout);

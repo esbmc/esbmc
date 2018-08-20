@@ -676,7 +676,8 @@ void execution_statet::execute_guard()
   do_simplify(parent_guard);
   implies2tc assumpt(guard_expr, parent_guard);
 
-  target->assumption(guardt().as_expr(), assumpt, get_active_state().source);
+  target->assumption(
+    guardt().as_expr(), assumpt, get_active_state().source, first_loop);
 
   guardt old_guard;
   old_guard.add(threads_state[last_active_thread].guard.as_expr());

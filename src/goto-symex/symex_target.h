@@ -51,7 +51,8 @@ public:
     const expr2tc &rhs,
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
-    const bool hidden) = 0;
+    const bool hidden,
+    unsigned loop_number) = 0;
 
   // record output
   virtual void output(
@@ -65,7 +66,8 @@ public:
   virtual void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
-    const sourcet &source) = 0;
+    const sourcet &source,
+    unsigned loop_number) = 0;
 
   // record an assertion
   // cond is destroyed

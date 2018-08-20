@@ -523,101 +523,124 @@ void bmct::bidirectional_search(
        options.get_bool_option("k-induction")))
     return;
 
-  // Map function name -> list of constraints
-  hash_map_cont<locationt, std::vector<expr2tc>, irep_hash> func_list;
-
   // We'll walk list of SSA steps and look for inductive assignments
-  unsigned assert_location_number = 0;
-  for(auto SSA_step : eq->SSA_steps)
+  std::vector<stack_framet> frames;
+  unsigned assert_loop_number = 0;
+  for(auto ssait : eq->SSA_steps)
   {
-    if(SSA_step.is_assert() && smt_conv->l_get(SSA_step.cond_ast).is_false())
+    if(ssait.is_assert() && smt_conv->l_get(ssait.cond_ast).is_false())
     {
-      // Save the location of the failed assertion
-      assert_location_number = SSA_step.loop_number;
-
-      // We are not interested in instructions after the failed assertion
-      break;
-    }
-
-    if(SSA_step.ignore)
-      continue;
-
-    // Skip instruction not inserted by the inductive step
-    if(!SSA_step.source.pc->inductive_step_instruction)
-      continue;
-
-    // Skip assumes inserted by the inductive step
-    if(!SSA_step.is_assignment())
-      continue;
-
-    // Only analyse nondet assignments
-    if(
-      is_symbol2t(SSA_step.rhs) &&
-      to_symbol2t(SSA_step.rhs)
-          .thename.as_string()
-          .find("nondet$symex::nondet") != std::string::npos)
-    {
-      // We don't support arrays yet
-      if(is_array_type(SSA_step.original_lhs))
+      if(!ssait.loop_number)
         return;
 
-      // Get lhs and the value
-      auto lhs = build_lhs(smt_conv, SSA_step.original_lhs);
-      auto value = build_rhs(smt_conv, SSA_step.rhs);
+      // Save the location of the failed assertion
+      frames = ssait.stack_trace;
+      assert_loop_number = ssait.loop_number;
 
-      // Add lhs and rhs to the list of new constraints
-      func_list[SSA_step.source.pc->location].push_back(
-        equality2tc(lhs, value));
+      // We are not interested in instructions before the failed assertion yet
+      break;
     }
   }
 
-  // If there's no constraint collected, give up
-  if(!func_list.size())
-    return;
-
-  // Now, try to add the new constraints
-  for(auto &f : func_list)
+  for(auto f : frames)
   {
     // Look for the function
     goto_functionst::function_mapt::iterator fit =
-      symex->goto_functions.function_map.find(f.first.get_function());
+      symex->goto_functions.function_map.find(f.function);
     assert(fit != symex->goto_functions.function_map.end());
 
     // Find function loops
     goto_loopst loops(
-      f.first.get_function(),
-      symex->goto_functions,
-      fit->second,
-      *get_message_handler());
+      f.function, symex->goto_functions, fit->second, *get_message_handler());
 
-    for(auto &l : loops.get_loops())
+    if(!loops.get_loops().size())
+      continue;
+
+    auto lit = loops.get_loops().begin(), lie = loops.get_loops().end();
+    while(lit != lie)
     {
-      goto_programt::targett loop_head = l.get_original_loop_head();
+      auto loop_head = lit->get_original_loop_head();
 
       // Skip constraints from other loops
-      if(loop_head->loop_number != assert_location_number)
+      if(loop_head->loop_number == assert_loop_number)
+        break;
+
+      ++lit;
+    }
+
+    if(lit == lie)
+      continue;
+
+    // Get the loop vars
+    auto all_loop_vars = lit->get_modified_loop_vars();
+    all_loop_vars.insert(
+      lit->get_unmodified_loop_vars().begin(),
+      lit->get_unmodified_loop_vars().end());
+
+    // Now, walk the SSA and get the last value of each variable before the loop
+    hash_map_cont<irep_idt, std::pair<expr2tc, expr2tc>, irep_id_hash>
+      var_ssa_list;
+
+    for(auto ssait : eq->SSA_steps)
+    {
+      if(ssait.loop_number == lit->get_original_loop_head()->loop_number)
+        break;
+
+      if(ssait.ignore)
         continue;
 
-      // Build new assertion
-      expr2tc constraints = f.second[0];
-      for(std::size_t i = 1; i < f.second.size(); ++i)
-        constraints = and2tc(constraints, f.second[i]);
+      if(!ssait.is_assignment())
+        continue;
 
-      goto_programt::targett loop_exit = l.get_original_loop_exit();
+      expr2tc new_lhs = ssait.original_lhs;
+      renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
 
-      goto_programt::instructiont i;
-      i.make_assertion(not2tc(constraints));
-      i.location = loop_exit->location;
-      i.location.user_provided(false);
-      i.loop_number = loop_exit->loop_number;
-      i.inductive_assertion = true;
+      if(all_loop_vars.find(new_lhs) == all_loop_vars.end())
+        continue;
 
-      fit->second.body.insert_swap(loop_exit, i);
+      var_ssa_list[to_symbol2t(new_lhs).thename] = {ssait.original_lhs,
+                                                    ssait.rhs};
     }
-  }
 
-  // recalculate numbers, etc.
-  symex->goto_functions.update();
+    if(!var_ssa_list.size())
+      return;
+
+    // Query the solver for the value of each variable
+    std::vector<expr2tc> equalities;
+    for(auto it : var_ssa_list)
+    {
+      // We don't support arrays or pointers
+      if(is_array_type(it.second.first) || is_pointer_type(it.second.first))
+        return;
+
+      auto lhs = build_lhs(smt_conv, it.second.first);
+      auto value = build_rhs(smt_conv, it.second.second);
+
+      // Add lhs and rhs to the list of new constraints
+      equalities.push_back(equality2tc(lhs, value));
+    }
+
+    // Build new assertion
+    expr2tc constraints = equalities[0];
+    for(std::size_t i = 1; i < equalities.size(); ++i)
+      constraints = and2tc(constraints, equalities[i]);
+
+    // and add it to the goto program
+    goto_programt::targett loop_exit = lit->get_original_loop_exit();
+
+    goto_programt::instructiont i;
+    i.make_assertion(not2tc(constraints));
+    i.location = loop_exit->location;
+    i.location.user_provided(false);
+    i.loop_number = loop_exit->loop_number;
+    i.inductive_assertion = true;
+
+    fit->second.body.insert_swap(loop_exit, i);
+
+    // recalculate numbers, etc.
+    symex->goto_functions.update();
+    return;
+  }
 }
 
 smt_convt::resultt

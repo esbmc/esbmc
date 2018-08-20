@@ -28,7 +28,7 @@ void goto_k_inductiont::goto_k_induction()
   // Full unwind the program
   for(auto &function_loop : function_loops)
   {
-    if(function_loop.get_loop_vars().empty())
+    if(function_loop.get_modified_loop_vars().empty())
       continue;
 
     // Start the loop conversion
@@ -165,7 +165,7 @@ void goto_k_inductiont::make_nondet_assign(
   goto_programt::targett &loop_head,
   const loopst &loop)
 {
-  auto const &loop_vars = loop.get_loop_vars();
+  auto const &loop_vars = loop.get_modified_loop_vars();
 
   goto_programt dest;
   for(auto const &lhs : loop_vars)
@@ -212,7 +212,7 @@ void goto_k_inductiont::remove_unrelated_loop_cond(
   guardst &guards,
   loopst &loop)
 {
-  auto const &loop_vars = loop.get_loop_vars();
+  auto const &loop_vars = loop.get_modified_loop_vars();
   if(!loop_vars.size())
   {
     guards.clear();

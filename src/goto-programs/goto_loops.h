@@ -33,7 +33,10 @@ protected:
     function_loopst::iterator loop,
     const irep_idt &_function_name);
 
-  void add_loop_var(loopst &loop, const expr2tc &expr);
+  void add_modified_var(loopst &loop, const expr2tc &expr);
+  void add_unmodified_var(loopst &loop, const expr2tc &expr);
+
+  void add_loop_var(loopst &loop, const expr2tc &expr, bool is_modified);
 
 public:
   goto_loopst(
@@ -50,9 +53,9 @@ public:
   }
 
   void find_function_loops();
-  void dump();
+  void dump() const;
 
-  function_loopst get_loops() const
+  const function_loopst &get_loops() const
   {
     return function_loops;
   }

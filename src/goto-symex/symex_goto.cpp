@@ -173,7 +173,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
         new_rhs,
         cur_state->source,
         cur_state->gen_stack_trace(),
-        true);
+        true,
+        first_loop);
 
       if(is_constant_expr(new_rhs))
         guard_expr = new_rhs;
@@ -329,7 +330,8 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
       rhs,
       cur_state->source,
       cur_state->gen_stack_trace(),
-      true);
+      true,
+      first_loop);
   }
 }
 
@@ -354,7 +356,7 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
     expr2tc guarded_expr = negated_cond;
     cur_state->guard.guard_expr(guarded_expr);
     target->assumption(
-      cur_state->guard.as_expr(), guarded_expr, cur_state->source);
+      cur_state->guard.as_expr(), guarded_expr, cur_state->source, first_loop);
   }
 
   // add to state guard to prevent further assignments
