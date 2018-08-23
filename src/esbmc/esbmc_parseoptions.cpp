@@ -40,6 +40,7 @@ extern "C"
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_unwind.h>
+#include <goto-programs/interval_analysis.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/remove_skip.h>
@@ -1537,6 +1538,9 @@ bool esbmc_parseoptionst::process_goto_program(
       return true;
     }
 
+    if(cmdline.isset("interval-analysis"))
+      interval_analysis(goto_functions, ns);
+
 #if 0
     // This disabled code used to run the pointer static analysis and produce
     // pointer assertions appropriately. Disabled now that assertions are all
@@ -1868,5 +1872,7 @@ void esbmc_parseoptionst::help()
        " --memstats                   print memory usage statistics\n"
        " --no-simplify                do not simplify any expression\n"
        " --enable-core-dump           do not disable core dump output\n"
+       " --interval-analysis          enable interval analysis and add assumes "
+       "to the program\n"
        "\n";
 }

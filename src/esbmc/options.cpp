@@ -156,6 +156,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "timeout", string, ""},
   {0, "enable-core-dump", switc, ""},
   {0, "no-simplify", switc, ""},
+  {0, "interval-analysis", switc, ""},
 
   // DEBUG options
 
