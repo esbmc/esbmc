@@ -1512,6 +1512,9 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns, ui_message_handler);
     }
 
+    if(cmdline.isset("interval-analysis"))
+      interval_analysis(goto_functions, ns);
+
     if(
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
       cmdline.isset("k-induction-parallel"))
@@ -1537,9 +1540,6 @@ bool esbmc_parseoptionst::process_goto_program(
       show_value_sets(get_ui(), goto_functions, value_set_analysis);
       return true;
     }
-
-    if(cmdline.isset("interval-analysis"))
-      interval_analysis(goto_functions, ns);
 
 #if 0
     // This disabled code used to run the pointer static analysis and produce
