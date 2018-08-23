@@ -9,7 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ac_config.h>
 
 #ifndef _WIN32
-extern "C" {
+extern "C"
+{
 #include <fcntl.h>
 #include <unistd.h>
 

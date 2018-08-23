@@ -31,7 +31,8 @@ Author: Daniel Kroening, kroening@kroening.com
       it != (program).instructions.end();                                      \
       it++)
 
-typedef enum {
+typedef enum
+{
   NO_INSTRUCTION_TYPE = 0,
   GOTO = 1,           // branch, possibly guarded
   ASSUME = 2,         // non-failing guarded self loop
@@ -392,14 +393,19 @@ public:
 
   void get_successors(const_targett target, const_targetst &successors) const;
 
+  /// Insertion that preserves jumps to "target".
+  void insert_swap(targett target)
+  {
+    assert(target != instructions.end());
+    const auto next = std::next(target);
+    instructions.insert(next, instructiont())->swap(*target);
+  }
+
   //! Insertion that preserves jumps to "target".
   //! The instruction is destroyed.
   void insert_swap(targett target, instructiont &instruction)
   {
-    assert(target != instructions.end());
-    targett next = target;
-    next++;
-    instructions.insert(next, instructiont())->swap(*target);
+    insert_swap(target);
     target->swap(instruction);
   }
 
@@ -411,8 +417,7 @@ public:
     if(p.instructions.empty())
       return;
     insert_swap(target, p.instructions.front());
-    targett next = target;
-    next++;
+    auto next = std::next(target);
     p.instructions.erase(p.instructions.begin());
     instructions.splice(next, p.instructions);
   }
@@ -563,6 +568,26 @@ public:
 bool operator<(
   const goto_programt::const_targett i1,
   const goto_programt::const_targett i2);
+
+struct const_target_hash
+{
+  std::size_t operator()(const goto_programt::const_targett t) const
+  {
+    using hash_typet = decltype(&(*t));
+    return std::hash<hash_typet>{}(&(*t));
+  }
+};
+
+/// Functor to check whether iterators from different collections point at the
+/// same object.
+struct pointee_address_equalt
+{
+  template <class A, class B>
+  bool operator()(const A &a, const B &b) const
+  {
+    return &(*a) == &(*b);
+  }
+};
 
 template <
   typename OutList,
