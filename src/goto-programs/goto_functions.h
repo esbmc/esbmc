@@ -77,6 +77,7 @@ public:
   {
     compute_target_numbers();
     compute_location_numbers();
+    compute_loop_numbers();
   }
 
   irep_idt main_id() const
