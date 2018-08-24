@@ -80,8 +80,7 @@ void instrument_intervals(
 
     if(!assertion.empty())
     {
-      goto_programt::targett t = i_it;
-      goto_function.body.insert_swap(i_it);
+      goto_programt::targett t = goto_function.body.insert(i_it);
       t->make_assumption(conjunction(assertion));
       i_it++; // goes to original instruction
       t->location = i_it->location;
