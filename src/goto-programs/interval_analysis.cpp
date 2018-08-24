@@ -82,9 +82,13 @@ void instrument_intervals(
     {
       goto_programt::targett t = goto_function.body.insert(i_it);
       t->make_assumption(conjunction(assertion));
+#if 0
+      // TODO: This is crashing cases like
+      // email_spec11_productSimulator_false-unreach-call_true-termination.cil.c
       i_it++; // goes to original instruction
       t->location = i_it->location;
       t->function = i_it->function;
+#endif
     }
   }
 }
