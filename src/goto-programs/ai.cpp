@@ -254,21 +254,21 @@ bool ai_baset::do_function_call_rec(
   const namespacet &ns)
 {
   assert(!goto_functions.function_map.empty());
+  bool new_data = false;
 
   // This is quite a strong assumption on the well-formedness of the program.
   // It means function pointers must be removed before use.
-  assert(is_symbol2t(function));
+  if(is_symbol2t(function))
+  {
+    const irep_idt &identifier = to_symbol2t(function).thename;
 
-  bool new_data = false;
+    goto_functionst::function_mapt::const_iterator it =
+      goto_functions.function_map.find(identifier);
 
-  const irep_idt &identifier = to_symbol2t(function).thename;
+    assert(it != goto_functions.function_map.end());
 
-  goto_functionst::function_mapt::const_iterator it =
-    goto_functions.function_map.find(identifier);
-
-  assert(it != goto_functions.function_map.end());
-
-  new_data = do_function_call(l_call, l_return, goto_functions, it, ns);
+    new_data = do_function_call(l_call, l_return, goto_functions, it, ns);
+  }
 
   return new_data;
 }
