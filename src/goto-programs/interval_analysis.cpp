@@ -98,4 +98,6 @@ void interval_analysis(goto_functionst &goto_functions, const namespacet &ns)
 
   Forall_goto_functions(f_it, goto_functions)
     instrument_intervals(interval_analysis, f_it->second);
+
+  goto_functions.update();
 }
