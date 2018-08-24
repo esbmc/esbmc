@@ -82,6 +82,7 @@ void instrument_intervals(
     {
       goto_programt::targett t = goto_function.body.insert(i_it);
       t->make_assumption(conjunction(assertion));
+      t->inductive_step_instruction = true;
 #if 0
       // TODO: This is crashing cases like
       // email_spec11_productSimulator_false-unreach-call_true-termination.cil.c
