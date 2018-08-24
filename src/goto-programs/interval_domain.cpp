@@ -275,7 +275,7 @@ void interval_domaint::assume_rec(
     }
     else if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
     {
-      ieee_floatt tmp = to_constant_floatbv2t(rhs).value;
+      ieee_floatt tmp = to_constant_floatbv2t(lhs).value;
       if(id == expr2t::lessthan_id)
         tmp.increment();
       ieee_float_intervalt &fi = float_map[rhs_identifier];
