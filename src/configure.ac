@@ -444,7 +444,7 @@ m4_define(ESBMC_OPTIONAL_SOLVER, [
     ])
   ])
 
-m4_define(esbmc_all_solvers, [z3, boolector, yices, cvc4, mathsat])
+m4_define(esbmc_all_solvers, [z3, boolector, yices, cvc4, mathsat, stp])
 m4_foreach(thesolver, [esbmc_all_solvers], [
   AC_ARG_ENABLE(thesolver,
               [AS_HELP_STRING([--disable-thesolver], Disable thesolver solver)])
@@ -483,6 +483,10 @@ m4_define(cvc4_possible_libdirs, [lib])
 m4_define(mathsat_build_headers, [include/mathsat.h])
 m4_define(mathsat_possible_locs, [$SATDIR64/mathsat, $SATDIR32/mathsat, $SATDIR/mathsat, $HOME/mathsat])
 m4_define(mathsat_possible_libdirs, [lib])
+
+m4_define(stp_build_headers, [include/stp/c_interface.h])
+m4_define(stp_possible_locs, [$SATDIR64/stp, $SATDIR32/stp, $SATDIR/stp, $HOME/stp])
+m4_define(stp_possible_libdirs, [lib, lib64])
 
 dnl Random dollars are shoehorned into these names to ensure that M4 does not
 dnl rename them as they are passed down to the point where they are actually
@@ -543,6 +547,17 @@ AS_IF([test "$esbmc_disable_solver_mathsat" != "yes"], [
 ESBMC_OPTIONAL_SOLVER([mathsat_possible_locs], [mathsat_build_headers], mathsat, mathsat, msat_create_config, include, [mathsat_possible_libdirs], $$ESBMC_NOOP_CONFIG)
 ])
 
+AS_IF([test "$esbmc_disable_solver_stp" != "yes"], [
+ESBMC_OPTIONAL_SOLVER([stp_possible_locs], [stp_build_headers], stp, stp, vc_createValidityChecker, include/stp, [stp_possible_libdirs], $$ESBMC_NOOP_CONFIG)
+])
+
+AS_IF([test "${ESBMC_ENABLE_stp}" = "1"], [
+  AC_CHECK_LIB([minisat2], [_ZN7Minisat6SolverD2Ev],
+      [AS_VAR_APPEND(LIBS, " -lminisat2")],
+      [AC_MSG_WARN([No minisat2 lib found: STP may require it])], []
+  )],
+[])
+
 dnl Temporarily, while things remain unconfigured
 AC_SUBST([ESBMC_ENABLE_minisat], 0)
 
@@ -553,7 +568,7 @@ AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
 AC_SUBST([ESBMC_SOLVER_LIBS], "$ESBMC_SOLVER_LIBS")
 
-AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/smt/tuple/Makefile solvers/smt/fp/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-c-frontend/headers/Makefile clang-c-frontend/AST/Makefile clang-cpp-frontend/Makefile c2goto/headers/Makefile c2goto/Makefile esbmc/Makefile solvers/solver_config.h esbmc/version.h])
+AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/smt/tuple/Makefile solvers/smt/fp/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/stp/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-c-frontend/headers/Makefile clang-c-frontend/AST/Makefile clang-cpp-frontend/Makefile c2goto/headers/Makefile c2goto/Makefile esbmc/Makefile solvers/solver_config.h esbmc/version.h])
 AC_OUTPUT
 
 AS_ECHO(["----------------------------------------"])

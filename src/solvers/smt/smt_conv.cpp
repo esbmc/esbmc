@@ -2610,23 +2610,17 @@ smt_astt smt_convt::mk_bvnot(smt_astt a)
 
 smt_astt smt_convt::mk_bvnxor(smt_astt a, smt_astt b)
 {
-  (void)a;
-  (void)b;
-  abort();
+  return mk_bvnot(mk_bvxor(a, b));
 }
 
 smt_astt smt_convt::mk_bvnor(smt_astt a, smt_astt b)
 {
-  (void)a;
-  (void)b;
-  abort();
+  return mk_bvnot(mk_bvnor(a, b));
 }
 
 smt_astt smt_convt::mk_bvnand(smt_astt a, smt_astt b)
 {
-  (void)a;
-  (void)b;
-  abort();
+  return mk_bvnot(mk_bvand(a, b));
 }
 
 smt_astt smt_convt::mk_bvxor(smt_astt a, smt_astt b)

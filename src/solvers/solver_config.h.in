@@ -21,3 +21,7 @@
 #if @ESBMC_ENABLE_yices@
 #define YICES
 #endif
+
+#if @ESBMC_ENABLE_stp@
+#define STP
+#endif

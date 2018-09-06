@@ -13,6 +13,7 @@ solver_creator create_new_boolector_solver;
 solver_creator create_new_cvc_solver;
 solver_creator create_new_mathsat_solver;
 solver_creator create_new_yices_solver;
+solver_creator create_new_stp_solver;
 
 const struct esbmc_solver_config esbmc_solvers[] = {
   {"smtlib", create_new_smtlib_solver},
@@ -32,12 +33,15 @@ const struct esbmc_solver_config esbmc_solvers[] = {
   {"mathsat", create_new_mathsat_solver},
 #endif
 #ifdef YICES
-  {"yices", create_new_yices_solver}
+  {"yices", create_new_yices_solver},
+#endif
+#ifdef STP
+  {"stp", create_new_stp_solver}
 #endif
 };
 
 const std::string list_of_all_solvers[] =
-  {"z3", "smtlib", "minisat", "boolector", "mathsat", "cvc", "yices"};
+  {"z3", "smtlib", "minisat", "boolector", "mathsat", "cvc", "yices", "stp"};
 
 const unsigned int total_num_of_solvers =
   sizeof(list_of_all_solvers) / sizeof(std::string);
