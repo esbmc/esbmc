@@ -144,6 +144,7 @@ public:
     {
     }
 
+    void dump() const;
     void output(const namespacet &ns, std::ostream &out) const;
     void short_output(
       const namespacet &ns,

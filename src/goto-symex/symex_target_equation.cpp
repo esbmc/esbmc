@@ -233,6 +233,11 @@ void symex_target_equationt::output(std::ostream &out) const
   }
 }
 
+void symex_target_equationt::SSA_stept::dump() const
+{
+  output(*migrate_namespace_lookup, std::cout);
+}
+
 void symex_target_equationt::short_output(std::ostream &out, bool show_ignored)
   const
 {
