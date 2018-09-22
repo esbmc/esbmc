@@ -11,9 +11,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/interval_domain.h>
 #include <langapi/language_util.h>
+#include <util/arith_tools.h>
+#include <util/c_typecast.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
-#include <util/arith_tools.h>
 
 void interval_domaint::output(std::ostream &out) const
 {
@@ -392,21 +393,30 @@ expr2tc interval_domaint::make_expression(const expr2tc &expr) const
     std::vector<expr2tc> conjuncts;
     if(interval.singleton())
     {
-      expr2tc tmp = from_integer(interval.upper, src.type);
-      conjuncts.push_back(equality2tc(expr, tmp));
+      expr2tc value = from_integer(interval.upper, src.type);
+      expr2tc new_expr = expr;
+      c_implicit_typecast_arithmetic(
+        new_expr, value, *migrate_namespace_lookup);
+      conjuncts.push_back(equality2tc(new_expr, value));
     }
     else
     {
       if(interval.upper_set)
       {
-        expr2tc tmp = from_integer(interval.upper, src.type);
-        conjuncts.push_back(lessthanequal2tc(expr, tmp));
+        expr2tc value = from_integer(interval.upper, src.type);
+        expr2tc new_expr = expr;
+        c_implicit_typecast_arithmetic(
+          new_expr, value, *migrate_namespace_lookup);
+        conjuncts.push_back(lessthanequal2tc(new_expr, value));
       }
 
       if(interval.lower_set)
       {
-        expr2tc tmp = from_integer(interval.lower, src.type);
-        conjuncts.push_back(lessthanequal2tc(tmp, expr));
+        expr2tc value = from_integer(interval.lower, src.type);
+        expr2tc new_expr = expr;
+        c_implicit_typecast_arithmetic(
+          new_expr, value, *migrate_namespace_lookup);
+        conjuncts.push_back(lessthanequal2tc(value, new_expr));
       }
     }
 
@@ -429,16 +439,22 @@ expr2tc interval_domaint::make_expression(const expr2tc &expr) const
     std::vector<expr2tc> conjuncts;
     if(interval.upper_set)
     {
-      expr2tc tmp;
-      migrate_expr(interval.upper.to_expr(), tmp);
-      conjuncts.push_back(lessthanequal2tc(expr, tmp));
+      expr2tc value;
+      migrate_expr(interval.upper.to_expr(), value);
+      expr2tc new_expr = expr;
+      c_implicit_typecast_arithmetic(
+        new_expr, value, *migrate_namespace_lookup);
+      conjuncts.push_back(lessthanequal2tc(expr, new_expr));
     }
 
     if(interval.lower_set)
     {
-      expr2tc tmp;
-      migrate_expr(interval.lower.to_expr(), tmp);
-      conjuncts.push_back(lessthanequal2tc(tmp, expr));
+      expr2tc value;
+      migrate_expr(interval.lower.to_expr(), value);
+      expr2tc new_expr = expr;
+      c_implicit_typecast_arithmetic(
+        new_expr, value, *migrate_namespace_lookup);
+      conjuncts.push_back(lessthanequal2tc(value, new_expr));
     }
 
     return conjunction(conjuncts);
