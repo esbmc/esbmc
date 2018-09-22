@@ -103,15 +103,8 @@ public:
 protected:
   bool bottom;
 
-  typedef hash_map_cont<
-    irep_idt,
-    std::pair<expr2tc, integer_intervalt>,
-    irep_id_hash>
-    int_mapt;
-  typedef hash_map_cont<
-    irep_idt,
-    std::pair<expr2tc, ieee_float_intervalt>,
-    irep_id_hash>
+  typedef hash_map_cont<irep_idt, integer_intervalt, irep_id_hash> int_mapt;
+  typedef hash_map_cont<irep_idt, ieee_float_intervalt, irep_id_hash>
     float_mapt;
 
   int_mapt int_map;

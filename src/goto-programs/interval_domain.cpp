@@ -11,10 +11,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/interval_domain.h>
 #include <langapi/language_util.h>
-#include <util/arith_tools.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/arith_tools.h>
 
 void interval_domaint::output(std::ostream &out) const
 {
@@ -26,25 +25,25 @@ void interval_domaint::output(std::ostream &out) const
 
   for(const auto &interval : int_map)
   {
-    if(interval.second.second.is_top())
+    if(interval.second.is_top())
       continue;
-    if(interval.second.second.lower_set)
-      out << interval.second.second.lower << " <= ";
+    if(interval.second.lower_set)
+      out << interval.second.lower << " <= ";
     out << interval.first;
-    if(interval.second.second.upper_set)
-      out << " <= " << interval.second.second.upper;
+    if(interval.second.upper_set)
+      out << " <= " << interval.second.upper;
     out << "\n";
   }
 
   for(const auto &interval : float_map)
   {
-    if(interval.second.second.is_top())
+    if(interval.second.is_top())
       continue;
-    if(interval.second.second.lower_set)
-      out << interval.second.second.lower << " <= ";
+    if(interval.second.lower_set)
+      out << interval.second.lower << " <= ";
     out << interval.first;
-    if(interval.second.second.upper_set)
-      out << " <= " << interval.second.second.upper;
+    if(interval.second.upper_set)
+      out << " <= " << interval.second.upper;
     out << "\n";
   }
 }
@@ -141,9 +140,9 @@ bool interval_domaint::join(const interval_domaint &b)
     }
     else
     {
-      integer_intervalt previous = it->second.second;
-      it->second.second.join(b_it->second.second);
-      if(it->second.second != previous)
+      integer_intervalt previous = it->second;
+      it->second.join(b_it->second);
+      if(it->second != previous)
         result = true;
 
       it++;
@@ -161,9 +160,9 @@ bool interval_domaint::join(const interval_domaint &b)
     }
     else
     {
-      ieee_float_intervalt previous = it->second.second;
-      it->second.second.join(b_it->second.second);
-      if(it->second.second != previous)
+      ieee_float_intervalt previous = it->second;
+      it->second.join(b_it->second);
+      if(it->second != previous)
         result = true;
 
       it++;
@@ -208,6 +207,12 @@ void interval_domaint::assume_rec(
   expr2t::expr_ids id,
   const expr2tc &rhs)
 {
+  if(is_typecast2t(lhs))
+    return assume_rec(to_typecast2t(lhs).from, id, rhs);
+
+  if(is_typecast2t(rhs))
+    return assume_rec(lhs, id, to_typecast2t(rhs).from);
+
   if(id == expr2t::equality_id)
   {
     assume_rec(lhs, expr2t::greaterthanequal_id, rhs);
@@ -229,88 +234,77 @@ void interval_domaint::assume_rec(
 
   assert(id == expr2t::lessthan_id || id == expr2t::lessthanequal_id);
 
-  const expr2tc &base_lhs = get_base_object(lhs);
-  const expr2tc &base_rhs = get_base_object(rhs);
-
-  if(is_symbol2t(base_lhs) && is_constant_number(base_rhs))
+  if(is_symbol2t(lhs) && is_constant_number(rhs))
   {
-    irep_idt lhs_identifier = to_symbol2t(base_lhs).thename;
+    irep_idt lhs_identifier = to_symbol2t(lhs).thename;
 
-    if(is_bv_type(base_lhs) && is_bv_type(base_rhs))
+    if(is_bv_type(lhs) && is_bv_type(rhs))
     {
-      mp_integer tmp = to_constant_int2t(base_rhs).value;
+      mp_integer tmp = to_constant_int2t(rhs).value;
       if(id == expr2t::lessthan_id)
         --tmp;
-      auto &ii = int_map[lhs_identifier];
-      ii.first = lhs;
-      ii.second.make_le_than(tmp);
-      if(ii.second.is_bottom())
+      integer_intervalt &ii = int_map[lhs_identifier];
+      ii.make_le_than(tmp);
+      if(ii.is_bottom())
         make_bottom();
     }
-    else if(is_floatbv_type(base_lhs) && is_floatbv_type(base_rhs))
+    else if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
     {
-      ieee_floatt tmp = to_constant_floatbv2t(base_rhs).value;
+      ieee_floatt tmp = to_constant_floatbv2t(rhs).value;
       if(id == expr2t::lessthan_id)
         tmp.decrement();
-      auto &fi = float_map[lhs_identifier];
-      fi.first = lhs;
-      fi.second.make_le_than(tmp);
-      if(fi.second.is_bottom())
+      ieee_float_intervalt &fi = float_map[lhs_identifier];
+      fi.make_le_than(tmp);
+      if(fi.is_bottom())
         make_bottom();
     }
   }
-  else if(is_constant_number(base_lhs) && is_symbol2t(base_rhs))
+  else if(is_constant_number(lhs) && is_symbol2t(rhs))
   {
-    irep_idt rhs_identifier = to_symbol2t(base_rhs).thename;
+    irep_idt rhs_identifier = to_symbol2t(rhs).thename;
 
-    if(is_bv_type(base_lhs) && is_bv_type(base_rhs))
+    if(is_bv_type(lhs) && is_bv_type(rhs))
     {
-      mp_integer tmp = to_constant_int2t(base_lhs).value;
+      mp_integer tmp = to_constant_int2t(lhs).value;
       if(id == expr2t::lessthan_id)
         ++tmp;
-      auto &ii = int_map[rhs_identifier];
-      ii.first = rhs;
-      ii.second.make_ge_than(tmp);
-      if(ii.second.is_bottom())
+      integer_intervalt &ii = int_map[rhs_identifier];
+      ii.make_ge_than(tmp);
+      if(ii.is_bottom())
         make_bottom();
     }
-    else if(is_floatbv_type(base_lhs) && is_floatbv_type(base_rhs))
+    else if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
     {
-      ieee_floatt tmp = to_constant_floatbv2t(base_lhs).value;
+      ieee_floatt tmp = to_constant_floatbv2t(lhs).value;
       if(id == expr2t::lessthan_id)
         tmp.increment();
-      auto &fi = float_map[rhs_identifier];
-      fi.first = rhs;
-      fi.second.make_ge_than(tmp);
-      if(fi.second.is_bottom())
+      ieee_float_intervalt &fi = float_map[rhs_identifier];
+      fi.make_ge_than(tmp);
+      if(fi.is_bottom())
         make_bottom();
     }
   }
-  else if(is_symbol2t(base_lhs) && is_symbol2t(base_rhs))
+  else if(is_symbol2t(lhs) && is_symbol2t(rhs))
   {
-    irep_idt lhs_identifier = to_symbol2t(base_lhs).thename;
-    irep_idt rhs_identifier = to_symbol2t(base_rhs).thename;
+    irep_idt lhs_identifier = to_symbol2t(lhs).thename;
+    irep_idt rhs_identifier = to_symbol2t(rhs).thename;
 
-    if(is_bv_type(base_lhs) && is_bv_type(base_rhs))
+    if(is_bv_type(lhs) && is_bv_type(rhs))
     {
-      auto &lhs_i = int_map[lhs_identifier];
-      lhs_i.first = lhs;
-      auto &rhs_i = int_map[rhs_identifier];
-      rhs_i.first = rhs;
-      lhs_i.second.meet(rhs_i.second);
-      rhs_i.second = lhs_i.second;
-      if(rhs_i.second.is_bottom())
+      integer_intervalt &lhs_i = int_map[lhs_identifier];
+      integer_intervalt &rhs_i = int_map[rhs_identifier];
+      lhs_i.meet(rhs_i);
+      rhs_i = lhs_i;
+      if(rhs_i.is_bottom())
         make_bottom();
     }
-    else if(is_floatbv_type(base_lhs) && is_floatbv_type(base_rhs))
+    else if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
     {
-      auto &lhs_i = float_map[lhs_identifier];
-      lhs_i.first = lhs;
-      auto &rhs_i = float_map[rhs_identifier];
-      rhs_i.first = rhs;
-      lhs_i.second.meet(rhs_i.second);
-      rhs_i.second = lhs_i.second;
-      if(rhs_i.second.is_bottom())
+      ieee_float_intervalt &lhs_i = float_map[lhs_identifier];
+      ieee_float_intervalt &rhs_i = float_map[rhs_identifier];
+      lhs_i.meet(rhs_i);
+      rhs_i = lhs_i;
+      if(rhs_i.is_bottom())
         make_bottom();
     }
   }
@@ -388,31 +382,31 @@ expr2tc interval_domaint::make_expression(const expr2tc &expr) const
     if(i_it == int_map.end())
       return gen_true_expr();
 
-    auto &iit = i_it->second;
-    if(iit.second.is_top())
+    const integer_intervalt &interval = i_it->second;
+    if(interval.is_top())
       return gen_true_expr();
 
-    if(iit.second.is_bottom())
+    if(interval.is_bottom())
       return gen_false_expr();
 
     std::vector<expr2tc> conjuncts;
-    if(iit.second.singleton())
+    if(interval.singleton())
     {
-      expr2tc tmp = from_integer(iit.second.upper, src.type);
-      conjuncts.push_back(equality2tc(iit.first, tmp));
+      expr2tc tmp = from_integer(interval.upper, src.type);
+      conjuncts.push_back(equality2tc(expr, tmp));
     }
     else
     {
-      if(iit.second.upper_set)
+      if(interval.upper_set)
       {
-        expr2tc tmp = from_integer(iit.second.upper, src.type);
-        conjuncts.push_back(lessthanequal2tc(iit.first, tmp));
+        expr2tc tmp = from_integer(interval.upper, src.type);
+        conjuncts.push_back(lessthanequal2tc(expr, tmp));
       }
 
-      if(iit.second.lower_set)
+      if(interval.lower_set)
       {
-        expr2tc tmp = from_integer(iit.second.lower, src.type);
-        conjuncts.push_back(lessthanequal2tc(tmp, iit.first));
+        expr2tc tmp = from_integer(interval.lower, src.type);
+        conjuncts.push_back(lessthanequal2tc(tmp, expr));
       }
     }
 
@@ -421,39 +415,30 @@ expr2tc interval_domaint::make_expression(const expr2tc &expr) const
 
   if(is_floatbv_type(expr))
   {
-    float_mapt::const_iterator f_it = float_map.find(src.thename);
-    if(f_it == float_map.end())
+    float_mapt::const_iterator i_it = float_map.find(src.thename);
+    if(i_it == float_map.end())
       return gen_true_expr();
 
-    auto &fit = f_it->second;
-    if(fit.second.is_top())
+    const ieee_float_intervalt &interval = i_it->second;
+    if(interval.is_top())
       return gen_true_expr();
 
-    if(fit.second.is_bottom())
+    if(interval.is_bottom())
       return gen_false_expr();
 
     std::vector<expr2tc> conjuncts;
-    if(fit.second.singleton())
+    if(interval.upper_set)
     {
       expr2tc tmp;
-      migrate_expr(fit.second.upper.to_expr(), tmp);
-      conjuncts.push_back(equality2tc(fit.first, tmp));
+      migrate_expr(interval.upper.to_expr(), tmp);
+      conjuncts.push_back(lessthanequal2tc(expr, tmp));
     }
-    else
-    {
-      if(fit.second.upper_set)
-      {
-        expr2tc tmp;
-        migrate_expr(fit.second.upper.to_expr(), tmp);
-        conjuncts.push_back(lessthanequal2tc(fit.first, tmp));
-      }
 
-      if(fit.second.lower_set)
-      {
-        expr2tc tmp;
-        migrate_expr(fit.second.lower.to_expr(), tmp);
-        conjuncts.push_back(lessthanequal2tc(tmp, fit.first));
-      }
+    if(interval.lower_set)
+    {
+      expr2tc tmp;
+      migrate_expr(interval.lower.to_expr(), tmp);
+      conjuncts.push_back(lessthanequal2tc(tmp, expr));
     }
 
     return conjunction(conjuncts);

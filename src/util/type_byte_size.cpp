@@ -353,15 +353,21 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
 const expr2tc &get_base_object(const expr2tc &expr)
 {
   if(is_index2t(expr))
+  {
     return get_base_object(to_index2t(expr).source_value);
-
+  }
   if(is_member2t(expr))
+  {
     return get_base_object(to_member2t(expr).source_value);
-
-  if(is_typecast2t(expr))
+  }
+  else if(is_typecast2t(expr))
+  {
     return get_base_object(to_typecast2t(expr).from);
-
-  return expr;
+  }
+  else
+  {
+    return expr;
+  }
 }
 
 const irep_idt get_string_argument(const expr2tc &expr)
