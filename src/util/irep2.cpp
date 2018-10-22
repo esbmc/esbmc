@@ -2059,13 +2059,13 @@ do_type_hash(const fixedbvt &theval, crypto_hash &hash)
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const ieee_floatt &theval)
 {
-  return do_type_crc(BigInt(theval.to_ansi_c_string().c_str()));
+  return do_type_crc(theval.pack());
 }
 
 static inline __attribute__((always_inline)) void
 do_type_hash(const ieee_floatt &theval, crypto_hash &hash)
 {
-  do_type_hash(BigInt(theval.to_ansi_c_string().c_str()), hash);
+  do_type_hash(theval.pack(), hash);
 }
 
 static inline __attribute__((always_inline)) size_t
