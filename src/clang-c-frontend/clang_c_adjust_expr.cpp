@@ -245,11 +245,10 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   const typet type0 = ns.follow(op0.type());
   const typet type1 = ns.follow(op1.type());
 
+  gen_typecast_arithmetic(ns, op0, op1);
+
   if(expr.id() == "shr" || expr.id() == "shl")
   {
-    gen_typecast_arithmetic(ns, op0);
-    gen_typecast_arithmetic(ns, op1);
-
     if(is_number(op0.type()) && is_number(op1.type()))
     {
       if(expr.id() == "shr") // shifting operation depends on types
@@ -271,8 +270,6 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   }
   else
   {
-    gen_typecast_arithmetic(ns, op0, op1);
-
     const typet &type0 = ns.follow(op0.type());
     const typet &type1 = ns.follow(op1.type());
 
@@ -280,12 +277,6 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
       expr.id() == "+" || expr.id() == "-" || expr.id() == "*" ||
       expr.id() == "/")
     {
-      if(type0.id() == "pointer" || type1.id() == "pointer")
-      {
-        //        typecheck_expr_pointer_arithmetic(expr);
-        return;
-      }
-
       adjust_float_arith(expr);
       return;
     }
