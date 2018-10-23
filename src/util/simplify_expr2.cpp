@@ -17,8 +17,8 @@ static expr2tc try_simplification(const expr2tc &expr)
 {
   expr2tc to_simplify = expr->do_simplify();
   if(is_nil_expr(to_simplify))
-    to_simplify = expr2tc(expr->clone());
-  return expr2tc(to_simplify->clone());
+    to_simplify = expr;
+  return to_simplify;
 }
 
 static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
@@ -2215,11 +2215,11 @@ static expr2tc simplify_floatbv_2ops(
   // Try to handle NaN
   if(is_constant_floatbv2t(simplied_side_1))
     if(to_constant_floatbv2t(simplied_side_1).value.is_NaN())
-      return expr2tc(simplied_side_1->clone());
+      return simplied_side_1;
 
   if(is_constant_floatbv2t(simplied_side_2))
     if(to_constant_floatbv2t(simplied_side_2).value.is_NaN())
-      return expr2tc(simplied_side_2->clone());
+      return simplied_side_2;
 
   if(
     !is_constant_expr(simplied_side_1) || !is_constant_expr(simplied_side_2) ||
