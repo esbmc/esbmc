@@ -112,6 +112,9 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
   compiler_args.push_back("-U__BLOCKS__");
 #endif
 
+  // Increase maximum bracket depth
+  compiler_args.push_back("-fbracket-depth=1024");
+
   // Force clang see all files as .c
   // This forces the preprocessor to be called even in preprocessed files
   // which allow us to perform transformations using -D

@@ -258,6 +258,7 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
           expr.id("lshr");
           return;
         }
+
         if(type0.id() == "signedbv")
         {
           expr.id("ashr");
