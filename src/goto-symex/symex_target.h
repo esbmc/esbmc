@@ -42,8 +42,6 @@ public:
     }
   };
 
-  typedef enum { STATE, HIDDEN } assignment_typet;
-
   // write to a variable - must be symbol
   // the value is destroyed
   virtual void assignment(
@@ -53,7 +51,8 @@ public:
     const expr2tc &rhs,
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
-    assignment_typet assignment_type) = 0;
+    const bool hidden,
+    unsigned loop_number) = 0;
 
   // record output
   virtual void output(
@@ -67,7 +66,8 @@ public:
   virtual void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
-    const sourcet &source) = 0;
+    const sourcet &source,
+    unsigned loop_number) = 0;
 
   // record an assertion
   // cond is destroyed
@@ -76,7 +76,8 @@ public:
     const expr2tc &cond,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
-    const sourcet &source) = 0;
+    const sourcet &source,
+    unsigned loop_number) = 0;
 
   // Renumber the pointer object of a given symbol
   virtual void renumber(

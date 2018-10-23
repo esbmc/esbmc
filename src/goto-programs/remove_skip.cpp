@@ -28,9 +28,7 @@ static bool is_skip(goto_programt::instructionst::iterator it)
   }
 
   if(it->is_other())
-  {
     return is_nil_expr(it->code);
-  }
 
   return false;
 }
@@ -92,6 +90,12 @@ void remove_skip(goto_programt &goto_program)
 
         if(result != new_targets.end())
           target = result->second;
+
+        if(i_it == result->second)
+        {
+          i_it->make_assumption(gen_false_expr());
+          break;
+        }
       }
     }
 

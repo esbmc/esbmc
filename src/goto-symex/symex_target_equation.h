@@ -45,7 +45,8 @@ public:
     const expr2tc &rhs,
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
-    assignment_typet assignment_type) override;
+    const bool hidden,
+    unsigned loop_number) override;
 
   // output
   void output(
@@ -59,7 +60,8 @@ public:
   void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
-    const sourcet &source) override;
+    const sourcet &source,
+    unsigned loop_number) override;
 
   // record an assertion
   // cond is destroyed
@@ -68,7 +70,8 @@ public:
     const expr2tc &cond,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
-    const sourcet &source) override;
+    const sourcet &source,
+    unsigned loop_number) override;
 
   void renumber(
     const expr2tc &guard,
@@ -123,7 +126,6 @@ public:
 
     // for ASSIGNMENT
     expr2tc lhs, rhs, original_lhs;
-    assignment_typet assignment_type;
 
     // for ASSUME/ASSERT
     expr2tc cond;
@@ -134,13 +136,19 @@ public:
     std::list<expr2tc> output_args;
 
     // for conversion
-    const smt_ast *guard_ast, *cond_ast;
+    smt_astt guard_ast, cond_ast;
     std::list<expr2tc> converted_output_args;
 
     // for slicing
     bool ignore;
 
-    SSA_stept() : ignore(false)
+    // for visibility
+    bool hidden;
+
+    // for bidirectional search
+    unsigned loop_number;
+
+    SSA_stept() : ignore(false), hidden(false)
     {
     }
 
@@ -149,6 +157,7 @@ public:
       const namespacet &ns,
       std::ostream &out,
       bool show_ignored = false) const;
+    void dump() const;
   };
 
   unsigned count_ignored_SSA_steps() const

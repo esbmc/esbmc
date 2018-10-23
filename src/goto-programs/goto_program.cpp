@@ -283,8 +283,7 @@ void goto_programt::get_successors(
   if(target == instructions.end())
     return;
 
-  const_targett next = target;
-  next++;
+  const auto next = std::next(target);
 
   const instructiont &i = *target;
 
@@ -293,7 +292,7 @@ void goto_programt::get_successors(
     for(auto target : i.targets)
       successors.emplace_back(target);
 
-    if(!is_true(i.guard))
+    if(!is_true(i.guard) && next != instructions.end())
       successors.push_back(next);
   }
   else if(i.is_return())

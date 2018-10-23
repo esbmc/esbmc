@@ -188,8 +188,7 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      std::cerr << "Setting thread data for nonexistant thread " << tid;
-      std::cerr << std::endl;
+      std::cerr << "Setting thread data for nonexistant thread " << tid << '\n';
       abort();
     }
 
@@ -201,8 +200,7 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      std::cerr << "Getting thread data for nonexistant thread " << tid;
-      std::cerr << std::endl;
+      std::cerr << "Getting thread data for nonexistant thread " << tid << '\n';
       abort();
     }
 
@@ -239,10 +237,8 @@ public:
    *  @param guard A guard for the assignment, true by default
    *  @param type Assignment type, visible by default
    */
-  void symex_assign(
-    const expr2tc &code,
-    symex_targett::assignment_typet type,
-    const guardt &guard) override;
+  void symex_assign(const expr2tc &code, const bool hidden, const guardt &guard)
+    override;
 
   /**
    *  Symbolically assert something.

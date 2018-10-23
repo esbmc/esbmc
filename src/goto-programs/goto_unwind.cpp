@@ -10,7 +10,6 @@
 #include <util/std_expr.h>
 
 void goto_unwind(
-  contextt &context,
   goto_functionst &goto_functions,
   unsigned unwind,
   message_handlert &message_handler)
@@ -18,12 +17,7 @@ void goto_unwind(
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
       goto_unwindt(
-        context,
-        it->first,
-        goto_functions,
-        it->second,
-        unwind,
-        message_handler);
+        it->first, goto_functions, it->second, unwind, message_handler);
 
   goto_functions.update();
 }

@@ -67,6 +67,7 @@ public:
   }
 
   void output(const namespacet &ns, std::ostream &out) const;
+  void dump() const;
 
   void compute_location_numbers();
   void compute_loop_numbers();
@@ -76,6 +77,7 @@ public:
   {
     compute_target_numbers();
     compute_location_numbers();
+    compute_loop_numbers();
   }
 
   irep_idt main_id() const

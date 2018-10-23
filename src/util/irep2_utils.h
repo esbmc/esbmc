@@ -96,12 +96,22 @@ inline bool is_structure_type(const expr2tc &e)
   return is_structure_type(e->type);
 }
 
-inline bool is_arith_type(const expr2tc &t)
+inline bool is_arith_expr(const expr2tc &expr)
 {
-  return t->expr_id == expr2t::neg_id || t->expr_id == expr2t::abs_id ||
-         t->expr_id == expr2t::add_id || t->expr_id == expr2t::sub_id ||
-         t->expr_id == expr2t::mul_id || t->expr_id == expr2t::modulus_id ||
-         t->expr_id == expr2t::div_id;
+  return expr->expr_id == expr2t::neg_id || expr->expr_id == expr2t::abs_id ||
+         expr->expr_id == expr2t::add_id || expr->expr_id == expr2t::sub_id ||
+         expr->expr_id == expr2t::mul_id || expr->expr_id == expr2t::div_id ||
+         expr->expr_id == expr2t::modulus_id;
+}
+
+inline bool is_comp_expr(const expr2tc &expr)
+{
+  return expr->expr_id == expr2t::lessthan_id ||
+         expr->expr_id == expr2t::lessthanequal_id ||
+         expr->expr_id == expr2t::greaterthan_id ||
+         expr->expr_id == expr2t::greaterthanequal_id ||
+         expr->expr_id == expr2t::equality_id ||
+         expr->expr_id == expr2t::notequal_id;
 }
 
 /** Test if expr is true. First checks whether the expr is a constant bool, and
@@ -262,6 +272,18 @@ inline void make_not(expr2tc &expr)
     new_expr = not2tc(expr);
 
   expr.swap(new_expr);
+}
+
+inline expr2tc conjunction(std::vector<expr2tc> cs)
+{
+  if(cs.empty())
+    return gen_true_expr();
+
+  expr2tc res = cs[0];
+  for(std::size_t i = 1; i < cs.size(); ++i)
+    res = and2tc(res, cs[i]);
+
+  return res;
 }
 
 inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)

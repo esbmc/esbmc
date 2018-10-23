@@ -122,7 +122,7 @@ unsigned goto_symext::argument_assignments(
         }
       }
 
-      symex_assign(code_assign2tc(lhs, rhs), symex_targett::HIDDEN);
+      symex_assign(code_assign2tc(lhs, rhs), true);
     }
 
     it1++;
@@ -165,7 +165,7 @@ unsigned goto_symext::argument_assignments(
         cur_state->top().level1.thread_id,
         0);
 
-      symex_assign(code_assign2tc(va_lhs, *it1), symex_targett::HIDDEN);
+      symex_assign(code_assign2tc(va_lhs, *it1), true);
     }
   }
   else if(it1 != arguments.end())
@@ -226,7 +226,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
       // Add an unwinding assumption.
       expr2tc now_guard = cur_state->guard.as_expr();
       not2tc not_now(now_guard);
-      target->assumption(now_guard, not_now, cur_state->source);
+      target->assumption(now_guard, not_now, cur_state->source, first_loop);
     }
 
     cur_state->source.pc++;

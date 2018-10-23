@@ -25,7 +25,7 @@ class bmct : public messaget
 {
 public:
   bmct(
-    const goto_functionst &funcs,
+    goto_functionst &funcs,
     optionst &opts,
     contextt &_context,
     message_handlert &_message_handler);
@@ -69,7 +69,7 @@ protected:
     boost::shared_ptr<smt_convt> &smt_conv,
     boost::shared_ptr<symex_target_equationt> &eq);
 
-  virtual void successful_trace(boost::shared_ptr<symex_target_equationt> &eq);
+  virtual void successful_trace();
 
   virtual void show_vcc(boost::shared_ptr<symex_target_equationt> &eq);
 
@@ -81,6 +81,10 @@ protected:
     boost::shared_ptr<symex_target_equationt> &eq);
 
   virtual void report_result(smt_convt::resultt &res);
+
+  virtual void bidirectional_search(
+    boost::shared_ptr<smt_convt> &smt_conv,
+    boost::shared_ptr<symex_target_equationt> &eq);
 
   smt_convt::resultt run_thread(boost::shared_ptr<symex_target_equationt> &eq);
 };

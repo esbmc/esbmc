@@ -539,6 +539,13 @@ dnl does not enjoy the idea of testing for C++ / mangled symbols
 ESBMC_OPTIONAL_SOLVER([cvc4_possible_locs], [cvc4_build_headers], cvc4, cvc4, sleep, include, [cvc4_possible_libdirs], $$ESBMC_NOOP_CONFIG)
 ])
 
+AS_IF([test "${ESBMC_ENABLE_cvc4}" = "1"], [
+  AC_CHECK_LIB([glpk], [glp_init_iocp],
+    [AS_VAR_APPEND(LIBS, " -lglpk")],
+    [AC_MSG_WARN([No libglk found: CVC4 may require it])], []
+  )],
+[])
+
 AS_IF([test "$esbmc_disable_solver_mathsat" != "yes"], [
 ESBMC_OPTIONAL_SOLVER([mathsat_possible_locs], [mathsat_build_headers], mathsat, mathsat, msat_create_config, include, [mathsat_possible_libdirs], $$ESBMC_NOOP_CONFIG)
 ])
