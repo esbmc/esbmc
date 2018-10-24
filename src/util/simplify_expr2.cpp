@@ -1591,15 +1591,6 @@ static expr2tc simplify_relations(
   expr2tc simplied_side_1 = try_simplification(side_1);
   expr2tc simplied_side_2 = try_simplification(side_2);
 
-  // Try to handle NaN
-  if(is_constant_floatbv2t(simplied_side_1))
-    if(to_constant_floatbv2t(simplied_side_1).value.is_NaN())
-      return gen_false_expr();
-
-  if(is_constant_floatbv2t(simplied_side_2))
-    if(to_constant_floatbv2t(simplied_side_2).value.is_NaN())
-      return gen_false_expr();
-
   if(!is_constant_expr(simplied_side_1) || !is_constant_expr(simplied_side_2))
   {
     // Were we able to simplify the sides?
@@ -1765,6 +1756,33 @@ expr2tc equality2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 template <class constant_type>
+struct IEEE_notequalitytor
+{
+  static expr2tc simplify(
+    const expr2tc &op1,
+    const expr2tc &op2,
+    const std::function<bool(const expr2tc &)> &is_constant,
+    std::function<constant_type &(expr2tc &)> get_value)
+  {
+    // Two constants? Simplify to result of the comparison
+    if(is_constant(op1) && is_constant(op2))
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(get_value(c1) != get_value(c2));
+    }
+
+    if(op1 == op2)
+    {
+      // x == x is the same as saying !isnan(x)
+      expr2tc is_nan(new isnan2t(op1));
+      return try_simplification(is_nan);
+    }
+
+    return expr2tc();
+  }
+};
+
+template <class constant_type>
 struct Notequaltor
 {
   static expr2tc simplify(
@@ -1785,6 +1803,11 @@ struct Notequaltor
 
 expr2tc notequal2t::do_simplify(bool second __attribute__((unused))) const
 {
+  // If we're dealing with floatbvs, call IEEE_notequalitytor instead
+  if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
+    return simplify_floatbv_relations<IEEE_notequalitytor, equality2t>(
+      type, side_1, side_2);
+
   return simplify_relations<Notequaltor, notequal2t>(type, side_1, side_2);
 }
 
