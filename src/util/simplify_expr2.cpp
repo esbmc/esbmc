@@ -1773,7 +1773,7 @@ struct IEEE_notequalitytor
 
     if(op1 == op2)
     {
-      // x == x is the same as saying !isnan(x)
+      // x != x is the same as saying isnan(x)
       expr2tc is_nan(new isnan2t(op1));
       return try_simplification(is_nan);
     }
