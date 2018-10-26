@@ -710,6 +710,7 @@ void check_replace_invalid_assignment(std::string &assignment)
     std::regex_search(assignment, m, std::regex("@")) ||
     std::regex_search(assignment, m, std::regex("POINTER_OFFSET")) ||
     std::regex_search(assignment, m, std::regex("SAME-OBJECT")) ||
+    std::regex_search(assignment, m, std::regex("CONCAT")) ||
     std::regex_search(assignment, m, std::regex("BITCAST:")))
     assignment.clear();
 }
