@@ -109,25 +109,6 @@ int generate_sha1_hash_for_file(const char *path, std::string &output)
 }
 
 /* */
-std::string execute_cmd(const std::string &command)
-{
-  /* add ./ for linux execution */
-  std::string initial = command.substr(0, 1);
-  FILE *pipe = popen(command.c_str(), "r");
-  if(!pipe)
-    return "ERROR";
-  char buffer[128];
-  std::string result;
-  while(!feof(pipe))
-  {
-    if(fgets(buffer, 128, pipe) != nullptr)
-      result += buffer;
-  }
-  pclose(pipe);
-  return result;
-}
-
-/* */
 std::string read_file(const std::string &path)
 {
   std::ifstream t(path.c_str());
