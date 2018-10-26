@@ -188,14 +188,6 @@ void goto_symext::symex_step(reachability_treet &art)
         thrown_obj_map.erase(cur_state->source.pc);
       }
 
-      replace_nondet(deref_code);
-
-      code_assign2t &assign = to_code_assign2t(deref_code);
-
-      dereference(assign.target, dereferencet::WRITE);
-      dereference(assign.source, dereferencet::READ);
-      replace_dynamic_allocation(deref_code);
-
       symex_assign(deref_code);
     }
 

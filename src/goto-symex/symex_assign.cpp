@@ -163,11 +163,17 @@ void goto_symext::symex_assign(
     delete foo;
   }
 
+  expr2tc original_lhs = code.target;
   expr2tc lhs = code.target;
   expr2tc rhs = code.source;
 
   replace_nondet(lhs);
   replace_nondet(rhs);
+
+  dereference(lhs, dereferencet::WRITE);
+  dereference(rhs, dereferencet::READ);
+  replace_dynamic_allocation(lhs);
+  replace_dynamic_allocation(rhs);
 
   if(is_sideeffect2t(rhs))
   {
@@ -212,7 +218,7 @@ void goto_symext::symex_assign(
     }
 
     guardt g(guard); // NOT the state guard!
-    symex_assign_rec(lhs, lhs, rhs, g, hidden_ssa);
+    symex_assign_rec(lhs, original_lhs, rhs, g, hidden_ssa);
   }
 }
 
