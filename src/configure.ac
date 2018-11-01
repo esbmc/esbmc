@@ -468,9 +468,9 @@ m4_define(z3_possible_libdirs, [lib, bin, x64])
 dnl Only boolector 1.6 and later are supported -- prior versions of boolector
 dnl do not have a structure for knowing where lingeling / minisat are.
 
-m4_define(btor_build_headers, [boolector/src/boolector.h])
+m4_define(btor_build_headers, [src/boolector.h])
 m4_define(btor_possible_locs, [$SATDIR64/boolector, $SATDIR32/boolector, $SATDIR/boolector, $HOME/boolector])
-m4_define(btor_possible_libdirs, [boolector/build])
+m4_define(btor_possible_libdirs, [build/lib])
 
 m4_define(yices_build_headers, [include/yices.h])
 m4_define(yices_possible_locs, [$SATDIR64/yices, $SATDIR32/yices, $SATDIR/yices, $HOME/yices])
@@ -499,8 +499,10 @@ m4_define([$$ESBMC_BOOLECTOR_EXTRA_CONFIG], [
   dnl $1 = Path we're looking at as being the boolector installation
   dnl $2 = libdir path
   dnl $3 = Variable we're pumping this config into
-  AS_VAR_APPEND($3, " [-L]$1/lingeling ")
+  AS_VAR_APPEND($3, " [-L]$1/deps/lingeling ")
   AS_VAR_APPEND($3, " -llgl ")
+  AS_VAR_APPEND($3, " [-L]$1/deps/btor2tools/build ")
+  AS_VAR_APPEND($3, " -lbtor2parser ")
 ])dnl
 
 m4_define([$$ESBMC_YICES_EXTRA_CONFIG], [
@@ -526,7 +528,7 @@ ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_cont
 ])
 
 AS_IF([test "$esbmc_disable_solver_boolector" != "yes"], [
-ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, boolector/src, [btor_possible_libdirs], $$ESBMC_BOOLECTOR_EXTRA_CONFIG)
+ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, src, [btor_possible_libdirs], $$ESBMC_BOOLECTOR_EXTRA_CONFIG)
 ])
 
 AS_IF([test "$esbmc_disable_solver_yices" != "yes"], [
