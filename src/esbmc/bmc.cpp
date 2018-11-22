@@ -454,6 +454,7 @@ smt_convt::resultt bmct::start_bmc()
   boost::shared_ptr<symex_target_equationt> eq;
   smt_convt::resultt res = run(eq);
   report_result(res);
+  report_trace(res, eq);
   return res;
 }
 
@@ -481,8 +482,6 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
     {
       if(config.options.get_bool_option("smt-model"))
         runtime_solver->print_model();
-
-      report_trace(res, eq);
 
       if(config.options.get_bool_option("bidirectional"))
         bidirectional_search(runtime_solver, eq);
