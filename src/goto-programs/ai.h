@@ -94,22 +94,6 @@ public:
   virtual void
   output(const goto_functionst &goto_functions, std::ostream &out) const;
 
-  void output(
-    const namespacet &ns,
-    const goto_programt &goto_program,
-    std::ostream &out) const
-  {
-    output(ns, goto_program, out);
-  }
-
-  void output(
-    const namespacet &ns,
-    const goto_functiont &goto_function,
-    std::ostream &out) const
-  {
-    output(ns, goto_function.body, out);
-  }
-
 protected:
   // overload to add a factory
   virtual void initialize(const goto_programt &);
