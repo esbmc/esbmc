@@ -35,18 +35,6 @@ void interval_domaint::output(std::ostream &out) const
       out << " <= " << interval.second.upper;
     out << "\n";
   }
-
-  for(const auto &interval : float_map)
-  {
-    if(interval.second.is_top())
-      continue;
-    if(interval.second.lower_set)
-      out << interval.second.lower << " <= ";
-    out << interval.first;
-    if(interval.second.upper_set)
-      out << " <= " << interval.second.upper;
-    out << "\n";
-  }
 }
 
 void interval_domaint::transform(
@@ -150,26 +138,6 @@ bool interval_domaint::join(const interval_domaint &b)
     }
   }
 
-  for(float_mapt::iterator it = float_map.begin();
-      it != float_map.end();) // no it++
-  {
-    const float_mapt::const_iterator b_it = b.float_map.begin();
-    if(b_it == b.float_map.end())
-    {
-      it = float_map.erase(it);
-      result = true;
-    }
-    else
-    {
-      ieee_float_intervalt previous = it->second;
-      it->second.join(b_it->second);
-      if(it->second != previous)
-        result = true;
-
-      it++;
-    }
-  }
-
   return result;
 }
 
@@ -194,8 +162,6 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
 
     if(is_bv_type(expr))
       int_map.erase(identifier);
-    else if(is_floatbv_type(expr))
-      float_map.erase(identifier);
   }
   else if(is_typecast2t(expr))
   {
@@ -249,16 +215,6 @@ void interval_domaint::assume_rec(
       if(ii.is_bottom())
         make_bottom();
     }
-    else if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
-    {
-      ieee_floatt tmp = to_constant_floatbv2t(rhs).value;
-      if(id == expr2t::lessthan_id)
-        tmp.decrement();
-      ieee_float_intervalt &fi = float_map[lhs_identifier];
-      fi.make_le_than(tmp);
-      if(fi.is_bottom())
-        make_bottom();
-    }
   }
   else if(is_constant_number(lhs) && is_symbol2t(rhs))
   {
@@ -274,16 +230,6 @@ void interval_domaint::assume_rec(
       if(ii.is_bottom())
         make_bottom();
     }
-    else if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
-    {
-      ieee_floatt tmp = to_constant_floatbv2t(lhs).value;
-      if(id == expr2t::lessthan_id)
-        tmp.increment();
-      ieee_float_intervalt &fi = float_map[rhs_identifier];
-      fi.make_ge_than(tmp);
-      if(fi.is_bottom())
-        make_bottom();
-    }
   }
   else if(is_symbol2t(lhs) && is_symbol2t(rhs))
   {
@@ -294,15 +240,6 @@ void interval_domaint::assume_rec(
     {
       integer_intervalt &lhs_i = int_map[lhs_identifier];
       integer_intervalt &rhs_i = int_map[rhs_identifier];
-      lhs_i.meet(rhs_i);
-      rhs_i = lhs_i;
-      if(rhs_i.is_bottom())
-        make_bottom();
-    }
-    else if(is_floatbv_type(lhs) && is_floatbv_type(rhs))
-    {
-      ieee_float_intervalt &lhs_i = float_map[lhs_identifier];
-      ieee_float_intervalt &rhs_i = float_map[rhs_identifier];
       lhs_i.meet(rhs_i);
       rhs_i = lhs_i;
       if(rhs_i.is_bottom())
@@ -418,43 +355,6 @@ expr2tc interval_domaint::make_expression(const expr2tc &expr) const
           new_expr, value, *migrate_namespace_lookup);
         conjuncts.push_back(lessthanequal2tc(value, new_expr));
       }
-    }
-
-    return conjunction(conjuncts);
-  }
-
-  if(is_floatbv_type(expr))
-  {
-    float_mapt::const_iterator i_it = float_map.find(src.thename);
-    if(i_it == float_map.end())
-      return gen_true_expr();
-
-    const ieee_float_intervalt &interval = i_it->second;
-    if(interval.is_top())
-      return gen_true_expr();
-
-    if(interval.is_bottom())
-      return gen_false_expr();
-
-    std::vector<expr2tc> conjuncts;
-    if(interval.upper_set)
-    {
-      expr2tc value;
-      migrate_expr(interval.upper.to_expr(), value);
-      expr2tc new_expr = expr;
-      c_implicit_typecast_arithmetic(
-        new_expr, value, *migrate_namespace_lookup);
-      conjuncts.push_back(lessthanequal2tc(expr, new_expr));
-    }
-
-    if(interval.lower_set)
-    {
-      expr2tc value;
-      migrate_expr(interval.lower.to_expr(), value);
-      expr2tc new_expr = expr;
-      c_implicit_typecast_arithmetic(
-        new_expr, value, *migrate_namespace_lookup);
-      conjuncts.push_back(lessthanequal2tc(value, new_expr));
     }
 
     return conjunction(conjuncts);

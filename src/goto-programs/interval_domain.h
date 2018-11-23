@@ -19,7 +19,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/mp_arith.h>
 
 typedef interval_templatet<mp_integer> integer_intervalt;
-typedef interval_templatet<ieee_floatt> ieee_float_intervalt;
 
 class interval_domaint : public ai_domain_baset
 {
@@ -61,7 +60,6 @@ public:
   void make_bottom() final override
   {
     int_map.clear();
-    float_map.clear();
     bottom = true;
   }
 
@@ -69,7 +67,6 @@ public:
   void make_top() final override
   {
     int_map.clear();
-    float_map.clear();
     bottom = false;
   }
 
@@ -90,7 +87,7 @@ public:
 
   bool is_top() const override final
   {
-    return !bottom && int_map.empty() && float_map.empty();
+    return !bottom && int_map.empty();
   }
 
   expr2tc make_expression(const expr2tc &expr) const;
@@ -104,18 +101,14 @@ protected:
   bool bottom;
 
   typedef hash_map_cont<irep_idt, integer_intervalt, irep_id_hash> int_mapt;
-  typedef hash_map_cont<irep_idt, ieee_float_intervalt, irep_id_hash>
-    float_mapt;
 
   int_mapt int_map;
-  float_mapt float_map;
 
   void havoc_rec(const expr2tc &expr);
   void assume_rec(const expr2tc &expr, bool negation = false);
   void assume_rec(const expr2tc &lhs, expr2t::expr_ids id, const expr2tc &rhs);
   void assign(const expr2tc &assignment);
   integer_intervalt get_int_rec(const expr2tc &expr);
-  ieee_float_intervalt get_float_rec(const expr2tc &expr);
 };
 
 #endif // CPROVER_ANALYSES_INTERVAL_DOMAIN_H
