@@ -299,13 +299,13 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
   {
     if(!negation)
       cond->foreach_operand(
-        [this, &cond](const expr2tc &e) { assume_rec(e, false); });
+        [this](const expr2tc &e) { assume_rec(e, false); });
   }
   else if(is_or2t(cond))
   {
     if(negation)
       cond->foreach_operand(
-        [this, &cond](const expr2tc &e) { assume_rec(e, true); });
+        [this](const expr2tc &e) { assume_rec(e, true); });
   }
 }
 
