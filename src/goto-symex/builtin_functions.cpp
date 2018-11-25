@@ -311,7 +311,10 @@ void goto_symext::symex_free(const expr2tc &expr)
       expr2tc offset = item.offset;
       expr2tc eq = equality2tc(offset, gen_ulong(0));
       g.guard_expr(eq);
-      claim(eq, "Operand of free must have zero pointer offset");
+      if(options.get_bool_option("assume-pointer-safety"))
+        assume(eq);
+      else
+        claim(eq, "Operand of free must have zero pointer offset");
     }
   }
 
@@ -914,7 +917,12 @@ void goto_symext::intrinsic_memset(
         expr2tc eq = equality2tc(offs, gen_zero(offs->type));
         curguard.guard_expr(eq);
         if(!options.get_bool_option("no-pointer-check"))
-          claim(eq, "Memset of full-object-size must have zero offset");
+        {
+          if(options.get_bool_option("assume-pointer-safety"))
+            assume(eq);
+          else
+            claim(eq, "Memset of full-object-size must have zero offset");
+        }
       }
       else if(is_struct_type(item.object->type) && is_constant_int2t(size))
       {
@@ -967,9 +975,14 @@ void goto_symext::intrinsic_memset(
 
         curguard.guard_expr(or_accuml);
         if(!options.get_bool_option("no-pointer-check"))
-          claim(
-            or_accuml,
-            "Unaligned, cross-field or other non-field-based memset?");
+        {
+          if(options.get_bool_option("assume-pointer-safety"))
+            assume(or_accuml);
+          else
+            claim(
+              or_accuml,
+              "Unaligned, cross-field or other non-field-based memset?");
+        }
         for(const auto &ref : out_list)
         {
           guardt newguard(curguard);

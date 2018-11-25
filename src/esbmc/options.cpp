@@ -126,6 +126,9 @@ const struct opt_templ esbmc_options[] = {
   {0, "atomicity-check", switc, ""},
   {0, "error-label", string, ""},
   {0, "force-malloc-success", switc, ""},
+  {0, "assume-bounds-safety", switc, ""},
+  {0, "assume-no-div-by-zero", switc, ""},
+  {0, "assume-pointer-safety", switc, ""},
 
   // k-induction
   {0, "base-case", switc, ""},
