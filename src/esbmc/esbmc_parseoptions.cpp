@@ -1279,6 +1279,11 @@ int esbmc_parseoptionst::do_inductive_step(
   if(opts.get_bool_option("disable-inductive-step"))
     return true;
 
+  if(
+    strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) <
+    k_step.to_uint64())
+    return true;
+
   opts.set_option("base-case", false);
   opts.set_option("forward-condition", false);
   opts.set_option("inductive-step", true);
