@@ -292,9 +292,7 @@ f = open(property_file, 'r')
 property_file_content = f.read()
 
 category_property = 0
-if "CHECK( init(main()), LTL(G valid-memcleanup) )" in property_file_content:
-  category_property = Property.memcleanup
-elif "CHECK( init(main()), LTL(G valid-free) )" in property_file_content:
+if "CHECK( init(main()), LTL(G valid-free) )" in property_file_content:
   category_property = Property.memory
 elif "CHECK( init(main()), LTL(G ! overflow) )" in property_file_content:
   category_property = Property.overflow
