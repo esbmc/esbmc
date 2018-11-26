@@ -335,6 +335,8 @@ public:
    */
   void rename(expr2tc &expr);
 
+  void rename_type(expr2tc &expr);
+
   /**
    *  Perform renaming of contents of an address_of operation.
    *  This requires different behaviour, because what we really want is a

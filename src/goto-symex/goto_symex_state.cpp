@@ -218,12 +218,36 @@ void goto_symex_statet::assignment(
   }
 }
 
+void goto_symex_statet::rename_type(expr2tc &expr)
+{
+  if(is_nil_expr(expr))
+    return;
+
+  if(is_array_type(expr->type))
+  {
+    expr2tc &arr_size = to_array_type(expr->type).array_size;
+    if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+      rename(arr_size);
+
+    expr->type->Foreach_subtype([this](type2tc &t) {
+      if(!is_array_type(t))
+        return;
+
+      expr2tc &arr_size = to_array_type(t).array_size;
+      if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+        rename(arr_size);
+    });
+  }
+}
+
 void goto_symex_statet::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
   if(is_nil_expr(expr))
     return;
+
+  rename_type(expr);
 
   if(is_symbol2t(expr))
   {

@@ -321,6 +321,8 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     // to.
     renaming::level2t::rename_to_record(new_lhs, variable);
 
+    cur_state->rename_type(new_lhs);
+    cur_state->rename_type(rhs);
     cur_state->assignment(new_lhs, rhs, true);
 
     target->assignment(
