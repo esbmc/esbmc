@@ -191,7 +191,7 @@ def get_result_string(the_result):
 esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
-esbmc_dargs = "--assume-no-div-by-zero --force-malloc-success --state-hashing "
+esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --state-hashing "
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 esbmc_dargs += "--context-bound 2 "
 
@@ -228,13 +228,13 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
     exit(1)
 
   if prop == Property.overflow:
-    command_line += "--assume-pointer-safety --assume-bounds-safety --overflow-check --no-assertions "
+    command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-assertions "
   elif prop == Property.memcleanup:
     command_line += "--memory-leak-check --no-assertions "
   elif prop == Property.reach:
-    command_line += "--assume-pointer-safety --assume-bounds-safety --interval-analysis "
+    command_line += "--no-pointer-check --no-bounds-check --interval-analysis "
   else:
     print "Unknown property"
     exit(1)

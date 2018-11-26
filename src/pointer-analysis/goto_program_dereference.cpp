@@ -188,8 +188,11 @@ void goto_program_dereferencet::dereference_instruction(
       invalid_pointer2tc invalid_ptr(deref.value);
       guardt guard;
       guard.add(invalid_ptr);
-      dereference_failure(
-        "function pointer dereference", "invalid pointer", guard);
+      if(!options.get_bool_option("no-pointer-check"))
+      {
+        dereference_failure(
+          "function pointer dereference", "invalid pointer", guard);
+      }
     }
   }
   else if(i.is_return())

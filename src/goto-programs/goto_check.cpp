@@ -76,8 +76,7 @@ protected:
     const std::string &comment,
     const std::string &property,
     const locationt &location,
-    const guardt &guard,
-    const bool is_assume = false);
+    const guardt &guard);
 
   goto_programt new_code;
   std::set<expr2tc> assertions;
@@ -114,8 +113,7 @@ void goto_checkt::div_by_zero_check(
     "division by zero",
     "division-by-zero",
     loc,
-    guard,
-    options.get_bool_option("assume-no-div-by-zero"));
+    guard);
 }
 
 void goto_checkt::float_overflow_check(
@@ -268,12 +266,7 @@ void goto_checkt::pointer_rel_check(
 
     same_object2tc same_object(side_1, side_2);
     add_guarded_claim(
-      same_object,
-      "Same object violation",
-      "pointer",
-      loc,
-      guard,
-      options.get_bool_option("assume-pointer-safety"));
+      same_object, "Same object violation", "pointer", loc, guard);
   }
 }
 
@@ -345,13 +338,7 @@ void goto_checkt::bounds_check(
   assert(!is_nil_expr(zero));
 
   greaterthanequal2tc lower(the_index, zero);
-  add_guarded_claim(
-    lower,
-    name + " lower bound",
-    "array bounds",
-    loc,
-    guard,
-    options.get_bool_option("assume-bounds-safety"));
+  add_guarded_claim(lower, name + " lower bound", "array bounds", loc, guard);
 
   assert(is_array_type(t) || is_string_type(t));
 
@@ -367,13 +354,7 @@ void goto_checkt::bounds_check(
   // Cast size to index type
   typecast2tc casted_size(the_index->type, array_size);
   lessthan2tc upper(the_index, casted_size);
-  add_guarded_claim(
-    upper,
-    name + " upper bound",
-    "array bounds",
-    loc,
-    guard,
-    options.get_bool_option("assume-bounds-safety"));
+  add_guarded_claim(upper, name + " upper bound", "array bounds", loc, guard);
 }
 
 void goto_checkt::add_guarded_claim(
@@ -381,8 +362,7 @@ void goto_checkt::add_guarded_claim(
   const std::string &comment,
   const std::string &property,
   const locationt &location,
-  const guardt &guard,
-  const bool is_assume)
+  const guardt &guard)
 {
   expr2tc e = expr;
 
@@ -399,8 +379,7 @@ void goto_checkt::add_guarded_claim(
   // Check if we're not adding the same assertion twice
   if(assertions.insert(new_expr).second)
   {
-    goto_programt::targett t =
-      new_code.add_instruction(is_assume ? ASSUME : ASSERT);
+    goto_programt::targett t = new_code.add_instruction(ASSERT);
     t->guard = new_expr;
     t->location = location;
     t->location.comment(comment);
