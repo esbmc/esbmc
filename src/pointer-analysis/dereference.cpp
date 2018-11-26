@@ -1827,7 +1827,9 @@ void dereferencet::valid_check(
       return;
 
     const symbolt &sym = ns.lookup(to_symbol2t(symbol).thename);
-    if(has_prefix(sym.name.as_string(), "symex_dynamic::"))
+    if(
+      has_prefix(sym.name.as_string(), "symex_dynamic::") &&
+      sym.name.as_string().find("alloca::") == std::string::npos)
     {
       // Assert thtat it hasn't (nondeterministically) been invalidated.
       address_of2tc addrof(symbol->type, symbol);

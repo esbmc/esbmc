@@ -150,7 +150,8 @@ expr2tc goto_symext::symex_mem(
   symbol.base_name = "dynamic_" + i2string(dynamic_counter) +
                      (size_is_one ? "_value" : "_array");
 
-  symbol.name = "symex_dynamic::" + id2string(symbol.base_name);
+  symbol.name = std::string("symex_dynamic::") +
+                (!is_malloc ? "alloca::" : "") + id2string(symbol.base_name);
   symbol.lvalue = true;
 
   typet renamedtype = ns.follow(migrate_type_back(type));
