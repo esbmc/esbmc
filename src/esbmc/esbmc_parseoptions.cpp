@@ -1835,7 +1835,6 @@ void esbmc_parseoptionst::help()
        "check\n"
        " --atomicity-check            enable atomicity check at visible "
        "assignments\n"
-       " --error-label label          check if label is unreachable\n"
        " --force-malloc-success       do not check for malloc/new failure\n"
 
        "\nK-induction\n"
