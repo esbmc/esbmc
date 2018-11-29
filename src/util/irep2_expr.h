@@ -3109,6 +3109,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class code_dead2t : public code_decl_expr_methods
+{
+public:
+  code_dead2t(const type2tc &t, const irep_idt &name)
+    : code_decl_expr_methods(t, code_dead_id, name)
+  {
+  }
+  code_dead2t(const code_dead2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 class code_printf2t : public code_printf_expr_methods
 {
 public:

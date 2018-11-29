@@ -1841,6 +1841,15 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     sym_name = expr.op0().identifier();
     new_expr_ref = expr2tc(new code_decl2t(thetype, sym_name));
   }
+  else if(expr.id() == irept::id_code && expr.statement() == "dead")
+  {
+    assert(expr.op0().id() == "symbol");
+    type2tc thetype;
+    irep_idt sym_name;
+    migrate_type(expr.op0().type(), thetype);
+    sym_name = expr.op0().identifier();
+    new_expr_ref = expr2tc(new code_dead2t(thetype, sym_name));
+  }
   else if(expr.id() == irept::id_code && expr.statement() == "printf")
   {
     std::vector<expr2tc> ops;
@@ -2999,6 +3008,16 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_decl2t &ref2 = to_code_decl2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("decl"));
+    typet thetype = migrate_type_back(ref2.type);
+    exprt symbol = symbol_exprt(ref2.value, thetype);
+    codeexpr.copy_to_operands(symbol);
+    return codeexpr;
+  }
+  case expr2t::code_dead_id:
+  {
+    const code_decl2t &ref2 = to_code_decl2t(ref);
+    exprt codeexpr("code", code_typet());
+    codeexpr.statement(irep_idt("dead"));
     typet thetype = migrate_type_back(ref2.type);
     exprt symbol = symbol_exprt(ref2.value, thetype);
     codeexpr.copy_to_operands(symbol);
