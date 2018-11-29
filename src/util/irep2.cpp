@@ -4064,6 +4064,7 @@ expr_typedefs1(code_block, code_block_data);
 expr_typedefs2(code_assign, code_assign_data);
 expr_typedefs2(code_init, code_assign_data);
 expr_typedefs1(code_decl, code_decl_data);
+expr_typedefs1(code_dead, code_decl_data);
 expr_typedefs1(code_printf, code_printf_data);
 expr_typedefs1(code_expression, code_expression_data);
 expr_typedefs1(code_return, code_expression_data);

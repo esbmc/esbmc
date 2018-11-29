@@ -1488,6 +1488,7 @@ irep_typedefs(code_block, code_block_data);
 irep_typedefs(code_assign, code_assign_data);
 irep_typedefs(code_init, code_assign_data);
 irep_typedefs(code_decl, code_decl_data);
+irep_typedefs(code_dead, code_decl_data);
 irep_typedefs(code_printf, code_printf_data);
 irep_typedefs(code_expression, code_expression_data);
 irep_typedefs(code_return, code_expression_data);
@@ -3109,11 +3110,11 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_dead2t : public code_decl_expr_methods
+class code_dead2t : public code_dead_expr_methods
 {
 public:
   code_dead2t(const type2tc &t, const irep_idt &name)
-    : code_decl_expr_methods(t, code_dead_id, name)
+    : code_dead_expr_methods(t, code_dead_id, name)
   {
   }
   code_dead2t(const code_dead2t &ref) = default;

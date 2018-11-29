@@ -3015,7 +3015,7 @@ exprt migrate_expr_back(const expr2tc &ref)
   }
   case expr2t::code_dead_id:
   {
-    const code_decl2t &ref2 = to_code_decl2t(ref);
+    const code_dead2t &ref2 = to_code_dead2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("dead"));
     typet thetype = migrate_type_back(ref2.type);
