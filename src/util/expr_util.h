@@ -39,6 +39,8 @@ exprt gen_or(const exprt &op1, const exprt &op2, const exprt &op3);
 exprt gen_implies(const exprt &op1, const exprt &op2);
 exprt gen_address_of(const exprt &op);
 
+exprt boolean_negate(const exprt &);
+
 pointer_typet gen_pointer_type(const typet &subtype);
 
 void gen_and(exprt &expr);
