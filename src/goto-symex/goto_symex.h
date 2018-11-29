@@ -838,28 +838,20 @@ protected:
   goto_symext &goto_symex;
   goto_symext::statet &state;
 
-  // overloads from dereference_callbackt
-  bool is_valid_object(const irep_idt &identifier __attribute__((unused))) override
-  {
-    return true;
-  }
-
   void dereference_failure(
     const std::string &property,
     const std::string &msg,
     const guardt &guard) override;
 
-  void get_value_set(
-    const expr2tc &expr,
-    value_setst::valuest &value_set) override;
+  void
+  get_value_set(const expr2tc &expr, value_setst::valuest &value_set) override;
 
-  bool has_failed_symbol(
-    const expr2tc &expr,
-    const symbolt *&symbol) override;
+  bool has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) override;
 
   void rename(expr2tc &expr) override;
 
-  void dump_internal_state(const std::list<struct internal_item> &data) override;
+  void
+  dump_internal_state(const std::list<struct internal_item> &data) override;
 };
 
 #endif

@@ -32,6 +32,10 @@ void value_set_analysist::add_vars(const goto_programt &goto_program)
   entry_listt globals;
   get_globals(globals);
 
+  // get the locals
+  goto_programt::decl_identifierst locals;
+  goto_program.get_decl_identifiers(locals);
+
   // cache the list for the locals to speed things up
   typedef hash_map_cont<irep_idt, entry_listt, irep_id_hash> entry_cachet;
   entry_cachet entry_cache;
@@ -44,16 +48,18 @@ void value_set_analysist::add_vars(const goto_programt &goto_program)
     value_sett &v = *(*this)[i_it].value_set;
     v.add_vars(globals);
 
-    for(auto const &l_it : goto_program.local_variables)
+    for(goto_programt::decl_identifierst::const_iterator l_it = locals.begin();
+        l_it != locals.end();
+        l_it++)
     {
       // cache hit?
-      entry_cachet::const_iterator e_it = entry_cache.find(l_it);
+      entry_cachet::const_iterator e_it = entry_cache.find(*l_it);
 
       if(e_it == entry_cache.end())
       {
-        const symbolt &symbol = ns.lookup(l_it);
+        const symbolt &symbol = ns.lookup(*l_it);
 
-        std::list<value_sett::entryt> &entries = entry_cache[l_it];
+        std::list<value_sett::entryt> &entries = entry_cache[*l_it];
         get_entries(symbol, entries);
         v.add_vars(entries);
       }
@@ -116,7 +122,11 @@ void value_set_analysist::add_vars(const goto_functionst &goto_functions)
       value_sett &v = *(*this)[i_it].value_set;
       v.add_vars(globals);
 
-      for(auto const &l_it : f_it->second.body.local_variables)
+      // get the locals
+      std::set<irep_idt> locals;
+      get_local_identifiers(f_it->second, locals);
+
+      for(auto const &l_it : locals)
       {
         const symbolt &symbol = ns.lookup(l_it);
 

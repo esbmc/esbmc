@@ -91,6 +91,7 @@ void goto_convertt::remove_sideeffects(
     remove_sideeffects(expr, dest, result_is_used);
     return;
   }
+
   if(expr.id() == "if")
   {
     // first clean condition
@@ -158,7 +159,8 @@ void goto_convertt::remove_sideeffects(
 
     return;
   }
-  else if(expr.id() == "comma")
+
+  if(expr.id() == "comma")
   {
     if(result_is_used)
     {
@@ -202,7 +204,8 @@ void goto_convertt::remove_sideeffects(
 
     return;
   }
-  else if(expr.id() == "typecast")
+
+  if(expr.id() == "typecast")
   {
     if(expr.operands().size() != 1)
       throw "typecast takes one argument";
@@ -215,7 +218,8 @@ void goto_convertt::remove_sideeffects(
 
     return;
   }
-  else if(expr.id() == "sideeffect")
+
+  if(expr.id() == "sideeffect")
   {
     // some of the side-effects need special treatment!
     const irep_idt statement = expr.statement();
@@ -224,12 +228,14 @@ void goto_convertt::remove_sideeffects(
       remove_gcc_conditional_expression(expr, dest);
       return;
     }
+
     if(statement == "statement_expression")
     {
       remove_statement_expression(expr, dest, result_is_used);
       return;
     }
-    else if(statement == "assign")
+
+    if(statement == "assign")
     {
       // we do a special treatment for x=f(...)
       assert(expr.operands().size() == 2);
@@ -677,7 +683,6 @@ void goto_convertt::remove_function_call(
 
   new_symbol.name = tmp_symbol_prefix + id2string(new_symbol.base_name);
   new_name(new_symbol);
-  scoped_variables.push_front(new_symbol.name);
 
   code_function_callt call;
   call.lhs() = symbol_expr(new_symbol);

@@ -28,8 +28,6 @@ Date: June 2003
 
 class goto_functiont
 {
-  bool inlined;
-
 public:
   goto_programt body;
   code_typet type;
@@ -39,18 +37,16 @@ public:
   // make symex renaming work.
   std::set<std::string> inlined_funcs;
 
-  void set_inlined(bool i)
+  goto_functiont() : body_available(false)
   {
-    inlined = i;
   }
 
-  bool is_inlined() const
+  /// update the function member in each instruction
+  /// \param function_id: the `function_id` used for assigning empty function
+  ///   members
+  void update_instructions_function(const irep_idt &function_id)
   {
-    return inlined;
-  }
-
-  goto_functiont() : inlined(false), body_available(false)
-  {
+    body.update_instructions_function(function_id);
   }
 };
 
@@ -90,5 +86,7 @@ public:
     function_map.swap(other.function_map);
   }
 };
+
+void get_local_identifiers(const goto_functiont &, std::set<irep_idt> &dest);
 
 #endif

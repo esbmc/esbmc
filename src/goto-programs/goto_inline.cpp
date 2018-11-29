@@ -26,8 +26,6 @@ void goto_inlinet::parameter_assignments(
   // iterates over the operands
   exprt::operandst::const_iterator it1 = arguments.begin();
 
-  goto_programt::local_variablest local_variables;
-
   const code_typet::argumentst &argument_types = code_type.arguments();
 
   // iterates over the types of the arguments
@@ -61,8 +59,6 @@ void goto_inlinet::parameter_assignments(
       decl->location = location;
       decl->function = location.get_function();
     }
-
-    local_variables.push_front(identifier);
 
     // nil means "don't assign"
     if(it1->is_nil())
@@ -237,9 +233,7 @@ void goto_inlinet::expand_function_call(
   // see if we need to inline this
   if(!full)
   {
-    if(
-      !f.body_available ||
-      (!f.is_inlined() && f.body.instructions.size() > smallfunc_limit))
+    if(!f.body_available || (f.body.instructions.size() > smallfunc_limit))
     {
       target++;
       return;
@@ -302,9 +296,6 @@ void goto_inlinet::expand_function_call(
     target = next_target;
 
     recursion_set.erase(recursion_it);
-
-    // Copy local variables
-    dest.add_local_variables(f.body.local_variables);
   }
   else
   {

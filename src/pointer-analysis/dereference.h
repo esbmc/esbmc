@@ -108,10 +108,6 @@ class dereference_callbackt
 public:
   virtual ~dereference_callbackt() = default;
 
-  /** Triggers a 'valid object' check when accessing a dynamically allocated
-   *  object. This is legacy, and will be deleted at some point. */
-  virtual bool is_valid_object(const irep_idt &identifier) = 0;
-
   /** Encode a dereference failure assertion. If a dereference does, or can
    *  trigger undefined or illegal behaviour, then this method is called to
    *  record it so that it can be asserted against.
@@ -120,7 +116,6 @@ public:
    *  @param guard Guard for this assertion -- evaluates to true whe this
    *         assertion has been violated.
    */
-
   virtual void dereference_failure(
     const std::string &property,
     const std::string &msg,
@@ -194,7 +189,8 @@ public:
   virtual ~dereferencet() = default;
 
   /** The different ways in which a pointer may be accessed. */
-  typedef enum {
+  typedef enum
+  {
     READ,     /// The result of the expression is only read.
     WRITE,    /// The result of the expression will be written to.
     FREE,     /// The referred to object will be freed.

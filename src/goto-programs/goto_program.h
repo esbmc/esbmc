@@ -90,21 +90,6 @@ public:
 
   bool hide;
 
-  // local variables
-  typedef std::list<irep_idt> local_variablest;
-  local_variablest local_variables;
-
-  void add_local_variable(const irep_idt &id)
-  {
-    local_variables.push_front(id);
-  }
-
-  void add_local_variables(const local_variablest &locals)
-  {
-    local_variables.insert(
-      local_variables.begin(), locals.begin(), locals.end());
-  }
-
   /*! \brief Container for an instruction of the goto-program
   */
   class instructiont
@@ -131,6 +116,27 @@ public:
     typedef std::list<const_targett> const_targetst;
 
     targetst targets;
+
+    /// Returns the first (and only) successor for the usual case of a single
+    /// target
+    targett get_target() const
+    {
+      assert(targets.size() == 1);
+      return targets.front();
+    }
+
+    /// Sets the first (and only) successor for the usual case of a single
+    /// target
+    void set_target(targett t)
+    {
+      targets.clear();
+      targets.push_back(t);
+    }
+
+    bool has_target() const
+    {
+      return !targets.empty();
+    }
 
     //! goto target labels
     typedef std::list<irep_idt> labelst;
@@ -162,65 +168,86 @@ public:
     {
       clear(GOTO);
     }
+
+    inline void make_location(const locationt &l)
+    {
+      clear(LOCATION);
+      location = l;
+    }
+
     inline void make_return()
     {
       clear(RETURN);
     }
+
     inline void make_function_call(const expr2tc &_code)
     {
       clear(FUNCTION_CALL);
       code = _code;
     }
+
     inline void make_skip()
     {
       clear(SKIP);
     }
+
     inline void make_throw()
     {
       clear(THROW);
     }
+
     inline void make_catch()
     {
       clear(CATCH);
     }
+
     inline void make_throw_decl()
     {
       clear(THROW_DECL);
     }
+
     inline void make_throw_decl_end()
     {
       clear(THROW_DECL_END);
     }
+
     inline void make_assertion(const expr2tc &g)
     {
       clear(ASSERT);
       guard = g;
     }
+
     inline void make_assumption(const expr2tc &g)
     {
       clear(ASSUME);
       guard = g;
     }
+
     inline void make_assignment()
     {
       clear(ASSIGN);
     }
+
     inline void make_other()
     {
       clear(OTHER);
     }
+
     inline void make_decl()
     {
       clear(DECL);
     }
+
     inline void make_dead()
     {
       clear(DEAD);
     }
+
     inline void make_atomic_begin()
     {
       clear(ATOMIC_BEGIN);
     }
+
     inline void make_atomic_end()
     {
       clear(ATOMIC_END);
@@ -242,54 +269,72 @@ public:
     {
       return type == GOTO;
     }
+
     inline bool is_return() const
     {
       return type == RETURN;
     }
+
     inline bool is_assign() const
     {
       return type == ASSIGN;
     }
+
     inline bool is_function_call() const
     {
       return type == FUNCTION_CALL;
     }
+
     inline bool is_throw() const
     {
       return type == THROW;
     }
+
     inline bool is_catch() const
     {
       return type == CATCH;
     }
+
     inline bool is_skip() const
     {
       return type == SKIP;
     }
+
     inline bool is_location() const
     {
       return type == LOCATION;
     }
+
     inline bool is_other() const
     {
       return type == OTHER;
     }
+
+    inline bool is_decl() const
+    {
+      return type == DECL;
+    }
+
     inline bool is_assume() const
     {
       return type == ASSUME;
     }
+
     inline bool is_assert() const
     {
       return type == ASSERT;
     }
+
     inline bool is_atomic_begin() const
     {
       return type == ATOMIC_BEGIN;
     }
+
     inline bool is_atomic_end() const
     {
       return type == ATOMIC_END;
     }
+
     inline bool is_end_function() const
     {
       return type == END_FUNCTION;
@@ -478,6 +523,22 @@ public:
     const irep_idt &identifier,
     std::ostream &out) const;
 
+  /// Sets the `function` member of each instruction if not yet set
+  /// Note that a goto program need not be a goto function and therefore,
+  /// we cannot do this in update(), but only at the level of
+  /// of goto_functionst where goto programs are guaranteed to be
+  /// named functions.
+  void update_instructions_function(const irep_idt &function_id)
+  {
+    for(auto &instruction : instructions)
+    {
+      if(instruction.function.empty())
+      {
+        instruction.function = function_id;
+      }
+    }
+  }
+
   //! Compute the target numbers
   void compute_target_numbers();
 
@@ -496,7 +557,7 @@ public:
   }
 
   //! Compute loop numbers
-  void compute_loop_numbers(unsigned int &num);
+  void compute_loop_numbers();
 
   //! Update all indices
   void update();
@@ -518,7 +579,6 @@ public:
   inline void swap(goto_programt &program)
   {
     program.instructions.swap(instructions);
-    program.local_variables.swap(local_variables);
   }
 
   //! Clear the goto program
@@ -532,6 +592,10 @@ public:
 
   //! Does the goto program have an assertion?
   bool has_assertion() const;
+
+  typedef std::set<irep_idt> decl_identifierst;
+  /// get the variables in decl statements
+  void get_decl_identifiers(decl_identifierst &decl_identifiers) const;
 
   // Template for extracting instructions /from/ a goto program, to a type
   // abstract something else.

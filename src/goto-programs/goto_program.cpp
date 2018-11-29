@@ -228,8 +228,9 @@ bool operator<(
   return &_i1 < &_i2;
 }
 
-void goto_programt::compute_loop_numbers(unsigned int &num)
+void goto_programt::compute_loop_numbers()
 {
+  unsigned num = 1;
   for(auto &instruction : instructions)
     if(instruction.is_backwards_goto())
     {
@@ -313,6 +314,7 @@ void goto_programt::update()
 {
   compute_target_numbers();
   compute_location_numbers();
+  compute_loop_numbers();
 }
 
 std::ostream &goto_programt::output(
@@ -387,12 +389,6 @@ void goto_programt::copy_from(const goto_programt &src)
   targets_mappingt targets_mapping;
 
   clear();
-
-  // Copy variables
-  local_variables.insert(
-    local_variables.begin(),
-    src.local_variables.begin(),
-    src.local_variables.end());
 
   // Copy hide flag
   hide = src.hide;
@@ -488,4 +484,14 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
 void goto_programt::dump() const
 {
   output(*migrate_namespace_lookup, "", std::cout);
+}
+
+void goto_programt::get_decl_identifiers(
+  decl_identifierst &decl_identifiers) const
+{
+  forall_goto_program_instructions(it, (*this))
+  {
+    if(it->is_decl())
+      decl_identifiers.insert(to_code_decl2t(it->code).value);
+  }
 }

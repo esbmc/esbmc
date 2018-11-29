@@ -209,7 +209,23 @@ void goto_functionst::compute_target_numbers()
 
 void goto_functionst::compute_loop_numbers()
 {
-  unsigned int num = 1;
   for(auto &it : function_map)
-    it.second.body.compute_loop_numbers(num);
+    it.second.body.compute_loop_numbers();
+}
+
+void get_local_identifiers(
+  const goto_functiont &goto_function,
+  std::set<irep_idt> &dest)
+{
+  goto_function.body.get_decl_identifiers(dest);
+
+  const code_typet::argumentst &arguments = goto_function.type.arguments();
+
+  // add parameters
+  for(const auto &param : arguments)
+  {
+    const irep_idt &identifier = param.get_identifier();
+    if(identifier != "")
+      dest.insert(identifier);
+  }
 }

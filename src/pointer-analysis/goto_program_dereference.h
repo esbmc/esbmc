@@ -50,8 +50,6 @@ protected:
   value_setst &value_sets;
   dereferencet dereference;
 
-  bool is_valid_object(const irep_idt &identifier) override;
-
   bool has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) override;
 
   void dereference_failure(
@@ -71,7 +69,6 @@ protected:
     const bool checks_only,
     const dereferencet::modet mode);
 
-  goto_programt::local_variablest *valid_local_variables;
   locationt dereference_location;
   goto_programt::const_targett current_target;
 
