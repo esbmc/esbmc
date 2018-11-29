@@ -1437,7 +1437,7 @@ irep_typedefs(greaterthanequal, relation_data);
 irep_typedefs(not, bool_1op);
 irep_typedefs(and, logic_2ops);
 irep_typedefs(or, logic_2ops);
-irep_typedefs (xor, logic_2ops);
+irep_typedefs(xor, logic_2ops);
 irep_typedefs(implies, logic_2ops);
 irep_typedefs(bitand, bit_2ops);
 irep_typedefs(bitor, bit_2ops);

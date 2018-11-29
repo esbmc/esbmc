@@ -193,10 +193,12 @@ public:
   // won't be using the detach facility to manipulate things, however it's
   // necessary for std::make_shared.
   explicit irep_container(std::shared_ptr<T> &&p) : std::shared_ptr<T>(p)
-    { }
+  {
+  }
 
-  irep_container(const irep_container &ref)
-    : std::shared_ptr<T>(ref) {}
+  irep_container(const irep_container &ref) : std::shared_ptr<T>(ref)
+  {
+  }
 
   template <class Y>
   irep_container(const irep_container<Y> &ref)
