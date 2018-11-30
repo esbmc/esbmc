@@ -163,10 +163,32 @@ void goto_convertt::convert_label(const code_labelt &code, goto_programt &dest)
   const irep_idt &label = code.get_label();
 
   goto_programt tmp;
+
   convert(to_code(code.op0()), tmp);
 
-  goto_programt::targett target = tmp.instructions.begin();
-  dest.destructive_append(tmp);
+  // magic ERROR label?
+
+  const std::string &error_label = options.get_option("error-label");
+
+  goto_programt::targett target;
+
+  if(error_label != "" && label == error_label)
+  {
+    goto_programt::targett t = dest.add_instruction(ASSERT);
+    t->guard = gen_false_expr();
+    t->location = code.location();
+    t->location.property("error label");
+    t->location.comment("error label");
+    t->location.user_provided(false);
+
+    target = t;
+    dest.destructive_append(tmp);
+  }
+  else
+  {
+    target = tmp.instructions.begin();
+    dest.destructive_append(tmp);
+  }
 
   targets.labels.insert({label, {target, targets.destructor_stack}});
   target->labels.push_front(label);

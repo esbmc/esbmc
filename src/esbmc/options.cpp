@@ -124,6 +124,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "data-races-check", switc, ""},
   {0, "lock-order-check", switc, ""},
   {0, "atomicity-check", switc, ""},
+  {0, "error-label", string, ""},
   {0, "force-malloc-success", switc, ""},
 
   // k-induction
