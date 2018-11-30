@@ -269,6 +269,8 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
     convert_throw_decl(code, dest);
   else if(statement == "throw_decl_end")
     convert_throw_decl_end(code, dest);
+  else if(statement == "dead")
+    copy(code, DEAD, dest);
   else
   {
     copy(code, OTHER, dest);
