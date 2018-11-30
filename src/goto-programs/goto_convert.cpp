@@ -1672,7 +1672,7 @@ void goto_convertt::generate_ifthenelse(
     // The above conjunction deliberately excludes the instance
     // if(some) ... else { label: assert(false); }
     expr2tc g;
-    migrate_expr(boolean_negate(guard), g);
+    migrate_expr(guard, g);
     false_case.instructions.back().guard = g;
     dest.destructive_append(false_case);
     false_case.instructions.clear();
@@ -1701,21 +1701,10 @@ void goto_convertt::generate_ifthenelse(
     return;
   }
 
-  // do guarded gotos directly
-  if(
-    false_case.instructions.empty() && true_case.instructions.size() == 1 &&
-    true_case.instructions.back().is_goto() &&
-    is_true(true_case.instructions.back().guard))
-  {
-    migrate_expr(guard, true_case.instructions.back().guard);
-    dest.destructive_append(true_case);
-    return;
-  }
-
   // Flip around if no 'true' case code.
   if(true_case.instructions.empty())
     return generate_ifthenelse(
-      gen_not(guard), false_case, true_case, location, dest);
+      boolean_negate(guard), false_case, true_case, location, dest);
 
   bool has_else = !false_case.instructions.empty();
 
