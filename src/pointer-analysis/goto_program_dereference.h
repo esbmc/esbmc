@@ -57,6 +57,8 @@ protected:
     const std::string &msg,
     const guardt &guard) override;
 
+  bool is_live_variable(const symbol2t &sym) { (void)sym; return true; }
+
   void get_value_set(const expr2tc &expr, value_setst::valuest &dest) override;
 
   void dereference_instruction(

@@ -152,6 +152,15 @@ public:
                                    __attribute__((unused)))
   {
   }
+
+  /** Determine whether variable is "alive".
+   *  For function-local variable symbols, determine whether or not a pointer
+   *  to the corresponding l1 storage is considered live: if the
+   *  corresponding activation record has been left, then it isn't.
+   *  @param sym Symbol to check validity of.
+   *  @return True if variable is alive
+   *  */
+  virtual bool is_live_variable(const symbol2t &sym) = 0;
 };
 
 /** Class containing expression dereference logic.

@@ -45,6 +45,7 @@ execution_statet::execution_statet(
     global_value_set(ns),
     message_handler(_message_handler)
 {
+  art1 = owning_rt;
   CS_number = 0;
   TS_number = 0;
   node_id = 0;

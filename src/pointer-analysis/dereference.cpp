@@ -1852,6 +1852,16 @@ void dereferencet::valid_check(
           "pointer dereference", "free() of non-dynamic memory", guard);
         return;
       }
+
+      // Otherwise, this is a pointer to some kind of lexical variable, with
+      // either global or function-local scope. Ask symex to determine if
+      // it's live.
+      if (!dereference_callback.is_live_variable(to_symbol2t(symbol))) {
+        // Any access where this guard is true -> failure
+        dereference_failure(
+          "pointer dereference", "accessed expired variable pointer", guard);
+        return;
+      }
     }
   }
 }

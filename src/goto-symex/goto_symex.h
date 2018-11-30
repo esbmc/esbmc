@@ -852,6 +852,7 @@ protected:
 
   void
   dump_internal_state(const std::list<struct internal_item> &data) override;
+  bool is_live_variable(const symbol2t &sym);
 };
 
 #endif
