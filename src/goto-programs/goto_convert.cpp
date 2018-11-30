@@ -598,10 +598,6 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
       if(globals > 0)
         break_globals2assignments(initializer, dest, new_code.location());
     }
-
-    goto_programt sideeffects;
-    remove_sideeffects(initializer, sideeffects);
-    dest.destructive_append(sideeffects);
   }
 
   // break up into decl and assignment
@@ -612,6 +608,10 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   if(!initializer.is_nil())
   {
+    goto_programt sideeffects;
+    remove_sideeffects(initializer, sideeffects);
+    dest.destructive_append(sideeffects);
+
     code_assignt assign(var, initializer);
     assign.location() = new_code.location();
     copy(assign, ASSIGN, dest);
