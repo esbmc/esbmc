@@ -1788,14 +1788,14 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     !has_else)
   {
     // if(a && b) XX --> if(a) if(b) XX
-    codet new_if0, new_if1;
+    code_ifthenelset new_if0, new_if1;
     new_if0.op0() = code.cond().op0();
     new_if1.op0() = code.cond().op1();
     new_if0.location() = location;
     new_if1.location() = location;
     new_if1.op1() = code.then_case();
     new_if0.op1() = new_if1;
-    return convert_ifthenelse(new_if0, dest);
+    return convert_ifthenelse(to_code(new_if0), dest);
   }
 
   // convert 'then'-branch
