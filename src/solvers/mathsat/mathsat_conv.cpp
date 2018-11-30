@@ -171,9 +171,11 @@ ieee_floatt mathsat_convt::get_fpbv(smt_astt a)
   mpz_get_str(buffer, 10, num);
 
   size_t ew, sw;
-  int ret =
-    msat_is_fp_type(env, to_solver_smt_sort<msat_type>(a->sort)->s, &ew, &sw);
-  assert(ret != 0 && "Non FP type passed to mathsat_convt::get_exp_width");
+  if(msat_is_fp_type(env, to_solver_smt_sort<msat_type>(a->sort)->s, &ew, &sw) != 0)
+  {
+    std::cerr << "Non FP type passed to mathsat_convt::get_exp_width" << std::endl;
+    abort();
+  }
 
   ieee_floatt number(ieee_float_spect(sw, ew));
   number.unpack(BigInt(buffer));
