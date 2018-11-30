@@ -196,7 +196,6 @@ void goto_functionst::output(const namespacet &ns, std::ostream &out) const
 void goto_functionst::compute_location_numbers()
 {
   unsigned nr = 0;
-
   for(auto &it : function_map)
     it.second.body.compute_location_numbers(nr);
 }
@@ -209,8 +208,9 @@ void goto_functionst::compute_target_numbers()
 
 void goto_functionst::compute_loop_numbers()
 {
+  unsigned nr = 1;
   for(auto &it : function_map)
-    it.second.body.compute_loop_numbers();
+    it.second.body.compute_loop_numbers(nr);
 }
 
 void get_local_identifiers(

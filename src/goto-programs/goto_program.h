@@ -557,7 +557,7 @@ public:
   }
 
   //! Compute loop numbers
-  void compute_loop_numbers();
+  void compute_loop_numbers(unsigned int &num);
 
   //! Update all indices
   void update();

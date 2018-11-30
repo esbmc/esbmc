@@ -228,9 +228,8 @@ bool operator<(
   return &_i1 < &_i2;
 }
 
-void goto_programt::compute_loop_numbers()
+void goto_programt::compute_loop_numbers(unsigned int &num)
 {
-  unsigned num = 1;
   for(auto &instruction : instructions)
     if(instruction.is_backwards_goto())
     {
@@ -314,7 +313,6 @@ void goto_programt::update()
 {
   compute_target_numbers();
   compute_location_numbers();
-  compute_loop_numbers();
 }
 
 std::ostream &goto_programt::output(
