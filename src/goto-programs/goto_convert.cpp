@@ -1486,6 +1486,9 @@ void goto_convertt::convert_return(
     throw "return without target";
   }
 
+  // Need to process _entire_ destructor stack.
+  unwind_destructor_stack(code.location(), 0, dest);
+
   code_returnt new_code(code);
 
   if(new_code.has_return_value())
@@ -1527,9 +1530,6 @@ void goto_convertt::convert_return(
       throw "function must not return value";
     }
   }
-
-  // Need to process _entire_ destructor stack.
-  unwind_destructor_stack(code.location(), 0, dest);
 
   // add goto to end-of-function
   goto_programt::targett t = dest.add_instruction();
