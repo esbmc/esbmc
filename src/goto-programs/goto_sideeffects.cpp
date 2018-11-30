@@ -684,6 +684,12 @@ void goto_convertt::remove_function_call(
   new_symbol.name = tmp_symbol_prefix + id2string(new_symbol.base_name);
   new_name(new_symbol);
 
+  {
+    code_declt decl(symbol_expr(new_symbol));
+    decl.location() = new_symbol.location;
+    convert_decl(decl, dest);
+  }
+
   code_function_callt call;
   call.lhs() = symbol_expr(new_symbol);
   call.function() = expr.op0();
