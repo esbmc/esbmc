@@ -1765,9 +1765,7 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     throw "ifthenelse takes two or three operands";
   }
 
-  assert(code.then_case().is_not_nil());
-
-  bool has_else = !code.else_case().is_nil();
+  bool has_else = code.operands().size() == 3 && !code.op2().is_nil();
 
   const locationt &location = code.location();
 
