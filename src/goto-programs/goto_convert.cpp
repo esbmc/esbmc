@@ -626,9 +626,8 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   }
 
   // do destructor
-  code_function_callt destructor = get_destructor(ns, s->type);
-
-  if(destructor.is_not_nil())
+  code_function_callt destructor;
+  if(get_destructor(ns, s->type, destructor))
   {
     // add "this"
     address_of_exprt this_expr(symbol_expr);
