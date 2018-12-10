@@ -1,5 +1,13 @@
 Release Notes of the ESBMC model checker
 
+*** Version 6.0
+* New bidirectional k-induction algorithm (bkind)
+* New invariant generator based on intervals from CPROVER
+* Improvements to constraint generation in the k-induction algorithm
+* Fix hash calculation for floats
+* Fix missing typecasts for shift operations
+* Fix correctness witnesses not being generated
+
 *** Version 5.1
 * Backported fixes to the floating-point API from Z3 4.7.1
 * Fixed compilation with clang
