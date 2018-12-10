@@ -230,7 +230,7 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
   if prop == Property.overflow:
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
   elif prop == Property.memory:
-    command_line += "--memory-leak-check --no-assertions --z3 "
+    command_line += "--memory-leak-check --no-assertions "
   elif prop == Property.memcleanup:
     command_line += "--memory-leak-check --no-assertions "
   elif prop == Property.reach:
