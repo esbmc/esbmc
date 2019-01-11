@@ -19,8 +19,14 @@ extern "C"
   extern char clang___clang_cuda_complex_builtins_buf[];
   extern unsigned int clang___clang_cuda_complex_builtins_buf_size;
 
+  extern char clang___clang_cuda_device_functions_buf[];
+  extern unsigned int clang___clang_cuda_device_functions_buf_size;
+
   extern char clang___clang_cuda_intrinsics_buf[];
   extern unsigned int clang___clang_cuda_intrinsics_buf_size;
+
+  extern char clang___clang_cuda_libdevice_declares_buf[];
+  extern unsigned int clang___clang_cuda_libdevice_declares_buf_size;
 
   extern char clang___clang_cuda_math_forward_declares_buf[];
   extern unsigned int clang___clang_cuda_math_forward_declares_buf_size;
@@ -51,6 +57,9 @@ extern "C"
 
   extern char clang_arm_acle_buf[];
   extern unsigned int clang_arm_acle_buf_size;
+
+  extern char clang_arm_fp16_buf[];
+  extern unsigned int clang_arm_fp16_buf_size;
 
   extern char clang_arm_neon_buf[];
   extern unsigned int clang_arm_neon_buf_size;
@@ -139,6 +148,9 @@ extern "C"
   extern char clang_cetintrin_buf[];
   extern unsigned int clang_cetintrin_buf_size;
 
+  extern char clang_cldemoteintrin_buf[];
+  extern unsigned int clang_cldemoteintrin_buf_size;
+
   extern char clang_clflushoptintrin_buf[];
   extern unsigned int clang_clflushoptintrin_buf_size;
 
@@ -190,6 +202,9 @@ extern "C"
   extern char clang_inttypes_buf[];
   extern unsigned int clang_inttypes_buf_size;
 
+  extern char clang_invpcidintrin_buf[];
+  extern unsigned int clang_invpcidintrin_buf_size;
+
   extern char clang_iso646_buf[];
   extern unsigned int clang_iso646_buf_size;
 
@@ -211,6 +226,9 @@ extern "C"
   extern char clang_mmintrin_buf[];
   extern unsigned int clang_mmintrin_buf_size;
 
+  extern char clang_movdirintrin_buf[];
+  extern unsigned int clang_movdirintrin_buf_size;
+
   extern char clang_msa_buf[];
   extern unsigned int clang_msa_buf_size;
 
@@ -229,6 +247,9 @@ extern "C"
   extern char clang_opencl_c_buf[];
   extern unsigned int clang_opencl_c_buf_size;
 
+  extern char clang_pconfigintrin_buf[];
+  extern unsigned int clang_pconfigintrin_buf_size;
+
   extern char clang_pkuintrin_buf[];
   extern unsigned int clang_pkuintrin_buf_size;
 
@@ -241,6 +262,9 @@ extern "C"
   extern char clang_prfchwintrin_buf[];
   extern unsigned int clang_prfchwintrin_buf_size;
 
+  extern char clang_ptwriteintrin_buf[];
+  extern unsigned int clang_ptwriteintrin_buf_size;
+
   extern char clang_rdseedintrin_buf[];
   extern unsigned int clang_rdseedintrin_buf_size;
 
@@ -249,6 +273,9 @@ extern "C"
 
   extern char clang_s390intrin_buf[];
   extern unsigned int clang_s390intrin_buf_size;
+
+  extern char clang_sgxintrin_buf[];
+  extern unsigned int clang_sgxintrin_buf_size;
 
   extern char clang_shaintrin_buf[];
   extern unsigned int clang_shaintrin_buf_size;
@@ -304,6 +331,12 @@ extern "C"
   extern char clang_vpclmulqdqintrin_buf[];
   extern unsigned int clang_vpclmulqdqintrin_buf_size;
 
+  extern char clang_waitpkgintrin_buf[];
+  extern unsigned int clang_waitpkgintrin_buf_size;
+
+  extern char clang_wbnoinvdintrin_buf[];
+  extern unsigned int clang_wbnoinvdintrin_buf_size;
+
   extern char clang_wmmintrin_buf[];
   extern unsigned int clang_wmmintrin_buf_size;
 
@@ -341,9 +374,15 @@ extern "C"
     {"__clang_cuda_complex_builtins.h",
      clang___clang_cuda_complex_builtins_buf,
      &clang___clang_cuda_complex_builtins_buf_size},
+    {"__clang_cuda_device_functions.h",
+     clang___clang_cuda_device_functions_buf,
+     &clang___clang_cuda_device_functions_buf_size},
     {"__clang_cuda_intrinsics.h",
      clang___clang_cuda_intrinsics_buf,
      &clang___clang_cuda_intrinsics_buf_size},
+    {"__clang_cuda_libdevice_declares.h",
+     clang___clang_cuda_libdevice_declares_buf,
+     &clang___clang_cuda_libdevice_declares_buf_size},
     {"__clang_cuda_math_forward_declares.h",
      clang___clang_cuda_math_forward_declares_buf,
      &clang___clang_cuda_math_forward_declares_buf_size},
@@ -364,6 +403,7 @@ extern "C"
     {"ammintrin.h", clang_ammintrin_buf, &clang_ammintrin_buf_size},
     {"arm64intr.h", clang_arm64intr_buf, &clang_arm64intr_buf_size},
     {"arm_acle.h", clang_arm_acle_buf, &clang_arm_acle_buf_size},
+    {"arm_fp16.h", clang_arm_fp16_buf, &clang_arm_fp16_buf_size},
     {"arm_neon.h", clang_arm_neon_buf, &clang_arm_neon_buf_size},
     {"armintr.h", clang_armintr_buf, &clang_armintr_buf_size},
     {"avx2intrin.h", clang_avx2intrin_buf, &clang_avx2intrin_buf_size},
@@ -435,6 +475,9 @@ extern "C"
     {"bmi2intrin.h", clang_bmi2intrin_buf, &clang_bmi2intrin_buf_size},
     {"bmiintrin.h", clang_bmiintrin_buf, &clang_bmiintrin_buf_size},
     {"cetintrin.h", clang_cetintrin_buf, &clang_cetintrin_buf_size},
+    {"cldemoteintrin.h",
+     clang_cldemoteintrin_buf,
+     &clang_cldemoteintrin_buf_size},
     {"clflushoptintrin.h",
      clang_clflushoptintrin_buf,
      &clang_clflushoptintrin_buf_size},
@@ -454,6 +497,7 @@ extern "C"
     {"immintrin.h", clang_immintrin_buf, &clang_immintrin_buf_size},
     {"intrin.h", clang_intrin_buf, &clang_intrin_buf_size},
     {"inttypes.h", clang_inttypes_buf, &clang_inttypes_buf_size},
+    {"invpcidintrin.h", clang_invpcidintrin_buf, &clang_invpcidintrin_buf_size},
     {"iso646.h", clang_iso646_buf, &clang_iso646_buf_size},
     {"limits.h", clang_limits_buf, &clang_limits_buf_size},
     {"lwpintrin.h", clang_lwpintrin_buf, &clang_lwpintrin_buf_size},
@@ -461,19 +505,23 @@ extern "C"
     {"mm3dnow.h", clang_mm3dnow_buf, &clang_mm3dnow_buf_size},
     {"mm_malloc.h", clang_mm_malloc_buf, &clang_mm_malloc_buf_size},
     {"mmintrin.h", clang_mmintrin_buf, &clang_mmintrin_buf_size},
+    {"movdirintrin.h", clang_movdirintrin_buf, &clang_movdirintrin_buf_size},
     {"msa.h", clang_msa_buf, &clang_msa_buf_size},
     {"mwaitxintrin.h", clang_mwaitxintrin_buf, &clang_mwaitxintrin_buf_size},
     {"nmmintrin.h", clang_nmmintrin_buf, &clang_nmmintrin_buf_size},
     {"omp.h", clang_omp_buf, &clang_omp_buf_size},
     {"ompt.h", clang_ompt_buf, &clang_ompt_buf_size},
     {"opencl-c.h", clang_opencl_c_buf, &clang_opencl_c_buf_size},
+    {"pconfigintrin.h", clang_pconfigintrin_buf, &clang_pconfigintrin_buf_size},
     {"pkuintrin.h", clang_pkuintrin_buf, &clang_pkuintrin_buf_size},
     {"pmmintrin.h", clang_pmmintrin_buf, &clang_pmmintrin_buf_size},
     {"popcntintrin.h", clang_popcntintrin_buf, &clang_popcntintrin_buf_size},
     {"prfchwintrin.h", clang_prfchwintrin_buf, &clang_prfchwintrin_buf_size},
+    {"ptwriteintrin.h", clang_ptwriteintrin_buf, &clang_ptwriteintrin_buf_size},
     {"rdseedintrin.h", clang_rdseedintrin_buf, &clang_rdseedintrin_buf_size},
     {"rtmintrin.h", clang_rtmintrin_buf, &clang_rtmintrin_buf_size},
     {"s390intrin.h", clang_s390intrin_buf, &clang_s390intrin_buf_size},
+    {"sgxintrin.h", clang_sgxintrin_buf, &clang_sgxintrin_buf_size},
     {"shaintrin.h", clang_shaintrin_buf, &clang_shaintrin_buf_size},
     {"smmintrin.h", clang_smmintrin_buf, &clang_smmintrin_buf_size},
     {"stdalign.h", clang_stdalign_buf, &clang_stdalign_buf_size},
@@ -494,6 +542,10 @@ extern "C"
     {"vpclmulqdqintrin.h",
      clang_vpclmulqdqintrin_buf,
      &clang_vpclmulqdqintrin_buf_size},
+    {"waitpkgintrin.h", clang_waitpkgintrin_buf, &clang_waitpkgintrin_buf_size},
+    {"wbnoinvdintrin.h",
+     clang_wbnoinvdintrin_buf,
+     &clang_wbnoinvdintrin_buf_size},
     {"wmmintrin.h", clang_wmmintrin_buf, &clang_wmmintrin_buf_size},
     {"x86intrin.h", clang_x86intrin_buf, &clang_x86intrin_buf_size},
     {"xmmintrin.h", clang_xmmintrin_buf, &clang_xmmintrin_buf_size},
