@@ -2454,7 +2454,13 @@ void clang_c_convertert::get_field_name(
       t.width(width.cformat());
     }
 
-    name = clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext);
+    clang::PrintingPolicy Policy(ASTContext->getPrintingPolicy());
+    Policy.SuppressScope = false;
+    Policy.AnonymousTagLocations = true;
+    Policy.PolishForDeclaration = true;
+    Policy.SuppressUnwrittenScope = true;
+    name =
+      clang::TypeName::getFullyQualifiedName(fd.getType(), *ASTContext, Policy);
     pretty_name = "anon";
   }
 }
@@ -2519,8 +2525,13 @@ bool clang_c_convertert::get_tag_name(
   const clang::RecordDecl &rd,
   std::string &name)
 {
+  clang::PrintingPolicy Policy(ASTContext->getPrintingPolicy());
+  Policy.SuppressScope = false;
+  Policy.AnonymousTagLocations = true;
+  Policy.PolishForDeclaration = true;
+  Policy.SuppressUnwrittenScope = true;
   name = clang::TypeName::getFullyQualifiedName(
-    ASTContext->getTagDeclType(&rd), *ASTContext);
+    ASTContext->getTagDeclType(&rd), *ASTContext, Policy);
   return false;
 }
 
