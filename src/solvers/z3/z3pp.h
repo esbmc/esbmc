@@ -139,7 +139,7 @@ namespace z3 {
 
         static void error_handler(Z3_context c, Z3_error_code e) {
             std::cerr << "Z3 error " << e << " encountered" << std::endl;
-            std::cerr << Z3_get_error_msg_ex(c, e) << std::endl;
+            std::cerr << Z3_get_error_msg(c, e) << std::endl;
             abort();
         }
         void init(config & c) {
@@ -148,19 +148,11 @@ namespace z3 {
             Z3_set_ast_print_mode(m_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
         }
 
-        void init_interp(config & c) {
-            m_ctx = Z3_mk_interpolation_context(c);
-            Z3_set_error_handler(m_ctx, error_handler);
-            Z3_set_ast_print_mode(m_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
-        }
-
         context(context const & s);
         context & operator=(context const & s);
     public:
-        struct interpolation {};
         context() { config c; init(c); }
         context(config & c) { init(c); }
-	context(config & c, interpolation) { init_interp(c); }
         void init(config & c, bool use_ints);
         context(bool dummy __attribute__((unused))) : m_ctx(nullptr), m_esbmc_int_sort(nullptr), int_encoding(false) { }
         context(config & c, bool use_ints) : int_encoding(use_ints) { init(c, use_ints); }
@@ -173,7 +165,7 @@ namespace z3 {
         void check_error() const {
             Z3_error_code e = Z3_get_error_code(m_ctx);
             if (e != Z3_OK)
-                throw exception(Z3_get_error_msg_ex(m_ctx, e));
+                throw exception(Z3_get_error_msg(m_ctx, e));
         }
 
         /**
@@ -334,14 +326,7 @@ namespace z3 {
 
         expr string_val(char const* s);
         expr string_val(std::string const& s);
-
         expr num_val(int n, sort const & s);
-
-        /**
-           \brief Interpolation support
-        */
-        check_result compute_interpolant(expr const& pat, params const& p, expr_vector& interp, model& m);
-        expr_vector  get_interpolant(expr const& proof, expr const& pat, params const& p);
 
     };
 
@@ -1756,12 +1741,6 @@ namespace z3 {
         }
         unsigned size() const { return Z3_apply_result_get_num_subgoals(ctx(), m_apply_result); }
         goal operator[](int i) const { assert(0 <= i); Z3_goal r = Z3_apply_result_get_subgoal(ctx(), m_apply_result, i); check_error(); return goal(ctx(), r); }
-        model convert_model(model const & m, unsigned i = 0) const {
-            check_context(*this, m);
-            Z3_model new_m = Z3_apply_result_convert_model(ctx(), m_apply_result, i, m);
-            check_error();
-            return model(ctx(), new_m);
-        }
         friend std::ostream & operator<<(std::ostream & out, apply_result const & r);
     };
     inline std::ostream & operator<<(std::ostream & out, apply_result const & r) { out << Z3_apply_result_to_string(r.ctx(), r); return out; }
@@ -1950,7 +1929,7 @@ namespace z3 {
         void pop() {
             Z3_optimize_pop(ctx(), m_opt);
         }
-        check_result check() { Z3_lbool r = Z3_optimize_check(ctx(), m_opt); check_error(); return to_check_result(r); }
+        check_result check() { Z3_lbool r = Z3_optimize_check(ctx(), m_opt, 0, 0); check_error(); return to_check_result(r); }
         model get_model() const { Z3_model m = Z3_optimize_get_model(ctx(), m_opt); check_error(); return model(ctx(), m); }
         void set(params const & p) { Z3_optimize_set_params(ctx(), m_opt, p); check_error(); }
         expr lower(handle const& h) {
@@ -2470,31 +2449,6 @@ namespace z3 {
         Z3_ast r = Z3_mk_const_array(d.ctx(), d, v);
         d.check_error();
         return expr(d.ctx(), r);
-    }
-
-    inline expr interpolant(expr const& a) {
-        return expr(a.ctx(), Z3_mk_interpolant(a.ctx(), a));
-    }
-
-    inline check_result context::compute_interpolant(expr const& pat, params const& p, expr_vector& i, model& m) {
-        Z3_ast_vector interp = nullptr;
-        Z3_model mdl = nullptr;
-        Z3_lbool r = Z3_compute_interpolant(*this, pat, p, &interp, &mdl);
-        switch (r) {
-        case Z3_L_FALSE:
-            i = expr_vector(*this, interp);
-            break;
-        case Z3_L_TRUE:
-            m = model(*this, mdl);
-            break;
-        case Z3_L_UNDEF:
-            break;
-        }
-        return to_check_result(r);
-    }
-
-    inline expr_vector context::get_interpolant(expr const& proof, expr const& pat, params const& p) {
-        return expr_vector(*this, Z3_get_interpolant(*this, proof, pat, p));
     }
 
     inline expr expr::substitute(expr_vector const& src, expr_vector const& dst) {
