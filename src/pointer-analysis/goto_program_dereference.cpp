@@ -43,25 +43,6 @@ bool goto_program_dereferencet::has_failed_symbol(
   return false;
 }
 
-bool goto_program_dereferencet::is_valid_object(const irep_idt &identifier)
-{
-  const symbolt &symbol = ns.lookup(identifier);
-
-  if(symbol.type.is_code())
-    return true;
-
-  if(symbol.static_lifetime)
-    return true; // global/static
-
-  auto it = std::find(
-    valid_local_variables->begin(), valid_local_variables->end(), symbol.name);
-
-  if(it != valid_local_variables->end())
-    return true; // valid local
-
-  return false;
-}
-
 void goto_program_dereferencet::dereference_failure(
   const std::string &property,
   const std::string &msg,
@@ -128,7 +109,6 @@ void goto_program_dereferencet::dereference_program(
     new_code.clear();
     assertions.clear();
 
-    valid_local_variables = &goto_program.local_variables;
     dereference_instruction(it, checks_only);
 
     // insert new instructions
@@ -139,11 +119,6 @@ void goto_program_dereferencet::dereference_program(
       it++;
     }
   }
-
-  goto_program.local_variables.insert(
-    goto_program.local_variables.begin(),
-    new_code.local_variables.begin(),
-    new_code.local_variables.end());
 }
 
 void goto_program_dereferencet::dereference_program(

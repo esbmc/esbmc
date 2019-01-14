@@ -8,12 +8,16 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/destructor.h>
 
-code_function_callt get_destructor(const namespacet &ns, const typet &type)
+bool get_destructor(
+  const namespacet &ns,
+  const typet &type,
+  code_function_callt &destructor)
 {
   if(type.id() == "symbol")
   {
-    return get_destructor(ns, ns.follow(type));
+    return get_destructor(ns, ns.follow(type), destructor);
   }
+
   if(type.id() == "struct")
   {
     const struct_typet &struct_type = to_struct_type(type);
@@ -41,12 +45,13 @@ code_function_callt get_destructor(const namespacet &ns, const typet &type)
             code_function_callt function_call;
             function_call.function() = symbol_expr;
 
-            return function_call;
+            destructor = function_call;
+            return true;
           }
         }
       }
     }
   }
 
-  return static_cast<const code_function_callt &>(get_nil_irep());
+  return false;
 }

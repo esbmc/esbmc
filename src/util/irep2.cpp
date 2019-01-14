@@ -820,6 +820,7 @@ static const char *expr_names[] = {
   "code_assign",
   "code_init",
   "code_decl",
+  "code_dead",
   "code_printf",
   "code_expression",
   "code_return",
@@ -3464,6 +3465,11 @@ std::string code_decl2t::field_names[esbmct::num_type_fields] = {"value",
                                                                  "",
                                                                  "",
                                                                  ""};
+std::string code_dead2t::field_names[esbmct::num_type_fields] = {"value",
+                                                                 "",
+                                                                 "",
+                                                                 "",
+                                                                 ""};
 std::string code_printf2t::field_names[esbmct::num_type_fields] = {"operands",
                                                                    "",
                                                                    "",
@@ -4058,6 +4064,7 @@ expr_typedefs1(code_block, code_block_data);
 expr_typedefs2(code_assign, code_assign_data);
 expr_typedefs2(code_init, code_assign_data);
 expr_typedefs1(code_decl, code_decl_data);
+expr_typedefs1(code_dead, code_decl_data);
 expr_typedefs1(code_printf, code_printf_data);
 expr_typedefs1(code_expression, code_expression_data);
 expr_typedefs1(code_return, code_expression_data);

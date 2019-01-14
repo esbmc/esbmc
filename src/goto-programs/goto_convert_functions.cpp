@@ -27,10 +27,6 @@ goto_convert_functionst::goto_convert_functionst(
   message_handlert &_message_handler)
   : goto_convertt(_context, _options, _message_handler), functions(_functions)
 {
-  if(options.get_bool_option("no-inlining"))
-    inlining = false;
-  else
-    inlining = true;
 }
 
 void goto_convert_functionst::goto_convert()
@@ -93,14 +89,6 @@ void goto_convert_functionst::add_return(
   t->code = code_return2tc(tmp_expr);
 }
 
-void goto_convert_functionst::convert_function(const irep_idt &identifier)
-{
-  symbolt *s = context.find_symbol(identifier);
-  assert(s != nullptr);
-
-  convert_function(*s);
-}
-
 void goto_convert_functionst::convert_function(symbolt &symbol)
 {
   irep_idt identifier = symbol.name;
@@ -128,50 +116,39 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     throw "got invalid code for function `" + id2string(identifier) + "'";
   }
 
-  // Get parameter names
-  goto_programt::local_variablest arg_ids;
-  const code_typet::argumentst &arguments = f.type.arguments();
-  for(auto const &it : arguments)
-  {
-    const irep_idt &identifier = it.get_identifier();
-    assert(!identifier.empty());
-    arg_ids.push_front(identifier);
-  }
-
   if(!symbol.value.is_code())
   {
     err_location(symbol.value);
     throw "got invalid code for function `" + id2string(identifier) + "'";
   }
 
-  codet tmp(to_code(symbol.value));
+  const codet &code = to_code(symbol.value);
 
   locationt end_location;
 
   if(to_code(symbol.value).get_statement() == "block")
-    end_location = static_cast<const locationt &>(symbol.value.end_location());
+    end_location =
+      static_cast<const locationt &>(to_code_block(code).end_location());
   else
     end_location.make_nil();
 
-  targets = targetst();
-  targets.return_set = true;
-  targets.return_value = f.type.return_type().id() != "empty" &&
-                         f.type.return_type().id() != "constructor" &&
-                         f.type.return_type().id() != "destructor";
+  // add "end of function"
+  goto_programt tmp_end_function;
+  goto_programt::targett end_function = tmp_end_function.add_instruction();
+  end_function->type = END_FUNCTION;
+  end_function->location = end_location;
 
-  goto_convert_rec(tmp, f.body);
+  targets = targetst();
+  targets.set_return(end_function);
+  targets.has_return_value = f.type.return_type().id() != "empty" &&
+                             f.type.return_type().id() != "constructor" &&
+                             f.type.return_type().id() != "destructor";
+
+  goto_convert_rec(code, f.body);
 
   // add non-det return value, if needed
-  if(targets.return_value)
+  if(targets.has_return_value)
     add_return(f, end_location);
-
-  // add "end of function"
-  goto_programt::targett t = f.body.add_instruction();
-  t->type = END_FUNCTION;
-  t->location = end_location;
-
-  if(to_code(symbol.value).get_statement() == "block")
-    t->location = static_cast<const locationt &>(symbol.value.end_location());
 
   // Wrap the body of functions name __VERIFIER_atomic_* with atomic_bengin
   // and atomic_end
@@ -198,28 +175,16 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     }
   }
 
-  // Add parameter and local variables
-  f.body.add_local_variables(arg_ids);
-  f.body.add_local_variables(local_variables);
+  // add "end of function"
+  f.body.destructive_append(tmp_end_function);
 
-  // do local variables
-  Forall_goto_program_instructions(i_it, f.body)
-  {
-    i_it->function = identifier;
-  }
-
-  // remove_skip depends on the target numbers
-  f.body.compute_target_numbers();
-
-  remove_skip(f.body);
+  // do function tags (they are empty at this point)
+  f.update_instructions_function(identifier);
 
   f.body.update();
 
   if(hide(f.body))
     f.body.hide = true;
-
-  if(f.type.inlined())
-    f.set_inlined(true);
 }
 
 void goto_convert(

@@ -50,14 +50,14 @@ protected:
   value_setst &value_sets;
   dereferencet dereference;
 
-  bool is_valid_object(const irep_idt &identifier) override;
-
   bool has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) override;
 
   void dereference_failure(
     const std::string &property,
     const std::string &msg,
     const guardt &guard) override;
+
+  bool is_live_variable(const symbol2t &sym) { (void)sym; return true; }
 
   void get_value_set(const expr2tc &expr, value_setst::valuest &dest) override;
 
@@ -71,7 +71,6 @@ protected:
     const bool checks_only,
     const dereferencet::modet mode);
 
-  goto_programt::local_variablest *valid_local_variables;
   locationt dereference_location;
   goto_programt::const_targett current_target;
 

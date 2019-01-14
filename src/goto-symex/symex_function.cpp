@@ -566,13 +566,8 @@ void goto_symext::symex_end_of_function()
 
 void goto_symext::locality(const goto_functiont &goto_function)
 {
-  goto_programt::local_variablest local_identifiers;
-
-  // For all insns...
-  local_identifiers.insert(
-    local_identifiers.begin(),
-    goto_function.body.local_variables.begin(),
-    goto_function.body.local_variables.end());
+  std::set<irep_idt> local_identifiers;
+  get_local_identifiers(goto_function, local_identifiers);
 
   statet::framet &frame = cur_state->top();
 

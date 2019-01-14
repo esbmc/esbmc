@@ -239,11 +239,14 @@ void goto_symext::symex_step(reachability_treet &art)
   }
   break;
 
+  case DECL:
   case OTHER:
     if(!cur_state->guard.is_false())
-    {
       symex_other();
-    }
+    cur_state->source.pc++;
+    break;
+
+  case DEAD:
     cur_state->source.pc++;
     break;
 

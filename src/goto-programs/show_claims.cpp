@@ -82,6 +82,5 @@ void show_claims(
   unsigned count = 0;
 
   for(const auto &it : goto_functions.function_map)
-    if(!it.second.is_inlined())
-      show_claims(ns, it.first, ui, it.second.body, count);
+    show_claims(ns, it.first, ui, it.second.body, count);
 }
