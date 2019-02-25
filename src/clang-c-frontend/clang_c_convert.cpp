@@ -2795,7 +2795,7 @@ bool clang_c_convertert::has_bitfields(const typet &_type, typet *converted)
   return false;
 }
 
-std::string clang_c_convertert::gen_bitfield_blob_name(unsigned int num)
+static std::string gen_bitfield_blob_name(unsigned int num)
 {
   return "#BITFIELD" + std::to_string(num);
 }
@@ -2820,7 +2820,7 @@ typet clang_c_convertert::fix_bitfields(const typet &_type)
 
   std::map<irep_idt, bitfield_map> backmap;
 
-  auto pop_blob = [this, is_packed, &bit_offs, &blob_count, &new_components]() {
+  auto pop_blob = [is_packed, &bit_offs, &blob_count, &new_components]() {
     // We have to pop the current bitfield blob into the struct and create
     // a new one to make space.
 
@@ -2906,7 +2906,7 @@ void clang_c_convertert::fix_constant_bitfields(exprt &expr)
 
   unsigned int bit_offs = 0;
 
-  auto pop_blob = [this, is_packed, &accuml, &bit_offs, &new_expr]() {
+  auto pop_blob = [is_packed, &accuml, &bit_offs, &new_expr]() {
     if(is_packed)
     {
       // Round number of bits up to nearest byte,
