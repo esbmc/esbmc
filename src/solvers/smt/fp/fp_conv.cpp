@@ -738,11 +738,11 @@ smt_astt fp_convt::mk_to_bv(smt_astt x, bool is_signed, std::size_t width)
       ovfl,
       ctx->mk_bvsle(
         pre_rounded, ctx->mk_bvneg(ctx->mk_smt_bv(BigInt(1), bv_sz + 3))));
+    pre_rounded =
+      ctx->mk_ite(x_is_neg, ctx->mk_bvneg(pre_rounded), pre_rounded);
     in_range = ctx->mk_and(
       ctx->mk_and(ctx->mk_not(ovfl), ctx->mk_bvsle(ll, pre_rounded)),
       ctx->mk_bvsle(pre_rounded, ul));
-    pre_rounded =
-      ctx->mk_ite(x_is_neg, ctx->mk_bvneg(pre_rounded), pre_rounded);
   }
 
   smt_astt rounded = ctx->mk_extract(pre_rounded, bv_sz - 1, 0);
