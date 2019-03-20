@@ -2397,23 +2397,38 @@ void clang_c_convertert::get_decl_name(
 {
   pretty_name = name = get_decl_name(nd);
 
-  bool name_is_empty = name.empty();
-  clang::Decl::Kind k = nd.getKind();
-
-  if(name_is_empty)
+  switch(nd.getKind())
   {
-    // ParamVarDecl, we can safely ignore them
-    if(k == clang::Decl::ParmVar)
-    {
-    }
-    else if(k == clang::Decl::Field || k == clang::Decl::IndirectField)
-    {
-      // Anonymous fields, generate a name based on the type
-      name = clang::TypeName::getFullyQualifiedName(nd.getType(), *ASTContext);
-      pretty_name = "anon";
-    }
+  // ParamVarDecl, we can safely ignore them
+  case clang::Decl::ParmVar:
+    if(name.empty())
+      return;
+    break;
 
-    return;
+    // Anonymous fields, generate a name based on the type
+  case clang::Decl::Field:
+  case clang::Decl::IndirectField:
+    if(name.empty())
+    {
+      clang::PrintingPolicy Policy(ASTContext->getPrintingPolicy());
+      Policy.SuppressScope = false;
+      Policy.AnonymousTagLocations = true;
+      Policy.PolishForDeclaration = true;
+      Policy.SuppressUnwrittenScope = true;
+      name = clang::TypeName::getFullyQualifiedName(
+        nd.getType(), *ASTContext, Policy);
+      pretty_name = "anon";
+      return;
+    }
+    break;
+
+  default:
+    if(name.empty())
+    {
+      std::cerr << "Declaration has an empty name:\n";
+      nd.dumpColor();
+      abort();
+    }
   }
 
   clang::SmallString<128> DeclUSR;
