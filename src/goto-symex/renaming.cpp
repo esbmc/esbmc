@@ -263,7 +263,7 @@ void renaming::level2t::print(std::ostream &out) const
     out << current_name.first.base_name;
 
     if(current_name.first.lev == symbol2t::level1)
-      out << "@" << current_name.first.l1_num << "!"
+      out << "?" << current_name.first.l1_num << "!"
           << current_name.first.t_num;
 
     out << " --> ";

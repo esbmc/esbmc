@@ -607,7 +607,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   }
 
   // Renamed to at least level 1,
-  size_t at_pos = thestr.rfind("@");
+  size_t at_pos = thestr.rfind("?");
   size_t exm_pos = thestr.rfind("!");
   size_t end_of_name_pos = at_pos;
 

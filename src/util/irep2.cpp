@@ -1239,10 +1239,10 @@ std::string symbol_data::get_symbol_name() const
   case level0:
     return thename.as_string();
   case level1:
-    return thename.as_string() + "@" + i2string(level1_num) + "!" +
+    return thename.as_string() + "?" + i2string(level1_num) + "!" +
            i2string(thread_num);
   case level2:
-    return thename.as_string() + "@" + i2string(level1_num) + "!" +
+    return thename.as_string() + "?" + i2string(level1_num) + "!" +
            i2string(thread_num) + "&" + i2string(node_num) + "#" +
            i2string(level2_num);
   case level1_global:
