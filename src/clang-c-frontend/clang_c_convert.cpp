@@ -325,10 +325,7 @@ bool clang_c_convertert::get_struct_union_class(
     }
   }
 
-  added_symbol.type = t;
-
-  if(has_bitfields(t))
-    added_symbol.type = fix_bitfields(t);
+  added_symbol.type = has_bitfields(t) ? fix_bitfields(t) : t;
 
   // This change on the pretty_name is just to beautify the output
   if(recordd.isStruct())
