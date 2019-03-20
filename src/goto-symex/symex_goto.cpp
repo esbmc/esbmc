@@ -66,14 +66,16 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   {
     // reset unwinding counter
     if(instruction.is_backwards_goto())
+    {
       cur_state->loop_iterations[instruction.loop_number] = 0;
+
+      // Reset loop counter
+      if(instruction.loop_number == first_loop)
+        first_loop = 0;
+    }
 
     // next instruction
     cur_state->source.pc++;
-
-    // Reset loop counter
-    if(instruction.loop_number == first_loop)
-      first_loop = 0;
 
     return; // nothing to do
   }
@@ -171,7 +173,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
         new_rhs,
         cur_state->source,
         cur_state->gen_stack_trace(),
-        symex_targett::HIDDEN);
+        true,
+        first_loop);
 
       if(is_constant_expr(new_rhs))
         guard_expr = new_rhs;
@@ -318,6 +321,8 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     // to.
     renaming::level2t::rename_to_record(new_lhs, variable);
 
+    cur_state->rename_type(new_lhs);
+    cur_state->rename_type(rhs);
     cur_state->assignment(new_lhs, rhs, true);
 
     target->assignment(
@@ -327,36 +332,37 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
       rhs,
       cur_state->source,
       cur_state->gen_stack_trace(),
-      symex_targett::HIDDEN);
+      true,
+      first_loop);
   }
 }
 
 void goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
+  if(partial_loops)
+    return;
+
   const irep_idt &loop_id = cur_state->source.pc->location.loopid();
 
   expr2tc negated_cond = guard;
   make_not(negated_cond);
 
-  if(!partial_loops)
+  if(!no_unwinding_assertions)
   {
-    if(!no_unwinding_assertions)
-    {
-      // generate unwinding assertion
-      claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
-    }
-    else
-    {
-      // generate unwinding assumption, unless we permit partial loops
-      expr2tc guarded_expr = negated_cond;
-      cur_state->guard.guard_expr(guarded_expr);
-      target->assumption(
-        cur_state->guard.as_expr(), guarded_expr, cur_state->source);
-    }
-
-    // add to state guard to prevent further assignments
-    cur_state->guard.add(negated_cond);
+    // generate unwinding assertion
+    claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
   }
+  else
+  {
+    // generate unwinding assumption, unless we permit partial loops
+    expr2tc guarded_expr = negated_cond;
+    cur_state->guard.guard_expr(guarded_expr);
+    target->assumption(
+      cur_state->guard.as_expr(), guarded_expr, cur_state->source, first_loop);
+  }
+
+  // add to state guard to prevent further assignments
+  cur_state->guard.add(negated_cond);
 }
 
 bool goto_symext::get_unwind(

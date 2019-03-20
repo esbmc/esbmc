@@ -178,6 +178,41 @@ extern inline code_declt &to_code_decl(codet &code)
   return static_cast<code_declt &>(code);
 }
 
+/*! \brief A removal of a local variable
+*/
+class code_deadt : public codet
+{
+public:
+  explicit code_deadt(const exprt &symbol) : codet("dead")
+  {
+    copy_to_operands(symbol);
+  }
+
+  exprt &symbol()
+  {
+    return op0();
+  }
+
+  const exprt &symbol() const
+  {
+    return op0();
+  }
+
+  const irep_idt &get_identifier() const;
+};
+
+inline const code_deadt &to_code_dead(const codet &code)
+{
+  assert(code.get_statement() == "dead" && code.operands().size() == 1);
+  return static_cast<const code_deadt &>(code);
+}
+
+inline code_deadt &to_code_dead(codet &code)
+{
+  assert(code.get_statement() == "dead" && code.operands().size() == 1);
+  return static_cast<code_deadt &>(code);
+}
+
 class code_assumet : public codet
 {
 public:

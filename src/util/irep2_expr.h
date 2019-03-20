@@ -1437,7 +1437,7 @@ irep_typedefs(greaterthanequal, relation_data);
 irep_typedefs(not, bool_1op);
 irep_typedefs(and, logic_2ops);
 irep_typedefs(or, logic_2ops);
-irep_typedefs (xor, logic_2ops);
+irep_typedefs(xor, logic_2ops);
 irep_typedefs(implies, logic_2ops);
 irep_typedefs(bitand, bit_2ops);
 irep_typedefs(bitor, bit_2ops);
@@ -1488,6 +1488,7 @@ irep_typedefs(code_block, code_block_data);
 irep_typedefs(code_assign, code_assign_data);
 irep_typedefs(code_init, code_assign_data);
 irep_typedefs(code_decl, code_decl_data);
+irep_typedefs(code_dead, code_decl_data);
 irep_typedefs(code_printf, code_printf_data);
 irep_typedefs(code_expression, code_expression_data);
 irep_typedefs(code_return, code_expression_data);
@@ -3106,6 +3107,18 @@ public:
   {
   }
   code_decl2t(const code_decl2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class code_dead2t : public code_dead_expr_methods
+{
+public:
+  code_dead2t(const type2tc &t, const irep_idt &name)
+    : code_dead_expr_methods(t, code_dead_id, name)
+  {
+  }
+  code_dead2t(const code_dead2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };

@@ -130,6 +130,20 @@ exprt gen_not(const exprt &op)
   return gen_unary("not", typet("bool"), op);
 }
 
+exprt boolean_negate(const exprt &src)
+{
+  if(src.id() == "not" && src.operands().size() == 1)
+    return src.op0();
+
+  if(src.is_true())
+    return false_exprt();
+
+  if(src.is_false())
+    return true_exprt();
+
+  return not_exprt(src);
+}
+
 exprt gen_unary(const std::string &id, const typet &type, const exprt &op)
 {
   exprt result(id, type);

@@ -2395,29 +2395,24 @@ void clang_c_convertert::get_decl_name(
   std::string &name,
   std::string &pretty_name)
 {
-  name = get_decl_name(nd);
+  pretty_name = name = get_decl_name(nd);
 
   bool name_is_empty = name.empty();
   clang::Decl::Kind k = nd.getKind();
 
-  // ParamVarDecl, we can safely ignore them
-  if(k == clang::Decl::ParmVar && name_is_empty)
-    return;
-
-  // Anonymous fields, generate a name based on the type
-  if(k == clang::Decl::Field || k == clang::Decl::IndirectField)
+  if(name_is_empty)
   {
-    if(name_is_empty)
+    // ParamVarDecl, we can safely ignore them
+    if(k == clang::Decl::ParmVar)
     {
-      // If it's empty, we generate the name using the type
+    }
+    else if(k == clang::Decl::Field || k == clang::Decl::IndirectField)
+    {
+      // Anonymous fields, generate a name based on the type
       name = clang::TypeName::getFullyQualifiedName(nd.getType(), *ASTContext);
       pretty_name = "anon";
     }
-    else
-    {
-      // Otherwise, just use the same name for both the names
-      pretty_name = name;
-    }
+
     return;
   }
 
@@ -2438,8 +2433,13 @@ bool clang_c_convertert::get_tag_name(
   const clang::RecordDecl &rd,
   std::string &name)
 {
+  clang::PrintingPolicy Policy(ASTContext->getPrintingPolicy());
+  Policy.SuppressScope = false;
+  Policy.AnonymousTagLocations = true;
+  Policy.PolishForDeclaration = true;
+  Policy.SuppressUnwrittenScope = true;
   name = clang::TypeName::getFullyQualifiedName(
-    ASTContext->getTagDeclType(&rd), *ASTContext);
+    ASTContext->getTagDeclType(&rd), *ASTContext, Policy);
   return false;
 }
 
@@ -2703,7 +2703,7 @@ bool clang_c_convertert::has_bitfields(const typet &_type, typet *converted)
   return false;
 }
 
-std::string clang_c_convertert::gen_bitfield_blob_name(unsigned int num)
+static std::string gen_bitfield_blob_name(unsigned int num)
 {
   return "#BITFIELD" + std::to_string(num);
 }
@@ -2728,7 +2728,7 @@ typet clang_c_convertert::fix_bitfields(const typet &_type)
 
   std::map<irep_idt, bitfield_map> backmap;
 
-  auto pop_blob = [this, is_packed, &bit_offs, &blob_count, &new_components]() {
+  auto pop_blob = [is_packed, &bit_offs, &blob_count, &new_components]() {
     // We have to pop the current bitfield blob into the struct and create
     // a new one to make space.
 
@@ -2814,7 +2814,7 @@ void clang_c_convertert::fix_constant_bitfields(exprt &expr)
 
   unsigned int bit_offs = 0;
 
-  auto pop_blob = [this, is_packed, &accuml, &bit_offs, &new_expr]() {
+  auto pop_blob = [is_packed, &accuml, &bit_offs, &new_expr]() {
     if(is_packed)
     {
       // Round number of bits up to nearest byte,

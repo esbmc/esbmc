@@ -1827,7 +1827,9 @@ void dereferencet::valid_check(
       return;
 
     const symbolt &sym = ns.lookup(to_symbol2t(symbol).thename);
-    if(has_prefix(sym.name.as_string(), "symex_dynamic::"))
+    if(
+      has_prefix(sym.name.as_string(), "symex_dynamic::") &&
+      sym.name.as_string().find("alloca::") == std::string::npos)
     {
       // Assert thtat it hasn't (nondeterministically) been invalidated.
       address_of2tc addrof(symbol->type, symbol);
@@ -1848,6 +1850,16 @@ void dereferencet::valid_check(
       {
         dereference_failure(
           "pointer dereference", "free() of non-dynamic memory", guard);
+        return;
+      }
+
+      // Otherwise, this is a pointer to some kind of lexical variable, with
+      // either global or function-local scope. Ask symex to determine if
+      // it's live.
+      if (!dereference_callback.is_live_variable(to_symbol2t(symbol))) {
+        // Any access where this guard is true -> failure
+        dereference_failure(
+          "pointer dereference", "accessed expired variable pointer", guard);
         return;
       }
     }

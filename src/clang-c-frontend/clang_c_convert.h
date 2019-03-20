@@ -155,7 +155,6 @@ private:
   // Bitfield mangling
   bool has_bitfields(const typet &type, typet *converted = NULL);
   typet fix_bitfields(const typet &type);
-  std::string gen_bitfield_blob_name(unsigned int num);
 
   std::map<typet, typet> bitfield_fixed_type_map;
   std::map<typet, typet> bitfield_orig_type_map;

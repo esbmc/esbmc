@@ -283,8 +283,7 @@ void goto_programt::get_successors(
   if(target == instructions.end())
     return;
 
-  const_targett next = target;
-  next++;
+  const auto next = std::next(target);
 
   const instructiont &i = *target;
 
@@ -293,7 +292,7 @@ void goto_programt::get_successors(
     for(auto target : i.targets)
       successors.emplace_back(target);
 
-    if(!is_true(i.guard))
+    if(!is_true(i.guard) && next != instructions.end())
       successors.push_back(next);
   }
   else if(i.is_return())
@@ -389,12 +388,6 @@ void goto_programt::copy_from(const goto_programt &src)
 
   clear();
 
-  // Copy variables
-  local_variables.insert(
-    local_variables.begin(),
-    src.local_variables.begin(),
-    src.local_variables.end());
-
   // Copy hide flag
   hide = src.hide;
 
@@ -489,4 +482,14 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
 void goto_programt::dump() const
 {
   output(*migrate_namespace_lookup, "", std::cout);
+}
+
+void goto_programt::get_decl_identifiers(
+  decl_identifierst &decl_identifiers) const
+{
+  forall_goto_program_instructions(it, (*this))
+  {
+    if(it->is_decl())
+      decl_identifiers.insert(to_code_decl2t(it->code).value);
+  }
 }

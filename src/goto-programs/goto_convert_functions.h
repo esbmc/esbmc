@@ -29,7 +29,6 @@ public:
 
   void goto_convert();
   void convert_function(symbolt &symbol);
-  void convert_function(const irep_idt &identifier);
   void thrash_type_symbols();
   void fixup_unions();
 
@@ -62,9 +61,6 @@ protected:
   // function calls
   //
   void add_return(goto_functiont &f, const locationt &location);
-
-private:
-  bool inlining;
 };
 
 #endif

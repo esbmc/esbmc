@@ -101,6 +101,10 @@ const struct opt_templ esbmc_options[] = {
   {0, "output", string, ""},
   {0, "floatbv", switc, ""},
   {0, "fixedbv", switc, ""},
+  {0, "fp2bv", switc, ""},
+  {0, "tuple-node-flattener", switc, ""},
+  {0, "tuple-sym-flattener", switc, ""},
+  {0, "array-flattener", switc, ""},
 
   // Incremental SMT
   {0, "smt-during-symex", switc, ""},
@@ -132,7 +136,9 @@ const struct opt_templ esbmc_options[] = {
   {0, "k-step", number, "1"},
   {0, "max-k-step", number, "50"},
   {0, "unlimited-k-steps", switc, ""},
-  {0, "show-counter-example", switc, ""},
+  {0, "show-cex", switc, ""},
+  {0, "bidirectional", switc, ""},
+  {0, "max-inductive-step", number, "-1"},
 
   // Scheduling
   {0, "schedule", switc, ""},
@@ -151,6 +157,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "timeout", string, ""},
   {0, "enable-core-dump", switc, ""},
   {0, "no-simplify", switc, ""},
+  {0, "interval-analysis", switc, ""},
 
   // DEBUG options
 
@@ -162,14 +169,6 @@ const struct opt_templ esbmc_options[] = {
 
   // Check if there is two or more assingments to the same SSA instruction
   {0, "double-assign-check", switc, ""},
-
-  // Use SMT flatteners instead of the ones provided by the solvers
-  {0, "tuple-node-flattener", switc, ""},
-  {0, "tuple-sym-flattener", switc, ""},
-  {0, "array-flattener", switc, ""},
-
-  // Use floating-point to bitvector converter
-  {0, "fp2bv", switc, ""},
 
   // Abort if the program contains a recursion
   {0, "abort-on-recursion", switc, ""},

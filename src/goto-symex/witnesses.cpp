@@ -109,25 +109,6 @@ int generate_sha1_hash_for_file(const char *path, std::string &output)
 }
 
 /* */
-std::string execute_cmd(const std::string &command)
-{
-  /* add ./ for linux execution */
-  std::string initial = command.substr(0, 1);
-  FILE *pipe = popen(command.c_str(), "r");
-  if(!pipe)
-    return "ERROR";
-  char buffer[128];
-  std::string result;
-  while(!feof(pipe))
-  {
-    if(fgets(buffer, 128, pipe) != nullptr)
-      result += buffer;
-  }
-  pclose(pipe);
-  return result;
-}
-
-/* */
 std::string read_file(const std::string &path)
 {
   std::ifstream t(path.c_str());
@@ -729,6 +710,7 @@ void check_replace_invalid_assignment(std::string &assignment)
     std::regex_search(assignment, m, std::regex("@")) ||
     std::regex_search(assignment, m, std::regex("POINTER_OFFSET")) ||
     std::regex_search(assignment, m, std::regex("SAME-OBJECT")) ||
+    std::regex_search(assignment, m, std::regex("CONCAT")) ||
     std::regex_search(assignment, m, std::regex("BITCAST:")))
     assignment.clear();
 }
@@ -740,7 +722,7 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
   std::string assignment = "";
   if(!is_nil_expr(step.value) && (is_valid_witness_step(ns, step)))
   {
-    assignment += from_expr(ns, "", step.lhs);
+    assignment += from_expr(ns, "", step.original_lhs);
     assignment += " = ";
     assignment += from_expr(ns, "", step.value);
     assignment += ";";

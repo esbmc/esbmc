@@ -27,7 +27,9 @@
 
 void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
-  if(inductive_step && first_loop)
+  // Convert asserts in assumes, if it's not the last loop iteration
+  // also, don't convert assertions added by the bidirectional search
+  if(inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
   {
     BigInt unwind = cur_state->loop_iterations[first_loop];
     if(unwind < (max_unwind - 1))
@@ -60,7 +62,8 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     new_expr,
     msg,
     cur_state->gen_stack_trace(),
-    cur_state->source);
+    cur_state->source,
+    first_loop);
 }
 
 void goto_symext::assume(const expr2tc &the_assumption)
@@ -76,7 +79,7 @@ void goto_symext::assume(const expr2tc &the_assumption)
 
   // Irritatingly, assumption destroys its expr argument
   expr2tc tmp_guard = cur_state->guard.as_expr();
-  target->assumption(tmp_guard, assumption, cur_state->source);
+  target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
   // If we're assuming false, make the guard for the following statement false
   if(is_false(the_assumption))
@@ -185,14 +188,6 @@ void goto_symext::symex_step(reachability_treet &art)
         thrown_obj_map.erase(cur_state->source.pc);
       }
 
-      replace_nondet(deref_code);
-
-      code_assign2t &assign = to_code_assign2t(deref_code);
-
-      dereference(assign.target, dereferencet::WRITE);
-      dereference(assign.source, dereferencet::READ);
-      replace_dynamic_allocation(deref_code);
-
       symex_assign(deref_code);
     }
 
@@ -244,11 +239,14 @@ void goto_symext::symex_step(reachability_treet &art)
   }
   break;
 
+  case DECL:
   case OTHER:
     if(!cur_state->guard.is_false())
-    {
       symex_other();
-    }
+    cur_state->source.pc++;
+    break;
+
+  case DEAD:
     cur_state->source.pc++;
     break;
 
@@ -436,7 +434,8 @@ void goto_symext::finish_formula()
       eq,
       "dereference failure: forgotten memory: " + it.name,
       cur_state->gen_stack_trace(),
-      cur_state->source);
+      cur_state->source,
+      first_loop);
 
     total_claims++;
     remaining_claims++;

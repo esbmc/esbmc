@@ -75,17 +75,6 @@ void convert(const goto_programt &program, irept &irep)
     convert(it, irep.get_sub().back());
   }
 
-  if(!program.local_variables.empty())
-  {
-    irept vars;
-    irept::subt &subs = vars.get_sub();
-    subs.reserve(program.local_variables.size());
-    for(auto const &it : program.local_variables)
-      subs.emplace_back(it);
-
-    irep.variables(vars);
-  }
-
   irep.hide(program.hide);
 }
 
@@ -141,11 +130,6 @@ void convert(const irept &irep, goto_programt &program)
   }
 
   program.update();
-
-  const irept &vars = irep.variables();
-  const irept::subt &vsubs = vars.get_sub();
-  for(auto const &it : vsubs)
-    program.local_variables.push_front(it.id());
 
   program.hide = irep.hide();
 }

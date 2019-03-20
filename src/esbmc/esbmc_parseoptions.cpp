@@ -9,7 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ac_config.h>
 
 #ifndef _WIN32
-extern "C" {
+extern "C"
+{
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -39,6 +40,7 @@ extern "C" {
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_unwind.h>
+#include <goto-programs/interval_analysis.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/remove_skip.h>
@@ -272,7 +274,12 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     options.set_option("inductive-step", true);
     options.set_option("no-unwinding-assertions", true);
-    options.set_option("partial-loops", true);
+    options.set_option("partial-loops", false);
+  }
+
+  if(cmdline.isset("overflow-check"))
+  {
+    options.set_option("disable-inductive-step", true);
   }
 
   if(cmdline.isset("timeout"))
@@ -374,20 +381,20 @@ int esbmc_parseoptionst::doit()
     return 0;
   }
 
+  if(cmdline.isset("termination"))
+    return doit_termination();
+
+  if(cmdline.isset("incremental-bmc"))
+    return doit_incremental();
+
+  if(cmdline.isset("falsification"))
+    return doit_falsification();
+
   if(cmdline.isset("k-induction"))
     return doit_k_induction();
 
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
-
-  if(cmdline.isset("falsification"))
-    return doit_falsification();
-
-  if(cmdline.isset("incremental-bmc"))
-    return doit_incremental();
-
-  if(cmdline.isset("termination"))
-    return doit_termination();
 
   optionst opts;
   get_command_line_options(opts);
@@ -1172,7 +1179,7 @@ int esbmc_parseoptionst::doit_termination()
 
 int esbmc_parseoptionst::do_base_case(
   optionst &opts,
-  const goto_functionst &goto_functions,
+  goto_functionst &goto_functions,
   const BigInt &k_step)
 {
   opts.set_option("base-case", true);
@@ -1209,7 +1216,7 @@ int esbmc_parseoptionst::do_base_case(
 
 int esbmc_parseoptionst::do_forward_condition(
   optionst &opts,
-  const goto_functionst &goto_functions,
+  goto_functionst &goto_functions,
   const BigInt &k_step)
 {
   if(opts.get_bool_option("disable-forward-condition"))
@@ -1262,7 +1269,7 @@ int esbmc_parseoptionst::do_forward_condition(
 
 int esbmc_parseoptionst::do_inductive_step(
   optionst &opts,
-  const goto_functionst &goto_functions,
+  goto_functionst &goto_functions,
   const BigInt &k_step)
 {
   // Don't run inductive step for k_step == 1
@@ -1270,6 +1277,11 @@ int esbmc_parseoptionst::do_inductive_step(
     return true;
 
   if(opts.get_bool_option("disable-inductive-step"))
+    return true;
+
+  if(
+    strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) <
+    k_step.to_uint64())
     return true;
 
   opts.set_option("base-case", false);
@@ -1505,11 +1517,14 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns, ui_message_handler);
     }
 
+    if(cmdline.isset("interval-analysis"))
+      interval_analysis(goto_functions, ns);
+
     if(
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
       cmdline.isset("k-induction-parallel"))
     {
-      goto_k_induction(goto_functions, context, ui_message_handler);
+      goto_k_induction(goto_functions, ui_message_handler);
 
       // Warn the user if the forward condition was disabled
       if(options.get_bool_option("disable-forward-condition"))
@@ -1581,7 +1596,6 @@ bool esbmc_parseoptionst::process_goto_program(
       }
 
       goto_unwind(
-        context,
         goto_functions,
         atol(options.get_option("unwind").c_str()),
         ui_message_handler);
@@ -1791,6 +1805,10 @@ void esbmc_parseoptionst::help()
        "                              (default for solvers that don't "
        "support the \n"
        "                              SMT floating-point theory)\n"
+       "--tuple-node-flattener        encode tuples using our tuple to node API"
+       "--tuple-sym-flattener         encode tuples using our tuple to symbol "
+       "API"
+       "--array-flattener             encode arrays using our array API"
 
        "\nIncremental SMT solving\n"
        " --smt-during-symex           enable incremental SMT solving "
@@ -1832,7 +1850,7 @@ void esbmc_parseoptionst::help()
        " --max-k-step nr              set max number of iteration (default is "
        "50)\n"
        " --unlimited-k-steps          set max number of iteration to UINT_MAX\n"
-       " --show-counter-example       print the counter-example produced by "
+       " --show-cex                   print the counter-example produced by "
        "the inductive step\n"
 
        "\nScheduling approaches\n"
@@ -1859,5 +1877,7 @@ void esbmc_parseoptionst::help()
        " --memstats                   print memory usage statistics\n"
        " --no-simplify                do not simplify any expression\n"
        " --enable-core-dump           do not disable core dump output\n"
+       " --interval-analysis          enable interval analysis and add assumes "
+       "to the program\n"
        "\n";
 }

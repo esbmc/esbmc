@@ -31,7 +31,8 @@ Author: Daniel Kroening, kroening@kroening.com
       it != (program).instructions.end();                                      \
       it++)
 
-typedef enum {
+typedef enum
+{
   NO_INSTRUCTION_TYPE = 0,
   GOTO = 1,           // branch, possibly guarded
   ASSUME = 2,         // non-failing guarded self loop
@@ -89,21 +90,6 @@ public:
 
   bool hide;
 
-  // local variables
-  typedef std::list<irep_idt> local_variablest;
-  local_variablest local_variables;
-
-  void add_local_variable(const irep_idt &id)
-  {
-    local_variables.push_front(id);
-  }
-
-  void add_local_variables(const local_variablest &locals)
-  {
-    local_variables.insert(
-      local_variables.begin(), locals.begin(), locals.end());
-  }
-
   /*! \brief Container for an instruction of the goto-program
   */
   class instructiont
@@ -131,12 +117,35 @@ public:
 
     targetst targets;
 
+    /// Returns the first (and only) successor for the usual case of a single
+    /// target
+    targett get_target() const
+    {
+      assert(targets.size() == 1);
+      return targets.front();
+    }
+
+    /// Sets the first (and only) successor for the usual case of a single
+    /// target
+    void set_target(targett t)
+    {
+      targets.clear();
+      targets.push_back(t);
+    }
+
+    bool has_target() const
+    {
+      return !targets.empty();
+    }
+
     //! goto target labels
     typedef std::list<irep_idt> labelst;
     labelst labels;
 
     // for k-induction
     bool inductive_step_instruction;
+
+    bool inductive_assertion;
 
     //! is this node a branch target?
     inline bool is_target() const
@@ -152,71 +161,93 @@ public:
       guard = gen_true_expr();
       code = expr2tc();
       inductive_step_instruction = false;
+      inductive_assertion = false;
     }
 
     inline void make_goto()
     {
       clear(GOTO);
     }
+
+    inline void make_location(const locationt &l)
+    {
+      clear(LOCATION);
+      location = l;
+    }
+
     inline void make_return()
     {
       clear(RETURN);
     }
+
     inline void make_function_call(const expr2tc &_code)
     {
       clear(FUNCTION_CALL);
       code = _code;
     }
+
     inline void make_skip()
     {
       clear(SKIP);
     }
+
     inline void make_throw()
     {
       clear(THROW);
     }
+
     inline void make_catch()
     {
       clear(CATCH);
     }
+
     inline void make_throw_decl()
     {
       clear(THROW_DECL);
     }
+
     inline void make_throw_decl_end()
     {
       clear(THROW_DECL_END);
     }
+
     inline void make_assertion(const expr2tc &g)
     {
       clear(ASSERT);
       guard = g;
     }
+
     inline void make_assumption(const expr2tc &g)
     {
       clear(ASSUME);
       guard = g;
     }
+
     inline void make_assignment()
     {
       clear(ASSIGN);
     }
+
     inline void make_other()
     {
       clear(OTHER);
     }
+
     inline void make_decl()
     {
       clear(DECL);
     }
+
     inline void make_dead()
     {
       clear(DEAD);
     }
+
     inline void make_atomic_begin()
     {
       clear(ATOMIC_BEGIN);
     }
+
     inline void make_atomic_end()
     {
       clear(ATOMIC_END);
@@ -238,54 +269,72 @@ public:
     {
       return type == GOTO;
     }
+
     inline bool is_return() const
     {
       return type == RETURN;
     }
+
     inline bool is_assign() const
     {
       return type == ASSIGN;
     }
+
     inline bool is_function_call() const
     {
       return type == FUNCTION_CALL;
     }
+
     inline bool is_throw() const
     {
       return type == THROW;
     }
+
     inline bool is_catch() const
     {
       return type == CATCH;
     }
+
     inline bool is_skip() const
     {
       return type == SKIP;
     }
+
     inline bool is_location() const
     {
       return type == LOCATION;
     }
+
     inline bool is_other() const
     {
       return type == OTHER;
     }
+
+    inline bool is_decl() const
+    {
+      return type == DECL;
+    }
+
     inline bool is_assume() const
     {
       return type == ASSUME;
     }
+
     inline bool is_assert() const
     {
       return type == ASSERT;
     }
+
     inline bool is_atomic_begin() const
     {
       return type == ATOMIC_BEGIN;
     }
+
     inline bool is_atomic_end() const
     {
       return type == ATOMIC_END;
     }
+
     inline bool is_end_function() const
     {
       return type == END_FUNCTION;
@@ -295,6 +344,7 @@ public:
       : location(static_cast<const locationt &>(get_nil_irep())),
         type(NO_INSTRUCTION_TYPE),
         inductive_step_instruction(false),
+        inductive_assertion(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -306,6 +356,7 @@ public:
       : location(static_cast<const locationt &>(get_nil_irep())),
         type(_type),
         inductive_step_instruction(false),
+        inductive_assertion(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -324,6 +375,8 @@ public:
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
+      std::swap(inductive_assertion, instruction.inductive_assertion);
+      std::swap(instruction.loop_number, loop_number);
     }
 
     //! A globally unique number to identify a program location.
@@ -385,14 +438,19 @@ public:
 
   void get_successors(const_targett target, const_targetst &successors) const;
 
+  /// Insertion that preserves jumps to "target".
+  void insert_swap(targett target)
+  {
+    assert(target != instructions.end());
+    const auto next = std::next(target);
+    instructions.insert(next, instructiont())->swap(*target);
+  }
+
   //! Insertion that preserves jumps to "target".
   //! The instruction is destroyed.
   void insert_swap(targett target, instructiont &instruction)
   {
-    assert(target != instructions.end());
-    targett next = target;
-    next++;
-    instructions.insert(next, instructiont())->swap(*target);
+    insert_swap(target);
     target->swap(instruction);
   }
 
@@ -404,8 +462,7 @@ public:
     if(p.instructions.empty())
       return;
     insert_swap(target, p.instructions.front());
-    targett next = target;
-    next++;
+    auto next = std::next(target);
     p.instructions.erase(p.instructions.begin());
     instructions.splice(next, p.instructions);
   }
@@ -466,6 +523,22 @@ public:
     const irep_idt &identifier,
     std::ostream &out) const;
 
+  /// Sets the `function` member of each instruction if not yet set
+  /// Note that a goto program need not be a goto function and therefore,
+  /// we cannot do this in update(), but only at the level of
+  /// of goto_functionst where goto programs are guaranteed to be
+  /// named functions.
+  void update_instructions_function(const irep_idt &function_id)
+  {
+    for(auto &instruction : instructions)
+    {
+      if(instruction.function.empty())
+      {
+        instruction.function = function_id;
+      }
+    }
+  }
+
   //! Compute the target numbers
   void compute_target_numbers();
 
@@ -506,7 +579,6 @@ public:
   inline void swap(goto_programt &program)
   {
     program.instructions.swap(instructions);
-    program.local_variables.swap(local_variables);
   }
 
   //! Clear the goto program
@@ -520,6 +592,10 @@ public:
 
   //! Does the goto program have an assertion?
   bool has_assertion() const;
+
+  typedef std::set<irep_idt> decl_identifierst;
+  /// get the variables in decl statements
+  void get_decl_identifiers(decl_identifierst &decl_identifiers) const;
 
   // Template for extracting instructions /from/ a goto program, to a type
   // abstract something else.
@@ -556,6 +632,26 @@ public:
 bool operator<(
   const goto_programt::const_targett i1,
   const goto_programt::const_targett i2);
+
+struct const_target_hash
+{
+  std::size_t operator()(const goto_programt::const_targett t) const
+  {
+    using hash_typet = decltype(&(*t));
+    return std::hash<hash_typet>{}(&(*t));
+  }
+};
+
+/// Functor to check whether iterators from different collections point at the
+/// same object.
+struct pointee_address_equalt
+{
+  template <class A, class B>
+  bool operator()(const A &a, const B &b) const
+  {
+    return &(*a) == &(*b);
+  }
+};
 
 template <
   typename OutList,

@@ -214,14 +214,29 @@ public:
     const expr2tc &rhs,
     const typename Base::sourcet &source,
     std::vector<stack_framet> stack_trace,
-    typename Base::assignment_typet assignment_type)
+    const bool hidden,
+    unsigned loop_number)
   {
     using namespace boost::python;
     if(override f = this->get_override("assignment"))
-      f(guard, lhs, original_lhs, rhs, source, stack_trace, assignment_type);
+      f(guard,
+        lhs,
+        original_lhs,
+        rhs,
+        source,
+        stack_trace,
+        hidden,
+        loop_number);
     else
       Base::assignment(
-        guard, lhs, original_lhs, rhs, source, stack_trace, assignment_type);
+        guard,
+        lhs,
+        original_lhs,
+        rhs,
+        source,
+        stack_trace,
+        hidden,
+        loop_number);
   }
 
   void default_assignment(
@@ -231,10 +246,11 @@ public:
     const expr2tc &rhs,
     const typename Base::sourcet &source,
     std::vector<stack_framet> stack_trace,
-    typename Base::assignment_typet assignment_type)
+    const bool hidden,
+    unsigned loop_number)
   {
     Base::assignment(
-      guard, lhs, original_lhs, rhs, source, stack_trace, assignment_type);
+      guard, lhs, original_lhs, rhs, source, stack_trace, hidden, loop_number);
   }
 
   void assertion(
@@ -242,13 +258,14 @@ public:
     const expr2tc &cond,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
-    const typename Base::sourcet &source)
+    const typename Base::sourcet &source,
+    unsigned loop_number)
   {
     using namespace boost::python;
     if(override f = this->get_override("assertion"))
-      f(guard, cond, msg, stack_trace, source);
+      f(guard, cond, msg, stack_trace, source, loop_number);
     else
-      Base::assertion(guard, cond, msg, stack_trace, source);
+      Base::assertion(guard, cond, msg, stack_trace, source, loop_number);
   }
 
   void default_assertion(
@@ -256,29 +273,32 @@ public:
     const expr2tc &cond,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
-    const typename Base::sourcet &source)
+    const typename Base::sourcet &source,
+    unsigned loop_number)
   {
-    Base::assertion(guard, cond, msg, stack_trace, source);
+    Base::assertion(guard, cond, msg, stack_trace, source, loop_number);
   }
 
   void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
-    const typename Base::sourcet &source)
+    const typename Base::sourcet &source,
+    unsigned loop_number)
   {
     using namespace boost::python;
     if(override f = this->get_override("assumption"))
-      f(guard, cond, source);
+      f(guard, cond, source, loop_number);
     else
-      Base::assumption(guard, cond, source);
+      Base::assumption(guard, cond, source, loop_number);
   }
 
   void default_assumption(
     const expr2tc &guard,
     const expr2tc &cond,
-    const typename Base::sourcet &source)
+    const typename Base::sourcet &source,
+    unsigned loop_number)
   {
-    Base::assumption(guard, cond, source);
+    Base::assumption(guard, cond, source, loop_number);
   }
 
   // NB: if you override anything, but not clone, then those overrides will
@@ -995,10 +1015,6 @@ void build_equation_class()
 {
   using namespace boost::python;
 
-  enum_<symex_targett::assignment_typet>("assignment_type")
-    .value("STATE", symex_targett::assignment_typet::STATE)
-    .value("HIDDEN", symex_targett::assignment_typet::HIDDEN);
-
   // In theory, we could filter these depending on the respective types of
   // different ssa steps being converted to python, but it seems pointless
   // to expose that to python without also replicating it in C++.
@@ -1011,7 +1027,6 @@ void build_equation_class()
     .def_readwrite("lhs", &step::lhs)
     .def_readwrite("rhs", &step::rhs)
     .def_readwrite("original_lhs", &step::original_lhs)
-    .def_readwrite("assignment_type", &step::assignment_type)
     .def_readwrite("cond", &step::cond)
     .def_readwrite("comment", &step::comment)
     // For some reason, def_readwrite can't synthesize it's own setter

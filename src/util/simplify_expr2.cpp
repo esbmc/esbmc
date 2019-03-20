@@ -17,8 +17,8 @@ static expr2tc try_simplification(const expr2tc &expr)
 {
   expr2tc to_simplify = expr->do_simplify();
   if(is_nil_expr(to_simplify))
-    to_simplify = expr2tc(expr->clone());
-  return expr2tc(to_simplify->clone());
+    to_simplify = expr;
+  return to_simplify;
 }
 
 static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
@@ -416,14 +416,6 @@ struct Divtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
-    if(is_constant(op1))
-    {
-      // Numerator is zero? Simplify to zero
-      expr2tc c1 = op1;
-      if(get_value(c1) == 0)
-        return op1;
-    }
-
     if(is_constant(op2))
     {
       expr2tc c2 = op2;
@@ -440,7 +432,14 @@ struct Divtor
     // Two constants? Simplify to result of the division
     if(is_constant(op1) && is_constant(op2))
     {
-      expr2tc c1 = op1, c2 = op2;
+      expr2tc c1 = op1;
+
+      // Numerator is zero? Simplify to zero, as we know
+      // that op2 is not zero
+      if(get_value(c1) == 0)
+        return op1;
+
+      expr2tc c2 = op2;
       get_value(c1) /= get_value(c2);
       return c1;
     }
@@ -955,8 +954,10 @@ static expr2tc simplify_logic_2ops(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-    std::function<ieee_floatt &(expr2tc &)> get_value = [](
-      expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1634,22 +1635,12 @@ static expr2tc simplify_relations(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-    std::function<ieee_floatt &(expr2tc &)> get_value = [](
-      expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
-
-    simpl_res = TFunctor<ieee_floatt>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
-  }
-  else if(is_bool_type(simplied_side_1) || is_bool_type(simplied_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_bool2t;
-
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
-      return to_constant_bool2t(c).value;
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
     };
 
-    simpl_res = TFunctor<bool>::simplify(
+    simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
   }
   else
@@ -1682,8 +1673,10 @@ static expr2tc simplify_floatbv_relations(
       std::function<bool(const expr2tc &)> is_constant =
         (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-      std::function<ieee_floatt &(expr2tc &)> get_value = [](
-        expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
+      std::function<ieee_floatt &(expr2tc &)> get_value =
+        [](expr2tc &c) -> ieee_floatt & {
+        return to_constant_floatbv2t(c).value;
+      };
 
       simpl_res = TFunctor<ieee_floatt>::simplify(
         simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1763,6 +1756,33 @@ expr2tc equality2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 template <class constant_type>
+struct IEEE_notequalitytor
+{
+  static expr2tc simplify(
+    const expr2tc &op1,
+    const expr2tc &op2,
+    const std::function<bool(const expr2tc &)> &is_constant,
+    std::function<constant_type &(expr2tc &)> get_value)
+  {
+    // Two constants? Simplify to result of the comparison
+    if(is_constant(op1) && is_constant(op2))
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(get_value(c1) != get_value(c2));
+    }
+
+    if(op1 == op2)
+    {
+      // x != x is the same as saying isnan(x)
+      expr2tc is_nan(new isnan2t(op1));
+      return try_simplification(is_nan);
+    }
+
+    return expr2tc();
+  }
+};
+
+template <class constant_type>
 struct Notequaltor
 {
   static expr2tc simplify(
@@ -1783,6 +1803,11 @@ struct Notequaltor
 
 expr2tc notequal2t::do_simplify(bool second __attribute__((unused))) const
 {
+  // If we're dealing with floatbvs, call IEEE_notequalitytor instead
+  if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
+    return simplify_floatbv_relations<IEEE_notequalitytor, equality2t>(
+      type, side_1, side_2);
+
   return simplify_relations<Notequaltor, notequal2t>(type, side_1, side_2);
 }
 
@@ -2213,11 +2238,11 @@ static expr2tc simplify_floatbv_2ops(
   // Try to handle NaN
   if(is_constant_floatbv2t(simplied_side_1))
     if(to_constant_floatbv2t(simplied_side_1).value.is_NaN())
-      return expr2tc(simplied_side_1->clone());
+      return simplied_side_1;
 
   if(is_constant_floatbv2t(simplied_side_2))
     if(to_constant_floatbv2t(simplied_side_2).value.is_NaN())
-      return expr2tc(simplied_side_2->clone());
+      return simplied_side_2;
 
   if(
     !is_constant_expr(simplied_side_1) || !is_constant_expr(simplied_side_2) ||
@@ -2242,8 +2267,10 @@ static expr2tc simplify_floatbv_2ops(
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-    std::function<ieee_floatt &(expr2tc &)> get_value = [](
-      expr2tc &c) -> ieee_floatt & { return to_constant_floatbv2t(c).value; };
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);

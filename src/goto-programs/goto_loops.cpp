@@ -73,7 +73,7 @@ void goto_loopst::create_function_loop(
 
   goto_programt::instructionst::iterator it = loop_head;
 
-  function_loops.push_front(loopst(context));
+  function_loops.push_front(loopst());
   function_loopst::iterator it1 = function_loops.begin();
 
   // Set original iterators
@@ -105,7 +105,7 @@ void goto_loopst::get_modified_variables(
   if(instruction->is_assign())
   {
     const code_assign2t &assign = to_code_assign2t(instruction->code);
-    add_loop_var(*loop, assign.target);
+    add_loop_var(*loop, assign.target, true);
   }
   else if(instruction->is_function_call())
   {
@@ -118,7 +118,7 @@ void goto_loopst::get_modified_variables(
       return;
 
     // First, add its return
-    add_loop_var(*loop, function_call.ret);
+    add_loop_var(*loop, function_call.ret, true);
 
     // The run over the function body and get the modified variables there
     irep_idt &identifier = to_symbol2t(function_call.function).thename;
@@ -150,21 +150,36 @@ void goto_loopst::get_modified_variables(
       get_modified_variables(head, loop, identifier);
     }
   }
+  else if(
+    instruction->is_goto() || instruction->is_return() ||
+    instruction->is_assert() || instruction->is_assume())
+  {
+    add_loop_var(*loop, instruction->guard, false);
+  }
 }
 
-void goto_loopst::add_loop_var(loopst &loop, const expr2tc &expr)
+void goto_loopst::add_loop_var(
+  loopst &loop,
+  const expr2tc &expr,
+  bool is_modified)
 {
   if(is_nil_expr(expr))
     return;
 
-  expr->foreach_operand(
-    [this, &loop](const expr2tc &e) { add_loop_var(loop, e); });
+  expr->foreach_operand([this, &loop, &is_modified](const expr2tc &e) {
+    add_loop_var(loop, e, is_modified);
+  });
 
   if(is_symbol2t(expr) && check_var_name(expr))
-    loop.add_var_to_loop(expr);
+  {
+    if(is_modified)
+      loop.add_modified_var_to_loop(expr);
+    else
+      loop.add_unmodified_var_to_loop(expr);
+  }
 }
 
-void goto_loopst::dump()
+void goto_loopst::dump() const
 {
   for(auto &function_loop : function_loops)
     function_loop.dump();

@@ -45,6 +45,7 @@ execution_statet::execution_statet(
     global_value_set(ns),
     message_handler(_message_handler)
 {
+  art1 = owning_rt;
   CS_number = 0;
   TS_number = 0;
   node_id = 0;
@@ -289,14 +290,9 @@ void execution_statet::symex_step(reachability_treet &art)
     {
       expr2tc thecode = instruction.code, assign;
       if(make_return_assignment(assign, thecode))
-      {
         goto_symext::symex_assign(assign);
-      }
-
       symex_return();
-
-      if(!is_nil_expr(assign))
-        analyze_assign(assign);
+      analyze_assign(assign);
     }
     state.source.pc++;
     break;
@@ -307,12 +303,12 @@ void execution_statet::symex_step(reachability_treet &art)
 
 void execution_statet::symex_assign(
   const expr2tc &code,
-  symex_targett::assignment_typet type,
+  const bool hidden,
   const guardt &guard)
 {
   pre_goto_guard = guardt();
 
-  goto_symext::symex_assign(code, type, guard);
+  goto_symext::symex_assign(code, hidden, guard);
 
   if(threads_state.size() >= thread_cswitch_threshold)
     analyze_assign(code);
@@ -681,7 +677,8 @@ void execution_statet::execute_guard()
   do_simplify(parent_guard);
   implies2tc assumpt(guard_expr, parent_guard);
 
-  target->assumption(guardt().as_expr(), assumpt, get_active_state().source);
+  target->assumption(
+    guardt().as_expr(), assumpt, get_active_state().source, first_loop);
 
   guardt old_guard;
   old_guard.add(threads_state[last_active_thread].guard.as_expr());
@@ -763,6 +760,9 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
 void execution_statet::analyze_assign(const expr2tc &code)
 {
+  if(is_nil_expr(code))
+    return;
+
   std::set<expr2tc> global_reads, global_writes;
   const code_assign2t &assign = to_code_assign2t(code);
   get_expr_globals(ns, assign.target, global_writes);

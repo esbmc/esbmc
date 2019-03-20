@@ -108,10 +108,6 @@ class dereference_callbackt
 public:
   virtual ~dereference_callbackt() = default;
 
-  /** Triggers a 'valid object' check when accessing a dynamically allocated
-   *  object. This is legacy, and will be deleted at some point. */
-  virtual bool is_valid_object(const irep_idt &identifier) = 0;
-
   /** Encode a dereference failure assertion. If a dereference does, or can
    *  trigger undefined or illegal behaviour, then this method is called to
    *  record it so that it can be asserted against.
@@ -120,7 +116,6 @@ public:
    *  @param guard Guard for this assertion -- evaluates to true whe this
    *         assertion has been violated.
    */
-
   virtual void dereference_failure(
     const std::string &property,
     const std::string &msg,
@@ -157,6 +152,15 @@ public:
                                    __attribute__((unused)))
   {
   }
+
+  /** Determine whether variable is "alive".
+   *  For function-local variable symbols, determine whether or not a pointer
+   *  to the corresponding l1 storage is considered live: if the
+   *  corresponding activation record has been left, then it isn't.
+   *  @param sym Symbol to check validity of.
+   *  @return True if variable is alive
+   *  */
+  virtual bool is_live_variable(const symbol2t &sym) = 0;
 };
 
 /** Class containing expression dereference logic.
@@ -194,7 +198,8 @@ public:
   virtual ~dereferencet() = default;
 
   /** The different ways in which a pointer may be accessed. */
-  typedef enum {
+  typedef enum
+  {
     READ,     /// The result of the expression is only read.
     WRITE,    /// The result of the expression will be written to.
     FREE,     /// The referred to object will be freed.

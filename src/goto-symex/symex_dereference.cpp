@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <goto-symex/goto_symex.h>
+#include <goto-symex/reachability_tree.h>
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
 #include <util/irep2.h>
@@ -64,6 +65,35 @@ void symex_dereference_statet::dump_internal_state(
 {
   goto_symex.internal_deref_items.insert(
     goto_symex.internal_deref_items.begin(), data.begin(), data.end());
+}
+
+bool symex_dereference_statet::is_live_variable(const symbol2t &sym)
+{
+  // NB, symbols shouldn't hit this point with no renaming (i.e. level0),
+  // this should eventually be asserted.
+  if (sym.rlevel == symbol2t::level0 || sym.rlevel == symbol2t::level1_global ||
+      sym.rlevel == symbol2t::level2_global)
+    return true;
+
+  // Symbol is renamed to at least level 1, fetch the relevant thread data
+  const execution_statet &ex_state = goto_symex.art1->get_cur_state();
+  const goto_symex_statet &state = ex_state.threads_state[sym.thread_num];
+
+  // Level one names represent the storage for a variable, and this symbol
+  // may have entered pointer tracking at any time the variable had its address
+  // taken (and subsequently been propagated from there). If the stack frame
+  // that that variable was in has now expired, it's an invalid pointer. Look
+  // up the stack frames currently active the corresponding thread to see
+  // whether there are any records for the lexical variable that have this
+  // activation record.
+  for (auto it = state.call_stack.rbegin(); it != state.call_stack.rend(); it++) {
+    if (it->level1.current_number(sym.thename) == sym.level1_num)
+      return true;
+  }
+
+  // There were no stack frames where that variable existed and had the correct
+  // level1 num: it's dead Jim.
+  return false;
 }
 
 void goto_symext::dereference(expr2tc &expr, dereferencet::modet mode)

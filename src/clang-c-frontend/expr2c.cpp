@@ -1495,6 +1495,18 @@ std::string expr2ct::convert_code_decl_block(const codet &src, unsigned indent)
   return dest;
 }
 
+std::string expr2ct::convert_code_dead(const codet &src, unsigned indent)
+{
+  // initializer to go away
+  if(src.operands().size() != 1)
+  {
+    unsigned precedence;
+    return convert_norep(src, precedence);
+  }
+
+  return indent_str(indent) + "dead " + convert(src.op0()) + ";";
+}
+
 std::string expr2ct::convert_code_decl(const codet &src, unsigned indent)
 {
   if(src.operands().size() != 1 && src.operands().size() != 2)
@@ -1684,6 +1696,9 @@ std::string expr2ct::convert_code(const codet &src, unsigned indent)
 
   if(statement == "decl-block")
     return convert_code_decl_block(src, indent);
+
+  if(statement == "dead")
+    return convert_code_dead(src, indent);
 
   if(statement == "assign")
     return convert_code_assign(src, indent);

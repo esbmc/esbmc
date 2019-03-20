@@ -649,14 +649,14 @@ expr2tc boolector_convt::get_array_elem(
 {
   const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(array);
 
-  int size;
+  uint32_t size;
   char **indicies, **values;
   boolector_array_assignment(btor, ast->a, &indicies, &values, &size);
 
   BigInt val = 0;
   if(size > 0)
   {
-    for(int i = 0; i < size; i++)
+    for(uint32_t i = 0; i < size; i++)
     {
       auto idx = string2integer(indicies[i], 2);
       if(idx.to_uint64() == index)

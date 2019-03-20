@@ -494,11 +494,12 @@ protected:
    *  a single new value to be bound to a new symbol.
    *  @param code Code to assign; with lhs and rhs.
    *  @param type Assignment type, visible by default
+   *  @param kind The step kind, by default is plain BMC
    *  @param guard A guard for the assignment, true by default
    */
   virtual void symex_assign(
     const expr2tc &code,
-    symex_targett::assignment_typet type = symex_targett::STATE,
+    const bool hidden = false,
     const guardt &guard = guardt());
 
   /** Recursively perform symex assign. @see symex_assign */
@@ -507,7 +508,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type);
+    const bool hidden);
 
   /**
    *  Perform assignment to a symbol.
@@ -523,7 +524,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type);
+    const bool hidden);
 
   /**
    *  Perform assignment to a structure.
@@ -548,7 +549,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type);
+    const bool hidden);
 
   /**
    *  Perform assignment to an extract irep.
@@ -568,7 +569,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type);
+    const bool hidden);
 
   /**
    *  Perform assignment to a typecast irep.
@@ -583,7 +584,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type);
+    const bool hidden);
 
   /**
    *  Perform assignment to an array.
@@ -600,7 +601,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type);
+    const bool hidden);
 
   /**
    *  Perform assignment to a struct.
@@ -616,7 +617,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type);
+    const bool hidden);
 
   /**
    *  Perform assignment to an "if".
@@ -632,7 +633,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type);
+    const bool hidden);
 
   /**
    *  Perform assignment to a byte extract.
@@ -649,7 +650,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type);
+    const bool hidden);
 
   /**
    *  Assign through a 'concat' operation. These are generated when we fail to
@@ -667,7 +668,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     guardt &guard,
-    symex_targett::assignment_typet type);
+    const bool hidden);
 
   /** Symbolic implementation of malloc. */
   expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
@@ -837,28 +838,21 @@ protected:
   goto_symext &goto_symex;
   goto_symext::statet &state;
 
-  // overloads from dereference_callbackt
-  bool is_valid_object(const irep_idt &identifier __attribute__((unused))) override
-  {
-    return true;
-  }
-
   void dereference_failure(
     const std::string &property,
     const std::string &msg,
     const guardt &guard) override;
 
-  void get_value_set(
-    const expr2tc &expr,
-    value_setst::valuest &value_set) override;
+  void
+  get_value_set(const expr2tc &expr, value_setst::valuest &value_set) override;
 
-  bool has_failed_symbol(
-    const expr2tc &expr,
-    const symbolt *&symbol) override;
+  bool has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) override;
 
   void rename(expr2tc &expr) override;
 
-  void dump_internal_state(const std::list<struct internal_item> &data) override;
+  void
+  dump_internal_state(const std::list<struct internal_item> &data) override;
+  bool is_live_variable(const symbol2t &sym) override;
 };
 
 #endif

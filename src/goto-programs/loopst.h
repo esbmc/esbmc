@@ -13,25 +13,26 @@
 class loopst
 {
 public:
-  loopst(contextt &_context) : context(_context), size(0)
+  loopst() : size(0)
   {
   }
 
   typedef hash_set_cont<expr2tc, irep2_hash> loop_varst;
 
-  const loop_varst &get_loop_vars() const;
+  const loop_varst &get_modified_loop_vars() const;
+  const loop_varst &get_unmodified_loop_vars() const;
 
-  goto_programt::targett get_original_loop_exit() const;
+  const goto_programt::targett get_original_loop_exit() const;
   void set_original_loop_exit(goto_programt::targett _loop_exit);
 
-  goto_programt::targett get_original_loop_head() const;
+  const goto_programt::targett get_original_loop_head() const;
   void set_original_loop_head(goto_programt::targett _loop_head);
 
-  void add_var_to_loop(loop_varst &_loop_vars);
-  void add_var_to_loop(const expr2tc &expr);
+  void add_modified_var_to_loop(const expr2tc &expr);
+  void add_unmodified_var_to_loop(const expr2tc &expr);
 
-  void dump();
-  void dump_loop_vars();
+  void dump() const;
+  void dump_loop_vars() const;
 
   void set_size(std::size_t size)
   {
@@ -39,8 +40,8 @@ public:
   }
 
 protected:
-  contextt &context;
-  loop_varst loop_vars;
+  loop_varst modified_loop_vars;
+  loop_varst unmodified_loop_vars;
 
   goto_programt::targett original_loop_head;
   goto_programt::targett original_loop_exit;

@@ -93,6 +93,29 @@ void clang_c_adjust::adjust_for(codet &code)
 
   // If the condition is not of boolean type, it must be casted
   gen_typecast_bool(ns, code.op1());
+
+  // the "for" statement has an implicit block around it,
+  // since code.op0() may contain declarations
+  //
+  // we therefore transform
+  //
+  //   for(a;b;c) d;
+  //
+  // to
+  //
+  //   { a; for(;b;c) d; }
+  //
+
+  code_blockt code_block;
+  code_block.location() = code.location();
+  if(to_code(code.op3()).get_statement() == "block")
+    code_block.end_location(to_code(code.op3()).end_location());
+
+  code_block.reserve_operands(2);
+  code_block.move_to_operands(code.op0());
+  code.op0().make_nil();
+  code_block.move_to_operands(code);
+  code.swap(code_block);
 }
 
 void clang_c_adjust::adjust_switch(codet &code)

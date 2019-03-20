@@ -247,8 +247,7 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
 
   if(expr.id() == "shr" || expr.id() == "shl")
   {
-    gen_typecast_arithmetic(ns, op0);
-    gen_typecast_arithmetic(ns, op1);
+    gen_typecast(ns, op1, op0.type());
 
     if(is_number(op0.type()) && is_number(op1.type()))
     {
@@ -259,6 +258,7 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
           expr.id("lshr");
           return;
         }
+
         if(type0.id() == "signedbv")
         {
           expr.id("ashr");
@@ -273,19 +273,10 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   {
     gen_typecast_arithmetic(ns, op0, op1);
 
-    const typet &type0 = ns.follow(op0.type());
-    const typet &type1 = ns.follow(op1.type());
-
     if(
       expr.id() == "+" || expr.id() == "-" || expr.id() == "*" ||
       expr.id() == "/")
     {
-      if(type0.id() == "pointer" || type1.id() == "pointer")
-      {
-        //        typecheck_expr_pointer_arithmetic(expr);
-        return;
-      }
-
       adjust_float_arith(expr);
       return;
     }
@@ -525,6 +516,7 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     gen_typecast(ns, op1, type0);
     return;
   }
+
   if(statement == "assign_shl" || statement == "assign_shr")
   {
     gen_typecast_arithmetic(ns, op1);

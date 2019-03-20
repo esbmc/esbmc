@@ -24,7 +24,8 @@ void symex_target_equationt::assignment(
   const expr2tc &rhs,
   const sourcet &source,
   std::vector<stack_framet> stack_trace,
-  assignment_typet assignment_type)
+  const bool hidden,
+  unsigned loop_number)
 {
   assert(!is_nil_expr(lhs));
 
@@ -35,11 +36,12 @@ void symex_target_equationt::assignment(
   SSA_step.lhs = lhs;
   SSA_step.original_lhs = original_lhs;
   SSA_step.rhs = rhs;
-  SSA_step.assignment_type = assignment_type;
+  SSA_step.hidden = hidden;
   SSA_step.cond = equality2tc(lhs, rhs);
   SSA_step.type = goto_trace_stept::ASSIGNMENT;
   SSA_step.source = source;
   SSA_step.stack_trace = stack_trace;
+  SSA_step.loop_number = loop_number;
 
   if(debug_print)
     SSA_step.short_output(ns, std::cout);
@@ -67,7 +69,8 @@ void symex_target_equationt::output(
 void symex_target_equationt::assumption(
   const expr2tc &guard,
   const expr2tc &cond,
-  const sourcet &source)
+  const sourcet &source,
+  unsigned loop_number)
 {
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
@@ -76,6 +79,7 @@ void symex_target_equationt::assumption(
   SSA_step.cond = cond;
   SSA_step.type = goto_trace_stept::ASSUME;
   SSA_step.source = source;
+  SSA_step.loop_number = loop_number;
 
   if(debug_print)
     SSA_step.short_output(ns, std::cout);
@@ -86,7 +90,8 @@ void symex_target_equationt::assertion(
   const expr2tc &cond,
   const std::string &msg,
   std::vector<stack_framet> stack_trace,
-  const sourcet &source)
+  const sourcet &source,
+  unsigned loop_number)
 {
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
@@ -97,6 +102,7 @@ void symex_target_equationt::assertion(
   SSA_step.source = source;
   SSA_step.comment = msg;
   SSA_step.stack_trace = stack_trace;
+  SSA_step.loop_number = loop_number;
 
   if(debug_print)
     SSA_step.short_output(ns, std::cout);
@@ -242,6 +248,11 @@ void symex_target_equationt::short_output(std::ostream &out, bool show_ignored)
   }
 }
 
+void symex_target_equationt::SSA_stept::dump() const
+{
+  output(*migrate_namespace_lookup, std::cout);
+}
+
 void symex_target_equationt::SSA_stept::output(
   const namespacet &ns,
   std::ostream &out) const
@@ -270,18 +281,7 @@ void symex_target_equationt::SSA_stept::output(
 
   case goto_trace_stept::ASSIGNMENT:
     out << "ASSIGNMENT (";
-    switch(assignment_type)
-    {
-    case HIDDEN:
-      out << "HIDDEN";
-      break;
-    case STATE:
-      out << "STATE";
-      break;
-    default:;
-    }
-
-    out << ")" << std::endl;
+    out << (hidden ? "HIDDEN" : "") << ")\n";
     break;
 
   default:

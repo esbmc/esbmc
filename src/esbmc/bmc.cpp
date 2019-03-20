@@ -23,6 +23,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <esbmc/bmc.h>
 #include <esbmc/document_subgoals.h>
 #include <fstream>
+#include <goto-programs/goto_loops.h>
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/reachability_tree.h>
@@ -41,7 +42,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/time_stopping.h>
 
 bmct::bmct(
-  const goto_functionst &funcs,
+  goto_functionst &funcs,
   optionst &opts,
   contextt &_context,
   message_handlert &_message_handler)
@@ -88,8 +89,7 @@ void bmct::do_cbmc(
   eq->convert(*smt_conv.get());
 }
 
-void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq
-                            __attribute__((unused)))
+void bmct::successful_trace()
 {
   if(options.get_bool_option("result-only"))
     return;
@@ -366,14 +366,14 @@ void bmct::report_trace(
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
-  bool show_cex = options.get_bool_option("show-counter-example");
+  bool show_cex = options.get_bool_option("show-cex");
 
   switch(res)
   {
   case smt_convt::P_UNSATISFIABLE:
     if(!bs)
     {
-      successful_trace(eq);
+      successful_trace();
     }
     break;
 
@@ -454,6 +454,7 @@ smt_convt::resultt bmct::start_bmc()
   boost::shared_ptr<symex_target_equationt> eq;
   smt_convt::resultt res = run(eq);
   report_result(res);
+  report_trace(res, eq);
   return res;
 }
 
@@ -482,7 +483,8 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
       if(config.options.get_bool_option("smt-model"))
         runtime_solver->print_model();
 
-      report_trace(res, eq);
+      if(config.options.get_bool_option("bidirectional"))
+        bidirectional_search(runtime_solver, eq);
     }
 
     if(res)
@@ -508,6 +510,136 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
   } while(symex->setup_next_formula());
 
   return interleaving_failed > 0 ? smt_convt::P_SATISFIABLE : res;
+}
+
+void bmct::bidirectional_search(
+  boost::shared_ptr<smt_convt> &smt_conv,
+  boost::shared_ptr<symex_target_equationt> &eq)
+{
+  // We should only analyse the inductive step's cex and we're running
+  // in k-induction mode
+  if(!(options.get_bool_option("inductive-step") &&
+       options.get_bool_option("k-induction")))
+    return;
+
+  // We'll walk list of SSA steps and look for inductive assignments
+  std::vector<stack_framet> frames;
+  unsigned assert_loop_number = 0;
+  for(auto ssait : eq->SSA_steps)
+  {
+    if(ssait.is_assert() && smt_conv->l_get(ssait.cond_ast).is_false())
+    {
+      if(!ssait.loop_number)
+        return;
+
+      // Save the location of the failed assertion
+      frames = ssait.stack_trace;
+      assert_loop_number = ssait.loop_number;
+
+      // We are not interested in instructions before the failed assertion yet
+      break;
+    }
+  }
+
+  for(auto f : frames)
+  {
+    // Look for the function
+    goto_functionst::function_mapt::iterator fit =
+      symex->goto_functions.function_map.find(f.function);
+    assert(fit != symex->goto_functions.function_map.end());
+
+    // Find function loops
+    goto_loopst loops(
+      f.function, symex->goto_functions, fit->second, *get_message_handler());
+
+    if(!loops.get_loops().size())
+      continue;
+
+    auto lit = loops.get_loops().begin(), lie = loops.get_loops().end();
+    while(lit != lie)
+    {
+      auto loop_head = lit->get_original_loop_head();
+
+      // Skip constraints from other loops
+      if(loop_head->loop_number == assert_loop_number)
+        break;
+
+      ++lit;
+    }
+
+    if(lit == lie)
+      continue;
+
+    // Get the loop vars
+    auto all_loop_vars = lit->get_modified_loop_vars();
+    all_loop_vars.insert(
+      lit->get_unmodified_loop_vars().begin(),
+      lit->get_unmodified_loop_vars().end());
+
+    // Now, walk the SSA and get the last value of each variable before the loop
+    hash_map_cont<irep_idt, std::pair<expr2tc, expr2tc>, irep_id_hash>
+      var_ssa_list;
+
+    for(auto ssait : eq->SSA_steps)
+    {
+      if(ssait.loop_number == lit->get_original_loop_head()->loop_number)
+        break;
+
+      if(ssait.ignore)
+        continue;
+
+      if(!ssait.is_assignment())
+        continue;
+
+      expr2tc new_lhs = ssait.original_lhs;
+      renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
+
+      if(all_loop_vars.find(new_lhs) == all_loop_vars.end())
+        continue;
+
+      var_ssa_list[to_symbol2t(new_lhs).thename] = {ssait.original_lhs,
+                                                    ssait.rhs};
+    }
+
+    if(!var_ssa_list.size())
+      return;
+
+    // Query the solver for the value of each variable
+    std::vector<expr2tc> equalities;
+    for(auto it : var_ssa_list)
+    {
+      // We don't support arrays or pointers
+      if(is_array_type(it.second.first) || is_pointer_type(it.second.first))
+        return;
+
+      auto lhs = build_lhs(smt_conv, it.second.first);
+      auto value = build_rhs(smt_conv, it.second.second);
+
+      // Add lhs and rhs to the list of new constraints
+      equalities.push_back(equality2tc(lhs, value));
+    }
+
+    // Build new assertion
+    expr2tc constraints = equalities[0];
+    for(std::size_t i = 1; i < equalities.size(); ++i)
+      constraints = and2tc(constraints, equalities[i]);
+
+    // and add it to the goto program
+    goto_programt::targett loop_exit = lit->get_original_loop_exit();
+
+    goto_programt::instructiont i;
+    i.make_assertion(not2tc(constraints));
+    i.location = loop_exit->location;
+    i.location.user_provided(false);
+    i.loop_number = loop_exit->loop_number;
+    i.inductive_assertion = true;
+
+    fit->second.body.insert_swap(loop_exit, i);
+
+    // recalculate numbers, etc.
+    symex->goto_functions.update();
+    return;
+  }
 }
 
 smt_convt::resultt
@@ -613,9 +745,7 @@ bmct::run_thread(boost::shared_ptr<symex_target_equationt> &eq)
 
     if(result->remaining_claims == 0)
     {
-      if(
-        options.get_bool_option("smt-formula-too") ||
-        options.get_bool_option("smt-formula-only"))
+      if(options.get_bool_option("smt-formula-only"))
       {
         std::cout << "No VCC remaining, no SMT formula will be generated for"
                   << " the program\n";

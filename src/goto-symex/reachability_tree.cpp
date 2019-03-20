@@ -25,7 +25,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <util/std_expr.h>
 
 reachability_treet::reachability_treet(
-  const goto_functionst &goto_functions,
+  goto_functionst &goto_functions,
   const namespacet &ns,
   optionst &opts,
   boost::shared_ptr<symex_targett> target,

@@ -703,8 +703,6 @@ void cpp_typecheck_resolvet::make_constructors(
 {
   resolve_identifierst new_identifiers;
 
-  resolve_identifierst::iterator next;
-
   for(auto &identifier : identifiers)
   {
     if(identifier.id() != "type")
@@ -1465,7 +1463,7 @@ exprt cpp_typecheck_resolvet::resolve(
       result.type() = pointer_typet();
       result.type().subtype() = empty_typet();
       result.location() = location;
-      return result;
+      return std::move(result);
     }
     else if(
       base_name == "__func__" || base_name == "__FUNCTION__" ||
@@ -1475,7 +1473,7 @@ exprt cpp_typecheck_resolvet::resolve(
       // __FUNCTION__ and __PRETTY_FUNCTION__ are GCC-specific
       string_constantt s(location.get_function());
       s.location() = location;
-      return s;
+      return std::move(s);
     }
   }
 

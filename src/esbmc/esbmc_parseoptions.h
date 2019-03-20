@@ -49,17 +49,17 @@ protected:
 
   int do_base_case(
     optionst &opts,
-    const goto_functionst &goto_functions,
+    goto_functionst &goto_functions,
     const BigInt &k_step);
 
   int do_forward_condition(
     optionst &opts,
-    const goto_functionst &goto_functions,
+    goto_functionst &goto_functions,
     const BigInt &k_step);
 
   int do_inductive_step(
     optionst &opts,
-    const goto_functionst &goto_functions,
+    goto_functionst &goto_functions,
     const BigInt &k_step);
 
   bool read_goto_binary(goto_functionst &goto_functions);
