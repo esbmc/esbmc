@@ -100,8 +100,7 @@ private:
     typet type,
     std::string base_name,
     std::string pretty_name,
-    locationt location,
-    bool is_used);
+    locationt location);
 
   void get_field_name(
     const clang::FieldDecl &fd,

@@ -30,7 +30,7 @@ public:
   const irep_idt &display_name() const;
 
   // global use
-  bool is_type, is_macro, is_parameter, is_used;
+  bool is_type, is_macro, is_parameter;
 
   // ANSI-C
   bool lvalue, static_lifetime, file_local, is_extern;

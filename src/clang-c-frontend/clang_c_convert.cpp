@@ -282,8 +282,7 @@ bool clang_c_convertert::get_struct_union_class(
     t,
     identifier,
     "tag-" + identifier,
-    location_begin,
-    true);
+    location_begin);
 
   // Save the struct/union/class type address and name to the type map
   std::string symbol_name = symbol.name.as_string();
@@ -402,8 +401,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     t,
     vd.getName().str(),
     identifier,
-    location_begin,
-    true);
+    location_begin);
 
   symbol.lvalue = true;
   symbol.static_lifetime =
@@ -493,11 +491,6 @@ bool clang_c_convertert::get_function(
   std::string base_name, pretty_name;
   get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
 
-  // special case for is_used: we'll always convert the entry point,
-  // either the main function or the user defined entry point
-  bool is_used =
-    fd.isMain() || (fd.getName().str() == config.main) || fd.isUsed();
-
   symbolt symbol;
   get_default_symbol(
     symbol,
@@ -505,8 +498,7 @@ bool clang_c_convertert::get_function(
     type,
     base_name,
     pretty_name,
-    location_begin,
-    is_used);
+    location_begin);
 
   std::string symbol_name = symbol.name.as_string();
 
@@ -599,8 +591,7 @@ bool clang_c_convertert::get_function_params(
     param_type,
     name,
     pretty_name,
-    location_begin,
-    true); // function parameter cannot be static
+    location_begin);
 
   param_symbol.lvalue = true;
   param_symbol.is_parameter = true;
@@ -2419,8 +2410,7 @@ void clang_c_convertert::get_default_symbol(
   typet type,
   std::string base_name,
   std::string pretty_name,
-  locationt location,
-  bool is_used)
+  locationt location)
 {
   symbol.mode = "C";
   symbol.module = module_name;
@@ -2429,7 +2419,6 @@ void clang_c_convertert::get_default_symbol(
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
   symbol.name = pretty_name;
-  symbol.is_used = is_used;
 }
 
 void clang_c_convertert::get_field_name(
@@ -2661,9 +2650,6 @@ symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
       if(symbol.type.is_not_nil() && !s->type.is_not_nil())
         s->swap(symbol);
     }
-
-    // Update is_used
-    s->is_used |= symbol.is_used;
   }
 
   return s;
