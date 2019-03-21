@@ -19,7 +19,7 @@ void symbolt::clear()
   value.make_nil();
   location.make_nil();
   lvalue = static_lifetime = file_local = is_extern = is_type = is_parameter =
-    is_macro = is_used = false;
+    is_macro = false;
   name = module = base_name = mode = "";
 }
 
@@ -44,7 +44,6 @@ void symbolt::swap(symbolt &b)
   SYM_SWAP2(static_lifetime);
   SYM_SWAP2(file_local);
   SYM_SWAP2(is_extern);
-  SYM_SWAP2(is_used);
 }
 
 void symbolt::dump() const
@@ -77,8 +76,6 @@ void symbolt::show(std::ostream &out) const
     out << " extern";
   if(is_macro)
     out << " macro";
-  if(is_used)
-    out << " used";
 
   out << std::endl;
   out << "Location....: " << location << std::endl;

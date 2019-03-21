@@ -93,8 +93,7 @@ private:
     typet type,
     std::string base_name,
     std::string pretty_name,
-    locationt location,
-    bool is_used);
+    locationt location);
 
   std::string get_decl_name(const clang::NamedDecl &nd);
 

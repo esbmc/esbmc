@@ -132,21 +132,3 @@ void contextt::foreach_operand_impl_in_order(symbol_delegate &expr)
     expr(*ordered_symbol);
   }
 }
-
-void contextt::remove_unused()
-{
-  for(auto it = symbols.begin(), ite = symbols.end(); it != ite;)
-  {
-    if(!it->second.is_used)
-      it = symbols.erase(it);
-    else
-      ++it;
-  }
-
-  ordered_symbols.erase(
-    std::remove_if(
-      ordered_symbols.begin(),
-      ordered_symbols.end(),
-      [](const symbolt *s) { return !s->is_used; }),
-    ordered_symbols.end());
-}

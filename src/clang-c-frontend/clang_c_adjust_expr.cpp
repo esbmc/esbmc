@@ -562,7 +562,6 @@ void clang_c_adjust::adjust_side_effect_function_call(
       new_symbol.location = expr.location();
       new_symbol.type = f_op.type();
       new_symbol.mode = "C";
-      new_symbol.is_used = true;
 
       // Adjust type
       to_code_type(new_symbol.type).make_ellipsis();
@@ -1140,7 +1139,6 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
   argc_symbol.type = op0.type();
   argc_symbol.static_lifetime = true;
   argc_symbol.lvalue = true;
-  argc_symbol.is_used = true;
 
   symbolt *argc_new_symbol;
   context.move(argc_symbol, argc_new_symbol);
@@ -1158,7 +1156,6 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
   argv_symbol.type = array_typet(op1.type().subtype(), size_expr);
   argv_symbol.static_lifetime = true;
   argv_symbol.lvalue = true;
-  argv_symbol.is_used = true;
 
   symbolt *argv_new_symbol;
   context.move(argv_symbol, argv_new_symbol);
@@ -1172,7 +1169,6 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
     envp_size_symbol.name = "envp_size'";
     envp_size_symbol.type = op0.type(); // same type as argc!
     envp_size_symbol.static_lifetime = true;
-    envp_size_symbol.is_used = true;
 
     symbolt *envp_new_size_symbol;
     context.move(envp_size_symbol, envp_new_size_symbol);
@@ -1182,7 +1178,6 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
     envp_symbol.name = "envp'";
     envp_symbol.type = op2.type();
     envp_symbol.static_lifetime = true;
-    envp_symbol.is_used = true;
     exprt size_expr = symbol_expr(*envp_new_size_symbol);
     envp_symbol.type = array_typet(envp_symbol.type.subtype(), size_expr);
 
@@ -1242,7 +1237,6 @@ void clang_c_adjust::adjust_builtin_va_arg(exprt &expr)
   symbol.base_name = "builtin_va_arg";
   symbol.name = "builtin_va_arg";
   symbol.type = symbol_type;
-  symbol.is_used = true;
 
   context.move(symbol);
 }

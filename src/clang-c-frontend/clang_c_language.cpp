@@ -171,10 +171,6 @@ bool clang_c_languaget::typecheck(
   if(c_link(context, new_context, message_handler, module))
     return true;
 
-  // Remove unused
-  if(!config.options.get_bool_option("keep-unused"))
-    context.remove_unused();
-
   return false;
 }
 
@@ -225,19 +221,15 @@ unsigned __ESBMC_POINTER_OBJECT(const void *);
 signed __ESBMC_POINTER_OFFSET(const void *);
 
 // malloc
-__attribute__((used))
 __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_alloc[1];
 
-__attribute__((used))
 __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_deallocated[1];
 
-__attribute__((used))
 __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_is_dynamic[1];
 
-__attribute__((used))
 __attribute__((annotate("__ESBMC_inf_size")))
 unsigned long __ESBMC_alloc_size[1];
 
@@ -299,8 +291,8 @@ _Bool __ESBMC_check_delta_stability(double *, double, int, int);
 // Forward decs for pthread main thread begin/end hooks. Because they're
 // pulled in from the C library, they need to be declared prior to pulling
 // them in, for type checking.
-__attribute__((used)) void pthread_start_main_hook(void);
-__attribute__((used)) void pthread_end_main_hook(void);
+void pthread_start_main_hook(void);
+void pthread_end_main_hook(void);
 
 // Forward declarations for nondeterministic types.
 int nondet_int();

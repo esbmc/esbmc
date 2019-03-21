@@ -65,8 +65,6 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
       out << " extern";
     if(s.is_macro)
       out << " macro";
-    if(s.is_used)
-      out << " used";
 
     out << std::endl;
     out << "Location....: " << s.location << std::endl;
