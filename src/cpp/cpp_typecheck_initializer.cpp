@@ -148,7 +148,7 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
   {
     // we need a constructor
 
-    symbol_exprt expr_symbol(symbol.name);
+    symbol_exprt expr_symbol(symbol.id);
 
     exprt::operandst ops;
     ops.push_back(symbol.value);

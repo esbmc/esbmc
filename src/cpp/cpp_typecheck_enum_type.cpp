@@ -20,7 +20,7 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
   irept::subt &components = body.get_sub();
 
   typet enum_type("symbol");
-  enum_type.identifier(enum_symbol.name);
+  enum_type.identifier(enum_symbol.id);
 
   mp_integer i = 0;
 
@@ -42,7 +42,7 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
 
     symbolt symbol;
 
-    symbol.name = id2string(enum_symbol.name) + "::" + id2string(name);
+    symbol.id = id2string(enum_symbol.id) + "::" + id2string(name);
     symbol.base_name = name;
     symbol.value.swap(final_value);
     symbol.location = static_cast<const locationt &>(it->find("#location"));
@@ -113,7 +113,7 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
 
     symbolt symbol;
 
-    symbol.name = symbol_name;
+    symbol.id = symbol_name;
     symbol.base_name = base_name;
     symbol.value.make_nil();
     symbol.location = type.location();

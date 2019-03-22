@@ -289,7 +289,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     if(cur_state->guard.is_false() || goto_state.guard.is_false())
     {
-      rhs = symbol2tc(type, symbol.name);
+      rhs = symbol2tc(type, symbol.id);
 
       // Try to get the value
       renaming::level2t::rename_to_record(rhs, variable);
@@ -297,8 +297,8 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     }
     else
     {
-      symbol2tc true_val(type, symbol.name);
-      symbol2tc false_val(type, symbol.name);
+      symbol2tc true_val(type, symbol.id);
+      symbol2tc false_val(type, symbol.id);
 
       // Semi-manually rename these symbols: we may be referring to an l1
       // variable not in the current scope, thus we need to directly specify

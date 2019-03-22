@@ -32,7 +32,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     symbolt argc_symbol;
 
     argc_symbol.base_name = "argc";
-    argc_symbol.name = "argc'";
+    argc_symbol.id = "argc'";
     argc_symbol.type = op0.type();
     argc_symbol.static_lifetime = true;
     argc_symbol.lvalue = true;
@@ -75,7 +75,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     symbolt argv_symbol;
 
     argv_symbol.base_name = "argv";
-    argv_symbol.name = "argv'";
+    argv_symbol.id = "argv'";
     argv_symbol.type = argv_type;
     argv_symbol.static_lifetime = true;
     argv_symbol.lvalue = true;
@@ -88,14 +88,14 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
   {
     symbolt envp_symbol;
     envp_symbol.base_name = "envp";
-    envp_symbol.name = "envp'";
+    envp_symbol.id = "envp'";
     envp_symbol.type =
       (static_cast<const exprt &>(arguments.get_sub()[2])).type();
     envp_symbol.static_lifetime = true;
 
     symbolt envp_size_symbol, *envp_new_size_symbol;
     envp_size_symbol.base_name = "envp_size";
-    envp_size_symbol.name = "envp_size'";
+    envp_size_symbol.id = "envp_size'";
     envp_size_symbol.type = op0.type(); // same type as argc!
     envp_size_symbol.static_lifetime = true;
     move_symbol(envp_size_symbol, envp_new_size_symbol);

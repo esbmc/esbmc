@@ -150,8 +150,8 @@ expr2tc goto_symext::symex_mem(
   symbol.base_name = "dynamic_" + i2string(dynamic_counter) +
                      (size_is_one ? "_value" : "_array");
 
-  symbol.name = std::string("symex_dynamic::") +
-                (!is_malloc ? "alloca::" : "") + id2string(symbol.base_name);
+  symbol.id = std::string("symex_dynamic::") + (!is_malloc ? "alloca::" : "") +
+              id2string(symbol.base_name);
   symbol.lvalue = true;
 
   typet renamedtype = ns.follow(migrate_type_back(type));
@@ -178,13 +178,13 @@ expr2tc goto_symext::symex_mem(
   if(size_is_one)
   {
     rhs_addrof->type = get_pointer_type(pointer_typet(symbol.type));
-    rhs_addrof->ptr_obj = symbol2tc(new_type, symbol.name);
+    rhs_addrof->ptr_obj = symbol2tc(new_type, symbol.id);
   }
   else
   {
     type2tc subtype;
     migrate_type(symbol.type.subtype(), subtype);
-    expr2tc sym = symbol2tc(new_type, symbol.name);
+    expr2tc sym = symbol2tc(new_type, symbol.id);
     expr2tc idx_val = gen_ulong(0);
     expr2tc idx = index2tc(subtype, sym, idx_val);
     rhs_addrof->type = get_pointer_type(pointer_typet(symbol.type.subtype()));
@@ -374,7 +374,7 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   symbolt symbol;
   symbol.base_name = do_array ? "dynamic_" + count_string + "_array"
                               : "dynamic_" + count_string + "_value";
-  symbol.name = "symex_dynamic::" + id2string(symbol.base_name);
+  symbol.id = "symex_dynamic::" + id2string(symbol.base_name);
   symbol.lvalue = true;
   symbol.mode = "C++";
 
@@ -402,12 +402,12 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 
   if(do_array)
   {
-    symbol2tc sym(newtype, symbol.name);
+    symbol2tc sym(newtype, symbol.id);
     index2tc idx(renamedtype2, sym, gen_ulong(0));
     rhs->ptr_obj = idx;
   }
   else
-    rhs->ptr_obj = symbol2tc(newtype, symbol.name);
+    rhs->ptr_obj = symbol2tc(newtype, symbol.id);
 
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
@@ -725,7 +725,7 @@ void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
 
     va_rhs = symbol2tc(
       symbol_type,
-      s->name,
+      s->id,
       symbol2t::level1,
       0,
       0,
@@ -836,7 +836,7 @@ void goto_symext::intrinsic_memset(
 
       std::function<bool(const type2tc &, unsigned int)> right_sized_field;
       right_sized_field = [item, sz, &right_sized_field, &ref_types](
-        const type2tc &strct, unsigned int offs) -> bool {
+                            const type2tc &strct, unsigned int offs) -> bool {
         const struct_type2t &sref = to_struct_type(strct);
         bool retval = false;
         unsigned int i = 0;

@@ -145,7 +145,7 @@ public:
     symbol.location = location();
     symbol.value = decl_value();
     symbol.type = type();
-    symbol.name = get_name();
+    symbol.id = get_name();
     symbol.base_name = get_base_name();
     symbol.is_type = get_is_type();
     symbol.is_extern = get_is_extern();

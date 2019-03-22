@@ -92,7 +92,7 @@ private:
     std::string module_name,
     typet type,
     std::string base_name,
-    std::string pretty_name,
+    std::string unique_name,
     locationt location);
 
   std::string get_decl_name(const clang::NamedDecl &nd);

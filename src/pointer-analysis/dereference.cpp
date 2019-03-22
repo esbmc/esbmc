@@ -530,7 +530,7 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
 
   // else, do new symbol
   symbolt symbol;
-  symbol.name = "symex::invalid_object" + i2string(invalid_counter++);
+  symbol.id = "symex::invalid_object" + i2string(invalid_counter++);
   symbol.base_name = "invalid_object";
   symbol.type = migrate_type_back(the_type);
 
@@ -1828,8 +1828,8 @@ void dereferencet::valid_check(
 
     const symbolt &sym = ns.lookup(to_symbol2t(symbol).thename);
     if(
-      has_prefix(sym.name.as_string(), "symex_dynamic::") &&
-      sym.name.as_string().find("alloca::") == std::string::npos)
+      has_prefix(sym.id.as_string(), "symex_dynamic::") &&
+      sym.id.as_string().find("alloca::") == std::string::npos)
     {
       // Assert thtat it hasn't (nondeterministically) been invalidated.
       address_of2tc addrof(symbol->type, symbol);
@@ -1856,7 +1856,8 @@ void dereferencet::valid_check(
       // Otherwise, this is a pointer to some kind of lexical variable, with
       // either global or function-local scope. Ask symex to determine if
       // it's live.
-      if (!dereference_callback.is_live_variable(to_symbol2t(symbol))) {
+      if(!dereference_callback.is_live_variable(to_symbol2t(symbol)))
+      {
         // Any access where this guard is true -> failure
         dereference_failure(
           "pointer dereference", "accessed expired variable pointer", guard);
@@ -1884,7 +1885,7 @@ void dereferencet::bounds_check(
   if(
     !is_constant_array2t(expr) &&
     has_prefix(
-      ns.lookup(to_symbol2t(expr).thename).name.as_string(), "symex_dynamic::"))
+      ns.lookup(to_symbol2t(expr).thename).id.as_string(), "symex_dynamic::"))
   {
     // Construct a dynamic_size irep.
     address_of2tc addrof(expr->type, expr);

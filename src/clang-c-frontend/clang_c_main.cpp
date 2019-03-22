@@ -92,7 +92,7 @@ bool clang_main(
   const code_typet::argumentst &arguments =
     to_code_type(symbol.type).arguments();
 
-  if(symbol.name == standard_main)
+  if(symbol.id == standard_main)
   {
     if(arguments.size() == 0)
     {
@@ -245,7 +245,7 @@ bool clang_main(
   code_typet main_type;
   main_type.return_type() = empty_typet();
 
-  new_symbol.name = "__ESBMC_main";
+  new_symbol.id = "__ESBMC_main";
   new_symbol.base_name = "__ESBMC_main";
   new_symbol.type.swap(main_type);
   new_symbol.value.swap(init_code);

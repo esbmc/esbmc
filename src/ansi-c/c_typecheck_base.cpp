@@ -48,10 +48,10 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   symbol.lvalue = !symbol.is_type && !symbol.is_macro;
 
   std::string root_name = id2string(symbol.base_name);
-  std::string new_name = id2string(symbol.name);
+  std::string new_name = id2string(symbol.id);
 
   // do anon-tags first
-  if(symbol.is_type && has_prefix(id2string(symbol.name), "tag-#anon"))
+  if(symbol.is_type && has_prefix(id2string(symbol.id), "tag-#anon"))
   {
     // used to be file local:
     // new_name=prefix+module+"::tag-"+id2string(symbol.base_name);
@@ -59,7 +59,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     // now: rename them
     std::string typestr = type2name(symbol.type);
     new_name = "tag-#anon#" + typestr;
-    id_replace_map[symbol.name] = new_name;
+    id_replace_map[symbol.id] = new_name;
 
     symbolt *s = context.find_symbol(new_name);
     if(s != nullptr)
@@ -70,7 +70,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   }
   else if(symbol.file_local) // rename file-local stuff
   {
-    new_name = module + "::" + id2string(symbol.name);
+    new_name = module + "::" + id2string(symbol.id);
   }
   else if(symbol.is_extern && !final_type.is_code())
   {
@@ -87,14 +87,14 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     symbol.static_lifetime = false;
   }
 
-  if(symbol.name != new_name)
+  if(symbol.id != new_name)
   {
-    id_replace_map[symbol.name] = new_name;
-    symbol.name = new_name;
+    id_replace_map[symbol.id] = new_name;
+    symbol.id = new_name;
   }
 
   // see if we have it already
-  symbolt *s = context.find_symbol(symbol.name);
+  symbolt *s = context.find_symbol(symbol.id);
   if(s == nullptr)
   {
     // just put into context
@@ -133,7 +133,7 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
     // insert a new type symbol for the array
     {
       symbolt new_symbol;
-      new_symbol.name = id2string(symbol.name) + "$type";
+      new_symbol.id = id2string(symbol.id) + "$type";
       new_symbol.base_name = id2string(symbol.base_name) + "$type";
       new_symbol.location = symbol.location;
       new_symbol.mode = symbol.mode;
@@ -142,7 +142,7 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
       new_symbol.is_type = true;
       new_symbol.is_macro = true;
 
-      symbol.type = symbol_typet(new_symbol.name);
+      symbol.type = symbol_typet(new_symbol.id);
 
       symbolt *new_sp;
       context.move(new_symbol, new_sp);
@@ -422,6 +422,6 @@ void c_typecheck_baset::typecheck_function_body(symbolt &symbol)
 
   typecheck_code(to_code(symbol.value));
 
-  if(symbol.name == "main")
+  if(symbol.id == "main")
     add_argc_argv(symbol);
 }

@@ -119,7 +119,7 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
     const symbolt &symbol = ns.lookup(to_symbol_type(type1).symbol_name);
 
     if(!symbol.is_type)
-      throw "symbol " + id2string(symbol.name) + " is not a type";
+      throw "symbol " + id2string(symbol.base_name) + " is not a type";
 
     type2tc tmp;
     migrate_type(symbol.type, tmp);
@@ -131,7 +131,7 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
     const symbolt &symbol = ns.lookup(to_symbol_type(type2).symbol_name);
 
     if(!symbol.is_type)
-      throw "symbol " + id2string(symbol.name) + " is not a type";
+      throw "symbol " + id2string(symbol.base_name) + " is not a type";
 
     type2tc tmp;
     migrate_type(symbol.type, tmp);
@@ -262,7 +262,7 @@ bool base_type_eqt::base_type_eq_rec(const typet &type1, const typet &type2)
     const symbolt &symbol = ns.lookup(type1.identifier());
 
     if(!symbol.is_type)
-      throw "symbol " + id2string(symbol.name) + " is not a type";
+      throw "symbol " + id2string(symbol.base_name) + " is not a type";
 
     return base_type_eq_rec(symbol.type, type2);
   }
@@ -272,7 +272,7 @@ bool base_type_eqt::base_type_eq_rec(const typet &type1, const typet &type2)
     const symbolt &symbol = ns.lookup(type2.identifier());
 
     if(!symbol.is_type)
-      throw "symbol " + id2string(symbol.name) + " is not a type";
+      throw "symbol " + id2string(symbol.base_name) + " is not a type";
 
     return base_type_eq_rec(type1, symbol.type);
   }

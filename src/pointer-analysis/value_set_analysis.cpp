@@ -73,7 +73,7 @@ void value_set_analysist::get_entries(
   const symbolt &symbol,
   std::list<value_sett::entryt> &dest)
 {
-  get_entries_rec(symbol.name.as_string(), "", symbol.type, dest);
+  get_entries_rec(symbol.id.as_string(), "", symbol.type, dest);
 }
 
 void value_set_analysist::get_entries_rec(

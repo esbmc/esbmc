@@ -75,7 +75,7 @@ goto_symext::goto_symext(
   dyn_info_arr_name = "c:@__ESBMC_is_dynamic";
 
   symbolt sym;
-  sym.name = "symex_throw::thrown_obj";
+  sym.id = "symex_throw::thrown_obj";
   sym.base_name = "thrown_obj";
   // Type left deliberately undefined. XXX, is this wise?
   new_context.move(sym);

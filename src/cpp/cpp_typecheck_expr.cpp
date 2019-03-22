@@ -1929,7 +1929,7 @@ void cpp_typecheckt::typecheck_method_application(
     symbol.value.id() == "cpp_not_typechecked" &&
     !symbol.value.get_bool("is_used"))
   {
-    context.find_symbol(symbol.name)->value.set("is_used", true);
+    context.find_symbol(symbol.id)->value.set("is_used", true);
   }
 }
 

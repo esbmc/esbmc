@@ -169,7 +169,7 @@ void cpp_typecheckt::static_initialization()
       else
       {
         exprt symbexpr("symbol", symbol.type);
-        symbexpr.identifier(symbol.name);
+        symbexpr.identifier(symbol.id);
 
         codet code;
         code.set_statement("assign");
@@ -203,7 +203,7 @@ void cpp_typecheckt::static_initialization()
   // Create the initialization procedure
   symbolt init_symbol;
 
-  init_symbol.name = "#ini#" + id2string(module);
+  init_symbol.id = "#ini#" + id2string(module);
   init_symbol.base_name = "#ini#" + id2string(module);
   init_symbol.value.swap(block_sini);
   init_symbol.mode = current_mode;
@@ -272,7 +272,7 @@ void cpp_typecheckt::clean_up()
   context.Foreach_operand([this](symbolt &s) {
     if(s.type.get_bool("is_template"))
     {
-      context.erase_symbol(s.name);
+      context.erase_symbol(s.id);
       return;
     }
     if(s.type.is_struct() || s.type.is_union())

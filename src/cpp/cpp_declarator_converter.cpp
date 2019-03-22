@@ -199,7 +199,7 @@ symbolt &cpp_declarator_convertert::convert(
   {
     cpp_scopet::id_sett id_set;
 
-    scope->lookup_id(symbol.name, cpp_idt::TEMPLATE_ARGUMENT, id_set);
+    scope->lookup_id(symbol.id, cpp_idt::TEMPLATE_ARGUMENT, id_set);
 
     if(id_set.empty())
     {
@@ -370,7 +370,7 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
 {
   symbolt symbol;
 
-  symbol.name = final_identifier;
+  symbol.id = final_identifier;
   symbol.base_name = base_name;
   symbol.value = declarator.value();
   symbol.location = declarator.name().location();
@@ -432,7 +432,7 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   }
 
   if(symbol.static_lifetime)
-    cpp_typecheck.dinis.push_back(symbol.name);
+    cpp_typecheck.dinis.push_back(symbol.id);
 
   // move early, it must be visible before doing any value
   symbolt *new_symbol;
@@ -524,7 +524,7 @@ void cpp_declarator_convertert::operator_overloading_rules(
 
 void cpp_declarator_convertert::main_function_rules(const symbolt &symbol)
 {
-  if(symbol.name == "main")
+  if(symbol.id == "main")
   {
     if(symbol.type.id() != "code")
     {

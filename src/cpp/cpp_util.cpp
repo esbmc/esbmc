@@ -13,7 +13,7 @@ Author:
 exprt cpp_symbol_expr(const symbolt &symbol)
 {
   exprt tmp("symbol", symbol.type);
-  tmp.identifier(symbol.name);
+  tmp.identifier(symbol.id);
 
   if(symbol.lvalue)
     tmp.set("#lvalue", true);

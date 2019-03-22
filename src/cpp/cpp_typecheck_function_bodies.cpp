@@ -22,7 +22,7 @@ void cpp_typecheckt::typecheck_function_bodies()
 
     function_bodies.pop_front();
 
-    if(function_symbol.name == "main")
+    if(function_symbol.id == "main")
       add_argc_argv(function_symbol);
 
     exprt &body = function_symbol.value;

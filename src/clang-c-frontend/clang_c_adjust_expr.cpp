@@ -58,7 +58,7 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
   if(!symbol.value.is_nil())
     adjust_expr(symbol.value);
 
-  if(symbol.type.is_code() && symbol.name == "c:@F@main")
+  if(symbol.type.is_code() && symbol.id == "c:@F@main")
     adjust_argc_argv(symbol);
 }
 
@@ -557,7 +557,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
       // let's just add it
       symbolt new_symbol;
 
-      new_symbol.name = identifier;
+      new_symbol.id = identifier;
       new_symbol.base_name = f_op.name();
       new_symbol.location = expr.location();
       new_symbol.type = f_op.type();
@@ -1135,7 +1135,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
 
   symbolt argc_symbol;
   argc_symbol.base_name = "argc";
-  argc_symbol.name = "argc'";
+  argc_symbol.id = "argc'";
   argc_symbol.type = op0.type();
   argc_symbol.static_lifetime = true;
   argc_symbol.lvalue = true;
@@ -1152,7 +1152,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
 
   symbolt argv_symbol;
   argv_symbol.base_name = "argv";
-  argv_symbol.name = "argv'";
+  argv_symbol.id = "argv'";
   argv_symbol.type = array_typet(op1.type().subtype(), size_expr);
   argv_symbol.static_lifetime = true;
   argv_symbol.lvalue = true;
@@ -1166,7 +1166,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
 
     symbolt envp_size_symbol;
     envp_size_symbol.base_name = "envp_size";
-    envp_size_symbol.name = "envp_size'";
+    envp_size_symbol.id = "envp_size'";
     envp_size_symbol.type = op0.type(); // same type as argc!
     envp_size_symbol.static_lifetime = true;
 
@@ -1175,7 +1175,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
 
     symbolt envp_symbol;
     envp_symbol.base_name = "envp";
-    envp_symbol.name = "envp'";
+    envp_symbol.id = "envp'";
     envp_symbol.type = op2.type();
     envp_symbol.static_lifetime = true;
     exprt size_expr = symbol_expr(*envp_new_size_symbol);
@@ -1235,7 +1235,7 @@ void clang_c_adjust::adjust_builtin_va_arg(exprt &expr)
 
   symbolt symbol;
   symbol.base_name = "builtin_va_arg";
-  symbol.name = "builtin_va_arg";
+  symbol.id = "builtin_va_arg";
   symbol.type = symbol_type;
 
   context.move(symbol);

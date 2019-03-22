@@ -19,8 +19,8 @@ void symbolt::clear()
   value.make_nil();
   location.make_nil();
   lvalue = static_lifetime = file_local = is_extern = is_type = is_parameter =
-    is_macro = is_used = false;
-  name = module = base_name = mode = "";
+    is_macro = false;
+  id = module = base_name = mode = "";
 }
 
 void symbolt::swap(symbolt &b)
@@ -29,7 +29,7 @@ void symbolt::swap(symbolt &b)
 
   SYM_SWAP1(type);
   SYM_SWAP1(value);
-  SYM_SWAP1(name);
+  SYM_SWAP1(id);
   SYM_SWAP1(module);
   SYM_SWAP1(base_name);
   SYM_SWAP1(mode);
@@ -44,7 +44,6 @@ void symbolt::swap(symbolt &b)
   SYM_SWAP2(static_lifetime);
   SYM_SWAP2(file_local);
   SYM_SWAP2(is_extern);
-  SYM_SWAP2(is_used);
 }
 
 void symbolt::dump() const
@@ -54,7 +53,7 @@ void symbolt::dump() const
 
 void symbolt::show(std::ostream &out) const
 {
-  out << "Symbol......: " << name << std::endl;
+  out << "Symbol......: " << id << std::endl;
   out << "Base name...: " << base_name << std::endl;
   out << "Module......: " << module << std::endl;
   out << "Mode........: " << mode << " (" << mode << ")" << std::endl;
@@ -77,8 +76,6 @@ void symbolt::show(std::ostream &out) const
     out << " extern";
   if(is_macro)
     out << " macro";
-  if(is_used)
-    out << " used";
 
   out << std::endl;
   out << "Location....: " << location << std::endl;
@@ -98,7 +95,7 @@ void symbolt::to_irep(irept &dest) const
   dest.type() = type;
   dest.symvalue(value);
   dest.location(location);
-  dest.name(name);
+  dest.name(id);
   dest.module(module);
   dest.base_name(base_name);
   dest.mode(mode);
@@ -125,7 +122,7 @@ void symbolt::from_irep(const irept &src)
   value = static_cast<const exprt &>(src.symvalue());
   location = static_cast<const locationt &>(src.location());
 
-  name = src.name();
+  id = src.name();
   module = src.module();
   base_name = src.base_name();
   mode = src.mode();
