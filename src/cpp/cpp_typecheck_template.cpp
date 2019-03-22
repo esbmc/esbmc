@@ -83,7 +83,7 @@ void cpp_typecheckt::typecheck_class_template(cpp_declarationt &declaration)
       if(declaration.get_specialization_of() == "")
       {
         const symbolt &previous = lookup((*id_set.begin())->identifier);
-        if(previous.name != symbol_name || id_set.size() > 1)
+        if(previous.id != symbol_name || id_set.size() > 1)
         {
           err_location(cpp_name.location());
           str << "template declaration of `" << base_name.c_str()
@@ -146,7 +146,7 @@ void cpp_typecheckt::typecheck_class_template(cpp_declarationt &declaration)
 
   symbolt symbol;
 
-  symbol.name = symbol_name;
+  symbol.id = symbol_name;
   symbol.base_name = base_name;
   symbol.location = cpp_name.location();
   symbol.mode = current_mode;
@@ -238,7 +238,7 @@ void cpp_typecheckt::typecheck_function_template(cpp_declarationt &declaration)
   }
 
   symbolt symbol;
-  symbol.name = symbol_name;
+  symbol.id = symbol_name;
   symbol.base_name = base_name;
   symbol.location = cpp_name.location();
   symbol.mode = current_mode;
@@ -398,8 +398,8 @@ std::string cpp_typecheckt::class_template_identifier(
     identifier += "_specialized_to_<";
 
     counter = 0;
-    for(cpp_template_args_non_tct::argumentst::const_iterator
-          it = partial_specialization_args.arguments().begin();
+    for(cpp_template_args_non_tct::argumentst::const_iterator it =
+          partial_specialization_args.arguments().begin();
         it != partial_specialization_args.arguments().end();
         it++, counter++)
     {
@@ -517,7 +517,7 @@ void cpp_typecheckt::convert_class_template_specialization(
 
   // partial -- we typecheck
   declaration.partial_specialization_args() = template_args_non_tc;
-  declaration.set_specialization_of(template_symbol.name);
+  declaration.set_specialization_of(template_symbol.id);
 
   // We can't typecheck arguments yet, they are used
   // for guessing later. But we can check the number.
@@ -689,13 +689,13 @@ cpp_scopet &cpp_typecheckt::typecheck_template_parameters(template_typet &type)
     if(cpp_declarator_converter.is_typedef)
     {
       parameter = template_parametert("type", typet("symbol"));
-      parameter.type().identifier(symbol.name);
+      parameter.type().identifier(symbol.id);
       parameter.type().location() = declaration.find_location();
     }
     else
     {
       parameter = template_parametert("symbol", symbol.type);
-      parameter.identifier(symbol.name);
+      parameter.identifier(symbol.id);
     }
 
     // set (non-typechecked) default value
@@ -765,7 +765,7 @@ cpp_template_args_tct cpp_typecheckt::typecheck_template_args(
 
       // these need to be typechecked in the scope of the template,
       // not in the current scope!
-      cpp_idt *template_scope = cpp_scopes.id_map[template_symbol.name];
+      cpp_idt *template_scope = cpp_scopes.id_map[template_symbol.id];
       assert(template_scope != nullptr);
       cpp_scopes.go_to(*template_scope);
     }

@@ -75,7 +75,7 @@ void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
 {
   if(new_symbol.is_type != in_context.is_type)
   {
-    str << "class conflict on symbol `" << in_context.name << "'";
+    str << "class conflict on symbol `" << in_context.base_name << "'";
     throw 0;
   }
 
@@ -125,14 +125,14 @@ void c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
     else
     {
       // rename, there are no type clashes in C
-      irep_idt old_identifier = new_symbol.name;
+      irep_idt old_identifier = new_symbol.id;
 
       do
       {
         irep_idt new_identifier =
           id2string(old_identifier) + "#link" + i2string(type_counter++);
 
-        new_symbol.name = new_identifier;
+        new_symbol.id = new_identifier;
       } while(context.move(new_symbol));
     }
   }
@@ -180,7 +180,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else if(base_type_eq(in_context.type, new_symbol.type, ns))
       {
         // keep the one in in_context -- libraries come last!
-        str << "warning: function `" << in_context.name << "' in module `"
+        str << "warning: function `" << in_context.base_name << "' in module `"
             << new_symbol.module << "' is shadowed by a definition in module `"
             << in_context.module << "'";
         warning();
@@ -188,8 +188,8 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else
       {
         err_location(new_symbol.value);
-        str << "error: duplicate definition of function `" << in_context.name
-            << "'" << std::endl;
+        str << "error: duplicate definition of function `"
+            << in_context.base_name << "'" << std::endl;
         str << "In module `" << in_context.module << "' and module `"
             << new_symbol.module << "'";
         throw 0;
@@ -239,8 +239,8 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else
       {
         err_location(new_symbol.location);
-        str << "error: conflicting definition for variable `" << in_context.name
-            << "'" << std::endl;
+        str << "error: conflicting definition for variable `"
+            << in_context.base_name << "'" << std::endl;
         str << "old definition: " << to_string(in_context.type) << std::endl;
         str << "Module: " << in_context.module << std::endl;
         str << "new definition: " << to_string(new_symbol.type) << std::endl;
@@ -261,7 +261,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       {
         err_location(new_symbol.value);
         str << "error: conflicting initializers for variable `"
-            << in_context.name << "'" << std::endl;
+            << in_context.base_name << "'" << std::endl;
         str << "old value: " << to_string(in_context.value) << std::endl;
         str << "Module: " << in_context.module << std::endl;
         str << "new value: " << to_string(new_symbol.value) << std::endl;
@@ -280,13 +280,13 @@ void c_linkt::typecheck()
     {
       // we could have a clash
       unsigned counter = 0;
-      std::string newname = id2string(s.name);
+      std::string newname = id2string(s.id);
 
       while(context.find_symbol(newname) != nullptr)
       {
         // there is a clash, rename!
         counter++;
-        newname = id2string(s.name) + "#-mc-" + i2string(counter);
+        newname = id2string(s.id) + "#-mc-" + i2string(counter);
       }
 
       if(counter > 0)
@@ -295,10 +295,9 @@ void c_linkt::typecheck()
         subst.identifier(newname);
         subst.location() = s.location;
         symbol_fixer.insert(
-          s.name,
-          static_cast<const typet &>(static_cast<const irept &>(subst)));
+          s.id, static_cast<const typet &>(static_cast<const irept &>(subst)));
         subst.type() = s.type;
-        symbol_fixer.insert(s.name, subst);
+        symbol_fixer.insert(s.id, subst);
       }
     }
   });

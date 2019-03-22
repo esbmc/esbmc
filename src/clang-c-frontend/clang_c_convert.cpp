@@ -279,7 +279,7 @@ bool clang_c_convertert::get_struct_union_class(
     location_begin);
 
   // Save the struct/union/class type address and name to the type map
-  std::string symbol_name = symbol.name.as_string();
+  std::string symbol_name = symbol.id.as_string();
 
   std::size_t address = reinterpret_cast<std::size_t>(recordd.getFirstDecl());
   type_map[address] = symbol_name;
@@ -407,7 +407,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   }
 
   // Save the variable address and name to the object map
-  std::string symbol_name = symbol.name.as_string();
+  std::string symbol_name = symbol.id.as_string();
 
   std::size_t address = reinterpret_cast<std::size_t>(vd.getFirstDecl());
   object_map[address] = symbol_name;
@@ -488,7 +488,7 @@ bool clang_c_convertert::get_function(
     pretty_name,
     location_begin);
 
-  std::string symbol_name = symbol.name.as_string();
+  std::string symbol_name = symbol.id.as_string();
 
   symbol.lvalue = true;
   symbol.is_extern = fd.getStorageClass() == clang::SC_Extern ||
@@ -585,7 +585,7 @@ bool clang_c_convertert::get_function_params(
 
   // Save the function's param address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(pd.getFirstDecl());
-  object_map[address] = param_symbol.name.as_string();
+  object_map[address] = param_symbol.id.as_string();
 
   const clang::FunctionDecl &fd =
     static_cast<const clang::FunctionDecl &>(*pd.getParentFunctionOrMethod());
@@ -2354,7 +2354,7 @@ void clang_c_convertert::get_default_symbol(
   std::string module_name,
   typet type,
   std::string base_name,
-  std::string pretty_name,
+  std::string unique_name,
   locationt location)
 {
   symbol.mode = "C";
@@ -2362,7 +2362,7 @@ void clang_c_convertert::get_default_symbol(
   symbol.location = std::move(location);
   symbol.type = std::move(type);
   symbol.base_name = base_name;
-  symbol.name = pretty_name;
+  symbol.id = unique_name;
 }
 
 std::string clang_c_convertert::get_decl_name(const clang::NamedDecl &nd)
@@ -2549,13 +2549,13 @@ std::string clang_c_convertert::get_filename_from_path(std::string path)
 
 symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
 {
-  symbolt *s = context.find_symbol(symbol.name);
+  symbolt *s = context.find_symbol(symbol.id);
   if(s == nullptr)
   {
     if(context.move(symbol, s))
     {
-      std::cerr << "Couldn't add symbol " << symbol.name << " to symbol table"
-                << std::endl;
+      std::cerr << "Couldn't add symbol " << symbol.base_name
+                << " to symbol table\n";
       symbol.dump();
       abort();
     }

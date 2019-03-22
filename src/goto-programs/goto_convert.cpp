@@ -642,7 +642,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   // now create a 'dead' instruction -- will be added after the
   // destructor created below as unwind_destructor_stack pops off the
   // top of the destructor stack
-  const symbol_exprt symbol_expr(s->name, s->type);
+  const symbol_exprt symbol_expr(s->id, s->type);
 
   {
     code_deadt code_dead(symbol_expr);
@@ -1980,7 +1980,7 @@ symbolt &goto_convertt::new_tmp_symbol(const typet &type)
   do
   {
     new_symbol.base_name = "tmp$" + i2string(++temporary_counter);
-    new_symbol.name = tmp_symbol_prefix + id2string(new_symbol.base_name);
+    new_symbol.id = tmp_symbol_prefix + id2string(new_symbol.id);
     new_symbol.lvalue = true;
     new_symbol.type = type;
   } while(context.move(new_symbol, symbol_ptr));

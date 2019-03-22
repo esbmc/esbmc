@@ -32,7 +32,7 @@ void cpp_typecheckt::convert_argument(
 
   symbolt symbol;
 
-  symbol.name = identifier;
+  symbol.id = identifier;
   symbol.base_name = argument.get_base_name();
   symbol.location = argument.location();
   symbol.mode = mode;
@@ -47,7 +47,7 @@ void cpp_typecheckt::convert_argument(
   if(context.move(symbol, new_symbol))
   {
     err_location(symbol.location);
-    str << "cpp_typecheckt::convert_argument: context.move(" << symbol.name
+    str << "cpp_typecheckt::convert_argument: context.move(" << symbol.id
         << ") failed";
     throw 0;
   }
@@ -107,10 +107,10 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
 
   // enter appropriate scope
   cpp_save_scopet saved_scope(cpp_scopes);
-  cpp_scopet &function_scope = cpp_scopes.set_scope(symbol.name);
+  cpp_scopet &function_scope = cpp_scopes.set_scope(symbol.id);
 
   // fix the scope's prefix
-  function_scope.prefix += id2string(symbol.name) + "::";
+  function_scope.prefix += id2string(symbol.id) + "::";
 
   // genuine function definition -- do the parameter declarations
   convert_arguments(symbol.mode, function_type);

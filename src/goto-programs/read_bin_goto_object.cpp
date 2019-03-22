@@ -89,7 +89,7 @@ bool read_bin_goto_object(
       // makes sure there is an empty function
       // for every function symbol and fixes
       // the function types.
-      functions.function_map[symbol.name].type = to_code_type(symbol.type);
+      functions.function_map[symbol.id].type = to_code_type(symbol.type);
     }
     context.add(symbol);
   }

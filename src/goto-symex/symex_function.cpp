@@ -145,7 +145,7 @@ unsigned goto_symext::argument_assignments(
 
       // add to symbol table
       symbolt symbol;
-      symbol.name = id;
+      symbol.id = id;
       symbol.base_name = "va_arg" + std::to_string(va_count);
       symbol.type = migrate_type_back((*it1)->type);
 

@@ -10,10 +10,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void fix_symbolt::fix_symbol(symbolt &symbol)
 {
-  type_mapt::const_iterator it = type_map.find(symbol.name);
-
+  type_mapt::const_iterator it = type_map.find(symbol.id);
   if(it != type_map.end())
-    symbol.name = it->second.id();
+    symbol.id = it->second.id();
 
   replace(symbol.type);
   replace(symbol.value);
@@ -28,7 +27,7 @@ void fix_symbolt::fix_context(contextt &context)
     assert(symb != nullptr);
 
     symbolt s = *symb;
-    s.name = t_it->second.identifier();
+    s.id = t_it->second.identifier();
     context.erase_symbol(t_it->first);
     context.move(s);
   }

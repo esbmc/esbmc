@@ -681,7 +681,7 @@ void goto_convertt::remove_function_call(
     new_symbol.mode = symbol.mode;
   }
 
-  new_symbol.name = tmp_symbol_prefix + id2string(new_symbol.base_name);
+  new_symbol.id = tmp_symbol_prefix + id2string(new_symbol.id);
   new_name(new_symbol);
 
   {
@@ -728,7 +728,7 @@ void goto_convertt::remove_cpp_new(
 
   new_symbol.base_name = "new_ptr$" + std::to_string(++temporary_counter);
   new_symbol.type = expr.type();
-  new_symbol.name = tmp_symbol_prefix + id2string(new_symbol.base_name);
+  new_symbol.id = tmp_symbol_prefix + id2string(new_symbol.id);
 
   new_name(new_symbol);
 
@@ -813,7 +813,7 @@ void goto_convertt::remove_statement_expression(
 
   symbolt &new_symbol = new_tmp_symbol(expr.type());
 
-  symbol_exprt tmp_symbol_expr(new_symbol.name, new_symbol.type);
+  symbol_exprt tmp_symbol_expr(new_symbol.id, new_symbol.type);
   tmp_symbol_expr.location() = location;
 
   if(last.statement() == "expression")

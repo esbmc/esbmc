@@ -177,7 +177,7 @@ void c_typecheck_baset::typecheck_expr_builtin_va_arg(exprt &expr)
 
   symbolt symbol;
   symbol.base_name = "builtin_va_arg";
-  symbol.name = "builtin_va_arg";
+  symbol.id = "builtin_va_arg";
   symbol.type = symbol_type;
 
   context.move(symbol);
@@ -1144,7 +1144,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
 
       symbolt new_symbol;
 
-      new_symbol.name = identifier;
+      new_symbol.id = identifier;
       new_symbol.base_name = id2string(identifier);
       new_symbol.location = expr.location();
       new_symbol.type = code_typet();

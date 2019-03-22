@@ -68,7 +68,7 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
     base_it->swap(base_symbol_expr);
 
     // Add base scopes to the current scopes
-    cpp_scopes.current_scope().add_parent(*cpp_scopes.id_map[base_symbol.name]);
+    cpp_scopes.current_scope().add_parent(*cpp_scopes.id_map[base_symbol.id]);
 
     const struct_typet &base_struct_type = to_struct_type(base_symbol.type);
 

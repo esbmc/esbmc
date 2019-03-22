@@ -138,14 +138,14 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     if(!fargs.has_object || e.type().get("return_type") == "constructor")
     {
       non_template_identifiers.push_back(
-        symbol_exprt(new_symbol.name, new_symbol.type));
+        symbol_exprt(new_symbol.id, new_symbol.type));
     }
     else
     {
       // This should be a member expression.
       exprt memb("member");
       memb.type() = new_symbol.type;
-      memb.set("component_name", new_symbol.name);
+      memb.set("component_name", new_symbol.id);
       non_template_identifiers.push_back(memb);
     }
   }
@@ -434,7 +434,7 @@ exprt cpp_typecheck_resolvet::convert_identifier(
         assert(symbol.type.is_not_nil());
       }
       else
-        e.type() = symbol_typet(symbol.name);
+        e.type() = symbol_typet(symbol.id);
     }
     else if(symbol.is_macro)
     {
@@ -952,7 +952,7 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
           disambiguate_template_classes(base_name, id_set, template_args);
 
         cpp_typecheck.cpp_scopes.go_to(
-          cpp_typecheck.cpp_scopes.get_scope(symb_tmpl.name));
+          cpp_typecheck.cpp_scopes.get_scope(symb_tmpl.id));
 
         template_args.make_nil();
       }
@@ -1111,7 +1111,7 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
 
   // the baseline
   matches.emplace_back(
-    full_template_args_tc, full_template_args_tc, primary_template_symbol.name);
+    full_template_args_tc, full_template_args_tc, primary_template_symbol.id);
 
   for(auto it : id_set)
   {
@@ -1569,7 +1569,7 @@ exprt cpp_typecheck_resolvet::resolve(
       {
         const symbolt &instance =
           disambiguate_template_classes(base_name, id_set, template_args);
-        identifiers.emplace_back("type", symbol_typet(instance.name));
+        identifiers.emplace_back("type", symbol_typet(instance.id));
       }
     }
 
@@ -1917,7 +1917,7 @@ bool cpp_typecheck_resolvet::guess_template_args(
         else
         {
           // No; we must look if the parent scope has the template arguments
-          cpp_scopet &scope = cpp_typecheck.cpp_scopes.get_scope(s.name);
+          cpp_scopet &scope = cpp_typecheck.cpp_scopes.get_scope(s.id);
 
           unsigned parent_size = scope.parents_size();
           while(parent_size)
@@ -2227,7 +2227,7 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
 
   // Remember that this was a template
 
-  function_type.set("#template", template_symbol.name);
+  function_type.set("#template", template_symbol.id);
   function_type.set("#template_arguments", template_args);
 
   // Seems we got an instance for all parameters. Let's return that.
@@ -2287,7 +2287,7 @@ void cpp_typecheck_resolvet::apply_template_args(
     const symbolt &new_symbol = cpp_typecheck.instantiate_template(
       location, template_symbol, template_args_tc, template_args_tc);
 
-    expr = exprt("type", symbol_typet(new_symbol.name));
+    expr = exprt("type", symbol_typet(new_symbol.id));
     expr.location() = location;
   }
   else
@@ -2316,10 +2316,10 @@ void cpp_typecheck_resolvet::apply_template_args(
 
 #ifndef NDEBUG
       const struct_typet &struct_type = to_struct_type(type_symb.type);
-      assert(struct_type.has_component(new_symbol.name));
+      assert(struct_type.has_component(new_symbol.id));
 #endif
       member_exprt member(code_type);
-      member.set_component_name(new_symbol.name);
+      member.set_component_name(new_symbol.id);
       if(fargs.has_object)
         member.struct_op() = *fargs.operands.begin();
       else

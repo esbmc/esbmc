@@ -91,7 +91,7 @@ void goto_convert_functionst::add_return(
 
 void goto_convert_functionst::convert_function(symbolt &symbol)
 {
-  irep_idt identifier = symbol.name;
+  irep_idt identifier = symbol.id;
 
   // Apply a SFINAE test: discard unused C++ templates.
   if(
@@ -100,7 +100,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     return;
 
   // make tmp variables local to function
-  tmp_symbol_prefix = id2string(symbol.name) + "::$tmp::";
+  tmp_symbol_prefix = id2string(symbol.id) + "::$tmp::";
   temporary_counter = 0;
 
   goto_functiont &f = functions.function_map[identifier];
@@ -404,12 +404,12 @@ void goto_convert_functionst::thrash_type_symbols()
 
   typename_mapt typenames;
   context.foreach_operand([this, &names, &typenames](const symbolt &s) {
-    if(names.find(s.name) != names.end())
+    if(names.find(s.id) != names.end())
     {
       typename_sett list;
       collect_expr(s.value, list);
       collect_type(s.type, list);
-      typenames[s.name] = list;
+      typenames[s.id] = list;
     }
   });
 
@@ -426,8 +426,8 @@ void goto_convert_functionst::thrash_type_symbols()
 
   // And now all the types have a fixed form, rename types in all existing code.
   context.Foreach_operand([this](symbolt &s) {
-    rename_types(s.type, s, s.name);
-    rename_exprs(s.value, s, s.name);
+    rename_types(s.type, s, s.id);
+    rename_exprs(s.value, s, s.id);
   });
 }
 

@@ -466,7 +466,7 @@ exprt c_typecheck_baset::do_initializer_union(
 void c_typecheck_baset::do_initializer(symbolt &symbol)
 {
   // this one doesn't need initialization
-  if(has_prefix(id2string(symbol.name), CPROVER_PREFIX "constant_infinity"))
+  if(has_prefix(id2string(symbol.id), CPROVER_PREFIX "constant_infinity"))
     return;
 
   if(symbol.static_lifetime)

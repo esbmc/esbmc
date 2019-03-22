@@ -292,8 +292,7 @@ void cpp_typecheckt::default_cpctor(
         namespacet(context).lookup(mem_it->type().subtype().identifier());
 
       const symbolt &virtual_table_symbol_var = namespacet(context).lookup(
-        virtual_table_symbol_type.name.as_string() + "@" +
-        symbol.name.as_string());
+        virtual_table_symbol_type.id.as_string() + "@" + symbol.id.as_string());
 
       exprt var = symbol_expr(virtual_table_symbol_var);
       address_of_exprt address(var);
@@ -357,7 +356,7 @@ void cpp_typecheckt::default_assignop(
 
   cpctor.add("storage_spec").id("cpp-storage-spec");
   cpctor.type().id("symbol");
-  cpctor.type().add("identifier").id(symbol.name);
+  cpctor.type().add("identifier").id(symbol.id);
   cpctor.operands().emplace_back("cpp-declarator");
   cpctor.location() = location;
 
@@ -572,7 +571,7 @@ void cpp_typecheckt::check_member_initializers(
         forall_irep(parent_it, bases.get_sub())
         {
           assert(parent_it->get("type") == "symbol");
-          if(symb.name == parent_it->type().identifier())
+          if(symb.id == parent_it->type().identifier())
           {
             ok = true;
             break;
@@ -825,7 +824,7 @@ void cpp_typecheckt::full_member_initialization(
         lookup(mem_it->type().subtype().identifier());
 
       const symbolt &virtual_table_symbol_var = lookup(
-        virtual_table_symbol_type.name.as_string() + "@" +
+        virtual_table_symbol_type.id.as_string() + "@" +
         struct_type.name().as_string());
 
       exprt var = symbol_expr(virtual_table_symbol_var);
@@ -937,7 +936,7 @@ bool cpp_typecheckt::find_cpctor(const symbolt &symbol) const
     if(!is_reference(arg1_type))
       continue;
 
-    if(arg1_type.subtype().identifier() != symbol.name)
+    if(arg1_type.subtype().identifier() != symbol.id)
       continue;
 
     bool defargs = true;
@@ -987,7 +986,7 @@ bool cpp_typecheckt::find_assignop(const symbolt &symbol) const
     if(!is_reference(arg1_type))
       continue;
 
-    if(arg1_type.subtype().identifier() != symbol.name)
+    if(arg1_type.subtype().identifier() != symbol.id)
       continue;
 
     return true;
@@ -1067,8 +1066,7 @@ void cpp_typecheckt::dtor(
         namespacet(context).lookup(cit->type().subtype().identifier());
 
       const symbolt &virtual_table_symbol_var = namespacet(context).lookup(
-        virtual_table_symbol_type.name.as_string() + "@" +
-        symb.name.as_string());
+        virtual_table_symbol_type.id.as_string() + "@" + symb.id.as_string());
 
       exprt var = symbol_expr(virtual_table_symbol_var);
       address_of_exprt address(var);

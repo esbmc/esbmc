@@ -6,7 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-extern "C" {
+extern "C"
+{
 #include <unistd.h>
 
 #ifdef _WIN32
@@ -25,23 +26,24 @@ extern "C" {
 
 #ifndef NO_CPROVER_LIBRARY
 
-extern "C" {
-extern uint8_t clib32_buf[1];
-extern uint8_t clib64_buf[1];
-extern unsigned int clib32_buf_size;
-extern unsigned int clib64_buf_size;
+extern "C"
+{
+  extern uint8_t clib32_buf[1];
+  extern uint8_t clib64_buf[1];
+  extern unsigned int clib32_buf_size;
+  extern unsigned int clib64_buf_size;
 
-extern uint8_t clib32_fp_buf[1];
-extern uint8_t clib64_fp_buf[1];
-extern unsigned int clib32_fp_buf_size;
-extern unsigned int clib64_fp_buf_size;
+  extern uint8_t clib32_fp_buf[1];
+  extern uint8_t clib64_fp_buf[1];
+  extern unsigned int clib32_fp_buf_size;
+  extern unsigned int clib64_fp_buf_size;
 
-uint8_t *clib_ptrs[4][4] = {
-  {&clib32_buf[0], ((&clib32_buf[0]) + clib32_buf_size)},
-  {&clib64_buf[0], ((&clib64_buf[0]) + clib64_buf_size)},
-  {&clib32_fp_buf[0], ((&clib32_fp_buf[0]) + clib32_fp_buf_size)},
-  {&clib64_fp_buf[0], ((&clib64_fp_buf[0]) + clib64_fp_buf_size)},
-};
+  uint8_t *clib_ptrs[4][4] = {
+    {&clib32_buf[0], ((&clib32_buf[0]) + clib32_buf_size)},
+    {&clib64_buf[0], ((&clib64_buf[0]) + clib64_buf_size)},
+    {&clib32_fp_buf[0], ((&clib32_fp_buf[0]) + clib32_fp_buf_size)},
+    {&clib64_fp_buf[0], ((&clib64_fp_buf[0]) + clib64_fp_buf_size)},
+  };
 }
 
 #undef p
@@ -225,8 +227,8 @@ void add_cprover_library(contextt &context, message_handlert &message_handler)
 #endif
 
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
-    generate_symbol_deps(s.name, s.value, symbol_deps);
-    generate_symbol_deps(s.name, s.type, symbol_deps);
+    generate_symbol_deps(s.id, s.value, symbol_deps);
+    generate_symbol_deps(s.id, s.type, symbol_deps);
   });
 
   // Add two hacks; we migth use either pthread_mutex_lock or the checked
@@ -250,11 +252,11 @@ void add_cprover_library(contextt &context, message_handlert &message_handler)
 
   new_ctx.foreach_operand(
     [&context, &store_ctx, &symbol_deps, &to_include](const symbolt &s) {
-      const symbolt *symbol = context.find_symbol(s.name);
+      const symbolt *symbol = context.find_symbol(s.id);
       if(symbol != nullptr && symbol->value.is_nil())
       {
         store_ctx.add(s);
-        ingest_symbol(s.name, symbol_deps, to_include);
+        ingest_symbol(s.id, symbol_deps, to_include);
       }
     });
 

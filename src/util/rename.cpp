@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void get_new_name(symbolt &symbol, const namespacet &ns)
 {
-  get_new_name(symbol.name, ns);
+  get_new_name(symbol.id, ns);
 }
 
 void get_new_name(irep_idt &new_name, const namespacet &ns)

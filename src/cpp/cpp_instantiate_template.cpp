@@ -166,7 +166,7 @@ const symbolt *cpp_typecheckt::handle_recursive_template_instance(
   // Look for this template being instantiated.
   for(; it != instantiation_stack.rend(); it++)
   {
-    if(it->identifier == template_symbol.name)
+    if(it->identifier == template_symbol.id)
     {
       // OK, we found it. Now, are the types equivalent?
       typedef cpp_template_args_baset::argumentst argumentst;
@@ -204,7 +204,7 @@ const symbolt *cpp_typecheckt::handle_recursive_template_instance(
 
       // Nope; create it.
       symbolt symbol;
-      symbol.name = link_symbol;
+      symbol.id = link_symbol;
       symbol.base_name = template_symbol.base_name;
       symbol.value = exprt();
       symbol.location = locationt();
@@ -266,7 +266,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   instantiation_levelt i_level(instantiation_stack);
   instantiation_stack.back().location = location;
-  instantiation_stack.back().identifier = template_symbol.name;
+  instantiation_stack.back().identifier = template_symbol.id;
   instantiation_stack.back().full_template_args = full_template_args;
 
 #if 0
@@ -297,12 +297,12 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   // we need the template scope to see the parameters
   cpp_scopet *template_scope =
-    static_cast<cpp_scopet *>(cpp_scopes.id_map[template_symbol.name]);
+    static_cast<cpp_scopet *>(cpp_scopes.id_map[template_symbol.id]);
 
   if(template_scope == nullptr)
   {
     err_location(location);
-    str << "identifier: " << template_symbol.name << std::endl;
+    str << "identifier: " << template_symbol.id << std::endl;
     throw "template instantiation error: scope not found";
   }
 
@@ -316,7 +316,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   template_typet template_type = new_decl.template_type();
   new_decl.remove("is_template");
   new_decl.remove("template_type");
-  new_decl.set("#template", template_symbol.name);
+  new_decl.set("#template", template_symbol.id);
   new_decl.set("#template_arguments", specialization_template_args);
 
   // Let's check if the arguments are incompletes (they might have been
@@ -360,7 +360,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   // Does it already exist?
   const symbolt *existing_template_instance =
-    is_template_instantiated(template_symbol.name, subscope_name);
+    is_template_instantiated(template_symbol.id, subscope_name);
   if(existing_template_instance)
   {
     // continue if the type is incomplete only -- it might now be complete(?).
@@ -380,7 +380,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   // been instantiated using these arguments
   {
     // need non-const handle on template symbol
-    symbolt &s = *context.find_symbol(template_symbol.name);
+    symbolt &s = *context.find_symbol(template_symbol.id);
     irept &instantiated_with = s.value.add("instantiated_with");
     instantiated_with.get_sub().push_back(specialization_template_args);
   }
@@ -436,8 +436,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
     // Mark template as instantiated before instantiating template methods,
     // as they might then go and instantiate recursively.
-    mark_template_instantiated(
-      template_symbol.name, subscope_name, new_symb.name);
+    mark_template_instantiated(template_symbol.id, subscope_name, new_symb.id);
 
     // also instantiate all the template methods
     const exprt &template_methods = static_cast<const exprt &>(
@@ -539,7 +538,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
       false);
 
     irep_idt sym_name = to_struct_type(symb.type).components().back().name();
-    mark_template_instantiated(template_symbol.name, subscope_name, sym_name);
+    mark_template_instantiated(template_symbol.id, subscope_name, sym_name);
     symbolt &final_sym = *context.find_symbol(sym_name);
 
     // Propagate the '#template' attributes
@@ -557,7 +556,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   convert_non_template_declaration(new_decl);
 
   const irep_idt &new_sym_name = new_decl.declarators()[0].identifier();
-  mark_template_instantiated(template_symbol.name, subscope_name, new_sym_name);
+  mark_template_instantiated(template_symbol.id, subscope_name, new_sym_name);
   return lookup(new_sym_name);
 }
 
@@ -629,7 +628,7 @@ void cpp_typecheckt::put_template_arg_into_scope(
 
   // Construct a new, concrete type symbol, with the base name as the templated
   // type name, and with the current scopes prefix.
-  symbol.name = cur_scope_prefix + "::" + orig_symbol.base_name.as_string();
+  symbol.id = cur_scope_prefix + "::" + orig_symbol.base_name.as_string();
   symbol.base_name = orig_symbol.base_name;
   symbol.value = argument;
   symbol.location = argument.location();

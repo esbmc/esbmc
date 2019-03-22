@@ -11,13 +11,13 @@ Author: Daniel Kroening, kroening@kroening.com
 bool contextt::add(const symbolt &symbol)
 {
   std::pair<symbolst::iterator, bool> result =
-    symbols.insert(std::pair<irep_idt, symbolt>(symbol.name, symbol));
+    symbols.insert(std::pair<irep_idt, symbolt>(symbol.id, symbol));
 
   if(!result.second)
     return true;
 
   symbol_base_map.insert(
-    std::pair<irep_idt, irep_idt>(symbol.base_name, symbol.name));
+    std::pair<irep_idt, irep_idt>(symbol.base_name, symbol.id));
 
   ordered_symbols.push_back(&result.first->second);
   return false;
@@ -26,9 +26,8 @@ bool contextt::add(const symbolt &symbol)
 bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 {
   symbolt tmp;
-
   std::pair<symbolst::iterator, bool> result =
-    symbols.insert(std::pair<irep_idt, symbolt>(symbol.name, tmp));
+    symbols.insert(std::pair<irep_idt, symbolt>(symbol.id, tmp));
 
   if(!result.second)
   {
@@ -37,7 +36,7 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
   }
 
   symbol_base_map.insert(
-    std::pair<irep_idt, irep_idt>(symbol.base_name, symbol.name));
+    std::pair<irep_idt, irep_idt>(symbol.base_name, symbol.id));
 
   ordered_symbols.push_back(&result.first->second);
 
@@ -57,28 +56,16 @@ void contextt::dump() const
 symbolt *contextt::find_symbol(irep_idt name)
 {
   auto it = symbols.find(name);
-
   if(it != symbols.end())
     return &(it->second);
-
-  auto it1 = symbol_base_map.find(name);
-  if(it1 != symbol_base_map.end())
-    return find_symbol(it1->second);
-
   return nullptr;
 }
 
 const symbolt *contextt::find_symbol(irep_idt name) const
 {
   auto it = symbols.find(name);
-
   if(it != symbols.end())
     return &(it->second);
-
-  auto it1 = symbol_base_map.find(name);
-  if(it1 != symbol_base_map.end())
-    return find_symbol(it1->second);
-
   return nullptr;
 }
 
@@ -96,7 +83,7 @@ void contextt::erase_symbol(irep_idt name)
     std::remove_if(
       ordered_symbols.begin(),
       ordered_symbols.end(),
-      [&name](const symbolt *s) { return s->name == name; }),
+      [&name](const symbolt *s) { return s->id == name; }),
     ordered_symbols.end());
 }
 

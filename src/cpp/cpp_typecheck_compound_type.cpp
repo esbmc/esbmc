@@ -201,7 +201,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     // produce new symbol
     symbolt symbol;
 
-    symbol.name = symbol_name;
+    symbol.id = symbol_name;
     symbol.base_name = base_name;
     symbol.value.make_nil();
     symbol.location = type.location();
@@ -226,7 +226,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.is_scope = true;
     id.prefix = cpp_scopes.current_scope().prefix +
                 id2string(new_symbol->base_name) + "::";
-    id.class_identifier = new_symbol->name;
+    id.class_identifier = new_symbol->id;
     id.id_class = cpp_idt::CLASS;
 
     if(has_body)
@@ -297,7 +297,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
   bool is_explicit = declaration.member_spec().is_explicit();
   bool is_inline = declaration.member_spec().is_inline();
 
-  final_type.set("#member_name", symbol.name);
+  final_type.set("#member_name", symbol.id);
 
   // first do some sanity checks
 
@@ -448,7 +448,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     if(!is_virtual)
     {
       typecheck_member_function(
-        symbol.name, component, initializers, method_qualifier, value);
+        symbol.id, component, initializers, method_qualifier, value);
 
       if(!value.is_nil() && !is_static)
       {
@@ -480,10 +480,10 @@ void cpp_typecheckt::typecheck_compound_declarator(
       }
 
       typecheck_member_function(
-        symbol.name, component, initializers, method_qualifier, value);
+        symbol.id, component, initializers, method_qualifier, value);
 
       // get the virtual-table symbol type
-      irep_idt vt_name = "virtual_table::" + symbol.name.as_string();
+      irep_idt vt_name = "virtual_table::" + symbol.id.as_string();
 
       symbolt *s = context.find_symbol(vt_name);
 
@@ -491,14 +491,14 @@ void cpp_typecheckt::typecheck_compound_declarator(
       {
         // first time: create a virtual-table symbol type
         symbolt vt_symb_type;
-        vt_symb_type.name = vt_name;
+        vt_symb_type.id = vt_name;
         vt_symb_type.base_name =
           "virtual_table::" + symbol.base_name.as_string();
         vt_symb_type.mode = current_mode;
         vt_symb_type.module = module;
         vt_symb_type.location = symbol.location;
         vt_symb_type.type = struct_typet();
-        vt_symb_type.type.set("name", vt_symb_type.name);
+        vt_symb_type.type.set("name", vt_symb_type.id);
         vt_symb_type.is_type = true;
 
         bool failed = context.move(vt_symb_type);
@@ -510,7 +510,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         // add a virtual-table pointer
         struct_typet::componentt compo;
         compo.type() = pointer_typet(symbol_typet(vt_name));
-        compo.set_name(symbol.name.as_string() + "::@vtable_pointer");
+        compo.set_name(symbol.id.as_string() + "::@vtable_pointer");
         compo.base_name("@vtable_pointer");
         compo.pretty_name(symbol.base_name.as_string() + "@vtable_pointer");
         compo.set("is_vtptr", true);
@@ -543,7 +543,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
         // a new function that does 'late casting' of the 'this' parameter
         symbolt func_symb;
-        func_symb.name =
+        func_symb.id =
           component.get_name().as_string() + "::" + virtual_base.as_string();
         func_symb.base_name = component.base_name();
         func_symb.mode = current_mode;
@@ -567,14 +567,13 @@ void cpp_typecheckt::typecheck_compound_declarator(
             base_name = "arg" + i2string(i);
 
           symbolt arg_symb;
-          arg_symb.name =
-            func_symb.name.as_string() + "::" + base_name.as_string();
+          arg_symb.id = func_symb.id.as_string() + "::" + base_name.as_string();
           arg_symb.base_name = base_name;
           arg_symb.mode = current_mode;
           arg_symb.location = func_symb.location;
           arg_symb.type = arg.type();
 
-          arg.set("#identifier", arg_symb.name);
+          arg.set("#identifier", arg_symb.id);
 
           // add the argument to the symbol table
           bool failed = context.move(arg_symb);
@@ -632,7 +631,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
         struct_typet::componentt new_compo = component;
         new_compo.type() = func_symb.type;
-        new_compo.set_name(func_symb.name);
+        new_compo.set_name(func_symb.id);
         components.push_back(new_compo);
 
         // add the function to the symbol table
@@ -653,7 +652,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     // add as global variable to context
     symbolt static_symbol;
     static_symbol.mode = symbol.mode;
-    static_symbol.name = identifier;
+    static_symbol.id = identifier;
     static_symbol.type = component.type();
     static_symbol.base_name = component.base_name();
     static_symbol.lvalue = true;
@@ -661,7 +660,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     static_symbol.location = cpp_name.location();
     static_symbol.is_extern = true;
 
-    dinis.push_back(static_symbol.name);
+    dinis.push_back(static_symbol.id);
 
     symbolt *new_symbol;
     if(context.move(static_symbol, new_symbol))
@@ -689,7 +688,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
       else
       {
         symbol_exprt symexpr;
-        symexpr.identifier(new_symbol->name);
+        symexpr.identifier(new_symbol->id);
 
         exprt::operandst ops;
         ops.push_back(value);
@@ -919,7 +918,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   cpp_save_scopet saved_scope(cpp_scopes);
 
   // enter scope of compound
-  cpp_scopes.set_scope(symbol.name);
+  cpp_scopes.set_scope(symbol.id);
 
   assert(symbol.type.id() == "struct" || symbol.type.id() == "union");
 
@@ -940,7 +939,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   exprt &body = static_cast<exprt &>(type.add("body"));
   struct_typet::componentst &components = type.components();
 
-  symbol.type.set("name", symbol.name);
+  symbol.type.set("name", symbol.id);
 
   // default access
   irep_idt access = type.get_bool("#class") ? "private" : "public";
@@ -1320,7 +1319,7 @@ void cpp_typecheckt::typecheck_member_function(
   if(value.is_not_nil())
     type.set("#inlined", true);
 
-  symbol.name = identifier;
+  symbol.id = identifier;
   symbol.base_name = component.base_name();
   symbol.value.swap(value);
   symbol.mode = current_mode;
@@ -1336,13 +1335,13 @@ void cpp_typecheckt::typecheck_member_function(
   if(context.move(symbol, new_symbol))
   {
     err_location(symbol.location);
-    str << "failed to insert new symbol: " << symbol.name.c_str() << std::endl;
+    str << "failed to insert new symbol: " << symbol.id.c_str() << std::endl;
 
-    symbolt *symb_it = context.find_symbol(symbol.name);
+    symbolt *symb_it = context.find_symbol(symbol.id);
 
     if(symb_it != nullptr)
     {
-      str << "name of previous symbol: " << symbol.name << std::endl;
+      str << "name of previous symbol: " << symbol.id << std::endl;
       str << "location of previous symbol: ";
       err_location(symb_it->location);
     }
@@ -1423,7 +1422,7 @@ void cpp_typecheckt::add_anonymous_members_to_scope(
       cpp_idt &id = cpp_scopes.current_scope().insert(base_name);
       id.id_class = cpp_idt::SYMBOL;
       id.identifier = struct_union_component.name();
-      id.class_identifier = struct_union_symbol.name;
+      id.class_identifier = struct_union_symbol.id;
       id.is_member = true;
     }
   }
@@ -1460,7 +1459,7 @@ void cpp_typecheckt::convert_compound_ano_union(
   irep_idt identifier = cpp_scopes.current_scope().prefix + base_name.c_str();
 
   typet symbol_type("symbol");
-  symbol_type.identifier(struct_union_symbol.name);
+  symbol_type.identifier(struct_union_symbol.id);
 
   struct_typet::componentt component;
   component.name(identifier);

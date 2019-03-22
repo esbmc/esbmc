@@ -32,7 +32,7 @@ std::string from_expr(
     {
       mode = get_mode(id2string(symbol->mode));
       if(mode < 0)
-        throw "symbol " + id2string(symbol->name) + " has unknown mode '" +
+        throw "symbol " + id2string(symbol->base_name) + " has unknown mode '" +
           id2string(symbol->mode) + "'";
     }
   }
@@ -65,7 +65,7 @@ std::string from_type(
     {
       mode = get_mode(id2string(symbol->mode));
       if(mode < 0)
-        throw "symbol " + id2string(symbol->name) + " has unknown mode '" +
+        throw "symbol " + id2string(symbol->base_name) + " has unknown mode '" +
           id2string(symbol->mode) + "'";
     }
   }
