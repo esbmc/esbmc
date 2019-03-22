@@ -78,8 +78,8 @@ void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
 
       if(!ns.lookup(identifier, symbol))
       {
-        base_name = symbol->base_name;
-        display_name = symbol->base_name;
+        base_name = symbol->name;
+        display_name = symbol->name;
         if(type_string == "")
           type_string = from_type(ns, identifier, symbol->type);
 

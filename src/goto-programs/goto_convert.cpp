@@ -1979,7 +1979,7 @@ symbolt &goto_convertt::new_tmp_symbol(const typet &type)
 
   do
   {
-    new_symbol.base_name = "tmp$" + i2string(++temporary_counter);
+    new_symbol.name = "tmp$" + i2string(++temporary_counter);
     new_symbol.id = tmp_symbol_prefix + id2string(new_symbol.id);
     new_symbol.lvalue = true;
     new_symbol.type = type;

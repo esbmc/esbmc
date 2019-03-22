@@ -176,7 +176,7 @@ void c_typecheck_baset::typecheck_expr_builtin_va_arg(exprt &expr)
   symbol_type.return_type() = empty_typet();
 
   symbolt symbol;
-  symbol.base_name = "builtin_va_arg";
+  symbol.name = "builtin_va_arg";
   symbol.id = "builtin_va_arg";
   symbol.type = symbol_type;
 
@@ -289,8 +289,7 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   if(symbol.is_type)
   {
     err_location(expr);
-    str << "did not expect a type symbol here, but got `" << symbol.base_name
-        << "'";
+    str << "did not expect a type symbol here, but got `" << symbol.name << "'";
     throw 0;
   }
 
@@ -1143,9 +1142,8 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
       const irep_idt &identifier = f_op.identifier();
 
       symbolt new_symbol;
-
       new_symbol.id = identifier;
-      new_symbol.base_name = id2string(identifier);
+      new_symbol.name = id2string(identifier);
       new_symbol.location = expr.location();
       new_symbol.type = code_typet();
       new_symbol.type.incomplete(true);

@@ -2361,7 +2361,7 @@ void clang_c_convertert::get_default_symbol(
   symbol.module = module_name;
   symbol.location = std::move(location);
   symbol.type = std::move(type);
-  symbol.base_name = base_name;
+  symbol.name = base_name;
   symbol.id = unique_name;
 }
 
@@ -2554,7 +2554,7 @@ symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
   {
     if(context.move(symbol, s))
     {
-      std::cerr << "Couldn't add symbol " << symbol.base_name
+      std::cerr << "Couldn't add symbol " << symbol.name
                 << " to symbol table\n";
       symbol.dump();
       abort();

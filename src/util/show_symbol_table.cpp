@@ -33,7 +33,7 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
     {
       mode = get_mode(id2string(s.mode));
       if(mode < 0)
-        throw "symbol " + id2string(s.base_name) + " has unknown mode";
+        throw "symbol " + id2string(s.name) + " has unknown mode";
     }
 
     std::unique_ptr<languaget> p(mode_table[mode].new_language());
@@ -47,7 +47,7 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
 
     out << "Symbol......: " << s.id << std::endl;
     out << "Module......: " << s.module << std::endl;
-    out << "Base name...: " << s.base_name << std::endl;
+    out << "Base name...: " << s.name << std::endl;
     out << "Mode........: " << s.mode << " (" << mode << ")" << std::endl;
     out << "Type........: " << type_str << std::endl;
     out << "Value.......: " << value_str << std::endl;

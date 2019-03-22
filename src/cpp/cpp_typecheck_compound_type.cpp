@@ -202,7 +202,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     symbolt symbol;
 
     symbol.id = symbol_name;
-    symbol.base_name = base_name;
+    symbol.name = base_name;
     symbol.value.make_nil();
     symbol.location = type.location();
     symbol.mode = "C++"; // All types are cpp types
@@ -210,8 +210,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     symbol.type.swap(type);
     symbol.is_type = true;
     symbol.is_macro = false;
-    symbol.type.tag(
-      cpp_scopes.current_scope().prefix + id2string(symbol.base_name));
+    symbol.type.tag(cpp_scopes.current_scope().prefix + id2string(symbol.name));
 
     // move early, must be visible before doing body
     symbolt *new_symbol;
@@ -224,8 +223,8 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
 
     id.id_class = cpp_idt::CLASS;
     id.is_scope = true;
-    id.prefix = cpp_scopes.current_scope().prefix +
-                id2string(new_symbol->base_name) + "::";
+    id.prefix =
+      cpp_scopes.current_scope().prefix + id2string(new_symbol->name) + "::";
     id.class_identifier = new_symbol->id;
     id.id_class = cpp_idt::CLASS;
 
@@ -234,7 +233,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     else
     {
       typet new_type("incomplete_" + new_symbol->type.id_string());
-      new_type.set("tag", new_symbol->base_name);
+      new_type.set("tag", new_symbol->name);
       new_symbol->type.swap(new_type);
     }
   }
@@ -343,14 +342,14 @@ void cpp_typecheckt::typecheck_compound_declarator(
     throw 0;
   }
 
-  if(is_constructor && base_name != id2string(symbol.base_name))
+  if(is_constructor && base_name != id2string(symbol.name))
   {
     err_location(cpp_name.location());
     str << "member function must return a value or void";
     throw 0;
   }
 
-  if(is_destructor && base_name != "~" + id2string(symbol.base_name))
+  if(is_destructor && base_name != "~" + id2string(symbol.name))
   {
     err_location(cpp_name.location());
     str << "destructor with wrong name";
@@ -492,8 +491,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         // first time: create a virtual-table symbol type
         symbolt vt_symb_type;
         vt_symb_type.id = vt_name;
-        vt_symb_type.base_name =
-          "virtual_table::" + symbol.base_name.as_string();
+        vt_symb_type.name = "virtual_table::" + symbol.name.as_string();
         vt_symb_type.mode = current_mode;
         vt_symb_type.module = module;
         vt_symb_type.location = symbol.location;
@@ -512,7 +510,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         compo.type() = pointer_typet(symbol_typet(vt_name));
         compo.set_name(symbol.id.as_string() + "::@vtable_pointer");
         compo.base_name("@vtable_pointer");
-        compo.pretty_name(symbol.base_name.as_string() + "@vtable_pointer");
+        compo.pretty_name(symbol.name.as_string() + "@vtable_pointer");
         compo.set("is_vtptr", true);
         compo.set("access", "public");
         components.push_back(compo);
@@ -545,7 +543,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         symbolt func_symb;
         func_symb.id =
           component.get_name().as_string() + "::" + virtual_base.as_string();
-        func_symb.base_name = component.base_name();
+        func_symb.name = component.base_name();
         func_symb.mode = current_mode;
         func_symb.module = module;
         func_symb.location = component.location();
@@ -568,7 +566,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
           symbolt arg_symb;
           arg_symb.id = func_symb.id.as_string() + "::" + base_name.as_string();
-          arg_symb.base_name = base_name;
+          arg_symb.name = base_name;
           arg_symb.mode = current_mode;
           arg_symb.location = func_symb.location;
           arg_symb.type = arg.type();
@@ -654,7 +652,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     static_symbol.mode = symbol.mode;
     static_symbol.id = identifier;
     static_symbol.type = component.type();
-    static_symbol.base_name = component.base_name();
+    static_symbol.name = component.base_name();
     static_symbol.lvalue = true;
     static_symbol.static_lifetime = true;
     static_symbol.location = cpp_name.location();
@@ -666,7 +664,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     if(context.move(static_symbol, new_symbol))
     {
       err_location(cpp_name.location());
-      str << "redeclaration of symbol `" << static_symbol.base_name.as_string()
+      str << "redeclaration of symbol `" << static_symbol.name.as_string()
           << "'";
       throw 0;
     }
@@ -1111,7 +1109,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
     // build declaration
     cpp_declarationt ctor;
-    default_ctor(symbol.type.location(), symbol.base_name, ctor);
+    default_ctor(symbol.type.location(), symbol.name, ctor);
     body.add("operands").move_to_sub(ctor);
   }
 
@@ -1320,7 +1318,7 @@ void cpp_typecheckt::typecheck_member_function(
     type.set("#inlined", true);
 
   symbol.id = identifier;
-  symbol.base_name = component.base_name();
+  symbol.name = component.base_name();
   symbol.value.swap(value);
   symbol.mode = current_mode;
   symbol.module = module;
@@ -1396,7 +1394,7 @@ void cpp_typecheckt::add_anonymous_members_to_scope(
     if(struct_union_component.type().id() == "code")
     {
       err_location(struct_union_symbol.type.location());
-      str << "anonymous struct/union member `" << struct_union_symbol.base_name
+      str << "anonymous struct/union member `" << struct_union_symbol.name
           << "' shall not have function members";
       throw 0;
     }

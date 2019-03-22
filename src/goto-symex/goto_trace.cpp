@@ -194,7 +194,7 @@ void show_goto_trace_gui(
       const symbolt *symbol;
       irep_idt base_name;
       if(!ns.lookup(identifier, symbol))
-        base_name = symbol->base_name;
+        base_name = symbol->name;
 
       out << "TRACE" << std::endl;
 

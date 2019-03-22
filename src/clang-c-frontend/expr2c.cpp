@@ -24,7 +24,7 @@ std::string expr2ct::id_shorthand(const exprt &expr) const
   const symbolt *symbol;
 
   if(!ns.lookup(identifier, symbol))
-    return id2string(symbol->base_name);
+    return id2string(symbol->name);
 
   std::string sh = id2string(identifier);
 

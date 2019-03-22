@@ -238,7 +238,7 @@ exprt symbol_expr(const symbolt &symbol)
 {
   exprt tmp("symbol", symbol.type);
   tmp.identifier(symbol.id);
-  tmp.name(symbol.base_name);
+  tmp.name(symbol.name);
   return tmp;
 }
 

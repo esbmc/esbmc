@@ -43,7 +43,7 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
     symbolt symbol;
 
     symbol.id = id2string(enum_symbol.id) + "::" + id2string(name);
-    symbol.base_name = name;
+    symbol.name = name;
     symbol.value.swap(final_value);
     symbol.location = static_cast<const locationt &>(it->find("#location"));
     symbol.mode = "C++"; // All types are c++ types
@@ -114,7 +114,7 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
     symbolt symbol;
 
     symbol.id = symbol_name;
-    symbol.base_name = base_name;
+    symbol.name = base_name;
     symbol.value.make_nil();
     symbol.location = type.location();
     symbol.mode = "C++"; // All types are c++ types.

@@ -40,7 +40,7 @@ public:
 
     symbolt new_symbol;
     new_symbol.id = identifier;
-    new_symbol.base_name = identifier;
+    new_symbol.name = identifier;
     new_symbol.type = typet("bool");
     new_symbol.static_lifetime = true;
     new_symbol.value.make_false();

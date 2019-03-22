@@ -27,7 +27,7 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
     if(symbol.value.id() != "type")
     {
       err_location(symbol.location);
-      str << "expected type as initializer for `" << symbol.base_name << "'";
+      str << "expected type as initializer for `" << symbol.name << "'";
       throw 0;
     }
 
@@ -43,14 +43,14 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
     if(is_reference(symbol.type))
     {
       err_location(symbol.location);
-      str << "`" << symbol.base_name
+      str << "`" << symbol.name
           << "' is declared as reference but is not initialized";
       throw 0;
     }
     if(symbol.type.id() == "incomplete_array")
     {
       err_location(symbol.location);
-      str << "storage size of `" << symbol.base_name << "' isn't know";
+      str << "storage size of `" << symbol.name << "' isn't know";
       throw 0;
     }
 

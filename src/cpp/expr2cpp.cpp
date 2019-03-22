@@ -194,7 +194,7 @@ std::string expr2cppt::convert_rec(
       else
         dest += "struct";
 
-      dest += " " + id2string(symbol.base_name);
+      dest += " " + id2string(symbol.name);
       dest += d;
       return dest;
     }
@@ -204,7 +204,7 @@ std::string expr2cppt::convert_rec(
 
       dest += "enum";
 
-      dest += " " + id2string(symbol.base_name);
+      dest += " " + id2string(symbol.name);
       dest += d;
       return dest;
     }

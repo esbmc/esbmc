@@ -187,17 +187,17 @@ void cpp_typecheckt::default_cpctor(
   locationt location = symbol.type.location();
 
   location.set_function(
-    id2string(symbol.base_name) + "::" + id2string(symbol.base_name) +
-    "( const " + id2string(symbol.base_name) + "&)");
+    id2string(symbol.name) + "::" + id2string(symbol.name) + "( const " +
+    id2string(symbol.name) + "&)");
 
-  default_ctor(location, symbol.base_name, cpctor);
+  default_ctor(location, symbol.name, cpctor);
   cpp_declaratort &decl0 = cpctor.declarators()[0];
 
   std::string arg_name("ref");
 
   // Compound name
   irept compname("name");
-  compname.identifier(symbol.base_name);
+  compname.identifier(symbol.name);
   compname.set("#location", location);
 
   cpp_namet cppcomp;
@@ -250,10 +250,10 @@ void cpp_typecheckt::default_cpctor(
     const symbolt &parsymb = lookup(parent_it->type().identifier());
 
     if(cpp_is_pod(parsymb.type))
-      copy_parent(location, parsymb.base_name, arg_name, block);
+      copy_parent(location, parsymb.name, arg_name, block);
     else
     {
-      irep_idt ctor_name = parsymb.base_name;
+      irep_idt ctor_name = parsymb.name;
 
       // Call the parent default copy constructor
       exprt name("name");
@@ -349,8 +349,8 @@ void cpp_typecheckt::default_assignop(
   locationt location = symbol.type.location();
 
   location.set_function(
-    id2string(symbol.base_name) + "& " + id2string(symbol.base_name) +
-    "::operator=( const " + id2string(symbol.base_name) + "&)");
+    id2string(symbol.name) + "& " + id2string(symbol.name) +
+    "::operator=( const " + id2string(symbol.name) + "&)");
 
   std::string arg_name("ref");
 
@@ -389,8 +389,7 @@ void cpp_typecheckt::default_assignop(
   args_decl.type().id("merged_type");
   args_decl_type_sub.get_sub().emplace_back("cpp-name");
   args_decl_type_sub.get_sub().back().get_sub().emplace_back("name");
-  args_decl_type_sub.get_sub().back().get_sub().back().identifier(
-    symbol.base_name);
+  args_decl_type_sub.get_sub().back().get_sub().back().identifier(symbol.name);
   args_decl_type_sub.get_sub().back().get_sub().back().set(
     "#location", location);
 
@@ -440,7 +439,7 @@ void cpp_typecheckt::default_assignop_value(
 
     const symbolt &symb = lookup(parent_it->type().identifier());
 
-    copy_parent(location, symb.base_name, arg_name, block);
+    copy_parent(location, symb.name, arg_name, block);
   }
 
   // Then, we copy the members
@@ -671,7 +670,7 @@ void cpp_typecheckt::full_member_initialization(
       {
         // default initializer
         irept name("name");
-        name.identifier(symb.base_name);
+        name.identifier(symb.name);
 
         cpp_namet cppname;
         cppname.move_to_sub(name);
@@ -697,7 +696,7 @@ void cpp_typecheckt::full_member_initialization(
     if(cpp_is_pod(ctorsymb.type))
       continue;
 
-    irep_idt ctor_name = ctorsymb.base_name;
+    irep_idt ctor_name = ctorsymb.name;
 
     // Check if the initialization list of the constructor
     // explicitly calls the parent constructor
@@ -1001,7 +1000,7 @@ bool cpp_typecheckt::find_dtor(const symbolt &symbol) const
 
   forall_irep(cit, components.get_sub())
   {
-    if(cit->base_name() == "~" + id2string(symbol.base_name))
+    if(cit->base_name() == "~" + id2string(symbol.name))
       return true;
   }
 
@@ -1014,7 +1013,7 @@ void cpp_typecheckt::default_dtor(const symbolt &symb, cpp_declarationt &dtor)
 
   irept name;
   name.id("name");
-  name.identifier("~" + id2string(symb.base_name));
+  name.identifier("~" + id2string(symb.name));
   name.set("#location", symb.location);
 
   cpp_declaratort decl;
@@ -1044,7 +1043,7 @@ void cpp_typecheckt::dtor(
   locationt location = symb.type.location();
 
   location.set_function(
-    id2string(symb.base_name) + "::~" + id2string(symb.base_name) + "()");
+    id2string(symb.name) + "::~" + id2string(symb.name) + "()");
 
   const struct_typet::componentst &components =
     to_struct_type(symb.type).components();
