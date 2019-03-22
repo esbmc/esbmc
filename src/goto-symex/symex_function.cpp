@@ -43,7 +43,7 @@ bool goto_symext::get_unwind_recursion(
 
     const symbolt &symbol = ns.lookup(identifier);
 
-    std::string msg = "Unwinding recursion " + id2string(symbol.base_name) +
+    std::string msg = "Unwinding recursion " + id2string(symbol.name) +
                       " iteration " + integer2string(unwind);
 
     if(this_loop_max_unwind != 0)
@@ -146,7 +146,7 @@ unsigned goto_symext::argument_assignments(
       // add to symbol table
       symbolt symbol;
       symbol.id = id;
-      symbol.base_name = "va_arg" + std::to_string(va_count);
+      symbol.name = "va_arg" + std::to_string(va_count);
       symbol.type = migrate_type_back((*it1)->type);
 
       if(new_context.move(symbol))

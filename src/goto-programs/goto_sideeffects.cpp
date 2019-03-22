@@ -654,7 +654,7 @@ void goto_convertt::remove_function_call(
 
   symbolt new_symbol;
 
-  new_symbol.base_name = "return_value$";
+  new_symbol.name = "return_value$";
   new_symbol.type = expr.type();
   new_symbol.location = expr.location();
 
@@ -671,13 +671,13 @@ void goto_convertt::remove_function_call(
     const irep_idt &identifier = expr.op0().identifier();
     const symbolt &symbol = ns.lookup(identifier);
 
-    std::string new_base_name = id2string(new_symbol.base_name);
+    std::string new_base_name = id2string(new_symbol.name);
 
     new_base_name += '_';
-    new_base_name += id2string(symbol.base_name);
+    new_base_name += id2string(symbol.name);
     new_base_name += "$" + std::to_string(++temporary_counter);
 
-    new_symbol.base_name = new_base_name;
+    new_symbol.name = new_base_name;
     new_symbol.mode = symbol.mode;
   }
 
@@ -726,7 +726,7 @@ void goto_convertt::remove_cpp_new(
 
   symbolt new_symbol;
 
-  new_symbol.base_name = "new_ptr$" + std::to_string(++temporary_counter);
+  new_symbol.name = "new_ptr$" + std::to_string(++temporary_counter);
   new_symbol.type = expr.type();
   new_symbol.id = tmp_symbol_prefix + id2string(new_symbol.id);
 

@@ -56,7 +56,7 @@ cpp_idt &cpp_scopest::put_into_scope(
   bool is_friend)
 {
   assert(!symbol.id.empty());
-  assert(!symbol.base_name.empty());
+  assert(!symbol.name.empty());
 
   // functions are also scopes
   if(symbol.type.id() == "code")
@@ -64,13 +64,12 @@ cpp_idt &cpp_scopest::put_into_scope(
     cpp_scopest::id_mapt::iterator id_it = id_map.find(symbol.id);
     if(id_it == id_map.end())
     {
-      irep_idt block_base_name(
-        std::string("$block:") + symbol.base_name.c_str());
+      irep_idt block_base_name(std::string("$block:") + symbol.name.c_str());
       cpp_idt &id = scope.insert(block_base_name);
       id.id_class = cpp_idt::BLOCK_SCOPE;
       id.identifier = symbol.id;
       id.is_scope = true;
-      id.prefix = id2string(scope.prefix) + id2string(symbol.base_name) + "::";
+      id.prefix = id2string(scope.prefix) + id2string(symbol.name) + "::";
       id_map[symbol.id] = &id;
     }
   }
@@ -81,7 +80,7 @@ cpp_idt &cpp_scopest::put_into_scope(
     go_to(scope);
     go_to_global_scope();
 
-    cpp_idt &id = current_scope().insert(symbol.base_name);
+    cpp_idt &id = current_scope().insert(symbol.name);
     id.identifier = symbol.id;
     id.id_class = cpp_idt::SYMBOL;
     if(id_map.find(symbol.id) == id_map.end())
@@ -89,7 +88,7 @@ cpp_idt &cpp_scopest::put_into_scope(
     return id;
   }
 
-  cpp_idt &id = scope.insert(symbol.base_name);
+  cpp_idt &id = scope.insert(symbol.name);
   id.identifier = symbol.id;
   id.id_class = cpp_idt::SYMBOL;
   if(id_map.find(symbol.id) == id_map.end())

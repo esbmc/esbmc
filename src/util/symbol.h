@@ -23,7 +23,7 @@ public:
   locationt location;
   irep_idt id;
   irep_idt module;
-  irep_idt base_name;
+  irep_idt name;
   irep_idt mode;
 
   // global use

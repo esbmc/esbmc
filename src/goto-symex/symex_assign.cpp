@@ -76,7 +76,7 @@ goto_symext::goto_symext(
 
   symbolt sym;
   sym.id = "symex_throw::thrown_obj";
-  sym.base_name = "thrown_obj";
+  sym.name = "thrown_obj";
   // Type left deliberately undefined. XXX, is this wise?
   new_context.move(sym);
 }

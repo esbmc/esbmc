@@ -33,14 +33,14 @@ void cpp_typecheckt::convert_argument(
   symbolt symbol;
 
   symbol.id = identifier;
-  symbol.base_name = argument.get_base_name();
+  symbol.name = argument.get_base_name();
   symbol.location = argument.location();
   symbol.mode = mode;
   symbol.module = module;
   symbol.type = argument.type();
   symbol.lvalue = !is_reference(symbol.type);
 
-  assert(!symbol.base_name.empty());
+  assert(!symbol.name.empty());
 
   symbolt *new_symbol;
 

@@ -70,7 +70,7 @@ void cpp_typecheckt::convert_anonymous_union(
     if(it->type().id() == "code")
     {
       err_location(union_symbol.type.location());
-      str << "anonymous union `" << union_symbol.base_name
+      str << "anonymous union `" << union_symbol.name
           << "' shall not have function members\n";
       throw 0;
     }
@@ -91,7 +91,7 @@ void cpp_typecheckt::convert_anonymous_union(
     id.is_member = true;
   }
 
-  union_symbol.type.set("#unnamed_object", symbol.base_name);
+  union_symbol.type.set("#unnamed_object", symbol.name);
 
   code.swap(new_code);
 }

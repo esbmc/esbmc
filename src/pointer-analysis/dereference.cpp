@@ -531,7 +531,7 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
   // else, do new symbol
   symbolt symbol;
   symbol.id = "symex::invalid_object" + i2string(invalid_counter++);
-  symbol.base_name = "invalid_object";
+  symbol.name = "invalid_object";
   symbol.type = migrate_type_back(the_type);
 
   // make it a lvalue, so we can assign to it

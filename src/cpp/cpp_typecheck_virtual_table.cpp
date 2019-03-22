@@ -54,8 +54,8 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
 
     symbolt vt_symb_var;
     vt_symb_var.id = vt_symb_type.id.as_string() + "@" + symbol.id.as_string();
-    vt_symb_var.base_name =
-      vt_symb_type.base_name.as_string() + "@" + symbol.base_name.as_string();
+    vt_symb_var.name =
+      vt_symb_type.name.as_string() + "@" + symbol.name.as_string();
     vt_symb_var.mode = current_mode;
     vt_symb_var.module = module;
     vt_symb_var.location = vt_symb_type.location;

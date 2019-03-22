@@ -736,7 +736,7 @@ void cpp_typecheck_resolvet::make_constructors(
       const symbolt &the_sym = cpp_typecheck.lookup(struct_type.name());
 
       cpp_scopest::id_sett id_set;
-      cpp_typecheck.cpp_scopes.get_ids(the_sym.base_name, id_set, true);
+      cpp_typecheck.cpp_scopes.get_ids(the_sym.name, id_set, true);
 
       for(auto it : id_set)
       {
@@ -1357,7 +1357,7 @@ void cpp_typecheck_resolvet::show_identifiers(
 
       if(id_expr.type().get_bool("is_template"))
       {
-        out << cpp_typecheck.lookup(to_symbol_expr(id_expr)).base_name;
+        out << cpp_typecheck.lookup(to_symbol_expr(id_expr)).name;
       }
       else if(id_expr.type().id() == "code")
       {

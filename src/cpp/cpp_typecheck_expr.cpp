@@ -31,7 +31,7 @@ bool cpp_typecheckt::find_parent(
 {
   forall_irep(bit, symb.type.find("bases").get_sub())
   {
-    if(lookup(bit->type().identifier()).base_name == base_name)
+    if(lookup(bit->type().identifier()).name == base_name)
     {
       identifier = bit->type().identifier();
       return true;
@@ -1022,7 +1022,7 @@ void cpp_typecheckt::typecheck_expr_member(
         symbol_expr.type().get("return_type") == "constructor")
       {
         err_location(expr);
-        str << "error: member `" << lookup(symbol_expr.identifier()).base_name
+        str << "error: member `" << lookup(symbol_expr.identifier()).name
             << "' is a constructor";
         throw 0;
       }
@@ -1036,7 +1036,7 @@ void cpp_typecheckt::typecheck_expr_member(
         err_location(expr);
         str << "error: `" << symbol_expr.identifier()
             << "' is not static member "
-            << "of class `" << struct_symbol.base_name << "'";
+            << "of class `" << struct_symbol.name << "'";
         throw 0;
       }
 
@@ -1076,8 +1076,8 @@ void cpp_typecheckt::typecheck_expr_member(
   else
   {
     err_location(expr);
-    str << "error: member `" << component_name << "' of `"
-        << struct_symbol.base_name << "' not found";
+    str << "error: member `" << component_name << "' of `" << struct_symbol.name
+        << "' not found";
     throw 0;
   }
 
@@ -1403,7 +1403,7 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
     if(arguments.type().id() == "incomplete_array")
     {
       err_location(arguments.location());
-      str << "storage size of ‘" << lookup(arguments.identifier()).base_name;
+      str << "storage size of ‘" << lookup(arguments.identifier()).name;
       str << "’ isn’t known\n";
       throw 0;
     }

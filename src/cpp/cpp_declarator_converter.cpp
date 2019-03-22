@@ -245,9 +245,8 @@ void cpp_declarator_convertert::combine_types(
           if(i != 0 || !symbol_code_type.get_bool("#is_virtual"))
           {
             cpp_typecheck.err_location(location);
-            cpp_typecheck.str << "symbol `" << symbol.base_name
-                              << "': argument " << (i + 1) << " type mismatch"
-                              << std::endl;
+            cpp_typecheck.str << "symbol `" << symbol.name << "': argument "
+                              << (i + 1) << " type mismatch" << std::endl;
             cpp_typecheck.str << "previous type: "
                               << cpp_typecheck.to_string(symbol_argument.type())
                               << std::endl;
@@ -280,7 +279,7 @@ void cpp_declarator_convertert::combine_types(
   }
 
   cpp_typecheck.err_location(location);
-  cpp_typecheck.str << "symbol `" << symbol.base_name
+  cpp_typecheck.str << "symbol `" << symbol.name
                     << "' already declared with different type" << std::endl;
   cpp_typecheck.str << "previous type: " << cpp_typecheck.to_string(symbol.type)
                     << std::endl;
@@ -371,7 +370,7 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   symbolt symbol;
 
   symbol.id = final_identifier;
-  symbol.base_name = base_name;
+  symbol.name = base_name;
   symbol.value = declarator.value();
   symbol.location = declarator.name().location();
   symbol.mode = mode;

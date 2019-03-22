@@ -41,7 +41,7 @@ reachability_treet::reachability_treet(
   symbolt sym;
   sym.type = bool_typet();
   sym.id = "execution_statet::\\guard_exec";
-  sym.base_name = "execution_statet::\\guard_exec";
+  sym.name = "execution_statet::\\guard_exec";
   context.move(sym);
 
   CS_bound = atoi(options.get_option("context-bound").c_str());

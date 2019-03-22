@@ -147,7 +147,7 @@ void cpp_typecheckt::typecheck_class_template(cpp_declarationt &declaration)
   symbolt symbol;
 
   symbol.id = symbol_name;
-  symbol.base_name = base_name;
+  symbol.name = base_name;
   symbol.location = cpp_name.location();
   symbol.mode = current_mode;
   symbol.module = module;
@@ -162,8 +162,7 @@ void cpp_typecheckt::typecheck_class_template(cpp_declarationt &declaration)
   // put into current scope
   cpp_idt &id = cpp_scopes.put_into_scope(*new_symbol);
   id.id_class = cpp_idt::TEMPLATE;
-  id.prefix =
-    cpp_scopes.current_scope().prefix + id2string(new_symbol->base_name);
+  id.prefix = cpp_scopes.current_scope().prefix + id2string(new_symbol->name);
 
   // link the template symbol with the template scope
   cpp_scopes.id_map[symbol_name] = &template_scope;
@@ -239,7 +238,7 @@ void cpp_typecheckt::typecheck_function_template(cpp_declarationt &declaration)
 
   symbolt symbol;
   symbol.id = symbol_name;
-  symbol.base_name = base_name;
+  symbol.name = base_name;
   symbol.location = cpp_name.location();
   symbol.mode = current_mode;
   symbol.module = module;
@@ -254,8 +253,7 @@ void cpp_typecheckt::typecheck_function_template(cpp_declarationt &declaration)
   // put into scope
   cpp_idt &id = cpp_scopes.put_into_scope(*new_symbol);
   id.id_class = cpp_idt::TEMPLATE;
-  id.prefix =
-    cpp_scopes.current_scope().prefix + id2string(new_symbol->base_name);
+  id.prefix = cpp_scopes.current_scope().prefix + id2string(new_symbol->name);
 
   // link the template symbol with the template scope
   assert(template_scope.id_class == cpp_idt::TEMPLATE_SCOPE);

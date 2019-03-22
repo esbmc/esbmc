@@ -204,7 +204,7 @@ void cpp_typecheckt::static_initialization()
   symbolt init_symbol;
 
   init_symbol.id = "#ini#" + id2string(module);
-  init_symbol.base_name = "#ini#" + id2string(module);
+  init_symbol.name = "#ini#" + id2string(module);
   init_symbol.value.swap(block_sini);
   init_symbol.mode = current_mode;
   init_symbol.module = module;
@@ -239,7 +239,7 @@ void cpp_typecheckt::do_not_typechecked()
 
     for(symbolt *sym : to_typecheck_list)
     {
-      if(sym->base_name == "operator=")
+      if(sym->name == "operator=")
       {
         cpp_declaratort declarator;
         declarator.location() = sym->location;

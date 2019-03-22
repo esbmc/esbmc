@@ -147,11 +147,11 @@ expr2tc goto_symext::symex_mem(
   // value
   symbolt symbol;
 
-  symbol.base_name = "dynamic_" + i2string(dynamic_counter) +
-                     (size_is_one ? "_value" : "_array");
+  symbol.name = "dynamic_" + i2string(dynamic_counter) +
+                (size_is_one ? "_value" : "_array");
 
   symbol.id = std::string("symex_dynamic::") + (!is_malloc ? "alloca::" : "") +
-              id2string(symbol.base_name);
+              id2string(symbol.name);
   symbol.lvalue = true;
 
   typet renamedtype = ns.follow(migrate_type_back(type));
@@ -225,7 +225,7 @@ expr2tc goto_symext::symex_mem(
   track_new_pointer(ptr_obj, new_type);
 
   dynamic_memory.emplace_back(
-    rhs_copy, alloc_guard, !is_malloc, symbol.base_name.as_string());
+    rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());
 
   return rhs_addrof->ptr_obj;
 }
@@ -372,9 +372,9 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 
   // value
   symbolt symbol;
-  symbol.base_name = do_array ? "dynamic_" + count_string + "_array"
-                              : "dynamic_" + count_string + "_value";
-  symbol.id = "symex_dynamic::" + id2string(symbol.base_name);
+  symbol.name = do_array ? "dynamic_" + count_string + "_array"
+                         : "dynamic_" + count_string + "_value";
+  symbol.id = "symex_dynamic::" + id2string(symbol.name);
   symbol.lvalue = true;
   symbol.mode = "C++";
 
@@ -426,7 +426,7 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   symex_assign(code_assign2tc(idx, truth), true);
 
   dynamic_memory.emplace_back(
-    rhs_copy, cur_state->guard, false, symbol.base_name.as_string());
+    rhs_copy, cur_state->guard, false, symbol.name.as_string());
 }
 
 // XXX - implement as a call to free?

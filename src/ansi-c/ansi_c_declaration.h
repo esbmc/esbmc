@@ -146,7 +146,7 @@ public:
     symbol.value = decl_value();
     symbol.type = type();
     symbol.id = get_name();
-    symbol.base_name = get_base_name();
+    symbol.name = get_base_name();
     symbol.is_type = get_is_type();
     symbol.is_extern = get_is_extern();
     symbol.is_macro = get_is_macro();

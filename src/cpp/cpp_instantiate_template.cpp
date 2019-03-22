@@ -88,7 +88,7 @@ void cpp_typecheckt::show_instantiation_stack(std::ostream &out)
       s_it++)
   {
     const symbolt &symbol = lookup(s_it->identifier);
-    out << "instantiating `" << symbol.base_name << "' with <";
+    out << "instantiating `" << symbol.name << "' with <";
 
     forall_expr(a_it, s_it->full_template_args.arguments())
     {
@@ -205,7 +205,7 @@ const symbolt *cpp_typecheckt::handle_recursive_template_instance(
       // Nope; create it.
       symbolt symbol;
       symbol.id = link_symbol;
-      symbol.base_name = template_symbol.base_name;
+      symbol.name = template_symbol.name;
       symbol.value = exprt();
       symbol.location = locationt();
       symbol.mode = mode;     // uhu.
@@ -242,7 +242,7 @@ bool cpp_typecheckt::has_incomplete_args(cpp_template_args_tct template_args_tc)
       {
         std::cerr
           << "**** WARNING: template instantiation with incomplete type "
-          << arg_sym->base_name << " at " << arg_sym->location << std::endl;
+          << arg_sym->name << " at " << arg_sym->location << std::endl;
         return true;
       }
     }
@@ -287,7 +287,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   if(full_template_args.arguments().empty())
   {
     err_location(location);
-    str << "`" << template_symbol.base_name
+    str << "`" << template_symbol.name
         << "' is a template; thus, expected template arguments";
     throw 0;
   }
@@ -628,8 +628,8 @@ void cpp_typecheckt::put_template_arg_into_scope(
 
   // Construct a new, concrete type symbol, with the base name as the templated
   // type name, and with the current scopes prefix.
-  symbol.id = cur_scope_prefix + "::" + orig_symbol.base_name.as_string();
-  symbol.base_name = orig_symbol.base_name;
+  symbol.id = cur_scope_prefix + "::" + orig_symbol.name.as_string();
+  symbol.name = orig_symbol.name;
   symbol.value = argument;
   symbol.location = argument.location();
   symbol.mode = mode;            // uhu.

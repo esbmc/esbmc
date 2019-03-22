@@ -533,7 +533,7 @@ void goto_convertt::do_function_call_symbol(
       "' type mismatch: expected code";
   }
 
-  std::string base_name = symbol->base_name.as_string();
+  std::string base_name = symbol->name.as_string();
 
   bool is_assume =
     (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
