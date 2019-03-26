@@ -189,9 +189,10 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
   const irep_idt &identifier = to_symbol2t(call.function).thename;
+  const std::string pretty_name =
+    identifier.as_string().substr(identifier.as_string().find_last_of('@') + 1);
 
   // find code in function map
-
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find(identifier);
 
@@ -204,7 +205,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
       return;
     }
 
-    std::cerr << "failed to find `" + id2string(identifier) +
+    std::cerr << "failed to find `" + id2string(pretty_name) +
                    "' in function_map";
     abort();
   }
@@ -237,7 +238,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     if(body_warnings.insert(identifier).second)
     {
       std::string msg =
-        "**** WARNING: no body for function " + id2string(identifier);
+        "**** WARNING: no body for function " + id2string(pretty_name);
       std::cerr << msg << std::endl;
     }
 
@@ -336,6 +337,7 @@ get_function_list(const expr2tc &expr)
     l1.splice(l1.begin(), l2);
     return l1;
   }
+
   if(is_symbol2t(expr))
   {
     guardt guard;
@@ -344,19 +346,16 @@ get_function_list(const expr2tc &expr)
     l.push_back(p);
     return l;
   }
-  else if(is_typecast2t(expr))
-  {
+
+  if(is_typecast2t(expr))
     return get_function_list(to_typecast2t(expr).from);
-  }
-  else
-  {
-    std::cerr << "Unexpected irep id " << get_expr_id(expr)
-              << " in function ptr dereference" << std::endl;
-    // So, the function may point at something invalid. If that's the case,
-    // wait for a solve-time pointer validity assertion to detect that. Return
-    // nothing to call right now.
-    return l;
-  }
+
+  std::cerr << "Unexpected irep id " << get_expr_id(expr)
+            << " in function ptr dereference" << std::endl;
+  // So, the function may point at something invalid. If that's the case,
+  // wait for a solve-time pointer validity assertion to detect that. Return
+  // nothing to call right now.
+  return l;
 }
 
 void goto_symext::symex_function_call_deref(const expr2tc &expr)
