@@ -453,8 +453,8 @@ smt_convt::resultt bmct::start_bmc()
 {
   boost::shared_ptr<symex_target_equationt> eq;
   smt_convt::resultt res = run(eq);
-  report_result(res);
   report_trace(res, eq);
+  report_result(res);
   return res;
 }
 
