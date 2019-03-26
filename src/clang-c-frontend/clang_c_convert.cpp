@@ -131,10 +131,10 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     if(get_type(fd.getType(), t))
       return true;
 
-    std::string name, pretty_name;
-    get_decl_name(fd, name, pretty_name);
+    std::string id, name;
+    get_decl_name(fd, name, id);
 
-    struct_union_typet::componentt comp(name, pretty_name, t);
+    struct_union_typet::componentt comp(name, id, t);
     if(fd.isBitField())
     {
       exprt width;
@@ -158,10 +158,10 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     if(get_type(fd.getType(), t))
       return true;
 
-    std::string name, pretty_name;
-    get_decl_name(*fd.getAnonField(), name, pretty_name);
+    std::string id, name;
+    get_decl_name(*fd.getAnonField(), name, id);
 
-    struct_union_typet::componentt comp(name, pretty_name, t);
+    struct_union_typet::componentt comp(name, id, t);
     if(fd.getAnonField()->isBitField())
     {
       exprt width;
@@ -237,85 +237,78 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
-bool clang_c_convertert::get_struct_union_class(
-  const clang::RecordDecl &recordd)
+bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
-  if(recordd.isClass())
+  if(rd.isClass())
   {
     std::cerr << "Class is not supported yet" << std::endl;
     return true;
   }
-  else if(recordd.isInterface())
+  else if(rd.isInterface())
   {
     std::cerr << "Interface is not supported yet" << std::endl;
     return true;
   }
 
   struct_union_typet t;
-  if(recordd.isStruct())
+  if(rd.isStruct())
     t = struct_typet();
-  else if(recordd.isUnion())
+  else if(rd.isUnion())
     t = union_typet();
   else
     // This should never be reached
     abort();
 
-  std::string identifier;
-  if(get_tag_name(recordd, identifier))
-    return true;
-
-  t.tag(identifier);
+  std::string id, name;
+  get_decl_name(rd, name, id);
+  t.tag(name);
 
   locationt location_begin;
-  get_location_from_decl(recordd, location_begin);
+  get_location_from_decl(rd, location_begin);
 
   symbolt symbol;
   get_default_symbol(
     symbol,
     get_modulename_from_path(location_begin.file().as_string()),
     t,
-    identifier,
-    "tag-" + identifier,
+    name,
+    id,
     location_begin);
 
   // Save the struct/union/class type address and name to the type map
   std::string symbol_name = symbol.id.as_string();
 
-  std::size_t address = reinterpret_cast<std::size_t>(recordd.getFirstDecl());
+  std::size_t address = reinterpret_cast<std::size_t>(rd.getFirstDecl());
   type_map[address] = symbol_name;
 
   symbol.is_type = true;
 
-  // We have to add the struct/union/class to the context before converting its fields
-  // because there might be recursive struct/union/class (pointers) and the code at
-  // get_type, case clang::Type::Record, needs to find the correct type
-  // (itself). Note that the type is incomplete at this stage, it doesn't
+  // We have to add the struct/union/class to the context before converting its
+  // fields because there might be recursive struct/union/class (pointers) and
+  // the code at get_type, case clang::Type::Record, needs to find the correct
+  // type (itself). Note that the type is incomplete at this stage, it doesn't
   // contain the fields, which are added to the symbol later on this method.
   move_symbol_to_context(symbol);
 
   // Don't continue to parse if it doesn't have a complete definition
   // Try to get the definition
-  clang::RecordDecl *record_def = recordd.getDefinition();
-  if(!record_def)
+  clang::RecordDecl *rd_def = rd.getDefinition();
+  if(!rd_def)
     return false;
 
   // Now get the symbol back to continue the conversion
   symbolt &added_symbol = *context.find_symbol(symbol_name);
 
-  if(get_struct_union_class_fields(*record_def, t))
+  if(get_struct_union_class_fields(*rd_def, t))
     return true;
 
   // Check for packed specifier.
-  if(record_def->hasAttrs())
+  if(rd_def->hasAttrs())
   {
-    const auto &attrs = record_def->getAttrs();
+    const auto &attrs = rd_def->getAttrs();
     for(const auto &attr : attrs)
-    {
       if(attr->getKind() == clang::attr::Packed)
-      {
         t.set("packed", "true");
-      }
-    }
   }
 
   added_symbol.type = has_bitfields(t) ? fix_bitfields(t) : t;
@@ -376,8 +369,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     }
   }
 
-  std::string base_name, pretty_name;
-  get_decl_name(vd, base_name, pretty_name);
+  std::string id, name;
+  get_decl_name(vd, name, id);
 
   locationt location_begin;
   get_location_from_decl(vd, location_begin);
@@ -387,8 +380,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     symbol,
     get_modulename_from_path(location_begin.file().as_string()),
     t,
-    base_name,
-    pretty_name,
+    name,
+    id,
     location_begin);
 
   symbol.lvalue = true;
@@ -406,18 +399,12 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     symbol.value.zero_initializer(true);
   }
 
-  // Save the variable address and name to the object map
-  std::string symbol_name = symbol.id.as_string();
-
-  std::size_t address = reinterpret_cast<std::size_t>(vd.getFirstDecl());
-  object_map[address] = symbol_name;
-
   // We have to add the symbol before converting the initial assignment
   // because we might have something like 'int x = x + 1;' which is
   // completely wrong but allowed by the language
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
-  code_declt decl(symbol_exprt(pretty_name, t));
+  code_declt decl(symbol_expr(added_symbol));
 
   if(vd.hasInit())
   {
@@ -476,16 +463,16 @@ bool clang_c_convertert::get_function(
   locationt location_begin;
   get_location_from_decl(fd, location_begin);
 
-  std::string base_name, pretty_name;
-  get_decl_name(fd, base_name, pretty_name);
+  std::string id, name;
+  get_decl_name(fd, name, id);
 
   symbolt symbol;
   get_default_symbol(
     symbol,
     get_modulename_from_path(location_begin.file().as_string()),
     type,
-    base_name,
-    pretty_name,
+    name,
+    id,
     location_begin);
 
   std::string symbol_name = symbol.id.as_string();
@@ -545,24 +532,24 @@ bool clang_c_convertert::get_function_params(
     param_type.remove("#constant");
   }
 
-  std::string base_name, pretty_name;
-  get_decl_name(pd, base_name, pretty_name);
+  std::string id, name;
+  get_decl_name(pd, name, id);
 
   param = code_typet::argumentt();
   param.type() = param_type;
-  param.cmt_base_name(base_name);
+  param.cmt_base_name(name);
 
   // If the name is empty, this is an function definition that we don't
   // need to worry about as the function params name's will be defined
   // when the function is defined, the exprt is filled for the sake of
   // beautification
-  if(base_name.empty())
+  if(name.empty())
     return false;
 
   locationt location_begin;
   get_location_from_decl(pd, location_begin);
 
-  param.cmt_identifier(pretty_name);
+  param.cmt_identifier(id);
   param.location() = location_begin;
 
   // TODO: we can remove the following code once irep1 is dead, there
@@ -575,17 +562,13 @@ bool clang_c_convertert::get_function_params(
     param_symbol,
     get_modulename_from_path(location_begin.file().as_string()),
     param_type,
-    base_name,
-    pretty_name,
+    name,
+    id,
     location_begin);
 
   param_symbol.lvalue = true;
   param_symbol.is_parameter = true;
   param_symbol.file_local = true;
-
-  // Save the function's param address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(pd.getFirstDecl());
-  object_map[address] = param_symbol.id.as_string();
 
   const clang::FunctionDecl &fd =
     static_cast<const clang::FunctionDecl &>(*pd.getParentFunctionOrMethod());
@@ -2006,17 +1989,17 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   if(const auto *nd = llvm::dyn_cast<clang::ValueDecl>(&d))
   {
     // Everything else should be a value decl
-    std::string base_name, pretty_name;
-    get_decl_name(*nd, base_name, pretty_name);
+    std::string name, id;
+    get_decl_name(*nd, name, id);
 
     typet type;
     if(get_type(nd->getType(), type))
       return true;
 
     new_expr = exprt("symbol", type);
-    new_expr.identifier(pretty_name);
+    new_expr.identifier(id);
     new_expr.cmt_lvalue(true);
-    new_expr.name(base_name);
+    new_expr.name(name);
     return false;
   }
 
@@ -2329,8 +2312,6 @@ bool clang_c_convertert::get_compound_assign_expr(
     return true;
   }
 
-  // TODO: this whole conversion is incomplete
-
   exprt lhs;
   if(get_expr(*compop.getLHS(), lhs))
     return true;
@@ -2353,19 +2334,19 @@ void clang_c_convertert::get_default_symbol(
   symbolt &symbol,
   std::string module_name,
   typet type,
-  std::string base_name,
-  std::string unique_name,
+  std::string name,
+  std::string id,
   locationt location)
 {
   symbol.mode = "C";
   symbol.module = module_name;
   symbol.location = std::move(location);
   symbol.type = std::move(type);
-  symbol.name = base_name;
-  symbol.id = unique_name;
+  symbol.name = name;
+  symbol.id = id;
 }
 
-std::string clang_c_convertert::get_decl_name(const clang::NamedDecl &nd)
+static std::string get_decl_name(const clang::NamedDecl &nd)
 {
   if(const clang::IdentifierInfo *identifier = nd.getIdentifier())
     return identifier->getName().str();
@@ -2376,12 +2357,23 @@ std::string clang_c_convertert::get_decl_name(const clang::NamedDecl &nd)
   return rso.str();
 }
 
-void clang_c_convertert::get_decl_name(
-  const clang::ValueDecl &nd,
-  std::string &name,
-  std::string &pretty_name)
+static std::string
+getFullyQualifiedName(const clang::QualType &t, const clang::ASTContext &c)
 {
-  pretty_name = name = get_decl_name(nd);
+  clang::PrintingPolicy Policy(c.getPrintingPolicy());
+  Policy.SuppressScope = false;
+  Policy.AnonymousTagLocations = true;
+  Policy.PolishForDeclaration = true;
+  Policy.SuppressUnwrittenScope = true;
+  return clang::TypeName::getFullyQualifiedName(t, c, Policy);
+}
+
+void clang_c_convertert::get_decl_name(
+  const clang::NamedDecl &nd,
+  std::string &name,
+  std::string &id)
+{
+  id = name = ::get_decl_name(nd);
 
   switch(nd.getKind())
   {
@@ -2391,22 +2383,36 @@ void clang_c_convertert::get_decl_name(
       return;
     break;
 
-    // Anonymous fields, generate a name based on the type
   case clang::Decl::Field:
-  case clang::Decl::IndirectField:
     if(name.empty())
     {
-      clang::PrintingPolicy Policy(ASTContext->getPrintingPolicy());
-      Policy.SuppressScope = false;
-      Policy.AnonymousTagLocations = true;
-      Policy.PolishForDeclaration = true;
-      Policy.SuppressUnwrittenScope = true;
-      name = clang::TypeName::getFullyQualifiedName(
-        nd.getType(), *ASTContext, Policy);
-      pretty_name = "anon";
+      // Anonymous fields, generate a name based on the type
+      const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(nd);
+      name = "anon";
+      id = getFullyQualifiedName(fd.getType(), *ASTContext);
       return;
     }
     break;
+
+  case clang::Decl::IndirectField:
+    if(name.empty())
+    {
+      // Anonymous fields, generate a name based on the type
+      const clang::IndirectFieldDecl &fd =
+        static_cast<const clang::IndirectFieldDecl &>(nd);
+      name = "anon";
+      id = getFullyQualifiedName(fd.getType(), *ASTContext);
+      return;
+    }
+    break;
+
+  case clang::Decl::Record:
+  {
+    const clang::RecordDecl &rd = static_cast<const clang::RecordDecl &>(nd);
+    name = getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
+    id = "tag-" + name;
+    return;
+  }
 
   default:
     if(name.empty())
@@ -2420,7 +2426,7 @@ void clang_c_convertert::get_decl_name(
   clang::SmallString<128> DeclUSR;
   if(!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    pretty_name = DeclUSR.str().str();
+    id = DeclUSR.str().str();
     return;
   }
 
@@ -2428,20 +2434,6 @@ void clang_c_convertert::get_decl_name(
   std::cerr << "Unable to generate the USR for:\n";
   nd.dumpColor();
   abort();
-}
-
-bool clang_c_convertert::get_tag_name(
-  const clang::RecordDecl &rd,
-  std::string &name)
-{
-  clang::PrintingPolicy Policy(ASTContext->getPrintingPolicy());
-  Policy.SuppressScope = false;
-  Policy.AnonymousTagLocations = true;
-  Policy.PolishForDeclaration = true;
-  Policy.SuppressUnwrittenScope = true;
-  name = clang::TypeName::getFullyQualifiedName(
-    ASTContext->getTagDeclType(&rd), *ASTContext, Policy);
-  return false;
 }
 
 void clang_c_convertert::get_start_location_from_stmt(
@@ -2582,13 +2574,6 @@ void clang_c_convertert::dump_type_map()
 {
   std::cout << "Type_map:" << std::endl;
   for(auto const &it : type_map)
-    std::cout << it.first << ": " << it.second << std::endl;
-}
-
-void clang_c_convertert::dump_object_map()
-{
-  std::cout << "Object_map:" << std::endl;
-  for(auto const &it : object_map)
     std::cout << it.first << ": " << it.second << std::endl;
 }
 
