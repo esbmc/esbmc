@@ -35,14 +35,10 @@ private:
 
   const clang::FunctionDecl *current_functionDecl;
 
-  typedef std::map<std::size_t, std::string> object_mapt;
-  object_mapt object_map;
-
   typedef std::map<std::size_t, std::string> type_mapt;
   type_mapt type_map;
 
   void dump_type_map();
-  void dump_object_map();
 
   bool convert_builtin_types();
   bool convert_top_level_decl();
@@ -95,14 +91,8 @@ private:
     std::string unique_name,
     locationt location);
 
-  std::string get_decl_name(const clang::NamedDecl &nd);
-
-  void get_decl_name(
-    const clang::ValueDecl &vd,
-    std::string &name,
-    std::string &pretty_name);
-
-  bool get_tag_name(const clang::RecordDecl &recordd, std::string &identifier);
+  void
+  get_decl_name(const clang::NamedDecl &vd, std::string &id, std::string &name);
 
   void
   get_start_location_from_stmt(const clang::Stmt &stmt, locationt &location);
