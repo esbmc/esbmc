@@ -1,4 +1,4 @@
-[![Build Status](https://rafaelsa.ddns.net/buildStatus/icon?job=esbmc-private%2Fjenkins)](https://rafaelsa.ddns.net/buildStatus/icon?job=esbmc-private%2Fmaster)
+[![Build Status](https://rafaelsa.ddns.net/buildStatus/icon?job=esbmc-private%2Fmaster)](https://rafaelsa.ddns.net/buildStatus/icon?job=esbmc-private%2Fmaster)
 
 # The ESBMC model checker
 
