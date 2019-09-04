@@ -1,3 +1,5 @@
+[![Build Status](https://rafaelsa.ddns.net/buildStatus/icon?job=esbmc-private%2Fmaster)](https://rafaelsa.ddns.net/buildStatus/icon?job=esbmc-private%2Fmaster)
+
 # The ESBMC model checker
 
 ESBMC, the efficient SMT based model checker, is a software verification tool for C and C++ code bases. The technique is sound but incomplete -- an error found by ESBMC will be correct (modulo errors in the tool), but a successful verification does not guarantee there are no errors.
