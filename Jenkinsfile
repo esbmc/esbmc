@@ -28,24 +28,8 @@ pipeline {
               sh 'make -j`nproc`'
               sh 'make install'              
             }
-            sh 'ls /home/jenkins/agent/workspace/esbmc-private_cmake/release-autoconf/bin/esbmc'
-            archiveArtifacts(artifacts: 'release-autoconf/bin/esbmc', onlyIfSuccessful: true)
-            stash includes: 'release-autoconf/bin/esbmc', name: 'build-autoconf'
           }
         }
-      }
-    }
-    stage('Regression') {
-      parallel {
-        stage('ESBMC') {
-          steps {
-            unstash 'build-autoconf'
-            dir(path: "regression/esbmc") {
-              echo "$PWD"
-              sh 'PATH=$PWD/../../:$PATH make default || true'
-            }            
-          }
-        }        
       }
     }
   }
