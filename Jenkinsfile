@@ -39,15 +39,25 @@ pipeline {
       parallel {
         stage('ESBMC') {
           steps {
+<<<<<<< HEAD
             dir(path: 'regression/esbmc') {
               sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
+=======
+            unstash 'build-autoconf'
+            dir(path: 'regression/esbmc') {
+              sh 'PATH=$PWD/../../:$PATH ../test.pl -c esbmc'
+>>>>>>> added regression suite validation
             }
 
           }
         }
         stage('CPP') {
           steps {
+<<<<<<< HEAD
             echo 'CPP testing is currently not working'
+=======
+            echo 'cpp testing'
+>>>>>>> added regression suite validation
           }
         }
       }
