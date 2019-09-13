@@ -40,6 +40,7 @@ pipeline {
         stage('ESBMC') {
           steps {
 <<<<<<< HEAD
+<<<<<<< HEAD
             dir(path: 'regression/esbmc') {
               sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
 =======
@@ -47,6 +48,10 @@ pipeline {
             dir(path: 'regression/esbmc') {
               sh 'PATH=$PWD/../../:$PATH ../test.pl -c esbmc'
 >>>>>>> added regression suite validation
+=======
+            dir(path: 'regression/esbmc') {
+              sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
+>>>>>>> fixed wrong executable path
             }
 
           }
@@ -54,10 +59,14 @@ pipeline {
         stage('CPP') {
           steps {
 <<<<<<< HEAD
+<<<<<<< HEAD
             echo 'CPP testing is currently not working'
 =======
             echo 'cpp testing'
 >>>>>>> added regression suite validation
+=======
+            echo 'CPP testing is currently not working'
+>>>>>>> fixed wrong executable path
           }
         }
       }
