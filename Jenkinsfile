@@ -69,6 +69,13 @@ pipeline {
             }
           }
         }
+        stage('k-induction') {
+          steps {
+            dir(path: 'regression/k-induction') {
+              sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
+            }
+          }
+        }
         stage('CPP') {
           steps {
 <<<<<<< HEAD
