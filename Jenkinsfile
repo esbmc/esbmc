@@ -86,6 +86,13 @@ pipeline {
             }
           }
         }
+        stage('floats regression') {
+          steps {
+            dir(path: 'regression/floats-regression') {
+              sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
+            }
+          }
+        }
         stage('CPP') {
           steps {
             echo 'CPP testing is currently not working'
