@@ -65,6 +65,13 @@ pipeline {
             }
           }
         }
+        stage('llvm') {
+          steps {
+            dir(path: 'regression/llvm') {
+              sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
+            }
+          }
+        }
         stage('CPP') {
           steps {
             echo 'CPP testing is currently not working'
