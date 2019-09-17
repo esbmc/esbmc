@@ -72,6 +72,13 @@ pipeline {
             }
           }
         }
+        stage('digital-filters') {
+          steps {
+            dir(path: 'regression/digital-filters') {
+              sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
+            }
+          }
+        }
         stage('CPP') {
           steps {
             echo 'CPP testing is currently not working'
