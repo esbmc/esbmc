@@ -42,7 +42,13 @@ pipeline {
             dir(path: 'regression/esbmc') {
               sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
             }
-
+          }
+        }
+        stage('cstd - ctype') {
+          steps {
+            dir(path: 'regression/cstd/ctype') {
+              sh 'PATH=$PWD/../../../build-autoconf/esbmc:$PATH ../../test.pl -c esbmc'
+            }
           }
         }
         stage('CPP') {
