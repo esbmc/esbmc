@@ -53,7 +53,13 @@ pipeline {
               sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
 >>>>>>> fixed wrong executable path
             }
-
+          }
+        }
+        stage('cstd - ctype') {
+          steps {
+            dir(path: 'regression/cstd/ctype') {
+              sh 'PATH=$PWD/../../../build-autoconf/esbmc:$PATH ../../test.pl -c esbmc'
+            }
           }
         }
         stage('CPP') {
