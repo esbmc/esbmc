@@ -1,3 +1,4 @@
+CORE
 main.c
 --floatbv --32
 ^VERIFICATION SUCCESSFUL$

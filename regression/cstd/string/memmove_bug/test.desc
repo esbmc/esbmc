@@ -1,3 +1,4 @@
+CORE
 main.c
 --unwind 33
 ^VERIFICATION FAILED$

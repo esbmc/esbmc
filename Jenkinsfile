@@ -42,7 +42,55 @@ pipeline {
             dir(path: 'regression/esbmc') {
               sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
             }
-
+          }
+        }
+        stage('cstd - ctype') {
+          steps {
+            dir(path: 'regression/cstd/ctype') {
+              sh 'PATH=$PWD/../../../build-autoconf/esbmc:$PATH ../../test.pl -c esbmc'
+            }
+          }
+        }
+        stage('cstd - string') {
+          steps {
+            dir(path: 'regression/cstd/string') {
+              sh 'PATH=$PWD/../../../build-autoconf/esbmc:$PATH ../../test.pl -c esbmc'
+            }
+          }
+        }
+        stage('k-induction') {
+          steps {
+            dir(path: 'regression/k-induction') {
+              sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
+            }
+          }
+        }
+        stage('llvm') {
+          steps {
+            dir(path: 'regression/llvm') {
+              sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
+            }
+          }
+        }
+        stage('digital-filters') {
+          steps {
+            dir(path: 'regression/digital-filters') {
+              sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
+            }
+          }
+        }
+        stage('floats') {
+          steps {
+            dir(path: 'regression/floats') {
+              sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
+            }
+          }
+        }
+        stage('floats regression') {
+          steps {
+            dir(path: 'regression/floats-regression') {
+              sh 'PATH=$PWD/../../build-autoconf/esbmc:$PATH ../test.pl -c esbmc'
+            }
           }
         }
         stage('CPP') {

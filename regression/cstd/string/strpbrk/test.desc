@@ -1,3 +1,4 @@
+CORE
 main.c
 --unwind 7
 ^VERIFICATION SUCCESSFUL$

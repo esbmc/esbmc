@@ -9,7 +9,7 @@ struct {
 
 int main ()
 {
-  char myname[] = "Pierre de Fermat";
+  char myname[] = "Pierre";
 
   /* using memcpy to copy string: */
   memcpy ( person.name, myname, strlen(myname)+1 );
