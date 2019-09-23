@@ -21,6 +21,9 @@ import xmlrunner
 #   extends unittest and adds multiprocessing e.g. nose, testtools. However, it will be an extra dependency on something
 #   that is not maintained by python itself.
 
+# Dependencies (install through pip)
+# - unittest-xml-reporting
+
 # TestModes
 # Core -> Essential tests that are fast
 # THOROUGH -> Slower tests
