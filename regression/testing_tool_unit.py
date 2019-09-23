@@ -39,7 +39,7 @@ class TestCaseCore2(unittest.TestCase):
 
 
 class TestCaseCore_00_account_02(unittest.TestCase):
-    """Added testcase with testfile different of main.c"""
+    """Added testcase with testfile different of main file"""
 
     def setUp(self):
         self.test_case = testing_tool.TestCase("./esbmc/00_account_02", "00_account_02")

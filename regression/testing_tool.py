@@ -101,17 +101,16 @@ def _add_test(test_case: TestCase, executor):
 
     def test(self):
         stdout, stderr = executor.run(test_case)
-        # FUTURE: If for some reason stderr of the process
-        #         is needed, this is where you shall find it
         regex = re.compile(test_case.test_regex, re.MULTILINE)
-        error_message = stdout.decode() + stderr.decode() + str(test_case.generate_run_argument_list(executor.tool))
-        self.assertRegex(stdout.decode(), regex, msg=error_message)
+        output_to_validate = stdout.decode() + stderr.decode()
+        error_message = output_to_validate + str(test_case.generate_run_argument_list(executor.tool))
+        self.assertRegex(output_to_validate, regex, msg=error_message)
 
     return test
 
 
 def create_tests(executor_path: str, base_dir: str, mode: str):
-    assert mode in SUPPORTED_TEST_MODES
+    assert mode in SUPPORTED_TEST_MODES, str(mode) + " is not supported"
 
     executor = Executor(executor_path)
 
