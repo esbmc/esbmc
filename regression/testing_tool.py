@@ -16,7 +16,10 @@ import xmlrunner
 # Summary
 # - Dynamically generates unittest tests: https://docs.python.org/3/library/unittest.html
 # - Support esbmc test description format
-# - Export jUnit format
+# - Export jUnit format: using
+# - Sadly unittest does not provide any multiprocessing out-of-box. In the future we can change to a package that
+#   extends unittest and adds multiprocessing e.g. nose, testtools. However, it will be an extra dependency on something
+#   that is not maintained by python itself.
 
 # TestModes
 # Core -> Essential tests that are fast
@@ -39,8 +42,8 @@ class TestCase:
             assert self.test_mode in SUPPORTED_TEST_MODES, str(self.test_mode) + " is not supported"
 
             # Second line - Test file
-            self.test_file = self.test_dir + "/" + fp.readline().strip()
-            assert os.path.exists(self.test_file)
+            self.test_file = fp.readline().strip()
+            assert os.path.exists(self.test_dir + '/' + self.test_file)
 
             # Third line - Arguments of executable
             self.test_args = fp.readline().strip()
@@ -58,8 +61,8 @@ class TestCase:
     def generate_run_argument_list(self, executable: str):
         """Generates run command list to be used in Popen"""
         result = [executable]
-        if self.test_args != "":
-            for x in self.test_args.split(" "):
+        for x in self.test_args.split(" "):
+            if x != "":
                 result.append(x)
         result.append(self.test_file)
         return result
@@ -71,7 +74,8 @@ class Executor:
 
     def run(self, test_case: TestCase):
         """Execute the test case with `executable`"""
-        process = Popen(test_case.generate_run_argument_list(self.tool), stdout=PIPE, stderr=PIPE)
+        process = Popen(test_case.generate_run_argument_list(self.tool), stdout=PIPE, stderr=PIPE,
+                        cwd=test_case.test_dir)
         stdout, stderr = process.communicate()
         return stdout, stderr
 
@@ -94,6 +98,7 @@ class RegressionBase(unittest.TestCase):
 
 def _add_test(test_case: TestCase, executor):
     """This method returns a function that defines a test"""
+
     def test(self):
         stdout, stderr = executor.run(test_case)
         # FUTURE: If for some reason stderr of the process
@@ -101,6 +106,7 @@ def _add_test(test_case: TestCase, executor):
         regex = re.compile(test_case.test_regex, re.MULTILINE)
         error_message = stdout.decode() + stderr.decode() + str(test_case.generate_run_argument_list(executor.tool))
         self.assertRegex(stdout.decode(), regex, msg=error_message)
+
     return test
 
 
@@ -121,11 +127,10 @@ def create_tests(executor_path: str, base_dir: str, mode: str):
 
 def _arg_parsing():
     parser = argparse.ArgumentParser()
-    # FUTURE: add option for parallel jobs
     parser.add_argument("--tool", required=True, help="tool executable path")
     parser.add_argument("--regression", required=True, help="regression suite path")
     parser.add_argument("--mode", required=True, help="tests to be executed [CORE, "
-                                                            "KNOWNBUG, FUTURE, THOROUGH")
+                                                      "KNOWNBUG, FUTURE, THOROUGH")
     main_args = parser.parse_args()
     return main_args.tool, main_args.regression, main_args.mode
 
