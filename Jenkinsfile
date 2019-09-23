@@ -40,56 +40,56 @@ pipeline {
         stage('ESBMC') {
           steps {
             dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc" --regression="./esbmc" --mode="CORE"'
+              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./esbmc" --mode="CORE"'
             }
           }
         }
         stage('cstd - ctype') {
           steps {
             dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc" --regression="./cstd/ctype" --mode="CORE"'
+              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./cstd/ctype" --mode="CORE"'
             }
           }
         }
         stage('cstd - string') {
           steps {
             dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc" --regression="./cstd/string" --mode="CORE"'
+              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./cstd/string" --mode="CORE"'
             }
           }
         }
         stage('k-induction') {
           steps {
             dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc" --regression="./k-induction" --mode="CORE"'
+              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./k-induction" --mode="CORE"'
             }
           }
         }
         stage('llvm') {
           steps {
             dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc" --regression="./llvm" --mode="CORE"'
+              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./llvm" --mode="CORE"'
             }
           }
         }
         stage('digital-filters') {
           steps {
             dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc" --regression="./digital-filters" --mode="CORE"'
+              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./digital-filters" --mode="CORE"'
             }
           }
         }
         stage('floats') {
           steps {
             dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc" --regression="floats" --mode="CORE"'
+              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="floats" --mode="CORE"'
             }
           }
         }
         stage('floats regression') {
           steps {
             dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc" --regression="./floats-regression" --mode="CORE"'
+              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./floats-regression" --mode="CORE"'
             }
           }
         }
