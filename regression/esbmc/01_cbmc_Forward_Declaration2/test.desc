@@ -1,7 +1,6 @@
 CORE
 main.c
 
-^SIGNAL=0$
 ^PARSING ERROR$
 --
 ^warning: ignoring
