@@ -25,7 +25,7 @@ import xmlrunner
 # - unittest-xml-reporting
 
 # TestModes
-# Core -> Essential tests that are fast
+# CORE -> Essential tests that are fast
 # THOROUGH -> Slower tests
 # KNOWNBUG -> Tests that are known to fail due to bugs
 # FUTURE -> Test that are known to fail due to missing implementation
