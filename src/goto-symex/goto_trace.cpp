@@ -236,10 +236,7 @@ void show_state_header(
 {
   out << std::endl;
 
-  if(step_nr == 0)
-    out << "Initial State";
-  else
-    out << "State " << step_nr;
+  out << "State " << step_nr;
 
   out << " " << location << " thread " << state.thread_nr << std::endl;
 
