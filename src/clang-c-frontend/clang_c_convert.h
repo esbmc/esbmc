@@ -81,6 +81,8 @@ private:
   bool
   get_unary_operator_expr(const clang::UnaryOperator &uniop, exprt &new_expr);
 
+  bool get_atomic_expr(const clang::AtomicExpr &atm, exprt &new_expr);
+
   bool get_cast_expr(const clang::CastExpr &cast, exprt &new_expr);
 
   void get_default_symbol(
