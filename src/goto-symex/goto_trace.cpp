@@ -121,13 +121,12 @@ void counterexample_value(
   const expr2tc &lhs,
   const expr2tc &value)
 {
-  std::string value_string;
-
+  out << "  " << from_expr(ns, "", lhs);
   if(is_nil_expr(value))
-    value_string = "(assignment removed)";
+    out << "(assignment removed)";
   else
   {
-    value_string = from_expr(ns, "", value);
+    out << " = " << from_expr(ns, "", value);
 
     // Don't print the bit-vector if we're running on integer/real mode
     if(is_constant_expr(value) && !config.options.get_bool_option("ir"))
@@ -151,22 +150,22 @@ void counterexample_value(
 
       if(!binary_value.empty())
       {
-        value_string += " (";
+        out << " (";
 
         std::string::size_type i = 0;
         for(const auto c : binary_value)
         {
-          value_string += c;
+          out << c;
           if(++i % 8 == 0 && binary_value.size() != i)
-            value_string += ' ';
+            out << ' ';
         }
 
-        value_string += ")";
+        out << ")";
       }
     }
-  }
 
-  out << "  " << from_expr(ns, "", lhs) << " = " << value_string << std::endl;
+    out << std::endl;
+  }
 }
 
 void show_goto_trace_gui(
