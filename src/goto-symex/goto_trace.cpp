@@ -132,27 +132,36 @@ void counterexample_value(
     // Don't print the bit-vector if we're running on integer/real mode
     if(is_constant_expr(value) && !config.options.get_bool_option("ir"))
     {
+      std::string binary_value = "";
       if(is_bv_type(value))
       {
-        value_string +=
-          " (" +
-          integer2binary(
-            to_constant_int2t(value).value, value->type->get_width()) +
-          ")";
+        binary_value = integer2binary(
+          to_constant_int2t(value).value, value->type->get_width());
       }
       else if(is_fixedbv_type(value))
       {
-        value_string +=
-          " (" +
-          to_constant_fixedbv2t(value).value.to_expr().get_value().as_string() +
-          ")";
+        binary_value =
+          to_constant_fixedbv2t(value).value.to_expr().get_value().as_string();
       }
       else if(is_floatbv_type(value))
       {
-        value_string +=
-          " (" +
-          to_constant_floatbv2t(value).value.to_expr().get_value().as_string() +
-          ")";
+        binary_value =
+          to_constant_floatbv2t(value).value.to_expr().get_value().as_string();
+      }
+
+      if(!binary_value.empty())
+      {
+        value_string += " (";
+
+        std::string::size_type i = 0;
+        for(const auto c : binary_value)
+        {
+          value_string += c;
+          if(++i % 8 == 0 && binary_value.size() != i)
+            value_string += ' ';
+        }
+
+        value_string += ")";
       }
     }
   }
