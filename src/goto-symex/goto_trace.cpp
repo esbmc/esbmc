@@ -244,23 +244,8 @@ void show_state_header(
   unsigned step_nr)
 {
   out << std::endl;
-
   out << "State " << step_nr;
-
   out << " " << location << " thread " << state.thread_nr << std::endl;
-
-  // Print stack trace
-
-  for(const auto &it : state.stack_trace)
-  {
-    if(it.src == nullptr)
-      out << it.function.as_string() << std::endl;
-    else
-      out << it.function.as_string() << " at "
-          << it.src->pc->location.get_file().as_string() << " line "
-          << it.src->pc->location.get_line().as_string() << std::endl;
-  }
-
   out << "----------------------------------------------------" << std::endl;
 }
 
