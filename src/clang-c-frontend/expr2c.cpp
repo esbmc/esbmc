@@ -1014,10 +1014,7 @@ std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
     dest = value;
   else if(type.is_bool())
   {
-    if(src.is_true())
-      dest = "TRUE";
-    else
-      dest = "FALSE";
+    dest = src.is_true() ? "1" : "0";
   }
   else if(type.id() == "unsignedbv" || type.id() == "signedbv")
   {
