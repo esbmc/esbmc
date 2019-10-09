@@ -601,7 +601,7 @@ void goto_convertt::do_function_call_symbol(
       throw id2string(base_name) + " expected not to have LHS";
     }
   }
-  else if(identifier == "__VERIFIER_error")
+  else if(base_name == "__VERIFIER_error")
   {
     if(!arguments.empty())
     {

@@ -21,12 +21,6 @@ void abort(void)
 }
 #pragma clang diagnostic pop
 
-void __VERIFIER_error(void)
-{
-ERROR:
-  __ESBMC_assert(0, "Verifier error called\n");
-}
-
 void *calloc(size_t nmemb, size_t size)
 {
 __ESBMC_HIDE:;
