@@ -900,9 +900,22 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     break;
   }
+
+  case clang::Type::Atomic:
+  {
+    const clang::AtomicType &dt =
+      static_cast<const clang::AtomicType &>(the_type);
+
+    // FIXME: we need some representation of atomic types in irep2
+    if(get_type(dt.getValueType(), new_type))
+      return true;
+
+    break;
+  }
+
   default:
-    std::cerr << "No clang <=> ESBMC migration for type "
-              << the_type.getTypeClassName() << std::endl;
+    std::cerr << "Conversion of unsupported clang type: \"";
+    std::cerr << the_type.getTypeClassName() << std::endl;
     the_type.dump();
     return true;
   }
@@ -1950,6 +1963,17 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  // Atomic instructions
+  case clang::Stmt::AtomicExprClass:
+  {
+    const clang::AtomicExpr &atm = static_cast<const clang::AtomicExpr &>(stmt);
+
+    if(get_atomic_expr(atm, new_expr))
+      return true;
+
+    break;
+  }
+
   // A NULL statement, we ignore it. An example is a lost semicolon on
   // the program
   case clang::Stmt::NullStmtClass:
@@ -2327,6 +2351,219 @@ bool clang_c_convertert::get_compound_assign_expr(
     gen_typecast(ns, rhs, lhs.type());
 
   new_expr.copy_to_operands(lhs, rhs);
+  return false;
+}
+
+bool clang_c_convertert::get_atomic_expr(
+  const clang::AtomicExpr &atm,
+  exprt &new_expr)
+{
+  // We're going to create a fake function call
+  side_effect_expr_function_callt fake_call;
+
+  // Get the type
+  code_typet t;
+  if(get_type(atm.getType(), t.return_type()))
+    return true;
+  fake_call.type() = t;
+
+  // get the name
+  std::string name;
+  switch(atm.getOp())
+  {
+  case clang::AtomicExpr::AO__c11_atomic_load:
+    name = "__c11_atomic_load";
+    break;
+
+  case clang::AtomicExpr::AO__c11_atomic_store:
+    name = "__c11_atomic_store";
+    break;
+
+  case clang::AtomicExpr::AO__c11_atomic_exchange:
+    name = "__c11_atomic_exchange";
+    break;
+
+  case clang::AtomicExpr::AO__c11_atomic_compare_exchange_strong:
+    name = "__c11_atomic_compare_exchange_strong";
+    break;
+
+  case clang::AtomicExpr::AO__c11_atomic_compare_exchange_weak:
+    name = "__c11_atomic_compare_exchange_weak";
+    break;
+
+  case clang::AtomicExpr::AO__c11_atomic_fetch_add:
+    name = "__c11_atomic_fetch_add";
+    break;
+
+  case clang::AtomicExpr::AO__c11_atomic_fetch_sub:
+    name = "__c11_atomic_fetch_sub";
+    break;
+
+  case clang::AtomicExpr::AO__c11_atomic_fetch_and:
+    name = "__c11_atomic_fetch_and";
+    break;
+
+  case clang::AtomicExpr::AO__c11_atomic_fetch_or:
+    name = "__c11_atomic_fetch_or";
+    break;
+
+  case clang::AtomicExpr::AO__c11_atomic_fetch_xor:
+    name = "__c11_atomic_fetch_xor";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_load:
+    name = "__atomic_load";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_load_n:
+    name = "__atomic_load_n";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_store:
+    name = "__atomic_store";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_store_n:
+    name = "__atomic_store_n";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_exchange:
+    name = "__atomic_exchange";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_exchange_n:
+    name = "__atomic_exchange_n";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_compare_exchange:
+    name = "__atomic_compare_exchange";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_compare_exchange_n:
+    name = "__atomic_compare_exchange_n";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_fetch_add:
+    name = "__atomic_fetch_add";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_fetch_sub:
+    name = "__atomic_fetch_sub";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_fetch_and:
+    name = "__atomic_fetch_and";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_fetch_or:
+    name = "__atomic_fetch_or";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_fetch_xor:
+    name = "__atomic_fetch_xor";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_fetch_nand:
+    name = "__atomic_fetch_nand";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_add_fetch:
+    name = "__atomic_add_fetch";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_sub_fetch:
+    name = "__atomic_sub_fetch";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_and_fetch:
+    name = "__atomic_and_fetch";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_or_fetch:
+    name = "__atomic_or_fetch";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_xor_fetch:
+    name = "__atomic_xor_fetch";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_nand_fetch:
+    name = "__atomic_nand_fetch";
+    break;
+
+  default:
+    std::cerr << "Unknown Atomic expression" << std::endl;
+    atm.dumpColor();
+    return true;
+  }
+
+  // Get Arguments, ptr is never nullptr
+  exprt ptr;
+  if(get_expr(*atm.getPtr(), ptr))
+    return true;
+
+  t.arguments().push_back(code_typet::argumentt(ptr.type()));
+  fake_call.arguments().push_back(ptr);
+
+  // Val1
+  if(
+    atm.getOp() != clang::AtomicExpr::AO__c11_atomic_load &&
+    atm.getOp() != clang::AtomicExpr::AO__atomic_load_n)
+  {
+    exprt val1;
+    if(get_expr(*atm.getVal1(), val1))
+      return true;
+
+    t.arguments().push_back(code_typet::argumentt(val1.type()));
+    fake_call.arguments().push_back(val1);
+  }
+
+  // Val2
+  if(atm.getOp() == clang::AtomicExpr::AO__atomic_exchange || atm.isCmpXChg())
+  {
+    exprt val2;
+    if(get_expr(*atm.getVal2(), val2))
+      return true;
+
+    t.arguments().push_back(code_typet::argumentt(val2.type()));
+    fake_call.arguments().push_back(val2);
+  }
+
+  // Weak
+  if(
+    atm.getOp() == clang::AtomicExpr::AO__atomic_compare_exchange ||
+    atm.getOp() == clang::AtomicExpr::AO__atomic_compare_exchange_n)
+  {
+    exprt weak;
+    if(get_expr(*atm.getWeak(), weak))
+      return true;
+
+    t.arguments().push_back(code_typet::argumentt(weak.type()));
+    fake_call.arguments().push_back(weak);
+  }
+
+  if(atm.getOp() != clang::AtomicExpr::AO__c11_atomic_init)
+  {
+    exprt order;
+    if(get_expr(*atm.getOrder(), order))
+      return true;
+
+    t.arguments().push_back(code_typet::argumentt(order.type()));
+    fake_call.arguments().push_back(order);
+  }
+
+  if(atm.isCmpXChg())
+  {
+    exprt order_fail;
+    if(get_expr(*atm.getOrderFail(), order_fail))
+      return true;
+
+    t.arguments().push_back(code_typet::argumentt(order_fail.type()));
+    fake_call.arguments().push_back(order_fail);
+  }
+
+  fake_call.function() = symbol_exprt("c:@F@" + name, t);
+  new_expr.swap(fake_call);
   return false;
 }
 
