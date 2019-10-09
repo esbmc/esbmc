@@ -2563,6 +2563,7 @@ bool clang_c_convertert::get_atomic_expr(
   }
 
   fake_call.function() = symbol_exprt("c:@F@" + name, t);
+  fake_call.function().name(name);
   new_expr.swap(fake_call);
   return false;
 }
