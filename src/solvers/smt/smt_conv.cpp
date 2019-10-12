@@ -1821,7 +1821,8 @@ type2tc smt_convt::flatten_array_type(const type2tc &type)
   type_rec = to_array_type(type_rec).subtype;
   expr2tc arr_size2 = to_array_type(type_rec).array_size;
 
-  assert(arr_size1->type == arr_size2->type);
+  if(arr_size1->type == arr_size2->type)
+    arr_size1 = typecast2tc(arr_size2->type, arr_size1);
 
   expr2tc arr_size = mul2tc(arr_size1->type, arr_size1, arr_size2);
 
