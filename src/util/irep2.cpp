@@ -409,18 +409,33 @@ const irep_idt &struct_union_data::get_structure_name() const
   return name;
 }
 
-unsigned int struct_union_data::get_component_number(const irep_idt &name) const
+unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
 {
-  unsigned int i = 0;
+  unsigned int i = 0, count = 0, pos = 0;
   for(auto const &it : member_names)
   {
-    if(it == name)
-      return i;
+    if(it == comp)
+    {
+      pos = i;
+      ++count;
+    }
     i++;
   }
 
-  std::cerr << "Looking up index of nonexistant member \"" << name
-            << "\" in struct/union \"" << name << "\"" << std::endl;
+  if(count == 1)
+    return pos;
+
+  if(!count)
+  {
+    std::cerr << "Looking up index of nonexistant member \"" << comp
+              << "\" in struct/union \"" << name << "\"" << std::endl;
+  }
+  else if(count > 1)
+  {
+    std::cerr << "Name \"" << comp << "\" matches more than one member"
+              << "\" in struct/union \"" << name << "\"" << std::endl;
+  }
+
   abort();
 }
 
