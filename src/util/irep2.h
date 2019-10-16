@@ -717,11 +717,10 @@ public:
    *  Currently simplification does some things that it shouldn't: pointer
    *  arithmetic for example. I'm not sure where this can be relocated to
    *  though.
-   *  @param second Whether this is the second call to do_simplify on this obj
    *  @return expr2tc A nil expression if no simplifcation could occur, or a new
    *          simplified object if it can.
    */
-  virtual expr2tc do_simplify(bool second = false) const;
+  virtual expr2tc do_simplify() const;
 
   /** Indirect, abstract operand iteration.
    *

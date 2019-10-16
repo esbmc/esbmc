@@ -8,9 +8,94 @@
 #include <util/irep2_utils.h>
 #include <util/type_byte_size.h>
 
-expr2tc expr2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc expr2t::do_simplify() const
 {
   return expr2tc();
+}
+
+expr2tc expr2t::simplify() const
+{
+  try
+  {
+    // Corner case! Don't even try to simplify address of's operands, might end up
+    // taking the address of some /completely/ arbitary pice of data, by
+    // simplifiying an index to its data, discarding the symbol.
+    if(__builtin_expect((expr_id == address_of_id), 0)) // unlikely
+      return expr2tc();
+
+    // And overflows too. We don't wish an add to distribute itself, for example,
+    // when we're trying to work out whether or not it's going to overflow.
+    if(__builtin_expect((expr_id == overflow_id), 0))
+      return expr2tc();
+
+    // Try initial simplification
+    expr2tc res = do_simplify();
+    if(!is_nil_expr(res))
+    {
+      // Woot, we simplified some of this. It may have _additional_ fields that
+      // need to get simplified (member2ts in arrays for example), so invoke the
+      // simplifier again, to hit those potential subfields.
+      expr2tc res2 = res->simplify();
+
+      // If we simplified even further, return res2; otherwise res.
+      if(is_nil_expr(res2))
+        return res;
+      else
+        return res2;
+    }
+
+    // Try simplifying all the sub-operands.
+    bool changed = false;
+    std::list<expr2tc> newoperands;
+
+    for(unsigned int idx = 0; idx < get_num_sub_exprs(); idx++)
+    {
+      const expr2tc *e = get_sub_expr(idx);
+      expr2tc tmp;
+
+      if(!is_nil_expr(*e))
+      {
+        tmp = e->simplify();
+        if(!is_nil_expr(tmp))
+          changed = true;
+      }
+
+      newoperands.push_back(tmp);
+    }
+
+    if(changed == false)
+      // Second shot at simplification. For efficiency, a simplifier may be
+      // holding something back until it's certain all its operands are
+      // simplified. It's responsible for simplifying further if it's made that
+      // call though.
+      return do_simplify();
+
+    // An operand has been changed; clone ourselves and update.
+    expr2tc new_us = clone();
+    std::list<expr2tc>::iterator it2 = newoperands.begin();
+    new_us->Foreach_operand([&it2](expr2tc &e) {
+      if((*it2) == nullptr)
+        ; // No change in operand;
+      else
+        e = *it2; // Operand changed; overwrite with new one.
+      it2++;
+    });
+
+    // Finally, attempt simplification again.
+    expr2tc tmp = new_us->do_simplify();
+    if(is_nil_expr(tmp))
+      return new_us;
+    else
+      return tmp;
+  }
+  catch(array_type2t::dyn_sized_array_excp *e)
+  {
+    // Pretty much anything in any expression could be fouled up by there
+    // being a dynamically sized array somewhere in there. In this circumstance,
+    // don't even attempt partial simpilfication. We'd probably have to double
+    // the size of simplification code in that case.
+    return expr2tc();
+  }
 }
 
 static expr2tc try_simplification(const expr2tc &expr)
@@ -294,7 +379,7 @@ struct Addtor
   }
 };
 
-expr2tc add2t::do_simplify(bool __attribute__((unused))) const
+expr2tc add2t::do_simplify() const
 {
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if(!is_nil_expr(res))
@@ -350,7 +435,7 @@ struct Subtor
   }
 };
 
-expr2tc sub2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc sub2t::do_simplify() const
 {
   return simplify_arith_2ops<Subtor, sub2t>(type, side_1, side_2);
 }
@@ -402,7 +487,7 @@ struct Multor
   }
 };
 
-expr2tc mul2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc mul2t::do_simplify() const
 {
   return simplify_arith_2ops<Multor, mul2t>(type, side_1, side_2);
 }
@@ -448,12 +533,12 @@ struct Divtor
   }
 };
 
-expr2tc div2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc div2t::do_simplify() const
 {
   return simplify_arith_2ops<Divtor, div2t>(type, side_1, side_2);
 }
 
-expr2tc modulus2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc modulus2t::do_simplify() const
 {
   if(!is_number_type(type))
     return expr2tc();
@@ -570,7 +655,7 @@ struct Negator
   }
 };
 
-expr2tc neg2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc neg2t::do_simplify() const
 {
   return simplify_arith_1op<Negator, neg2t>(type, value);
 }
@@ -592,12 +677,12 @@ struct abstor
   }
 };
 
-expr2tc abs2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc abs2t::do_simplify() const
 {
   return simplify_arith_1op<abstor, abs2t>(type, value);
 }
 
-expr2tc with2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc with2t::do_simplify() const
 {
   if(is_constant_struct2t(source_value))
   {
@@ -675,7 +760,7 @@ expr2tc with2t::do_simplify(bool second __attribute__((unused))) const
   }
 }
 
-expr2tc member2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc member2t::do_simplify() const
 {
   if(is_constant_struct2t(source_value) || is_constant_union2t(source_value))
   {
@@ -719,7 +804,7 @@ expr2tc member2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-expr2tc pointer_offset2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc pointer_offset2t::do_simplify() const
 {
   // XXX - this could be better. But the current implementation catches most
   // cases that ESBMC produces internally.
@@ -823,7 +908,7 @@ expr2tc pointer_offset2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-expr2tc index2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc index2t::do_simplify() const
 {
   if(is_with2t(source_value))
   {
@@ -882,7 +967,7 @@ expr2tc index2t::do_simplify(bool second __attribute__((unused))) const
   }
 }
 
-expr2tc not2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc not2t::do_simplify() const
 {
   expr2tc simp = try_simplification(value);
 
@@ -1014,7 +1099,7 @@ struct Andtor
   }
 };
 
-expr2tc and2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc and2t::do_simplify() const
 {
   return simplify_logic_2ops<Andtor, and2t>(type, side_1, side_2);
 }
@@ -1055,7 +1140,7 @@ struct Ortor
   }
 };
 
-expr2tc or2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc or2t::do_simplify() const
 {
   // Special case: if one side is a not of the other, and they're otherwise
   // identical, simplify to true
@@ -1112,7 +1197,7 @@ struct Xortor
   }
 };
 
-expr2tc xor2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc xor2t::do_simplify() const
 {
   return simplify_logic_2ops<Xortor, xor2t>(type, side_1, side_2);
 }
@@ -1147,7 +1232,7 @@ struct Impliestor
   }
 };
 
-expr2tc implies2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc implies2t::do_simplify() const
 {
   return simplify_logic_2ops<Impliestor, implies2t>(type, side_1, side_2);
 }
@@ -1241,7 +1326,7 @@ static expr2tc do_bit_munge_operation(
   return expr2tc(theint);
 }
 
-expr2tc bitand2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc bitand2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return (op1 & op2);
@@ -1250,7 +1335,7 @@ expr2tc bitand2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<bitand2t>(op, type, side_1, side_2);
 }
 
-expr2tc bitor2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc bitor2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return (op1 | op2);
@@ -1259,7 +1344,7 @@ expr2tc bitor2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<bitor2t>(op, type, side_1, side_2);
 }
 
-expr2tc bitxor2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc bitxor2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return (op1 ^ op2);
@@ -1268,7 +1353,7 @@ expr2tc bitxor2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<bitxor2t>(op, type, side_1, side_2);
 }
 
-expr2tc bitnand2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc bitnand2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return ~(op1 & op2);
@@ -1277,7 +1362,7 @@ expr2tc bitnand2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<bitnand2t>(op, type, side_1, side_2);
 }
 
-expr2tc bitnor2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc bitnor2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return ~(op1 | op2);
@@ -1286,7 +1371,7 @@ expr2tc bitnor2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<bitnor2t>(op, type, side_1, side_2);
 }
 
-expr2tc bitnxor2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc bitnxor2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return ~(op1 ^ op2);
@@ -1295,7 +1380,7 @@ expr2tc bitnxor2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<bitnxor2t>(op, type, side_1, side_2);
 }
 
-expr2tc bitnot2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc bitnot2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op =
     [](int64_t op1, int64_t op2 __attribute__((unused))) { return ~(op1); };
@@ -1303,7 +1388,7 @@ expr2tc bitnot2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<bitnot2t>(op, type, value, value);
 }
 
-expr2tc shl2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc shl2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return (op1 << op2);
@@ -1312,7 +1397,7 @@ expr2tc shl2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<shl2t>(op, type, side_1, side_2);
 }
 
-expr2tc lshr2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc lshr2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return ((uint64_t)op1) >> ((uint64_t)op2);
@@ -1321,7 +1406,7 @@ expr2tc lshr2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<lshr2t>(op, type, side_1, side_2);
 }
 
-expr2tc ashr2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc ashr2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return (op1 >> op2);
@@ -1330,7 +1415,7 @@ expr2tc ashr2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation<ashr2t>(op, type, side_1, side_2);
 }
 
-expr2tc typecast2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc typecast2t::do_simplify() const
 {
   // Follow approach of old irep, i.e., copy it
   if(type == from->type)
@@ -1527,7 +1612,7 @@ expr2tc typecast2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-expr2tc nearbyint2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc nearbyint2t::do_simplify() const
 {
   if(!is_number_type(type))
     return expr2tc();
@@ -1550,7 +1635,7 @@ expr2tc nearbyint2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-expr2tc address_of2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc address_of2t::do_simplify() const
 {
   // NB: address of never has its operands simplified below its feet for sanitys
   // sake.
@@ -1745,7 +1830,7 @@ struct Equalitytor
   }
 };
 
-expr2tc equality2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc equality2t::do_simplify() const
 {
   // If we're dealing with floatbvs, call IEEE_equalitytor instead
   if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
@@ -1801,7 +1886,7 @@ struct Notequaltor
   }
 };
 
-expr2tc notequal2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc notequal2t::do_simplify() const
 {
   // If we're dealing with floatbvs, call IEEE_notequalitytor instead
   if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
@@ -1838,7 +1923,7 @@ struct Lessthantor
   }
 };
 
-expr2tc lessthan2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc lessthan2t::do_simplify() const
 {
   return simplify_relations<Lessthantor, lessthan2t>(type, side_1, side_2);
 }
@@ -1870,7 +1955,7 @@ struct Greaterthantor
   }
 };
 
-expr2tc greaterthan2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc greaterthan2t::do_simplify() const
 {
   return simplify_relations<Greaterthantor, greaterthan2t>(
     type, side_1, side_2);
@@ -1903,7 +1988,7 @@ struct Lessthanequaltor
   }
 };
 
-expr2tc lessthanequal2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc lessthanequal2t::do_simplify() const
 {
   return simplify_relations<Lessthanequaltor, lessthanequal2t>(
     type, side_1, side_2);
@@ -1936,14 +2021,13 @@ struct Greaterthanequaltor
   }
 };
 
-expr2tc greaterthanequal2t::do_simplify(bool second
-                                        __attribute__((unused))) const
+expr2tc greaterthanequal2t::do_simplify() const
 {
   return simplify_relations<Greaterthanequaltor, greaterthanequal2t>(
     type, side_1, side_2);
 }
 
-expr2tc if2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc if2t::do_simplify() const
 {
   if(is_constant_expr(cond))
   {
@@ -1981,12 +2065,12 @@ expr2tc if2t::do_simplify(bool second __attribute__((unused))) const
   }
 }
 
-expr2tc overflow_cast2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc overflow_cast2t::do_simplify() const
 {
   return expr2tc();
 }
 
-expr2tc overflow2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc overflow2t::do_simplify() const
 {
   return expr2tc();
 }
@@ -2021,7 +2105,7 @@ static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
   return expr2tc();
 }
 
-expr2tc same_object2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc same_object2t::do_simplify() const
 {
   if(is_address_of2t(side_1) && is_address_of2t(side_2))
     return obj_equals_addr_of(
@@ -2036,7 +2120,7 @@ expr2tc same_object2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-expr2tc concat2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc concat2t::do_simplify() const
 {
   if(!is_constant_int2t(side_1) || !is_constant_int2t(side_2))
     return expr2tc();
@@ -2052,7 +2136,7 @@ expr2tc concat2t::do_simplify(bool second __attribute__((unused))) const
   return constant_int2tc(type, accuml);
 }
 
-expr2tc extract2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc extract2t::do_simplify() const
 {
   assert(is_bv_type(type));
 
@@ -2146,7 +2230,7 @@ struct Isnantor
   }
 };
 
-expr2tc isnan2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc isnan2t::do_simplify() const
 {
   return simplify_floatbv_1op<Isnantor, isnan2t>(type, value);
 }
@@ -2163,7 +2247,7 @@ struct Isinftor
   }
 };
 
-expr2tc isinf2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc isinf2t::do_simplify() const
 {
   return simplify_floatbv_1op<Isinftor, isinf2t>(type, value);
 }
@@ -2180,7 +2264,7 @@ struct Isnormaltor
   }
 };
 
-expr2tc isnormal2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc isnormal2t::do_simplify() const
 {
   return simplify_floatbv_1op<Isnormaltor, isnormal2t>(type, value);
 }
@@ -2197,7 +2281,7 @@ struct Isfinitetor
   }
 };
 
-expr2tc isfinite2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc isfinite2t::do_simplify() const
 {
   return simplify_floatbv_1op<Isfinitetor, isfinite2t>(type, value);
 }
@@ -2214,7 +2298,7 @@ struct Signbittor
   }
 };
 
-expr2tc signbit2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc signbit2t::do_simplify() const
 {
   return simplify_floatbv_1op<Signbittor, signbit2t>(type, operand);
 }
@@ -2312,7 +2396,7 @@ struct IEEE_addtor
   }
 };
 
-expr2tc ieee_add2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc ieee_add2t::do_simplify() const
 {
   return simplify_floatbv_2ops<IEEE_addtor, ieee_add2t>(
     type, side_1, side_2, rounding_mode);
@@ -2349,7 +2433,7 @@ struct IEEE_subtor
   }
 };
 
-expr2tc ieee_sub2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc ieee_sub2t::do_simplify() const
 {
   return simplify_floatbv_2ops<IEEE_subtor, ieee_sub2t>(
     type, side_1, side_2, rounding_mode);
@@ -2386,7 +2470,7 @@ struct IEEE_multor
   }
 };
 
-expr2tc ieee_mul2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc ieee_mul2t::do_simplify() const
 {
   return simplify_floatbv_2ops<IEEE_multor, ieee_mul2t>(
     type, side_1, side_2, rounding_mode);
@@ -2437,13 +2521,13 @@ struct IEEE_divtor
   }
 };
 
-expr2tc ieee_div2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc ieee_div2t::do_simplify() const
 {
   return simplify_floatbv_2ops<IEEE_divtor, ieee_div2t>(
     type, side_1, side_2, rounding_mode);
 }
 
-expr2tc ieee_fma2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc ieee_fma2t::do_simplify() const
 {
   assert(is_floatbv_type(type));
 
@@ -2521,7 +2605,7 @@ expr2tc ieee_fma2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-expr2tc ieee_sqrt2t::do_simplify(bool second __attribute__((unused))) const
+expr2tc ieee_sqrt2t::do_simplify() const
 {
   if(!is_number_type(type))
     return expr2tc();
