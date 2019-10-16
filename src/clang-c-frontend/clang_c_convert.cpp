@@ -134,7 +134,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     std::string id, name;
     get_decl_name(fd, name, id);
 
-    struct_union_typet::componentt comp(name, id, t);
+    struct_union_typet::componentt comp(id, name, t);
     if(fd.isBitField())
     {
       exprt width;
@@ -161,7 +161,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     std::string id, name;
     get_decl_name(*fd.getAnonField(), name, id);
 
-    struct_union_typet::componentt comp(name, id, t);
+    struct_union_typet::componentt comp(id, name, t);
     if(fd.getAnonField()->isBitField())
     {
       exprt width;
@@ -2628,9 +2628,8 @@ void clang_c_convertert::get_decl_name(
       const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(nd);
       name = "anon";
       id = getFullyQualifiedName(fd.getType(), *ASTContext);
-      return;
     }
-    break;
+    return;
 
   case clang::Decl::IndirectField:
     if(name.empty())
