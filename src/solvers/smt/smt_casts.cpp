@@ -64,7 +64,10 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(
   else
   {
     assert(from_width < to_integer_bits);
-    frontpart = mk_sign_ext(a, to_integer_bits - from_width);
+    if(is_signedbv_type(cast.from))
+      frontpart = mk_sign_ext(a, to_integer_bits - from_width);
+    else
+      frontpart = mk_zero_ext(a, to_integer_bits - from_width);
   }
 
   // Make all zeros fraction bits
