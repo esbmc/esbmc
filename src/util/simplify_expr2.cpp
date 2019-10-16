@@ -2031,38 +2031,21 @@ expr2tc if2t::do_simplify() const
 {
   if(is_constant_expr(cond))
   {
-    // We can simplify this.
-    if(is_constant_bool2t(cond))
-    {
-      if(to_constant_bool2t(cond).value)
-      {
-        return true_value;
-      }
+    // Cast towards a bool type.
+    expr2tc cast = cond;
+    ::simplify(cast);
 
+    if(is_true(cast))
+      return true_value;
+
+    if(is_false(cast))
       return false_value;
-    }
-    else
-    {
-      // Cast towards a bool type.
-      expr2tc cast = typecast2tc(type_pool.get_bool(), cond);
-      cast = cast->simplify();
-      assert(
-        !is_nil_expr(cast) &&
-        "We should always be able to cast a "
-        "constant value to a constant bool");
-
-      if(to_constant_bool2t(cast).value)
-      {
-        return true_value;
-      }
-
-      return false_value;
-    }
   }
-  else
-  {
-    return expr2tc();
-  }
+
+  if(is_true(true_value) && is_false(false_value))
+    return cond;
+
+  return expr2tc();
 }
 
 expr2tc overflow_cast2t::do_simplify() const
