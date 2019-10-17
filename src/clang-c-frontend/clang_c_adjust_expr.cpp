@@ -302,8 +302,9 @@ void clang_c_adjust::adjust_index(index_exprt &index)
       std::swap(array_expr, index_expr);
   }
 
-  const typet &final_array_type = ns.follow(array_expr.type());
+  gen_typecast(ns, index_expr, index_type());
 
+  const typet &final_array_type = ns.follow(array_expr.type());
   if(final_array_type.is_array() || final_array_type.id() == "incomplete_array")
   {
     if(array_expr.cmt_lvalue())
