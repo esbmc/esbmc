@@ -2036,14 +2036,14 @@ expr2tc if2t::do_simplify() const
     ::simplify(cast);
 
     if(is_true(cast))
-      return true_value;
+      return typecast_check_return(type, true_value);
 
     if(is_false(cast))
-      return false_value;
+      return typecast_check_return(type, false_value);
   }
 
   if(is_true(true_value) && is_false(false_value))
-    return cond;
+    return typecast_check_return(type, cond);
 
   return expr2tc();
 }
