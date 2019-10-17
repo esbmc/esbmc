@@ -42,7 +42,8 @@ bool is_skip(
 
     // A branch to the next instruction is a skip
     // We also require the guard to be 'true'
-    return is_true(it->guard) && it->get_target() == next_it;
+    return is_true(it->guard) && it->has_target() &&
+           it->get_target() == next_it;
   }
 
   if(it->is_other())
