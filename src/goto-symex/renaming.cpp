@@ -270,7 +270,9 @@ void renaming::level2t::print(std::ostream &out) const
 
     if(!is_nil_expr(current_name.second.constant))
     {
-      out << from_expr(current_name.second.constant) << std::endl;
+      out << from_expr(
+               *migrate_namespace_lookup, "", current_name.second.constant)
+          << std::endl;
     }
     else
     {
