@@ -349,13 +349,11 @@ public:
   /**
    *  Make an L2 and value set assignment.
    *  Records an assignment with L2 renaming context and the value set pointer
-   *  tracking state. Potentially enables constant propagation if record_value
-   *  is true.
+   *  tracking state.
    *  @param lhs Symbol being assigned to.
    *  @param rhs Value being assigned to symbol.
-   *  @param record_value Whether to enable constant propagation.
    */
-  void assignment(expr2tc &lhs, const expr2tc &rhs, bool record_value);
+  void assignment(expr2tc &lhs, const expr2tc &rhs);
 
   /**
    *  Determine whether to constant propagate the value of an expression.
