@@ -97,26 +97,38 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
   for(auto const &inc : config.ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
 
-  compiler_args.emplace_back("-D__builtin_sadd_overflow=__sadd_overflow");
-  compiler_args.emplace_back("-D__builtin_saddl_overflow=__saddl_overflow");
-  compiler_args.emplace_back("-D__builtin_saddll_overflow=__saddll_overflow");
-  compiler_args.emplace_back("-D__builtin_uadd_overflow=__uadd_overflow");
-  compiler_args.emplace_back("-D__builtin_uaddl_overflow=__uaddl_overflow");
-  compiler_args.emplace_back("-D__builtin_uaddll_overflow=__uaddll_overflow");
+  compiler_args.emplace_back("-D__builtin_sadd_overflow=__ESBMC_overflow_sadd");
+  compiler_args.emplace_back(
+    "-D__builtin_saddl_overflow=__ESBMC_overflow_saddl");
+  compiler_args.emplace_back(
+    "-D__builtin_saddll_overflow=__ESBMC_overflow_saddll");
+  compiler_args.emplace_back("-D__builtin_uadd_overflow=__ESBMC_overflow_uadd");
+  compiler_args.emplace_back(
+    "-D__builtin_uaddl_overflow=__ESBMC_overflow_uaddl");
+  compiler_args.emplace_back(
+    "-D__builtin_uaddll_overflow=__ESBMC_overflow_uaddll");
 
-  compiler_args.emplace_back("-D__builtin_ssub_overflow=__ssub_overflow");
-  compiler_args.emplace_back("-D__builtin_ssubl_overflow=__ssubl_overflow");
-  compiler_args.emplace_back("-D__builtin_ssubll_overflow=__ssubll_overflow");
-  compiler_args.emplace_back("-D__builtin_usub_overflow=__usub_overflow");
-  compiler_args.emplace_back("-D__builtin_usubl_overflow=__usubl_overflow");
-  compiler_args.emplace_back("-D__builtin_usubll_overflow=__usubll_overflow");
+  compiler_args.emplace_back("-D__builtin_ssub_overflow=__ESBMC_overflow_ssub");
+  compiler_args.emplace_back(
+    "-D__builtin_ssubl_overflow=__ESBMC_overflow_ssubl");
+  compiler_args.emplace_back(
+    "-D__builtin_ssubll_overflow=__ESBMC_overflow_ssubll");
+  compiler_args.emplace_back("-D__builtin_usub_overflow=__ESBMC_overflow_usub");
+  compiler_args.emplace_back(
+    "-D__builtin_usubl_overflow=__ESBMC_overflow_usubl");
+  compiler_args.emplace_back(
+    "-D__builtin_usubll_overflow=__ESBMC_overflow_usubll");
 
-  compiler_args.emplace_back("-D__builtin_smul_overflow=__smul_overflow");
-  compiler_args.emplace_back("-D__builtin_smull_overflow=__smull_overflow");
-  compiler_args.emplace_back("-D__builtin_smulll_overflow=__smulll_overflow");
-  compiler_args.emplace_back("-D__builtin_umul_overflow=__umul_overflow");
-  compiler_args.emplace_back("-D__builtin_umull_overflow=__umull_overflow");
-  compiler_args.emplace_back("-D__builtin_umulll_overflow=__umulll_overflow");
+  compiler_args.emplace_back("-D__builtin_smul_overflow=__ESBMC_overflow_smul");
+  compiler_args.emplace_back(
+    "-D__builtin_smull_overflow=__ESBMC_overflow_smull");
+  compiler_args.emplace_back(
+    "-D__builtin_smulll_overflow=__ESBMC_overflow_smulll");
+  compiler_args.emplace_back("-D__builtin_umul_overflow=__ESBMC_overflow_umul");
+  compiler_args.emplace_back(
+    "-D__builtin_umull_overflow=__ESBMC_overflow_umull");
+  compiler_args.emplace_back(
+    "-D__builtin_umulll_overflow=__ESBMC_overflow_umulll");
 
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
@@ -348,26 +360,24 @@ void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
 void __VERIFIER_atomic_end();
 
-_Bool __sadd_overflow(int, int, int *);
-_Bool __saddl_overflow(long int, long int, long int *);
-_Bool __saddll_overflow(long long int, long long int, long long int *);
-_Bool __uadd_overflow(unsigned int, unsigned int, unsigned int *);
-_Bool __uaddl_overflow(unsigned long int, unsigned long int, unsigned long int *);
-_Bool __uaddll_overflow(unsigned long long int, unsigned long long int, unsigned long long int *);
-
-_Bool __ssub_overflow(int, int, int *);
-_Bool __ssubl_overflow(long int, long int, long int *);
-_Bool __ssubll_overflow(long long int, long long int, long long int *);
-_Bool __usub_overflow(unsigned int, unsigned int, unsigned int *);
-_Bool __usubl_overflow(unsigned long int, unsigned long int, unsigned long int *);
-_Bool __usubll_overflow(unsigned long long int, unsigned long long int, unsigned long long int *);
-
-_Bool __smul_overflow(int, int, int *);
-_Bool __smull_overflow(long int, long int, long int *);
-_Bool __smulll_overflow(long long int, long long int, long long int *);
-_Bool __umul_overflow(unsigned int, unsigned int, unsigned int *);
-_Bool __umull_overflow(unsigned long int, unsigned long int, unsigned long int *);
-_Bool __umulll_overflow(unsigned long long int, unsigned long long int, unsigned long long int *);
+_Bool __ESBMC_overflow_sadd(int, int, int *);
+_Bool __ESBMC_overflow_saddl(long int, long int, long int *);
+_Bool __ESBMC_overflow_saddll(long long int, long long int, long long int *);
+_Bool __ESBMC_overflow_uadd(unsigned int, unsigned int, unsigned int *);
+_Bool __ESBMC_overflow_uaddl(unsigned long int, unsigned long int, unsigned long int *);
+_Bool __ESBMC_overflow_uaddll(unsigned long long int, unsigned long long int, unsigned long long int *);
+_Bool __ESBMC_overflow_ssub(int, int, int *);
+_Bool __ESBMC_overflow_ssubl(long int, long int, long int *);
+_Bool __ESBMC_overflow_ssubll(long long int, long long int, long long int *);
+_Bool __ESBMC_overflow_usub(unsigned int, unsigned int, unsigned int *);
+_Bool __ESBMC_overflow_usubl(unsigned long int, unsigned long int, unsigned long int *);
+_Bool __ESBMC_overflow_usubll(unsigned long long int, unsigned long long int, unsigned long long int *);
+_Bool __ESBMC_overflow_smul(int, int, int *);
+_Bool __ESBMC_overflow_smull(long int, long int, long int *);
+_Bool __ESBMC_overflow_smulll(long long int, long long int, long long int *);
+_Bool __ESBMC_overflow_umul(unsigned int, unsigned int, unsigned int *);
+_Bool __ESBMC_overflow_umull(unsigned long int, unsigned long int, unsigned long int *);
+_Bool __ESBMC_overflow_umulll(unsigned long long int, unsigned long long int, unsigned long long int *);
     )";
 
   return intrinsics;

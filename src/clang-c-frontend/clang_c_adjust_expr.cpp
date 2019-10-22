@@ -1030,31 +1030,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
-    else if(
-      identifier == CPROVER_PREFIX "overflows" ||
-      identifier == CPROVER_PREFIX "overflowsl" ||
-      identifier == CPROVER_PREFIX "overflowsll" ||
-      identifier == CPROVER_PREFIX "overflowsu" ||
-      identifier == CPROVER_PREFIX "overflowsul" ||
-      identifier == CPROVER_PREFIX "overflowsull")
-    {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "overflow checks expect one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
-      auto &arg = expr.arguments()[0];
-      assert((arg.id() == "+") || (arg.id() == "-") || (arg.id() == "*"));
-
-      exprt new_expr(
-        (arg.id() == "+") ? "overflow-+"
-                          : (arg.id() == "-") ? "overflow--" : "overflow-*",
-        bool_typet());
-      new_expr.copy_to_operands(arg.operands()[0], arg.operands()[1]);
-      expr.swap(new_expr);
-    }
   }
 
   // Restore location

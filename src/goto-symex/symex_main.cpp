@@ -400,13 +400,52 @@ void goto_symext::run_intrinsic(
   {
     intrinsic_memset(art, func_call);
   }
+  else if(has_prefix(symname, "c:@F@__ESBMC_overflow"))
+  {
+    bool is_mult = has_prefix(symname, "c:@F@__ESBMC_overflow_smul") ||
+                   has_prefix(symname, "c:@F@__ESBMC_overflow_umul");
+    bool is_add = has_prefix(symname, "c:@F@__ESBMC_overflow_sadd") ||
+                  has_prefix(symname, "c:@F@__ESBMC_overflow_uadd");
+    bool is_sub = has_prefix(symname, "c:@F@__ESBMC_overflow_ssub") ||
+                  has_prefix(symname, "c:@F@__ESBMC_overflow_usub");
+
+    assert(func_call.operands.size() == 3);
+
+    const auto &func_type = to_code_type(func_call.function->type);
+    assert(func_type.arguments[0] == func_type.arguments[1]);
+    assert(is_pointer_type(func_type.arguments[2]));
+
+    expr2tc op;
+    if(is_mult)
+      op = mul2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else if(is_add)
+      op = add2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else if(is_sub)
+      op = sub2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else
+    {
+      assert(0 && "Unknown overflow intrinsics");
+    }
+
+    // Assign result of the two arguments to the dereferenced third argument
+    symex_assign(code_assign2tc(
+      dereference2tc(
+        to_pointer_type(func_call.operands[2]->type).subtype,
+        func_call.operands[2]),
+      op));
+
+    // Perform overflow check and assign it to the return object
+    symex_assign(code_assign2tc(func_call.ret, expr2tc(new overflow2t(op))));
+  }
   else
   {
-    std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
-    std::cerr << std::endl << "The name in question: " << symname << std::endl;
-    std::cerr << "(NB: the C spec reserves the __ prefix for the compiler and "
-                 "environment)"
-              << std::endl;
+    std::cerr << "Function call to non-intrinsic prefixed with __ESBMC";
+    std::cerr << " (fatal)\nThe name in question: " << symname;
+    std::cerr << "\n(NB: the C spec reserves the __ prefix for the compiler"
+                 " and environment)\n";
     abort();
   }
 }
