@@ -178,10 +178,7 @@ bool goto_symex_statet::constant_propagation_reference(
   return false;
 }
 
-void goto_symex_statet::assignment(
-  expr2tc &lhs,
-  const expr2tc &rhs,
-  bool record_value)
+void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
 {
   assert(is_symbol2t(lhs));
   symbol2t &lhs_sym = to_symbol2t(lhs);
@@ -197,12 +194,7 @@ void goto_symex_statet::assignment(
 
   expr2tc l1_lhs = lhs;
 
-  expr2tc const_value;
-  if(record_value && constant_propagation(rhs))
-    const_value = rhs;
-  else
-    const_value = expr2tc();
-
+  expr2tc const_value = constant_propagation(rhs) ? rhs : expr2tc();
   level2.make_assignment(lhs, const_value, rhs);
 
   if(use_value_set)
