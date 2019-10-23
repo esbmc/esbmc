@@ -285,32 +285,26 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     typet old_type = symbol.type;
     migrate_type(symbol.type, type);
 
+    expr2tc cur_state_rhs = symbol2tc(type, symbol.id);
+    renaming::level2t::rename_to_record(cur_state_rhs, variable);
+
+    expr2tc goto_state_rhs = symbol2tc(type, symbol.id);
+    renaming::level2t::rename_to_record(goto_state_rhs, variable);
+
+    // Semi-manually rename these symbols: we may be referring to an l1
+    // variable not in the current scope, thus we need to directly specify
+    // which l1 variable we're dealing with.
+    goto_state.level2.rename(goto_state_rhs);
+    cur_state->level2.rename(cur_state_rhs);
+
     expr2tc rhs;
-
-    if(cur_state->guard.is_false() || goto_state.guard.is_false())
-    {
-      rhs = symbol2tc(type, symbol.id);
-
-      // Try to get the value
-      renaming::level2t::rename_to_record(rhs, variable);
-      goto_state.level2.rename(rhs);
-    }
+    if(cur_state->guard.is_false())
+      rhs = goto_state_rhs;
+    else if(goto_state.guard.is_false())
+      rhs = cur_state_rhs;
     else
     {
-      symbol2tc true_val(type, symbol.id);
-      symbol2tc false_val(type, symbol.id);
-
-      // Semi-manually rename these symbols: we may be referring to an l1
-      // variable not in the current scope, thus we need to directly specify
-      // which l1 variable we're dealing with.
-      renaming::level2t::rename_to_record(true_val, variable);
-      renaming::level2t::rename_to_record(false_val, variable);
-
-      // Try to get the symbol's value
-      goto_state.level2.rename(true_val);
-      cur_state->level2.rename(false_val);
-
-      rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
+      rhs = if2tc(type, tmp_guard.as_expr(), goto_state_rhs, cur_state_rhs);
       simplify(rhs);
     }
 
