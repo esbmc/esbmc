@@ -630,7 +630,7 @@ void bmct::bidirectional_search(
     goto_programt::instructiont i;
     i.make_assertion(not2tc(constraints));
     i.location = loop_exit->location;
-    i.location.user_provided(false);
+    i.location.user_provided(true);
     i.loop_number = loop_exit->loop_number;
     i.inductive_assertion = true;
 
