@@ -32,7 +32,7 @@ goto_symext::goto_symext(
     total_claims(0),
     remaining_claims(0),
     max_unwind(options.get_option("unwind").c_str()),
-    constant_propagation(true),
+    constant_propagation(!options.get_bool_option("no-propagation")),
     ns(_ns),
     new_context(_new_context),
     goto_functions(_goto_functions),
