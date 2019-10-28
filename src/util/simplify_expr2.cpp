@@ -2090,6 +2090,11 @@ expr2tc if2t::do_simplify() const
       return typecast_check_return(type, false_value);
   }
 
+  if(
+    is_true(true_value) && (gen_one(true_value->type) == true_value) &&
+    is_false(false_value))
+    return typecast_check_return(type, cond);
+
   if(true_value == false_value)
     return typecast_check_return(type, true_value);
 
