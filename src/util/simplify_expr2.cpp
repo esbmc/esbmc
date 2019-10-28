@@ -122,9 +122,7 @@ static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
     return expr;
 
   // Create a typecast of the result
-  expr2tc typecast = expr2tc(new typecast2t(type, expr));
-
-  return try_simplification(typecast);
+  return try_simplification(typecast2tc(type, expr));
 }
 
 static void fetch_ops_from_this_type(
@@ -2029,6 +2027,56 @@ expr2tc greaterthanequal2t::do_simplify() const
 
 expr2tc if2t::do_simplify() const
 {
+  if(is_bool_type(type))
+  {
+    // We can only do these simplification if the expecting results is boolean
+    // A bug was introduced in 2835092f that applied these simplifications to
+    // integers, which resulted in expressions like:
+    //
+    // c:@t2&1#4 == (guard?0!0&0#3 ? 2 : 0)
+    //
+    // to be simplified to:
+    //
+    // c:@t2&1#4 == (unsigned int)guard?0!0&0#3
+
+    expr2tc simp;
+    if(is_true(true_value) && is_false(false_value))
+    {
+      // a?1:0 <-> a
+      simp = cond;
+    }
+    else if(is_false(true_value) && is_true(false_value))
+    {
+      // a?0:1 <-> !a
+      simp = not2tc(cond);
+    }
+    else if(is_false(false_value))
+    {
+      // a?b:0 <-> a AND b
+      simp = and2tc(cond, true_value);
+    }
+    else if(is_true(false_value))
+    {
+      // a?b:1 <-> !a OR b
+      simp = or2tc(not2tc(cond), true_value);
+    }
+    else if(is_true(true_value))
+    {
+      // a?1:b <-> a||(!a && b) <-> a OR b
+      simp = or2tc(cond, false_value);
+    }
+    else if(is_false(true_value))
+    {
+      // a?0:b <-> !a && b
+      simp = and2tc(not2tc(cond), false_value);
+    }
+    else
+      return simp;
+
+    ::simplify(simp);
+    return simp;
+  }
+
   if(is_constant_expr(cond))
   {
     // Cast towards a bool type.
@@ -2041,9 +2089,6 @@ expr2tc if2t::do_simplify() const
     if(is_false(cast))
       return typecast_check_return(type, false_value);
   }
-
-  if(is_true(true_value) && is_false(false_value))
-    return typecast_check_return(type, cond);
 
   if(true_value == false_value)
     return typecast_check_return(type, true_value);
