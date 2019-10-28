@@ -1877,6 +1877,7 @@ void esbmc_parseoptionst::help()
        "by {s,m,h}\n"
        " --memstats                   print memory usage statistics\n"
        " --no-simplify                do not simplify any expression\n"
+       " --no-propagation             disable constant propagation\n"
        " --enable-core-dump           do not disable core dump output\n"
        " --interval-analysis          enable interval analysis and add assumes "
        "to the program\n"
