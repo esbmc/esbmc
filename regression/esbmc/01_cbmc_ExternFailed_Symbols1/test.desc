@@ -1,8 +1,6 @@
-CORE
+KNOWNBUG
 main.c
  --no-pointer-check
-^EXIT=0$
-^SIGNAL=0$
 ^VERIFICATION FAILED$
 --
 ^warning: ignoring

@@ -141,14 +141,16 @@ smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt x, smt_astt rm)
   v4 = ctx->mk_ite(rm_is_rtn, v4_rtn, v4);
   v4 = ctx->mk_ite(rm_is_rtz, xzero, v4);
 
-  // exponent >= sbits-1
+  // exponent >= sbits-1 -> x
   smt_astt exp_is_large =
-    ctx->mk_bvsle(ctx->mk_smt_bv(BigInt(sbits - 1), ebits), a_exp);
+    log2(sbits - 1) + 1 <= ebits - 1
+      ? ctx->mk_bvsle(ctx->mk_smt_bv(BigInt(sbits - 1), ebits), a_exp)
+      : ctx->mk_smt_bool(false);
   smt_astt c5 = exp_is_large;
   smt_astt v5 = x;
 
   // Actual conversion with rounding.
-  // x.exponent >= 0 && x.exponent < x.sbits - 1
+  // exponent >= 0 && exponent < sbits - 1
   smt_astt res_sgn = a_sgn;
   smt_astt res_exp = a_exp;
 
@@ -202,9 +204,6 @@ smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt x, smt_astt rm)
   res_sig = ctx->mk_ite(c53, v53, res_sig);
   res_sig = ctx->mk_ite(c52, v52, res_sig);
   res_sig = ctx->mk_ite(c51, v51, res_sig);
-  res_sig = ctx->mk_zero_ext(
-    ctx->mk_concat(res_sig, ctx->mk_smt_bv(BigInt(0), 3)),
-    1); // rounding bits are all 0.
 
   assert(res_exp->sort->get_data_width() == ebits);
   assert(shift->sort->get_data_width() == sbits);
@@ -216,12 +215,30 @@ smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt x, smt_astt rm)
   res_exp = ctx->mk_bvadd(ctx->mk_zero_ext(res_exp, 2), e_shift);
 
   assert(res_sgn->sort->get_data_width() == 1);
-  assert(res_sig->sort->get_data_width() == sbits + 4);
+  assert(res_sig->sort->get_data_width() == sbits);
   assert(res_exp->sort->get_data_width() == ebits + 2);
 
-  // CMW: We use the rounder for normalization.
-  smt_astt v6;
-  round(rm, res_sgn, res_sig, res_exp, ebits, sbits, v6);
+  // Renormalize
+  smt_astt zero_e2 = ctx->mk_smt_bv(BigInt(0), ebits + 2);
+  smt_astt min_exp = mk_min_exp(ebits);
+  min_exp = ctx->mk_sign_ext(min_exp, 2);
+  smt_astt sig_lz = mk_leading_zeros(res_sig, ebits + 2);
+  smt_astt max_exp_delta = ctx->mk_bvsub(res_exp, min_exp);
+  smt_astt sig_lz_capped =
+    ctx->mk_ite(ctx->mk_bvsle(sig_lz, max_exp_delta), sig_lz, max_exp_delta);
+  smt_astt renorm_delta =
+    ctx->mk_ite(ctx->mk_bvsle(zero_e2, sig_lz_capped), sig_lz_capped, zero_e2);
+  assert(renorm_delta->sort->get_data_width() == ebits + 2);
+  res_exp = ctx->mk_bvsub(res_exp, renorm_delta);
+  res_sig =
+    ctx->mk_bvshl(res_sig, ctx->mk_zero_ext(renorm_delta, sbits - ebits - 2));
+
+  res_exp = ctx->mk_extract(res_exp, ebits - 1, 0);
+  res_exp = mk_bias(res_exp);
+  res_sig = ctx->mk_extract(res_sig, sbits - 2, 0);
+  smt_astt v6 = mk_from_bv_to_fp(
+    ctx->mk_concat(res_sgn, ctx->mk_concat(res_exp, res_sig)),
+    mk_fpbv_sort(ebits, sbits - 1));
 
   // And finally, we tie them together.
   smt_astt result = ctx->mk_ite(c5, v5, v6);
@@ -738,11 +755,11 @@ smt_astt fp_convt::mk_to_bv(smt_astt x, bool is_signed, std::size_t width)
       ovfl,
       ctx->mk_bvsle(
         pre_rounded, ctx->mk_bvneg(ctx->mk_smt_bv(BigInt(1), bv_sz + 3))));
+    pre_rounded =
+      ctx->mk_ite(x_is_neg, ctx->mk_bvneg(pre_rounded), pre_rounded);
     in_range = ctx->mk_and(
       ctx->mk_and(ctx->mk_not(ovfl), ctx->mk_bvsle(ll, pre_rounded)),
       ctx->mk_bvsle(pre_rounded, ul));
-    pre_rounded =
-      ctx->mk_ite(x_is_neg, ctx->mk_bvneg(pre_rounded), pre_rounded);
   }
 
   smt_astt rounded = ctx->mk_extract(pre_rounded, bv_sz - 1, 0);

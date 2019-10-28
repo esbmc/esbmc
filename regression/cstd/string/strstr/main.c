@@ -2,10 +2,10 @@
 
 int main ()
 {
-  char str[] ="This is a simple string";
+  char str[] ="tes";
   char * pch;
-  pch = strstr (str,"simple");
-  strncpy (pch,"sample",6);
-  assert(!strcmp(str, "This is a sample string"));
+  pch = strstr (str,"tes");
+  strncpy (pch,"tis",3);
+  assert(!strcmp(str, "tis"));
   return 0;
 }
