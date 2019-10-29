@@ -29,17 +29,7 @@ void set_claims(
       count++;
 
       if(claims.find(count) == claims.end())
-      {
-#if 0
-        // assume-guarantee
-        if(it->guard.is_true())
-          it->type=SKIP;
-        else
-          it->type=ASSUME;
-#else
-        instruction.type = SKIP;
-#endif
-      }
+        instruction.make_skip();
     }
   }
 }
@@ -70,17 +60,16 @@ void set_claims(
   const std::list<std::string> &claims)
 {
   std::set<unsigned> unsigned_claims;
-
   convert_claims(claims, unsigned_claims);
 
   if(unsigned_claims.empty())
     return;
 
   unsigned count = 0;
-
   for(auto &it : goto_functions.function_map)
   {
-    set_claims(it.second.body, unsigned_claims, count);
+    if(!it.second.body.empty())
+      set_claims(it.second.body, unsigned_claims, count);
   }
 
   unsigned largest = *(--unsigned_claims.end());
