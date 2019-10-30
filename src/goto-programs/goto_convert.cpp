@@ -403,7 +403,7 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
     static_cast<const locationt &>(code.end_location());
 
   // this saves the size of the destructor stack
-  std::size_t old_stack_size = targets.destructor_stack.size();
+  destructor_stackt old_stack = targets.destructor_stack;
 
   // Convert each expression
   for(auto const &it : code.operands())
@@ -421,10 +421,10 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
     // don't do destructors when we are unreachable
   }
   else
-    unwind_destructor_stack(end_location, old_stack_size, dest);
+    unwind_destructor_stack(end_location, old_stack.size(), dest);
 
   // remove those destructors
-  targets.destructor_stack.resize(old_stack_size);
+  targets.destructor_stack = old_stack;
 }
 
 void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
@@ -1508,16 +1508,24 @@ void goto_convertt::convert_return(
     throw "return without target";
   }
 
-  // Need to process _entire_ destructor stack.
-  unwind_destructor_stack(code.location(), 0, dest);
-
   code_returnt new_code(code);
-
   if(new_code.has_return_value())
   {
     goto_programt sideeffects;
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
+
+    auto const &identifier = new_code.return_value().identifier();
+    for(destructor_stackt::iterator it = targets.destructor_stack.begin();
+        it != targets.destructor_stack.end();
+        ++it)
+    {
+      if(to_code_dead(*it).symbol().identifier() == identifier)
+      {
+        targets.destructor_stack.erase(it);
+        break;
+      }
+    }
 
     if(options.get_bool_option("atomicity-check"))
     {
@@ -1527,6 +1535,9 @@ void goto_convertt::convert_return(
           new_code.return_value(), dest, code.location());
     }
   }
+
+  // Need to process _entire_ destructor stack.
+  unwind_destructor_stack(code.location(), 0, dest);
 
   if(targets.has_return_value)
   {
