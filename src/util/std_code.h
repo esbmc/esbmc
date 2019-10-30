@@ -197,8 +197,6 @@ public:
   {
     return op0();
   }
-
-  const irep_idt &get_identifier() const;
 };
 
 inline const code_deadt &to_code_dead(const codet &code)
