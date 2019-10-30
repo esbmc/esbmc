@@ -159,13 +159,6 @@ public:
      *  assigns the result of this function call to at a higher level. */
     expr2tc return_value;
 
-    typedef hash_set_cont<
-      renaming::level2t::name_record,
-      renaming::level2t::name_rec_hash>
-      local_variablest;
-    /** Set of local variable l1 names. */
-    local_variablest local_variables;
-
     /** List of function pointer targets. During the invocation of a function
      *  pointer call, this contains a list of targets that the function pointer
      *  can point at, and that need to have calls set up to and executed. This
@@ -187,12 +180,14 @@ public:
     typedef hash_set_cont<
       renaming::level2t::name_record,
       renaming::level2t::name_rec_hash>
-      declaration_historyt;
+      variable_name_sett;
     /** Set of variables names that have been declared. Used to detect when we
      *  are in some kind of block that is entered then exited repeatedly -
      *  whenever that happens, a new l1 name is required. This caches the
      *  already seen names in a function for making that decision. */
-    declaration_historyt declaration_history;
+    variable_name_sett declaration_history;
+    /** Set of local variable l1 names. */
+    variable_name_sett local_variables;
 
     /** Record the first va_args index used in this function call, if any,
      *  otherwise UINT_MAX
