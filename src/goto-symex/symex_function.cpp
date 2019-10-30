@@ -546,17 +546,14 @@ void goto_symext::pop_frame()
     cur_state->guard = frame.entry_guard;
 
   // clear locals from L2 renaming
-  for(statet::framet::local_variablest::const_iterator it =
-        frame.local_variables.begin();
-      it != frame.local_variables.end();
-      it++)
+  for(auto const &it : frame.local_variables)
   {
-    cur_state->level2.remove(*it);
+    cur_state->level2.remove(it);
 
     // Construct an l1 name on the fly - this is a temporary hack for when
     // the value set is storing things in a not-an-irep-idt form.
     symbol2tc tmp_expr(
-      get_empty_type(), it->base_name, it->lev, it->l1_num, 0, it->t_num, 0);
+      get_empty_type(), it.base_name, it.lev, it.l1_num, 0, it.t_num, 0);
     cur_state->value_set.erase(to_symbol2t(tmp_expr).get_symbol_name());
   }
 
