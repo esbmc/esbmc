@@ -166,8 +166,7 @@ void symex_target_equationt::convert_internal_step(
     std::cout << std::endl;
   }
 
-  expr2tc tmp(step.guard);
-  step.guard_ast = smt_conv.convert_ast(tmp);
+  step.guard_ast = smt_conv.convert_ast(step.guard);
 
   if(step.is_assume() || step.is_assert())
   {
