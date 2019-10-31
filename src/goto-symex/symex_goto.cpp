@@ -29,10 +29,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   cur_state->rename(new_guard);
   do_simplify(new_guard);
 
-  bool new_guard_false = false, new_guard_true = false;
-
-  new_guard_false = ((is_false(new_guard)) || cur_state->guard.is_false());
-  new_guard_true = is_true(new_guard);
+  bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
+  bool new_guard_true = is_true(new_guard);
 
   if(!new_guard_false && options.get_bool_option("smt-symex-guard"))
   {
@@ -95,7 +93,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
       // generate assume(false) or a suitable negation if this
       // instruction is a conditional goto
-      if(is_true(new_guard))
+      if(new_guard_true)
         assume(gen_false_expr());
       else
       {
@@ -157,7 +155,6 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     cur_state->top().goto_state_map[new_state_pc];
 
   goto_state_list.emplace_back(*cur_state);
-  statet::goto_statet &new_state = goto_state_list.back();
 
   // adjust guards
   if(new_guard_true)
@@ -166,6 +163,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   }
   else
   {
+    statet::goto_statet &new_state = goto_state_list.back();
+
     // produce new guard symbol
     expr2tc guard_expr;
 
@@ -218,6 +217,38 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   }
 }
 
+static inline guardt merge_state_guards(
+  goto_symext::statet::goto_statet &goto_state,
+  goto_symex_statet &state)
+{
+  // adjust guard, even using guards from unreachable states. This helps to
+  // shrink the state guard if the incoming edge is from a path that was
+  // truncated by config.unwind, config.depth or an assume-false instruction.
+
+  // Note when an unreachable state contributes its guard, merging it in is
+  // optional, since the formula already implies the unreachable guard is
+  // impossible. Therefore we only integrate it when to do so simplifies the
+  // state guard.
+
+  // This function can trash either state's guards, since goto_state is dying
+  // and state's guard will shortly be overwritten.
+  if(
+    (!goto_state.guard.is_false() && !state.guard.is_false()) ||
+    state.guard.disjunction_may_simplify(goto_state.guard))
+  {
+    state.guard |= goto_state.guard;
+    return std::move(state.guard);
+  }
+  else if(state.guard.is_false() && !goto_state.guard.is_false())
+  {
+    return std::move(goto_state.guard);
+  }
+  else
+  {
+    return std::move(state.guard);
+  }
+}
+
 void goto_symext::merge_gotos()
 {
   statet::framet &frame = cur_state->top();
@@ -232,22 +263,27 @@ void goto_symext::merge_gotos()
   // we need to merge
   statet::goto_state_listt &state_list = state_map_it->second;
 
-  for(statet::goto_state_listt::reverse_iterator list_it = state_list.rbegin();
-      list_it != state_list.rend();
+  for(auto list_it = state_list.rbegin(); list_it != state_list.rend();
       list_it++)
   {
     statet::goto_statet &goto_state = *list_it;
 
-    // do SSA phi functions
-    phi_function(goto_state);
+    // Merge guards. Don't write this to `state` yet because we might move
+    // goto_state over it below.
+    guardt new_guard = merge_state_guards(goto_state, *cur_state);
 
-    merge_value_sets(goto_state);
+    if(!goto_state.guard.is_false())
+    {
+      // do SSA phi functions
+      phi_function(goto_state);
 
-    // adjust guard
-    cur_state->guard |= goto_state.guard;
+      merge_value_sets(goto_state);
 
-    // adjust depth
-    cur_state->depth = std::min(cur_state->depth, goto_state.depth);
+      // adjust depth
+      cur_state->depth = std::min(cur_state->depth, goto_state.depth);
+    }
+
+    cur_state->guard = std::move(new_guard);
   }
 
   // clean up to save some memory
@@ -267,6 +303,9 @@ void goto_symext::merge_value_sets(const statet::goto_statet &src)
 
 void goto_symext::phi_function(const statet::goto_statet &goto_state)
 {
+  if(goto_state.guard.is_false() && cur_state->guard.is_false())
+    return;
+
   // go over all variables to see what changed
   std::set<renaming::level2t::name_record> variables;
 

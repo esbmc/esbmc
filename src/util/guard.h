@@ -34,6 +34,7 @@ public:
   expr2tc as_expr() const;
   void guard_expr(expr2tc &dest) const;
 
+  bool disjunction_may_simplify(const guardt &other_guard) const;
   bool is_true() const;
   bool is_false() const;
 

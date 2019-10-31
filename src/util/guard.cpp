@@ -223,6 +223,22 @@ void guardt::swap(guardt &g)
   g_expr.swap(g.g_expr);
 }
 
+bool guardt::disjunction_may_simplify(const guardt &other_guard) const
+{
+  if(is_true() || is_false() || other_guard.is_true() || other_guard.is_false())
+    return true;
+
+  auto og_expr = other_guard.as_expr();
+  if((is_single_symbol() || is_and2t(as_expr())) && is_and2t(og_expr))
+    return true;
+
+  make_not(og_expr);
+  if(as_expr() == og_expr)
+    return true;
+
+  return false;
+}
+
 bool guardt::is_true() const
 {
   return guard_list.empty();
