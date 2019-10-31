@@ -76,7 +76,6 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
     // next instruction
     cur_state->source.pc++;
-
     return; // nothing to do
   }
 
@@ -89,6 +88,26 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // backwards?
   if(!forward)
   {
+    if(goto_target == cur_state->source.pc)
+    {
+      assert(
+        cur_state->source.pc->location_number == goto_target->location_number);
+
+      // generate assume(false) or a suitable negation if this
+      // instruction is a conditional goto
+      if(is_true(new_guard))
+        assume(gen_false_expr());
+      else
+      {
+        make_not(new_guard);
+        assume(new_guard);
+      }
+
+      // next instruction
+      cur_state->source.pc++;
+      return;
+    }
+
     BigInt &unwind = cur_state->loop_iterations[instruction.loop_number];
     ++unwind;
 
