@@ -89,6 +89,29 @@ void goto_symext::symex_other()
       cur_state->level2.make_assignment(l1_sym, expr2tc(), expr2tc());
     }
   }
+  else if(is_code_dead2t(code2))
+  {
+    replace_dynamic_allocation(code2);
+    replace_nondet(code2);
+    dereference(code2, dereferencet::READ);
+
+    const code_dead2t &dead_code = to_code_dead2t(code2);
+
+    // just do the L2 renaming to preseve locality
+    const irep_idt &identifier = dead_code.value;
+
+    // Generate dummy symbol as a vehicle for renaming.
+    symbol2tc l1_sym(get_empty_type(), identifier);
+
+    cur_state->top().level1.get_ident_name(l1_sym);
+
+    // Erase from propagation
+    cur_state->value_set.erase(l1_sym->get_symbol_name());
+
+    // Erase from L2 renaming map
+    cur_state->level2.remove(
+      renaming::level2t::name_record(to_symbol2t(l1_sym)));
+  }
   else if(is_code_asm2t(code2))
   {
     // Assembly statement -> do nothing.
