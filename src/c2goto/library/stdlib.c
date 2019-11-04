@@ -24,6 +24,9 @@ void abort(void)
 void *calloc(size_t nmemb, size_t size)
 {
 __ESBMC_HIDE:;
+  if(!nmemb)
+    return NULL;
+
   size_t total_size = nmemb * size;
   void *res = malloc(total_size);
   memset(res, 0, total_size);
