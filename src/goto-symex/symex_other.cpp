@@ -103,9 +103,10 @@ void goto_symext::symex_other()
     // Generate dummy symbol as a vehicle for renaming.
     symbol2tc l1_sym(get_empty_type(), identifier);
 
+    // Rename it to level 1
     cur_state->top().level1.get_ident_name(l1_sym);
 
-    // Erase from propagation
+    // Erase from level 1 propagation
     cur_state->value_set.erase(l1_sym->get_symbol_name());
 
     // Erase from L2 renaming map
