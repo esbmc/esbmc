@@ -482,3 +482,24 @@ __ESBMC_HIDE:;
   do_pthread_cond_wait(cond, mutex, 1);
   return 0;
 }
+
+int pthread_key_create(pthread_key_t *key, void (*destructor)(void*))
+{
+__ESBMC_HIDE:;
+    // TODO
+    return 0;
+}
+
+void *pthread_getspecific(pthread_key_t key)
+{
+__ESBMC_HIDE:;
+    // TODO
+    return NULL;
+}
+
+int pthread_setspecific(pthread_key_t key, const void *value)
+{
+__ESBMC_HIDE:;
+    // TODO
+    return 0;
+}
