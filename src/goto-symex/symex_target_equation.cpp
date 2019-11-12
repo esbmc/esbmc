@@ -44,7 +44,7 @@ void symex_target_equationt::assignment(
   SSA_step.loop_number = loop_number;
 
   if(debug_print)
-    SSA_step.short_output(ns, std::cout);
+    SSA_step.output(ns, std::cout);
 }
 
 void symex_target_equationt::output(
