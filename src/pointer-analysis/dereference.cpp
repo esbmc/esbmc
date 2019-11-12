@@ -1860,7 +1860,10 @@ void dereferencet::valid_check(
       {
         // Any access where this guard is true -> failure
         dereference_failure(
-          "pointer dereference", "accessed expired variable pointer", guard);
+          "pointer dereference",
+          "accessed expired variable pointer `" +
+            to_symbol2t(symbol).thename.as_string() + "'",
+          guard);
         return;
       }
     }
