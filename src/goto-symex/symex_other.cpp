@@ -91,6 +91,7 @@ void goto_symext::symex_other()
   }
   else if(is_code_dead2t(code2))
   {
+#if 0
     replace_dynamic_allocation(code2);
     replace_nondet(code2);
     dereference(code2, dereferencet::READ);
@@ -112,6 +113,7 @@ void goto_symext::symex_other()
     // Erase from L2 renaming map
     cur_state->level2.remove(
       renaming::level2t::name_record(to_symbol2t(l1_sym)));
+#endif
   }
   else if(is_code_asm2t(code2))
   {
