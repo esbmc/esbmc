@@ -191,6 +191,16 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   const code_function_call2t &call = to_code_function_call2t(expr);
   const irep_idt &identifier = to_symbol2t(call.function).thename;
 
+  // Keep this block until the following pthread models are implemented
+  if(identifier.as_string() == "pthread_key_create"  ||
+     identifier.as_string() == "pthread_getspecific" ||
+     identifier.as_string() == "pthread_setspecific")
+  {
+      std::cerr << "No model for `" + id2string(identifier) +
+                     "' function\n";
+      abort();
+  }
+
   // find code in function map
 
   goto_functionst::function_mapt::const_iterator it =
