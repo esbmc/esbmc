@@ -195,7 +195,7 @@ expr2tc goto_symext::symex_mem(
   expr2tc ptr_rhs = rhs;
   guardt alloc_guard = cur_state->guard;
 
-  if(!options.get_bool_option("force-malloc-success"))
+  if(!options.get_bool_option("force-malloc-success") && is_malloc)
   {
     symbol2tc null_sym(rhs->type, "NULL");
     sideeffect2tc choice(
