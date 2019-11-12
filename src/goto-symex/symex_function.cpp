@@ -605,13 +605,10 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
       return true;
     }
   }
-  else
+  else if(!is_nil_expr(frame.return_value))
   {
-    if(!is_nil_expr(frame.return_value))
-    {
-      std::cerr << "return with unexpected value" << std::endl;
-      abort();
-    }
+    std::cerr << "return with unexpected value" << std::endl;
+    abort();
   }
 
   return false;
