@@ -778,6 +778,18 @@ public:
   }
 };
 
+extern inline const address_of_exprt &to_address_of_expr(const exprt &expr)
+{
+  assert(expr.id() == exprt::addrof && expr.operands().size() == 1);
+  return static_cast<const address_of_exprt &>(expr);
+}
+
+extern inline address_of_exprt &to_address_of_expr(exprt &expr)
+{
+  assert(expr.id() == exprt::addrof && expr.operands().size() == 1);
+  return static_cast<address_of_exprt &>(expr);
+}
+
 class not_exprt : public exprt
 {
 public:
