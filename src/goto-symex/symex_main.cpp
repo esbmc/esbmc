@@ -247,9 +247,6 @@ void goto_symext::symex_step(reachability_treet &art)
     cur_state->source.pc++;
     break;
 
-    cur_state->source.pc++;
-    break;
-
   case CATCH:
     symex_catch();
     break;
