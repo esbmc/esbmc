@@ -149,7 +149,6 @@ void symex_target_equationt::convert_internal_step(
   SSA_stept &step)
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
-  bvt assert_bv;
   const smt_ast *true_val = smt_conv.convert_ast(gen_true_expr());
   const smt_ast *false_val = smt_conv.convert_ast(gen_false_expr());
 

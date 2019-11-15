@@ -353,7 +353,7 @@ std::string expr2ct::convert_bitcast(const exprt &src, unsigned &precedence)
     src.op0().is_zero())
     return "NULL";
 
-  std::string dest = "(BITCAST:" + convert(type) + ")";
+  std::string dest = "(" + convert(type) + ")";
 
   std::string tmp = convert(src.op0(), precedence);
 
