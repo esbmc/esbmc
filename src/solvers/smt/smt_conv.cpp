@@ -34,9 +34,8 @@ static std::string itos(int64_t i)
   return ss.str();
 }
 
-unsigned int smt_convt::get_member_name_field(
-  const type2tc &t,
-  const irep_idt &name) const
+unsigned int
+smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
 {
   unsigned int idx = 0;
   const struct_union_data &data_ref = get_type_def(t);
@@ -54,9 +53,8 @@ unsigned int smt_convt::get_member_name_field(
   return idx;
 }
 
-unsigned int smt_convt::get_member_name_field(
-  const type2tc &t,
-  const expr2tc &name) const
+unsigned int
+smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 {
   const constant_string2t &str = to_constant_string2t(name);
   return get_member_name_field(t, str.value);
@@ -1680,9 +1678,8 @@ expr2tc smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
   return output;
 }
 
-expr2tc smt_convt::decompose_store_chain(
-  const expr2tc &expr,
-  expr2tc &update_val)
+expr2tc
+smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &update_val)
 {
   with2tc with = expr;
 
@@ -1967,9 +1964,6 @@ expr2tc smt_convt::get(const expr2tc &expr)
     return res;
 
   case expr2t::symbol_id:
-    if(is_structure_type(res))
-      return res;
-
     // Query symbol value from the solver
     return get_by_type(res);
 
@@ -2250,9 +2244,8 @@ smt_astt smt_convt::pointer_array_of(
   return tuple_api->tuple_array_of(strct, array_width);
 }
 
-smt_astt smt_convt::tuple_array_create_despatch(
-  const expr2tc &expr,
-  smt_sortt domain)
+smt_astt
+smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
 {
   // Take a constant_array2t or an array_of, and format the data from them into
   // a form palatable to tuple_array_create.
