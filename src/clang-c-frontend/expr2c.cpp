@@ -303,7 +303,7 @@ std::string expr2ct::convert_typecast(const exprt &src, unsigned &precedence)
     type.id() == "pointer" &&
     ns.follow(type.subtype()).id() == "empty" && // to (void *)?
     src.op0().is_zero())
-    return "NULL";
+    return "0";
 
   std::string dest;
   if(type.id() == "struct")
@@ -351,7 +351,7 @@ std::string expr2ct::convert_bitcast(const exprt &src, unsigned &precedence)
     type.id() == "pointer" &&
     ns.follow(type.subtype()).id() == "empty" && // to (void *)?
     src.op0().is_zero())
-    return "NULL";
+    return "0";
 
   std::string dest = "(" + convert(type) + ")";
 
@@ -1068,7 +1068,7 @@ std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
   else if(type.id() == "pointer")
   {
     if(value == "NULL")
-      dest = "NULL";
+      dest = "0";
     else if(value == "INVALID" || std::string(value, 0, 8) == "INVALID-")
       dest = value;
     else
@@ -2052,7 +2052,7 @@ std::string expr2ct::convert(const exprt &src, unsigned &precedence)
 
   else if(src.id() == "NULL-object")
   {
-    return "NULL-object";
+    return "0";
   }
 
   else if(src.id() == "infinity")
