@@ -1072,25 +1072,25 @@ struct Andtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Two constants? Simplify to result of the and
+    if(is_constant(op1) && is_constant(op2))
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(!(get_value(c1) == 0) && !(get_value(c2) == 0));
+    }
+
     if(is_constant(op1))
     {
       // False? never true
       expr2tc c1 = op1;
-      return (get_value(c1) == 0) ? c1 : op2;
+      return (get_value(c1) == 0) ? gen_false_expr() : op2;
     }
 
     if(is_constant(op2))
     {
       // False? never true
       expr2tc c2 = op2;
-      return (get_value(c2) == 0) ? c2 : op1;
-    }
-
-    // Two constants? Simplify to result of the and
-    if(is_constant(op1) && is_constant(op2))
-    {
-      expr2tc c1 = op1, c2 = op2;
-      return constant_bool2tc(!(get_value(c1) == 0) && !(get_value(c2) == 0));
+      return (get_value(c2) == 0) ? gen_false_expr() : op1;
     }
 
     return expr2tc();
@@ -1111,27 +1111,25 @@ struct Ortor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
-    if(is_constant(op1))
-    {
-      // True? Simplify to op2
-      expr2tc c1 = op1;
-      if(!(get_value(c1) == 0))
-        return gen_true_expr();
-    }
-
-    if(is_constant(op2))
-    {
-      // True? Simplify to op1
-      expr2tc c2 = op2;
-      if(!(get_value(c2) == 0))
-        return gen_true_expr();
-    }
-
     // Two constants? Simplify to result of the or
     if(is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(!(get_value(c1) == 0) || !(get_value(c2) == 0));
+    }
+
+    if(is_constant(op1))
+    {
+      // True? return true
+      expr2tc c1 = op1;
+      return (!(get_value(c1) == 0)) ? gen_true_expr() : op2;
+    }
+
+    if(is_constant(op2))
+    {
+      // True? return true
+      expr2tc c2 = op2;
+      return (!(get_value(c2) == 0)) ? gen_true_expr() : op1;
     }
 
     return expr2tc();
