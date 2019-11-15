@@ -1971,6 +1971,22 @@ expr2tc smt_convt::get(const expr2tc &expr)
     break;
   }
 
+  if(is_array_type(expr->type))
+  {
+    expr2tc &arr_size = to_array_type(res->type).array_size;
+    if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+      arr_size = get(arr_size);
+
+    res->type->Foreach_subtype([this](type2tc &t) {
+      if(!is_array_type(t))
+        return;
+
+      expr2tc &arr_size = to_array_type(t).array_size;
+      if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+        arr_size = get(arr_size);
+    });
+  }
+
   // Recurse on operands
   res->Foreach_operand([this](expr2tc &e) {
     expr2tc new_e = get(e);
