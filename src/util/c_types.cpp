@@ -83,7 +83,7 @@ type2tc build_float_type2(unsigned width)
 
 typet index_type()
 {
-  return signedbv_typet(config.ansi_c.int_width);
+  return signed_size_type();
 }
 
 type2tc index_type2()
