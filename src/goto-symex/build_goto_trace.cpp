@@ -64,7 +64,7 @@ void build_goto_trace(
     if(SSA_step.is_assignment() && is_symbol2t(SSA_step.rhs))
     {
       symbol2t s = to_symbol2t(SSA_step.rhs);
-      if(s.thename.as_string().find("__VERIFIER_nondet") != std::string::npos)
+      if(s.thename.as_string().find("return_value$") != std::string::npos)
         goto BUILD_ASSIGNMENT;
     }
 
