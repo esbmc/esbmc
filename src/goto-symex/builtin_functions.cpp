@@ -768,7 +768,8 @@ void goto_symext::intrinsic_memset(
 
     expr2tc newcall = func_call.clone();
     code_function_call2t &mutable_funccall = to_code_function_call2t(newcall);
-    mutable_funccall.function = symbol2tc(get_empty_type(), "c:@F@memset_impl");
+    mutable_funccall.function =
+      symbol2tc(get_empty_type(), "c:@F@__ESBMC_memset_impl");
     // Execute call
     symex_function_call(newcall);
     return;
