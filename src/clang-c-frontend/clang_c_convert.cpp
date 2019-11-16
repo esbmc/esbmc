@@ -685,13 +685,12 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if(get_type(arr.getElementType(), the_type))
       return true;
 
-    array_typet type(the_type);
-    type.size() = constant_exprt(
-      integer2binary(val.getSExtValue(), bv_width(int_type())),
-      integer2string(val.getSExtValue()),
-      int_type());
-
-    new_type = type;
+    new_type = array_typet(
+      the_type,
+      constant_exprt(
+        integer2binary(val.getSExtValue(), bv_width(int_type())),
+        integer2string(val.getSExtValue()),
+        int_type()));
     break;
   }
 
@@ -705,7 +704,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if(get_type(arr.getElementType(), sub_type))
       return true;
 
-    new_type = gen_pointer_type(sub_type);
+    new_type = array_typet(sub_type, gen_zero(index_type()));
     break;
   }
 
