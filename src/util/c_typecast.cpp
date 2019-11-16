@@ -782,7 +782,7 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
 
   const typet &dest_type = ns.follow(dest.type());
 
-  if(dest_type.is_array())
+  if(dest_type.is_array() || dest_type.is_incomplete_array())
   {
     index_exprt index;
     index.array() = dest;
