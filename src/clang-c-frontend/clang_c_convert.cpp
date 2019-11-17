@@ -704,7 +704,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if(get_type(arr.getElementType(), sub_type))
       return true;
 
-    new_type = array_typet(sub_type, gen_zero(index_type()));
+    new_type = array_typet(sub_type, gen_one(index_type()));
     break;
   }
 
