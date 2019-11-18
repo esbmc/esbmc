@@ -95,12 +95,15 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if(is_symbol2t(expr))
   {
     symbol2t s = to_symbol2t(expr);
+
+    // Null is also essentially a constant.
+    if(s.thename == "NULL")
+      return true;
+
     // By propagation nondet symbols, we can achieve some speed up but the
     // counterexample will be missing a lot of information, so not really worth it
     if(s.thename.as_string().find("nondet$symex::nondet") != std::string::npos)
       return false;
-
-    return true;
   }
 
   if(is_address_of2t(expr))
