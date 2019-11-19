@@ -212,7 +212,7 @@ void goto_symext::symex_assign(
     {
       symbol2t s = to_symbol2t(lhs);
       if(s.thename.as_string().find("return_value$") != std::string::npos)
-        hidden_ssa = true;
+        hidden_ssa = false;
       else if(s.thename.as_string().find("__ESBMC_") != std::string::npos)
         hidden_ssa = true;
     }
