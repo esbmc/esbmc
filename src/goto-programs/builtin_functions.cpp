@@ -167,12 +167,6 @@ void goto_convertt::do_mem(
 {
   std::string func = is_malloc ? "malloc" : "alloca";
 
-  if(arguments.size() != 1)
-  {
-    err_location(function);
-    throw func + "expected to have one argument";
-  }
-
   if(lhs.is_nil())
     return; // does nothing
 
@@ -456,12 +450,6 @@ void goto_convertt::do_free(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  if(arguments.size() != 1)
-  {
-    err_location(function);
-    throw "free expected to have one argument";
-  }
-
   if(lhs.is_not_nil())
   {
     err_location(function);
