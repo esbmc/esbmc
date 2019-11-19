@@ -726,6 +726,9 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
     assignment += " = ";
     assignment += from_expr(ns, "", step.value);
     assignment += ";";
+
+    std::replace(assignment.begin(), assignment.end(), '$', '_');
+
     if(std::regex_match(assignment, regex_array))
       reformat_assignment_array(ns, step, assignment);
     else if(std::regex_match(assignment, regex_structs))
@@ -804,8 +807,7 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
   return (
     (location.find("built-in") & location.find("library") &
      lhsexpr.find("__ESBMC") & lhsexpr.find("stdin") & lhsexpr.find("stdout") &
-     lhsexpr.find("stderr") & lhsexpr.find("$") & lhsexpr.find("sys_")) ==
-    std::string::npos);
+     lhsexpr.find("stderr") & lhsexpr.find("sys_")) == std::string::npos);
 }
 
 /* */
