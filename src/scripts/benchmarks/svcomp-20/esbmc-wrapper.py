@@ -91,6 +91,7 @@ def parse_result(the_output, prop):
   invalid_pointer = "dereference failure: invalid pointer"
   access_out = "dereference failure: Access to object out of bounds"
   dereference_null = "dereference failure: NULL pointer"
+  expired_variable = "dereference failure: accessed expired variable pointer"
   invalid_object = "dereference failure: invalidated dynamic object"
   invalid_object_free = "dereference failure: invalidated dynamic object freed"
   invalid_pointer_free = "dereference failure: invalid pointer freed"
@@ -115,6 +116,9 @@ def parse_result(the_output, prop):
 
       if invalid_object_free in the_output:
         return Result.fail_free
+
+      if expired_variable in the_output:
+        return Result.fail_deref
 
       if invalid_pointer in the_output:
         return Result.fail_deref
