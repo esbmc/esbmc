@@ -229,6 +229,7 @@ __ESBMC_HIDE:;
 
 char *strtok(char *str, const char *delim)
 {
+__ESBMC_HIDE:;
   static char *p = 0;
   if(str)
     p = str;
