@@ -1502,7 +1502,7 @@ static inline void get_symbol_identifiers(
   const exprt &expr,
   hash_set_cont<irep_idt, irep_id_hash> &identifiers)
 {
-  if(expr.is_symbol())
+  if(expr.is_symbol() && !expr.type().is_array())
     identifiers.insert(expr.identifier());
 
   forall_operands(it, expr)
