@@ -265,7 +265,7 @@ __ESBMC_HIDE:;
   return dst;
 }
 
-void *__ESBMC_memset_impl(void *s, int c, size_t n)
+void *__memset_impl(void *s, int c, size_t n)
 {
 __ESBMC_HIDE:;
   char *sp = s;
@@ -277,7 +277,7 @@ __ESBMC_HIDE:;
 void *memset(void *s, int c, size_t n)
 {
 __ESBMC_HIDE:;
-  void *hax = &__ESBMC_memset_impl;
+  void *hax = &__memset_impl;
   (void)hax;
   return __ESBMC_memset(s, c, n);
 }
