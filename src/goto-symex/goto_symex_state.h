@@ -80,6 +80,10 @@ public:
   typedef std::map<goto_programt::const_targett, goto_state_listt>
     goto_state_mapt;
   typedef std::vector<framet> call_stackt;
+  typedef hash_set_cont<
+    renaming::level2t::name_record,
+    renaming::level2t::name_rec_hash>
+    variable_name_sett;
 
   /**
    *  Class recording the result of a portion of symex.
@@ -99,6 +103,7 @@ public:
     value_sett value_set;
     guardt guard;
     unsigned int thread_id;
+    variable_name_sett local_variables;
 
     explicit goto_statet(const goto_symex_statet &s)
       : depth(s.depth),
@@ -106,7 +111,8 @@ public:
         level2(*level2_ptr),
         value_set(s.value_set),
         guard(s.guard),
-        thread_id(s.source.thread_nr)
+        thread_id(s.source.thread_nr),
+        local_variables(s.top().local_variables)
     {
     }
 
@@ -116,7 +122,8 @@ public:
         level2(*level2_ptr),
         value_set(s.value_set),
         guard(s.guard),
-        thread_id(s.thread_id)
+        thread_id(s.thread_id),
+        local_variables(s.local_variables)
     {
     }
 
@@ -177,10 +184,6 @@ public:
      *  resulting function invocations with. */
     expr2tc orig_func_ptr_call;
 
-    typedef hash_set_cont<
-      renaming::level2t::name_record,
-      renaming::level2t::name_rec_hash>
-      variable_name_sett;
     /** Set of variables names that have been declared. Used to detect when we
      *  are in some kind of block that is entered then exited repeatedly -
      *  whenever that happens, a new l1 name is required. This caches the

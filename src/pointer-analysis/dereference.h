@@ -160,7 +160,7 @@ public:
    *  @param sym Symbol to check validity of.
    *  @return True if variable is alive
    *  */
-  virtual bool is_live_variable(const symbol2t &sym) = 0;
+  virtual bool is_live_variable(const expr2tc &sym) = 0;
 };
 
 /** Class containing expression dereference logic.

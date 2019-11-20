@@ -91,10 +91,9 @@ void goto_symext::symex_other()
   }
   else if(is_code_dead2t(code2))
   {
-#if 0
     replace_dynamic_allocation(code2);
     replace_nondet(code2);
-    dereference(code2, dereferencet::READ);
+    dereference(code2, dereferencet::INTERNAL);
 
     const code_dead2t &dead_code = to_code_dead2t(code2);
 
@@ -110,10 +109,9 @@ void goto_symext::symex_other()
     // Erase from level 1 propagation
     cur_state->value_set.erase(l1_sym->get_symbol_name());
 
-    // Erase from L2 renaming map
-    cur_state->level2.remove(
+    // Erase from local_variables map
+    cur_state->top().local_variables.erase(
       renaming::level2t::name_record(to_symbol2t(l1_sym)));
-#endif
   }
   else if(is_code_asm2t(code2))
   {

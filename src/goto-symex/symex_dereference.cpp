@@ -67,17 +67,26 @@ void symex_dereference_statet::dump_internal_state(
     goto_symex.internal_deref_items.begin(), data.begin(), data.end());
 }
 
-bool symex_dereference_statet::is_live_variable(const symbol2t &sym)
+bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
 {
+  expr2tc sym = symbol;
+
   // NB, symbols shouldn't hit this point with no renaming (i.e. level0),
   // this should eventually be asserted.
-  if (sym.rlevel == symbol2t::level0 || sym.rlevel == symbol2t::level1_global ||
-      sym.rlevel == symbol2t::level2_global)
+  if(
+    to_symbol2t(sym).rlevel == symbol2t::level0 ||
+    to_symbol2t(sym).rlevel == symbol2t::level1_global ||
+    to_symbol2t(sym).rlevel == symbol2t::level2_global)
     return true;
+
+  goto_symex.replace_dynamic_allocation(sym);
+  goto_symex.replace_nondet(sym);
+  goto_symex.dereference(sym, dereferencet::INTERNAL);
 
   // Symbol is renamed to at least level 1, fetch the relevant thread data
   const execution_statet &ex_state = goto_symex.art1->get_cur_state();
-  const goto_symex_statet &state = ex_state.threads_state[sym.thread_num];
+  const goto_symex_statet &state =
+    ex_state.threads_state[to_symbol2t(sym).thread_num];
 
   // Level one names represent the storage for a variable, and this symbol
   // may have entered pointer tracking at any time the variable had its address
@@ -86,8 +95,13 @@ bool symex_dereference_statet::is_live_variable(const symbol2t &sym)
   // up the stack frames currently active the corresponding thread to see
   // whether there are any records for the lexical variable that have this
   // activation record.
-  for (auto it = state.call_stack.rbegin(); it != state.call_stack.rend(); it++) {
-    if (it->level1.current_number(sym.thename) == sym.level1_num)
+
+  for(auto it = state.call_stack.rbegin(); it != state.call_stack.rend(); it++)
+  {
+    auto &local_vars = it->local_variables;
+    if(
+      local_vars.find(renaming::level2t::name_record(to_symbol2t(sym))) !=
+      local_vars.end())
       return true;
   }
 

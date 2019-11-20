@@ -242,6 +242,8 @@ protected:
    */
   void merge_value_sets(const statet::goto_statet &goto_state);
 
+  void merge_locality(const statet::goto_statet &goto_state);
+
   /**
    *  Join together a previous jump state into thread state.
    *  This combines together two thread states by using if-then-elses to decide
@@ -852,7 +854,7 @@ protected:
 
   void
   dump_internal_state(const std::list<struct internal_item> &data) override;
-  bool is_live_variable(const symbol2t &sym) override;
+  bool is_live_variable(const expr2tc &sym) override;
 };
 
 #endif

@@ -57,7 +57,7 @@ protected:
     const std::string &msg,
     const guardt &guard) override;
 
-  bool is_live_variable(const symbol2t &sym) override
+  bool is_live_variable(const expr2tc &sym) override
   {
     (void)sym;
     return true;
