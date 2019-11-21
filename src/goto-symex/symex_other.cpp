@@ -101,10 +101,14 @@ void goto_symext::symex_other()
     const irep_idt &identifier = dead_code.value;
 
     // Generate dummy symbol as a vehicle for renaming.
-    symbol2tc l1_sym(get_empty_type(), identifier);
+    symbol2tc l1_sym(dead_code.type, identifier);
 
     // Rename it to level 1
     cur_state->top().level1.get_ident_name(l1_sym);
+
+    // Call free on alloca'd objects
+    if(identifier.as_string().find("return_value$_alloca") != std::string::npos)
+      symex_free(code_free2tc(l1_sym));
 
     // Erase from level 1 propagation
     cur_state->value_set.erase(l1_sym->get_symbol_name());
