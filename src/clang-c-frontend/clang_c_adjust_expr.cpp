@@ -855,6 +855,19 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
     }
+    else if(identifier == "__builtin_popcount")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "__builtin_popcount expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt popcount_expr("popcount", int_type());
+      popcount_expr.operands() = expr.arguments();
+      expr.swap(popcount_expr);
+    }
     else if(identifier == "__builtin_expect")
     {
       // this is a gcc extension to provide branch prediction
