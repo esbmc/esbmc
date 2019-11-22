@@ -1510,6 +1510,7 @@ irep_typedefs(isinf, bool_1op);
 irep_typedefs(isnormal, bool_1op);
 irep_typedefs(isfinite, bool_1op);
 irep_typedefs(signbit, overflow_ops);
+irep_typedefs(popcount, overflow_ops);
 irep_typedefs(concat, bit_2ops);
 irep_typedefs(extract, extract_data);
 
@@ -3414,6 +3415,20 @@ public:
   {
   }
   signbit2t(const signbit2t &ref) = default;
+
+  expr2tc do_simplify() const override;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class popcount2t : public popcount_expr_methods
+{
+public:
+  popcount2t(const expr2tc &val)
+    : popcount_expr_methods(type_pool.get_int32(), popcount_id, val)
+  {
+  }
+  popcount2t(const popcount2t &ref) = default;
 
   expr2tc do_simplify() const override;
 

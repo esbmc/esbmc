@@ -2342,6 +2342,11 @@ expr2tc signbit2t::do_simplify() const
   return simplify_floatbv_1op<Signbittor, signbit2t>(type, operand);
 }
 
+expr2tc popcount2t::do_simplify() const
+{
+  return simplify_floatbv_1op<Signbittor, signbit2t>(type, operand);
+}
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_floatbv_2ops(
   const type2tc &type,

@@ -774,6 +774,7 @@ static const char *expr_names[] = {
   "signbit",
   "concat",
   "extract",
+  "popcount",
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -3478,6 +3479,11 @@ std::string signbit2t::field_names[esbmct::num_type_fields] = {"value",
                                                                "",
                                                                "",
                                                                ""};
+std::string popcount2t::field_names[esbmct::num_type_fields] = {"value",
+                                                              "",
+                                                              "",
+                                                              "",
+                                                              ""};
 std::string concat2t::field_names[esbmct::num_type_fields] = {"forward",
                                                               "aft",
                                                               "",
@@ -4016,5 +4022,6 @@ expr_typedefs1(isinf, bool_1op);
 expr_typedefs1(isnormal, bool_1op);
 expr_typedefs1(isfinite, bool_1op);
 expr_typedefs1(signbit, overflow_ops);
+expr_typedefs1(popcount, overflow_ops);
 expr_typedefs2(concat, bit_2ops);
 expr_typedefs3(extract, extract_data);
