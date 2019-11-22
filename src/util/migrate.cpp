@@ -2016,6 +2016,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     signbit2t *n = new signbit2t(theval);
     new_expr_ref = expr2tc(n);
   }
+  else if(expr.id() == "popcount")
+  {
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+
+    popcount2t *n = new popcount2t(theval);
+    new_expr_ref = expr2tc(n);
+  }
   else if(expr.id() == "concat")
   {
     expr2tc op0, op1;
@@ -3173,6 +3181,13 @@ exprt migrate_expr_back(const expr2tc &ref)
   {
     const signbit2t &ref2 = to_signbit2t(ref);
     exprt back("signbit", bool_typet());
+    back.copy_to_operands(migrate_expr_back(ref2.operand));
+    return back;
+  }
+  case expr2t::popcount_id:
+  {
+    const popcount2t &ref2 = to_popcount2t(ref);
+    exprt back("popcount", bool_typet());
     back.copy_to_operands(migrate_expr_back(ref2.operand));
     return back;
   }
