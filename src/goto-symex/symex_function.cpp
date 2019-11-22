@@ -215,8 +215,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
       return;
     }
 
-    std::cerr << "failed to find `" + id2string(pretty_name) +
-                   "' in function_map";
+    std::cerr << "failed to find `" + pretty_name + "' in function_map";
     abort();
   }
 
@@ -245,12 +244,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 
   if(!goto_function.body_available)
   {
-    if(body_warnings.insert(identifier).second)
-    {
-      std::string msg =
-        "**** WARNING: no body for function " + id2string(pretty_name);
-      std::cerr << msg << std::endl;
-    }
+    std::cerr << "**** WARNING: no body for function " << pretty_name << '\n';
 
     if(!is_nil_expr(call.ret))
     {
@@ -430,31 +424,18 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   {
     goto_functionst::function_mapt::const_iterator fit =
       goto_functions.function_map.find(it.second->thename);
-    if(fit == goto_functions.function_map.end())
+
+    const std::string pretty_name = it.second->thename.as_string().substr(
+      it.second->thename.as_string().find_last_of('@') + 1);
+
+    if(fit == goto_functions.function_map.end() || !fit->second.body_available)
     {
-      if(body_warnings.insert(it.second->thename).second)
-      {
-        std::string msg =
-          "**** WARNING: no body for function " + id2string(it.second->thename);
-        std::cerr << msg << std::endl;
-      }
+      std::cerr << "**** WARNING: no body for function " << pretty_name << '\n';
 
       continue; // XXX, find out why this fires on SV-COMP 14 benchmark
       // 32_7a_cilled_true_linux-3.8-rc1-drivers--ata--pata_legacy.ko-main.cil.out.c
       // Where it probably shouldn't, as that var is defined. Module name
       // difference?
-    }
-    if(!fit->second.body_available)
-    {
-      if(body_warnings.insert(it.second->thename).second)
-      {
-        std::string msg =
-          "**** WARNING: no body for function " + id2string(it.second->thename);
-        std::cerr << msg << std::endl;
-      }
-
-      // XXX -- put a nondet value into return values?
-      continue;
     }
 
     // Set up a merge of the current state into the target function.
