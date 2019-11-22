@@ -522,7 +522,6 @@ void build_goto_symex_classes()
     .def_readwrite(
       "no_unwinding_assertions", &goto_symext::no_unwinding_assertions)
     .def_readwrite("partial_loops", &goto_symext::no_unwinding_assertions)
-    .def_readwrite("body_warnings", &goto_symext::body_warnings)
     .def_readwrite("internal_deref_items", &goto_symext::internal_deref_items);
 
   class_<goto_symex_statet::goto_statet>(

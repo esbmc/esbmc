@@ -94,7 +94,6 @@ goto_symext::goto_symext(const goto_symext &sym)
 
 goto_symext &goto_symext::operator=(const goto_symext &sym)
 {
-  body_warnings = sym.body_warnings;
   unwind_set = sym.unwind_set;
   max_unwind = sym.max_unwind;
   constant_propagation = sym.constant_propagation;

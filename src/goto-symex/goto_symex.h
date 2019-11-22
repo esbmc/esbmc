@@ -816,8 +816,6 @@ protected:
   /** Flag as to whether we're doing a k-induction inductive step.
    *  Corresponds to the option --inductive-step */
   bool inductive_step;
-  /** Names of functions that we've complained about missing bodies of. */
-  static hash_set_cont<irep_idt, irep_id_hash> body_warnings;
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
