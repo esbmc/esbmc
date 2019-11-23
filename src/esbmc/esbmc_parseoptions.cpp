@@ -1169,6 +1169,9 @@ int esbmc_parseoptionst::doit_termination()
 
     if(!do_forward_condition(opts, goto_functions, k_step))
       return false;
+
+    if(!do_inductive_step(opts, goto_functions, k_step))
+      return false;
   }
 
   status("Unable to prove or falsify the program, giving up.");
@@ -1533,6 +1536,11 @@ bool esbmc_parseoptionst::process_goto_program(
                   << "so we are not applying the forward condition!"
                   << std::endl;
       }
+    }
+
+    if(cmdline.isset("termination"))
+    {
+      goto_termination(goto_functions, ui_message_handler);
     }
 
     goto_check(ns, options, goto_functions);
