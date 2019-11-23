@@ -657,6 +657,25 @@ std::string expr2ct::convert_alloca(const exprt &src, unsigned &precedence)
   return dest;
 }
 
+std::string expr2ct::convert_realloc(const exprt &src, unsigned &precedence)
+{
+  if(src.operands().size() != 1)
+    return convert_norep(src, precedence);
+
+  unsigned p0, p1;
+  std::string op0 = convert(src.op0(), p0);
+  std::string size = convert((const exprt &)src.cmt_size(), p1);
+
+  std::string dest = "REALLOC";
+  dest += '(';
+  dest += op0;
+  dest += ", ";
+  dest += size;
+  dest += ')';
+
+  return dest;
+}
+
 std::string expr2ct::convert_malloc(const exprt &src, unsigned &precedence)
 {
   if(src.operands().size() != 1)
@@ -2252,6 +2271,8 @@ std::string expr2ct::convert(const exprt &src, unsigned &precedence)
       return convert_function_call(src, precedence);
     else if(statement == "malloc")
       return convert_malloc(src, precedence = 15);
+    else if(statement == "realloc")
+      return convert_realloc(src, precedence = 15);
     else if(statement == "alloca")
       return convert_alloca(src, precedence = 15);
     else if(statement == "printf")

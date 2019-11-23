@@ -161,6 +161,7 @@ protected:
 
   std::string convert_function_call(const exprt &src, unsigned &precedence);
   std::string convert_malloc(const exprt &src, unsigned &precedence);
+  std::string convert_realloc(const exprt &src, unsigned &precedence);
   std::string convert_alloca(const exprt &src, unsigned &precedence);
   std::string convert_nondet(const exprt &src, unsigned &precedence);
   std::string
