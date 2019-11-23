@@ -912,6 +912,16 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     break;
   }
 
+  case clang::Type::Auto:
+  {
+    const clang::AutoType &at = static_cast<const clang::AutoType &>(the_type);
+
+    if(get_type(at.desugar(), new_type))
+      return true;
+
+    break;
+  }
+
   default:
     std::cerr << "Conversion of unsupported clang type: \"";
     std::cerr << the_type.getTypeClassName() << std::endl;
