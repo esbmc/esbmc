@@ -19,6 +19,10 @@ void goto_k_induction(
   goto_functionst &goto_functions,
   message_handlert &message_handler);
 
+void goto_termination(
+  goto_functionst &goto_functions,
+  message_handlert &message_handler);
+
 class goto_k_inductiont : public goto_loopst
 {
 public:

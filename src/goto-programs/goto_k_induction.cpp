@@ -1,10 +1,3 @@
-/*
- * goto_unwind.cpp
- *
- *  Created on: Jun 3, 2015
- *      Author: mramalho
- */
-
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/remove_skip.h>
 #include <util/c_types.h>
@@ -21,6 +14,43 @@ void goto_k_induction(
       goto_k_inductiont(it->first, goto_functions, it->second, message_handler);
 
   goto_functions.update();
+}
+
+void goto_termination(
+  goto_functionst &goto_functions,
+  message_handlert &message_handler)
+{
+  Forall_goto_functions(it, goto_functions)
+    if(it->second.body_available)
+      goto_k_inductiont(it->first, goto_functions, it->second, message_handler);
+  goto_functions.update();
+
+  auto function = goto_functions.function_map.find("__ESBMC_main");
+
+  // Search for __ESBMC_main
+  auto it = function->second.body.instructions.begin();
+  while(it != function->second.body.instructions.end())
+  {
+    if(it->is_function_call())
+    {
+      auto const &call = to_code_function_call2t(it->code);
+      if(to_symbol2t(call.function).thename.as_string() == "c:@F@main")
+        break;
+    }
+    it++;
+  }
+  assert(it != function->second.body.instructions.end());
+
+  // Create an assert(0)
+  goto_programt dest;
+  goto_programt::targett t = dest.add_instruction(ASSERT);
+  t->guard = gen_false_expr();
+  t->inductive_step_instruction = true;
+  t->location.comment("termination");
+
+  // And add it one instruction after the call to main
+  it++;
+  function->second.body.insert_swap(it, dest);
 }
 
 void goto_k_inductiont::goto_k_induction()
