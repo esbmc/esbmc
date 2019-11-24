@@ -2344,7 +2344,11 @@ expr2tc signbit2t::do_simplify() const
 
 expr2tc popcount2t::do_simplify() const
 {
-  return simplify_floatbv_1op<Signbittor, signbit2t>(type, operand);
+  if(!is_constant_int2t(operand))
+    return expr2tc();
+
+  std::string bin = integer2string(to_constant_int2t(operand).value, 2);
+  return constant_int2tc(type, count(bin.begin(), bin.end(), '1'));
 }
 
 template <template <typename> class TFunctor, typename constructor>
