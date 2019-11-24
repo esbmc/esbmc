@@ -437,6 +437,36 @@ void goto_symext::run_intrinsic(
     // Perform overflow check and assign it to the return object
     symex_assign(code_assign2tc(func_call.ret, expr2tc(new overflow2t(op))));
   }
+  else if(has_prefix(symname, "c:@F@__ESBMC_atomic_load"))
+  {
+    assert(
+      func_call.operands.size() == 3 && "Wrong __ESBMC_atomic_load signature");
+    auto &ex_state = art.get_cur_state();
+    if(ex_state.cur_state->guard.is_false())
+      return;
+
+    expr2tc ptr = func_call.operands[0];
+    expr2tc ret = func_call.operands[1];
+
+    symex_assign(code_assign2tc(
+      dereference2tc(to_pointer_type(ret->type).subtype, ret),
+      dereference2tc(to_pointer_type(ptr->type).subtype, ptr)));
+  }
+  else if(has_prefix(symname, "c:@F@__ESBMC_atomic_store"))
+  {
+    assert(
+      func_call.operands.size() == 3 && "Wrong __ESBMC_atomic_store signature");
+    auto &ex_state = art.get_cur_state();
+    if(ex_state.cur_state->guard.is_false())
+      return;
+
+    expr2tc ptr = func_call.operands[0];
+    expr2tc ret = func_call.operands[1];
+
+    symex_assign(code_assign2tc(
+      dereference2tc(to_pointer_type(ptr->type).subtype, ptr),
+      dereference2tc(to_pointer_type(ret->type).subtype, ret)));
+  }
   else
   {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC";
