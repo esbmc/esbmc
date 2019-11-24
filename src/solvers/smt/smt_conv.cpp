@@ -644,6 +644,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = convert_signbit(expr);
     break;
   }
+  case expr2t::popcount_id:
+  {
+    a = convert_popcount(expr);
+    break;
+  }
   case expr2t::overflow_id:
   {
     a = overflow_arith(expr);
@@ -1386,6 +1391,40 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
     is_neg,
     convert_ast(gen_one(signbit.type)),
     convert_ast(gen_zero(signbit.type)));
+}
+
+smt_astt smt_convt::convert_popcount(const expr2tc &expr)
+{
+  expr2tc op = to_popcount2t(expr).operand;
+
+  // repeatedly compute x = (x & bitmask) + ((x >> shift) & bitmask)
+  auto const width = op->type->get_width();
+  for(std::size_t shift = 1; shift < width; shift <<= 1)
+  {
+    // x >> shift
+    lshr2tc shifted_x(op->type, op, from_integer(shift, op->type));
+
+    // bitmask is a string of alternating shift-many bits starting from lsb set
+    // to 1
+    std::string bitstring;
+    bitstring.reserve(width);
+    for(std::size_t i = 0; i < width / (2 * shift); ++i)
+      bitstring += std::string(shift, '0') + std::string(shift, '1');
+    const constant_int2tc bitmask(op->type, binary2integer(bitstring, false));
+
+    // build the expression
+    op = add2tc(
+      op->type,
+      bitand2tc(op->type, op, bitmask),
+      bitand2tc(op->type, shifted_x, bitmask));
+  }
+  // the result is restricted to the result type
+  op = typecast2tc(expr->type, op);
+
+  // Try to simplify the expression before encoding it
+  simplify(op);
+
+  return convert_ast(op);
 }
 
 smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)

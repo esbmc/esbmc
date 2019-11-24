@@ -156,7 +156,13 @@ public:
 
   /** Result of a call to dec_solve. Either sat, unsat, or error. SMTLIB is
    *  historic case that needs to go. */
-  typedef enum { P_UNSATISFIABLE, P_SATISFIABLE, P_ERROR, P_SMTLIB } resultt;
+  typedef enum
+  {
+    P_UNSATISFIABLE,
+    P_SATISFIABLE,
+    P_ERROR,
+    P_SMTLIB
+  } resultt;
 
   /** Push one context on the SMT assertion stack. */
   virtual void push_ctx();
@@ -608,6 +614,8 @@ public:
   smt_astt convert_is_finite(const expr2tc &expr);
   /** Converts signbit representation. */
   smt_astt convert_signbit(const expr2tc &expr);
+  /** Converts popcount representation. */
+  smt_astt convert_popcount(const expr2tc &expr);
   /** Converts rounding mode for ieee fp operations. */
   smt_astt convert_rounding_mode(const expr2tc &expr);
   /** Convert a byte_extract2tc, pulling a byte from the byte representation
@@ -726,10 +734,10 @@ public:
    *  there's no other way to initialize a pointer array in C, AFAIK. */
   smt_astt pointer_array_of(const expr2tc &init_val, unsigned long array_width);
 
-  unsigned int get_member_name_field(const type2tc &t, const irep_idt &name)
-    const;
-  unsigned int get_member_name_field(const type2tc &t, const expr2tc &name)
-    const;
+  unsigned int
+  get_member_name_field(const type2tc &t, const irep_idt &name) const;
+  unsigned int
+  get_member_name_field(const type2tc &t, const expr2tc &name) const;
 
   // Ours:
   /** Given an array expression, attempt to extract its valuation from the
