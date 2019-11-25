@@ -1,6 +1,5 @@
 #include <arpa/inet.h>
 #include <stdint.h>
-#include <byteswap.h>
 
 #undef htonl
 #undef htons
