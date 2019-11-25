@@ -56,7 +56,7 @@ void build_goto_trace(
 {
   unsigned step_nr = 0;
 
-  for(auto SSA_step : target->SSA_steps)
+  for(auto const &SSA_step : target->SSA_steps)
   {
     if(SSA_step.hidden)
       continue;
