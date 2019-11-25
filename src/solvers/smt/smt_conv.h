@@ -616,6 +616,8 @@ public:
   smt_astt convert_signbit(const expr2tc &expr);
   /** Converts popcount representation. */
   smt_astt convert_popcount(const expr2tc &expr);
+  /** Converts bswap representation. */
+  smt_astt convert_bswap(const expr2tc &expr);
   /** Converts rounding mode for ieee fp operations. */
   smt_astt convert_rounding_mode(const expr2tc &expr);
   /** Convert a byte_extract2tc, pulling a byte from the byte representation
