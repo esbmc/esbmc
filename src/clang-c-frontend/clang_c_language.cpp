@@ -378,6 +378,21 @@ _Bool __ESBMC_overflow_smulll(long long int, long long int, long long int *);
 _Bool __ESBMC_overflow_umul(unsigned int, unsigned int, unsigned int *);
 _Bool __ESBMC_overflow_umull(unsigned long int, unsigned long int, unsigned long int *);
 _Bool __ESBMC_overflow_umulll(unsigned long long int, unsigned long long int, unsigned long long int *);
+
+#define __atomic_load_n(PTR, MO)                                               \
+  __extension__({                                                              \
+    __auto_type __atomic_load_ptr = (PTR);                                     \
+    __typeof__(*__atomic_load_ptr) __atomic_load_tmp;                          \
+    __ESBMC_atomic_load(__atomic_load_ptr, &__atomic_load_tmp, (MO));          \
+    __atomic_load_tmp;                                                         \
+  })
+
+#define __atomic_store_n(PTR, VAL, MO)                                         \
+  __extension__({                                                              \
+    __auto_type __atomic_store_ptr = (PTR);                                    \
+    __typeof__(*__atomic_store_ptr) __atomic_store_tmp = (VAL);                \
+    __ESBMC_atomic_store(__atomic_store_ptr, &__atomic_store_tmp, (MO));       \
+  })
     )";
 
   return intrinsics;
