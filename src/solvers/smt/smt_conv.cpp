@@ -649,6 +649,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = convert_popcount(expr);
     break;
   }
+  case expr2t::bswap_id:
+  {
+    a = convert_bswap(expr);
+    break;
+  }
   case expr2t::overflow_id:
   {
     a = overflow_arith(expr);
@@ -1425,6 +1430,34 @@ smt_astt smt_convt::convert_popcount(const expr2tc &expr)
   simplify(op);
 
   return convert_ast(op);
+}
+
+smt_astt smt_convt::convert_bswap(const expr2tc &expr)
+{
+  expr2tc op = to_bswap2t(expr).operand;
+
+  const std::size_t bits_per_byte = 8;
+  const std::size_t width = expr->type->get_width();
+
+  const std::size_t bytes = width / bits_per_byte;
+  if(bytes <= 1)
+    return convert_ast(op);
+
+  std::vector<expr2tc> thebytes;
+  for(std::size_t byte = 0; byte < bytes; byte++)
+  {
+    thebytes.emplace_back(new extract2t(
+      get_uint8_type(),
+      op,
+      (byte * bits_per_byte + (bits_per_byte - 1)),
+      (byte * bits_per_byte)));
+  }
+
+  expr2tc swap = thebytes[0];
+  for(std::size_t i = 1; i < thebytes.size(); i++)
+    swap = concat2tc(get_uint_type((i + 1) * 8), swap, thebytes[i]);
+
+  return convert_ast(swap);
 }
 
 smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
