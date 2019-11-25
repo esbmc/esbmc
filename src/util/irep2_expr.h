@@ -1511,6 +1511,7 @@ irep_typedefs(isnormal, bool_1op);
 irep_typedefs(isfinite, bool_1op);
 irep_typedefs(signbit, overflow_ops);
 irep_typedefs(popcount, overflow_ops);
+irep_typedefs(bswap, overflow_ops);
 irep_typedefs(concat, bit_2ops);
 irep_typedefs(extract, extract_data);
 
@@ -3415,6 +3416,20 @@ public:
   {
   }
   signbit2t(const signbit2t &ref) = default;
+
+  expr2tc do_simplify() const override;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class bswap2t : public bswap_expr_methods
+{
+public:
+  bswap2t(const type2tc &type, const expr2tc &val)
+    : bswap_expr_methods(type, bswap_id, val)
+  {
+  }
+  bswap2t(const bswap2t &ref) = default;
 
   expr2tc do_simplify() const override;
 

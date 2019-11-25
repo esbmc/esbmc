@@ -2194,6 +2194,11 @@ std::string expr2ct::convert(const exprt &src, unsigned &precedence)
     return convert_function(src, "popcount", precedence = 15);
   }
 
+  else if(src.id() == "bswap")
+  {
+    return convert_function(src, "bswap", precedence = 15);
+  }
+
   else if(src.id() == "builtin_va_arg")
   {
     return convert_function(src, "builtin_va_arg", precedence = 15);

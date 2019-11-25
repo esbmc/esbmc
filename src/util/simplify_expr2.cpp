@@ -2351,6 +2351,11 @@ expr2tc popcount2t::do_simplify() const
   return constant_int2tc(type, count(bin.begin(), bin.end(), '1'));
 }
 
+expr2tc bswap2t::do_simplify() const
+{
+  return expr2tc();
+}
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_floatbv_2ops(
   const type2tc &type,
