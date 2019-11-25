@@ -467,6 +467,14 @@ void goto_symext::run_intrinsic(
       dereference2tc(to_pointer_type(ptr->type).subtype, ptr),
       dereference2tc(to_pointer_type(ret->type).subtype, ret)));
   }
+  else if(has_prefix(symname, "c:@F@__ESBMC_is_little_endian"))
+  {
+    expr2tc is_little_endian =
+      (config.ansi_c.endianess == configt::ansi_ct::IS_LITTLE_ENDIAN)
+        ? gen_true_expr()
+        : gen_false_expr();
+    symex_assign(code_assign2tc(func_call.ret, is_little_endian));
+  }
   else
   {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC";
