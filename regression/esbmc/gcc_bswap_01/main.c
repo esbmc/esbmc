@@ -18,7 +18,6 @@ int main()
   uint16_t sb = __VERIFIER_nondet_u16();
   sb &= 0xff00;
   // expected to fail, only MSB guaranteed to be 0
-  assert(__builtin_bswap16(sb) == 0);
   assert((__builtin_bswap16(sb) & 0xff00) == 0);
 
   uint32_t a = 0xabcdef00;
@@ -26,7 +25,6 @@ int main()
   uint32_t b = __VERIFIER_nondet_u32();
   b &= 0xffffff00;
   // expected to fail, only MSB guaranteed to be 0
-  assert(__builtin_bswap32(b) == 0);
   assert((__builtin_bswap32(b) & 0xff000000) == 0);
 
   uint64_t al = 0xabcdef0001020304LL;
@@ -34,7 +32,6 @@ int main()
   uint64_t bl = __VERIFIER_nondet_u64();
   bl &= 0xffffffffffffff00LL;
   // expected to fail, only MSB guaranteed to be 0
-  assert(__builtin_bswap64(bl) == 0);
   assert((__builtin_bswap64(bl) & 0xff00000000000000) == 0);
 
   return 0;
