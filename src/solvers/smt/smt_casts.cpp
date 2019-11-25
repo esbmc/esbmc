@@ -38,8 +38,8 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
   abort();
 }
 
-smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(
-  const expr2tc &expr)
+smt_astt
+smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
@@ -75,8 +75,8 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(
   return mk_concat(frontpart, zero_fracbits);
 }
 
-smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(
-  const expr2tc &expr)
+smt_astt
+smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
@@ -91,8 +91,8 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(
   return mk_concat(switched, zero);
 }
 
-smt_astt smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(
-  const expr2tc &expr)
+smt_astt
+smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   assert(is_fixedbv_type(cast.from));
@@ -215,6 +215,7 @@ smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
 
   if(is_unsignedbv_type(cast.from))
     return convert_typecast_to_ints_from_unsigned(cast);
+
   if(is_floatbv_type(cast.from))
     return convert_typecast_from_fpbv(cast);
 
@@ -275,8 +276,8 @@ smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
   return round_real_to_int(a);
 }
 
-smt_astt smt_convt::convert_typecast_to_ints_from_fbv_sint(
-  const typecast2t &cast)
+smt_astt
+smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
@@ -309,8 +310,8 @@ smt_astt smt_convt::convert_typecast_to_ints_from_fbv_sint(
   abort();
 }
 
-smt_astt smt_convt::convert_typecast_to_ints_from_unsigned(
-  const typecast2t &cast)
+smt_astt
+smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
