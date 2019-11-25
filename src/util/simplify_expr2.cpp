@@ -2353,7 +2353,28 @@ expr2tc popcount2t::do_simplify() const
 
 expr2tc bswap2t::do_simplify() const
 {
-  return expr2tc();
+  if(!is_constant_int2t(operand))
+    return expr2tc();
+
+  const std::size_t bits_per_byte = 8;
+  const std::size_t width = type->get_width();
+  mp_integer value = to_constant_int2t(operand).value;
+
+  std::vector<mp_integer> bytes;
+  // take apart
+  for(std::size_t bit = 0; bit < width; bit += bits_per_byte)
+    bytes.push_back((value >> bit) % power(2, bits_per_byte));
+
+  // put back together, but backwards
+  mp_integer new_value = 0;
+  for(std::size_t bit = 0; bit < width; bit += bits_per_byte)
+  {
+    assert(!bytes.empty());
+    new_value += bytes.back() << bit;
+    bytes.pop_back();
+  }
+
+  return constant_int2tc(type, new_value);
 }
 
 template <template <typename> class TFunctor, typename constructor>
