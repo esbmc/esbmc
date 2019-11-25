@@ -2024,6 +2024,15 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     popcount2t *n = new popcount2t(theval);
     new_expr_ref = expr2tc(n);
   }
+  else if(expr.id() == "bswap")
+  {
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+    migrate_type(expr.type(), type);
+
+    bswap2t *n = new bswap2t(type, theval);
+    new_expr_ref = expr2tc(n);
+  }
   else if(expr.id() == "concat")
   {
     expr2tc op0, op1;
@@ -3187,7 +3196,14 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::popcount_id:
   {
     const popcount2t &ref2 = to_popcount2t(ref);
-    exprt back("popcount", bool_typet());
+    exprt back("popcount", migrate_type_back(ref->type));
+    back.copy_to_operands(migrate_expr_back(ref2.operand));
+    return back;
+  }
+  case expr2t::bswap_id:
+  {
+    const bswap2t &ref2 = to_bswap2t(ref);
+    exprt back("bswap", migrate_type_back(ref->type));
     back.copy_to_operands(migrate_expr_back(ref2.operand));
     return back;
   }

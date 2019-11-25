@@ -872,6 +872,21 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       popcount_expr.operands() = expr.arguments();
       expr.swap(popcount_expr);
     }
+    else if(
+      identifier == "__builtin_bswap16" || identifier == "__builtin_bswap32" ||
+      identifier == "__builtin_bswap64")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << identifier << " expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt bswap_expr("bswap", expr.type());
+      bswap_expr.operands() = expr.arguments();
+      expr.swap(bswap_expr);
+    }
     else if(identifier == "__builtin_expect")
     {
       // this is a gcc extension to provide branch prediction
