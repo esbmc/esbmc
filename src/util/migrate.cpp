@@ -3204,7 +3204,7 @@ exprt migrate_expr_back(const expr2tc &ref)
   {
     const bswap2t &ref2 = to_bswap2t(ref);
     exprt back("bswap", migrate_type_back(ref->type));
-    back.copy_to_operands(migrate_expr_back(ref2.operand));
+    back.copy_to_operands(migrate_expr_back(ref2.value));
     return back;
   }
   case expr2t::concat_id:
