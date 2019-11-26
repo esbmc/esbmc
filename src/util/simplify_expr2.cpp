@@ -2369,17 +2369,17 @@ expr2tc popcount2t::do_simplify() const
 
 expr2tc bswap2t::do_simplify() const
 {
-  if(!is_constant_int2t(operand))
+  if(!is_constant_int2t(value))
     return expr2tc();
 
   const std::size_t bits_per_byte = 8;
   const std::size_t width = type->get_width();
-  mp_integer value = to_constant_int2t(operand).value;
+  mp_integer v = to_constant_int2t(value).value;
 
   std::vector<mp_integer> bytes;
   // take apart
   for(std::size_t bit = 0; bit < width; bit += bits_per_byte)
-    bytes.push_back((value >> bit) % power(2, bits_per_byte));
+    bytes.push_back((v >> bit) % power(2, bits_per_byte));
 
   // put back together, but backwards
   mp_integer new_value = 0;

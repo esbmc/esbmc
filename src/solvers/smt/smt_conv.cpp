@@ -1434,7 +1434,7 @@ smt_astt smt_convt::convert_popcount(const expr2tc &expr)
 
 smt_astt smt_convt::convert_bswap(const expr2tc &expr)
 {
-  expr2tc op = to_bswap2t(expr).operand;
+  expr2tc op = to_bswap2t(expr).value;
 
   const std::size_t bits_per_byte = 8;
   const std::size_t width = expr->type->get_width();

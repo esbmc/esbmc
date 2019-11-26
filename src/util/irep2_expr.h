@@ -1511,7 +1511,7 @@ irep_typedefs(isnormal, bool_1op);
 irep_typedefs(isfinite, bool_1op);
 irep_typedefs(signbit, overflow_ops);
 irep_typedefs(popcount, overflow_ops);
-irep_typedefs(bswap, overflow_ops);
+irep_typedefs(bswap, arith_1op);
 irep_typedefs(concat, bit_2ops);
 irep_typedefs(extract, extract_data);
 
