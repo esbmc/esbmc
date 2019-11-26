@@ -66,7 +66,7 @@ void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
     break;
 
   case goto_trace_stept::ASSIGNMENT:
-    slice_assignment(SSA_step);
+    //slice_assignment(SSA_step);
     break;
 
   case goto_trace_stept::OUTPUT:
