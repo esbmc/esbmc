@@ -66,7 +66,7 @@ void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
     break;
 
   case goto_trace_stept::ASSIGNMENT:
-    //slice_assignment(SSA_step);
+    slice_assignment(SSA_step);
     break;
 
   case goto_trace_stept::OUTPUT:
@@ -105,11 +105,18 @@ void symex_slicet::slice_assignment(symex_target_equationt::SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
 
+  bool is_nondet_array = false;
+  if(is_array_type(SSA_step.rhs) || is_pointer_type(SSA_step.rhs))
+        is_nondet_array = true;
+  // std::cout << "Identifier LHS: " << id2string(identifier) << "\n";
+  // if (id2string(identifier).find("return_value$___VERIFIER_nondet") != std::string::npos)
+    // to_skip = true;
+
   auto check_in_deps = [this](const symbol2t &s) -> bool {
     return depends.find(s.get_symbol_name()) != depends.end();
   };
 
-  if(!get_symbols(SSA_step.lhs, check_in_deps))
+  if(!get_symbols(SSA_step.lhs, check_in_deps) && !is_nondet_array)
   {
     // we don't really need it
     SSA_step.ignore = true;
