@@ -103,28 +103,46 @@ void symex_slicet::slice_assume(symex_target_equationt::SSA_stept &SSA_step)
 }
 
 bool expression_contains_nondet(const expr2tc* e) {
-  if(is_constant_expr(*e))
-      return false;
-  else
-      // TODO: work this better
+  if(is_constant_expr(*e) || is_nil_expr(*e)) 
+  {
+    return true;
+  }
+  bool result = false;
+  if(is_symbol2t(*e))
+  {
+    symbol2t s = to_symbol2t(*e);
+    if(s.thename.as_string().find("nondet$symex") !=
+        std::string::npos)
       return true;
+  }
+      
+  unsigned i = e->get()->get_num_sub_exprs();  
+  for(unsigned j = 0;j < i; j++) 
+  {
+      if(expression_contains_nondet(e->get()->get_sub_expr(j)))
+      {  
+        return true;       
+      }
+  } 
+  return false;
 }
+
 
 void symex_slicet::slice_assignment(symex_target_equationt::SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
 
-  bool has_inner_nondet = false;
+  bool has_inner_nondet = false; 
   
-  const expr2tc rhs = SSA_step.rhs;     
+  const expr2tc rhs = SSA_step.rhs;       
   unsigned i = rhs.get()->get_num_sub_exprs();
   for(unsigned j = 0;j < i; j++) {
       if(expression_contains_nondet(rhs.get()->get_sub_expr(j)))
       {
-        has_inner_nondet = true;
+        has_inner_nondet = true;        
       }
-  }
-  
+  }       
+
   auto check_in_deps = [this](const symbol2t &s) -> bool {
     return depends.find(s.get_symbol_name()) != depends.end();
   };
