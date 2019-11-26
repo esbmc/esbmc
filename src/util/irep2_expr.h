@@ -1867,7 +1867,8 @@ public:
   }
 
   bitcast2t(const bitcast2t &ref) = default;
-  // No simplification at this time
+
+  expr2tc do_simplify() const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };

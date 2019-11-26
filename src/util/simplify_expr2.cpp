@@ -1411,6 +1411,22 @@ expr2tc ashr2t::do_simplify() const
   return do_bit_munge_operation<ashr2t>(op, type, side_1, side_2);
 }
 
+expr2tc bitcast2t::do_simplify() const
+{
+  // Follow approach of old irep, i.e., copy it
+  if(type == from->type)
+  {
+    // Typecast to same type means this can be eliminated entirely
+    return from;
+  }
+
+  // This should be fine, just use typecast
+  if(!is_floatbv_type(type) && !is_floatbv_type(from->type))
+    return typecast2tc(type, from)->do_simplify();
+
+  return expr2tc();
+}
+
 expr2tc typecast2t::do_simplify() const
 {
   // Follow approach of old irep, i.e., copy it
