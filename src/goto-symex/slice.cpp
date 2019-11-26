@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-symex/slice.h>
 
+
 symex_slicet::symex_slicet(bool assume)
   : ignored(0),
     slice_assumes(assume),
@@ -101,22 +102,34 @@ void symex_slicet::slice_assume(symex_target_equationt::SSA_stept &SSA_step)
   }
 }
 
+bool expression_contains_nondet(const expr2tc* e) {
+  if(is_constant_expr(*e))
+      return false;
+  else
+      // TODO: work this better
+      return true;
+}
+
 void symex_slicet::slice_assignment(symex_target_equationt::SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
 
-  bool is_nondet_array = false;
-  if(is_array_type(SSA_step.rhs) || is_pointer_type(SSA_step.rhs))
-        is_nondet_array = true;
-  // std::cout << "Identifier LHS: " << id2string(identifier) << "\n";
-  // if (id2string(identifier).find("return_value$___VERIFIER_nondet") != std::string::npos)
-    // to_skip = true;
-
+  bool has_inner_nondet = false;
+  
+  const expr2tc rhs = SSA_step.rhs;     
+  unsigned i = rhs.get()->get_num_sub_exprs();
+  for(unsigned j = 0;j < i; j++) {
+      if(expression_contains_nondet(rhs.get()->get_sub_expr(j)))
+      {
+        has_inner_nondet = true;
+      }
+  }
+  
   auto check_in_deps = [this](const symbol2t &s) -> bool {
     return depends.find(s.get_symbol_name()) != depends.end();
   };
 
-  if(!get_symbols(SSA_step.lhs, check_in_deps) && !is_nondet_array)
+  if(!get_symbols(SSA_step.lhs, check_in_deps) && !has_inner_nondet)
   {
     // we don't really need it
     SSA_step.ignore = true;
