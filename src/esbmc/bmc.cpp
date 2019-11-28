@@ -366,13 +366,17 @@ void bmct::report_trace(
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
+  bool term = options.get_bool_option("termination");
   bool show_cex = options.get_bool_option("show-cex");
 
   switch(res)
   {
   case smt_convt::P_UNSATISFIABLE:
     report_result(res);
-    if(!bs)
+    if(is && term)
+    {
+    }
+    else if(!bs)
     {
       successful_trace();
     }
@@ -400,11 +404,16 @@ void bmct::report_result(smt_convt::resultt &res)
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
+  bool term = options.get_bool_option("termination");
 
   switch(res)
   {
   case smt_convt::P_UNSATISFIABLE:
-    if(!bs)
+    if(is && term)
+    {
+      report_failure();
+    }
+    else if(!bs)
     {
       report_success();
     }

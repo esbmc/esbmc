@@ -46,6 +46,7 @@ void goto_termination(
   goto_programt::targett t = dest.add_instruction(ASSERT);
   t->guard = gen_false_expr();
   t->inductive_step_instruction = true;
+  t->inductive_assertion = false;
   t->location.comment("termination");
 
   // And add it one instruction after the call to main
