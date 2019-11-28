@@ -24,6 +24,7 @@ class Result:
   force_fp_mode = 10
   unknown = 11
   fail_memcleanup = 12
+  fail_termination = 13
 
   @staticmethod
   def is_fail(res):
@@ -38,6 +39,8 @@ class Result:
     if res == Result.fail_reach:
       return True
     if res == Result.fail_memcleanup:
+      return True
+    if res == result.fail_termination:
       return True
     return False
 
@@ -107,6 +110,9 @@ def parse_result(the_output, prop):
       if memory_leak in the_output:
         return Result.fail_memcleanup
 
+    if prop == Property.termination:
+      return Result.fail_termination
+
     if prop == Property.memory:
       if memory_leak in the_output:
         return Result.fail_memtrack
@@ -173,6 +179,9 @@ def get_result_string(the_result):
 
   if the_result == Result.fail_reach:
     return "FALSE_REACH"
+
+  if the_result == Result.fail_termination:
+    return "FALSE_TERMINATION"
 
   if the_result == Result.success:
     return "TRUE"
