@@ -29,7 +29,8 @@ import xmlrunner
 # THOROUGH -> Slower tests
 # KNOWNBUG -> Tests that are known to fail due to bugs
 # FUTURE -> Test that are known to fail due to missing implementation
-SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG"]
+# ALL -> Run all tests
+SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
 
 
 class TestCase:
@@ -120,7 +121,7 @@ def create_tests(executor_path: str, base_dir: str, mode: str):
     test_cases = _get_test_objects(base_dir)
     assert len(test_cases) > 0
     for test_case in test_cases:
-        if test_case.test_mode == mode:
+        if test_case.test_mode == mode or mode == "ALL":
             test_func = _add_test(test_case, executor)
             # Add test case into RegressionBase class
             # FUTURE: Maybe change the class name for better report
@@ -140,4 +141,4 @@ def _arg_parsing():
 if __name__ == "__main__":
     tool, regression, mode = _arg_parsing()
     create_tests(tool, regression, mode)
-    unittest.main(argv=[sys.argv[0]], testRunner=xmlrunner.XMLTestRunner(output='test-reports'))
+    unittest.main(argv=[sys.argv[0]], testRunner=xmlrunner.XMLTestRunner(verbosity=2, output='test-reports'))
