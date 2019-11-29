@@ -1,21 +1,24 @@
 # Module to find LLVM and checks it's version
 
-# Are we given an LLVM_DIRECTORY?
-set (HAVE_LLVM "NOTFOUND")
-if (DEFINED LLVM_DIRECTORY)
-  include ("${LLVM_DIRECTORY}/lib/cmake/llvm/LLVMConfig.cmake" OPTIONAL RESULT_VARIABLE HAVE_LLVM)
-  if (NOT ("${HAVE_LLVM}" STREQUAL "NOTFOUND"))
-    include ("${LLVM_DIRECTORY}/lib/cmake/clang/ClangConfig.cmake")
-  else()
-    message(SEND_ERROR "Could not load LLVMConfig.cmake from requested LLVM directory: ${LLVM_DIRECTORY}")
-  endif()
+if(NOT (${LLVM_DIR} STREQUAL "LLVM_DIR-NOTFOUND"))
+  set(Clang_DIR ${LLVM_DIR})  
+  find_package(LLVM REQUIRED CONFIG
+    PATHS ${LLVM_DIR}
+    NO_DEFAULT_PATH
+  )
 
-  if (${LLVM_VERSION_MAJOR} GREATER_EQUAL 7)
-    message(STATUS "Found valid LLVM. Version: ${LLVM_VERSION}")
-  else()
-    message(SEND_ERROR "ESBMC needs LLVM 7.0 or greater!")
-  endif ()
+  find_package(Clang REQUIRED CONFIG
+    PATHS ${Clang_DIR}
+    NO_DEFAULT_PATH
+  )
 else()
-  message(SEND_ERROR "Could not find LLVM/Clang 7.0 at all: please specify with -DLLVM_DIRECTORY")
+  find_package(LLVM REQUIRED CONFIG)
+  find_package(Clang REQUIRED CONFIG)
+endif()
+
+if (${LLVM_VERSION_MAJOR} GREATER_EQUAL 7)
+  message(STATUS "LLVM version: ${LLVM_VERSION}")
+else()
+  message(SEND_ERROR "Could not find LLVM/Clang 7.0 at all: please specify with -DLLVM_DIR")
 endif()
 # BUG: For some reason, ESBMC is not linking with Systems LLVM

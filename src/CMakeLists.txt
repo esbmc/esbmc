@@ -14,7 +14,7 @@ include(Options)
 
 # The only default solver available is smtlib
 set (ESBMC_AVAILABLE_SOLVERS "smtlib")
-set (ESBMC_SOLVERS 4.6.0)
+set (ESBMC_SOLVERS 6.0.0)
 
 # Configuration
 include(SendFileHack)
@@ -22,17 +22,13 @@ configure_file (
  "${PROJECT_SOURCE_DIR}/scripts/cmake/cmake_config.in"
  "${PROJECT_BINARY_DIR}/ac_config.h"
 )
- #include(DefineLibm)
 
-#if(ENABLE_WERROR)
-#  include(CompilerWerror)
-#endif()
+#include(DefineLibM)
 
-#if(BUILD_STATIC)
-#  include(BuildStatic)
-#else()
-#  message(STATUS "ESBMC will be built in dynamic mode")
-#endif()
+if(BUILD_STATIC)
+    set(Boost_USE_STATIC_LIBS ON)
+    set(Boost_USE_STATIC_RUNTIME ON)
+endif()
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
 include(FindBoost) # This is a CMake default module
@@ -46,10 +42,9 @@ include(FindBoost) # This is a CMake default module
 #endif()
 
 include_directories (${CMAKE_SOURCE_DIR})
-#include_directories (${CMAKE_BINARY_DIR})
 
 # Optimization
-#include(OptimizationCCache) 
+include(OptimizationCCache) 
 
 add_subdirectory (big-int)
 add_subdirectory (util)
