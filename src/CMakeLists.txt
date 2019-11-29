@@ -1,3 +1,6 @@
+#################################
+# Project Information           #
+#################################
 cmake_minimum_required (VERSION 3.7)
 project (ESBMC)
 
@@ -7,24 +10,27 @@ set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION_HEX 060000)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
-message("ESBMC ${ESBMC_VERSION} cmake started!")
-
-# Adds custom modules from ESBMC and default Options
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/scripts/cmake/")
-include(Options)
-
 # The only default solver available is smtlib
 set (ESBMC_AVAILABLE_SOLVERS "smtlib")
 set (ESBMC_SOLVERS 6.0.0)
 
-# Configuration
+message("ESBMC ${ESBMC_VERSION} cmake started!")
+
+#################################
+# Configuration                 #
+#################################
+
+# Adds custom modules from ESBMC and default Options
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/scripts/cmake/")
+
+include(Options)
 include(SendFileHack)
+
+# Generate ac_config.h
 configure_file (
  "${PROJECT_SOURCE_DIR}/scripts/cmake/cmake_config.in"
  "${PROJECT_BINARY_DIR}/ac_config.h"
 )
-
-#include(DefineLibM)
 
 if(BUILD_STATIC)
     set(Boost_USE_STATIC_LIBS ON)
@@ -32,22 +38,25 @@ if(BUILD_STATIC)
 endif()
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
-include(FindBoost) # This is a CMake default module
+#include(FindBoost) # This is a CMake default module
 find_package(Boost COMPONENTS filesystem date_time)
 include(FindLLVM)
 
-#if(ENABLE_PYTHON)
-#  add_definitions(-DBOOST_PYTHON_STATIC_LIB)
-#  include(FindPython)
-#else()
-#  message(STATUS "Python support is off")
-#endif()
-
-include_directories (${CMAKE_SOURCE_DIR})
+if(ENABLE_PYTHON)
+  add_definitions(-DBOOST_PYTHON_STATIC_LIB)
+  include(FindPython)
+else()
+  message(STATUS "Python support is off")
+endif()
 
 # Optimization
-#include(OptimizationCCache) 
+include(OptimizationCCache) 
 
+#################################
+# Modules                       #
+#################################
+
+include_directories(${CMAKE_SOURCE_DIR})
 add_subdirectory (big-int)
 add_subdirectory (util)
 add_subdirectory (langapi)

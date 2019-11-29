@@ -3,19 +3,19 @@
 # TODO refactor this code
 # Test for the presence of things required for python
 if(ENABLE_PYTHON)
-  message("Looking for python support")
+  
   include(FindPythonLibs)
   if ((NOT (DEFINED PYTHONLIBS_FOUND)) OR (NOT "${PYTHONLIBS_FOUND}"))
     set(NO_PYTHON 1)
-    message("Didn't find python")
+    message(FATAL_ERROR "Didn't find python")
   else()
     if ("${PYTHONLIBS_VERSION_STRING}" VERSION_LESS 3.0.0)
-      message("Found python ${PYTHONLIBS_VERSION_STRING}, but need at least python 3")
+      message(FATAL_ERROR "Found python ${PYTHONLIBS_VERSION_STRING}, but need at least python 3")
       set(NO_PYTHON 1)
     else()
       include_directories("${PYTHON_INCLUDE_DIRS}")
       #link_libraries("${PYTHON_LIBRARIES}")
-      message("Found python ${PYTHONLIBS_VERSION_STRING}")
+      message(STATUS "Python version: ${PYTHONLIBS_VERSION_STRING}")
       string(REGEX REPLACE "^([0-9])\.[0-9]\.[0-9]$" "\\1" PYMAJOR ${PYTHONLIBS_VERSION_STRING})
       string(REGEX REPLACE "^[0-9]\.([0-9])\.[0-9]$"  "\\1" PYMINOR ${PYTHONLIBS_VERSION_STRING})
       if (("${PYMAJOR}" STREQUAL "") OR ("${PYMINOR}" STREQUAL ""))
