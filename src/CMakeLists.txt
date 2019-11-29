@@ -32,7 +32,8 @@ endif()
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
 include(FindBoost) # This is a CMake default module
-#include(FindLLVM)
+find_package(Boost COMPONENTS filesystem date_time)
+include(FindLLVM)
 
 #if(ENABLE_PYTHON)
 #  add_definitions(-DBOOST_PYTHON_STATIC_LIB)
@@ -55,7 +56,7 @@ add_subdirectory (goto-programs)
 add_subdirectory (pointer-analysis)
 add_subdirectory (ansi-c)
 add_subdirectory (cpp)
-#add_subdirectory (clang-c-frontend)
+add_subdirectory (clang-c-frontend)
 #add_subdirectory (clang-cpp-frontend)
 #add_subdirectory (c2goto)
 #add_subdirectory (esbmc)
