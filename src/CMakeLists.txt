@@ -44,13 +44,13 @@ include(FindBoost) # This is a CMake default module
 include_directories (${CMAKE_SOURCE_DIR})
 
 # Optimization
-include(OptimizationCCache) 
+#include(OptimizationCCache) 
 
 add_subdirectory (big-int)
 add_subdirectory (util)
 add_subdirectory (langapi)
 add_subdirectory (solvers)
-#add_subdirectory (goto-symex)
+add_subdirectory (goto-symex)
 #add_subdirectory (goto-programs)
 #add_subdirectory (pointer-analysis)
 #add_subdirectory (ansi-c)
