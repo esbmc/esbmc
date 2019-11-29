@@ -20,7 +20,7 @@ if (DEFINED HAVE_PYTHON)
 endif()
 
 add_library(solvers INTERFACE)
-target_link_libraries(solvers INTERFACE solve smtlib smttuple smtfp smt propproplibprop)
+target_link_libraries(solvers INTERFACE solve smtlib smttuple smtfp smt prop)
 
 # Logic for each of these are duplicated -- cmake doesn't have indirect function
 # calling, so it's hard to structure it how I want
