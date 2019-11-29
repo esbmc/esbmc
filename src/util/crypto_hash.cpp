@@ -1,6 +1,11 @@
 
 #include <boost/algorithm/hex.hpp>
-#include <boost/uuid/sha1.hpp>
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 106600
+#  include <boost/uuid/detail/sha1.hpp>
+#else
+#  include <boost/uuid/sha1.hpp>
+#endif
 #include <cstring>
 #include <util/crypto_hash.h>
 
