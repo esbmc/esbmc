@@ -5,6 +5,7 @@ add_library(clangcfrontend_stuff clang_c_language.cpp clang_c_convert.cpp clang_
 target_include_directories(clangcfrontend_stuff 
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CLANG_INCLUDE_DIRS}
+    PRIVATE ${Boost_INCLUDE_DIRS}
 )
 target_link_libraries(clangcfrontend_stuff gotoprograms langapi util_esbmc bigint clangTooling)
 

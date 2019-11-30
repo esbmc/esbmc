@@ -2,6 +2,7 @@ add_library(symex symex_python.cpp symex_target.cpp symex_target_equation.cpp sy
 target_include_directories(symex 
     PRIVATE ${CMAKE_BINARY_DIR}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
 target_link_libraries(symex pointeranalysis langapi util_esbmc bigint)
