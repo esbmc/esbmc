@@ -24,6 +24,7 @@ class Result:
   force_fp_mode = 10
   unknown = 11
   fail_memcleanup = 12
+  fail_termination = 13
 
   @staticmethod
   def is_fail(res):
@@ -38,6 +39,8 @@ class Result:
     if res == Result.fail_reach:
       return True
     if res == Result.fail_memcleanup:
+      return True
+    if res == result.fail_termination:
       return True
     return False
 
@@ -91,6 +94,7 @@ def parse_result(the_output, prop):
   invalid_pointer = "dereference failure: invalid pointer"
   access_out = "dereference failure: Access to object out of bounds"
   dereference_null = "dereference failure: NULL pointer"
+  expired_variable = "dereference failure: accessed expired variable pointer"
   invalid_object = "dereference failure: invalidated dynamic object"
   invalid_object_free = "dereference failure: invalidated dynamic object freed"
   invalid_pointer_free = "dereference failure: invalid pointer freed"
@@ -106,6 +110,9 @@ def parse_result(the_output, prop):
       if memory_leak in the_output:
         return Result.fail_memcleanup
 
+    if prop == Property.termination:
+      return Result.fail_termination
+
     if prop == Property.memory:
       if memory_leak in the_output:
         return Result.fail_memtrack
@@ -115,6 +122,9 @@ def parse_result(the_output, prop):
 
       if invalid_object_free in the_output:
         return Result.fail_free
+
+      if expired_variable in the_output:
+        return Result.fail_deref
 
       if invalid_pointer in the_output:
         return Result.fail_deref
@@ -170,6 +180,9 @@ def get_result_string(the_result):
   if the_result == Result.fail_reach:
     return "FALSE_REACH"
 
+  if the_result == Result.fail_termination:
+    return "FALSE_TERMINATION"
+
   if the_result == Result.success:
     return "TRUE"
 
@@ -213,7 +226,7 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.termination:
     command_line += "--no-pointer-check --no-bounds-check --no-assertions "
-    command_line += "--termination "
+    command_line += "--termination --max-inductive-step 3 "
     return command_line
 
   # Add strategy
