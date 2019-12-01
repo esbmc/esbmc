@@ -6,6 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <fstream> // This is before in MacOS because util/parser.h defines stack
 #include <ansi-c/ansi_c_convert.h>
 #include <ansi-c/ansi_c_language.h>
 #include <ansi-c/ansi_c_parser.h>
@@ -17,7 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/trans_unit.h>
 #include <clang-c-frontend/expr2c.h>
 #include <cstring>
-#include <fstream>
 #include <sstream>
 #include <util/c_link.h>
 #include <util/config.h>
