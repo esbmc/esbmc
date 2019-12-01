@@ -29,15 +29,17 @@ set_target_properties(libesbmc PROPERTIES VERSION "${ESBMC_VERSION}")
 target_include_directories(libesbmc 
     PRIVATE ${CMAKE_BINARY_DIR}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-    #PRIVATE ${Boost_INCLUDE_DIRS}
+    PRIVATE ${Boost_INCLUDE_DIRS}
 )
 target_link_libraries(libesbmc ansicfrontend cppfrontend clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs)
 set_target_properties(libesbmc
   PROPERTIES OUTPUT_NAME esbmc)
 
 add_executable (esbmc main.cpp)
+target_include_directories(esbmc 
+    PRIVATE ${Boost_INCLUDE_DIRS}
+)
 target_link_libraries(esbmc libesbmc)
-
 
 if (DEFINED HAVE_PYTHON)
   add_library(esbmc_python python.cpp)

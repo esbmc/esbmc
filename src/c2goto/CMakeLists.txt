@@ -49,11 +49,18 @@ endfunction()
 message(STATUS "Multiarch include for c2goto: ${multiarch}. You may want to override C2GOTO_INCLUDE_DIR")
 mangle_clib(mangled_files ${inputs})
 add_library(clibs ${mangled_files} cprover_library.cpp)
+target_include_directories(clibs
+    PRIVATE ${Boost_INCLUDE_DIRS} 
+)
 add_library(cprover_blank_library cprover_blank_library.cpp)
 target_include_directories(cprover_blank_library 
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}    
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    PRIVATE ${Boost_INCLUDE_DIRS} 
 )
 
 add_executable(c2goto c2goto.cpp)
+target_include_directories(c2goto
+    PRIVATE ${Boost_INCLUDE_DIRS} 
+)
 target_link_libraries(c2goto ansicfrontend clangcfrontend cppfrontend gotoprograms langapi util_esbmc bigint c2gotoheaders cprover_blank_library "${Boost_LIBRARIES}")
 
