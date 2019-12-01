@@ -1291,7 +1291,7 @@ int esbmc_parseoptionst::do_inductive_step(
   opts.set_option("inductive-step", true);
 
   opts.set_option("no-unwinding-assertions", true);
-  opts.set_option("partial-loops", true);
+  opts.set_option("partial-loops", false);
 
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);

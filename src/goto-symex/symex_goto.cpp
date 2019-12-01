@@ -412,7 +412,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
 
 void goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
-  if(partial_loops && !config.options.get_bool_option("termination"))
+  if(partial_loops)
     return;
 
   const irep_idt &loop_id = cur_state->source.pc->location.loopid();
