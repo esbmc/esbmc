@@ -114,9 +114,6 @@ bool goto_k_inductiont::get_entry_cond_rec(
     if(it != marked_branch.end())
       return it->second;
 
-    /* TODO: disable this for now, it will be used for termination evaluation
-     * in the future.
-
     // Return, assume(0) and assert(0) stop the execution, so ignore these
     // branches too
     if(tmp_head->is_return())
@@ -125,7 +122,6 @@ bool goto_k_inductiont::get_entry_cond_rec(
     if(tmp_head->is_assume() || tmp_head->is_assert())
       if(is_false(tmp_head->guard))
         return true;
-    */
 
     if(tmp_head->is_goto() && !tmp_head->is_backwards_goto())
     {
