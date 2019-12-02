@@ -4,7 +4,7 @@ find_library(LIBGMP gmp)
 if ((LIBGMP STREQUAL "LIBGMP-NOTFOUND") AND (DEFINED MSAT_DIR))
     find_library(LIBGMP gmp PATHS "${MSAT_DIR}")
 endif ()
-message("${LIBGMP}")
+
 if (LIBGMP STREQUAL "LIBGMP-NOTFOUND")
     if (DEFINED ENABLE_MSAT)
         message(FATAL_ERROR "Requested mathsat, however I can't find libgmp in system or \\$MSAT_DIR")
