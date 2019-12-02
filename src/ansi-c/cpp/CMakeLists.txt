@@ -6,7 +6,7 @@ BISON_TARGET(cpy cpy.y ${CMAKE_CURRENT_BINARY_DIR}/cpy.c COMPILE_FLAGS "-pcpp -d
 add_library(ansiccpp ${CMAKE_CURRENT_BINARY_DIR}/cpy.c cpp.c compat.c hooks.c token.c)
 target_include_directories(ansiccpp 
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
-    PRIVATE ${CMAKE_BINARY_DIR}
+    PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )
 target_link_libraries(ansiccpp c2gotoheaders)

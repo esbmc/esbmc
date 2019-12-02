@@ -1,35 +1,17 @@
 #################################
-# Project Information           #
-#################################
-cmake_minimum_required (VERSION 3.7)
-project (ESBMC)
-
-set (ESBMC_VERSION_MAJOR 6)
-set (ESBMC_VERSION_MINOR 0)
-set (ESBMC_VERSION_PATCH 0)
-set (ESBMC_VERSION_HEX 060000)
-set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
-
-# The only default solver available is smtlib
-set (ESBMC_AVAILABLE_SOLVERS "smtlib")
-set (ESBMC_SOLVERS 6.0.0)
-
-message("ESBMC ${ESBMC_VERSION} cmake started!")
-
-#################################
 # Configuration                 #
 #################################
 
 # Adds custom modules from ESBMC and default Options
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/scripts/cmake/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/src/scripts/cmake/")
 
 include(Options)
 include(SendFileHack)
 
 # Generate ac_config.h
 configure_file (
- "${PROJECT_SOURCE_DIR}/scripts/cmake/cmake_config.in"
- "${PROJECT_BINARY_DIR}/ac_config.h"
+ "${PROJECT_SOURCE_DIR}/src/scripts/cmake/cmake_config.in"
+ "${PROJECT_BINARY_DIR}/src/ac_config.h"
 )
 
 if(BUILD_STATIC)
@@ -38,7 +20,6 @@ if(BUILD_STATIC)
 endif()
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
-#include(FindBoost) # This is a CMake default module
 find_package(Boost COMPONENTS filesystem date_time)
 include(FindLLVM)
 
@@ -56,7 +37,7 @@ include(OptimizationCCache)
 # Modules                       #
 #################################
 
-include_directories(${CMAKE_SOURCE_DIR})
+include_directories(${CMAKE_SOURCE_DIR}/src)
 add_subdirectory (big-int)
 add_subdirectory (util)
 add_subdirectory (langapi)

@@ -17,7 +17,7 @@ add_library(util_esbmc irep2.cpp
 
 # Boost is needed by anything that touches irep2
 target_include_directories(util_esbmc 
-    PRIVATE ${CMAKE_BINARY_DIR}
+    PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )

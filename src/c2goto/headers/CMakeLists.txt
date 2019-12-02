@@ -7,7 +7,7 @@ function(mangle_hs output)
     string(REGEX REPLACE .hs .c out_f "${out_f}")
     set(out_f "${CMAKE_CURRENT_BINARY_DIR}/${out_f}")
     add_custom_command(OUTPUT ${out_f}
-      COMMAND ${CMAKE_SOURCE_DIR}/c2goto/headers/flail.sh ${CMAKE_CURRENT_SOURCE_DIR}/${in_f} ${CMAKE_CURRENT_SOURCE_DIR}/${in_f} > ${out_f}
+      COMMAND ${CMAKE_SOURCE_DIR}/src/c2goto/headers/flail.sh ${CMAKE_CURRENT_SOURCE_DIR}/${in_f} ${CMAKE_CURRENT_SOURCE_DIR}/${in_f} > ${out_f}
       DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${in_f}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Mangling hs file ${out_f}"

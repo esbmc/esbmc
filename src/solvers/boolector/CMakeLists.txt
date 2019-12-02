@@ -71,11 +71,11 @@ if (LIBBTOR STREQUAL "LIBBTOR-NOTFOUND")
     endif ()
     # Otherwise, boolector neither found nor requested, so ignore it.
 else ()
-    # Got it; build stuff.
-    target_include_directories(solverz3
+    # Got it; build stuff.    
+    add_library(solverbtor boolector_conv.cpp)
+    target_include_directories(solverbtor
             PRIVATE ${INCBTOR}/src
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    add_library(solverbtor boolector_conv.cpp)
     target_link_libraries(solverbtor ${LIBBTOR} ${LIBLGL} ${LIBBTOR2PARSER})
     set(ENABLE_BTOR "1")
     message(STATUS "Boolector version: ${BTORVERSIONSTR}")
