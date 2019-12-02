@@ -26,7 +26,7 @@ target_link_libraries(solvers INTERFACE solve smtlib smttuple smtfp smt prop)
 # calling, so it's hard to structure it how I want
 add_subdirectory(z3)
 #add_subdirectory(boolector)
-#add_subdirectory(cvc4)
+add_subdirectory(cvc4)
 add_subdirectory(mathsat)
 add_subdirectory(yices)
 
