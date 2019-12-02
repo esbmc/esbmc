@@ -27,7 +27,7 @@ target_link_libraries(solvers INTERFACE solve smtlib smttuple smtfp smt prop)
 add_subdirectory(z3)
 #add_subdirectory(boolector)
 #add_subdirectory(cvc4)
-#add_subdirectory(mathsat)
+add_subdirectory(mathsat)
 add_subdirectory(yices)
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/solver_config.h.in"
