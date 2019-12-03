@@ -10,7 +10,7 @@ function(mangle_hs output)
       COMMAND ${CMAKE_SOURCE_DIR}/src/c2goto/headers/flail.sh ${CMAKE_CURRENT_SOURCE_DIR}/${in_f} ${CMAKE_CURRENT_SOURCE_DIR}/${in_f} > ${out_f}
       DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${in_f}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-      COMMENT "Converting hs file ${out_f} into an array of chars"
+      COMMENT "Converting internal headers ${out_f} to data"
       VERBATIM
       )
     list(APPEND result ${out_f})
