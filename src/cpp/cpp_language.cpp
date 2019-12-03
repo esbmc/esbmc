@@ -6,7 +6,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <fstream> // This is before in MacOS because util/parser.h defines stack
 #include <ansi-c/c_main.h>
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/gcc_builtin_headers.h>
@@ -16,6 +15,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_typecheck.h>
 #include <cpp/expr2cpp.h>
 #include <cstring>
+#include <fstream>
 #include <sstream>
 #include <util/c_link.h>
 #include <util/config.h>
