@@ -76,6 +76,7 @@ else ()
     add_library(solverz3 z3_conv.cpp)
     target_include_directories(solverz3
             PRIVATE ${INCZ3}
+            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     set(ENABLE_Z3 "1")
     message(STATUS "Z3 version: ${Z3VERSIONSTR}")
