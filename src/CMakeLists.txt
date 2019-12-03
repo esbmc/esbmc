@@ -15,8 +15,7 @@ configure_file (
 )
 
 if(BUILD_STATIC)
-    set(Boost_USE_STATIC_LIBS ON)
-    set(Boost_USE_STATIC_RUNTIME ON)
+  include(BuildStatic)
 endif()
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
