@@ -74,6 +74,7 @@ else ()
     add_library(solverbtor boolector_conv.cpp)
     target_include_directories(solverbtor
             PRIVATE ${INCBTOR}/src
+            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(solverbtor ${LIBBTOR} ${LIBLGL} ${LIBBTOR2PARSER})
     set(ENABLE_BTOR "1")
