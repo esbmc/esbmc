@@ -19,30 +19,15 @@ configure_file (
  "${PROJECT_BINARY_DIR}/src/esbmc/version.h"
 )
 
-if(BUILD_STATIC)
-    add_library(libesbmc esbmc_parseoptions.cpp bmc.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
-else()
-    add_library(libesbmc SHARED esbmc_parseoptions.cpp bmc.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
-endif()
-
-set_target_properties(libesbmc PROPERTIES VERSION "${ESBMC_VERSION}")
-target_include_directories(libesbmc 
+add_executable (esbmc main.cpp esbmc_parseoptions.cpp bmc.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
+target_include_directories(esbmc 
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_link_libraries(libesbmc ansicfrontend cppfrontend clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs)
-set_target_properties(libesbmc
-  PROPERTIES OUTPUT_NAME esbmc)
-
-add_executable (esbmc main.cpp)
-target_include_directories(esbmc 
-    PRIVATE ${Boost_INCLUDE_DIRS}
-)
-target_link_libraries(esbmc libesbmc)
+target_link_libraries(esbmc ansicfrontend cppfrontend clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs)
 
 if (DEFINED HAVE_PYTHON)
   add_library(esbmc_python python.cpp)
   target_link_libraries(esbmc esbmc_python ${PYTHON_LINK_LIBS})
-  target_link_libraries(libesbmc esbmc_python ${PYTHON_LINK_LIBS})
 endif()
