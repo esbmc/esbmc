@@ -3,28 +3,21 @@
 #  * Environmental var paths
 #  * System default
 function(findz3 versionstr libz3 incz3)
-    if (BUILD_STATIC)
-        find_library(LIBZ3 NAMES libz3.a PATHS "${ARGN}" PATH_SUFFIXES lib bin NO_DEFAULT_PATH)
-    else ()
-        find_library(LIBZ3 NAMES libz3.so PATHS "${ARGN}" PATH_SUFFIXES lib bin NO_DEFAULT_PATH)
-    endif ()
-    find_path(INCZ3 z3.h PATHS "${ARGN}/include" NO_DEFAULT_PATHcd)
+    find_library(LIBZ3 z3 PATHS "${ARGN}" PATH_SUFFIXES lib bin NO_DEFAULT_PATH)
+    find_path(INCZ3 z3.h PATHS "${ARGN}/include" NO_DEFAULT_PATH)
 
     if ((LIBZ3 STREQUAL "LIBZ3-NOTFOUND") OR (INCZ3 STREQUAL "INCZ3-NOTFOUND"))
         return()
-    endif ()
-
+    endif ()    
     get_filename_component(Z3_LIBDIR "${LIBZ3}" DIRECTORY)
     try_run(Z3RUNS Z3COMPILES ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/try_z3.c
             CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${ARGN}/include
-            LINK_LIBRARIES ${LIBZ3} ${LIBGMP} stdc++ m
+            LINK_LIBRARIES ${LIBZ3} ${LIBGMP} stdc++ m -pthread -ldl
             COMPILE_OUTPUT_VARIABLE Z3COMPILESTR
             RUN_OUTPUT_VARIABLE Z3VERSIONSTR)
 
     if ((NOT Z3RUNS EQ 0) OR (NOT Z3COMPILES))
-        if (DEBUG_TRY_RUNS)
-            message(FATAL_ERRROR "Failed Z3 compilation compile: ${Z3COMPILESTR}")
-        endif ()
+        message(FATAL_ERRROR "Failed Z3 compilation compile: ${Z3COMPILESTR}")
         return()
     endif ()
 

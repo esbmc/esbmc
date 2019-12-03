@@ -1,5 +1,5 @@
 function(findboolector versionstr libbtor incbtor liblgl thepath libbtor2parser)
-    find_library(LIBBTOR boolector NAMES libboolector.a PATHS "${thepath}" PATH_SUFFIXES build/lib NO_DEFAULT_PATH)
+    find_library(LIBBTOR boolector PATHS "${thepath}" PATH_SUFFIXES build/lib NO_DEFAULT_PATH)
     find_path(INCBTOR boolector.h PATHS "${thepath}" PATH_SUFFIXES src NO_DEFAULT_PATH)
     find_path(INCBTORBUILD btorconfig.h PATHS "${thepath}" PATH_SUFFIXES build/src NO_DEFAULT_PATH)
 
