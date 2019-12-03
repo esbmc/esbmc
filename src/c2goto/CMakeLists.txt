@@ -29,7 +29,7 @@ function(mangle_clib output)
       COMMAND sh -c "${CMAKE_CURRENT_BINARY_DIR}/c2goto -I ${multiarch} ${CMAKE_CURRENT_SOURCE_DIR}/library/*.c ${LIBM_PATTERN} ${in_flags} --output ${out_goto}"
       DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/c2goto
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-      COMMENT "Mangling clib ${out_goto}"
+      COMMENT "Generating model ${out_goto}"
       VERBATIM
       )
 
@@ -37,7 +37,7 @@ function(mangle_clib output)
       COMMAND ${CMAKE_SOURCE_DIR}/src/c2goto/headers/flail.sh ${barename} ${out_goto} > ${out_file}
       DEPENDS ${out_goto}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-      COMMENT "Mangling goto file ${out_file}"
+      COMMENT "Converting file ${out_file} into an array of chars"
       VERBATIM
       )
 
