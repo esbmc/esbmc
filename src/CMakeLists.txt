@@ -18,6 +18,8 @@ if(BUILD_STATIC)
   include(BuildStatic)
 endif()
 
+include(DefineLibM)
+
 # This MUST be executed after BuildStatic since it sets Boost Static flags
 find_package(Boost COMPONENTS filesystem date_time)
 include(FindLLVM)
