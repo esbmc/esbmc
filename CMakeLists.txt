@@ -12,6 +12,6 @@ set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSIO
 
 # The only default solver available is smtlib
 set (ESBMC_AVAILABLE_SOLVERS "smtlib")
-set (ESBMC_SOLVERS 6.0.0)
+set (ESBMC_SOLVERS ${ESBMC_VERSION})
 
 add_subdirectory(src)
