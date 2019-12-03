@@ -14,6 +14,4 @@ set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSIO
 set (ESBMC_AVAILABLE_SOLVERS "smtlib")
 set (ESBMC_SOLVERS 6.0.0)
 
-message("ESBMC ${ESBMC_VERSION} cmake started!")
-
 add_subdirectory(src)
