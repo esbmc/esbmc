@@ -1,5 +1,4 @@
 # Mathsat depends on gmp
-cmake_policy(SET CMP0079 NEW)
 find_library(LIBGMP gmp)
 if ((LIBGMP STREQUAL "LIBGMP-NOTFOUND") AND (DEFINED MSAT_DIR))
     find_library(LIBGMP gmp PATHS "${MSAT_DIR}")

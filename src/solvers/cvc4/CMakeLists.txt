@@ -1,4 +1,3 @@
-cmake_policy(SET CMP0079 NEW)
 function(findcvc4 versionstr libcvc4 inccvc4)
     find_library(LIBCVC4 cvc4 NAMES libcvc4 PATHS "${ARGN}" PATH_SUFFIXES lib NO_DEFAULT_PATH)
     find_path(INCCVC4 cvc4/cvc4.h PATHS "${ARGN}/include" NO_DEFAULT_PATH)

@@ -2,8 +2,6 @@
 #  * User specified directories
 #  * Environmental var paths
 #  * System default
-cmake_policy(SET CMP0079 NEW)
-
 function(findz3 versionstr libz3 incz3)
     if (BUILD_STATIC)
         find_library(LIBZ3 NAMES libz3.a PATHS "${ARGN}" PATH_SUFFIXES lib bin NO_DEFAULT_PATH)

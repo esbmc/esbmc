@@ -1,4 +1,3 @@
-cmake_policy(SET CMP0079 NEW)
 function(findyices versionstr libyices incyices)
     find_library(LIBYICES yices NAMES libyices.so PATHS "${ARGN}" PATH_SUFFIXES lib NO_DEFAULT_PATH)
     find_path(INCYICES yices.h PATHS "${ARGN}/include" NO_DEFAULT_PATH)
