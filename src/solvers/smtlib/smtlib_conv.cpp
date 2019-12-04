@@ -532,7 +532,7 @@ expr2tc smtlib_convt::get_array_elem(
   std::string name = sa->symname;
 
   // XXX -- double bracing this may be a Z3 ecentricity
-  unsigned long domain_width = array->sort->get_domain_width();
+  uint64_t domain_width = array->sort->get_domain_width();
   fprintf(
     out_stream,
     "(get-value ((select |%s| (_ bv%" PRIu64 " %" PRIu64 "))))\n",
