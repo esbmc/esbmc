@@ -37,7 +37,7 @@ if(ENABLE_PYTHON)
 
   # And now try compiling it...
   try_compile (didbpcompile ${CMAKE_BINARY_DIR}
-                ${CMAKE_SOURCE_DIR}/scripts/try_bp.cpp
+                ${CMAKE_SOURCE_DIR}/src/scripts/try_bp.cpp
                  CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${PYTHON_INCLUDE_DIRS} 
                  LINK_LIBRARIES ${BOOST_PYTHON} ${PYTHON_LIBRARIES} dl util expat z pthread
                  OUTPUT_VARIABLE DIDBPCOMPILE_MSG)
