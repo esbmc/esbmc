@@ -1,6 +1,7 @@
-#include <z3.h>
+#include <z3_version.h>
+#include <stdio.h>
 
 int main() {
-    printf("%s", Z3_get_full_version());
+    printf(Z3_FULL_VERSION);
     return 0;
 }

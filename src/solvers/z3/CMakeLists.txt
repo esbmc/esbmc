@@ -12,7 +12,8 @@ function(findz3 versionstr libz3 incz3)
     get_filename_component(Z3_LIBDIR "${LIBZ3}" DIRECTORY)
     try_run(Z3RUNS Z3COMPILES ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/try_z3.c
             CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${ARGN}/include
-            LINK_LIBRARIES ${LIBZ3} ${LIBGMP} stdc++ m -pthread -ldl
+            LINK_LIBRARIES ${LIBZ3} stdc++ m -pthread
+            
             COMPILE_OUTPUT_VARIABLE Z3COMPILESTR
             RUN_OUTPUT_VARIABLE Z3VERSIONSTR)
 

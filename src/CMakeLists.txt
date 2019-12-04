@@ -16,6 +16,7 @@ configure_file (
 
 if(BUILD_STATIC)
   include(BuildStatic)
+  add_definitions(-DBOOST_PYTHON_STATIC_LIB)
 endif()
 
 include(DefineLibM)
@@ -25,7 +26,6 @@ find_package(Boost COMPONENTS filesystem date_time)
 include(FindLLVM)
 
 if(ENABLE_PYTHON)
-  add_definitions(-DBOOST_PYTHON_STATIC_LIB)
   include(FindPython)
 else()
   message(STATUS "Python support is off")
