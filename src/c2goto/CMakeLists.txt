@@ -37,7 +37,7 @@ function(mangle_clib output)
       COMMAND ${CMAKE_SOURCE_DIR}/src/c2goto/headers/flail.sh ${barename} ${out_goto} > ${out_file}
       DEPENDS ${out_goto}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-      COMMENT "Converting libc model ${out_file} to data"
+      COMMENT "Converting libc model ${out_goto} to data"
       VERBATIM
       )
 
