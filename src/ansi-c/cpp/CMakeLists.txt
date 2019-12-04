@@ -9,4 +9,5 @@ target_include_directories(ansiccpp
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )
+target_compile_options(ansiccpp PRIVATE -Wimplicit-function-declaration)
 target_link_libraries(ansiccpp c2gotoheaders)
