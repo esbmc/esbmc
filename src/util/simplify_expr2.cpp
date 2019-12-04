@@ -575,27 +575,17 @@ expr2tc modulus2t::do_simplify() const
   if(!is_number_type(type))
     return expr2tc();
 
-  if(!is_constant_expr(side_1) && !is_constant_expr(side_2))
-    return expr2tc();
-
   if(is_bv_type(type))
   {
-    if(is_constant_int2t(side_2))
-    {
-      // Denominator is one? Simplify to zero
-      if(to_constant_int2t(side_2).value == 1)
-        return constant_int2tc(type, BigInt(0));
-    }
+    // Denominator is one? Simplify to zero
+    if(is_constant_int2t(side_2) && (to_constant_int2t(side_2).value == 1))
+      return gen_zero(type);
 
     if(is_constant_int2t(side_1) && is_constant_int2t(side_2))
     {
-      const constant_int2t &numerator = to_constant_int2t(side_1);
-      const constant_int2t &denominator = to_constant_int2t(side_2);
-
-      auto c = numerator.value;
-      c %= denominator.value;
-
-      return constant_int2tc(type, c);
+      const constant_int2t &n = to_constant_int2t(side_1);
+      const constant_int2t &d = to_constant_int2t(side_2);
+      return gen_constant(type, n.value % d.value);
     }
   }
 
