@@ -7,5 +7,5 @@ target_include_directories(symex
 
 target_link_libraries(symex pointeranalysis langapi util_esbmc bigint)
 if (DEFINED HAVE_PYTHON)
-  target_link_libraries(symex -lm -ldl ${PYTHON_LINK_LIBS}  dl util expat z pthread)
+  target_link_libraries(symex -lm -ldl ${PYTHON_LIBRARIES} ${BOOST_PYTHON}  dl util expat z pthread)
 endif()

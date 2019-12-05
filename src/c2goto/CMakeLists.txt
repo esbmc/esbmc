@@ -64,3 +64,7 @@ target_include_directories(c2goto
 )
 target_link_libraries(c2goto ansicfrontend clangcfrontend cppfrontend gotoprograms langapi util_esbmc bigint c2gotoheaders cprover_blank_library "${Boost_LIBRARIES}")
 
+if (DEFINED HAVE_PYTHON)
+  target_link_libraries(c2goto -lm -ldl ${BOOST_PYTHON} ${PYTHON_LIBRARIES}   dl util expat z pthread)
+endif()
+
