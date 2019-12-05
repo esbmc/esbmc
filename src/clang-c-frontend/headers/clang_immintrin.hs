@@ -1,22 +1,8 @@
 /*===---- immintrin.h - Intel intrinsics -----------------------------------===
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
+ * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+ * See https://llvm.org/LICENSE.txt for license information.
+ * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  *
  *===-----------------------------------------------------------------------===
  */
@@ -195,6 +181,15 @@
 #include <avx512pfintrin.h>
 #endif
 
+#if !defined(_MSC_VER) || __has_feature(modules) || defined(__AVX512BF16__)
+#include <avx512bf16intrin.h>
+#endif
+
+#if !defined(_MSC_VER) || __has_feature(modules) || \
+    (defined(__AVX512VL__) && defined(__AVX512BF16__))
+#include <avx512vlbf16intrin.h>
+#endif
+
 #if !defined(_MSC_VER) || __has_feature(modules) || defined(__PKU__)
 #include <pkuintrin.h>
 #endif
@@ -240,18 +235,6 @@ _rdrand64_step(unsigned long long *__p)
 }
 #endif
 #endif /* __RDRND__ */
-
-/* __bit_scan_forward */
-static __inline__ int __attribute__((__always_inline__, __nodebug__))
-_bit_scan_forward(int __A) {
-  return __builtin_ctz(__A);
-}
-
-/* __bit_scan_reverse */
-static __inline__ int __attribute__((__always_inline__, __nodebug__))
-_bit_scan_reverse(int __A) {
-  return 31 - __builtin_clz(__A);
-}
 
 #if !defined(_MSC_VER) || __has_feature(modules) || defined(__FSGSBASE__)
 #ifdef __x86_64__
@@ -306,6 +289,65 @@ _writegsbase_u64(unsigned long long __V)
 #endif
 #endif /* __FSGSBASE__ */
 
+#if !defined(_MSC_VER) || __has_feature(modules) || defined(__MOVBE__)
+
+/* The structs used below are to force the load/store to be unaligned. This
+ * is accomplished with the __packed__ attribute. The __may_alias__ prevents
+ * tbaa metadata from being generated based on the struct and the type of the
+ * field inside of it.
+ */
+
+static __inline__ short __attribute__((__always_inline__, __nodebug__, __target__("movbe")))
+_loadbe_i16(void const * __P) {
+  struct __loadu_i16 {
+    short __v;
+  } __attribute__((__packed__, __may_alias__));
+  return __builtin_bswap16(((struct __loadu_i16*)__P)->__v);
+}
+
+static __inline__ void __attribute__((__always_inline__, __nodebug__, __target__("movbe")))
+_storebe_i16(void * __P, short __D) {
+  struct __storeu_i16 {
+    short __v;
+  } __attribute__((__packed__, __may_alias__));
+  ((struct __storeu_i16*)__P)->__v = __builtin_bswap16(__D);
+}
+
+static __inline__ int __attribute__((__always_inline__, __nodebug__, __target__("movbe")))
+_loadbe_i32(void const * __P) {
+  struct __loadu_i32 {
+    int __v;
+  } __attribute__((__packed__, __may_alias__));
+  return __builtin_bswap32(((struct __loadu_i32*)__P)->__v);
+}
+
+static __inline__ void __attribute__((__always_inline__, __nodebug__, __target__("movbe")))
+_storebe_i32(void * __P, int __D) {
+  struct __storeu_i32 {
+    int __v;
+  } __attribute__((__packed__, __may_alias__));
+  ((struct __storeu_i32*)__P)->__v = __builtin_bswap32(__D);
+}
+
+#ifdef __x86_64__
+static __inline__ long long __attribute__((__always_inline__, __nodebug__, __target__("movbe")))
+_loadbe_i64(void const * __P) {
+  struct __loadu_i64 {
+    long long __v;
+  } __attribute__((__packed__, __may_alias__));
+  return __builtin_bswap64(((struct __loadu_i64*)__P)->__v);
+}
+
+static __inline__ void __attribute__((__always_inline__, __nodebug__, __target__("movbe")))
+_storebe_i64(void * __P, long long __D) {
+  struct __storeu_i64 {
+    long long __v;
+  } __attribute__((__packed__, __may_alias__));
+  ((struct __storeu_i64*)__P)->__v = __builtin_bswap64(__D);
+}
+#endif
+#endif /* __MOVBE */
+
 #if !defined(_MSC_VER) || __has_feature(modules) || defined(__RTM__)
 #include <rtmintrin.h>
 #include <xtestintrin.h>
@@ -319,9 +361,8 @@ _writegsbase_u64(unsigned long long __V)
 #include <fxsrintrin.h>
 #endif
 
-#if !defined(_MSC_VER) || __has_feature(modules) || defined(__XSAVE__)
+/* No feature check desired due to internal MSC_VER checks */
 #include <xsaveintrin.h>
-#endif
 
 #if !defined(_MSC_VER) || __has_feature(modules) || defined(__XSAVEOPT__)
 #include <xsaveoptintrin.h>
@@ -380,7 +421,21 @@ _writegsbase_u64(unsigned long long __V)
 #include <invpcidintrin.h>
 #endif
 
-#ifdef _MSC_VER
+#if !defined(_MSC_VER) || __has_feature(modules) || \
+  defined(__AVX512VP2INTERSECT__)
+#include <avx512vp2intersectintrin.h>
+#endif
+
+#if !defined(_MSC_VER) || __has_feature(modules) || \
+  (defined(__AVX512VL__) && defined(__AVX512VP2INTERSECT__))
+#include <avx512vlvp2intersectintrin.h>
+#endif
+
+#if !defined(_MSC_VER) || __has_feature(modules) || defined(__ENQCMD__)
+#include <enqcmdintrin.h>
+#endif
+
+#if defined(_MSC_VER) && __has_extension(gnu_asm)
 /* Define the default attributes for these intrinsics */
 #define __DEFAULT_FN_ATTRS __attribute__((__always_inline__, __nodebug__))
 #ifdef __cplusplus
@@ -462,6 +517,6 @@ _InterlockedCompareExchange64_HLERelease(__int64 volatile *_Destination,
 
 #undef __DEFAULT_FN_ATTRS
 
-#endif /* _MSC_VER */
+#endif /* defined(_MSC_VER) && __has_extension(gnu_asm) */
 
 #endif /* __IMMINTRIN_H */
