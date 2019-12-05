@@ -22,7 +22,7 @@ endif()
 include(DefineLibM)
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
-find_package(Boost COMPONENTS filesystem date_time)
+find_package(Boost REQUIRED COMPONENTS filesystem date_time)
 include(FindLLVM)
 
 if(ENABLE_PYTHON)
