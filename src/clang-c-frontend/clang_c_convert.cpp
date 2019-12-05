@@ -1217,8 +1217,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::OffsetOfExpr &>(stmt);
 
     // Use clang to calculate offsetof
-    llvm::APSInt val;
-    bool res = offset.EvaluateAsInt(val, *ASTContext);
+    clang::Expr::EvalResult result;
+    bool res = offset.EvaluateAsInt(result, *ASTContext);
     if(!res)
     {
       std::cerr << "Clang could not calculate offset" << std::endl;
@@ -1227,8 +1227,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
 
     new_expr = constant_exprt(
-      integer2binary(val.getSExtValue(), bv_width(uint_type())),
-      integer2string(val.getSExtValue()),
+      integer2binary(result.Val.getInt().getSExtValue(), bv_width(uint_type())),
+      integer2string(result.Val.getInt().getSExtValue()),
       uint_type());
     break;
   }
@@ -1241,13 +1241,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // Use clang to calculate alignof
     if(unary.getKind() == clang::UETT_AlignOf)
     {
-      llvm::APSInt val;
-      if(!unary.EvaluateAsInt(val, *ASTContext))
+      clang::Expr::EvalResult result;
+      if(!unary.EvaluateAsInt(result, *ASTContext))
         return true;
 
       new_expr = constant_exprt(
-        integer2binary(val.getZExtValue(), bv_width(uint_type())),
-        integer2string(val.getZExtValue()),
+        integer2binary(
+          result.Val.getInt().getZExtValue(), bv_width(uint_type())),
+        integer2string(result.Val.getInt().getZExtValue()),
         uint_type());
     }
     else
