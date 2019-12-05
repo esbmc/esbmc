@@ -100,4 +100,5 @@ else ()
     target_link_libraries(solvers INTERFACE solvermsat)
 
     set(ESBMC_ENABLE_mathsat 1 PARENT_SCOPE)
+    set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} mathsat" PARENT_SCOPE)
 endif ()

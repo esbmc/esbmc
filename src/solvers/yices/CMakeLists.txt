@@ -87,4 +87,5 @@ else ()
     endif ()
 
     set(ESBMC_ENABLE_yices 1 PARENT_SCOPE)
+    set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} yices" PARENT_SCOPE)
 endif ()

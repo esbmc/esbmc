@@ -8,12 +8,6 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/src/scripts/cmak
 include(Options)
 include(SendFileHack)
 
-# Generate ac_config.h
-configure_file (
- "${PROJECT_SOURCE_DIR}/src/scripts/cmake/cmake_config.in"
- "${PROJECT_BINARY_DIR}/src/ac_config.h"
-)
-
 if(BUILD_STATIC)
   include(BuildStatic)
   add_definitions(-DBOOST_PYTHON_STATIC_LIB)
@@ -60,3 +54,9 @@ add_subdirectory (solvers)
 add_subdirectory (clang-cpp-frontend)
 add_subdirectory (goto-symex)
 add_subdirectory (esbmc)
+
+# Generate ac_config.h. This must be generated after solvers
+configure_file (
+ "${PROJECT_SOURCE_DIR}/src/scripts/cmake/cmake_config.in"
+ "${PROJECT_BINARY_DIR}/src/ac_config.h"
+)

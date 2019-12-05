@@ -89,4 +89,5 @@ else ()
     target_link_libraries(solvers INTERFACE solvercvc4)
 
     set(ESBMC_ENABLE_cvc4 1 PARENT_SCOPE)
+    set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} cvc4" PARENT_SCOPE)
 endif ()

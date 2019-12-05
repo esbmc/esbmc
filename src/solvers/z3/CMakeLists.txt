@@ -90,4 +90,5 @@ else ()
     target_link_libraries(solvers INTERFACE solverz3)
 
     set(ESBMC_ENABLE_z3 1 PARENT_SCOPE)
+    set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} z3" PARENT_SCOPE)
 endif ()
