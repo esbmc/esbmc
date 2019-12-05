@@ -5,7 +5,6 @@ target_include_directories(symex
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(symex pointeranalysis langapi util_esbmc bigint)
 if (DEFINED HAVE_PYTHON)
   target_link_libraries(symex -lm -ldl ${PYTHON_LIBRARIES} ${BOOST_PYTHON}  dl util expat z pthread)
 endif()

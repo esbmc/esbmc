@@ -7,7 +7,7 @@ target_include_directories(clangcfrontend_stuff
     PRIVATE ${CLANG_INCLUDE_DIRS}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_link_libraries(clangcfrontend_stuff gotoprograms langapi util_esbmc bigint clangTooling)
+target_link_libraries(clangcfrontend_stuff gotoprograms clangTooling)
 
 add_library(clangcfrontend INTERFACE)
 target_link_libraries(clangcfrontend INTERFACE clangcfrontend_stuff clangcfrontendast cheaders)

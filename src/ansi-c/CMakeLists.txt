@@ -13,7 +13,7 @@ target_include_directories(ansicfrontend_stuff
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(ansicfrontend_stuff gotoprograms langapi util_esbmc bigint)
+target_link_libraries(ansicfrontend_stuff)
 
 add_library(ansicfrontend INTERFACE)
 target_link_libraries(ansicfrontend INTERFACE ansicfrontend_stuff ansiccpp)

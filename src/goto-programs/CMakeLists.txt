@@ -2,7 +2,7 @@ add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp goto_s
 target_include_directories(gotoprograms
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_link_libraries(gotoprograms pointeranalysis util_esbmc bigint)
+target_link_libraries(gotoprograms pointeranalysis bigint)
 if (DEFINED HAVE_PYTHON)
   target_link_libraries(gotoprograms ${PYTHON_LINK_LIBS} dl util expat z pthread)
 endif()

@@ -1,3 +1,13 @@
+add_executable(c2goto c2goto.cpp)
+target_include_directories(c2goto
+    PRIVATE ${Boost_INCLUDE_DIRS} 
+)
+target_link_libraries(c2goto ansicfrontend clangcfrontend cppfrontend gotoprograms langapi  cprover_blank_library "${Boost_LIBRARIES}")
+
+if (DEFINED HAVE_PYTHON)
+  target_link_libraries(c2goto -lm -ldl ${BOOST_PYTHON} ${PYTHON_LIBRARIES}   dl util expat z pthread)
+endif()
+
 add_subdirectory (headers)
 
 if(DEFINED C2GOTO_INCLUDE_DIR)
@@ -57,14 +67,4 @@ target_include_directories(cprover_blank_library
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS} 
 )
-
-add_executable(c2goto c2goto.cpp)
-target_include_directories(c2goto
-    PRIVATE ${Boost_INCLUDE_DIRS} 
-)
-target_link_libraries(c2goto ansicfrontend clangcfrontend cppfrontend gotoprograms langapi util_esbmc bigint c2gotoheaders cprover_blank_library "${Boost_LIBRARIES}")
-
-if (DEFINED HAVE_PYTHON)
-  target_link_libraries(c2goto -lm -ldl ${BOOST_PYTHON} ${PYTHON_LIBRARIES}   dl util expat z pthread)
-endif()
 
