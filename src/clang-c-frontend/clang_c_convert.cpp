@@ -1594,10 +1594,21 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::ConstantExprClass:
+  {
+    const clang::ConstantExpr &c =
+      static_cast<const clang::ConstantExpr &>(stmt);
+
+    if(get_expr(*c.getSubExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
   /*
-       The following enum values are the basic elements of a program,
-       defined on the Stmt class
-    */
+    The following enum values are the basic elements of a program,
+    defined on the Stmt class
+  */
 
   // Declaration of variables, it is created as a decl-block to
   // allow declarations like int a,b;
