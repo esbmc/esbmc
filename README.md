@@ -51,9 +51,7 @@ The fundemental verification technique (unrolling programs to SSA then convertin
 
 # Open source
 
-ESBMC has now been released as open source software -- mainly distributed under the terms of the Apache License 2.0. ESBMC contains a signficant amount of other peoples software, however, please see the COPYING file for an explanation of who-owns-what, and under what terms they are distributed. Note that our K-induction implementation does not feature in this source release.
-
-We fully intend on continuing to maintain and develop ESBMC. While it's open source, it is not necessarily open development, in that decisions on future direction will only be made by the developers, and the development tree is not part of the public distribution. Source releases are made by exporting a source distribution from the dev tree, which is then committed to the public git repository.
+ESBMC has now been released as open source software -- mainly distributed under the terms of the Apache License 2.0. ESBMC contains a signficant amount of other peoples software, however, please see the COPYING file for an explanation of who-owns-what, and under what terms they are distributed.
 
 We'd be extremely happy to receive contributions to make ESBMC better (under the terms of the Apache License 2.0). If you'd like to submit anything, please file a pull request against the public github repo. General discussion and release announcements will be made on the esbmc-users@googlegroups.com mailing list. To contact us about research or collaboration, please email the esbmc@ mailing list on ecs.soton.ac.uk.
 
