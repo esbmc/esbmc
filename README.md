@@ -1,4 +1,4 @@
-[![Build Status](https://ssvlab.ddns.net/buildStatus/icon?job=esbmc-private2%2Fmaster)](https://ssvlab.ddns.net/buildStatus/icon?job=esbmc-private2%2Fmaster)
+[![Build Status](https://ssvlab.ddns.net/buildStatus/icon?job=esbmc-private%2Fmaster)](https://ssvlab.ddns.net/buildStatus/icon?job=esbmc-private%2Fmaster)
 
 # The ESBMC model checker
 
