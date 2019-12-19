@@ -26,17 +26,19 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v1
-      - name: Install Dependencies and Z3
-        run: brew install cmake boost ninja z3
+      - name: Install Dependencies, Z3 and MathSAT
+        run: brew install gmp cmake boost ninja z3 python3 && pip3 install PySMT
       - name: Download Clang 7
         run: wget http://releases.llvm.org/7.0.0/clang+llvm-7.0.0-x86_64-apple-darwin.tar.xz
       - name: Extract Clang 7
         run: tar xf clang+llvm-7.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-7.0.0-x86_64-apple-darwin clang7
+      - name: Setup solvers
+        run: yes Y | pysmt-install --msat
       - name: Setup Boolector
         run: git clone https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh && cd build && make -j9
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=/usr/local/Cellar/z3/4.8.7/ -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/
+        run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=/usr/local/Cellar/z3/4.8.7/ -DMSAT_DIR=$PWD/../.smt_solvers/msat/mathsat-5.5.1-darwin-libcxx-x86_64/ -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/
       - name: Build ESBMC
         run: cd build && cmake --build .
