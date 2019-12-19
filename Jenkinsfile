@@ -40,7 +40,7 @@ pipeline {
         stage('ESBMC') {
           steps {
             dir(path: 'regression') {
-              //sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./esbmc" --mode="CORE"'
+              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./esbmc" --mode="CORE"'
             }
           }
         }
@@ -68,7 +68,7 @@ pipeline {
         stage('llvm') {
           steps {
             dir(path: 'regression') {
-              //sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./llvm" --mode="CORE"'
+              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./llvm" --mode="CORE"'
             }
           }
         }
