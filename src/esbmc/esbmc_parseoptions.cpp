@@ -39,7 +39,6 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
-#include <goto-programs/goto_unwind.h>
 #include <goto-programs/interval_analysis.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
@@ -1595,20 +1594,6 @@ bool esbmc_parseoptionst::process_goto_program(
       value_set_analysis.update(goto_functions);
     }
 
-    if(cmdline.isset("unroll-loops"))
-    {
-      if(!atol(options.get_option("unwind").c_str()))
-      {
-        std::cerr << "Max unwind must be set to unroll loops" << std::endl;
-        abort();
-      }
-
-      goto_unwind(
-        goto_functions,
-        atol(options.get_option("unwind").c_str()),
-        ui_message_handler);
-    }
-
     // show it?
     if(cmdline.isset("show-loops"))
     {
@@ -1774,8 +1759,6 @@ void esbmc_parseoptionst::help()
        " --unwindset nr               unwind given loop nr times\n"
        " --no-unwinding-assertions    do not generate unwinding assertions\n"
        " --partial-loops              permit paths with partial loops\n"
-       " --unroll-loops               unwind all loops by the value defined by "
-       "the --unwind option\n"
        " --no-slice                   do not remove unused equations\n"
        " --extended-try-analysis      check all the try block, even when an "
        "exception is thrown\n"
