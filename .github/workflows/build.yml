@@ -15,10 +15,12 @@ jobs:
       run: tar xf clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04 clang7
     - name: Setup boolector
       run: git clone https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh && cd build && make -j9
+    - name: Setup Z3
+      run: wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.4/z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && unzip z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && mv z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04 z3
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBTOR_DIR=$PWD/../boolector
+      run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3
     - name: Build ESBMC
       run: cd build && cmake --build .
 
