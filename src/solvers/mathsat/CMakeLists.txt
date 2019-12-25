@@ -91,6 +91,7 @@ else ()
     add_library(solvermsat mathsat_conv.cpp)
     target_include_directories(solvermsat
             PRIVATE ${INCMSAT}
+            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(solvermsat "${LIBMSAT}" ${LIBGMP})
     set(ENABLE_MSAT "1")
