@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Install Dependencies
-        run: brew install gmp cmake boost@1.60 ninja python3 && pip3 install PySMT && pip3 install --user xmlrunner unittest-xml-reporting
+        run: brew install gmp cmake boost ninja python3 && pip3 install PySMT && pip3 install --user xmlrunner unittest-xml-reporting
       - name: Download Clang 7
         run: wget http://releases.llvm.org/7.0.0/clang+llvm-7.0.0-x86_64-apple-darwin.tar.xz
       - name: Extract Clang 7
