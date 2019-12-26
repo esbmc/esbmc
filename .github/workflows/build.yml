@@ -25,9 +25,6 @@ jobs:
       run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBUILD_STATIC=On -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat
     - name: Build ESBMC
       run: cd build && cmake --build .
-    - name: Run regression (llvm)
-      run: cd regression && python3 testing_tool.py --tool="$PWD/../build/src/esbmc/esbmc" --regression="./llvm" --mode="CORE"
-
 
   build-macos:
     runs-on: macos-latest
@@ -53,5 +50,3 @@ jobs:
         run: mkdir build && cd build && cmake .. -GNinja -DBUILD_STATIC=On -DLLVM_DIR=../clang7 -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/
       - name: Build ESBMC
         run: cd build && cmake --build .
-      - name: Run regression
-        run: cd regression && python3 testing_tool.py --tool="$PWD/../build/src/esbmc/esbmc" --regression="./llvm" --mode="CORE"
