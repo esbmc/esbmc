@@ -613,15 +613,6 @@ void value_sett::get_value_set_rec(
     get_value_set_rec(be.source_value, dest, suffix, original_type);
     return;
   }
-  else if(
-    is_bitor2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr) ||
-    is_bitnand2t(expr) || is_bitnor2t(expr) || is_bitnxor2t(expr))
-  {
-    assert(expr->get_num_sub_exprs() == 2);
-    get_value_set_rec(*expr->get_sub_expr(0), dest, suffix, original_type);
-    get_value_set_rec(*expr->get_sub_expr(1), dest, suffix, original_type);
-    return;
-  }
 
   // If none of those expressions matched, then we don't really know what this
   // expression evaluates to. So just record it as being unknown.
