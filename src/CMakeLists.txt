@@ -5,6 +5,9 @@
 # Adds custom modules from ESBMC and default Options
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/src/scripts/cmake/")
 
+# Set a default build type if none was specified
+set(default_build_type "RelWithDebInfo")
+
 include(Options)
 include(SendFileHack)
 
