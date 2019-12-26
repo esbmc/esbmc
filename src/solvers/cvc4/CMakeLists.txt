@@ -63,6 +63,7 @@ endif ()
 if (LIBCVC4 STREQUAL "LIBCVC4-NOTFOUND")
     # Try default search instead
     find_library(LIBCVC4 cvc4)
+    find_path(INCCVC4 cvc4/cvc4.h)
     set(CVC4VERSIONSTR "(system)")
 endif ()
 
