@@ -75,11 +75,13 @@ else ()
     # Got it; build stuff.
     add_library(solvercvc4 cvc_conv.cpp)
     if(CVC4VERSIONSTR STREQUAL "(system)")
-        target_include_directories(solvercvc4            
+        target_include_directories(solvercvc4   
+            PRIVATE ${Boost_INCLUDE_DIRS}         
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     else()
         target_include_directories(solvercvc4
             PRIVATE ${INCCVC4}
+            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     endif()   
     
