@@ -8,7 +8,7 @@ jobs:
     steps:      
     - uses: actions/checkout@v1
     - name: Install Dependencies
-      run: sudo apt-get install gperf gmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools && pip3 install --user xmlrunner unittest-xml-reporting
+      run: sudo apt-get install gperf cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools && pip3 install --user xmlrunner unittest-xml-reporting
     - name: Download Clang 7
       run: wget http://releases.llvm.org/7.0.1/clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04.tar.xz
     - name: Extract Clang 7
