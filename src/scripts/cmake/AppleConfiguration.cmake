@@ -11,5 +11,5 @@ if (APPLE)
     # MacOS Z3 does not need libgomp
     set(LIBGOMP_LIB "")
 else()
-    set(LIBGOMP_LIB "-lgomp")
+    set(LIBGOMP_LIB "-lgomp -ldl")
 endif()
