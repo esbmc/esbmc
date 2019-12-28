@@ -76,10 +76,12 @@ else ()
             PRIVATE ${INCYICES}
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    if (BUILD_STATIC)
-        target_link_libraries(solveryices "${LIBYICES}")
+    if(DEFINED GMP_DIR)
+        find_library(LIBGMP_CUSTOM gmp NAMES libgmp.a PATHS ${GMP_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
+        message(STATUS "Using gmp: ${LIBGMP_CUSTOM}")
+        target_link_libraries(solveryices "${LIBYICES}" "${LIBGMP_CUSTOM}")
     else ()
-        target_link_libraries(solveryices "${LIBYICES}")        
+        target_link_libraries(solveryices "${LIBYICES}")
     endif ()
     
     set(ENABLE_YICES "1")

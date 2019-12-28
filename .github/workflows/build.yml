@@ -20,7 +20,7 @@ jobs:
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBUILD_STATIC=On -DYICES_DIR=$PWD/../yices
+      run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBUILD_STATIC=On -DYICES_DIR=$PWD/../yices -DGMP_DIR=$PWD/../gmp
     - name: Build ESBMC
       run: cd build && cmake --build .
 
