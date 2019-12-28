@@ -34,7 +34,7 @@ jobs:
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBUILD_STATIC=On -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat -DYICES_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4
+      run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBUILD_STATIC=On -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat -DYICES_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp
     - name: Build ESBMC
       run: cd build && cmake --build .
 
