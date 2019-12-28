@@ -80,7 +80,7 @@ else ()
         #LIBGMP should already be inside Yices
         target_link_libraries(solveryices "${LIBYICES}")
         if(DEFINED YICES_GMP_LIB)
-            target_link_libraries(solveryices "${LIBYICES}" "${YICES_GMP_LIB}" -ldl)
+            target_link_libraries(solveryices "${LIBYICES}" -ldl)
         endif()
     else ()
         target_link_libraries(solveryices "${LIBYICES}" gmp)        
