@@ -77,7 +77,8 @@ else ()
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     if (BUILD_STATIC)
-        target_link_libraries(solveryices "${LIBYICES}" "${LIBGOMP_LIB}")
+        #LIBGMP should already be inside Yices
+        target_link_libraries(solveryices "${LIBYICES}")
     else ()
         target_link_libraries(solveryices "${LIBYICES}" gmp)        
     endif ()
