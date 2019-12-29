@@ -19,6 +19,7 @@ endif()
 include(Options)
 include(SendFileHack)
 include(AppleConfiguration)
+include(InstallFiles)
 
 if(BUILD_STATIC)
   include(BuildStatic)
