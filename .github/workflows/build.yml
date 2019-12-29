@@ -76,7 +76,8 @@ jobs:
   regression-ubuntu-core:
     needs: build-linux
     runs-on: ubuntu-latest
-    - uses: actions/checkout@v1
+    steps:
+      - uses: actions/checkout@v1
       - name: Install Dependencies
         run: sudo apt-get install python3-setuptools && pip3 install --user xmlrunner unittest-xml-reporting
       - name: Download build-linux results
@@ -90,7 +91,8 @@ jobs:
   regression-macos-core:
     needs: build-macos
     runs-on: macos-latest
-    - uses: actions/checkout@v1
+    steps:
+      - uses: actions/checkout@v1
       - name: Install Dependencies
         run: brew install python3 && pip3 install --user xmlrunner unittest-xml-reporting
       - name: Download build-linux results
