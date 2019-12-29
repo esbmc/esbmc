@@ -32,4 +32,4 @@ if (DEFINED HAVE_PYTHON)
   target_link_libraries(esbmc esbmc_python ${PYTHON_LINK_LIBS})
 endif()
 
-install(TARGETS esbmc DESTINATION bin)
+install(TARGETS esbmc DESTINATION bin PERMISSIONS OWNER_EXECUTE)
