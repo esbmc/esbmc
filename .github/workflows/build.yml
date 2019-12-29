@@ -98,7 +98,7 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls && ls release-macos
       - name: Give esbmc permission
-        run: chmod +x release/bin/esbmc
+        run: chmod +x release-macos/bin/esbmc
       - name: Run regression
         continue-on-error: true
         run: cd regression && python3 testing_tool.py --tool="$PWD/../release/bin/esbmc" --regression="./${{ matrix.regression }}" --mode="CORE"
