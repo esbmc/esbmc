@@ -7,9 +7,7 @@ jobs:
   static-analysis:  
     runs-on: ubuntu-latest
     steps:      
-    - uses: actions/checkout@v1
-    - name: Install Dependencies
-      run: sudo apt-get install clang-format
+    - uses: actions/checkout@v1    
     - name: Run clang-format
       run: clang-format -i -style=file ./src/*/*.h && clang-format -i -style=file ./src/*/*.cpp
     - name: Throws error if changes were made
