@@ -10,6 +10,9 @@ if (APPLE)
 
     # MacOS Z3 does not need libgomp
     set(LIBGOMP_LIB "")
+
+    # Set policies
+    cmake_policy(SET CMP0079 OLD)
 else()
     set(LIBGOMP_LIB "-lgomp -ldl")
 endif()
