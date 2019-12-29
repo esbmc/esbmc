@@ -42,7 +42,7 @@ jobs:
         name: esbmc-ubuntu
         path: ./release
 
-  build-macos:
+  build-macos:  
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v1
@@ -72,3 +72,31 @@ jobs:
         with:
           name: esbmc-macos
           path: ./release
+  
+  regression-ubuntu-core:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    - uses: actions/checkout@v1
+      - name: Install Dependencies
+        run: sudo apt-get install python3-setuptools && pip3 install --user xmlrunner unittest-xml-reporting
+      - name: Download build-linux results
+        uses: actions/download-artifact@v1
+        with:
+          name: esbmc-ubuntu
+      - name: Run regression
+        continue-on-error: true
+        run: cd regression && python3 testing_tool.py --tool="$PWD/../release/bin/esbmc" --regression="./esbmc" --mode="CORE"
+  
+  regression-macos-core:
+    needs: build-macos
+    runs-on: macos-latest
+    - uses: actions/checkout@v1
+      - name: Install Dependencies
+        run: brew install python3 && pip3 install --user xmlrunner unittest-xml-reporting
+      - name: Download build-linux results
+        uses: actions/download-artifact@v1
+        with:
+          name: esbmc-macos
+      - name: Run regression
+        continue-on-error: true
+        run: cd regression && python3 testing_tool.py --tool="$PWD/../release/bin/esbmc" --regression="./esbmc" --mode="CORE"
