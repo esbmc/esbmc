@@ -91,6 +91,9 @@ jobs:
   regression-macos-core:
     needs: build-macos
     runs-on: macos-latest
+    strategy:
+      matrix:
+        regression: [esbmc, cstd/ctype, cstd/string, k-induction, llvm, digital-filters, floats, floats-regression]
     steps:
       - uses: actions/checkout@v1
       - name: Install Dependencies
@@ -101,4 +104,4 @@ jobs:
           name: esbmc-macos
       - name: Run regression
         continue-on-error: true
-        run: cd regression && python3 testing_tool.py --tool="$PWD/../release/bin/esbmc" --regression="./esbmc" --mode="CORE"
+        run: cd regression && python3 testing_tool.py --tool="$PWD/../release/bin/esbmc" --regression="./${{ matrix.go-regression }}" --mode="CORE"
