@@ -46,7 +46,7 @@ jobs:
       run: cd build && cmake --build . && ninja install
     - uses: actions/upload-artifact@v1
       with:
-        name: release-ubuntu
+        name: release-linux
         path: ./release
 
   build-macos:  
@@ -80,8 +80,29 @@ jobs:
           name: release-macos
           path: ./release
   
+  regression-linux:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        regression: [esbmc, cstd/ctype, cstd/string, k-induction, llvm, digital-filters, floats, floats-regression]
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install Dependencies
+        run: sudo apt-get install python3-setuptools && pip3 install --user xmlrunner unittest-xml-reporting
+      - name: Download build-linux results
+        uses: actions/download-artifact@v1
+        with:
+          name: release-linux
+      - name: Get current folder and files
+        run: pwd && ls && ls release-linux
+      - name: Give esbmc permission
+        run: chmod +x release-linux/bin/esbmc
+      - name: Run regression
+        continue-on-error: true
+        run: cd regression && python3 testing_tool.py --tool="$PWD/../release-linux/bin/esbmc" --regression="./${{ matrix.regression }}" --mode="CORE"
 
-  regression-macos-core:
+  regression-macos:
     needs: build-macos
     runs-on: macos-latest
     strategy:
@@ -98,7 +119,7 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls && ls release-macos
       - name: Give esbmc permission
-        run: chmod +x release-macos/bin/esbmc
+        run: chmod +x release-macos/bin/esbmc/
       - name: Run regression
         continue-on-error: true
-        run: cd regression && python3 testing_tool.py --tool="$PWD/../release/bin/esbmc" --regression="./${{ matrix.regression }}" --mode="CORE"
+        run: cd regression && python3 testing_tool.py --tool="$PWD/../release-macos/bin/esbmc" --regression="./${{ matrix.regression }}" --mode="CORE"
