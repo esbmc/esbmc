@@ -15,4 +15,5 @@ jobs:
     - name: Run clang-format
       run: ./clang7/bin/clang-format -i -style=file ./src/*/*.h && ./clang7/bin/clang-format -i -style=file ./src/*/*.cpp
     - name: Throws error if changes were made
+      continue-on-error: true
       run: git diff --exit-code
