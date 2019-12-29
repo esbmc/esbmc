@@ -26,8 +26,9 @@ option(BUILD_STATIC "Build ESBMC in static mode (default: OFF)" OFF)
 option(ENABLE_LIBM "Use libm from c2goto (default: ON)" ON)
 
 #############################
-# CMake Vars
+# CMake extra Vars
 #############################
+set(Clang_DIR "${LLVM_DIR}" CACHE STRING "Clang Directory (if not set, this will be set to the LLVM_DIR")  
 
 # Demand C++14
 set (CMAKE_CXX_STANDARD 14)
