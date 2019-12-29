@@ -12,7 +12,7 @@ if (APPLE)
     set(LIBGOMP_LIB "")
 
     # Set policies
-    cmake_policy(SET CMP0079 OLD)
+    cmake_policy(SET CMP0079 NEW)
 else()
     set(LIBGOMP_LIB "-lgomp -ldl")
 endif()
