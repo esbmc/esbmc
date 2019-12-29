@@ -1,7 +1,7 @@
 # Module to find LLVM and checks it's version
 
-if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL "")))
-  set(Clang_DIR ${LLVM_DIR})  
+if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL "")))  
+  
   find_package(LLVM REQUIRED CONFIG
     PATHS ${LLVM_DIR}
     NO_DEFAULT_PATH
