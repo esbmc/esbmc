@@ -46,7 +46,7 @@ jobs:
       run: cd build && cmake --build . && cmake --install .
     - uses: actions/upload-artifact@v1
       with:
-        name: esbmc-ubuntu
+        name: release
         path: ./release
 
   build-macos:  
@@ -77,24 +77,10 @@ jobs:
         run: cd build && cmake --build . && cmake --install .
       - uses: actions/upload-artifact@v1
         with:
-          name: esbmc-macos
+          name: release
           path: ./release
   
-  regression-ubuntu-core:
-    needs: build-linux
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v1
-      - name: Install Dependencies
-        run: sudo apt-get install python3-setuptools && pip3 install --user xmlrunner unittest-xml-reporting
-      - name: Download build-linux results
-        uses: actions/download-artifact@v1
-        with:
-          name: esbmc-ubuntu
-      - name: Run regression
-        continue-on-error: true
-        run: cd regression && python3 testing_tool.py --tool="$PWD/../release/bin/esbmc" --regression="./esbmc" --mode="CORE"
-  
+
   regression-macos-core:
     needs: build-macos
     runs-on: macos-latest
@@ -108,7 +94,9 @@ jobs:
       - name: Download build-linux results
         uses: actions/download-artifact@v1
         with:
-          name: esbmc-macos
+          name: release
+      - name: Get current folder and files
+        run: pwd && ls && ls release
       - name: Give esbmc permission
         run: chmod +x release/bin/esbmc
       - name: Run regression
