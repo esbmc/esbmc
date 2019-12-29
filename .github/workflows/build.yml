@@ -77,7 +77,7 @@ jobs:
         run: cd build && cmake --build . && cmake --install .
       - uses: actions/upload-artifact@v1
         with:
-          name: release
+          name: release-macos
           path: ./release
   
 
@@ -94,7 +94,7 @@ jobs:
       - name: Download build-linux results
         uses: actions/download-artifact@v1
         with:
-          name: release
+          name: release-macos
       - name: Get current folder and files
         run: pwd && ls && ls release
       - name: Give esbmc permission
