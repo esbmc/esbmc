@@ -96,7 +96,7 @@ jobs:
         with:
           name: release-macos
       - name: Get current folder and files
-        run: pwd && ls && ls release
+        run: pwd && ls && ls release-macos
       - name: Give esbmc permission
         run: chmod +x release/bin/esbmc
       - name: Run regression
