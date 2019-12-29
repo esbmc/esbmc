@@ -102,6 +102,8 @@ jobs:
         uses: actions/download-artifact@v1
         with:
           name: esbmc-macos
+      - name: Give esbmc permission
+        run: chmod +x release/bin/esbmc
       - name: Run regression
         continue-on-error: true
         run: cd regression && python3 testing_tool.py --tool="$PWD/../release/bin/esbmc" --regression="./${{ matrix.go-regression }}" --mode="CORE"
