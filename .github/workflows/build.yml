@@ -43,10 +43,10 @@ jobs:
     - name: Configure CMake
       run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBUILD_STATIC=On -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat -DYICES_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
     - name: Build ESBMC
-      run: cd build && cmake --build . && cmake --install .
+      run: cd build && cmake --build . && ninja install
     - uses: actions/upload-artifact@v1
       with:
-        name: release
+        name: release-ubuntu
         path: ./release
 
   build-macos:  
