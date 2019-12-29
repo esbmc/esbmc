@@ -3,20 +3,14 @@ name: ESBMC Fast Health Checks
 on: [push, pull_request]
 jobs:
 
-  # Check project with static analysis tools
+  # Check project with clang-format
   static-analysis:  
     runs-on: ubuntu-latest
     steps:      
     - uses: actions/checkout@v1
     - name: Install Dependencies
-      run: sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build
-    - name: Download Clang 7
-      run: wget http://releases.llvm.org/7.0.1/clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-    - name: Extract Clang 7
-      run: tar xf clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04 clang7
-    - name: Get current folder and files
-      run: pwd && ls
-    - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBUILD_STATIC=On -DCMAKE_CXX_CLANG_TIDY=$PWD/../clang7/bin/clang-tidy;--format-style=file
-    - name: Build ESBMC
-      run: cd build && cmake --build .
+      run: sudo apt-get install clang-format
+    - name: Run clang-format
+      run: clang-format -i -style=file ./src/*/*.h && clang-format -i -style=file ./src/*/*.cpp
+    - name: Throws error if changes were made
+      run: git diff --exit-code
