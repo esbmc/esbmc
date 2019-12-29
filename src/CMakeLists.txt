@@ -8,6 +8,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/src/scripts/cmak
 include(Options)
 include(SendFileHack)
 include(AppleConfiguration)
+include(InstallFiles)
 
 if(BUILD_STATIC)
   include(BuildStatic)
