@@ -4,7 +4,7 @@ on: [push, pull_request]
 jobs:
 
   # Check project with clang-format
-  static-analysis:  
+  code-style:  
     runs-on: ubuntu-latest
     steps:      
     - uses: actions/checkout@v1    
