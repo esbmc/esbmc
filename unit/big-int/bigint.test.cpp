@@ -56,16 +56,14 @@ struct BigIntHelper
     check_bigint_str(obj, expected, is_correct);
   }
 };
-
-void test_pair(std::pair<int, std::string> const &test)
-{
-  const std::string message = test.second;
-  BOOST_TEST_MESSAGE(message);
-
-  const int value = test.first;
-  BOOST_TEST(value);
-}
 } // namespace
+
+#define binary_op_test(FIRST_OPERATOR, SECOND_OPERATOR, BIN_OP)               \
+  BigInt obj(FIRST_OPERATOR);                                                  \
+  int expected = FIRST_OPERATOR BIN_OP SECOND_OPERATOR;                        \
+  int actual = obj BIN_OP SECOND_OPERATOR;                                     \
+  BOOST_TEST(expected == actual);
+
 
 // ******************** TESTS ********************
 
@@ -268,71 +266,73 @@ BOOST_AUTO_TEST_SUITE_END()
 // ** Comparator
 // Check whether comparations are working
 
-#define comparator_test(FIRST_OPERATOR, SECOND_OPERATOR, BIN_OP)               \
-  BigInt obj(FIRST_OPERATOR);                                                  \
-  int expected = FIRST_OPERATOR BIN_OP SECOND_OPERATOR;                        \
-  int actual = obj BIN_OP SECOND_OPERATOR;                                     \
-  BOOST_TEST(expected == actual);
-
 BOOST_AUTO_TEST_SUITE(compare)
 
-BOOST_AUTO_TEST_CASE(signed_cmp_lesser_ok_1){comparator_test(-4567, -300, <)}
+BOOST_AUTO_TEST_CASE(signed_cmp_lesser_ok_1){binary_op_test(-4567, -300, <)}
 
-BOOST_AUTO_TEST_CASE(signed_cmp_lesser_ok_2){comparator_test(-1235, -2000, <)}
+BOOST_AUTO_TEST_CASE(signed_cmp_lesser_ok_2){binary_op_test(-1235, -2000, <)}
 
-BOOST_AUTO_TEST_CASE(signed_cmp_greater_ok_1){comparator_test(-255, -300, >)}
+BOOST_AUTO_TEST_CASE(signed_cmp_greater_ok_1){binary_op_test(-255, -300, >)}
 
-BOOST_AUTO_TEST_CASE(signed_cmp_greater_ok_2){comparator_test(-255, -200, >)}
+BOOST_AUTO_TEST_CASE(signed_cmp_greater_ok_2){binary_op_test(-255, -200, >)}
 
 BOOST_AUTO_TEST_CASE(signed_cmp_lesser_equal_ok_1){
-  comparator_test(-4567, -300, <=)}
+  binary_op_test(-4567, -300, <=)}
 
 BOOST_AUTO_TEST_CASE(signed_cmp_lesser_equal_ok_2){
-  comparator_test(-4567, -4567, <=)}
+  binary_op_test(-4567, -4567, <=)}
 
 BOOST_AUTO_TEST_CASE(signed_cmp_lesser_equal_ok_3){
-  comparator_test(-1235, -2000, <=)}
+  binary_op_test(-1235, -2000, <=)}
 
 BOOST_AUTO_TEST_CASE(signed_cmp_greater_equal_ok_1){
-  comparator_test(-300, -4567, >=)}
+  binary_op_test(-300, -4567, >=)}
 
 BOOST_AUTO_TEST_CASE(signed_cmp_greater_equal_ok_2){
-  comparator_test(-4567, -4567, >=)}
+  binary_op_test(-4567, -4567, >=)}
 
 BOOST_AUTO_TEST_CASE(signed_cmp_greater_equal_ok_3){
-  comparator_test(-4567, -4566, >=)}
+  binary_op_test(-4567, -4566, >=)}
 
-BOOST_AUTO_TEST_CASE(signed_cmp_equal_ok_1){comparator_test(-255, -255, ==)}
+BOOST_AUTO_TEST_CASE(signed_cmp_equal_ok_1){binary_op_test(-255, -255, ==)}
 
-BOOST_AUTO_TEST_CASE(signed_cmp_equal_ok_2){comparator_test(-255, 0, ==)}
+BOOST_AUTO_TEST_CASE(signed_cmp_equal_ok_2){binary_op_test(-255, 0, ==)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_1){comparator_test(0, (unsigned)200, <)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_1){binary_op_test(0, (unsigned)200, <)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_2){comparator_test(200, (unsigned)0, <)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_2){binary_op_test(200, (unsigned)0, <)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_1){comparator_test(300, (unsigned)200, >)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_1){binary_op_test(300, (unsigned)200, >)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_2){comparator_test(0, (unsigned)200, >)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_2){binary_op_test(0, (unsigned)200, >)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_1){comparator_test(0, (unsigned)200, <=)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_1){binary_op_test(0, (unsigned)200, <=)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_2){comparator_test(200, (unsigned)0, <=)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_2){binary_op_test(200, (unsigned)0, <=)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_4){comparator_test(20, (unsigned)20, <=)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_4){binary_op_test(20, (unsigned)20, <=)}
 
 BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_1){
-  comparator_test(300, (unsigned)0, >=)}
+  binary_op_test(300, (unsigned)0, >=)}
 
 BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_3){
-  comparator_test(400, (unsigned)600, >=)}
+  binary_op_test(400, (unsigned)600, >=)}
 
 BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_4){
-  comparator_test(400, (unsigned)400, >=)}
+  binary_op_test(400, (unsigned)400, >=)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_equal_ok_1){comparator_test(255, (unsigned)255, ==)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_equal_ok_1){binary_op_test(255, (unsigned)255, ==)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_equal_ok_2){comparator_test(-255, (unsigned)255, ==)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_equal_ok_2){binary_op_test(-255, (unsigned)255, ==)}
 
 BOOST_AUTO_TEST_SUITE_END()
 
-#undef comparator_test
+
+// ** Math Operations
+// Check whether math operations are working
+
+BOOST_AUTO_TEST_SUITE(math)
+
+BOOST_AUTO_TEST_SUITE_END()
+
+#undef binary_op_test
