@@ -1,6 +1,12 @@
-name: ESBMC Build CI/CD
+name: ESBMC Build CI/CD (Full)
 
-on: [push]
+on: 
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
 jobs:
 
   build-linux:
@@ -13,18 +19,37 @@ jobs:
       run: wget http://releases.llvm.org/7.0.1/clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04.tar.xz
     - name: Extract Clang 7
       run: tar xf clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04 clang7
+    - name: Setup Boolector
+      run: git clone https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh && cd build && make -j9
+    - name: Setup Z3
+      run: wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.4/z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && unzip z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && mv z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04 z3
+    - name: Setup MathSAT
+      run: wget http://mathsat.fbk.eu/download.php?file=mathsat-5.5.4-linux-x86_64.tar.gz -O mathsat.tar.gz && tar xf mathsat.tar.gz && mv mathsat-5.5.4-linux-x86_64 mathsat
     - name: Setup Yices 2 (GMP)
       run: wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz && rm gmp-6.1.2.tar.xz && cd gmp-6.1.2 && ./configure --prefix $PWD/../gmp --disable-shared ABI=64 CFLAGS=-fPIC CPPFLAGS=-DPIC && make -j4 && make install
     - name: Setup Yices 2
-      run: wget http://yices.csl.sri.com/releases/2.6.1/yices-2.6.1-src.tar.gz && tar xf yices-2.6.1-src.tar.gz && cd yices-2.6.1 && ./configure --prefix $PWD/../yices --with-pic-gmp=$PWD/../gmp/lib/libgmp.a --with-pic-gmp-include-dir=$PWD/../gmp/include && make -j9 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib
+      run: wget http://yices.csl.sri.com/releases/2.6.1/yices-2.6.1-src.tar.gz && tar xf yices-2.6.1-src.tar.gz && cd yices-2.6.1 && ./configure --prefix $PWD/../yices --with-static-gmp=$PWD/../gmp/lib/libgmp.a && make -j9 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib 
+    - name: Get older cvc4 build
+      id: cache-cvc4
+      uses: actions/cache@v1
+      with:
+        path: cvc4
+        key: ubuntu-cvc4
+    - name: Setup CVC4
+      if: steps.cache-cvc4.outputs.cache-hit != 'true'          
+      run: wget https://github.com/CVC4/CVC4/archive/1.7.tar.gz && tar xf 1.7.tar.gz && rm 1.7.tar.gz && cd CVC4-1.7 && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j8 && make install
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBUILD_STATIC=On -DYICES_DIR=$PWD/../yices -DGMP_DIR=$PWD/../gmp
+      run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang7 -DBUILD_STATIC=On -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat -DYICES_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
     - name: Build ESBMC
-      run: cd build && cmake --build .
+      run: cd build && cmake --build . && ninja install
+    - uses: actions/upload-artifact@v1
+      with:
+        name: release-linux
+        path: ./release
 
-  build-macos:
+  build-macos:  
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v1
@@ -41,12 +66,61 @@ jobs:
       - name: Setup MathSAT
         run: wget http://mathsat.fbk.eu/download.php?file=mathsat-5.5.4-darwin-libcxx-x86_64.tar.gz -O mathsat.tar.gz && tar xf mathsat.tar.gz && mv mathsat-5.5.4-darwin-libcxx-x86_64 mathsat
       - name: MathSAT brew hack
+        # This is needed because CMake does not include /usr/local/include when trying to compile mathsat
         run: ln -s /usr/local/include/gmp.h mathsat/include/gmp.h
       - name: Setup Yices 2
         run: wget http://yices.csl.sri.com/releases/2.6.1/yices-2.6.1-src.tar.gz && tar xf yices-2.6.1-src.tar.gz && cd yices-2.6.1 && ./configure --prefix $PWD/../yices && make -j9 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a ../yices/lib 
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -GNinja -DBUILD_STATIC=On -DLLVM_DIR=../clang7 -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat -DYICES_DIR=$PWD/../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/
+        run: mkdir build && cd build && cmake .. -GNinja -DBUILD_STATIC=On -DLLVM_DIR=../clang7 -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat -DYICES_DIR=$PWD/../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
       - name: Build ESBMC
-        run: cd build && cmake --build .
+        run: cd build && cmake --build . && cmake --install .
+      - uses: actions/upload-artifact@v1
+        with:
+          name: release-macos
+          path: ./release
+  
+  regression-linux:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        regression: [esbmc, cstd/ctype, cstd/string, k-induction, llvm, digital-filters, floats, floats-regression]
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install Dependencies
+        run: sudo apt-get install python3-setuptools && pip3 install --user xmlrunner unittest-xml-reporting
+      - name: Download build-linux results
+        uses: actions/download-artifact@v1
+        with:
+          name: release-linux
+      - name: Get current folder and files
+        run: pwd && ls && ls release-linux
+      - name: Give esbmc permission
+        run: chmod +x release-linux/bin/esbmc
+      - name: Run regression
+        continue-on-error: true
+        run: cd regression && python3 testing_tool.py --tool="$PWD/../release-linux/bin/esbmc" --regression="./${{ matrix.regression }}" --mode="CORE"
+
+  regression-macos:
+    needs: build-macos
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        regression: [esbmc, cstd/ctype, cstd/string, k-induction, llvm, digital-filters, floats, floats-regression]
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install Dependencies
+        run: brew install python3 && pip3 install --user xmlrunner unittest-xml-reporting
+      - name: Download build-linux results
+        uses: actions/download-artifact@v1
+        with:
+          name: release-macos
+      - name: Get current folder and files
+        run: pwd && ls && ls release-macos
+      - name: Give esbmc permission
+        run: chmod +x release-macos/bin/esbmc
+      - name: Run regression
+        continue-on-error: true
+        run: cd regression && python3 testing_tool.py --tool="$PWD/../release-macos/bin/esbmc" --regression="./${{ matrix.regression }}" --mode="CORE"
