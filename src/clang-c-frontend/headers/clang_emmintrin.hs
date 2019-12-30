@@ -1,22 +1,8 @@
 /*===---- emmintrin.h - SSE2 intrinsics ------------------------------------===
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
+ * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+ * See https://llvm.org/LICENSE.txt for license information.
+ * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  *
  *===-----------------------------------------------------------------------===
  */
@@ -26,8 +12,11 @@
 
 #include <xmmintrin.h>
 
-typedef double __m128d __attribute__((__vector_size__(16)));
-typedef long long __m128i __attribute__((__vector_size__(16)));
+typedef double __m128d __attribute__((__vector_size__(16), __aligned__(16)));
+typedef long long __m128i __attribute__((__vector_size__(16), __aligned__(16)));
+
+typedef double __m128d_u __attribute__((__vector_size__(16), __aligned__(1)));
+typedef long long __m128i_u __attribute__((__vector_size__(16), __aligned__(1)));
 
 /* Type defines.  */
 typedef double __v2df __attribute__ ((__vector_size__ (16)));
@@ -1652,7 +1641,7 @@ static __inline__ __m128d __DEFAULT_FN_ATTRS
 _mm_loadu_pd(double const *__dp)
 {
   struct __loadu_pd {
-    __m128d __v;
+    __m128d_u __v;
   } __attribute__((__packed__, __may_alias__));
   return ((struct __loadu_pd*)__dp)->__v;
 }
@@ -1675,7 +1664,49 @@ _mm_loadu_si64(void const *__a)
     long long __v;
   } __attribute__((__packed__, __may_alias__));
   long long __u = ((struct __loadu_si64*)__a)->__v;
-  return __extension__ (__m128i)(__v2di){__u, 0L};
+  return __extension__ (__m128i)(__v2di){__u, 0LL};
+}
+
+/// Loads a 32-bit integer value to the low element of a 128-bit integer
+///    vector and clears the upper element.
+///
+/// \headerfile <x86intrin.h>
+///
+/// This intrinsic corresponds to the <c> VMOVD / MOVD </c> instruction.
+///
+/// \param __a
+///    A pointer to a 32-bit memory location. The address of the memory
+///    location does not have to be aligned.
+/// \returns A 128-bit vector of [4 x i32] containing the loaded value.
+static __inline__ __m128i __DEFAULT_FN_ATTRS
+_mm_loadu_si32(void const *__a)
+{
+  struct __loadu_si32 {
+    int __v;
+  } __attribute__((__packed__, __may_alias__));
+  int __u = ((struct __loadu_si32*)__a)->__v;
+  return __extension__ (__m128i)(__v4si){__u, 0, 0, 0};
+}
+
+/// Loads a 16-bit integer value to the low element of a 128-bit integer
+///    vector and clears the upper element.
+///
+/// \headerfile <x86intrin.h>
+///
+/// This intrinsic does not correspond to a specific instruction.
+///
+/// \param __a
+///    A pointer to a 16-bit memory location. The address of the memory
+///    location does not have to be aligned.
+/// \returns A 128-bit vector of [8 x i16] containing the loaded value.
+static __inline__ __m128i __DEFAULT_FN_ATTRS
+_mm_loadu_si16(void const *__a)
+{
+  struct __loadu_si16 {
+    short __v;
+  } __attribute__((__packed__, __may_alias__));
+  short __u = ((struct __loadu_si16*)__a)->__v;
+  return __extension__ (__m128i)(__v8hi){__u, 0, 0, 0, 0, 0, 0, 0};
 }
 
 /// Loads a 64-bit double-precision value to the low element of a
@@ -2000,7 +2031,7 @@ static __inline__ void __DEFAULT_FN_ATTRS
 _mm_storeu_pd(double *__dp, __m128d __a)
 {
   struct __storeu_pd {
-    __m128d __v;
+    __m128d_u __v;
   } __attribute__((__packed__, __may_alias__));
   ((struct __storeu_pd*)__dp)->__v = __a;
 }
@@ -2274,11 +2305,7 @@ _mm_adds_epu16(__m128i __a, __m128i __b)
 static __inline__ __m128i __DEFAULT_FN_ATTRS
 _mm_avg_epu8(__m128i __a, __m128i __b)
 {
-  typedef unsigned short __v16hu __attribute__ ((__vector_size__ (32)));
-  return (__m128i)__builtin_convertvector(
-               ((__builtin_convertvector((__v16qu)__a, __v16hu) +
-                 __builtin_convertvector((__v16qu)__b, __v16hu)) + 1)
-                 >> 1, __v16qu);
+  return (__m128i)__builtin_ia32_pavgb128((__v16qi)__a, (__v16qi)__b);
 }
 
 /// Computes the rounded avarages of corresponding elements of two
@@ -2298,11 +2325,7 @@ _mm_avg_epu8(__m128i __a, __m128i __b)
 static __inline__ __m128i __DEFAULT_FN_ATTRS
 _mm_avg_epu16(__m128i __a, __m128i __b)
 {
-  typedef unsigned int __v8su __attribute__ ((__vector_size__ (32)));
-  return (__m128i)__builtin_convertvector(
-               ((__builtin_convertvector((__v8hu)__a, __v8su) +
-                 __builtin_convertvector((__v8hu)__b, __v8su)) + 1)
-                 >> 1, __v8hu);
+  return (__m128i)__builtin_ia32_pavgw128((__v8hi)__a, (__v8hi)__b);
 }
 
 /// Multiplies the corresponding elements of two 128-bit signed [8 x i16]
@@ -3522,10 +3545,10 @@ _mm_load_si128(__m128i const *__p)
 ///    A pointer to a memory location containing integer values.
 /// \returns A 128-bit integer vector containing the moved values.
 static __inline__ __m128i __DEFAULT_FN_ATTRS
-_mm_loadu_si128(__m128i const *__p)
+_mm_loadu_si128(__m128i_u const *__p)
 {
   struct __loadu_si128 {
-    __m128i __v;
+    __m128i_u __v;
   } __attribute__((__packed__, __may_alias__));
   return ((struct __loadu_si128*)__p)->__v;
 }
@@ -3543,7 +3566,7 @@ _mm_loadu_si128(__m128i const *__p)
 /// \returns A 128-bit vector of [2 x i64]. The lower order bits contain the
 ///    moved value. The higher order bits are cleared.
 static __inline__ __m128i __DEFAULT_FN_ATTRS
-_mm_loadl_epi64(__m128i const *__p)
+_mm_loadl_epi64(__m128i_u const *__p)
 {
   struct __mm_loadl_epi64_struct {
     long long __u;
@@ -3985,12 +4008,75 @@ _mm_store_si128(__m128i *__p, __m128i __b)
 /// \param __b
 ///    A 128-bit integer vector containing the values to be moved.
 static __inline__ void __DEFAULT_FN_ATTRS
-_mm_storeu_si128(__m128i *__p, __m128i __b)
+_mm_storeu_si128(__m128i_u *__p, __m128i __b)
 {
   struct __storeu_si128 {
-    __m128i __v;
+    __m128i_u __v;
   } __attribute__((__packed__, __may_alias__));
   ((struct __storeu_si128*)__p)->__v = __b;
+}
+
+/// Stores a 64-bit integer value from the low element of a 128-bit integer
+///    vector.
+///
+/// \headerfile <x86intrin.h>
+///
+/// This intrinsic corresponds to the <c> VMOVQ / MOVQ </c> instruction.
+///
+/// \param __p
+///    A pointer to a 64-bit memory location. The address of the memory
+///    location does not have to be algned.
+/// \param __b
+///    A 128-bit integer vector containing the value to be stored.
+static __inline__ void __DEFAULT_FN_ATTRS
+_mm_storeu_si64(void *__p, __m128i __b)
+{
+  struct __storeu_si64 {
+    long long __v;
+  } __attribute__((__packed__, __may_alias__));
+  ((struct __storeu_si64*)__p)->__v = ((__v2di)__b)[0];
+}
+
+/// Stores a 32-bit integer value from the low element of a 128-bit integer
+///    vector.
+///
+/// \headerfile <x86intrin.h>
+///
+/// This intrinsic corresponds to the <c> VMOVD / MOVD </c> instruction.
+///
+/// \param __p
+///    A pointer to a 32-bit memory location. The address of the memory
+///    location does not have to be aligned.
+/// \param __b
+///    A 128-bit integer vector containing the value to be stored.
+static __inline__ void __DEFAULT_FN_ATTRS
+_mm_storeu_si32(void *__p, __m128i __b)
+{
+  struct __storeu_si32 {
+    int __v;
+  } __attribute__((__packed__, __may_alias__));
+  ((struct __storeu_si32*)__p)->__v = ((__v4si)__b)[0];
+}
+
+/// Stores a 16-bit integer value from the low element of a 128-bit integer
+///    vector.
+///
+/// \headerfile <x86intrin.h>
+///
+/// This intrinsic does not correspond to a specific instruction.
+///
+/// \param __p
+///    A pointer to a 16-bit memory location. The address of the memory
+///    location does not have to be aligned.
+/// \param __b
+///    A 128-bit integer vector containing the value to be stored.
+static __inline__ void __DEFAULT_FN_ATTRS
+_mm_storeu_si16(void *__p, __m128i __b)
+{
+  struct __storeu_si16 {
+    short __v;
+  } __attribute__((__packed__, __may_alias__));
+  ((struct __storeu_si16*)__p)->__v = ((__v8hi)__b)[0];
 }
 
 /// Moves bytes selected by the mask from the first operand to the
@@ -4034,7 +4120,7 @@ _mm_maskmoveu_si128(__m128i __d, __m128i __n, char *__p)
 ///    A 128-bit integer vector of [2 x i64]. The lower 64 bits contain the
 ///    value to be stored.
 static __inline__ void __DEFAULT_FN_ATTRS
-_mm_storel_epi64(__m128i *__p, __m128i __a)
+_mm_storel_epi64(__m128i_u *__p, __m128i __a)
 {
   struct __mm_storel_epi64_struct {
     long long __u;
