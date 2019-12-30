@@ -71,11 +71,19 @@ if (LIBYICES STREQUAL "LIBYICES-NOTFOUND")
     # Otherwise, YICES neither found nor requested, so ignore it.
 else ()
     # Got it; build stuff.
-    add_library(solveryices yices_conv.cpp)
+    add_library(solveryices yices_conv.cpp)    
     target_include_directories(solveryices
             PRIVATE ${INCYICES}
+            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solveryices "${LIBYICES}" gmp)
+    if(DEFINED GMP_DIR)
+        find_library(LIBGMP_CUSTOM gmp NAMES libgmp.a PATHS ${GMP_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
+        message(STATUS "Custom gmp found: ${LIBGMP_CUSTOM}")
+        target_link_libraries(solveryices "${LIBYICES}" "${LIBGMP_CUSTOM}")
+    else ()
+        target_link_libraries(solveryices "${LIBYICES}")
+    endif ()
+    
     set(ENABLE_YICES "1")
     message(STATUS "YICES version: ${YICESVERSIONSTR}")
 

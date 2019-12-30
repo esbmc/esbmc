@@ -74,9 +74,17 @@ if (LIBCVC4 STREQUAL "LIBCVC4-NOTFOUND")
 else ()
     # Got it; build stuff.
     add_library(solvercvc4 cvc_conv.cpp)
-    target_include_directories(solvercvc4
-            PRIVATE ${INCCVC4}
+    if(CVC4VERSIONSTR STREQUAL "(system)")
+        target_include_directories(solvercvc4   
+            PRIVATE ${Boost_INCLUDE_DIRS}         
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    else()
+        target_include_directories(solvercvc4
+            PRIVATE ${INCCVC4}
+            PRIVATE ${Boost_INCLUDE_DIRS}
+            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    endif()   
+    
     find_library(gmp gmp)
     if (NOT gmp)
         message(FATAL_ERROR "gmp not found")
