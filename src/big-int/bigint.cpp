@@ -742,7 +742,7 @@ int BigInt::compare(ullong_t b) const
 
 int BigInt::compare(llong_t b) const
 {
-  return b < 0 ? -compare(ullong_t(-b)) : compare(ullong_t(b));
+  return compare(BigInt(b));
 }
 
 int BigInt::compare(BigInt const &b) const

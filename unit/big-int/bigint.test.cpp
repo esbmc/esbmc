@@ -310,27 +310,18 @@ BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_1){comparator_test(0, (unsigned)200,
 
 BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_2){comparator_test(200, (unsigned)0, <)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_3){comparator_test(-20, (unsigned)0, <)}
-
 BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_1){comparator_test(300, (unsigned)200, >)}
 
 BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_2){comparator_test(0, (unsigned)200, >)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_3){comparator_test(-255, (unsigned)200, >)}
 
 BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_1){comparator_test(0, (unsigned)200, <=)}
 
 BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_2){comparator_test(200, (unsigned)0, <=)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_3){comparator_test(-20, (unsigned)0, <=)}
-
 BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_4){comparator_test(20, (unsigned)20, <=)}
 
 BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_1){
   comparator_test(300, (unsigned)0, >=)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_2){
-  comparator_test(-4567, (unsigned)4567, >=)}
 
 BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_3){
   comparator_test(400, (unsigned)600, >=)}
