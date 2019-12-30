@@ -10,7 +10,6 @@
    - Assignments
    - Comparator
    - Math Operations
-   - Class Helpers
  \*******************************************************************/
 
 #define BOOST_TEST_DYN_LINK
@@ -58,12 +57,24 @@ struct BigIntHelper
 };
 } // namespace
 
-#define binary_op_test(FIRST_OPERATOR, SECOND_OPERATOR, BIN_OP)               \
+#define binary_op_test(FIRST_OPERATOR, SECOND_OPERATOR, BIN_OP)                \
   BigInt obj(FIRST_OPERATOR);                                                  \
   int expected = FIRST_OPERATOR BIN_OP SECOND_OPERATOR;                        \
   int actual = obj BIN_OP SECOND_OPERATOR;                                     \
   BOOST_TEST(expected == actual);
 
+#define math_test(FIRST_OPERATOR, SECOND_OPERATOR, BIN_OP)                     \
+  BigInt obj(FIRST_OPERATOR);                                                  \
+  int expected_result = FIRST_OPERATOR BIN_OP SECOND_OPERATOR;                 \
+  BigInt actual_result = obj BIN_OP SECOND_OPERATOR;                           \
+  bool expected_equals_actual = actual_result == expected_result;              \
+  BOOST_TEST(expected_equals_actual);
+
+#define math_test_signed_generator(NAME, OP)                                   \
+  BOOST_AUTO_TEST_CASE(signed_1_##NAME){math_test(-255, -300, OP)};            \
+  BOOST_AUTO_TEST_CASE(signed_2_##NAME){math_test(-255, 300, OP)};             \
+  BOOST_AUTO_TEST_CASE(signed_3_##NAME){math_test(-255, 255, OP)};             \
+  BOOST_AUTO_TEST_CASE(signed_4_##NAME){math_test(-255, 230, OP)};
 
 // ******************** TESTS ********************
 
@@ -298,19 +309,26 @@ BOOST_AUTO_TEST_CASE(signed_cmp_equal_ok_1){binary_op_test(-255, -255, ==)}
 
 BOOST_AUTO_TEST_CASE(signed_cmp_equal_ok_2){binary_op_test(-255, 0, ==)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_1){binary_op_test(0, (unsigned)200, <)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_1){
+  binary_op_test(0, (unsigned)200, <)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_2){binary_op_test(200, (unsigned)0, <)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_2){
+  binary_op_test(200, (unsigned)0, <)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_1){binary_op_test(300, (unsigned)200, >)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_1){
+  binary_op_test(300, (unsigned)200, >)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_2){binary_op_test(0, (unsigned)200, >)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_2){
+  binary_op_test(0, (unsigned)200, >)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_1){binary_op_test(0, (unsigned)200, <=)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_1){
+  binary_op_test(0, (unsigned)200, <=)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_2){binary_op_test(200, (unsigned)0, <=)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_2){
+  binary_op_test(200, (unsigned)0, <=)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_4){binary_op_test(20, (unsigned)20, <=)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_4){
+  binary_op_test(20, (unsigned)20, <=)}
 
 BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_1){
   binary_op_test(300, (unsigned)0, >=)}
@@ -321,18 +339,70 @@ BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_3){
 BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_4){
   binary_op_test(400, (unsigned)400, >=)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_equal_ok_1){binary_op_test(255, (unsigned)255, ==)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_equal_ok_1){
+  binary_op_test(255, (unsigned)255, ==)}
 
-BOOST_AUTO_TEST_CASE(unsigned_cmp_equal_ok_2){binary_op_test(-255, (unsigned)255, ==)}
+BOOST_AUTO_TEST_CASE(unsigned_cmp_equal_ok_2){
+  binary_op_test(-255, (unsigned)255, ==)}
 
-BOOST_AUTO_TEST_SUITE_END()
-
+BOOST_AUTO_TEST_SUITE_END();
 
 // ** Math Operations
 // Check whether math operations are working
 
-BOOST_AUTO_TEST_SUITE(math)
+BOOST_AUTO_TEST_SUITE(math);
+
+math_test_signed_generator(addition, +);
+math_test_signed_generator(subtraction, -);
+math_test_signed_generator(multiplication, *);
+math_test_signed_generator(division, /);
+math_test_signed_generator(mod, %);
+
+BOOST_AUTO_TEST_CASE(floor_pow_ok_1){
+  BigInt obj(31);
+  unsigned expected = 4;
+  unsigned actual = obj.floorPow2();
+  BOOST_TEST(expected == actual);
+};
+
+BOOST_AUTO_TEST_CASE(floor_pow_ok_2){
+  BigInt obj(-31);
+  unsigned expected = 4;
+  unsigned actual = obj.floorPow2();
+  BOOST_TEST(expected == actual);
+}
+
+BOOST_AUTO_TEST_CASE(floor_pow_ok_3){
+  BigInt obj(32);
+  unsigned expected = 5;
+  unsigned actual = obj.floorPow2();
+  BOOST_TEST(expected == actual);
+}
+
+BOOST_AUTO_TEST_CASE(floor_pow_ok_4){
+  BigInt obj(-32);
+  unsigned expected = 5;
+  unsigned actual = obj.floorPow2();
+  BOOST_TEST(expected == actual);
+}
+
+BOOST_AUTO_TEST_CASE(set_pow_ok_1){
+  BigInt obj;
+  obj.setPower2(5);
+  unsigned expected = 32;
+  int expected_is_equal_to_actual = obj == expected;
+  BOOST_TEST(expected_is_equal_to_actual);
+};
+
+BOOST_AUTO_TEST_CASE(set_pow_ok_2){
+  BigInt obj;
+  obj.setPower2(0);
+  unsigned expected = 1;
+  int expected_is_equal_to_actual = obj == expected;
+  BOOST_TEST(expected_is_equal_to_actual);
+};
 
 BOOST_AUTO_TEST_SUITE_END()
 
 #undef binary_op_test
+#undef math_test
