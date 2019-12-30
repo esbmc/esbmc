@@ -466,6 +466,9 @@ BigInt &BigInt::operator=(BigInt const &y)
 
 BigInt &BigInt::operator=(char const *s)
 {
+  reallocate(small);
+  length = 0;
+  positive = true;
   scan(s);
   return *this;
 }

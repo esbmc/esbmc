@@ -51,6 +51,8 @@ template <class T> struct BigIntHelper {
 
 // ** Constructors
 // Check whether the object is initialized correctly
+
+BOOST_AUTO_TEST_SUITE(constructors)
 BOOST_AUTO_TEST_CASE(null_constructor_ok) {
   BigIntHelper<int> obj;
   obj.check_value(NULL);
@@ -131,10 +133,12 @@ BOOST_AUTO_TEST_CASE(bigint_constructor_fail) {
   BigIntHelper<BigInt> obj(input);
   obj.check_value(NULL, false);
 }
+BOOST_AUTO_TEST_SUITE_END()
 
 // ** Assignment
 // Check whether the object is initialized correctly after an assignement
 
+BOOST_AUTO_TEST_SUITE(assignment)
 BOOST_AUTO_TEST_CASE(signed_assignment_ok) {
   BigIntHelper<unsigned> obj(42);
   obj.obj = -9090;
@@ -198,21 +202,19 @@ BOOST_AUTO_TEST_CASE(string_assignment_ok_4) {
   obj.check_value(input);
 }
 
-/*
-BOOST_AUTO_TEST_CASE(string_assignment_fail) {
+BOOST_AUTO_TEST_CASE(string_assignment_fail_1) {
   const BigInt::onedig_t base = 10;
   const char *input = "12345678987654321234567890";
-  BigIntHelper<int> obj(input, base);
+  BigIntHelper<char> obj(input, base);
+  obj.obj = 255;
+  obj.check_value(input, false);
+}
+
+BOOST_AUTO_TEST_CASE(string_assignment_fail_2) {
+  const BigInt::onedig_t base = 10;
+  const char *input = "255";
+  BigIntHelper<char> obj(input, base);
   obj.obj = -255;
-  obj.check_value("-255", false);
+  obj.check_value("-255255", false);
 }
-*/
-
-BOOST_AUTO_TEST_CASE(string_assignment_comparation_ok) {
-  const char *input = "12345678987654321234567890";
-  BigInt obj_1(-255);
-  obj_1 = input;
-
-  BigInt obj_2(input);
-  BOOST_TEST(obj_1.compare(obj_2));
-}
+BOOST_AUTO_TEST_SUITE_END()
