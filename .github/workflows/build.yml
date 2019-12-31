@@ -90,7 +90,7 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Install Dependencies
-        run: sudo apt-get install python3-setuptools && pip3 install --user xmlrunner unittest-xml-reporting
+        run: sudo apt-get install python3-setuptools build-essential gcc-multilib && pip3 install --user xmlrunner unittest-xml-reporting
       - name: Download build-linux results
         uses: actions/download-artifact@v1
         with:
