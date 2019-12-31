@@ -19,6 +19,7 @@ Also, you can set some variables which are not defined directly here:
 option(ENABLE_WERROR "All warnings are treated as errors during compilation (default: OFF)" OFF)
 option(ENABLE_PYTHON "Build esbmc with python support (default: OFF)" OFF)
 option(BUILD_STATIC "Build ESBMC in static mode (default: OFF)" OFF)
+option(BUILD_DOC "Build ESBMC documentation" OFF)
 
 #############################
 # OTHERS
