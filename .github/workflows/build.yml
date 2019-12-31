@@ -49,8 +49,8 @@ jobs:
         name: release-linux
         path: ./release
     - name: Run tests
-        continue-on-error: true
-        run: cd build && ctest -j4 .
+      continue-on-error: true
+      run: cd build && ctest -j4 .
 
   build-macos:  
     runs-on: macos-latest
