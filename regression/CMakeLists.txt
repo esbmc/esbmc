@@ -4,7 +4,14 @@ enable_testing()
 
 find_package(Python)
 # TODO: Use add dependency
+
 set(ESBMC_BIN "${CMAKE_BINARY_DIR}/src/esbmc/esbmc")
+if(APPLE)
+    set(MACOS_ESBMC_WRAPPER "#!/bin/sh\n${ESBMC_BIN} -I${C2GOTO_INCLUDE_DIR} $@")
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/macos-wrapper.sh ${MACOS_ESBMC_WRAPPER})
+    set(ESBMC_BIN "${CMAKE_CURRENT_BINARY_DIR}/macos-wrapper.sh")
+endif()
+
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 
 function(add_esbmc_regression folder mode)
