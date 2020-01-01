@@ -2,7 +2,7 @@
 #include <cstring>
 
 extern "C" {
-#include <btorcore.h>
+#include <boolector/boolector.h>
 }
 
 smt_convt *create_new_boolector_solver(
@@ -57,7 +57,7 @@ smt_convt::resultt boolector_convt::dec_solve()
 const std::string boolector_convt::solver_text()
 {
   std::string ss = "Boolector ";
-  ss += btor_version(btor);
+  ss += boolector_version(btor);
   return ss;
 }
 
