@@ -50,7 +50,7 @@ jobs:
         path: ./release
     - name: Run tests
       continue-on-error: true
-      run: cd build/regression && ctest -j4 .
+      run: cd build/regression && ctest -j4 --output-on-failure --progress . 
 
   build-macos:  
     runs-on: macos-latest
@@ -85,4 +85,4 @@ jobs:
           path: ./release
       - name: Run tests
         continue-on-error: true
-        run: cd build/regression && ctest -j4 .
+        run: cd build/regression && ctest -j4 --output-on-failure --progress .
