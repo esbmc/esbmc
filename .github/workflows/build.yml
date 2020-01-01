@@ -20,11 +20,11 @@ jobs:
     - name: Extract Clang 9
       run: tar xf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
     - name: Get older boolector build
-        id: cache-boolector
-        uses: actions/cache@v1
-        with:
-          path: boolector-release
-          key: ubuntu-boolector
+      id: cache-boolector
+      uses: actions/cache@v1
+      with:
+        path: boolector-release
+        key: ubuntu-boolector
     - name: Setup boolector
       if: steps.cache-boolector.outputs.cache-hit != 'true'
       run: git clone https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
@@ -67,14 +67,14 @@ jobs:
       - name: Extract Clang 9
         run: tar xf clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz && mv clang+llvm-9.0.0-x86_64-darwin-apple clang9
       - name: Get older boolector build
-          id: cache-boolector
-          uses: actions/cache@v1
-          with:
-            path: boolector-release
-            key: macos-boolector
-            - name: Setup boolector
-              if: steps.cache-boolector.outputs.cache-hit != 'true'
-              run: git clone https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
+        id: cache-boolector
+        uses: actions/cache@v1
+        with:
+          path: boolector-release
+          key: macos-boolector
+      - name: Setup boolector
+        if: steps.cache-boolector.outputs.cache-hit != 'true'
+        run: git clone https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
       - name: Setup Z3
         run: wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-osx-10.14.6.zip && unzip z3-4.8.7-x64-osx-10.14.6.zip && mv z3-4.8.7-x64-osx-10.14.6 z3
       - name: Setup MathSAT
