@@ -21,6 +21,11 @@ option(ENABLE_PYTHON "Build esbmc with python support (default: OFF)" OFF)
 option(BUILD_STATIC "Build ESBMC in static mode (default: OFF)" OFF)
 
 #############################
+# SOLVERS
+#############################
+option(ENABLE_BOOLECTOR "Use Boolector solver (default: ON)" ON)
+
+#############################
 # OTHERS
 #############################
 option(ENABLE_LIBM "Use libm from c2goto (default: ON)" ON)
