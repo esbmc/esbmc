@@ -21,11 +21,14 @@ if(CMAKE_BUILD_TYPE STREQUAL "Sanitizer")
     # UndefinedBehaviour
     set(UBSAN_FLAGS "-fsanitize=undefined")
 
-    message(STATUS "${Sanitizer_TYPE}")
     set(CMAKE_C_FLAGS_SANITIZER
             "${${Sanitizer_TYPE}_FLAGS}" CACHE
             STRING "C flags for sanitizer." FORCE)
     set(CMAKE_CXX_FLAGS_SANITIZER
             "${${Sanitizer_TYPE}_FLAGS}"
             CACHE STRING "C++ flags for sanitizer." FORCE)
+else()
+    unset(Sanitizer_TYPE CACHE)
+    unset(CMAKE_C_FLAGS_SANITIZER CACHE)
+    unset(CMAKE_CXX_FLAGS_SANITIZER CACHE)
 endif()
