@@ -24,6 +24,7 @@ option(ENABLE_REGRESSION "Add Regressions Tests (default: OFF)" OFF)
 # SOLVERS
 #############################
 option(ENABLE_BOOLECTOR "Use Boolector solver (default: ON)" ON)
+option(ENABLE_Z3 "Use Z3 solver (default: ON)" ON)
 
 #############################
 # OTHERS
