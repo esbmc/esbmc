@@ -24,7 +24,7 @@ jobs:
       uses: actions/cache@v1
       with:
         path: boolector-release
-        key: ubuntu-boolector
+        key: ubuntu-boolector-build
     - name: Setup boolector
       if: steps.cache-boolector.outputs.cache-hit != 'true'
       run: git clone https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
@@ -71,7 +71,7 @@ jobs:
         uses: actions/cache@v1
         with:
           path: boolector-release
-          key: macos-boolector
+          key: macos-boolector-build
       - name: Setup boolector
         if: steps.cache-boolector.outputs.cache-hit != 'true'
         run: git clone https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
