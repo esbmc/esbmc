@@ -4,8 +4,6 @@ if(ENABLE_BOOLECTOR)
 
     message(STATUS "Boolector version: ${Boolector_VERSION}")
 
-    message(STATUS "Boolector version: ${Boolector_INCLUDE_DIRECTORIES}")
-    message(STATUS "Boolector version: ${Boolector_DIR}")
     add_library(solverbtor boolector_conv.cpp)
     target_include_directories(solverbtor
             PRIVATE ${Boost_INCLUDE_DIRS}
