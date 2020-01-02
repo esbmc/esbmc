@@ -20,6 +20,7 @@ option(ENABLE_WERROR "All warnings are treated as errors during compilation (def
 option(ENABLE_PYTHON "Build esbmc with python support (default: OFF)" OFF)
 option(BUILD_STATIC "Build ESBMC in static mode (default: OFF)" OFF)
 option(BUILD_DOC "Build ESBMC documentation" OFF)
+option(ENABLE_REGRESSION "Add Regressions Tests (default: OFF)" OFF)
 
 #############################
 # OTHERS
