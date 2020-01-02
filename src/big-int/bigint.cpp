@@ -466,6 +466,9 @@ BigInt &BigInt::operator=(BigInt const &y)
 
 BigInt &BigInt::operator=(char const *s)
 {
+  reallocate(small);
+  length = 0;
+  positive = true;
   scan(s);
   return *this;
 }
@@ -739,7 +742,7 @@ int BigInt::compare(ullong_t b) const
 
 int BigInt::compare(llong_t b) const
 {
-  return b < 0 ? -compare(ullong_t(-b)) : compare(ullong_t(b));
+  return compare(BigInt(b));
 }
 
 int BigInt::compare(BigInt const &b) const

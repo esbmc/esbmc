@@ -15,6 +15,12 @@ set (ESBMC_AVAILABLE_SOLVERS "smtlib")
 
 add_subdirectory(src)
 
+include(CTest)
+if(BUILD_TESTING)
+    enable_testing()
+    include_directories(src)
+    add_subdirectory(unit)
+endif()
 if(ENABLE_REGRESSION)
     add_subdirectory(regression)
 endif()

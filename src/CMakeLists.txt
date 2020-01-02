@@ -13,13 +13,15 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
       STRING "Choose the type of build." FORCE)
   # Set the possible values of build type for cmake-gui
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
-    "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+    "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer")
 endif()
 
 include(Options)
 include(SendFileHack)
 include(AppleConfiguration)
 include(InstallFiles)
+include(Sanitizers)
+
 
 if(BUILD_STATIC)
   include(BuildStatic)
@@ -65,3 +67,6 @@ configure_file (
  "${PROJECT_SOURCE_DIR}/src/scripts/cmake/cmake_config.in"
  "${PROJECT_BINARY_DIR}/src/ac_config.h"
 )
+
+# This should be added after all source files
+include(Docs)
