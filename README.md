@@ -1,4 +1,4 @@
-![](https://github.com/esbmc/esbmc/workflows/.github/workflows/build.yml/badge.svg)
+![](https://github.com/esbmc/esbmc/workflows/ESBMC%20Build%20CI/CD%20(Full)/badge.svg)
 
 # The ESBMC model checker
 

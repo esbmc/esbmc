@@ -34,6 +34,17 @@ clang_c_languaget::clang_c_languaget()
     abort();
   }
 
+  // Create temporary directory
+  p += "/esbmc_clang_headers";
+  boost::filesystem::create_directory(p);
+  if(!boost::filesystem::is_directory(p))
+  {
+    std::cerr
+      << "Can't create temporary directory (needed to dump clang headers)"
+      << std::endl;
+    abort();
+  }
+
   // Build the compile arguments
   build_compiler_args(std::move(p.string()));
 

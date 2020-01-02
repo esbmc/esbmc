@@ -33,8 +33,9 @@ public:
     return true;
   }
 
-  std::unique_ptr<clang::ASTConsumer>
-  CreateASTConsumer(clang::CompilerInstance &CI, StringRef InFile) override
+  std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(
+    clang::CompilerInstance &CI,
+    llvm::StringRef InFile) override
   {
     return llvm::make_unique<clang::ASTConsumer>();
   }
