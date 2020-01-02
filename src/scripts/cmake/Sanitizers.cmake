@@ -3,10 +3,10 @@
 # Inspired on http://www.stablecoder.ca/2018/02/01/analyzer-build-types.html
 
 if(CMAKE_BUILD_TYPE STREQUAL "Sanitizer")
-    set(Sanitizer_TYPE "ASAN" CACHE
-            STRING "Choose the sanitizer to use." FORCE)
+    set(SANITIZER_TYPE "ASAN" CACHE
+            STRING "Choose the sanitizer to use.")
 
-    set_property(CACHE Sanitizer_TYPE PROPERTY STRINGS
+    set_property(CACHE SANITIZER_TYPE PROPERTY STRINGS
             "TSAN" "ASAN" "LSAN" "MSAN" "UBSAN")
     
     # ThreadSanitizer
@@ -21,13 +21,13 @@ if(CMAKE_BUILD_TYPE STREQUAL "Sanitizer")
     set(UBSAN_FLAGS "-fsanitize=undefined")
 
     set(CMAKE_C_FLAGS_SANITIZER
-            "${${Sanitizer_TYPE}_FLAGS}" CACHE
+            "${${SANITIZER_TYPE}_FLAGS}" CACHE
             STRING "C flags for sanitizer." FORCE)
     set(CMAKE_CXX_FLAGS_SANITIZER
-            "${${Sanitizer_TYPE}_FLAGS}"
+            "${${SANITIZER_TYPE}_FLAGS}"
             CACHE STRING "C++ flags for sanitizer." FORCE)
 else()
-    unset(Sanitizer_TYPE CACHE)
+    unset(SANITIZER_TYPE CACHE)
     unset(CMAKE_C_FLAGS_SANITIZER CACHE)
     unset(CMAKE_CXX_FLAGS_SANITIZER CACHE)
 endif()
