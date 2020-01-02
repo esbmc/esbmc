@@ -3,13 +3,12 @@
 # Inspired on http://www.stablecoder.ca/2018/02/01/analyzer-build-types.html
 
 if(CMAKE_BUILD_TYPE STREQUAL "Sanitizer")
-    set(Sanitizer_TYPE "" CACHE
-            STRING "Choose the sanitizer to use.")
+    set(Sanitizer_TYPE "ASAN" CACHE
+            STRING "Choose the sanitizer to use." FORCE)
 
     set_property(CACHE Sanitizer_TYPE PROPERTY STRINGS
-            "" "TSAN" "ASAN" "LSAN" "MSAN" "UBSAN")
-    # Empty
-    set(_FLAGS "-fsanitize=thread -g -O1")
+            "TSAN" "ASAN" "LSAN" "MSAN" "UBSAN")
+    
     # ThreadSanitizer
     set(TSAN_FLAGS "-fsanitize=thread -g -O1")
     # AddressSanitizer
