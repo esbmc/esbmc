@@ -14,3 +14,7 @@ set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSIO
 set (ESBMC_AVAILABLE_SOLVERS "smtlib")
 
 add_subdirectory(src)
+
+if(ENABLE_REGRESSION)
+    add_subdirectory(regression)
+endif()

@@ -41,13 +41,16 @@ jobs:
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DLLVM_DIR=../clang9 -DBUILD_STATIC=On -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat -DYICES_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
+      run: mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DLLVM_DIR=../clang9 -DBUILD_STATIC=On -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat -DYICES_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
     - name: Build ESBMC
       run: cd build && cmake --build . && ninja install
     - uses: actions/upload-artifact@v1
       with:
         name: release-linux
         path: ./release
+    - name: Run tests
+      continue-on-error: true
+      run: cd build/regression && ctest -j4 --output-on-failure --progress . 
 
   build-macos:  
     runs-on: macos-latest
@@ -73,54 +76,13 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -GNinja -DBUILD_STATIC=On -DLLVM_DIR=../clang9 -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat -DYICES_DIR=$PWD/../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
+        run: mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DLLVM_DIR=../clang9 -DBTOR_DIR=$PWD/../boolector -DZ3_DIR=$PWD/../z3 -DMSAT_DIR=$PWD/../mathsat -DYICES_DIR=$PWD/../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
       - name: Build ESBMC
         run: cd build && cmake --build . && cmake --install .
       - uses: actions/upload-artifact@v1
         with:
           name: release-macos
           path: ./release
-  
-  regression-linux:
-    needs: build-linux
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        regression: [esbmc, cstd/ctype, cstd/string, k-induction, llvm, digital-filters, floats, floats-regression]
-    steps:
-      - uses: actions/checkout@v1
-      - name: Install Dependencies
-        run: sudo apt-get install python3-setuptools build-essential gcc-multilib && pip3 install --user xmlrunner unittest-xml-reporting
-      - name: Download build-linux results
-        uses: actions/download-artifact@v1
-        with:
-          name: release-linux
-      - name: Get current folder and files
-        run: pwd && ls && ls release-linux
-      - name: Give esbmc permission
-        run: chmod +x release-linux/bin/esbmc
-      - name: Run regression
+      - name: Run tests
         continue-on-error: true
-        run: cd regression && python3 testing_tool.py --tool="$PWD/../release-linux/bin/esbmc" --regression="./${{ matrix.regression }}" --mode="CORE"
-
-  regression-macos:
-    needs: build-macos
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        regression: [esbmc, cstd/ctype, cstd/string, k-induction, llvm, digital-filters, floats, floats-regression]
-    steps:
-      - uses: actions/checkout@v1
-      - name: Install Dependencies
-        run: brew install python3 && pip3 install --user xmlrunner unittest-xml-reporting
-      - name: Download build-linux results
-        uses: actions/download-artifact@v1
-        with:
-          name: release-macos
-      - name: Get current folder and files
-        run: pwd && ls && ls release-macos
-      - name: Give esbmc permission
-        run: chmod +x release-macos/bin/esbmc
-      - name: Run regression
-        continue-on-error: true
-        run: cd regression && python3 testing_tool.py --tool="$PWD/../release-macos/bin/esbmc" --regression="./${{ matrix.regression }}" --mode="CORE"
+        run: cd build/regression && chmod +x macos-wrapper.sh && ctest -j4 --output-on-failure --progress .
