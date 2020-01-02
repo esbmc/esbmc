@@ -24,7 +24,7 @@ option(ENABLE_REGRESSION "Add Regressions Tests (default: OFF)" OFF)
 # OTHERS
 #############################
 option(ENABLE_LIBM "Use libm from c2goto (default: ON)" ON)
-
+option(ENABLE_FUZZER "Add fuzzing targets (default: OFF)" OFF)
 #############################
 # CMake extra Vars
 #############################
