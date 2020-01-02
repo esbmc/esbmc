@@ -22,6 +22,7 @@ include(AppleConfiguration)
 include(InstallFiles)
 include(Sanitizers)
 
+
 if(BUILD_STATIC)
   include(BuildStatic)
   add_definitions(-DBOOST_PYTHON_STATIC_LIB)
@@ -66,3 +67,6 @@ configure_file (
  "${PROJECT_SOURCE_DIR}/src/scripts/cmake/cmake_config.in"
  "${PROJECT_BINARY_DIR}/src/ac_config.h"
 )
+
+# This should be added after all source files
+include(Docs)
