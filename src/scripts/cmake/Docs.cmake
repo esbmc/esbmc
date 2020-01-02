@@ -16,4 +16,6 @@ if(BUILD_DOC)
             ALL
             COMMENT "Generating API documentation with Doxygen")
 
+    install(DIRECTORY ${PROJECT_BINARY_DIR}/src/man DESTINATION share)
+    install(DIRECTORY ${PROJECT_BINARY_DIR}/src/html DESTINATION share)
 endif()
