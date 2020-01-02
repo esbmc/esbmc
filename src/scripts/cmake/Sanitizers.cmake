@@ -1,53 +1,31 @@
 # Module to set flags for sanitizers
 
-# Taken from http://www.stablecoder.ca/2018/02/01/analyzer-build-types.html
+# Inspired on http://www.stablecoder.ca/2018/02/01/analyzer-build-types.html
 
-# ThreadSanitizer
-set(CMAKE_C_FLAGS_TSAN
-        "-fsanitize=thread -g -O1"
-        CACHE STRING "Flags used by the C compiler during ThreadSanitizer builds."
-        FORCE)
-set(CMAKE_CXX_FLAGS_TSAN
-        "-fsanitize=thread -g -O1"
-        CACHE STRING "Flags used by the C++ compiler during ThreadSanitizer builds."
-        FORCE)
+if(CMAKE_BUILD_TYPE STREQUAL "Sanitizer")
+    set(Sanitizer_TYPE "" CACHE
+            STRING "Choose the sanitizer to use.")
 
-# AddressSanitizer
-set(CMAKE_C_FLAGS_ASAN
-        "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
-        CACHE STRING "Flags used by the C compiler during AddressSanitizer builds."
-        FORCE)
-set(CMAKE_CXX_FLAGS_ASAN
-        "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
-        CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
-        FORCE)
+    set_property(CACHE Sanitizer_TYPE PROPERTY STRINGS
+            "" "TSAN" "ASAN" "LSAN" "MSAN" "UBSAN")
+    # Empty
+    set(_FLAGS "-fsanitize=thread -g -O1")
+    # ThreadSanitizer
+    set(TSAN_FLAGS "-fsanitize=thread -g -O1")
+    # AddressSanitizer
+    set(ASAN_FLAGS "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1")
+    # LeakSanitizer
+    set(LSAN_FLAGS "-fsanitize=leak -fno-omit-frame-pointer -g -O1")
+    # MemorySanitizer
+    set(MSAN_FLAGS "-fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer -g -O2")
+    # UndefinedBehaviour
+    set(UBSAN_FLAGS "-fsanitize=undefined")
 
-# LeakSanitizer
-set(CMAKE_C_FLAGS_LSAN
-        "-fsanitize=leak -fno-omit-frame-pointer -g -O1"
-        CACHE STRING "Flags used by the C compiler during LeakSanitizer builds."
-        FORCE)
-set(CMAKE_CXX_FLAGS_LSAN
-        "-fsanitize=leak -fno-omit-frame-pointer -g -O1"
-        CACHE STRING "Flags used by the C++ compiler during LeakSanitizer builds."
-        FORCE)
-
-# MemorySanitizer
-set(CMAKE_C_FLAGS_MSAN
-        "-fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer -g -O2"
-        CACHE STRING "Flags used by the C compiler during MemorySanitizer builds."
-        FORCE)
-set(CMAKE_CXX_FLAGS_MSAN
-        "-fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer -g -O2"
-        CACHE STRING "Flags used by the C++ compiler during MemorySanitizer builds."
-        FORCE)
-
-# UndefinedBehaviour
-set(CMAKE_C_FLAGS_UBSAN
-        "-fsanitize=undefined"
-        CACHE STRING "Flags used by the C compiler during UndefinedBehaviourSanitizer builds."
-        FORCE)
-set(CMAKE_CXX_FLAGS_UBSAN
-        "-fsanitize=undefined"
-        CACHE STRING "Flags used by the C++ compiler during UndefinedBehaviourSanitizer builds."
-        FORCE)
+    message(STATUS "${Sanitizer_TYPE}")
+    set(CMAKE_C_FLAGS_SANITIZER
+            "${${Sanitizer_TYPE}_FLAGS}" CACHE
+            STRING "C flags for sanitizer." FORCE)
+    set(CMAKE_CXX_FLAGS_SANITIZER
+            "${${Sanitizer_TYPE}_FLAGS}"
+            CACHE STRING "C++ flags for sanitizer." FORCE)
+endif()
