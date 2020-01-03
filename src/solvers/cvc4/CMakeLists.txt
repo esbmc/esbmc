@@ -1,9 +1,14 @@
 if(DEFINED CVC4_DIR)
     set(ENABLE_CVC4 ON)
 endif()
+
+if(EXISTS $ENV{HOME}/cvc4)
+    set(ENABLE_CVC4 ON)
+endif()
+
 if(ENABLE_CVC4)
-    find_library(CVC4_LIB cvc4 PATHS ${CVC4_DIR} PATH_SUFFIXES lib bin)
-    find_path(CVC4_INCLUDE_DIRS cvc4/cvc4.h PATHS ${CVC4_DIR} PATH_SUFFIXES include)
+    find_library(CVC4_LIB cvc4 PATHS ${CVC4_DIR} $ENV{HOME}/cvc4 PATH_SUFFIXES lib bin)
+    find_path(CVC4_INCLUDE_DIRS cvc4/cvc4.h PATHS ${CVC4_DIR} $ENV{HOME}/cvc4 PATH_SUFFIXES include)
 
     if(CVC4_INCLUDE_DIRS STREQUAL "CVC4_INCLUDE_DIRS-NOTFOUND")
         message(FATAL_ERROR "Could not find cvc4 include headers, please check CVC4_DIR")

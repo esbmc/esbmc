@@ -1,9 +1,14 @@
 if(DEFINED Yices_DIR)
     set(ENABLE_YICES ON)
 endif()
+
+if(EXISTS $ENV{HOME}/yices)
+    set(ENABLE_YICES ON)
+endif()
+
 if(ENABLE_YICES)
-    find_path(Yices_INCLUDE_DIRS yices.h PATHS "${Yices_DIR}" PATH_SUFFIXES include)
-    find_library(Yices_LIB yices NAMES yices PATHS "${Yices_DIR}" PATH_SUFFIXES lib)
+    find_path(Yices_INCLUDE_DIRS yices.h PATHS "${Yices_DIR}" $ENV{HOME}/yices PATH_SUFFIXES include)
+    find_library(Yices_LIB yices NAMES yices PATHS "${Yices_DIR}" $ENV{HOME}/yices PATH_SUFFIXES lib)
 
     if(Yices_INCLUDE_DIRS STREQUAL "Yices_INCLUDE_DIRS-NOTFOUND")
         message(FATAL_ERROR "Could not find yices headers, please check Yices_DIR")
