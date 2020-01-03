@@ -25,10 +25,11 @@ option(ENABLE_REGRESSION "Add Regressions Tests (default: OFF)" OFF)
 #############################
 # SOLVERS
 #############################
-option(ENABLE_BOOLECTOR "Use Boolector solver (default: ON)" ON)
-option(ENABLE_Z3 "Use Z3 solver (default: ON)" ON)
+option(ENABLE_BOOLECTOR "Use Boolector solver (default: OFF)" OFF)
+option(ENABLE_Z3 "Use Z3 solver (default: OFF)" OFF)
 option(ENABLE_MATHSAT "Use MathSAT solver (default: OFF)" OFF)
 option(ENABLE_YICES "Use Yices solver (default: OFF)" OFF)
+option(ENABLE_CVC4 "Use CVC4 solver (default: OFF)" OFF)
 
 #############################
 # OTHERS
