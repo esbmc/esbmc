@@ -14,7 +14,6 @@ if(ENABLE_Z3)
             RUN_OUTPUT_VARIABLE Z3_VERSION)
 
     message(STATUS "Z3 version: ${Z3_VERSION}")
-    set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} z3" PARENT_SCOPE)
 
     add_library(solverz3 z3_conv.cpp)
     target_include_directories(solverz3
@@ -29,5 +28,7 @@ if(ENABLE_Z3)
     endif ()
     # Add to solver link
     target_link_libraries(solvers INTERFACE solverz3)
-
+    
+    set(ESBMC_ENABLE_z3 1 PARENT_SCOPE)
+    set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} z3" PARENT_SCOPE)
 endif()

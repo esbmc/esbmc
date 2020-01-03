@@ -11,5 +11,7 @@ if(ENABLE_BOOLECTOR)
     target_link_libraries(solverbtor Boolector::boolector)
 
     target_link_libraries(solvers INTERFACE solverbtor)
+
+    set(ESBMC_ENABLE_boolector 1 PARENT_SCOPE)
     set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} boolector" PARENT_SCOPE)
 endif()
