@@ -13,7 +13,7 @@ jobs:
     - name: Extract Clang 9
       run: tar xf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
     - name: Run clang-format
-      run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | xargs ./clang9/bin/clang-format -style=file -i -fallback-style=none
+      run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/solvers/z3/z3pp.h | xargs ./clang9/bin/clang-format -style=file -i -fallback-style=none
     - name: Throws error if changes were made
       run: git diff --exit-code
 
