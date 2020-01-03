@@ -4,14 +4,26 @@
 #  * System default
 
 if(ENABLE_Z3)
-    find_library(Z3_LIB z3 PATHS ${Z3_DIR} PATH_SUFFIXES lib bin REQUIRED)
-    find_path(Z3_INCLUDE_DIRS z3.h PATHS ${Z3_DIR} PATH_SUFFIXES include REQUIRED)
+    find_library(Z3_LIB z3 PATHS ${Z3_DIR} PATH_SUFFIXES lib bin)
+    find_path(Z3_INCLUDE_DIRS z3.h PATHS ${Z3_DIR} PATH_SUFFIXES include)
+
+    if(Z3_INCLUDE_DIRS STREQUAL "Z3_INCLUDE_DIRS-NOTFOUND")
+        message(FATAL_ERROR "Could not find z3 include headers, please check Z3_DIR")
+    endif()
+
+    if(Z3_LIB STREQUAL "Z3_LIB-NOTFOUND")
+        message(FATAL_ERROR "Could not find libz3, please check Z3_DIR")
+    endif()
 
     try_run(Z3_RUNS Z3_COMPILES ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/try_z3.c
             CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${Z3_INCLUDE_DIRS}
             LINK_LIBRARIES ${Z3_LIB} stdc++ m -pthread
             COMPILE_OUTPUT_VARIABLE Z3COMPILESTR
             RUN_OUTPUT_VARIABLE Z3_VERSION)
+
+    if(NOT Z3_COMPILES)
+        message(FATAL_ERROR "Could not use Z3: \n${MSATCOMPILESTR}")
+    endif()
 
     message(STATUS "Z3 version: ${Z3_VERSION}")
 
