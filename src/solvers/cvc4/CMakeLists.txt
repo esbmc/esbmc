@@ -42,9 +42,8 @@ if(ENABLE_CVC4)
     endif ()
     target_link_libraries(solvercvc4 "${CVC4_LIB}" ${gmp})
 
-    #    # Add to solver link
+    # Add to solver link
     target_link_libraries(solvers INTERFACE solvercvc4)
-    #
     set(ESBMC_ENABLE_cvc4 1 PARENT_SCOPE)
     set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} cvc4" PARENT_SCOPE)
 endif()
