@@ -22,7 +22,7 @@ if(ENABLE_Z3)
             RUN_OUTPUT_VARIABLE Z3_VERSION)
 
     if(NOT Z3_COMPILES)
-        message(FATAL_ERROR "Could not use Z3: \n${MSATCOMPILESTR}")
+        message(FATAL_ERROR "Could not use Z3: \n${Z3COMPILESTR}")
     endif()
 
     message(STATUS "Z3 version: ${Z3_VERSION}")
