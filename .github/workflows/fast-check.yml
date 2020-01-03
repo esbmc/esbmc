@@ -9,7 +9,7 @@ jobs:
     steps:      
     - uses: actions/checkout@v1    
     - name: Install packages
-      run: sudo apt-get update && sudo apt-get install clang-format-9
+      run: sudo apt-get update && sudo apt-get install clang-format-8
     - name: Run clang-format
       run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | xargs clang-format -style=file -i -fallback-style=none
     - name: Throws error if changes were made
