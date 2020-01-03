@@ -9,16 +9,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef _ESBMC_SOLVERS_Z3_Z3_CONV_H
 #define _ESBMC_SOLVERS_Z3_Z3_CONV_H
 
-#include <cstdint>
-#include <cstring>
-#include <map>
-#include <set>
-#include <solvers/prop/pointer_logic.h>
 #include <solvers/smt/smt_conv.h>
-#include <util/hash_cont.h>
-#include <util/irep2.h>
-#include <util/namespace.h>
-#include <vector>
 #include <z3pp.h>
 
 class z3_smt_ast : public solver_smt_ast<z3::expr>
@@ -45,7 +36,7 @@ class z3_convt : public smt_convt,
 {
 public:
   z3_convt(bool int_encoding, const namespacet &ns);
-  ~z3_convt() override;
+  ~z3_convt() override = default;
 
 private:
   void intr_push_ctx();
@@ -238,7 +229,6 @@ public:
   //  Must be first member; that way it's the last to be destroyed.
   z3::context z3_ctx;
   z3::solver solver;
-  z3::model model;
 
   std::list<z3::expr> assumpt;
   std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
