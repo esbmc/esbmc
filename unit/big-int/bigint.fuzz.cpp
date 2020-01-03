@@ -10,6 +10,7 @@
  \*******************************************************************/
 
 #include <cctype>
+#include <cassert>
 #include <big-int/bigint.hh>
 #include <vector>
 
