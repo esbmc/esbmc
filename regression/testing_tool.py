@@ -29,7 +29,7 @@ import re
 # FUTURE -> Test that are known to fail due to missing implementation
 # ALL -> Run all tests
 SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
-
+FAIL_MODES = ["KNOWNBUG"]
 
 class TestCase:
     """This class is responsible to:
@@ -50,8 +50,11 @@ class TestCase:
             # Third line - Arguments of executable
             self.test_args = fp.readline().strip()
 
-            # Fourth line - Regex of expected output
-            self.test_regex = fp.readline().strip()
+            # Fourth line and beyond
+            # Regex of expected output
+            self.test_regex = []
+            for line in fp:
+                self.test_regex.append(line.strip())
 
     def __init__(self, test_dir: str, name: str):
         assert os.path.exists(test_dir)
@@ -103,13 +106,20 @@ def _add_test(test_case: TestCase, executor):
 
     def test(self):
         stdout, stderr = executor.run(test_case)
-        regex = re.compile(test_case.test_regex, re.MULTILINE)
         output_to_validate = stdout.decode() + stderr.decode()
-        error_message_prefix = "\nEXPECTED TO FOUND: " + test_case.test_regex + "\n\nPROGRAM OUTPUT\n"
+        error_message_prefix = "\nEXPECTED TO FOUND: " + str(test_case.test_regex) + "\n\nPROGRAM OUTPUT\n"
         error_message = output_to_validate + "\n\nARGUMENTS: " + str(test_case.generate_run_argument_list(executor.tool))
-        if(not regex.search(output_to_validate)):
-            self.fail(error_message_prefix + error_message)
 
+        matches_regex = True
+        for regex in test_case.test_regex:
+            match_regex = re.compile(regex, re.MULTILINE)
+            if not match_regex.search(output_to_validate):
+                matches_regex = False
+
+        if (test_case.test_mode in FAIL_MODES) and matches_regex:
+            self.fail(error_message_prefix + error_message)
+        elif (test_case.test_mode not in FAIL_MODES) and (not matches_regex):
+            self.fail(error_message_prefix + error_message)
     return test
 
 
