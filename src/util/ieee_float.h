@@ -81,7 +81,8 @@ bool operator!=(const ieee_float_spect &a, const ieee_float_spect &b);
 class ieee_floatt
 {
 public:
-  typedef enum {
+  typedef enum
+  {
     ROUND_TO_EVEN = 0,
     ROUND_TO_AWAY = 1,
     ROUND_TO_PLUS_INF = 2,

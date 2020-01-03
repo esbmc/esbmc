@@ -16,8 +16,9 @@
 #define __STDC_FORMAT_MACROS
 
 // Forward dec, to avoid bringing in clang headers
-namespace clang {
-  class ASTUnit;
+namespace clang
+{
+class ASTUnit;
 } // namespace clang
 
 std::unique_ptr<clang::ASTUnit> buildASTs(

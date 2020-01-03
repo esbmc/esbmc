@@ -6,7 +6,8 @@
 #include <util/irep2.h>
 #include <util/namespace.h>
 
-extern "C" {
+extern "C"
+{
 #include <boolector/boolector.h>
 }
 

@@ -18,7 +18,12 @@ Author: Daniel Kroening, kroening@kroening.com
 class tvt
 {
 public:
-  typedef enum { TV_FALSE, TV_UNKNOWN, TV_TRUE } tv_enumt;
+  typedef enum
+  {
+    TV_FALSE,
+    TV_UNKNOWN,
+    TV_TRUE
+  } tv_enumt;
 
   bool is_true() const
   {

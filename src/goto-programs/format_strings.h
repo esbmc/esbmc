@@ -17,7 +17,8 @@ Author: CM Wintersteiger
 class format_tokent
 {
 public:
-  typedef enum {
+  typedef enum
+  {
     UNKNOWN,
     TEXT,
     SIGNED_DEC,   // d, i
@@ -34,7 +35,8 @@ public:
     PERCENT       // %
   } token_typet;
 
-  typedef enum {
+  typedef enum
+  {
     ALTERNATE,
     ZERO_PAD,
     LEFT_ADJUST,
@@ -43,7 +45,14 @@ public:
     ASTERISK
   } flag_typet;
 
-  typedef enum { LEN_h, LEN_l, LEN_L, LEN_j, LEN_t } length_modifierst;
+  typedef enum
+  {
+    LEN_h,
+    LEN_l,
+    LEN_L,
+    LEN_j,
+    LEN_t
+  } length_modifierst;
 
   format_tokent(token_typet _type) : type(_type)
   {

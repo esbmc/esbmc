@@ -2725,7 +2725,7 @@ bool simplify_exprt::simplify_node(exprt &expr)
 
 bool simplify_exprt::simplify_rec(exprt &expr)
 {
-// look up in cache
+  // look up in cache
 
 #ifdef USE_CACHE
   std::pair<simplify_expr_cachet::containert::iterator, bool> cache_result =

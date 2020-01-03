@@ -18,7 +18,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Sanitizer")
     # MemorySanitizer
     set(MSAN_FLAGS "-fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer -g -O2")
     # UndefinedBehaviour
-    set(UBSAN_FLAGS "-fsanitize=undefined")
+    set(UBSAN_FLAGS "-fsanitize=undefined -fno-sanitize=vptr")
 
     set(CMAKE_C_FLAGS_SANITIZER
             "${${SANITIZER_TYPE}_FLAGS}" CACHE

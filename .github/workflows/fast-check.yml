@@ -8,12 +8,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:      
     - uses: actions/checkout@v1    
-    - name: Download Clang 7
-      run: wget http://releases.llvm.org/7.0.1/clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-    - name: Extract Clang 7
-      run: tar xf clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04 clang7
+    - name: Download Clang 9
+      run: wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+    - name: Extract Clang 9
+      run: tar xf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
     - name: Run clang-format
-      run: ./clang7/bin/clang-format -i -style=file ./src/*/*.h && ./clang7/bin/clang-format -i -style=file ./src/*/*.cpp
+      run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/solvers/z3/z3pp.h | grep -v src/ansi-c/cpp | xargs ./clang9/bin/clang-format -style=file -i -fallback-style=none
     - name: Throws error if changes were made
-      continue-on-error: true
       run: git diff --exit-code
+
+  fast-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install Dependencies
+      run: sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools
+    - name: Download Clang 9
+      run: wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+    - name: Extract Clang 9
+      run: tar xf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
+    - name: Get current folder and files
+      run: pwd && ls
+    - name: Configure CMake
+      run: mkdir build && cd build && CC=../clang9/bin/clang CXX=../clang9/bin/clang++ cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_FUZZER=On -DLLVM_DIR=../clang9
+    - name: Build BigInt Tests
+      run: cd build && ninja biginttest && ninja bigintfuzz
+    - name: Run tests
+      run: cd build && ninja test

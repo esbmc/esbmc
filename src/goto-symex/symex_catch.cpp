@@ -38,8 +38,8 @@ void goto_symext::symex_catch()
 
     // Fill the map with the catch type and the target
     unsigned i = 0;
-    for(goto_programt::targetst::const_iterator
-          it = instruction.targets.begin();
+    for(goto_programt::targetst::const_iterator it =
+          instruction.targets.begin();
         it != instruction.targets.end();
         it++, i++)
     {
