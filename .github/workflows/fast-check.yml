@@ -8,11 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:      
     - uses: actions/checkout@v1    
-    - name: Download Clang 7
-      run: wget http://releases.llvm.org/7.0.1/clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-    - name: Extract Clang 7
-      run: tar xf clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-7.0.1-x86_64-linux-gnu-ubuntu-18.04 clang7
+    - name: Install packages
+      run: sudo apt-get update && sudo apt-get install clang-format
     - name: Run clang-format
-      run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | xargs ./clang7/bin/clang-format -style=file -i -fallback-style=none
+      run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | xargs clang-format -style=file -i -fallback-style=none
     - name: Throws error if changes were made
+      continue-on-error: true
       run: git diff --exit-code
