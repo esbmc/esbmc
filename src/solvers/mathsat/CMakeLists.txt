@@ -1,4 +1,6 @@
-# Mathsat depends on gmp
+if(DEFINED Mathsat_DIR)
+    set(ENABLE_MATHSAT ON)
+endif()
 if(ENABLE_MATHSAT)
     find_library(Mathsat_LIB mathsat PATHS "${Mathsat_DIR}" PATH_SUFFIXES lib)
     find_path(Mathsat_INCLUDE_DIRS mathsat.h PATHS ${Mathsat_DIR} PATH_SUFFIXES include)

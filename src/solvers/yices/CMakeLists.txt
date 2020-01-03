@@ -1,3 +1,6 @@
+if(DEFINED Yices_DIR)
+    set(ENABLE_YICES ON)
+endif()
 if(ENABLE_YICES)
     find_path(Yices_INCLUDE_DIRS yices.h PATHS "${Yices_DIR}" PATH_SUFFIXES include)
     find_library(Yices_LIB yices NAMES yices PATHS "${Yices_DIR}" PATH_SUFFIXES lib)

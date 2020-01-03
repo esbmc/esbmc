@@ -1,3 +1,6 @@
+if(DEFINED Boolector_DIR)
+    set(ENABLE_BOOLECTOR ON)
+endif()
 if(ENABLE_BOOLECTOR)
     find_package(Boolector REQUIRED
             PATHS ${Boolector_DIR}/lib/cmake)
