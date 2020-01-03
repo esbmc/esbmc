@@ -1,105 +1,38 @@
 # Mathsat depends on gmp
-find_library(LIBGMP gmp)
-if ((LIBGMP STREQUAL "LIBGMP-NOTFOUND") AND (DEFINED MSAT_DIR))
-    find_library(LIBGMP gmp PATHS "${MSAT_DIR}")
-endif ()
+if(ENABLE_MATHSAT)
+    find_library(Mathsat_LIB mathsat PATHS "${Mathsat_DIR}" PATH_SUFFIXES lib)
+    find_path(Mathsat_INCLUDE_DIRS mathsat.h PATHS ${Mathsat_DIR} PATH_SUFFIXES include)
 
-if (LIBGMP STREQUAL "LIBGMP-NOTFOUND")
-    if (DEFINED ENABLE_MSAT)
-        message(FATAL_ERROR "Requested mathsat, however I can't find libgmp in system or \\$MSAT_DIR")
-    else ()
-        message(WARNING "Skipping searching for mathsat as I can't find libgmp, try pointing \\$MSAT_DIR at its director")
-        return()
-    endif ()
-endif ()
+    if(Mathsat_INCLUDE_DIRS STREQUAL "Mathsat_INCLUDE_DIRS-NOTFOUND")
+        message(FATAL_ERROR "Could not find mathsat include headers, please check Mathsat_DIR")
+    endif()
 
+    if(Mathsat_LIB STREQUAL "Mathsat_LIB-NOTFOUND")
+        message(FATAL_ERROR "Could not find libmathsat, please check Mathsat_DIR")
+    endif()
 
-function(findmsat versionstr libmsat incmsat)
-    find_library(LIBMSAT mathsat NAMES libmathsat PATHS "${ARGN}/lib" NO_DEFAULT_PATH)
-    find_path(INCMSAT mathsat.h PATHS "${ARGN}/include" NO_DEFAULT_PATH)
-    if ((LIBMSAT STREQUAL "LIBMSAT-NOTFOUND") OR (INCMSAT STREQUAL "INCMSAT-NOTFOUND"))
-        return()
-    endif ()
-
-    get_filename_component(MSAT_LIBDIR "${LIBMSAT}" DIRECTORY)
-    try_run(MSATRUNS MSATCOMPILES ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/try_msat.c
-            CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${ARGN}/include -DLINK_DIRECTORIES=${MSAT_LIBDIR}
-            LINK_LIBRARIES ${LIBMSAT} ${LIBGMP} stdc++ m
+    find_library(GMP_LIB gmp)
+    try_run(MSATRUNS Mathsat_COMPILES ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/try_msat.c
+            CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${Mathsat_INCLUDE_DIRS}
+            LINK_LIBRARIES ${Mathsat_LIB} ${GMP_LIB} stdc++ m
             COMPILE_OUTPUT_VARIABLE MSATCOMPILESTR
-            RUN_OUTPUT_VARIABLE MSATVERSIONSTR)
+            RUN_OUTPUT_VARIABLE Mathsat_VERSION)
 
-    if ((NOT MSATRUNS EQ 0) OR (NOT MSATCOMPILES))
-        if (DEBUG_TRY_RUNS)
-            message("Failed mathsat compilation compile: ${MSATCOMPILESTR}")
-        endif ()
-        return()
-    endif ()
+    if(NOT Mathsat_COMPILES)
+        message(FATAL_ERROR "Could not use MathSAT: \n${MSATCOMPILESTR}")
+    endif()
+    message(STATUS "MathSAT version: ${Mathsat_VERSION}")
 
-    set(${libmsat} "${LIBMSAT}" PARENT_SCOPE)
-    set(${incmsat} "${ARGN}/include" PARENT_SCOPE)
-    set(${versionstr} "${MSATVERSIONSTR}" PARENT_SCOPE)
-endfunction()
-
-if (DEFINED DISABLE_MSAT)
-    if (DEFINED ENABLE_MSAT)
-        message(SEND_ERROR "Can't request both disable and enable msat")
-    endif ()
-    set(YESWEUSED_DIABLE_MSAT, "${DISABLE_MSAT}")
-    return()
-endif ()
-
-
-set(LIBMSAT "LIBMSAT-NOTFOUND")
-set(INCMSAT "LIBMSAT-NOTFOUND")
-
-if (DEFINED MSAT_DIR)
-    findmsat(MSATVERSIONSTR LIBMSAT INCMSAT "${MSAT_DIR}")
-    if (LIBMSAT STREQUAL "LIBMSAT-NOTFOUND")
-        message(SEND_ERROR "Couldn't find mathsat where you pointed MSAT_DIR: ${MSAT_DIR}")
-    endif ()
-endif ()
-
-if ((LIBMSAT STREQUAL "LIBMSAT-NOTFOUND") AND (NOT $ENV{SATDIR64} STREQUAL ""))
-    findmsat(MSATVERSIONSTR LIBMSAT INCMSAT "$ENV{SATDIR64}/mathsat")
-endif ()
-
-if ((LIBMSAT STREQUAL "LIBMSAT-NOTFOUND") AND (NOT $ENV{SATDIR32} STREQUAL ""))
-    findmsat(MSATVERSIONSTR LIBMSAT INCMSAT "$ENV{SATDIR32}/mathsat")
-endif ()
-
-if ((LIBMSAT STREQUAL LIBMSAT INCMSAT "LIBMSAT-NOTFOUND") AND (NOT $ENV{SATDIR} STREQUAL ""))
-    findmsat(MSATVERSIONSTR LIBMSAT INCMSAT "$ENV{SATDIR}/mathsat")
-endif ()
-
-if (LIBMSAT STREQUAL "LIBMSAT-NOTFOUND")
-    findmsat(MSATVERSIONSTR LIBMSAT INCMSAT "$ENV{HOME}/mathsat")
-endif ()
-
-if (LIBMSAT STREQUAL "LIBMSAT-NOTFOUND")
-    # Try default search instead
-    find_library(LIBMSAT mathsat)
-    set(MSATVERSIONSTR "(system)")
-endif ()
-
-if (LIBMSAT STREQUAL "LIBMSAT-NOTFOUND")
-    if (DEFINED ENABLE_MSAT)
-        message(SEND_ERROR "MSAT requested, but couldn't find it; please point MSAT_DIR at it")
-    endif ()
-    # Otherwise, MSAT neither found nor requested, so ignore it.
-else ()
-    # Got it; build stuff.
     add_library(solvermsat mathsat_conv.cpp)
     target_include_directories(solvermsat
-            PRIVATE ${INCMSAT}
+            PRIVATE ${Mathsat_INCLUDE_DIRS}
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solvermsat "${LIBMSAT}" ${LIBGMP})
-    set(ENABLE_MSAT "1")
-    message(STATUS "MathSAT version: ${MSATVERSIONSTR}")
+    target_link_libraries(solvermsat "${Mathsat_LIB}" ${GMP_LIB})
 
     # Add to solver link
     target_link_libraries(solvers INTERFACE solvermsat)
 
     set(ESBMC_ENABLE_mathsat 1 PARENT_SCOPE)
     set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} mathsat" PARENT_SCOPE)
-endif ()
+endif()
