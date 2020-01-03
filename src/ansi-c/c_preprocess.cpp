@@ -21,7 +21,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/message_stream.h>
 
-extern "C" {
+extern "C"
+{
 #include <cpp/iface.h>
 }
 

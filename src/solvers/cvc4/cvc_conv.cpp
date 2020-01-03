@@ -278,9 +278,8 @@ cvc_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
     v1->sort);
 }
 
-smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(
-  smt_astt from,
-  std::size_t width)
+smt_astt
+cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
 {
   smt_sortt to = mk_bv_sort(width);
   return new_ast(
@@ -291,9 +290,8 @@ smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(
     to);
 }
 
-smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_sbv(
-  smt_astt from,
-  std::size_t width)
+smt_astt
+cvc_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
 {
   smt_sortt to = mk_bv_sort(width);
   return new_ast(

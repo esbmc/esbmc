@@ -15,7 +15,12 @@ public:
   unsigned min_width;
   unsigned precision;
   bool zero_padding;
-  typedef enum { DECIMAL, SCIENTIFIC, AUTOMATIC } stylet;
+  typedef enum
+  {
+    DECIMAL,
+    SCIENTIFIC,
+    AUTOMATIC
+  } stylet;
   stylet style;
 
   format_spect()

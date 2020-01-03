@@ -6,27 +6,26 @@
 #ifndef SC_SIGNAL
 #define SC_SIGNAL
 
-template<class T>
+template <class T>
 class sc_signal
 {
+public:
+  sc_signal()
+  {
+  } // not implemented
 
-    public :
-    
-    sc_signal () { } // not implemented
-  
-    void write(T arg)
-	{
-		signal = arg;
-	}
+  void write(T arg)
+  {
+    signal = arg;
+  }
 
-	T read()
-	{
-		return signal;
-	}
+  T read()
+  {
+    return signal;
+  }
 
-    private: 
-    	T signal;
-    
+private:
+  T signal;
 };
 
 #endif

@@ -1,7 +1,8 @@
 #include <boolector_conv.h>
 #include <cstring>
 
-extern "C" {
+extern "C"
+{
 #include <btorcore.h>
 }
 

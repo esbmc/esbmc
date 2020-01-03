@@ -143,8 +143,8 @@ public:
     uint64_t index,
     const type2tc &subtype) override;
 
-  const smt_ast *convert_array_of(smt_astt init_val, unsigned long domain_width)
-    override;
+  const smt_ast *
+  convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
   void add_array_constraints_for_solving() override;
   void push_array_ctx() override;
