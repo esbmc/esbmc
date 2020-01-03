@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --no-div-by-zero-check --force-malloc-success -Dldv_assume=__ESBMC_assume --z3 --memory-leak-check -D__VERIFIER_error=ESBMC_error --no-unwinding-assertions --unwind 4
 ^VERIFICATION SUCCESSFUL$
