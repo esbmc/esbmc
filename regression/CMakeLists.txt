@@ -24,4 +24,7 @@ set(REGRESSIONS esbmc cstd/ctype cstd/string k-induction llvm digital-filters fl
 
 foreach(regression IN LISTS REGRESSIONS)
     add_esbmc_regression("${regression}" "CORE")
+    add_esbmc_regression("${regression}" "KNOWNBUG")
+    add_esbmc_regression("${regression}" "FUTURE")
+    add_esbmc_regression("${regression}" "THOROUGH")
 endforeach()
