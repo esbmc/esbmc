@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --fixedbv --no-slice --z3 --ir --no-simplify
 ^VERIFICATION SUCCESSFUL$

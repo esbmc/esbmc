@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --incremental-bmc --unlimited-k-steps --memory-leak-check --z3 --floatbv
 ^VERIFICATION SUCCESSFUL$
