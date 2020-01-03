@@ -17,7 +17,7 @@ if(ENABLE_YICES)
             RUN_OUTPUT_VARIABLE Yices_VERSION)
 
     if(NOT Yices_COMPILES)
-        message(FATAL_ERROR "Could not use Z3: \n${YICESCOMPILESTR}")
+        message(FATAL_ERROR "Could not use Yices: \n${YICESCOMPILESTR}")
     endif()
 
     message(STATUS "Yices version: ${Yices_VERSION}")
