@@ -2,7 +2,9 @@
 #  * User specified directories
 #  * Environmental var paths
 #  * System default
-
+if(DEFINED Z3_DIR)
+    set(ENABLE_Z3 ON)
+endif()
 if(ENABLE_Z3)
     find_library(Z3_LIB z3 PATHS ${Z3_DIR} PATH_SUFFIXES lib bin)
     find_path(Z3_INCLUDE_DIRS z3.h PATHS ${Z3_DIR} PATH_SUFFIXES include)
