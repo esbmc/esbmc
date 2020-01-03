@@ -24,8 +24,9 @@ printf_formattert::make_type(const expr2tc &src, const type2tc &dest)
   return tmp;
 }
 
-void printf_formattert::
-operator()(const std::string &_format, const std::list<expr2tc> &_operands)
+void printf_formattert::operator()(
+  const std::string &_format,
+  const std::list<expr2tc> &_operands)
 {
   format = _format;
   operands = _operands;

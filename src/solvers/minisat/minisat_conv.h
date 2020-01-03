@@ -22,7 +22,12 @@ typedef std::vector<literalt> bvt;
 class minisat_convt : public cnf_iface, public cnf_convt, public bitblast_convt
 {
 public:
-  typedef enum { LEFT, LRIGHT, ARIGHT } shiftt;
+  typedef enum
+  {
+    LEFT,
+    LRIGHT,
+    ARIGHT
+  } shiftt;
 
   minisat_convt(bool int_encoding, const namespacet &_ns, const optionst &opts);
   ~minisat_convt();

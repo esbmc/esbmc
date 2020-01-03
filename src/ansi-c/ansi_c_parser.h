@@ -17,7 +17,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/parser.h>
 #include <util/string_hash.h>
 
-typedef enum {
+typedef enum
+{
   ANSI_C_UNKNOWN,
   ANSI_C_SYMBOL,
   ANSI_C_TYPEDEF,

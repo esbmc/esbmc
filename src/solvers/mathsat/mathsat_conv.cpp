@@ -171,9 +171,12 @@ ieee_floatt mathsat_convt::get_fpbv(smt_astt a)
   mpz_get_str(buffer, 10, num);
 
   size_t ew, sw;
-  if(msat_is_fp_type(env, to_solver_smt_sort<msat_type>(a->sort)->s, &ew, &sw) != 0)
+  if(
+    msat_is_fp_type(env, to_solver_smt_sort<msat_type>(a->sort)->s, &ew, &sw) !=
+    0)
   {
-    std::cerr << "Non FP type passed to mathsat_convt::get_exp_width" << std::endl;
+    std::cerr << "Non FP type passed to mathsat_convt::get_exp_width"
+              << std::endl;
     abort();
   }
 
@@ -780,9 +783,8 @@ smt_ast *mathsat_convt::mk_array_symbol(
   return mk_smt_symbol(name, s);
 }
 
-smt_ast *mathsat_convt::mk_smt_symbol(
-  const std::string &name,
-  const smt_sort *s)
+smt_ast *
+mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   // XXX - does 'd' leak?
   msat_decl d = msat_declare_function(

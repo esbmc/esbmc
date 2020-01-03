@@ -25,7 +25,8 @@ class cpp_idt
 public:
   cpp_idt();
 
-  typedef enum {
+  typedef enum
+  {
     UNKNOWN,
     SYMBOL,
     TYPEDEF,

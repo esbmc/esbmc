@@ -46,7 +46,12 @@ public:
 class bitblast_convt : public smt_convt
 {
 public:
-  typedef enum { LEFT, LRIGHT, ARIGHT } shiftt;
+  typedef enum
+  {
+    LEFT,
+    LRIGHT,
+    ARIGHT
+  } shiftt;
 
   bitblast_convt(bool int_encoding, const namespacet &_ns, sat_iface *sat_api);
   ~bitblast_convt();
