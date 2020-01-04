@@ -27,7 +27,7 @@ foreach(regression IN LISTS REGRESSIONS)
     add_esbmc_regression("${regression}" "KNOWNBUG")
     add_esbmc_regression("${regression}" "FUTURE")
 
-    if(not APPLE)
+    if(NOT APPLE)
         if(regression STREQUAL "k-induction")
             message(STATUS "Skipping ${regression} THOROUGH")
         else()
