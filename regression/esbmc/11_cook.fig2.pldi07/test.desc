@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --unwind 5 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$
