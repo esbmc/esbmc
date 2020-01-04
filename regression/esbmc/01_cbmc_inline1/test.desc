@@ -2,5 +2,3 @@ CORE
 main.c
 module.c
 ^VERIFICATION SUCCESSFUL$
---
-^warning: ignoring

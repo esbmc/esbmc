@@ -2,5 +2,3 @@ CORE
 file1.c
 file2.c
 ^VERIFICATION SUCCESSFUL$
---
-^warning: ignoring

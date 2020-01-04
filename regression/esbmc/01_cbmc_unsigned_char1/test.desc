@@ -2,5 +2,3 @@ CORE
 main.c
 --unsigned-char
 ^VERIFICATION SUCCESSFUL$
---
-^warning: ignoring
