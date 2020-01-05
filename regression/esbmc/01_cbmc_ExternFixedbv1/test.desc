@@ -1,6 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --fixedbv
 ^VERIFICATION SUCCESSFUL$
---
-^warning: ignoring

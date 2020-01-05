@@ -1,6 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 
 ^PARSING ERROR$
---
-^warning: ignoring

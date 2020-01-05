@@ -1,6 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --16 
 ^VERIFICATION SUCCESSFUL$
---
-^warning: ignoring
