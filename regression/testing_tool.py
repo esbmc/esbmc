@@ -28,8 +28,8 @@ import re
 # KNOWNBUG -> Tests that are known to fail due to bugs
 # FUTURE -> Test that are known to fail due to missing implementation
 # ALL -> Run all tests
-SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
-FAIL_MODES = ["KNOWNBUG"]
+SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "KNOWNBUG-MAC", "KNOWNBUG-LINUX", "ALL"]
+FAIL_MODES = ["KNOWNBUG", "KNOWNBUG-MAC", "KNOWNBUG-LINUX"]
 
 class TestCase:
     """This class is responsible to:
