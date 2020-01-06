@@ -1027,36 +1027,19 @@ smt_astt z3_convt::tuple_create(const expr2tc &structdef)
   const std::vector<expr2tc> &members = strct.datatype_members;
   const std::vector<type2tc> &member_types = type.members;
 
-  unsigned size = member_types.size();
-
-  z3::expr *args = new z3::expr[size];
-
-#ifndef NDEBUG
-  unsigned int numoperands = members.size();
-  assert(
-    numoperands == member_types.size() &&
-    "Too many / few struct fields for struct type");
-#endif
-
   // Populate tuple with members of that struct
-  for(unsigned int i = 0; i < member_types.size(); i++)
-  {
-    const z3_smt_ast *tmp =
-      to_solver_smt_ast<z3_smt_ast>(convert_ast(members[i]));
-    args[i] = tmp->a;
-  }
+  z3::expr_vector args(z3_ctx);
+  for(std::size_t i = 0; i < member_types.size(); ++i)
+    args.push_back(to_solver_smt_ast<z3_smt_ast>(convert_ast(members[i]))->a);
 
   // Create tuple itself, return to caller. This is a lump of data, we don't
   // need to bind it to a name or symbol.
   smt_sortt s = mk_struct_sort(structdef->type);
 
-  Z3_func_decl decl =
-    Z3_get_tuple_sort_mk_decl(z3_ctx, to_solver_smt_sort<z3::sort>(s)->s);
-  z3::func_decl d(z3_ctx, decl);
-  z3::expr e = d.make_tuple_from_array(size, args);
-  delete[] args;
-
-  return new_ast(e, s);
+  z3::func_decl z3_tuple = z3::to_func_decl(
+    z3_ctx,
+    Z3_get_tuple_sort_mk_decl(z3_ctx, to_solver_smt_sort<z3::sort>(s)->s));
+  return new_ast(z3_tuple(args), s);
 }
 
 smt_astt z3_convt::tuple_fresh(const smt_sort *s, std::string name)
