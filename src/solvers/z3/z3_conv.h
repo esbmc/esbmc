@@ -10,7 +10,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #define _ESBMC_SOLVERS_Z3_Z3_CONV_H
 
 #include <solvers/smt/smt_conv.h>
-#include <z3pp.h>
+#include <z3++.h>
 
 class z3_smt_ast : public solver_smt_ast<z3::expr>
 {
