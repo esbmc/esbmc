@@ -129,44 +129,37 @@ z3::expr
 z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
 {
   z3::sort ty = t.get_sort();
-  unsigned num_fields, j;
-
   if(!ty.is_datatype())
   {
     std::cerr << "argument must be a tuple";
     abort();
   }
 
-  num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
-
+  std::size_t num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
   if(i >= num_fields)
   {
     std::cerr << "invalid tuple update, index is too big";
     abort();
   }
 
-  std::vector<z3::expr> new_fields;
-  new_fields.resize(num_fields);
-  for(j = 0; j < num_fields; j++)
+  z3::expr_vector args(z3_ctx);
+  for(std::size_t j = 0; j < num_fields; j++)
   {
     if(i == j)
     {
       /* use new_val at position i */
-      new_fields[j] = newval;
+      args.push_back(newval);
     }
     else
     {
       /* use field j of t */
       z3::func_decl proj_decl =
         z3::to_func_decl(z3_ctx, Z3_get_tuple_sort_field_decl(z3_ctx, ty, j));
-      new_fields[j] = proj_decl(t);
+      args.push_back(proj_decl(t));
     }
   }
 
-  z3::func_decl mk_tuple_decl =
-    z3::to_func_decl(z3_ctx, Z3_get_tuple_sort_mk_decl(z3_ctx, ty));
-
-  return mk_tuple_decl.make_tuple_from_array(num_fields, new_fields.data());
+  return z3::to_func_decl(z3_ctx, Z3_get_tuple_sort_mk_decl(z3_ctx, ty))(args);
 }
 
 z3::expr z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
