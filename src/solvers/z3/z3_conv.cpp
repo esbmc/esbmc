@@ -1486,7 +1486,7 @@ smt_sortt z3_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 smt_astt z3_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 {
   return new_ast(
-    z3::expr(
+    z3::to_expr(
       z3_ctx,
       Z3_mk_fpa_to_fp_bv(
         z3_ctx,
@@ -1500,7 +1500,7 @@ smt_astt z3_convt::mk_from_fp_to_bv(smt_astt op)
   smt_sortt to = mk_bvfp_sort(
     op->sort->get_exponent_width(), op->sort->get_significand_width() - 1);
   return new_ast(
-    z3::expr(
+    z3::to_expr(
       z3_ctx,
       Z3_mk_fpa_to_ieee_bv(z3_ctx, to_solver_smt_ast<z3_smt_ast>(op)->a)),
     to);
@@ -1516,7 +1516,7 @@ z3_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
   const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
 
   return new_ast(
-    z3::expr(z3_ctx, Z3_mk_fpa_to_ubv(z3_ctx, mrm->a, mfrom->a, width)),
+    z3::to_expr(z3_ctx, Z3_mk_fpa_to_ubv(z3_ctx, mrm->a, mfrom->a, width)),
     mk_bv_sort(width));
 }
 
@@ -1530,7 +1530,7 @@ z3_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
   const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
 
   return new_ast(
-    z3::expr(z3_ctx, Z3_mk_fpa_to_sbv(z3_ctx, mrm->a, mfrom->a, width)),
+    z3::to_expr(z3_ctx, Z3_mk_fpa_to_sbv(z3_ctx, mrm->a, mfrom->a, width)),
     mk_bv_sort(width));
 }
 
@@ -1542,7 +1542,7 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv_to_fpbv(
   const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
   const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
   return new_ast(
-    z3::expr(
+    z3::to_expr(
       z3_ctx,
       Z3_mk_fpa_to_fp_float(
         z3_ctx, mrm->a, mfrom->a, to_solver_smt_sort<z3::sort>(to)->s)),
@@ -1555,7 +1555,7 @@ z3_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
   const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
   const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
   return new_ast(
-    z3::expr(
+    z3::to_expr(
       z3_ctx,
       Z3_mk_fpa_to_fp_unsigned(
         z3_ctx, mrm->a, mfrom->a, to_solver_smt_sort<z3::sort>(to)->s)),
@@ -1568,7 +1568,7 @@ z3_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
   const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
   const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
   return new_ast(
-    z3::expr(
+    z3::to_expr(
       z3_ctx,
       Z3_mk_fpa_to_fp_signed(
         z3_ctx, mrm->a, mfrom->a, to_solver_smt_sort<z3::sort>(to)->s)),
@@ -1580,7 +1580,7 @@ smt_astt z3_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
   const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
   const z3_smt_ast *mfrom = to_solver_smt_ast<z3_smt_ast>(from);
   return new_ast(
-    z3::expr(z3_ctx, Z3_mk_fpa_round_to_integral(z3_ctx, mrm->a, mfrom->a)),
+    z3::to_expr(z3_ctx, Z3_mk_fpa_round_to_integral(z3_ctx, mrm->a, mfrom->a)),
     from->sort);
 }
 
@@ -1589,7 +1589,7 @@ smt_astt z3_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
   const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
   const z3_smt_ast *mrd = to_solver_smt_ast<z3_smt_ast>(rd);
   return new_ast(
-    z3::expr(z3_ctx, Z3_mk_fpa_sqrt(z3_ctx, mrm->a, mrd->a)), rd->sort);
+    z3::to_expr(z3_ctx, Z3_mk_fpa_sqrt(z3_ctx, mrm->a, mrd->a)), rd->sort);
 }
 
 smt_astt
@@ -1600,7 +1600,7 @@ z3_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
   const z3_smt_ast *mv2 = to_solver_smt_ast<z3_smt_ast>(v2);
   const z3_smt_ast *mv3 = to_solver_smt_ast<z3_smt_ast>(v3);
   return new_ast(
-    z3::expr(z3_ctx, Z3_mk_fpa_fma(z3_ctx, mrm->a, mv1->a, mv2->a, mv3->a)),
+    z3::to_expr(z3_ctx, Z3_mk_fpa_fma(z3_ctx, mrm->a, mv1->a, mv2->a, mv3->a)),
     v1->sort);
 }
 
@@ -1610,7 +1610,7 @@ smt_astt z3_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
   const z3_smt_ast *mrhs = to_solver_smt_ast<z3_smt_ast>(rhs);
   const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
   return new_ast(
-    z3::expr(z3_ctx, Z3_mk_fpa_add(z3_ctx, mrm->a, mlhs->a, mrhs->a)),
+    z3::to_expr(z3_ctx, Z3_mk_fpa_add(z3_ctx, mrm->a, mlhs->a, mrhs->a)),
     lhs->sort);
 }
 
@@ -1620,7 +1620,7 @@ smt_astt z3_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
   const z3_smt_ast *mrhs = to_solver_smt_ast<z3_smt_ast>(rhs);
   const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
   return new_ast(
-    z3::expr(z3_ctx, Z3_mk_fpa_sub(z3_ctx, mrm->a, mlhs->a, mrhs->a)),
+    z3::to_expr(z3_ctx, Z3_mk_fpa_sub(z3_ctx, mrm->a, mlhs->a, mrhs->a)),
     lhs->sort);
 }
 
@@ -1630,7 +1630,7 @@ smt_astt z3_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
   const z3_smt_ast *mrhs = to_solver_smt_ast<z3_smt_ast>(rhs);
   const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
   return new_ast(
-    z3::expr(z3_ctx, Z3_mk_fpa_mul(z3_ctx, mrm->a, mlhs->a, mrhs->a)),
+    z3::to_expr(z3_ctx, Z3_mk_fpa_mul(z3_ctx, mrm->a, mlhs->a, mrhs->a)),
     lhs->sort);
 }
 
@@ -1640,7 +1640,7 @@ smt_astt z3_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
   const z3_smt_ast *mrhs = to_solver_smt_ast<z3_smt_ast>(rhs);
   const z3_smt_ast *mrm = to_solver_smt_ast<z3_smt_ast>(rm);
   return new_ast(
-    z3::expr(z3_ctx, Z3_mk_fpa_div(z3_ctx, mrm->a, mlhs->a, mrhs->a)),
+    z3::to_expr(z3_ctx, Z3_mk_fpa_div(z3_ctx, mrm->a, mlhs->a, mrhs->a)),
     lhs->sort);
 }
 
