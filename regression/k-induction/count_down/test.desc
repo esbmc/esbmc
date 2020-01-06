@@ -1,4 +1,4 @@
-THOROUGH
+KNOWNBUG
 main.c
 --k-induction
 ^VERIFICATION SUCCESSFUL$
