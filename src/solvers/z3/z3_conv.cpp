@@ -1091,62 +1091,42 @@ const smt_ast *z3_convt::tuple_array_create(
   bool const_array,
   const smt_sort *domain)
 {
-  z3::expr output;
   const array_type2t &arrtype = to_array_type(arr_type);
-
-  if(const_array)
-  {
-    z3::expr value, index;
-    z3::sort array_type, dom_type;
-    std::string tmp, identifier;
-
-    array_type = to_solver_smt_sort<z3::sort>(convert_sort(arr_type))->s;
-    dom_type = array_type.array_domain();
-
-    const z3_smt_ast *tmpast = to_solver_smt_ast<z3_smt_ast>(*input_args);
-    value = tmpast->a;
-
-    if(is_bool_type(arrtype.subtype))
-    {
-      value = z3_ctx.bool_val(false);
-    }
-
-    output = z3::to_expr(z3_ctx, Z3_mk_const_array(z3_ctx, dom_type, value));
-  }
-  else
-  {
-    u_int i = 0;
-    z3::sort z3_array_type;
-    z3::expr int_cte, val_cte;
-    z3::sort domain_sort;
-
-    assert(
-      !is_nil_expr(arrtype.array_size) &&
-      "Non-const array-of's can't be infinitely sized");
-    const constant_int2t &sz = to_constant_int2t(arrtype.array_size);
-
-    assert(
-      is_constant_int2t(arrtype.array_size) &&
-      "array_of sizes should be constant");
-
-    int64_t size;
-    size = sz.as_long();
-
-    z3_array_type = to_solver_smt_sort<z3::sort>(convert_sort(arr_type))->s;
-    domain_sort = z3_array_type.array_domain();
-
-    output = z3_ctx.constant(nullptr, z3_array_type);
-
-    for(i = 0; i < size; i++)
-    {
-      int_cte = z3_ctx.num_val(i, domain_sort);
-      const z3_smt_ast *tmpast = to_solver_smt_ast<z3_smt_ast>(input_args[i]);
-      output = z3::store(output, int_cte, tmpast->a);
-    }
-  }
+  z3::sort array_sort = to_solver_smt_sort<z3::sort>(convert_sort(arr_type))->s;
+  z3::sort dom_sort = array_sort.array_domain();
 
   smt_sortt ssort = mk_struct_sort(arrtype.subtype);
   smt_sortt asort = mk_array_sort(domain, ssort);
+
+  if(const_array)
+  {
+    const z3_smt_ast *tmpast = to_solver_smt_ast<z3_smt_ast>(*input_args);
+    z3::expr value = tmpast->a;
+
+    if(is_bool_type(arrtype.subtype))
+      value = z3_ctx.bool_val(false);
+
+    return new_ast(
+      z3::to_expr(z3_ctx, Z3_mk_const_array(z3_ctx, dom_sort, value)), asort);
+  }
+
+  assert(
+    !is_nil_expr(arrtype.array_size) &&
+    "Non-const array-of's can't be infinitely sized");
+
+  assert(
+    is_constant_int2t(arrtype.array_size) &&
+    "array_of sizes should be constant");
+
+  z3::expr output = z3_ctx.constant(nullptr, array_sort);
+  for(std::size_t i = 0; i < to_constant_int2t(arrtype.array_size).as_ulong();
+      ++i)
+  {
+    z3::expr int_cte = z3_ctx.num_val(i, dom_sort);
+    const z3_smt_ast *tmpast = to_solver_smt_ast<z3_smt_ast>(input_args[i]);
+    output = z3::store(output, int_cte, tmpast->a);
+  }
+
   return new_ast(output, asort);
 }
 
