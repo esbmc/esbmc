@@ -961,71 +961,33 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
   }
 
   const struct_type2t &strct = to_struct_type(type);
-  const std::vector<type2tc> &members = strct.members;
-  const std::vector<irep_idt> &member_names = strct.member_names;
-  const irep_idt &struct_name = strct.name;
+  const std::size_t num_members = strct.members.size();
 
-  z3::symbol mk_tuple_name, *proj_names;
-  z3::sort *proj_types;
-  Z3_func_decl mk_tuple_decl, *proj_decls;
-  std::string name;
-  u_int num_elems = members.size();
-
-  proj_names = new z3::symbol[num_elems];
-  proj_types = new z3::sort[num_elems];
-  proj_decls = new Z3_func_decl[num_elems];
-
-  name = "struct";
-  name += "_type_" + struct_name.as_string();
-  mk_tuple_name = z3::symbol(z3_ctx, name.c_str());
-
-  z3::sort sort;
-  if(!members.size())
+  z3::array<Z3_symbol> member_names(num_members);
+  z3::array<Z3_sort> member_sorts(num_members);
+  for(std::size_t i = 0; i < num_members; ++i)
   {
-    sort = z3::to_sort(
-      z3_ctx,
-      Z3_mk_tuple_sort(
-        z3_ctx, mk_tuple_name, 0, nullptr, nullptr, &mk_tuple_decl, nullptr));
+    member_names[i] =
+      z3_ctx.str_symbol(strct.member_names[i].as_string().c_str());
+    member_sorts[i] =
+      to_solver_smt_sort<z3::sort>(convert_sort(strct.members[i]))->s;
   }
-  else
-  {
-    u_int i = 0;
-    std::vector<irep_idt>::const_iterator mname = member_names.begin();
-    for(std::vector<type2tc>::const_iterator it = members.begin();
-        it != members.end();
-        it++, mname++, i++)
-    {
-      proj_names[i] = z3::symbol(z3_ctx, mname->as_string().c_str());
-      auto tmp = to_solver_smt_sort<z3::sort>(convert_sort(*it));
-      proj_types[i] = tmp->s;
-    }
 
-    // Unpack pointers from Z3++ objects.
-    Z3_symbol *unpacked_symbols = new Z3_symbol[num_elems];
-    Z3_sort *unpacked_sorts = new Z3_sort[num_elems];
-    for(i = 0; i < num_elems; i++)
-    {
-      unpacked_symbols[i] = proj_names[i];
-      unpacked_sorts[i] = proj_types[i];
-    }
+  z3::symbol tuple_name = z3_ctx.str_symbol(
+    std::string("struct_type_" + strct.name.as_string()).c_str());
 
-    sort = z3::to_sort(
+  Z3_func_decl mk_tuple_decl;
+  z3::array<Z3_func_decl> proj_decls(num_members);
+  z3::sort sort = to_sort(
+    z3_ctx,
+    Z3_mk_tuple_sort(
       z3_ctx,
-      Z3_mk_tuple_sort(
-        z3_ctx,
-        mk_tuple_name,
-        num_elems,
-        unpacked_symbols,
-        unpacked_sorts,
-        &mk_tuple_decl,
-        proj_decls));
-
-    delete[] unpacked_symbols;
-    delete[] unpacked_sorts;
-    delete[] proj_names;
-    delete[] proj_types;
-    delete[] proj_decls;
-  }
+      tuple_name,
+      num_members,
+      member_names.ptr(),
+      member_sorts.ptr(),
+      &mk_tuple_decl,
+      proj_decls.ptr()));
 
   return new solver_smt_sort<z3::sort>(SMT_SORT_STRUCT, sort, type);
 }
