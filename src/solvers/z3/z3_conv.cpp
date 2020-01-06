@@ -165,16 +165,13 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
 z3::expr z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 {
   z3::sort ty = t.get_sort();
-  unsigned num_fields;
-
   if(!ty.is_datatype())
   {
     std::cerr << "Z3 conversion: argument must be a tuple" << std::endl;
     abort();
   }
 
-  num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
-
+  size_t num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
   if(i >= num_fields)
   {
     std::cerr << "Z3 conversion: invalid tuple select, index is too large"
