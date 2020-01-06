@@ -28,6 +28,7 @@ if(ENABLE_CVC4)
         message(FATAL_ERROR "Could not use CVC4: \n${CVC4COMPILESTR}")
     endif()
 
+    message(STATUS "Using CVC4 at: ${CVC4_LIB}")
     message(STATUS "CVC4 version: ${CVC4_VERSION}")
 
 

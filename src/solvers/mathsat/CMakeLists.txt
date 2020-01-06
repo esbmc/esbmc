@@ -28,7 +28,10 @@ if(ENABLE_MATHSAT)
     if(NOT Mathsat_COMPILES)
         message(FATAL_ERROR "Could not use MathSAT: \n${MSATCOMPILESTR}")
     endif()
-    message(STATUS "MathSAT version: ${Mathsat_VERSION}")
+
+    message(STATUS "Using MathSAT at: ${Mathsat_LIB}")
+    string(REGEX MATCH "version ([0-9].[0-9].[0-9]) "  REGEX_OUTPUT ${Mathsat_VERSION})
+    message(STATUS "MathSAT version: ${CMAKE_MATCH_1}")
 
     add_library(solvermsat mathsat_conv.cpp)
     target_include_directories(solvermsat

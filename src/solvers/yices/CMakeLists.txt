@@ -28,6 +28,7 @@ if(ENABLE_YICES)
         message(FATAL_ERROR "Could not use Yices: \n${YICESCOMPILESTR}")
     endif()
 
+    message(STATUS "Using Yices at: ${Yices_LIB}")
     message(STATUS "Yices version: ${Yices_VERSION}")
 
     if (Yices_VERSION VERSION_GREATER 2.5.2)

@@ -10,8 +10,9 @@ if(ENABLE_BOOLECTOR)
     find_package(Boolector REQUIRED
             PATHS ${Boolector_DIR}/lib/cmake $ENV{HOME}/boolector)
 
+    message(STATUS "Found Boolector at: ${Boolector_DIR}")
     message(STATUS "Boolector version: ${Boolector_VERSION}")
-
+    
     add_library(solverbtor boolector_conv.cpp)
     target_include_directories(solverbtor
             PRIVATE ${Boost_INCLUDE_DIRS}
