@@ -128,10 +128,8 @@ void z3_convt::assert_ast(const smt_ast *a)
 z3::expr
 z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
 {
-  z3::sort ty;
+  z3::sort ty = t.get_sort();
   unsigned num_fields, j;
-
-  ty = t.get_sort();
 
   if(!ty.is_datatype())
   {
@@ -173,10 +171,8 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
 
 z3::expr z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 {
-  z3::sort ty;
+  z3::sort ty = t.get_sort();
   unsigned num_fields;
-
-  ty = t.get_sort();
 
   if(!ty.is_datatype())
   {
