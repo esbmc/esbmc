@@ -156,19 +156,9 @@ public:
     return new yices_smt_ast(this, s, t);
   }
 
-  inline void clear_model()
-  {
-    if(sat_model)
-    {
-      yices_free_model(sat_model);
-      sat_model = nullptr;
-    }
-  }
-
   void print_model();
 
   context_t *yices_ctx;
-  model_t *sat_model;
 };
 
 #endif /* _ESBMC_SOLVERS_YICES_YICES_CONV_H_ */
