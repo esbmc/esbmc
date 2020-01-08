@@ -1,99 +1,63 @@
-function(findyices versionstr libyices incyices)
-    find_library(LIBYICES yices NAMES libyices.so PATHS "${ARGN}" PATH_SUFFIXES lib NO_DEFAULT_PATH)
-    find_path(INCYICES yices.h PATHS "${ARGN}/include" NO_DEFAULT_PATH)
-    if ((LIBYICES STREQUAL "LIBYICES-NOTFOUND") OR (INCYICES STREQUAL "INCYICES-NOTFOUND"))
-        return()
-    endif ()
+set(Yices_MIN_VERSION "2.6.1")
 
-    get_filename_component(YICES_LIBDIR "${LIBYICES}" DIRECTORY)
-    try_run(YICESRUNS YICESCOMPILES ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/try_yices.c
-            CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${ARGN}/include -DLINK_DIRECTORIES=${YICES_LIBDIR}
-            LINK_LIBRARIES yices
+if(DEFINED Yices_DIR)
+    set(ENABLE_YICES ON)
+endif()
+
+if(EXISTS $ENV{HOME}/yices)
+    set(ENABLE_YICES ON)
+endif()
+
+if(ENABLE_YICES)
+    find_path(Yices_INCLUDE_DIRS yices.h PATHS "${Yices_DIR}" $ENV{HOME}/yices PATH_SUFFIXES include)
+    find_library(Yices_LIB yices NAMES yices PATHS "${Yices_DIR}" $ENV{HOME}/yices PATH_SUFFIXES lib)
+
+    if(Yices_INCLUDE_DIRS STREQUAL "Yices_INCLUDE_DIRS-NOTFOUND")
+        message(FATAL_ERROR "Could not find yices headers, please check Yices_DIR")
+    endif()
+
+    if(Yices_LIB STREQUAL "Yices_LIB-NOTFOUND")
+        message(FATAL_ERROR "Could not find libyices, please check Yices_DIR")
+    endif()
+
+    try_run(Yices_RUNS Yices_COMPILES ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/try_yices.c
+            CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${Yices_INCLUDE_DIRS}
+            LINK_LIBRARIES ${Yices_LIB}
             COMPILE_OUTPUT_VARIABLE YICESCOMPILESTR
-            RUN_OUTPUT_VARIABLE YICESVERSIONSTR)
+            RUN_OUTPUT_VARIABLE Yices_VERSION)
 
-    if ((NOT YICESRUNS EQ 0) OR (NOT YICESCOMPILES))
-        if (DEBUG_TRY_RUNS)
-            message("Failed yices compilation compile: ${YICESCOMPILESTR}")
-        endif ()
-        return()
+    if(NOT Yices_COMPILES)
+        message(FATAL_ERROR "Could not use Yices: \n${YICESCOMPILESTR}")
+    endif()
+
+    message(STATUS "Using Yices at: ${Yices_LIB}")
+    message(STATUS "Yices version: ${Yices_VERSION}")
+
+    if(Yices_VERSION VERSION_LESS Yices_MIN_VERSION)
+        message(FATAL_ERROR "Expected version ${Yices_MIN_VERSION} or greater")
+    endif()
+
+    if (Yices_VERSION VERSION_GREATER 2.5.2)
+        message(STATUS "Danger Will Robinson: the version of Yices you have is GPL licensed, distribution is impossible")
     endif ()
 
-    set(${libyices} "${LIBYICES}" PARENT_SCOPE)
-    set(${incyices} "${ARGN}/include" PARENT_SCOPE)
-    set(${versionstr} "${YICESVERSIONSTR}" PARENT_SCOPE)
-endfunction()
+    add_library(solveryices yices_conv.cpp)
 
-if (DEFINED DISABLE_YICES)
-    if (DEFINED ENABLE_YICES)
-        message(SEND_ERROR "Can't request both disable and enable yices")
-    endif ()
-    set(YESWEUSED_DIABLE_YICES, "${DISABLE_YICES}")
-    return()
-endif ()
-
-set(LIBYICES "LIBYICES-NOTFOUND")
-set(INCYICES "LIBYICES-NOTFOUND")
-
-if (DEFINED YICES_DIR)
-    findyices(YICESVERSIONSTR LIBYICES INCYICES "${YICES_DIR}")
-    if (LIBYICES STREQUAL "LIBYICES-NOTFOUND")
-        message(SEND_ERROR "Couldn't find YICES where you pointed YICES_DIR: ${YICES_DIR}")
-    endif ()
-endif ()
-
-if ((LIBYICES STREQUAL "LIBYICES-NOTFOUND") AND (NOT $ENV{SATDIR64} STREQUAL ""))
-    findyices(YICESVERSIONSTR LIBYICES INCYICES "$ENV{SATDIR64}/yices")
-endif ()
-
-if ((LIBYICES STREQUAL "LIBYICES-NOTFOUND") AND (NOT $ENV{SATDIR32} STREQUAL ""))
-    findyices(YICESVERSIONSTR LIBYICES INCYICES "$ENV{SATDIR32}/yices")
-endif ()
-
-if ((LIBYICES STREQUAL LIBYICES INCYICES "LIBYICES-NOTFOUND") AND (NOT $ENV{SATDIR} STREQUAL ""))
-    findyices(YICESVERSIONSTR LIBYICES INCYICES "$ENV{SATDIR}/yices")
-endif ()
-
-if (LIBYICES STREQUAL "LIBYICES-NOTFOUND")
-    findyices(YICESVERSIONSTR LIBYICES INCYICES "$ENV{HOME}/yices")
-endif ()
-
-if (LIBYICES STREQUAL "LIBYICES-NOTFOUND")
-    # Try default search instead
-    find_library(LIBYICES yices)
-    set(YICESVERSIONSTR "(system)")
-endif ()
-
-if (LIBYICES STREQUAL "LIBYICES-NOTFOUND")
-    if (DEFINED ENABLE_YICES)
-        message(SEND_ERROR "YICES requested, but couldn't find it; please point YICES_DIR at it")
-    endif ()
-    # Otherwise, YICES neither found nor requested, so ignore it.
-else ()
-    # Got it; build stuff.
-    add_library(solveryices yices_conv.cpp)    
     target_include_directories(solveryices
-            PRIVATE ${INCYICES}
+            PRIVATE ${Yices_INCLUDE_DIRS}
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+    # Hack needed for Ubuntu, since it is not linking with static libs from system
     if(DEFINED GMP_DIR)
         find_library(LIBGMP_CUSTOM gmp NAMES libgmp.a PATHS ${GMP_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
         message(STATUS "Custom gmp found: ${LIBGMP_CUSTOM}")
-        target_link_libraries(solveryices "${LIBYICES}" "${LIBGMP_CUSTOM}")
+        target_link_libraries(solveryices "${Yices_LIB}" "${LIBGMP_CUSTOM}")
     else ()
-        target_link_libraries(solveryices "${LIBYICES}")
+        target_link_libraries(solveryices "${Yices_LIB}")
     endif ()
-    
-    set(ENABLE_YICES "1")
-    message(STATUS "YICES version: ${YICESVERSIONSTR}")
 
-    # Add to solver link
     target_link_libraries(solvers INTERFACE solveryices)
-
-    if (YICESVERSIONSTR VERSION_GREATER 2.5.2)
-        message(WARNING "Danger Will Robinson: the version of Yices you have is GPL licensed, distribution is impossible")
-    endif ()
-
     set(ESBMC_ENABLE_yices 1 PARENT_SCOPE)
     set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} yices" PARENT_SCOPE)
-endif ()
+endif()

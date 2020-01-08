@@ -23,6 +23,15 @@ option(BUILD_DOC "Build ESBMC documentation" OFF)
 option(ENABLE_REGRESSION "Add Regressions Tests (default: OFF)" OFF)
 
 #############################
+# SOLVERS
+#############################
+option(ENABLE_BOOLECTOR "Use Boolector solver (default: OFF)" OFF)
+option(ENABLE_Z3 "Use Z3 solver (default: OFF)" OFF)
+option(ENABLE_MATHSAT "Use MathSAT solver (default: OFF)" OFF)
+option(ENABLE_YICES "Use Yices solver (default: OFF)" OFF)
+option(ENABLE_CVC4 "Use CVC4 solver (default: OFF)" OFF)
+
+#############################
 # OTHERS
 #############################
 option(ENABLE_LIBM "Use libm from c2goto (default: ON)" ON)
