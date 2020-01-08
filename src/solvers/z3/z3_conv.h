@@ -38,10 +38,6 @@ public:
   z3_convt(bool int_encoding, const namespacet &ns);
   ~z3_convt() override = default;
 
-private:
-  void intr_push_ctx();
-  void intr_pop_ctx();
-
 public:
   void push_ctx() override;
   void pop_ctx() override;
@@ -222,9 +218,6 @@ public:
   //  Must be first member; that way it's the last to be destroyed.
   z3::context z3_ctx;
   z3::solver solver;
-
-  std::list<z3::expr> assumpt;
-  std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
 };
 
 #endif /* _ESBMC_SOLVERS_Z3_Z3_CONV_H_ */
