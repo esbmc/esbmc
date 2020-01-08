@@ -148,7 +148,7 @@ public:
   expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
     override;
 
-  void print_model();
+  void print_model() override;
 
   context_t *yices_ctx;
 };
