@@ -8,7 +8,7 @@
 class mathsat_smt_ast : public solver_smt_ast<msat_term>
 {
 public:
-  using solver_smt_ast<msat_term>::solver_smt_ast;
+  mathsat_smt_ast(smt_convt *ctx, msat_term _t, const smt_sort *_s);
   ~mathsat_smt_ast() override = default;
 
   void dump() const override;
@@ -23,7 +23,7 @@ public:
   resultt dec_solve() override;
   const std::string solver_text() override;
 
-  void assert_ast(const smt_ast *a) override;
+  void assert_ast(smt_astt a) override;
 
   smt_astt mk_add(smt_astt a, smt_astt b) override;
   smt_astt mk_bvadd(smt_astt a, smt_astt b) override;
@@ -71,15 +71,14 @@ public:
   smt_sortt mk_fpbv_rm_sort() override;
 
   smt_astt mk_smt_int(const mp_integer &theint, bool sign) override;
-  smt_ast *mk_smt_real(const std::string &str) override;
-  smt_ast *mk_smt_bool(bool val) override;
-  smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) override;
-  smt_ast *mk_array_symbol(
+  smt_astt mk_smt_real(const std::string &str) override;
+  smt_astt mk_smt_bool(bool val) override;
+  smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_array_symbol(
     const std::string &name,
     const smt_sort *s,
     smt_sortt array_subtype) override;
-  smt_astt
-  mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
+  smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low) override;
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
@@ -126,27 +125,19 @@ public:
   smt_astt mk_from_bv_to_fp(smt_astt op, smt_sortt to) override;
   smt_astt mk_from_fp_to_bv(smt_astt op) override;
 
-  inline mathsat_smt_ast *new_ast(msat_term _e, smt_sortt _s)
-  {
-    check_msat_error(_e);
-    return new mathsat_smt_ast(this, _s, _e);
-  }
-
   void push_ctx() override;
   void pop_ctx() override;
 
-  bool get_bool(const smt_ast *a) override;
+  bool get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a) override;
   ieee_floatt get_fpbv(smt_astt a) override;
-  expr2tc get_array_elem(
-    const smt_ast *array,
-    uint64_t index,
-    const type2tc &subtype) override;
+  expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
+    override;
 
-  const smt_ast *
+  smt_astt
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
-  void check_msat_error(msat_term &r);
+  void check_msat_error(msat_term &r) const;
 
   void dump_smt() override;
   void print_model() override;
