@@ -208,13 +208,7 @@ public:
   void dump_smt() override;
   void print_model() override;
 
-  // Some useful types
 public:
-  inline z3_smt_ast *new_ast(z3::expr _e, smt_sortt _s)
-  {
-    return new z3_smt_ast(this, _s, _e);
-  }
-
   //  Must be first member; that way it's the last to be destroyed.
   z3::context z3_ctx;
   z3::solver solver;

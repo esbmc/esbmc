@@ -25,6 +25,8 @@
 #include <util/type_byte_size.h>
 #include <z3_conv.h>
 
+#define new_ast new_solver_ast<z3_smt_ast>
+
 static void error_handler(Z3_context c, Z3_error_code e)
 {
   std::cerr << "Z3 error " << e << " encountered" << std::endl;
@@ -1204,9 +1206,7 @@ expr2tc z3_convt::get_array_elem(
       mk_smt_bv(BigInt(index), mk_bv_sort(array_bound)));
 
   z3::expr e = solver.get_model().eval(select(za->a, idx->a), false);
-
-  z3_smt_ast *value = new_ast(e, convert_sort(subtype));
-  return get_by_ast(subtype, value);
+  return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }
 
 void z3_smt_ast::dump() const
