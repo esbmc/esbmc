@@ -63,44 +63,18 @@ z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
 
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
   Z3_set_error_handler(z3_ctx, error_handler);
-
-  assumpt_ctx_stack.push_back(assumpt.begin());
 }
 
 void z3_convt::push_ctx()
 {
   smt_convt::push_ctx();
-  intr_push_ctx();
   solver.push();
 }
 
 void z3_convt::pop_ctx()
 {
   solver.pop();
-  intr_pop_ctx();
   smt_convt::pop_ctx();
-}
-
-void z3_convt::intr_push_ctx()
-{
-  // Also push/duplicate pointer logic state.
-  pointer_logic.push_back(pointer_logic.back());
-  addr_space_sym_num.push_back(addr_space_sym_num.back());
-  addr_space_data.push_back(addr_space_data.back());
-
-  // Store where we are in the list of assumpts.
-  std::list<z3::expr>::iterator it = assumpt.end();
-  it--;
-  assumpt_ctx_stack.push_back(it);
-}
-
-void z3_convt::intr_pop_ctx()
-{
-  // Erase everything on stack since last push_ctx
-  std::list<z3::expr>::iterator it = assumpt_ctx_stack.back();
-  ++it;
-  assumpt.erase(it, assumpt.end());
-  assumpt_ctx_stack.pop_back();
 }
 
 smt_convt::resultt z3_convt::dec_solve()
@@ -122,7 +96,6 @@ void z3_convt::assert_ast(const smt_ast *a)
 {
   z3::expr theval = to_solver_smt_ast<z3_smt_ast>(a)->a;
   solver.add(theval);
-  assumpt.push_back(theval);
 }
 
 z3::expr
