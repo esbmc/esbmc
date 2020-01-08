@@ -31,10 +31,7 @@ smt_convt *create_new_yices_solver(
 }
 
 yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns),
-    array_iface(false, false),
-    fp_convt(this),
-    sat_model(nullptr)
+  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
 {
   yices_init();
 
@@ -86,17 +83,12 @@ void yices_convt::pop_ctx()
 
 smt_convt::resultt yices_convt::dec_solve()
 {
-  clear_model();
   pre_solve();
 
   smt_status_t result = yices_check_context(yices_ctx, nullptr);
   if(result == STATUS_SAT)
-  {
-    sat_model = yices_get_model(yices_ctx, 1);
     return smt_convt::P_SATISFIABLE;
-  }
 
-  sat_model = nullptr;
   if(result == STATUS_UNSAT)
     return smt_convt::P_UNSATISFIABLE;
 
@@ -791,7 +783,7 @@ bool yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
-  auto res = yices_get_bool_value(sat_model, ast->a, &val);
+  auto res = yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val);
   assert(!res && "Can't get boolean value from Yices");
   return val ? true : false;
 }
@@ -803,7 +795,7 @@ BigInt yices_convt::get_bv(smt_astt a)
   int64_t val = 0;
   if(int_encoding)
   {
-    yices_get_int64_value(sat_model, ast->a, &val);
+    yices_get_int64_value(yices_get_model(yices_ctx, 1), ast->a, &val);
     return BigInt(val);
   }
 
@@ -811,7 +803,7 @@ BigInt yices_convt::get_bv(smt_astt a)
   assert(width <= 64);
 
   int32_t data[64];
-  yices_get_bv_value(sat_model, ast->a, data);
+  yices_get_bv_value(yices_get_model(yices_ctx, 1), ast->a, data);
 
   int i;
   for(i = width - 1; i >= 0; i--)
@@ -1061,7 +1053,7 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
 
 void yices_convt::print_model()
 {
-  yices_print_model(stdout, sat_model);
+  yices_print_model(stdout, yices_get_model(yices_ctx, 1));
 }
 
 smt_sortt yices_convt::mk_bool_sort()
