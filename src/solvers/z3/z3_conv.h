@@ -198,13 +198,6 @@ public:
   const smt_ast *
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
-  void add_array_constraints_for_solving() override;
-  void add_tuple_constraints_for_solving() override;
-  void push_array_ctx() override;
-  void pop_array_ctx() override;
-  void push_tuple_ctx() override;
-  void pop_tuple_ctx() override;
-
   void assert_ast(const smt_ast *a) override;
 
   const std::string solver_text() override

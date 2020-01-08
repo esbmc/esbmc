@@ -52,9 +52,9 @@ public:
    *  model */
   virtual expr2tc tuple_get(const expr2tc &expr) = 0;
 
-  virtual void add_tuple_constraints_for_solving() = 0;
-  virtual void push_tuple_ctx() = 0;
-  virtual void pop_tuple_ctx() = 0;
+  virtual void add_tuple_constraints_for_solving(){};
+  virtual void push_tuple_ctx(){};
+  virtual void pop_tuple_ctx(){};
 
   virtual ~tuple_iface() = default;
 };

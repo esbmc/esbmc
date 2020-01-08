@@ -49,10 +49,10 @@ public:
     unsigned long domain_width,
     smt_convt *ctx);
 
-  virtual void add_array_constraints_for_solving() = 0;
+  virtual void add_array_constraints_for_solving(){};
 
-  virtual void push_array_ctx() = 0;
-  virtual void pop_array_ctx() = 0;
+  virtual void push_array_ctx(){};
+  virtual void pop_array_ctx(){};
 
   // And everything else goes through the ast methods!
 

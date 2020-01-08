@@ -130,10 +130,6 @@ public:
   smt_astt
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
-  void add_array_constraints_for_solving() override;
-  void push_array_ctx() override;
-  void pop_array_ctx() override;
-
   smt_sortt mk_struct_sort(const type2tc &type) override;
   smt_astt tuple_create(const expr2tc &structdef) override;
   smt_astt tuple_fresh(smt_sortt s, std::string name = "") override;
@@ -147,9 +143,6 @@ public:
   smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override;
   smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
   expr2tc tuple_get(const expr2tc &expr) override;
-  void add_tuple_constraints_for_solving() override;
-  void push_tuple_ctx() override;
-  void pop_tuple_ctx() override;
 
   bool get_bool(const smt_ast *a) override;
   BigInt get_bv(smt_astt a) override;

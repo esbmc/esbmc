@@ -1236,30 +1236,6 @@ expr2tc z3_convt::get_array_elem(
   return get_by_ast(subtype, value);
 }
 
-void z3_convt::add_array_constraints_for_solving()
-{
-}
-
-void z3_convt::push_array_ctx()
-{
-}
-
-void z3_convt::pop_array_ctx()
-{
-}
-
-void z3_convt::add_tuple_constraints_for_solving()
-{
-}
-
-void z3_convt::push_tuple_ctx()
-{
-}
-
-void z3_convt::pop_tuple_ctx()
-{
-}
-
 void z3_smt_ast::dump() const
 {
   std::cout << Z3_ast_to_string(a.ctx(), a) << std::endl;

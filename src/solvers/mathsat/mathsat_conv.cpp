@@ -896,18 +896,6 @@ mathsat_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return default_convert_array_of(init_val, domain_width, this);
 }
 
-void mathsat_convt::add_array_constraints_for_solving()
-{
-}
-
-void mathsat_convt::push_array_ctx()
-{
-}
-
-void mathsat_convt::pop_array_ctx()
-{
-}
-
 void mathsat_smt_ast::dump() const
 {
   // We need to get the env

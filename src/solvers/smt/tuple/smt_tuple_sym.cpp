@@ -209,15 +209,3 @@ smt_sortt smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
 
   return new smt_sort(SMT_SORT_STRUCT, type);
 }
-
-void smt_tuple_sym_flattener::add_tuple_constraints_for_solving()
-{
-}
-
-void smt_tuple_sym_flattener::push_tuple_ctx()
-{
-}
-
-void smt_tuple_sym_flattener::pop_tuple_ctx()
-{
-}

@@ -146,10 +146,6 @@ public:
   const smt_ast *
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
-  void add_array_constraints_for_solving() override;
-  void push_array_ctx() override;
-  void pop_array_ctx() override;
-
   void check_msat_error(msat_term &r);
 
   void dump_smt() override;

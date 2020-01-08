@@ -33,10 +33,6 @@ public:
     bool const_array,
     smt_sortt domain) override;
 
-  void add_tuple_constraints_for_solving() override;
-  void push_tuple_ctx() override;
-  void pop_tuple_ctx() override;
-
   smt_convt *ctx;
   const namespacet &ns;
 };
