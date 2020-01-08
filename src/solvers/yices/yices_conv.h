@@ -7,8 +7,8 @@
 class yices_smt_ast : public solver_smt_ast<term_t>
 {
 public:
-  yices_smt_ast(smt_convt *ctx, const smt_sort *_s, term_t _t)
-    : solver_smt_ast<term_t>(ctx, _s, _t)
+  yices_smt_ast(smt_convt *ctx, term_t _t, const smt_sort *_s)
+    : solver_smt_ast<term_t>(ctx, _t, _s)
   {
     // Detect term errors
     if(a == NULL_TERM)
@@ -150,11 +150,6 @@ public:
     const smt_ast *array,
     uint64_t index,
     const type2tc &subtype) override;
-
-  inline smt_astt new_ast(term_t t, smt_sortt s)
-  {
-    return new yices_smt_ast(this, s, t);
-  }
 
   void print_model();
 

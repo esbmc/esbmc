@@ -16,6 +16,8 @@
 #define yices_bvor yices_bvor2
 #endif
 
+#define new_ast new_solver_ast<yices_smt_ast>
+
 smt_convt *create_new_yices_solver(
   bool int_encoding,
   const namespacet &ns,
@@ -681,7 +683,7 @@ smt_astt yices_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
   term_t term = yices_bvconst_uint64(w, theint.to_int64());
-  return new yices_smt_ast(this, s, term);
+  return new_ast(term, s);
 }
 
 smt_astt yices_convt::mk_smt_bool(bool val)
@@ -707,7 +709,7 @@ smt_astt yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
       yices_set_term_name(term, name.c_str());
   }
 
-  return new yices_smt_ast(this, s, term);
+  return new_ast(term, s);
 }
 
 smt_astt yices_convt::mk_array_symbol(
@@ -862,7 +864,7 @@ smt_astt yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
   const struct_union_data &data = ctx->get_type_def(type);
   smt_sortt elemsort = ctx->convert_sort(data.members[elem]);
 
-  return new yices_smt_ast(ctx, elemsort, yices_select(elem + 1, a));
+  return ctx->new_ast(yices_select(elem + 1, a), elemsort);
 }
 
 smt_astt yices_smt_ast::update(
@@ -880,7 +882,7 @@ smt_astt yices_smt_ast::update(
 
   const yices_smt_ast *yast = to_solver_smt_ast<yices_smt_ast>(value);
   term_t result = yices_tuple_update(a, idx + 1, yast->a);
-  return new yices_smt_ast(ctx, sort, result);
+  return ctx->new_ast(result, sort);
 }
 
 smt_sortt yices_convt::mk_struct_sort(const type2tc &type)
@@ -929,7 +931,7 @@ smt_astt yices_convt::tuple_fresh(smt_sortt s, std::string name)
 {
   term_t t = yices_new_uninterpreted_term(to_solver_smt_sort<type_t>(s)->s);
   yices_set_term_name(t, name.c_str());
-  return new yices_smt_ast(this, s, t);
+  return new_ast(t, s);
 }
 
 smt_astt yices_convt::tuple_array_create(
