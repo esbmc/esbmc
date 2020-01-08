@@ -118,7 +118,7 @@ public:
   ~array_convt() = default;
 
   // Public api
-  smt_ast *mk_array_symbol(
+  smt_astt mk_array_symbol(
     const std::string &name,
     const smt_sort *ms,
     smt_sortt subtype) override;

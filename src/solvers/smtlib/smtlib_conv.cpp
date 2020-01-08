@@ -521,10 +521,8 @@ BigInt smtlib_convt::get_bv(smt_astt a)
   return m;
 }
 
-expr2tc smtlib_convt::get_array_elem(
-  const smt_ast *array,
-  uint64_t index,
-  const type2tc &t)
+expr2tc
+smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
 {
   // This should always be a symbol.
   const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(array);
@@ -745,7 +743,7 @@ const std::string smtlib_convt::solver_text()
   return solver_name + " version " + solver_version;
 }
 
-void smtlib_convt::assert_ast(const smt_ast *a)
+void smtlib_convt::assert_ast(smt_astt a)
 {
   const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(a);
 
@@ -771,7 +769,7 @@ void smtlib_convt::assert_ast(const smt_ast *a)
   fprintf(out_stream, ")\n");
 }
 
-smt_ast *smtlib_convt::mk_smt_int(
+smt_astt smtlib_convt::mk_smt_int(
   const mp_integer &theint,
   bool sign __attribute__((unused)))
 {
@@ -781,7 +779,7 @@ smt_ast *smtlib_convt::mk_smt_int(
   return a;
 }
 
-smt_ast *smtlib_convt::mk_smt_real(const std::string &str)
+smt_astt smtlib_convt::mk_smt_real(const std::string &str)
 {
   smt_sortt s = mk_real_sort();
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_REAL);
@@ -796,14 +794,14 @@ smt_astt smtlib_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
   return a;
 }
 
-smt_ast *smtlib_convt::mk_smt_bool(bool val)
+smt_astt smtlib_convt::mk_smt_bool(bool val)
 {
   smtlib_smt_ast *a = new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_BOOL);
   a->boolval = val;
   return a;
 }
 
-smt_ast *smtlib_convt::mk_array_symbol(
+smt_astt smtlib_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
   smt_sortt array_subtype __attribute__((unused)))
@@ -811,7 +809,7 @@ smt_ast *smtlib_convt::mk_array_symbol(
   return mk_smt_symbol(name, s);
 }
 
-smt_ast *smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
+smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_SYMBOL);
   a->symname = name;
@@ -847,7 +845,7 @@ smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type
 }
 
 smt_astt
-smtlib_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
+smtlib_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   smt_sortt s = mk_bv_sort(high - low + 1);
   smtlib_smt_ast *n = new smtlib_smt_ast(this, s, SMT_FUNC_EXTRACT);
@@ -1426,7 +1424,7 @@ void smtlib_convt::pop_ctx()
   smt_convt::pop_ctx();
 }
 
-const smt_ast *
+smt_astt
 smtlib_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);

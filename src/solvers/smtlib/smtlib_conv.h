@@ -227,7 +227,7 @@ public:
   smt_astt mk_int2real(smt_astt a) override;
   smt_astt mk_isint(smt_astt a) override;
 
-  void assert_ast(const smt_ast *a) override;
+  void assert_ast(smt_astt a) override;
 
   smt_sortt mk_bool_sort() override;
   smt_sortt mk_real_sort() override;
@@ -238,32 +238,29 @@ public:
   smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw) override;
   smt_sortt mk_bvfp_rm_sort() override;
 
-  smt_ast *mk_smt_int(const mp_integer &theint, bool sign) override;
-  smt_ast *mk_smt_real(const std::string &str) override;
+  smt_astt mk_smt_int(const mp_integer &theint, bool sign) override;
+  smt_astt mk_smt_real(const std::string &str) override;
   smt_astt mk_smt_bv(const mp_integer &theint, smt_sortt s) override;
-  smt_ast *mk_smt_bool(bool val) override;
-  smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) override;
-  smt_ast *mk_array_symbol(
+  smt_astt mk_smt_bool(bool val) override;
+  smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_array_symbol(
     const std::string &name,
     const smt_sort *s,
     smt_sortt array_subtype) override;
   smt_sort *mk_struct_sort(const type2tc &type);
-  smt_astt
-  mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
+  smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low) override;
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
-  const smt_ast *
+  smt_astt
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
-  bool get_bool(const smt_ast *a) override;
+  bool get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a) override;
-  expr2tc get_array_elem(
-    const smt_ast *array,
-    uint64_t index,
-    const type2tc &type) override;
+  expr2tc
+  get_array_elem(smt_astt array, uint64_t index, const type2tc &type) override;
 
   std::string sort_to_string(const smt_sort *s) const;
   unsigned int emit_terminal_ast(const smtlib_smt_ast *a, std::string &output);

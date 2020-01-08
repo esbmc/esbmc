@@ -136,7 +136,7 @@ void smt_convt::set_fp_conv(fp_convt *iface)
 void smt_convt::delete_all_asts()
 {
   // Erase all the remaining asts in the live ast vector.
-  for(smt_ast *ast : live_asts)
+  for(auto *ast : live_asts)
     delete ast;
   live_asts.clear();
 }
@@ -2439,7 +2439,7 @@ smt_astt smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
     sort->id == SMT_SORT_ARRAY &&
     "Select operation applied to non-array scalar AST");
 
-  const smt_ast *args[2];
+  smt_astt args[2];
   args[0] = this;
   args[1] = ctx->convert_ast(idx);
   return ctx->mk_select(args[0], args[1]);

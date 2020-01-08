@@ -285,7 +285,7 @@ expr2tc smt_convt_wrapper::get_array_elem(
     ast_down(a), idx, subtype);
 }
 
-const smt_ast *smt_convt_wrapper::convert_array_of(
+smt_astt smt_convt_wrapper::convert_array_of(
   smt_astt init_val,
   unsigned long domain_width)
 {

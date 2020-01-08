@@ -94,7 +94,7 @@ smt_convt::resultt z3_convt::dec_solve()
   return smt_convt::P_ERROR;
 }
 
-void z3_convt::assert_ast(const smt_ast *a)
+void z3_convt::assert_ast(smt_astt a)
 {
   z3::expr theval = to_solver_smt_ast<z3_smt_ast>(a)->a;
   solver.add(theval);
@@ -738,8 +738,7 @@ smt_astt z3_convt::mk_isint(smt_astt a)
     boolean_sort);
 }
 
-smt_astt
-z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
+smt_astt z3_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   // If it's a floatbv, convert it to bv
   if(a->sort->id == SMT_SORT_FPBV)
@@ -957,9 +956,9 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
   return new solver_smt_sort<z3::sort>(SMT_SORT_STRUCT, sort, type);
 }
 
-const smt_ast *z3_smt_ast::update(
+smt_astt z3_smt_ast::update(
   smt_convt *conv,
-  const smt_ast *value,
+  smt_astt value,
   unsigned int idx,
   expr2tc idx_expr) const
 {
@@ -974,7 +973,7 @@ const smt_ast *z3_smt_ast::update(
   return z3_conv->new_ast(z3_conv->mk_tuple_update(a, idx, updateval->a), sort);
 }
 
-const smt_ast *z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
+smt_astt z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
 {
   z3_convt *z3_conv = static_cast<z3_convt *>(conv);
 
@@ -1020,7 +1019,7 @@ smt_astt z3_convt::tuple_fresh(const smt_sort *s, std::string name)
   return new_ast(z3_ctx.constant(n, to_solver_smt_sort<z3::sort>(s)->s), s);
 }
 
-const smt_ast *
+smt_astt
 z3_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   smt_sortt dom_sort = mk_int_bv_sort(domain_width);
@@ -1033,9 +1032,9 @@ z3_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return new_ast(output, mk_array_sort(dom_sort, init_val->sort));
 }
 
-const smt_ast *z3_convt::tuple_array_create(
+smt_astt z3_convt::tuple_array_create(
   const type2tc &arr_type,
-  const smt_ast **input_args,
+  smt_astt *input_args,
   bool const_array,
   const smt_sort *domain)
 {
@@ -1135,7 +1134,7 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
 
 // ***************************** 'get' api *******************************
 
-bool z3_convt::get_bool(const smt_ast *a)
+bool z3_convt::get_bool(smt_astt a)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
   z3::expr e = solver.get_model().eval(za->a, false);
@@ -1191,10 +1190,8 @@ ieee_floatt z3_convt::get_fpbv(smt_astt a)
   return number;
 }
 
-expr2tc z3_convt::get_array_elem(
-  const smt_ast *array,
-  uint64_t index,
-  const type2tc &subtype)
+expr2tc
+z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(array);
   unsigned long array_bound = array->sort->get_domain_width();

@@ -42,7 +42,7 @@ smt_convt::resultt cvc_convt::dec_solve()
   return P_UNSATISFIABLE;
 }
 
-bool cvc_convt::get_bool(const smt_ast *a)
+bool cvc_convt::get_bool(smt_astt a)
 {
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
   CVC4::Expr e = smt.getValue(ca->a);
@@ -82,7 +82,7 @@ BigInt cvc_convt::get_bv(smt_astt a)
 }
 
 expr2tc cvc_convt::get_array_elem(
-  const smt_ast *array,
+  smt_astt array,
   uint64_t index,
   const type2tc &subtype)
 {
@@ -542,7 +542,7 @@ smt_astt cvc_convt::mk_smt_fpbv_neg(smt_astt op)
     op->sort);
 }
 
-void cvc_convt::assert_ast(const smt_ast *a)
+void cvc_convt::assert_ast(smt_astt a)
 {
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
   smt.assertFormula(ca->a);
@@ -1097,8 +1097,7 @@ smt_astt cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return new_ast(e, s);
 }
 
-smt_astt
-cvc_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
+smt_astt cvc_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
   CVC4::BitVectorExtract ext(high, low);
@@ -1158,7 +1157,7 @@ smt_astt cvc_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
   return new_ast(e, t->sort);
 }
 
-const smt_ast *
+smt_astt
 cvc_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);

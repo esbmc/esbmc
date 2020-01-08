@@ -82,7 +82,7 @@ public:
   virtual void convert(smt_convt &smt_conv);
   void convert_internal_step(
     smt_convt &smt_conv,
-    const smt_ast *&assumpt_ast,
+    smt_astt &assumpt_ast,
     smt_convt::ast_vec &assertions,
     SSA_stept &s);
 
@@ -233,7 +233,7 @@ public:
 
   smt_convt &conv;
   std::list<smt_convt::ast_vec> assert_vec_list;
-  std::list<const smt_ast *> assumpt_chain;
+  std::list<smt_astt> assumpt_chain;
   std::list<SSA_stepst::iterator> scoped_end_points;
   SSA_stepst::iterator cvt_progress;
 };

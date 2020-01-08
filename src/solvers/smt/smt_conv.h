@@ -854,7 +854,7 @@ public:
 
   /** Lifetime tracking of smt ast's. When a context is pop'd, all the ASTs
    *  created in that context are freed. */
-  std::vector<smt_ast *> live_asts;
+  std::vector<smt_astt> live_asts;
   /** Accounting of live_asts for push/pop. Records the number of pointers
    *  contained when a push occurred. On pop, the live_asts vector is reset
    *  back to that point. */

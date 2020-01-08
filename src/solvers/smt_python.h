@@ -149,8 +149,7 @@ public:
   smt_astt
   mk_array_symbol(const std::string &name, smt_sortt sort, smt_sortt subtype);
   expr2tc get_array_elem(smt_astt a, uint64_t idx, const type2tc &subtype);
-  const smt_ast *
-  convert_array_of(smt_astt init_val, unsigned long domain_width);
+  smt_astt convert_array_of(smt_astt init_val, unsigned long domain_width);
   void add_array_constraints_for_solving();
   void push_array_ctx(void);
   void pop_array_ctx(void);

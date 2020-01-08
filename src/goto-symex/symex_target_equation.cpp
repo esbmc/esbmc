@@ -132,7 +132,7 @@ void symex_target_equationt::renumber(
 void symex_target_equationt::convert(smt_convt &smt_conv)
 {
   smt_convt::ast_vec assertions;
-  const smt_ast *assumpt_ast = smt_conv.convert_ast(gen_true_expr());
+  smt_astt assumpt_ast = smt_conv.convert_ast(gen_true_expr());
 
   for(auto &SSA_step : SSA_steps)
     convert_internal_step(smt_conv, assumpt_ast, assertions, SSA_step);
@@ -144,13 +144,13 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
 
 void symex_target_equationt::convert_internal_step(
   smt_convt &smt_conv,
-  const smt_ast *&assumpt_ast,
+  smt_astt &assumpt_ast,
   smt_convt::ast_vec &assertions,
   SSA_stept &step)
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
-  const smt_ast *true_val = smt_conv.convert_ast(gen_true_expr());
-  const smt_ast *false_val = smt_conv.convert_ast(gen_false_expr());
+  smt_astt true_val = smt_conv.convert_ast(gen_true_expr());
+  smt_astt false_val = smt_conv.convert_ast(gen_false_expr());
 
   if(step.ignore)
   {
@@ -488,7 +488,7 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
 
   // Convert the question (must be a bool).
   assert(is_bool_type(question));
-  const smt_ast *q = conv.convert_ast(question);
+  smt_astt q = conv.convert_ast(question);
 
   // The proposition also needs to be guarded with the in-program assumptions,
   // which are not necessarily going to be part of the state guard.
