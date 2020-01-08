@@ -1162,18 +1162,6 @@ cvc_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return default_convert_array_of(init_val, domain_width, this);
 }
 
-void cvc_convt::add_array_constraints_for_solving()
-{
-}
-
-void cvc_convt::push_array_ctx()
-{
-}
-
-void cvc_convt::pop_array_ctx()
-{
-}
-
 smt_sortt cvc_convt::mk_bool_sort()
 {
   return new solver_smt_sort<CVC4::Type>(SMT_SORT_BOOL, em.booleanType(), 1);

@@ -787,18 +787,6 @@ yices_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return default_convert_array_of(init_val, domain_width, this);
 }
 
-void yices_convt::add_array_constraints_for_solving()
-{
-}
-
-void yices_convt::push_array_ctx()
-{
-}
-
-void yices_convt::pop_array_ctx()
-{
-}
-
 bool yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
@@ -1069,18 +1057,6 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
   }
 
   return outstruct;
-}
-
-void yices_convt::add_tuple_constraints_for_solving()
-{
-}
-
-void yices_convt::push_tuple_ctx()
-{
-}
-
-void yices_convt::pop_tuple_ctx()
-{
 }
 
 void yices_convt::print_model()

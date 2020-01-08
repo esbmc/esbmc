@@ -255,12 +255,8 @@ public:
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
-  void add_array_constraints_for_solving() override;
-
   const smt_ast *
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
-  void push_array_ctx() override;
-  void pop_array_ctx() override;
 
   bool get_bool(const smt_ast *a) override;
   BigInt get_bv(smt_astt a) override;

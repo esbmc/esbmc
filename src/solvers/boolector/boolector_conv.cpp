@@ -1,11 +1,6 @@
 #include <boolector_conv.h>
 #include <cstring>
 
-extern "C"
-{
-#include <boolector/boolector.h>
-}
-
 smt_convt *create_new_boolector_solver(
   bool int_encoding,
   const namespacet &ns,
@@ -739,18 +734,6 @@ const smt_ast *
 boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
-}
-
-void boolector_convt::add_array_constraints_for_solving()
-{
-}
-
-void boolector_convt::push_array_ctx()
-{
-}
-
-void boolector_convt::pop_array_ctx()
-{
 }
 
 smt_ast *boolector_convt::fix_up_shift(

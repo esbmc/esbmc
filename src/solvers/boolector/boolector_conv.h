@@ -93,10 +93,6 @@ public:
   const smt_ast *
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
-  void add_array_constraints_for_solving() override;
-  void push_array_ctx() override;
-  void pop_array_ctx() override;
-
   bool get_bool(const smt_ast *a) override;
   BigInt get_bv(smt_astt a) override;
   expr2tc get_array_elem(
