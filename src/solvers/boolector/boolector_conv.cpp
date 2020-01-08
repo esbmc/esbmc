@@ -1,6 +1,8 @@
 #include <boolector_conv.h>
 #include <cstring>
 
+#define new_ast new_solver_ast<btor_smt_ast>
+
 smt_convt *create_new_boolector_solver(
   bool int_encoding,
   const namespacet &ns,
@@ -57,7 +59,7 @@ const std::string boolector_convt::solver_text()
   return ss;
 }
 
-void boolector_convt::assert_ast(const smt_ast *a)
+void boolector_convt::assert_ast(smt_astt a)
 {
   boolector_assert(btor, to_solver_smt_ast<btor_smt_ast>(a)->a);
 }
@@ -472,7 +474,7 @@ smt_astt boolector_convt::mk_select(smt_astt a, smt_astt b)
     a->sort->get_range_sort());
 }
 
-smt_ast *boolector_convt::mk_smt_int(
+smt_astt boolector_convt::mk_smt_int(
   const mp_integer &theint __attribute__((unused)),
   bool sign __attribute__((unused)))
 {
@@ -480,7 +482,7 @@ smt_ast *boolector_convt::mk_smt_int(
   abort();
 }
 
-smt_ast *boolector_convt::mk_smt_real(const std::string &str
+smt_astt boolector_convt::mk_smt_real(const std::string &str
                                       __attribute__((unused)))
 {
   std::cerr << "Boolector can't create Real sorts" << std::endl;
@@ -494,14 +496,14 @@ smt_astt boolector_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
     s);
 }
 
-smt_ast *boolector_convt::mk_smt_bool(bool val)
+smt_astt boolector_convt::mk_smt_bool(bool val)
 {
   BoolectorNode *node = (val) ? boolector_true(btor) : boolector_false(btor);
   const smt_sort *sort = boolean_sort;
   return new_ast(node, sort);
 }
 
-smt_ast *boolector_convt::mk_array_symbol(
+smt_astt boolector_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
   smt_sortt array_subtype __attribute__((unused)))
@@ -509,7 +511,7 @@ smt_ast *boolector_convt::mk_array_symbol(
   return mk_smt_symbol(name, s);
 }
 
-smt_ast *
+smt_astt
 boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   symtable_type::iterator it = symtable.find(name);
@@ -543,16 +545,14 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     abort();
   }
 
-  btor_smt_ast *ast = new_ast(node, s);
+  smt_astt ast = new_ast(node, s);
 
   symtable.insert(symtable_type::value_type(name, ast));
   return ast;
 }
 
-smt_astt boolector_convt::mk_extract(
-  const smt_ast *a,
-  unsigned int high,
-  unsigned int low)
+smt_astt
+boolector_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   smt_sortt s = mk_bv_sort(high - low + 1);
   const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
@@ -603,7 +603,7 @@ smt_astt boolector_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
     t->sort);
 }
 
-bool boolector_convt::get_bool(const smt_ast *a)
+bool boolector_convt::get_bool(smt_astt a)
 {
   const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
   const char *result = boolector_bv_assignment(btor, ast->a);
@@ -639,7 +639,7 @@ BigInt boolector_convt::get_bv(smt_astt a)
 }
 
 expr2tc boolector_convt::get_array_elem(
-  const smt_ast *array,
+  smt_astt array,
   uint64_t index,
   const type2tc &subtype)
 {
@@ -669,7 +669,7 @@ expr2tc boolector_convt::get_array_elem(
   return gen_zero(subtype);
 }
 
-const smt_ast *boolector_convt::overflow_arith(const expr2tc &expr)
+smt_astt boolector_convt::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
   const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
@@ -730,13 +730,13 @@ const smt_ast *boolector_convt::overflow_arith(const expr2tc &expr)
   return new_ast(res, s);
 }
 
-const smt_ast *
+smt_astt
 boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
 }
 
-smt_ast *boolector_convt::fix_up_shift(
+smt_astt boolector_convt::fix_up_shift(
   shift_func_ptr fptr,
   smt_astt op0,
   smt_astt op1,
