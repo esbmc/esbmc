@@ -135,6 +135,13 @@ public:
   /** Shorthand for a vector of smt_ast's */
   typedef std::vector<smt_astt> ast_vec;
 
+  template <typename the_solver_ast>
+  smt_astt
+  new_solver_ast(typename the_solver_ast::solver_ast_type ast, smt_sortt sort)
+  {
+    return new the_solver_ast(this, ast, sort);
+  }
+
   /** Primary constructor. After construction, smt_post_init must be called
    *  before the object is used as a solver converter.
    *
