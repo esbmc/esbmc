@@ -1,6 +1,8 @@
 #include <util/c_types.h>
 #include <cvc_conv.h>
 
+#define new_ast new_solver_ast<cvc_smt_ast>
+
 smt_convt *create_new_cvc_solver(
   bool int_encoding,
   const namespacet &ns,
