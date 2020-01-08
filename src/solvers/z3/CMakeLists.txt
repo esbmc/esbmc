@@ -1,7 +1,5 @@
-# Try and find z3. Search in priority of:
-#  * User specified directories
-#  * Environmental var paths
-#  * System default
+set(Z3_MIN_VERSION "4.8.4")
+
 if(DEFINED Z3_DIR)
     set(ENABLE_Z3 ON)
 endif()
@@ -34,7 +32,13 @@ if(ENABLE_Z3)
     endif()
 
     message(STATUS "Using Z3 at: ${Z3_LIB}")
+    string(REGEX MATCH "Z3 ([0-9].[0-9].[0-9].[0-9])"  REGEX_OUTPUT ${Z3_VERSION})
+    set(Z3_VERSION "${CMAKE_MATCH_1}")    
     message(STATUS "Z3 version: ${Z3_VERSION}")
+    if(Z3_VERSION VERSION_LESS Z3_MIN_VERSION)
+        message(FATAL_ERROR "Expected version ${Z3_MIN_VERSION} or greater")
+    endif()
+    
 
     add_library(solverz3 z3_conv.cpp)
     target_include_directories(solverz3

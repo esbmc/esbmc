@@ -1,3 +1,5 @@
+set(Mathsat_MIN_VERSION 5.5.4)
+
 if(DEFINED Mathsat_DIR)
     set(ENABLE_MATHSAT ON)
 endif()
@@ -31,7 +33,11 @@ if(ENABLE_MATHSAT)
 
     message(STATUS "Using MathSAT at: ${Mathsat_LIB}")
     string(REGEX MATCH "version ([0-9].[0-9].[0-9]) "  REGEX_OUTPUT ${Mathsat_VERSION})
-    message(STATUS "MathSAT version: ${CMAKE_MATCH_1}")
+    set(Mathsat_VERSION "${CMAKE_MATCH_1}")
+    message(STATUS "MathSAT version: ${Mathsat_VERSION}")
+    if(Mathsat_VERSION VERSION_LESS Mathsat_MIN_VERSION)
+        message(FATAL_ERROR "Expected version ${Mathsat_MIN_VERSION} or greater")
+    endif()
 
     add_library(solvermsat mathsat_conv.cpp)
     target_include_directories(solvermsat

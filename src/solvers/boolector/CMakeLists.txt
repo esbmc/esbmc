@@ -1,3 +1,5 @@
+set(Boolector_MIN_VERSION "3.1.0")
+
 if(DEFINED Boolector_DIR)
     set(ENABLE_BOOLECTOR ON)
 endif()
@@ -12,6 +14,9 @@ if(ENABLE_BOOLECTOR)
 
     message(STATUS "Found Boolector at: ${Boolector_DIR}")
     message(STATUS "Boolector version: ${Boolector_VERSION}")
+    if(Boolector_VERSION VERSION_LESS Boolector_MIN_VERSION)
+        message(FATAL_ERROR "Expected version ${Boolector_MIN_VERSION} or greater")
+    endif()
     
     add_library(solverbtor boolector_conv.cpp)
     target_include_directories(solverbtor

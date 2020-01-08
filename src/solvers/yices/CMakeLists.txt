@@ -1,3 +1,5 @@
+set(Yices_MIN_VERSION "2.6.1")
+
 if(DEFINED Yices_DIR)
     set(ENABLE_YICES ON)
 endif()
@@ -30,6 +32,10 @@ if(ENABLE_YICES)
 
     message(STATUS "Using Yices at: ${Yices_LIB}")
     message(STATUS "Yices version: ${Yices_VERSION}")
+
+    if(Yices_VERSION VERSION_LESS Yices_MIN_VERSION)
+        message(FATAL_ERROR "Expected version ${Yices_MIN_VERSION} or greater")
+    endif()
 
     if (Yices_VERSION VERSION_GREATER 2.5.2)
         message(STATUS "Danger Will Robinson: the version of Yices you have is GPL licensed, distribution is impossible")

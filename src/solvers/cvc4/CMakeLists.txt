@@ -1,3 +1,5 @@
+set(CVC4_MIN_VERSION "1.6")
+
 if(DEFINED CVC4_DIR)
     set(ENABLE_CVC4 ON)
 endif()
@@ -30,6 +32,10 @@ if(ENABLE_CVC4)
 
     message(STATUS "Using CVC4 at: ${CVC4_LIB}")
     message(STATUS "CVC4 version: ${CVC4_VERSION}")
+    if(CVC4_VERSION VERSION_LESS CVC4_MIN_VERSION)
+        message(FATAL_ERROR "Expected version ${CVC4_MIN_VERSION} or greater")
+    endif()
+    
 
 
     add_library(solvercvc4 cvc_conv.cpp)
