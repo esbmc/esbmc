@@ -97,10 +97,9 @@ bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
   // records for the lexical variable that have this activation record.
   for(auto it = state.call_stack.rbegin(); it != state.call_stack.rend(); it++)
   {
-    auto &local_vars = it->local_variables;
-    if(
-      local_vars.find(renaming::level2t::name_record(to_symbol2t(sym))) !=
-      local_vars.end())
+    auto const &name = renaming::level2t::name_record(to_symbol2t(sym));
+    auto const &local_vars = it->local_variables;
+    if(local_vars.find(name) != local_vars.end())
       return true;
   }
 
