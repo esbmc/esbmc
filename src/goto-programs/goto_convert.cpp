@@ -1524,8 +1524,8 @@ void goto_convertt::convert_return(
     }
   }
 
-  // Need to process _entire_ destructor stack.
-  unwind_destructor_stack(code.location(), 0, dest);
+  goto_programt dummy;
+  unwind_destructor_stack(code.location(), 0, dummy);
 
   if(targets.has_return_value)
   {
