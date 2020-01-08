@@ -24,7 +24,9 @@ static const char *mathsat_config =
   "theory.fp.bv_combination_enabled = true\n"
   "theory.arr.enable_witness = true";
 
-void mathsat_convt::check_msat_error(msat_term &r)
+#define new_ast new_solver_ast<mathsat_smt_ast>
+
+void mathsat_convt::check_msat_error(msat_term &r) const
 {
   if(MSAT_ERROR_TERM(r))
   {
@@ -76,7 +78,7 @@ void mathsat_convt::pop_ctx()
   smt_convt::pop_ctx();
 }
 
-void mathsat_convt::assert_ast(const smt_ast *a)
+void mathsat_convt::assert_ast(smt_astt a)
 {
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
   msat_assert_formula(env, mast->a);
@@ -96,7 +98,7 @@ smt_convt::resultt mathsat_convt::dec_solve()
   return smt_convt::P_ERROR;
 }
 
-bool mathsat_convt::get_bool(const smt_ast *a)
+bool mathsat_convt::get_bool(smt_astt a)
 {
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
   msat_term t = msat_get_model_value(env, mast->a);
@@ -186,7 +188,7 @@ ieee_floatt mathsat_convt::get_fpbv(smt_astt a)
 }
 
 expr2tc mathsat_convt::get_array_elem(
-  const smt_ast *array,
+  smt_astt array,
   uint64_t index,
   const type2tc &subtype)
 {
@@ -656,7 +658,7 @@ smt_astt mathsat_convt::mk_smt_int(
   return new_ast(t, s);
 }
 
-smt_ast *mathsat_convt::mk_smt_real(const std::string &str)
+smt_astt mathsat_convt::mk_smt_real(const std::string &str)
 {
   msat_term t = msat_make_number(env, str.c_str());
   check_msat_error(t);
@@ -768,14 +770,13 @@ smt_astt mathsat_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   return new_ast(t, mk_fpbv_rm_sort());
 }
 
-smt_ast *mathsat_convt::mk_smt_bool(bool val)
+smt_astt mathsat_convt::mk_smt_bool(bool val)
 {
   const smt_sort *s = boolean_sort;
-  return new mathsat_smt_ast(
-    this, s, (val) ? msat_make_true(env) : msat_make_false(env));
+  return new_ast((val) ? msat_make_true(env) : msat_make_false(env), s);
 }
 
-smt_ast *mathsat_convt::mk_array_symbol(
+smt_astt mathsat_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
   smt_sortt array_subtype __attribute__((unused)))
@@ -783,7 +784,7 @@ smt_ast *mathsat_convt::mk_array_symbol(
   return mk_smt_symbol(name, s);
 }
 
-smt_ast *
+smt_astt
 mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   // XXX - does 'd' leak?
@@ -797,7 +798,7 @@ mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 }
 
 smt_astt
-mathsat_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low)
+mathsat_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   // If it's a floatbv, convert it to bv
   if(a->sort->id == SMT_SORT_FPBV)
@@ -890,10 +891,21 @@ smt_astt mathsat_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
   return new_ast(r, t->sort);
 }
 
-const smt_ast *
+smt_astt
 mathsat_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
+}
+
+mathsat_smt_ast::mathsat_smt_ast(
+  smt_convt *ctx,
+  msat_term _t,
+  const smt_sort *_s)
+  : solver_smt_ast<msat_term>(ctx, _t, _s)
+{
+  auto convt = dynamic_cast<const mathsat_convt *>(context);
+  assert(convt != nullptr);
+  convt->check_msat_error(_t);
 }
 
 void mathsat_smt_ast::dump() const
