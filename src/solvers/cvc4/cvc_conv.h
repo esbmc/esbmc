@@ -147,11 +147,6 @@ public:
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
-  inline cvc_smt_ast *new_ast(CVC4::Expr _e, const smt_sort *_s)
-  {
-    return new cvc_smt_ast(this, _s, _e);
-  }
-
   const smt_ast *
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
