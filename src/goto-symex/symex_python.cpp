@@ -883,8 +883,7 @@ get_guard_ast(symex_target_equationt::SSA_stept &step)
   return smt_ast_wrapper::cast_ast_down(step.guard_ast);
 }
 
-static void
-set_guard_ast(symex_target_equationt::SSA_stept &step, const smt_ast *ast)
+static void set_guard_ast(symex_target_equationt::SSA_stept &step, smt_astt ast)
 {
   step.guard_ast = ast;
   return;
@@ -896,8 +895,7 @@ get_cond_ast(symex_target_equationt::SSA_stept &step)
   return smt_ast_wrapper::cast_ast_down(step.cond_ast);
 }
 
-static void
-set_cond_ast(symex_target_equationt::SSA_stept &step, const smt_ast *ast)
+static void set_cond_ast(symex_target_equationt::SSA_stept &step, smt_astt ast)
 {
   step.cond_ast = ast;
   return;

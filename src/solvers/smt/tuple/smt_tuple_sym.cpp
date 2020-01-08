@@ -15,7 +15,7 @@ smt_astt smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
   // Add a . suffix because this is of tuple type.
   name += ".";
 
-  smt_ast *result =
+  smt_astt result =
     new tuple_sym_smt_ast(ctx, ctx->convert_sort(structdef->type), name);
 
   for(unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)

@@ -18,13 +18,11 @@ public:
   using solver_smt_ast<z3::expr>::solver_smt_ast;
   ~z3_smt_ast() override = default;
 
-  const smt_ast *update(
-    smt_convt *ctx,
-    const smt_ast *value,
-    unsigned int idx,
-    expr2tc idx_expr) const override;
+  smt_astt
+  update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr)
+    const override;
 
-  const smt_ast *project(smt_convt *ctx, unsigned int elem) const override;
+  smt_astt project(smt_convt *ctx, unsigned int elem) const override;
 
   void dump() const override;
 };
@@ -43,13 +41,11 @@ public:
   void pop_ctx() override;
   smt_convt::resultt dec_solve() override;
 
-  bool get_bool(const smt_ast *a) override;
+  bool get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a) override;
   ieee_floatt get_fpbv(smt_astt a) override;
-  expr2tc get_array_elem(
-    const smt_ast *array,
-    uint64_t index,
-    const type2tc &subtype) override;
+  expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
+    override;
 
   z3::expr
   mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &new_val);
@@ -169,8 +165,7 @@ public:
     smt_sortt array_subtype) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
   smt_sortt mk_struct_sort(const type2tc &type) override;
-  smt_astt
-  mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
+  smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low) override;
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
@@ -180,9 +175,9 @@ public:
   smt_astt tuple_fresh(const smt_sort *s, std::string name = "") override;
   expr2tc tuple_get(const expr2tc &expr) override;
 
-  const smt_ast *tuple_array_create(
+  smt_astt tuple_array_create(
     const type2tc &array_type,
-    const smt_ast **input_args,
+    smt_astt *input_args,
     bool const_array,
     const smt_sort *domain) override;
 
@@ -191,10 +186,10 @@ public:
   smt_astt
   tuple_array_of(const expr2tc &init, unsigned long domain_width) override;
 
-  const smt_ast *
+  smt_astt
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
-  void assert_ast(const smt_ast *a) override;
+  void assert_ast(smt_astt a) override;
 
   const std::string solver_text() override
   {

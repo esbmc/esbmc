@@ -21,13 +21,11 @@ public:
   smt_convt::resultt dec_solve() override;
   const std::string solver_text() override;
 
-  bool get_bool(const smt_ast *a) override;
+  bool get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a) override;
   ieee_floatt get_fpbv(smt_astt a) override;
-  expr2tc get_array_elem(
-    const smt_ast *array,
-    uint64_t index,
-    const type2tc &subtype) override;
+  expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
+    override;
 
   // SMT-abstraction migration:
   smt_astt mk_add(smt_astt a, smt_astt b) override;
@@ -140,17 +138,16 @@ public:
     const smt_sort *s,
     smt_sortt array_subtype) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
-  smt_astt
-  mk_extract(const smt_ast *a, unsigned int high, unsigned int low) override;
+  smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low) override;
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
-  const smt_ast *
+  smt_astt
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
-  void assert_ast(const smt_ast *a) override;
+  void assert_ast(smt_astt a) override;
 
   void dump_smt() override;
 

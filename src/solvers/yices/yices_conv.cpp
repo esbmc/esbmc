@@ -818,7 +818,7 @@ BigInt yices_convt::get_bv(smt_astt a)
 }
 
 expr2tc yices_convt::get_array_elem(
-  const smt_ast *array,
+  smt_astt array,
   uint64_t index,
   const type2tc &subtype)
 {
