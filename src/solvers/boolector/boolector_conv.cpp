@@ -3,6 +3,13 @@
 
 #define new_ast new_solver_ast<btor_smt_ast>
 
+void error_handler(const char *msg)
+{
+  std::cerr << "Boolector error encountered\n";
+  std::cerr << msg << '\n';
+  abort();
+}
+
 smt_convt *create_new_boolector_solver(
   bool int_encoding,
   const namespacet &ns,
@@ -17,7 +24,7 @@ smt_convt *create_new_boolector_solver(
 }
 
 boolector_convt::boolector_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
+  : smt_convt(int_encoding, ns), array_iface(true, true), fp_convt(this)
 {
   if(int_encoding)
   {
@@ -29,6 +36,7 @@ boolector_convt::boolector_convt(bool int_encoding, const namespacet &ns)
   btor = boolector_new();
   boolector_set_opt(btor, BTOR_OPT_MODEL_GEN, 1);
   boolector_set_opt(btor, BTOR_OPT_AUTO_CLEANUP, 1);
+  boolector_set_abort(error_handler);
 }
 
 boolector_convt::~boolector_convt()
@@ -732,7 +740,15 @@ smt_astt boolector_convt::overflow_arith(const expr2tc &expr)
 smt_astt
 boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
-  return default_convert_array_of(init_val, domain_width, this);
+  smt_sortt dom_sort = mk_int_bv_sort(domain_width);
+  smt_sortt arrsort = mk_array_sort(dom_sort, init_val->sort);
+
+  return new_ast(
+    boolector_const_array(
+      btor,
+      to_solver_smt_sort<BoolectorSort>(arrsort)->s,
+      to_solver_smt_ast<btor_smt_ast>(init_val)->a),
+    arrsort);
 }
 
 smt_astt boolector_convt::fix_up_shift(
