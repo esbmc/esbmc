@@ -61,19 +61,9 @@ void build_goto_trace(
     if(SSA_step.hidden)
       continue;
 
-    if(SSA_step.is_assignment() && is_symbol2t(SSA_step.rhs))
-    {
-      symbol2t s = to_symbol2t(SSA_step.rhs);
-      if(
-        s.thename.as_string().find("return_value$___VERIFIER_nondet") !=
-        std::string::npos)
-        goto BUILD_ASSIGNMENT;
-    }
-
     if(!smt_conv->l_get(SSA_step.guard_ast).is_true())
       continue;
 
-  BUILD_ASSIGNMENT:
     goto_trace.steps.emplace_back();
     goto_trace_stept &goto_trace_step = goto_trace.steps.back();
 
