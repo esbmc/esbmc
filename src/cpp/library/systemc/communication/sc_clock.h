@@ -3,10 +3,10 @@
 
 class sc_clock
 {
-	public :
-		sc_clock() {}
+public:
+  sc_clock()
+  {
+  }
 };
-
-
 
 #endif

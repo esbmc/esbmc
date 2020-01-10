@@ -1,22 +1,8 @@
 /*===---- bmiintrin.h - BMI intrinsics -------------------------------------===
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
+ * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+ * See https://llvm.org/LICENSE.txt for license information.
+ * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  *
  *===-----------------------------------------------------------------------===
  */
@@ -62,7 +48,7 @@
 static __inline__ unsigned short __RELAXED_FN_ATTRS
 __tzcnt_u16(unsigned short __X)
 {
-  return __X ? __builtin_ctzs(__X) : 16;
+  return __builtin_ia32_tzcnt_u16(__X);
 }
 
 /// Performs a bitwise AND of the second operand with the one's
@@ -196,7 +182,7 @@ __blsr_u32(unsigned int __X)
 static __inline__ unsigned int __RELAXED_FN_ATTRS
 __tzcnt_u32(unsigned int __X)
 {
-  return __X ? __builtin_ctz(__X) : 32;
+  return __builtin_ia32_tzcnt_u32(__X);
 }
 
 /// Counts the number of trailing zero bits in the operand.
@@ -212,7 +198,7 @@ __tzcnt_u32(unsigned int __X)
 static __inline__ int __RELAXED_FN_ATTRS
 _mm_tzcnt_32(unsigned int __X)
 {
-  return __X ? __builtin_ctz(__X) : 32;
+  return __builtin_ia32_tzcnt_u32(__X);
 }
 
 #ifdef __x86_64__
@@ -359,7 +345,7 @@ __blsr_u64(unsigned long long __X)
 static __inline__ unsigned long long __RELAXED_FN_ATTRS
 __tzcnt_u64(unsigned long long __X)
 {
-  return __X ? __builtin_ctzll(__X) : 64;
+  return __builtin_ia32_tzcnt_u64(__X);
 }
 
 /// Counts the number of trailing zero bits in the operand.
@@ -375,7 +361,7 @@ __tzcnt_u64(unsigned long long __X)
 static __inline__ long long __RELAXED_FN_ATTRS
 _mm_tzcnt_64(unsigned long long __X)
 {
-  return __X ? __builtin_ctzll(__X) : 64;
+  return __builtin_ia32_tzcnt_u64(__X);
 }
 
 #endif /* __x86_64__ */

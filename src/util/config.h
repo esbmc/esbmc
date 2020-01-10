@@ -42,10 +42,16 @@ public:
     // alignment (in structs) measured in bytes
     unsigned alignment;
 
-    typedef enum { NO_ENDIANESS, IS_LITTLE_ENDIAN, IS_BIG_ENDIAN } endianesst;
+    typedef enum
+    {
+      NO_ENDIANESS,
+      IS_LITTLE_ENDIAN,
+      IS_BIG_ENDIAN
+    } endianesst;
     endianesst endianess;
 
-    typedef enum {
+    typedef enum
+    {
       NO_OS,
       OS_I386_LINUX,
       OS_I386_MACOS,
@@ -57,7 +63,11 @@ public:
     std::list<std::string> defines;
     std::list<std::string> include_paths;
 
-    typedef enum { LIB_NONE, LIB_FULL } libt;
+    typedef enum
+    {
+      LIB_NONE,
+      LIB_FULL
+    } libt;
     libt lib;
   } ansi_c;
 

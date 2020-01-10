@@ -53,7 +53,15 @@ public:
     return type == RENUMBER;
   }
 
-  typedef enum { ASSIGNMENT, ASSUME, ASSERT, OUTPUT, SKIP, RENUMBER } typet;
+  typedef enum
+  {
+    ASSIGNMENT,
+    ASSUME,
+    ASSERT,
+    OUTPUT,
+    SKIP,
+    RENUMBER
+  } typet;
   typet type;
 
   goto_programt::const_targett pc;

@@ -70,6 +70,9 @@ extern "C"
   extern char clang_avx2intrin_buf[];
   extern unsigned int clang_avx2intrin_buf_size;
 
+  extern char clang_avx512bf16intrin_buf[];
+  extern unsigned int clang_avx512bf16intrin_buf_size;
+
   extern char clang_avx512bitalgintrin_buf[];
   extern unsigned int clang_avx512bitalgintrin_buf_size;
 
@@ -106,6 +109,9 @@ extern "C"
   extern char clang_avx512vbmivlintrin_buf[];
   extern unsigned int clang_avx512vbmivlintrin_buf_size;
 
+  extern char clang_avx512vlbf16intrin_buf[];
+  extern unsigned int clang_avx512vlbf16intrin_buf_size;
+
   extern char clang_avx512vlbitalgintrin_buf[];
   extern unsigned int clang_avx512vlbitalgintrin_buf_size;
 
@@ -127,8 +133,14 @@ extern "C"
   extern char clang_avx512vlvnniintrin_buf[];
   extern unsigned int clang_avx512vlvnniintrin_buf_size;
 
+  extern char clang_avx512vlvp2intersectintrin_buf[];
+  extern unsigned int clang_avx512vlvp2intersectintrin_buf_size;
+
   extern char clang_avx512vnniintrin_buf[];
   extern unsigned int clang_avx512vnniintrin_buf_size;
+
+  extern char clang_avx512vp2intersectintrin_buf[];
+  extern unsigned int clang_avx512vp2intersectintrin_buf_size;
 
   extern char clang_avx512vpopcntdqintrin_buf[];
   extern unsigned int clang_avx512vpopcntdqintrin_buf_size;
@@ -165,6 +177,9 @@ extern "C"
 
   extern char clang_emmintrin_buf[];
   extern unsigned int clang_emmintrin_buf_size;
+
+  extern char clang_enqcmdintrin_buf[];
+  extern unsigned int clang_enqcmdintrin_buf_size;
 
   extern char clang_f16cintrin_buf[];
   extern unsigned int clang_f16cintrin_buf_size;
@@ -241,8 +256,14 @@ extern "C"
   extern char clang_omp_buf[];
   extern unsigned int clang_omp_buf_size;
 
+  extern char clang_omp_tools_buf[];
+  extern unsigned int clang_omp_tools_buf_size;
+
   extern char clang_ompt_buf[];
   extern unsigned int clang_ompt_buf_size;
+
+  extern char clang_opencl_c_base_buf[];
+  extern unsigned int clang_opencl_c_base_buf_size;
 
   extern char clang_opencl_c_buf[];
   extern unsigned int clang_opencl_c_buf_size;
@@ -407,6 +428,9 @@ extern "C"
     {"arm_neon.h", clang_arm_neon_buf, &clang_arm_neon_buf_size},
     {"armintr.h", clang_armintr_buf, &clang_armintr_buf_size},
     {"avx2intrin.h", clang_avx2intrin_buf, &clang_avx2intrin_buf_size},
+    {"avx512bf16intrin.h",
+     clang_avx512bf16intrin_buf,
+     &clang_avx512bf16intrin_buf_size},
     {"avx512bitalgintrin.h",
      clang_avx512bitalgintrin_buf,
      &clang_avx512bitalgintrin_buf_size},
@@ -441,6 +465,9 @@ extern "C"
     {"avx512vbmivlintrin.h",
      clang_avx512vbmivlintrin_buf,
      &clang_avx512vbmivlintrin_buf_size},
+    {"avx512vlbf16intrin.h",
+     clang_avx512vlbf16intrin_buf,
+     &clang_avx512vlbf16intrin_buf_size},
     {"avx512vlbitalgintrin.h",
      clang_avx512vlbitalgintrin_buf,
      &clang_avx512vlbitalgintrin_buf_size},
@@ -462,9 +489,15 @@ extern "C"
     {"avx512vlvnniintrin.h",
      clang_avx512vlvnniintrin_buf,
      &clang_avx512vlvnniintrin_buf_size},
+    {"avx512vlvp2intersectintrin.h",
+     clang_avx512vlvp2intersectintrin_buf,
+     &clang_avx512vlvp2intersectintrin_buf_size},
     {"avx512vnniintrin.h",
      clang_avx512vnniintrin_buf,
      &clang_avx512vnniintrin_buf_size},
+    {"avx512vp2intersectintrin.h",
+     clang_avx512vp2intersectintrin_buf,
+     &clang_avx512vp2intersectintrin_buf_size},
     {"avx512vpopcntdqintrin.h",
      clang_avx512vpopcntdqintrin_buf,
      &clang_avx512vpopcntdqintrin_buf_size},
@@ -485,6 +518,7 @@ extern "C"
     {"clzerointrin.h", clang_clzerointrin_buf, &clang_clzerointrin_buf_size},
     {"cpuid.h", clang_cpuid_buf, &clang_cpuid_buf_size},
     {"emmintrin.h", clang_emmintrin_buf, &clang_emmintrin_buf_size},
+    {"enqcmdintrin.h", clang_enqcmdintrin_buf, &clang_enqcmdintrin_buf_size},
     {"f16cintrin.h", clang_f16cintrin_buf, &clang_f16cintrin_buf_size},
     {"float.h", clang_float_buf, &clang_float_buf_size},
     {"fma4intrin.h", clang_fma4intrin_buf, &clang_fma4intrin_buf_size},
@@ -509,8 +543,10 @@ extern "C"
     {"msa.h", clang_msa_buf, &clang_msa_buf_size},
     {"mwaitxintrin.h", clang_mwaitxintrin_buf, &clang_mwaitxintrin_buf_size},
     {"nmmintrin.h", clang_nmmintrin_buf, &clang_nmmintrin_buf_size},
+    {"omp-tools.h", clang_omp_tools_buf, &clang_omp_tools_buf_size},
     {"omp.h", clang_omp_buf, &clang_omp_buf_size},
     {"ompt.h", clang_ompt_buf, &clang_ompt_buf_size},
+    {"opencl-c-base.h", clang_opencl_c_base_buf, &clang_opencl_c_base_buf_size},
     {"opencl-c.h", clang_opencl_c_buf, &clang_opencl_c_buf_size},
     {"pconfigintrin.h", clang_pconfigintrin_buf, &clang_pconfigintrin_buf_size},
     {"pkuintrin.h", clang_pkuintrin_buf, &clang_pkuintrin_buf_size},

@@ -14,3 +14,13 @@ set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSIO
 set (ESBMC_AVAILABLE_SOLVERS "smtlib")
 
 add_subdirectory(src)
+
+include(CTest)
+if(BUILD_TESTING)
+    enable_testing()
+    include_directories(src)
+    add_subdirectory(unit)
+endif()
+if(ENABLE_REGRESSION)
+    add_subdirectory(regression)
+endif()

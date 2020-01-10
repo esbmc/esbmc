@@ -9,7 +9,7 @@ libgotoprograms_la_SOURCES = \
       goto_program_serialization.cpp goto_function_serialization.cpp \
       read_bin_goto_object.cpp goto_program_irep.cpp \
       format_strings.cpp loop_numbers.cpp goto_loops.cpp \
-      write_goto_binary.cpp goto_unwind.cpp goto_k_induction.cpp \
+      write_goto_binary.cpp goto_k_induction.cpp \
       loopst.cpp goto_python.cpp ai.cpp ai_domain.cpp interval_analysis.cpp \
       interval_domain.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir)
@@ -19,7 +19,7 @@ gotoinclude_HEADERS = add_race_assertions.h destructor.h format_strings.h \
       goto_check.h goto_convert_class.h goto_convert_functions.h \
       goto_function_serialization.h goto_functions.h goto_inline.h \
       goto_k_induction.h goto_loops.h goto_program.h goto_program_irep.h \
-      goto_program_serialization.h goto_unwind.h loop_numbers.h loopst.h \
+      goto_program_serialization.h loop_numbers.h loopst.h \
       read_bin_goto_object.h read_goto_binary.h \
       remove_skip.h remove_unreachable.h rw_set.h set_claims.h \
       show_claims.h static_analysis.h write_goto_binary.h ai.h \

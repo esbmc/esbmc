@@ -1,4 +1,4 @@
-[![Build Status](https://ssvlab.ddns.net/buildStatus/icon?job=esbmc-private%2Fmaster)](https://ssvlab.ddns.net/buildStatus/icon?job=esbmc-private%2Fmaster)
+![](https://github.com/esbmc/esbmc/workflows/ESBMC%20Build%20CI/CD%20(Full)/badge.svg)
 
 # The ESBMC model checker
 

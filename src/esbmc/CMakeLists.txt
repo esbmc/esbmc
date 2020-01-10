@@ -30,4 +30,7 @@ target_link_libraries(esbmc ansicfrontend cppfrontend clangcfrontend clangcppfro
 if (DEFINED HAVE_PYTHON)
   add_library(esbmc_python python.cpp)
   target_link_libraries(esbmc esbmc_python ${PYTHON_LINK_LIBS})
+  install(TARGETS esbmc_python DESTINATION lib)
 endif()
+
+install(TARGETS esbmc DESTINATION bin)

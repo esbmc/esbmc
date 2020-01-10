@@ -7,7 +7,6 @@ import unittest
 from subprocess import Popen, PIPE
 import argparse
 import re
-import xmlrunner
 
 #####################
 # Testing Tool
@@ -16,7 +15,6 @@ import xmlrunner
 # Summary
 # - Dynamically generates unittest tests: https://docs.python.org/3/library/unittest.html
 # - Support esbmc test description format
-# - Export jUnit format: using
 # - Sadly unittest does not provide any multiprocessing out-of-box. In the future we can change to a package that
 #   extends unittest and adds multiprocessing e.g. nose, testtools. However, it will be an extra dependency on something
 #   that is not maintained by python itself.
@@ -107,8 +105,10 @@ def _add_test(test_case: TestCase, executor):
         stdout, stderr = executor.run(test_case)
         regex = re.compile(test_case.test_regex, re.MULTILINE)
         output_to_validate = stdout.decode() + stderr.decode()
-        error_message = output_to_validate + str(test_case.generate_run_argument_list(executor.tool))
-        self.assertRegex(output_to_validate, regex, msg=error_message)
+        error_message_prefix = "\nEXPECTED TO FOUND: " + test_case.test_regex + "\n\nPROGRAM OUTPUT\n"
+        error_message = output_to_validate + "\n\nARGUMENTS: " + str(test_case.generate_run_argument_list(executor.tool))
+        if(not regex.search(output_to_validate)):
+            self.fail(error_message_prefix + error_message)
 
     return test
 
@@ -141,4 +141,4 @@ def _arg_parsing():
 if __name__ == "__main__":
     tool, regression, mode = _arg_parsing()
     create_tests(tool, regression, mode)
-    unittest.main(argv=[sys.argv[0]], testRunner=xmlrunner.XMLTestRunner(verbosity=2, output='test-reports'))
+    unittest.main(argv=[sys.argv[0]])

@@ -6,8 +6,9 @@
 #include <util/irep2.h>
 #include <util/namespace.h>
 
-extern "C" {
-#include <boolector.h>
+extern "C"
+{
+#include <boolector/boolector.h>
 }
 
 class btor_smt_ast : public solver_smt_ast<BoolectorNode *>

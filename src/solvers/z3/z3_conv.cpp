@@ -1115,9 +1115,8 @@ smt_astt z3_convt::tuple_fresh(const smt_sort *s, std::string name)
   return new_ast(output, s);
 }
 
-const smt_ast *z3_convt::convert_array_of(
-  smt_astt init_val,
-  unsigned long domain_width)
+const smt_ast *
+z3_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   smt_sortt dom_sort = mk_int_bv_sort(domain_width);
 

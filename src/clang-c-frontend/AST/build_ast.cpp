@@ -26,11 +26,11 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   const std::vector<std::string> &compiler_args)
 {
   // Create virtual file system to add clang's headers
-  llvm::IntrusiveRefCntPtr<clang::vfs::OverlayFileSystem> OverlayFileSystem(
-    new clang::vfs::OverlayFileSystem(clang::vfs::getRealFileSystem()));
+  llvm::IntrusiveRefCntPtr<llvm::vfs::OverlayFileSystem> OverlayFileSystem(
+    new llvm::vfs::OverlayFileSystem(llvm::vfs::getRealFileSystem()));
 
-  llvm::IntrusiveRefCntPtr<clang::vfs::InMemoryFileSystem> InMemoryFileSystem(
-    new clang::vfs::InMemoryFileSystem);
+  llvm::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> InMemoryFileSystem(
+    new llvm::vfs::InMemoryFileSystem);
   OverlayFileSystem->pushOverlay(InMemoryFileSystem);
 
   llvm::IntrusiveRefCntPtr<clang::FileManager> Files(
@@ -41,10 +41,11 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts =
     new clang::DiagnosticOptions();
 
-  std::unique_ptr<llvm::opt::OptTable> Opts(clang::driver::createDriverOptTable());
+  std::unique_ptr<llvm::opt::OptTable> Opts(
+    clang::driver::createDriverOptTable());
 
-  std::vector<const char*> Argv;
-  for (const std::string &Str : compiler_args)
+  std::vector<const char *> Argv;
+  for(const std::string &Str : compiler_args)
     Argv.push_back(Str.c_str());
 
   unsigned MissingArgIndex, MissingArgCount;
@@ -58,20 +59,17 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   clang::TextDiagnosticPrinter *DiagnosticPrinter =
     new clang::TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
 
-  clang::DiagnosticsEngine *Diagnostics =
-    new clang::DiagnosticsEngine(
-      llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs>(
-        new clang::DiagnosticIDs()),
-        &*DiagOpts,
-        DiagnosticPrinter,
-        false);
+  clang::DiagnosticsEngine *Diagnostics = new clang::DiagnosticsEngine(
+    llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs>(new clang::DiagnosticIDs()),
+    &*DiagOpts,
+    DiagnosticPrinter,
+    false);
 
-  const std::unique_ptr<clang::driver::Driver> Driver(
-    new clang::driver::Driver(
-      "clang-tool",
-      llvm::sys::getDefaultTargetTriple(),
-      *Diagnostics,
-      std::move(Files->getVirtualFileSystem())));
+  const std::unique_ptr<clang::driver::Driver> Driver(new clang::driver::Driver(
+    "clang-tool",
+    llvm::sys::getDefaultTargetTriple(),
+    *Diagnostics,
+    &Files->getVirtualFileSystem()));
   Driver->setTitle("clang_based_tool");
 
   // Since the input might only be virtual, don't check whether it exists.
@@ -84,7 +82,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 
   const llvm::opt::ArgStringList *const CC1Args = &Jobs.begin()->getArguments();
 
-#if (CLANG_VERSION_MAJOR >= 4)
+#if(CLANG_VERSION_MAJOR >= 4)
   std::shared_ptr<clang::CompilerInvocation> Invocation(
     clang::tooling::newInvocation(Diagnostics, *CC1Args));
 #else
@@ -92,7 +90,8 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 #endif
 
   // Show the invocation, with -v.
-  if (Invocation->getHeaderSearchOpts().Verbose) {
+  if(Invocation->getHeaderSearchOpts().Verbose)
+  {
     llvm::errs() << "clang Invocation:\n";
     Compilation->getJobs().Print(llvm::errs(), "\n", true);
     llvm::errs() << "\n";
@@ -104,7 +103,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   // Create ASTUnit
   std::unique_ptr<clang::ASTUnit> unit(
     clang::ASTUnit::LoadFromCompilerInvocationAction(
-#if (CLANG_VERSION_MAJOR >= 4)
+#if(CLANG_VERSION_MAJOR >= 4)
       std::move(Invocation),
 #else
       Invocation,
