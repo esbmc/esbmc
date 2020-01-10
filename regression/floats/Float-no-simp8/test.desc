@@ -1,4 +1,4 @@
-KNOWNBUG-MAC
+KNOWNBUG
 main.c
 --floatbv --no-simplify
 ^VERIFICATION SUCCESSFUL$

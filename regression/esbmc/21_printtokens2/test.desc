@@ -1,4 +1,4 @@
-KNOWNBUG-LINUX
+KNOWNBUG
 main.c
 --partial-loops --unwind 1
 ^VERIFICATION FAILED$
