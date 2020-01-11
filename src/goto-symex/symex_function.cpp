@@ -529,6 +529,19 @@ void goto_symext::pop_frame()
   // clear locals from L2 renaming
   for(auto const &it : frame.local_variables)
   {
+    type2tc ptr(new pointer_type2t(pointer_type2()));
+    symbol2tc l1_sym(ptr, it.base_name);
+    frame.level1.get_ident_name(l1_sym);
+
+    // Call free on alloca'd objects
+    if(
+      it.base_name.as_string().find("return_value$_alloca") !=
+      std::string::npos)
+      symex_free(code_free2tc(l1_sym));
+
+    // Erase from level 1 propagation
+    cur_state->value_set.erase(l1_sym->get_symbol_name());
+
     cur_state->level2.remove(it);
 
     // Construct an l1 name on the fly - this is a temporary hack for when

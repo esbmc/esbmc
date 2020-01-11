@@ -1498,17 +1498,6 @@ void goto_convertt::convert_break(const code_breakt &code, goto_programt &dest)
   t->location = code.location();
 }
 
-static inline void get_symbol_identifiers(
-  const exprt &expr,
-  hash_set_cont<irep_idt, irep_id_hash> &identifiers)
-{
-  if(expr.is_symbol() && !expr.type().is_array())
-    identifiers.insert(expr.identifier());
-
-  forall_operands(it, expr)
-    get_symbol_identifiers(*it, identifiers);
-}
-
 void goto_convertt::convert_return(
   const code_returnt &code,
   goto_programt &dest)
@@ -1526,20 +1515,6 @@ void goto_convertt::convert_return(
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
 
-    // Don't create dead instructions for symbols being returned
-    hash_set_cont<irep_idt, irep_id_hash> identifiers;
-    get_symbol_identifiers(new_code.return_value(), identifiers);
-
-    for(auto it = targets.destructor_stack.begin();
-        it != targets.destructor_stack.end();)
-    {
-      auto it1 = identifiers.find(to_code_dead(*it).symbol().identifier());
-      if(it1 != identifiers.end())
-        it = targets.destructor_stack.erase(it);
-      else
-        ++it;
-    }
-
     if(options.get_bool_option("atomicity-check"))
     {
       unsigned int globals = get_expr_number_globals(new_code.return_value());
@@ -1549,8 +1524,8 @@ void goto_convertt::convert_return(
     }
   }
 
-  // Need to process _entire_ destructor stack.
-  unwind_destructor_stack(code.location(), 0, dest);
+  goto_programt dummy;
+  unwind_destructor_stack(code.location(), 0, dummy);
 
   if(targets.has_return_value)
   {

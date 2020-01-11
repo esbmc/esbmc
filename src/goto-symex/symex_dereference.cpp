@@ -90,18 +90,16 @@ bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
 
   // Level one names represent the storage for a variable, and this symbol
   // may have entered pointer tracking at any time the variable had its address
-  // taken (and subsequently been propagated from there). If the stack frame
-  // that that variable was in has now expired, it's an invalid pointer. Look
-  // up the stack frames currently active the corresponding thread to see
-  // whether there are any records for the lexical variable that have this
-  // activation record.
-
+  // taken (and subsequently been propagated from there, e.g., a variable passed
+  // as reference to a function). If the stack frame that the variable was in
+  //  has now expired, it's an invalid pointer. Look up the stack frames
+  // currently active the corresponding thread to see whether there are any
+  // records for the lexical variable that have this activation record.
   for(auto it = state.call_stack.rbegin(); it != state.call_stack.rend(); it++)
   {
-    auto &local_vars = it->local_variables;
-    if(
-      local_vars.find(renaming::level2t::name_record(to_symbol2t(sym))) !=
-      local_vars.end())
+    auto const &name = renaming::level2t::name_record(to_symbol2t(sym));
+    auto const &local_vars = it->local_variables;
+    if(local_vars.find(name) != local_vars.end())
       return true;
   }
 
