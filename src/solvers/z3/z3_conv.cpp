@@ -800,9 +800,8 @@ smt_astt z3_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
     t->sort);
 }
 
-smt_astt z3_convt::mk_smt_int(
-  const BigInt &theint,
-  bool sign __attribute__((unused)))
+smt_astt
+z3_convt::mk_smt_int(const BigInt &theint, bool sign __attribute__((unused)))
 {
   smt_sortt s = mk_int_sort();
   if(theint.is_negative())

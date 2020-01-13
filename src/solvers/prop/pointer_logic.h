@@ -31,8 +31,7 @@ public:
 
     pointert() = default;
 
-    pointert(unsigned _obj, const BigInt &&_off)
-      : object(_obj), offset(_off)
+    pointert(unsigned _obj, const BigInt &&_off) : object(_obj), offset(_off)
     {
     }
   };
