@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <cpp/cpp_scope.h>
 #include <set>
-#include <util/string_hash.h>
 #include <util/symbol.h>
 
 class cpp_scopest

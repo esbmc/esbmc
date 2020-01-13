@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <functional>
 #include <iostream>
 #include <map>
-#include <util/string_hash.h>
 #include <util/symbol.h>
 #include <util/type.h>
 

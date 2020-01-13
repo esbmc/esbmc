@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cassert>
 #include <list>
 #include <unordered_map>
-#include <util/string_hash.h>
+#include <string>
 #include <vector>
 
 struct string_ptrt
@@ -39,7 +39,7 @@ class string_ptr_hash
 public:
   size_t operator()(const string_ptrt s) const
   {
-    return hash_string(s.s);
+    return std::hash<std::string>{}(s.s);
   }
 };
 

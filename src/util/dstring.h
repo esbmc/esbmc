@@ -184,11 +184,6 @@ struct dstring_hash
   }
 };
 
-inline size_t hash_string(const dstring &s)
-{
-  return s.hash();
-}
-
 inline std::ostream &operator<<(std::ostream &out, const dstring &a)
 {
   return a.operator<<(out);
