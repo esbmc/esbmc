@@ -31,8 +31,5 @@ void build_dstring_python_class(void)
 
   class_<std::vector<dstring>>("irep_idt_vec")
     .def(vector_indexing_suite<std::vector<dstring>>());
-
-  class_<string_wrapper>("string_wrapper")
-    .def_readwrite("the_string", &string_wrapper::the_string);
 }
 #endif
