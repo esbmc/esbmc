@@ -17,13 +17,12 @@ string_ptrt::string_ptrt(const char *_s) : s(_s), len(strlen(_s))
 {
 }
 
-bool operator==(const string_ptrt a, const string_ptrt b)
+bool string_ptrt::operator==(const string_ptrt &other) const
 {
-  if(a.len != b.len)
+  if(len != other.len)
     return false;
-  if(a.len == 0)
-    return true;
-  return memcmp(a.s, b.s, a.len) == 0;
+
+  return len == 0 || memcmp(s, other.s, len) == 0;
 }
 
 unsigned string_containert::get(const char *s)
@@ -35,7 +34,7 @@ unsigned string_containert::get(const char *s)
   if(it != hash_table.end())
     return it->second;
 
-  unsigned r = hash_table.size();
+  size_t r = hash_table.size();
 
   // these are stable
   string_list.emplace_back(s);
@@ -58,7 +57,7 @@ unsigned string_containert::get(const std::string &s)
   if(it != hash_table.end())
     return it->second;
 
-  unsigned r = hash_table.size();
+  size_t r = hash_table.size();
 
   // these are stable
   string_list.push_back(s);

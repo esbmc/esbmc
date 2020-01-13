@@ -18,7 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 struct string_ptrt
 {
   const char *s;
-  unsigned len;
+  size_t len;
 
   const char *c_str() const
   {
@@ -31,10 +31,8 @@ struct string_ptrt
   {
   }
 
-  friend bool operator==(const string_ptrt a, const string_ptrt b);
+  bool operator==(const string_ptrt &other) const;
 };
-
-bool operator==(const string_ptrt a, const string_ptrt b);
 
 class string_ptr_hash
 {
@@ -42,10 +40,6 @@ public:
   size_t operator()(const string_ptrt s) const
   {
     return hash_string(s.s);
-  }
-  bool operator()(const string_ptrt &s1, const string_ptrt &s2) const
-  {
-    return hash_string(s1.s) < hash_string(s2.s);
   }
 };
 
@@ -67,22 +61,24 @@ public:
     // allocate empty string -- this gets index 0
     get("");
   }
+  ~string_containert() = default;
 
-  const char *c_str(unsigned no) const
+  // the pointer is guaranteed to be stable
+  const char *c_str(size_t no) const
   {
     assert(no < string_vector.size());
     return string_vector[no]->c_str();
   }
 
-  const std::string &get_string(unsigned no) const
+  // the reference is guaranteed to be stable
+  const std::string &get_string(size_t no) const
   {
     assert(no < string_vector.size());
     return *string_vector[no];
   }
 
 protected:
-  typedef std::unordered_map<string_ptrt, unsigned, string_ptr_hash>
-    hash_tablet;
+  typedef std::unordered_map<string_ptrt, size_t, string_ptr_hash> hash_tablet;
   hash_tablet hash_table;
 
   unsigned get(const char *s);
@@ -96,5 +92,11 @@ protected:
 };
 
 extern string_containert string_container;
+
+inline string_containert &get_string_container()
+{
+  static string_containert ret;
+  return ret;
+}
 
 #endif
