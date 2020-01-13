@@ -174,10 +174,6 @@ const struct opt_templ esbmc_options[] = {
   // Abort if the program contains a recursion
   {0, "abort-on-recursion", switc, ""},
 
-  // The clang frontend can mark unused struct/functions, in the future this
-  // will be enabled by default, but for now, it needs more testing
-  {0, "keep-unused", switc, ""},
-
   // Verbosity of message, probably does nothing
   {0, "verbosity", number, ""},
 
