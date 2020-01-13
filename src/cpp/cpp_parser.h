@@ -14,7 +14,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_token_buffer.h>
 #include <util/expr.h>
 #include <util/parser.h>
-#include <util/string_hash.h>
 
 class cpp_parsert : public parsert
 {

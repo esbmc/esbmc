@@ -5,7 +5,7 @@ libutil_la_SOURCES = \
       expr_util.cpp i2string.cpp location.cpp message.cpp \
       language_file.cpp mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp \
       threeval.cpp typecheck.cpp bitvector.cpp parser.cpp replace_symbol.cpp \
-      string_hash.cpp string_container.cpp options.cpp c_misc.cpp \
+      string_container.cpp options.cpp c_misc.cpp \
       simplify_expr.cpp dstring.cpp simplify_expr2.cpp ui_message.cpp \
       simplify_utils.cpp string2array.cpp time_stopping.cpp symbol.cpp \
       type_eq.cpp guard.cpp array_name.cpp message_stream.cpp union_find.cpp \
@@ -30,7 +30,7 @@ utilinclude_HEADERS = arith_tools.h array_name.h base_type.h bitvector.h \
       rename.h replace_symbol.h signal_catcher.h \
       simplify_expr.h simplify_expr_class.h simplify_utils.h std_code.h \
       std_expr.h std_types.h string2array.h string_constant.h \
-      string_container.h string_hash.h symbol.h symbol_serialization.h \
+      string_container.h symbol.h symbol_serialization.h \
       thread.h threeval.h time_stopping.h type.h type_byte_size.h \
       type_eq.h typecheck.h ui_message.h union_find.h xml.h xml_irep.h \
       show_symbol_table.h c_sizeof.h c_link.h c_typecast.h fix_symbol.h

@@ -22,7 +22,7 @@ public:
   symex_slicet(bool assume);
   void slice(boost::shared_ptr<symex_target_equationt> &eq);
 
-  typedef std::unordered_set<std::string, string_hash> symbol_sett;
+  typedef std::unordered_set<std::string> symbol_sett;
   symbol_sett depends;
   BigInt ignored;
 

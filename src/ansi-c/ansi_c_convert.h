@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_storage_spec.h>
 #include <util/message_stream.h>
 #include <util/std_code.h>
-#include <util/string_hash.h>
 
 bool ansi_c_convert(
   ansi_c_parse_treet &ansi_c_parse_tree,
