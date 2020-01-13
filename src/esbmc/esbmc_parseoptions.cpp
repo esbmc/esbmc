@@ -749,7 +749,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmct bmc(goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
-      bmc.options.set_option("unwind", (int)k_step.to_long());
+      bmc.options.set_option("unwind", integer2string(k_step));
 
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
       std::cout << k_step;
@@ -860,7 +860,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmct bmc(goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
-      bmc.options.set_option("unwind", (int)k_step.to_long());
+      bmc.options.set_option("unwind", integer2string(k_step));
 
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
       std::cout << k_step;
@@ -927,7 +927,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmct bmc(goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
-      bmc.options.set_option("unwind", (int)k_step.to_long());
+      bmc.options.set_option("unwind", integer2string(k_step));
 
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
       std::cout << k_step + 1;
