@@ -9,6 +9,7 @@
 #define GOTO_PROGRAMS_LOOPST_H_
 
 #include <goto-programs/goto_functions.h>
+#include <unordered_set>
 
 class loopst
 {
@@ -17,7 +18,7 @@ public:
   {
   }
 
-  typedef hash_set_cont<expr2tc, irep2_hash> loop_varst;
+  typedef std::unordered_set<expr2tc, irep2_hash> loop_varst;
 
   const loop_varst &get_modified_loop_vars() const;
   const loop_varst &get_unmodified_loop_vars() const;

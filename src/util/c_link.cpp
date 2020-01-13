@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <clang-c-frontend/expr2c.h>
+#include <unordered_set>
 #include <util/base_type.h>
 #include <util/c_link.h>
 #include <util/fix_symbol.h>
@@ -53,7 +54,7 @@ protected:
   std::string module;
   namespacet ns;
 
-  typedef hash_set_cont<irep_idt, irep_id_hash> known_modulest;
+  typedef std::unordered_set<irep_idt, irep_id_hash> known_modulest;
   known_modulest known_modules;
 
   fix_symbolt symbol_fixer;

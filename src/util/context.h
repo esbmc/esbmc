@@ -12,12 +12,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <functional>
 #include <iostream>
 #include <map>
-#include <util/hash_cont.h>
 #include <util/string_hash.h>
 #include <util/symbol.h>
 #include <util/type.h>
 
-typedef hash_map_cont<irep_idt, symbolt, irep_id_hash> symbolst;
+typedef std::unordered_map<irep_idt, symbolt, irep_id_hash> symbolst;
 typedef std::vector<symbolt *> ordered_symbolst;
 
 typedef std::multimap<irep_idt, irep_idt> symbol_base_mapt;

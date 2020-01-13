@@ -1337,15 +1337,16 @@ extern inline const std::string &name2string(const irep_namet &n)
 }
 
 struct irep_hash
-  hash_map_hasher_superclass(irept){size_t operator()(const irept &irep)
-                                      const {return irep.hash();
-}
-bool operator()(const irept &i1, const irept &i2) const
 {
-  return i1.hash() < i2.hash();
-}
-}
-;
+  size_t operator()(const irept &irep) const
+  {
+    return irep.hash();
+  }
+  bool operator()(const irept &i1, const irept &i2) const
+  {
+    return i1.hash() < i2.hash();
+  }
+};
 
 struct irep_full_hash
 {

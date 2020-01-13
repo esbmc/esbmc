@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_POINTER_LOGIC_H
 
 #include <util/expr.h>
-#include <util/hash_cont.h>
 #include <util/irep2.h>
 #include <util/mp_arith.h>
 #include <util/numbering.h>
@@ -19,7 +18,7 @@ class pointer_logict
 {
 public:
   // this numbers the objects
-  typedef hash_map_cont<expr2tc, unsigned int, irep2_hash> objectst;
+  typedef std::unordered_map<expr2tc, unsigned int, irep2_hash> objectst;
   objectst objects;
   typedef std::vector<expr2tc> obj_lookupt;
   obj_lookupt lookup;

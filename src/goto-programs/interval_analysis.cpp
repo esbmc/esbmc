@@ -11,9 +11,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/interval_analysis.h>
 #include <goto-programs/interval_domain.h>
+#include <unordered_set>
 
-static inline void
-get_symbols(const expr2tc &expr, hash_set_cont<expr2tc, irep2_hash> &symbols)
+static inline void get_symbols(
+  const expr2tc &expr,
+  std::unordered_set<expr2tc, irep2_hash> &symbols)
 {
   if(is_nil_expr(expr))
     return;
@@ -34,7 +36,7 @@ void instrument_intervals(
   const ait<interval_domaint> &interval_analysis,
   goto_functiont &goto_function)
 {
-  hash_set_cont<expr2tc, irep2_hash> symbols;
+  std::unordered_set<expr2tc, irep2_hash> symbols;
 
   forall_goto_program_instructions(i_it, goto_function.body)
   {

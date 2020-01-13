@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/ansi_c_parse_tree.h>
 #include <cassert>
 #include <util/expr.h>
-#include <util/hash_cont.h>
 #include <util/i2string.h>
 #include <util/parser.h>
 #include <util/string_hash.h>
@@ -85,7 +84,7 @@ public:
   class scopet
   {
   public:
-    typedef hash_map_cont<irep_idt, identifiert, irep_id_hash> name_mapt;
+    typedef std::unordered_map<irep_idt, identifiert, irep_id_hash> name_mapt;
     name_mapt name_map;
 
     std::string prefix;

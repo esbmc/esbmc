@@ -561,7 +561,7 @@ void build_goto_symex_classes()
       "declaration_history", &goto_symex_statet::framet::declaration_history);
 
   class_<goto_symex_statet::loop_iterationst>("loop_iterationst")
-    .def(map_indexing_suite<hash_map_cont<unsigned, unsigned>>());
+    .def(map_indexing_suite<std::unordered_map<unsigned, unsigned>>());
 
   void (goto_symex_statet::*current_name_expr)(expr2tc &) const =
     &goto_symex_statet::current_name;

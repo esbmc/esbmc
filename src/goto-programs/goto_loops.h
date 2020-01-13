@@ -10,7 +10,6 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
-#include <util/hash_cont.h>
 #include <util/message_stream.h>
 #include <util/std_types.h>
 

@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/expr2cpp.h>
 #include <util/std_types.h>
 #include <util/symbol.h>
+#include <unordered_set>
 
 class expr2cppt : public expr2ct
 {
@@ -45,7 +46,7 @@ protected:
     const c_qualifierst &qualifiers,
     const std::string &declarator) override;
 
-  typedef hash_set_cont<std::string, string_hash> id_sett;
+  typedef std::unordered_set<std::string, string_hash> id_sett;
 };
 
 std::string expr2cppt::convert_struct(const exprt &src, unsigned &precedence)

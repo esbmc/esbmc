@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_INLINE_H
 
 #include <goto-programs/goto_functions.h>
-#include <util/hash_cont.h>
+#include <unordered_set>
 #include <util/message_stream.h>
 #include <util/std_types.h>
 
@@ -89,10 +89,10 @@ protected:
     const exprt::operandst &arguments,
     goto_programt &dest);
 
-  typedef hash_set_cont<irep_idt, irep_id_hash> recursion_sett;
+  typedef std::unordered_set<irep_idt, irep_id_hash> recursion_sett;
   recursion_sett recursion_set;
 
-  typedef hash_set_cont<irep_idt, irep_id_hash> no_body_sett;
+  typedef std::unordered_set<irep_idt, irep_id_hash> no_body_sett;
   no_body_sett no_body_set;
 
 public:

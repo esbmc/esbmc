@@ -16,7 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 #include <pointer-analysis/dereference.h>
 #include <stack>
-#include <util/hash_cont.h>
 #include <util/i2string.h>
 #include <util/irep2.h>
 #include <util/options.h>

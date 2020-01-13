@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 #include <set>
 #include <util/expr.h>
-#include <util/hash_cont.h>
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/threeval.h>

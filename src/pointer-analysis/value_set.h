@@ -157,7 +157,7 @@ public:
    *  additional reference data in an objectt object. The integers are indexes
    *  into value_sett::object_numbering, which identifies the l1 variable
    *  being referred to. */
-  typedef hash_map_cont<unsigned, objectt> object_mapt;
+  typedef std::unordered_map<unsigned, objectt> object_mapt;
   class object_map_dt
   {
     // If you said this class looks pretty map like, it's because it used to be
@@ -253,7 +253,7 @@ public:
   /** Type of the value-set containing structure. A hash map mapping variables
    *  to an entryt, storing the value set of objects a variable might point
    *  at. */
-  typedef hash_map_cont<irep_idt, entryt, irep_id_hash> valuest;
+  typedef std::unordered_map<irep_idt, entryt, irep_id_hash> valuest;
 
   /** Get the natural alignment unit of a reference to e. I don't know a more
    *  appropriate term, but if we were to have an offset into e, then what is

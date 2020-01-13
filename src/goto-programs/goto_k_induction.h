@@ -11,7 +11,6 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_loops.h>
 #include <util/guard.h>
-#include <util/hash_cont.h>
 #include <util/message_stream.h>
 #include <util/irep2_expr.h>
 
@@ -42,10 +41,10 @@ public:
   }
 
 protected:
-  typedef hash_map_cont<unsigned, bool> marked_branchst;
+  typedef std::unordered_map<unsigned, bool> marked_branchst;
   marked_branchst marked_branch;
 
-  typedef hash_map_cont<unsigned, guardt> guardst;
+  typedef std::unordered_map<unsigned, guardt> guardst;
   guardst guards;
 
   void goto_k_induction();

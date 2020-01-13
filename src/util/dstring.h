@@ -166,15 +166,18 @@ protected:
   unsigned no;
 };
 
-struct dstring_hash hash_map_hasher_superclass(
-  dstring){public: size_t operator()(const dstring &s) const {return s.hash();
-}
-bool operator()(const dstring &s1, const dstring &s2) const
+struct dstring_hash
 {
-  return s1.hash() < s2.hash();
-}
-}
-;
+public:
+  size_t operator()(const dstring &s) const
+  {
+    return s.hash();
+  }
+  bool operator()(const dstring &s1, const dstring &s2) const
+  {
+    return s1.hash() < s2.hash();
+  }
+};
 
 size_t hash_string(const dstring &s);
 

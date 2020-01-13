@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_target_equation.h>
-#include <util/hash_cont.h>
+#include <unordered_set>
 
 BigInt slice(boost::shared_ptr<symex_target_equationt> &eq, bool slice_assume);
 BigInt simple_slice(boost::shared_ptr<symex_target_equationt> &eq);
@@ -22,7 +22,7 @@ public:
   symex_slicet(bool assume);
   void slice(boost::shared_ptr<symex_target_equationt> &eq);
 
-  typedef hash_set_cont<std::string, string_hash> symbol_sett;
+  typedef std::unordered_set<std::string, string_hash> symbol_sett;
   symbol_sett depends;
   BigInt ignored;
 

@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <list>
-#include <util/hash_cont.h>
+#include <unordered_map>
 #include <util/string_hash.h>
 #include <vector>
 
@@ -36,16 +36,18 @@ struct string_ptrt
 
 bool operator==(const string_ptrt a, const string_ptrt b);
 
-class string_ptr_hash hash_map_hasher_superclass(
-  std::string){public: size_t operator()(const string_ptrt s)
-                 const {return hash_string(s.s);
-}
-bool operator()(const string_ptrt &s1, const string_ptrt &s2) const
+class string_ptr_hash
 {
-  return hash_string(s1.s) < hash_string(s2.s);
-}
-}
-;
+public:
+  size_t operator()(const string_ptrt s) const
+  {
+    return hash_string(s.s);
+  }
+  bool operator()(const string_ptrt &s1, const string_ptrt &s2) const
+  {
+    return hash_string(s1.s) < hash_string(s2.s);
+  }
+};
 
 class string_containert
 {
@@ -79,7 +81,8 @@ public:
   }
 
 protected:
-  typedef hash_map_cont<string_ptrt, unsigned, string_ptr_hash> hash_tablet;
+  typedef std::unordered_map<string_ptrt, unsigned, string_ptr_hash>
+    hash_tablet;
   hash_tablet hash_table;
 
   unsigned get(const char *s);

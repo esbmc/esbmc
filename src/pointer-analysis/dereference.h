@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <set>
 #include <util/expr.h>
 #include <util/guard.h>
-#include <util/hash_cont.h>
 #include <util/namespace.h>
 #include <util/options.h>
 
