@@ -72,13 +72,6 @@ pipeline {
             }
           }
         }
-        stage('digital-filters') {
-          steps {
-            dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./digital-filters" --mode="CORE"'
-            }
-          }
-        }
         stage('floats') {
           steps {
             dir(path: 'regression') {

@@ -20,7 +20,7 @@ function(add_esbmc_regression folder mode)
             --tool=${ESBMC_BIN} --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder} --mode=${mode})
 endfunction(add_esbmc_regression mode folder)
 
-set(REGRESSIONS esbmc cstd/ctype cstd/string llvm digital-filters floats floats-regression k-induction)
+set(REGRESSIONS esbmc cstd/ctype cstd/string llvm floats floats-regression k-induction)
 
 foreach(regression IN LISTS REGRESSIONS)
     add_esbmc_regression("${regression}" "CORE")
