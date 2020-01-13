@@ -1190,7 +1190,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     const constant_int2t &theint = to_constant_int2t(expr);
     unsigned int width = expr->type->get_width();
     if(int_encoding)
-      return mk_smt_int(theint.value, is_signedbv_type(expr));
+      return mk_smt_int(theint.value);
 
     return mk_smt_bv(theint.value, width);
   }
@@ -1524,7 +1524,7 @@ smt_astt smt_convt::round_real_to_int(smt_astt a)
   // The actual conversion
   smt_astt as_int = mk_real2int(a);
 
-  smt_astt one = mk_smt_int(BigInt(1), false);
+  smt_astt one = mk_smt_int(BigInt(1));
   smt_astt plus_one = mk_add(one, as_int);
 
   // If it's an integer, just keep it's untruncated value.
@@ -1582,9 +1582,9 @@ smt_astt smt_convt::make_bool_bit(smt_astt a)
     "Wrong sort fed to "
     "smt_convt::make_bool_bit");
   smt_astt one =
-    (int_encoding) ? mk_smt_int(BigInt(1), false) : mk_smt_bv(BigInt(1), 1);
+    (int_encoding) ? mk_smt_int(BigInt(1)) : mk_smt_bv(BigInt(1), 1);
   smt_astt zero =
-    (int_encoding) ? mk_smt_int(BigInt(0), false) : mk_smt_bv(BigInt(0), 1);
+    (int_encoding) ? mk_smt_int(BigInt(0)) : mk_smt_bv(BigInt(0), 1);
   return mk_ite(a, one, zero);
 }
 
@@ -1596,7 +1596,7 @@ smt_astt smt_convt::make_bit_bool(smt_astt a)
     "Wrong sort fed to smt_convt::make_bit_bool");
 
   smt_astt one =
-    (int_encoding) ? mk_smt_int(BigInt(1), false) : mk_smt_bv(BigInt(1), 1);
+    (int_encoding) ? mk_smt_int(BigInt(1)) : mk_smt_bv(BigInt(1), 1);
   return mk_eq(a, one);
 }
 

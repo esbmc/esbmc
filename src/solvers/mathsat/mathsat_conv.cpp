@@ -643,9 +643,7 @@ smt_astt mathsat_convt::mk_select(smt_astt a, smt_astt b)
     a->sort->get_range_sort());
 }
 
-smt_astt mathsat_convt::mk_smt_int(
-  const BigInt &theint,
-  bool sign __attribute__((unused)))
+smt_astt mathsat_convt::mk_smt_int(const BigInt &theint)
 {
   char buffer[256], *n = nullptr;
   n = theint.as_string(buffer, 256);

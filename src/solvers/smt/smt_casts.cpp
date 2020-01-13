@@ -252,8 +252,8 @@ smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
     smt_astt zero, one;
     if(is_bv_type(cast.type))
     {
-      zero = mk_smt_int(BigInt(0), false);
-      one = mk_smt_int(BigInt(1), false);
+      zero = mk_smt_int(BigInt(0));
+      one = mk_smt_int(BigInt(1));
     }
     else
     {

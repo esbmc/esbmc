@@ -72,7 +72,7 @@ public:
   const std::string solver_text();
   tvt l_get(smt_astt a);
 
-  smt_astt mk_smt_int(const BigInt &theint, bool sign);
+  smt_astt mk_smt_int(const BigInt &theint);
   smt_astt mk_smt_bool(bool val);
   smt_astt mk_smt_symbol(const std::string &name, smt_sortt s);
   smt_astt mk_smt_real(const std::string &str);

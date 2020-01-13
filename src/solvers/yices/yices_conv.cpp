@@ -663,8 +663,7 @@ smt_astt yices_convt::mk_isint(smt_astt a)
   abort();
 }
 
-smt_astt
-yices_convt::mk_smt_int(const BigInt &theint, bool sign __attribute__((unused)))
+smt_astt yices_convt::mk_smt_int(const BigInt &theint)
 {
   term_t term = yices_int64(theint.to_int64());
   smt_sortt s = mk_int_sort();
