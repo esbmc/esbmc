@@ -52,14 +52,6 @@ static void internal_additions(std::string &code)
     "int __ESBMC_rounding_mode = 0;\n"
     "_Bool __ESBMC_floatbv_mode();\n"
 
-    // Digital controllers code
-    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float "
-    "* cout, int coutsize, _Bool isDenominator);\n"
-    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float "
-    "delta);\n"
-    "_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int "
-    "iwidth, int precision);\n"
-
     // Forward decs for pthread main thread begin/end hooks. Because they're
     // pulled in from the C library, they need to be declared prior to pulling
     // them in, for type checking.
