@@ -1494,9 +1494,6 @@ void build_value_set_classes()
         .def_readwrite("values", &value_sett::values);
     // XXX object numberingt?
 
-    class_<value_sett::valuest>("valuest").def(
-      map_indexing_suite<value_sett::valuest>());
-
     class_<value_sett::objectt>("objectt", init<bool, unsigned int>())
       .def(init<bool, BigInt>())
       .def("offset_is_zero", &value_sett::objectt::offset_is_zero)
@@ -1504,9 +1501,6 @@ void build_value_set_classes()
       .def_readwrite("offset_is_set", &value_sett::objectt::offset_is_set)
       .def_readwrite(
         "offset_alignment", &value_sett::objectt::offset_alignment);
-
-    class_<value_sett::object_mapt>("object_mapt")
-      .def(map_indexing_suite<value_sett::object_mapt>());
 
     class_<value_sett::entryt>("entryt")
       .def(init<std::string, std::string>())

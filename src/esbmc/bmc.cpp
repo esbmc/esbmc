@@ -587,7 +587,7 @@ void bmct::bidirectional_search(
       lit->get_unmodified_loop_vars().end());
 
     // Now, walk the SSA and get the last value of each variable before the loop
-    hash_map_cont<irep_idt, std::pair<expr2tc, expr2tc>, irep_id_hash>
+    std::unordered_map<irep_idt, std::pair<expr2tc, expr2tc>, irep_id_hash>
       var_ssa_list;
 
     for(auto ssait : eq->SSA_steps)

@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <map>
-#include <util/hash_cont.h>
+#include <unordered_map>
 #include <vector>
 
 template <typename T>
@@ -73,7 +73,7 @@ public:
 
 protected:
   typedef std::map<T, unsigned> numberst;
-  typedef hash_map_cont<unsigned, T, std::hash<unsigned>> vectort;
+  typedef std::unordered_map<unsigned, T, std::hash<unsigned>> vectort;
   numberst numbers;
   vectort vec;
   unsigned int next_obj_num;
@@ -144,8 +144,8 @@ public:
   }
 
 protected:
-  typedef hash_map_cont<T, unsigned, hash_fkt> numberst;
-  typedef hash_map_cont<unsigned, T, std::hash<unsigned>> vectort;
+  typedef std::unordered_map<T, unsigned, hash_fkt> numberst;
+  typedef std::unordered_map<unsigned, T, std::hash<unsigned>> vectort;
   numberst numbers;
   vectort vec;
   unsigned int next_obj_num;

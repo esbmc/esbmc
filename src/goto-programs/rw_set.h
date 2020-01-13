@@ -14,7 +14,6 @@ Date: February 2006
 #include <pointer-analysis/value_sets.h>
 #include <util/expr_util.h>
 #include <util/guard.h>
-#include <util/hash_cont.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
 
@@ -50,7 +49,7 @@ public:
     }
   };
 
-  typedef hash_map_cont<irep_idt, entryt, irep_id_hash> entriest;
+  typedef std::unordered_map<irep_idt, entryt, irep_id_hash> entriest;
   entriest entries;
 
   void compute(const codet &code);

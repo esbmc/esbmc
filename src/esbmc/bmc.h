@@ -18,7 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
-#include <util/hash_cont.h>
 #include <util/options.h>
 
 class bmct : public messaget

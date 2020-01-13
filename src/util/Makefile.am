@@ -22,7 +22,7 @@ utilinclude_HEADERS = arith_tools.h array_name.h base_type.h bitvector.h \
       bp_converter.h c_misc.h c_types.h cmdline.h \
       config.h context.h cprover_prefix.h crypto_hash.h dcutil.h \
       dstring.h expr.h expr_util.h fixedbv.h \
-      format_constant.h format_spec.h guard.h hash_cont.h \
+      format_constant.h format_spec.h guard.h \
       i2string.h ieee_float.h irep.h irep2.h irep_serialization.h \
       language.h language_file.h location.h message.h message_stream.h \
       migrate.h mp_arith.h namespace.h numbering.h options.h \

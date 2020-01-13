@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/ansi_c_parse_tree.h>
 #include <ansi-c/c_storage_spec.h>
-#include <util/hash_cont.h>
 #include <util/message_stream.h>
 #include <util/std_code.h>
 #include <util/string_hash.h>

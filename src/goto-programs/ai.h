@@ -107,7 +107,8 @@ protected:
   void entry_state(const goto_functionst &);
 
   // the work-queue is sorted by location number
-  typedef hash_map_cont<unsigned, goto_programt::const_targett> working_sett;
+  typedef std::unordered_map<unsigned, goto_programt::const_targett>
+    working_sett;
 
   goto_programt::const_targett get_next(working_sett &working_set);
 
@@ -223,7 +224,7 @@ public:
   }
 
 protected:
-  typedef hash_map_cont<
+  typedef std::unordered_map<
     goto_programt::const_targett,
     domainT,
     const_target_hash,

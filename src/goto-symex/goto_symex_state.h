@@ -21,6 +21,7 @@
 #include <pointer-analysis/value_set.h>
 #include <stack>
 #include <string>
+#include <unordered_set>
 #include <util/crypto_hash.h>
 #include <util/guard.h>
 #include <util/i2string.h>
@@ -80,7 +81,7 @@ public:
   typedef std::map<goto_programt::const_targett, goto_state_listt>
     goto_state_mapt;
   typedef std::vector<framet> call_stackt;
-  typedef hash_set_cont<
+  typedef std::unordered_set<
     renaming::level2t::name_record,
     renaming::level2t::name_rec_hash>
     variable_name_sett;
@@ -432,7 +433,7 @@ public:
   /** Record of how many loop unwinds we've performed. For each target in the
    *  program that contains a loop, record how many times we've unwound round
    *  it. */
-  typedef hash_map_cont<unsigned, BigInt> loop_iterationst;
+  typedef std::unordered_map<unsigned, BigInt> loop_iterationst;
   loop_iterationst loop_iterations;
   /** Record of how many times we've unwound function recursion. */
   std::map<irep_idt, BigInt> function_unwind;

@@ -778,7 +778,7 @@ public:
         std::greater<unsigned int>>>>
     smt_cachet;
 
-  typedef hash_map_cont<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
+  typedef std::unordered_map<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
 
   // Members
   /** Number of un-popped context pushes encountered so far. */
