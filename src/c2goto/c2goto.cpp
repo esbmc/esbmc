@@ -31,7 +31,6 @@ public:
     goto_functionst goto_functions;
 
     config.set(cmdline);
-    config.options.set_option("keep-unused", true);
 
     if(!cmdline.isset("output"))
     {

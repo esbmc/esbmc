@@ -337,9 +337,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
-  if(cmdline.isset("keep-unused"))
-    options.set_option("keep-unused", true);
-
   config.options = options;
 }
 
