@@ -20,7 +20,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/cprover_prefix.h>
-#include <util/dcutil.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/irep2.h>

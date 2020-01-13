@@ -329,11 +329,6 @@ long double __ESBMC_sqrtld(long double);
 
 void *__ESBMC_memset(void *, int, unsigned int);
 
-// Digital controllers code
-void __ESBMC_generate_cascade_controllers(float *, int, float *, int, _Bool);
-void __ESBMC_generate_delta_coefficients(float *, double *, float);
-_Bool __ESBMC_check_delta_stability(double *, double, int, int);
-
 // Forward decs for pthread main thread begin/end hooks. Because they're
 // pulled in from the C library, they need to be declared prior to pulling
 // them in, for type checking.

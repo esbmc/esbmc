@@ -1,4 +1,4 @@
-set (inputs digitalfilter.hs limits.hs pthread.hs pthreadtypes.hs stdarg.hs stdbool.hs stddef.hs)
+set (inputs limits.hs pthread.hs pthreadtypes.hs stdarg.hs stdbool.hs stddef.hs)
 
 function(mangle_hs output)
   set(result)

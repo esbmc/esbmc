@@ -12,7 +12,7 @@ libutil_la_SOURCES = \
       xml.cpp xml_irep.cpp std_types.cpp std_code.cpp format_constant.cpp \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
       signal_catcher.cpp migrate.cpp show_symbol_table.cpp \
-      thread.cpp crypto_hash.cpp type_byte_size.cpp dcutil.cpp \
+      thread.cpp crypto_hash.cpp type_byte_size.cpp \
       string_constant.cpp c_types.cpp ieee_float.cpp c_qualifiers.cpp \
       c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir)
@@ -20,7 +20,7 @@ AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir)
 utilincludedir = $(includedir)/util
 utilinclude_HEADERS = arith_tools.h array_name.h base_type.h bitvector.h \
       bp_converter.h c_misc.h c_types.h cmdline.h \
-      config.h context.h cprover_prefix.h crypto_hash.h dcutil.h \
+      config.h context.h cprover_prefix.h crypto_hash.h \
       dstring.h expr.h expr_util.h fixedbv.h \
       format_constant.h format_spec.h guard.h \
       i2string.h ieee_float.h irep.h irep2.h irep_serialization.h \

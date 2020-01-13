@@ -15,22 +15,20 @@ struct hooked_header {
 };
 
 struct hooked_header headers[] = {
-{ "stddef.h",		stddef_buf,	&stddef_buf_size},
 /* stddef.h contains a variety of compiler-specific functions */
-{ "stdarg.h",		stdarg_buf,	&stdarg_buf_size},
+{ "stddef.h",		stddef_buf,	&stddef_buf_size},
 /* contains va_start and similar functionality */
-{ "stdbool.h",		stdbool_buf,	&stdbool_buf_size},
+{ "stdarg.h",		stdarg_buf,	&stdarg_buf_size},
 /* Fairly self explanatory */
-{ "bits/wordsize.h",	NULL,				NULL},
+{ "stdbool.h",		stdbool_buf,	&stdbool_buf_size},
 /* Defines __WORDSIZE, which we define ourselves */
-{ "pthread.h",		pthread_buf,	&pthread_buf_size},
+{ "bits/wordsize.h",	NULL,				NULL},
 /* Pthreads header */
-{ "digitalfilter.h",    digitalfilter_buf, &digitalfilter_buf_size},
-/* digital filter header */
-{ "pthreadtypes.h",	pthreadtypes_buf, &pthreadtypes_buf_size},
+{ "pthread.h",		pthread_buf,	&pthread_buf_size},
 /*  Additional pthread data header */
-{ "limits.h",		limits_buf, &limits_buf_size},
+{ "pthreadtypes.h",	pthreadtypes_buf, &pthreadtypes_buf_size},
  /* Integer limits */
+{ "limits.h",		limits_buf, &limits_buf_size},
 { NULL, NULL, NULL}
 };
 

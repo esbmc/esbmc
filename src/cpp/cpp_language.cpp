@@ -96,17 +96,6 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "long double __ESBMC_fabsl(long double x);" << std::endl;
   out << "float __ESBMC_fabsf(float x);" << std::endl;
 
-  // Digital controllers code
-  out << "void __ESBMC_generate_cascade_controllers(float * cden, int csize, "
-         "float * cout, int coutsize, bool isDenominator);"
-      << std::endl;
-  out << "void __ESBMC_generate_delta_coefficients(float a[], double out[], "
-         "float delta);"
-      << std::endl;
-  out << "bool __ESBMC_check_delta_stability(double dc[], double sample_time, "
-         "int iwidth, int precision);"
-      << std::endl;
-
   // Forward decs for pthread main thread begin/end hooks. Because they're
   // pulled in from the C library, they need to be declared prior to pulling
   // them in, for type checking.
