@@ -334,10 +334,8 @@ smt_ast *bitblast_convt::mk_smt_real(const std::string &value
   abort();
 }
 
-smt_ast *bitblast_convt::mk_smt_bvint(
-  const BigInt &intval,
-  bool sign,
-  unsigned int w)
+smt_ast *
+bitblast_convt::mk_smt_bvint(const BigInt &intval, bool sign, unsigned int w)
 {
   smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
   bitblast_smt_ast *a = new_ast(s);

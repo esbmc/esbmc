@@ -86,8 +86,7 @@ public:
   virtual smt_sort *mk_sort(smt_sort_kind k, ...);
   virtual smt_ast *mk_smt_int(const BigInt &intval, bool sign);
   virtual smt_ast *mk_smt_real(const std::string &value);
-  virtual smt_ast *
-  mk_smt_bvint(const BigInt &inval, bool sign, unsigned int w);
+  virtual smt_ast *mk_smt_bvint(const BigInt &inval, bool sign, unsigned int w);
   virtual smt_ast *mk_smt_bool(bool boolval);
   virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *sort);
   virtual smt_sort *mk_struct_sort(const type2tc &t);
