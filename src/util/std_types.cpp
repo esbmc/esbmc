@@ -107,12 +107,12 @@ bool is_rvalue_reference(const typet &type)
   return type.id() == "pointer" && type.get_bool("#reference");
 }
 
-mp_integer signedbv_typet::smallest() const
+BigInt signedbv_typet::smallest() const
 {
   return -power(2, get_width() - 1);
 }
 
-mp_integer signedbv_typet::largest() const
+BigInt signedbv_typet::largest() const
 {
   return power(2, get_width() - 1) - 1;
 }
@@ -132,12 +132,12 @@ constant_exprt signedbv_typet::largest_expr() const
   return to_constant_expr(from_integer(largest(), *this));
 }
 
-mp_integer unsignedbv_typet::smallest() const
+BigInt unsignedbv_typet::smallest() const
 {
   return 0;
 }
 
-mp_integer unsignedbv_typet::largest() const
+BigInt unsignedbv_typet::largest() const
 {
   return power(2, get_width()) - 1;
 }

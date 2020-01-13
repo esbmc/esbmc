@@ -46,12 +46,12 @@ void fixedbvt::from_expr(const constant_exprt &expr)
   v = binary2integer(id2string(expr.get_value()), true);
 }
 
-void fixedbvt::from_integer(const mp_integer &i)
+void fixedbvt::from_integer(const BigInt &i)
 {
   v = i * power(2, spec.get_fraction_bits());
 }
 
-mp_integer fixedbvt::to_integer() const
+BigInt fixedbvt::to_integer() const
 {
   // this rounds to zero, i.e., we just divide
   return v / power(2, spec.get_fraction_bits());
@@ -73,16 +73,16 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
   unsigned old_fraction_bits = spec.width - spec.integer_bits;
   unsigned new_fraction_bits = dest_spec.width - dest_spec.integer_bits;
 
-  mp_integer result = v;
+  BigInt result = v;
 
   if(new_fraction_bits > old_fraction_bits)
     result = v * power(2, new_fraction_bits - old_fraction_bits);
   else if(new_fraction_bits < old_fraction_bits)
   {
     // may need to round
-    mp_integer p = power(2, old_fraction_bits - new_fraction_bits);
-    mp_integer div = v / p;
-    mp_integer rem = v % p;
+    BigInt p = power(2, old_fraction_bits - new_fraction_bits);
+    BigInt div = v / p;
+    BigInt rem = v % p;
     if(rem < 0)
       rem = -rem;
 
@@ -158,8 +158,8 @@ std::string fixedbvt::format(const format_spect &format_spec) const
   std::string dest;
   unsigned fraction_bits = spec.get_fraction_bits();
 
-  mp_integer int_value = v;
-  mp_integer factor = power(2, fraction_bits); //mp_integer(1)<<fraction_bits;
+  BigInt int_value = v;
+  BigInt factor = power(2, fraction_bits); //BigInt(1)<<fraction_bits;
 
   if(int_value.is_negative())
   {

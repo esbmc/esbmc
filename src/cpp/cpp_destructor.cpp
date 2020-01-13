@@ -41,7 +41,7 @@ codet cpp_typecheckt::cpp_destructor(
       return new_code;
     }
 
-    mp_integer s;
+    BigInt s;
     if(to_integer(size_expr, s))
     {
       err_location(tmp_type);
@@ -54,7 +54,7 @@ codet cpp_typecheckt::cpp_destructor(
     new_code.set_statement("block");
 
     // for each element of the array, call the destructor
-    for(mp_integer i = 0; i < s; ++i)
+    for(BigInt i = 0; i < s; ++i)
     {
       exprt constant = from_integer(i, int_type());
       constant.location() = location;

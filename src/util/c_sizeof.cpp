@@ -23,7 +23,7 @@ exprt c_sizeof(const typet &src, const namespacet &ns)
   // Array size simplification and so forth will have already occurred in
   // migration, but we might still run into a nondeterministically sized
   // array.
-  mp_integer size;
+  BigInt size;
   try
   {
     size = type_byte_size(t);

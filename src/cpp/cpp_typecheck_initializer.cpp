@@ -214,7 +214,7 @@ void cpp_typecheckt::zero_initializer(
       if(size_expr.id() == "infinity")
         return; // don't initialize
 
-      mp_integer size;
+      BigInt size;
 
 #ifndef NDEBUG
       bool to_int = to_integer(size_expr, size);
@@ -223,7 +223,7 @@ void cpp_typecheckt::zero_initializer(
       assert(size >= 0);
 
       exprt::operandst empty_operands;
-      for(mp_integer i = 0; i < size; ++i)
+      for(BigInt i = 0; i < size; ++i)
       {
         exprt index("index");
         index.copy_to_operands(object, from_integer(i, int_type()));
@@ -234,7 +234,7 @@ void cpp_typecheckt::zero_initializer(
   else if(final_type.id() == "union")
   {
     // Select the largest component
-    mp_integer comp_size = 0;
+    BigInt comp_size = 0;
 
     exprt comp = nil_exprt();
 
@@ -249,7 +249,7 @@ void cpp_typecheckt::zero_initializer(
 
       exprt exs = c_sizeof(component.type(), *this);
 
-      mp_integer size;
+      BigInt size;
 #ifndef NDEBUG
       bool to_int = !to_integer(exs, size);
       assert(to_int);

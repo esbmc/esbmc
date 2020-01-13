@@ -172,7 +172,7 @@ bool exprt::is_zero() const
 
     if(type_id == "unsignedbv" || type_id == "signedbv")
     {
-      mp_integer int_value = binary2integer(value, false);
+      BigInt int_value = binary2integer(value, false);
       if(int_value == 0)
         return true;
     }
@@ -205,7 +205,7 @@ bool exprt::is_one() const
 
     if(type_id == "unsignedbv" || type_id == "signedbv")
     {
-      mp_integer int_value = binary2integer(value, false);
+      BigInt int_value = binary2integer(value, false);
       if(int_value == 1)
         return true;
     }

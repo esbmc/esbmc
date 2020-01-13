@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/bitvector.h>
 #include <util/irep2_utils.h>
 
-bool to_integer(const exprt &expr, mp_integer &int_value)
+bool to_integer(const exprt &expr, BigInt &int_value)
 {
   if(!expr.is_constant())
     return true;
@@ -46,7 +46,7 @@ bool to_integer(const exprt &expr, mp_integer &int_value)
   return true;
 }
 
-exprt from_integer(const mp_integer &int_value, const typet &type)
+exprt from_integer(const BigInt &int_value, const typet &type)
 {
   exprt expr;
 
@@ -79,7 +79,7 @@ exprt from_integer(const mp_integer &int_value, const typet &type)
   return expr;
 }
 
-expr2tc from_integer(const mp_integer &int_value, const type2tc &type)
+expr2tc from_integer(const BigInt &int_value, const type2tc &type)
 {
   switch(type->type_id)
   {
@@ -110,15 +110,15 @@ expr2tc from_integer(const mp_integer &int_value, const type2tc &type)
   }
 }
 
-mp_integer power(const mp_integer &base, const mp_integer &exponent)
+BigInt power(const BigInt &base, const BigInt &exponent)
 {
   assert(exponent >= 0);
 
   if(exponent == 0)
     return 1;
 
-  mp_integer result(base);
-  mp_integer count(exponent - 1);
+  BigInt result(base);
+  BigInt count(exponent - 1);
 
   while(count != 0)
   {
@@ -130,9 +130,9 @@ mp_integer power(const mp_integer &base, const mp_integer &exponent)
 }
 
 /// ceil(log2(size))
-mp_integer address_bits(const mp_integer &size)
+BigInt address_bits(const BigInt &size)
 {
-  mp_integer result, x = 2;
+  BigInt result, x = 2;
   for(result = 1; x < size; result += 1, x *= 2)
     ;
 

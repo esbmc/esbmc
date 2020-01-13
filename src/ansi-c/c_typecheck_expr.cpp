@@ -216,7 +216,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   const irept &components = symbol.type.components();
   const irep_idt &member = expr.member_irep().identifier();
   bool found = false;
-  mp_integer offset = 0;
+  BigInt offset = 0;
 
   forall_irep(it, components.get_sub())
   {
@@ -229,7 +229,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
     const typet &type = it->type();
     exprt size_expr = c_sizeof(type, *this);
 
-    mp_integer i;
+    BigInt i;
     to_integer(size_expr, i);
     offset += i;
   }
@@ -1301,7 +1301,7 @@ void c_typecheck_baset::do_special_functions(
       if(config.ansi_c.use_fixed_for_float)
       {
         // We saturate to the biggest value
-        mp_integer value = power(2, bv_width(t) - 1) - 1;
+        BigInt value = power(2, bv_width(t) - 1) - 1;
         infl_expr = constant_exprt(
           integer2binary(value, bv_width(t)), integer2string(value, 10), t);
       }
@@ -1325,7 +1325,7 @@ void c_typecheck_baset::do_special_functions(
       constant_exprt nan_expr;
       if(config.ansi_c.use_fixed_for_float)
       {
-        mp_integer value = 0;
+        BigInt value = 0;
         nan_expr = constant_exprt(
           integer2binary(value, bv_width(t)), integer2string(value, 10), t);
       }

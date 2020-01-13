@@ -22,7 +22,7 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
   typet enum_type("symbol");
   enum_type.identifier(enum_symbol.id);
 
-  mp_integer i = 0;
+  BigInt i = 0;
 
   Forall_irep(it, components)
   {

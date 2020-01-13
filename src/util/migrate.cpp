@@ -752,7 +752,7 @@ static expr2tc flatten_union(const exprt &expr)
 {
   type2tc type;
   migrate_type(expr.type(), type);
-  mp_integer full_size = type_byte_size(type);
+  BigInt full_size = type_byte_size(type);
 
   // Union literals should have one field.
   assert(
@@ -804,7 +804,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if(type->type_id == type2t::signedbv_id)
       is_signed = true;
 
-    mp_integer val = binary2bigint(expr.value(), is_signed);
+    BigInt val = binary2bigint(expr.value(), is_signed);
 
     expr2t *new_expr = new constant_int2t(type, val);
     new_expr_ref = expr2tc(new_expr);
@@ -935,7 +935,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     typet thetype = expr.type();
     assert(thetype.add(typet::a_size).id() == irept::id_constant);
     exprt &face = (exprt &)thetype.add(typet::a_size);
-    mp_integer val = binary2bigint(face.value(), false);
+    BigInt val = binary2bigint(face.value(), false);
 
     type2tc t = type2tc(new string_type2t(val.to_long()));
 

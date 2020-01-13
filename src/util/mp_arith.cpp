@@ -14,9 +14,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/arith_tools.h>
 #include <util/mp_arith.h>
 
-mp_integer operator>>(const mp_integer &a, const mp_integer &b)
+BigInt operator>>(const BigInt &a, const BigInt &b)
 {
-  mp_integer power = ::power(2, b);
+  BigInt power = ::power(2, b);
 
   if(a >= 0)
     return a / power;
@@ -30,29 +30,29 @@ mp_integer operator>>(const mp_integer &a, const mp_integer &b)
   return a / power - 1;
 }
 
-mp_integer operator<<(const mp_integer &a, const mp_integer &b)
+BigInt operator<<(const BigInt &a, const BigInt &b)
 {
   return a * power(2, b);
 }
 
-std::ostream &operator<<(std::ostream &out, const mp_integer &n)
+std::ostream &operator<<(std::ostream &out, const BigInt &n)
 {
   out << integer2string(n);
   return out;
 }
 
-const mp_integer string2integer(const std::string &n, unsigned base)
+const BigInt string2integer(const std::string &n, unsigned base)
 {
   for(unsigned i = 0; i < n.size(); i++)
     if(!(isalnum(n[i]) || (n[i] == '-' && i == 0)))
       return 0;
 
-  return mp_integer(n.c_str(), base);
+  return BigInt(n.c_str(), base);
 }
 
-const std::string integer2binary(const mp_integer &n, std::size_t width)
+const std::string integer2binary(const BigInt &n, std::size_t width)
 {
-  mp_integer a(n);
+  BigInt a(n);
 
   if(width == 0)
     return "";
@@ -89,7 +89,7 @@ const std::string integer2binary(const mp_integer &n, std::size_t width)
   return result;
 }
 
-const std::string integer2string(const mp_integer &n, unsigned base)
+const std::string integer2string(const BigInt &n, unsigned base)
 {
   unsigned len = n.digits(base) + 2;
   char *buffer = (char *)malloc(len);
@@ -102,13 +102,13 @@ const std::string integer2string(const mp_integer &n, unsigned base)
   return result;
 }
 
-const mp_integer binary2integer(const std::string &n, bool is_signed)
+const BigInt binary2integer(const std::string &n, bool is_signed)
 {
   if(n.size() == 0)
     return 0;
 
-  mp_integer result = 0;
-  mp_integer mask = 1;
+  BigInt result = 0;
+  BigInt mask = 1;
   mask = mask << (n.size() - 1);
 
   for(unsigned i = 0; i < n.size(); i++)
@@ -135,18 +135,18 @@ const mp_integer binary2integer(const std::string &n, bool is_signed)
   return result;
 }
 
-std::size_t integer2size_t(const mp_integer &n)
+std::size_t integer2size_t(const BigInt &n)
 {
   assert(n >= 0);
-  mp_integer::ullong_t ull = n.to_ulong();
+  BigInt::ullong_t ull = n.to_ulong();
   assert(ull <= std::numeric_limits<std::size_t>::max());
   return (std::size_t)ull;
 }
 
-unsigned integer2unsigned(const mp_integer &n)
+unsigned integer2unsigned(const BigInt &n)
 {
   assert(n >= 0);
-  mp_integer::ullong_t ull = n.to_ulong();
+  BigInt::ullong_t ull = n.to_ulong();
   assert(ull <= std::numeric_limits<unsigned>::max());
   return (unsigned)ull;
 }

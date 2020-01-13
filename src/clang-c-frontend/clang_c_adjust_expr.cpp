@@ -741,7 +741,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       if(config.ansi_c.use_fixed_for_float)
       {
         // We saturate to the biggest value
-        mp_integer value = power(2, bv_width(t) - 1) - 1;
+        BigInt value = power(2, bv_width(t) - 1) - 1;
         infl_expr = constant_exprt(
           integer2binary(value, bv_width(t)), integer2string(value, 10), t);
       }
@@ -765,7 +765,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       constant_exprt nan_expr;
       if(config.ansi_c.use_fixed_for_float)
       {
-        mp_integer value = 0;
+        BigInt value = 0;
         nan_expr = constant_exprt(
           integer2binary(value, bv_width(t)), integer2string(value, 10), t);
       }

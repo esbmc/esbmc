@@ -2118,7 +2118,7 @@ void cpp_typecheckt::typecheck_side_effect_increment(side_effect_exprt &expr)
 
   // the odd C++ way to denote the post-inc/dec operator
   if(post)
-    new_expr.arguments().push_back(from_integer(mp_integer(0), int_type()));
+    new_expr.arguments().push_back(from_integer(BigInt(0), int_type()));
 
   typecheck_side_effect_function_call(new_expr);
   expr.swap(new_expr);

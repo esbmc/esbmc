@@ -58,7 +58,7 @@ bool c_typecheck_baset::zero_initializer(exprt &value, const typet &type) const
     }
     else
     {
-      mp_integer size;
+      BigInt size;
 
       if(to_integer(size_expr, size))
         return true;
@@ -286,7 +286,7 @@ exprt c_typecheck_baset::do_initializer_array(
 {
   // get size
 
-  mp_integer mp_size;
+  BigInt mp_size;
 
   if(to_integer(type.size(), mp_size))
   {

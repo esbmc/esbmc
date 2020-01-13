@@ -16,7 +16,7 @@ void string2array(const exprt &src, exprt &dest)
   const std::string &str = src.value().as_string();
   unsigned actual_size = str.size();
 
-  mp_integer str_size;
+  BigInt str_size;
   to_integer(to_array_type(src.type()).size(), str_size);
   unsigned int string_size = str_size.to_uint64();
 

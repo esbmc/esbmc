@@ -63,8 +63,8 @@ public:
 
   token_typet type;
   std::list<flag_typet> flags;
-  mp_integer field_width;
-  mp_integer precision;
+  BigInt field_width;
+  BigInt precision;
   length_modifierst length_modifier;
   irep_idt value; // for text and pattern matching
 };

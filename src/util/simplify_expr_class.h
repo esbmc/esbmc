@@ -83,7 +83,7 @@ public:
 
   virtual ~simplify_exprt() = default;
 
-  typedef std::set<mp_integer> value_listt;
+  typedef std::set<BigInt> value_listt;
   bool get_values(const exprt &expr, value_listt &value_list);
 
   simplify_exprt() : do_simplify_if(true)

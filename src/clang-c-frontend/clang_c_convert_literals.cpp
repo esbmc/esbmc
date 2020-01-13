@@ -77,8 +77,8 @@ bool clang_c_convertert::convert_integer_literal(
 
 static void parse_float(
   llvm::SmallVectorImpl<char> &src,
-  mp_integer &significand,
-  mp_integer &exponent)
+  BigInt &significand,
+  BigInt &exponent)
 {
   // {digit}{dot}{digits}[+-]{exponent}
 
@@ -150,9 +150,9 @@ bool clang_c_convertert::convert_float_literal(
   val.toString(string, width, 0);
 
   // Now let's build the literal
-  mp_integer value;
-  mp_integer significand;
-  mp_integer exponent;
+  BigInt value;
+  BigInt significand;
+  BigInt exponent;
   std::string value_string;
 
   // Fixed bvs
@@ -189,7 +189,7 @@ bool clang_c_convertert::convert_float_literal(
       else
         fraction_bits = width - atoi(integer_bits.c_str());
 
-      mp_integer factor = mp_integer(1) << fraction_bits;
+      BigInt factor = BigInt(1) << fraction_bits;
       value = significand * factor;
 
       if(exponent < 0)

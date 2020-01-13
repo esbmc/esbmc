@@ -770,7 +770,7 @@ void smtlib_convt::assert_ast(smt_astt a)
 }
 
 smt_astt smtlib_convt::mk_smt_int(
-  const mp_integer &theint,
+  const BigInt &theint,
   bool sign __attribute__((unused)))
 {
   smt_sortt s = mk_int_sort();
@@ -787,7 +787,7 @@ smt_astt smtlib_convt::mk_smt_real(const std::string &str)
   return a;
 }
 
-smt_astt smtlib_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
+smt_astt smtlib_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_BVINT);
   a->intval = theint;

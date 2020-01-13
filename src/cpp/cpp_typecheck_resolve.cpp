@@ -790,7 +790,7 @@ exprt cpp_typecheck_resolvet::do_builtin(
         "but got type";
     }
 
-    mp_integer i;
+    BigInt i;
     if(to_integer(argument, i))
     {
       cpp_typecheck.err_location(location);
@@ -836,7 +836,7 @@ exprt cpp_typecheck_resolvet::do_builtin(
         "but got type";
     }
 
-    mp_integer width, integer_bits;
+    BigInt width, integer_bits;
 
     if(to_integer(argument0, width))
     {

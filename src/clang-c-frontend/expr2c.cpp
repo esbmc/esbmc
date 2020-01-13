@@ -91,7 +91,7 @@ std::string expr2ct::convert_rec(
   }
   else if(src.id() == "signedbv" || src.id() == "unsignedbv")
   {
-    mp_integer width = string2integer(src.width().as_string());
+    BigInt width = string2integer(src.width().as_string());
 
     bool is_signed = src.id() == "signedbv";
     std::string sign_str = is_signed ? "signed " : "unsigned ";
@@ -119,7 +119,7 @@ std::string expr2ct::convert_rec(
   }
   else if(src.id() == "floatbv" || src.id() == "fixedbv")
   {
-    mp_integer width = string2integer(src.width().as_string());
+    BigInt width = string2integer(src.width().as_string());
 
     if(width == config.ansi_c.single_width)
       return q + "float" + d;
@@ -1009,8 +1009,8 @@ std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
   }
   else if(type.id() == "c_enum" || type.id() == "incomplete_c_enum")
   {
-    mp_integer int_value = string2integer(value);
-    mp_integer i = 0;
+    BigInt int_value = string2integer(value);
+    BigInt i = 0;
     const irept &body = type.body();
 
     forall_irep(it, body.get_sub())
@@ -1037,7 +1037,7 @@ std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
   }
   else if(type.id() == "unsignedbv" || type.id() == "signedbv")
   {
-    mp_integer int_value = binary2integer(value, type.id() == "signedbv");
+    BigInt int_value = binary2integer(value, type.id() == "signedbv");
     dest = integer2string(int_value);
   }
   else if(type.id() == "floatbv")

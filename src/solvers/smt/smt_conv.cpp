@@ -1222,7 +1222,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     magnitude <<= (bitwidth / 2);
     fin = magnitude | fraction;
 
-    return mk_smt_bv(mp_integer(fin), bitwidth);
+    return mk_smt_bv(BigInt(fin), bitwidth);
   }
   case expr2t::constant_floatbv_id:
   {

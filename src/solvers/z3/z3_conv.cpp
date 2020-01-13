@@ -801,7 +801,7 @@ smt_astt z3_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 }
 
 smt_astt z3_convt::mk_smt_int(
-  const mp_integer &theint,
+  const BigInt &theint,
   bool sign __attribute__((unused)))
 {
   smt_sortt s = mk_int_sort();
@@ -817,7 +817,7 @@ smt_astt z3_convt::mk_smt_real(const std::string &str)
   return new_ast(z3_ctx.real_val(str.c_str()), s);
 }
 
-smt_astt z3_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
+smt_astt z3_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
 
@@ -831,10 +831,10 @@ smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
   smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);
 
-  const mp_integer sig = thereal.get_fraction();
+  const BigInt sig = thereal.get_fraction();
 
   // If the number is denormal, we set the exponent to -bias
-  const mp_integer exp =
+  const BigInt exp =
     thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
 
   smt_astt sgn_bv = mk_smt_bv(BigInt(thereal.get_sign()), mk_bv_sort(1));

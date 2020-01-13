@@ -127,7 +127,7 @@ expr2tc goto_symext::symex_mem(
   else
   {
     cur_state->rename(size);
-    mp_integer i;
+    BigInt i;
     if(is_constant_int2t(size) && to_constant_int2t(size).as_ulong() == 1)
       size_is_one = true;
   }
@@ -266,7 +266,7 @@ void goto_symext::track_new_pointer(
   {
     try
     {
-      mp_integer object_size = type_byte_size(new_type);
+      BigInt object_size = type_byte_size(new_type);
       object_size_exp =
         constant_int2tc(pointer_type2(), object_size.to_ulong());
     }

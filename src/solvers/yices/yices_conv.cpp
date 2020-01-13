@@ -664,7 +664,7 @@ smt_astt yices_convt::mk_isint(smt_astt a)
 }
 
 smt_astt yices_convt::mk_smt_int(
-  const mp_integer &theint,
+  const BigInt &theint,
   bool sign __attribute__((unused)))
 {
   term_t term = yices_int64(theint.to_int64());
@@ -679,7 +679,7 @@ smt_astt yices_convt::mk_smt_real(const std::string &str)
   return new_ast(term, s);
 }
 
-smt_astt yices_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
+smt_astt yices_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
   term_t term = yices_bvconst_uint64(w, theint.to_int64());

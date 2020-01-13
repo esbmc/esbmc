@@ -114,7 +114,7 @@ bool clang_main(
       init_code.copy_to_operands(code_assumet(ge));
 
       // assume argc is at most MAX-1
-      mp_integer max;
+      BigInt max;
 
       if(argc_symbol.type.id() == "signedbv")
         max = power(2, atoi(argc_symbol.type.width().c_str()) - 1) - 1;

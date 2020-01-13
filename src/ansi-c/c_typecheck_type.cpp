@@ -128,7 +128,7 @@ void c_typecheck_baset::typecheck_array_type(array_typet &type)
 
   if(size.is_constant())
   {
-    mp_integer s;
+    BigInt s;
     if(to_integer(size, s))
     {
       err_location(size);
@@ -222,7 +222,7 @@ void c_typecheck_baset::typecheck_c_bit_field_type(typet &type)
   typecheck_expr(size);
   make_constant_index(size);
 
-  mp_integer i;
+  BigInt i;
   if(to_integer(size, i))
   {
     err_location(size);

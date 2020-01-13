@@ -18,7 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/irep2_utils.h>
 #include <util/mp_arith.h>
 
-typedef interval_templatet<mp_integer> integer_intervalt;
+typedef interval_templatet<BigInt> integer_intervalt;
 
 class interval_domaint : public ai_domain_baset
 {
