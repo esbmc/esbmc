@@ -100,7 +100,7 @@ static void copy_member(
 static void copy_array(
   const locationt &location,
   const irep_idt &member_base_name,
-  const mp_integer &i,
+  const BigInt &i,
   const irep_idt &arg_name,
   exprt &block)
 {
@@ -467,14 +467,14 @@ void cpp_typecheckt::default_assignop_value(
         continue;
       }
 
-      mp_integer size;
+      BigInt size;
       bool to_int = to_integer(size_expr, size);
       assert(!to_int);
       assert(size >= 0);
       (void)to_int; //ndebug
 
       exprt::operandst empty_operands;
-      for(mp_integer i = 0; i < size; ++i)
+      for(BigInt i = 0; i < size; ++i)
         copy_array(location, mem_name, i, arg_name, block);
     }
     else

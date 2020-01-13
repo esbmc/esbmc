@@ -20,7 +20,7 @@ class ieee_float_spect
 public:
   unsigned f, e;
 
-  mp_integer bias() const;
+  BigInt bias() const;
 
   ieee_float_spect(const floatbv_typet &type);
   ieee_float_spect(const floatbv_type2tc &type);
@@ -40,8 +40,8 @@ public:
 
   const floatbv_type2tc get_type() const;
 
-  mp_integer max_exponent() const;
-  mp_integer max_fraction() const;
+  BigInt max_exponent() const;
+  BigInt max_fraction() const;
 
   floatbv_typet to_type() const;
   inline static ieee_float_spect single_precision()
@@ -201,30 +201,30 @@ public:
   }
   bool is_normal() const;
 
-  const mp_integer &get_exponent() const
+  const BigInt &get_exponent() const
   {
     return exponent;
   }
-  const mp_integer &get_fraction() const
+  const BigInt &get_fraction() const
   {
     return fraction;
   }
 
   // performs conversion to ieee floating point format
-  void from_integer(const mp_integer &i);
-  void from_base10(const mp_integer &exp, const mp_integer &frac);
-  void build(const mp_integer &exp, const mp_integer &frac);
-  void unpack(const mp_integer &i);
+  void from_integer(const BigInt &i);
+  void from_base10(const BigInt &exp, const BigInt &frac);
+  void build(const BigInt &exp, const BigInt &frac);
+  void unpack(const BigInt &i);
   void from_double(const double d);
   void from_float(const float f);
   double to_double() const;
   float to_float() const;
   bool is_double() const;
   bool is_float() const;
-  mp_integer pack() const;
-  void extract_base2(mp_integer &_fraction, mp_integer &_exponent) const;
-  void extract_base10(mp_integer &_fraction, mp_integer &_exponent) const;
-  mp_integer to_integer() const; // this always rounds to zero
+  BigInt pack() const;
+  void extract_base2(BigInt &_fraction, BigInt &_exponent) const;
+  void extract_base10(BigInt &_fraction, BigInt &_exponent) const;
+  BigInt to_integer() const; // this always rounds to zero
 
   // performs conversion from ieee floating point format
   void change_spec(const ieee_float_spect &dest_spec);
@@ -273,18 +273,18 @@ public:
   friend bool operator<=(const ieee_floatt &a, int i);
 
 protected:
-  void divide_and_round(mp_integer &fraction, const mp_integer &factor);
+  void divide_and_round(BigInt &fraction, const BigInt &factor);
   void align();
   void next_representable(bool greater);
 
   // we store the number unpacked
   bool sign_flag;
-  mp_integer exponent; // this is unbiased
-  mp_integer fraction; // this _does_ include the hidden bit
+  BigInt exponent; // this is unbiased
+  BigInt fraction; // this _does_ include the hidden bit
   bool NaN_flag, infinity_flag;
 
   // number of digits of an integer >=1 in base 10
-  static mp_integer base10_digits(const mp_integer &src);
+  static BigInt base10_digits(const BigInt &src);
 };
 
 bool operator<(const ieee_floatt &a, const ieee_floatt &b);

@@ -104,7 +104,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
 
     if(op_type_id == "c_enum" || op_type_id == "incomplete_c_enum")
     {
-      mp_integer int_value = string2integer(id2string(value));
+      BigInt int_value = string2integer(id2string(value));
 
       if(expr_type_id == "bool")
       {
@@ -145,7 +145,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
     }
     else if(op_type_id == "unsignedbv" || op_type_id == "signedbv")
     {
-      mp_integer int_value =
+      BigInt int_value =
         binary2integer(id2string(value), op_type_id == "signedbv");
 
       if(expr_type_id == "bool")
@@ -239,7 +239,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
         expr_type_id == "unsignedbv" || expr_type_id == "signedbv" ||
         expr_type_id == "floatbv")
       {
-        mp_integer int_value = binary2integer(id2string(value), false);
+        BigInt int_value = binary2integer(id2string(value), false);
         new_expr.value(integer2binary(int_value, expr_width));
         expr.swap(new_expr);
         return false;
@@ -582,7 +582,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
 
   if(expr.type().is_signedbv() || expr.type().is_unsignedbv())
   {
-    mp_integer int_value0, int_value1;
+    BigInt int_value0, int_value1;
     bool ok0, ok1;
 
     ok0 = !to_integer(expr.op0(), int_value0);
@@ -601,7 +601,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
 
     if(ok0 && ok1)
     {
-      mp_integer result = int_value0 / int_value1;
+      BigInt result = int_value0 / int_value1;
       exprt tmp = from_integer(result, expr.type());
 
       if(tmp.is_not_nil())
@@ -673,7 +673,7 @@ bool simplify_exprt::simplify_modulo(exprt &expr)
   {
     if(expr.type() == expr.op0().type() && expr.type() == expr.op1().type())
     {
-      mp_integer int_value0, int_value1;
+      BigInt int_value0, int_value1;
       bool ok0, ok1;
 
       ok0 = !to_integer(expr.op0(), int_value0);
@@ -690,7 +690,7 @@ bool simplify_exprt::simplify_modulo(exprt &expr)
 
       if(ok0 && ok1)
       {
-        mp_integer result = int_value0 % int_value1;
+        BigInt result = int_value0 % int_value1;
         exprt tmp = from_integer(result, expr.type());
 
         if(tmp.is_not_nil())
@@ -977,7 +977,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
   if(expr.operands().size() != 2)
     return true;
 
-  mp_integer distance;
+  BigInt distance;
 
   if(to_integer(expr.op1(), distance))
     return true;
@@ -990,7 +990,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
     return false;
   }
 
-  mp_integer value;
+  BigInt value;
 
   if(to_integer(expr.op0(), value))
     return true;
@@ -999,7 +999,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
     expr.op0().type().id() == "unsignedbv" ||
     expr.op0().type().id() == "signedbv")
   {
-    mp_integer width = string2integer(id2string(expr.op0().type().width()));
+    BigInt width = string2integer(id2string(expr.op0().type().width()));
 
     if(expr.id() == "lshr")
     {
@@ -1021,8 +1021,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
       // this is to simulate an arithmetic right shift
       if(distance >= 0)
       {
-        mp_integer new_value =
-          (distance >= width) ? 0 : value / power(2, distance);
+        BigInt new_value = (distance >= width) ? 0 : value / power(2, distance);
 
         if(value < 0 && new_value == 0)
           new_value = -1;
@@ -1072,7 +1071,7 @@ bool simplify_exprt::simplify_if_implies(
       const irep_idt &type_id = cond.op1().type().id();
       if(type_id == "unsignedbv")
       {
-        const mp_integer i1, i2;
+        const BigInt i1, i2;
         if(
           binary2integer(cond.op1().value().as_string(), false) >=
           binary2integer(expr.op1().value().as_string(), false))
@@ -1083,7 +1082,7 @@ bool simplify_exprt::simplify_if_implies(
       }
       else if(type_id == "signedbv")
       {
-        const mp_integer i1, i2;
+        const BigInt i1, i2;
         if(
           binary2integer(cond.op1().value().as_string(), true) >=
           binary2integer(expr.op1().value().as_string(), true))
@@ -1100,7 +1099,7 @@ bool simplify_exprt::simplify_if_implies(
       const irep_idt &type_id = cond.op1().type().id();
       if(type_id == "unsignedbv")
       {
-        const mp_integer i1, i2;
+        const BigInt i1, i2;
         if(
           binary2integer(cond.op1().value().as_string(), false) <=
           binary2integer(expr.op1().value().as_string(), false))
@@ -1111,7 +1110,7 @@ bool simplify_exprt::simplify_if_implies(
       }
       else if(type_id == "signedbv")
       {
-        const mp_integer i1, i2;
+        const BigInt i1, i2;
         if(
           binary2integer(cond.op1().value().as_string(), true) <=
           binary2integer(expr.op1().value().as_string(), true))
@@ -1596,7 +1595,7 @@ bool simplify_exprt::get_values(const exprt &expr, value_listt &value_list)
 {
   if(expr.is_constant())
   {
-    mp_integer int_value;
+    BigInt int_value;
     if(to_integer(expr, int_value))
       return true;
 
@@ -1699,7 +1698,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr)
     }
     else
     {
-      mp_integer v0, v1;
+      BigInt v0, v1;
 
       if(to_integer(expr.op0(), v0))
         return true;
@@ -1862,8 +1861,8 @@ bool simplify_exprt::simplify_inequality_not_constant(exprt &expr)
       forall_value_list(it1, values1)
       {
         bool tmp = false;
-        const mp_integer &int_value0 = *it0;
-        const mp_integer &int_value1 = *it1;
+        const BigInt &int_value0 = *it0;
+        const BigInt &int_value1 = *it1;
 
         if(expr.id() == ">=")
           tmp = (int_value0 >= int_value1);
@@ -1921,14 +1920,14 @@ bool simplify_exprt::simplify_inequality_constant(exprt &expr)
 
     if(expr.id() == "=" || expr.id() == "notequal")
     {
-      mp_integer constant = 0;
+      BigInt constant = 0;
       bool changed = false;
 
       Forall_operands(it, expr.op0())
       {
         if(it->is_constant())
         {
-          mp_integer i;
+          BigInt i;
           if(!to_integer(*it, i))
           {
             constant += i;
@@ -1941,7 +1940,7 @@ bool simplify_exprt::simplify_inequality_constant(exprt &expr)
       if(changed)
       {
         // adjust constant
-        mp_integer i;
+        BigInt i;
         to_integer(expr.op1(), i);
         i -= constant;
         expr.op1() = from_integer(i, expr.op1().type());
@@ -2139,7 +2138,7 @@ bool simplify_exprt::simplify_with(exprt &expr)
     {
       while(expr.operands().size() > 1)
       {
-        mp_integer i;
+        BigInt i;
 
         if(to_integer(expr.op1(), i))
           break;
@@ -2222,7 +2221,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr)
   }
   else if(expr.op0().id() == "constant" || expr.op0().is_array())
   {
-    mp_integer i;
+    BigInt i;
 
     if(to_integer(expr.op1(), i))
     {
@@ -2242,7 +2241,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr)
   }
   else if(expr.op0().id() == "string-constant")
   {
-    mp_integer i;
+    BigInt i;
 
     const irep_idt &value = expr.op0().value();
 
@@ -2605,7 +2604,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
   {
     if(expr.type().is_signedbv() || expr.type().is_unsignedbv())
     {
-      mp_integer int_value;
+      BigInt int_value;
 
       if(to_integer(expr.op0(), int_value))
         return true;

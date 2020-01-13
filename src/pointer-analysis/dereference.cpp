@@ -1070,14 +1070,14 @@ void dereferencet::construct_from_const_struct_offset(
 {
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
-  const mp_integer int_offset = to_constant_int2t(offset).value;
-  mp_integer access_size = type_byte_size(type);
+  const BigInt int_offset = to_constant_int2t(offset).value;
+  BigInt access_size = type_byte_size(type);
 
   unsigned int i = 0;
   for(auto const &it : struct_type.members)
   {
-    mp_integer m_offs = member_offset(value->type, struct_type.member_names[i]);
-    mp_integer m_size = type_byte_size(it);
+    BigInt m_offs = member_offset(value->type, struct_type.member_names[i]);
+    BigInt m_size = type_byte_size(it);
 
     if(m_size == 0)
     {
@@ -1193,7 +1193,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   unsigned int i = 0;
   for(auto const &it : struct_type.members)
   {
-    mp_integer offs = member_offset(value->type, struct_type.member_names[i]);
+    BigInt offs = member_offset(value->type, struct_type.member_names[i]);
 
     // Compute some kind of guard
     unsigned int field_size = it->get_width() / 8;
@@ -1324,7 +1324,7 @@ void dereferencet::construct_from_multidir_array(
   // is an alignment violation as that can posess extra padding.
   // So, divide the offset by size of the inner dimention, make an index2t, and
   // construct a reference to that.
-  mp_integer subtype_sz = type_byte_size(arr_type.subtype);
+  BigInt subtype_sz = type_byte_size(arr_type.subtype);
   constant_int2tc subtype_sz_expr(pointer_type2(), subtype_sz);
   div2tc div(pointer_type2(), offset, subtype_sz_expr);
   simplify(div);
@@ -1392,7 +1392,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
   // Minimal effort: the moment that we can throw this object out due to an
   // incompatible type, we do.
   const constant_int2t &intref = to_constant_int2t(offs);
-  mp_integer type_size = type_byte_size(type);
+  BigInt type_size = type_byte_size(type);
 
   if(is_struct_type(value->type))
   {
@@ -1416,8 +1416,8 @@ void dereferencet::construct_struct_ref_from_const_offset(
     unsigned int i = 0;
     for(auto const &it : struct_type.members)
     {
-      mp_integer offs = member_offset(value->type, struct_type.member_names[i]);
-      mp_integer size = type_byte_size(it);
+      BigInt offs = member_offset(value->type, struct_type.member_names[i]);
+      BigInt size = type_byte_size(it);
 
       if(
         !is_scalar_type(it) && intref.value >= offs &&
@@ -1438,7 +1438,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
 
         // OK, it's this substruct, and we've eliminated the zero-sized-struct
         // menace. Recurse to continue our checks.
-        mp_integer new_offs = intref.value - offs;
+        BigInt new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs.to_ulong());
         value = member2tc(it, value, struct_type.member_names[i]);
         construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
@@ -1536,7 +1536,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     // and recurse. The complicated part is the new offset and guard: we need
     // to guard for offsets that are inside this array, and modulus the offset
     // by the array size.
-    mp_integer subtype_size = type_byte_size(arr_type.subtype);
+    BigInt subtype_size = type_byte_size(arr_type.subtype);
     expr2tc sub_size = gen_ulong(subtype_size.to_ulong());
     expr2tc div = div2tc(offs->type, offs, sub_size);
     expr2tc mod = modulus2tc(offs->type, offs, sub_size);
@@ -1582,9 +1582,9 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
         continue;
       }
 
-      mp_integer memb_offs =
+      BigInt memb_offs =
         member_offset(value->type, struct_type.member_names[i]);
-      mp_integer size = type_byte_size(it);
+      BigInt size = type_byte_size(it);
       expr2tc memb_offs_expr = gen_ulong(memb_offs.to_ulong());
       expr2tc limit_expr = gen_ulong(memb_offs.to_ulong() + size.to_ulong());
       expr2tc memb = member2tc(it, value, struct_type.member_names[i]);

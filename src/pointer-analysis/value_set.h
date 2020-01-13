@@ -112,7 +112,7 @@ public:
       if(offset_set)
       {
         offset_is_set = true;
-        offset = mp_integer(operand);
+        offset = BigInt(operand);
         offset_alignment = 1;
       }
       else
@@ -125,7 +125,7 @@ public:
 
     explicit objectt(
       bool offset_set __attribute__((unused)),
-      const mp_integer &_offset)
+      const BigInt &_offset)
       : offset(_offset), offset_is_set(true)
     {
       assert(offset_set);
@@ -135,7 +135,7 @@ public:
 
     /** Record of the explicit offset into the object. Only valid when
      *  offset_is_set is true. */
-    mp_integer offset;
+    BigInt offset;
     /** Whether or not the offset field of this objectt is valid; if this is
      *  true, then the reference has a fixed offset into the object, the value
      *  of which is in the offset field. If not, then the offset isn't
@@ -284,7 +284,7 @@ public:
     return 8;
   }
 
-  inline unsigned int offset2align(const expr2tc &e, const mp_integer &m) const
+  inline unsigned int offset2align(const expr2tc &e, const BigInt &m) const
   {
     unsigned int nat_align = get_natural_alignment(e);
     if(m == 0)
@@ -332,8 +332,7 @@ public:
     return insert(dest, it->first, it->second);
   }
 
-  bool
-  insert(object_mapt &dest, const expr2tc &src, const mp_integer &offset) const
+  bool insert(object_mapt &dest, const expr2tc &src, const BigInt &offset) const
   {
     return insert(dest, object_numbering.number(src), objectt(true, offset));
   }

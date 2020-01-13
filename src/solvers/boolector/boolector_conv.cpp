@@ -475,7 +475,7 @@ smt_astt boolector_convt::mk_select(smt_astt a, smt_astt b)
 }
 
 smt_astt boolector_convt::mk_smt_int(
-  const mp_integer &theint __attribute__((unused)),
+  const BigInt &theint __attribute__((unused)),
   bool sign __attribute__((unused)))
 {
   std::cerr << "Boolector can't create integer sorts" << std::endl;
@@ -489,7 +489,7 @@ smt_astt boolector_convt::mk_smt_real(const std::string &str
   abort();
 }
 
-smt_astt boolector_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
+smt_astt boolector_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   return new_ast(
     boolector_const(btor, integer2binary(theint, s->get_data_width()).c_str()),

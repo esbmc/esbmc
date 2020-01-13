@@ -57,7 +57,7 @@ cpp_typecheckt::template_suffix(const cpp_template_args_tct &template_args)
       make_constant(e);
 
       // this must be a constant, which includes true/false
-      mp_integer i;
+      BigInt i;
 
       if(e.is_true())
         i = 1;

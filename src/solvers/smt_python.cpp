@@ -231,7 +231,7 @@ tvt smt_convt_wrapper::l_get(smt_astt a)
   return get_override_checked(this, "l_get")(ast_down(a));
 }
 
-smt_astt smt_convt_wrapper::mk_smt_int(const mp_integer &theint, bool sign)
+smt_astt smt_convt_wrapper::mk_smt_int(const BigInt &theint, bool sign)
 {
   return get_override_checked(this, "mk_smt_int")(theint, sign);
 }
@@ -251,7 +251,7 @@ smt_astt smt_convt_wrapper::mk_smt_real(const std::string &str)
   return get_override_checked(this, "mk_smt_real")(str);
 }
 
-smt_astt smt_convt_wrapper::mk_smt_bv(const mp_integer &theint, smt_sortt s)
+smt_astt smt_convt_wrapper::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   return get_override_checked(this, "mk_smt_bv")(s, theint);
 }
@@ -561,7 +561,7 @@ void build_smt_conv_python_class(void)
       &smt_ast_wrapper::default_project,
       rte());
 
-  smt_astt (smt_convt::*mk_smt_bv)(const mp_integer &, std::size_t) =
+  smt_astt (smt_convt::*mk_smt_bv)(const BigInt &, std::size_t) =
     &smt_convt::mk_smt_bv;
 
   // Register generic smt_convt facilities: only allow the python user to do

@@ -217,7 +217,7 @@ void value_sett::get_value_set_rec(
   {
     // Unknown / invalid exprs mean we just point at something unknown (and
     // potentially invalid).
-    insert(dest, unknown2tc(original_type), mp_integer(0));
+    insert(dest, unknown2tc(original_type), BigInt(0));
     return;
   }
 
@@ -349,7 +349,7 @@ void value_sett::get_value_set_rec(
       expr2tc locnum = gen_ulong(location_number);
       dynamic_object2tc dynobj(dynamic_type, locnum, false, false);
 
-      insert(dest, dynobj, mp_integer(0));
+      insert(dest, dynobj, BigInt(0));
       return;
     }
 
@@ -365,7 +365,7 @@ void value_sett::get_value_set_rec(
 
       dynamic_object2tc dynobj(ptr.subtype, locnum, false, false);
 
-      insert(dest, dynobj, mp_integer(0));
+      insert(dest, dynobj, BigInt(0));
       return;
     }
 
@@ -383,7 +383,7 @@ void value_sett::get_value_set_rec(
   {
     // The use of an explicit constant struct value evaluates to it's address.
     address_of2tc tmp(expr->type, expr);
-    insert(dest, tmp, mp_integer(0));
+    insert(dest, tmp, BigInt(0));
     return;
   }
 
@@ -484,7 +484,7 @@ void value_sett::get_value_set_rec(
         subtype = ns.follow(subtype);
 
       expr2tc tmp = null_object2tc(ptr_ref.subtype);
-      insert(dest, tmp, mp_integer(0));
+      insert(dest, tmp, BigInt(0));
       return;
     }
 
@@ -529,7 +529,7 @@ void value_sett::get_value_set_rec(
       // pointer arithmetic. We also use the _perceived_ type of what we're
       // adding or subtracting from/to, it might be being typecasted.
       const type2tc &subtype = to_pointer_type(ptr_op->type).subtype;
-      mp_integer total_offs(0);
+      BigInt total_offs(0);
       bool is_const = false;
       try
       {
@@ -546,8 +546,8 @@ void value_sett::get_value_set_rec(
 
             // Potentially rename,
             const type2tc renamed = ns.follow(subtype);
-            mp_integer elem_size = type_byte_size(renamed);
-            const mp_integer &val = to_constant_int2t(non_ptr_op).value;
+            BigInt elem_size = type_byte_size(renamed);
+            const BigInt &val = to_constant_int2t(non_ptr_op).value;
             total_offs = val * elem_size;
             if(is_sub2t(expr))
               total_offs.negate();
@@ -651,7 +651,7 @@ void value_sett::get_value_set_rec(
   // If none of those expressions matched, then we don't really know what this
   // expression evaluates to. So just record it as being unknown.
   unknown2tc tmp(original_type);
-  insert(dest, tmp, mp_integer(0));
+  insert(dest, tmp, BigInt(0));
 }
 
 void value_sett::get_byte_stitching_value_set(
@@ -734,7 +734,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
       is_array_type(index.source_value) || is_string_type(index.source_value));
 
     // Compute the offset introduced by this index.
-    mp_integer index_offset;
+    BigInt index_offset;
     bool has_const_index_offset = false;
     try
     {
@@ -761,7 +761,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
       {
         // Once an unknown, always an unknown.
         unknown2tc unknown(expr->type);
-        insert(dest, unknown, mp_integer(0));
+        insert(dest, unknown, BigInt(0));
       }
       else
       {
@@ -781,7 +781,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         {
           // Non constant offset -- work out what the lowest alignment is.
           // Fetch the type size of the array index element.
-          mp_integer m = type_byte_size_default(index.source_value->type, 1);
+          BigInt m = type_byte_size_default(index.source_value->type, 1);
 
           // This index operation, whatever the offset, will always multiply
           // by the size of the element type.
@@ -810,10 +810,10 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     // value may refer to, plus an additional member operation. So, fetch that
     // reference set, and add the relevant offset to the offset expr.
     const member2t &memb = to_member2t(expr);
-    mp_integer offset_in_bytes;
+    BigInt offset_in_bytes;
 
     if(is_union_type(memb.source_value->type))
-      offset_in_bytes = mp_integer(0);
+      offset_in_bytes = BigInt(0);
     else
       offset_in_bytes = member_offset(memb.source_value->type, memb.member);
 
@@ -830,7 +830,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         (is_typecast2t(object) && is_null_object2t(to_typecast2t(object).from)))
       {
         unknown2tc unknown(memb.type);
-        insert(dest, unknown, mp_integer(0));
+        insert(dest, unknown, BigInt(0));
       }
       else
       {
@@ -903,7 +903,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
   // If we didn't recognize the expression, then we have no idea what this
   // refers to, so store an unknown expr.
   unknown2tc unknown(expr->type);
-  insert(dest, unknown, mp_integer(0));
+  insert(dest, unknown, BigInt(0));
 }
 
 void value_sett::assign(
@@ -1450,7 +1450,7 @@ void build_value_set_classes()
       value_sett::object_mapt &, unsigned, const value_sett::objectt &) const =
       &value_sett::insert;
     bool (value_sett::*insert_expr)(
-      value_sett::object_mapt &, const expr2tc &, const mp_integer &) const =
+      value_sett::object_mapt &, const expr2tc &, const BigInt &) const =
       &value_sett::insert;
     value_sett::entryt &(value_sett::*get_entry)(const value_sett::entryt &) =
       &value_sett::get_entry;

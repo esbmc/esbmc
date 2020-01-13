@@ -76,7 +76,7 @@ pointer_logict::pointer_expr(const pointert &pointer, const type2tc &type) const
 }
 
 expr2tc pointer_logict::object_rec(
-  const mp_integer &offset,
+  const BigInt &offset,
   const type2tc &pointer_type,
   const expr2tc &src) const
 {
@@ -84,13 +84,13 @@ expr2tc pointer_logict::object_rec(
   {
     const array_type2t &arrtype =
       dynamic_cast<const array_type2t &>(*src->type.get());
-    mp_integer size = type_byte_size(arrtype.subtype);
+    BigInt size = type_byte_size(arrtype.subtype);
 
     if(size == 0)
       return src;
 
-    mp_integer index = offset / size;
-    mp_integer rest = offset % size;
+    BigInt index = offset / size;
+    BigInt rest = offset % size;
 
     type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
     index2tc newindex(arrtype.subtype, src, constant_int2tc(inttype, index));
@@ -110,7 +110,7 @@ expr2tc pointer_logict::object_rec(
     if(offset == 0) // the struct itself
       return src;
 
-    mp_integer current_offset = 1;
+    BigInt current_offset = 1;
 
     assert(offset >= current_offset);
 
@@ -119,12 +119,12 @@ expr2tc pointer_logict::object_rec(
     {
       assert(offset >= current_offset);
 
-      mp_integer sub_size = type_byte_size(it);
+      BigInt sub_size = type_byte_size(it);
 
       if(sub_size == 0)
         return src;
 
-      mp_integer new_offset = current_offset + sub_size;
+      BigInt new_offset = current_offset + sub_size;
       if(new_offset > offset)
       {
         // found it

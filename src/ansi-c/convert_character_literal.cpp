@@ -50,11 +50,11 @@ void convert_character_literal(const std::string &src, exprt &dest)
   }
   else if(value.size() >= 2 && value.size() <= 4)
   {
-    mp_integer x = 0;
+    BigInt x = 0;
 
     for(unsigned i = 0; i < value.size(); i++)
     {
-      mp_integer z = (unsigned char)(value[i]);
+      BigInt z = (unsigned char)(value[i]);
       z = z << ((value.size() - i - 1) * 8);
       x += z;
     }

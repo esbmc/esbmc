@@ -389,7 +389,7 @@ public:
    *  @param theint BigInt representation of the number to create.
    *  @param sign Whether this integer is considered signed or not.
    *  @return The newly created terminal smt_ast of this integer. */
-  virtual smt_astt mk_smt_int(const mp_integer &theint, bool sign) = 0;
+  virtual smt_astt mk_smt_int(const BigInt &theint, bool sign) = 0;
 
   /** Create a real in a smt_ast.
    *  @param str String representation of the real, to be parsed by the solver.
@@ -404,7 +404,7 @@ public:
    *         in the stored integer should be ignored.
    *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bv(const mp_integer &theint, std::size_t w)
+  virtual smt_astt mk_smt_bv(const BigInt &theint, std::size_t w)
   {
     return mk_smt_bv(theint, mk_int_bv_sort(w));
   }
@@ -415,7 +415,7 @@ public:
    *         in the stored integer should be ignored.
    *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bv(const mp_integer &theint, smt_sortt s) = 0;
+  virtual smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) = 0;
 
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.

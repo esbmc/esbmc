@@ -207,7 +207,7 @@ void interval_domaint::assume_rec(
 
     if(is_bv_type(lhs) && is_bv_type(rhs))
     {
-      mp_integer tmp = to_constant_int2t(rhs).value;
+      BigInt tmp = to_constant_int2t(rhs).value;
       if(id == expr2t::lessthan_id)
         --tmp;
       integer_intervalt &ii = int_map[lhs_identifier];
@@ -222,7 +222,7 @@ void interval_domaint::assume_rec(
 
     if(is_bv_type(lhs) && is_bv_type(rhs))
     {
-      mp_integer tmp = to_constant_int2t(lhs).value;
+      BigInt tmp = to_constant_int2t(lhs).value;
       if(id == expr2t::lessthan_id)
         ++tmp;
       integer_intervalt &ii = int_map[rhs_identifier];

@@ -72,11 +72,11 @@ public:
   const std::string solver_text();
   tvt l_get(smt_astt a);
 
-  smt_astt mk_smt_int(const mp_integer &theint, bool sign);
+  smt_astt mk_smt_int(const BigInt &theint, bool sign);
   smt_astt mk_smt_bool(bool val);
   smt_astt mk_smt_symbol(const std::string &name, smt_sortt s);
   smt_astt mk_smt_real(const std::string &str);
-  smt_astt mk_smt_bv(const mp_integer &theint, smt_sortt s);
+  smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s);
 
   smt_astt mk_add(smt_astt a, smt_astt b);
   smt_astt mk_bvadd(smt_astt a, smt_astt b);

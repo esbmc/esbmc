@@ -16,8 +16,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void convert_float_literal(const std::string &src, exprt &dest)
 {
-  mp_integer significand;
-  mp_integer exponent;
+  BigInt significand;
+  BigInt exponent;
   bool is_float, is_long;
   unsigned base;
 
@@ -54,8 +54,8 @@ void convert_float_literal(const std::string &src, exprt &dest)
     else
       fraction_bits = width - atoi(integer_bits.c_str());
 
-    mp_integer factor = mp_integer(1) << fraction_bits;
-    mp_integer value = significand * factor;
+    BigInt factor = BigInt(1) << fraction_bits;
+    BigInt value = significand * factor;
 
     if(value != 0)
     {

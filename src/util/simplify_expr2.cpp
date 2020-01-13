@@ -882,7 +882,7 @@ expr2tc pointer_offset2t::do_simplify() const
     // And multiply the non pointer one by the type size.
     type2tc ptr_int_type = get_int_type(config.ansi_c.pointer_width);
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
-    mp_integer thesize =
+    BigInt thesize =
       (is_empty_type(ptr_subtype)) ? 1 : type_byte_size(ptr_subtype);
     constant_int2tc type_size(type, thesize);
 
@@ -1462,7 +1462,7 @@ expr2tc typecast2t::do_simplify() const
 
         ieee_floatt fpbv;
 
-        mp_integer rm_value = to_constant_int2t(rounding_mode).value;
+        BigInt rm_value = to_constant_int2t(rounding_mode).value;
         fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
         fpbv.from_expr(to_constant_floatbv2t(simp).value.to_expr());
@@ -1507,7 +1507,7 @@ expr2tc typecast2t::do_simplify() const
 
         ieee_floatt fpbv;
 
-        mp_integer rm_value = to_constant_int2t(rounding_mode).value;
+        BigInt rm_value = to_constant_int2t(rounding_mode).value;
         fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
         fpbv.spec = to_floatbv_type(migrate_type_back(type));
@@ -1544,7 +1544,7 @@ expr2tc typecast2t::do_simplify() const
 
       ieee_floatt fpbv(to_constant_floatbv2t(simp).value);
 
-      mp_integer rm_value = to_constant_int2t(rounding_mode).value;
+      BigInt rm_value = to_constant_int2t(rounding_mode).value;
       fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
       if(is_bv_type(type))
@@ -2180,11 +2180,11 @@ expr2tc concat2t::do_simplify() const
   if(!is_constant_int2t(side_1) || !is_constant_int2t(side_2))
     return expr2tc();
 
-  const mp_integer &value1 = to_constant_int2t(side_1).value;
-  const mp_integer &value2 = to_constant_int2t(side_2).value;
+  const BigInt &value1 = to_constant_int2t(side_1).value;
+  const BigInt &value2 = to_constant_int2t(side_2).value;
 
   // k; Take the values, and concatenate. Side 1 has higher end bits.
-  mp_integer accuml = value1;
+  BigInt accuml = value1;
   accuml *= (1ULL << side_2->type->get_width());
   accuml += value2;
 
@@ -2374,15 +2374,15 @@ expr2tc bswap2t::do_simplify() const
 
   const std::size_t bits_per_byte = 8;
   const std::size_t width = type->get_width();
-  mp_integer v = to_constant_int2t(value).value;
+  BigInt v = to_constant_int2t(value).value;
 
-  std::vector<mp_integer> bytes;
+  std::vector<BigInt> bytes;
   // take apart
   for(std::size_t bit = 0; bit < width; bit += bits_per_byte)
     bytes.push_back((v >> bit) % power(2, bits_per_byte));
 
   // put back together, but backwards
-  mp_integer new_value = 0;
+  BigInt new_value = 0;
   for(std::size_t bit = 0; bit < width; bit += bits_per_byte)
   {
     assert(!bytes.empty());

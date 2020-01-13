@@ -977,7 +977,7 @@ smt_astt cvc_convt::mk_select(smt_astt a, smt_astt b)
 }
 
 smt_astt cvc_convt::mk_smt_int(
-  const mp_integer &theint,
+  const BigInt &theint,
   bool sign __attribute__((unused)))
 {
   // TODO: Is this correct? CVC4 doesn't have any call for
@@ -997,10 +997,10 @@ smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
   smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);
 
-  const mp_integer sig = thereal.get_fraction();
+  const BigInt sig = thereal.get_fraction();
 
   // If the number is denormal, we set the exponent to 0
-  const mp_integer exp =
+  const BigInt exp =
     thereal.is_normal() ? thereal.get_exponent() + thereal.spec.bias() : 0;
 
   std::string smt_str = thereal.get_sign() ? "1" : "0";
@@ -1054,7 +1054,7 @@ smt_astt cvc_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   abort();
 }
 
-smt_astt cvc_convt::mk_smt_bv(const mp_integer &theint, smt_sortt s)
+smt_astt cvc_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
 

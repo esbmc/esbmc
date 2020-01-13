@@ -27,11 +27,11 @@ public:
   struct pointert
   {
     unsigned object;
-    mp_integer offset;
+    BigInt offset;
 
     pointert() = default;
 
-    pointert(unsigned _obj, const mp_integer &&_off)
+    pointert(unsigned _obj, const BigInt &&_off)
       : object(_obj), offset(_off)
     {
     }
@@ -68,10 +68,10 @@ public:
 protected:
   unsigned null_object, invalid_object;
 
-  expr2tc pointer_expr(const mp_integer &offset, const expr2t &object) const;
+  expr2tc pointer_expr(const BigInt &offset, const expr2t &object) const;
 
   expr2tc object_rec(
-    const mp_integer &offset,
+    const BigInt &offset,
     const type2tc &pointer_type,
     const expr2tc &src) const;
 };

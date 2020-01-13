@@ -155,7 +155,7 @@ bool c_main(
 
       {
         // assume argc is at most MAX-1
-        mp_integer max;
+        BigInt max;
 
         if(argc_symbol.type.id() == "signedbv")
           max = power(2, atoi(argc_symbol.type.width().c_str()) - 1) - 1;
@@ -179,7 +179,7 @@ bool c_main(
       {
         const symbolt &envp_size_symbol = ns.lookup("envp_size'");
         // assume envp_size is at most MAX-1
-        mp_integer max;
+        BigInt max;
 
         if(envp_size_symbol.type.id() == "signedbv")
           max = power(2, atoi(envp_size_symbol.type.width().c_str()) - 1) - 1;

@@ -14,7 +14,7 @@
 #include <util/std_types.h>
 #include <util/type_byte_size.h>
 
-static inline void round_up_to_word(mp_integer &mp)
+static inline void round_up_to_word(BigInt &mp)
 {
   const unsigned int word_bytes = config.ansi_c.word_size / 8;
   const unsigned int align_mask = word_bytes - 1;
@@ -25,7 +25,7 @@ static inline void round_up_to_word(mp_integer &mp)
   }
   if(mp < word_bytes)
   {
-    mp = mp_integer(word_bytes);
+    mp = BigInt(word_bytes);
     // Or if it's an array of chars etc. that doesn't end on a boundry,
   }
   else if(mp.to_ulong() & align_mask)
@@ -34,7 +34,7 @@ static inline void round_up_to_word(mp_integer &mp)
   }
 }
 
-static inline void round_up_to_int64(mp_integer &mp)
+static inline void round_up_to_int64(BigInt &mp)
 {
   const unsigned int word_bytes = 8;
   const unsigned int align_mask = 7;
@@ -45,7 +45,7 @@ static inline void round_up_to_int64(mp_integer &mp)
   }
   if(mp < word_bytes)
   {
-    mp = mp_integer(word_bytes);
+    mp = BigInt(word_bytes);
     // Or if it's an array of chars etc. that doesn't end on a boundry,
   }
   else if(mp.to_ulong() & align_mask)
@@ -54,9 +54,9 @@ static inline void round_up_to_int64(mp_integer &mp)
   }
 }
 
-mp_integer member_offset(const type2tc &type, const irep_idt &member)
+BigInt member_offset(const type2tc &type, const irep_idt &member)
 {
-  mp_integer result = 0;
+  BigInt result = 0;
   unsigned idx = 0;
 
   const struct_type2t &thetype = to_struct_type(type);
@@ -87,7 +87,7 @@ mp_integer member_offset(const type2tc &type, const irep_idt &member)
 
     // XXX 100% unhandled: bitfields.
 
-    mp_integer sub_size = type_byte_size(it);
+    BigInt sub_size = type_byte_size(it);
     // Handle padding: we need to observe the usual struct constraints.
     if(!thetype.packed)
       round_up_to_word(sub_size);
@@ -104,8 +104,7 @@ mp_integer member_offset(const type2tc &type, const irep_idt &member)
   return result;
 }
 
-mp_integer
-type_byte_size_default(const type2tc &type, const mp_integer &defaultval)
+BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval)
 {
   try
   {
@@ -117,7 +116,7 @@ type_byte_size_default(const type2tc &type, const mp_integer &defaultval)
   }
 }
 
-mp_integer type_byte_size(const type2tc &type)
+BigInt type_byte_size(const type2tc &type)
 {
   switch(type->type_id)
   {
@@ -142,13 +141,13 @@ mp_integer type_byte_size(const type2tc &type)
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
-    return mp_integer(type->get_width() / 8);
+    return BigInt(type->get_width() / 8);
   case type2t::pointer_id:
-    return mp_integer(config.ansi_c.pointer_width / 8);
+    return BigInt(config.ansi_c.pointer_width / 8);
   case type2t::string_id:
   {
     const string_type2t &t2 = to_string_type(type);
-    return mp_integer(t2.width);
+    return BigInt(t2.width);
   }
   case type2t::array_id:
   {
@@ -158,7 +157,7 @@ mp_integer type_byte_size(const type2tc &type)
     // type_byte_size will handle all alignment and trailing padding byte
     // problems.
     const array_type2t &t2 = to_array_type(type);
-    mp_integer subsize = type_byte_size(t2.subtype);
+    BigInt subsize = type_byte_size(t2.subtype);
 
     // Attempt to compute constant array offset. If we can't, we can't
     // reasonably return anything anyway, so throw.
@@ -185,7 +184,7 @@ mp_integer type_byte_size(const type2tc &type)
     // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
 
     const struct_type2t &t2 = to_struct_type(type);
-    mp_integer accumulated_size(0);
+    BigInt accumulated_size(0);
     for(auto const &it : t2.members)
     {
       if(!t2.packed)
@@ -210,7 +209,7 @@ mp_integer type_byte_size(const type2tc &type)
           round_up_to_int64(accumulated_size);
       }
 
-      mp_integer memb_size = type_byte_size(it);
+      BigInt memb_size = type_byte_size(it);
 
       if(!t2.packed)
         round_up_to_word(memb_size);
@@ -230,10 +229,10 @@ mp_integer type_byte_size(const type2tc &type)
     // Very simple: the largest field size, rounded up to a word boundry for
     // array allocation alignment.
     const union_type2t &t2 = to_union_type(type);
-    mp_integer max_size(0);
+    BigInt max_size(0);
     for(auto const &it : t2.members)
     {
-      mp_integer memb_size = type_byte_size(it);
+      BigInt memb_size = type_byte_size(it);
       max_size = std::max(max_size, memb_size);
     }
 
@@ -254,7 +253,7 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
   if(is_index2t(expr))
   {
     const index2t &index = to_index2t(expr);
-    mp_integer sub_size;
+    BigInt sub_size;
     if(is_array_type(index.source_value))
     {
       const array_type2t &arr_type = to_array_type(index.source_value->type);
@@ -300,7 +299,7 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
   {
     const member2t &memb = to_member2t(expr);
 
-    mp_integer result;
+    BigInt result;
     if(is_struct_type(memb.source_value->type))
     {
       result = member_offset(memb.source_value->type, memb.member);

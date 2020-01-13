@@ -51,8 +51,8 @@ public:
 
   explicit fixedbvt(const constant_exprt &expr);
 
-  void from_integer(const mp_integer &i);
-  mp_integer to_integer() const; // this rounds to zero
+  void from_integer(const BigInt &i);
+  BigInt to_integer() const; // this rounds to zero
   void from_expr(const constant_exprt &expr);
   constant_exprt to_expr() const;
   void round(const fixedbv_spect &dest_spec);
@@ -130,18 +130,18 @@ public:
   friend bool operator>=(const fixedbvt &a, int i);
   friend bool operator<=(const fixedbvt &a, int i);
 
-  const mp_integer &get_value() const
+  const BigInt &get_value() const
   {
     return v;
   }
-  void set_value(const mp_integer &_v)
+  void set_value(const BigInt &_v)
   {
     v = _v;
   }
 
 protected:
   // negative values stored as such
-  mp_integer v;
+  BigInt v;
 };
 
 bool operator<(const fixedbvt &a, const fixedbvt &b);

@@ -15,11 +15,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/namespace.h>
 #include <util/std_types.h>
 
-mp_integer member_offset(const type2tc &type, const irep_idt &member);
+BigInt member_offset(const type2tc &type, const irep_idt &member);
 
-mp_integer type_byte_size(const type2tc &type);
-mp_integer
-type_byte_size_default(const type2tc &type, const mp_integer &defaultval);
+BigInt type_byte_size(const type2tc &type);
+BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval);
 
 expr2tc compute_pointer_offset(const expr2tc &expr);
 

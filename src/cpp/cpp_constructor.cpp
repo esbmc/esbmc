@@ -61,7 +61,7 @@ codet cpp_typecheckt::cpp_constructor(
       return nil;
     }
 
-    mp_integer s;
+    BigInt s;
     if(to_integer(size_expr, s))
     {
       err_location(tmp_type);
@@ -89,7 +89,7 @@ codet cpp_typecheckt::cpp_constructor(
       codet new_code("block");
 
       // for each element of the array, call the default constructor
-      for(mp_integer i = 0; i < s; ++i)
+      for(BigInt i = 0; i < s; ++i)
       {
         exprt::operandst tmp_operands;
 

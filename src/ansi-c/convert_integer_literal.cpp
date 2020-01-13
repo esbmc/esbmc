@@ -28,7 +28,7 @@ void convert_integer_literal(const std::string &src, exprt &dest)
       break;
   }
 
-  mp_integer value;
+  BigInt value;
 
   if(src.size() >= 2 && src[0] == '0' && tolower(src[1]) == 'x')
   {
@@ -60,7 +60,7 @@ void convert_integer_literal(const std::string &src, exprt &dest)
   else
     type = typet("signedbv");
 
-  mp_integer value_abs = value;
+  BigInt value_abs = value;
 
   if(value < 0)
     value_abs.negate();

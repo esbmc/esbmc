@@ -466,7 +466,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
       {
         if(value.is_not_nil() && value.id() == "constant")
         {
-          mp_integer i;
+          BigInt i;
           to_integer(value, i);
           if(i != 0)
           {

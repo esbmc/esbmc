@@ -14,8 +14,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void parse_float(
   const std::string &src,
-  mp_integer &significand,
-  mp_integer &exponent,
+  BigInt &significand,
+  BigInt &exponent,
   unsigned &exponent_base,
   bool &is_float,
   bool &is_long);

@@ -70,7 +70,7 @@ public:
   smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) override;
   smt_sortt mk_fpbv_rm_sort() override;
 
-  smt_astt mk_smt_int(const mp_integer &theint, bool sign) override;
+  smt_astt mk_smt_int(const BigInt &theint, bool sign) override;
   smt_astt mk_smt_real(const std::string &str) override;
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
@@ -84,7 +84,7 @@ public:
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
-  smt_astt mk_smt_bv(const mp_integer &theint, smt_sortt s) override;
+  smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
   smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw) override;
   smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw) override;
