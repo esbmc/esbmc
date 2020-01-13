@@ -800,8 +800,7 @@ smt_astt z3_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
     t->sort);
 }
 
-smt_astt
-z3_convt::mk_smt_int(const BigInt &theint, bool sign __attribute__((unused)))
+smt_astt z3_convt::mk_smt_int(const BigInt &theint)
 {
   smt_sortt s = mk_int_sort();
   if(theint.is_negative())
@@ -1196,7 +1195,7 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
   unsigned long array_bound = array->sort->get_domain_width();
   const z3_smt_ast *idx;
   if(int_encoding)
-    idx = to_solver_smt_ast<z3_smt_ast>(mk_smt_int(BigInt(index), false));
+    idx = to_solver_smt_ast<z3_smt_ast>(mk_smt_int(BigInt(index)));
   else
     idx = to_solver_smt_ast<z3_smt_ast>(
       mk_smt_bv(BigInt(index), mk_bv_sort(array_bound)));

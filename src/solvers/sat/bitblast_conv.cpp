@@ -319,9 +319,8 @@ smt_sort *bitblast_convt::mk_sort(smt_sort_kind k, ...)
   return s;
 }
 
-smt_ast *bitblast_convt::mk_smt_int(
-  const BigInt &intval __attribute__((unused)),
-  bool sign __attribute__((unused)))
+smt_ast *bitblast_convt::mk_smt_int(const BigInt &intval
+                                    __attribute__((unused)))
 {
   std::cerr << "Can't create integers in bitblast solver" << std::endl;
   abort();

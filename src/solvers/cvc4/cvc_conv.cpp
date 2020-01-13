@@ -976,8 +976,7 @@ smt_astt cvc_convt::mk_select(smt_astt a, smt_astt b)
     a->sort->get_range_sort());
 }
 
-smt_astt
-cvc_convt::mk_smt_int(const BigInt &theint, bool sign __attribute__((unused)))
+smt_astt cvc_convt::mk_smt_int(const BigInt &theint)
 {
   // TODO: Is this correct? CVC4 doesn't have any call for
   // em.mkConst(CVC4::Integer(...));

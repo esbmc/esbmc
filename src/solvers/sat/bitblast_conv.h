@@ -84,7 +84,7 @@ public:
     const smt_ast *const *args,
     unsigned int num);
   virtual smt_sort *mk_sort(smt_sort_kind k, ...);
-  virtual smt_ast *mk_smt_int(const BigInt &intval, bool sign);
+  virtual smt_ast *mk_smt_int(const BigInt &intval);
   virtual smt_ast *mk_smt_real(const std::string &value);
   virtual smt_ast *mk_smt_bvint(const BigInt &inval, bool sign, unsigned int w);
   virtual smt_ast *mk_smt_bool(bool boolval);

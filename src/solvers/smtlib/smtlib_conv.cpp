@@ -769,9 +769,7 @@ void smtlib_convt::assert_ast(smt_astt a)
   fprintf(out_stream, ")\n");
 }
 
-smt_astt smtlib_convt::mk_smt_int(
-  const BigInt &theint,
-  bool sign __attribute__((unused)))
+smt_astt smtlib_convt::mk_smt_int(const BigInt &theint)
 {
   smt_sortt s = mk_int_sort();
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_INT);

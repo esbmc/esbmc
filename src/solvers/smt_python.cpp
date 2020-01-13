@@ -231,9 +231,9 @@ tvt smt_convt_wrapper::l_get(smt_astt a)
   return get_override_checked(this, "l_get")(ast_down(a));
 }
 
-smt_astt smt_convt_wrapper::mk_smt_int(const BigInt &theint, bool sign)
+smt_astt smt_convt_wrapper::mk_smt_int(const BigInt &theint)
 {
-  return get_override_checked(this, "mk_smt_int")(theint, sign);
+  return get_override_checked(this, "mk_smt_int")(theint);
 }
 
 smt_astt smt_convt_wrapper::mk_smt_bool(bool val)

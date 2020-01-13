@@ -387,9 +387,8 @@ public:
   /** Create an integer smt_ast. That is, an integer in QF_AUFLIRA, rather than
    *  a bitvector.
    *  @param theint BigInt representation of the number to create.
-   *  @param sign Whether this integer is considered signed or not.
    *  @return The newly created terminal smt_ast of this integer. */
-  virtual smt_astt mk_smt_int(const BigInt &theint, bool sign) = 0;
+  virtual smt_astt mk_smt_int(const BigInt &theint) = 0;
 
   /** Create a real in a smt_ast.
    *  @param str String representation of the real, to be parsed by the solver.

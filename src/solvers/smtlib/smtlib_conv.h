@@ -238,7 +238,7 @@ public:
   smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw) override;
   smt_sortt mk_bvfp_rm_sort() override;
 
-  smt_astt mk_smt_int(const BigInt &theint, bool sign) override;
+  smt_astt mk_smt_int(const BigInt &theint) override;
   smt_astt mk_smt_real(const std::string &str) override;
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_bool(bool val) override;
