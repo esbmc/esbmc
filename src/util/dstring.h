@@ -12,32 +12,45 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iostream>
 #include <util/string_container.h>
 
-class dstring
+class dstring final
 {
 public:
   // this is safe for static objects
-  inline dstring() : no(0)
+
+  constexpr dstring() : no(0)
+  {
+  }
+
+  // this is safe for static objects
+  constexpr static dstring make_from_table_index(unsigned no)
+  {
+    return dstring(no);
+  }
+
+  // this one is not safe for static objects
+  dstring(const char *s) : no(get_string_container()[s])
   {
   }
 
   // this one is not safe for static objects
-  inline dstring(const char *s) : no(string_container[s])
+  dstring(const std::string &s) : no(get_string_container()[s])
   {
   }
 
-  // this one is not safe for static objects
-  inline dstring(const std::string &s) : no(string_container[s])
-  {
-  }
+  dstring(const dstring &) = default;
 
   // access
+  /// source object \p other, this is effectively just a copy constructor.
+  constexpr dstring(dstring &&other) : no(other.no)
+  {
+  }
 
   inline bool empty() const
   {
     return no == 0; // string 0 is exactly the empty string
   }
 
-  inline char operator[](unsigned i) const
+  inline char operator[](size_t i) const
   {
     return as_string()[i];
   }
@@ -115,15 +128,10 @@ public:
     return as_string().compare(b.as_string());
   }
 
-  inline friend bool ordering(const dstring &a, const dstring &b)
+  // the reference returned is guaranteed to be stable
+  const std::string &as_string() const
   {
-    return a.no < b.no;
-  }
-
-  // warning! the reference returned is not stable
-  inline const std::string &as_string() const
-  {
-    return string_container.get_string(no);
+    return get_string_container().get_string(no);
   }
 
   // modifying
@@ -141,20 +149,13 @@ public:
   }
 
   inline dstring &operator=(const dstring &b) = default;
+  inline dstring &operator=(dstring &&other) = default;
 
-  inline friend std::ostream &operator<<(std::ostream &out, const dstring &a)
-  {
-    return out << a.as_string();
-  }
+  // output
 
-  inline friend size_t hash_string(const dstring &s)
+  std::ostream &operator<<(std::ostream &out) const
   {
-    return s.hash();
-  }
-
-  inline size_t hash() const
-  {
-    return no;
+    return out << as_string();
   }
 
   inline unsigned get_no() const
@@ -162,25 +163,35 @@ public:
     return no;
   }
 
-protected:
+  inline size_t hash() const
+  {
+    return no;
+  }
+
+private:
+  constexpr explicit dstring(unsigned _no) : no(_no)
+  {
+  }
+
   unsigned no;
 };
 
 struct dstring_hash
 {
-public:
   size_t operator()(const dstring &s) const
   {
     return s.hash();
   }
-  bool operator()(const dstring &s1, const dstring &s2) const
-  {
-    return s1.hash() < s2.hash();
-  }
 };
 
-size_t hash_string(const dstring &s);
+inline size_t hash_string(const dstring &s)
+{
+  return s.hash();
+}
 
-std::ostream &operator<<(std::ostream &out, const dstring &a);
+inline std::ostream &operator<<(std::ostream &out, const dstring &a)
+{
+  return a.operator<<(out);
+}
 
 #endif
