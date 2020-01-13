@@ -558,10 +558,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         else
         {
           std::cout << "**** WARNING: Base case process crashed." << std::endl;
-
-          bc_finished = true;
-          if(cmdline.isset("dont-ignore-dead-child-process"))
-            fc_finished = is_finished = true;
+          bc_finished = fc_finished = is_finished = true;
         }
       }
 
@@ -583,9 +580,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
           std::cout << "**** WARNING: Forward condition process crashed."
                     << std::endl;
 
-          fc_finished = true;
-          if(cmdline.isset("dont-ignore-dead-child-process"))
-            bc_finished = is_finished = true;
+          fc_finished = bc_finished = is_finished = true;
         }
       }
 
@@ -607,9 +602,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
           std::cout << "**** WARNING: Inductive step process crashed."
                     << std::endl;
 
-          is_finished = true;
-          if(cmdline.isset("dont-ignore-dead-child-process"))
-            bc_finished = fc_finished = true;
+          is_finished = bc_finished = fc_finished = true;
         }
       }
 

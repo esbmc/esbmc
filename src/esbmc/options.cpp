@@ -165,9 +165,6 @@ const struct opt_templ esbmc_options[] = {
   // Print commit hash for current binary
   {0, "git-hash", switc, ""},
 
-  // Finish parallel k-induction if a child dies
-  {0, "dont-ignore-dead-child-process", switc, ""},
-
   // Check if there is two or more assingments to the same SSA instruction
   {0, "double-assign-check", switc, ""},
 
