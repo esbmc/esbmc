@@ -13,8 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iostream>
 #include <string>
 
-typedef unsigned int u_int;
-
 std::ostream &operator<<(std::ostream &out, const BigInt &n);
 BigInt operator>>(const BigInt &a, const BigInt &b);
 BigInt operator<<(const BigInt &a, const BigInt &b);

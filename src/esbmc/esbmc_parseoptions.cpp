@@ -68,7 +68,7 @@ enum PROCESS_TYPE
 struct resultt
 {
   PROCESS_TYPE type;
-  u_int k;
+  BigInt k;
 };
 
 #ifndef _WIN32
@@ -448,7 +448,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   short num_p = 0;
 
   // We need to fork 3 times: one for each step
-  for(u_int p = 0; p < 3; ++p)
+  for(unsigned p = 0; p < 3; ++p)
   {
     pid_t pid = fork();
 
@@ -499,11 +499,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   }
 
   // Get max number of iterations
-  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
-
-  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
-  if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = UINT_MAX;
+  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
+                        ? UINT_MAX
+                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
@@ -519,8 +517,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
     struct resultt a_result;
     bool bc_finished = false, fc_finished = false, is_finished = false;
-    u_int bc_solution = max_k_step, fc_solution = max_k_step,
-          is_solution = max_k_step;
+    BigInt bc_solution = max_k_step, fc_solution = max_k_step,
+           is_solution = max_k_step;
 
     // Keep reading until we find an answer
     while(!(bc_finished && fc_finished && is_finished))
@@ -664,7 +662,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         r.k = fc_solution;
 
         // Write result
-        u_int len = write(backward_pipe[1], &r, sizeof(r));
+        auto const len = write(backward_pipe[1], &r, sizeof(r));
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
       }
@@ -683,7 +681,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         r.k = is_solution;
 
         // Write result
-        u_int len = write(backward_pipe[1], &r, sizeof(r));
+        auto const len = write(backward_pipe[1], &r, sizeof(r));
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
       }
@@ -756,15 +754,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A bug was found, we send the step where it was found
     // 2. It couldn't find a bug
-    for(u_int k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+    for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
     {
       bmct bmc(goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
-      bmc.options.set_option("unwind", i2string(k_step));
+      bmc.options.set_option("unwind", (int)k_step.to_long());
 
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long)k_step);
+      std::cout << k_step;
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking base case" << std::endl;
 
@@ -785,7 +783,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         r.k = k_step;
 
         // Write result
-        u_int len = write(forward_pipe[1], &r, sizeof(r));
+        auto const len = write(forward_pipe[1], &r, sizeof(r));
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
@@ -839,7 +837,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Send information to parent that a bug was not found
     r.k = 0;
 
-    u_int len = write(forward_pipe[1], &r, sizeof(r));
+    auto const len = write(forward_pipe[1], &r, sizeof(r));
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
@@ -864,7 +862,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for(u_int k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+    for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
       if(opts.get_bool_option("disable-forward-condition"))
         break;
@@ -872,10 +870,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmct bmc(goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
-      bmc.options.set_option("unwind", i2string(k_step));
+      bmc.options.set_option("unwind", (int)k_step.to_long());
 
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long)k_step);
+      std::cout << k_step;
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking forward condition" << std::endl;
 
@@ -896,7 +894,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         r.k = k_step;
 
         // Write result
-        u_int len = write(forward_pipe[1], &r, sizeof(r));
+        auto const len = write(forward_pipe[1], &r, sizeof(r));
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
@@ -909,7 +907,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Send information to parent that it couldn't prove the code
     r.k = 0;
 
-    u_int len = write(forward_pipe[1], &r, sizeof(r));
+    auto const len = write(forward_pipe[1], &r, sizeof(r));
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
@@ -934,15 +932,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for(u_int k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+    for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
       bmct bmc(goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
-      bmc.options.set_option("unwind", i2string(k_step));
+      bmc.options.set_option("unwind", (int)k_step.to_long());
 
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long)k_step + 1);
+      std::cout << k_step + 1;
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking inductive step" << std::endl;
 
@@ -963,7 +961,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         r.k = k_step;
 
         // Write result
-        u_int len = write(forward_pipe[1], &r, sizeof(r));
+        auto const len = write(forward_pipe[1], &r, sizeof(r));
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
@@ -976,7 +974,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Send information to parent that it couldn't prove the code
     r.k = 0;
 
-    u_int len = write(forward_pipe[1], &r, sizeof(r));
+    auto const len = write(forward_pipe[1], &r, sizeof(r));
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
@@ -1010,11 +1008,9 @@ int esbmc_parseoptionst::doit_k_induction()
     return 7;
 
   // Get max number of iterations
-  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
-
-  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
-  if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = UINT_MAX;
+  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
+                        ? UINT_MAX
+                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
@@ -1060,11 +1056,9 @@ int esbmc_parseoptionst::doit_falsification()
     return 7;
 
   // Get max number of iterations
-  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
-
-  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
-  if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = UINT_MAX;
+  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
+                        ? UINT_MAX
+                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
@@ -1104,11 +1098,9 @@ int esbmc_parseoptionst::doit_incremental()
     return 7;
 
   // Get max number of iterations
-  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
-
-  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
-  if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = UINT_MAX;
+  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
+                        ? UINT_MAX
+                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
@@ -1151,11 +1143,9 @@ int esbmc_parseoptionst::doit_termination()
     return 7;
 
   // Get max number of iterations
-  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
-
-  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
-  if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = UINT_MAX;
+  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
+                        ? UINT_MAX
+                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
