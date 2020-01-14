@@ -14,11 +14,6 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
   VERBATIM
 )
 
-configure_file (
- "version.h.in"
- "${PROJECT_BINARY_DIR}/src/esbmc/version.h"
-)
-
 add_executable (esbmc main.cpp esbmc_parseoptions.cpp bmc.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
 target_include_directories(esbmc 
     PRIVATE ${CMAKE_BINARY_DIR}/src
