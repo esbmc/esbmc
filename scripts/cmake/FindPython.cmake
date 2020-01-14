@@ -25,7 +25,6 @@ if(ENABLE_PYTHON)
     endif()
   endif()
 
-  message("Testing boost python (slow)")
   find_library(BOOST_PYTHON "boost_python3")
   if ("${BOOST_PYTHON}" STREQUAL "BOOST_PYTHON-NOTFOUND")
     # Try just normal OS boost python
@@ -35,7 +34,7 @@ if(ENABLE_PYTHON)
 
   # And now try compiling it...
   try_compile (didbpcompile ${CMAKE_BINARY_DIR}
-                ${CMAKE_SOURCE_DIR}/src/scripts/try_bp.cpp
+                ${CMAKE_SOURCE_DIR}/scripts/try_bp.cpp
                  CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${PYTHON_INCLUDE_DIRS} 
                  LINK_LIBRARIES ${BOOST_PYTHON} ${PYTHON_LIBRARIES} dl util expat z pthread
                  OUTPUT_VARIABLE DIDBPCOMPILE_MSG)

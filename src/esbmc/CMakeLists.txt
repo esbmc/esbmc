@@ -1,5 +1,5 @@
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
-  COMMAND ${CMAKE_SOURCE_DIR}/src/scripts/buildidobj.sh ${CMAKE_CURRENT_BINARY_DIR}
+  COMMAND ${CMAKE_SOURCE_DIR}/scripts/buildidobj.sh ${CMAKE_CURRENT_BINARY_DIR}
   DEPENDS main.cpp esbmc_parseoptions.cpp bmc.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp ansicfrontend cppfrontend clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs # Depends on... everything else linked into esbmc. Add more as necessary.
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   COMMENT "Generating ESBMC version ID"
