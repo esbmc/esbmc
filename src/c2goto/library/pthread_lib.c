@@ -27,13 +27,13 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_rwlock_field(a) ((a).__data.__lock)
 
 /* Global tracking data. Should all initialize to 0 / false */
-__attribute__((used)) __attribute__((annotate("__ESBMC_inf_size")))
+__attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_running[1];
 
-__attribute__((used)) __attribute__((annotate("__ESBMC_inf_size")))
+__attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_ended[1];
 
-__attribute__((used)) __attribute__((
+__attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
 
 unsigned int __ESBMC_num_total_threads = 0;
