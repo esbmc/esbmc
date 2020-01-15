@@ -30,7 +30,7 @@ jobs:
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && CC=../clang9/bin/clang CXX=../clang9/bin/clang++ cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_FUZZER=On -DLLVM_DIR=../clang9
+      run: mkdir build && cd build && CC=../clang9/bin/clang CXX=../clang9/bin/clang++ cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_FUZZER=On -DClang_DIR=../clang9
     - name: Build BigInt Tests
       run: cd build && ninja biginttest && ninja bigintfuzz
     - name: Run tests
