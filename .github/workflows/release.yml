@@ -26,7 +26,7 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -GNinja -DClang_DIR=../clang9 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3
+        run: mkdir build && cd build && cmake .. -GNinja -DClang_DIR=../clang9 -DLLVM_DIR=../clang9 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3
       - name: Build ESBMC
         run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Linux.sh
       - name: Create Release
