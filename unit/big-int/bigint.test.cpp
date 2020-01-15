@@ -12,7 +12,6 @@
    - Math Operations
  \*******************************************************************/
 
-#define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE "Big Int"
 
 #include <big-int/bigint.hh>
