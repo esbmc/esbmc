@@ -7,7 +7,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
 )
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
-  COMMAND sh -c "${CMAKE_SOURCE_DIR}/src/c2goto/headers/flail.sh buildidstring ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt > ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c"
+  COMMAND sh -c "${CMAKE_SOURCE_DIR}/scripts/flail.sh buildidstring ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt > ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c"
   DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   COMMENT "Flailing build ID object"
