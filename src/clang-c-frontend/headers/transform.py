@@ -1,53 +1,38 @@
 #!/usr/bin/env python
 
 import os
+import argparse
 
-from sys import argv
-#from os import listdir
-#from os.path import isfile, join, splitext
+if __name__ == "__main__":
 
-script, dire, printopt = argv
+  parser = argparse.ArgumentParser()
+  parser.add_argument('path', help='Path containing the headers', default='./', type=str)
+  args = parser.parse_args()
 
-onlyfiles = [f for f in os.listdir(dire) if os.path.isfile(os.path.join(dire, f))]
-onlyfiles.sort()
+  p = args.path
+  files = [f for f in os.listdir(p) if os.path.isfile(os.path.join(p, f))]
+  files = [f for f in files if f.endswith(".h")]
+  files.sort()
 
-for filename in onlyfiles:
+  print('extern "C"\n{\n')
+  for filename in files:
+    name, ext = os.path.splitext(filename)
+    assert(len(ext) == 2)
 
-  if(filename == "Makefile.am"):
-    continue;
+    name_ = name.replace('-', '_')
+    print("extern char " + name_ + "_buf[];")
+    print("extern unsigned int " + name_ + "_buf_size;\n")
 
-  if(filename == "Makefile.in"):
-    continue;
+  print('struct hooked_header clang_headers[] = {')
+  for filename in files:
+    name, ext = os.path.splitext(filename)
+    assert(len(ext) == 2)
 
-  if(filename == "transform.py"):
-    continue;
+    name_ = name.replace('-', '_')
+    print(f'{{"{filename}", {name_}_buf, &{name_}_buf_size}},')
 
-  name, ext = os.path.splitext(filename)
+  print('{nullptr, nullptr, nullptr}};\n}')
 
-  if(ext != ".h" and ext != ".hs"):
-    print "Remove this file, it's not needed: " + filename
+  for filename in files:
+    print(filename, end=' ')
 
-  if(ext == ".h"):
-    new_filename = name + ".hs"
-    if(os.path.exists(new_filename)):
-      os.remove(new_filename)
-
-    os.rename(filename, new_filename)
-    filename = new_filename
-
-  if(filename.startswith('clang_') != True):
-    new_name = "clang_" + name
-    new_filename = new_name + ".hs"
-
-    if(os.path.exists(new_filename)):
-      os.remove(new_filename)
-
-    os.rename(filename, new_filename)
-
-  if(printopt == "0"):
-    print "{ \"" + name[6:len(name)] + ".h\", " + name + "_buf, &" + name + "_buf_size},"
-  elif(printopt == "1"):	
-    print "extern char " + name + "_buf[];"
-    print "extern unsigned int " + name + "_buf_size;\n"
-  else:
-    print filename
