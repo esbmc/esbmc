@@ -28,7 +28,7 @@ jobs:
     - name: Setup Yices 2 (GMP)
       run: wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz && rm gmp-6.1.2.tar.xz && cd gmp-6.1.2 && ./configure --prefix $PWD/../gmp --disable-shared ABI=64 CFLAGS=-fPIC CPPFLAGS=-DPIC && make -j4 && make install
     - name: Setup Yices 2
-      run: wget http://yices.csl.sri.com/releases/2.6.1/yices-2.6.1-src.tar.gz && tar xf yices-2.6.1-src.tar.gz && cd yices-2.6.1 && ./configure --prefix $PWD/../yices --with-static-gmp=$PWD/../gmp/lib/libgmp.a && make -j9 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib 
+      run: git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices --with-static-gmp=$PWD/../gmp/lib/libgmp.a && make -j9 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib
     - name: Get older cvc4 build
       id: cache-cvc4
       uses: actions/cache@v1
@@ -62,7 +62,7 @@ jobs:
       - name: Extract Clang 9
         run: tar xf clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz && mv clang+llvm-9.0.0-x86_64-darwin-apple clang9
       - name: Setup boolector
-        run: git clone https://github.com/boolector/boolector && cd boolector && git checkout 3.1.0  && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
+        run: git clone https://github.com/boolector/boolector && cd boolector && git checkout 3.1.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
       - name: Setup Z3
         run: brew install z3 
       - name: Setup MathSAT
@@ -71,7 +71,7 @@ jobs:
         # This is needed because CMake does not include /usr/local/include when trying to compile mathsat
         run: ln -s /usr/local/include/gmp.h mathsat/include/gmp.h
       - name: Setup Yices 2
-        run: wget http://yices.csl.sri.com/releases/2.6.1/yices-2.6.1-src.tar.gz && tar xf yices-2.6.1-src.tar.gz && cd yices-2.6.1 && ./configure --prefix $PWD/../yices && make -j9 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a ../yices/lib 
+        run: git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices && make -j9 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a ../yices/lib
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
