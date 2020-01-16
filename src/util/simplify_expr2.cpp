@@ -545,7 +545,7 @@ expr2tc modulus2t::do_simplify() const
   expr2tc simplied_side_1 = try_simplification(side_1);
   expr2tc simplied_side_2 = try_simplification(side_2);
 
-  if(!is_constant_expr(simplied_side_1) || !is_constant_expr(simplied_side_2))
+  if(!is_constant_expr(simplied_side_1) && !is_constant_expr(simplied_side_2))
   {
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
