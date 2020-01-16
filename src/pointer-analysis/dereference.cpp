@@ -965,11 +965,11 @@ void dereferencet::construct_from_array(
     return;
   }
 
-  constant_int2tc subtype_sz_expr(pointer_type2(), BigInt(subtype_size));
+  constant_int2tc subtype_sz_expr(offset->type, BigInt(subtype_size));
   div2tc div(pointer_type2(), offset, subtype_sz_expr);
   simplify(div);
 
-  modulus2tc mod(pointer_type2(), offset, subtype_sz_expr);
+  modulus2tc mod(offset->type, offset, subtype_sz_expr);
   simplify(mod);
 
   if(is_structure_type(arr_subtype))
