@@ -56,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Install Dependencies
-        run: brew install gmp cmake boost ninja python3 && pip3 install PySMT
+        run: brew install gmp cmake boost ninja python3 automake && pip3 install PySMT
       - name: Download Clang 9
         run: wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz
       - name: Extract Clang 9
