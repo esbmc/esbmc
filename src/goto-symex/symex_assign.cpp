@@ -199,28 +199,24 @@ void goto_symext::symex_assign(
     default:
       assert(0 && "unexpected side effect");
     }
-  }
-  else
-  {
-    bool hidden_ssa = hidden;
-    if(cur_state->top().hidden)
-    {
-      hidden_ssa = true;
-    }
-    else if(is_symbol2t(lhs))
-    {
-      symbol2t s = to_symbol2t(lhs);
-      if(
-        s.thename.as_string().find("return_value$___VERIFIER_nondet") !=
-        std::string::npos)
-        hidden_ssa = false;
-      else if(s.thename.as_string().find("__ESBMC_") != std::string::npos)
-        hidden_ssa = true;
-    }
 
-    guardt g(guard); // NOT the state guard!
-    symex_assign_rec(lhs, original_lhs, rhs, g, hidden_ssa);
+    return;
   }
+
+  bool hidden_ssa = hidden || cur_state->top().hidden;
+  if(!hidden_ssa)
+  {
+    auto const maybe_symbol = get_base_object(lhs);
+    if(is_symbol2t(maybe_symbol))
+    {
+      auto const s = to_symbol2t(maybe_symbol).thename.as_string();
+      hidden_ssa |= (s.find('$') != std::string::npos) ||
+                    (s.find("__ESBMC_") != std::string::npos);
+    }
+  }
+
+  guardt g(guard); // NOT the state guard!
+  symex_assign_rec(lhs, original_lhs, rhs, g, hidden_ssa);
 }
 
 void goto_symext::symex_assign_rec(
