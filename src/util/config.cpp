@@ -71,7 +71,7 @@ void configt::ansi_ct::set_64()
 bool configt::set(const cmdlinet &cmdline)
 {
   // defaults
-  ansi_c.set_32();
+  ansi_c.set_64();
 
 #ifdef HAVE_FLOATBV
   ansi_c.use_fixed_for_float = false;
