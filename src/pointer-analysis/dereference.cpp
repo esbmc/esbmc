@@ -1550,6 +1550,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       mul2tc(sub_size->type, arr_type.array_size, sub_size);
     expr2tc lt = lessthan2tc(offs, arr_size_in_bytes);
     expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
+    simplify(range_guard);
 
     construct_struct_ref_from_dyn_offs_rec(
       index, new_offset, type, range_guard, mode, output);
