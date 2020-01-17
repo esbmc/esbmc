@@ -1,4 +1,4 @@
 CORE
 main.c
---fixedbv --no-slice
+--fixedbv --no-slice --32
 ^VERIFICATION SUCCESSFUL$

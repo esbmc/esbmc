@@ -1,4 +1,4 @@
 CORE
 main.c
-app.c picosat.c --unwind 1 --partial-loops --function picosat_add
+app.c picosat.c --unwind 1 --partial-loops --function picosat_add --32
 ^VERIFICATION FAILED$
