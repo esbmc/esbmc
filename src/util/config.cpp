@@ -72,13 +72,7 @@ bool configt::set(const cmdlinet &cmdline)
 {
   // defaults
   ansi_c.set_64();
-
-#ifdef HAVE_FLOATBV
   ansi_c.use_fixed_for_float = false;
-#else
-  ansi_c.use_fixed_for_float = true;
-#endif
-
   ansi_c.endianess = ansi_ct::NO_ENDIANESS;
   ansi_c.os = ansi_ct::NO_OS;
   ansi_c.lib = configt::ansi_ct::LIB_NONE;
