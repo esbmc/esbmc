@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc
+--incremental-bmc --32
 ^VERIFICATION FAILED$

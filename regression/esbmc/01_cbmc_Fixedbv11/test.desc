@@ -1,4 +1,4 @@
 CORE
 main.c
---function checkOverflow --fixedbv
+--function checkOverflow --fixedbv --32
 ^VERIFICATION FAILED$

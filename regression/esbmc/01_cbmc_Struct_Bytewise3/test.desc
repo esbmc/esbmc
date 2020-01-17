@@ -1,4 +1,4 @@
 CORE
 struct_bytewise.c
-
+--32
 ^VERIFICATION SUCCESSFUL$
