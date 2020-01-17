@@ -16,10 +16,10 @@ else()
   set(multiarch "/usr/include/${CMAKE_LIBRARY_ARCHITECTURE}")
 endif()
 
-set (clib32_config clib32.c "")
-set (clib64_config clib64.c "--64")
-set (clib32f_config clib32_fp.c "--floatbv")
-set (clib64f_config clib64_fp.c "--64;--floatbv")
+set (clib32_config clib32.c "--32 --fixedbv")
+set (clib64_config clib64.c "--64 --fixedbv")
+set (clib32f_config clib32_fp.c "--32 --floatbv")
+set (clib64f_config clib64_fp.c "--64 --floatbv")
 
 set (inputs clib32_config clib64_config clib32f_config clib64f_config)
 

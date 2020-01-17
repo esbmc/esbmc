@@ -12,6 +12,7 @@
 const struct opt_templ c2goto_options[] = {{0, "16", switc, ""},
                                            {0, "32", switc, ""},
                                            {0, "64", switc, ""},
+                                           {0, "fixedbv", switc, ""},
                                            {0, "floatbv", switc, ""},
                                            {0, "output", string, ""},
                                            {'I', "", string, ""},
