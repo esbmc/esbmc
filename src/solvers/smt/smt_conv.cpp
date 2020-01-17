@@ -450,53 +450,101 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::ieee_add_id:
   {
-    assert(is_floatbv_type(expr));
-    a = fp_api->mk_smt_fpbv_add(
-      convert_ast(to_ieee_add2t(expr).side_1),
-      convert_ast(to_ieee_add2t(expr).side_2),
-      convert_rounding_mode(to_ieee_add2t(expr).rounding_mode));
+    if(int_encoding)
+    {
+      a = mk_add(
+        convert_ast(to_ieee_mul2t(expr).side_1),
+        convert_ast(to_ieee_mul2t(expr).side_2));
+    }
+    else
+    {
+      assert(is_floatbv_type(expr));
+      a = fp_api->mk_smt_fpbv_add(
+        convert_ast(to_ieee_add2t(expr).side_1),
+        convert_ast(to_ieee_add2t(expr).side_2),
+        convert_rounding_mode(to_ieee_add2t(expr).rounding_mode));
+    }
     break;
   }
   case expr2t::ieee_sub_id:
   {
     assert(is_floatbv_type(expr));
-    a = fp_api->mk_smt_fpbv_sub(
-      convert_ast(to_ieee_sub2t(expr).side_1),
-      convert_ast(to_ieee_sub2t(expr).side_2),
-      convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode));
+    if(int_encoding)
+    {
+      a = mk_sub(
+        convert_ast(to_ieee_mul2t(expr).side_1),
+        convert_ast(to_ieee_mul2t(expr).side_2));
+    }
+    else
+    {
+      a = fp_api->mk_smt_fpbv_sub(
+        convert_ast(to_ieee_sub2t(expr).side_1),
+        convert_ast(to_ieee_sub2t(expr).side_2),
+        convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode));
+    }
     break;
   }
   case expr2t::ieee_mul_id:
   {
     assert(is_floatbv_type(expr));
-    a = fp_api->mk_smt_fpbv_mul(
-      convert_ast(to_ieee_mul2t(expr).side_1),
-      convert_ast(to_ieee_mul2t(expr).side_2),
-      convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode));
+    if(int_encoding)
+    {
+      a = mk_mul(
+        convert_ast(to_ieee_mul2t(expr).side_1),
+        convert_ast(to_ieee_mul2t(expr).side_2));
+    }
+    else
+    {
+      a = fp_api->mk_smt_fpbv_mul(
+        convert_ast(to_ieee_mul2t(expr).side_1),
+        convert_ast(to_ieee_mul2t(expr).side_2),
+        convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode));
+    }
     break;
   }
   case expr2t::ieee_div_id:
   {
     assert(is_floatbv_type(expr));
-    a = fp_api->mk_smt_fpbv_div(
-      convert_ast(to_ieee_div2t(expr).side_1),
-      convert_ast(to_ieee_div2t(expr).side_2),
-      convert_rounding_mode(to_ieee_div2t(expr).rounding_mode));
+    if(int_encoding)
+    {
+      a = mk_div(
+        convert_ast(to_ieee_fma2t(expr).value_1),
+        convert_ast(to_ieee_fma2t(expr).value_2));
+    }
+    else
+    {
+      a = fp_api->mk_smt_fpbv_div(
+        convert_ast(to_ieee_div2t(expr).side_1),
+        convert_ast(to_ieee_div2t(expr).side_2),
+        convert_rounding_mode(to_ieee_div2t(expr).rounding_mode));
+    }
     break;
   }
   case expr2t::ieee_fma_id:
   {
     assert(is_floatbv_type(expr));
-    a = fp_api->mk_smt_fpbv_fma(
-      convert_ast(to_ieee_fma2t(expr).value_1),
-      convert_ast(to_ieee_fma2t(expr).value_2),
-      convert_ast(to_ieee_fma2t(expr).value_3),
-      convert_rounding_mode(to_ieee_fma2t(expr).rounding_mode));
+    if(int_encoding)
+    {
+      a = mk_add(
+        mk_mul(
+          convert_ast(to_ieee_fma2t(expr).value_1),
+          convert_ast(to_ieee_fma2t(expr).value_2)),
+        convert_ast(to_ieee_fma2t(expr).value_3));
+    }
+    else
+    {
+      a = fp_api->mk_smt_fpbv_fma(
+        convert_ast(to_ieee_fma2t(expr).value_1),
+        convert_ast(to_ieee_fma2t(expr).value_2),
+        convert_ast(to_ieee_fma2t(expr).value_3),
+        convert_rounding_mode(to_ieee_fma2t(expr).rounding_mode));
+    }
     break;
   }
   case expr2t::ieee_sqrt_id:
   {
     assert(is_floatbv_type(expr));
+    // TODO: no integer mode implementation
     a = fp_api->mk_smt_fpbv_sqrt(
       convert_ast(to_ieee_sqrt2t(expr).value),
       convert_rounding_mode(to_ieee_sqrt2t(expr).rounding_mode));
@@ -688,7 +736,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     auto eq = to_equality2t(expr);
 
-    if(is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2))
+    if(
+      is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2) && !int_encoding)
       a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
       a = args[0]->eq(this, args[1]);
@@ -701,7 +750,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     auto neq = to_notequal2t(expr);
 
-    if(is_floatbv_type(neq.side_1) && is_floatbv_type(neq.side_2))
+    if(
+      is_floatbv_type(neq.side_1) && is_floatbv_type(neq.side_2) &&
+      !int_encoding)
       a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
       a = args[0]->eq(this, args[1]);
@@ -771,7 +822,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       // No need to do anything.
       a = args[0];
     }
-    else if(is_floatbv_type(abs.value))
+    else if(is_floatbv_type(abs.value) && !int_encoding)
     {
       a = fp_api->mk_smt_fpbv_abs(args[0]);
     }
@@ -793,13 +844,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(lt.side_1, lt.side_2, expr);
     }
-    else if(is_floatbv_type(lt.side_1) && is_floatbv_type(lt.side_2))
-    {
-      a = fp_api->mk_smt_fpbv_lt(args[0], args[1]);
-    }
     else if(int_encoding)
     {
       a = mk_lt(args[0], args[1]);
+    }
+    else if(is_floatbv_type(lt.side_1) && is_floatbv_type(lt.side_2))
+    {
+      a = fp_api->mk_smt_fpbv_lt(args[0], args[1]);
     }
     else if(is_fixedbv_type(lt.side_1) && is_fixedbv_type(lt.side_2))
     {
@@ -824,13 +875,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(lte.side_1, lte.side_2, expr);
     }
-    else if(is_floatbv_type(lte.side_1) && is_floatbv_type(lte.side_2))
-    {
-      a = fp_api->mk_smt_fpbv_lte(args[0], args[1]);
-    }
     else if(int_encoding)
     {
       a = mk_le(args[0], args[1]);
+    }
+    else if(is_floatbv_type(lte.side_1) && is_floatbv_type(lte.side_2))
+    {
+      a = fp_api->mk_smt_fpbv_lte(args[0], args[1]);
     }
     else if(is_fixedbv_type(lte.side_1) && is_fixedbv_type(lte.side_2))
     {
@@ -855,13 +906,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(gt.side_1, gt.side_2, expr);
     }
-    else if(is_floatbv_type(gt.side_1) && is_floatbv_type(gt.side_2))
-    {
-      a = fp_api->mk_smt_fpbv_gt(args[0], args[1]);
-    }
     else if(int_encoding)
     {
       a = mk_gt(args[0], args[1]);
+    }
+    else if(is_floatbv_type(gt.side_1) && is_floatbv_type(gt.side_2))
+    {
+      a = fp_api->mk_smt_fpbv_gt(args[0], args[1]);
     }
     else if(is_fixedbv_type(gt.side_1) && is_fixedbv_type(gt.side_2))
     {
@@ -886,13 +937,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(gte.side_1, gte.side_2, expr);
     }
-    else if(is_floatbv_type(gte.side_1) && is_floatbv_type(gte.side_2))
-    {
-      a = fp_api->mk_smt_fpbv_gte(args[0], args[1]);
-    }
     else if(int_encoding)
     {
       a = mk_ge(args[0], args[1]);
+    }
+    else if(is_floatbv_type(gte.side_1) && is_floatbv_type(gte.side_2))
+    {
+      a = fp_api->mk_smt_fpbv_gte(args[0], args[1]);
     }
     else if(is_fixedbv_type(gte.side_1) && is_fixedbv_type(gte.side_2))
     {
@@ -973,13 +1024,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::neg_id:
   {
     const neg2t &neg = to_neg2t(expr);
-    if(is_floatbv_type(neg.value))
-    {
-      a = fp_api->mk_smt_fpbv_neg(args[0]);
-    }
-    else if(int_encoding)
+    if(int_encoding)
     {
       a = mk_neg(args[0]);
+    }
+    else if(is_floatbv_type(neg.value))
+    {
+      a = fp_api->mk_smt_fpbv_neg(args[0]);
     }
     else
     {
@@ -1326,7 +1377,7 @@ smt_astt smt_convt::convert_is_nan(const expr2tc &expr)
   const isnan2t &isnan = to_isnan2t(expr);
 
   // Anything other than floats will never be NaNs
-  if(!is_floatbv_type(isnan.value))
+  if(!is_floatbv_type(isnan.value) || int_encoding)
     return mk_smt_bool(false);
 
   smt_astt operand = convert_ast(isnan.value);
@@ -1338,7 +1389,7 @@ smt_astt smt_convt::convert_is_inf(const expr2tc &expr)
   const isinf2t &isinf = to_isinf2t(expr);
 
   // Anything other than floats will never be infs
-  if(!is_floatbv_type(isinf.value))
+  if(!is_floatbv_type(isinf.value) || int_encoding)
     return mk_smt_bool(false);
 
   smt_astt operand = convert_ast(isinf.value);
@@ -1350,7 +1401,7 @@ smt_astt smt_convt::convert_is_normal(const expr2tc &expr)
   const isnormal2t &isnormal = to_isnormal2t(expr);
 
   // Anything other than floats will always be normal
-  if(!is_floatbv_type(isnormal.value))
+  if(!is_floatbv_type(isnormal.value) || int_encoding)
     return mk_smt_bool(true);
 
   smt_astt operand = convert_ast(isnormal.value);
@@ -1362,7 +1413,7 @@ smt_astt smt_convt::convert_is_finite(const expr2tc &expr)
   const isfinite2t &isfinite = to_isfinite2t(expr);
 
   // Anything other than floats will always be finite
-  if(!is_floatbv_type(isfinite.value))
+  if(!is_floatbv_type(isfinite.value) || int_encoding)
     return mk_smt_bool(true);
 
   smt_astt value = convert_ast(isfinite.value);
@@ -1462,6 +1513,11 @@ smt_astt smt_convt::convert_bswap(const expr2tc &expr)
 
 smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
 {
+  // We don't actually care about rounding mode when in integer/real mode, as
+  // it is discarded when encoding it in SMT
+  if(int_encoding)
+    return nullptr;
+
   // Easy case, we know the rounding mode
   if(is_constant_int2t(expr))
   {
