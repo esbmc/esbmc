@@ -1,4 +1,4 @@
 CORE
 main.c
---claim 6
+--fixedbv
 ^VERIFICATION SUCCESSFUL$
