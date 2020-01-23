@@ -15,7 +15,7 @@
 #define BOOST_TEST_MODULE "Big Int"
 
 #include <big-int/bigint.hh>
-#include <boost/test/unit_test.hpp>
+#include <boost/test/included/unit_test.hpp>
 namespace utf = boost::unit_test;
 
 namespace
