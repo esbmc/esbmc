@@ -801,7 +801,7 @@ void execution_statet::get_expr_globals(
 
   if(
     is_address_of2t(expr) || is_pointer_type(expr) || is_valid_object2t(expr) ||
-    is_dynamic_size2t(expr) || is_dynamic_size2t(expr))
+    is_dynamic_size2t(expr))
   {
     return;
   }
