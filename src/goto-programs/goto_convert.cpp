@@ -560,11 +560,11 @@ void goto_convertt::generate_dynamic_size_vla(
 
   // Set the array to have a dynamic size
   address_of_exprt addrof(var);
-  exprt dynamic_size("dynamic_size", int_type());
+  exprt dynamic_size("dynamic_size", uint_type());
   dynamic_size.copy_to_operands(addrof);
 
   goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
-  exprt assign = code_assignt(dynamic_size, mult);
+  exprt assign = code_assignt(dynamic_size, typecast_exprt(mult, uint_type()));
   migrate_expr(assign, t_s_s->code);
   t_s_s->location = loc;
 }

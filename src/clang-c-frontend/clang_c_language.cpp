@@ -275,7 +275,7 @@ __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_is_dynamic[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
-unsigned long __ESBMC_alloc_size[1];
+unsigned __ESBMC_alloc_size[1];
 
 _Bool __ESBMC_is_little_endian();
 

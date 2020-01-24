@@ -349,7 +349,7 @@ void goto_checkt::bounds_check(
   const expr2tc &array_size =
     is_array_type(t)
       ? to_array_type(t).array_size
-      : constant_int2tc(get_uint64_type(), to_string_type(t).get_length());
+      : constant_int2tc(get_uint32_type(), to_string_type(t).get_length());
 
   // Cast size to index type
   typecast2tc casted_size(the_index->type, array_size);

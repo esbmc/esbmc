@@ -332,7 +332,7 @@ void goto_convertt::do_cpp_new(
 
   // set size
   //nec: ex37.c
-  exprt dynamic_size("dynamic_size", int_type());
+  exprt dynamic_size("dynamic_size", uint_type());
   dynamic_size.copy_to_operands(lhs);
   dynamic_size.location() = rhs.find_location();
   goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
