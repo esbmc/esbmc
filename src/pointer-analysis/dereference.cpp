@@ -1917,17 +1917,17 @@ void dereferencet::bounds_check(
     // Secondly, try to calc the size of the array.
     unsigned long subtype_size_int =
       type_byte_size(arr_type.subtype).to_ulong();
-    constant_int2tc subtype_size(pointer_type2(), BigInt(subtype_size_int));
-    expr2tc array_size = typecast2tc(pointer_type2(), arr_type.array_size);
-    arrsize = mul2tc(pointer_type2(), array_size, subtype_size);
+    constant_int2tc subtype_size(uint_type2(), BigInt(subtype_size_int));
+    expr2tc array_size = typecast2tc(uint_type2(), arr_type.array_size);
+    arrsize = mul2tc(uint_type2(), array_size, subtype_size);
   }
 
-  typecast2tc unsigned_offset(pointer_type2(), offset);
+  typecast2tc unsigned_offset(uint_type2(), offset);
 
   // Then, expressions as to whether the access is over or under the array
   // size.
-  constant_int2tc access_size_e(pointer_type2(), BigInt(access_size));
-  add2tc upper_byte(pointer_type2(), unsigned_offset, access_size_e);
+  constant_int2tc access_size_e(uint_type2(), BigInt(access_size));
+  add2tc upper_byte(uint_type2(), unsigned_offset, access_size_e);
 
   greaterthan2tc gt(unsigned_offset, arrsize);
   greaterthan2tc gt2(upper_byte, arrsize);
