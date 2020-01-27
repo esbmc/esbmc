@@ -26,7 +26,9 @@ jobs:
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && CC=../clang9/bin/clang CXX=../clang9/bin/clang++ cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_FUZZER=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9
+      run: mkdir build && cd build && CC=../clang9/bin/clang CXX=../clang9/bin/clang++ cmake .. -DBUILD_STATIC=Off -GNinja -DBUILD_TESTING=On -DENABLE_FUZZER=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9
+    - name: Build Util Tests
+      run: cd build && ninja lrucachetest
     - name: Build BigInt Tests
       run: cd build && ninja biginttest && ninja bigintfuzz
     - name: Run tests
