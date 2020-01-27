@@ -3,9 +3,7 @@ target_link_libraries(biginttest ${Boost_LIBRARIES} bigint)
 
 add_test(NAME BigInt COMMAND biginttest)
 
-if(NOT BUILD_STATIC)
-  add_definitions(-DBOOST_TEST_DYN_LINK)
-endif()
+
 
 if(ENABLE_FUZZER)
     add_executable(bigintfuzz bigint.fuzz.cpp)

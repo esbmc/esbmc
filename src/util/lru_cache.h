@@ -17,14 +17,14 @@ template <typename K, typename V>
 class lru_cache
 {
 protected:
-  typedef typename std::pair<K, V> KeyValue;
+  typedef typename std::pair<K, V> key_value;
+  typedef typename std::list<key_value>::iterator key_value_iterator;
 
   // std::list is a double ended queue
-  std::list<KeyValue> cache;
-
+  std::list<key_value> cache;
   // a list has O(N) worst case, so it should be
   // faster to use a Hash for the index
-  std::unordered_map<K, list<KeyValue>::iterator> cache_index;
+  std::unordered_map<K, key_value_iterator> cache_index;
   size_t max_capacity = 0;
 
 public:
@@ -38,7 +38,7 @@ public:
 
   V &get(const K &key)
   {
-    return null;
+    return 0;
   }
 
   bool exists(const K &key)
@@ -49,6 +49,11 @@ public:
   size_t size()
   {
     return 0;
+  }
+
+  const size_t max_size()
+  {
+    return max_capacity;
   }
 };
 #endif
