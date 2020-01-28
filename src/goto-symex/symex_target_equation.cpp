@@ -63,7 +63,7 @@ void symex_target_equationt::output(
   SSA_step.format_string = fmt;
 
   if(debug_print)
-    SSA_step.short_output(ns, std::cout);
+    SSA_step.output(ns, std::cout);
 }
 
 void symex_target_equationt::assumption(
@@ -82,7 +82,7 @@ void symex_target_equationt::assumption(
   SSA_step.loop_number = loop_number;
 
   if(debug_print)
-    SSA_step.short_output(ns, std::cout);
+    SSA_step.output(ns, std::cout);
 }
 
 void symex_target_equationt::assertion(
@@ -105,7 +105,7 @@ void symex_target_equationt::assertion(
   SSA_step.loop_number = loop_number;
 
   if(debug_print)
-    SSA_step.short_output(ns, std::cout);
+    SSA_step.output(ns, std::cout);
 }
 
 void symex_target_equationt::renumber(
@@ -126,7 +126,7 @@ void symex_target_equationt::renumber(
   SSA_step.source = source;
 
   if(debug_print)
-    SSA_step.short_output(ns, std::cout);
+    SSA_step.output(ns, std::cout);
 }
 
 void symex_target_equationt::convert(smt_convt &smt_conv)
