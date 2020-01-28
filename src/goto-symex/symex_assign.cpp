@@ -48,6 +48,7 @@ goto_symext::goto_symext(
     no_unwinding_assertions(options.get_bool_option("no-unwinding-assertions")),
     partial_loops(options.get_bool_option("partial-loops")),
     k_induction(options.get_bool_option("k-induction")),
+    termination(options.get_bool_option("termination")),
     base_case(options.get_bool_option("base-case")),
     forward_condition(options.get_bool_option("forward-condition")),
     inductive_step(options.get_bool_option("inductive-step"))
@@ -108,6 +109,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   no_unwinding_assertions = sym.no_unwinding_assertions;
   partial_loops = sym.partial_loops;
   k_induction = sym.k_induction;
+  termination = sym.termination;
   base_case = sym.base_case;
   forward_condition = sym.forward_condition;
   inductive_step = sym.inductive_step;

@@ -538,10 +538,15 @@ void goto_symext::intrinsic_spawn_thread(
   const code_function_call2t &call,
   reachability_treet &art)
 {
-  if(k_induction && !options.get_bool_option("disable-inductive-step"))
+  if(
+    (k_induction || termination) &&
+    !options.get_bool_option("disable-inductive-step"))
   {
-    std::cout << "**** WARNING: k-induction does not support concurrency yet. "
-              << "Disabling inductive step\n";
+    assert(k_induction || termination);
+    const std::string mode = k_induction ? "k-induction" : "termination";
+    std::cout << "**** WARNING: " << mode
+              << " does not support concurrency yet. "
+              << "Disabling " << mode << "\n";
 
     // Disable inductive step on multi threaded code
     options.set_option("disable-inductive-step", true);

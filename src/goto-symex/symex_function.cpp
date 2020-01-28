@@ -32,10 +32,14 @@ bool goto_symext::get_unwind_recursion(
     if(options.get_bool_option("abort-on-recursion"))
       abort();
 
-    if(k_induction && !options.get_bool_option("disable-inductive-step"))
+    if(
+      (k_induction || termination) &&
+      !options.get_bool_option("disable-inductive-step"))
     {
-      std::cout << "**** WARNING: k-induction does not support recursion yet. "
-                << "Disabling inductive step\n";
+      const std::string mode = k_induction ? "k-induction" : "termination";
+      std::cout << "**** WARNING: " << mode
+                << " does not support recursion yet. "
+                << "Disabling " << mode << "\n";
 
       // Disable inductive step on recursion
       options.set_option("disable-inductive-step", true);

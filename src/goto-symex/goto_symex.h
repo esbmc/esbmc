@@ -803,9 +803,12 @@ protected:
   /** Flag as to whether we're not enabling partial loops. Corresponds to
    *  the option --partial-loops */
   bool partial_loops;
-  /** Flag as to whether we're doing a k-induction. Corresponds to
+  /** Flag as to whether we're doing k-induction. Corresponds to
    *  the options --k-induction and --k-induction-parallel */
   bool k_induction;
+  /** Flag as to whether we're doing termination. Corresponds to
+   *  the options --termination */
+  bool termination;
   /** Flag as to whether we're doing a k-induction base case. Corresponds to
    *  the option --base-case */
   bool base_case;
