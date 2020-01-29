@@ -225,7 +225,7 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
 
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.termination:
-    command_line += "--no-pointer-check --no-bounds-check --no-assertions "
+    command_line += "--no-pointer-check --no-bounds-check "
     command_line += "--termination --max-inductive-step 3 "
     return command_line
 
