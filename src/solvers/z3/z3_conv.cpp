@@ -1111,8 +1111,8 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
       convert_sort(strct.members[1]));
 
-    uint64_t num = get_bv(object).to_uint64();
-    uint64_t offs = get_bv(offset).to_uint64();
+    unsigned int num = get_bv(object).to_uint64();
+    unsigned int offs = get_bv(offset).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, expr->type);
   }

@@ -690,7 +690,7 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
 
     // Iterate over each field and flatten to bytes
     const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
-    for(unsigned long i = 0; i < intref.value.to_uint64(); i++)
+    for(unsigned int i = 0; i < intref.value.to_uint64(); i++)
     {
       index2tc idx(arraytype.subtype, new_expr, gen_ulong(i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
@@ -721,7 +721,7 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     typecast2tc cast(byteptr, addrof);
 
     // Produce N bytes
-    for(unsigned long i = 0; i < size.to_uint64(); i++)
+    for(unsigned int i = 0; i < size.to_uint64(); i++)
     {
       index2tc idx(get_uint8_type(), cast, gen_ulong(i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
@@ -733,7 +733,7 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
 
     bool is_big_endian =
       config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
-    for(unsigned long i = 0; i < size.to_uint64(); i++)
+    for(unsigned int i = 0; i < size.to_uint64(); i++)
     {
       byte_extract2tc ext(
         get_uint8_type(), new_expr, gen_ulong(i), is_big_endian);
@@ -937,7 +937,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     exprt &face = (exprt &)thetype.add(typet::a_size);
     BigInt val = binary2bigint(face.value(), false);
 
-    type2tc t = type2tc(new string_type2t(val.to_long()));
+    type2tc t = type2tc(new string_type2t(val.to_int64()));
 
     new_expr_ref = expr2tc(new constant_string2t(t, irep_idt(thestring)));
   }

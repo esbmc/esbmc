@@ -114,7 +114,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   }
 
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
-  uint64_t sz = thesize.value.to_ulong();
+  unsigned int sz = thesize.value.to_uint64();
 
   // Repeatedly store operands into this.
   for(unsigned int i = 0; i < sz; i++)
@@ -200,9 +200,9 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     if(is_nil_expr(outstruct->datatype_members[0]))
       return expr2tc();
 
-    uint64_t num =
+    unsigned int num =
       to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
-    uint64_t offs =
+    unsigned int offs =
       to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return ctx->pointer_logic.back().pointer_expr(

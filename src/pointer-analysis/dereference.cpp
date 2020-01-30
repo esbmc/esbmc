@@ -956,8 +956,8 @@ void dereferencet::construct_from_array(
   const array_type2t arr_type = get_arr_type(value);
   type2tc arr_subtype = arr_type.subtype;
 
-  unsigned long subtype_size = type_byte_size(arr_subtype).to_ulong();
-  unsigned long deref_size = type->get_width() / 8;
+  unsigned int subtype_size = type_byte_size(arr_subtype).to_uint64();
+  unsigned int deref_size = type->get_width() / 8;
 
   if(is_array_type(arr_type.subtype))
   {
@@ -991,7 +991,7 @@ void dereferencet::construct_from_array(
   if(is_const_offset)
   {
     // Constant offset is aligned with array boundaries?
-    uint64_t offs = to_constant_int2t(offset).value.to_ulong();
+    unsigned int offs = to_constant_int2t(offset).value.to_uint64();
     is_correctly_aligned = ((offs % subtype_size) == 0);
   }
   else
@@ -1200,8 +1200,8 @@ void dereferencet::construct_from_dyn_struct_offset(
     // Round up to word size
     unsigned int word_mask = (config.ansi_c.word_size / 8) - 1;
     field_size = (field_size + word_mask) & (~word_mask);
-    expr2tc field_offs = gen_ulong(offs.to_ulong());
-    expr2tc field_top = gen_ulong(offs.to_ulong() + field_size);
+    expr2tc field_offs = gen_ulong(offs.to_uint64());
+    expr2tc field_top = gen_ulong(offs.to_uint64() + field_size);
     expr2tc lower_bound = greaterthanequal2tc(offset, field_offs);
     expr2tc upper_bound = lessthan2tc(offset, field_top);
     expr2tc field_guard = and2tc(lower_bound, upper_bound);
@@ -1368,7 +1368,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   std::vector<expr2tc> fields;
   assert(is_struct_type(type));
   const struct_type2t &structtype = to_struct_type(type);
-  uint64_t struct_offset = intref.value.to_uint64();
+  unsigned int struct_offset = intref.value.to_uint64();
   for(auto const &it : structtype.members)
   {
     const type2tc &target_type = it;
@@ -1439,7 +1439,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
         // OK, it's this substruct, and we've eliminated the zero-sized-struct
         // menace. Recurse to continue our checks.
         BigInt new_offs = intref.value - offs;
-        expr2tc offs_expr = gen_ulong(new_offs.to_ulong());
+        expr2tc offs_expr = gen_ulong(new_offs.to_uint64());
         value = member2tc(it, value, struct_type.member_names[i]);
         construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
         return;
@@ -1537,7 +1537,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     // to guard for offsets that are inside this array, and modulus the offset
     // by the array size.
     BigInt subtype_size = type_byte_size(arr_type.subtype);
-    expr2tc sub_size = gen_ulong(subtype_size.to_ulong());
+    expr2tc sub_size = gen_ulong(subtype_size.to_uint64());
     expr2tc div = div2tc(offs->type, offs, sub_size);
     expr2tc mod = modulus2tc(offs->type, offs, sub_size);
     expr2tc index = index2tc(arr_type.subtype, value, div);
@@ -1586,8 +1586,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       BigInt memb_offs =
         member_offset(value->type, struct_type.member_names[i]);
       BigInt size = type_byte_size(it);
-      expr2tc memb_offs_expr = gen_ulong(memb_offs.to_ulong());
-      expr2tc limit_expr = gen_ulong(memb_offs.to_ulong() + size.to_ulong());
+      expr2tc memb_offs_expr = gen_ulong(memb_offs.to_uint64());
+      expr2tc limit_expr = gen_ulong(memb_offs.to_uint64() + size.to_uint64());
       expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
 
       // Compute a guard and update the offset for an access to this field.
@@ -1878,7 +1878,7 @@ void dereferencet::bounds_check(
   if(options.get_bool_option("no-bounds-check"))
     return;
 
-  unsigned long access_size = type_byte_size(type).to_ulong();
+  unsigned int access_size = type_byte_size(type).to_uint64();
 
   assert(is_array_type(expr) || is_string_type(expr));
   const array_type2t arr_type = get_arr_type(expr);
@@ -1915,8 +1915,8 @@ void dereferencet::bounds_check(
       return;
 
     // Secondly, try to calc the size of the array.
-    unsigned long subtype_size_int =
-      type_byte_size(arr_type.subtype).to_ulong();
+    unsigned int subtype_size_int =
+      type_byte_size(arr_type.subtype).to_uint64();
     constant_int2tc subtype_size(uint_type2(), BigInt(subtype_size_int));
     expr2tc array_size = typecast2tc(uint_type2(), arr_type.array_size);
     arrsize = mul2tc(uint_type2(), array_size, subtype_size);
@@ -2037,8 +2037,8 @@ void dereferencet::check_data_obj_access(
   assert(!is_array_type(value));
 
   expr2tc offset = typecast2tc(pointer_type2(), src_offset);
-  unsigned long data_sz = type_byte_size(value->type).to_ulong();
-  unsigned long access_sz = type_byte_size(type).to_ulong();
+  unsigned int data_sz = type_byte_size(value->type).to_uint64();
+  unsigned int access_sz = type_byte_size(type).to_uint64();
   expr2tc data_sz_e = gen_ulong(data_sz);
   expr2tc access_sz_e = gen_ulong(access_sz);
 

@@ -311,7 +311,7 @@ exprt c_typecheck_baset::do_initializer_array(
     throw 0;
   }
 
-  unsigned long size = mp_size.to_ulong();
+  unsigned int size = mp_size.to_uint64();
 
   // build array constant
   exprt result("constant", type);

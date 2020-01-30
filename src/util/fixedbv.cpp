@@ -215,7 +215,7 @@ fixedbvt &fixedbvt::operator-=(const fixedbvt &o)
   return *this;
 }
 
-fixedbvt &fixedbvt::operator!()
+fixedbvt &fixedbvt::operator-()
 {
   this->negate();
   return (*this);

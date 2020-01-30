@@ -215,7 +215,7 @@ std::string ieee_floatt::to_string_decimal(unsigned precision) const
       while(BigInt(tmp.size()) <= position)
         tmp = "0" + tmp;
 
-      std::size_t dot = tmp.size() - integer2size_t(position);
+      std::size_t dot = tmp.size() - position.to_uint64();
       result += std::string(tmp, 0, dot) + '.';
       result += std::string(tmp, dot, std::string::npos);
 
@@ -896,7 +896,7 @@ ieee_floatt &ieee_floatt::operator-=(const ieee_floatt &other)
   return (*this) += _other;
 }
 
-ieee_floatt &ieee_floatt::operator!()
+ieee_floatt &ieee_floatt::operator-()
 {
   this->negate();
   return (*this);
@@ -1173,7 +1173,7 @@ double ieee_floatt::to_double() const
 {
   union {
     double f;
-    uint64_t i;
+    unsigned int i;
   } a;
 
   if(infinity_flag)
@@ -1193,9 +1193,9 @@ double ieee_floatt::to_double() const
   }
 
   BigInt i = pack();
-  assert(i.is_ulong());
+  assert(i.is_uint64());
 
-  a.i = i.to_ulong();
+  a.i = i.to_uint64();
   return a.f;
 }
 
@@ -1208,7 +1208,7 @@ float ieee_floatt::to_float() const
 
   union {
     float f;
-    uint32_t i;
+    unsigned int i;
   } a;
 
   if(infinity_flag)
@@ -1228,9 +1228,9 @@ float ieee_floatt::to_float() const
   }
 
   BigInt i = pack();
-  assert(i.is_ulong());
+  assert(i.is_uint64());
 
-  a.i = (unsigned)i.to_ulong();
+  a.i = i.to_uint64();
   return a.f;
 }
 

@@ -339,10 +339,10 @@ bitblast_convt::mk_smt_bvint(const BigInt &intval, bool sign, unsigned int w)
   smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
   bitblast_smt_ast *a = new_ast(s);
   a->bv.resize(w);
-  int64_t u = intval.to_long();
+  int u = intval.to_int64();
   for(unsigned int i = 0; i < w; i++)
   {
-    int64_t mask = (1ULL << i);
+    int mask = (1ULL << i);
     bool val = u & mask;
     a->bv[i] = const_literal(val);
   }

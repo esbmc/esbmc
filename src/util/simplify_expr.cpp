@@ -2149,7 +2149,7 @@ bool simplify_exprt::simplify_with(exprt &expr)
         if(!expr.op2().is_constant())
           break;
 
-        expr.op0().operands()[i.to_ulong()].swap(expr.op2());
+        expr.op0().operands()[i.to_uint64()].swap(expr.op2());
 
         expr.operands().erase(++expr.operands().begin());
         expr.operands().erase(++expr.operands().begin());
@@ -2234,7 +2234,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr)
     {
       // ok
       exprt tmp;
-      tmp.swap(expr.op0().operands()[i.to_ulong()]);
+      tmp.swap(expr.op0().operands()[i.to_uint64()]);
       expr.swap(tmp);
       return false;
     }
@@ -2255,7 +2255,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr)
     else
     {
       // terminating zero?
-      char v = (i == value.size()) ? 0 : value[i.to_ulong()];
+      char v = (i == value.size()) ? 0 : value[i.to_uint64()];
       exprt tmp = from_integer(v, expr.type());
       expr.swap(tmp);
       return false;

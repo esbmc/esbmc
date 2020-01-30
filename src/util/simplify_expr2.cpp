@@ -648,7 +648,7 @@ struct Negator
     std::function<constant_type &(expr2tc &)> to_constant)
   {
     expr2tc c = number;
-    to_constant(c).value = !to_constant(c).value;
+    to_constant(c).value = -to_constant(c).value;
     return c;
   }
 };
@@ -670,7 +670,7 @@ struct abstor
     if(to_constant(c).value > 0)
       return number;
 
-    to_constant(c).value = !to_constant(c).value;
+    to_constant(c).value = -to_constant(c).value;
     return c;
   }
 };
@@ -1267,14 +1267,6 @@ static expr2tc do_bit_munge_operation(
   // it to a binary representation, and then and that.
   const constant_int2t &int1 = to_constant_int2t(side_1);
   const constant_int2t &int2 = to_constant_int2t(side_2);
-
-  // Drama: BigInt does *not* do any kind of twos compliment representation.
-  // In fact, negative numbers are stored as positive integers, but marked as
-  // being negative. To get around this, perform operations in an {u,}int64,
-  if(
-    ((int1.value.get_len() * sizeof(BigInt::onedig_t)) > sizeof(int64_t)) ||
-    ((int2.value.get_len() * sizeof(BigInt::onedig_t)) > sizeof(int64_t)))
-    return expr2tc();
 
   // Dump will zero-prefix and right align the output number.
   int64_t val1 = int1.value.to_int64();
@@ -2205,7 +2197,6 @@ expr2tc extract2t::do_simplify() const
   const constant_int2t &cint = to_constant_int2t(from);
   const BigInt &theint = cint.value;
   assert(theint.is_positive());
-  assert(theint.get_len() <= 2);
 
   // Take the value, mask and shift.
   uint64_t theval = theint.to_uint64();
@@ -2470,7 +2461,7 @@ struct IEEE_addtor
     {
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(
-          to_constant_int2t(rm).value.to_long());
+          to_constant_int2t(rm).value.to_int64());
 
       expr2tc c1 = op1;
       get_value(c1).rounding_mode = mode;
@@ -2507,7 +2498,7 @@ struct IEEE_subtor
     {
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(
-          to_constant_int2t(rm).value.to_long());
+          to_constant_int2t(rm).value.to_int64());
 
       expr2tc c1 = op1;
       get_value(c1).rounding_mode = mode;
@@ -2544,7 +2535,7 @@ struct IEEE_multor
     {
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(
-          to_constant_int2t(rm).value.to_long());
+          to_constant_int2t(rm).value.to_int64());
 
       expr2tc c1 = op1;
       get_value(c1).rounding_mode = mode;
@@ -2581,7 +2572,7 @@ struct IEEE_divtor
     {
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(
-          to_constant_int2t(rm).value.to_long());
+          to_constant_int2t(rm).value.to_int64());
 
       expr2tc c1 = op1;
       get_value(c1).rounding_mode = mode;
@@ -2597,7 +2588,7 @@ struct IEEE_divtor
     {
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(
-          to_constant_int2t(rm).value.to_long());
+          to_constant_int2t(rm).value.to_int64());
 
       expr2tc c2 = op2;
       get_value(c2).rounding_mode = mode;

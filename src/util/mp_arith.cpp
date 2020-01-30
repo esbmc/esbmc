@@ -41,15 +41,19 @@ std::ostream &operator<<(std::ostream &out, const BigInt &n)
   return out;
 }
 
+/// \par parameters: string of '0'-'9' etc. most significant digit first
+/// base of number representation
+/// \return BigInt
 const BigInt string2integer(const std::string &n, unsigned base)
 {
-  for(unsigned i = 0; i < n.size(); i++)
+  for(std::size_t i = 0; i < n.size(); i++)
     if(!(isalnum(n[i]) || (n[i] == '-' && i == 0)))
       return 0;
 
   return BigInt(n.c_str(), base);
 }
 
+/// \return string of '0'/'1', most significant bit first
 const std::string integer2binary(const BigInt &n, std::size_t width)
 {
   BigInt a(n);
@@ -66,12 +70,10 @@ const std::string integer2binary(const BigInt &n, std::size_t width)
   }
 
   std::size_t len = a.digits(2) + 2;
-  char *buffer = (char *)malloc(len);
-  char *s = a.as_string(buffer, len, 2);
+  std::vector<char> buffer(len);
+  char *s = a.as_string(buffer.data(), len, 2);
 
   std::string result(s);
-
-  free(buffer);
 
   if(result.size() < width)
   {
@@ -83,8 +85,8 @@ const std::string integer2binary(const BigInt &n, std::size_t width)
     result = result.substr(result.size() - width, width);
 
   if(neg)
-    for(char &i : result)
-      i = (i == '0') ? '1' : '0';
+    for(std::size_t i = 0; i < result.size(); i++)
+      result[i] = (result[i] == '0') ? '1' : '0';
 
   return result;
 }
@@ -92,61 +94,56 @@ const std::string integer2binary(const BigInt &n, std::size_t width)
 const std::string integer2string(const BigInt &n, unsigned base)
 {
   unsigned len = n.digits(base) + 2;
-  char *buffer = (char *)malloc(len);
-  char *s = n.as_string(buffer, len, base);
+  std::vector<char> buffer(len);
+  char *s = n.as_string(buffer.data(), len, base);
 
   std::string result(s);
 
-  free(buffer);
-
   return result;
 }
 
+/// convert binary string representation to BigInt
+/// \par parameters: string of '0'/'1', most significant bit first
+/// \return BigInt
 const BigInt binary2integer(const std::string &n, bool is_signed)
 {
-  if(n.size() == 0)
+  if(n.empty())
     return 0;
 
-  BigInt result = 0;
-  BigInt mask = 1;
-  mask = mask << (n.size() - 1);
-
-  for(unsigned i = 0; i < n.size(); i++)
+  if(n.size() <= (sizeof(unsigned long) * 8))
   {
-    if(n[i] == '0')
+    // this is a tuned implementation for short integers
+
+    unsigned long mask = 1;
+    mask = mask << (n.size() - 1);
+    BigInt top_bit = (n[0] == '1') ? mask : 0;
+    if(is_signed)
+      top_bit.negate();
+    mask >>= 1;
+    unsigned long other_bits = 0;
+
+    for(std::string::const_iterator it = ++n.begin(); it != n.end(); ++it)
     {
-    }
-    else if(n[i] == '1')
-    {
-      if(is_signed && i == 0)
-        result = -mask;
-      else
-        result = result + mask;
-    }
-    else
-    {
-      std::cerr << "Invalid number fed to binary2integer" << std::endl;
-      abort();
+      if(*it == '1')
+        other_bits += mask;
+      else if(*it != '0')
+        return 0;
+
+      mask >>= 1;
     }
 
-    mask = mask >> 1;
+    return top_bit + other_bits;
   }
 
-  return result;
-}
+  if(n.find_first_not_of("01") != std::string::npos)
+    return 0;
 
-std::size_t integer2size_t(const BigInt &n)
-{
-  assert(n >= 0);
-  BigInt::ullong_t ull = n.to_ulong();
-  assert(ull <= std::numeric_limits<std::size_t>::max());
-  return (std::size_t)ull;
-}
-
-unsigned integer2unsigned(const BigInt &n)
-{
-  assert(n >= 0);
-  BigInt::ullong_t ull = n.to_ulong();
-  assert(ull <= std::numeric_limits<unsigned>::max());
-  return (unsigned)ull;
+  if(is_signed && n[0] == '1')
+  {
+    BigInt result(n.c_str() + 1, 2);
+    result -= BigInt(1) << (n.size() - 1);
+    return result;
+  }
+  else
+    return BigInt(n.c_str(), 2);
 }
