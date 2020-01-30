@@ -14,7 +14,9 @@
 #include <cstring>
 #include <iostream>
 
-#define error(x) fprintf(stderr, "%s\n", x)
+#define error(x)                                                               \
+  fprintf(stderr, "%s\n", x);                                                  \
+  abort()
 
 // Shortcut access to BigInt scoped things.
 typedef BigInt::llong_t llong_t;
@@ -281,7 +283,7 @@ inline void BigInt::reallocate(unsigned digits)
 {
   if(digits > size)
   {
-    if(size != 0u)
+    if(size)
       delete[] digit;
     size = adjust_size(digits);
     digit = new onedig_t[size];
@@ -301,7 +303,7 @@ inline void BigInt::resize(unsigned digits)
     if(old_digit != nullptr)
     {
       memcpy(digit, old_digit, length * sizeof(onedig_t));
-      if(old_size != 0u)
+      if(old_size)
         delete[] old_digit;
     }
   }
@@ -326,17 +328,17 @@ inline void BigInt::adjust()
 inline void digit_set(ullong_t ul, onedig_t d[small], unsigned &l)
 {
   l = 0;
-  if(ul != 0u)
+  if(ul)
   {
     d[l++] = onedig_t(ul);
     ul >>= single_bits;
     if(small > 2)
-      while(ul != 0u)
+      while(ul)
       {
         d[l++] = onedig_t(ul);
         ul >>= single_bits;
       }
-    else if(ul != 0u)
+    else if(ul)
       d[l++] = onedig_t(ul);
   }
 }
@@ -429,6 +431,11 @@ BigInt::BigInt(BigInt const &y)
   memcpy(digit, y.digit, length * sizeof(onedig_t));
 }
 
+BigInt::BigInt(BigInt &&y) : BigInt()
+{
+  swap(y);
+}
+
 BigInt::BigInt(char const *s, onedig_t b)
   : size(adjust_size(small)),
     length(0),
@@ -438,51 +445,29 @@ BigInt::BigInt(char const *s, onedig_t b)
   scan(s, b);
 }
 
-BigInt &BigInt::operator=(llong_t l)
-{
-  reallocate(small);
-  assign(l);
-  return *this;
-}
-
-BigInt &BigInt::operator=(ullong_t ul)
-{
-  reallocate(small);
-  assign(ul);
-  return *this;
-}
-
 BigInt &BigInt::operator=(BigInt const &y)
 {
-  if(&y != this)
-  {
-    reallocate(y.length);
-    length = y.length;
-    positive = y.positive;
-    memcpy(digit, y.digit, length * sizeof(onedig_t));
-  }
+  BigInt copy(y);
+  swap(copy);
   return *this;
 }
 
-BigInt &BigInt::operator=(char const *s)
+BigInt &BigInt::operator=(BigInt &&y)
 {
-  reallocate(small);
-  length = 0;
-  positive = true;
-  scan(s);
+  swap(y);
   return *this;
 }
 
 char const *BigInt::scan_on(char const *s, onedig_t b)
 {
-  for(char c = *s; c != 0; c = *++s)
+  for(char c = *s; c; c = *++s)
   {
     // Convert digit. Use 0..9A..Z for singles up to 36. Ignoring case.
     c = toupper(c);
     onedig_t dig;
     if(c < '0')
       return s;
-    if(c <= '9')
+    else if(c <= '9')
       dig = c - '0';
     else if(c < 'A')
       return s;
@@ -495,7 +480,7 @@ char const *BigInt::scan_on(char const *s, onedig_t b)
       return s;
     // Multiply this by single and add digit.
     onedig_t r = digit_mul(digit, length, b);
-    if(r != 0u)
+    if(r)
     {
       resize(length + 1);
       digit[length++] = r;
@@ -506,7 +491,7 @@ char const *BigInt::scan_on(char const *s, onedig_t b)
     else
     {
       r = digit_add(digit, length, &dig, 1, digit);
-      if(r != 0u)
+      if(r)
       {
         resize(length + 1);
         digit[length++] = r;
@@ -529,7 +514,7 @@ char const *BigInt::scan(char const *s, onedig_t b)
 unsigned BigInt::digits(onedig_t b) const
 {
   int bits = -1;
-  while(b != 0u)
+  while(b)
     ++bits, b >>= 1;
   return (single_bits * length + bits - 1) / bits;
 }
@@ -541,7 +526,7 @@ char *BigInt::as_string(char *p, unsigned l, onedig_t b) const
   p[--l] = '\0';
   // Check for zero. Would otherwise print as empty string.
   unsigned len = length;
-  while((len != 0u) && digit[len - 1] == 0)
+  while(len && digit[len - 1] == 0)
     --len;
   if(len == 0)
   {
@@ -560,14 +545,12 @@ char *BigInt::as_string(char *p, unsigned l, onedig_t b) const
     p[--l] = r < 10 ? r + '0' : 'A' + r - 10;
     if(dig[len - 1] == 0)
       --len;
-  } while(len != 0u);
+  } while(len);
   // Maybe attach sign.
   if(!positive)
   {
     if(l == 0)
-    {
       return nullptr;
-    }
     p[--l] = '-';
   }
   // Return pointer to start of number.
@@ -591,7 +574,7 @@ bool BigInt::dump(unsigned char *p, unsigned n) const
   // Determine number m of characters needed.
   onedig_t d = *--t;
   unsigned i = sizeof(onedig_t);
-  while((--i != 0u) && (d >> i * CHAR_BIT) == 0)
+  while(--i && (d >> i * CHAR_BIT) == 0)
     ;
 
   unsigned m = ++i + (t - digit) * sizeof(onedig_t);
@@ -609,7 +592,7 @@ bool BigInt::dump(unsigned char *p, unsigned n) const
   // Copy out digits.
   for(;;)
   {
-    while((i--) != 0u)
+    while(i--)
       *p++ = d >> i * CHAR_BIT;
     if(t <= digit)
       break;
@@ -645,12 +628,11 @@ void BigInt::load(unsigned char const *p, unsigned n)
     d = 0;
     i = 0;
   }
-
-  if(d != 0u)
+  if(d)
     digit[length++] = d;
 }
 
-bool BigInt::is_long() const
+bool BigInt::is_int64() const
 {
   if(length < small)
     return true;
@@ -658,19 +640,19 @@ bool BigInt::is_long() const
   if(length > small)
     return false;
 
-  // jmorse: will truncate to whatever size full of bits onedig_t is.
-  // More ideally, this code would pre-define what the maximum is.
-  onedig_t max = (onedig_t)0xFFFFFFFFFFFFFFFFULL;
-
+  const onedig_t max = onedig_t(1) << (single_bits - 1);
   if(digit[small - 1] < max)
     return true;
+
   if(positive || digit[small - 1] > max)
     return false;
+
   // There is exactly one good signed number n with abs (n) having the
   // topmost bit set: The most negative number.
   for(int l = length - 1; --l >= 0;)
     if(digit[l] != 0)
       return false;
+
   return true;
 }
 
@@ -692,28 +674,12 @@ int64_t BigInt::to_int64() const
   return ret;
 }
 
-ullong_t BigInt::to_ulong() const
-{
-  ullong_t ul = 0;
-  for(int i = length; --i >= 0;)
-  {
-    ul <<= single_bits;
-    ul |= digit[i];
-  }
-  return ul;
-}
-
-llong_t BigInt::to_long() const
-{
-  ullong_t ul = to_ulong();
-  return positive ? ul : -llong_t(ul);
-}
-
 // Auxiliary method for comparing magnitude.
 inline int BigInt::ucompare(BigInt const &b) const
 {
   if(length < b.length)
     return -1;
+
   if(length > b.length)
     return 1;
 
@@ -747,9 +713,9 @@ int BigInt::compare(llong_t b) const
 
 int BigInt::compare(BigInt const &b) const
 {
-  if(static_cast<int>(positive) < static_cast<int>(b.positive))
+  if(positive < b.positive)
     return -1;
-  if(static_cast<int>(positive) > static_cast<int>(b.positive))
+  if(positive > b.positive)
     return 1;
   int result = ucompare(b);
   return positive ? result : -result;
@@ -789,7 +755,7 @@ void BigInt::add(onedig_t const *dig, unsigned len, bool pos)
     // We're adding effectively.
     onedig_t c = digit_add(d1, l1, d2, l2, digit);
     length = l1;
-    if(c != 0u)
+    if(c)
       digit[length++] = c;
     // Sign remains unchanged.
   }
@@ -852,7 +818,7 @@ void BigInt::mul(onedig_t const *dig, unsigned len, bool pos)
     // Get a new string of digits for the result.
     unsigned old_size = size;
     size = adjust_size(length + len);
-    auto r = new onedig_t[size];
+    onedig_t *r = new onedig_t[size];
 
     // The first parameter pair defines the outer loop which should
     // be the shorter.
@@ -862,12 +828,13 @@ void BigInt::mul(onedig_t const *dig, unsigned len, bool pos)
       digit_mul(dig, len, digit, length, r);
 
     // Replace digit string of this with result.
-    if(old_size != 0u)
+    if(old_size)
       delete[] digit;
     digit = r;
     length += len;
     adjust();
   }
+
   if(!pos)
     positive = !positive;
 }
@@ -1013,25 +980,25 @@ void BigInt::div(BigInt const &x, BigInt const &y, BigInt &q, BigInt &r)
   if(y.length == 0)
   {
   zero:
-    std::cerr << "Division by zero in bigint routine.";
-    abort();
+    error("Division by zero.");
+    return;
   }
-  if(x.is_ulong())
+  if(x.is_uint64())
   {
     // Can do it directly.
-    ullong_t n = x.to_ulong();
-    ullong_t m = y.to_ulong();
+    uint64_t n = x.to_uint64();
+    uint64_t m = y.to_uint64();
     if(m == 0)
       goto zero;
-    q.assign(n / m);
-    r.assign(n % m);
+    q.assign((BigInt::ullong_t)n / m);
+    r.assign((BigInt::ullong_t)n % m);
   }
   else if(y.length == 1)
   {
     // This digit_div() transforms the dividend into the quotient.
     q = y;
     r.digit[0] = digit_div(q.digit, q.length, y.digit[0]);
-    r.length = r.digit[0] != 0u ? 1 : 0;
+    r.length = r.digit[0] ? 1 : 0;
   }
   else
   {
@@ -1067,11 +1034,11 @@ void BigInt::div(BigInt const &x, BigInt const &y, BigInt &q, BigInt &r)
     digit_div(a, b, bl, q.digit, q.length);
 
     // Unscale the remainder and copy it into r.
-    for(al = bl; (al != 0u) && a[al - 1] == 0; --al)
+    for(al = bl; al && a[al - 1] == 0; --al)
       ;
     if(scale != 1)
       digit_div(a, al, scale);
-    if((al != 0u) && a[al - 1] == 0)
+    if(al && a[al - 1] == 0)
       --al;
     r.length = al;
     r.resize(r.length);
@@ -1103,14 +1070,14 @@ BigInt &BigInt::operator/=(BigInt const &y)
   if(y.length == 0)
   {
   zero:
-    std::cerr << "Division by zero in bigint routine.";
-    abort();
+    error("Division by zero.");
+    return *this;
   }
-  if(is_ulong())
+  if(is_uint64())
   {
     // Can do it directly.
-    ullong_t n = to_ulong();
-    ullong_t m = y.to_ulong();
+    auto n = to_uint64();
+    auto m = y.to_uint64();
     if(m == 0)
       goto zero;
     digit_set(n / m, digit, length);
@@ -1169,14 +1136,14 @@ BigInt &BigInt::operator%=(BigInt const &y)
   if(y.length == 0)
   {
   zero:
-    std::cerr << "Division by zero in bigint routine.";
-    abort();
+    error("Division by zero.");
+    return *this;
   }
-  if(is_ulong())
+  if(is_uint64())
   {
     // Can do it directly.
-    ullong_t n = to_ulong();
-    ullong_t m = y.to_ulong();
+    auto n = to_uint64();
+    auto m = y.to_uint64();
     if(m == 0)
       goto zero;
     digit_set(n % m, digit, length);
@@ -1277,7 +1244,7 @@ void build_bigint_python_class()
 
   init<long signed int> init;
   class_<BigInt>("BigInt", init)
-    .def("to_long", &BigInt::to_long)
+    .def("to_int", &BigInt::to_int)
     .def(self == self)
     .def(self != self)
     .def(self < self);

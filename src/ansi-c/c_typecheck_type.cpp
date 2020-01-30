@@ -250,7 +250,7 @@ void c_typecheck_baset::typecheck_c_bit_field_type(typet &type)
     throw 0;
   }
 
-  unsigned width = atoi(base_type.width().c_str());
+  uint64_t width = atoi(base_type.width().c_str());
 
   if(i > width)
   {
@@ -258,7 +258,7 @@ void c_typecheck_baset::typecheck_c_bit_field_type(typet &type)
     throw "bit field size too large";
   }
 
-  width = i.to_ulong();
+  width = i.to_uint64();
 
   typet tmp(base_type);
   type.swap(tmp);

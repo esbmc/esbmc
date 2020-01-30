@@ -98,7 +98,7 @@ public:
   fixedbvt &operator+=(const fixedbvt &other);
   fixedbvt &operator-=(const fixedbvt &other);
 
-  fixedbvt &operator!();
+  fixedbvt &operator-();
 
   friend bool operator<(const fixedbvt &a, const fixedbvt &b)
   {

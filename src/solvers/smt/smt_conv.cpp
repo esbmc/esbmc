@@ -1698,7 +1698,7 @@ unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
   if(!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size))
   {
     constant_int2tc thesize = arr.array_size;
-    return size_to_bit_width(thesize->value.to_ulong());
+    return size_to_bit_width(thesize->value.to_uint64());
   }
 
   return config.ansi_c.word_size;
@@ -2231,7 +2231,7 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
   }
 
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
-  uint64_t sz = thesize.value.to_ulong();
+  unsigned int sz = thesize.value.to_uint64();
 
   assert(is_constant_array2t(expr));
   const constant_array2t &array = to_constant_array2t(expr);

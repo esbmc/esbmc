@@ -940,7 +940,7 @@ smt_astt yices_convt::tuple_array_create(
 {
   const array_type2t &arr_type = to_array_type(array_type);
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
-  uint64_t sz = thesize.value.to_ulong();
+  unsigned int sz = thesize.value.to_uint64();
 
   // We support both tuples and arrays of them, so just repeatedly store
   smt_sortt sort = convert_sort(array_type);
@@ -988,9 +988,9 @@ smt_astt yices_convt::tuple_array_of(
   const yices_smt_ast *yast = to_solver_smt_ast<yices_smt_ast>(a);
 
   // Now repeatedly store Things into it
-  unsigned long elems =
-    to_constant_int2t(array_domain_to_width(domtype)).value.to_ulong();
-  for(unsigned long i = 0; i < elems; i++)
+  unsigned int elems =
+    to_constant_int2t(array_domain_to_width(domtype)).value.to_uint64();
+  for(unsigned int i = 0; i < elems; i++)
   {
     term_t idxterm =
       int_encoding ? yices_int64(i) : yices_bvconst_uint64(domain_width, i);
@@ -1032,8 +1032,8 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
     smt_astt offset =
       new_ast(yices_select(2, to_solver_smt_ast<yices_smt_ast>(sym)->a), s2);
 
-    uint64_t num = get_bv(object).to_uint64();
-    uint64_t offs = get_bv(offset).to_uint64();
+    unsigned int num = get_bv(object).to_uint64();
+    unsigned int offs = get_bv(offset).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, expr->type);
   }

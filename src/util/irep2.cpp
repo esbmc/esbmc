@@ -1146,13 +1146,13 @@ unsigned long constant_int2t::as_ulong() const
 {
   // XXXjmorse - add assertion that we don't exceed machine word width?
   assert(!value.is_negative());
-  return value.to_ulong();
+  return value.to_uint64();
 }
 
 long constant_int2t::as_long() const
 {
   // XXXjmorse - add assertion that we don't exceed machine word width?
-  return value.to_long();
+  return value.to_int64();
 }
 
 bool constant_bool2t::is_true() const
@@ -1921,25 +1921,15 @@ do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const BigInt &theint)
 {
+  if(theint.is_zero())
+    return boost::hash<uint8_t>()(0);
+
   size_t crc = 0;
-
-  unsigned char buffer[256];
-
-  if(theint.dump(buffer, sizeof(buffer)))
+  std::array<unsigned char, 256> buffer;
+  if(theint.dump(buffer.data(), buffer.size()))
   {
-    // Zero has no data in bigints.
-    if(theint.is_zero())
-    {
-      crc = boost::hash<uint8_t>()(0);
-    }
-    else
-    {
-      unsigned int thelen = theint.get_len();
-      thelen *= 4; // words -> bytes
-      unsigned int start = 256 - thelen;
-      for(unsigned int i = 0; i < thelen; i++)
-        boost::hash_combine(crc, buffer[start + i]);
-    }
+    for(unsigned int i = 0; i < buffer.size(); i++)
+      boost::hash_combine(crc, buffer[i]);
   }
   else
   {
@@ -1954,20 +1944,18 @@ do_type_crc(const BigInt &theint)
 static inline __attribute__((always_inline)) void
 do_type_hash(const BigInt &theint, crypto_hash &hash)
 {
-  unsigned char buffer[256];
-
-  if(theint.dump(buffer, sizeof(buffer)))
+  // Zero has no data in bigints.
+  if(theint.is_zero())
   {
-    // Zero has no data in bigints.
-    if(theint.is_zero())
-    {
-      uint8_t val = 0;
-      hash.ingest(&val, sizeof(val));
-    }
-    else
-    {
-      hash.ingest(buffer, theint.get_len());
-    }
+    uint8_t val = 0;
+    hash.ingest(&val, sizeof(val));
+    return;
+  }
+
+  std::array<unsigned char, 256> buffer;
+  if(theint.dump(buffer.data(), buffer.size()))
+  {
+    hash.ingest(buffer.data(), buffer.size());
   }
   else
   {

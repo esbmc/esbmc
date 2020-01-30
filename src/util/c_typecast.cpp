@@ -674,7 +674,7 @@ void c_typecastt::implicit_typecast_followed(
     // special case: 0 == NULL
 
     if(
-      is_constant_int2t(expr) && to_constant_int2t(expr).value.to_long() == 0 &&
+      is_constant_int2t(expr) && to_constant_int2t(expr).value == 0 &&
       (is_unsignedbv_type(src_type) || is_signedbv_type(src_type)))
     {
       expr = symbol2tc(dest_type, "NULL");

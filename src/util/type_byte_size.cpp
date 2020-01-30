@@ -20,17 +20,16 @@ static inline void round_up_to_word(BigInt &mp)
   const unsigned int align_mask = word_bytes - 1;
 
   if(mp == 0)
-  {
     return;
-  }
+
   if(mp < word_bytes)
   {
     mp = BigInt(word_bytes);
     // Or if it's an array of chars etc. that doesn't end on a boundry,
   }
-  else if(mp.to_ulong() & align_mask)
+  else if(mp.to_uint64() & align_mask)
   {
-    mp += word_bytes - (mp.to_ulong() & align_mask);
+    mp += word_bytes - (mp.to_uint64() & align_mask);
   }
 }
 
@@ -40,17 +39,16 @@ static inline void round_up_to_int64(BigInt &mp)
   const unsigned int align_mask = 7;
 
   if(mp == 0)
-  {
     return;
-  }
+
   if(mp < word_bytes)
   {
     mp = BigInt(word_bytes);
     // Or if it's an array of chars etc. that doesn't end on a boundry,
   }
-  else if(mp.to_ulong() & align_mask)
+  else if(mp.to_uint64() & align_mask)
   {
-    mp += word_bytes - (mp.to_ulong() & align_mask);
+    mp += word_bytes - (mp.to_uint64() & align_mask);
   }
 }
 
@@ -272,7 +270,7 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
     if(is_constant_int2t(index.index))
     {
       const constant_int2t &index_val = to_constant_int2t(index.index);
-      result = gen_ulong(BigInt(sub_size * index_val.value).to_ulong());
+      result = gen_ulong(BigInt(sub_size * index_val.value).to_uint64());
     }
     else
     {
@@ -308,7 +306,7 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
     }
 
     // Also accumulate any pointer offset in the source object.
-    expr2tc res_expr = gen_ulong(result.to_ulong());
+    expr2tc res_expr = gen_ulong(result.to_uint64());
     res_expr = add2tc(
       res_expr->type, res_expr, compute_pointer_offset(memb.source_value));
 

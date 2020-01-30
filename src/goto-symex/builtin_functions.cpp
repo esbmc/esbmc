@@ -266,7 +266,7 @@ void goto_symext::track_new_pointer(
     try
     {
       BigInt object_size = type_byte_size(new_type);
-      object_size_exp = constant_int2tc(uint_type2(), object_size.to_ulong());
+      object_size_exp = constant_int2tc(uint_type2(), object_size.to_uint64());
     }
     catch(array_type2t::dyn_sized_array_excp *e)
     {
@@ -452,7 +452,7 @@ void goto_symext::intrinsic_switch_to(
 
   const constant_int2t &thread_num = to_constant_int2t(num);
 
-  unsigned int tid = thread_num.value.to_long();
+  unsigned int tid = thread_num.value.to_uint64();
   if(tid != art.get_cur_state().get_active_state_number())
     art.get_cur_state().switch_to_thread(tid);
 }
@@ -502,7 +502,7 @@ void goto_symext::intrinsic_set_thread_data(
     abort();
   }
 
-  unsigned int tid = to_constant_int2t(threadid).value.to_ulong();
+  unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
   art.get_cur_state().set_thread_start_data(tid, startdata);
 }
 
@@ -525,7 +525,7 @@ void goto_symext::intrinsic_get_thread_data(
     abort();
   }
 
-  unsigned int tid = to_constant_int2t(threadid).value.to_ulong();
+  unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
   const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
 
   assert(base_type_eq(call.ret->type, startdata->type, ns));
@@ -613,7 +613,7 @@ void goto_symext::intrinsic_get_thread_state(
     abort();
   }
 
-  unsigned int tid = to_constant_int2t(threadid).value.to_ulong();
+  unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
   // Possibly we should handle this error; but meh.
   assert(art.get_cur_state().threads_state.size() >= tid);
 
@@ -677,7 +677,7 @@ void goto_symext::intrinsic_register_monitor(
     abort();
   }
 
-  unsigned int tid = to_constant_int2t(threadid).value.to_ulong();
+  unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
   assert(art.get_cur_state().threads_state.size() >= tid);
   ex_state.monitor_tid = tid;
   ex_state.tid_is_set = true;
@@ -795,7 +795,7 @@ void goto_symext::intrinsic_memset(
   {
     const expr2tc &offs = item.offset;
 
-    int64_t tmpsize;
+    int tmpsize;
     try
     {
       tmpsize = type_byte_size(item.object->type).to_int64();
@@ -811,14 +811,13 @@ void goto_symext::intrinsic_memset(
 
     if(
       is_constant_int2t(offs) && to_constant_int2t(offs).value == 0 &&
-      is_constant_int2t(size) &&
-      to_constant_int2t(size).value.to_int64() == tmpsize)
+      is_constant_int2t(size) && to_constant_int2t(size).value == tmpsize)
     {
       continue;
     }
     else if(
       !is_constant_int2t(offs) && is_constant_int2t(size) &&
-      to_constant_int2t(size).value.to_int64() == tmpsize)
+      to_constant_int2t(size).value == tmpsize)
     {
       continue;
     }
@@ -829,7 +828,7 @@ void goto_symext::intrinsic_memset(
     // the C implementation.
     if(is_struct_type(item.object->type) && is_constant_int2t(size))
     {
-      uint64_t sz = to_constant_int2t(size).value.to_uint64();
+      unsigned int sz = to_constant_int2t(size).value.to_uint64();
       ref_types.insert(std::make_pair(
         item.object->type, std::list<std::pair<type2tc, unsigned int>>()));
 
@@ -842,7 +841,7 @@ void goto_symext::intrinsic_memset(
         for(const auto &elem : sref.members)
         {
           // Is this this field?
-          uint64_t fieldsize = type_byte_size(elem).to_uint64();
+          unsigned int fieldsize = type_byte_size(elem).to_uint64();
           if(fieldsize == sz)
           {
             unsigned int new_offs = offs;
@@ -877,8 +876,6 @@ void goto_symext::intrinsic_memset(
 
   if(can_construct)
   {
-    //uint64_t set_sz = to_constant_int2t(size).value.to_uint64();
-
     for(const auto &item : internal_deref_items)
     {
       const expr2tc &offs = item.offset;
@@ -886,7 +883,7 @@ void goto_symext::intrinsic_memset(
       guardt curguard(cur_state->guard);
       curguard.add(item.guard);
 
-      int64_t tmpsize;
+      int tmpsize;
       try
       {
         tmpsize = type_byte_size(item.object->type).to_int64();
@@ -906,7 +903,7 @@ void goto_symext::intrinsic_memset(
       }
       else if(
         !is_constant_int2t(offs) && is_constant_int2t(size) &&
-        to_constant_int2t(size).value.to_int64() == tmpsize)
+        to_constant_int2t(size).value == tmpsize)
       {
         // It's a memset where the size is such that the only valid offset is
         // zero.

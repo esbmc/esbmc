@@ -662,7 +662,7 @@ expr2tc boolector_convt::get_array_elem(
     for(uint32_t i = 0; i < size; i++)
     {
       auto idx = string2integer(indicies[i], 2);
-      if(idx.to_uint64() == index)
+      if(idx == index)
       {
         val = string2integer(values[i], 2);
         break;
@@ -765,7 +765,7 @@ smt_astt boolector_convt::fix_up_shift(
   bwidth = log2(op0->sort->get_data_width());
 
   // If we're a non-power-of-x number, some zero extension has to occur
-  if(pow(2.0, bwidth) < op0->sort->get_data_width())
+  if((pow(2.0, bwidth)) < op0->sort->get_data_width())
   {
     // Zero extend up to bwidth + 1
     bwidth++;

@@ -47,17 +47,17 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
   unsigned width;
   width = data.source_value->type->get_width();
 
-  uint64_t upper, lower;
+  unsigned int upper, lower;
   if(!data.big_endian)
   {
-    upper = ((intref.value.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
-    lower = intref.value.to_long() * 8;             //i*w;
+    upper = ((intref.value.to_uint64() + 1) * 8) - 1; //((i+1)*w)-1;
+    lower = intref.value.to_uint64() * 8;             //i*w;
   }
   else
   {
-    uint64_t max = width - 1;
-    upper = max - (intref.value.to_long() * 8);           //max-(i*w);
-    lower = max - ((intref.value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
+    unsigned int max = width - 1;
+    upper = max - (intref.value.to_uint64() * 8);           //max-(i*w);
+    lower = max - ((intref.value.to_uint64() + 1) * 8 - 1); //max-((i+1)*w-1);
   }
 
   smt_astt source_ast = convert_ast(source);
@@ -163,13 +163,13 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   src_value = convert_ast(data.source_value);
 
   width_op0 = data.source_value->type->get_width();
-  src_offset = to_constant_int2t(data.source_offset).value.to_ulong();
+  src_offset = to_constant_int2t(data.source_offset).value.to_uint64();
 
   // Flip location if we're in big-endian mode
   if(data.big_endian)
   {
     unsigned int data_size =
-      type_byte_size(data.source_value->type).to_ulong() - 1;
+      type_byte_size(data.source_value->type).to_uint64() - 1;
     src_offset = data_size - src_offset;
   }
 

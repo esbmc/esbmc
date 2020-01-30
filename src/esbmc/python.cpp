@@ -16,8 +16,8 @@ public:
   location(const locationt &loc)
   {
     file = loc.get_file();
-    line = string2integer(loc.get_line().as_string()).to_ulong();
-    column = string2integer(loc.get_column().as_string()).to_ulong();
+    line = string2integer(loc.get_line().as_string()).to_uint64();
+    column = string2integer(loc.get_column().as_string()).to_uint64();
     function = loc.get_function();
   }
 

@@ -148,7 +148,7 @@ smt_astt array_convt::mk_select(
   if(is_constant_int2t(idx))
   {
     const constant_int2t &intref = to_constant_int2t(idx);
-    unsigned long intval = intref.value.to_ulong();
+    unsigned int intval = intref.value.to_uint64();
     if(intval > ma->array_fields.size())
       // Return a fresh value.
       return ctx->mk_fresh(ressort, "array_mk_select_badidx::");
@@ -193,7 +193,7 @@ smt_astt array_convt::mk_store(
   if(is_constant_int2t(idx))
   {
     const constant_int2t &intref = to_constant_int2t(idx);
-    unsigned long intval = intref.value.to_ulong();
+    unsigned int intval = intref.value.to_uint64();
     if(intval > ma->array_fields.size())
       return ma;
 

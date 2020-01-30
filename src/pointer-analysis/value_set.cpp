@@ -785,13 +785,13 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
 
           // This index operation, whatever the offset, will always multiply
           // by the size of the element type.
-          unsigned int index_align = m.to_ulong();
+          uint64_t index_align = m.to_uint64();
 
           // Extract an offset from the old offset if set, otherwise the
           // alignment field.
-          unsigned int old_align = (o.offset_is_set)
-                                     ? offset2align(object, o.offset)
-                                     : o.offset_alignment;
+          uint64_t old_align = (o.offset_is_set)
+                                 ? offset2align(object, o.offset)
+                                 : o.offset_alignment;
 
           o.offset_alignment = std::min(index_align, old_align);
           o.offset_is_set = false;
@@ -1130,7 +1130,7 @@ void value_sett::assign_rec(
       return; // We're assigning to something unknown. Not much we can do.
     assert(is_constant_int2t(dynamic_object.instance));
     unsigned int idnum =
-      to_constant_int2t(dynamic_object.instance).value.to_long();
+      to_constant_int2t(dynamic_object.instance).value.to_uint64();
     const std::string name = "value_set::dynamic_object" + i2string(idnum);
 
     make_union(get_entry(name, suffix).object_map, values_rhs);

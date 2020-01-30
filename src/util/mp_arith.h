@@ -11,17 +11,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <big-int/bigint.hh>
 #include <iostream>
-#include <string>
 
-std::ostream &operator<<(std::ostream &out, const BigInt &n);
-BigInt operator>>(const BigInt &a, const BigInt &b);
-BigInt operator<<(const BigInt &a, const BigInt &b);
+std::ostream &operator<<(std::ostream &, const BigInt &);
+BigInt operator>>(const BigInt &, const BigInt &);
+BigInt operator<<(const BigInt &, const BigInt &);
 
-const std::string integer2string(const BigInt &n, unsigned base = 10);
-const BigInt string2integer(const std::string &n, unsigned base = 10);
-const std::string integer2binary(const BigInt &n, std::size_t width);
-const BigInt binary2integer(const std::string &n, bool is_signed);
-std::size_t integer2size_t(const BigInt &);
-unsigned integer2unsigned(const BigInt &);
+const std::string integer2string(const BigInt &, unsigned base = 10);
+const BigInt string2integer(const std::string &, unsigned base = 10);
+const std::string integer2binary(const BigInt &, std::size_t width);
+const BigInt binary2integer(const std::string &, bool is_signed);
 
-#endif
+#endif // CPROVER_UTIL_MP_ARITH_H
