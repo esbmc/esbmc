@@ -372,7 +372,6 @@ void bmct::report_trace(
   switch(res)
   {
   case smt_convt::P_UNSATISFIABLE:
-    report_result(res);
     if(is && term)
     {
     }
@@ -391,7 +390,6 @@ void bmct::report_trace(
     {
       error_trace(runtime_solver, eq);
     }
-    report_result(res);
     break;
 
   default:
@@ -465,6 +463,7 @@ smt_convt::resultt bmct::start_bmc()
   boost::shared_ptr<symex_target_equationt> eq;
   smt_convt::resultt res = run(eq);
   report_trace(res, eq);
+  report_result(res);
   return res;
 }
 
