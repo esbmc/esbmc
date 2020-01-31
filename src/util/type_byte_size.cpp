@@ -120,18 +120,16 @@ BigInt type_byte_size(const type2tc &type)
 {
   switch(type->type_id)
   {
+  // This is a gcc extension.
+  // https://gcc.gnu.org/onlinedocs/gcc-4.8.0/gcc/Pointer-Arith.html
   case type2t::bool_id:
-    return 1;
   case type2t::empty_id:
-    std::cerr << "Void type id in type_byte_size" << std::endl;
-    abort();
+    return 1;
+  case type2t::code_id:
+    return 1;
   case type2t::symbol_id:
     std::cerr << "Symbolic type id in type_byte_size" << std::endl;
     type->dump();
-    abort();
-  case type2t::code_id:
-    // In C++, methods are struct fields.
-    return 0;
     abort();
   case type2t::cpp_name_id:
     std::cerr << "C++ symbolic type id in type_byte_size" << std::endl;
