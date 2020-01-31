@@ -3,7 +3,8 @@
 
 #include <solvers/smt/smt_sort.h>
 
-#define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
+#define is_tuple_ast_type(x)                                                   \
+  (is_structure_type(x) || is_pointer_type(x) || is_code_type(x))
 
 inline bool is_tuple_array_ast_type(const type2tc &t)
 {
