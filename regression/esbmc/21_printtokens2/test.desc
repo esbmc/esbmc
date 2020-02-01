@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --partial-loops --unwind 1 --32
 ^VERIFICATION FAILED$
