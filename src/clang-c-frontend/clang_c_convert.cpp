@@ -1037,6 +1037,7 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "double";
     break;
 
+  case clang::BuiltinType::Float128:
   case clang::BuiltinType::LongDouble:
     new_type = long_double_type();
     c_type = "long_double";
