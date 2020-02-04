@@ -194,7 +194,24 @@ protected:
    *  example (ideally they should be intrinsics...), but also printf and
    *  variable declarations are handled here.
    */
-  void symex_other();
+  void symex_other(const expr2tc code);
+
+  /**
+   *  Interpret an DECL instruction.
+   *  It creates renamed symbols. These names are all the names of local
+   *  variables, renamed to level 1. We also bump up the level 1 renaming
+   *  number, effectively making all the local variables new instances of those
+   *  variables (which is what entering a function and declaring variables
+   *  does).
+   */
+  void symex_decl(const expr2tc code);
+
+  /**
+   *  Interpret an DEAD instruction.
+   *  It calls free on alloca'd symbols and erase the symbols from the
+   *  propagation map.
+   */
+  void symex_dead(const expr2tc code);
 
   /**
    *  Interpret an ASSUME instruction.
@@ -349,10 +366,7 @@ protected:
 
   /**
    *  Fill goto_symex_statet::framet with renamed local variable names.
-   *  These names are all the names of local variables, renamed to level 1.
-   *  We also bump up the level 1 renaming number, effectively making all the
-   *  local variables new instances of those variables (which is what entering
-   *  a function and declaring variables does).
+
    *  @param goto_function The function we're working upon.
    */
   void locality(const goto_functiont &goto_function);
