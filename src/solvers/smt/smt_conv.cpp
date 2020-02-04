@@ -2091,8 +2091,8 @@ expr2tc smt_convt::get(const expr2tc &expr)
   case expr2t::address_of_id:
     return res;
 
+  case expr2t::same_object_id:
   case expr2t::symbol_id:
-    // Query symbol value from the solver
     return get_by_type(res);
 
   default:
