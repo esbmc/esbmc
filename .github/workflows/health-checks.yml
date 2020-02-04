@@ -31,6 +31,10 @@ jobs:
       run: cd build && ninja lrucachetest
     - name: Build BigInt Tests
       run: cd build && ninja biginttest && ninja bigintfuzz
+    - name: Build Utils Tests
+      run: cd build && ninja lrucachetest
+    - name: Build Cache Tests
+      run: cd build && ninja ssa_step_algorithm_test
     - name: Run tests
       run: cd build && ninja test
 

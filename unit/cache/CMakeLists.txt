@@ -1,0 +1,4 @@
+add_executable(ssa_step_algorithm_test ssa_step_algorithm.test.cpp)
+target_compile_definitions(ssa_step_algorithm_test PRIVATE "BOOST_TEST_DYN_LINK=1")
+target_link_libraries(ssa_step_algorithm_test ansicfrontend cppfrontend clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs ${Boost_LIBRARIES})
+add_test(NAME SsaStepAlgorithm COMMAND ssa_step_algorithm_test)
