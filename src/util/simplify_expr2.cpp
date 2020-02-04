@@ -2083,31 +2083,30 @@ expr2tc if2t::do_simplify() const
     return simp;
   }
 
-  if(is_constant_expr(cond))
-  {
-    // Cast towards a bool type.
-    expr2tc cast = cond;
-    ::simplify(cast);
+  if(true_value == false_value)
+    return typecast_check_return(type, true_value);
 
-    if(is_true(cast))
+  expr2tc simp_cond = cond;
+  ::simplify(simp_cond);
+
+  if(is_constant_expr(simp_cond))
+  {
+    if(is_true(simp_cond))
       return typecast_check_return(type, true_value);
 
-    if(is_false(cast))
+    if(is_false(simp_cond))
       return typecast_check_return(type, false_value);
   }
 
   if(
-    is_true(true_value) && (gen_one(true_value->type) == true_value) &&
-    is_false(false_value))
+    is_constant_number(true_value) && is_true(true_value) &&
+    (gen_one(true_value->type) == true_value) && is_false(false_value))
     return typecast_check_return(type, cond);
 
   if(
-    is_false(true_value) && (gen_one(false_value->type) == false_value) &&
-    is_true(false_value))
+    is_constant_number(false_value) && is_false(true_value) &&
+    (gen_one(false_value->type) == false_value) && is_true(false_value))
     return typecast_check_return(type, not2tc(cond));
-
-  if(true_value == false_value)
-    return typecast_check_return(type, true_value);
 
   return expr2tc();
 }
