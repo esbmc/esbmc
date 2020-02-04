@@ -2069,6 +2069,8 @@ expr2tc smt_convt::get(const expr2tc &expr)
         to_constant_int2t(idx).value.to_uint64(),
         get_flattened_array_subtype(res->type));
     }
+
+    // TODO: Give up, then what?
     break;
   }
 
@@ -2095,8 +2097,32 @@ expr2tc smt_convt::get(const expr2tc &expr)
   case expr2t::symbol_id:
     return get_by_type(res);
 
-  default:
-    break;
+  case expr2t::if_id:
+  {
+    // Special case for ternary if, for cases when we are updating the member
+    // of a struct (SSA indexes are omitted):
+    //
+    // d2 == (!(SAME-OBJECT(pd, &d1)) ? (d2 WITH [a:=0]) : d2)
+    //
+    // i.e., update the field 'a' of 'd2', if a given condition holds,
+    // otherwise, do nothing.
+
+    // The problem of relying on the simplification code is because the type of
+    // the ternary is a struct, and if the condition holds, we extract the
+    // update value from the WITH expression, in this case '0', and cast it to
+    // struct. So now we try to query the solver for which side is used and
+    // we return it, without casting to the ternary if type.
+    if2t i = to_if2t(res);
+
+    expr2tc c = get(i.cond);
+    if(is_true(c))
+      return get(i.true_value);
+
+    if(is_false(c))
+      return get(i.false_value);
+  }
+
+  default:;
   }
 
   if(is_array_type(expr->type))
