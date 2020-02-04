@@ -403,6 +403,7 @@ inline expr2tc gen_one(const type2tc &type)
     break;
   }
 
+  std::cerr << "Can't generate one for type " << get_type_id(type) << '\n';
   abort();
 }
 
