@@ -63,14 +63,9 @@ unsigned goto_symext::argument_assignments(
   // iterates over the operands
   std::vector<expr2tc>::const_iterator it1 = arguments.begin();
 
-  // these are the types of the arguments
-  const std::vector<type2tc> &argument_types = function_type.arguments;
-
   // iterates over the types of the arguments
-  unsigned int name_idx = 0;
-  for(std::vector<type2tc>::const_iterator it2 = argument_types.begin();
-      it2 != argument_types.end();
-      it2++, name_idx++)
+  for(unsigned int name_idx = 0; name_idx < function_type.arguments.size();
+      ++name_idx)
   {
     // if you run out of actual arguments there was a mismatch
     if(it1 == arguments.end())
@@ -79,16 +74,13 @@ unsigned goto_symext::argument_assignments(
       abort();
     }
 
-    const type2tc &arg_type = *it2;
     const irep_idt &identifier = function_type.argument_names[name_idx];
-
     if(identifier == "")
     {
       std::cerr << "no identifier for function argument" << std::endl;
       abort();
     }
 
-    symbol2tc lhs(function_type.arguments[name_idx], identifier);
     if(is_nil_expr(*it1))
     {
       ; // XXX jmorse, is this valid?
@@ -98,6 +90,7 @@ unsigned goto_symext::argument_assignments(
       expr2tc rhs = *it1;
 
       // it should be the same exact type
+      auto const &arg_type = function_type.arguments[name_idx];
       if(!base_type_eq(arg_type, rhs->type, ns))
       {
         const type2tc &f_arg_type = arg_type;
@@ -112,15 +105,17 @@ unsigned goto_symext::argument_assignments(
         }
         else
         {
-          std::string error = "function call: argument \"" +
-                              id2string(identifier) + "\" type mismatch: got " +
-                              get_type_id((*it1)->type) + ", expected " +
-                              get_type_id(arg_type);
-          std::cerr << error << std::endl;
+          std::cerr << "function call: argument \"" << id2string(identifier)
+                    << "\" type mismatch: got " << get_type_id((*it1)->type)
+                    << ", expected " << get_type_id(arg_type) << '\n';
           abort();
         }
       }
 
+      // Assign value to function argument
+      symbol2tc lhs(function_type.arguments[name_idx], identifier);
+
+      // TODO: Should we hide it (true means hidden)?
       symex_assign(code_assign2tc(lhs, rhs), true);
     }
 
