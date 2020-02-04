@@ -744,7 +744,7 @@ void goto_convertt::do_function_call_symbol(
 
     do_cpp_new(lhs, new_function, dest);
   }
-  else if(identifier == "builtin_va_arg")
+  else if(base_name == "builtin_va_arg")
   {
     // This does two things.
     // 1) Move list pointer to next argument.
@@ -755,7 +755,7 @@ void goto_convertt::do_function_call_symbol(
     if(arguments.size() != 1)
     {
       err_location(function);
-      throw "`" + id2string(identifier) + "' expected to have one argument";
+      throw "`" + id2string(base_name) + "' expected to have one argument";
     }
 
     exprt list_arg = make_va_list(arguments[0]);
@@ -783,12 +783,12 @@ void goto_convertt::do_function_call_symbol(
       t2->location = function.location();
     }
   }
-  else if(identifier == "__builtin_va_copy")
+  else if(base_name == "__builtin_va_copy")
   {
     if(arguments.size() != 2)
     {
       err_location(function);
-      throw "`" + id2string(identifier) + "' expected to have two arguments";
+      throw "`" + id2string(base_name) + "' expected to have two arguments";
     }
 
     exprt dest_expr = make_va_list(arguments[0]);
@@ -805,14 +805,14 @@ void goto_convertt::do_function_call_symbol(
     migrate_expr(assign_expr, t->code);
     t->location = function.location();
   }
-  else if(identifier == "__builtin_va_start")
+  else if(base_name == "__builtin_va_start")
   {
     // Set the list argument to be the address of the
     // parameter argument.
     if(arguments.size() != 2)
     {
       err_location(function);
-      throw "`" + id2string(identifier) + "' expected to have two arguments";
+      throw "`" + id2string(base_name) + "' expected to have two arguments";
     }
 
     exprt dest_expr = make_va_list(arguments[0]);
@@ -830,13 +830,13 @@ void goto_convertt::do_function_call_symbol(
     migrate_expr(assign_expr, t->code);
     t->location = function.location();
   }
-  else if(identifier == "__builtin_va_end")
+  else if(base_name == "__builtin_va_end")
   {
     // Invalidates the argument. We do so by setting it to NULL.
     if(arguments.size() != 1)
     {
       err_location(function);
-      throw "`" + id2string(identifier) + "' expected to have one argument";
+      throw "`" + id2string(base_name) + "' expected to have one argument";
     }
 
     exprt dest_expr = make_va_list(arguments[0]);
