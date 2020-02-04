@@ -240,10 +240,20 @@ void goto_symext::symex_step(reachability_treet &art)
   break;
 
   case DECL:
-  case OTHER:
+    if(!cur_state->guard.is_false())
+      symex_decl(instruction.code);
+    cur_state->source.pc++;
+    break;
+
   case DEAD:
     if(!cur_state->guard.is_false())
-      symex_other();
+      symex_dead(instruction.code);
+    cur_state->source.pc++;
+    break;
+
+  case OTHER:
+    if(!cur_state->guard.is_false())
+      symex_other(instruction.code);
     cur_state->source.pc++;
     break;
 
