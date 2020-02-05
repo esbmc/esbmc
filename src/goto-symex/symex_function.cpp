@@ -112,9 +112,11 @@ unsigned goto_symext::argument_assignments(
         }
       }
 
-      // Assign value to function argument
+      // 'Declare' the argument before assigning a value to it
       symbol2tc lhs(function_type.arguments[name_idx], identifier);
+      symex_decl(code_decl2tc(lhs->type, identifier));
 
+      // Assign value to function argument
       // TODO: Should we hide it (true means hidden)?
       symex_assign(code_assign2tc(lhs, rhs), true);
     }
@@ -135,12 +137,12 @@ unsigned goto_symext::argument_assignments(
     va_index = va_count;
     for(; it1 != arguments.end(); it1++, va_count++)
     {
-      irep_idt id =
+      irep_idt identifier =
         id2string(function_identifier) + "::va_arg" + std::to_string(va_count);
 
       // add to symbol table
       symbolt symbol;
-      symbol.id = id;
+      symbol.id = identifier;
       symbol.name = "va_arg" + std::to_string(va_count);
       symbol.type = migrate_type_back((*it1)->type);
 
@@ -150,16 +152,15 @@ unsigned goto_symext::argument_assignments(
         abort();
       }
 
-      symbol2tc va_lhs(
-        (*it1)->type,
-        id,
-        symbol2t::level1,
-        0,
-        0,
-        cur_state->top().level1.thread_id,
-        0);
+      // 'Declare' the argument before assigning a value to it
+      symex_decl(code_decl2tc((*it1)->type, identifier));
 
-      symex_assign(code_assign2tc(va_lhs, *it1), true);
+      symbol2tc sym((*it1)->type, identifier);
+      cur_state->top().level1.get_ident_name(sym);
+
+      // Assign value to function argument
+      // TODO: Should we hide it (true means hidden)?
+      symex_assign(code_assign2tc(sym, *it1), true);
     }
   }
   else if(it1 != arguments.end())
@@ -281,9 +282,6 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 
   frame.calling_location = cur_state->source;
   frame.entry_guard = cur_state->guard;
-
-  // preserve locality of local variables
-  locality(goto_function);
 
   // assign arguments
   type2tc tmp_type;
@@ -556,28 +554,6 @@ void goto_symext::pop_frame()
 void goto_symext::symex_end_of_function()
 {
   pop_frame();
-}
-
-void goto_symext::locality(const goto_functiont &goto_function)
-{
-  std::set<irep_idt> local_identifiers;
-  get_local_identifiers(goto_function, local_identifiers);
-
-  statet::framet &frame = cur_state->top();
-
-  // For each local variable, set its frame number to frame_nr, ensuring all new
-  // references to it look up a new variable.
-  for(auto const &it : local_identifiers)
-  {
-    // Temporary, for symbol migration,
-    symbol2tc tmp_sym(get_empty_type(), it);
-
-    unsigned int &frame_nr = cur_state->variable_instance_nums[it];
-    frame.level1.rename(tmp_sym, ++frame_nr);
-    frame.level1.get_ident_name(tmp_sym);
-    frame.local_variables.insert(
-      renaming::level2t::name_record(to_symbol2t(tmp_sym)));
-  }
 }
 
 bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)

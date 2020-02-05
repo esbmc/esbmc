@@ -71,22 +71,23 @@ void goto_symext::symex_decl(const expr2tc code)
   // Generate dummy symbol as a vehicle for renaming.
   symbol2tc l1_sym(get_empty_type(), identifier);
 
-  cur_state->top().level1.get_ident_name(l1_sym);
-  symbol2t &l1_symbol = to_symbol2t(l1_sym);
-
   // increase the frame if we have seen this declaration before
-  while(cur_state->top().declaration_history.find(
-          renaming::level2t::name_record(l1_symbol)) !=
-        cur_state->top().declaration_history.end())
+  statet::framet &frame = cur_state->top();
+  do
   {
     unsigned &index = cur_state->variable_instance_nums[identifier];
-    cur_state->top().level1.rename(l1_sym, ++index);
-    l1_symbol.level1_num = index;
-  }
+    frame.level1.rename(l1_sym, ++index);
+    l1_sym->level1_num = index;
+  } while(frame.declaration_history.find(renaming::level2t::name_record(
+            to_symbol2t(l1_sym))) != frame.declaration_history.end());
 
-  renaming::level2t::name_record tmp_name(l1_symbol);
-  cur_state->top().declaration_history.insert(tmp_name);
-  cur_state->top().local_variables.insert(tmp_name);
+  // Rename it to the new name
+  cur_state->top().level1.get_ident_name(l1_sym);
+
+  // And record it
+  renaming::level2t::name_record l(to_symbol2t(l1_sym));
+  frame.declaration_history.insert(l);
+  frame.local_variables.insert(l);
 
   // seen it before?
   // it should get a fresh value
