@@ -721,14 +721,8 @@ void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
     type2tc symbol_type;
     migrate_type(s->type, symbol_type);
 
-    va_rhs = symbol2tc(
-      symbol_type,
-      s->id,
-      symbol2t::level1,
-      0,
-      0,
-      cur_state->top().level1.thread_id,
-      0);
+    va_rhs = symbol2tc(symbol_type, s->id);
+    cur_state->top().level1.get_ident_name(va_rhs);
 
     va_rhs = address_of2tc(symbol_type, va_rhs);
     va_rhs = typecast2tc(lhs->type, va_rhs);

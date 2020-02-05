@@ -365,13 +365,6 @@ protected:
     const std::vector<expr2tc> &arguments);
 
   /**
-   *  Fill goto_symex_statet::framet with renamed local variable names.
-
-   *  @param goto_function The function we're working upon.
-   */
-  void locality(const goto_functiont &goto_function);
-
-  /**
    *  Setup next function in a chain of func ptr calls.
    *  @see symex_function_call_deref
    *  @param first Whether this is the first func ptr invocation.
