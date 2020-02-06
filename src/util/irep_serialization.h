@@ -35,7 +35,6 @@ void write_string(std::ostream &out, const std::string &s);
 class irep_serializationt
 {
 private:
-
   /**
    * Helper class to generate and compare irep hashs
    */
@@ -169,7 +168,7 @@ public:
    */
   static unsigned read_long(std::istream &in);
 
-/**
+  /**
  * Read a dstring from a buffer
  * @param in
  * @return
