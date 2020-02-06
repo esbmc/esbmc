@@ -117,7 +117,7 @@ public:
    * initializes read_buffer with the char 0.
    * @param ic container which will hold the serialization.
    */
-  irep_serializationt(ireps_containert &ic) : ireps_container(ic)
+  explicit irep_serializationt(ireps_containert &ic) : ireps_container(ic)
   {
     read_buffer.resize(1, 0);
     clear();
