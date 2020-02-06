@@ -1,0 +1,4 @@
+add_executable(irep_serialization_test irep_serialization.test.cpp)
+target_compile_definitions(irep_serialization_test PRIVATE "BOOST_TEST_DYN_LINK=1")
+target_link_libraries(irep_serialization_test ansicfrontend cppfrontend clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs ${Boost_LIBRARIES})
+add_test(NAME IrepSerializationTest COMMAND irep_serialization_test)
