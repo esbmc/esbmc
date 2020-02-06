@@ -35,32 +35,6 @@ void write_string(std::ostream &out, const std::string &s);
 class irep_serializationt
 {
 private:
-  /**
-   * Helper class to convert values from different types.
-   */
-  struct ul_hash
-  {
-    /**
-     * Apply a *short* mask into a unsigned and return the new value
-     * @param l value to be converted into short
-     * @return l after the mask
-     */
-    unsigned short operator()(const unsigned long l) const
-    {
-      return (l & 0xFFFF);
-    }
-  };
-
-  /**
-   * Helper class to compare equality on values from different types
-   */
-  struct ul_eq
-  {
-    bool operator()(const unsigned long l, const unsigned long r) const
-    {
-      return (l == r);
-    }
-  };
 
   /**
    * Helper class to generate and compare irep hashs
