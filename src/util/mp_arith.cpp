@@ -286,7 +286,7 @@ BigInt rotate_left(const BigInt &a, const BigInt &b, std::size_t true_size)
   ullong_t number = a.to_ulong();
   ullong_t shift = b.to_ulong();
 
-  ullong_t revShift = true_size-shift;
+  ullong_t revShift = true_size - shift;
   const ullong_t filter = 1ULL << (true_size - 1);
   ullong_t result =
     ((number << shift) & filter) | ((number & filter) >> revShift);
