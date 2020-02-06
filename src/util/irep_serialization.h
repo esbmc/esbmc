@@ -14,20 +14,46 @@ Date: May 2007
 #include <map>
 #include <util/irep.h>
 
-void write_long(std::ostream &, unsigned);
-void write_string(std::ostream &, const std::string &);
+/**
+ * Sends a long to a output stream
+ * @param out output stream
+ * @param u long to be sent to output
+ */
+void write_long(std::ostream &out, unsigned u);
 
+/**
+ * Sends a string to a output stream
+ * @param out output stream
+ * @param s string to be sent to output
+ */
+void write_string(std::ostream &out, const std::string &s);
+
+/**
+ * Class used for irep serialization, containing methods to save/load for later
+ * usage.
+ */
 class irep_serializationt
 {
 private:
+  /**
+   * Helper class to convert values from different types.
+   */
   struct ul_hash
   {
+    /**
+     * Apply a *short* mask into a unsigned and return the new value
+     * @param l value to be converted into short
+     * @return l after the mask
+     */
     unsigned short operator()(const unsigned long l) const
     {
       return (l & 0xFFFF);
     }
   };
 
+  /**
+   * Helper class to compare equality on values from different types
+   */
   struct ul_eq
   {
     bool operator()(const unsigned long l, const unsigned long r) const
@@ -36,20 +62,44 @@ private:
     }
   };
 
+  /**
+   * Helper class to generate and compare irep hashs
+   */
   struct irep_full_hash
   {
+    /**
+     * Takes an irep and generates it's hash
+     * @param i irep to be hashed
+     * @return the hash value of i
+     */
     size_t operator()(const irept &i) const
     {
       return i.full_hash();
     }
+
+    /**
+     * Compares two irep using their hashes
+     * @param i1 first irep
+     * @param i2 second irep
+     * @return truth value for if i1 hash is lower than i2 hash
+     */
     bool operator()(const irept &i1, const irept &i2) const
     {
       return i1.full_hash() < i2.full_hash();
     }
   };
 
+  /**
+   * Helper class to compare two irep
+   */
   struct irep_content_eq
   {
+    /**
+     * Compares equality between two ireps
+     * @param l
+     * @param r
+     * @return boolean value representing if l and r are equal
+     */
     bool operator()(const irept &l, const irept &r) const
     {
       return full_eq(l, r);
@@ -57,6 +107,9 @@ private:
   };
 
 public:
+  /**
+   * Helper class to keep track of which ireps where read or wrote.
+   */
   class ireps_containert
   {
   public:
@@ -72,6 +125,9 @@ public:
     typedef std::vector<std::pair<bool, dstring>> string_rev_mapt;
     string_rev_mapt string_rev_map;
 
+    /**
+     * Removes entries from all dictionaries and vectors
+     */
     void clear()
     {
       ireps_on_write.clear();
@@ -81,32 +137,88 @@ public:
     }
   };
 
+  /**
+   * Constructor for serialization
+   *
+   * initializes read_buffer with the char 0.
+   * @param ic container which will hold the serialization.
+   */
   irep_serializationt(ireps_containert &ic) : ireps_container(ic)
   {
     read_buffer.resize(1, 0);
     clear();
   };
 
-  void reference_convert(std::istream &, irept &irep);
-  void reference_convert(const irept &irep, std::ostream &);
+  /**
+   * Checks if a reference was already read and then stores it in an irept
+   * reference
+   * @param in input containing the irep
+   * @param irep object where the irep will be stored
+   */
+  void reference_convert(std::istream &in, irept &irep);
 
-  irep_idt read_string_ref(std::istream &);
-  void write_string_ref(std::ostream &, const dstring &);
+  /**
+ * Checks if a reference was already written if yes, then stores it's id
+ * if not, then stores it's id alongside with irep
+ * @param irep irept to be stored
+ * @param out output stream
+ */
+  void reference_convert(const irept &irep, std::ostream &out);
 
+  /**
+   * Read a string reference from input stream and adds it into string_rev_map
+   * @param in input stream to be read
+   * @return a dstring with the input
+   */
+  irep_idt read_string_ref(std::istream &in);
+
+  /**
+   * Write an dstring reference into an output buffer and adds it to the
+   * string_map
+   * @param out output buffer
+   * @param s dstring to be wrote
+   */
+  void write_string_ref(std::ostream &out, const dstring &s);
+
+  /**
+   * Clear current container
+   */
   void clear()
   {
     ireps_container.clear();
   }
 
-  static unsigned read_long(std::istream &);
-  dstring read_string(std::istream &);
+  /**
+   * Reads an input as an 4 byte unsigned
+   * @param in input stream
+   * @return 4-byte unsigned with the value read
+   */
+  static unsigned read_long(std::istream &in);
+
+/**
+ * Read a dstring from a buffer
+ * @param in
+ * @return
+ */
+  dstring read_string(std::istream &in);
 
 private:
   ireps_containert &ireps_container;
   std::vector<char> read_buffer;
 
-  void write_irep(std::ostream &, const irept &irep);
-  void read_irep(std::istream &, irept &irep);
+  /**
+   * Writes an irep to an output stream
+   * @param out output stream
+   * @param irep to be serialized
+   */
+  void write_irep(std::ostream &out, const irept &irep);
+
+  /**
+   * Read an input stream and converts it to an irept
+   * @param in input stream to be read
+   * @param irep reference to be initizalized
+   */
+  void read_irep(std::istream &in, irept &irep);
 };
 
 #endif /*IREP_SERIALIZATION_H_*/
