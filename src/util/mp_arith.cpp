@@ -206,14 +206,12 @@ BigInt bitwise_xor(const BigInt &a, const BigInt &b)
   return bitwise(a, b, [](bool a, bool b) { return a != b; });
 }
 
-
 BigInt arith_left_shift(const BigInt &a, const BigInt &b, std::size_t true_size)
 {
   (a.is_long() && b.is_ulong());
   (b <= true_size || a == 0);
 
   ullong_t shift = b.to_ulong();
-
   llong_t result = a.to_long() << shift;
   llong_t mask =
     true_size < (sizeof(llong_t) * 8) ? (1LL << true_size) - 1 : -1;
@@ -274,6 +272,7 @@ BigInt rotate_right(const BigInt &a, const BigInt &b, std::size_t true_size)
   ullong_t shift = b.to_ulong();
 
   ullong_t revShift = true_size - shift;
+
   const ullong_t filter = 1ULL << (true_size - 1);
   ullong_t result = (number >> shift) | ((number << revShift) & filter);
   return result;
