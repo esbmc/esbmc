@@ -177,7 +177,6 @@ public:
 private:
   ireps_containert &ireps_container;
 
-
   /**
    * Writes an irep to an output stream
    * @param out output stream
