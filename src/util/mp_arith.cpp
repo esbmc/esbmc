@@ -14,6 +14,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/arith_tools.h>
 #include <util/mp_arith.h>
 
+typedef BigInt::ullong_t ullong_t;
+typedef BigInt::llong_t llong_t;
+
 BigInt operator>>(const BigInt &a, const BigInt &b)
 {
   BigInt power = ::power(2, b);
