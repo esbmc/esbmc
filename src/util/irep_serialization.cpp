@@ -143,6 +143,8 @@ dstring irep_serializationt::read_string(std::istream &in)
 {
   char c;
   unsigned i = 0;
+  std::vector<char> read_buffer;
+  read_buffer.resize(1, 0);
 
   while((c = in.get()) != 0)
   {

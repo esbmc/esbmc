@@ -118,7 +118,6 @@ public:
    */
   explicit irep_serializationt(ireps_containert &ic) : ireps_container(ic)
   {
-    read_buffer.resize(1, 0);
     clear();
   };
 
@@ -173,11 +172,11 @@ public:
  * @param in
  * @return
  */
-  dstring read_string(std::istream &in);
+  static dstring read_string(std::istream &in);
 
 private:
   ireps_containert &ireps_container;
-  std::vector<char> read_buffer;
+
 
   /**
    * Writes an irep to an output stream
