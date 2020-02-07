@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <iostream>
 #include <util/string_container.h>
+#include <boost/archive/detail/common_oarchive.hpp>
 
 class dstring final
 {
@@ -174,6 +175,14 @@ private:
   }
 
   unsigned no;
+
+  friend class boost::serialization::access;
+  // String container have to be serialized
+  template<class Archive>
+  void serialize(Archive &ar, const unsigned int version)
+  {
+    ar &no;
+  }
 };
 
 struct dstring_hash

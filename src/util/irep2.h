@@ -34,6 +34,8 @@
 #include <util/irep.h>
 #include <vector>
 
+#include <boost/archive/detail/common_oarchive.hpp>
+
 // Ahead of time: a list of all expressions and types, in a preprocessing
 // list, for enumerating later. Should avoid manually enumerating anywhere
 // else.
@@ -491,6 +493,15 @@ public:
   type_ids type_id;
 
   mutable size_t crc_val;
+
+private:
+  friend class boost::serialization::access;
+  template <class Archive>
+  void serialize(Archive &ar, const unsigned int version)
+  {
+    ar &type_id;
+    ar &crc_val;
+  }
 };
 
 /** Fetch identifying name for a type.
@@ -763,6 +774,15 @@ public:
   type2tc type;
 
   mutable size_t crc_val;
+
+private:
+  friend class boost::serialization::access;
+  template <class Archive>
+  void serialize(Archive &ar, const unsigned int version)
+  {
+    ar &type;
+    ar &expr_id;
+  }
 };
 
 inline bool is_nil_expr(const expr2tc &exp)

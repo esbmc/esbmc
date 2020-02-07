@@ -109,7 +109,7 @@ void irep_serializationt::reference_convert(
   write_irep(out, irep);
 }
 
-void write_long(std::ostream &out, unsigned u)
+void irep_serializationt::write_long(std::ostream &out, unsigned u)
 {
   out.put((u & 0xFF000000) >> 24);
   out.put((u & 0x00FF0000) >> 16);
@@ -127,7 +127,7 @@ unsigned irep_serializationt::read_long(std::istream &in)
   return res;
 }
 
-void write_string(std::ostream &out, const std::string &s)
+void irep_serializationt::write_string(std::ostream &out, const std::string &s)
 {
   for(char i : s)
   {

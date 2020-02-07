@@ -45,7 +45,7 @@ endif()
 include(DefineLibM)
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
-find_package(Boost REQUIRED COMPONENTS filesystem system date_time)
+find_package(Boost REQUIRED COMPONENTS filesystem system date_time serialization)
 include(FindLLVM)
 
 if(ENABLE_PYTHON)

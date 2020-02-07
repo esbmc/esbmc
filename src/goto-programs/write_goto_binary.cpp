@@ -20,14 +20,14 @@ bool write_goto_binary(
 {
   // header
   out << "GBF";
-  write_long(out, GOTO_BINARY_VERSION);
+  irep_serializationt::write_long(out, GOTO_BINARY_VERSION);
 
   irep_serializationt::ireps_containert irepc;
   irep_serializationt irepconverter(irepc);
   symbol_serializationt symbolconverter(irepc);
   goto_function_serializationt gfconverter(irepc);
 
-  write_long(out, lcontext.size());
+  irep_serializationt::write_long(out, lcontext.size());
 
   lcontext.foreach_operand([&symbolconverter, &out](const symbolt &s) {
     symbolconverter.convert(s, out);
@@ -38,14 +38,14 @@ bool write_goto_binary(
     if(it->second.body_available)
       cnt++;
 
-  write_long(out, cnt);
+  irep_serializationt::write_long(out, cnt);
 
   for(auto &it : functions.function_map)
   {
     if(it.second.body_available)
     {
       it.second.body.compute_location_numbers();
-      write_string(out, it.first.as_string());
+      irep_serializationt::write_string(out, it.first.as_string());
       gfconverter.convert(it.second, out);
     }
   }
