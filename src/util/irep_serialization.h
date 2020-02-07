@@ -13,13 +13,16 @@ Date: May 2007
 
 #include <map>
 #include <util/irep2.h>
+<<<<<<< HEAD
 #include "irep2_type.h"
+=======
+>>>>>>> write_long and write_string now belongs to irep_serializationt
 
-/**
+  /**
  * Class used for irep serialization, containing methods to save/load for later
  * usage.
  */
-class irep_serializationt
+  class irep_serializationt
 {
 private:
   /**
@@ -153,34 +156,6 @@ public:
  */
   static void write_string(std::ostream &out, const std::string &s);
 
-  /**
-   * Since the irep2 does not inherit for a common type an union type will be
-   * used
-   */
-  union irep2tc {
-    std::unique_ptr<type2tc> t;
-    std::unique_ptr<expr2tc> e;
-  };
-  struct irep2_unserialization
-  {
-    bool is_expr;
-    union irep2tc c;
-  };
-  /**
-   * Writes an irep2 to an output stream
-   * @param out output stream
-   * @param irep2 to be serialized
-   */
-  template <class T>
-  static void write_irep2(std::ostream &out, const T &irep2);
-
-  /**
-   * Read an input stream and converts it to an irept
-   * @param in input stream to be read
-   * @param irep reference to be initizalized
-   */
-  static void read_irep(std::istream &in, irept &irep);
-
 private:
   ireps_containert &ireps_container;
 
@@ -196,7 +171,23 @@ private:
    * @param in input stream to be read
    * @param irep reference to be initizalized
    */
-  void read_irep_helper(std::istream &in, irept &irep);
+  void read_irep(std::istream &in, irept &irep);
+
+  /**
+   * Writes an irep to an output stream
+   * @param out output stream
+   * @param irep to be serialized
+   */
+  void write_irep2(std::ostream &out, const type2tc &irep);
+
+  void write_irep2(std::ostream &out, const expr2tc &irep);
+
+  /**
+   * Read an input stream and converts it to an irept
+   * @param in input stream to be read
+   * @param irep reference to be initialized
+   */
+  void read_irep2(std::istream &in, type2tc &irep);
 };
 
 #endif /*IREP_SERIALIZATION_H_*/
