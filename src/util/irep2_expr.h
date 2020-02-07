@@ -1540,6 +1540,7 @@ public:
   long as_long() const;
 
   static std::string field_names[esbmct::num_type_fields];
+  //
 };
 
 /** Constant fixedbv class. Records a fixed-width number in what I assume
@@ -1564,6 +1565,7 @@ public:
   constant_fixedbv2t(const constant_fixedbv2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
+  //
 };
 
 /** Constant floatbv class. Records a floating-point number,
@@ -2703,6 +2705,7 @@ public:
   byte_extract2t(const byte_extract2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
+  //
 };
 
 /** Update byte. Takes a data object and updates the value of a particular

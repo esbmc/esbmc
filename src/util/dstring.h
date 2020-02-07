@@ -178,7 +178,7 @@ private:
 
   friend class boost::serialization::access;
   // String container have to be serialized
-  template<class Archive>
+  template <class Archive>
   void serialize(Archive &ar, const unsigned int version)
   {
     ar &no;

@@ -1,4 +1,4 @@
-add_library(util_esbmc irep2.cpp
+add_library(util_esbmc irep2.cpp irep_serialization.cpp
     arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp
     expr_util.cpp i2string.cpp location.cpp message.cpp
     language_file.cpp mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp
@@ -8,7 +8,7 @@ add_library(util_esbmc irep2.cpp
     simplify_utils.cpp string2array.cpp time_stopping.cpp symbol.cpp
     type_eq.cpp guard.cpp array_name.cpp message_stream.cpp union_find.cpp
     xml.cpp xml_irep.cpp std_types.cpp std_code.cpp format_constant.cpp
-    irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp
+     symbol_serialization.cpp fixedbv.cpp
     signal_catcher.cpp migrate.cpp show_symbol_table.cpp
     thread.cpp crypto_hash.cpp type_byte_size.cpp
     string_constant.cpp c_types.cpp ieee_float.cpp c_qualifiers.cpp
