@@ -18,7 +18,7 @@ void string2array(const exprt &src, exprt &dest)
 
   BigInt str_size;
   to_integer(to_array_type(src.type()).size(), str_size);
-  unsigned int string_size = str_size.to_uint64();
+  unsigned int string_size = str_size.to_ulong();
 
   const typet &char_type = src.type().subtype();
   bool char_is_unsigned = char_type.is_unsignedbv();

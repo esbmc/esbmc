@@ -1263,7 +1263,7 @@ int esbmc_parseoptionst::do_inductive_step(
 
   if(
     strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) <
-    k_step.to_uint64())
+    k_step.to_ulong())
     return true;
 
   opts.set_option("base-case", false);

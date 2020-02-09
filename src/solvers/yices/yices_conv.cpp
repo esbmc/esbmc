@@ -665,7 +665,7 @@ smt_astt yices_convt::mk_isint(smt_astt a)
 
 smt_astt yices_convt::mk_smt_int(const BigInt &theint)
 {
-  term_t term = yices_int64(theint.to_int64());
+  term_t term = yices_int64(theint.to_long());
   smt_sortt s = mk_int_sort();
   return new_ast(term, s);
 }
@@ -680,7 +680,7 @@ smt_astt yices_convt::mk_smt_real(const std::string &str)
 smt_astt yices_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
-  term_t term = yices_bvconst_uint64(w, theint.to_int64());
+  term_t term = yices_bvconst_uint64(w, theint.to_long());
   return new_ast(term, s);
 }
 
@@ -1032,8 +1032,8 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
     smt_astt offset =
       new_ast(yices_select(2, to_solver_smt_ast<yices_smt_ast>(sym)->a), s2);
 
-    uint64_t num = get_bv(object).to_uint64();
-    uint64_t offs = get_bv(offset).to_uint64();
+    uint64_t num = get_bv(object).to_ulong();
+    uint64_t offs = get_bv(offset).to_ulong();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, expr->type);
   }

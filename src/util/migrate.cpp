@@ -690,7 +690,7 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
 
     // Iterate over each field and flatten to bytes
     const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
-    for(unsigned long i = 0; i < intref.value.to_uint64(); i++)
+    for(unsigned long i = 0; i < intref.value.to_ulong(); i++)
     {
       index2tc idx(arraytype.subtype, new_expr, gen_ulong(i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
@@ -721,7 +721,7 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     typecast2tc cast(byteptr, addrof);
 
     // Produce N bytes
-    for(unsigned long i = 0; i < size.to_uint64(); i++)
+    for(unsigned long i = 0; i < size.to_ulong(); i++)
     {
       index2tc idx(get_uint8_type(), cast, gen_ulong(i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
@@ -733,7 +733,7 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
 
     bool is_big_endian =
       config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
-    for(unsigned long i = 0; i < size.to_uint64(); i++)
+    for(unsigned long i = 0; i < size.to_ulong(); i++)
     {
       byte_extract2tc ext(
         get_uint8_type(), new_expr, gen_ulong(i), is_big_endian);
@@ -765,7 +765,7 @@ static expr2tc flatten_union(const exprt &expr)
   // Potentially extend this array further if this literal is smaller than
   // the overall size of the union.
   expr2tc abyte = gen_zero(get_uint8_type());
-  while(byte_array.size() < full_size.to_uint64())
+  while(byte_array.size() < full_size.to_ulong())
     byte_array.push_back(abyte);
 
   expr2tc size = gen_ulong(byte_array.size());

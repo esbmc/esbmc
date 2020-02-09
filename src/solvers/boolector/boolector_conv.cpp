@@ -654,7 +654,7 @@ expr2tc boolector_convt::get_array_elem(
     for(uint32_t i = 0; i < size; i++)
     {
       auto idx = string2integer(indicies[i], 2);
-      if(idx.to_uint64() == index)
+      if(idx.to_ulong() == index)
       {
         val = string2integer(values[i], 2);
         break;

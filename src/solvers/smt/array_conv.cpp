@@ -496,7 +496,7 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
       continue;
 
     const constant_int2t &intval = to_constant_int2t(e2);
-    if(intval.value.to_uint64() == index)
+    if(intval.value.to_ulong() == index)
       break;
   }
 

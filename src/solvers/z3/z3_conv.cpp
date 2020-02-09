@@ -804,9 +804,9 @@ smt_astt z3_convt::mk_smt_int(const BigInt &theint)
 {
   smt_sortt s = mk_int_sort();
   if(theint.is_negative())
-    return new_ast(z3_ctx.int_val(theint.to_int64()), s);
+    return new_ast(z3_ctx.int_val(theint.to_long()), s);
 
-  return new_ast(z3_ctx.int_val(theint.to_uint64()), s);
+  return new_ast(z3_ctx.int_val(theint.to_ulong()), s);
 }
 
 smt_astt z3_convt::mk_smt_real(const std::string &str)
@@ -820,9 +820,9 @@ smt_astt z3_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
   std::size_t w = s->get_data_width();
 
   if(theint.is_negative())
-    return new_ast(z3_ctx.bv_val(theint.to_int64(), w), s);
+    return new_ast(z3_ctx.bv_val(theint.to_long(), w), s);
 
-  return new_ast(z3_ctx.bv_val(theint.to_uint64(), w), s);
+  return new_ast(z3_ctx.bv_val(theint.to_ulong(), w), s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
@@ -1111,8 +1111,8 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
       convert_sort(strct.members[1]));
 
-    uint64_t num = get_bv(object).to_uint64();
-    uint64_t offs = get_bv(offset).to_uint64();
+    uint64_t num = get_bv(object).to_ulong();
+    uint64_t offs = get_bv(offset).to_ulong();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, expr->type);
   }

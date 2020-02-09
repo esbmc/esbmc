@@ -520,7 +520,7 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
     // Instead, create a byte array, all unions are now reduced to byte arrays.
     BigInt size = type_byte_size(out_type);
     type2tc array_type(
-      new array_type2t(get_uint8_type(), gen_ulong(size.to_uint64()), false));
+      new array_type2t(get_uint8_type(), gen_ulong(size.to_ulong()), false));
     the_type = array_type;
   }
   else
@@ -1368,7 +1368,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   std::vector<expr2tc> fields;
   assert(is_struct_type(type));
   const struct_type2t &structtype = to_struct_type(type);
-  uint64_t struct_offset = intref.value.to_uint64();
+  uint64_t struct_offset = intref.value.to_ulong();
   for(auto const &it : structtype.members)
   {
     const type2tc &target_type = it;
@@ -1376,7 +1376,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
     build_reference_rec(
       target, gen_ulong(struct_offset), target_type, guard, mode);
     fields.push_back(target);
-    struct_offset += type_byte_size(target_type).to_uint64();
+    struct_offset += type_byte_size(target_type).to_ulong();
   }
 
   // We now have a vector of fields reconstructed from the byte array
@@ -1635,7 +1635,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       array_offset = add2tc(
         array_offset->type,
         array_offset,
-        gen_ulong(type_byte_size(target_type).to_uint64()));
+        gen_ulong(type_byte_size(target_type).to_ulong()));
     }
 
     // We now have a vector of fields reconstructed from the byte array

@@ -1277,8 +1277,8 @@ static expr2tc do_bit_munge_operation(
     return expr2tc();
 
   // Dump will zero-prefix and right align the output number.
-  int64_t val1 = int1.value.to_int64();
-  int64_t val2 = int2.value.to_int64();
+  int64_t val1 = int1.value.to_long();
+  int64_t val2 = int2.value.to_long();
 
   if(int1.value.is_negative())
   {
@@ -1463,7 +1463,7 @@ expr2tc typecast2t::do_simplify() const
         ieee_floatt fpbv;
 
         BigInt rm_value = to_constant_int2t(rounding_mode).value;
-        fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+        fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_long());
 
         fpbv.from_expr(to_constant_floatbv2t(simp).value.to_expr());
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
@@ -1508,7 +1508,7 @@ expr2tc typecast2t::do_simplify() const
         ieee_floatt fpbv;
 
         BigInt rm_value = to_constant_int2t(rounding_mode).value;
-        fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+        fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_long());
 
         fpbv.spec = to_floatbv_type(migrate_type_back(type));
         fpbv.from_integer(to_constant_int2t(simp).value);
@@ -1545,7 +1545,7 @@ expr2tc typecast2t::do_simplify() const
       ieee_floatt fpbv(to_constant_floatbv2t(simp).value);
 
       BigInt rm_value = to_constant_int2t(rounding_mode).value;
-      fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+      fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_long());
 
       if(is_bv_type(type))
       {
@@ -2208,7 +2208,7 @@ expr2tc extract2t::do_simplify() const
   assert(theint.get_len() <= 2);
 
   // Take the value, mask and shift.
-  uint64_t theval = theint.to_uint64();
+  uint64_t theval = theint.to_ulong();
   theval >>= lower;
   theval &= (2 << upper) - 1;
   bool isneg = (1 << (upper)) & theval;

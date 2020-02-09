@@ -148,9 +148,9 @@ expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
       return expr2tc();
 
     uint64_t num =
-      to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
+      to_constant_int2t(outstruct->datatype_members[0]).value.to_ulong();
     uint64_t offs =
-      to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
+      to_constant_int2t(outstruct->datatype_members[1]).value.to_ulong();
     pointer_logict::pointert p(num, BigInt(offs));
     return ctx->pointer_logic.back().pointer_expr(p, expr->type);
   }

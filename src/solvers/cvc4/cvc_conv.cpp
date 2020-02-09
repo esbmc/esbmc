@@ -981,7 +981,7 @@ smt_astt cvc_convt::mk_smt_int(const BigInt &theint)
   // TODO: Is this correct? CVC4 doesn't have any call for
   // em.mkConst(CVC4::Integer(...));
   smt_sortt s = mk_int_sort();
-  CVC4::Expr e = em.mkConst(CVC4::Rational(theint.to_int64()));
+  CVC4::Expr e = em.mkConst(CVC4::Rational(theint.to_long()));
   return new_ast(e, s);
 }
 
@@ -1058,7 +1058,7 @@ smt_astt cvc_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv = CVC4::BitVector(w, (unsigned long int)theint.to_int64());
+  CVC4::BitVector bv = CVC4::BitVector(w, (unsigned long int)theint.to_long());
   CVC4::Expr e = em.mkConst(bv);
   return new_ast(e, s);
 }

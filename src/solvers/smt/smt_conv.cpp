@@ -1466,7 +1466,7 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
   if(is_constant_int2t(expr))
   {
     ieee_floatt::rounding_modet rm = static_cast<ieee_floatt::rounding_modet>(
-      to_constant_int2t(expr).value.to_int64());
+      to_constant_int2t(expr).value.to_long());
     return fp_api->mk_smt_fpbv_rm(rm);
   }
 
@@ -2010,7 +2010,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
       // Retrieve the element
       res = array_api->get_array_elem(
         array,
-        to_constant_int2t(idx).value.to_uint64(),
+        to_constant_int2t(idx).value.to_ulong(),
         get_flattened_array_subtype(res->type));
     }
     break;
@@ -2240,7 +2240,7 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
       const BigInt &size = to_constant_int2t(arrtype.array_size).value;
 
       std::vector<expr2tc> new_contents;
-      for(uint64_t i = 0; i < size.to_uint64(); i++)
+      for(uint64_t i = 0; i < size.to_ulong(); i++)
         new_contents.insert(
           new_contents.end(),
           constarray.datatype_members.begin(),

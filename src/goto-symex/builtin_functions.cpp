@@ -799,7 +799,7 @@ void goto_symext::intrinsic_memset(
     int64_t tmpsize;
     try
     {
-      tmpsize = type_byte_size(item.object->type).to_int64();
+      tmpsize = type_byte_size(item.object->type).to_long();
     }
     catch(array_type2t::dyn_sized_array_excp *e)
     {
@@ -813,13 +813,13 @@ void goto_symext::intrinsic_memset(
     if(
       is_constant_int2t(offs) && to_constant_int2t(offs).value == 0 &&
       is_constant_int2t(size) &&
-      to_constant_int2t(size).value.to_int64() == tmpsize)
+      to_constant_int2t(size).value.to_long() == tmpsize)
     {
       continue;
     }
     else if(
       !is_constant_int2t(offs) && is_constant_int2t(size) &&
-      to_constant_int2t(size).value.to_int64() == tmpsize)
+      to_constant_int2t(size).value.to_long() == tmpsize)
     {
       continue;
     }
@@ -830,7 +830,7 @@ void goto_symext::intrinsic_memset(
     // the C implementation.
     if(is_struct_type(item.object->type) && is_constant_int2t(size))
     {
-      uint64_t sz = to_constant_int2t(size).value.to_uint64();
+      uint64_t sz = to_constant_int2t(size).value.to_ulong();
       ref_types.insert(std::make_pair(
         item.object->type, std::list<std::pair<type2tc, unsigned int>>()));
 
@@ -843,11 +843,11 @@ void goto_symext::intrinsic_memset(
         for(const auto &elem : sref.members)
         {
           // Is this this field?
-          uint64_t fieldsize = type_byte_size(elem).to_uint64();
+          uint64_t fieldsize = type_byte_size(elem).to_ulong();
           if(fieldsize == sz)
           {
             unsigned int new_offs = offs;
-            new_offs += member_offset(strct, sref.member_names[i]).to_uint64();
+            new_offs += member_offset(strct, sref.member_names[i]).to_ulong();
             ref_types[item.object->type].push_back(
               std::make_pair(elem, new_offs));
             retval = true;
@@ -857,7 +857,7 @@ void goto_symext::intrinsic_memset(
           if(is_struct_type(elem))
           {
             unsigned int new_offs = offs;
-            new_offs += member_offset(strct, sref.member_names[i]).to_uint64();
+            new_offs += member_offset(strct, sref.member_names[i]).to_ulong();
             if(right_sized_field(elem, new_offs))
               retval = true;
           }
@@ -878,7 +878,7 @@ void goto_symext::intrinsic_memset(
 
   if(can_construct)
   {
-    //uint64_t set_sz = to_constant_int2t(size).value.to_uint64();
+    //uint64_t set_sz = to_constant_int2t(size).value.to_ulong();
 
     for(const auto &item : internal_deref_items)
     {
@@ -890,7 +890,7 @@ void goto_symext::intrinsic_memset(
       int64_t tmpsize;
       try
       {
-        tmpsize = type_byte_size(item.object->type).to_int64();
+        tmpsize = type_byte_size(item.object->type).to_long();
       }
       catch(array_type2t::dyn_sized_array_excp *e)
       {
@@ -907,7 +907,7 @@ void goto_symext::intrinsic_memset(
       }
       else if(
         !is_constant_int2t(offs) && is_constant_int2t(size) &&
-        to_constant_int2t(size).value.to_int64() == tmpsize)
+        to_constant_int2t(size).value.to_long() == tmpsize)
       {
         // It's a memset where the size is such that the only valid offset is
         // zero.

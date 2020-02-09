@@ -201,9 +201,9 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
       return expr2tc();
 
     uint64_t num =
-      to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
+      to_constant_int2t(outstruct->datatype_members[0]).value.to_ulong();
     uint64_t offs =
-      to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
+      to_constant_int2t(outstruct->datatype_members[1]).value.to_ulong();
     pointer_logict::pointert p(num, BigInt(offs));
     return ctx->pointer_logic.back().pointer_expr(
       p, type2tc(new pointer_type2t(get_empty_type())));
