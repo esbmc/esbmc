@@ -98,10 +98,7 @@ bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
   for(auto it = state.call_stack.rbegin(); it != state.call_stack.rend(); it++)
   {
     // Get the last l1 renamed symbol
-    expr2tc l1_sym = sym;
-    it->level1.get_ident_name(l1_sym);
-    auto const &name = renaming::level2t::name_record(to_symbol2t(l1_sym));
-
+    auto const &name = renaming::level2t::name_record(to_symbol2t(sym));
     auto const &local_vars = it->local_variables;
     if(local_vars.find(name) != local_vars.end())
       return true;
