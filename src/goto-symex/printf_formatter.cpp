@@ -136,6 +136,7 @@ void printf_formattert::process_format(std::ostream &out)
   }
   break;
 
+  case 'i':
   case 'd':
     if(next_operand == operands.end())
       break;
@@ -158,6 +159,12 @@ void printf_formattert::process_format(std::ostream &out)
     if(next_operand == operands.end())
       break;
     out << format_constant(make_type(*(next_operand++), long_uint_type2()));
+    break;
+
+  case 'c':
+    if(next_operand == operands.end())
+      break;
+    out << format_constant(make_type(*(next_operand++), char_type2()));
     break;
 
   default:
