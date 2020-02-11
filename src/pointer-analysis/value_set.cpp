@@ -120,9 +120,9 @@ expr2tc value_sett::to_expr(object_mapt::const_iterator it) const
 
   expr2tc offs;
   if(it->second.offset_is_set)
-    offs = constant_int2tc(index_type2(), it->second.offset);
+    offs = constant_int2tc(pointer_type2(), it->second.offset);
   else
-    offs = unknown2tc(index_type2());
+    offs = unknown2tc(pointer_type2());
 
   expr2tc obj = object_descriptor2tc(
     object->type, object, offs, it->second.offset_alignment);
