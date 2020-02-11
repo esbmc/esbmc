@@ -13,6 +13,34 @@ expr2tc expr2t::do_simplify() const
   return expr2tc();
 }
 
+inline static expr2tc try_simplification(const expr2tc &expr)
+{
+  expr2tc to_simplify = expr->do_simplify();
+  if(is_nil_expr(to_simplify))
+    to_simplify = expr;
+  return to_simplify;
+}
+
+inline static expr2tc
+typecast_check_return(const type2tc &type, const expr2tc &expr)
+{
+  // If the expr is already nil, do nothing
+  if(is_nil_expr(expr))
+    return expr2tc();
+
+  // Don't type cast from constant to pointer
+  // TODO: check if this is right
+  if(is_pointer_type(type) && is_number_type(expr))
+    return try_simplification(expr);
+
+  // No need to typecast
+  if(expr->type == type)
+    return expr;
+
+  // Create a typecast of the result
+  return try_simplification(typecast2tc(type, expr));
+}
+
 expr2tc expr2t::simplify() const
 {
   try
@@ -36,7 +64,7 @@ expr2tc expr2t::simplify() const
       [&changed](expr2tc &e) { changed |= ::simplify(e); });
 
     // Try to simplify top-level expr
-    expr2tc simplified = new_us->do_simplify();
+    expr2tc simplified = typecast_check_return(type, new_us->do_simplify());
 
     // If we could simplified it, just return
     if(!is_nil_expr(simplified))
@@ -56,33 +84,6 @@ expr2tc expr2t::simplify() const
     // the size of simplification code in that case.
   }
   return expr2tc();
-}
-
-static expr2tc try_simplification(const expr2tc &expr)
-{
-  expr2tc to_simplify = expr->do_simplify();
-  if(is_nil_expr(to_simplify))
-    to_simplify = expr;
-  return to_simplify;
-}
-
-static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
-{
-  // If the expr is already nil, do nothing
-  if(is_nil_expr(expr))
-    return expr2tc();
-
-  // Don't type cast from constant to pointer
-  // TODO: check if this is right
-  if(is_pointer_type(type) && is_number_type(expr))
-    return try_simplification(expr);
-
-  // No need to typecast
-  if(expr->type == type)
-    return expr;
-
-  // Create a typecast of the result
-  return try_simplification(typecast2tc(type, expr));
 }
 
 static void fetch_ops_from_this_type(
