@@ -25,6 +25,9 @@
 #include <util/type_byte_size.h>
 #include <z3_conv.h>
 
+typedef BigInt::llong_t llong_t;
+typedef BigInt::ullong_t ullong_t;
+
 #define new_ast new_solver_ast<z3_smt_ast>
 
 static void error_handler(Z3_context c, Z3_error_code e)
@@ -804,9 +807,9 @@ smt_astt z3_convt::mk_smt_int(const BigInt &theint)
 {
   smt_sortt s = mk_int_sort();
   if(theint.is_negative())
-    return new_ast(z3_ctx.int_val(theint.to_long()), s);
+    return new_ast(z3_ctx.int_val(static_cast<int64_t>(theint.to_long())), s);
 
-  return new_ast(z3_ctx.int_val(theint.to_ulong()), s);
+  return new_ast(z3_ctx.int_val(static_cast<uint64_t>(theint.to_ulong())), s);
 }
 
 smt_astt z3_convt::mk_smt_real(const std::string &str)
@@ -819,10 +822,10 @@ smt_astt z3_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
 
-  if(theint.is_negative())
-    return new_ast(z3_ctx.bv_val(theint.to_long(), w), s);
+  if(theint.is_negative()) 
+    return new_ast(z3_ctx.bv_val(static_cast<int64_t>(theint.to_long()), w), s);
 
-  return new_ast(z3_ctx.bv_val(theint.to_ulong(), w), s);
+  return new_ast(z3_ctx.bv_val(static_cast<uint64_t>(theint.to_ulong()), w), s);
 }
 
 smt_astt z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
