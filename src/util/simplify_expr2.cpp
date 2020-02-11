@@ -340,40 +340,6 @@ inline static bool is_associative(const expr2tc &expr)
          expr->expr_id == expr2t::mul_id;
 }
 
-#define check_perform_binop_constants(op, is, to, side_1, side_2)              \
-  if(is(side_1))                                                               \
-  {                                                                            \
-    auto s1 = side_1;                                                          \
-    to(s1).value op to(side_2).value;                                          \
-    return s1;                                                                 \
-  }
-
-#define perform_binop_constants(op, side_1, side_2)                            \
-  check_perform_binop_constants(                                               \
-    op, is_bv_type, to_constant_int2t, side_1, side_2);                        \
-  check_perform_binop_constants(                                               \
-    op, is_fixedbv_type, to_constant_fixedbv2t, side_1, side_2);               \
-  check_perform_binop_constants(                                               \
-    op, is_floatbv_type, to_constant_floatbv2t, side_1, side_2);
-
-// Tries to simplify if the two sides are constants
-// otherwise, move constants to the RHS of the expr
-#define simplify_constants_or_commute(op, expr)                                  \
-  assert(side_1->type == side_2->type);                                          \
-  if(is_constant_number(side_1))                                                 \
-  {                                                                              \
-    /* Add sides if they are constants */                                        \
-    if(is_constant_number(side_2))                                               \
-    {                                                                            \
-      perform_binop_constants(op, side_1, side_2);                               \
-    }                                                                            \
-                                                                                 \
-    /* Canonicalize the constant to the RHS if this is a commutative operation*/ \
-    if(is_commutative(expr))                                                     \
-      res =                                                                      \
-        expr2tc(new std::decay<decltype(*this)>::type{type, side_2, side_1});    \
-  }
-
 inline static bool is_know_negation(const expr2tc &a, const expr2tc &b)
 {
   if(is_not2t(a))
@@ -391,15 +357,65 @@ inline static bool is_know_negation(const expr2tc &a, const expr2tc &b)
   return false;
 }
 
+#define check_perform_binop_constants(op, is, to, side_1, side_2)              \
+  if(is(side_1) && is(side_2))                                                 \
+  {                                                                            \
+    expr2tc s1 = side_1;                                                       \
+    to(s1).value op to(side_2).value;                                          \
+    return s1;                                                                 \
+  }
+
+#define perform_binop_constants(op, side_1, side_2)                            \
+  check_perform_binop_constants(                                               \
+    op, is_bv_type, to_constant_int2t, side_1, side_2);                        \
+  check_perform_binop_constants(                                               \
+    op, is_fixedbv_type, to_constant_fixedbv2t, side_1, side_2);               \
+  check_perform_binop_constants(                                               \
+    op, is_floatbv_type, to_constant_floatbv2t, side_1, side_2);
+
+#define simplify_constants(side_1, side_2)                                     \
+  if(expr->expr_id == expr2t::add_id)                                          \
+  {                                                                            \
+    perform_binop_constants(+=, side_1, side_2)                                \
+  }
+
+// Tries to simplify if the two sides are constants
+// otherwise, move constants to the RHS of the expr
+template <typename T>
+inline static expr2tc
+check_simplify_constants_or_commute_binop(const expr2tc &expr)
+{
+  assert(expr->get_num_sub_exprs() == 2);
+  expr2tc side_1 = *expr->get_sub_expr(0);
+  expr2tc side_2 = *expr->get_sub_expr(1);
+
+  if(is_constant_number(side_1))
+  {
+    // Add sides if they are constants
+    if(is_constant_number(side_2))
+    {
+      simplify_constants(side_1, side_2);
+    }
+
+    // Canonicalize the constant to the RHS if this is a commutative operation
+    if(is_commutative(expr))
+      return expr2tc(new T{expr->type, side_1, side_2});
+  }
+
+  return expr2tc();
+}
+
 expr2tc add2t::do_simplify() const
 {
   // This should be handled by ieee_*
   assert(!is_floatbv_type(type));
 
-  // Clone expr to simplify
-  auto res = this->clone();
-
-  simplify_constants_or_commute(+=, res);
+  // This could be easily turned into a macro but I don't want
+  // to declare 'res' inside the macro
+  auto res = check_simplify_constants_or_commute_binop<
+    std::decay<decltype(*this)>::type>(this->clone());
+  if(!is_nil_expr(res))
+    return res;
 
   // X + 0 -> X
   if(is_zero(side_2))
