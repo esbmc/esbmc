@@ -162,6 +162,11 @@ inline bool is_false(const expr2tc &expr)
   return false;
 }
 
+inline bool is_zero(const expr2tc &expr)
+{
+  return is_false(expr);
+}
+
 inline expr2tc gen_true_expr()
 {
   static constant_bool2tc c(true);
@@ -309,28 +314,37 @@ inline expr2tc conjunction(std::vector<expr2tc> cs)
   return res;
 }
 
-inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
+inline expr2tc
+gen_constant(const type2tc &type, BigInt b, bool array_as_array_of = false)
 {
   switch(type->type_id)
   {
   case type2t::bool_id:
-    return gen_false_expr();
+    return b.is_zero() ? gen_false_expr() : gen_true_expr();
 
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
-    return constant_int2tc(type, BigInt(0));
+    return constant_int2tc(type, BigInt(b));
 
   case type2t::fixedbv_id:
-    return constant_fixedbv2tc(fixedbvt(fixedbv_spect(to_fixedbv_type(type))));
+  {
+    fixedbvt f(fixedbv_spect(to_fixedbv_type(type)));
+    f.from_integer(BigInt(b));
+    return constant_fixedbv2tc(f);
+  }
 
   case type2t::floatbv_id:
-    return constant_floatbv2tc(
-      ieee_floatt(ieee_float_spect(to_floatbv_type(type))));
+  {
+    ieee_floatt f(ieee_float_spect(to_floatbv_type(type)));
+    f.from_integer(BigInt(b));
+    return constant_floatbv2tc(f);
+  }
 
   case type2t::array_id:
   {
     if(array_as_array_of)
-      return constant_array_of2tc(type, gen_zero(to_array_type(type).subtype));
+      return constant_array_of2tc(
+        type, gen_constant(to_array_type(type).subtype, b));
 
     auto arr_type = to_array_type(type);
 
@@ -339,13 +353,14 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
 
     std::vector<expr2tc> members;
     for(long int i = 0; i < s.as_long(); i++)
-      members.push_back(
-        gen_zero(to_array_type(type).subtype, array_as_array_of));
+      members.push_back(gen_constant(to_array_type(type).subtype, b));
 
     return constant_array2tc(type, members);
   }
 
   case type2t::pointer_id:
+    // We only generate NULL pointers here!
+    assert(b.is_zero());
     return symbol2tc(pointer_type2(), "NULL");
 
   case type2t::struct_id:
@@ -354,7 +369,7 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
 
     std::vector<expr2tc> members;
     for(auto const &member_type : struct_type.members)
-      members.push_back(gen_zero(member_type, array_as_array_of));
+      members.push_back(gen_constant(member_type, b, array_as_array_of));
 
     return constant_struct2tc(type, members);
   }
@@ -365,7 +380,7 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
 
     std::vector<expr2tc> members;
     for(auto const &member_type : union_type.members)
-      members.push_back(gen_zero(member_type, array_as_array_of));
+      members.push_back(gen_constant(member_type, b, array_as_array_of));
 
     return constant_union2tc(type, members);
   }
@@ -374,40 +389,19 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
     break;
   }
 
+  std::cerr << "Can't generate " << b << " for type " << get_type_id(type)
+            << '\n';
   abort();
 }
 
-inline expr2tc gen_one(const type2tc &type)
+inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
 {
-  switch(type->type_id)
-  {
-  case type2t::bool_id:
-    return gen_true_expr();
+  return gen_constant(type, 0, array_as_array_of);
+}
 
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-    return constant_int2tc(type, BigInt(1));
-
-  case type2t::fixedbv_id:
-  {
-    fixedbvt f(fixedbv_spect(to_fixedbv_type(type)));
-    f.from_integer(BigInt(1));
-    return constant_fixedbv2tc(f);
-  }
-
-  case type2t::floatbv_id:
-  {
-    ieee_floatt f(ieee_float_spect(to_floatbv_type(type)));
-    f.from_integer(BigInt(1));
-    return constant_floatbv2tc(f);
-  }
-
-  default:
-    break;
-  }
-
-  std::cerr << "Can't generate one for type " << get_type_id(type) << '\n';
-  abort();
+inline expr2tc gen_one(const type2tc &type, bool array_as_array_of = false)
+{
+  return gen_constant(type, 1, array_as_array_of);
 }
 
 #endif /* UTIL_IREP2_UTILS_H_ */
