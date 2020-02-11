@@ -993,7 +993,7 @@ smt_astt z3_convt::tuple_create(const expr2tc &structdef)
   // Converts a static struct - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
   // propagation.
-  const std::vector<expr2tc> &members = strct.datatype_members;
+  const std::vector<expr2tc> &members = strct.value;
   const std::vector<type2tc> &member_types = type.members;
 
   // Populate tuple with members of that struct
@@ -1123,7 +1123,7 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
   for(auto const &it : strct.members)
   {
     member2tc memb(it, expr, strct.member_names[i]);
-    outstruct->datatype_members.push_back(get(memb));
+    outstruct->value.push_back(get(memb));
     i++;
   }
 

@@ -136,7 +136,7 @@ expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
     std::stringstream ss;
     ss << name << "." << strct.member_names[i];
     symbol2tc sym(it, ss.str());
-    outstruct->datatype_members.push_back(ctx->get(sym));
+    outstruct->value.push_back(ctx->get(sym));
     i++;
   }
 
@@ -144,13 +144,12 @@ expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
   if(is_pointer_type(expr->type))
   {
     // Guard against free pointer value
-    if(is_nil_expr(outstruct->datatype_members[0]))
+    if(is_nil_expr(outstruct->value[0]))
       return expr2tc();
 
-    unsigned int num =
-      to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
+    unsigned int num = to_constant_int2t(outstruct->value[0]).value.to_uint64();
     unsigned int offs =
-      to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
+      to_constant_int2t(outstruct->value[1]).value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return ctx->pointer_logic.back().pointer_expr(p, expr->type);
   }
@@ -176,10 +175,10 @@ smt_astt smt_tuple_sym_flattener::tuple_array_of(
   smt_sortt sort = ctx->convert_sort(arrtype);
   smt_astt newsym = new array_sym_smt_ast(ctx, sort, name);
 
-  assert(subtype.members.size() == data.datatype_members.size());
+  assert(subtype.members.size() == data.value.size());
   for(unsigned long i = 0; i < subtype.members.size(); i++)
   {
-    const expr2tc &val = data.datatype_members[i];
+    const expr2tc &val = data.value[i];
     type2tc subarr_type = array_type2tc(val->type, arrsize, false);
     constant_array_of2tc sub_array_of(subarr_type, val);
 

@@ -148,7 +148,7 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
   if(tuple->elements.size() == 0)
   {
     for(unsigned int i = 0; i < strct.members.size(); i++)
-      outstruct->datatype_members.emplace_back();
+      outstruct->value.emplace_back();
     return outstruct;
   }
 
@@ -187,7 +187,7 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
       abort();
     }
 
-    outstruct->datatype_members.push_back(res);
+    outstruct->value.push_back(res);
     i++;
   }
 
@@ -197,13 +197,12 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     tuple->sort->get_tuple_type() == ctx->pointer_struct)
   {
     // Guard against a free pointer though
-    if(is_nil_expr(outstruct->datatype_members[0]))
+    if(is_nil_expr(outstruct->value[0]))
       return expr2tc();
 
-    unsigned int num =
-      to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
+    unsigned int num = to_constant_int2t(outstruct->value[0]).value.to_uint64();
     unsigned int offs =
-      to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
+      to_constant_int2t(outstruct->value[1]).value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return ctx->pointer_logic.back().pointer_expr(
       p, type2tc(new pointer_type2t(get_empty_type())));

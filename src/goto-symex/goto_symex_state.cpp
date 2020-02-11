@@ -128,7 +128,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   if(is_constant_array_of2t(expr))
   {
-    const expr2tc &init = to_constant_array_of2t(expr).initializer;
+    const expr2tc &init = to_constant_array_of2t(expr).value;
     if(is_constant_expr(init) && !is_bool_type(init))
       return true;
   }

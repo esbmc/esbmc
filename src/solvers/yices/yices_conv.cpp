@@ -914,7 +914,7 @@ smt_astt yices_convt::tuple_create(const expr2tc &structdef)
   const struct_union_data &type = get_type_def(strct.type);
 
   std::vector<term_t> terms;
-  for(auto const &it : strct.datatype_members)
+  for(auto const &it : strct.value)
   {
     smt_astt a = convert_ast(it);
     const yices_smt_ast *yast = to_solver_smt_ast<yices_smt_ast>(a);
@@ -1044,7 +1044,7 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
   for(auto const &it : strct.members)
   {
     member2tc memb(it, expr, strct.member_names[i]);
-    outstruct->datatype_members.push_back(get(memb));
+    outstruct->value.push_back(get(memb));
     i++;
   }
 

@@ -1973,7 +1973,7 @@ expr2tc smt_convt::flatten_array_body(const expr2tc &expr)
 
 // This should be an array of arrays, glue the sub arrays together
 #ifndef NDEBUG
-  for(auto const &elem : the_array.datatype_members)
+  for(auto const &elem : the_array.value)
     // Must only contain constant arrays, for now. No indirection should be
     // expressable at this level.
     assert(
@@ -1983,14 +1983,14 @@ expr2tc smt_convt::flatten_array_body(const expr2tc &expr)
 #endif
 
   std::vector<expr2tc> sub_expr_list;
-  for(auto const &elem : the_array.datatype_members)
+  for(auto const &elem : the_array.value)
   {
     expr2tc flatten_elem = flatten_array_body(elem);
 
     sub_expr_list.insert(
       sub_expr_list.end(),
-      to_constant_array2t(flatten_elem).datatype_members.begin(),
-      to_constant_array2t(flatten_elem).datatype_members.end());
+      to_constant_array2t(flatten_elem).value.begin(),
+      to_constant_array2t(flatten_elem).value.end());
   }
 
   return constant_array2tc(flatten_array_type(expr->type), sub_expr_list);
@@ -2267,11 +2267,11 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
   smt_astt newsym_ast = convert_ast(newsym);
   for(unsigned int i = 0; i < sz; i++)
   {
-    expr2tc init = array.datatype_members[i];
+    expr2tc init = array.value[i];
 
     // Workaround for bools-in-arrays
     if(
-      is_bool_type(array.datatype_members[i]->type) && !int_encoding &&
+      is_bool_type(array.value[i]->type) && !int_encoding &&
       !array_api->supports_bools_in_arrays)
       init = typecast2tc(type2tc(new unsignedbv_type2t(1)), init);
 
@@ -2297,23 +2297,22 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
   {
     expr2tc rec_expr = expr;
 
-    if(is_constant_array_of2t(to_constant_array_of2t(rec_expr).initializer))
+    if(is_constant_array_of2t(to_constant_array_of2t(rec_expr).value))
     {
       type2tc flat_type = flatten_array_type(expr->type);
       const array_type2t &arrtype2 = to_array_type(flat_type);
       array_size = calculate_array_domain_width(arrtype2);
 
       while(is_constant_array_of2t(rec_expr))
-        rec_expr = to_constant_array_of2t(rec_expr).initializer;
+        rec_expr = to_constant_array_of2t(rec_expr).value;
 
       base_init = rec_expr;
     }
     else
     {
       const constant_array_of2t &arrof = to_constant_array_of2t(rec_expr);
-      assert(is_constant_array2t(arrof.initializer));
-      const constant_array2t &constarray =
-        to_constant_array2t(arrof.initializer);
+      assert(is_constant_array2t(arrof.value));
+      const constant_array2t &constarray = to_constant_array2t(arrof.value);
       const array_type2t &constarray_type = to_array_type(constarray.type);
 
       // Duplicate contents repeatedly.
@@ -2325,9 +2324,7 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
       std::vector<expr2tc> new_contents;
       for(uint64_t i = 0; i < size.to_uint64(); i++)
         new_contents.insert(
-          new_contents.end(),
-          constarray.datatype_members.begin(),
-          constarray.datatype_members.end());
+          new_contents.end(), constarray.value.begin(), constarray.value.end());
 
       // Create new expression, convert and return that.
       mul2tc newsize(
@@ -2344,7 +2341,7 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
   }
   else
   {
-    base_init = arrof.initializer;
+    base_init = arrof.value;
     array_size = calculate_array_domain_width(arrtype);
   }
 
@@ -2428,16 +2425,16 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
   if(is_constant_array_of2t(expr))
   {
     const constant_array_of2t &arr = to_constant_array_of2t(expr);
-    smt_astt arg = convert_ast(arr.initializer);
+    smt_astt arg = convert_ast(arr.value);
 
     return tuple_api->tuple_array_create(arr_type, &arg, true, domain);
   }
 
   assert(is_constant_array2t(expr));
   const constant_array2t &arr = to_constant_array2t(expr);
-  smt_astt args[arr.datatype_members.size()];
+  smt_astt args[arr.value.size()];
   unsigned int i = 0;
-  for(auto const &it : arr.datatype_members)
+  for(auto const &it : arr.value)
   {
     args[i] = convert_ast(it);
     i++;

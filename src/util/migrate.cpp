@@ -2289,7 +2289,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const constant_struct2t &ref2 = to_constant_struct2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt thestruct("struct", thetype);
-    for(auto const &it : ref2.datatype_members)
+    for(auto const &it : ref2.value)
       thestruct.operands().push_back(migrate_expr_back(it));
     return thestruct;
   }
@@ -2298,7 +2298,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const constant_union2t &ref2 = to_constant_union2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt theunion("union", thetype);
-    for(auto const &it : ref2.datatype_members)
+    for(auto const &it : ref2.value)
       theunion.operands().push_back(migrate_expr_back(it));
     return theunion;
   }
@@ -2307,7 +2307,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const constant_array2t &ref2 = to_constant_array2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt thearray("constant", thetype);
-    for(auto const &it : ref2.datatype_members)
+    for(auto const &it : ref2.value)
       thearray.operands().push_back(migrate_expr_back(it));
     return thearray;
   }
@@ -2316,7 +2316,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     const constant_array_of2t &ref2 = to_constant_array_of2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt thearray("array_of", thetype);
-    exprt initializer = migrate_expr_back(ref2.initializer);
+    exprt initializer = migrate_expr_back(ref2.value);
     thearray.operands().push_back(initializer);
     return thearray;
   }

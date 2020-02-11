@@ -605,11 +605,11 @@ expr2tc with2t::do_simplify() const
     const constant_string2t &memb = to_constant_string2t(update_field);
     unsigned no = static_cast<const struct_union_data &>(*type.get())
                     .get_component_number(memb.value);
-    assert(no < c_struct.datatype_members.size());
+    assert(no < c_struct.value.size());
 
     // Clone constant struct, update its field according to this "with".
     constant_struct2tc s = c_struct;
-    s->datatype_members[no] = update_value;
+    s->value[no] = update_value;
     return expr2tc(s);
   }
 
@@ -643,11 +643,11 @@ expr2tc with2t::do_simplify() const
     if(index.value.is_negative())
       return expr2tc();
 
-    if(index.as_ulong() >= array.datatype_members.size())
+    if(index.as_ulong() >= array.value.size())
       return expr2tc();
 
     constant_array2tc arr = array;
-    arr->datatype_members[index.as_ulong()] = update_value;
+    arr->value[index.as_ulong()] = update_value;
     return arr;
   }
 
@@ -667,7 +667,7 @@ expr2tc with2t::do_simplify() const
 
     // We can eliminate this operation if the operand to this with is the same
     // as the initializer.
-    if(update_value == array.initializer)
+    if(update_value == array.value)
       return source_value;
 
     return expr2tc();
@@ -688,7 +688,7 @@ expr2tc member2t::do_simplify() const
     expr2tc s;
     if(is_constant_struct2t(source_value))
     {
-      s = to_constant_struct2t(source_value).datatype_members[no];
+      s = to_constant_struct2t(source_value).value[no];
 
       assert(
         is_pointer_type(type) ||
@@ -700,10 +700,10 @@ expr2tc member2t::do_simplify() const
       // array, but possibly fewer. This is legal C. So bounds check first that
       // we can actually perform this member operation.
       const constant_union2t &uni = to_constant_union2t(source_value);
-      if(uni.datatype_members.size() <= no)
+      if(uni.value.size() <= no)
         return expr2tc();
 
-      s = uni.datatype_members[no];
+      s = uni.value[no];
 
       // If the type we just selected isn't compatible, it means that whatever
       // field is in the constant union /isn't/ the field we're selecting from
@@ -847,10 +847,10 @@ expr2tc index2t::do_simplify() const
       return expr2tc();
 
     unsigned long the_idx = idx.as_ulong();
-    if(the_idx >= arr.datatype_members.size())
+    if(the_idx >= arr.value.size())
       return expr2tc();
 
-    return arr.datatype_members[the_idx];
+    return arr.value[the_idx];
   }
 
   if(is_constant_string2t(source_value) && is_constant_int2t(index))
@@ -875,7 +875,7 @@ expr2tc index2t::do_simplify() const
   if(is_constant_array_of2t(source_value))
   {
     // Only thing this index can evaluate to is the default value of this array
-    return to_constant_array_of2t(source_value).initializer;
+    return to_constant_array_of2t(source_value).value;
   }
 
   return expr2tc();

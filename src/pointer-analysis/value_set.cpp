@@ -1003,7 +1003,7 @@ void value_sett::assign(
 
       if(is_constant_array_of2t(rhs))
       {
-        assign(lhs_index, to_constant_array_of2t(rhs).initializer, add_to_sets);
+        assign(lhs_index, to_constant_array_of2t(rhs).value, add_to_sets);
       }
       else if(is_constant_array2t(rhs) || is_constant_expr(rhs))
       {
@@ -1366,7 +1366,7 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   if(is_constant_struct2t(src))
   {
     unsigned no = to_struct_type(type).get_component_number(component_name);
-    return to_constant_struct2t(src).datatype_members[no];
+    return to_constant_struct2t(src).value[no];
   }
   if(is_with2t(src))
   {

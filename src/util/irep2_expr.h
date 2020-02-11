@@ -19,157 +19,103 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_FWD_DEC, foo, ESBMC_LIST_OF_EXPRS)
 
 // Data definitions.
 
+template <typename T>
 class constant2t : public expr2t
 {
 public:
-  constant2t(const type2tc &t, expr2t::expr_ids id) : expr2t(t, id)
+  constant2t(const type2tc &t, expr2t::expr_ids id, T v)
+    : expr2t(t, id), value(v)
   {
   }
   constant2t(const constant2t &ref) = default;
-};
 
-class constant_int_data : public constant2t
-{
-public:
-  constant_int_data(const type2tc &t, expr2t::expr_ids id, const BigInt &bint)
-    : constant2t(t, id), value(bint)
-  {
-  }
-  constant_int_data(const constant_int_data &ref) = default;
-
-  BigInt value;
+  T value;
 
   // Type mangling:
-  typedef esbmct::
-    field_traits<BigInt, constant_int_data, &constant_int_data::value>
-      value_field;
+  typedef esbmct::field_traits<T, constant2t, &constant2t::value> value_field;
   typedef esbmct::expr2t_traits<value_field> traits;
 };
 
-class constant_fixedbv_data : public constant2t
+class constant_int_data : public constant2t<BigInt>
+{
+public:
+  constant_int_data(const type2tc &t, expr2t::expr_ids id, const BigInt &bint)
+    : constant2t(t, id, bint)
+  {
+  }
+  constant_int_data(const constant_int_data &ref) = default;
+};
+
+class constant_fixedbv_data : public constant2t<fixedbvt>
 {
 public:
   constant_fixedbv_data(
     const type2tc &t,
     expr2t::expr_ids id,
     const fixedbvt &fbv)
-    : constant2t(t, id), value(std::move(fbv))
+    : constant2t(t, id, std::move(fbv))
   {
   }
   constant_fixedbv_data(const constant_fixedbv_data &ref) = default;
-
-  fixedbvt value;
-
-  // Type mangling:
-  typedef esbmct::
-    field_traits<fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value>
-      value_field;
-  typedef esbmct::expr2t_traits_notype<value_field> traits;
 };
 
-class constant_floatbv_data : public constant2t
+class constant_floatbv_data : public constant2t<ieee_floatt>
 {
 public:
   constant_floatbv_data(
     const type2tc &t,
     expr2t::expr_ids id,
     const ieee_floatt &ieeebv)
-    : constant2t(t, id), value(std::move(ieeebv))
+    : constant2t(t, id, std::move(ieeebv))
   {
   }
   constant_floatbv_data(const constant_floatbv_data &ref) = default;
-
-  ieee_floatt value;
-
-  // Type mangling:
-  typedef esbmct::field_traits<
-    ieee_floatt,
-    constant_floatbv_data,
-    &constant_floatbv_data::value>
-    value_field;
-  typedef esbmct::expr2t_traits_notype<value_field> traits;
 };
 
-class constant_datatype_data : public constant2t
+class constant_bool_data : public constant2t<bool>
+{
+public:
+  constant_bool_data(const type2tc &t, expr2t::expr_ids id, bool b)
+    : constant2t(t, id, b)
+  {
+  }
+  constant_bool_data(const constant_bool_data &ref) = default;
+};
+
+class constant_datatype_data : public constant2t<std::vector<expr2tc>>
 {
 public:
   constant_datatype_data(
     const type2tc &t,
     expr2t::expr_ids id,
     std::vector<expr2tc> m)
-    : constant2t(t, id), datatype_members(std::move(m))
+    : constant2t(t, id, std::move(m))
   {
   }
   constant_datatype_data(const constant_datatype_data &ref) = default;
-
-  std::vector<expr2tc> datatype_members;
-
-  // Type mangling:
-  typedef esbmct::field_traits<
-    std::vector<expr2tc>,
-    constant_datatype_data,
-    &constant_datatype_data::datatype_members>
-    datatype_members_field;
-  typedef esbmct::expr2t_traits<datatype_members_field> traits;
 };
 
-class constant_bool_data : public constant2t
-{
-public:
-  constant_bool_data(const type2tc &t, expr2t::expr_ids id, bool value)
-    : constant2t(t, id), value(value)
-  {
-  }
-  constant_bool_data(const constant_bool_data &ref) = default;
-
-  bool value;
-
-  // Type mangling:
-  typedef esbmct::
-    field_traits<bool, constant_bool_data, &constant_bool_data::value>
-      value_field;
-  typedef esbmct::expr2t_traits_notype<value_field> traits;
-};
-
-class constant_array_of_data : public constant2t
+class constant_array_of_data : public constant2t<expr2tc>
 {
 public:
   constant_array_of_data(
     const type2tc &t,
     expr2t::expr_ids id,
     const expr2tc &value)
-    : constant2t(t, id), initializer(value)
+    : constant2t(t, id, value)
   {
   }
   constant_array_of_data(const constant_array_of_data &ref) = default;
-
-  expr2tc initializer;
-
-  // Type mangling:
-  typedef esbmct::field_traits<
-    expr2tc,
-    constant_array_of_data,
-    &constant_array_of_data::initializer>
-    initializer_field;
-  typedef esbmct::expr2t_traits<initializer_field> traits;
 };
 
-class constant_string_data : public constant2t
+class constant_string_data : public constant2t<irep_idt>
 {
 public:
   constant_string_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
-    : constant2t(t, id), value(v)
+    : constant2t(t, id, v)
   {
   }
   constant_string_data(const constant_string_data &ref) = default;
-
-  irep_idt value;
-
-  // Type mangling:
-  typedef esbmct::
-    field_traits<irep_idt, constant_string_data, &constant_string_data::value>
-      value_field;
-  typedef esbmct::expr2t_traits<value_field> traits;
 };
 
 class symbol_data : public expr2t
