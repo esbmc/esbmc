@@ -322,19 +322,63 @@ struct Addtor
   }
 };
 
+inline bool is_commutative(const expr2t *expr)
+{
+  return expr->expr_id == expr2t::add_id ||
+         expr->expr_id == expr2t::ieee_add_id ||
+         expr->expr_id == expr2t::mul_id ||
+         expr->expr_id == expr2t::ieee_mul_id ||
+         expr->expr_id == expr2t::and_id || expr->expr_id == expr2t::or_id ||
+         expr->expr_id == expr2t::xor_id;
+}
+
+inline bool is_associative(const expr2t *expr)
+{
+  return expr->expr_id == expr2t::and_id || expr->expr_id == expr2t::or_id ||
+         expr->expr_id == expr2t::xor_id || expr->expr_id == expr2t::add_id ||
+         expr->expr_id == expr2t::mul_id;
+}
+
+#define check_perform_binop_constants(op, is, to, side_1, side_2)              \
+  if(is(side_1))                                                               \
+  {                                                                            \
+    auto res = side_1;                                                         \
+    to(res).value op to(side_2).value;                                         \
+    return res;                                                                \
+  }
+
+#define perform_binop_constants(op, side_1, side_2)                            \
+  check_perform_binop_constants(                                               \
+    op, is_bv_type, to_constant_int2t, side_1, side_2);                        \
+  check_perform_binop_constants(                                               \
+    op, is_fixedbv_type, to_constant_fixedbv2t, side_1, side_2);               \
+  check_perform_binop_constants(                                               \
+    op, is_floatbv_type, to_constant_floatbv2t, side_1, side_2);
+
+#define simplify_or_commute(op, expr)                                            \
+  assert(side_1->type == side_2->type);                                          \
+  if(is_constant_number(side_1))                                                 \
+  {                                                                              \
+    /* Add sides if they are constants */                                        \
+    if(is_constant_number(side_2))                                               \
+    {                                                                            \
+      perform_binop_constants(op, side_1, side_2);                               \
+    }                                                                            \
+                                                                                 \
+    /* Canonicalize the constant to the RHS if this is a commutative operation*/ \
+    if(is_commutative(expr))                                                     \
+      return expr2tc(                                                            \
+        new std::decay<decltype(*this)>::type{type, side_2, side_1});            \
+  }
+
 expr2tc add2t::do_simplify() const
 {
-  expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
-  if(!is_nil_expr(res))
-    return res;
+  // This should be handled by ieee_*
+  assert(!is_floatbv_type(type));
 
-  // Attempt associative simplification
-  std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
-    [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
-    return add2tc(this->type, arg1, arg2);
-  };
+  simplify_or_commute(+=, this);
 
-  return attempt_associative_simplify(*this, add_wrapper);
+  return expr2tc();
 }
 
 template <class constant_type>
