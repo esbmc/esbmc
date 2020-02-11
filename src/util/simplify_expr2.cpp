@@ -322,7 +322,7 @@ struct Addtor
   }
 };
 
-inline bool is_commutative(const expr2t *expr)
+inline bool is_commutative(const expr2tc &expr)
 {
   return expr->expr_id == expr2t::add_id ||
          expr->expr_id == expr2t::ieee_add_id ||
@@ -332,7 +332,7 @@ inline bool is_commutative(const expr2t *expr)
          expr->expr_id == expr2t::xor_id;
 }
 
-inline bool is_associative(const expr2t *expr)
+inline bool is_associative(const expr2tc &expr)
 {
   return expr->expr_id == expr2t::and_id || expr->expr_id == expr2t::or_id ||
          expr->expr_id == expr2t::xor_id || expr->expr_id == expr2t::add_id ||
@@ -342,9 +342,9 @@ inline bool is_associative(const expr2t *expr)
 #define check_perform_binop_constants(op, is, to, side_1, side_2)              \
   if(is(side_1))                                                               \
   {                                                                            \
-    auto res = side_1;                                                         \
-    to(res).value op to(side_2).value;                                         \
-    return res;                                                                \
+    auto s1 = side_1;                                                          \
+    to(s1).value op to(side_2).value;                                          \
+    return s1;                                                                 \
   }
 
 #define perform_binop_constants(op, side_1, side_2)                            \
@@ -355,7 +355,9 @@ inline bool is_associative(const expr2t *expr)
   check_perform_binop_constants(                                               \
     op, is_floatbv_type, to_constant_floatbv2t, side_1, side_2);
 
-#define simplify_or_commute(op, expr)                                            \
+// Tries to simplify if the two sides are constants
+// otherwise, move constants to the RHS of the expr
+#define simplify_constants_or_commute(op, expr)                                  \
   assert(side_1->type == side_2->type);                                          \
   if(is_constant_number(side_1))                                                 \
   {                                                                              \
@@ -367,16 +369,59 @@ inline bool is_associative(const expr2t *expr)
                                                                                  \
     /* Canonicalize the constant to the RHS if this is a commutative operation*/ \
     if(is_commutative(expr))                                                     \
-      return expr2tc(                                                            \
-        new std::decay<decltype(*this)>::type{type, side_2, side_1});            \
+      res =                                                                      \
+        expr2tc(new std::decay<decltype(*this)>::type{type, side_2, side_1});    \
   }
+
+bool is_know_negation(const expr2tc &a, const expr2tc &b)
+{
+  if(is_not2t(a))
+    return (to_not2t(a).value == b);
+
+  if(is_not2t(b))
+    return (to_not2t(b).value == a);
+
+  if(is_neg2t(a))
+    return (to_neg2t(a).value == b);
+
+  if(is_neg2t(b))
+    return (to_neg2t(b).value == a);
+
+  return false;
+}
 
 expr2tc add2t::do_simplify() const
 {
   // This should be handled by ieee_*
   assert(!is_floatbv_type(type));
 
-  simplify_or_commute(+=, this);
+  // Clone expr to simplify
+  auto res = this->clone();
+
+  simplify_constants_or_commute(+=, res);
+
+  // X + 0 -> X
+  if(is_zero(side_2))
+    return side_1;
+
+  // If two operands are each other's negation, return 0
+  if(is_know_negation(side_1, side_2))
+    return gen_zero(type);
+
+  // X + (Y - X) -> Y
+  // (Y - X) + X -> Y
+  // Eg: X + -X -> 0
+  if(is_sub2t(side_2) && to_sub2t(side_2).side_2 == side_1)
+    return to_sub2t(side_2).side_1;
+
+  if(is_sub2t(side_1) && to_sub2t(side_1).side_2 == side_2)
+    return to_sub2t(side_1).side_1;
+
+  // X + ~X -> -1 since ~X = -X-1
+  if(
+    (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2) ||
+    (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1))
+    return gen_constant(type, -1);
 
   return expr2tc();
 }
