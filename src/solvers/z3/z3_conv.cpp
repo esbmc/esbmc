@@ -821,7 +821,7 @@ smt_astt z3_convt::mk_smt_real(const std::string &str)
 smt_astt z3_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
-
+  
   if(theint.is_negative()) 
     return new_ast(z3_ctx.bv_val(static_cast<int64_t>(theint.to_long()), w), s);
 

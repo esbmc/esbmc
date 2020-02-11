@@ -674,24 +674,6 @@ bool BigInt::is_long() const
   return true;
 }
 
-// uint64_t BigInt::to_ulong() const
-// {
-//   uint64_t ul = 0;
-//   for(int i = length; --i >= 0;)
-//   {
-//     ul <<= single_bits;
-//     ul |= digit[i];
-//   }
-//   return ul;
-// }
-
-// int64_t BigInt::to_long() const
-// {
-//   uint64_t ul = to_ulong();
-//   int64_t ret = positive ? ul : -ul;
-//   return ret;
-// }
-
 ullong_t BigInt::to_ulong() const
 {
   ullong_t ul = 0;
@@ -723,8 +705,8 @@ inline int BigInt::ucompare(BigInt const &b) const
 // Comparision primitives.
 
 int BigInt::compare(ullong_t b) const
-{
-  if(!positive)
+
+{  if(!positive)
     return -1;
 
   onedig_t dig[small];
