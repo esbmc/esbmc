@@ -322,7 +322,7 @@ struct Addtor
   }
 };
 
-inline bool is_commutative(const expr2tc &expr)
+inline static bool is_commutative(const expr2tc &expr)
 {
   return expr->expr_id == expr2t::add_id ||
          expr->expr_id == expr2t::ieee_add_id ||
@@ -332,7 +332,7 @@ inline bool is_commutative(const expr2tc &expr)
          expr->expr_id == expr2t::xor_id;
 }
 
-inline bool is_associative(const expr2tc &expr)
+inline static bool is_associative(const expr2tc &expr)
 {
   return expr->expr_id == expr2t::and_id || expr->expr_id == expr2t::or_id ||
          expr->expr_id == expr2t::xor_id || expr->expr_id == expr2t::add_id ||
@@ -373,7 +373,7 @@ inline bool is_associative(const expr2tc &expr)
         expr2tc(new std::decay<decltype(*this)>::type{type, side_2, side_1});    \
   }
 
-bool is_know_negation(const expr2tc &a, const expr2tc &b)
+inline static bool is_know_negation(const expr2tc &a, const expr2tc &b)
 {
   if(is_not2t(a))
     return (to_not2t(a).value == b);
