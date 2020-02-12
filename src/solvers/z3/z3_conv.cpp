@@ -25,9 +25,6 @@
 #include <util/type_byte_size.h>
 #include <z3_conv.h>
 
-typedef BigInt::llong_t llong_t;
-typedef BigInt::ullong_t ullong_t;
-
 #define new_ast new_solver_ast<z3_smt_ast>
 
 static void error_handler(Z3_context c, Z3_error_code e)

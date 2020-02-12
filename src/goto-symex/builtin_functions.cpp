@@ -878,8 +878,6 @@ void goto_symext::intrinsic_memset(
 
   if(can_construct)
   {
-    //uint64_t set_sz = to_constant_int2t(size).value.to_ulong();
-
     for(const auto &item : internal_deref_items)
     {
       const expr2tc &offs = item.offset;
