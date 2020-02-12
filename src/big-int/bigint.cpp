@@ -705,8 +705,8 @@ inline int BigInt::ucompare(BigInt const &b) const
 // Comparision primitives.
 
 int BigInt::compare(ullong_t b) const
-
-{  if(!positive)
+{
+  if(!positive)
     return -1;
 
   onedig_t dig[small];
