@@ -981,7 +981,7 @@ smt_astt cvc_convt::mk_smt_int(const BigInt &theint)
   // TODO: Is this correct? CVC4 doesn't have any call for
   // em.mkConst(CVC4::Integer(...));
   smt_sortt s = mk_int_sort();
-  CVC4::Expr e = em.mkConst(CVC4::Rational(theint.to_long()));
+  CVC4::Expr e = em.mkConst(CVC4::Rational(static_cast<int64_t>(theint.to_long())));
   return new_ast(e, s);
 }
 
