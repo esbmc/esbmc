@@ -369,9 +369,9 @@ inline static expr2tc swap_operands(const expr2tc &expr)
 #define check_perform_binop_constants(op, is, to, side_1, side_2)              \
   if(is(side_1) && is(side_2))                                                 \
   {                                                                            \
-    expr2tc s1 = side_1;                                                       \
-    to(s1).value op to(side_2).value;                                          \
-    return s1;                                                                 \
+    to(side_1).value op to(side_2).value;                                      \
+    expr = side_1;                                                             \
+    return true;                                                               \
   }
 
 #define perform_binop_constants(op, side_1, side_2)                            \
@@ -382,7 +382,7 @@ inline static expr2tc swap_operands(const expr2tc &expr)
   check_perform_binop_constants(                                               \
     op, is_floatbv_type, to_constant_floatbv2t, side_1, side_2);
 
-#define simplify_constants(side_1, side_2)                                     \
+#define simplify_constants(expr)                                               \
   if(expr->expr_id == expr2t::add_id)                                          \
   {                                                                            \
     perform_binop_constants(+=, side_1, side_2)                                \
@@ -391,7 +391,7 @@ inline static expr2tc swap_operands(const expr2tc &expr)
 // Tries to simplify if the two sides are constants
 // otherwise, move constants to the RHS of the expr
 template <typename T>
-inline static expr2tc check_simplify_constants_or_commute_binop(expr2tc &expr)
+inline static bool check_simplify_constants_or_commute_binop(expr2tc &expr)
 {
   assert(expr->get_num_sub_exprs() == 2);
   expr2tc side_1 = *expr->get_sub_expr(0);
@@ -402,7 +402,7 @@ inline static expr2tc check_simplify_constants_or_commute_binop(expr2tc &expr)
     // Add sides if they are constants
     if(is_constant_number(side_2))
     {
-      simplify_constants(side_1, side_2);
+      simplify_constants(expr);
     }
 
     // Canonicalize the constant to the RHS if this is a commutative operation
@@ -410,7 +410,7 @@ inline static expr2tc check_simplify_constants_or_commute_binop(expr2tc &expr)
       expr = swap_operands<T>(expr);
   }
 
-  return expr2tc();
+  return false;
 }
 
 /// This performs a few simplifications for operators that are associative or
@@ -448,11 +448,11 @@ inline static bool simplify_associative_or_commutative(expr2tc &expr)
       changed = true;
     }
 
+    expr2tc s1 = *expr->get_sub_expr(0);
+    expr2tc s2 = *expr->get_sub_expr(1);
+
     if(is_associative(expr))
     {
-      expr2tc s1 = *expr->get_sub_expr(0);
-      expr2tc s2 = *expr->get_sub_expr(1);
-
       // Transform: "(A op B) op C" ==> "A op (B op C)" if "B op C" simplifies.
       if(s1->expr_id == expr->expr_id)
       {
@@ -492,7 +492,7 @@ inline static bool simplify_associative_or_commutative(expr2tc &expr)
         if(::simplify(V))
         {
           // It does! Return "V op C" if it simplifies or is already available.
-          // If V equals B then "V op C" is just the RHS.
+          // If V equals B then "V op C" is just the s2.
           if(V == B)
           {
             expr = s2;
@@ -502,6 +502,63 @@ inline static bool simplify_associative_or_commutative(expr2tc &expr)
 
           // It simplifies to V.  Form "V op C".
           expr = expr2tc(new T{expr->type, V, C});
+          changed = true;
+          continue;
+        }
+      }
+    }
+
+    if(is_associative(expr) && is_commutative(expr))
+    {
+      // Transform: "(A op B) op C" ==> "(C op A) op B" if "C op A" simplifies.
+      if(s1->expr_id == expr->expr_id)
+      {
+        expr2tc A = *s1->get_sub_expr(0);
+        expr2tc B = *s1->get_sub_expr(1);
+        expr2tc C = s2;
+
+        // Does "C op A" simplify?
+        expr2tc V(new T{expr->type, C, A});
+        if(::simplify(V))
+        {
+          // It does! Return "V op B" if it simplifies or is already available.
+          // If V equals A then "V op B" is just the s1.
+          if(V == A)
+          {
+            expr = s1;
+            changed = true;
+            continue;
+          }
+
+          // It simplifies to V.  Form "V op B".
+          expr = expr2tc(new T{expr->type, V, B});
+          changed = true;
+          continue;
+        }
+      }
+
+      // Transform: "A op (B op C)" ==> "B op (C op A)" if "C op A" simplifies.
+      if(s2->expr_id == expr->expr_id)
+      {
+        expr2tc A = s1;
+        expr2tc B = *s2->get_sub_expr(0);
+        expr2tc C = *s2->get_sub_expr(1);
+
+        // Does "C op A" simplify?
+        expr2tc V(new T{expr->type, C, A});
+        if(::simplify(V))
+        {
+          // It does! Return "B op V" if it simplifies or is already available.
+          // If V equals C then "B op V" is just the s2.
+          if(V == C)
+          {
+            expr = s2;
+            changed = true;
+            continue;
+          }
+
+          // It simplifies to V.  Form "B op V".
+          expr = expr2tc(new T{expr->type, B, V});
           changed = true;
           continue;
         }
@@ -522,10 +579,9 @@ expr2tc add2t::do_simplify() const
 
   // This could be easily turned into a macro but I don't want
   // to declare 'res' inside the macro
-  expr2tc res = check_simplify_constants_or_commute_binop<
-    std::decay<decltype(*this)>::type>(clone);
-  if(!is_nil_expr(res))
-    return res;
+  if(check_simplify_constants_or_commute_binop<
+       std::decay<decltype(*this)>::type>(clone))
+    return clone;
 
   expr2tc s1 = *clone->get_sub_expr(0);
   expr2tc s2 = *clone->get_sub_expr(1);
@@ -552,6 +608,45 @@ expr2tc add2t::do_simplify() const
     (is_bitnot2t(s1) && to_bitnot2t(s1).value == s2) ||
     (is_bitnot2t(s2) && to_bitnot2t(s2).value == s1))
     return gen_constant(type, -1);
+
+  // X + X --> X << 1
+  if(s1 == s2)
+    return shl2tc(s1->type, s1, gen_one(s1->type));
+
+  if(is_neg2t(s1))
+  {
+    // -A + -B --> -(A + B)
+    if(is_neg2t(s2))
+      return neg2tc(type, add2tc(type, to_neg2t(s1).value, to_neg2t(s2).value));
+
+    // -A + B --> B - A
+    return sub2tc(type, s2, to_neg2t(s1).value);
+  }
+
+  // A + -B  -->  A - B
+  if(is_neg2t(s2))
+    return sub2tc(type, s1, to_neg2t(s2).value);
+
+  // (A + 1) + ~B --> A - B
+  // (~B + A) + 1 --> A - B
+  // (A + ~B) + 1 --> A - B
+  if(is_add2t(s1))
+  {
+    if((is_one(to_add2t(s1).side_2) && is_bitnot2t(s2)))
+      return sub2tc(type, to_add2t(s1).side_1, to_bitnot2t(s2).value);
+
+    if(is_bitnot2t(to_add2t(s1).side_1) && is_one(s2))
+      return sub2tc(
+        type, to_add2t(s1).side_2, to_bitnot2t(to_add2t(s1).side_1).value);
+
+    if(is_bitnot2t(to_add2t(s1).side_2) && is_one(s2))
+      return sub2tc(
+        type, to_add2t(s1).side_1, to_bitnot2t(to_add2t(s1).side_2).value);
+  }
+
+  // ~B + (A + 1) --> A - B
+  if(is_bitnot2t(s1) && is_add2t(s2) && is_one(to_add2t(s2).side_2))
+    return sub2tc(type, to_add2t(s2).side_1, to_bitnot2t(s1).value);
 
   // Try some generic simplifications for associative operations.
   if(!simplify_associative_or_commutative<std::decay<decltype(*this)>::type>(

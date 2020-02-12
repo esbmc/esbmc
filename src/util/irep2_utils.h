@@ -162,6 +162,23 @@ inline bool is_false(const expr2tc &expr)
   return false;
 }
 
+inline bool is_one(const expr2tc &expr)
+{
+  if(is_constant_bool2t(expr) && to_constant_bool2t(expr).value)
+    return true;
+
+  if(is_constant_int2t(expr) && to_constant_int2t(expr).value == 1)
+    return true;
+
+  if(is_constant_floatbv2t(expr) && to_constant_floatbv2t(expr).value == 1)
+    return true;
+
+  if(is_constant_fixedbv2t(expr) && to_constant_fixedbv2t(expr).value == 1)
+    return true;
+
+  return false;
+}
+
 inline bool is_zero(const expr2tc &expr)
 {
   return is_false(expr);
