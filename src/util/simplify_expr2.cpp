@@ -357,6 +357,15 @@ inline static bool is_know_negation(const expr2tc &a, const expr2tc &b)
   return false;
 }
 
+template <typename T>
+inline static expr2tc swap_operands(const expr2tc &expr)
+{
+  assert(expr->get_num_sub_exprs() == 2);
+  expr2tc s1 = *expr->get_sub_expr(0);
+  expr2tc s2 = *expr->get_sub_expr(1);
+  return expr2tc(new T{expr->type, s2, s1});
+}
+
 #define check_perform_binop_constants(op, is, to, side_1, side_2)              \
   if(is(side_1) && is(side_2))                                                 \
   {                                                                            \
@@ -399,7 +408,7 @@ check_simplify_constants_or_commute_binop(const expr2tc &expr)
 
     // Canonicalize the constant to the RHS if this is a commutative operation
     if(is_commutative(expr))
-      return expr2tc(new T{expr->type, side_1, side_2});
+      expr = swap_operands<T>(expr);
   }
 
   return expr2tc();
