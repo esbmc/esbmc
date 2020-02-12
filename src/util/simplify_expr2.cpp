@@ -391,8 +391,7 @@ inline static expr2tc swap_operands(const expr2tc &expr)
 // Tries to simplify if the two sides are constants
 // otherwise, move constants to the RHS of the expr
 template <typename T>
-inline static expr2tc
-check_simplify_constants_or_commute_binop(const expr2tc &expr)
+inline static expr2tc check_simplify_constants_or_commute_binop(expr2tc &expr)
 {
   assert(expr->get_num_sub_exprs() == 2);
   expr2tc side_1 = *expr->get_sub_expr(0);
@@ -414,42 +413,152 @@ check_simplify_constants_or_commute_binop(const expr2tc &expr)
   return expr2tc();
 }
 
+/// This performs a few simplifications for operators that are associative or
+/// commutative:
+///
+///  Commutative operators:
+///
+///  1. Order operands such that they are listed from right (least complex) to
+///     left (most complex).  This puts constants before unary operators before
+///     binary operators.
+///
+///  Associative operators:
+///
+///  2. Transform: "(A op B) op C" ==> "A op (B op C)" if "B op C" simplifies.
+///  3. Transform: "A op (B op C)" ==> "(A op B) op C" if "A op B" simplifies.
+///
+///  Associative and commutative operators:
+///
+///  4. Transform: "(A op B) op C" ==> "(C op A) op B" if "C op A" simplifies.
+///  5. Transform: "A op (B op C)" ==> "B op (C op A)" if "C op A" simplifies.
+///  6. Transform: "(A op C1) op (B op C2)" ==> "(A op B) op (C1 op C2)"
+///     if C1 and C2 are constants.
+template <typename T>
+inline static bool simplify_associative_or_commutative(expr2tc &expr)
+{
+  bool changed = false;
+
+  do
+  {
+    if(
+      is_commutative(expr) && is_constant_number(*expr->get_sub_expr(0)) &&
+      !is_constant_number(*expr->get_sub_expr(1)))
+    {
+      expr = swap_operands<T>(expr);
+      changed = true;
+    }
+
+    if(is_associative(expr))
+    {
+      expr2tc s1 = *expr->get_sub_expr(0);
+      expr2tc s2 = *expr->get_sub_expr(1);
+
+      // Transform: "(A op B) op C" ==> "A op (B op C)" if "B op C" simplifies.
+      if(s1->expr_id == expr->expr_id)
+      {
+        expr2tc A = *s1->get_sub_expr(0);
+        expr2tc B = *s1->get_sub_expr(1);
+        expr2tc C = s2;
+
+        // Does "B op C" simplify?
+        expr2tc V(new T{expr->type, B, C});
+        if(::simplify(V))
+        {
+          // It does! Return "A op V" if it simplifies or is already available.
+          // If V equals B then "A op V" is just the s1.
+          if(V == B)
+          {
+            expr = s1;
+            changed = true;
+            continue;
+          }
+
+          // It simplifies to V.  Form "A op V".
+          expr = expr2tc(new T{expr->type, A, V});
+          changed = true;
+          continue;
+        }
+      }
+
+      // Transform: "A op (B op C)" ==> "(A op B) op C" if "A op B" simplifies.
+      if(s2->expr_id == expr->expr_id)
+      {
+        expr2tc A = s1;
+        expr2tc B = *s2->get_sub_expr(0);
+        expr2tc C = *s2->get_sub_expr(1);
+
+        // Does "A op B" simplify?
+        expr2tc V(new T{expr->type, A, B});
+        if(::simplify(V))
+        {
+          // It does! Return "V op C" if it simplifies or is already available.
+          // If V equals B then "V op C" is just the RHS.
+          if(V == B)
+          {
+            expr = s2;
+            changed = true;
+            continue;
+          }
+
+          // It simplifies to V.  Form "V op C".
+          expr = expr2tc(new T{expr->type, V, C});
+          changed = true;
+          continue;
+        }
+      }
+    }
+
+    return changed;
+  } while(true);
+}
+
 expr2tc add2t::do_simplify() const
 {
   // This should be handled by ieee_*
   assert(!is_floatbv_type(type));
 
+  // Clone this irep
+  expr2tc clone = this->clone();
+
   // This could be easily turned into a macro but I don't want
   // to declare 'res' inside the macro
-  auto res = check_simplify_constants_or_commute_binop<
-    std::decay<decltype(*this)>::type>(this->clone());
+  expr2tc res = check_simplify_constants_or_commute_binop<
+    std::decay<decltype(*this)>::type>(clone);
   if(!is_nil_expr(res))
     return res;
 
+  expr2tc s1 = *clone->get_sub_expr(0);
+  expr2tc s2 = *clone->get_sub_expr(1);
+
   // X + 0 -> X
-  if(is_zero(side_2))
-    return side_1;
+  if(is_zero(s2))
+    return s1;
 
   // If two operands are each other's negation, return 0
-  if(is_know_negation(side_1, side_2))
+  if(is_know_negation(s1, s2))
     return gen_zero(type);
 
   // X + (Y - X) -> Y
   // (Y - X) + X -> Y
   // Eg: X + -X -> 0
-  if(is_sub2t(side_2) && to_sub2t(side_2).side_2 == side_1)
-    return to_sub2t(side_2).side_1;
+  if(is_sub2t(s2) && to_sub2t(s2).side_2 == s1)
+    return to_sub2t(s2).side_1;
 
-  if(is_sub2t(side_1) && to_sub2t(side_1).side_2 == side_2)
-    return to_sub2t(side_1).side_1;
+  if(is_sub2t(s1) && to_sub2t(s1).side_2 == s2)
+    return to_sub2t(s1).side_1;
 
   // X + ~X -> -1 since ~X = -X-1
   if(
-    (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2) ||
-    (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1))
+    (is_bitnot2t(s1) && to_bitnot2t(s1).value == s2) ||
+    (is_bitnot2t(s2) && to_bitnot2t(s2).value == s1))
     return gen_constant(type, -1);
 
-  return expr2tc();
+  // Try some generic simplifications for associative operations.
+  if(!simplify_associative_or_commutative<std::decay<decltype(*this)>::type>(
+       clone))
+    return expr2tc();
+
+  return clone;
 }
 
 template <class constant_type>
