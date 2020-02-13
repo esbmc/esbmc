@@ -1,4 +1,4 @@
-set(Boolector_MIN_VERSION "3.1.0")
+set(Boolector_MIN_VERSION "3.2.0")
 
 if(DEFINED Boolector_DIR)
     set(ENABLE_BOOLECTOR ON)
