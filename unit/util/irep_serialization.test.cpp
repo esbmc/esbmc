@@ -18,15 +18,14 @@
 #include <boost/test/included/unit_test.hpp>
 #include <boost/test/framework.hpp>
 #include <util/irep2_expr.h>
+#include <util/migrate.h>
 
 namespace btf = boost::unit_test::framework;
 // THIS APPROACH IS NOT THREAD SAFE!!!!
-void write_serialization(
-  irep_serializable &original,
-  const std::string &file_name)
+void write_serialization(const type2tc &original, const std::string &file_name)
 {
   std::ofstream ofs(file_name, std::ofstream::binary);
-  original.serialize(ofs);
+  irep_serializationt::write_irep2(ofs, original);
 }
 
 std::unique_ptr<std::istream> load_serialization(const std::string &file_name)
@@ -35,210 +34,155 @@ std::unique_ptr<std::istream> load_serialization(const std::string &file_name)
   return std::move(ptr);
 }
 
+void init_type_pool()
+{
+  static bool initialized = false;
+  if(!initialized)
+  {
+    type_poolt hack(true);
+    type_pool = hack;
+    initialized = true;
+  }
+}
+
+void type2t_types_test(const type2tc &irep2, type2t::type_ids id)
+{
+  std::string file_name(btf::current_test_case().p_name);
+  write_serialization(irep2, file_name);
+  auto istream = load_serialization(file_name);
+  typet irep;
+  irep_serializationt::read_irep(*istream, irep);
+  type2tc irep2_in;
+  migrate_type(irep, irep2_in);
+  BOOST_CHECK_EQUAL(irep2->type_id, id);
+  BOOST_CHECK_EQUAL(irep2->type_id, irep2_in->type_id);
+}
+
+#define type2t_int_test(SIZE)                                                  \
+  init_type_pool();                                                            \
+  const type2tc &irep2 = type_pool.get_int##SIZE();                            \
+  type2t_types_test(irep2, type2t::type_ids::signedbv_id);
+
+#define type2t_uint_test(SIZE)                                                 \
+  init_type_pool();                                                            \
+  const type2tc &irep2 = type_pool.get_uint##SIZE();                           \
+  type2t_types_test(irep2, type2t::type_ids::unsignedbv_id);
+
+#define type2t_integer_generator(SIZE)                                         \
+  BOOST_AUTO_TEST_CASE(type2t_uint##SIZE){                                     \
+    type2t_uint_test(SIZE)} BOOST_AUTO_TEST_CASE(type2t_int##SIZE)             \
+  {                                                                            \
+    type2t_int_test(SIZE)                                                      \
+  }
+
 // ******************** TESTS ********************
 
-// ** type deduction
-// Check whether the object is reconstructed with correct type
+BOOST_AUTO_TEST_SUITE(type_id_check)
 
-#define type_deduction_helper(TYPE)                                            \
-  std::string file_name(btf::current_test_case().p_name);                      \
-  TYPE obj;                                                                    \
-  write_serialization(obj, file_name);                                         \
-  auto istream = load_serialization(file_name);
-
-#define type_deduction_ok(OK_TYPE)                                             \
-  type_deduction_helper(OK_TYPE)                                               \
-    std::static_pointer_cast<OK_TYPE>(OK_TYPE::unserialize(*istream));
-
-#define type_deduction_false(OK_TYPE, WRONG_TYPE)                              \
-  type_deduction_helper(WRONG_TYPE)                                            \
-    BOOST_CHECK_THROW(OK_TYPE::unserialize(*istream), std::bad_cast);
-
-#define type_deduction_generator(TYPE, WRONG_TYPE)                             \
-  BOOST_AUTO_TEST_CASE(ok_##TYPE){type_deduction_ok(TYPE)};                    \
-  BOOST_AUTO_TEST_CASE(bad_##TYPE){type_deduction_false(TYPE, WRONG_TYPE)};
-
-#define type_deduction_type2t_ok(OK_TYPE, ID)                                  \
-  type_deduction_helper(OK_TYPE);                                              \
-  auto check =                                                                 \
-    std::dynamic_pointer_cast<OK_TYPE>(type2t::unserialize(*istream));         \
-  BOOST_CHECK_EQUAL(check->type_id, ID);
-
-#define type_deduction_type2t(OK_TYPE, WRONG_TYPE, ID)                         \
-  BOOST_AUTO_TEST_CASE(ok_##OK_TYPE){type_deduction_type2t_ok(OK_TYPE, ID)};
-
-BOOST_AUTO_TEST_SUITE(type_deduction)
-
-// Containers
-type_deduction_generator(type2tc, expr2tc);
-type_deduction_generator(expr2tc, type2tc);
-
-// type2t
-type_deduction_type2t(bool_type2t, empty_type2t, type2t::type_ids::bool_id);
-type_deduction_type2t(empty_type2t, bool_type2t, type2t::type_ids::empty_id);
-
-BOOST_AUTO_TEST_CASE(ok_cpp_name_type2t)
+BOOST_AUTO_TEST_CASE(type2t_bool_type)
 {
-  std::string file_name(btf::current_test_case().p_name);
-  irep_idt irep;
-  std::vector<type2tc> vec;
-  cpp_name_type2t obj(irep, vec);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<cpp_name_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::cpp_name_id);
+  init_type_pool();
+  const type2tc &irep2 = type_pool.get_bool();
+  type2t_types_test(irep2, type2t::type_ids::bool_id);
 }
 
-BOOST_AUTO_TEST_CASE(ok_string_type2t)
+BOOST_AUTO_TEST_CASE(type2t_empty_type)
 {
-  std::string file_name(btf::current_test_case().p_name);
-  string_type2t obj(0);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<string_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::string_id);
+  init_type_pool();
+  const type2tc &irep2 = type_pool.get_empty();
+  type2t_types_test(irep2, type2t::type_ids::empty_id);
 }
 
-BOOST_AUTO_TEST_CASE(ok_floatbv_type2t)
+BOOST_AUTO_TEST_CASE(type2t_struct_type)
 {
-  std::string file_name(btf::current_test_case().p_name);
-  floatbv_type2t obj(0, 1);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<floatbv_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::floatbv_id);
+  init_type_pool();
+  const std::vector<type2tc> members;
+  const std::vector<irep_idt> memb_names;
+  const std::vector<irep_idt> memb_pretty_names;
+  const irep_idt name;
+  const type2tc &irep2 =
+    struct_type2tc(members, memb_names, memb_pretty_names, name);
+  type2t_types_test(irep2, type2t::type_ids::struct_id);
 }
 
-BOOST_AUTO_TEST_CASE(ok_fixedbv_type2t)
+BOOST_AUTO_TEST_CASE(type2t_union_type)
 {
-  std::string file_name(btf::current_test_case().p_name);
-  fixedbv_type2t obj(0, 1);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<fixedbv_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::fixedbv_id);
+  init_type_pool();
+  const std::vector<type2tc> members;
+  const std::vector<irep_idt> memb_names;
+  const std::vector<irep_idt> memb_pretty_names;
+  const irep_idt name("name"); // Initialization is Required
+  const type2tc &irep2 =
+    union_type2tc(members, memb_names, memb_pretty_names, name);
+  type2t_types_test(irep2, type2t::type_ids::union_id);
 }
 
-BOOST_AUTO_TEST_CASE(ok_pointer_type2t)
+BOOST_AUTO_TEST_CASE(type2t_array_type)
 {
-  std::string file_name(btf::current_test_case().p_name);
-  type2tc tc;
-  pointer_type2t obj(tc);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<pointer_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::pointer_id);
+  init_type_pool();
+  const type2tc &_subtype = type_pool.get_bool(); // Initialization is Required
+  const expr2tc size;
+  bool inf;
+  const type2tc &irep2 = array_type2tc(_subtype, size, inf);
+  type2t_types_test(irep2, type2t::type_ids::array_id);
 }
 
-BOOST_AUTO_TEST_CASE(ok_array_type2t)
+BOOST_AUTO_TEST_CASE(type2t_pointer_type)
 {
-  std::string file_name(btf::current_test_case().p_name);
-  type2tc tc;
-  expr2tc ec;
-  array_type2t obj(tc, ec, true);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<array_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::array_id);
+  init_type_pool();
+  const type2tc &_subtype = type_pool.get_uint8(); // Initialization is Required
+  const type2tc irep2(new pointer_type2t(_subtype));
+  type2t_types_test(irep2, type2t::type_ids::pointer_id);
 }
 
-BOOST_AUTO_TEST_CASE(ok_code_type2t)
+BOOST_AUTO_TEST_CASE(type2t_string_type)
 {
-  std::string file_name(btf::current_test_case().p_name);
-  std::vector<type2tc> vec_code_type2t;
-  type2tc tc_code_type2t;
-  std::vector<irep_idt> names_code_type2t;
-  code_type2t obj(vec_code_type2t, tc_code_type2t, names_code_type2t, true);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<code_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::code_id);
+  init_type_pool();
+  const unsigned int elements = 16;
+  const type2tc &irep2 = string_type2tc(elements);
+  type2t_types_test(irep2, type2t::type_ids::string_id);
 }
 
-BOOST_AUTO_TEST_CASE(ok_signedbv_type2t)
+BOOST_AUTO_TEST_CASE(type2t_floatbv_type)
 {
-  std::string file_name(btf::current_test_case().p_name);
-  signedbv_type2t obj(0);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<signedbv_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::signedbv_id);
+  init_type_pool();
+  const unsigned int fraction = 2;
+  const unsigned int exponent = 4;
+  const type2tc &irep2 = floatbv_type2tc(fraction, exponent);
+  type2t_types_test(irep2, type2t::type_ids::floatbv_id);
 }
 
-BOOST_AUTO_TEST_CASE(ok_unsignedbv_type2t)
+BOOST_AUTO_TEST_CASE(type2t_fixedbv_type)
 {
-  std::string file_name(btf::current_test_case().p_name);
-  unsignedbv_type2t obj(0);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<unsignedbv_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::unsignedbv_id);
+  init_type_pool();
+  const unsigned int width = 2;
+  const unsigned int integer = 4;
+  const type2tc &irep2 = fixedbv_type2tc(width, integer);
+  type2t_types_test(irep2, type2t::type_ids::fixedbv_id);
 }
 
-BOOST_AUTO_TEST_CASE(ok_union_type2t)
+BOOST_AUTO_TEST_CASE(type2t_code_type)
 {
-  std::string file_name(btf::current_test_case().p_name);
-  const std::vector<type2tc> tc_union_type2t;
-  const std::vector<irep_idt> irep_union_type2t;
-  const std::vector<irep_idt> irep2_union_type2t;
-  const irep_idt name_union_type2t;
-  union_type2t obj(
-    tc_union_type2t, irep_union_type2t, irep2_union_type2t, name_union_type2t);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<union_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::union_id);
+  init_type_pool();
+  const std::vector<type2tc> args;
+  const type2tc &ret_type = type_pool.get_int8();
+  const std::vector<irep_idt> names;
+  const bool e = true;
+  const type2tc &irep2 = code_type2tc(args, ret_type, names, e);
+  type2t_types_test(irep2, type2t::type_ids::code_id);
 }
 
-BOOST_AUTO_TEST_CASE(ok_struct_type2t)
+BOOST_AUTO_TEST_CASE(type2t_symbol_type)
 {
-  std::string file_name(btf::current_test_case().p_name);
-  const std::vector<type2tc> tc_union_type2t;
-  const std::vector<irep_idt> irep_union_type2t;
-  const std::vector<irep_idt> irep2_union_type2t;
-  const irep_idt name_union_type2t;
-  struct_type2t obj(
-    tc_union_type2t, irep_union_type2t, irep2_union_type2t, name_union_type2t);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<struct_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::struct_id);
+  init_type_pool();
+  const dstring sym_name("name");
+  const type2tc &irep2 = symbol_type2tc(sym_name);
+  type2t_types_test(irep2, type2t::type_ids::symbol_id);
 }
 
-BOOST_AUTO_TEST_CASE(ok_symbol_type2t)
-{
-  std::string file_name(btf::current_test_case().p_name);
-  symbol_type2t obj("asd");
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<symbol_type2t>(type2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->type_id, type2t::type_ids::symbol_id);
-}
-
-// expr2t
-
-BOOST_AUTO_TEST_CASE(ok_unknown2t)
-{
-  std::string file_name(btf::current_test_case().p_name);
-  type2tc tc;
-  unknown2t obj(tc);
-  write_serialization(obj, file_name);
-  auto istream = load_serialization(file_name);
-  auto check =
-    std::dynamic_pointer_cast<unknown2t>(expr2t::unserialize(*istream));
-  BOOST_CHECK_EQUAL(check->expr_id, expr2t::expr_ids::unknown_id);
-}
+type2t_integer_generator(8);
+type2t_integer_generator(16);
+type2t_integer_generator(32);
+type2t_integer_generator(64);
 
 BOOST_AUTO_TEST_SUITE_END();
