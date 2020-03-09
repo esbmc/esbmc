@@ -126,7 +126,7 @@ public:
   }
 
   /**
-   * Reads an input as an 4 byte unsigned
+   * Reads an input as a 4 byte unsigned
    * @param in input stream
    * @return 4-byte unsigned with the value read
    */
@@ -140,14 +140,14 @@ public:
   static dstring read_string(std::istream &in);
 
   /**
-   * Sends a long to a output stream
+   * Sends a long to an output stream
    * @param out output stream
    * @param u long to be sent to output
    */
   static void write_long(std::ostream &out, unsigned u);
 
   /**
- * Sends a string to a output stream
+ * Sends a string to an output stream
  * @param out output stream
  * @param s string to be sent to output
  */
