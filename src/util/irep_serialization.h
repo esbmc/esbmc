@@ -95,11 +95,11 @@ public:
   void reference_convert(std::istream &in, irept &irep);
 
   /**
- * Checks if a reference was already written if yes, then stores it's id
- * if not, then stores it's id alongside with irep
- * @param irep irept to be stored
- * @param out output stream
- */
+   * Checks whether a reference was already written; if so, then stores its id; 
+   * otherwise, stores its id alongside with irep
+   * @param irep irept to be stored
+   * @param out output stream
+   */
   void reference_convert(const irept &irep, std::ostream &out);
 
   /**
