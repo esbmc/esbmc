@@ -77,6 +77,8 @@ void type2t_types_test(const type2tc &irep2, type2t::type_ids id)
 
 // ******************** TESTS ********************
 
+// ** TypeID
+// Check whether the object type is reconstructed correctly
 BOOST_AUTO_TEST_SUITE(type_id_check)
 
 BOOST_AUTO_TEST_CASE(type2t_bool_type)
@@ -138,7 +140,7 @@ BOOST_AUTO_TEST_CASE(type2t_pointer_type)
 BOOST_AUTO_TEST_CASE(type2t_string_type)
 {
   init_type_pool();
-  const unsigned int elements = 16;
+  const unsigned int elements = 16; // Any number greater than 0
   const type2tc &irep2 = string_type2tc(elements);
   type2t_types_test(irep2, type2t::type_ids::string_id);
 }
@@ -146,8 +148,8 @@ BOOST_AUTO_TEST_CASE(type2t_string_type)
 BOOST_AUTO_TEST_CASE(type2t_floatbv_type)
 {
   init_type_pool();
-  const unsigned int fraction = 2;
-  const unsigned int exponent = 4;
+  const unsigned int fraction = 2; // Any number greater than 0
+  const unsigned int exponent = 4; // Any number greater than 0
   const type2tc &irep2 = floatbv_type2tc(fraction, exponent);
   type2t_types_test(irep2, type2t::type_ids::floatbv_id);
 }
@@ -155,8 +157,8 @@ BOOST_AUTO_TEST_CASE(type2t_floatbv_type)
 BOOST_AUTO_TEST_CASE(type2t_fixedbv_type)
 {
   init_type_pool();
-  const unsigned int width = 2;
-  const unsigned int integer = 4;
+  const unsigned int width = 2; // Any number greater than 0
+  const unsigned int integer = 4; // Any number greater than 0
   const type2tc &irep2 = fixedbv_type2tc(width, integer);
   type2t_types_test(irep2, type2t::type_ids::fixedbv_id);
 }
@@ -175,7 +177,7 @@ BOOST_AUTO_TEST_CASE(type2t_code_type)
 BOOST_AUTO_TEST_CASE(type2t_symbol_type)
 {
   init_type_pool();
-  const dstring sym_name("name");
+  const dstring sym_name("name"); // Initialization is Required
   const type2tc &irep2 = symbol_type2tc(sym_name);
   type2t_types_test(irep2, type2t::type_ids::symbol_id);
 }
