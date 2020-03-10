@@ -34,6 +34,6 @@ protected:
   virtual void run_on_skip(symex_target_equationt::SSA_stept &step) = 0;
   virtual void run_on_renumber(symex_target_equationt::SSA_stept &step) = 0;
 
-  symex_target_equationt::SSA_stepst steps;
+  symex_target_equationt::SSA_stepst &steps;
 };
 #endif //ESBMC_SSA_STEP_ALGORITHM_H

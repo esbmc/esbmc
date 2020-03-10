@@ -39,6 +39,7 @@ void ssa_step_algorithm::run()
 
   for(auto s : steps)
   {
-    run_on_function[s.type](s);
+    if(!s.ignore)
+      run_on_function[s.type](s);
   }
 }

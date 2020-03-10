@@ -40,6 +40,8 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
+#include <cache/algorithms/ssa_step_algorithm_debug.h>
+#include <cache/green/green_cache.h>
 
 bmct::bmct(
   goto_functionst &funcs,
@@ -737,6 +739,12 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       str << result->remaining_claims << " remaining after simplification ";
       str << "(" << BigInt(eq->SSA_steps.size()) - ignored << " assignments)";
       status(str.str());
+    }
+
+    if(options.get_bool_option("enable-caching"))
+    {
+      green_cache cache;
+      cache.run(eq->SSA_steps);
     }
 
     if(options.get_bool_option("document-subgoals"))

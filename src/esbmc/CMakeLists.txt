@@ -20,6 +20,6 @@ target_include_directories(esbmc
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_link_libraries(esbmc ansicfrontend cppfrontend clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs)
+target_link_libraries(esbmc ansicfrontend cppfrontend clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs smt_cache)
 
 install(TARGETS esbmc DESTINATION bin)
