@@ -15,6 +15,13 @@ class lexicographical_reordering : public ssa_step_algorithm
 public:
   lexicographical_reordering(symex_target_equationt::SSA_stepst &steps);
 
+private:
+  void process_expr(expr2tc &rhs);
+  void run_on_relation(expr2tc &expr);
+  void run_on_value(expr2tc &expr);
+  void run_on_arith(expr2tc &expr);
+  void run_on_symbol(expr2tc &expr);
+
 protected:
   void run_on_assignment(symex_target_equationt::SSA_stept &step) override
   {
