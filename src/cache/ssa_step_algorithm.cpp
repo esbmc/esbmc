@@ -37,9 +37,11 @@ void ssa_step_algorithm::run()
     map_initialized = true;
   }
 
-  for(auto s : steps)
+  for(auto bb = steps.begin(); bb != steps.end(); bb++)
   {
-    if(!s.ignore)
-      run_on_function[s.type](s);
+    if(!bb->ignore)
+    {
+      run_on_function[bb->type](*bb);
+    }
   }
 }

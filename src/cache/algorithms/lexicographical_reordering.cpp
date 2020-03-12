@@ -2,20 +2,22 @@
 // Created by rafaelsa on 10/03/2020.
 //
 
+#include <stack>
 #include "lexicographical_reordering.h"
 
 namespace
 {
-const std::array<expr2t::expr_ids, 8> arith_expr_names = {
+const std::array<expr2t::expr_ids, 4> arith_expr_names = {
   expr2t::expr_ids::add_id,
-  expr2t::expr_ids::sub_id,
   expr2t::expr_ids::mul_id,
-  expr2t::expr_ids::div_id,
   expr2t::expr_ids::ieee_add_id,
-  expr2t::expr_ids::ieee_sub_id,
-  expr2t::expr_ids::ieee_div_id,
   expr2t::expr_ids::ieee_mul_id};
 
+inline const bool is_arith_expr(const expr2t &expr)
+{
+  return std::count(
+           arith_expr_names.begin(), arith_expr_names.end(), expr.expr_id) > 0;
+}
 const std::array<expr2t::expr_ids, 6> relation_expr_names = {
   expr2t::expr_ids::equality_id,
   expr2t::expr_ids::notequal_id,
@@ -35,10 +37,30 @@ const std::array<expr2t::expr_ids, 9> value_expr_names = {
   expr2t::expr_ids::constant_array_id,
   expr2t::expr_ids::constant_array_of_id};
 
+inline const bool is_value_expr(const expr2t &expr)
+{
+  return std::count(
+           value_expr_names.begin(), value_expr_names.end(), expr.expr_id) > 0;
+}
+
 const std::array<expr2t::expr_ids, 1> symbol_expr_names = {
   expr2t::expr_ids::symbol_id};
 
-const std::array<expr2t::expr_ids, 76> ignored_expr_names = {
+inline const bool is_symbolic_expr(const expr2t &expr)
+{
+  return std::count(
+           symbol_expr_names.begin(), symbol_expr_names.end(), expr.expr_id) >
+         0;
+}
+
+const std::array<expr2t::expr_ids, 80> ignored_expr_names = {
+  // Binary operations that cannot be simple swapped
+  expr2t::expr_ids::div_id,
+  expr2t::expr_ids::ieee_div_id,
+  expr2t::expr_ids::sub_id,
+  expr2t::expr_ids::ieee_sub_id,
+
+  // Other expr
   expr2t::expr_ids::typecast_id,
   expr2t::expr_ids::bitcast_id,
   expr2t::expr_ids::nearbyint_id,
@@ -115,12 +137,122 @@ const std::array<expr2t::expr_ids, 76> ignored_expr_names = {
   expr2t::expr_ids::signbit_id,
   expr2t::expr_ids::concat_id,
   expr2t::expr_ids::extract_id};
+
+typedef std::vector<symbol2tc> symbols_vec;
+typedef std::vector<constant_int2tc> values_vec;
+
+void replace_value(
+  const std::shared_ptr<arith_2ops> op,
+  bool is_side_1,
+  symbols_vec &symbols,
+  values_vec &values)
+{
+  auto side_to_check = is_side_1 ? op->side_1 : op->side_2;
+  bool is_to_change =
+    is_symbolic_expr(*side_to_check) || is_value_expr(*side_to_check);
+  if(is_to_change)
+  {
+    expr2tc to_add;
+    if(!symbols.empty())
+    {
+      to_add = symbols.back();
+      symbols.pop_back();
+    }
+    else
+    {
+      to_add = values.back();
+      values.pop_back();
+    }
+    if(is_side_1)
+      op->side_1 = to_add;
+    else
+      op->side_2 = to_add;
+  }
+}
+
+void add_value(
+  const std::shared_ptr<arith_2ops> op,
+  bool is_side_1,
+  symbols_vec &symbols,
+  values_vec &values)
+{
+  auto side_to_add = is_side_1 ? op->side_1 : op->side_2;
+  if(is_symbolic_expr(*side_to_add))
+
+  {
+    symbol2tc symbol;
+    symbol = side_to_add;
+    symbols.push_back(symbol);
+  }
+  else if(is_value_expr(*side_to_add))
+  {
+    constant_int2tc value;
+    value = side_to_add;
+    values.push_back(value);
+  }
+}
+
+void transverse_replacing_arith_op(
+  const std::shared_ptr<arith_2ops> op,
+  symbols_vec &symbols,
+  values_vec &values)
+{
+  if(op->side_1->expr_id == op->expr_id)
+  {
+    std::shared_ptr<arith_2ops> arith;
+    arith = std::dynamic_pointer_cast<arith_2ops>(op->side_1);
+    transverse_replacing_arith_op(arith, symbols, values);
+  }
+
+  replace_value(op, true, symbols, values);
+  if(op->side_2->expr_id == op->expr_id)
+  {
+    std::shared_ptr<arith_2ops> arith;
+    arith = std::dynamic_pointer_cast<arith_2ops>(op->side_2);
+    transverse_replacing_arith_op(arith, symbols, values);
+  }
+  replace_value(op, false, symbols, values);
+}
+
+void transverse_arith_op(
+  const std::shared_ptr<arith_2ops> op,
+  symbols_vec &symbols,
+  values_vec &values)
+{
+  if(op->side_1->expr_id == op->expr_id)
+  {
+    std::shared_ptr<arith_2ops> arith;
+    arith = std::dynamic_pointer_cast<arith_2ops>(op->side_1);
+    transverse_arith_op(arith, symbols, values);
+  }
+  add_value(op, true, symbols, values);
+
+  if(op->side_2->expr_id == op->expr_id)
+  {
+    std::shared_ptr<arith_2ops> arith;
+    arith = std::dynamic_pointer_cast<arith_2ops>(op->side_2);
+    transverse_arith_op(arith, symbols, values);
+  }
+  add_value(op, false, symbols, values);
+}
+
 } // namespace
 
-lexicographical_reordering::lexicographical_reordering(
-  symex_target_equationt::SSA_stepst &steps)
-  : ssa_step_algorithm(steps)
+bool lexicographical_reordering::should_swap(expr2tc &side1, expr2tc &side2)
 {
+  bool result = is_value_expr(*side1) && is_symbolic_expr(*side2);
+  if(is_symbolic_expr(*side1) && is_symbolic_expr(*side2))
+  {
+    std::shared_ptr<symbol_data> symbol1;
+    symbol1 = std::dynamic_pointer_cast<symbol_data>(side1);
+
+    std::shared_ptr<symbol_data> symbol2;
+    symbol2 = std::dynamic_pointer_cast<symbol_data>(side2);
+
+    result = symbol1->get_symbol_name() > symbol2->get_symbol_name();
+  }
+
+  return result;
 }
 
 void lexicographical_reordering::process_expr(expr2tc &rhs)
@@ -177,11 +309,24 @@ void lexicographical_reordering::process_expr(expr2tc &rhs)
   expr_to_function[rhs->expr_id](rhs);
 }
 
+void lexicographical_reordering::run_on_assume(
+  symex_target_equationt::SSA_stept &step)
+{
+  expr2tc &cond = step.cond;
+  process_expr(cond);
+}
+
+void lexicographical_reordering::run_on_assignment(
+  symex_target_equationt::SSA_stept &step)
+{
+  expr2tc &rhs = step.rhs;
+  process_expr(rhs);
+}
+
 void lexicographical_reordering::run_on_assert(
   symex_target_equationt::SSA_stept &step)
 {
   expr2tc &cond = step.cond;
-  std::string &comment = step.comment;
 
   // First assert irep should begin with an implies
   assert(cond->expr_id == expr2t::expr_ids::implies_id);
@@ -200,26 +345,34 @@ void lexicographical_reordering::run_on_relation(expr2tc &expr)
   process_expr(relation->side_1);
   process_expr(relation->side_2);
 }
+
 void lexicographical_reordering::run_on_arith(expr2tc &expr)
 {
+  /* The reorder will check if LHS and RHS are symbols/values
+   * the precedence will be x op y op z op value
+   */
   std::shared_ptr<arith_2ops> arith;
   arith = std::dynamic_pointer_cast<arith_2ops>(expr);
-  // HERE THE REORDER SHOULD TAKE PLACE
-  std::cout << "BEFORE\n";
-  arith->dump();
-  auto ref = arith->side_2;
-  arith->side_2 = arith->side_1;
-  arith->side_1 = ref;
-  std::cout << "AFTER\n";
-  arith->dump();
   process_expr(arith->side_1);
   process_expr(arith->side_2);
-}
-void lexicographical_reordering::run_on_symbol(expr2tc &expr)
-{
-  std::shared_ptr<symbol_data> symbol;
-  symbol = std::dynamic_pointer_cast<symbol_data>(expr);
-}
-void lexicographical_reordering::run_on_value(expr2tc &expr)
-{
+
+  /**
+   * The check are gonna be:
+   *
+   * 1. If the expression is BinOp X Y
+   * 2. If The expression is BinOp BinOp X Y Z
+   * 3. Check if constant propagation did not happen
+   */
+
+  symbols_vec symbols;
+  values_vec values;
+  transverse_arith_op(arith, symbols, values);
+  sort(symbols.begin(), symbols.end(), [](const auto &lhs, const auto &rhs) {
+    return lhs->get_symbol_name() > rhs->get_symbol_name();
+  });
+
+  if(values.size() > 1)
+    throw std::runtime_error("Reordering expects max of one number");
+
+  transverse_replacing_arith_op(arith, symbols, values);
 }
