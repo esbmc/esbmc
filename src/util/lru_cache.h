@@ -94,6 +94,5 @@ public:
   {
     return max_capacity;
   }
-
 };
 #endif
