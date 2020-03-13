@@ -95,9 +95,5 @@ public:
     return max_capacity;
   }
 
-  const size_t max_size()
-  {
-    return max_capacity;
-  }
 };
 #endif
