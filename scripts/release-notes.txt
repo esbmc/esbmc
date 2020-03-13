@@ -1,5 +1,26 @@
 Release Notes of the ESBMC model checker
 
+*** Version 6.2
+* Cmake is now the default build system
+* ESBMC now defaults to 64 bits mode
+* ESBMC now defaults to use floating-points
+* Updated ESBMC to use clang version to 9.0 minimal
+* Updated ESBMC to use Boolector 3.2
+* Updated Z3 and boolector licenses
+* Simplified some methods in our SMT conversion API
+* Removed goto-unwind option
+* Removed duplicated Z3 header
+* Removed unnecessary code due to new c++ standards
+* Removed unnecessary mp_integer typedef
+* Removed old regressions
+* Removed autotools
+* Added support for Float128 in the frontend
+* Several expression optimizations implemented
+* Several new cex queries implemented
+* Fixed several small issues in all SMT backends
+* Fixed alloca'd variables not being destroyed at the end of frames
+* Fixed some variables going out of scope but not being marked as detroyed
+
 *** Version 6.1
 * Use clang to generate declaration names
 * Added support for popcount
