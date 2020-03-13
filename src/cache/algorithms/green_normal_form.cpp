@@ -3,4 +3,3 @@
 //
 
 #include "green_normal_form.h"
-

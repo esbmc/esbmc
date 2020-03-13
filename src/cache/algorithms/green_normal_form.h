@@ -17,10 +17,13 @@
  * - k is an integer
  * - OP belongs to { =, !=, <= }
  *
- * Example:
- * A + B + C + 7 < 0 -> A + B + C + 8 <= 0
- * A + B + C + 7 > 0 -> -A -B -C -6  <= 0
- * A + B + C + 7 >= 0 -> -A -B -C -7  <= 0
+ * Rules for changing relations:
+ * A + B + C + ... + k = y -> A + B + C + ... + (k-y) = 0
+ * A + B + C + ... + k != y -> A + B + C + ... + (k-y) != 0
+ * A + B + C + ... + k <= y -> A + B + C + (k-y) <= 0
+ * A + B + C + ... + k < y -> A + B + C + (k-y+1) <= 0
+ * A + B + C + ... + k > y -> -(A + B + C + (k+y-1)) <= 0
+ * A + B + C + ... + k >= y -> -(A + B + C + (k+y)) <= 0
  *
  * NOTES:
  *
@@ -28,7 +31,23 @@
  * - The substituition rules works only for *Integers*!
  */
 
-class green_normal_form: public ssa_step_algorithm
+namespace
+{
+const std::array<expr2t::expr_ids, 6> relation_expr_names = {
+  expr2t::expr_ids::equality_id,
+  expr2t::expr_ids::notequal_id,
+  expr2t::expr_ids::lessthan_id,
+  expr2t::expr_ids::greaterthan_id,
+  expr2t::expr_ids::lessthanequal_id,
+  expr2t::expr_ids::greaterthanequal_id};
+
+const std::array<expr2t::expr_ids, 3> valid_relation_names = {
+  expr2t::expr_ids::equality_id,
+  expr2t::expr_ids::notequal_id,
+  expr2t::expr_ids::lessthanequal_id};
+
+} // namespace
+class green_normal_form : public ssa_step_algorithm
 {
 public:
   green_normal_form(symex_target_equationt::SSA_stepst &steps)
@@ -48,7 +67,10 @@ private:
    * @param relation
    * @return
    */
-  bool is_operator_correct(expr2tc &relation);
+  bool is_operator_correct(expr2tc &relation)
+  {
+    return false;
+  }
 
 protected:
   void run_on_assignment(symex_target_equationt::SSA_stept &step) override
