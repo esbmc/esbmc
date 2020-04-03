@@ -50,10 +50,12 @@ const std::array<expr2t::expr_ids, 3> valid_relation_names = {
 class green_normal_form : public ssa_step_algorithm
 {
 public:
-  green_normal_form(symex_target_equationt::SSA_stepst &steps)
-    : ssa_step_algorithm(steps)
+  explicit green_normal_form(symex_target_equationt::SSA_stepst &steps)
+    : ssa_step_algorithm(steps) 
   {
   }
+
+  
 
 private:
   /**
