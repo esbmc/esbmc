@@ -62,26 +62,50 @@ private:
    */
   void convert_inequality(expr2tc &inequality);
 
+
   /**
    * Checks whether the operator of the relation is not <=, = or !=
    * @param relation
    * @return
    */
-  bool is_operator_correct(expr2tc &relation)
+  bool is_operator_correct(expr2tc &relation);
+
+  /**
+   * Checks whether the RHS side of the expression is 0
+   * @param relation
+   * @return
+   */
+  bool is_normal_form(expr2tc &relation)
   {
     return false;
   }
+
+    /**
+   * Checks whether the expression contains only Integers
+   * @param relation
+   * @return
+   */
+  bool is_integer_expr(expr2tc &relation);
+
+  void process_expr(expr2tc &rhs);
+
+  /**
+   * This should convert equality of the form != into =
+   * @param equality to be converted
+   */
+  void convert_equality(expr2tc &equality);
+
+  void convert_to_normal_form(expr2tc &equality);
+
+  void set_rightest_value_of_lhs_relation(expr2tc &equality, BigInt value);
 
 protected:
   void run_on_assignment(symex_target_equationt::SSA_stept &step) override
   {
   }
-  void run_on_assume(symex_target_equationt::SSA_stept &step) override
-  {
-  }
-  void run_on_assert(symex_target_equationt::SSA_stept &step) override
-  {
-  }
+  void run_on_assume(symex_target_equationt::SSA_stept &step) override;
+  void run_on_assert(symex_target_equationt::SSA_stept &step) override;
+
   void run_on_output(symex_target_equationt::SSA_stept &step) override
   {
   }
