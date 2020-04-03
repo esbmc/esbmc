@@ -10,9 +10,9 @@ target_compile_definitions(lexicographical_reordering_test PRIVATE "BOOST_TEST_D
 target_link_libraries(lexicographical_reordering_test  smt_cache util_esbmc bigint ${Boost_LIBRARIES})
 add_test(NAME ReorderingTest COMMAND lexicographical_reordering_test)
 
-add_executable(green_normal_test green_normal_form.test.cpp)
-target_compile_definitions(green_normal_test PRIVATE "BOOST_TEST_DYN_LINK=1")
+add_executable(green_normal_form_test green_normal_form.test.cpp)
+target_compile_definitions(green_normal_form_test PRIVATE "BOOST_TEST_DYN_LINK=1")
 
-target_link_libraries(green_normal_test smt_cache util_esbmc bigint ${Boost_LIBRARIES})
-add_test(NAME GreenNormalFormTest COMMAND green_normal_test)
+target_link_libraries(green_normal_form_test smt_cache ansicfrontend cppfrontend clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs ${Boost_LIBRARIES})
+add_test(NAME GreenNormalFormTest COMMAND green_normal_form_test)
 

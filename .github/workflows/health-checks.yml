@@ -34,7 +34,7 @@ jobs:
     - name: Build Utils Tests
       run: cd build && ninja lrucachetest
     - name: Build Cache Tests
-      run: cd build && ninja ssa_step_algorithm_test && ninja lexicographical_reordering_test
+      run: cd build && ninja ssa_step_algorithm_test && ninja lexicographical_reordering_test && ninja green_normal_form_test
     - name: Run tests
       run: cd build && ninja test
 

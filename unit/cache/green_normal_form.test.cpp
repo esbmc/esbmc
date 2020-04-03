@@ -21,6 +21,11 @@
 #include "ssa_step_utils.h"
 namespace utf = boost::unit_test;
 
+namespace
+{
+
+}
+
 // ******************** TESTS ********************
 
 // ** A + B + C + ... + k == y -> A + B + C + ... + (k-y) == 0
@@ -30,6 +35,7 @@ BOOST_AUTO_TEST_SUITE(green_normal_form_equality)
 
 BOOST_AUTO_TEST_CASE(equality_1_test)
 {
+  init_test_values();
   expr2tc expr = equality_1_ordered();
 
   symex_target_equationt::SSA_stepst ssa_steps;
@@ -37,14 +43,10 @@ BOOST_AUTO_TEST_CASE(equality_1_test)
 
   green_normal_form t(ssa_steps);
   t.run();
-  expr2tc &actual = ssa_steps.front().rhs;
+
+  expr2tc &actual = ssa_steps.front().cond;
   expr2tc expected = equality_1_green_normal();
-  
-  std::shared_ptr<arith_2ops> arith;
-  //arith = std::dynamic_pointer_cast<arith_2ops>(rhs);
-  // TEST if after applying the algorithm side_1 still is 'a'
-  //      and side_2 is still b
-  BOOST_TEST(false);
+  is_equality_1_equivalent(actual, expected);
 }
 
 

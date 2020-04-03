@@ -7,7 +7,7 @@
 
 
 #include <cache/ssa_step_algorithm.h>
-
+#include <boost/test/included/unit_test.hpp>
 // TODO: Test all functions from this file
 
 
@@ -33,8 +33,9 @@ bool is_unsigned_equal(expr2tc &v1, expr2tc &v2)
   constant_int2tc value1 = v1;
   constant_int2tc value2 = v2;
 
-  return value1->value == value2->value;
+  return value1->value.compare(value2->value) == 0;
 }
+
 
 symbol2tc create_unsigned_32_symbol_expr(std::string name)
 {
@@ -52,7 +53,7 @@ constant_int2tc create_unsigned_32_value_expr(unsigned value)
   return expression;
 }
 
-constant_int2tc create_signed_32_value_expr(unsigned value)
+constant_int2tc create_signed_32_value_expr(int value)
 {
   signedbv_type2tc i32type(32);
   BigInt num(value);
@@ -117,20 +118,22 @@ namespace
   symbol2tc X = create_unsigned_32_symbol_expr("X");
   constant_int2tc values[10];
   constant_int2tc neg_values[10];
-  void init_values()
-  {
-    static bool is_initialized = false;
-    if(is_initialized) return;
-    for(int i = 0; i < 10; i++)
-    {
-      values[i] = create_signed_32_value_expr(i);
-      neg_values[i] = create_signed_32_value_expr(0-i);
-    }
-    is_initialized = true;
-  } 
+
 }
 
-// ((Y + y) + 7) == 9
+void init_test_values()
+{
+  static bool is_initialized = false;
+  if(is_initialized) return;
+  for(int i = 0; i < 10; i++)
+  {
+    values[i] = create_signed_32_value_expr(i);
+    neg_values[i] = create_signed_32_value_expr(0-i);
+  }
+  is_initialized = true;
+}
+
+// ((Y + X) + 7) == 9
 inline expr2tc equality_1()
 {
   add2tc add_1 = create_signed_32_add_expr(Y,X);
@@ -155,6 +158,40 @@ inline expr2tc equality_1_green_normal()
   add2tc add_2 = create_signed_32_add_expr(add_1,neg_values[2]);
   equality2tc result = create_equality_relation(add_2, values[0]);
   return result;
+}
+
+void is_equality_1_equivalent(expr2tc &actual, expr2tc &expected)
+{
+  std::shared_ptr<equality2t> actual_relation;
+  actual_relation = std::dynamic_pointer_cast<equality2t>(actual);
+  std::shared_ptr<equality2t> expected_relation;
+  expected_relation = std::dynamic_pointer_cast<equality2t>(expected);
+
+  // RHS OF RELATION
+  bool is_rhs_value_equal = is_unsigned_equal(actual_relation->side_2, expected_relation->side_2);
+  BOOST_TEST(is_rhs_value_equal);
+
+  // LHS OF RELATION
+
+  std::shared_ptr<arith_2ops> actual_outter_add;
+  actual_outter_add = std::dynamic_pointer_cast<arith_2ops>(actual_relation->side_1);
+
+  std::shared_ptr<arith_2ops> expected_outter_add;
+  expected_outter_add = std::dynamic_pointer_cast<arith_2ops>(expected_relation->side_1);
+
+  // First symbol
+  bool outter_symbol = is_unsigned_equal(actual_outter_add->side_2, expected_outter_add->side_2);
+  BOOST_TEST(outter_symbol);
+
+  // Inner add
+  std::shared_ptr<arith_2ops> actual_inner_add;
+  actual_inner_add = std::dynamic_pointer_cast<arith_2ops>(actual_outter_add->side_1);
+
+  std::shared_ptr<arith_2ops> expected_inner_add;
+  expected_inner_add = std::dynamic_pointer_cast<arith_2ops>(expected_outter_add->side_1);
+
+  BOOST_TEST(is_symbols_equal(actual_inner_add->side_1, expected_inner_add->side_1));
+  BOOST_TEST(is_symbols_equal(actual_inner_add->side_2, expected_inner_add->side_2));
 }
 
 // (1 + x) == 0
