@@ -50,12 +50,7 @@ const std::array<expr2t::expr_ids, 3> valid_relation_names = {
 class green_normal_form : public ssa_step_algorithm
 {
 public:
-  explicit green_normal_form(symex_target_equationt::SSA_stepst &steps)
-    : ssa_step_algorithm(steps) 
-  {
-  }
-
-  
+  explicit green_normal_form(symex_target_equationt::SSA_stepst &steps);
 
 private:
   /**
@@ -63,7 +58,6 @@ private:
    * @param inequality to be converted
    */
   void convert_inequality(expr2tc &inequality);
-
 
   /**
    * Checks whether the operator of the relation is not <=, = or !=
@@ -82,7 +76,7 @@ private:
     return false;
   }
 
-    /**
+  /**
    * Checks whether the expression contains only Integers
    * @param relation
    * @return

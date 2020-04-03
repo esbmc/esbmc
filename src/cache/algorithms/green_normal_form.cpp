@@ -4,8 +4,7 @@
 
 #include "green_normal_form.h"
 
-void green_normal_form::run_on_assert(
-  symex_target_equationt::SSA_stept &step)
+void green_normal_form::run_on_assert(symex_target_equationt::SSA_stept &step)
 {
   expr2tc &cond = step.cond;
 
@@ -17,6 +16,12 @@ void green_normal_form::run_on_assert(
   implies = std::dynamic_pointer_cast<logic_2ops>(cond);
   expr2tc &rhs(implies->side_2);
   process_expr(rhs);
+}
+
+void green_normal_form::run_on_assume(symex_target_equationt::SSA_stept &step)
+{
+  expr2tc &cond = step.cond;
+  process_expr(cond);
 }
 
 bool green_normal_form::is_integer_expr(expr2tc &relation)
@@ -39,19 +44,18 @@ bool green_normal_form::is_integer_expr(expr2tc &relation)
   return false;
 }
 
-
 bool green_normal_form::is_operator_correct(expr2tc &relation)
 {
   return true;
 }
 
-
 void green_normal_form::convert_to_normal_form(expr2tc &equality)
 {
-  
 }
 
-void green_normal_form::set_rightest_value_of_lhs_relation(expr2tc &equality, BigInt value)
+void green_normal_form::set_rightest_value_of_lhs_relation(
+  expr2tc &equality,
+  BigInt value)
 {
   if(equality->expr_id == expr2t::expr_ids::add_id)
   {
@@ -62,15 +66,14 @@ void green_normal_form::set_rightest_value_of_lhs_relation(expr2tc &equality, Bi
   else if(equality->expr_id == expr2t::expr_ids::constant_int_id)
   {
     std::shared_ptr<constant_int2t> relation_rhs;
-    relation_rhs = std::dynamic_pointer_cast<constant_int2t>(equality); 
+    relation_rhs = std::dynamic_pointer_cast<constant_int2t>(equality);
     relation_rhs->value -= value;
   }
-
 }
 
 void green_normal_form::process_expr(expr2tc &rhs)
 {
-  if (rhs->expr_id != expr2t::expr_ids::equality_id)
+  if(rhs->expr_id != expr2t::expr_ids::equality_id)
   {
     return;
   }
@@ -86,9 +89,12 @@ void green_normal_form::process_expr(expr2tc &rhs)
   }
 
   std::shared_ptr<constant_int2t> relation_rhs;
-  relation_rhs = std::dynamic_pointer_cast<constant_int2t>(relation->side_2); 
+  relation_rhs = std::dynamic_pointer_cast<constant_int2t>(relation->side_2);
   old_rhs = relation_rhs->value;
   relation_rhs->value = 0;
-
-
+  set_rightest_value_of_lhs_relation(relation->side_1, old_rhs);
+}
+green_normal_form::green_normal_form(symex_target_equationt::SSA_stepst &steps)
+  : ssa_step_algorithm(steps)
+{
 }

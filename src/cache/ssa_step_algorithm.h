@@ -24,7 +24,8 @@ public:
     : steps(steps)
   {
   }
-  virtual void run();
+
+  void run();
 
 protected:
   virtual void run_on_assignment(symex_target_equationt::SSA_stept &step) = 0;
