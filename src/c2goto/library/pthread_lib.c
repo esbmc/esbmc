@@ -483,23 +483,39 @@ __ESBMC_HIDE:;
   return 0;
 }
 
+__attribute__((annotate("__ESBMC_inf_size"))) 
+const void *__ESBMC_thread_keys[];
+
+__attribute__((annotate("__ESBMC_inf_size"))) 
+void (*__ESBMC_thread_key_dtors[])(void *);
+
+unsigned long __ESBMC_next_thread_key;
+
 int pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 {
 __ESBMC_HIDE:;
-  // TODO
+  __ESBMC_thread_keys[__ESBMC_next_thread_key] = 0;
+  __ESBMC_thread_key_dtors[__ESBMC_next_thread_key] = destructor;
+  *key = __ESBMC_next_thread_key++;
+  return 0;
+}
+
+int pthread_key_delete(pthread_key_t key)
+{
+__ESBMC_HIDE:;
+  __ESBMC_thread_keys[key] = 0;
   return 0;
 }
 
 void *pthread_getspecific(pthread_key_t key)
 {
 __ESBMC_HIDE:;
-  // TODO
-  return NULL;
+  return (void *)__ESBMC_thread_keys[key];
 }
 
 int pthread_setspecific(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
-  // TODO
+  __ESBMC_thread_keys[key] = value;
   return 0;
 }
