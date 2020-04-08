@@ -104,6 +104,7 @@ __ESBMC_HIDE:;
 
   __ESBMC_atomic_begin();
   pthread_t threadid = __ESBMC_spawn_thread(pthread_trampoline);
+  void (**thread_key_dtors)(void *) = __ESBMC_thread_key_destructors;
   __ESBMC_num_total_threads++;
   __ESBMC_num_threads_running++;
   __ESBMC_pthread_thread_running[threadid] = 1;
@@ -124,8 +125,6 @@ void pthread_exit(void *retval)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  // Destructor support is disabled as it is too expensive due to its extensive
-  // use of shared variables.
   for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
     const void *key = __ESBMC_thread_keys[i];
@@ -502,17 +501,13 @@ __ESBMC_HIDE:;
 int pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 {
 __ESBMC_HIDE:;
-  __ESBMC_atomic_begin();
   __ESBMC_assert(
     key != NULL,
     "In pthread_key_create, key parameter should be different than NULL.");
   __ESBMC_thread_keys[__ESBMC_next_thread_key] = NULL;
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   *key = __ESBMC_next_thread_key++;
-  // we assume the pthread_key_create() function will store
-  // the newly created key value at *key and return zero.
-  return 0;
-  __ESBMC_atomic_end();
+  return nondet_bool() ? (nondet_bool()? EAGAIN : ENOMEM) : 0;
 }
 
 int pthread_key_delete(pthread_key_t key)
@@ -531,6 +526,10 @@ __ESBMC_HIDE:;
 int pthread_setspecific(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
+  if(value == NULL)
+    return EINVAL;
+
   __ESBMC_thread_keys[key] = value;
-  return 0;
+  
+  return (nondet_bool()? ENOMEM : 0);
 }
