@@ -15,7 +15,7 @@ void *worker( void *k ) {
   assert( val == 0 );
     
   int r = pthread_setspecific( *key, (void *)42 );
-  assert( r == 0 || r == EINVAL || r == ENOMEM);
+  assert( r == 0 || r == ENOMEM);
     
   val = (long)pthread_getspecific( *key );
   assert( val == 42 );
@@ -35,13 +35,13 @@ int main() {
   pthread_create( &tid, NULL, worker, &key );
 
   val = (long)pthread_getspecific( key );
-  assert( val == 0 || val == 42);
+  assert( val == 0 || val == 42 );
 
   r = pthread_setspecific( key, (void *)16 );
-  assert( r == 0 || r == EINVAL || r == ENOMEM);
+  assert( r == 0 || r == ENOMEM);
 
   val = (long)pthread_getspecific( key );
-  assert( val == 16);
+  assert(val == 16 || val == 42);
 
   pthread_join( tid, NULL );
   val = (long)pthread_getspecific( key );

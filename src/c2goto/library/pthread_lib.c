@@ -501,12 +501,14 @@ __ESBMC_HIDE:;
 int pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_assert(
     key != NULL,
     "In pthread_key_create, key parameter should be different than NULL.");
   __ESBMC_thread_keys[__ESBMC_next_thread_key] = NULL;
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   *key = __ESBMC_next_thread_key++;
+  __ESBMC_atomic_end();
   return nondet_bool() ? (nondet_bool()? EAGAIN : ENOMEM) : 0;
 }
 
@@ -520,16 +522,23 @@ __ESBMC_HIDE:;
 void *pthread_getspecific(pthread_key_t key)
 {
 __ESBMC_HIDE:;
-  return (void *)__ESBMC_thread_keys[key];
+  __ESBMC_atomic_begin();
+  if (key > __ESBMC_next_thread_key)
+    return NULL;
+  else
+    return (void *)__ESBMC_thread_keys[key];
+  __ESBMC_atomic_end();
 }
 
 int pthread_setspecific(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   if(value == NULL)
     return EINVAL;
 
   __ESBMC_thread_keys[key] = value;
   
+  __ESBMC_atomic_end();
   return (nondet_bool()? ENOMEM : 0);
 }
