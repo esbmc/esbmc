@@ -1,6 +1,8 @@
-/* Contributed by: Vladimír Štill, https://divine.fi.muni.cz
-   Description: A test case for pthread TLS.
-*/
+/*
+ * Extracted from https://github.com/sosy-lab/sv-benchmarks).
+ * Contributed by Vladimír Štill (https://divine.fi.muni.cz).
+ * Description: A test case for pthread TLS.
+ */
 
 #include <pthread.h>
 #include <assert.h>

@@ -495,7 +495,13 @@ int pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 {
 __ESBMC_HIDE:;
   __ESBMC_thread_keys[__ESBMC_next_thread_key] = 0;
+#if 0
+  // Destructor support is disabled as it is too expensive due to its extensive
+  // use of shared variables.
   __ESBMC_thread_key_dtors[__ESBMC_next_thread_key] = destructor;
+#else
+  __ESBMC_assert(destructor == 0, "destructors are not yet supported");
+#endif
   *key = __ESBMC_next_thread_key++;
   return 0;
 }
