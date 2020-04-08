@@ -6,6 +6,11 @@ typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);
 unsigned int __ESBMC_spawn_thread(void (*)(void));
 
+__attribute__((annotate("__ESBMC_inf_size"))) const void *__ESBMC_thread_keys[];
+__attribute__((annotate("__ESBMC_inf_size"))) void (
+  *__ESBMC_thread_key_destructors[])(void *);
+unsigned long __ESBMC_next_thread_key;
+
 struct __pthread_start_data
 {
   __ESBMC_thread_start_func_type func;
@@ -118,6 +123,17 @@ void pthread_exit(void *retval)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+
+  // Destructor support is disabled as it is too expensive due to its extensive
+  // use of shared variables.
+  for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
+  {
+    const void *key = __ESBMC_thread_keys[i];
+    __ESBMC_thread_keys[i] = 0;
+    if(__ESBMC_thread_key_destructors[i] && key)
+      __ESBMC_thread_key_destructors[i](key);
+  }
+
   pthread_t threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[(int)threadid] = retval;
   __ESBMC_pthread_thread_ended[(int)threadid] = 1;
@@ -483,25 +499,10 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-__attribute__((annotate("__ESBMC_inf_size"))) 
-const void *__ESBMC_thread_keys[];
-
-__attribute__((annotate("__ESBMC_inf_size"))) 
-void (*__ESBMC_thread_key_dtors[])(void *);
-
-unsigned long __ESBMC_next_thread_key;
-
 int pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 {
 __ESBMC_HIDE:;
-  __ESBMC_thread_keys[__ESBMC_next_thread_key] = 0;
-#if 0
-  // Destructor support is disabled as it is too expensive due to its extensive
-  // use of shared variables.
-  __ESBMC_thread_key_dtors[__ESBMC_next_thread_key] = destructor;
-#else
-  __ESBMC_assert(destructor == 0, "destructors are not yet supported");
-#endif
+  __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   *key = __ESBMC_next_thread_key++;
   return 0;
 }
