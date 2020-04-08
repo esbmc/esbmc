@@ -502,6 +502,10 @@ __ESBMC_HIDE:;
 int pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 {
 __ESBMC_HIDE:;
+  __ESBMC_assert(
+    key != NULL,
+    "In pthread_key_create, key parameter should be different than NULL.");
+  __ESBMC_thread_keys[__ESBMC_next_thread_key] = NULL;
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   *key = __ESBMC_next_thread_key++;
   return 0;
