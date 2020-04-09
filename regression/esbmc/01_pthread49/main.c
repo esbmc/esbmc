@@ -5,6 +5,6 @@ int main()
 {
   pthread_key_t key;
   int r = pthread_key_create(&key, NULL);
-  assert(r == 0);
+  assert(r == 1);
   return 0;
 }

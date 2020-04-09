@@ -509,23 +509,18 @@ __ESBMC_HIDE:;
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   *key = __ESBMC_next_thread_key++;
   __ESBMC_atomic_end();
-  return nondet_bool() ? (nondet_bool() ? EAGAIN : ENOMEM) : 0;
+  return 0;
 }
 
 void *pthread_getspecific(pthread_key_t key)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  if(key > __ESBMC_next_thread_key)
-  {
-    __ESBMC_atomic_end();
-    return NULL;
-  }
-  else
-  {
-    __ESBMC_atomic_end(); 
-    return (void *)__ESBMC_thread_keys[key];
-  }
+  void *result = NULL;
+  if(key <= __ESBMC_next_thread_key)
+    result = __ESBMC_thread_keys[key];
+  __ESBMC_atomic_end();
+  return result;
 }
 
 int pthread_setspecific(pthread_key_t key, const void *value)
@@ -539,5 +534,5 @@ __ESBMC_HIDE:;
   }
   __ESBMC_thread_keys[key] = value;
   __ESBMC_atomic_end();
-  return (nondet_bool() ? ENOMEM : 0);
+  return 0;
 }
