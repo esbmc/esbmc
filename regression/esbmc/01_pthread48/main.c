@@ -10,7 +10,6 @@
 
 void *worker(void *k)
 {
-#if 0
   pthread_key_t *key = k;
 
   long val = (long)pthread_getspecific(*key);
@@ -21,7 +20,7 @@ void *worker(void *k)
 
   val = (long)pthread_getspecific(*key);
   assert(val == 42);
-#endif
+  
   return NULL;
 }
 
@@ -37,7 +36,7 @@ int main()
 
   pthread_create(&tid, NULL, worker, &key);
 
-#if 0
+
   val = (long)pthread_getspecific(key);
   assert(val == 0 || val == 42);
 
@@ -47,9 +46,9 @@ int main()
   val = (long)pthread_getspecific(key);
   assert(val == 16 || val == 42);
 
-//  pthread_join(tid, NULL);
+  pthread_join(tid, NULL);
   val = (long)pthread_getspecific(key);
   assert(val == 16);
-#endif
+  
   return 0;
 }

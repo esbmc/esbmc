@@ -526,13 +526,12 @@ __ESBMC_HIDE:;
 int pthread_setspecific(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
+  int result = 0;
   __ESBMC_atomic_begin();
   if(value == NULL)
-  {
-    __ESBMC_atomic_end();
-    return EINVAL;
-  }
-  __ESBMC_thread_keys[key] = value;
+    result = EINVAL;
+  else
+    __ESBMC_thread_keys[key] = value;
   __ESBMC_atomic_end();
-  return 0;
+  return result;
 }
