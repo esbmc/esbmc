@@ -517,10 +517,15 @@ void *pthread_getspecific(pthread_key_t key)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   if(key > __ESBMC_next_thread_key)
+  {
+    __ESBMC_atomic_end();
     return NULL;
+  }
   else
+  {
+    __ESBMC_atomic_end(); 
     return (void *)__ESBMC_thread_keys[key];
-  __ESBMC_atomic_end();
+  }
 }
 
 int pthread_setspecific(pthread_key_t key, const void *value)
@@ -528,10 +533,11 @@ int pthread_setspecific(pthread_key_t key, const void *value)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   if(value == NULL)
+  {
+    __ESBMC_atomic_end();
     return EINVAL;
-
+  }
   __ESBMC_thread_keys[key] = value;
-
   __ESBMC_atomic_end();
   return (nondet_bool() ? ENOMEM : 0);
 }
