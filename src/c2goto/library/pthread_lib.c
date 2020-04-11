@@ -9,7 +9,7 @@ unsigned int __ESBMC_spawn_thread(void (*)(void));
 __attribute__((annotate("__ESBMC_inf_size"))) const void *__ESBMC_thread_keys[];
 __attribute__((annotate("__ESBMC_inf_size"))) void (
   *__ESBMC_thread_key_destructors[])(void *);
-unsigned long __ESBMC_next_thread_key;
+unsigned long __ESBMC_next_thread_key = 0;
 
 struct __pthread_start_data
 {
@@ -125,12 +125,21 @@ void pthread_exit(void *retval)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
+  // At thread exit, if a key value has a non-NULL destructor pointer,
+  // and the thread has a non-NULL value associated with that key,
+  // the value of the key is set to NULL, and then the function pointed to
+  // is called with the previously associated value as its sole argument.
+  // The order of destructor calls is unspecified if more than one destructor
+  // exists for a thread when it exits.
+  // source: https://linux.die.net/man/3/pthread_key_create
   for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
     const void *key = __ESBMC_thread_keys[i];
-    __ESBMC_thread_keys[i] = 0;
     if(__ESBMC_thread_key_destructors[i] && key)
+    {
+      __ESBMC_thread_keys[i] = 0;
       __ESBMC_thread_key_destructors[i](key);
+    }
   }
 
   pthread_t threadid = __ESBMC_get_thread_id();
@@ -498,40 +507,91 @@ __ESBMC_HIDE:;
   return 0;
 }
 
+// The pthread_key_create() function shall create a thread-specific
+// data key visible to all threads in the process.
+// source: https://linux.die.net/man/3/pthread_key_create
 int pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+  int result = 0;
   __ESBMC_assert(
     key != NULL,
-    "In pthread_key_create, key parameter should be different than NULL.");
+    "In pthread_key_create, key parameter must be different than NULL.");
+  // the value NULL shall be associated with the new key in all active threads
   __ESBMC_thread_keys[__ESBMC_next_thread_key] = NULL;
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
+  // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
-  __ESBMC_atomic_end();
-  return 0;
-}
-
-void *pthread_getspecific(pthread_key_t key)
-{
-__ESBMC_HIDE:;
-  __ESBMC_atomic_begin();
-  void *result = NULL;
-  if(key <= __ESBMC_next_thread_key)
-    result = __ESBMC_thread_keys[key];
+  if(nondet_bool())
+  {
+    // Insufficient memory exists to create the key.
+    result = ENOMEM;
+  }
+  else if(nondet_bool())
+  {
+    // The system lacked the necessary resources
+    // to create another thread-specific data key, or
+    // the system-imposed limit on the total number of
+    // keys per process {PTHREAD_KEYS_MAX} has been exceeded.
+    result = EAGAIN;
+  }
   __ESBMC_atomic_end();
   return result;
 }
 
+// The pthread_getspecific() function shall return
+// the value currently bound to the specified key
+// on behalf of the calling thread.
+// source: https://linux.die.net/man/3/pthread_getspecific
+void *pthread_getspecific(pthread_key_t key)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  void *result;
+  if(key <= __ESBMC_next_thread_key)
+  {
+    // Return the thread-specific data value associated
+    // with the given key.
+    result = __ESBMC_thread_keys[key];
+  }
+  else if(key > __ESBMC_next_thread_key)
+  {
+    // If no thread-specific data value is associated with key,
+    // then the value NULL shall be returned.
+    result = NULL;
+  }
+  __ESBMC_atomic_end();
+  // No errors are returned from pthread_getspecific().
+  return result;
+}
+
+// The pthread_setspecific() function shall associate
+// a thread-specific value with a key obtained via
+// a previous call to pthread_key_create().
+// source: https://linux.die.net/man/3/pthread_setspecific
 int pthread_setspecific(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
-  int result = 0;
+  int result;
   __ESBMC_atomic_begin();
+  if(nondet_bool())
+  {
+    // Insufficient memory exists to associate
+    // the value with the key.
+    result = ENOMEM;
+  }
   if(value == NULL)
+  {
+    // The key value is invalid.
     result = EINVAL;
+  }
   else
+  {
     __ESBMC_thread_keys[key] = value;
+    // If successful, then return zero;
+    result = 0;
+  }
   __ESBMC_atomic_end();
   return result;
 }
