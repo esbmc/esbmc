@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <assert.h>
 #include <errno.h>
+#include <stdlib.h>
 
 void dtor(void *v)
 {
@@ -28,13 +29,21 @@ int main()
 {
   pthread_key_t key;
   int r = pthread_key_create(&key, &dtor);
-  assert(r == 0);
+  if(r == ENOMEM)
+  {
+    exit(1);
+  }
+  assert(r == 0 || r == EAGAIN);
 
   pthread_t tid;
   pthread_create(&tid, NULL, worker, &key);
 
   r = pthread_setspecific(key, (void *)16);
-  assert(r == 0);
+  if(r == ENOMEM)
+  {
+    exit(1);
+  }
+  assert(r == 0 || r == EAGAIN);
 
   pthread_join(tid, NULL);
   return 0;
