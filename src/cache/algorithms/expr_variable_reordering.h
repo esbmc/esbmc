@@ -1,0 +1,191 @@
+/*******************************************************************\
+
+Module: Expressions Variable Reordering
+
+Author: Rafael Sá Menezes
+
+Date: April 2020
+
+\*******************************************************************/
+
+#ifndef ESBMC_EXPR_VARIABLE_REORDERING_H
+#define ESBMC_EXPR_VARIABLE_REORDERING_H
+
+#include <cache/expr_algorithm.h>
+#include <util/irep2_expr.h>
+
+/**
+ *  This class will reorder a expression based on it's naming
+ *  the idea is that a expression in the format:
+ *
+ *  c + a + b + 4 + d == b + a
+ *
+ *  Becomes:
+ *
+ *  a + b + c + d + 4 == a + b
+ *
+ *  Note that that this assumes that a constant propagation algorithm
+ *  was executed, so an expression should have at max 1 constant value.
+ *
+ *  Supported Operators: [+, -, *, /]
+ *  Supported Types (constants/symbols): [Signed Integer, Unsigned Integer]
+ *  Supported Relations: [==, !=, <, >, <=, >=]
+ *
+ *  TODO: Define precedence rules for operators
+ */
+class expr_variable_reordering : public expr_algorithm
+{
+  typedef std::vector<symbol2tc> symbols_vec;
+  typedef std::vector<constant_int2tc> values_vec;
+
+public:
+  explicit expr_variable_reordering(expr2tc &expr) : expr_algorithm(expr)
+  {
+  }
+
+  void run() override;
+
+private:
+  /**
+   * Parse a binary operation and reorders it
+   *
+   * Since some operators have precedence this implementation
+   * should take it into account.
+   *
+   * The reorder will check if LHS and RHS are symbols/values
+   * the precedence will be: x OP y OP z OP value
+   *
+   * TODO: support precedence levels, the current implementation will stop if it finds a different operator
+   *
+   * @param expr binary_operation
+   */
+  void run_on_binop(expr2tc &expr) noexcept;
+
+  /**
+   * Parse a relation by reordering the LHS and RHS
+   *
+   * @param expr relation
+   */
+  void run_on_relation(expr2tc &expr) noexcept;
+
+  /**
+   * Parses and adds the symbol or value
+   *
+   * This receives a reference and generates a copy of it to be later used
+   *
+   * @param op parent of the operation
+   * @param is_lhs truth value to determine which side of the op will be checked
+   * @param symbols
+   * @param values
+   */
+  void add_value(
+    const std::shared_ptr<arith_2ops> op,
+    bool is_lhs,
+    symbols_vec &symbols,
+    values_vec &values);
+
+  /**
+   * Parses and replaces symbols and values
+   *
+   * This works by tacking an expression and manually replacing it's inner
+   * expressions with the ordered symbols and values
+   *
+   * Example:
+   *
+   * op: (ADD (b) ( (ADD (7) (a) )
+   * symbols: ["a", "b"]
+   * values: [7]
+   *
+   * The expression would be parsed/replaced in the following order:
+   *
+   * (ADD (1) ( (ADD (2) (3)) )
+   *
+   * 1 -> "a"
+   * 2 -> "b"
+   * 3 -> "7"
+   *
+   * @param op parent of the operation
+   * @param is_lhs truth value to determine which side of the op will be checked
+   * @param symbols
+   * @param values
+   */
+  void replace_value(
+    const std::shared_ptr<arith_2ops> op,
+    bool is_lhs,
+    symbols_vec &symbols,
+    values_vec &values);
+
+  enum class PARSE_AS
+  {
+    BIN_OP,   /// For binary operations
+    CONSTANT, /// for constants
+    RELATION, /// for relations
+    SYMBOL,   /// for symbols
+    SKIP      /// for expressions that shouldn't be analyzed
+  };
+
+  enum class TRANSVERSE_MODE
+  {
+    READ,    /// to extract the expressions
+    REPLACE, /// to replace the expressions
+  };
+  /**
+   * Check expression and categorize it's type
+   * @param expr to be parsed
+   * @return PARSE_AS type of expression
+   */
+  static PARSE_AS get_expr_type(expr2tc &expr);
+
+  /**
+   * Default strategy to execute an algorithm while transversing the expr
+   * @param op binary operation
+   * @param symbols vector of all symbols expressions
+   * @param values vector of all values expressions
+   */
+  void transverse_binop(
+    const std::shared_ptr<arith_2ops> op,
+    symbols_vec &symbols,
+    values_vec &values,
+    TRANSVERSE_MODE mode);
+
+  /**
+   * Recursively extracts all symbols and values of a binary operation
+   *
+   * The logic is that an expr is like a lisp:
+   *
+   *  (BINOP (BINOP (x) (y)) (7))
+   *
+   *  So the output would be:
+   *
+   *  symbols = [x,y], values = [7]
+   *
+   *  TODO: Currently there is no logic to handle different BINOP inside the same expression
+   *
+   * @param op binary operation
+   * @param symbols vector of all symbols expressions
+   * @param values vector of all values expressions
+   */
+  void transverse_read_binop(
+    const std::shared_ptr<arith_2ops> op,
+    symbols_vec &symbols,
+    values_vec &values);
+
+  /**
+   * After transverse reading the all symbols and value this will
+   * tranverse again but replacing the symbols
+   *
+   * This assumes that symbols is ordered and values has at most 1 element
+   *
+   * @param op binary operation
+   * @param symbols vector of all symbols expressions
+   * @param values vector of all values expressions
+   */
+  void transverse_replace_binop(
+    const std::shared_ptr<arith_2ops> op,
+    symbols_vec &symbols,
+    values_vec &values);
+};
+
+// EXCEPTIONS
+
+#endif //ESBMC_EXPR_VARIABLE_REORDERING_H

@@ -23,7 +23,6 @@ namespace utf = boost::unit_test;
 
 namespace
 {
-
 }
 
 // ******************** TESTS ********************
@@ -37,8 +36,9 @@ BOOST_AUTO_TEST_CASE(equality_1_test)
 {
   init_test_values();
   expr2tc expr = equality_1_ordered();
+  expr->hash() crypto_hash
 
-  symex_target_equationt::SSA_stepst ssa_steps;
+    symex_target_equationt::SSA_stepst ssa_steps;
   create_assumption(ssa_steps, expr);
 
   green_normal_form t(ssa_steps);
@@ -48,6 +48,5 @@ BOOST_AUTO_TEST_CASE(equality_1_test)
   expr2tc expected = equality_1_green_normal();
   is_equality_1_equivalent(actual, expected);
 }
-
 
 BOOST_AUTO_TEST_SUITE_END()

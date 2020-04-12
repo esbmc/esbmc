@@ -238,23 +238,6 @@ void transverse_arith_op(
 
 } // namespace
 
-bool lexicographical_reordering::should_swap(expr2tc &side1, expr2tc &side2)
-{
-  bool result = is_value_expr(*side1) && is_symbolic_expr(*side2);
-  if(is_symbolic_expr(*side1) && is_symbolic_expr(*side2))
-  {
-    std::shared_ptr<symbol_data> symbol1;
-    symbol1 = std::dynamic_pointer_cast<symbol_data>(side1);
-
-    std::shared_ptr<symbol_data> symbol2;
-    symbol2 = std::dynamic_pointer_cast<symbol_data>(side2);
-
-    result = symbol1->get_symbol_name() > symbol2->get_symbol_name();
-  }
-
-  return result;
-}
-
 void lexicographical_reordering::process_expr(expr2tc &rhs)
 {
   typedef std::function<void(expr2tc &)> expr_function;
@@ -366,7 +349,7 @@ void lexicographical_reordering::run_on_arith(expr2tc &expr)
 
   symbols_vec symbols;
   values_vec values;
-  transverse_arith_op(arith, symbols, values);
+
   sort(symbols.begin(), symbols.end(), [](const auto &lhs, const auto &rhs) {
     return lhs->get_symbol_name() > rhs->get_symbol_name();
   });

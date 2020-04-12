@@ -4,6 +4,8 @@
 
 #include <cache/green/green_cache.h>
 #include <cache/algorithms/lexicographical_reordering.h>
+#include <cache/algorithms/green_normal_form.h>
+#include <cache/algorithms/ssa_flattener.h>
 green_cache::green_cache()
 {
 }
@@ -34,6 +36,23 @@ void green_cache::run(symex_target_equationt::SSA_stepst &steps)
    * a. Reorder assertions on lexical order
    */
 
-  lexicographical_reordering reordering(steps);
-  reordering.run();
+  //lexicographical_reordering reordering(steps);
+  //reordering.run();
+  ssa_flattener flattener(steps);
+  flattener.run();
+  std::cout << "Checking collisions\n";
+  flattener.dump_collisions();
+  items = flattener.get_map();
+}
+
+void green_cache::succesful()
+{
+  std::cout << "Saving and marking as unsat\n";
+  green_storage gs;
+  gs.load();
+  for(const auto &[key, value] : items)
+  {
+    gs.add(value);
+  }
+  gs.save();
 }

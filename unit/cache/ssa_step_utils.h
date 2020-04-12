@@ -5,11 +5,9 @@
 #ifndef ESBMC_SSA_STEP_UTILS_H
 #define ESBMC_SSA_STEP_UTILS_H
 
-
 #include <cache/ssa_step_algorithm.h>
 #include <boost/test/included/unit_test.hpp>
 // TODO: Test all functions from this file
-
 
 bool is_symbols_equal(expr2tc &v1, expr2tc &v2)
 {
@@ -35,7 +33,6 @@ bool is_unsigned_equal(expr2tc &v1, expr2tc &v2)
 
   return value1->value.compare(value2->value) == 0;
 }
-
 
 symbol2tc create_unsigned_32_symbol_expr(std::string name)
 {
@@ -75,6 +72,18 @@ add2tc create_signed_32_add_expr(expr2tc &side1, expr2tc &side2)
   return expression;
 }
 
+lessthan2tc create_lesser_relation(expr2tc &lhs, expr2tc &rhs)
+{
+  lessthan2tc relation(lhs, rhs);
+  return relation;
+}
+
+greaterthan2tc create_greater_relation(expr2tc &lhs, expr2tc &rhs)
+{
+  greaterthan2tc relation(lhs, rhs);
+  return relation;
+}
+
 equality2tc create_equality_relation(expr2tc &lhs, expr2tc &rhs)
 {
   equality2tc relation(lhs, rhs);
@@ -89,7 +98,9 @@ void create_assignment(symex_target_equationt::SSA_stepst &output, expr2tc &rhs)
   output.push_back(step1);
 }
 
-void create_assumption(symex_target_equationt::SSA_stepst &output, expr2tc &cond)
+void create_assumption(
+  symex_target_equationt::SSA_stepst &output,
+  expr2tc &cond)
 {
   symex_target_equationt::SSA_stept step1;
   step1.type = goto_trace_stept::ASSUME;
@@ -105,39 +116,39 @@ void create_assert(symex_target_equationt::SSA_stepst &output, expr2tc &cond)
   output.push_back(step1);
 }
 
-
 // Pre-Built expressions
 // These expressions will be used thorough the
 // test cases as simple validations.
 // The fuzzer should use the above method as a way to construct
 // and validate expressions
 
-namespace 
+namespace
 {
-  symbol2tc Y = create_unsigned_32_symbol_expr("Y");
-  symbol2tc X = create_unsigned_32_symbol_expr("X");
-  constant_int2tc values[10];
-  constant_int2tc neg_values[10];
+symbol2tc Y = create_unsigned_32_symbol_expr("Y");
+symbol2tc X = create_unsigned_32_symbol_expr("X");
+constant_int2tc values[10];
+constant_int2tc neg_values[10];
 
-}
+} // namespace
 
 void init_test_values()
 {
   static bool is_initialized = false;
-  if(is_initialized) return;
+  if(is_initialized)
+    return;
   for(int i = 0; i < 10; i++)
   {
     values[i] = create_signed_32_value_expr(i);
-    neg_values[i] = create_signed_32_value_expr(0-i);
+    neg_values[i] = create_signed_32_value_expr(0 - i);
   }
   is_initialized = true;
 }
 
-// ((Y + X) + 7) == 9
+// ((y + x) + 7) == 9
 inline expr2tc equality_1()
 {
-  add2tc add_1 = create_signed_32_add_expr(Y,X);
-  add2tc add_2 = create_signed_32_add_expr(add_1,values[7]);
+  add2tc add_1 = create_signed_32_add_expr(Y, X);
+  add2tc add_2 = create_signed_32_add_expr(add_1, values[7]);
   equality2tc result = create_equality_relation(add_2, values[9]);
   return result;
 }
@@ -145,8 +156,8 @@ inline expr2tc equality_1()
 // ((x + y) + 7) == 9
 inline expr2tc equality_1_ordered()
 {
-  add2tc add_1 = create_signed_32_add_expr(X,Y);
-  add2tc add_2 = create_signed_32_add_expr(add_1,values[7]);
+  add2tc add_1 = create_signed_32_add_expr(X, Y);
+  add2tc add_2 = create_signed_32_add_expr(add_1, values[7]);
   equality2tc result = create_equality_relation(add_2, values[9]);
   return result;
 }
@@ -154,8 +165,8 @@ inline expr2tc equality_1_ordered()
 // ((x + y) + -2) == 0
 inline expr2tc equality_1_green_normal()
 {
-  add2tc add_1 = create_signed_32_add_expr(X,Y);
-  add2tc add_2 = create_signed_32_add_expr(add_1,neg_values[2]);
+  add2tc add_1 = create_signed_32_add_expr(X, Y);
+  add2tc add_2 = create_signed_32_add_expr(add_1, neg_values[2]);
   equality2tc result = create_equality_relation(add_2, values[0]);
   return result;
 }
@@ -168,36 +179,46 @@ void is_equality_1_equivalent(expr2tc &actual, expr2tc &expected)
   expected_relation = std::dynamic_pointer_cast<equality2t>(expected);
 
   // RHS OF RELATION
-  bool is_rhs_value_equal = is_unsigned_equal(actual_relation->side_2, expected_relation->side_2);
+  bool is_rhs_value_equal =
+    is_unsigned_equal(actual_relation->side_2, expected_relation->side_2);
   BOOST_TEST(is_rhs_value_equal);
 
   // LHS OF RELATION
 
   std::shared_ptr<arith_2ops> actual_outter_add;
-  actual_outter_add = std::dynamic_pointer_cast<arith_2ops>(actual_relation->side_1);
+  actual_outter_add =
+    std::dynamic_pointer_cast<arith_2ops>(actual_relation->side_1);
 
   std::shared_ptr<arith_2ops> expected_outter_add;
-  expected_outter_add = std::dynamic_pointer_cast<arith_2ops>(expected_relation->side_1);
+  expected_outter_add =
+    std::dynamic_pointer_cast<arith_2ops>(expected_relation->side_1);
 
   // First symbol
-  bool outter_symbol = is_unsigned_equal(actual_outter_add->side_2, expected_outter_add->side_2);
+  bool outter_symbol =
+    is_unsigned_equal(actual_outter_add->side_2, expected_outter_add->side_2);
   BOOST_TEST(outter_symbol);
 
   // Inner add
   std::shared_ptr<arith_2ops> actual_inner_add;
-  actual_inner_add = std::dynamic_pointer_cast<arith_2ops>(actual_outter_add->side_1);
+  actual_inner_add =
+    std::dynamic_pointer_cast<arith_2ops>(actual_outter_add->side_1);
 
   std::shared_ptr<arith_2ops> expected_inner_add;
-  expected_inner_add = std::dynamic_pointer_cast<arith_2ops>(expected_outter_add->side_1);
+  expected_inner_add =
+    std::dynamic_pointer_cast<arith_2ops>(expected_outter_add->side_1);
 
-  BOOST_TEST(is_symbols_equal(actual_inner_add->side_1, expected_inner_add->side_1));
-  BOOST_TEST(is_symbols_equal(actual_inner_add->side_2, expected_inner_add->side_2));
+  BOOST_TEST(
+    is_symbols_equal(actual_inner_add->side_1, expected_inner_add->side_1));
+  BOOST_TEST(
+    is_symbols_equal(actual_inner_add->side_2, expected_inner_add->side_2));
+
+  BOOST_TEST(actual->crc() == expected->crc());
 }
 
 // (1 + x) == 0
 inline expr2tc equality_2()
 {
-  add2tc add_1 = create_signed_32_add_expr(values[1],X);
+  add2tc add_1 = create_signed_32_add_expr(values[1], X);
   equality2tc result = create_equality_relation(add_1, values[0]);
   return result;
 }
@@ -219,7 +240,7 @@ inline expr2tc equality_2_green_normal()
 // (y + 4) == 8
 inline expr2tc equality_3()
 {
-  add2tc add_1 = create_signed_32_add_expr(Y,values[4]);
+  add2tc add_1 = create_signed_32_add_expr(Y, values[4]);
   equality2tc result = create_equality_relation(add_1, values[8]);
   return result;
 }
@@ -233,7 +254,7 @@ inline expr2tc equality_3_ordered()
 // (y - 4) == 0
 inline expr2tc equality_3_green_normal()
 {
-  add2tc add_1 = create_signed_32_add_expr(Y,neg_values[4]);
+  add2tc add_1 = create_signed_32_add_expr(Y, neg_values[4]);
   equality2tc result = create_equality_relation(add_1, values[0]);
   return result;
 }
@@ -241,7 +262,7 @@ inline expr2tc equality_3_green_normal()
 // (x + 0) == 0
 inline expr2tc equality_4()
 {
-  add2tc add_1 = create_signed_32_add_expr(X,values[0]);
+  add2tc add_1 = create_signed_32_add_expr(X, values[0]);
   equality2tc result = create_equality_relation(add_1, values[0]);
   return result;
 }
