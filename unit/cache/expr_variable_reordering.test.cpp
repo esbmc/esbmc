@@ -3,7 +3,7 @@
 
  Author: Rafael Sá Menezes
 
- Date: March 2019
+ Date: March 2020
 
  Test Plan:
 
@@ -16,7 +16,7 @@
 
 #include <cache/algorithms/expr_variable_reordering.h>
 #include <boost/test/included/unit_test.hpp>
-#include "ssa_step_utils.h"
+#include "cache_test_utils.h"
 // ******************** TESTS ********************
 
 // ** Check if trivial cases are ok

@@ -18,7 +18,7 @@
 
 #include <cache/algorithms/green_normal_form.h>
 #include <boost/test/included/unit_test.hpp>
-#include "ssa_step_utils.h"
+#include "cache_test_utils.h"
 namespace utf = boost::unit_test;
 
 namespace

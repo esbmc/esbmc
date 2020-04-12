@@ -1,13 +1,6 @@
-//
-// Created by rafaelsa on 12/03/2020.
-//
+// Rafael Sá Menezes - 04/2020
 
-#ifndef ESBMC_SSA_STEP_UTILS_H
-#define ESBMC_SSA_STEP_UTILS_H
-
-#include <cache/ssa_step_algorithm.h>
-#include <boost/test/included/unit_test.hpp>
-// TODO: Test all functions from this file
+#include "cache_test_utils.h"
 
 bool is_symbols_equal(expr2tc &v1, expr2tc &v2)
 {
@@ -20,6 +13,8 @@ bool is_symbols_equal(expr2tc &v1, expr2tc &v2)
   std::shared_ptr<symbol_data> symbol2;
   symbol2 = std::dynamic_pointer_cast<symbol_data>(v2);
 
+  auto name1 = symbol1->get_symbol_name();
+  auto name2 = symbol2->get_symbol_name();
   return symbol1->get_symbol_name() == symbol2->get_symbol_name();
 }
 
@@ -145,7 +140,7 @@ void init_test_values()
 }
 
 // ((y + x) + 7) == 9
-inline expr2tc equality_1()
+expr2tc equality_1()
 {
   add2tc add_1 = create_signed_32_add_expr(Y, X);
   add2tc add_2 = create_signed_32_add_expr(add_1, values[7]);
@@ -154,7 +149,7 @@ inline expr2tc equality_1()
 }
 
 // ((x + y) + 7) == 9
-inline expr2tc equality_1_ordered()
+expr2tc equality_1_ordered()
 {
   add2tc add_1 = create_signed_32_add_expr(X, Y);
   add2tc add_2 = create_signed_32_add_expr(add_1, values[7]);
@@ -163,7 +158,7 @@ inline expr2tc equality_1_ordered()
 }
 
 // ((x + y) + -2) == 0
-inline expr2tc equality_1_green_normal()
+expr2tc equality_1_green_normal()
 {
   add2tc add_1 = create_signed_32_add_expr(X, Y);
   add2tc add_2 = create_signed_32_add_expr(add_1, neg_values[2]);
@@ -181,7 +176,7 @@ void is_equality_1_equivalent(expr2tc &actual, expr2tc &expected)
   // RHS OF RELATION
   bool is_rhs_value_equal =
     is_unsigned_equal(actual_relation->side_2, expected_relation->side_2);
-  BOOST_TEST(is_rhs_value_equal);
+  assert(is_rhs_value_equal);
 
   // LHS OF RELATION
 
@@ -196,7 +191,7 @@ void is_equality_1_equivalent(expr2tc &actual, expr2tc &expected)
   // First symbol
   bool outter_symbol =
     is_unsigned_equal(actual_outter_add->side_2, expected_outter_add->side_2);
-  BOOST_TEST(outter_symbol);
+  assert(outter_symbol);
 
   // Inner add
   std::shared_ptr<arith_2ops> actual_inner_add;
@@ -207,16 +202,16 @@ void is_equality_1_equivalent(expr2tc &actual, expr2tc &expected)
   expected_inner_add =
     std::dynamic_pointer_cast<arith_2ops>(expected_outter_add->side_1);
 
-  BOOST_TEST(
+  assert(
     is_symbols_equal(actual_inner_add->side_1, expected_inner_add->side_1));
-  BOOST_TEST(
+  assert(
     is_symbols_equal(actual_inner_add->side_2, expected_inner_add->side_2));
 
-  BOOST_TEST(actual->crc() == expected->crc());
+  assert(actual->crc() == expected->crc());
 }
 
 // (1 + x) == 0
-inline expr2tc equality_2()
+expr2tc equality_2()
 {
   add2tc add_1 = create_signed_32_add_expr(values[1], X);
   equality2tc result = create_equality_relation(add_1, values[0]);
@@ -224,7 +219,7 @@ inline expr2tc equality_2()
 }
 
 // (x + 1) == 0
-inline expr2tc equality_2_ordered()
+expr2tc equality_2_ordered()
 {
   add2tc add_1 = create_signed_32_add_expr(X, values[1]);
   equality2tc result = create_equality_relation(add_1, values[0]);
@@ -232,13 +227,13 @@ inline expr2tc equality_2_ordered()
 }
 
 // (x + 1) == 0
-inline expr2tc equality_2_green_normal()
+expr2tc equality_2_green_normal()
 {
   return equality_2_ordered();
 }
 
 // (y + 4) == 8
-inline expr2tc equality_3()
+expr2tc equality_3()
 {
   add2tc add_1 = create_signed_32_add_expr(Y, values[4]);
   equality2tc result = create_equality_relation(add_1, values[8]);
@@ -246,13 +241,13 @@ inline expr2tc equality_3()
 }
 
 // (y + 4) == 8
-inline expr2tc equality_3_ordered()
+expr2tc equality_3_ordered()
 {
   return equality_3();
 }
 
 // (y - 4) == 0
-inline expr2tc equality_3_green_normal()
+expr2tc equality_3_green_normal()
 {
   add2tc add_1 = create_signed_32_add_expr(Y, neg_values[4]);
   equality2tc result = create_equality_relation(add_1, values[0]);
@@ -260,7 +255,7 @@ inline expr2tc equality_3_green_normal()
 }
 
 // (x + 0) == 0
-inline expr2tc equality_4()
+expr2tc equality_4()
 {
   add2tc add_1 = create_signed_32_add_expr(X, values[0]);
   equality2tc result = create_equality_relation(add_1, values[0]);
@@ -268,15 +263,13 @@ inline expr2tc equality_4()
 }
 
 // (x + 0) == 0
-inline expr2tc equality_4_ordered()
+expr2tc equality_4_ordered()
 {
   return equality_4();
 }
 
 // (x + 0) == 0
-inline expr2tc equality_4_green_normal()
+expr2tc equality_4_green_normal()
 {
   return equality_4();
 }
-
-#endif //ESBMC_SSA_STEP_UTILS_H
