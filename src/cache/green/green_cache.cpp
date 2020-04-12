@@ -3,7 +3,6 @@
 //
 
 #include <cache/green/green_cache.h>
-#include <cache/algorithms/lexicographical_reordering.h>
 #include <cache/algorithms/green_normal_form.h>
 #include <cache/algorithms/ssa_flattener.h>
 green_cache::green_cache()

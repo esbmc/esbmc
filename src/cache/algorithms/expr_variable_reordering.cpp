@@ -118,7 +118,6 @@ void expr_variable_reordering::run_on_binop(expr2tc &expr) noexcept
   for(auto item : symbols2)
   {
     auto name = item->get_symbol_name();
-    std::cout << name;
   }
 }
 
