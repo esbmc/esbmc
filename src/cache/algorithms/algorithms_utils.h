@@ -1,14 +1,13 @@
 /*******************************************************************\
+ Module: Algorithm Utilities
 
-Module: Algorithm Utilities
+ Author: Rafael Sá Menezes
 
-Author: Rafael Sá Menezes rafael.sa@icomp.ufam.edu.br
+ Description:
+  This file contains helper functions to manipulate SSA's and
+  Expressions that are common between all algorithms.
 
-Description:
- This file contains helper functions to manipulate SSA's and Expressions
- that are common between all algorithms.
-
- - Only static methods are available
+  - Only static methods are available
 \*******************************************************************/
 
 #ifndef ESBMC_ALGORITHMS_UTILS_H

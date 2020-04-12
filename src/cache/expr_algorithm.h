@@ -1,12 +1,21 @@
-//
-// Created by Rafael Sá Menezes on 11/04/20.
-//
+/*******************************************************************\
+ Module: Expr Algorithms Interface
+
+ Author: Rafael Sá Menezes
+
+ Date: April 2020
+\*******************************************************************/
 
 #ifndef ESBMC_EXPR_ALGORITHM_H
 #define ESBMC_EXPR_ALGORITHM_H
 
 #include <util/irep2.h>
 
+/**
+ * Base interface to run an algorithm in an expression
+ * the algorithm may extract information or change the
+ * expression at will.
+ */
 class expr_algorithm
 {
 public:

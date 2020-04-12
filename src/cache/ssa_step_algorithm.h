@@ -1,14 +1,14 @@
-//
-// Created by rafaelsa on 04/02/2020.
-//
+/*******************************************************************\
+ Module: SSA Step Algorithm
+
+ Author: Rafael Sá Menezes
+
+ Date: April 2020
+\*******************************************************************/
 
 #ifndef ESBMC_SSA_STEP_ALGORITHM_H
 #define ESBMC_SSA_STEP_ALGORITHM_H
 
-/** @file ssa_step_algorithm.h
- * This file will define methods and classes to help manipulate
- * SSA_steps for algorithms
- */
 #include <iostream>
 #include <goto-symex/symex_target_equation.h>
 

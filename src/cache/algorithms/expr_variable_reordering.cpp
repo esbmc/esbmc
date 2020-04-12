@@ -107,18 +107,8 @@ void expr_variable_reordering::run_on_binop(expr2tc &expr) noexcept
   // A constant propagation should have been executed prior to this
   assert(values.size() <= 1);
 
+  // 3. Change all values
   this->transverse_replace_binop(arith, symbols, values);
-
-  symbols_vec symbols2; // annotates all inner symbols
-  values_vec values2;   // annotates all inner values
-
-  // 1. Create a list of symbols and values
-  this->transverse_read_binop(arith, symbols2, values2);
-
-  for(auto item : symbols2)
-  {
-    auto name = item->get_symbol_name();
-  }
 }
 
 void expr_variable_reordering::run_on_relation(expr2tc &expr) noexcept

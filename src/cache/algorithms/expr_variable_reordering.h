@@ -1,11 +1,9 @@
 /*******************************************************************\
+ Module: Expressions Variable Reordering
 
-Module: Expressions Variable Reordering
+ Author: Rafael Sá Menezes
 
-Author: Rafael Sá Menezes
-
-Date: April 2020
-
+ Date: April 2020
 \*******************************************************************/
 
 #ifndef ESBMC_EXPR_VARIABLE_REORDERING_H

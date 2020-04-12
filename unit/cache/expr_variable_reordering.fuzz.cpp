@@ -1,4 +1,4 @@
-/*******************************************************************
+/*******************************************************************\
  Module: Expressions Variable Reordering unit tests
 
  Author: Rafael Sá Menezes
@@ -12,7 +12,7 @@
  3 - Generate expr from input (ordered)
  4 - Apply ordering in 2
  5 - Compare crc from 3 with 4
- \*******************************************************************/
+\*******************************************************************/
 
 #include <cctype>
 #include <cassert>

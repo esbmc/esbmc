@@ -11,6 +11,11 @@ add_executable(expr_variable_reordering_test expr_variable_reordering.test.cpp)
 target_link_libraries(expr_variable_reordering_test cache_test_utils)
 add_test(NAME ReorderingTest COMMAND expr_variable_reordering_test)
 
+# Expr Green Normal Form Test
+add_executable(expr_green_normal_form_test expr_green_normal_form.test.cpp)
+target_link_libraries(expr_green_normal_form_test cache_test_utils)
+add_test(NAME GreenNormalFormTest COMMAND expr_green_normal_form_test)
+
 # Cache Fuzz Utils Test
 add_executable(cache_fuzz_utils_test cache_fuzz_utils.test.cpp)
 target_link_libraries(cache_fuzz_utils_test cache_fuzz_utils)

@@ -1,20 +1,21 @@
 /*******************************************************************\
+ Module: Algorithms
 
-Module: Algorithms
+ Author: Rafael Sá Menezes
 
-Author: Rafael Sá Menezes rafael.sa@icomp.ufam.edu.br
+ Date: April 2020
 
-Description:
- This file is a include to all available algorithms such that the caching methods
- can only include <cache/algorithms/algorithms.h> instead of one-by-one
-
- - Only static methods are available
+ Description:
+  This file is a include to all available algorithms such that the
+  caching methods can only include <cache/algorithms/algorithms.h>
+  instead of one-by-one
 \*******************************************************************/
 
 #ifndef ESBMC_ALGORITHMS_H
 #define ESBMC_ALGORITHMS_H
 
 // Expr Algorithms
+#include <cache/algorithms/expr_variable_reordering.h>
 
 // SSA Algorithms
 

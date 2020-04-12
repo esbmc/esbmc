@@ -1,4 +1,4 @@
-/*******************************************************************
+/*******************************************************************\
  Module: Expressions Variable Reordering unit tests
 
  Author: Rafael Sá Menezes
@@ -10,7 +10,7 @@
  - Check if trivial cases are ok
  - Check symbols and symbols with the same operator
  - Multiple operators (not working)
- \*******************************************************************/
+\*******************************************************************/
 
 #define BOOST_TEST_MODULE "Expr Variable Reordering"
 

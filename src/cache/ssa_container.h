@@ -1,14 +1,19 @@
-//
-// Created by Rafael Sá Menezes on 09/04/20.
-//
+/*******************************************************************\
+ Module: SSA Container
+
+ Author: Rafael Sá Menezes
+
+ Date: April 2020
+
+ Description:
+  This file will define methods and classes to help manipulate stored
+  SSA's as the cache will work in SSA, this a form of storing and
+  manipulate it, this may be a simple set with custom hashing
+  to tries and external databases.
+\*******************************************************************/
 
 #ifndef ESBMC_SSA_CONTAINER_H
 #define ESBMC_SSA_CONTAINER_H
-
-/** @file ssa_container.h
- * This file will define methods and classes to help manipulate
- * saved ssa's
- */
 
 /**
  *  A generic interface to represent a item to stored in the SSA container
