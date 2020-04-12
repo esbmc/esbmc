@@ -70,6 +70,29 @@ void pthread_end_main_hook(void)
   __ESBMC_num_threads_running--;
 }
 
+void pthread_exec_key_destructors(void)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  // At thread exit, if a key value has a non-NULL destructor pointer,
+  // and the thread has a non-NULL value associated with that key,
+  // the value of the key is set to NULL, and then the function pointed to
+  // is called with the previously associated value as its sole argument.
+  // The order of destructor calls is unspecified if more than one destructor
+  // exists for a thread when it exits.
+  // source: https://linux.die.net/man/3/pthread_key_create
+  for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
+  {
+    const void *key = __ESBMC_thread_keys[i];
+    if(__ESBMC_thread_key_destructors[i] && key)
+    {
+      __ESBMC_thread_keys[i] = 0;
+      __ESBMC_thread_key_destructors[i](key);
+    }
+  }
+  __ESBMC_atomic_end();
+}
+
 void pthread_trampoline(void)
 {
 __ESBMC_HIDE:;
@@ -88,6 +111,7 @@ __ESBMC_HIDE:;
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
+  pthread_exec_key_destructors();
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end(); // Never reached; doesn't matter.
   return;
@@ -104,7 +128,6 @@ __ESBMC_HIDE:;
 
   __ESBMC_atomic_begin();
   pthread_t threadid = __ESBMC_spawn_thread(pthread_trampoline);
-  void (**thread_key_dtors)(void *) = __ESBMC_thread_key_destructors;
   __ESBMC_num_total_threads++;
   __ESBMC_num_threads_running++;
   __ESBMC_pthread_thread_running[threadid] = 1;
@@ -124,24 +147,7 @@ void pthread_exit(void *retval)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-
-  // At thread exit, if a key value has a non-NULL destructor pointer,
-  // and the thread has a non-NULL value associated with that key,
-  // the value of the key is set to NULL, and then the function pointed to
-  // is called with the previously associated value as its sole argument.
-  // The order of destructor calls is unspecified if more than one destructor
-  // exists for a thread when it exits.
-  // source: https://linux.die.net/man/3/pthread_key_create
-  for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
-  {
-    const void *key = __ESBMC_thread_keys[i];
-    if(__ESBMC_thread_key_destructors[i] && key)
-    {
-      __ESBMC_thread_keys[i] = 0;
-      __ESBMC_thread_key_destructors[i](key);
-    }
-  }
-
+  pthread_exec_key_destructors();
   pthread_t threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[(int)threadid] = retval;
   __ESBMC_pthread_thread_ended[(int)threadid] = 1;

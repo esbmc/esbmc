@@ -61,7 +61,7 @@ int main()
 
   pthread_join(tid, NULL);
   val = (long)pthread_getspecific(key);
-  assert(val == 16 || val == 42);
+  assert(val == 16); //this assertion must fail
 
   return 0;
 }
