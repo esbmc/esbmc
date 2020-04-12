@@ -8,8 +8,10 @@ inline char convert_char_to_letter(const char input)
 {
   const char a = 'a';
   const char z = 'z';
+  if(input >= a && input <= z)
+    return input;
   const char range = z - a;
-  const char result = ((input - a) % range) + a;
+  const char result = (input % range) + a;
   return result;
 }
 } // namespace

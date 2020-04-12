@@ -59,6 +59,29 @@ BOOST_AUTO_TEST_CASE(rhs_expression_not_ok)
   BOOST_TEST(!fuzzer.is_expr_valid());
 }
 
+BOOST_AUTO_TEST_CASE(no_rhs_expression_not_ok)
+{
+  const char *expression = "00aaa";
+  std::string input(expression);
+  expr_generator_fuzzer fuzzer(input);
+  BOOST_TEST(!fuzzer.is_expr_valid());
+}
+
+BOOST_AUTO_TEST_CASE(expression_from_fuzzer_1_ok)
+{
+  const char *expression = "|+|+%\x0a";
+  std::string input(expression);
+  expr_generator_fuzzer fuzzer(input);
+  BOOST_TEST(fuzzer.is_expr_valid());
+}
+
+BOOST_AUTO_TEST_CASE(expression_from_fuzzer_2_ok)
+{
+  const char *expression = "0x6a0xa0xfb0x250xff0xfb\nj\x0a\xfb%\xff\xfb";
+  std::string input(expression);
+  expr_generator_fuzzer fuzzer(input);
+  BOOST_TEST(fuzzer.is_expr_valid());
+}
 BOOST_AUTO_TEST_SUITE_END()
 
 /*

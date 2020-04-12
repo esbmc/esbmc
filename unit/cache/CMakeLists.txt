@@ -17,6 +17,15 @@ target_link_libraries(cache_fuzz_utils_test cache_fuzz_utils)
 add_test(NAME CacheFuzzUtilsTest COMMAND cache_fuzz_utils_test)
 
 
+if(ENABLE_FUZZER)
+    # Expr Reordering Fuzz
+    add_executable(expr_variable_reordering_fuzz expr_variable_reordering.fuzz.cpp)
+    add_test(NAME ReorderingFuzz COMMAND expr_variable_reordering_fuzz -runs=6500000)
+    target_compile_options(expr_variable_reordering_fuzz PRIVATE $<$<C_COMPILER_ID:Clang>:-g -O1 -fsanitize=fuzzer>)
+    target_link_libraries(expr_variable_reordering_fuzz PRIVATE $<$<C_COMPILER_ID:Clang>:-fsanitize=fuzzer> cache_fuzz_utils)
+endif()
+
+
 
 
 

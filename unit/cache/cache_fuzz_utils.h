@@ -37,6 +37,15 @@ public:
     return is_valid;
   }
 
+  const std::vector<char> get_lhs_names()
+  {
+    return lhs_names;
+  }
+  const std::vector<char> get_rhs_names()
+  {
+    return rhs_names;
+  }
+
 protected:
   /**
    * Process data and validates if it is in the right format
@@ -135,6 +144,15 @@ public:
     binary_operation binop,
     std::vector<char> lhs,
     std::vector<char> rhs);
+
+  const relation get_relation()
+  {
+    return expr_relation;
+  }
+  const binary_operation get_binop()
+  {
+    return expr_binop;
+  }
 };
 
 #endif //ESBMC_CACHE_FUZZ_UTILS_H
