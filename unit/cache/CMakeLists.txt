@@ -28,6 +28,12 @@ if(ENABLE_FUZZER)
     add_test(NAME ReorderingFuzz COMMAND expr_variable_reordering_fuzz -runs=65000)
     target_compile_options(expr_variable_reordering_fuzz PRIVATE $<$<C_COMPILER_ID:Clang>:-g -O1 -fsanitize=fuzzer>)
     target_link_libraries(expr_variable_reordering_fuzz PRIVATE $<$<C_COMPILER_ID:Clang>:-fsanitize=fuzzer> cache_fuzz_utils)
+
+    # Expr Green Normal Form Fuzz
+    add_executable(expr_green_normal_form_fuzz expr_green_normal_form.fuzz.cpp)
+    add_test(NAME GreenNormalFormFuzz COMMAND expr_green_normal_form_fuzz -runs=65000)
+    target_compile_options(expr_green_normal_form_fuzz PRIVATE $<$<C_COMPILER_ID:Clang>:-g -O1 -fsanitize=fuzzer>)
+    target_link_libraries(expr_green_normal_form_fuzz PRIVATE $<$<C_COMPILER_ID:Clang>:-fsanitize=fuzzer> cache_fuzz_utils)
 endif()
 
 

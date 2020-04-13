@@ -19,7 +19,7 @@
  *
  * The main class will work by receiving a string and parsing it as follows:
  *
- * RELATION [SYMBOLS] % SYMBOLS
+ * RELATION BINOP [SYMBOLS] % SYMBOLS
  *
  * 00abc%a => a + b + c == a => (EQUAL (ADD (A) (ADD) (B) (C))) (A))
  *

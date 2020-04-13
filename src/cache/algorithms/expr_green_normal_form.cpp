@@ -1,7 +1,7 @@
 // Rafael Sá Menezes - 04/2020
 
 #include <util/irep2_expr.h>
-#include "expr_green_normal_form.test.h"
+#include "expr_green_normal_form.h"
 
 namespace
 {

@@ -6,8 +6,8 @@
  Date: April 2020
 \*******************************************************************/
 
-#ifndef ESBMC_EXPR_GREEN_NORMAL_FORM_TEST_H
-#define ESBMC_EXPR_GREEN_NORMAL_FORM_TEST_H
+#ifndef ESBMC_EXPR_GREEN_NORMAL_FORM_H
+#define ESBMC_EXPR_GREEN_NORMAL_FORM_H
 
 #include <cache/expr_algorithm.h>
 
@@ -72,4 +72,4 @@ public:
   void run() override;
 };
 
-#endif //ESBMC_EXPR_GREEN_NORMAL_FORM_TEST_H
+#endif //ESBMC_EXPR_GREEN_NORMAL_FORM_H

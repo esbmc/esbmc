@@ -12,7 +12,7 @@
 
 #define BOOST_TEST_MODULE "Expr Green Normal Form"
 
-#include <cache/algorithms/expr_green_normal_form.test.h>
+#include <cache/algorithms/expr_green_normal_form.h>
 #include <boost/test/included/unit_test.hpp>
 #include "cache_test_utils.h"
 
