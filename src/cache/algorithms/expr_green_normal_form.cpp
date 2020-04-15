@@ -1,16 +1,17 @@
 // Rafael Sá Menezes - 04/2020
 
 #include <util/irep2_expr.h>
+#include <array>
 #include "expr_green_normal_form.h"
 
 namespace
 {
-constexpr std::array<expr2t::expr_ids, 3> relations_ok = {
+std::array<expr2t::expr_ids, 3> relations_ok = {
   expr2t::expr_ids::notequal_id,
   expr2t::expr_ids::equality_id,
   expr2t::expr_ids::lessthanequal_id};
 
-constexpr std::array<expr2t::expr_ids, 3> relations_not_ok = {
+std::array<expr2t::expr_ids, 3> relations_not_ok = {
   expr2t::expr_ids::lessthan_id,
   expr2t::expr_ids::greaterthan_id,
   expr2t::expr_ids::greaterthanequal_id};

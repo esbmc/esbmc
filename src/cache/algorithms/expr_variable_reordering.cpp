@@ -3,16 +3,17 @@
 #include "expr_variable_reordering.h"
 
 #include <cache/algorithms/algorithms_utils.h>
+#include <array>
 
 namespace
 {
-constexpr std::array<expr2t::expr_ids, 4> binary_operations = {
+std::array<expr2t::expr_ids, 4> binary_operations = {
   expr2t::expr_ids::add_id,
   expr2t::expr_ids::sub_id,
   expr2t::expr_ids::mul_id,
   expr2t::expr_ids::div_id};
 
-constexpr std::array<expr2t::expr_ids, 6> relations = {
+std::array<expr2t::expr_ids, 6> relations = {
   expr2t::expr_ids::equality_id,
   expr2t::expr_ids::notequal_id,
   expr2t::expr_ids::lessthan_id,
