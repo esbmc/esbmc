@@ -40,8 +40,9 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
-#include <cache/algorithms/ssa_step_algorithm_debug.h>
-#include <cache/green/green_cache.h>
+#include <cache/cache.h>
+
+std::shared_ptr<ssa_step_algorithm> cache;
 
 bmct::bmct(
   goto_functionst &funcs,
@@ -229,6 +230,13 @@ smt_convt::resultt bmct::run_decision_procedure(
 
 void bmct::report_success()
 {
+  if(options.get_bool_option("enable-caching"))
+  {
+    std::shared_ptr<green_cache> result_cache;
+    result_cache = std::dynamic_pointer_cast<green_cache>(cache);
+    result_cache->mark_ssa_as_unsat();
+  }
+
   status("\nVERIFICATION SUCCESSFUL");
 
   switch(ui)
@@ -743,8 +751,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if(options.get_bool_option("enable-caching"))
     {
-      green_cache cache;
-      cache.run(eq->SSA_steps);
+      cache = std::make_shared<green_cache>(eq->SSA_steps);
+      cache->run();
     }
 
     if(options.get_bool_option("document-subgoals"))
