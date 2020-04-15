@@ -13,7 +13,7 @@
 
 #define BOOST_TEST_MODULE "LRU Cache"
 
-#include <util/lru_cache.h>
+#include <cache/containers/lru_cache.h>
 #include <boost/test/included/unit_test.hpp>
 namespace utf = boost::unit_test;
 

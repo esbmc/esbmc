@@ -1,5 +1,5 @@
 /*******************************************************************\
- Module: Algorithms
+ Module: Cache Algorithms
 
  Author: Rafael Sá Menezes
 
@@ -16,7 +16,7 @@
 
 // Expr Algorithms
 #include <cache/algorithms/expr_variable_reordering.h>
-
+#include <cache/algorithms/expr_green_normal_form.h>
 // SSA Algorithms
 
 #endif //ESBMC_ALGORITHMS_H

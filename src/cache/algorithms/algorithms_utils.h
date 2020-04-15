@@ -36,6 +36,18 @@ public:
     return symbol->get_symbol_name();
   }
 
+  static bool is_guard(const expr2tc &expr, std::string &name)
+  {
+    if(expr->expr_id != expr2t::expr_ids::symbol_id)
+      return false;
+
+    std::shared_ptr<symbol_data> symbol;
+    symbol = std::dynamic_pointer_cast<symbol_data>(expr);
+    std::string symbol_name = symbol->get_symbol_name();
+    name = symbol_name;
+    return symbol_name.find("goto_symex::guard") != std::string::npos;
+  }
+
 private:
   expr_algorithm_util() = default;
 };

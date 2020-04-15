@@ -15,6 +15,7 @@
 #ifndef ESBMC_SSA_CONTAINER_H
 #define ESBMC_SSA_CONTAINER_H
 
+#include <string>
 /**
  *  A generic interface to represent a item to stored in the SSA container
  *  this is the form that the object will be represented in the storage system
@@ -32,17 +33,23 @@ public:
     return expression;
   }
 
-protected:
-  virtual std::string convert_to_string() = 0;
+  virtual void operator=(const ssa_container_item<T> &other)
+  {
+    expression = other.expression;
+  }
+  virtual void set(const ssa_container_item<T> &other)
+  {
+    expression = other.expression;
+  }
 
-private:
+protected:
   T expression;
 };
 
 /**
  *  A generic interface to represent a container to store SSA steps
  */
-template <ssa_container_item T>
+template <class T>
 class ssa_container
 {
 public:
@@ -50,20 +57,32 @@ public:
   {
     return expressions;
   }
-  explicit expr_container(const T &other) : expressions(other)
+
+  explicit ssa_container() : expressions()
   {
   }
 
-private:
+  virtual void operator=(const ssa_container<T> &other)
+  {
+    expressions = other.expressions;
+  }
+
+  virtual void set(const ssa_container<T> &other)
+  {
+    expressions = other.expressions;
+  }
+
+protected:
   T expressions;
 };
 
-template <ssa_container_item T>
-class ssa_set_container : public ssa_container<std::set<T>>
+template <class T>
+class container_storage
 {
-  explicit ssa_set_container(const std::set<T> &other) : ssa_container(other)
-  {
-  }
+public:
+  container_storage() = default;
+  virtual ssa_container<T> load(std::istream &) = 0;
+  virtual void store(ssa_container<T> &) = 0;
 };
 
 #endif //ESBMC_SSA_CONTAINER_H

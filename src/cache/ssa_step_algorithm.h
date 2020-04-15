@@ -33,6 +33,7 @@ public:
     static std::map<ssa_type, ssa_function> run_on_function;
     static bool map_initialized = false;
 
+    // Simple optimization so we do not use switch-case
     if(!map_initialized)
     {
       run_on_function[ssa_type::ASSIGNMENT] = [this](ssa_step &step) {

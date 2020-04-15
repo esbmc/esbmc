@@ -1,9 +1,9 @@
 /*******************************************************************\
+ Module: LRU Cache
  
-Module: LRU Cache
- 
-Author: Rafael Menezes, rafael.sa.menezes40@gmail.com
- 
+ Author: Rafael Sá Menezes
+
+ Date: March 2020
 \*******************************************************************/
 
 #ifndef LRU_CACHE

@@ -1,10 +1,20 @@
 # Base libraries
 add_library(cache_test_utils cache_test_utils.cpp)
 target_compile_definitions(cache_test_utils PRIVATE "BOOST_TEST_DYN_LINK=1")
-target_link_libraries(cache_test_utils cache_algorithms util_esbmc bigint ${Boost_LIBRARIES})
+target_link_libraries(cache_test_utils cache_methods cache_algorithms cache_containers util_esbmc bigint ${Boost_LIBRARIES})
 
 add_library(cache_fuzz_utils cache_fuzz_utils.cpp)
 target_link_libraries(cache_fuzz_utils cache_test_utils)
+
+# LRU Cache
+add_executable(lru_cache_test lru_cache.test.cpp)
+target_link_libraries(lru_cache_test cache_test_utils)
+add_test(NAME LruCacheTest COMMAND lru_cache_test)
+
+# CRC Set Container Test
+add_executable(crc_set_container_test crc_set_container.test.cpp)
+target_link_libraries(crc_set_container_test cache_test_utils)
+add_test(NAME CrcSetContainerTest COMMAND crc_set_container_test)
 
 # Expr Reordering Test
 add_executable(expr_variable_reordering_test expr_variable_reordering.test.cpp)

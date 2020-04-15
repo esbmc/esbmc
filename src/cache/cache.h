@@ -1,19 +1,19 @@
-//
-// Created by rafaelsa on 10/03/2020.
-//
+/*******************************************************************\
+ Module: Cache
+
+ Author: Rafael Sá Menezes
+
+ Date: April 2020
+
+ Description:
+  This file is a include to all available caching methods
+  such that the other modules can only
+  include <cache/algorithms/algorithms.h>  instead of one-by-one
+\*******************************************************************/
 
 #ifndef ESBMC_CACHE_H
 #define ESBMC_CACHE_H
 
-#include <cache/ssa_step_algorithm.h>
-
-class cache
-{
-public:
-  explicit cache()
-  {
-  }
-  virtual void run(symex_target_equationt::SSA_stepst &steps) = 0;
-};
+#include <cache/cache/green_cache.h>
 
 #endif //ESBMC_CACHE_H
