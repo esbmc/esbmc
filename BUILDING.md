@@ -2,7 +2,7 @@
 
 This is a guide on how to build ESBMC and its supported solvers.
 
-It has been tested with Ubuntu 19.10, but the steps are mostly the same for other Linux distributions.
+It has been tested with Ubuntu 19.10 and macOS Catalina, but the steps are mostly the same for other Linux and macOS distributions.
 
 Before starting, note that ESBMC is mainly distributed under the terms of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), so please make sure to read it carefully.
 
@@ -13,7 +13,11 @@ We need to install some dependencies before moving into next steps.
 All of them are listed in the following installation command:
 
 ```
+Linux:
 sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison curl flex gcc-multilib linux-libc-dev libboost-all-dev libtinfo-dev ninja-build python3-setuptools
+
+macOS:
+brew install gmp cmake boost ninja python3 automake && pip3 install PySMT
 ```
 
 Note that they are listed with their name in Debian/Ubuntu, but they can be found in other distributions as well.
@@ -35,13 +39,21 @@ ESBMC uses [__clang__](https://clang.llvm.org/) in its front-end. It currently s
 First, we need to download the package. It can be performed using the following __wget__ command:
 
 ```
+Linux:
 wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+
+macOS:
+wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz
 ```
 
 Then, we need to extract the package. You can use the following __tar__ command:
 
 ```
+Linux:
 tar xf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
+
+macOS:
+tar xf clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz && mv clang+llvm-9.0.0-x86_64-darwin-apple clang9
 ```
 
 ## Setting Up Solvers
@@ -62,7 +74,7 @@ git clone https://github.com/boolector/boolector && cd boolector && git reset --
 
 If you need more details on Boolector, please refer to [its Github](https://github.com/Boolector/boolector).
 
-### Setting Up CVC4
+### Setting Up CVC4 (Linux Only)
 
 We have wrapped the entire build and setup of CVC4 in the following command:
 
@@ -77,14 +89,24 @@ If you need more details on CVC4, please refer to [its Github](https://github.co
 We have wrapped the entire build and setup of MathSAT in the following command:
 
 ```
+Linux:
 wget http://mathsat.fbk.eu/download.php?file=mathsat-5.5.4-linux-x86_64.tar.gz -O mathsat.tar.gz && tar xf mathsat.tar.gz && mv mathsat-5.5.4-linux-x86_64 mathsat
+
+macOS:
+wget http://mathsat.fbk.eu/download.php?file=mathsat-5.5.4-darwin-libcxx-x86_64.tar.gz -O mathsat.tar.gz && tar xf mathsat.tar.gz && mv mathsat-5.5.4-darwin-libcxx-x86_64 mathsat
+```
+
+In macOS, the following command is required:
+
+```
+ln -s /usr/local/include/gmp.h mathsat/include/gmp.h
 ```
 
 If you need more details on MathSAT, please refer to [its webpage](https://mathsat.fbk.eu).
 
 ### Setting Up Yices
 
-First, we need to setup and build [GMP library](https://gmplib.org), by entering the following command:
+First, we need to setup and build [GMP library](https://gmplib.org), by entering the following command (Linux only):
 
 ```
 wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz && rm gmp-6.1.2.tar.xz && cd gmp-6.1.2 && ./configure --prefix $PWD/../gmp --disable-shared ABI=64 CFLAGS=-fPIC CPPFLAGS=-DPIC && make -j4 && make install
@@ -93,7 +115,11 @@ wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz
 Then, we are able build and setup Yices using the following command:
 
 ```
+Linux:
 git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices --with-static-gmp=$PWD/../gmp/lib/libgmp.a && make -j9 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib
+
+macOS:
+git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices && make -j9 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a ../yices/lib
 ```
 
 If you need more details on Yices, please refer to [its Github](https://github.com/SRI-CSL/yices2).
@@ -103,7 +129,11 @@ If you need more details on Yices, please refer to [its Github](https://github.c
 We have wrapped the entire build and setup of Z3 in the following command:
 
 ```
+Linux:
 wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.4/z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && unzip z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && mv z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04 z3
+
+macOS:
+brew install z3 
 ```
 
 If you need more details on Z3, please refer to [its Github](https://github.com/Z3Prover/z3).
@@ -115,7 +145,11 @@ Now we are ready to build ESBMC.
 First, we need to setup __cmake__, by using the following command:
 
 ```
+Linux:
 cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../../clang9 -DLLVM_DIR=$PWD/../../clang9 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../../yices -DCVC4_DIR=$PWD/../../cvc4 -DGMP_DIR=$PWD/../../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
+
+macOS:
+mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../../clang9 -DLLVM_DIR=$PWD/../../clang9 -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
 ```
 
 Finally, we can trigger the build process, by using the following command:
