@@ -2,9 +2,9 @@
 
 This is a guide on how to build ESBMC and its supported solvers.
 
-It has been tested with Ubuntu 19.10, but the steps are essentially the same for other Linux distributions.
+It has been tested with Ubuntu 19.10, but the steps are mostly the same for other Linux distributions.
 
-Before starting, note that ESBMC is mainly distributed under the terms of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), so please make sure to carefully read it.
+Before starting, note that ESBMC is mainly distributed under the terms of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), so please make sure to read it carefully.
 
 ## Installing Dependencies
 
