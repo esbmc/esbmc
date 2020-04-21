@@ -140,7 +140,7 @@ If you need more details on Z3, please refer to [its Github](https://github.com/
 
 ## Building ESBMC
 
-Now we are ready to build ESBMC.
+Now we are ready to build ESBMC. Please note that we describe the same build option used in our CI/CD. If you want to all available _cmake_ options, refer to our [Options.cmake file](https://github.com/esbmc/esbmc/blob/master/scripts/cmake/Options.cmake).
 
 First, we need to setup __cmake__, by using the following command:
 
