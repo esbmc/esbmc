@@ -60,7 +60,7 @@ tar xf clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz && mv clang+llvm-9.0.0-x86_64
 
 ESBMC relies on SMT solvers to reason about formulae in its back-end.
 
-Currently we support the following solvers: __Boolector__, __CVC4__, __MathSAT__, __Yices__, __Yices (GMP)__, and __Z3__.
+Currently we support the following solvers: __Boolector__, __CVC4__, __MathSAT__, __Yices 2__, and __Z3__.
 
 Since this guide focuses primarily on ESBMC build, we will only cover the steps needed by it.
 
@@ -112,7 +112,7 @@ First, we need to setup and build [GMP library](https://gmplib.org), by entering
 wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz && rm gmp-6.1.2.tar.xz && cd gmp-6.1.2 && ./configure --prefix $PWD/../gmp --disable-shared ABI=64 CFLAGS=-fPIC CPPFLAGS=-DPIC && make -j4 && make install
 ```
 
-Then, we are able build and setup Yices using the following command:
+Then, we are able build and setup Yices 2 using the following command:
 
 ```
 Linux:
@@ -122,7 +122,7 @@ macOS:
 git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices && make -j9 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a ../yices/lib
 ```
 
-If you need more details on Yices, please refer to [its Github](https://github.com/SRI-CSL/yices2).
+If you need more details on Yices 2, please refer to [its Github](https://github.com/SRI-CSL/yices2).
 
 ### Setting Up Z3
 
