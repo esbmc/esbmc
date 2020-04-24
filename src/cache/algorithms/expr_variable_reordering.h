@@ -85,7 +85,7 @@ private:
   /**
    * Parses and replaces symbols and values
    *
-   * This works by tacking an expression and manually replacing it's inner
+   * This works by tacking an expression and manually replacing its inner
    * expressions with the ordered symbols and values
    *
    * Example:
@@ -128,7 +128,7 @@ private:
     REPLACE, /// to replace the expressions
   };
   /**
-   * Check expression and categorize it's type
+   * Check expression and categorize its type
    * @param expr to be parsed
    * @return PARSE_AS type of expression
    */
@@ -169,8 +169,8 @@ private:
     values_vec &values);
 
   /**
-   * After transverse reading the all symbols and value this will
-   * tranverse again but replacing the symbols
+   * Transverse the expression replacing its inner symbols and values
+   * in alphabetical order
    *
    * This assumes that symbols is ordered and values has at most 1 element
    *

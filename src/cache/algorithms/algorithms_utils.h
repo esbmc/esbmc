@@ -5,7 +5,7 @@
 
  Description:
   This file contains helper functions to manipulate SSA's and
-  Expressions that are common between all algorithms.
+  expressions that are common between all algorithms.
 
   - Only static methods are available
 \*******************************************************************/
