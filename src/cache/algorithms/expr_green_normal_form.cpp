@@ -58,6 +58,16 @@ void expr_green_normal_form::run()
     return;
   }
 
+  /**
+   *  After 1 the expression would be similar to:
+   *
+   *  A + B + C + k = c
+   *
+   *  Then it will be set to:
+   *
+   * A + B + C + k = 0
+   */
+  
   std::shared_ptr<constant_int2t> relation_rhs;
   relation_rhs = std::dynamic_pointer_cast<constant_int2t>(relation->side_2);
   BigInt old_rhs = relation_rhs->value;
