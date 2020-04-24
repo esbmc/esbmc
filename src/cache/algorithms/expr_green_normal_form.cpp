@@ -67,7 +67,7 @@ void expr_green_normal_form::run()
    *
    * A + B + C + k = 0
    */
-  
+
   std::shared_ptr<constant_int2t> relation_rhs;
   relation_rhs = std::dynamic_pointer_cast<constant_int2t>(relation->side_2);
   BigInt old_rhs = relation_rhs->value;
@@ -81,7 +81,7 @@ void expr_green_normal_form::set_rightest_value_of_lhs_relation(
   expr2tc &equality,
   BigInt value)
 {
-  // TODO: Add support to other binary operations
+  // TODO: Add support to other binary operations e.g MUL
   // TODO: Add support to expressions without k
 
   if(equality->expr_id == expr2t::expr_ids::add_id)
