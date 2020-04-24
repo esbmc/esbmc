@@ -15,8 +15,8 @@
 #define ESBMC_ALGORITHMS_H
 
 // Expr Algorithms
-#include <cache/algorithms/expr_variable_reordering.h>
 #include <cache/algorithms/expr_green_normal_form.h>
+#include <cache/algorithms/expr_variable_reordering.h>
 // SSA Algorithms
 
 #endif //ESBMC_ALGORITHMS_H
