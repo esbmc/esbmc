@@ -1,8 +1,9 @@
 // Rafael Sá Menezes - 04/2020
 
+#include <cache/algorithms/expr_green_normal_form.h>
+
 #include <util/irep2_expr.h>
 #include <array>
-#include "expr_green_normal_form.h"
 
 namespace
 {

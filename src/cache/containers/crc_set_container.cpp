@@ -1,6 +1,6 @@
 // Rafael Sá Menezes - 04/2020
 
-#include "crc_set_container.h"
+#include <cache/containers/crc_set_container.h>
 #include <sstream>
 #include <util/irep2.h>
 #include <iostream>

@@ -107,7 +107,7 @@ private:
    * @param symbols
    * @param values
    */
-  static static void replace_value(
+  static void replace_value(
     const std::shared_ptr<arith_2ops> op,
     bool is_lhs,
     symbols_vec &symbols,

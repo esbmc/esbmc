@@ -1,6 +1,6 @@
 // Rafael Sá Menezes - 04/2020
 
-#include "green_cache.h"
+#include <cache/cache/green_cache.h>
 #include <cache/algorithms/algorithms.h>
 #include <cache/algorithms/algorithms_utils.h>
 

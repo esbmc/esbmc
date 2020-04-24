@@ -1,7 +1,6 @@
 // Rafael Sá Menezes - 04/2020
 
-#include "expr_variable_reordering.h"
-
+#include <cache/algorithms/expr_variable_reordering.h>
 #include <cache/algorithms/algorithms_utils.h>
 #include <array>
 
