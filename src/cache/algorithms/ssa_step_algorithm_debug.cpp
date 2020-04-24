@@ -1,6 +1,4 @@
-//
-// Created by rafaelsa on 10/03/2020.
-//
+// Rafael Sá Menezes - 03/2020
 
 #include <cache/algorithms/ssa_step_algorithm_debug.h>
 

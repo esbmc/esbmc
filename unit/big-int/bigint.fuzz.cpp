@@ -15,10 +15,10 @@
 #include <vector>
 
 // Checks whether the input contains digits only
-int is_valid_input(const char *Data, size_t DataSize) {
+int is_valid_input(const char *Data, size_t DataSize)
+{
   const char low_bound = '0';
   const char high_bound = '9';
-
 
   for(size_t i = 0; i < DataSize; ++i)
   {
@@ -28,12 +28,15 @@ int is_valid_input(const char *Data, size_t DataSize) {
   return 1;
 }
 
-void test_construct_bigint(const char *Data, size_t DataSize) {
+void test_construct_bigint(const char *Data, size_t DataSize)
+{
   if(DataSize == 0)
     return;
   if(Data[0] == '0')
-    return;;
-  if(!is_valid_input(Data,DataSize)) return;
+    return;
+  ;
+  if(!is_valid_input(Data, DataSize))
+    return;
   BigInt obj(Data, 10);
 
   std::vector<char> vec(obj.digits());
@@ -45,7 +48,8 @@ void test_construct_bigint(const char *Data, size_t DataSize) {
   }
 }
 
-extern "C" int LLVMFuzzerTestOneInput(const char *Data, size_t Size) {
+extern "C" int LLVMFuzzerTestOneInput(const char *Data, size_t Size)
+{
   test_construct_bigint(Data, Size);
   return 0;
 }

@@ -38,7 +38,7 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
   if(rhs->expr_id == expr2t::expr_ids::implies_id)
   {
     /*
-     * If an ASSERTIVE contains an inner implies this means that this is in the
+     * If an ASSERTION contains an inner implies this means that this is in the
      * format:
      *
      * GUARD0 && GUARD1 && ... && GUARDN => ¬inner_expr
@@ -69,10 +69,10 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
   if(unsat_container.check(guard_items))
   {
     /**
-     * An assertive is in the format of
+     * An assertion is in the format of
      *
-     * a. assertive_guard -> !expr
-     * b. assertive_guard -> guards && ... && guard -> !expr.
+     * a. assertion_guard -> !expr
+     * b. assertion_guard -> guards && ... && guard -> !expr.
      *
      * For 'a' the is the trivial case, if expr is known to be false
      * then we mark it's negation as true.
@@ -84,7 +84,7 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
      * Where A would be the set of guards and B the !expr. Since A if false
      * it's negation is true, so we can simplify to:
      *
-     * assertive_guard -> 1 (true)
+     * assertion_guard -> 1 (true)
      *
      */
     constant_bool2tc false_value(true);
@@ -117,7 +117,7 @@ void green_cache::parse_implication_guard(
   }
   else
   {
-    // Note: Not sure if the assertive guard always implies in a group of guards
+    // Note: Not sure if the guard always implies in a group of guards
     //assert(0);
   }
 }

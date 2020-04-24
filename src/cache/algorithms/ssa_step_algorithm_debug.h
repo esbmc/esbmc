@@ -1,6 +1,10 @@
-//
-// Created by rafaelsa on 10/03/2020.
-//
+/*******************************************************************\
+ Module: SSA step debug algorithm
+
+ Author: Rafael Sá Menezes
+
+ Date: March 2020
+\*******************************************************************/
 
 #ifndef ESBMC_SSA_STEP_ALGORITHM_DEBUG_H
 #define ESBMC_SSA_STEP_ALGORITHM_DEBUG_H
