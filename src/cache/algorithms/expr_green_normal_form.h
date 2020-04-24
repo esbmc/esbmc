@@ -59,8 +59,8 @@ private:
    *
    * This method sets k as @value
    *
-   * @param relation
-   * @param value
+   * @param relation expression e.g A + 4 == 8
+   * @param value constant to substitute the value from the relation
    */
   void set_rightest_value_of_lhs_relation(expr2tc &relation, BigInt value);
 
