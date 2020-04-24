@@ -7,7 +7,6 @@
 namespace
 {
 std::array<expr2t::expr_ids, 2> binary_operations = {expr2t::expr_ids::add_id,
-                                                     expr2t::expr_ids::sub_id,
                                                      expr2t::expr_ids::mul_id};
 
 std::array<expr2t::expr_ids, 6> relations = {
