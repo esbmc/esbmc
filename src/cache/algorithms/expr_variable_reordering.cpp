@@ -139,55 +139,47 @@ inline void expr_variable_reordering::transverse_replace_binop(
   transverse_binop(op, symbols, values, TRANSVERSE_MODE::REPLACE);
 }
 
+void expr_variable_reordering::parse_arith_side(
+  const std::shared_ptr<arith_2ops> op,
+  expr_variable_reordering::symbols_vec &symbols,
+  expr_variable_reordering::values_vec &values,
+  expr_variable_reordering::TRANSVERSE_MODE mode,
+  bool is_lhs)
+{
+  bool side_is_same_operand = is_lhs ? op->side_1->expr_id == op->expr_id
+                                     : op->side_2->expr_id == op->expr_id;
+  // Check if LHS is the same binary operation of parent
+  if(side_is_same_operand)
+  {
+    std::shared_ptr<arith_2ops> arith;
+    arith =
+      std::dynamic_pointer_cast<arith_2ops>(is_lhs ? op->side_1 : op->side_2);
+    transverse_binop(arith, symbols, values, mode);
+  }
+
+  switch(mode)
+  {
+  case TRANSVERSE_MODE::READ:
+  {
+    add_value(op, is_lhs, symbols, values);
+    break;
+  }
+  case TRANSVERSE_MODE::REPLACE:
+  {
+    replace_value(op, is_lhs, symbols, values);
+    break;
+  }
+  }
+}
+
 void expr_variable_reordering::transverse_binop(
   const std::shared_ptr<arith_2ops> op,
   expr_variable_reordering::symbols_vec &symbols,
   expr_variable_reordering::values_vec &values,
   expr_variable_reordering::TRANSVERSE_MODE mode)
 {
-  // Check if LHS is the same binary operation of parent
-  if(op->side_1->expr_id == op->expr_id)
-  {
-    std::shared_ptr<arith_2ops> arith;
-    arith = std::dynamic_pointer_cast<arith_2ops>(op->side_1);
-    transverse_binop(arith, symbols, values, mode);
-  }
-
-  switch(mode)
-  {
-  case TRANSVERSE_MODE::READ:
-  {
-    add_value(op, true, symbols, values);
-    break;
-  }
-  case TRANSVERSE_MODE::REPLACE:
-  {
-    replace_value(op, true, symbols, values);
-    break;
-  }
-  }
-
-  // Check if RHS is the same binary operation of parent
-  if(op->side_2->expr_id == op->expr_id)
-  {
-    std::shared_ptr<arith_2ops> arith;
-    arith = std::dynamic_pointer_cast<arith_2ops>(op->side_2);
-    transverse_binop(arith, symbols, values, mode);
-  }
-
-  switch(mode)
-  {
-  case TRANSVERSE_MODE::READ:
-  {
-    add_value(op, false, symbols, values);
-    break;
-  }
-  case TRANSVERSE_MODE::REPLACE:
-  {
-    replace_value(op, false, symbols, values);
-    break;
-  }
-  }
+  parse_arith_side(op, symbols, values, mode, true);  // LHS
+  parse_arith_side(op, symbols, values, mode, false); // RHS
 }
 
 void expr_variable_reordering::add_value(

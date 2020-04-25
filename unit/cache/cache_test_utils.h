@@ -25,6 +25,10 @@ add2tc create_unsigned_32_add_expr(expr2tc &side1, expr2tc &side2);
 
 add2tc create_signed_32_add_expr(expr2tc &side1, expr2tc &side2);
 
+mul2tc create_unsigned_32_mul_expr(expr2tc &side1, expr2tc &side2);
+
+mul2tc create_signed_32_mul_expr(expr2tc &side1, expr2tc &side2);
+
 lessthan2tc create_lesser_relation(expr2tc &lhs, expr2tc &rhs);
 
 greaterthan2tc create_greater_relation(expr2tc &lhs, expr2tc &rhs);

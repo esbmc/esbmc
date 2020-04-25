@@ -25,11 +25,10 @@
  *  Note that that this assumes that a constant propagation algorithm
  *  was executed, so an expression should have at max 1 constant value.
  *
- *  Supported Operators: [+, -, *, /]
+ *  Supported Operators: [+, *]
  *  Supported Types (constants/symbols): [Signed Integer, Unsigned Integer]
  *  Supported Relations: [==, !=, <, >, <=, >=]
  *
- *  TODO: Define precedence rules for operators
  */
 class expr_variable_reordering : public expr_algorithm
 {
@@ -53,7 +52,6 @@ private:
    * The reorder will check if LHS and RHS are symbols/values
    * the precedence will be: x OP y OP z OP value
    *
-   * TODO: support precedence levels, the current implementation will stop if it finds a different operator
    *
    * @param expr binary_operation
    */
@@ -135,13 +133,30 @@ private:
   static PARSE_AS get_expr_type(expr2tc &expr);
 
   /**
+   * @brief Helper method to be used internally with transverse_binop,
+   *        keeping the DRY principle
+   *
+   * @param op binaop arith
+   * @param symbols symbolic variable list
+   * @param values constants list
+   * @param mode reading/replacing
+   * @param is_lhs which side of binary operation to be checked
+   */
+  void parse_arith_side(
+    std::shared_ptr<arith_2ops> op,
+    symbols_vec &symbols,
+    values_vec &values,
+    TRANSVERSE_MODE mode,
+    bool is_lhs);
+
+  /**
    * Default strategy to execute an algorithm while transversing the expr
    * @param op binary operation
    * @param symbols vector of all symbols expressions
    * @param values vector of all values expressions
    */
   void transverse_binop(
-    const std::shared_ptr<arith_2ops> op,
+    std::shared_ptr<arith_2ops> op,
     symbols_vec &symbols,
     values_vec &values,
     TRANSVERSE_MODE mode);
@@ -157,14 +172,13 @@ private:
    *
    *  symbols = [x,y], values = [7]
    *
-   *  TODO: Currently there is no logic to handle different BINOP inside the same expression
    *
    * @param op binary operation
    * @param symbols vector of all symbols expressions
    * @param values vector of all values expressions
    */
   void transverse_read_binop(
-    const std::shared_ptr<arith_2ops> op,
+    std::shared_ptr<arith_2ops> op,
     symbols_vec &symbols,
     values_vec &values);
 
@@ -179,7 +193,7 @@ private:
    * @param values vector of all values expressions
    */
   void transverse_replace_binop(
-    const std::shared_ptr<arith_2ops> op,
+    std::shared_ptr<arith_2ops> op,
     symbols_vec &symbols,
     values_vec &values);
 };

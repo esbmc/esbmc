@@ -67,6 +67,20 @@ add2tc create_signed_32_add_expr(expr2tc &side1, expr2tc &side2)
   return expression;
 }
 
+mul2tc create_unsigned_32_mul_expr(expr2tc &side1, expr2tc &side2)
+{
+  unsignedbv_type2tc type(32);
+  mul2tc expression(type, side1, side2);
+  return expression;
+}
+
+mul2tc create_signed_32_mul_expr(expr2tc &side1, expr2tc &side2)
+{
+  signedbv_type2tc type(32);
+  mul2tc expression(type, side1, side2);
+  return expression;
+}
+
 lessthan2tc create_lesser_relation(expr2tc &lhs, expr2tc &rhs)
 {
   lessthan2tc relation(lhs, rhs);

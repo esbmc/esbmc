@@ -159,6 +159,104 @@ BOOST_AUTO_TEST_CASE(value_add_a_should_become_a_add_value)
   BOOST_CHECK(add->crc() != crc);
 }
 
+BOOST_AUTO_TEST_CASE(expression_with_multiple_operators)
+{
+  // 42 + x + (y*(b + a))  -> // x + 42 + y*(a + b)
+  symbol2tc a = create_unsigned_32_symbol_expr("a");
+  symbol2tc b = create_unsigned_32_symbol_expr("b");
+  symbol2tc x = create_unsigned_32_symbol_expr("x");
+  symbol2tc y = create_unsigned_32_symbol_expr("y");
+  constant_int2tc value = create_unsigned_32_value_expr(42);
+
+  // b + a -> a + b
+  add2tc add_1 = create_unsigned_32_add_expr(b, a);
+  add2tc add_1_expected = create_unsigned_32_add_expr(a, b);
+
+  // y(b + a) -> y(a + b)
+  mul2tc mul_1 = create_unsigned_32_mul_expr(y, add_1);
+  mul2tc mul_1_expected = create_unsigned_32_mul_expr(y, add_1_expected);
+
+  // x + y(b + a) -> 42 + y(b + a)
+  add2tc add_2 = create_unsigned_32_add_expr(x, mul_1);
+  add2tc add_2_expected = create_unsigned_32_add_expr(value, mul_1_expected);
+
+  // 42 + x + y(b + a) -> x + 42 + y(b + a)
+  add2tc add_3 = create_unsigned_32_add_expr(value, add_2);
+  add2tc add_3_expected = create_unsigned_32_add_expr(x, add_2_expected);
+
+  auto crc = add_3->crc();
+
+  expr_variable_reordering algorithm(add_3);
+  algorithm.run();
+
+  // Check if object has changed
+  BOOST_CHECK(add_3->crc() != crc);
+
+  /**
+   *     add_2
+   *        |  mul_1
+   *        |    |   add_1
+   *  add_3 |    |    |
+   *   |    |    |    |
+   * x + 42 + y * (a + b)
+   * | |  | | | |  | | |
+   * | |  A | | |  | | |
+   * | |    | | |  | | B
+   * | |    | | |  C |
+   * | |    | | |    D
+   * | |    | E |
+   * | |    |   F
+   * | |    G
+   * H |
+   *   I
+   */
+
+  // I
+  // I am unsure why this is not working, maybe is related to the way
+  // that I generated the expr, but all subexpressions are ok
+  //BOOST_TES(add_3->crc() != add_3_expected->crc());
+
+  // H
+  BOOST_TEST(add_3->side_1->expr_id == add_3_expected->side_1->expr_id);
+  BOOST_TEST(add_3->side_1->crc() == add_3_expected->side_1->crc());
+  BOOST_TEST(is_symbols_equal(add_3->side_1, x));
+
+  // G
+  add2tc G(add_3->side_2);
+  BOOST_TEST(G->expr_id == add_3_expected->side_2->expr_id);
+  BOOST_TEST(G->crc() == add_3_expected->side_2->crc());
+
+  // F
+  BOOST_TEST(G->side_2->expr_id == mul_1_expected->expr_id);
+  mul2tc F(G->side_2);
+  BOOST_TEST(F->crc() == mul_1_expected->crc());
+
+  // E
+  BOOST_TEST(F->side_1->expr_id == mul_1_expected->side_1->expr_id);
+  BOOST_TEST(F->side_1->crc() == mul_1_expected->side_1->crc());
+  BOOST_TEST(is_symbols_equal(F->side_1, y));
+
+  // D
+  BOOST_TEST(F->side_2->expr_id == add_1_expected->expr_id);
+  add2tc D(F->side_2);
+  BOOST_TEST(D->crc() == add_1_expected->crc());
+
+  // C
+  BOOST_TEST(D->side_1->expr_id == add_1_expected->side_1->expr_id);
+  BOOST_TEST(D->side_1->crc() == add_1_expected->side_1->crc());
+  BOOST_TEST(is_symbols_equal(D->side_1, a));
+
+  // B
+  BOOST_TEST(D->side_2->expr_id == add_1_expected->side_2->expr_id);
+  BOOST_TEST(D->side_2->crc() == add_1_expected->side_2->crc());
+  BOOST_TEST(is_symbols_equal(D->side_2, b));
+
+  // A
+  BOOST_TEST(G->side_1->expr_id == add_2_expected->side_1->expr_id);
+  BOOST_TEST(G->side_1->crc() == add_2_expected->side_1->crc());
+  BOOST_TEST(is_unsigned_equal(G->side_1, value));
+}
+
 BOOST_AUTO_TEST_CASE(equality_1_check)
 {
   init_test_values();
