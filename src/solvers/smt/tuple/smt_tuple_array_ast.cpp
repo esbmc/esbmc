@@ -59,8 +59,8 @@ smt_astt array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   unsigned int i = 0;
   for(auto const &it : data.members)
   {
-    type2tc tmparrtype(
-      new array_type2t(it, arrtype.array_size, arrtype.size_is_infinite));
+    type2tc tmparrtype =
+      array_type2tc(it, arrtype.array_size, arrtype.size_is_infinite);
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
     eqs.push_back(side1->eq(ctx, side2));
@@ -98,8 +98,8 @@ smt_astt array_sym_smt_ast::update(
   unsigned int i = 0;
   for(auto const &it : data.members)
   {
-    type2tc arrtype(
-      new array_type2t(it, array_type.array_size, array_type.size_is_infinite));
+    type2tc arrtype =
+      array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
 
     // Project and update a field in 'this'
     smt_astt field = project(ctx, i);
@@ -128,8 +128,8 @@ smt_astt array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   unsigned int i = 0;
   for(auto const &it : data.members)
   {
-    type2tc arrtype(
-      new array_type2t(it, array_type.array_size, array_type.size_is_infinite));
+    type2tc arrtype =
+      array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
 
     smt_astt result_field = result->project(ctx, i);
     smt_astt sub_array = project(ctx, i);
@@ -157,8 +157,8 @@ smt_astt array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   std::string sym_name = name + fieldname;
 
   const type2tc &restype = data.members[idx];
-  type2tc new_arr_type(
-    new array_type2t(restype, arr.array_size, arr.size_is_infinite));
+  type2tc new_arr_type =
+    array_type2tc(restype, arr.array_size, arr.size_is_infinite);
   smt_sortt s = ctx->convert_sort(new_arr_type);
 
   if(is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype))

@@ -237,8 +237,7 @@ void goto_symext::track_new_pointer(
   // Also update all the accounting data.
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type =
-    type2tc(new array_type2t(get_bool_type(), expr2tc(), true));
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
   symbol2tc sym(sym_type, dyn_info_arr_name);
 
   index2tc idx(get_bool_type(), sym, ptr_obj);
@@ -255,8 +254,7 @@ void goto_symext::track_new_pointer(
   expr2tc falseity = gen_false_expr();
   symex_assign(code_assign2tc(dealloc_index_expr, falseity), true);
 
-  type2tc sz_sym_type =
-    type2tc(new array_type2t(uint_type2(), expr2tc(), true));
+  type2tc sz_sym_type = array_type2tc(uint_type2(), expr2tc(), true);
   symbol2tc sz_sym(sz_sym_type, alloc_size_arr_name);
   index2tc sz_index_expr(get_bool_type(), sz_sym, ptr_obj);
 
@@ -315,8 +313,7 @@ void goto_symext::symex_free(const expr2tc &expr)
   }
 
   // Clear the alloc bit, and set the deallocated bit.
-  type2tc sym_type =
-    type2tc(new array_type2t(get_bool_type(), expr2tc(), true));
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code.operand);
   dereference(ptr_obj, dereferencet::READ);
 
@@ -383,7 +380,7 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 
   if(do_array)
   {
-    newtype = type2tc(new array_type2t(renamedtype2, code.size, false));
+    newtype = array_type2tc(renamedtype2, code.size, false);
   }
   else
     newtype = renamedtype2;
@@ -413,8 +410,7 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   symex_assign(code_assign2tc(lhs, rhs), true);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type =
-    type2tc(new array_type2t(get_bool_type(), expr2tc(), true));
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
   symbol2tc sym(sym_type, "__ESBMC_is_dynamic");
 
   pointer_object2tc ptr_obj(pointer_type2(), lhs);

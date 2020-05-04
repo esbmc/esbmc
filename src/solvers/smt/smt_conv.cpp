@@ -96,8 +96,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   addr_space_type_data = tmp;
   addr_space_type = type2tc(tmp);
 
-  addr_space_arr_type =
-    type2tc(new array_type2t(addr_space_type, expr2tc(), true));
+  addr_space_arr_type = array_type2tc(addr_space_type, expr2tc(), true);
 
   addr_space_data.emplace_back();
 
@@ -159,8 +158,8 @@ void smt_convt::smt_post_init()
     for(pow = 1ULL; count < 64; pow <<= 1, count++)
       power_array_data.push_back(constant_int2tc(powarr_elemt, BigInt(pow)));
 
-    type2tc power_array_type(
-      new array_type2t(powarr_elemt, gen_ulong(64), false));
+    type2tc power_array_type =
+      array_type2tc(powarr_elemt, gen_ulong(64), false);
 
     constant_array2tc power_array(power_array_type, power_array_data);
     int_shift_op_array = convert_ast(power_array);
@@ -2214,7 +2213,7 @@ expr2tc smt_convt::get_array(const expr2tc &expr)
 
   const array_type2t &ar = to_array_type(flatten_array_type(expr->type));
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
-  type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
+  type2tc arr_type = array_type2tc(ar.subtype, arr_size, false);
   std::vector<expr2tc> fields;
 
   for(size_t i = 0; i < (1ULL << w); i++)
@@ -2333,8 +2332,8 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
         constarray_type.array_size);
       simplify(newsize);
 
-      type2tc new_arr_type(
-        new array_type2t(constarray_type.subtype, newsize, false));
+      type2tc new_arr_type =
+        array_type2tc(constarray_type.subtype, newsize, false);
       constant_array2tc new_const_array(new_arr_type, new_contents);
       return convert_ast(new_const_array);
     }

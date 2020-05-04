@@ -534,7 +534,7 @@ public:
    *  @param size Size of this array.
    *  @param inf Whether or not this array is infinitely sized
    */
-  array_type2t(const type2tc &_subtype, const expr2tc &size, bool inf)
+  array_type2t(const type2tc &_subtype, expr2tc &size, bool inf)
     : array_type_methods(array_id, _subtype, size, inf)
   {
     // If we can simplify the array size, do so

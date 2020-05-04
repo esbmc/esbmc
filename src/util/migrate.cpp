@@ -107,8 +107,7 @@ void real_migrate_type(
       size = fixup_containerof_in_sizeof(size);
     }
 
-    array_type2t *a = new array_type2t(subtype, size, is_infinite);
-    new_type_ref = type2tc(a);
+    new_type_ref = array_type2tc(subtype, size, is_infinite);
   }
   else if(type.id() == typet::t_pointer)
   {
@@ -323,7 +322,7 @@ void real_migrate_type(
     // because we still can't access it as an incomplete struct. So just return
     // an infinitely sized array of characters, the most permissive approach to
     // something that shouldn't happen.
-    new_type_ref = type2tc(new array_type2t(get_uint8_type(), expr2tc(), true));
+    new_type_ref = array_type2tc(get_uint8_type(), expr2tc(), true);
   }
   else if(type.id() == "string")
   {
