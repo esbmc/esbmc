@@ -474,11 +474,11 @@ expr2tc add2t::do_simplify() const
     return sub2tc(type, to_add2t(s2).side_1, to_bitnot2t(s1).value);
 
   // Try some generic simplifications for associative operations.
-  if(!simplify_associative_or_commutative<std::decay<decltype(*this)>::type>(
+  if(simplify_associative_or_commutative<std::decay<decltype(*this)>::type>(
        clone))
-    return expr2tc();
+    return clone;
 
-  return clone;
+  return expr2tc();
 }
 
 template <class constant_type>
