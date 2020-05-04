@@ -210,12 +210,6 @@ inline static expr2tc swap_operands(const expr2tc &expr)
   check_perform_binop_constants(                                               \
     op, is_floatbv_type, to_constant_floatbv2t, side_1, side_2);
 
-#define simplify_constants(expr)                                               \
-  if(expr->expr_id == expr2t::add_id)                                          \
-  {                                                                            \
-    perform_binop_constants(+=, side_1, side_2)                                \
-  }
-
 // Tries to simplify if the two sides are constants
 // otherwise, move constants to the RHS of the expr
 template <typename T>
@@ -230,7 +224,10 @@ inline static bool check_simplify_constants_or_commute_binop(expr2tc &expr)
     // Add sides if they are constants
     if(is_constant_number(side_2))
     {
-      simplify_constants(expr);
+      if(is_add2t(expr))
+      {
+        perform_binop_constants(+=, side_1, side_2)
+      }
     }
 
     // Canonicalize the constant to the RHS if this is a commutative operation
