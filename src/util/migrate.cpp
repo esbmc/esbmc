@@ -90,7 +90,7 @@ void real_migrate_type(
   else if(type.id() == typet::t_array)
   {
     type2tc subtype;
-    expr2tc size((expr2t *)nullptr);
+    expr2tc size;
     bool is_infinite = false;
 
     migrate_type(type.subtype(), subtype, ns, cache);
