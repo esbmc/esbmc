@@ -14,7 +14,7 @@ All of them are listed in the following installation command:
 
 ```
 Linux:
-sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison curl flex gcc-multilib linux-libc-dev libboost-all-dev libtinfo-dev ninja-build python3-setuptools
+sudo apt-get update && sudo apt-get install build-essential git gperf libgmp-dev cmake bison curl flex gcc-multilib linux-libc-dev libboost-all-dev libtinfo-dev ninja-build python3-setuptools unzip wget
 
 macOS:
 brew install gmp cmake boost ninja python3 automake && pip3 install PySMT
@@ -133,7 +133,7 @@ Linux:
 wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.4/z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && unzip z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && mv z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04 z3
 
 macOS:
-brew install z3 
+brew install z3
 ```
 
 If you need more details on Z3, please refer to [its Github](https://github.com/Z3Prover/z3).
