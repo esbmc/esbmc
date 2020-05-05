@@ -95,7 +95,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release-linux
+          asset_path: ./ESBMC-Linux.sh
           asset_name: ESBMC-Linux.sh
           asset_content_type: text/x-shellscript
       - name: Upload Release Asset (Darwin)
@@ -105,6 +105,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release-darwin
+          asset_path: ./ESBMC-Darwin.sh
           asset_name: ESBMC-Darwin.sh
           asset_content_type: text/x-shellscript
