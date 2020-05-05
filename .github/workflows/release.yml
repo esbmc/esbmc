@@ -32,7 +32,7 @@ jobs:
       - uses: actions/upload-artifact@v1
         with:
           name: release-linux
-          path: ./ESBMC-Linux.sh
+          path: ./build/ESBMC-Linux.sh
       
           
   build-macos:
@@ -59,7 +59,7 @@ jobs:
       - uses: actions/upload-artifact@v1
         with:
           name: release-darwin
-          path: ./ESBMC-Darwin.sh
+          path: ./build/ESBMC-Darwin.sh
 
   create-release:
     name: Upload Release Asset
