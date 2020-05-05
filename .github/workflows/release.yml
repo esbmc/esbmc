@@ -7,8 +7,8 @@ on:
 name: Upload Release Asset
 
 jobs:
-  build:
-    name: Upload Release Asset
+  build-linux:
+    name: Build Linux Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -26,9 +26,54 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -GNinja -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -GNinja -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3
       - name: Build ESBMC
         run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Linux.sh
+      - uses: actions/upload-artifact@v1
+        with:
+          name: release-linux
+          path: ./ESBMC-Linux.sh
+      
+          
+  build-macos:
+    name: Build Darwin Release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install Dependencies
+        run: brew install gmp cmake boost ninja python3 automake && pip3 install PySMT
+      - name: Download Clang 9
+        run: wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz
+      - name: Extract Clang 9
+        run: tar xf clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz && mv clang+llvm-9.0.0-x86_64-darwin-apple clang9
+      - name: Setup boolector
+        run: git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
+      - name: Setup Z3
+        run: brew install z3
+      - name: Get current folder and files
+        run: pwd && ls
+      - name: Configure CMake
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -GNinja -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/
+      - name: Build ESBMC
+        run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Darwin.sh
+      - uses: actions/upload-artifact@v1
+        with:
+          name: release-darwin
+          path: ./ESBMC-Darwin.sh
+
+  create-release:
+    name: Upload Release Asset
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-macos]
+    steps:
+      - name: Download Linux Build
+        uses: actions/download-artifact@v1
+        with:
+          name: release-linux
+      - name: Download Macos Build
+        uses: actions/download-artifact@v1
+        with:
+          name: release-darwin
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1.0.0
@@ -39,13 +84,23 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
-      - name: Upload Release Asset
-        id: upload-release-asset 
+      - name: Upload Release Asset (Linux)
+        id: upload-release-asset-linux 
         uses: actions/upload-release-asset@v1.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build/ESBMC-Linux.sh
+          asset_path: ./release-linux
           asset_name: ESBMC-Linux.sh
+          asset_content_type: text/x-shellscript
+      - name: Upload Release Asset (Darwin)
+        id: upload-release-asset-macos 
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./release-darwin
+          asset_name: ESBMC-Darwin.sh
           asset_content_type: text/x-shellscript
