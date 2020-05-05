@@ -70,10 +70,14 @@ jobs:
         uses: actions/download-artifact@v1
         with:
           name: release-linux
+          path: ./
       - name: Download Macos Build
         uses: actions/download-artifact@v1
         with:
           name: release-darwin
+          path: ./
+      - name: Get files
+        run: ls
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1.0.0
