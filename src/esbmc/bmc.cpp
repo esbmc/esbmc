@@ -225,18 +225,21 @@ smt_convt::resultt bmct::run_decision_procedure(
   str << "s";
   status(str.str());
 
+  if(dec_result == smt_convt::P_UNSATISFIABLE)
+  {
+    if(options.get_bool_option("enable-caching"))
+    {
+      std::shared_ptr<green_cache> result_cache;
+      result_cache = std::dynamic_pointer_cast<green_cache>(cache);
+      result_cache->mark_ssa_as_unsat();
+    }
+  }
+
   return dec_result;
 }
 
 void bmct::report_success()
 {
-  if(options.get_bool_option("enable-caching"))
-  {
-    std::shared_ptr<green_cache> result_cache;
-    result_cache = std::dynamic_pointer_cast<green_cache>(cache);
-    result_cache->mark_ssa_as_unsat();
-  }
-
   status("\nVERIFICATION SUCCESSFUL");
 
   switch(ui)
