@@ -6,12 +6,17 @@
 
 void green_cache::canonize_expr(expr2tc &expr)
 {
-  expr_variable_reordering reordering(expr);
-  reordering.run();
+  if(apply_reordering)
+  {
+    expr_variable_reordering reordering(expr);
+    //reordering.run();
+  }
 
-  expr_green_normal_form gnf(expr);
-  gnf.run();
-
+  if(apply_normalization)
+  {
+    expr_green_normal_form gnf(expr);
+    //gnf.run();
+  }
   // TODO: add variable renaming
 }
 
@@ -63,7 +68,7 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
     guard_items.insert(expr_hash);
   }
 
-  items[guard_name] = guard_items;
+  items.insert({guard_name, guard_items});
 
   load_unsat_container();
   if(unsat_container.check(guard_items))
@@ -135,9 +140,9 @@ void green_cache::run_on_assignment(symex_target_equationt::SSA_stept &step)
     canonize_expr(step.rhs);
 
     expr2tc &rhs = step.rhs;
-    auto relations = parse_guard(rhs);
+    crc_expr relations = parse_guard(rhs);
     // Adds it to the dictionary
-    this->items[guard_name] = relations;
+    items.insert({guard_name, relations});
   }
 }
 
@@ -148,10 +153,11 @@ crc_hash green_cache::convert_expr_to_hash(const expr2tc &expr)
 
 crc_expr green_cache::parse_guard(const expr2tc &expr)
 {
+  //assert(expr->expr_id == expr2t::expr_ids::equality_id);
   crc_expr local_items;
   // TODO: support other relations (<=, !=)
-  if(expr->expr_id != expr2t::expr_ids::equality_id)
-    return local_items;
+  //if(expr->expr_id != expr2t::expr_ids::equality_id)
+  //return local_items;
 
   // Just get the hash from the expr and add it
   local_items.insert(convert_expr_to_hash(expr));

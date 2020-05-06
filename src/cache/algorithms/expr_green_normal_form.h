@@ -38,8 +38,6 @@
  *
  * NOTES:
  * - This assumes that expr_variable_reordering was applied.
- * - TODO: If expression does not have a k, it should be added.
- * - TODO: Add simplification rules for expressions in RHS
  * - The substitution rules work only for Integers. Because the
  *   rule to convert from < to <= (and similar) is to add 1 to LHS.
  */
@@ -50,19 +48,7 @@ private:
    * This should convert inequalities from the form <, >, >= into <=
    * @param inequality to be converted
    */
-  void convert_inequality(expr2tc &inequality);
-
-  /**
-   * An relation in normal form should be in the format:
-   *
-   * A + B + ... + k == c, where k and c are constants
-   *
-   * This method sets k as @value
-   *
-   * @param relation expression e.g A + 4 == 8
-   * @param value constant to substitute the value from the relation
-   */
-  void set_rightest_value_of_lhs_relation(expr2tc &relation, BigInt value);
+  expr2tc convert_inequality(expr2tc &inequality);
 
 public:
   explicit expr_green_normal_form(expr2tc &expr) : expr_algorithm(expr)

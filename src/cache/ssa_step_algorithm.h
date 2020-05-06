@@ -31,32 +31,25 @@ public:
     typedef std::function<void(ssa_step &)> ssa_function;
 
     static std::map<ssa_type, ssa_function> run_on_function;
-    static bool map_initialized = false;
+    run_on_function[ssa_type::ASSIGNMENT] = [this](ssa_step &step) {
+      run_on_assignment(step);
+    };
+    run_on_function[ssa_type::ASSUME] = [this](ssa_step &step) {
+      run_on_assume(step);
+    };
+    run_on_function[ssa_type::ASSERT] = [this](ssa_step &step) {
+      run_on_assert(step);
+    };
+    run_on_function[ssa_type::OUTPUT] = [this](ssa_step &step) {
+      run_on_output(step);
+    };
+    run_on_function[ssa_type::RENUMBER] = [this](ssa_step &step) {
+      run_on_renumber(step);
+    };
+    run_on_function[ssa_type::SKIP] = [this](ssa_step &step) {
+      run_on_skip(step);
+    };
 
-    // Simple optimization so we do not use switch-case
-    if(!map_initialized)
-    {
-      run_on_function[ssa_type::ASSIGNMENT] = [this](ssa_step &step) {
-        run_on_assignment(step);
-      };
-      run_on_function[ssa_type::ASSUME] = [this](ssa_step &step) {
-        run_on_assume(step);
-      };
-      run_on_function[ssa_type::ASSERT] = [this](ssa_step &step) {
-        run_on_assert(step);
-      };
-      run_on_function[ssa_type::OUTPUT] = [this](ssa_step &step) {
-        run_on_output(step);
-      };
-      run_on_function[ssa_type::RENUMBER] = [this](ssa_step &step) {
-        run_on_renumber(step);
-      };
-      run_on_function[ssa_type::SKIP] = [this](ssa_step &step) {
-        run_on_skip(step);
-      };
-
-      map_initialized = true;
-    }
     for(auto &step : steps)
     {
       if(parse_step(step))

@@ -224,15 +224,15 @@ void expr_variable_reordering::replace_value(
   if(should_change)
   {
     expr2tc to_add;
-    if(!symbols.empty())
-    {
-      to_add = symbols.back();
-      symbols.pop_back();
-    }
-    else
+    if(!values.empty())
     {
       to_add = values.back();
       values.pop_back();
+    }
+    else
+    {
+      to_add = symbols.back();
+      symbols.pop_back();
     }
     if(is_lhs)
       op->side_1 = to_add;

@@ -30,8 +30,15 @@
 class green_cache : public ssa_step_algorithm_hidden
 {
 public:
-  green_cache(symex_target_equationt::SSA_stepst &steps)
-    : ssa_step_algorithm_hidden(steps)
+  green_cache(
+    symex_target_equationt::SSA_stepst &steps,
+    bool apply_reordering = true,
+    bool apply_renaming = true,
+    bool apply_normalization = true)
+    : ssa_step_algorithm_hidden(steps),
+      apply_reordering(apply_reordering),
+      apply_renaming(apply_renaming),
+      apply_normalization(apply_normalization)
   {
   }
 
@@ -103,7 +110,7 @@ protected:
    * TODO: 3. Rename it
    * @param expr
    */
-  static void canonize_expr(expr2tc &expr);
+  void canonize_expr(expr2tc &expr);
 
   /**
    * Loads a ssa_container with all expressions known to be unsat
@@ -128,6 +135,10 @@ protected:
   }
 
 private:
+  const bool apply_reordering;
+  const bool apply_renaming;
+  const bool apply_normalization;
+
   ssa_set_container unsat_container;
   // TODO: Add sat_container
 };

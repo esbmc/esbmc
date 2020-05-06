@@ -20,7 +20,7 @@
  *
  *  Becomes:
  *
- *  a + b + c + d + 4 == a + b
+ *  4 + a + b + c + d == a + b
  *
  *  Note that that this assumes that a constant propagation algorithm
  *  was executed, so an expression should have at max 1 constant value.

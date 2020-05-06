@@ -1,10 +1,68 @@
 // Rafael Sá Menezes - 04/2020
 
 #include <cache/containers/crc_set_container.h>
+#include <cache/containers/bloom_filter.h>
+#include <cache/containers/lru_cache.h>
 #include <sstream>
-#include <util/irep2.h>
-#include <iostream>
 #include <fstream>
+#include <array>
+
+namespace
+{
+using guards_crc = crc_expr;
+
+using crc_hash_function = bloom_filter_function<guards_crc>;
+using hash_set = std::set<crc_hash_function>;
+template <size_t N, size_t K>
+using crc_bloom_filter = bloom_filter<guards_crc, N, K>;
+using crc_lru = lru_cache<crc_expr>;
+
+// Bloom Filter
+
+/*
+ * These variables were found using bloom filter formulas to determine the
+ * theoretical best values. From there empirical evaluation was used to find
+ * the best values.
+ */
+const size_t bloom_filter_size = 100000;
+const size_t number_of_hashes = 3;
+
+crc_hash_function f1([](const guards_crc &t) {
+  size_t value = 0;
+  for(const auto &i : t)
+  {
+    value += i;
+  }
+  return (size_t)0;
+});
+
+const crc_hash_function f2([](const guards_crc &t) {
+  size_t value = 1;
+  for(const auto &i : t)
+  {
+    value *= i;
+  }
+  return (size_t)value;
+});
+const crc_hash_function f3([](const guards_crc &t) {
+  size_t value = 1;
+  for(const auto &i : t)
+  {
+    value *= i;
+  }
+  return (size_t)pow(2, value);
+});
+
+std::array<crc_hash_function, number_of_hashes> hash_functions = {f1, f2, f3};
+
+crc_bloom_filter<bloom_filter_size, number_of_hashes> filter(hash_functions);
+
+// LRU Cache
+
+const size_t lru_cache_size = 100;
+crc_lru cache(lru_cache_size);
+
+} // namespace
 
 bool expr_set_container::is_subset_of(const std::set<long> &other)
 {
@@ -17,16 +75,25 @@ bool expr_set_container::is_subset_of(const std::set<long> &other)
 
 bool ssa_set_container::check(const std::set<long> &items)
 {
+  if(!filter.test_element(items))
+    return false;
+  if(cache.exists(items))
+    return true;
   for(auto it : this->expressions)
   {
     if(it->is_subset_of(items))
+    {
+      cache.insert(items);
       return true;
+    }
   }
   return false;
 }
 
 void ssa_set_container::add(const std::set<long> &items)
 {
+  filter.insert_element(items);
+  cache.insert(items);
   this->expressions.insert(std::make_shared<expr_set_container>(items));
 }
 
