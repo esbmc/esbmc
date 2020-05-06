@@ -87,6 +87,18 @@ lessthan2tc create_lesser_relation(expr2tc &lhs, expr2tc &rhs)
   return relation;
 }
 
+lessthanequal2tc create_lessthanequal_relation(expr2tc &lhs, expr2tc &rhs)
+{
+  lessthanequal2tc relation(lhs, rhs);
+  return relation;
+}
+
+greaterthanequal2tc create_greaterthanequal_relation(expr2tc &lhs, expr2tc &rhs)
+{
+  greaterthanequal2tc relation(lhs, rhs);
+  return relation;
+}
+
 greaterthan2tc create_greater_relation(expr2tc &lhs, expr2tc &rhs)
 {
   greaterthan2tc relation(lhs, rhs);
@@ -162,20 +174,20 @@ expr2tc equality_1()
   return result;
 }
 
-// ((x + y) + 7) == 9
+// (7 + (x + y)) == 9
 expr2tc equality_1_ordered()
 {
-  add2tc add_1 = create_signed_32_add_expr(X, Y);
-  add2tc add_2 = create_signed_32_add_expr(add_1, values[7]);
+  add2tc add_1 = create_signed_32_add_expr(values[7], X);
+  add2tc add_2 = create_signed_32_add_expr(add_1, Y);
   equality2tc result = create_equality_relation(add_2, values[9]);
   return result;
 }
 
-// ((x + y) + -2) == 0
+// (-2 + (x + y)) == 0
 expr2tc equality_1_green_normal()
 {
-  add2tc add_1 = create_signed_32_add_expr(X, Y);
-  add2tc add_2 = create_signed_32_add_expr(add_1, neg_values[2]);
+  add2tc add_1 = create_signed_32_add_expr(neg_values[2], X);
+  add2tc add_2 = create_signed_32_add_expr(add_1, Y);
   equality2tc result = create_equality_relation(add_2, values[0]);
   return result;
 }
@@ -232,10 +244,10 @@ expr2tc equality_2()
   return result;
 }
 
-// (x + 1) == 0
+// (1 + x) == 0
 expr2tc equality_2_ordered()
 {
-  add2tc add_1 = create_signed_32_add_expr(X, values[1]);
+  add2tc add_1 = create_signed_32_add_expr(values[1], X);
   equality2tc result = create_equality_relation(add_1, values[0]);
   return result;
 }
@@ -254,10 +266,12 @@ expr2tc equality_3()
   return result;
 }
 
-// (y + 4) == 8
+// (4 + y) == 8
 expr2tc equality_3_ordered()
 {
-  return equality_3();
+  add2tc add_1 = create_signed_32_add_expr(values[4], Y);
+  equality2tc result = create_equality_relation(add_1, values[8]);
+  return result;
 }
 
 // (y - 4) == 0
@@ -276,10 +290,12 @@ expr2tc equality_4()
   return result;
 }
 
-// (x + 0) == 0
+// (0 + x) == 0
 expr2tc equality_4_ordered()
 {
-  return equality_4();
+  add2tc add_1 = create_signed_32_add_expr(values[0], X);
+  equality2tc result = create_equality_relation(add_1, values[0]);
+  return result;
 }
 
 // (x + 0) == 0

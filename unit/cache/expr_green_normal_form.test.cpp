@@ -16,63 +16,106 @@
 #include <boost/test/included/unit_test.hpp>
 #include "cache_test_utils.h"
 
-// ******************** TESTS ********************
+BOOST_AUTO_TEST_SUITE(operators)
 
-// ** Check if trivial cases are ok
-// expressions which does not contain a symbol/value or only one at max
-BOOST_AUTO_TEST_SUITE(trivial)
-
-BOOST_AUTO_TEST_CASE(equality_1)
+BOOST_AUTO_TEST_CASE(less_should_become_lessthanequal)
 {
-  init_test_values();
-  expr2tc actual = equality_1_ordered();
-  expr2tc expected = equality_1_green_normal();
+  symbol2tc a = create_unsigned_32_symbol_expr("a");
+  symbol2tc b = create_unsigned_32_symbol_expr("b");
 
-  BOOST_TEST(actual->crc() != expected->crc());
-  expr_green_normal_form algorithm(actual);
+  // * < *
+  expr2tc lesser = create_lesser_relation(a, b);
+  auto actual = lesser->expr_id;
+
+  // * <= *
+  auto expected = expr2t::expr_ids::lessthanequal_id;
+
+  BOOST_TEST(actual != expected);
+  expr_green_normal_form algorithm(lesser);
   algorithm.run();
 
-  is_equality_1_equivalent(actual, expected);
-  BOOST_TEST(actual->crc() == expected->crc());
+  actual = lesser->expr_id;
+  BOOST_TEST(actual == expected);
 }
 
-BOOST_AUTO_TEST_CASE(equality_2)
+BOOST_AUTO_TEST_CASE(lessthanequal_should_become_lessthanequal)
 {
-  init_test_values();
-  expr2tc actual = equality_2_ordered();
-  expr2tc expected = equality_2_green_normal();
+  symbol2tc a = create_unsigned_32_symbol_expr("a");
+  symbol2tc b = create_unsigned_32_symbol_expr("b");
 
-  BOOST_TEST(actual->crc() == expected->crc());
-  expr_green_normal_form algorithm(actual);
+  // * <= *
+  expr2tc lesser = create_lessthanequal_relation(a, b);
+  auto actual = lesser->expr_id;
+
+  // * <= *
+  auto expected = expr2t::expr_ids::lessthanequal_id;
+
+  BOOST_TEST(actual == expected);
+  expr_green_normal_form algorithm(lesser);
   algorithm.run();
 
-  BOOST_TEST(actual->crc() == expected->crc());
+  actual = lesser->expr_id;
+  BOOST_TEST(actual == expected);
 }
 
-BOOST_AUTO_TEST_CASE(equality_3)
+BOOST_AUTO_TEST_CASE(greaterthan_should_become_lessthanequal)
 {
-  init_test_values();
-  expr2tc actual = equality_3_ordered();
-  expr2tc expected = equality_3_green_normal();
+  symbol2tc a = create_unsigned_32_symbol_expr("a");
+  symbol2tc b = create_unsigned_32_symbol_expr("b");
 
-  BOOST_TEST(actual->crc() != expected->crc());
-  expr_green_normal_form algorithm(actual);
+  // * > *
+  expr2tc lesser = create_greater_relation(a, b);
+  auto actual = lesser->expr_id;
+
+  // * <= *
+  auto expected = expr2t::expr_ids::lessthanequal_id;
+
+  BOOST_TEST(actual != expected);
+  expr_green_normal_form algorithm(lesser);
   algorithm.run();
 
-  BOOST_TEST(actual->crc() == expected->crc());
+  actual = lesser->expr_id;
+  BOOST_TEST(actual == expected);
 }
 
-BOOST_AUTO_TEST_CASE(equality_4)
+BOOST_AUTO_TEST_CASE(greaterthanequal_should_become_lessthanequal)
 {
-  init_test_values();
-  expr2tc actual = equality_4_ordered();
-  expr2tc expected = equality_4_green_normal();
+  symbol2tc a = create_unsigned_32_symbol_expr("a");
+  symbol2tc b = create_unsigned_32_symbol_expr("b");
 
-  BOOST_TEST(actual->crc() == expected->crc());
-  expr_green_normal_form algorithm(actual);
+  // * >=*
+  expr2tc lesser = create_greaterthanequal_relation(a, b);
+  auto actual = lesser->expr_id;
+
+  // * <= *
+  auto expected = expr2t::expr_ids::lessthanequal_id;
+
+  BOOST_TEST(actual != expected);
+  expr_green_normal_form algorithm(lesser);
   algorithm.run();
 
-  BOOST_TEST(actual->crc() == expected->crc());
+  actual = lesser->expr_id;
+  BOOST_TEST(actual == expected);
+}
+
+BOOST_AUTO_TEST_CASE(equal_should_become_equal)
+{
+  symbol2tc a = create_unsigned_32_symbol_expr("a");
+  symbol2tc b = create_unsigned_32_symbol_expr("b");
+
+  // * == *
+  expr2tc lesser = create_equality_relation(a, b);
+  auto actual = lesser->expr_id;
+
+  // *== *
+  auto expected = expr2t::expr_ids::equality_id;
+
+  BOOST_TEST(actual == expected);
+  expr_green_normal_form algorithm(lesser);
+  algorithm.run();
+
+  actual = lesser->expr_id;
+  BOOST_TEST(actual == expected);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

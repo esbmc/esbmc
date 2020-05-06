@@ -31,6 +31,11 @@ mul2tc create_signed_32_mul_expr(expr2tc &side1, expr2tc &side2);
 
 lessthan2tc create_lesser_relation(expr2tc &lhs, expr2tc &rhs);
 
+lessthanequal2tc create_lessthanequal_relation(expr2tc &lhs, expr2tc &rhs);
+
+greaterthanequal2tc
+create_greaterthanequal_relation(expr2tc &lhs, expr2tc &rhs);
+
 greaterthan2tc create_greater_relation(expr2tc &lhs, expr2tc &rhs);
 
 equality2tc create_equality_relation(expr2tc &lhs, expr2tc &rhs);
