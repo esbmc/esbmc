@@ -939,7 +939,11 @@ public:
     cpp_new_arr,
     nondet,
     va_arg,
-    function_call
+    function_call,
+    preincrement,
+    postincrement,
+    predecrement,
+    postdecrement
   };
 
   sideeffect_data(
