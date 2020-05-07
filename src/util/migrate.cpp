@@ -1817,9 +1817,29 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       new_expr_ref = code_printf2tc(args);
       return;
     }
+    else if(expr.statement() == "preincrement")
+    {
+      t = sideeffect2t::preincrement;
+      migrate_expr(expr.op0(), new_expr_ref);
+    }
+    else if(expr.statement() == "postincrement")
+    {
+      t = sideeffect2t::postincrement;
+      migrate_expr(expr.op0(), new_expr_ref);
+    }
+    else if(expr.statement() == "predecrement")
+    {
+      t = sideeffect2t::predecrement;
+      migrate_expr(expr.op0(), new_expr_ref);
+    }
+    else if(expr.statement() == "postdecrement")
+    {
+      t = sideeffect2t::predecrement;
+      migrate_expr(expr.op0(), new_expr_ref);
+    }
     else
     {
-      std::cerr << "Unexpected side-effect statement\n";
+      std::cerr << "Unexpected side-effect statement: " << expr.statement() << std::endl;
       abort();
     }
 
@@ -3003,6 +3023,18 @@ exprt migrate_expr_back(const expr2tc &ref)
       break;
     case sideeffect2t::function_call:
       theexpr.statement("function_call");
+      break;
+    case sideeffect2t::preincrement: 
+      theexpr.statement("preincrement");
+      break;
+    case sideeffect2t::postincrement: 
+      theexpr.statement("postincrement");
+      break;
+    case sideeffect2t::predecrement: 
+      theexpr.statement("predecrement");
+      break;
+    case sideeffect2t::postdecrement: 
+      theexpr.statement("postdecrement");
       break;
     default:
       assert(0 && "Unexpected side effect type when back-converting");
