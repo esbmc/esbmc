@@ -1839,7 +1839,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else
     {
-      std::cerr << "Unexpected side-effect statement: " << expr.statement() << std::endl;
+      std::cerr << "Unexpected side-effect statement: " << expr.statement()
+                << std::endl;
       abort();
     }
 
@@ -3024,16 +3025,16 @@ exprt migrate_expr_back(const expr2tc &ref)
     case sideeffect2t::function_call:
       theexpr.statement("function_call");
       break;
-    case sideeffect2t::preincrement: 
+    case sideeffect2t::preincrement:
       theexpr.statement("preincrement");
       break;
-    case sideeffect2t::postincrement: 
+    case sideeffect2t::postincrement:
       theexpr.statement("postincrement");
       break;
-    case sideeffect2t::predecrement: 
+    case sideeffect2t::predecrement:
       theexpr.statement("predecrement");
       break;
-    case sideeffect2t::postdecrement: 
+    case sideeffect2t::postdecrement:
       theexpr.statement("postdecrement");
       break;
     default:
