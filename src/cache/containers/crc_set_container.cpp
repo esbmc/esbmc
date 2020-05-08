@@ -6,6 +6,8 @@
 #include <sstream>
 #include <fstream>
 #include <array>
+#include <cassert>
+#include <cmath>
 
 namespace
 {

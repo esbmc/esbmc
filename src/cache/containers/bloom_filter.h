@@ -21,6 +21,10 @@
 #include <set>
 #include <bitset>
 #include <iostream>
+#include <functional>
+#include <cassert>
+#include <cmath>
+
 template <typename T>
 using bloom_filter_function = std::function<size_t(const T &)>;
 
