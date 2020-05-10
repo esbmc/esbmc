@@ -75,6 +75,9 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
   if(config.ansi_c.char_is_unsigned)
     compiler_args.emplace_back("-funsigned-char");
 
+  if(config.options.get_bool_option("fms-extensions"))
+    compiler_args.emplace_back("-fms-extensions");
+
   if(config.options.get_bool_option("deadlock-check"))
   {
     compiler_args.emplace_back("-Dpthread_join=pthread_join_switch");

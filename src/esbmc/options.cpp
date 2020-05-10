@@ -56,7 +56,6 @@ const struct opt_templ esbmc_options[] = {
   {0, "16", switc, ""},
   {0, "32", switc, ""},
   {0, "64", switc, ""},
-  {0, "unsigned-char", switc, ""},
   {0, "version", switc, ""},
   {0, "witness-output", string, ""},
   {0, "witness-producer", string, ""},
@@ -67,6 +66,9 @@ const struct opt_templ esbmc_options[] = {
   {0, "i386-macos", switc, ""},
   {0, "i386-win32", switc, ""},
   {0, "ppc-macos", switc, ""},
+
+  {0, "funsigned-char", switc, ""},
+  {0, "fms-extensions", switc, ""},
 
   // BMC
   {0, "function", string, ""},

@@ -1707,7 +1707,6 @@ void esbmc_parseoptionst::help()
        " --big-endian                 allow big-endian word-byte conversions\n"
        " --16, --32, --64             set width of machine word (default is "
        "64)\n"
-       " --unsigned-char              make \"char\" unsigned by default\n"
        " --version                    show current ESBMC version and exit\n"
        " --witness-output filename    generate the verification result witness "
        "in GraphML format\n"
@@ -1730,6 +1729,8 @@ void esbmc_parseoptionst::help()
        " --i386-linux                 set Linux/I386 architecture (default)\n"
        " --i386-win32                 set Windows/I386 architecture\n"
 #endif
+       " --funsigned-char              make \"char\" unsigned by default\n"
+       " --fms-extensions              enable microsoft C extensions\n"
 
        "\nBMC options\n"
        " --function name              set main function name\n"
