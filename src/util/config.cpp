@@ -176,7 +176,7 @@ bool configt::set(const cmdlinet &cmdline)
     return true;
   }
 
-  if(cmdline.isset("unsigned-char"))
+  if(cmdline.isset("funsigned-char"))
     ansi_c.char_is_unsigned = true;
 
   return false;
