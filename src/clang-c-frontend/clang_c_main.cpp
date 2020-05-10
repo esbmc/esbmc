@@ -142,6 +142,11 @@ bool clang_main(
         symbol_expr(*argc_symbol),
         argv_symbol->type.subtype());
 
+      exprt addition("+", symbol_expr(*argv_symbol).type());
+      addition.operands().swap(argv_index.operands());
+      argv_index.move_to_operands(addition);
+      argv_index.id("dereference");
+
       // disable bounds check on that one
       // Logic to perform this ^ moved into goto_check, rather than load
       // irep2 with additional baggage.
