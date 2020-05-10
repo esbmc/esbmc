@@ -100,46 +100,47 @@ bool clang_main(
     }
     else if(arguments.size() == 2 || arguments.size() == 3)
     {
-      namespacet ns(context);
+      symbolt *argc_symbol = context.find_symbol(arguments[0].cmt_identifier());
+      assert(argc_symbol != nullptr);
 
-      const symbolt &argc_symbol = ns.lookup("argc'");
-      const symbolt &argv_symbol = ns.lookup("argv'");
+      symbolt *argv_symbol = context.find_symbol(arguments[1].cmt_identifier());
+      assert(argv_symbol != nullptr);
 
       // assume argc is at least one
-      exprt one = from_integer(1, argc_symbol.type);
+      exprt one = from_integer(1, argc_symbol->type);
 
       exprt ge(">=", bool_type());
-      ge.copy_to_operands(symbol_expr(argc_symbol), one);
+      ge.copy_to_operands(symbol_expr(*argc_symbol), one);
 
       init_code.copy_to_operands(code_assumet(ge));
 
       // assume argc is at most MAX-1
       BigInt max;
 
-      if(argc_symbol.type.id() == "signedbv")
-        max = power(2, atoi(argc_symbol.type.width().c_str()) - 1) - 1;
-      else if(argc_symbol.type.id() == "unsignedbv")
-        max = power(2, atoi(argc_symbol.type.width().c_str())) - 1;
+      if(argc_symbol->type.id() == "signedbv")
+        max = power(2, atoi(argc_symbol->type.width().c_str()) - 1) - 1;
+      else if(argc_symbol->type.id() == "unsignedbv")
+        max = power(2, atoi(argc_symbol->type.width().c_str())) - 1;
       else
         assert(false);
 
-      exprt max_minus_one = from_integer(max - 1, argc_symbol.type);
+      exprt max_minus_one = from_integer(max - 1, argc_symbol->type);
 
       exprt le("<=", bool_type());
-      le.copy_to_operands(symbol_expr(argc_symbol), max_minus_one);
+      le.copy_to_operands(symbol_expr(*argc_symbol), max_minus_one);
 
       init_code.copy_to_operands(code_assumet(le));
 
       // assign argv[argc] to NULL
       constant_exprt null(
-        irep_idt("NULL"), integer2string(0), argv_symbol.type.subtype());
+        irep_idt("NULL"), integer2string(0), argv_symbol->type.subtype());
 
-      exprt index_expr("index", argv_symbol.type.subtype());
+      exprt index_expr("index", argv_symbol->type.subtype());
 
       index_exprt argv_index(
-        symbol_expr(argv_symbol),
-        symbol_expr(argc_symbol),
-        argv_symbol.type.subtype());
+        symbol_expr(*argv_symbol),
+        symbol_expr(*argc_symbol),
+        argv_symbol->type.subtype());
 
       // disable bounds check on that one
       // Logic to perform this ^ moved into goto_check, rather than load
@@ -157,12 +158,12 @@ bool clang_main(
       exprt &op0 = operands[0];
       exprt &op1 = operands[1];
 
-      op0 = symbol_expr(argc_symbol);
+      op0 = symbol_expr(*argc_symbol);
 
       const exprt &arg1 = arguments[1];
 
       index_exprt arg1_index(
-        symbol_expr(argv_symbol),
+        symbol_expr(*argv_symbol),
         gen_zero(index_type()),
         arg1.type().subtype());
 
@@ -175,8 +176,9 @@ bool clang_main(
 
       if(arguments.size() == 3)
       {
-        const symbolt &envp_symbol = ns.lookup("envp'");
-        const symbolt &envp_size_symbol = ns.lookup("envp_size'");
+        const symbolt &envp_symbol =
+          *context.find_symbol(arguments[2].cmt_identifier());
+        const symbolt &envp_size_symbol = *context.find_symbol("envp_size'");
 
         exprt envp_ge(">=", bool_type());
         envp_ge.copy_to_operands(symbol_expr(envp_size_symbol), one);

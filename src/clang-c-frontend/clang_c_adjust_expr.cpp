@@ -1053,19 +1053,12 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
   if(arguments.size() == 0)
     return;
 
-  if(arguments.size() != 2 && arguments.size() != 3)
-  {
-    std::cerr << "main expected to have no or two or three arguments"
-              << std::endl;
-    abort();
-  }
-
   const exprt &op0 = arguments[0];
   const exprt &op1 = arguments[1];
 
   symbolt argc_symbol;
-  argc_symbol.name = "argc";
-  argc_symbol.id = "argc'";
+  argc_symbol.name = op0.cmt_base_name();
+  argc_symbol.id = op0.cmt_identifier();
   argc_symbol.type = op0.type();
   argc_symbol.static_lifetime = true;
   argc_symbol.lvalue = true;
@@ -1081,8 +1074,8 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
   size_expr.copy_to_operands(symbol_expr(*argc_new_symbol), one_expr);
 
   symbolt argv_symbol;
-  argv_symbol.name = "argv";
-  argv_symbol.id = "argv'";
+  argv_symbol.name = op1.cmt_base_name();
+  argv_symbol.id = op1.cmt_identifier();
   argv_symbol.type = array_typet(op1.type().subtype(), size_expr);
   argv_symbol.static_lifetime = true;
   argv_symbol.lvalue = true;
@@ -1104,8 +1097,8 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
     context.move(envp_size_symbol, envp_new_size_symbol);
 
     symbolt envp_symbol;
-    envp_symbol.name = "envp";
-    envp_symbol.id = "envp'";
+    envp_symbol.name = op2.cmt_base_name();
+    envp_symbol.id = op2.cmt_identifier();
     envp_symbol.type = op2.type();
     envp_symbol.static_lifetime = true;
     exprt size_expr = symbol_expr(*envp_new_size_symbol);
