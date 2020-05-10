@@ -24,7 +24,7 @@ set (clib64f_config clib64_fp.c "--64 --floatbv")
 set (inputs clib32_config clib64_config clib32f_config clib64f_config)
 
 function(mangle_clib output)
-  set(result)
+  set(result "")
   foreach(in_f ${ARGN})
     set (in_f "${${in_f}}")
     list(GET in_f 0 in_file)
