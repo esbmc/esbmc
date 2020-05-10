@@ -819,12 +819,11 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // If the value being asked is greater or equal the current step,
       // then we can stop the base case. It can be equal, because we
       // have just checked the current value of k
-
-      if(a_result.k >= k_step)
+      if(a_result.k < k_step)
         break;
 
       // Otherwise, we just need to check the base case for k = a_result.k
-      k_step = max_k_step = a_result.k;
+      max_k_step = a_result.k;
     }
 
     // Send information to parent that a bug was not found
