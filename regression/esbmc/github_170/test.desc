@@ -1,0 +1,4 @@
+CORE
+main.c
+--fms-extensions --function make_s2 --force-malloc-success
+^VERIFICATION SUCCESSFUL$
