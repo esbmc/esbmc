@@ -637,14 +637,16 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // If the either the forward condition or inductive step finds a
       // solution, first check if base case couldn't find a bug in that code,
       // if there is no bug, inductive step can present the result
-
       if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
       {
         // If base case finished, then we can present the result
         if(bc_finished)
           break;
 
-        // Otherwise, ask base case for a solution
+        // Otherwise, kill the inductive step process
+        kill(children_pid[2], SIGKILL);
+
+        // And ask base case for a solution
 
         // Struct to keep the result
         struct resultt r = {process_type, 0};
@@ -663,7 +665,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         if(bc_finished)
           break;
 
-        // Otherwise, ask base case for a solution
+        // Otherwise, kill the forward condition process
+        kill(children_pid[1], SIGKILL);
+
+        // And ask base case for a solution
 
         // Struct to keep the result
         struct resultt r = {process_type, 0};
