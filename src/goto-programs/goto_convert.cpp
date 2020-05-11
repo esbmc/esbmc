@@ -476,9 +476,7 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
 
   // Constant size is not a VLA
   if(size.is_constant())
-  {
     return false;
-  }
 
   // We have to replace the symbol by a temporary, because it might
   // change its value in the future
