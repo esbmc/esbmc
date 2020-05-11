@@ -474,12 +474,16 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
     return true;
   }
 
+  // Constant size is not a VLA
+  if(size.is_constant())
+  {
+    return false;
+  }
+
   // We have to replace the symbol by a temporary, because it might
   // change its value in the future
   // Don't create a symbol for temporary symbols
-  if(
-    size.is_symbol() &&
-    size.identifier().as_string().find("tmp$") == std::string::npos)
+  if(size.identifier().as_string().find("tmp$") == std::string::npos)
   {
     // Old size symbol
     exprt old_size = size;
@@ -498,7 +502,7 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
     return true;
   }
 
-  // A constant array
+  // This should never happen, this is a constant temporary symbol.
   return false;
 }
 
