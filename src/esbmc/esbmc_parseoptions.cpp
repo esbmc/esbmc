@@ -828,7 +828,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         break;
 
       // Otherwise, we just need to check the base case for k = a_result.k
-      max_k_step = a_result.k;
+      max_k_step = a_result.k + k_step_inc;
     }
 
     // Send information to parent that a bug was not found
