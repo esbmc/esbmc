@@ -924,7 +924,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     opts.set_option("inductive-step", true);
 
     opts.set_option("no-unwinding-assertions", true);
-    opts.set_option("partial-loops", false);
+    opts.set_option("partial-loops", true);
 
     // Start communication to the parent process
     close(forward_pipe[0]);
