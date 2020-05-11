@@ -1,6 +1,6 @@
 void foo(char **q)
 {
-  q[5];
+  q[4];
 }
 
 int main(int argc, char **argv)
