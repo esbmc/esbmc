@@ -1239,4 +1239,5 @@ void cvc_convt::dump_smt()
 void cvc_smt_ast::dump() const
 {
   a.printAst(std::cout, 0);
+  std::cout << std::flush;
 }
