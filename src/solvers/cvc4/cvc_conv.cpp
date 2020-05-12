@@ -20,6 +20,7 @@ cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
   : smt_convt(int_encoding, ns),
     array_iface(false, false),
     fp_convt(this),
+    to_bv_counter(0),
     em(),
     smt(&em),
     sym_tab()
@@ -370,6 +371,20 @@ smt_astt cvc_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
       em.mkConst(CVC4::FloatingPointToFPIEEEBitVector(ew, sw)),
       to_solver_smt_ast<cvc_smt_ast>(op)->a),
     to);
+}
+
+smt_astt cvc_convt::mk_from_fp_to_bv(smt_astt op)
+{
+  // Create new symbol
+  const std::string name = "__to_ieeebv" + std::to_string(to_bv_counter++);
+  smt_astt new_symbol =
+    mk_smt_symbol(name, mk_bv_sort(op->sort->get_data_width()));
+
+  // and constraint it to be the conversion of the fp, since
+  // (fp_matches_bv f bv) <-> (= f ((_ to_fp E S) bv))
+  assert_ast(mk_eq(op, mk_from_bv_to_fp(new_symbol, op->sort)));
+
+  return new_symbol;
 }
 
 smt_astt cvc_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
