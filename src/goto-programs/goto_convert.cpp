@@ -496,12 +496,8 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
     assignment.copy_to_operands(old_size);
     assignment.location() = old_size.location();
     copy(assignment, ASSIGN, dest);
-
-    return true;
   }
-
-  // This should never happen, this is a constant temporary symbol.
-  return false;
+  return true;
 }
 
 bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
