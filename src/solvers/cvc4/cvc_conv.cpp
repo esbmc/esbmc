@@ -283,25 +283,33 @@ cvc_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
 smt_astt
 cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
 {
-  smt_sortt to = mk_bv_sort(width);
+  const cvc_smt_ast *mrm =
+    to_solver_smt_ast<cvc_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
+  const cvc_smt_ast *mfrom = to_solver_smt_ast<cvc_smt_ast>(from);
+
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_UBV,
-      to_solver_smt_ast<cvc_smt_ast>(from)->a,
-      em.mkConst(CVC4::FloatingPointToUBV(width))),
-    to);
+      em.mkConst(CVC4::FloatingPointToUBV(width)),
+      mrm->a,
+      mfrom->a),
+    mk_bv_sort(width));
 }
 
 smt_astt
 cvc_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
 {
-  smt_sortt to = mk_bv_sort(width);
+  const cvc_smt_ast *mrm =
+    to_solver_smt_ast<cvc_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
+  const cvc_smt_ast *mfrom = to_solver_smt_ast<cvc_smt_ast>(from);
+
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_SBV,
-      to_solver_smt_ast<cvc_smt_ast>(from)->a,
-      em.mkConst(CVC4::FloatingPointToSBV(width))),
-    to);
+      em.mkConst(CVC4::FloatingPointToSBV(width)),
+      mrm->a,
+      mfrom->a),
+    mk_bv_sort(width));
 }
 
 smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
@@ -315,9 +323,9 @@ smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_FP_FLOATINGPOINT,
+      em.mkConst(CVC4::FloatingPointToFPFloatingPoint(ew, sw)),
       to_solver_smt_ast<cvc_smt_ast>(rm)->a,
-      to_solver_smt_ast<cvc_smt_ast>(from)->a,
-      em.mkConst(CVC4::FloatingPointToFPFloatingPoint(ew, sw))),
+      to_solver_smt_ast<cvc_smt_ast>(from)->a),
     to);
 }
 
@@ -330,9 +338,9 @@ cvc_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_FP_UNSIGNED_BITVECTOR,
+      em.mkConst(CVC4::FloatingPointToFPUnsignedBitVector(ew, sw)),
       to_solver_smt_ast<cvc_smt_ast>(rm)->a,
-      to_solver_smt_ast<cvc_smt_ast>(from)->a,
-      em.mkConst(CVC4::FloatingPointToFPUnsignedBitVector(ew, sw))),
+      to_solver_smt_ast<cvc_smt_ast>(from)->a),
     to);
 }
 
@@ -345,9 +353,9 @@ cvc_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_FP_SIGNED_BITVECTOR,
+      em.mkConst(CVC4::FloatingPointToFPSignedBitVector(ew, sw)),
       to_solver_smt_ast<cvc_smt_ast>(rm)->a,
-      to_solver_smt_ast<cvc_smt_ast>(from)->a,
-      em.mkConst(CVC4::FloatingPointToFPSignedBitVector(ew, sw))),
+      to_solver_smt_ast<cvc_smt_ast>(from)->a),
     to);
 }
 
@@ -359,8 +367,8 @@ smt_astt cvc_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_FP_IEEE_BITVECTOR,
-      to_solver_smt_ast<cvc_smt_ast>(op)->a,
-      em.mkConst(CVC4::FloatingPointToFPIEEEBitVector(ew, sw))),
+      em.mkConst(CVC4::FloatingPointToFPIEEEBitVector(ew, sw)),
+      to_solver_smt_ast<cvc_smt_ast>(op)->a),
     to);
 }
 
