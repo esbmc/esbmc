@@ -1102,6 +1102,10 @@ smt_astt cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 
 smt_astt cvc_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
+  // If it's a floatbv, convert it to bv
+  if(a->sort->id == SMT_SORT_FPBV)
+    a = mk_from_fp_to_bv(a);
+
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
   CVC4::BitVectorExtract ext(high, low);
   CVC4::Expr ext2 = em.mkConst(ext);
