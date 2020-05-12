@@ -317,7 +317,7 @@ smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
   smt_sortt to,
   smt_astt rm)
 {
-  unsigned sw = to->get_significand_width() - 1;
+  unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
   return new_ast(
@@ -332,7 +332,7 @@ smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
 smt_astt
 cvc_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
 {
-  unsigned sw = to->get_significand_width() - 1;
+  unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
   return new_ast(
@@ -347,7 +347,7 @@ cvc_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
 smt_astt
 cvc_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
 {
-  unsigned sw = to->get_significand_width() - 1;
+  unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
   return new_ast(
@@ -361,7 +361,7 @@ cvc_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
 
 smt_astt cvc_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 {
-  unsigned sw = to->get_significand_width() - 1;
+  unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
   return new_ast(
