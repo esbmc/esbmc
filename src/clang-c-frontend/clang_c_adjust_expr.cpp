@@ -887,7 +887,13 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       exprt sign_expr("signbit", int_type());
       sign_expr.operands() = expr.arguments();
 
-      and_exprt new_expr(isinf_expr, typecast_exprt(sign_expr, bool_typet()));
+      if_exprt new_expr(
+        isinf_expr,
+        if_exprt(
+          typecast_exprt(sign_expr, bool_typet()),
+          from_integer(-1, expr.type()),
+          from_integer(1, expr.type())),
+        from_integer(0, expr.type()));
       expr.swap(new_expr);
     }
     else if(identifier == CPROVER_PREFIX "floatbv_mode")
