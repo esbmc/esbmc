@@ -6,6 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <algorithm>
 #include <iostream>
 #include <util/config.h>
 
@@ -95,6 +96,12 @@ bool configt::set(const cmdlinet &cmdline)
   if(cmdline.isset('I'))
     ansi_c.include_paths = cmdline.get_values('I');
 
+  if(cmdline.isset('f'))
+    ansi_c.forces = cmdline.get_values('f');
+
+  if(cmdline.isset('W'))
+    ansi_c.warnings = cmdline.get_values('W');
+
   if(cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
   {
     std::cerr << "Can't set both floatbv and fixedbv modes" << std::endl;
@@ -176,8 +183,11 @@ bool configt::set(const cmdlinet &cmdline)
     return true;
   }
 
-  if(cmdline.isset("funsigned-char"))
-    ansi_c.char_is_unsigned = true;
+  ansi_c.char_is_unsigned =
+    (std::find(
+       ansi_c.forces.begin(),
+       ansi_c.forces.end(),
+       std::string("unsigned-char")) != ansi_c.forces.end());
 
   return false;
 }

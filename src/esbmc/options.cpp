@@ -40,6 +40,8 @@ const struct opt_templ esbmc_options[] = {
   // Frontend
   {'I', "", string, ""},
   {'D', "", string, ""},
+  {'W', "", string, ""},
+  {'f', "", string, ""},
   {0, "preprocess", switc, ""},
   {0, "no-inlining", switc, ""},
   {0, "full-inlining", switc, ""},
@@ -66,9 +68,6 @@ const struct opt_templ esbmc_options[] = {
   {0, "i386-macos", switc, ""},
   {0, "i386-win32", switc, ""},
   {0, "ppc-macos", switc, ""},
-
-  {0, "funsigned-char", switc, ""},
-  {0, "fms-extensions", switc, ""},
 
   // BMC
   {0, "function", string, ""},

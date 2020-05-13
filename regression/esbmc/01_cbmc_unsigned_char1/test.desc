@@ -1,4 +1,4 @@
 CORE
 main.c
---funsigned-char
+-funsigned-char
 ^VERIFICATION SUCCESSFUL$
