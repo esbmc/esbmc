@@ -23,6 +23,25 @@ static smt_astt extract_exp_sig(smt_convt *ctx, smt_astt fp)
   return ctx->mk_extract(fp, fp->sort->get_data_width() - 2, 0);
 }
 
+static BigInt power2(std::size_t n, bool negated)
+{
+  BigInt b;
+  b.setPower2(n);
+  if(negated)
+    b.negate();
+  return b;
+}
+
+static BigInt power2m1(std::size_t n, bool negated)
+{
+  BigInt b;
+  b.setPower2(n);
+  b -= 1;
+  if(negated)
+    b.negate();
+  return b;
+}
+
 fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
 {
 }
@@ -1144,7 +1163,8 @@ ieee_floatt fp_convt::get_fpbv(smt_astt a)
   return number;
 }
 
-void fp_convt::add_core(
+static void add_core(
+  smt_convt *ctx,
   unsigned sbits,
   unsigned ebits,
   smt_astt &c_sgn,
@@ -1294,6 +1314,7 @@ smt_astt fp_convt::mk_smt_fpbv_add(smt_astt x, smt_astt y, smt_astt rm)
 
   smt_astt res_sgn, res_sig, res_exp;
   add_core(
+    ctx,
     sbits,
     ebits,
     c_sgn,
