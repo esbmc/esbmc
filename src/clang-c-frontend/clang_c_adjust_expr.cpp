@@ -896,6 +896,48 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
         from_integer(0, expr.type()));
       expr.swap(new_expr);
     }
+    else if(identifier == "__builtin_fpclassify")
+    {
+      if(expr.arguments().size() != 6)
+      {
+        std::cout << "__builtin_fpclassify expects six operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      // This gets 5 integers followed by a float or double.
+      // The five integers are the return values for the cases
+      // FP_NAN, FP_INFINITE, FP_NORMAL, FP_SUBNORMAL and FP_ZERO.
+      // gcc expects this to be able to produce compile-time constants.
+
+      const exprt &fp_value = expr.arguments()[5];
+
+      exprt isnan_expr("isnan", bool_typet());
+      isnan_expr.copy_to_operands(fp_value);
+
+      exprt isinf_expr("isinf", bool_typet());
+      isinf_expr.copy_to_operands(fp_value);
+
+      exprt isnormal_expr("isnormal", bool_typet());
+      isnormal_expr.copy_to_operands(fp_value);
+
+      const auto &arguments = expr.arguments();
+      if_exprt new_expr(
+        isnan_expr,
+        arguments[0],
+        if_exprt(
+          isinf_expr,
+          arguments[1],
+          if_exprt(
+            isnormal_expr,
+            arguments[2],
+            if_exprt(
+              equality_exprt(fp_value, gen_zero(fp_value.type())),
+              arguments[4],
+              arguments[3])))); // subnormal
+
+      expr.swap(new_expr);
+    }
     else if(identifier == CPROVER_PREFIX "floatbv_mode")
     {
       exprt new_expr;
