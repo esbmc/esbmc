@@ -872,6 +872,24 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
+    else if(identifier == "__builtin_isinf_sign")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "__builtin_isinf_sign expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt isinf_expr("isinf", bool_typet());
+      isinf_expr.operands() = expr.arguments();
+
+      exprt sign_expr("signbit", int_type());
+      sign_expr.operands() = expr.arguments();
+
+      and_exprt new_expr(isinf_expr, typecast_exprt(sign_expr, bool_typet()));
+      expr.swap(new_expr);
+    }
     else if(identifier == CPROVER_PREFIX "floatbv_mode")
     {
       exprt new_expr;
