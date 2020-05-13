@@ -346,16 +346,11 @@ int configure_and_run_cpp(
     record_define("pthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
-  for(std::list<std::string>::const_iterator it = config.ansi_c.defines.begin();
-      it != config.ansi_c.defines.end();
-      it++)
-    record_define(it->c_str());
+  for(auto const &it : config.ansi_c.defines)
+    record_define(it.c_str());
 
-  for(std::list<std::string>::const_iterator it =
-        config.ansi_c.include_paths.begin();
-      it != config.ansi_c.include_paths.end();
-      it++)
-    record_include(it->c_str());
+  for(auto const &it : config.ansi_c.include_paths)
+    record_include(it.c_str());
 
   record_include("/usr/include");
   record_builtin_macros();

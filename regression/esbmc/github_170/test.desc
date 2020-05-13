@@ -1,4 +1,4 @@
 CORE
 main.c
---fms-extensions --function make_s2 --force-malloc-success
+-fms-extensions -Wno-microsoft-anon-tag --function make_s2 --force-malloc-success
 ^VERIFICATION SUCCESSFUL$
