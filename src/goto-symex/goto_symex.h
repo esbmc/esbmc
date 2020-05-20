@@ -434,6 +434,11 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /** Return the current stack size. */
+  void intrinsic_get_stack_size(
+    const code_function_call2t &call,
+    reachability_treet &art);
+
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
 
