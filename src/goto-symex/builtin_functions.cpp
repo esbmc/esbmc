@@ -632,7 +632,7 @@ void goto_symext::intrinsic_get_stack_size(
 {
   // Get all variables
   int size = 0;
-  ns.get_context().foreach_operand([&size](const symbolt &s) {
+  ns.get_context().foreach_operand([this,&size](const symbolt &s) {
     const std::string &symbol_name = s.id.as_string();
     // Ignore functions for now
     if(has_prefix(symbol_name, "c:@F@"))
@@ -645,8 +645,11 @@ void goto_symext::intrinsic_get_stack_size(
       has_prefix(symbol_name, "symex_throw::"))
       return;
 
-    irep_idt width = s.type.width();
-    size += std::stoi(width.as_string());
+    // Convert to type2t to extract width for pointers
+    type2tc renamedtype;
+    migrate_type(s.type, renamedtype);
+    unsigned width = renamedtype->get_width();
+    size += width;
   });
   std::cout << "Size: " << size << std::endl;
   constant_int2tc flag_expr(get_uint_type(config.ansi_c.int_width), size);
