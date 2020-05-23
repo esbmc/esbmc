@@ -642,6 +642,7 @@ void goto_symext::intrinsic_get_stack_size(
     if(
       has_prefix(symbol_name, "__") || has_prefix(symbol_name, "c:@__") ||
       has_prefix(symbol_name, "execution_statet:") ||
+      has_prefix(symbol_name, "tag-struct ") ||
       has_prefix(symbol_name, "symex_throw::"))
       return;
 
