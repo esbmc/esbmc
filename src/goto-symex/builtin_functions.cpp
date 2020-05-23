@@ -631,7 +631,7 @@ void goto_symext::intrinsic_get_stack_size(
   reachability_treet &art)
 {
   // Get all variables
-  int size = 0;
+  unsigned size = 0;
   ns.get_context().foreach_operand([this,&size](const symbolt &s) {
     const std::string &symbol_name = s.id.as_string();
     // Ignore functions for now
