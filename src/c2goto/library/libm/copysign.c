@@ -24,8 +24,8 @@
     return name(x, y);                                                         \
   }
 
-copysign_def(float, copysignf, __signbitf, isnanf, fabsf);
-copysign_def(double, copysign, __signbit, isnan, fabs);
-copysign_def(long double, copysignl, __signbitl, isnanl, fabsl);
+copysign_def(float, copysignf, signbit, isnan, fabsf);
+copysign_def(double, copysign, signbit, isnan, fabs);
+copysign_def(long double, copysignl, signbit, isnan, fabsl);
 
 #undef copysign_def

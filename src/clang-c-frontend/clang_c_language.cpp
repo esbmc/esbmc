@@ -286,46 +286,6 @@ _Bool __ESBMC_is_little_endian();
 int __ESBMC_rounding_mode = 0;
 _Bool __ESBMC_floatbv_mode();
 
-double __ESBMC_fabsd(double);
-long double __ESBMC_fabsld(long double);
-float __ESBMC_fabsf(float);
-
-_Bool __ESBMC_isnanf(float);
-_Bool __ESBMC_isnand(double);
-_Bool __ESBMC_isnanld(long double);
-
-_Bool __ESBMC_isfinite(double);
-_Bool __ESBMC_isfinitef(float);
-_Bool __ESBMC_isfinited(double);
-_Bool __ESBMC_isfiniteld(long double);
-
-_Bool __ESBMC_isinf(double);
-_Bool __ESBMC_isinff(float);
-_Bool __ESBMC_isinfd(double);
-_Bool __ESBMC_isinfld(long double);
-
-_Bool __ESBMC_sign(double);
-_Bool __ESBMC_signf(float);
-_Bool __ESBMC_signd(double);
-_Bool __ESBMC_signld(long double);
-
-_Bool __ESBMC_isnormal(double);
-_Bool __ESBMC_isnormalf(float);
-_Bool __ESBMC_isnormald(double);
-_Bool __ESBMC_isnormalld(long double);
-
-double __ESBMC_inf(void);
-float __ESBMC_inff(void);
-long double __ESBMC_infld(void);
-
-float __ESBMC_nearbyintf(float);
-double __ESBMC_nearbyintd(double);
-long double __ESBMC_nearbyintld(long double);
-
-float __ESBMC_fmaf(float, float, float);
-double __ESBMC_fmad(double, double, double);
-long double __ESBMC_fmald(long double, long double, long double);
-
 float __ESBMC_sqrtf(float);
 double __ESBMC_sqrtd(double);
 long double __ESBMC_sqrtld(long double);

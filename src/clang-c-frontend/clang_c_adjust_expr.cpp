@@ -695,44 +695,21 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       pointer_object_expr.operands() = expr.arguments();
       expr.swap(pointer_object_expr);
     }
-    else if(
-      identifier == CPROVER_PREFIX "isnanf" ||
-      identifier == CPROVER_PREFIX "isnand" ||
-      identifier == CPROVER_PREFIX "isnanld" || identifier == "__builtin_isnan")
+    else if(identifier == "isnan" || identifier == "__builtin_isnan")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "isnan expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt isnan_expr("isnan", bool_typet());
       isnan_expr.operands() = expr.arguments();
       expr.swap(isnan_expr);
     }
-    else if(
-      identifier == CPROVER_PREFIX "isfinitef" ||
-      identifier == CPROVER_PREFIX "isfinited" ||
-      identifier == CPROVER_PREFIX "isfiniteld")
+    else if(identifier == "isfinite")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "isfinite expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt isfinite_expr("isfinite", bool_typet());
       isfinite_expr.operands() = expr.arguments();
       expr.swap(isfinite_expr);
     }
     else if(
-      identifier == CPROVER_PREFIX "inff" ||
-      identifier == CPROVER_PREFIX "inf" ||
-      identifier == CPROVER_PREFIX "infld" || identifier == "__builtin_inff" ||
-      identifier == "__builtin_inf" || identifier == "__builtin_infld" ||
-      identifier == "__builtin_huge_valf" ||
+      identifier == "__builtin_inff" || identifier == "__builtin_inf" ||
+      identifier == "__builtin_infl" || identifier == "__builtin_huge_valf" ||
       identifier == "__builtin_huge_val" || identifier == "__builtin_huge_vall")
     {
       typet t = expr.type();
@@ -755,10 +732,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(infl_expr);
     }
     else if(
-      identifier == CPROVER_PREFIX "nanf" ||
-      identifier == CPROVER_PREFIX "nan" ||
-      identifier == CPROVER_PREFIX "nanld" || identifier == "__builtin_nanf" ||
-      identifier == "__builtin_nan" || identifier == "__builtin_nanl")
+      identifier == "nanf" || identifier == "nan" || identifier == "nanl" ||
+      identifier == "__builtin_nanf" || identifier == "__builtin_nan" ||
+      identifier == "__builtin_nanl")
     {
       typet t = expr.type();
 
@@ -778,79 +754,31 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(nan_expr);
     }
     else if(
-      identifier == CPROVER_PREFIX "abs" ||
-      identifier == CPROVER_PREFIX "labs" ||
-      identifier == CPROVER_PREFIX "llabs" ||
-      identifier == CPROVER_PREFIX "fabsd" ||
-      identifier == CPROVER_PREFIX "fabsf" ||
-      identifier == CPROVER_PREFIX "fabsld" || identifier == "__builtin_fabs" ||
-      identifier == "__builtin_fabsf")
+      identifier == "abs" || identifier == "labs" || identifier == "llabs" ||
+      identifier == "fabs" || identifier == "fabsf" || identifier == "fabsl" ||
+      identifier == "__builtin_fabs" || identifier == "__builtin_fabsf" ||
+      identifier == "__builtin_fabsl")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "abs expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt abs_expr("abs", expr.type());
       abs_expr.operands() = expr.arguments();
       expr.swap(abs_expr);
     }
-    else if(
-      identifier == CPROVER_PREFIX "isinf" ||
-      identifier == CPROVER_PREFIX "isinff" ||
-      identifier == CPROVER_PREFIX "isinfd" ||
-      identifier == CPROVER_PREFIX "isinfld" ||
-      identifier == "__builtin_isinf" || identifier == "__builtin_isinff" ||
-      identifier == "__builtin_isinfd" || identifier == "__builtin_isinfld")
+    else if(identifier == "isinf" || identifier == "__builtin_isinf")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "isinf expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt isinf_expr("isinf", bool_typet());
       isinf_expr.operands() = expr.arguments();
       expr.swap(isinf_expr);
     }
-    else if(
-      identifier == CPROVER_PREFIX "isnormal" ||
-      identifier == CPROVER_PREFIX "isnormalf" ||
-      identifier == CPROVER_PREFIX "isnormald" ||
-      identifier == CPROVER_PREFIX "isnormalld" ||
-      identifier == "__builtin_isnormal" ||
-      identifier == "__builtin_isnormalf" ||
-      identifier == "__builtin_isnormald" ||
-      identifier == "__builtin_isnormalld")
+    else if(identifier == "isnormal" || identifier == "__builtin_isnormal")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "finite expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt isnormal_expr("isnormal", bool_typet());
       isnormal_expr.operands() = expr.arguments();
       expr.swap(isnormal_expr);
     }
     else if(
-      identifier == CPROVER_PREFIX "signf" ||
-      identifier == CPROVER_PREFIX "signd" ||
-      identifier == CPROVER_PREFIX "signld" ||
-      identifier == "__builtin_signbit" || identifier == "__builtin_signbitf" ||
-      identifier == "__builtin_signbitl")
+      identifier == "sign" || identifier == "__builtin_signbit" ||
+      identifier == "__builtin_signbitf" || identifier == "__builtin_signbitl")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "sign expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt sign_expr("signbit", int_type());
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
@@ -861,13 +789,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       identifier == "__builtin_popcountl" ||
       identifier == "__builtin_popcountll")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << identifier << " expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt popcount_expr("popcount", int_type());
       popcount_expr.operands() = expr.arguments();
       expr.swap(popcount_expr);
@@ -876,13 +797,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       identifier == "__builtin_bswap16" || identifier == "__builtin_bswap32" ||
       identifier == "__builtin_bswap64")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << identifier << " expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt bswap_expr("bswap", expr.type());
       bswap_expr.operands() = expr.arguments();
       expr.swap(bswap_expr);
@@ -890,88 +804,35 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     else if(identifier == "__builtin_expect")
     {
       // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_expect expects two arguments" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt tmp = expr.arguments()[0];
       expr.swap(tmp);
     }
     else if(identifier == "__builtin_isgreater")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_isgreater expects two arguments" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op(">", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
-
       expr.swap(op);
     }
     else if(identifier == "__builtin_isgreaterequal")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_isgreaterequal expects two arguments"
-                  << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op(">=", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
-
       expr.swap(op);
     }
     else if(identifier == "__builtin_isless")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_isless expects two arguments" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op("<", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
-
       expr.swap(op);
     }
     else if(identifier == "__builtin_islessequal")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_islessequal expects two arguments" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op("<=", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
-
       expr.swap(op);
     }
     else if(identifier == "__builtin_islessgreater")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_islessgreater expects two arguments"
-                  << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op1("<", bool_typet());
       op1.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
 
@@ -985,14 +846,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if(identifier == "__builtin_isunordered")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_islessequal expects two arguments" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op1("isnan", bool_typet());
       op1.copy_to_operands(expr.arguments()[0]);
 
@@ -1005,33 +858,16 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(op);
     }
     else if(
-      identifier == CPROVER_PREFIX "nearbyintf" ||
-      identifier == CPROVER_PREFIX "nearbyintd" ||
-      identifier == CPROVER_PREFIX "nearbyintld")
+      identifier == "nearbyintf" || identifier == "nearbyintd" ||
+      identifier == "nearbyintl")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "nearbyint expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt new_expr("nearbyint", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
     else if(
-      identifier == CPROVER_PREFIX "fmaf" ||
-      identifier == CPROVER_PREFIX "fmad" ||
-      identifier == CPROVER_PREFIX "fmald")
+      identifier == "fmaf" || identifier == "fmad" || identifier == "fmal")
     {
-      if(expr.arguments().size() != 3)
-      {
-        std::cout << "fma expects three operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt new_expr("ieee_fma", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
@@ -1047,17 +883,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(new_expr);
     }
     else if(
-      identifier == CPROVER_PREFIX "sqrtf" ||
-      identifier == CPROVER_PREFIX "sqrtd" ||
-      identifier == CPROVER_PREFIX "sqrtld")
+      identifier == "sqrtf" || identifier == "sqrtd" || identifier == "sqrtl")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "sqrt expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt new_expr("ieee_sqrt", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);

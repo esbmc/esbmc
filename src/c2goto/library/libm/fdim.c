@@ -18,8 +18,8 @@
     return name(x, y);                                                         \
   }
 
-fdim_def(float, fdimf, isnanf);
+fdim_def(float, fdimf, isnan);
 fdim_def(double, fdim, isnan);
-fdim_def(long double, fdiml, isnanl);
+fdim_def(long double, fdiml, isnan);
 
 #undef fdim_def

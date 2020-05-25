@@ -38,8 +38,8 @@
     return name(x, y);                                                                 \
   }
 
-fmod_def(float, fmodf, isnanf, isinff, finitef);
-fmod_def(double, fmod, isnan, isinf, finite);
-fmod_def(long double, fmodl, isnanl, isinfl, finitel);
+fmod_def(float, fmodf, isnan, isinf, isfinite);
+fmod_def(double, fmod, isnan, isinf, isfinite);
+fmod_def(long double, fmodl, isnan, isinf, isfinite);
 
 #undef fmod_def

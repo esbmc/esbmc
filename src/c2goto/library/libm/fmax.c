@@ -29,8 +29,8 @@
     return name(x, y);                                                         \
   }
 
-fmax_def(float, fmaxf, isnanf);
+fmax_def(float, fmaxf, isnan);
 fmax_def(double, fmax, isnan);
-fmax_def(long double, fmaxl, isnanl);
+fmax_def(long double, fmaxl, isnan);
 
 #undef fmax_def

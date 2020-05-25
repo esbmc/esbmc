@@ -41,8 +41,8 @@ __ESBMC_HIDE:;
     return name(f);                                                            \
   }
 
-sqrt_def(float, sqrtf, isnanf, isinff, __ESBMC_sqrtf);
+sqrt_def(float, sqrtf, isnan, isinf, __ESBMC_sqrtf);
 sqrt_def(double, sqrt, isnan, isinf, __ESBMC_sqrtd);
-sqrt_def(long double, sqrtl, isnanl, isinfl, __ESBMC_sqrtld);
+sqrt_def(long double, sqrtl, isnan, isinf, __ESBMC_sqrtld);
 
 #undef sqrt_def
