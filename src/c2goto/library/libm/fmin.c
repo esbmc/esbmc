@@ -29,8 +29,8 @@
     return name(x, y);                                                         \
   }
 
-fmin_def(float, fminf, isnanf);
+fmin_def(float, fminf, isnan);
 fmin_def(double, fmin, isnan);
-fmin_def(long double, fminl, isnanl);
+fmin_def(long double, fminl, isnan);
 
 #undef fmin_def

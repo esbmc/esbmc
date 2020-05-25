@@ -1,7 +1,7 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
-#include <math.h>
 #include <fenv.h>
+#include <math.h>
 
 #define modff_def(type, name, nearbyint_func, copysign_func, isinf_func)       \
   type name(type value, type *iptr)                                            \
@@ -20,8 +20,8 @@
     return name(value, iptr);                                                  \
   }
 
-modff_def(float, modff, nearbyintf, copysignf, isinff);
+modff_def(float, modff, nearbyintf, copysignf, isinf);
 modff_def(double, modf, nearbyint, copysign, isinf);
-modff_def(long double, modfl, nearbyintl, copysignl, isinfl);
+modff_def(long double, modfl, nearbyintl, copysignl, isinf);
 
 #undef modff_def
