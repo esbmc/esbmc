@@ -434,11 +434,6 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
-  /** Return the current stack size. */
-  void intrinsic_get_stack_size(
-    const code_function_call2t &call,
-    reachability_treet &art);
-
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
 
@@ -717,6 +712,12 @@ protected:
   void replace_nondet(expr2tc &expr);
 
   /**
+   * Process a block adding the width of each symbol into the stack length
+   * @param expr Expr to search for symbols.
+   */
+  void process_stack_size(expr2tc &expr);
+
+  /**
    *  Fetch reference to global dynamic object counter.
    *  @return Reference to global dynamic object counter.
    */
@@ -794,6 +795,8 @@ protected:
   /** Flag to indicate if we are go into the unexpected flow. */
   bool inside_unexpected;
 
+  /** Limit size for stack */
+  unsigned long stack_limit;
   /** Depth limit, as given by the --depth option */
   unsigned long depth_limit;
   /** Instruction number we are to break at -- that is, trap, to the debugger.

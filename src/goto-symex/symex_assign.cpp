@@ -40,6 +40,7 @@ goto_symext::goto_symext(
     cur_state(nullptr),
     last_throw(nullptr),
     inside_unexpected(false),
+    stack_limit(atol(options.get_option("stack-limit").c_str())),
     depth_limit(atol(options.get_option("depth").c_str())),
     break_insn(atol(options.get_option("break-at").c_str())),
     memory_leak_check(options.get_bool_option("memory-leak-check")),

@@ -485,10 +485,6 @@ void goto_symext::run_intrinsic(
         : gen_false_expr();
     symex_assign(code_assign2tc(func_call.ret, is_little_endian));
   }
-  else if(symname == "c:@F@__ESBMC_stack_size")
-  {
-    intrinsic_get_stack_size(func_call, art);
-  }
   else
   {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC";
