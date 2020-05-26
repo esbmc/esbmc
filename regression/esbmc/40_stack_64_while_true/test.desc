@@ -1,0 +1,4 @@
+CORE
+main.c
+--64 --k-induction --stack-limit 16
+^VERIFICATION FAILED$
