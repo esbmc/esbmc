@@ -14,14 +14,14 @@
                           : isnormal_func(f) ? FP_NORMAL : FP_SUBNORMAL;       \
   }
 
-classify_def(float, _fdclass, isnan, isinf, isnormal);
-classify_def(float, __fpclassifyf, isnan, isinf, isnormal);
+classify_def(float, _fdclass, isnan, isinf, __builtin_isnormal);
+classify_def(float, __fpclassifyf, isnan, isinf, __builtin_isnormal);
 
-classify_def(double, _dclass, isnan, isinf, isnormal);
-classify_def(double, __fpclassify, isnan, isinf, isnormal);
-classify_def(double, __fpclassifyd, isnan, isinf, isnormal);
+classify_def(double, _dclass, isnan, isinf, __builtin_isnormal);
+classify_def(double, __fpclassify, isnan, isinf, __builtin_isnormal);
+classify_def(double, __fpclassifyd, isnan, isinf, __builtin_isnormal);
 
-classify_def(long double, _ldclass, isnan, isinf, isnormal);
-classify_def(long double, __fpclassifyl, isnan, isinf, isnormal);
+classify_def(long double, _ldclass, isnan, isinf, __builtin_isnormal);
+classify_def(long double, __fpclassifyl, isnan, isinf, __builtin_isnormal);
 
 #undef classify_def
