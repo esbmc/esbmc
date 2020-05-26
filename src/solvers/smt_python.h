@@ -179,7 +179,7 @@ public:
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal);
   smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw);
   smt_sortt mk_fpbv_rm_sort();
-  smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw);
+  smt_astt mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw);
   smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw);
   smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm);
   smt_astt mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width);

@@ -1011,13 +1011,18 @@ smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
     s);
 }
 
-smt_astt cvc_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
+smt_astt cvc_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
-  return new_ast(
+  smt_astt the_nan = new_ast(
     em.mkConst(CVC4::FloatingPoint::makeNaN(CVC4::FloatingPointSize(
       s->get_exponent_width(), s->get_significand_width()))),
     s);
+
+  if(sgn)
+    the_nan = fp_convt::mk_smt_fpbv_neg(the_nan);
+
+  return the_nan;
 }
 
 smt_astt cvc_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)

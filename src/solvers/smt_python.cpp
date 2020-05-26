@@ -676,9 +676,9 @@ smt_astt smt_convt_wrapper::mk_smt_fpbv(const ieee_floatt &thereal)
   return get_override_checked(this, "mk_smt_fpbv")(thereal);
 }
 
-smt_astt smt_convt_wrapper::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
+smt_astt smt_convt_wrapper::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
 {
-  return get_override_checked(this, "mk_smt_fpbv_nan")(ew, sw);
+  return get_override_checked(this, "mk_smt_fpbv_nan")(sgn, ew, sw);
 }
 
 smt_astt smt_convt_wrapper::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
