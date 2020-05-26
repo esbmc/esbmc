@@ -1,5 +1,3 @@
-#define STACK_LIM 64
-
 struct MixedData
 {
   char var1; // i8
@@ -8,11 +6,7 @@ struct MixedData
   char var4; // i8
 };
 
-// total: 64
-
-struct MixedData a;
-
 int main() {
-  __ESBMC_assert(__ESBMC_stack_size() <= STACK_LIM, "ERROR");
+  struct MixedData a; // total: 64
   return 0;
 }
