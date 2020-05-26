@@ -1288,7 +1288,8 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
     unsigned int exponent_width = to_floatbv_type(thereal.type).exponent;
     if(thereal.value.is_NaN())
-      return fp_api->mk_smt_fpbv_nan(exponent_width, fraction_width + 1);
+      return fp_api->mk_smt_fpbv_nan(
+        thereal.value.get_sign(), exponent_width, fraction_width + 1);
 
     bool sign = thereal.value.get_sign();
     if(thereal.value.is_infinity())

@@ -713,17 +713,21 @@ smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal)
   return new_ast(t, s);
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
+smt_astt mathsat_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
 {
   if(use_fp_api)
-    return fp_convt::mk_smt_fpbv_nan(ew, sw);
+    return fp_convt::mk_smt_fpbv_nan(sgn, ew, sw);
 
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
 
   msat_term t = msat_make_fp_nan(env, ew, sw - 1);
   check_msat_error(t);
 
-  return new_ast(t, s);
+  smt_astt the_nan = new_ast(t, s);
+  if(sgn)
+    the_nan = fp_convt::mk_smt_fpbv_neg(the_nan);
+
+  return the_nan;
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)

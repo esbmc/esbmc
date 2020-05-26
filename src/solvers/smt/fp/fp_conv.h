@@ -32,7 +32,7 @@ public:
    *  @param ew Exponent width, in bits, of the bitvector to create.
    *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw);
 
   /** Create a (+/-)inf floating point bitvector
    *  @param sgn Whether this bitvector is negative or positive.
