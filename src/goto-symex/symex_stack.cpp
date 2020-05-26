@@ -17,7 +17,7 @@ void goto_symext::process_stack_size(expr2tc &expr)
 {
   code_decl2t &decl_code = to_code_decl2t(expr);
   cur_state->top().frame_info.add_decl(decl_code);
-  if(stack_limit != -1)
+  if(stack_limit != 0)
   {
     static unsignedbv_type2tc u32type(32);
     BigInt f_size(cur_state->top().frame_info.total);
