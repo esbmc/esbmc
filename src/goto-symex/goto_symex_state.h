@@ -185,6 +185,18 @@ public:
      *  resulting function invocations with. */
     expr2tc orig_func_ptr_call;
 
+    struct
+    {
+      std::vector<std::pair<std::string, unsigned>> variables;
+      unsigned total = 0;
+
+      void add_decl(code_decl2tc s)
+      {
+        total += s->type->get_width();
+        variables.emplace_back(s->value.as_string(), s->type->get_width());
+      }
+    } frame_info;
+
     /** Set of variables names that have been declared. Used to detect when we
      *  are in some kind of block that is entered then exited repeatedly -
      *  whenever that happens, a new l1 name is required. This caches the

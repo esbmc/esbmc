@@ -626,37 +626,6 @@ void goto_symext::intrinsic_get_thread_state(
   symex_assign(code_assign2tc(call.ret, flag_expr), true);
 }
 
-void goto_symext::intrinsic_get_stack_size(
-  const code_function_call2t &call,
-  reachability_treet &art)
-{
-  // Get all variables
-  unsigned size = 0;
-  ns.get_context().foreach_operand([this, &size](const symbolt &s) {
-    const std::string &symbol_name = s.id.as_string();
-    // Ignore functions for now
-    if(has_prefix(symbol_name, "c:@F@"))
-      return;
-
-    // Ignore compiler/intrinsic methods
-    if(
-      has_prefix(symbol_name, "__") || has_prefix(symbol_name, "c:@__") ||
-      has_prefix(symbol_name, "execution_statet:") ||
-      has_prefix(symbol_name, "tag-struct ") ||
-      has_prefix(symbol_name, "symex_throw::"))
-      return;
-
-    // Convert to type2t to extract width for pointers
-    type2tc renamedtype;
-    migrate_type(s.type, renamedtype);
-    unsigned width = renamedtype->get_width();
-    size += width;
-  });
-  std::cout << "Size: " << size << std::endl;
-  constant_int2tc flag_expr(get_uint_type(config.ansi_c.int_width), size);
-  symex_assign(code_assign2tc(call.ret, flag_expr), true);
-}
-
 void goto_symext::intrinsic_really_atomic_begin(reachability_treet &art)
 {
   art.get_cur_state().increment_active_atomic_number();

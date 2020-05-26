@@ -62,8 +62,9 @@ void goto_symext::symex_decl(const expr2tc code)
   replace_dynamic_allocation(code2);
   replace_nondet(code2);
   dereference(code2, dereferencet::READ);
+  process_stack_size(code2);
 
-  const code_decl2t &decl_code = to_code_decl2t(code2);
+  code_decl2t &decl_code = to_code_decl2t(code2);
 
   // just do the L2 renaming to preseve locality
   const irep_idt &identifier = decl_code.value;
