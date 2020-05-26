@@ -19,6 +19,7 @@ classify_def(float, __fpclassifyf, isnan, isinf, isnormal);
 
 classify_def(double, _dclass, isnan, isinf, isnormal);
 classify_def(double, __fpclassify, isnan, isinf, isnormal);
+classify_def(double, __fpclassifyd, isnan, isinf, isnormal);
 
 classify_def(long double, _ldclass, isnan, isinf, isnormal);
 classify_def(long double, __fpclassifyl, isnan, isinf, isnormal);
