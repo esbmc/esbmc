@@ -646,6 +646,40 @@ void clang_c_adjust::adjust_function_call_arguments(
   }
 }
 
+static inline bool
+compare_float_suffix(const irep_idt &identifier, const std::string name)
+{
+  return (identifier == name) || ((identifier == (name + "f"))) ||
+         ((identifier == (name + "d"))) || ((identifier == (name + "l")));
+}
+
+static inline bool
+compare_unscore_builtin(const irep_idt &identifier, const std::string name)
+{
+  // compare a given identifier with a set of possible names, e.g,
+  //
+  // compare_unscore_builtin(identifier, "isnan")
+  //
+  // will compare identifier to:
+  // isnan
+  // __isnan
+  // __isnanf
+  // __isnanl
+  // __isnand
+  // __builtin_isnan
+  // __builtin_isnanf
+  // __builtin_isnanl
+  // __builtin_isnand
+  const std::string builtin_name = "__builtin_" + name;
+  const std::string underscore_name = "__" + name;
+
+  return (identifier == name) ||
+         compare_float_suffix(identifier, builtin_name) ||
+         (identifier == builtin_name) ||
+         compare_float_suffix(identifier, underscore_name) ||
+         (identifier == underscore_name);
+}
+
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 {
   const exprt &f_op = expr.function();
@@ -695,29 +729,24 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       pointer_object_expr.operands() = expr.arguments();
       expr.swap(pointer_object_expr);
     }
-    else if(
-      identifier == "isnan" || identifier == "__isnanf" ||
-      identifier == "__isnan" || identifier == "__isnanl" ||
-      identifier == "__builtin_isnan")
+    else if(compare_unscore_builtin(identifier, "isnan"))
     {
       exprt isnan_expr("isnan", bool_typet());
       isnan_expr.operands() = expr.arguments();
       expr.swap(isnan_expr);
     }
     else if(
-      identifier == "isfinite" || identifier == "finitef" ||
-      identifier == "finite" || identifier == "finitel" ||
-      identifier == "__finitef" || identifier == "__finite" ||
-      identifier == "__finitel" || identifier == "__builtin_isfinite")
+      compare_float_suffix(identifier, "finite") ||
+      compare_unscore_builtin(identifier, "isfinite") ||
+      compare_unscore_builtin(identifier, "finite"))
     {
       exprt isfinite_expr("isfinite", bool_typet());
       isfinite_expr.operands() = expr.arguments();
       expr.swap(isfinite_expr);
     }
     else if(
-      identifier == "__builtin_inff" || identifier == "__builtin_inf" ||
-      identifier == "__builtin_infl" || identifier == "__builtin_huge_valf" ||
-      identifier == "__builtin_huge_val" || identifier == "__builtin_huge_vall")
+      compare_unscore_builtin(identifier, "inf") ||
+      compare_unscore_builtin(identifier, "huge_val"))
     {
       typet t = expr.type();
 
@@ -739,9 +768,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(infl_expr);
     }
     else if(
-      identifier == "nanf" || identifier == "nan" || identifier == "nanl" ||
-      identifier == "__builtin_nanf" || identifier == "__builtin_nan" ||
-      identifier == "__builtin_nanl")
+      compare_float_suffix(identifier, "nan") ||
+      compare_unscore_builtin(identifier, "nan"))
     {
       typet t = expr.type();
 
@@ -762,34 +790,26 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if(
       identifier == "abs" || identifier == "labs" || identifier == "llabs" ||
-      identifier == "fabs" || identifier == "fabsf" || identifier == "fabsl" ||
-      identifier == "__builtin_fabs" || identifier == "__builtin_fabsf" ||
-      identifier == "__builtin_fabsl")
+      compare_float_suffix(identifier, "fabs") ||
+      compare_unscore_builtin(identifier, "fabs"))
     {
       exprt abs_expr("abs", expr.type());
       abs_expr.operands() = expr.arguments();
       expr.swap(abs_expr);
     }
-    else if(
-      identifier == "isinf" || identifier == "__isinff" ||
-      identifier == "__isinf" || identifier == "__isinfl" ||
-      identifier == "__builtin_isinf")
+    else if(compare_unscore_builtin(identifier, "isinf"))
     {
       exprt isinf_expr("isinf", bool_typet());
       isinf_expr.operands() = expr.arguments();
       expr.swap(isinf_expr);
     }
-    else if(identifier == "isnormal" || identifier == "__builtin_isnormal")
+    else if(compare_unscore_builtin(identifier, "isnormal"))
     {
       exprt isnormal_expr("isnormal", bool_typet());
       isnormal_expr.operands() = expr.arguments();
       expr.swap(isnormal_expr);
     }
-    else if(
-      identifier == "sign" || identifier == "__signbit" ||
-      identifier == "__signbitf" || identifier == "__signbitl" ||
-      identifier == "__builtin_signbit" || identifier == "__builtin_signbitf" ||
-      identifier == "__builtin_signbitl")
+    else if(compare_unscore_builtin(identifier, "signbit"))
     {
       exprt sign_expr("signbit", int_type());
       sign_expr.operands() = expr.arguments();
@@ -869,15 +889,13 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(op);
     }
-    else if(
-      identifier == "nearbyintf" || identifier == "nearbyint" ||
-      identifier == "nearbyintl")
+    else if(compare_float_suffix(identifier, "nearbyint"))
     {
       exprt new_expr("nearbyint", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
-    else if(identifier == "fmaf" || identifier == "fma" || identifier == "fmal")
+    else if(compare_float_suffix(identifier, "fma"))
     {
       exprt new_expr("ieee_fma", expr.type());
       new_expr.operands() = expr.arguments();
@@ -935,8 +953,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(new_expr);
     }
-    else if(
-      identifier == "sqrtf" || identifier == "sqrt" || identifier == "sqrtl")
+    else if(compare_float_suffix(identifier, "sqrt"))
     {
       exprt new_expr("ieee_sqrt", expr.type());
       new_expr.operands() = expr.arguments();
