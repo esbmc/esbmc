@@ -2,7 +2,7 @@
 
 Module: Symbolic Execution - Stack tracking
 
-Author: Rafael Sá Menezes
+Authors: Rafael Menezes and Lucas Cordeiro
 
 Date: April 2020
 
@@ -15,7 +15,7 @@ Date: April 2020
 
 void goto_symext::process_stack_size(expr2tc &expr)
 {
-  code_decl2t &decl_code = to_code_decl2t(expr);
+  const code_decl2t &decl_code = to_code_decl2t(expr);
   cur_state->top().frame_info.add_decl(decl_code);
   if(stack_limit != 0)
   {
