@@ -1430,17 +1430,12 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
 {
   const signbit2t &signbit = to_signbit2t(expr);
 
-  // Since we can't extract the top bit, from the fpbv, we'll
-  // convert it to return if(is_neg) ? 1 : 0;
+  // Extract the top bit
   auto value = convert_ast(signbit.operand);
 
-  // Create is_neg
-  smt_astt is_neg;
-  if(!config.ansi_c.use_fixed_for_float && !int_encoding)
-    is_neg = fp_api->mk_smt_fpbv_is_negative(value);
-  else
-    // For fixedbvs, we check if it's < 0
-    is_neg = mk_lt(value, convert_ast(gen_zero(signbit.operand->type)));
+  const auto width = value->sort->get_data_width();
+  smt_astt is_neg =
+    mk_eq(mk_extract(value, width - 1, width - 1), mk_smt_bv(BigInt(1), 1));
 
   // If it's true, return 1. Return 0, othewise.
   return mk_ite(
