@@ -707,7 +707,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     else if(
       identifier == "isfinite" || identifier == "finitef" ||
       identifier == "finite" || identifier == "finitel" ||
-      identifier == "__builtin_isfinite")
+      identifier == "__finitef" || identifier == "__finite" ||
+      identifier == "__finitel" || identifier == "__builtin_isfinite")
     {
       exprt isfinite_expr("isfinite", bool_typet());
       isfinite_expr.operands() = expr.arguments();
