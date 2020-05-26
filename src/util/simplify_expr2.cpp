@@ -627,13 +627,6 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     simpl_res =
       TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
   }
-  else if(is_bool_type(value))
-  {
-    std::function<constant_bool2t &(expr2tc &)> to_constant =
-      (constant_bool2t & (*)(expr2tc &)) to_constant_bool2t;
-
-    simpl_res = TFunctor<constant_bool2t>::simplify(to_simplify, to_constant);
-  }
   else
     return expr2tc();
 
@@ -667,7 +660,7 @@ struct abstor
   {
     expr2tc c = number;
 
-    if(to_constant(c).value > 0)
+    if(!to_constant(c).value.is_negative())
       return number;
 
     to_constant(c).value = -to_constant(c).value;
