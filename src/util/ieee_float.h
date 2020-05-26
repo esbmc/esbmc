@@ -183,28 +183,39 @@ public:
   {
     return !NaN_flag && !infinity_flag && fraction == 0 && exponent == 0;
   }
+
+  bool is_negative() const
+  {
+    return sign_flag;
+  }
+
   bool get_sign() const
   {
     return sign_flag;
   }
+
   bool is_NaN() const
   {
     return NaN_flag;
   }
+
   bool is_infinity() const
   {
     return !NaN_flag && infinity_flag;
   }
+
   bool is_finite() const
   {
     return !(infinity_flag && NaN_flag);
   }
+
   bool is_normal() const;
 
   const BigInt &get_exponent() const
   {
     return exponent;
   }
+
   const BigInt &get_fraction() const
   {
     return fraction;
