@@ -1,5 +1,7 @@
+#ifndef __APPLE__
 #include <uchar.h>
 #include <wchar.h>
+#endif
 
 int main ()
 {
@@ -12,6 +14,7 @@ int main ()
   assert (z == 1);
   assert (o == 100);
 
+#ifndef __APPLE__
   char16_t a = u'貓';
 
   char32_t b1 = U'貓';
@@ -19,6 +22,7 @@ int main ()
 
   wchar_t c1 = L'β';
   wchar_t c2 = L'貓';
+#endif
 
   char d = 'AB';
 
