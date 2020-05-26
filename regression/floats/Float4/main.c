@@ -1,9 +1,11 @@
+#include<math.h>
+
 int main()
 {
   double f, f2;
   // the following rely on f not being a NaN or Infinity
-  __ESBMC_assume(!__ESBMC_isnand(f2));
-  __ESBMC_assume(!__ESBMC_isinfd(f2));
+  __ESBMC_assume(!isnan(f2));
+  __ESBMC_assume(!isinf(f2));
   f=f2;
   
   // addition

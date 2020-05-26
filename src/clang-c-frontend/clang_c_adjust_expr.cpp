@@ -695,13 +695,19 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       pointer_object_expr.operands() = expr.arguments();
       expr.swap(pointer_object_expr);
     }
-    else if(identifier == "isnan" || identifier == "__builtin_isnan")
+    else if(
+      identifier == "isnan" || identifier == "__isnanf" ||
+      identifier == "__isnan" || identifier == "__isnanl" ||
+      identifier == "__builtin_isnan")
     {
       exprt isnan_expr("isnan", bool_typet());
       isnan_expr.operands() = expr.arguments();
       expr.swap(isnan_expr);
     }
-    else if(identifier == "isfinite")
+    else if(
+      identifier == "isfinite" || identifier == "finitef" ||
+      identifier == "finite" || identifier == "finitel" ||
+      identifier == "__builtin_isfinite")
     {
       exprt isfinite_expr("isfinite", bool_typet());
       isfinite_expr.operands() = expr.arguments();
@@ -763,7 +769,10 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       abs_expr.operands() = expr.arguments();
       expr.swap(abs_expr);
     }
-    else if(identifier == "isinf" || identifier == "__builtin_isinf")
+    else if(
+      identifier == "isinf" || identifier == "__isinff" ||
+      identifier == "__isinf" || identifier == "__isinfl" ||
+      identifier == "__builtin_isinf")
     {
       exprt isinf_expr("isinf", bool_typet());
       isinf_expr.operands() = expr.arguments();
@@ -776,8 +785,10 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(isnormal_expr);
     }
     else if(
-      identifier == "sign" || identifier == "__builtin_signbit" ||
-      identifier == "__builtin_signbitf" || identifier == "__builtin_signbitl")
+      identifier == "sign" || identifier == "__signbit" ||
+      identifier == "__signbitf" || identifier == "__signbitl" ||
+      identifier == "__builtin_signbit" || identifier == "__builtin_signbitf" ||
+      identifier == "__builtin_signbitl")
     {
       exprt sign_expr("signbit", int_type());
       sign_expr.operands() = expr.arguments();
@@ -858,15 +869,14 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(op);
     }
     else if(
-      identifier == "nearbyintf" || identifier == "nearbyintd" ||
+      identifier == "nearbyintf" || identifier == "nearbyint" ||
       identifier == "nearbyintl")
     {
       exprt new_expr("nearbyint", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
-    else if(
-      identifier == "fmaf" || identifier == "fmad" || identifier == "fmal")
+    else if(identifier == "fmaf" || identifier == "fma" || identifier == "fmal")
     {
       exprt new_expr("ieee_fma", expr.type());
       new_expr.operands() = expr.arguments();
@@ -874,13 +884,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if(identifier == "__builtin_isinf_sign")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "__builtin_isinf_sign expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt isinf_expr("isinf", bool_typet());
       isinf_expr.operands() = expr.arguments();
 
@@ -898,13 +901,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if(identifier == "__builtin_fpclassify")
     {
-      if(expr.arguments().size() != 6)
-      {
-        std::cout << "__builtin_fpclassify expects six operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       // This gets 5 integers followed by a float or double.
       // The five integers are the return values for the cases
       // FP_NAN, FP_INFINITE, FP_NORMAL, FP_SUBNORMAL and FP_ZERO.
