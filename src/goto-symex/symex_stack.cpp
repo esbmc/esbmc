@@ -27,6 +27,5 @@ void goto_symext::process_stack_size(expr2tc &expr)
 
     lessthanequal2tc check(function_irep2, limit_irep2);
     claim(check, "Stack limit property was violated");
-    ;
   }
 }
