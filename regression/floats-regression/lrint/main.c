@@ -22,6 +22,6 @@ int main(void)
   __VERIFIER_assert(lrint(-2.5) == -3);
   __VERIFIER_assert(lrint(-3.5) == -4);
 
-  __VERIFIER_assert(!signbit(lrint(-0.0)));
+  __VERIFIER_assert(!lrint(-0.0));
 }
 
