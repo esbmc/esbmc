@@ -1735,11 +1735,7 @@ smt_astt fp_convt::mk_smt_fpbv_neg(smt_astt op)
   // Extract everything but the sign bit
   smt_astt ew_sw = extract_exp_sig(ctx, op);
   smt_astt sgn = extract_signbit(ctx, op);
-
-  smt_astt c = mk_smt_fpbv_is_nan(op);
-  smt_astt nsgn = ctx->mk_bvnot(sgn);
-  smt_astt r_sgn = ctx->mk_ite(c, sgn, nsgn);
-  return mk_from_bv_to_fp(ctx->mk_concat(r_sgn, ew_sw), op->sort);
+  return mk_from_bv_to_fp(ctx->mk_concat(ctx->mk_bvnot(sgn), ew_sw), op->sort);
 }
 
 void fp_convt::unpack(
