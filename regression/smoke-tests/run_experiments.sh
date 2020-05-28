@@ -1,8 +1,7 @@
 #!/bin/bash
 
-CBMC=../bin/esbmc
-#Z3 is the default solver
-SOLVER= 
+VERIFIER=esbmc
+SOLVER=--boolector 
 BINARY=
 CLAIM=--claim
 OVERFLOWCHECK=--overflow-check
@@ -76,9 +75,9 @@ check_encoding_time()
   START=$(date +%s)
   if [ ! -f $file.bound ];
   then
-    $CBMC $SOLVER $OVERFLOWCHECK $BINARY $file > $file.tmp
+    $VERIFIER $SOLVER $OVERFLOWCHECK $BINARY $file > $file.tmp
   else 
-    $CBMC $SOLVER $OVERFLOWCHECK --unwind $bound $BINARY $file > $file.tmp
+    $VERIFIER $SOLVER $OVERFLOWCHECK --unwind $bound $BINARY $file > $file.tmp
   fi
   sleep 1
   END=$(date +%s)
@@ -145,7 +144,7 @@ echo "##################################################"
     echo "Running program" $file "with bound" $bound
   fi
 
-  matches=`$CBMC $OVERFLOWCHECK --show-claims $BINARY $file | grep "$claim"`
+  matches=`$VERIFIER $OVERFLOWCHECK --show-claims $BINARY $file | grep "$claim"`
 
   for claim_nr in $matches
   do
@@ -165,9 +164,9 @@ echo "##################################################"
 	START=$(date +%s)
     if [ ! -f $file.bound ];
     then
-      $CBMC $SOLVER $OVERFLOWCHECK $CLAIM $i $BINARY $file > $file.tmp
+      $VERIFIER $SOLVER $OVERFLOWCHECK $CLAIM $i $BINARY $file > $file.tmp
     else 
-	  $CBMC $SOLVER $OVERFLOWCHECK $CLAIM $i --unwind $bound $BINARY $file > $file.tmp
+	  $VERIFIER $SOLVER $OVERFLOWCHECK $CLAIM $i --unwind $bound $BINARY $file > $file.tmp
     fi
 	END=$(date +%s)
 	time=$(( $END - $START ))
