@@ -4,6 +4,6 @@ int main() {
     int b; //8
     a--;
   }
-  // Total: 16
+  // Total: 16*8 = 128
   return 0;
 }
