@@ -64,8 +64,7 @@ void build_goto_trace(
     if(!smt_conv->l_get(SSA_step.guard_ast).is_true())
       continue;
 
-    goto_trace.steps.emplace_back();
-    goto_trace_stept &goto_trace_step = goto_trace.steps.back();
+    goto_trace_stept goto_trace_step;
 
     goto_trace_step.thread_nr = SSA_step.source.thread_nr;
     goto_trace_step.pc = SSA_step.source.pc;
@@ -80,7 +79,16 @@ void build_goto_trace(
     if(SSA_step.is_assignment())
     {
       goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
-      goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
+
+      try
+      {
+        goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
+      }
+      catch(type2t::symbolic_type_excp *e)
+      {
+        // Don't add this assignment to the cex if we couldn't build the rhs value
+        continue;
+      }
     }
 
     if(SSA_step.is_output())
@@ -96,6 +104,8 @@ void build_goto_trace(
 
     if(SSA_step.is_assert() || SSA_step.is_assume())
       goto_trace_step.guard = !smt_conv->l_get(SSA_step.cond_ast).is_false();
+
+    goto_trace.steps.push_back(goto_trace_step);
   }
 }
 
