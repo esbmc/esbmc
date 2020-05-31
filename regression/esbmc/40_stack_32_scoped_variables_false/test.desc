@@ -1,0 +1,4 @@
+CORE
+main.c
+--32 --stack-limit 127
+^VERIFICATION FAILED$
