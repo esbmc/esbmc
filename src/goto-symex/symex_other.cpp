@@ -64,9 +64,13 @@ void goto_symext::symex_decl(const expr2tc code)
   dereference(code2, dereferencet::READ);
   if(stack_limit != 0)
   {
+    const std::string pretty_name =
+      to_code_decl2t(code).value.as_string().substr(
+        to_code_decl2t(code).value.as_string().find_last_of('@') + 1);
+
     claim(
       (cur_state->top().process_stack_size(code2, stack_limit)),
-      "Stack limit was violated");
+      "Stack limit property was violated when declaring " + pretty_name);
   }
 
   code_decl2t &decl_code = to_code_decl2t(code2);
