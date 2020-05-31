@@ -197,6 +197,14 @@ public:
       }
     } frame_info;
 
+    /**
+     * Process a block adding the width of each symbol into the stack length
+     * @param expr Expr to search for symbols.
+     * @param stack_limit to limit size for stack
+     */
+    lessthanequal2tc
+    process_stack_size(expr2tc &expr, unsigned long stack_limit);
+
     /** Set of variables names that have been declared. Used to detect when we
      *  are in some kind of block that is entered then exited repeatedly -
      *  whenever that happens, a new l1 name is required. This caches the
