@@ -62,7 +62,12 @@ void goto_symext::symex_decl(const expr2tc code)
   replace_dynamic_allocation(code2);
   replace_nondet(code2);
   dereference(code2, dereferencet::READ);
-  process_stack_size(code2);
+  if(stack_limit != 0)
+  {
+    claim(
+      (cur_state->top().process_stack_size(code2, stack_limit)),
+      "Stack limit was violated");
+  }
 
   code_decl2t &decl_code = to_code_decl2t(code2);
 

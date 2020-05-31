@@ -712,12 +712,6 @@ protected:
   void replace_nondet(expr2tc &expr);
 
   /**
-   * Process a block adding the width of each symbol into the stack length
-   * @param expr Expr to search for symbols.
-   */
-  void process_stack_size(expr2tc &expr);
-
-  /**
    *  Fetch reference to global dynamic object counter.
    *  @return Reference to global dynamic object counter.
    */
