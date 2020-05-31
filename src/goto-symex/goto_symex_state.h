@@ -185,17 +185,8 @@ public:
      *  resulting function invocations with. */
     expr2tc orig_func_ptr_call;
 
-    struct
-    {
-      std::vector<std::pair<std::string, unsigned>> variables;
-      unsigned total = 0;
-
-      void add_decl(code_decl2tc s)
-      {
-        total += s->type->get_width();
-        variables.emplace_back(s->value.as_string(), s->type->get_width());
-      }
-    } frame_info;
+    /** The stack size of the frame. */
+    unsigned stack_frame_total;
 
     /**
      * Process a block adding the width of each symbol into the stack length
@@ -224,7 +215,8 @@ public:
     /** Record if the function body is hidden */
     bool hidden;
 
-    framet(unsigned int thread_id) : return_value(expr2tc()), hidden(false)
+    framet(unsigned int thread_id)
+      : return_value(expr2tc()), hidden(false), stack_frame_total(0)
     {
       level1.thread_id = thread_id;
     }

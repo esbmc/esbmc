@@ -18,8 +18,8 @@ lessthanequal2tc goto_symex_statet::framet::process_stack_size(
   unsigned long stack_limit)
 {
   const code_decl2t &decl_code = to_code_decl2t(expr);
-  frame_info.add_decl(decl_code);
-  BigInt f_size(frame_info.total);
+  stack_frame_total += decl_code.type->get_width();
+  BigInt f_size(stack_frame_total);
   BigInt s_size(stack_limit);
   constant_int2tc function_irep2(type_pool.get_uint64(), f_size);
   constant_int2tc limit_irep2(type_pool.get_uint64(), s_size);
