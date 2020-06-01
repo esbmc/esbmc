@@ -27,6 +27,7 @@ cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
 {
   // Already initialized stuff in the constructor list,
   smt.setOption("produce-models", true);
+  smt.setOption("produce-assertions", true);
 }
 
 smt_convt::resultt cvc_convt::dec_solve()
@@ -1256,7 +1257,12 @@ smt_sortt cvc_convt::mk_fpbv_rm_sort()
 
 void cvc_convt::dump_smt()
 {
-  smt.printInstantiations(std::cout);
+  auto const &assertions = smt.getAssertions();
+  for(auto const &a : assertions)
+  {
+    a.printAst(std::cout, 0);
+    std::cout << std::flush;
+  }
 }
 
 void cvc_smt_ast::dump() const
