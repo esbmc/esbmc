@@ -170,6 +170,7 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   symex_trace = ex.symex_trace;
   smt_during_symex = ex.smt_during_symex;
   smt_thread_guard = ex.smt_thread_guard;
+  stack_limit = ex.stack_limit;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
