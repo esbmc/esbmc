@@ -376,8 +376,15 @@ smt_astt cvc_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 
 smt_astt cvc_convt::mk_from_fp_to_bv(smt_astt op)
 {
-  // Create new symbol
-  const std::string name = "__to_ieeebv" + std::to_string(to_bv_counter++);
+  auto const *ca = to_solver_smt_ast<cvc_smt_ast>(op);
+
+  // Force NaN to always generate the same bv, otherwise, create a new variable
+  const std::string name =
+    (ca->a.getKind() == CVC4::kind::CONST_FLOATINGPOINT &&
+     ca->a.getConst<CVC4::FloatingPoint>().isNaN())
+      ? "__ESBMC_NaN"
+      : "__ESBMC_to_ieeebv" + std::to_string(to_bv_counter++);
+
   smt_astt new_symbol =
     mk_smt_symbol(name, mk_bv_sort(op->sort->get_data_width()));
 
