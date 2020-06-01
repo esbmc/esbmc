@@ -62,7 +62,7 @@ void goto_symext::symex_decl(const expr2tc code)
   replace_dynamic_allocation(code2);
   replace_nondet(code2);
   dereference(code2, dereferencet::READ);
-  stack_limit = atol(options.get_option("stack-limit").c_str());
+
   if(stack_limit > 0)
   {
     const std::string pretty_name =
