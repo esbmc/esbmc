@@ -18,11 +18,18 @@ lessthanequal2tc goto_symex_statet::framet::process_stack_size(
   unsigned long stack_limit)
 {
   const code_decl2t &decl_code = to_code_decl2t(expr);
+
+  // Store the total number of buts for a given stack frame.
   stack_frame_total += decl_code.type->get_width();
+
+  // Create two constants to define stack frame size and stack limit.
   BigInt f_size(stack_frame_total);
   BigInt s_size(stack_limit);
   constant_int2tc function_irep2(type_pool.get_uint64(), f_size);
   constant_int2tc limit_irep2(type_pool.get_uint64(), s_size);
+
+  // Ensure that the stack frame size is smaller than the stack limit.
   lessthanequal2tc check(function_irep2, limit_irep2);
+
   return check;
 }
