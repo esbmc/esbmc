@@ -122,6 +122,10 @@ void goto_symext::symex_dead(const expr2tc code)
   replace_nondet(code2);
   dereference(code2, dereferencet::INTERNAL);
 
+  // check whether the stack limit check has been activated.
+  if(stack_limit > 0)
+    cur_state->top().decrease_stack_frame_size(code2);
+
   const code_dead2t &dead_code = to_code_dead2t(code2);
 
   // just do the L2 renaming to preseve locality
