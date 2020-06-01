@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --64 --stack-limit 16
 ^VERIFICATION SUCCESSFUL$
