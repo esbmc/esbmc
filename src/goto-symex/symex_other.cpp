@@ -74,7 +74,7 @@ void goto_symext::symex_decl(const expr2tc code)
       "Stack limit property was violated when declaring " + pretty_name);
   }
 
-  code_decl2t &decl_code = to_code_decl2t(code2);
+  const code_decl2t &decl_code = to_code_decl2t(code2);
 
   // just do the L2 renaming to preseve locality
   const irep_idt &identifier = decl_code.value;
