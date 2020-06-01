@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/goto_symex.h>
 #include <util/expr_util.h>
 #include <util/irep2.h>
+#include <util/pretty.h>
 
 void goto_symext::symex_other(const expr2tc code)
 {
@@ -67,9 +68,7 @@ void goto_symext::symex_decl(const expr2tc code)
   if(stack_limit > 0)
   {
     // extract the actual variable name.
-    const std::string pretty_name =
-      to_code_decl2t(code).value.as_string().substr(
-        to_code_decl2t(code).value.as_string().find_last_of('@') + 1);
+    const std::string pretty_name = get_pretty_name(code);
 
     // check whether the stack size has been reached.
     claim(
