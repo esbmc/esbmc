@@ -285,6 +285,8 @@ cvc_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
 smt_astt
 cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
 {
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
   const cvc_smt_ast *mrm =
     to_solver_smt_ast<cvc_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
   const cvc_smt_ast *mfrom = to_solver_smt_ast<cvc_smt_ast>(from);
@@ -301,6 +303,8 @@ cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
 smt_astt
 cvc_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
 {
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
   const cvc_smt_ast *mrm =
     to_solver_smt_ast<cvc_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
   const cvc_smt_ast *mfrom = to_solver_smt_ast<cvc_smt_ast>(from);
