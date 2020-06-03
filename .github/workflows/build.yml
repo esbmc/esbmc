@@ -57,8 +57,6 @@ jobs:
         run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-9.0.1/clang+llvm-9.0.1-x86_64-apple-darwin.tar.xz
       - name: Extract Clang 9
         run: tar xf clang+llvm-9.0.1-x86_64-apple-darwin.tar.xz && mv clang+llvm-9.0.1-x86_64-apple-darwin clang9 && ls clang9
-      - name: Setup CVC4
-        run: git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --python3 --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j8 && make install
       - name: Setup boolector
         run: git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
       - name: Setup Z3
@@ -69,7 +67,9 @@ jobs:
         # This is needed because CMake does not include /usr/local/include when trying to compile mathsat
         run: ln -s /usr/local/include/gmp.h mathsat/include/gmp.h
       - name: Setup Yices 2
-        run: git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices && make -j9 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a ../yices/lib
+        run: git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices && make -j4 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a ../yices/lib
+      - name: Setup CVC4
+        run: git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --python3 --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j4 && make install
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
