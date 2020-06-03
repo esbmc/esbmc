@@ -48,12 +48,15 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v1
+      - uses: actions/setup-java@v1.3.0
       - name: Install Dependencies
-        run: brew install gmp cmake boost ninja python3 automake && pip3 install PySMT
+        run: brew install gmp cmake boost ninja python3 automake && pip3 install PySMT toml
       - name: Download Clang 9
         run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-9.0.1/clang+llvm-9.0.1-x86_64-apple-darwin.tar.xz
       - name: Extract Clang 9
         run: tar xf clang+llvm-9.0.1-x86_64-apple-darwin.tar.xz && mv clang+llvm-9.0.1-x86_64-apple-darwin clang9 && ls clang9
+      - name: Setup CVC4
+        run: git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --python3 --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j8 && make install
       - name: Setup boolector
         run: git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
       - name: Setup Z3
@@ -68,7 +71,7 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
+        run: mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
       - name: Build ESBMC
         run: cd build && cmake --build . && cmake --install .
       - uses: actions/upload-artifact@v1
