@@ -1781,6 +1781,8 @@ void esbmc_parseoptionst::help()
        "--tuple-sym-flattener         encode tuples using our tuple to symbol "
        "API\n"
        "--array-flattener             encode arrays using our array API\n"
+       "--no-return-value-opt         disable return value optimization to "
+       "compute the stack size\n"
 
        "\nIncremental SMT solving\n"
        " --smt-during-symex           enable incremental SMT solving "
