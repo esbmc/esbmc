@@ -1,5 +1,15 @@
 Release Notes of the ESBMC model checker
 
+*** Version 6.3
+* Stack property support
+* ESBMC now supports Microsoft extensions
+* -f an -W flags are forwarded into clang
+* Float models refactoring, which enabled macOS CI.
+* Fixed issue that caused a deref violation in VLAs.
+* Union bitfields no longer throws a segfault.
+* Unary sideeffects are handled properly.
+* CVC4 enconding for FPs is fixed.
+
 *** Version 6.2
 * Cmake is now the default build system
 * ESBMC now defaults to 64 bits mode
