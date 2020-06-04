@@ -2,20 +2,12 @@
 
 #include <math.h>
 
-#define copysign_def(type, name, signbit_func, isnan_func, abs_func)           \
+#define copysign_def(type, name, signbit_func, abs_func)                       \
   type name(type x, type y)                                                    \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    _Bool y_sign = signbit_func(y);                                            \
-                                                                               \
-    /* Easy case, both signs are equal, just return x */                       \
-    if(signbit_func(x) == y_sign)                                              \
-      return x;                                                                \
-                                                                               \
-    if(isnan_func(x))                                                          \
-      return y_sign ? -NAN : NAN;                                              \
-                                                                               \
-    return y_sign ? -abs_func(x) : abs_func(x);                                \
+    type abs = abs_func(x);                                                    \
+    return (signbit_func(y)) ? -abs : abs;                                     \
   }                                                                            \
                                                                                \
   type __##name(type x, type y)                                                \
@@ -24,8 +16,8 @@
     return name(x, y);                                                         \
   }
 
-copysign_def(float, copysignf, __signbitf, isnanf, fabsf);
-copysign_def(double, copysign, __signbit, isnan, fabs);
-copysign_def(long double, copysignl, __signbitl, isnanl, fabsl);
+copysign_def(float, copysignf, signbit, fabsf);
+copysign_def(double, copysign, signbit, fabs);
+copysign_def(long double, copysignl, signbit, fabsl);
 
 #undef copysign_def

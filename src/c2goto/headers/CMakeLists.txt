@@ -1,7 +1,7 @@
 set (inputs limits.hs pthread.hs pthreadtypes.hs stdarg.hs stdbool.hs stddef.hs)
 
 function(mangle_hs output)
-  set(result)
+  set(result "")
   foreach(in_f ${ARGN})
     file(RELATIVE_PATH out_f ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${in_f})
     string(REGEX REPLACE .hs .c out_f "${out_f}")

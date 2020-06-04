@@ -650,7 +650,12 @@ expr2tc boolector_convt::get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(array);
+  // We do the cast directly here instead of using to_solver_smt_ast because
+  // in release mode the dynamic_cast is converted to a static_cast, but we
+  // want to catch if the conversion fails
+  const btor_smt_ast *ast = dynamic_cast<const btor_smt_ast *>(array);
+  if(ast == nullptr)
+    throw new type2t::symbolic_type_excp();
 
   uint32_t size;
   char **indicies, **values;
@@ -796,6 +801,7 @@ void boolector_convt::dump_smt()
 void btor_smt_ast::dump() const
 {
   boolector_dump_smt2_node(boolector_get_btor(a), stdout, a);
+  std::cout << std::flush;
 }
 
 void boolector_convt::print_model()

@@ -23,6 +23,25 @@ static smt_astt extract_exp_sig(smt_convt *ctx, smt_astt fp)
   return ctx->mk_extract(fp, fp->sort->get_data_width() - 2, 0);
 }
 
+static BigInt power2(std::size_t n, bool negated)
+{
+  BigInt b;
+  b.setPower2(n);
+  if(negated)
+    b.negate();
+  return b;
+}
+
+static BigInt power2m1(std::size_t n, bool negated)
+{
+  BigInt b;
+  b.setPower2(n);
+  b -= 1;
+  if(negated)
+    b.negate();
+  return b;
+}
+
 fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
 {
 }
@@ -43,14 +62,14 @@ smt_sortt fp_convt::mk_fpbv_rm_sort()
   return ctx->mk_bvfp_rm_sort();
 }
 
-smt_astt fp_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
+smt_astt fp_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
 {
   // TODO: we always create the same positive NaN:
   // 01111111100000000000000000000001
   smt_astt top_exp = mk_top_exp(ew);
   return mk_from_bv_to_fp(
     ctx->mk_concat(
-      ctx->mk_smt_bv(BigInt(0), 1),
+      ctx->mk_smt_bv(BigInt(sgn), 1),
       ctx->mk_concat(top_exp, ctx->mk_smt_bv(BigInt(1), sw - 1))),
     mk_fpbv_sort(ew, sw - 1));
 }
@@ -81,7 +100,7 @@ smt_astt fp_convt::mk_smt_nearbyint_from_float(smt_astt x, smt_astt rm)
   smt_astt rm_is_rtn = mk_is_rm(rm, ieee_floatt::ROUND_TO_MINUS_INF);
   smt_astt rm_is_rtz = mk_is_rm(rm, ieee_floatt::ROUND_TO_ZERO);
 
-  smt_astt nan = mk_smt_fpbv_nan(ebits, sbits);
+  smt_astt nan = mk_smt_fpbv_nan(false, ebits, sbits);
   smt_astt nzero = mk_nzero(ebits, sbits);
   smt_astt pzero = mk_pzero(ebits, sbits);
 
@@ -253,7 +272,7 @@ smt_astt fp_convt::mk_smt_fpbv_sqrt(smt_astt x, smt_astt rm)
   unsigned ebits = x->sort->get_exponent_width();
   unsigned sbits = x->sort->get_significand_width();
 
-  smt_astt nan = mk_smt_fpbv_nan(ebits, sbits);
+  smt_astt nan = mk_smt_fpbv_nan(false, ebits, sbits);
 
   smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
 
@@ -363,7 +382,7 @@ fp_convt::mk_smt_fpbv_fma(smt_astt x, smt_astt y, smt_astt z, smt_astt rm)
   unsigned ebits = x->sort->get_exponent_width();
   unsigned sbits = x->sort->get_significand_width();
 
-  smt_astt nan = mk_smt_fpbv_nan(ebits, sbits);
+  smt_astt nan = mk_smt_fpbv_nan(false, ebits, sbits);
   smt_astt nzero = mk_nzero(ebits, sbits);
   smt_astt pzero = mk_pzero(ebits, sbits);
   smt_astt ninf = mk_ninf(ebits, sbits);
@@ -800,7 +819,7 @@ smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_fpbv(
 
   // NaN -> NaN
   smt_astt c1 = mk_smt_fpbv_is_nan(x);
-  smt_astt v1 = mk_smt_fpbv_nan(to_ebits, to_sbits);
+  smt_astt v1 = mk_smt_fpbv_nan(false, to_ebits, to_sbits);
 
   // +0 -> +0
   smt_astt c2 = mk_is_pzero(x);
@@ -1144,7 +1163,8 @@ ieee_floatt fp_convt::get_fpbv(smt_astt a)
   return number;
 }
 
-void fp_convt::add_core(
+static void add_core(
+  smt_convt *ctx,
   unsigned sbits,
   unsigned ebits,
   smt_astt &c_sgn,
@@ -1234,7 +1254,7 @@ smt_astt fp_convt::mk_smt_fpbv_add(smt_astt x, smt_astt y, smt_astt rm)
   std::size_t ebits = x->sort->get_exponent_width();
   std::size_t sbits = x->sort->get_significand_width();
 
-  smt_astt nan = mk_smt_fpbv_nan(ebits, sbits);
+  smt_astt nan = mk_smt_fpbv_nan(false, ebits, sbits);
   smt_astt nzero = mk_nzero(ebits, sbits);
   smt_astt pzero = mk_pzero(ebits, sbits);
 
@@ -1294,6 +1314,7 @@ smt_astt fp_convt::mk_smt_fpbv_add(smt_astt x, smt_astt y, smt_astt rm)
 
   smt_astt res_sgn, res_sig, res_exp;
   add_core(
+    ctx,
     sbits,
     ebits,
     c_sgn,
@@ -1338,7 +1359,7 @@ smt_astt fp_convt::mk_smt_fpbv_mul(smt_astt x, smt_astt y, smt_astt rm)
   std::size_t ebits = x->sort->get_exponent_width();
   std::size_t sbits = x->sort->get_significand_width();
 
-  smt_astt nan = mk_smt_fpbv_nan(ebits, sbits);
+  smt_astt nan = mk_smt_fpbv_nan(false, ebits, sbits);
   smt_astt nzero = mk_nzero(ebits, sbits);
   smt_astt pzero = mk_pzero(ebits, sbits);
   smt_astt ninf = mk_ninf(ebits, sbits);
@@ -1440,7 +1461,7 @@ smt_astt fp_convt::mk_smt_fpbv_div(smt_astt x, smt_astt y, smt_astt rm)
   unsigned ebits = x->sort->get_exponent_width();
   unsigned sbits = x->sort->get_significand_width();
 
-  smt_astt nan = mk_smt_fpbv_nan(ebits, sbits);
+  smt_astt nan = mk_smt_fpbv_nan(false, ebits, sbits);
   smt_astt nzero = mk_nzero(ebits, sbits);
   smt_astt pzero = mk_pzero(ebits, sbits);
   smt_astt ninf = mk_ninf(ebits, sbits);
@@ -1735,11 +1756,7 @@ smt_astt fp_convt::mk_smt_fpbv_neg(smt_astt op)
   // Extract everything but the sign bit
   smt_astt ew_sw = extract_exp_sig(ctx, op);
   smt_astt sgn = extract_signbit(ctx, op);
-
-  smt_astt c = mk_smt_fpbv_is_nan(op);
-  smt_astt nsgn = ctx->mk_bvnot(sgn);
-  smt_astt r_sgn = ctx->mk_ite(c, sgn, nsgn);
-  return mk_from_bv_to_fp(ctx->mk_concat(r_sgn, ew_sw), op->sort);
+  return mk_from_bv_to_fp(ctx->mk_concat(ctx->mk_bvnot(sgn), ew_sw), op->sort);
 }
 
 void fp_convt::unpack(

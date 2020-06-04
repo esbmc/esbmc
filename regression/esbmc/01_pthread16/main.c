@@ -5,10 +5,10 @@ pthread_mutex_t mutex;
 
 void *t1(void *arg)
 {
-  g=1;
+  g = 1;
   pthread_mutex_lock(&mutex);
-  g=1;              
-  g=0;        
+  g = 1;
+  g = 0;
   pthread_mutex_unlock(&mutex);
   pthread_exit(NULL);
 }
@@ -16,8 +16,9 @@ void *t1(void *arg)
 void *t2(void *arg)
 {
   pthread_mutex_lock(&mutex);
-  // this holds due to the lock
-  assert(g==0);              
+  // this does not hold since g is set 1 
+  // in thread t1 before locking the mutex
+  assert(g == 0);
   pthread_mutex_unlock(&mutex);
   pthread_exit(NULL);
 }
@@ -25,7 +26,7 @@ void *t2(void *arg)
 void *t3(void *arg)
 {
   pthread_mutex_lock(&mutex);
-  assert(g==0);              
+  assert(g == 0);
   pthread_mutex_unlock(&mutex);
   pthread_exit(NULL);
 }

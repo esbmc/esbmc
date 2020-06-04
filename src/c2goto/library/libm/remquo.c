@@ -1,7 +1,7 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
-#include <math.h>
 #include <fenv.h>
+#include <math.h>
 
 #define remquo_def(type, name, isnan_func, isinf_func, llrint_func)                    \
   type name(type x, type y, int *quo)                                                  \
@@ -16,7 +16,7 @@
       return NAN;                                                                      \
                                                                                        \
     /* If x is +inf/-inf and y is not NaN, NaN is returned and FE_INVALID is raised */ \
-    if(__ESBMC_isinff(x))                                                              \
+    if(isinf_func(x))                                                                  \
       return NAN;                                                                      \
                                                                                        \
     /* If y is +inf/-inf, return x */                                                  \
@@ -48,8 +48,8 @@
     return name(x, y, quo);                                                            \
   }
 
-remquo_def(float, remquof, isnanf, isinff, llrintf);
+remquo_def(float, remquof, isnan, isinf, llrintf);
 remquo_def(double, remquo, isnan, isinf, llrint);
-remquo_def(long double, remquol, isnanl, isinfl, llrintl);
+remquo_def(long double, remquol, isnan, isinf, llrintl);
 
 #undef remquo_def

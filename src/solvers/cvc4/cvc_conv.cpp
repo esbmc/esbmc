@@ -20,12 +20,14 @@ cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
   : smt_convt(int_encoding, ns),
     array_iface(false, false),
     fp_convt(this),
+    to_bv_counter(0),
     em(),
     smt(&em),
     sym_tab()
 {
   // Already initialized stuff in the constructor list,
   smt.setOption("produce-models", true);
+  smt.setOption("produce-assertions", true);
 }
 
 smt_convt::resultt cvc_convt::dec_solve()
@@ -283,25 +285,37 @@ cvc_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
 smt_astt
 cvc_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
 {
-  smt_sortt to = mk_bv_sort(width);
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
+  const cvc_smt_ast *mrm =
+    to_solver_smt_ast<cvc_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
+  const cvc_smt_ast *mfrom = to_solver_smt_ast<cvc_smt_ast>(from);
+
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_UBV,
-      to_solver_smt_ast<cvc_smt_ast>(from)->a,
-      em.mkConst(CVC4::FloatingPointToUBV(width))),
-    to);
+      em.mkConst(CVC4::FloatingPointToUBV(width)),
+      mrm->a,
+      mfrom->a),
+    mk_bv_sort(width));
 }
 
 smt_astt
 cvc_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
 {
-  smt_sortt to = mk_bv_sort(width);
+  // Conversion from float to integers always truncate, so we assume
+  // the round mode to be toward zero
+  const cvc_smt_ast *mrm =
+    to_solver_smt_ast<cvc_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
+  const cvc_smt_ast *mfrom = to_solver_smt_ast<cvc_smt_ast>(from);
+
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_SBV,
-      to_solver_smt_ast<cvc_smt_ast>(from)->a,
-      em.mkConst(CVC4::FloatingPointToSBV(width))),
-    to);
+      em.mkConst(CVC4::FloatingPointToSBV(width)),
+      mrm->a,
+      mfrom->a),
+    mk_bv_sort(width));
 }
 
 smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
@@ -309,59 +323,80 @@ smt_astt cvc_convt::mk_smt_typecast_from_fpbv_to_fpbv(
   smt_sortt to,
   smt_astt rm)
 {
-  unsigned sw = to->get_significand_width() - 1;
+  unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_FP_FLOATINGPOINT,
+      em.mkConst(CVC4::FloatingPointToFPFloatingPoint(ew, sw)),
       to_solver_smt_ast<cvc_smt_ast>(rm)->a,
-      to_solver_smt_ast<cvc_smt_ast>(from)->a,
-      em.mkConst(CVC4::FloatingPointToFPFloatingPoint(ew, sw))),
+      to_solver_smt_ast<cvc_smt_ast>(from)->a),
     to);
 }
 
 smt_astt
 cvc_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
 {
-  unsigned sw = to->get_significand_width() - 1;
+  unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_FP_UNSIGNED_BITVECTOR,
+      em.mkConst(CVC4::FloatingPointToFPUnsignedBitVector(ew, sw)),
       to_solver_smt_ast<cvc_smt_ast>(rm)->a,
-      to_solver_smt_ast<cvc_smt_ast>(from)->a,
-      em.mkConst(CVC4::FloatingPointToFPUnsignedBitVector(ew, sw))),
+      to_solver_smt_ast<cvc_smt_ast>(from)->a),
     to);
 }
 
 smt_astt
 cvc_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
 {
-  unsigned sw = to->get_significand_width() - 1;
+  unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_FP_SIGNED_BITVECTOR,
+      em.mkConst(CVC4::FloatingPointToFPSignedBitVector(ew, sw)),
       to_solver_smt_ast<cvc_smt_ast>(rm)->a,
-      to_solver_smt_ast<cvc_smt_ast>(from)->a,
-      em.mkConst(CVC4::FloatingPointToFPSignedBitVector(ew, sw))),
+      to_solver_smt_ast<cvc_smt_ast>(from)->a),
     to);
 }
 
 smt_astt cvc_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 {
-  unsigned sw = to->get_significand_width() - 1;
+  unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
 
   return new_ast(
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_TO_FP_IEEE_BITVECTOR,
-      to_solver_smt_ast<cvc_smt_ast>(op)->a,
-      em.mkConst(CVC4::FloatingPointToFPIEEEBitVector(ew, sw))),
+      em.mkConst(CVC4::FloatingPointToFPIEEEBitVector(ew, sw)),
+      to_solver_smt_ast<cvc_smt_ast>(op)->a),
     to);
+}
+
+smt_astt cvc_convt::mk_from_fp_to_bv(smt_astt op)
+{
+  auto const *ca = to_solver_smt_ast<cvc_smt_ast>(op);
+
+  // Force NaN to always generate the same bv, otherwise, create a new variable
+  const std::string name =
+    (ca->a.getKind() == CVC4::kind::CONST_FLOATINGPOINT &&
+     ca->a.getConst<CVC4::FloatingPoint>().isNaN())
+      ? "__ESBMC_NaN"
+      : "__ESBMC_to_ieeebv" + std::to_string(to_bv_counter++);
+
+  smt_astt new_symbol =
+    mk_smt_symbol(name, mk_bv_sort(op->sort->get_data_width()));
+
+  // and constraint it to be the conversion of the fp, since
+  // (fp_matches_bv f bv) <-> (= f ((_ to_fp E S) bv))
+  assert_ast(mk_eq(op, mk_from_bv_to_fp(new_symbol, op->sort)));
+
+  return new_symbol;
 }
 
 smt_astt cvc_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
@@ -1011,13 +1046,18 @@ smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
     s);
 }
 
-smt_astt cvc_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
+smt_astt cvc_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
-  return new_ast(
+  smt_astt the_nan = new_ast(
     em.mkConst(CVC4::FloatingPoint::makeNaN(CVC4::FloatingPointSize(
       s->get_exponent_width(), s->get_significand_width()))),
     s);
+
+  if(sgn)
+    the_nan = fp_convt::mk_smt_fpbv_neg(the_nan);
+
+  return the_nan;
 }
 
 smt_astt cvc_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
@@ -1058,7 +1098,7 @@ smt_astt cvc_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv = CVC4::BitVector(w, (unsigned long int)theint.to_int64());
+  CVC4::BitVector bv = CVC4::BitVector(w, theint.to_uint64());
   CVC4::Expr e = em.mkConst(bv);
   return new_ast(e, s);
 }
@@ -1097,6 +1137,10 @@ smt_astt cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 
 smt_astt cvc_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
+  // If it's a floatbv, convert it to bv
+  if(a->sort->id == SMT_SORT_FPBV)
+    a = mk_from_fp_to_bv(a);
+
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
   CVC4::BitVectorExtract ext(high, low);
   CVC4::Expr ext2 = em.mkConst(ext);
@@ -1224,10 +1268,16 @@ smt_sortt cvc_convt::mk_fpbv_rm_sort()
 
 void cvc_convt::dump_smt()
 {
-  smt.printInstantiations(std::cout);
+  auto const &assertions = smt.getAssertions();
+  for(auto const &a : assertions)
+  {
+    a.printAst(std::cout, 0);
+    std::cout << std::flush;
+  }
 }
 
 void cvc_smt_ast::dump() const
 {
   a.printAst(std::cout, 0);
+  std::cout << std::flush;
 }

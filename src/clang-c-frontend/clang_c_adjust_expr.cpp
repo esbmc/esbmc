@@ -646,6 +646,40 @@ void clang_c_adjust::adjust_function_call_arguments(
   }
 }
 
+static inline bool
+compare_float_suffix(const irep_idt &identifier, const std::string name)
+{
+  return (identifier == name) || ((identifier == (name + "f"))) ||
+         ((identifier == (name + "d"))) || ((identifier == (name + "l")));
+}
+
+static inline bool
+compare_unscore_builtin(const irep_idt &identifier, const std::string name)
+{
+  // compare a given identifier with a set of possible names, e.g,
+  //
+  // compare_unscore_builtin(identifier, "isnan")
+  //
+  // will compare identifier to:
+  // isnan
+  // __isnan
+  // __isnanf
+  // __isnanl
+  // __isnand
+  // __builtin_isnan
+  // __builtin_isnanf
+  // __builtin_isnanl
+  // __builtin_isnand
+  const std::string builtin_name = "__builtin_" + name;
+  const std::string underscore_name = "__" + name;
+
+  return (identifier == name) ||
+         compare_float_suffix(identifier, builtin_name) ||
+         (identifier == builtin_name) ||
+         compare_float_suffix(identifier, underscore_name) ||
+         (identifier == underscore_name);
+}
+
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 {
   const exprt &f_op = expr.function();
@@ -695,45 +729,24 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       pointer_object_expr.operands() = expr.arguments();
       expr.swap(pointer_object_expr);
     }
-    else if(
-      identifier == CPROVER_PREFIX "isnanf" ||
-      identifier == CPROVER_PREFIX "isnand" ||
-      identifier == CPROVER_PREFIX "isnanld" || identifier == "__builtin_isnan")
+    else if(compare_unscore_builtin(identifier, "isnan"))
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "isnan expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt isnan_expr("isnan", bool_typet());
       isnan_expr.operands() = expr.arguments();
       expr.swap(isnan_expr);
     }
     else if(
-      identifier == CPROVER_PREFIX "isfinitef" ||
-      identifier == CPROVER_PREFIX "isfinited" ||
-      identifier == CPROVER_PREFIX "isfiniteld")
+      compare_float_suffix(identifier, "finite") ||
+      compare_unscore_builtin(identifier, "isfinite") ||
+      compare_unscore_builtin(identifier, "finite"))
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "isfinite expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt isfinite_expr("isfinite", bool_typet());
       isfinite_expr.operands() = expr.arguments();
       expr.swap(isfinite_expr);
     }
     else if(
-      identifier == CPROVER_PREFIX "inff" ||
-      identifier == CPROVER_PREFIX "inf" ||
-      identifier == CPROVER_PREFIX "infld" || identifier == "__builtin_inff" ||
-      identifier == "__builtin_inf" || identifier == "__builtin_infld" ||
-      identifier == "__builtin_huge_valf" ||
-      identifier == "__builtin_huge_val" || identifier == "__builtin_huge_vall")
+      compare_unscore_builtin(identifier, "inf") ||
+      compare_unscore_builtin(identifier, "huge_val"))
     {
       typet t = expr.type();
 
@@ -755,10 +768,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(infl_expr);
     }
     else if(
-      identifier == CPROVER_PREFIX "nanf" ||
-      identifier == CPROVER_PREFIX "nan" ||
-      identifier == CPROVER_PREFIX "nanld" || identifier == "__builtin_nanf" ||
-      identifier == "__builtin_nan" || identifier == "__builtin_nanl")
+      compare_float_suffix(identifier, "nan") ||
+      compare_unscore_builtin(identifier, "nan"))
     {
       typet t = expr.type();
 
@@ -778,79 +789,28 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(nan_expr);
     }
     else if(
-      identifier == CPROVER_PREFIX "abs" ||
-      identifier == CPROVER_PREFIX "labs" ||
-      identifier == CPROVER_PREFIX "llabs" ||
-      identifier == CPROVER_PREFIX "fabsd" ||
-      identifier == CPROVER_PREFIX "fabsf" ||
-      identifier == CPROVER_PREFIX "fabsld" || identifier == "__builtin_fabs" ||
-      identifier == "__builtin_fabsf")
+      identifier == "abs" || identifier == "labs" || identifier == "llabs" ||
+      compare_float_suffix(identifier, "fabs") ||
+      compare_unscore_builtin(identifier, "fabs"))
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "abs expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt abs_expr("abs", expr.type());
       abs_expr.operands() = expr.arguments();
       expr.swap(abs_expr);
     }
-    else if(
-      identifier == CPROVER_PREFIX "isinf" ||
-      identifier == CPROVER_PREFIX "isinff" ||
-      identifier == CPROVER_PREFIX "isinfd" ||
-      identifier == CPROVER_PREFIX "isinfld" ||
-      identifier == "__builtin_isinf" || identifier == "__builtin_isinff" ||
-      identifier == "__builtin_isinfd" || identifier == "__builtin_isinfld")
+    else if(compare_unscore_builtin(identifier, "isinf"))
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "isinf expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt isinf_expr("isinf", bool_typet());
       isinf_expr.operands() = expr.arguments();
       expr.swap(isinf_expr);
     }
-    else if(
-      identifier == CPROVER_PREFIX "isnormal" ||
-      identifier == CPROVER_PREFIX "isnormalf" ||
-      identifier == CPROVER_PREFIX "isnormald" ||
-      identifier == CPROVER_PREFIX "isnormalld" ||
-      identifier == "__builtin_isnormal" ||
-      identifier == "__builtin_isnormalf" ||
-      identifier == "__builtin_isnormald" ||
-      identifier == "__builtin_isnormalld")
+    else if(compare_unscore_builtin(identifier, "isnormal"))
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "finite expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt isnormal_expr("isnormal", bool_typet());
       isnormal_expr.operands() = expr.arguments();
       expr.swap(isnormal_expr);
     }
-    else if(
-      identifier == CPROVER_PREFIX "signf" ||
-      identifier == CPROVER_PREFIX "signd" ||
-      identifier == CPROVER_PREFIX "signld" ||
-      identifier == "__builtin_signbit" || identifier == "__builtin_signbitf" ||
-      identifier == "__builtin_signbitl")
+    else if(compare_unscore_builtin(identifier, "signbit"))
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "sign expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt sign_expr("signbit", int_type());
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
@@ -861,13 +821,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       identifier == "__builtin_popcountl" ||
       identifier == "__builtin_popcountll")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << identifier << " expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt popcount_expr("popcount", int_type());
       popcount_expr.operands() = expr.arguments();
       expr.swap(popcount_expr);
@@ -876,13 +829,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       identifier == "__builtin_bswap16" || identifier == "__builtin_bswap32" ||
       identifier == "__builtin_bswap64")
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << identifier << " expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt bswap_expr("bswap", expr.type());
       bswap_expr.operands() = expr.arguments();
       expr.swap(bswap_expr);
@@ -890,88 +836,35 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     else if(identifier == "__builtin_expect")
     {
       // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_expect expects two arguments" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt tmp = expr.arguments()[0];
       expr.swap(tmp);
     }
     else if(identifier == "__builtin_isgreater")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_isgreater expects two arguments" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op(">", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
-
       expr.swap(op);
     }
     else if(identifier == "__builtin_isgreaterequal")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_isgreaterequal expects two arguments"
-                  << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op(">=", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
-
       expr.swap(op);
     }
     else if(identifier == "__builtin_isless")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_isless expects two arguments" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op("<", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
-
       expr.swap(op);
     }
     else if(identifier == "__builtin_islessequal")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_islessequal expects two arguments" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op("<=", bool_typet());
       op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
-
       expr.swap(op);
     }
     else if(identifier == "__builtin_islessgreater")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_islessgreater expects two arguments"
-                  << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op1("<", bool_typet());
       op1.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
 
@@ -985,14 +878,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if(identifier == "__builtin_isunordered")
     {
-      // this is a gcc extension to provide branch prediction
-      if(expr.arguments().size() != 2)
-      {
-        std::cout << "__builtin_islessequal expects two arguments" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt op1("isnan", bool_typet());
       op1.copy_to_operands(expr.arguments()[0]);
 
@@ -1004,60 +889,72 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(op);
     }
-    else if(
-      identifier == CPROVER_PREFIX "nearbyintf" ||
-      identifier == CPROVER_PREFIX "nearbyintd" ||
-      identifier == CPROVER_PREFIX "nearbyintld")
+    else if(compare_float_suffix(identifier, "nearbyint"))
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "nearbyint expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt new_expr("nearbyint", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
-    else if(
-      identifier == CPROVER_PREFIX "fmaf" ||
-      identifier == CPROVER_PREFIX "fmad" ||
-      identifier == CPROVER_PREFIX "fmald")
+    else if(compare_float_suffix(identifier, "fma"))
     {
-      if(expr.arguments().size() != 3)
-      {
-        std::cout << "fma expects three operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt new_expr("ieee_fma", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
-    else if(identifier == CPROVER_PREFIX "floatbv_mode")
+    else if(identifier == "__builtin_isinf_sign")
     {
-      exprt new_expr;
-      if(config.ansi_c.use_fixed_for_float)
-        new_expr = false_exprt();
-      else
-        new_expr = true_exprt();
+      exprt isinf_expr("isinf", bool_typet());
+      isinf_expr.operands() = expr.arguments();
+
+      exprt sign_expr("signbit", int_type());
+      sign_expr.operands() = expr.arguments();
+
+      if_exprt new_expr(
+        isinf_expr,
+        if_exprt(
+          typecast_exprt(sign_expr, bool_typet()),
+          from_integer(-1, expr.type()),
+          from_integer(1, expr.type())),
+        from_integer(0, expr.type()));
+      expr.swap(new_expr);
+    }
+    else if(identifier == "__builtin_fpclassify")
+    {
+      // This gets 5 integers followed by a float or double.
+      // The five integers are the return values for the cases
+      // FP_NAN, FP_INFINITE, FP_NORMAL, FP_SUBNORMAL and FP_ZERO.
+      // gcc expects this to be able to produce compile-time constants.
+
+      const exprt &fp_value = expr.arguments()[5];
+
+      exprt isnan_expr("isnan", bool_typet());
+      isnan_expr.copy_to_operands(fp_value);
+
+      exprt isinf_expr("isinf", bool_typet());
+      isinf_expr.copy_to_operands(fp_value);
+
+      exprt isnormal_expr("isnormal", bool_typet());
+      isnormal_expr.copy_to_operands(fp_value);
+
+      const auto &arguments = expr.arguments();
+      if_exprt new_expr(
+        isnan_expr,
+        arguments[0],
+        if_exprt(
+          isinf_expr,
+          arguments[1],
+          if_exprt(
+            isnormal_expr,
+            arguments[2],
+            if_exprt(
+              equality_exprt(fp_value, gen_zero(fp_value.type())),
+              arguments[4],
+              arguments[3])))); // subnormal
 
       expr.swap(new_expr);
     }
-    else if(
-      identifier == CPROVER_PREFIX "sqrtf" ||
-      identifier == CPROVER_PREFIX "sqrtd" ||
-      identifier == CPROVER_PREFIX "sqrtld")
+    else if(compare_float_suffix(identifier, "sqrt"))
     {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "sqrt expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
       exprt new_expr("ieee_sqrt", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);

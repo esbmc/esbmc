@@ -70,26 +70,39 @@ public:
     return v == 0;
   }
 
+  bool is_negative() const
+  {
+    return v.is_negative();
+  }
+
   bool get_sign() const
   {
     return v.is_negative();
   }
+
+  // Never true
   bool is_NaN() const
   {
     return false;
-  } // Never true
+  }
+
+  // Never true
   bool is_infinity() const
   {
     return false;
-  } // Never true
+  }
+
+  // Always true
   bool is_finite() const
   {
     return true;
-  } // Always true
+  }
+
+  // Always true?
   bool is_normal() const
   {
     return true;
-  } // Always true?
+  }
 
   void negate();
 

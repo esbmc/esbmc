@@ -2928,7 +2928,7 @@ bool clang_c_convertert::has_bitfields(const typet &_type, typet *converted)
     return true; // Yes, and this is the fixed version
   }
 
-  if(type.id() != "struct")
+  if(type.id() != "struct" && type.id() != "union")
     return false; // Could have been a symbol of a union
 
   auto sutype = to_struct_union_type(type);

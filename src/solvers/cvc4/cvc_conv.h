@@ -93,7 +93,7 @@ public:
   smt_astt mk_smt_real(const std::string &str) override;
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
-  smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw) override;
+  smt_astt mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw) override;
   smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw) override;
   smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm) override;
   smt_astt
@@ -131,6 +131,7 @@ public:
   smt_astt mk_smt_fpbv_abs(smt_astt op) override;
   smt_astt mk_smt_fpbv_neg(smt_astt op) override;
   smt_astt mk_from_bv_to_fp(smt_astt op, smt_sortt to) override;
+  smt_astt mk_from_fp_to_bv(smt_astt op) override;
 
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_array_symbol(
@@ -150,6 +151,8 @@ public:
   void assert_ast(smt_astt a) override;
 
   void dump_smt() override;
+
+  unsigned int to_bv_counter;
 
   CVC4::ExprManager em;
   CVC4::SmtEngine smt;

@@ -40,6 +40,8 @@ const struct opt_templ esbmc_options[] = {
   // Frontend
   {'I', "", string, ""},
   {'D', "", string, ""},
+  {'W', "", string, ""},
+  {'f', "", string, ""},
   {0, "preprocess", switc, ""},
   {0, "no-inlining", switc, ""},
   {0, "full-inlining", switc, ""},
@@ -56,7 +58,6 @@ const struct opt_templ esbmc_options[] = {
   {0, "16", switc, ""},
   {0, "32", switc, ""},
   {0, "64", switc, ""},
-  {0, "unsigned-char", switc, ""},
   {0, "version", switc, ""},
   {0, "witness-output", string, ""},
   {0, "witness-producer", string, ""},

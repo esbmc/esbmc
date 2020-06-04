@@ -1,8 +1,8 @@
 /* Simple possible deadlock */
 #include <pthread.h>
 
-pthread_mutex_t m1;// = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t m2;// = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t m1;
+pthread_mutex_t m2;
 
 static void *t1(void *v)
 {
@@ -27,11 +27,11 @@ static void *t2(void *v)
 int main()
 {
   pthread_t a, b;
-	
+
   pthread_mutex_init(&m1, NULL);
   pthread_mutex_init(&m2, NULL);
 
-  pthread_create(&a, NULL, t1, NULL);	
+  pthread_create(&a, NULL, t1, NULL);
   pthread_create(&b, NULL, t2, NULL);
 
   pthread_join(a, NULL);
@@ -39,4 +39,3 @@ int main()
 
   return 0;
 }
-

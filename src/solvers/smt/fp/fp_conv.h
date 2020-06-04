@@ -32,7 +32,7 @@ public:
    *  @param ew Exponent width, in bits, of the bitvector to create.
    *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw);
 
   /** Create a (+/-)inf floating point bitvector
    *  @param sgn Whether this bitvector is negative or positive.
@@ -272,38 +272,6 @@ private:
   smt_astt mk_is_denormal(smt_astt op);
 
   smt_astt mk_to_bv(smt_astt from, bool is_signed, std::size_t width);
-
-  void add_core(
-    unsigned sbits,
-    unsigned ebits,
-    smt_astt &c_sgn,
-    smt_astt &c_sig,
-    smt_astt &c_exp,
-    smt_astt &d_sgn,
-    smt_astt &d_sig,
-    smt_astt &d_exp,
-    smt_astt &res_sgn,
-    smt_astt &res_sig,
-    smt_astt &res_exp);
-
-  BigInt power2(std::size_t n, bool negated)
-  {
-    BigInt b;
-    b.setPower2(n);
-    if(negated)
-      b.negate();
-    return b;
-  }
-
-  BigInt power2m1(std::size_t n, bool negated)
-  {
-    BigInt b;
-    b.setPower2(n);
-    b -= 1;
-    if(negated)
-      b.negate();
-    return b;
-  }
 };
 
 #endif /* SOLVERS_SMT_FP_CONV_H_ */
