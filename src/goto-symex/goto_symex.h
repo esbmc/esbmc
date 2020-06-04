@@ -187,7 +187,7 @@ protected:
    *  Perform interpretation of RETURN instruction.
    *  @param code return statement.
    */
-  void symex_return(expr2tc code);
+  void symex_return(const expr2tc &code);
 
   /**
    *  Interpret an OTHER instruction.
