@@ -1,0 +1,4 @@
+CORE
+main.c
+--64 --stack-limit 95 --no-return-value-opt
+^VERIFICATION FAILED$
