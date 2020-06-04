@@ -171,6 +171,7 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   smt_during_symex = ex.smt_during_symex;
   smt_thread_guard = ex.smt_thread_guard;
   stack_limit = ex.stack_limit;
+  no_return_value_opt = ex.no_return_value_opt;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
@@ -292,7 +293,7 @@ void execution_statet::symex_step(reachability_treet &art)
       expr2tc thecode = instruction.code, assign;
       if(make_return_assignment(assign, thecode))
         goto_symext::symex_assign(assign, true);
-      symex_return();
+      symex_return(thecode);
       analyze_assign(assign);
     }
     state.source.pc++;

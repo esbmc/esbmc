@@ -589,7 +589,7 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
   return false;
 }
 
-void goto_symext::symex_return()
+void goto_symext::symex_return(expr2tc code)
 {
   // we treat this like an unconditional
   // goto to the end of the function
@@ -599,6 +599,18 @@ void goto_symext::symex_return()
     cur_state->top().goto_state_map[cur_state->top().end_of_function];
 
   goto_state_list.emplace_back(*cur_state);
+
+  // check whether the stack limit and return
+  // value optimization have been activated.
+  if(stack_limit > 0 && no_return_value_opt)
+  {
+    code->Foreach_operand([this](expr2tc &e) {
+      // check whether the stack size has been reached.
+      claim(
+        (cur_state->top().process_stack_size(e, stack_limit)),
+        "Stack limit property was violated");
+    });
+  }
 
   // kill this one
   cur_state->guard.make_false();

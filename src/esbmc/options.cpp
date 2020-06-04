@@ -82,6 +82,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "slice-assumes", switc, ""},
   {0, "extended-try-analysis", switc, ""},
   {0, "skip-bmc", switc, ""},
+  {0, "no-return-value-opt", switc, ""},
 
   // IBMC
   {0, "incremental-bmc", switc, ""},

@@ -158,7 +158,7 @@ void goto_symext::symex_step(reachability_treet &art)
         goto_symext::symex_assign(assign);
       }
 
-      symex_return();
+      symex_return(thecode);
     }
 
     cur_state->source.pc++;

@@ -185,8 +185,9 @@ protected:
 
   /**
    *  Perform interpretation of RETURN instruction.
+   *  @param code return statement.
    */
-  void symex_return();
+  void symex_return(expr2tc code);
 
   /**
    *  Interpret an OTHER instruction.
@@ -789,6 +790,8 @@ protected:
   /** Flag to indicate if we are go into the unexpected flow. */
   bool inside_unexpected;
 
+  /** Disable return value optimization */
+  bool no_return_value_opt;
   /** Limit size for stack */
   unsigned long stack_limit;
   /** Depth limit, as given by the --depth option */
