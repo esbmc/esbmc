@@ -1,7 +1,7 @@
 Release Notes of the ESBMC model checker
 
 *** Version 6.3
-* Stack property support
+* Stack property verification support
 * ESBMC now supports Microsoft extensions
 * -f an -W flags are forwarded into clang
 * Float models refactoring, which enabled macOS CI.
