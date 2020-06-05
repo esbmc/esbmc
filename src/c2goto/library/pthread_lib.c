@@ -6,7 +6,7 @@ typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);
 unsigned int __ESBMC_spawn_thread(void (*)(void));
 
-__attribute__((annotate("__ESBMC_inf_size"))) const void *__ESBMC_thread_keys[];
+void *__ESBMC_thread_keys[4][10];
 __attribute__((annotate("__ESBMC_inf_size"))) void (
   *__ESBMC_thread_key_destructors[])(void *);
 unsigned long __ESBMC_next_thread_key = 0;
@@ -83,10 +83,10 @@ __ESBMC_HIDE:;
   // source: https://linux.die.net/man/3/pthread_key_create
   for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
-    const void *key = __ESBMC_thread_keys[i];
+    const void *key = __ESBMC_thread_keys[__ESBMC_get_thread_id()][i];
     if(__ESBMC_thread_key_destructors[i] && key)
     {
-      __ESBMC_thread_keys[i] = 0;
+      __ESBMC_thread_keys[__ESBMC_get_thread_id()][i] = 0;
       __ESBMC_thread_key_destructors[i](key);
     }
   }
@@ -525,7 +525,7 @@ __ESBMC_HIDE:;
     key != NULL,
     "In pthread_key_create, key parameter must be different than NULL.");
   // the value NULL shall be associated with the new key in all active threads
-  __ESBMC_thread_keys[__ESBMC_next_thread_key] = NULL;
+  __ESBMC_thread_keys[__ESBMC_get_thread_id()][__ESBMC_next_thread_key] = NULL;
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
@@ -542,6 +542,10 @@ __ESBMC_HIDE:;
     // keys per process {PTHREAD_KEYS_MAX} has been exceeded.
     result = EAGAIN;
   }
+
+  for(int i = 0; i < 4; i++)
+    for(int j = 0; j < 10; j++)
+      __ESBMC_thread_keys[i][j] = NULL;
   __ESBMC_atomic_end();
   return result;
 }
@@ -554,12 +558,12 @@ void *pthread_getspecific(pthread_key_t key)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  void *result;
+  void *result = NULL;
   if(key <= __ESBMC_next_thread_key)
   {
     // Return the thread-specific data value associated
     // with the given key.
-    result = __ESBMC_thread_keys[key];
+    result = __ESBMC_thread_keys[__ESBMC_get_thread_id()][key];
   }
   else if(key > __ESBMC_next_thread_key)
   {
@@ -594,7 +598,7 @@ __ESBMC_HIDE:;
   }
   else
   {
-    __ESBMC_thread_keys[key] = value;
+    __ESBMC_thread_keys[__ESBMC_get_thread_id()][key] = value;
     // If successful, then return zero;
     result = 0;
   }
