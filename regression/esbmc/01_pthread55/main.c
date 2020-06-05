@@ -57,7 +57,7 @@ int main()
   {
     exit(1);
   }
-  assert(r == 0);
+  assert(r == 0 || r == EINVAL);
 
   val = (long)pthread_getspecific(key);
   assert(val == 16);
