@@ -11,6 +11,7 @@
 
 void *worker(void *k)
 {
+
   pthread_key_t *key = k;
 
   long val = (long)pthread_getspecific(*key);
@@ -34,6 +35,7 @@ pthread_key_t key;
 int main()
 {
   int r = pthread_key_create(&key, NULL);
+
   if(r == ENOMEM)
   {
     exit(1);

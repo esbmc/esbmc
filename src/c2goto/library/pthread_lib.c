@@ -6,7 +6,6 @@ typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);
 unsigned int __ESBMC_spawn_thread(void (*)(void));
 
-void *__ESBMC_thread_keys[4][10];
 __attribute__((annotate("__ESBMC_inf_size"))) void (
   *__ESBMC_thread_key_destructors[])(void *);
 unsigned long __ESBMC_next_thread_key = 0;
@@ -50,6 +49,56 @@ pthread_t __ESBMC_get_thread_id(void);
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
 
+/************************** Linked List Implementation **************************/
+
+typedef struct thread_key
+{
+  void *thread;
+  void *key;
+  void *value;
+  struct list *next;
+} __ESBMC_thread_key;
+
+__ESBMC_thread_key *head = NULL;
+__ESBMC_thread_key *mylist;
+
+int insert_list(__ESBMC_thread_key *l, void *key, void *value)
+{
+  l = (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key));
+  if(l == NULL)
+    return -1;
+  if(head == NULL)
+  {
+    l->thread = __ESBMC_get_thread_id();
+    l->key = key;
+    l->value = value;
+    l->next = NULL;
+  }
+  else
+  {
+    l->thread = __ESBMC_get_thread_id();
+    l->key = key;
+    l->value = value;
+    l->next = head;
+  }
+  head = l;
+  return 0;
+}
+
+void *search_list(__ESBMC_thread_key *l, void *key)
+{
+  l = head;
+  while(l != NULL && l->thread != __ESBMC_get_thread_id())
+  {
+    l = l->next;
+  }
+
+  if(l == NULL)
+    return 0;
+  else
+    return l->value;
+}
+
 /************************** Thread creation and exit **************************/
 
 void pthread_start_main_hook(void)
@@ -83,10 +132,11 @@ __ESBMC_HIDE:;
   // source: https://linux.die.net/man/3/pthread_key_create
   for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
-    const void *key = __ESBMC_thread_keys[__ESBMC_get_thread_id()][i];
+    const void *key = search_list(mylist, i);
+    //__ESBMC_thread_keys[__ESBMC_get_thread_id()][i];
     if(__ESBMC_thread_key_destructors[i] && key)
     {
-      __ESBMC_thread_keys[__ESBMC_get_thread_id()][i] = 0;
+      insert_list(mylist, i, NULL);
       __ESBMC_thread_key_destructors[i](key);
     }
   }
@@ -525,11 +575,11 @@ __ESBMC_HIDE:;
     key != NULL,
     "In pthread_key_create, key parameter must be different than NULL.");
   // the value NULL shall be associated with the new key in all active threads
-  __ESBMC_thread_keys[__ESBMC_get_thread_id()][__ESBMC_next_thread_key] = NULL;
+  result = insert_list(mylist, __ESBMC_next_thread_key, NULL);
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
-  if(nondet_bool())
+  if(result < 0)
   {
     // Insufficient memory exists to create the key.
     result = ENOMEM;
@@ -542,10 +592,6 @@ __ESBMC_HIDE:;
     // keys per process {PTHREAD_KEYS_MAX} has been exceeded.
     result = EAGAIN;
   }
-
-  for(int i = 0; i < 4; i++)
-    for(int j = 0; j < 10; j++)
-      __ESBMC_thread_keys[i][j] = NULL;
   __ESBMC_atomic_end();
   return result;
 }
@@ -563,7 +609,8 @@ __ESBMC_HIDE:;
   {
     // Return the thread-specific data value associated
     // with the given key.
-    result = __ESBMC_thread_keys[__ESBMC_get_thread_id()][key];
+    mylist = head;
+    result = search_list(mylist, key);
   }
   else if(key > __ESBMC_next_thread_key)
   {
@@ -585,22 +632,17 @@ int pthread_setspecific(pthread_key_t key, const void *value)
 __ESBMC_HIDE:;
   int result;
   __ESBMC_atomic_begin();
-  if(nondet_bool())
+  result = insert_list(mylist, key, value);
+  if(result < 0)
   {
     // Insufficient memory exists to associate
     // the value with the key.
     result = ENOMEM;
   }
-  if(value == NULL)
+  else if(value == NULL)
   {
     // The key value is invalid.
     result = EINVAL;
-  }
-  else
-  {
-    __ESBMC_thread_keys[__ESBMC_get_thread_id()][key] = value;
-    // If successful, then return zero;
-    result = 0;
   }
   __ESBMC_atomic_end();
   return result;
