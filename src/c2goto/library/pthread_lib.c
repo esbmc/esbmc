@@ -62,7 +62,7 @@ typedef struct thread_key
 __ESBMC_thread_key *head = NULL;
 __ESBMC_thread_key *mylist;
 
-int insert_list(__ESBMC_thread_key *l, void *key, void *value)
+int insert_key_value(__ESBMC_thread_key *l, void *key, void *value)
 {
   l = (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key));
   if(l == NULL)
@@ -85,7 +85,7 @@ int insert_list(__ESBMC_thread_key *l, void *key, void *value)
   return 0;
 }
 
-void *search_list(__ESBMC_thread_key *l, void *key)
+void *search_key(__ESBMC_thread_key *l, void *key)
 {
   l = head;
   while(l != NULL && l->thread != __ESBMC_get_thread_id())
@@ -132,11 +132,11 @@ __ESBMC_HIDE:;
   // source: https://linux.die.net/man/3/pthread_key_create
   for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
-    const void *key = search_list(mylist, i);
+    const void *key = search_key(mylist, i);
     //__ESBMC_thread_keys[__ESBMC_get_thread_id()][i];
     if(__ESBMC_thread_key_destructors[i] && key)
     {
-      insert_list(mylist, i, NULL);
+      insert_key_value(mylist, i, NULL);
       __ESBMC_thread_key_destructors[i](key);
     }
   }
@@ -575,22 +575,25 @@ __ESBMC_HIDE:;
     key != NULL,
     "In pthread_key_create, key parameter must be different than NULL.");
   // the value NULL shall be associated with the new key in all active threads
-  result = insert_list(mylist, __ESBMC_next_thread_key, NULL);
+  result = insert_key_value(mylist, __ESBMC_next_thread_key, NULL);
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
   if(result < 0)
   {
-    // Insufficient memory exists to create the key.
-    result = ENOMEM;
-  }
-  else if(nondet_bool())
-  {
-    // The system lacked the necessary resources
-    // to create another thread-specific data key, or
-    // the system-imposed limit on the total number of
-    // keys per process {PTHREAD_KEYS_MAX} has been exceeded.
-    result = EAGAIN;
+    if(nondet_bool())
+    {
+      // Insufficient memory exists to create the key.
+      result = ENOMEM;
+    }
+    else
+    {
+      // The system lacked the necessary resources
+      // to create another thread-specific data key, or
+      // the system-imposed limit on the total number of
+      // keys per process {PTHREAD_KEYS_MAX} has been exceeded.
+      result = EAGAIN;
+    }
   }
   __ESBMC_atomic_end();
   return result;
@@ -610,7 +613,7 @@ __ESBMC_HIDE:;
     // Return the thread-specific data value associated
     // with the given key.
     mylist = head;
-    result = search_list(mylist, key);
+    result = search_key(mylist, key);
   }
   else if(key > __ESBMC_next_thread_key)
   {
@@ -632,7 +635,7 @@ int pthread_setspecific(pthread_key_t key, const void *value)
 __ESBMC_HIDE:;
   int result;
   __ESBMC_atomic_begin();
-  result = insert_list(mylist, key, value);
+  result = insert_key_value(mylist, key, value);
   if(result < 0)
   {
     // Insufficient memory exists to associate
