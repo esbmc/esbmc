@@ -7,7 +7,7 @@
 #include <pthread.h>
 #include "svc.h"
 
-void dtor(void *v)
+void destructor(void *v)
 {
   long val = (long)v;
   assert(val != 42); // triggered by destructor of workers's version of TLS
