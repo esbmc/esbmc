@@ -91,7 +91,9 @@ int delete_key(__ESBMC_thread_key *l)
 {
   __ESBMC_thread_key *tmp;
   if(head == NULL)
+  {
     return -1;
+  }
   tmp = head;
   if(head != l)
   {
