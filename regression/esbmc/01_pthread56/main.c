@@ -1,31 +1,34 @@
-#include <errno.h>
+/* Contributed by: Vladimír Štill, https://divine.fi.muni.cz
+   Description: A test case for pthread TLS. This test demonstartes that
+                destructors are called.
+*/
+
 #include <pthread.h>
-#include <assert.h>
-#include <stdlib.h>
+#include "svc.h"
 
-int main()
-{
-  pthread_key_t key;
-  int r = pthread_key_create(&key, NULL);
-  if(r == ENOMEM)
-  {
-    exit(1);
-  }
-  assert(r == 0);
-  pthread_t tid;
+void dtor( void *v ) {
+    long val = (long)v;
+    assert( val != 42 ); // triggered by destructor of workers's version of TLS
+}
 
-  long val = (long)pthread_getspecific(key);
-  assert(val == 0);
+void *worker( void *k ) {
+    pthread_key_t *key = k;
 
-  val = (long)pthread_getspecific(key);
-  assert(val == 0);
+    int r = pthread_setspecific( *key, (void *)42 );
+    assert( r == 0 );
+    return 0;
+}
 
-  r = pthread_setspecific(key, nondet_bool() ? (void *)16 : NULL);
-  if(r == ENOMEM)
-  {
-    exit(1);
-  }
-  assert(r == 0 || r == EINVAL);
+int main() {
+    pthread_key_t key;
+    int r = pthread_key_create( &key, &dtor );
+    assert( r == 0 );
 
-  return 0;
+    pthread_t tid;
+    pthread_create( &tid, NULL, worker, &key );
+
+    r = pthread_setspecific( key, (void *)16 );
+    assert( r == 0 );
+
+    pthread_join( tid, NULL );
 }
