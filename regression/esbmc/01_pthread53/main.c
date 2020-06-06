@@ -10,7 +10,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-void dtor(void *v)
+void destructor(void *v)
 {
   long val = (long)v;
   assert(val != 42);
