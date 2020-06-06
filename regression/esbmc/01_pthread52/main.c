@@ -5,9 +5,9 @@
  *              destructors are called.
 */
 
-#include <pthread.h>
 #include <assert.h>
 #include <errno.h>
+#include <pthread.h>
 #include <stdlib.h>
 
 void dtor(void *v)
