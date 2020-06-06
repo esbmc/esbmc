@@ -66,9 +66,7 @@ int insert_key_value(__ESBMC_thread_key *l, void *key, void *value)
 {
   l = (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key *));
   if(l == NULL)
-  {
     return -1;
-  }
   l->thread = __ESBMC_get_thread_id();
   l->key = key;
   l->value = value;
@@ -81,9 +79,7 @@ void *search_key(__ESBMC_thread_key *l)
 {
   l = head;
   while(l != NULL && l->thread != __ESBMC_get_thread_id())
-  {
     l = l->next;
-  }
   return ((l == NULL) ? 0 : l->value);
 }
 
@@ -91,22 +87,16 @@ int delete_key(__ESBMC_thread_key *l)
 {
   __ESBMC_thread_key *tmp;
   if(head == NULL)
-  {
     return -1;
-  }
   tmp = head;
   if(head != l)
   {
     while(tmp->next != NULL && tmp->next != l)
-    {
       tmp = tmp->next;
-    }
     tmp->next = l->next;
   }
   else if(l->next != NULL)
-  {
     head = l->next;
-  }
   free(l);
   return 0;
 }
