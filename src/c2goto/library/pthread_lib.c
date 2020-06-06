@@ -628,6 +628,8 @@ void *pthread_getspecific(pthread_key_t key)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+  // If no thread-specific data value is associated with key,
+  // then the value NULL shall be returned.
   void *result = NULL;
   if(key <= __ESBMC_next_thread_key)
   {
@@ -635,12 +637,6 @@ __ESBMC_HIDE:;
     // with the given key.
     mylist = head;
     result = search_key(mylist, key);
-  }
-  else if(key > __ESBMC_next_thread_key)
-  {
-    // If no thread-specific data value is associated with key,
-    // then the value NULL shall be returned.
-    result = NULL;
   }
   __ESBMC_atomic_end();
   // No errors are returned from pthread_getspecific().
