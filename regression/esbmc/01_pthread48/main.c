@@ -29,10 +29,9 @@ void *worker(void *k)
   return NULL;
 }
 
-pthread_key_t key;
-
 int main()
 {
+  pthread_key_t key;
   int r = pthread_key_create(&key, NULL);
 
   if(r == ENOMEM)
