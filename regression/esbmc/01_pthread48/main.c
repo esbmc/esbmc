@@ -4,14 +4,13 @@
  * Description: A test case for pthread TLS.
  */
 
+#include <assert.h>
 #include <errno.h>
 #include <pthread.h>
-#include <assert.h>
 #include <stdlib.h>
 
 void *worker(void *k)
 {
-
   pthread_key_t *key = k;
 
   long val = (long)pthread_getspecific(*key);

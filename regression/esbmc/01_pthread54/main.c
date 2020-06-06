@@ -4,9 +4,9 @@
  * Description: A test case for pthread TLS.
  */
 
+#include <assert.h>
 #include <errno.h>
 #include <pthread.h>
-#include <assert.h>
 #include <stdlib.h>
 
 void *worker(void *k)
