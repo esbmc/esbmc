@@ -64,28 +64,20 @@ __ESBMC_thread_key *mylist;
 
 int insert_key_value(__ESBMC_thread_key *l, void *key, void *value)
 {
-  l = (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key));
+  l = (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key *));
   if(l == NULL)
+  {
     return -1;
-  if(head == NULL)
-  {
-    l->thread = __ESBMC_get_thread_id();
-    l->key = key;
-    l->value = value;
-    l->next = NULL;
   }
-  else
-  {
-    l->thread = __ESBMC_get_thread_id();
-    l->key = key;
-    l->value = value;
-    l->next = head;
-  }
+  l->thread = __ESBMC_get_thread_id();
+  l->key = key;
+  l->value = value;
+  l->next = (head == NULL) ? NULL : head;
   head = l;
   return 0;
 }
 
-void *search_key(__ESBMC_thread_key *l, void *key)
+void *search_key(__ESBMC_thread_key *l)
 {
   l = head;
   while(l != NULL && l->thread != __ESBMC_get_thread_id())
@@ -150,7 +142,7 @@ __ESBMC_HIDE:;
   // source: https://linux.die.net/man/3/pthread_key_create
   for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
-    const void *key = search_key(mylist, i);
+    const void *key = search_key(mylist);
     if(__ESBMC_thread_key_destructors[i] && key)
     {
       delete_key(key);
@@ -632,7 +624,7 @@ __ESBMC_HIDE:;
     // Return the thread-specific data value associated
     // with the given key.
     mylist = head;
-    result = search_key(mylist, key);
+    result = search_key(mylist);
   }
   __ESBMC_atomic_end();
   // No errors are returned from pthread_getspecific().
