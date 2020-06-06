@@ -599,6 +599,7 @@ __ESBMC_HIDE:;
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
+  // check whether we have failed to insert the key into our list.
   if(result < 0)
   {
     if(nondet_bool())
