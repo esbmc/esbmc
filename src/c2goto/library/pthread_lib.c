@@ -102,16 +102,18 @@ void *search_key(__ESBMC_thread_key *l, void *key)
 int delete_key(__ESBMC_thread_key *l)
 {
   __ESBMC_thread_key *tmp;
+  if(head == NULL)
+    return -1;
   tmp = head;
   if(head != l)
   {
-    while(tmp->next != l)
+    while(tmp->next != NULL && tmp->next != l)
     {
       tmp = tmp->next;
     }
     tmp->next = l->next;
   }
-  else
+  else if(l->next != NULL)
   {
     head = l->next;
   }
