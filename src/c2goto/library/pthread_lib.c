@@ -591,12 +591,11 @@ int pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  int result = 0;
   __ESBMC_assert(
     key != NULL,
     "In pthread_key_create, key parameter must be different than NULL.");
   // the value NULL shall be associated with the new key in all active threads
-  result = insert_key_value(mylist, __ESBMC_next_thread_key, NULL);
+  int result = insert_key_value(mylist, __ESBMC_next_thread_key, NULL);
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
