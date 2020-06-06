@@ -28,7 +28,7 @@ void *worker(void *k)
 int main()
 {
   pthread_key_t key;
-  int r = pthread_key_create(&key, &dtor);
+  int r = pthread_key_create(&key, &destructor);
   if(r == ENOMEM)
   {
     exit(1);
