@@ -13,7 +13,7 @@
 void dtor(void *v)
 {
   long val = (long)v;
-  assert(val != 42); //this assertion must fail
+  assert(val != 42); /* this assertion must fail */
 }
 
 void *worker(void *k)
