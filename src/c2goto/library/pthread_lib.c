@@ -60,11 +60,11 @@ typedef struct thread_key
 } __ESBMC_thread_key;
 
 __ESBMC_thread_key *head = NULL;
-__ESBMC_thread_key *mylist;
 
-int insert_key_value(__ESBMC_thread_key *l, void *key, void *value)
+int insert_key_value(void *key, void *value)
 {
-  l = (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key *));
+  __ESBMC_thread_key *l =
+    (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key));
   if(l == NULL)
     return -1;
   l->thread = __ESBMC_get_thread_id();
@@ -77,7 +77,6 @@ int insert_key_value(__ESBMC_thread_key *l, void *key, void *value)
 
 void *search_key(__ESBMC_thread_key *l)
 {
-  l = head;
   while(l != NULL && l->thread != __ESBMC_get_thread_id())
     l = l->next;
   return ((l == NULL) ? 0 : l->value);
@@ -134,7 +133,7 @@ __ESBMC_HIDE:;
   // source: https://linux.die.net/man/3/pthread_key_create
   for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
-    const void *key = search_key(mylist);
+    const void *key = search_key(head);
     if(__ESBMC_thread_key_destructors[i] && key)
     {
       delete_key(key);
@@ -575,7 +574,7 @@ __ESBMC_HIDE:;
     key != NULL,
     "In pthread_key_create, key parameter must be different than NULL.");
   // the value NULL shall be associated with the new key in all active threads
-  int result = insert_key_value(mylist, __ESBMC_next_thread_key, NULL);
+  int result = insert_key_value(__ESBMC_next_thread_key, NULL);
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
@@ -615,8 +614,7 @@ __ESBMC_HIDE:;
   {
     // Return the thread-specific data value associated
     // with the given key.
-    mylist = head;
-    result = search_key(mylist);
+    result = search_key(head);
   }
   __ESBMC_atomic_end();
   // No errors are returned from pthread_getspecific().
@@ -632,7 +630,7 @@ int pthread_setspecific(pthread_key_t key, const void *value)
 __ESBMC_HIDE:;
   int result;
   __ESBMC_atomic_begin();
-  result = insert_key_value(mylist, key, value);
+  result = insert_key_value(key, value);
   if(result < 0)
   {
     // Insufficient memory exists to associate
