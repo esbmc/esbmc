@@ -99,6 +99,26 @@ void *search_key(__ESBMC_thread_key *l, void *key)
     return l->value;
 }
 
+int delete_key(__ESBMC_thread_key *l)
+{
+  __ESBMC_thread_key *tmp;
+  tmp = head;
+  if(head != l)
+  {
+    while(tmp->next != l)
+    {
+      tmp = tmp->next;
+    }
+    tmp->next = l->next;
+  }
+  else
+  {
+    head = l->next;
+  }
+  free(l);
+  return 0;
+}
+
 /************************** Thread creation and exit **************************/
 
 void pthread_start_main_hook(void)
@@ -133,10 +153,9 @@ __ESBMC_HIDE:;
   for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
     const void *key = search_key(mylist, i);
-    //__ESBMC_thread_keys[__ESBMC_get_thread_id()][i];
     if(__ESBMC_thread_key_destructors[i] && key)
     {
-      insert_key_value(mylist, i, NULL);
+      delete_key(key);
       __ESBMC_thread_key_destructors[i](key);
     }
   }
