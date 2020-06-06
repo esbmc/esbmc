@@ -92,11 +92,7 @@ void *search_key(__ESBMC_thread_key *l, void *key)
   {
     l = l->next;
   }
-
-  if(l == NULL)
-    return 0;
-  else
-    return l->value;
+  return ((l == NULL) ? 0 : l->value);
 }
 
 int delete_key(__ESBMC_thread_key *l)
