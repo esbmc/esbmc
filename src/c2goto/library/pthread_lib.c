@@ -303,6 +303,9 @@ PTHREAD_MUTEX_TRYLOCK_END:
 int pthread_mutex_destroy_check(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_assert(
+    __ESBMC_mutex_lock_field(*mutex) != 0, "attempt to destroy a locked mutex");
   // Attempting to destroy a locked mutex results in undefined behavior.
   __ESBMC_assert(
     __ESBMC_mutex_lock_field(*mutex) == 1, "attempt to destroy a locked mutex");
@@ -312,12 +315,17 @@ __ESBMC_HIDE:;
 
   // It shall be safe to destroy an initialized mutex that is unlocked
   __ESBMC_mutex_lock_field(*mutex) = -1;
+  __ESBMC_atomic_end();
+  return 0;
 }
 
 int pthread_mutex_destroy(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = -1;
+  __ESBMC_atomic_end();
+  return 0;
 }
 
 int pthread_rwlock_destroy(pthread_rwlock_t *lock)
