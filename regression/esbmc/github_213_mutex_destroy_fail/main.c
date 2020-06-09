@@ -98,7 +98,6 @@ void my_drv_cleanup(void)
 
 int main(void)
 {
-  int ret = my_drv_init();
   int probe_ret;
   struct my_data data;
   probe_ret = my_drv_probe(&data);
