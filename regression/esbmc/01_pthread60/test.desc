@@ -1,0 +1,4 @@
+CORE
+main.c
+--incremental-bmc --deadlock-check --context-bound 1
+^VERIFICATION FAILED$
