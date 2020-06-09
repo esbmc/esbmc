@@ -297,9 +297,21 @@ PTHREAD_MUTEX_TRYLOCK_END:
   return res;
 }
 
+// The pthread_mutex_destroy() function shall destroy
+// the mutex object referenced by mutex;
+// the mutex object becomes, in effect, uninitialized.
 int pthread_mutex_destroy(pthread_mutex_t *mutex)
 {
-  return 0;
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    __ESBMC_mutex_lock_field(*mutex) != 0,
+    "attempt to destroy an uninitialized mutex");
+  __ESBMC_assert(
+    __ESBMC_mutex_lock_field(*mutex) == 1, "attempt to destroy a locked mutex");
+  __ESBMC_assert(
+    __ESBMC_mutex_lock_field(*mutex) != -1,
+    "attempt to destroy a previously destroyed mutex");
+  __ESBMC_mutex_lock_field(*mutex) = -1;
 }
 
 int pthread_rwlock_destroy(pthread_rwlock_t *lock)
@@ -364,10 +376,20 @@ __ESBMC_HIDE:;
 
 /************************ condvar mainpulation routines ***********************/
 
-// this is currently unimplemented.
+// The pthread_cond_broadcast() function shall unblock
+// all threads currently blocked on the specified condition
+// variable cond.
 int pthread_cond_broadcast(pthread_cond_t *cond)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+#ifdef __APPLE__
+  *((unsigned *)cond) = (unsigned)0;
+#else
+  __ESBMC_cond_lock_field(*cond) = 0;
+#endif
+  __ESBMC_atomic_end();
+
   return 0;
 }
 
@@ -433,9 +455,10 @@ __ESBMC_HIDE:;
   // this helps detect.
   __ESBMC_blocked_threads_count++;
   // No more threads to run -> croak.
-  __ESBMC_assert(
-    __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
-    "Deadlocked state in pthread_mutex_lock");
+  if(assrt)
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_mutex_lock");
 
   __ESBMC_atomic_end();
 
