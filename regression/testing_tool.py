@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/ev python3
 
 import os.path
 import os
@@ -107,7 +107,7 @@ def _add_test(test_case: TestCase, executor):
     def test(self):
         stdout, stderr = executor.run(test_case)
         output_to_validate = stdout.decode() + stderr.decode()
-        error_message_prefix = "\nTEST: " + str(test_case.test_dir) + "\nEXPECTED TO FOUND: " + str(test_case.test_regex) + "\n\nPROGRAM OUTPUT\n"
+        error_message_prefix = "\nTEST: " + str(test_case.test_dir) + "\nEXPECTED TO FIND: " + str(test_case.test_regex) + "\n\nPROGRAM OUTPUT\n"
         error_message = output_to_validate + "\n\nARGUMENTS: " + str(test_case.generate_run_argument_list(executor.tool))
 
         matches_regex = True
