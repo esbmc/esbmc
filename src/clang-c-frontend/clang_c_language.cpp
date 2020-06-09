@@ -88,6 +88,8 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
     compiler_args.emplace_back(
       "-Dpthread_mutex_unlock=pthread_mutex_unlock_nocheck");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
+    compiler_args.emplace_back(
+      "-Dpthread_mutex_destroy=pthread_mutex_destroy_check");
   }
   else
   {

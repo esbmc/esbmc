@@ -300,12 +300,9 @@ PTHREAD_MUTEX_TRYLOCK_END:
 // The pthread_mutex_destroy() function shall destroy
 // the mutex object referenced by mutex;
 // the mutex object becomes, in effect, uninitialized.
-int pthread_mutex_destroy(pthread_mutex_t *mutex)
+int pthread_mutex_destroy_check(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
-  __ESBMC_assert(
-    __ESBMC_mutex_lock_field(*mutex) != 0,
-    "attempt to destroy an uninitialized mutex");
   // Attempting to destroy a locked mutex results in undefined behavior.
   __ESBMC_assert(
     __ESBMC_mutex_lock_field(*mutex) == 1, "attempt to destroy a locked mutex");
@@ -314,6 +311,12 @@ __ESBMC_HIDE:;
     "attempt to destroy a previously destroyed mutex");
 
   // It shall be safe to destroy an initialized mutex that is unlocked
+  __ESBMC_mutex_lock_field(*mutex) = -1;
+}
+
+int pthread_mutex_destroy(pthread_mutex_t *mutex)
+{
+__ESBMC_HIDE:;
   __ESBMC_mutex_lock_field(*mutex) = -1;
 }
 

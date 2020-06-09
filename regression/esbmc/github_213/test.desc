@@ -1,4 +1,4 @@
 CORE
 main.c
-
-^VERIFICATION FAILED$
+--no-div-by-zero-check --force-malloc-success --context-bound 7 --state-hashing -Dldv_assume=__ESBMC_assume --floatbv --unlimited-k-steps --z3 --incremental-bmc --32 --no-pointer-check --no-bounds-check --error-label ERROR --32
+^VERIFICATION SUCCESSFUL$
