@@ -1,3 +1,5 @@
+/* Extracted from https://github.com/sosy-lab/sv-benchmarks. */
+
 #include <pthread.h>
 
 void __VERIFIER_error( void );
