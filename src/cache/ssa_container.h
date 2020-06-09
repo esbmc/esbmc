@@ -72,8 +72,14 @@ public:
     expressions = other.expressions;
   }
 
+  virtual unsigned get_hits() const
+  {
+    return hits;
+  }
+
 protected:
   T expressions;
+  unsigned hits = 0;
 };
 
 template <class T>

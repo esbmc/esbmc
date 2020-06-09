@@ -80,15 +80,20 @@ bool ssa_set_container::check(const std::set<long> &items)
   //if(!filter.test_element(items))
   //  return false;
   if(cache.exists(items))
+  {
+    std::cout << "Got " << hits++ << " hits\n\n\n";
     return true;
+  }
   for(auto it : this->expressions)
   {
     if(it->is_subset_of(items))
     {
       cache.insert(items);
+      std::cout << "Got " << hits++ << " hits\n\n\n";
       return true;
     }
   }
+  std::cout << "No hits\n\n\n";
   return false;
 }
 

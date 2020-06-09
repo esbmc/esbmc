@@ -25,7 +25,12 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
   expr2tc &cond = step.cond;
 
   // First assert irep should begin with an implies
-  assert(cond->expr_id == expr2t::expr_ids::implies_id);
+  if(cond->expr_id != expr2t::expr_ids::implies_id)
+  {
+    cond->dump();
+    // TODO: Support NOT
+    return;
+  }
 
   std::shared_ptr<logic_2ops> implies;
   implies = std::dynamic_pointer_cast<logic_2ops>(cond);
