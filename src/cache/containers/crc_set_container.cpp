@@ -77,8 +77,8 @@ bool expr_set_container::is_subset_of(const std::set<long> &other)
 
 bool ssa_set_container::check(const std::set<long> &items)
 {
-  if(!filter.test_element(items))
-    return false;
+  //if(!filter.test_element(items))
+  //  return false;
   if(cache.exists(items))
     return true;
   for(auto it : this->expressions)
@@ -97,6 +97,12 @@ void ssa_set_container::add(const std::set<long> &items)
   filter.insert_element(items);
   cache.insert(items);
   this->expressions.insert(std::make_shared<expr_set_container>(items));
+}
+
+void ssa_set_container::clear_cache()
+{
+  filter.clear();
+  cache.clear();
 }
 
 ssa_container<ssa_container_type> text_file_crc_set_storage::load()

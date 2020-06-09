@@ -30,6 +30,7 @@ BOOST_AUTO_TEST_SUITE(green_storage_unordered_map)
 BOOST_AUTO_TEST_CASE(expression_true_saved_ok)
 {
   init_test_values();
+  ssa_set_container::clear_cache();
   expr2tc expr = equality_1_ordered();
   ssa_set_container storage;
 
@@ -42,6 +43,7 @@ BOOST_AUTO_TEST_CASE(expression_true_saved_ok)
 BOOST_AUTO_TEST_CASE(expression_default_ok)
 {
   init_test_values();
+  ssa_set_container::clear_cache();
   expr2tc expr = equality_1_ordered();
   ssa_set_container storage;
   crc_expr items;
@@ -52,6 +54,7 @@ BOOST_AUTO_TEST_CASE(expression_default_ok)
 BOOST_AUTO_TEST_CASE(expression_multiple_false_true_ok)
 {
   init_test_values();
+  ssa_set_container::clear_cache();
   expr2tc expr1 = equality_1();
   expr2tc expr2 = equality_2();
   ssa_set_container storage;
@@ -71,6 +74,7 @@ BOOST_AUTO_TEST_CASE(expression_multiple_false_true_ok)
 BOOST_AUTO_TEST_CASE(expression_manually_built_ok)
 {
   init_test_values();
+  ssa_set_container::clear_cache();
   // ((x + y) + -2) == 0
   expr2tc expr1 = equality_1_green_normal();
 
@@ -107,7 +111,7 @@ BOOST_AUTO_TEST_CASE(expression_manually_built_inner_expr)
    * 4. Check whether X > 0 is unknown
    * 5. Check whether (X < 0) AND (X>0) AND (X == 0) is UNSAT
   */
-
+  ssa_set_container::clear_cache();
   symbol2tc X = create_unsigned_32_symbol_expr("X");
   constant_int2tc zero = create_signed_32_value_expr(0);
 

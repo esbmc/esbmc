@@ -76,5 +76,10 @@ public:
     std::cout << "Found element in filter!\n";
     return true;
   }
+
+  void clear()
+  {
+    filter.reset();
+  }
 };
 #endif //ESBMC_BLOOM_FILTER_H

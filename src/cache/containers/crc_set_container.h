@@ -57,6 +57,12 @@ public:
 
   // Add expression into the container
   void add(const crc_expr &items);
+
+  /**
+   * Caching is intended to run on a normal esbmc flow, however it may
+   * be the case that this is used as a library such as testing
+   */
+  static void clear_cache();
 };
 
 /**

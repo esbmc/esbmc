@@ -9,13 +9,13 @@ void green_cache::canonize_expr(expr2tc &expr)
   if(apply_reordering)
   {
     expr_variable_reordering reordering(expr);
-    //reordering.run();
+    reordering.run();
   }
 
   if(apply_normalization)
   {
     expr_green_normal_form gnf(expr);
-    //gnf.run();
+    gnf.run();
   }
   // TODO: add variable renaming
 }

@@ -37,6 +37,14 @@ public:
   {
     cache.clear();
   }
+
+  /**
+   * Resets the cache
+   */
+  void clear()
+  {
+    cache.clear();
+  }
   /**
    * Insert element into cache
    * @param key key of the element
