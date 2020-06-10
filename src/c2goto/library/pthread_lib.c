@@ -9,10 +9,6 @@ typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);
 unsigned int __ESBMC_spawn_thread(void (*)(void));
 
-__attribute__((annotate("__ESBMC_inf_size"))) void (
-  *__ESBMC_thread_key_destructors[])(void *);
-pthread_key_t __ESBMC_next_thread_key = 0;
-
 struct __pthread_start_data
 {
   __ESBMC_thread_start_func_type func;
@@ -42,6 +38,11 @@ _Bool __ESBMC_pthread_thread_ended[1];
 
 __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
+
+__attribute__((annotate("__ESBMC_inf_size"))) void (
+  *__ESBMC_thread_key_destructors[])(void *);
+
+pthread_key_t __ESBMC_next_thread_key = 0;
 
 unsigned int __ESBMC_num_total_threads = 0;
 unsigned int __ESBMC_num_threads_running = 0;
@@ -141,7 +142,7 @@ __ESBMC_HIDE:;
     if(__ESBMC_thread_key_destructors[i] && l->key)
     {
       delete_key(l);
-      __ESBMC_thread_key_destructors[i]((void *)l->key);
+      __ESBMC_thread_key_destructors[i](&l->key);
     }
   }
   __ESBMC_atomic_end();
@@ -656,7 +657,7 @@ __ESBMC_HIDE:;
     // Return the thread-specific data value associated
     // with the given key.
     __ESBMC_thread_key *l = search_key(key);
-    result = l->value;
+    result = (void *)l->value;
   }
   __ESBMC_atomic_end();
   // No errors are returned from pthread_getspecific().
