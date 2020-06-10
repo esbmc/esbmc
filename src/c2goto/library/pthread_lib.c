@@ -2,6 +2,9 @@
 
 #include "../headers/pthreadtypes.hs"
 
+void *malloc(unsigned long size);
+void free(void *ptr);
+
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);
 unsigned int __ESBMC_spawn_thread(void (*)(void));
