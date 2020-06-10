@@ -2,7 +2,9 @@
 
 #include "../headers/pthreadtypes.hs"
 
-void *malloc(unsigned long size);
+#include <stddef.h>
+
+void *malloc(size_t size);
 void free(void *ptr);
 
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
@@ -39,8 +41,9 @@ _Bool __ESBMC_pthread_thread_ended[1];
 __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
 
-__attribute__((annotate("__ESBMC_inf_size"))) void (
-  *__ESBMC_thread_key_destructors[])(void *);
+void(
+  __attribute__((annotate("__ESBMC_inf_size"))) *
+  __ESBMC_thread_key_destructors[1])(void *);
 
 pthread_key_t __ESBMC_next_thread_key = 0;
 
