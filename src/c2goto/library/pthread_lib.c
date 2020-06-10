@@ -657,7 +657,7 @@ __ESBMC_HIDE:;
     // Return the thread-specific data value associated
     // with the given key.
     __ESBMC_thread_key *l = search_key(key);
-    result = (void *)l->value;
+    result = (l == NULL) ? NULL : (void *)l->value;
   }
   __ESBMC_atomic_end();
   // No errors are returned from pthread_getspecific().
