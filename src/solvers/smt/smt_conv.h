@@ -742,6 +742,7 @@ public:
    *  there's no other way to initialize a pointer array in C, AFAIK. */
   smt_astt pointer_array_of(const expr2tc &init_val, unsigned long array_width);
 
+  /* sign extension method for bit-vectors */
   int signedbv_extension(smt_astt &lhs, smt_astt &rhs);
 
   unsigned int

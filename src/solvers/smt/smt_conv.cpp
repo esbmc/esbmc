@@ -2944,10 +2944,6 @@ smt_astt smt_convt::mk_bvsge(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  std::cout << "[SMT_CONV.cpp] a->sort->get_data_width(): "
-            << a->sort->get_data_width() << std::endl;
-  std::cout << "[SMT_CONV.cpp] b->sort->get_data_width(): "
-            << b->sort->get_data_width() << std::endl;
   return mk_not(mk_bvslt(a, b));
 }
 
