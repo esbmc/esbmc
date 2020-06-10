@@ -55,8 +55,8 @@ typedef struct thread_key
 {
   pthread_t thread;
   pthread_key_t key;
-  void *value;
-  struct list *next;
+  const void *value;
+  struct thread_key *next;
 } __ESBMC_thread_key;
 
 __ESBMC_thread_key *head = NULL;
@@ -75,11 +75,12 @@ int insert_key_value(pthread_key_t key, const void *value)
   return 0;
 }
 
-void *search_key(__ESBMC_thread_key *l)
+__ESBMC_thread_key *search_key(pthread_key_t key)
 {
+  __ESBMC_thread_key *l = head;
   while(l != NULL && l->thread != __ESBMC_get_thread_id())
     l = l->next;
-  return ((l == NULL) ? 0 : l->value);
+  return ((l == NULL) ? 0 : l);
 }
 
 int delete_key(__ESBMC_thread_key *l)
@@ -133,11 +134,11 @@ __ESBMC_HIDE:;
   // source: https://linux.die.net/man/3/pthread_key_create
   for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
-    const void *key = search_key(head);
-    if(__ESBMC_thread_key_destructors[i] && key)
+    __ESBMC_thread_key *l = search_key(i);
+    if(__ESBMC_thread_key_destructors[i] && l->key)
     {
-      delete_key(key);
-      __ESBMC_thread_key_destructors[i](key);
+      delete_key(l);
+      __ESBMC_thread_key_destructors[i]((void *)l->key);
     }
   }
   __ESBMC_atomic_end();
@@ -651,7 +652,8 @@ __ESBMC_HIDE:;
   {
     // Return the thread-specific data value associated
     // with the given key.
-    result = search_key(head);
+    __ESBMC_thread_key *l = search_key(key);
+    result = l->value;
   }
   __ESBMC_atomic_end();
   // No errors are returned from pthread_getspecific().
