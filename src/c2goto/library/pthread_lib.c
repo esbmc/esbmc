@@ -8,7 +8,7 @@ unsigned int __ESBMC_spawn_thread(void (*)(void));
 
 __attribute__((annotate("__ESBMC_inf_size"))) void (
   *__ESBMC_thread_key_destructors[])(void *);
-unsigned long __ESBMC_next_thread_key = 0;
+pthread_key_t __ESBMC_next_thread_key = 0;
 
 struct __pthread_start_data
 {
@@ -54,14 +54,14 @@ void __ESBMC_really_atomic_end(void);
 typedef struct thread_key
 {
   pthread_t thread;
-  void *key;
+  pthread_key_t key;
   void *value;
   struct list *next;
 } __ESBMC_thread_key;
 
 __ESBMC_thread_key *head = NULL;
 
-int insert_key_value(void *key, void *value)
+int insert_key_value(pthread_key_t key, const void *value)
 {
   __ESBMC_thread_key *l =
     (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key));
