@@ -34,6 +34,16 @@ static std::string itos(int64_t i)
   return ss.str();
 }
 
+int smt_convt::signedbv_extension(smt_astt &lhs, smt_astt &rhs)
+{
+  int difference = lhs->sort->get_data_width() - rhs->sort->get_data_width();
+  if(difference > 0)
+    rhs = mk_sign_ext(rhs, difference);
+  else if(difference < 0)
+    lhs = mk_sign_ext(lhs, difference * (-1));
+  return difference;
+}
+
 unsigned int
 smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
 {
@@ -863,6 +873,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     else
     {
       assert(is_signedbv_type(lt.side_1) && is_signedbv_type(lt.side_2));
+      signedbv_extension(args[0], args[1]);
       a = mk_bvslt(args[0], args[1]);
     }
     break;
@@ -894,6 +905,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     else
     {
       assert(is_signedbv_type(lte.side_1) && is_signedbv_type(lte.side_2));
+      signedbv_extension(args[0], args[1]);
       a = mk_bvsle(args[0], args[1]);
     }
     break;
@@ -925,6 +937,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     else
     {
       assert(is_signedbv_type(gt.side_1) && is_signedbv_type(gt.side_2));
+      signedbv_extension(args[0], args[1]);
       a = mk_bvsgt(args[0], args[1]);
     }
     break;
@@ -956,6 +969,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     else
     {
       assert(is_signedbv_type(gte.side_1) && is_signedbv_type(gte.side_2));
+      signedbv_extension(args[0], args[1]);
       a = mk_bvsge(args[0], args[1]);
     }
     break;
@@ -2930,6 +2944,10 @@ smt_astt smt_convt::mk_bvsge(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
+  std::cout << "[SMT_CONV.cpp] a->sort->get_data_width(): "
+            << a->sort->get_data_width() << std::endl;
+  std::cout << "[SMT_CONV.cpp] b->sort->get_data_width(): "
+            << b->sort->get_data_width() << std::endl;
   return mk_not(mk_bvslt(a, b));
 }
 
