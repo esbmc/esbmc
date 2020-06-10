@@ -153,6 +153,8 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
   compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
   compiler_args.push_back("-D_SECURE__STRING_H_");
   compiler_args.push_back("-U__BLOCKS__");
+  compiler_args.push_back("-Wno-nullability-completeness");
+  compiler_args.push_back("-Wno-deprecated-register");
 #endif
 
   // Increase maximum bracket depth
