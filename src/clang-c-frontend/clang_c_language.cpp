@@ -284,13 +284,7 @@ unsigned __ESBMC_alloc_size[1];
 
 _Bool __ESBMC_is_little_endian();
 
-// float stuff
 int __ESBMC_rounding_mode = 0;
-_Bool __ESBMC_floatbv_mode();
-
-float __ESBMC_sqrtf(float);
-double __ESBMC_sqrtd(double);
-long double __ESBMC_sqrtld(long double);
 
 void *__ESBMC_memset(void *, int, unsigned int);
 
