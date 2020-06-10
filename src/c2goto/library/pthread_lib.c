@@ -53,7 +53,7 @@ void __ESBMC_really_atomic_end(void);
 
 typedef struct thread_key
 {
-  void *thread;
+  pthread_t thread;
   void *key;
   void *value;
   struct list *next;
