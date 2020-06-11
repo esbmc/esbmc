@@ -1194,7 +1194,6 @@ void dereferencet::construct_from_dyn_struct_offset(
   for(auto const &it : struct_type.members)
   {
     BigInt offs = member_offset(value->type, struct_type.member_names[i]);
-
     // Compute some kind of guard
     unsigned int field_size = it->get_width() / 8;
     // Round up to word size
@@ -1202,8 +1201,21 @@ void dereferencet::construct_from_dyn_struct_offset(
     field_size = (field_size + word_mask) & (~word_mask);
     expr2tc field_offs = gen_ulong(offs.to_uint64());
     expr2tc field_top = gen_ulong(offs.to_uint64() + field_size);
-    expr2tc lower_bound = greaterthanequal2tc(offset, field_offs);
-    expr2tc upper_bound = lessthan2tc(offset, field_top);
+    expr2tc lower_bound;
+    expr2tc upper_bound;
+    if(is_bv_type(offset))
+    {
+      // Offset can be safely cast into an unsigned.
+      typecast2tc offset_uint(
+        type_pool.get_uint(config.ansi_c.word_size), offset);
+      lower_bound = greaterthanequal2tc(offset_uint, field_offs);
+      upper_bound = lessthan2tc(offset_uint, field_top);
+    }
+    else
+    {
+      lower_bound = greaterthanequal2tc(offset, field_offs);
+      upper_bound = lessthan2tc(offset, field_top);
+    }
     expr2tc field_guard = and2tc(lower_bound, upper_bound);
 
     if(is_struct_type(it))
