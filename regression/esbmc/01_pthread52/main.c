@@ -30,11 +30,9 @@ void *worker(void *k)
   return 0;
 }
 
-pthread_key_t key;
-
 int main()
 {
-//  pthread_key_t key;
+  pthread_key_t key;
   int r = pthread_key_create(&key, &destructor);
   if(r == ENOMEM)
   {
@@ -44,6 +42,7 @@ int main()
 
   pthread_t tid;
   pthread_create(&tid, NULL, worker, &key);
+
   r = pthread_setspecific(key, (void *)16);
   if(r == ENOMEM)
   {
