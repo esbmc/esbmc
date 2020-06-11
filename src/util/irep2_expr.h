@@ -307,6 +307,20 @@ public:
     const expr2tc &s2)
     : expr2t(t, id), side_1(s1), side_2(s2)
   {
+    if(is_pointer_type(s1) && is_pointer_type(s2))
+    {
+      assert(s1->type->get_width() == s2->type->get_width());
+    }
+    else
+    {
+      try
+      {
+        assert(s1->type == s2->type);
+      }
+      catch(array_type2t::inf_sized_array_excp *e)
+      {
+      }
+    }
   }
   relation_data(const relation_data &ref) = default;
 
@@ -456,6 +470,7 @@ public:
     const expr2tc &v2)
     : arith_ops(t, id), side_1(v1), side_2(v2)
   {
+    assert(v1->type == v2->type);
   }
   arith_2ops(const arith_2ops &ref) = default;
 
@@ -506,6 +521,7 @@ public:
     const expr2tc &rm)
     : arith_ops(t, id), rounding_mode(rm), side_1(v1), side_2(v2)
   {
+    assert(v1->type == v2->type);
   }
   ieee_arith_2ops(const ieee_arith_2ops &ref) = default;
 
@@ -539,6 +555,8 @@ public:
     const expr2tc &rm)
     : arith_ops(t, id), rounding_mode(rm), value_1(v1), value_2(v2), value_3(v3)
   {
+    assert(v1->type->get_width() == v2->type->get_width());
+    assert(v2->type->get_width() == v3->type->get_width());
   }
   ieee_arith_3ops(const ieee_arith_3ops &ref) = default;
 
