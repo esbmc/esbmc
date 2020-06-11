@@ -142,10 +142,10 @@ __ESBMC_HIDE:;
   for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
     __ESBMC_thread_key *l = search_key(i);
-    if(__ESBMC_thread_key_destructors[i] && l->key)
+    if(__ESBMC_thread_key_destructors[i])
     {
+      __ESBMC_thread_key_destructors[i](&l->value);
       delete_key(l);
-      __ESBMC_thread_key_destructors[i](&l->key);
     }
   }
   __ESBMC_atomic_end();
