@@ -174,12 +174,6 @@ inline expr2tc gen_false_expr()
   return c;
 }
 
-inline expr2tc gen_ulong(unsigned long val)
-{
-  constant_int2tc v(type_pool.get_uint(config.ansi_c.word_size), BigInt(val));
-  return v;
-}
-
 inline const type2tc &get_uint8_type()
 {
   return type_pool.get_uint8();

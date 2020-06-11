@@ -217,7 +217,8 @@ smt_astt smt_tuple_node_flattener::tuple_array_of(
   unsigned long array_size)
 {
   uint64_t elems = 1ULL << array_size;
-  array_type2tc array_type(init_val->type, gen_ulong(elems), false);
+  array_type2tc array_type(
+    init_val->type, constant_int2tc(uint_type2(), elems), false);
   smt_sortt array_sort = new smt_sort(
     SMT_SORT_ARRAY,
     array_type,

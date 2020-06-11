@@ -160,7 +160,7 @@ void smt_convt::smt_post_init()
       power_array_data.push_back(constant_int2tc(powarr_elemt, BigInt(pow)));
 
     type2tc power_array_type(
-      new array_type2t(powarr_elemt, gen_ulong(64), false));
+      new array_type2t(powarr_elemt, constant_int2tc(uint_type2(), 64), false));
 
     constant_array2tc power_array(power_array_type, power_array_data);
     int_shift_op_array = convert_ast(power_array);

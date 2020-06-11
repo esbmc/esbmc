@@ -456,8 +456,8 @@ void goto_convert_functionst::fix_union_type(typet &type, bool is_pointer)
     type2tc new_type;
     migrate_type(type, new_type);
     auto size = type_byte_size(new_type);
-    new_type = type2tc(
-      new array_type2t(get_uint8_type(), gen_ulong(size.to_uint64()), false));
+    new_type = type2tc(new array_type2t(
+      get_uint8_type(), constant_int2tc(uint_type2(), BigInt(size)), false));
     type = migrate_type_back(new_type);
     return;
   }
@@ -491,8 +491,8 @@ void goto_convert_functionst::fix_union_expr(exprt &expr)
       migrate_expr(expr.op0(), dataobj);
       type2tc union_type = dataobj->type;
       auto size = type_byte_size(union_type);
-      type2tc array_type = type2tc(
-        new array_type2t(get_uint8_type(), gen_ulong(size.to_uint64()), false));
+      type2tc array_type = type2tc(new array_type2t(
+        get_uint8_type(), constant_int2tc(uint_type2(), BigInt(size)), false));
       type2tc union_pointer(new pointer_type2t(union_type));
 
       address_of2tc addrof(array_type, dataobj);

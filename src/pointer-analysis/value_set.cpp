@@ -120,9 +120,9 @@ expr2tc value_sett::to_expr(object_mapt::const_iterator it) const
 
   expr2tc offs;
   if(it->second.offset_is_set)
-    offs = constant_int2tc(index_type2(), it->second.offset);
+    offs = constant_int2tc(uint_type2(), it->second.offset);
   else
-    offs = unknown2tc(index_type2());
+    offs = unknown2tc(uint_type2());
 
   expr2tc obj = object_descriptor2tc(
     object->type, object, offs, it->second.offset_alignment);
@@ -346,7 +346,7 @@ void value_sett::get_value_set_rec(
       assert(suffix == "");
       const type2tc &dynamic_type = side.alloctype;
 
-      expr2tc locnum = gen_ulong(location_number);
+      expr2tc locnum = constant_int2tc(uint_type2(), location_number);
       dynamic_object2tc dynobj(dynamic_type, locnum, false, false);
 
       insert(dest, dynobj, BigInt(0));
@@ -359,7 +359,7 @@ void value_sett::get_value_set_rec(
       assert(suffix == "");
       assert(is_pointer_type(side.type));
 
-      expr2tc locnum = gen_ulong(location_number);
+      expr2tc locnum = constant_int2tc(uint_type2(), location_number);
 
       const pointer_type2t &ptr = to_pointer_type(side.type);
 
@@ -988,7 +988,7 @@ void value_sett::assign(
   else if(is_array_type(lhs_type))
   {
     const array_type2t &arr_type = to_array_type(lhs_type);
-    unknown2tc unknown(index_type2());
+    unknown2tc unknown(uint_type2());
     index2tc lhs_index(arr_type.subtype, lhs, unknown);
 
     if(is_unknown2t(rhs) || is_invalid2t(rhs))
@@ -1017,7 +1017,7 @@ void value_sett::assign(
       {
         const with2t &with = to_with2t(rhs);
 
-        unknown2tc unknown(index_type2());
+        unknown2tc unknown(uint_type2());
         index2tc idx(arr_type.subtype, with.source_value, unknown);
 
         assign(lhs_index, idx, add_to_sets);
@@ -1025,7 +1025,7 @@ void value_sett::assign(
       }
       else
       {
-        unknown2tc unknown(index_type2());
+        unknown2tc unknown(uint_type2());
         index2tc rhs_idx(arr_type.subtype, rhs, unknown);
         assign(lhs_index, rhs_idx, true);
       }

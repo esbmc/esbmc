@@ -692,7 +692,8 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
     for(unsigned int i = 0; i < intref.value.to_uint64(); i++)
     {
-      index2tc idx(arraytype.subtype, new_expr, gen_ulong(i));
+      index2tc idx(
+        arraytype.subtype, new_expr, constant_int2tc(uint_type2(), i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
     }
   }
@@ -723,7 +724,7 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     // Produce N bytes
     for(unsigned int i = 0; i < size.to_uint64(); i++)
     {
-      index2tc idx(get_uint8_type(), cast, gen_ulong(i));
+      index2tc idx(get_uint8_type(), cast, constant_int2tc(uint_type2(), i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
     }
   }
@@ -736,7 +737,10 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     for(unsigned int i = 0; i < size.to_uint64(); i++)
     {
       byte_extract2tc ext(
-        get_uint8_type(), new_expr, gen_ulong(i), is_big_endian);
+        get_uint8_type(),
+        new_expr,
+        constant_int2tc(uint_type2(), i),
+        is_big_endian);
       bytes.push_back(ext);
     }
   }
@@ -768,7 +772,7 @@ static expr2tc flatten_union(const exprt &expr)
   while(byte_array.size() < full_size.to_uint64())
     byte_array.push_back(abyte);
 
-  expr2tc size = gen_ulong(byte_array.size());
+  expr2tc size = constant_int2tc(uint_type2(), byte_array.size());
   type2tc arraytype(new array_type2t(get_uint8_type(), size, false));
   constant_array2tc arr(arraytype, byte_array);
   return arr;

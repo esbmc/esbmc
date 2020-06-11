@@ -559,7 +559,8 @@ void goto_symext::symex_assign_concat(
   std::list<expr2tc> extracts;
   for(unsigned int i = 0; i < operand_list.size(); i++)
   {
-    byte_extract2tc byte(get_uint_type(8), rhs, gen_ulong(i), is_big_endian);
+    byte_extract2tc byte(
+      get_uint_type(8), rhs, constant_int2tc(uint_type2(), i), is_big_endian);
     extracts.push_back(byte);
   }
 
