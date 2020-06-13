@@ -1194,6 +1194,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   for(auto const &it : struct_type.members)
   {
     BigInt offs = member_offset(value->type, struct_type.member_names[i]);
+
     // Compute some kind of guard
     unsigned int field_size = it->get_width() / 8;
     // Round up to word size
@@ -1203,7 +1204,6 @@ void dereferencet::construct_from_dyn_struct_offset(
     expr2tc field_top = constant_int2tc(offset->type, offs + field_size);
     expr2tc lower_bound = greaterthanequal2tc(offset, field_offs);
     expr2tc upper_bound = lessthan2tc(offset, field_top);
-
     expr2tc field_guard = and2tc(lower_bound, upper_bound);
 
     if(is_struct_type(it))
