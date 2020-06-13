@@ -1200,10 +1200,11 @@ void dereferencet::construct_from_dyn_struct_offset(
     // Round up to word size
     unsigned int word_mask = (config.ansi_c.word_size / 8) - 1;
     field_size = (field_size + word_mask) & (~word_mask);
-    expr2tc field_offs = gen_ulong(offs.to_uint64());
-    expr2tc field_top = gen_ulong(offs.to_uint64() + field_size);
+    expr2tc field_offs = constant_int2tc(offset->type, offs);
+    expr2tc field_top = constant_int2tc(offset->type, offs + field_size);
     expr2tc lower_bound = greaterthanequal2tc(offset, field_offs);
     expr2tc upper_bound = lessthan2tc(offset, field_top);
+
     expr2tc field_guard = and2tc(lower_bound, upper_bound);
 
     if(is_struct_type(it))
@@ -2013,7 +2014,7 @@ void dereferencet::check_code_access(
 
     // Only other constraint is that the offset has to be zero; there are no
     // other rules about what code objects look like.
-    notequal2tc neq(offset, gen_ulong(0));
+    notequal2tc neq(offset, gen_zero(offset->type));
     guardt tmp_guard = guard;
     tmp_guard.add(neq);
     dereference_failure(
@@ -2072,12 +2073,12 @@ void dereferencet::check_alignment(
   {
     expr2tc align = gen_ulong(minwidth);
     modulus2tc moded(align->type, offset, align);
-    neq = notequal2tc(moded, gen_ulong(0));
+    neq = notequal2tc(moded, gen_zero(moded->type));
   }
   else
   {
     bitand2tc anded(mask_expr->type, mask_expr, offset);
-    neq = notequal2tc(anded, gen_ulong(0));
+    neq = notequal2tc(anded, gen_zero(anded->type));
   }
 
   guardt tmp_guard2 = guard;
