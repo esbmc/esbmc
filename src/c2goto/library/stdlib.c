@@ -140,3 +140,13 @@ size_t strlcat(char *dst, const char *src, size_t siz)
 
   return (dlen + (s - src)); /* count does not include NUL */
 }
+
+
+
+int rand (void)
+{
+    __ESBMC_HIDE:;
+    unsigned int seed=nondet_uint();
+    __ESBMC_assume(seed>=0 && seed<=RAND_MAX);
+    return seed;
+}
