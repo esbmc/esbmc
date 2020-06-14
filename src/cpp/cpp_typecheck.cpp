@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_convert_type.h>
 #include <cpp/cpp_declarator.h>
 #include <cpp/cpp_typecheck.h>
-#include <cpp/expr2cpp.h>
+#include <clang-cpp-frontend/expr2cpp.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>

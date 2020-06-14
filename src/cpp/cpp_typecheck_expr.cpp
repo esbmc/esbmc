@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_exception_id.h>
 #include <cpp/cpp_type2name.h>
 #include <cpp/cpp_typecheck.h>
-#include <cpp/expr2cpp.h>
+#include <clang-cpp-frontend/expr2cpp.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
 #include <util/c_sizeof.h>
