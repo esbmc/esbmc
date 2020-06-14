@@ -1,13 +1,13 @@
 /*******************************************************************\
 
-Module: C++ Language Module
+Module: Clang C++ Language Module
 
 Author:
 
 \*******************************************************************/
 
-#ifndef CPROVER_CPP_LANGUAGE_H
-#define CPROVER_CPP_LANGUAGE_H
+#ifndef CLANG_CPP_FRONTEND_CLANG_CPP_LANGUAGE_H_
+#define CLANG_CPP_FRONTEND_CLANG_CPP_LANGUAGE_H_
 
 #include <clang-c-frontend/clang_c_language.h>
 
@@ -27,9 +27,32 @@ public:
     return new clang_cpp_languaget;
   }
 
+  bool typecheck(
+    contextt &context,
+    const std::string &module,
+    message_handlert &message_handler) override;
+
+  // conversion from expression into string
+  bool from_expr(
+    const exprt &expr,
+    std::string &code,
+    const namespacet &ns,
+    bool fullname = false) override;
+
+  // conversion from type into string
+  bool from_type(
+    const typet &type,
+    std::string &code,
+    const namespacet &ns,
+    bool fullname = false) override;
+
   // constructor, destructor
   ~clang_cpp_languaget() override = default;
   clang_cpp_languaget();
+
+protected:
+  std::string internal_additions() override;
+  void force_file_type() override;
 };
 
 languaget *new_clang_cpp_language();

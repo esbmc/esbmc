@@ -1,8 +1,8 @@
 /*******************************************************************\
 
-Module: C++ Language Module
+Module: Clang C Language Module
 
-Author: Daniel Kroening, kroening@cs.cmu.edu
+Author:
 
 \*******************************************************************/
 
@@ -69,7 +69,8 @@ public:
   clang_c_languaget();
 
 protected:
-  std::string internal_additions();
+  virtual std::string internal_additions();
+  virtual void force_file_type();
 
   void dump_clang_headers(const std::string &tmp_dir);
   void build_compiler_args(const std::string &&tmp_dir);
