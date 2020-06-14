@@ -160,18 +160,21 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
 
-  // Force clang see all files as .c
-  // This forces the preprocessor to be called even in preprocessed files
-  // which allow us to perform transformations using -D
-  compiler_args.emplace_back("-x");
-  compiler_args.emplace_back("c");
-
   // Add -Wunknown-attributes, preprocessed files with GCC generate a bunch
   // of __leaf__ attributes that we don't care about
   compiler_args.emplace_back("-Wno-unknown-attributes");
 
   // Option to avoid creating a linking command
   compiler_args.emplace_back("-fsyntax-only");
+}
+
+void clang_c_languaget::force_file_type()
+{
+  // Force clang see all files as .c
+  // This forces the preprocessor to be called even in preprocessed files
+  // which allow us to perform transformations using -D
+  compiler_args.push_back("-x");
+  compiler_args.push_back("c");
 }
 
 bool clang_c_languaget::parse(
@@ -183,6 +186,9 @@ bool clang_c_languaget::parse(
   std::ostringstream o_preprocessed;
   if(preprocess(path, o_preprocessed, message_handler))
     return true;
+
+  // Force the file type, .c for the C frontend and .cpp for the C++ one
+  force_file_type();
 
   // Get compiler arguments and add the file path
   std::vector<std::string> new_compiler_args(compiler_args);
