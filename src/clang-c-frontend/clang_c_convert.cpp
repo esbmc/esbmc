@@ -2699,7 +2699,7 @@ void clang_c_convertert::get_start_location_from_stmt(
   std::string function_name;
 
   if(current_functionDecl)
-    function_name = current_functionDecl->getName().str();
+    function_name = ::get_decl_name(*current_functionDecl);
 
   clang::PresumedLoc PLoc;
   get_presumed_location(stmt.getSourceRange().getBegin(), PLoc);
@@ -2716,7 +2716,7 @@ void clang_c_convertert::get_final_location_from_stmt(
   std::string function_name;
 
   if(current_functionDecl)
-    function_name = current_functionDecl->getName().str();
+    function_name = ::get_decl_name(*current_functionDecl);
 
   clang::PresumedLoc PLoc;
   get_presumed_location(stmt.getSourceRange().getEnd(), PLoc);
@@ -2737,7 +2737,7 @@ void clang_c_convertert::get_location_from_decl(
     const clang::FunctionDecl &funcd =
       static_cast<const clang::FunctionDecl &>(*decl.getDeclContext());
 
-    function_name = funcd.getName().str();
+    function_name = ::get_decl_name(funcd);
   }
 
   clang::PresumedLoc PLoc;
