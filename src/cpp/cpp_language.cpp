@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_language.h>
 #include <cpp/cpp_parser.h>
 #include <cpp/cpp_typecheck.h>
-#include <cpp/expr2cpp.h>
+#include <clang-cpp-frontend/expr2cpp.h>
 #include <cstring>
 #include <fstream>
 #include <sstream>
