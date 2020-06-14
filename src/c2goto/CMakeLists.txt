@@ -2,7 +2,7 @@ add_executable(c2goto c2goto.cpp)
 target_include_directories(c2goto
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_link_libraries(c2goto ansicfrontend clangcfrontend cppfrontend gotoprograms langapi  cprover_blank_library "${Boost_LIBRARIES}")
+target_link_libraries(c2goto ansicfrontend clangcfrontend cppfrontend clangcppfrontend gotoprograms langapi  cprover_blank_library "${Boost_LIBRARIES}")
 
 add_subdirectory (headers)
 

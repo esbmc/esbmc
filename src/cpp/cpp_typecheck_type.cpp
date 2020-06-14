@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/c_qualifiers.h>
 #include <cpp/cpp_convert_type.h>
 #include <cpp/cpp_typecheck.h>
-#include <cpp/expr2cpp.h>
+#include <clang-cpp-frontend/expr2cpp.h>
 #include <util/location.h>
 
 void cpp_typecheckt::typecheck_type(typet &type)
