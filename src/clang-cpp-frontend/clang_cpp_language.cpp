@@ -7,6 +7,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <util/c_link.h>
+#include <c2goto/cprover_library.h>
+#include <clang-c-frontend/clang_c_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
@@ -61,6 +63,14 @@ bool clang_cpp_languaget::typecheck(
     return true;
 
   return false;
+}
+
+bool clang_cpp_languaget::final(
+  contextt &context,
+  message_handlert &message_handler)
+{
+  add_cprover_library(context, message_handler);
+  return clang_main(context, "c:@F@main#", message_handler);
 }
 
 bool clang_cpp_languaget::from_expr(
