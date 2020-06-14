@@ -17,20 +17,17 @@ Author:
 class clang_cpp_languaget : public clang_c_languaget
 {
 public:
-  std::string id() const override
-  {
-    return "cpp";
-  }
-
-  languaget *new_language() override
-  {
-    return new clang_cpp_languaget;
-  }
+  bool final(contextt &context, message_handlert &message_handler) override;
 
   bool typecheck(
     contextt &context,
     const std::string &module,
     message_handlert &message_handler) override;
+
+  std::string id() const override
+  {
+    return "cpp";
+  }
 
   // conversion from expression into string
   bool from_expr(
@@ -45,6 +42,11 @@ public:
     std::string &code,
     const namespacet &ns,
     bool fullname = false) override;
+
+  languaget *new_language() override
+  {
+    return new clang_cpp_languaget;
+  }
 
   // constructor, destructor
   ~clang_cpp_languaget() override = default;
