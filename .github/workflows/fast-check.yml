@@ -17,7 +17,7 @@ jobs:
     - name: Throws error if changes were made
       run: git diff --exit-code
 
-  # Check project with clang-format
+  # Check testing tool suite
   testing-tool:
     runs-on: ubuntu-latest
     steps:
