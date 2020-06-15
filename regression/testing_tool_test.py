@@ -131,7 +131,7 @@ class XMLTest1(ParseTest):
 
     def _argument_list_checks(self, test_obj: BaseTest):
         argument_list = self.test_case.generate_run_argument_list("__test__")
-        expected = ['__test__', '--unwind', '10', '--no-unwinding-assertions', '-I', 'DefaultValue', 'main.cpp']
+        expected = ['__test__', '--unwind', '10', '--no-unwinding-assertions', 'main.cpp']
         self.assertEqual(argument_list, expected, str(argument_list))
 
 if __name__ == '__main__':

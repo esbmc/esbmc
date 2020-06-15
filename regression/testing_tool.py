@@ -31,7 +31,7 @@ import xml.etree.ElementTree as ET
 # ALL -> Run all tests
 SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
 FAIL_MODES = ["KNOWNBUG"]
-CPP_INCLUDE_DIR: str = "DefaultValue"
+CPP_INCLUDE_DIR: str = None
 
 class BaseTest:
     """This class is responsible to:
@@ -123,8 +123,10 @@ class XMLTestCase(BaseTest):
         try:
             index = result.index("~/libraries/")
             if CPP_INCLUDE_DIR is None:
-                raise RuntimeError(f'[{self.test_dir}] is requesting CPP libraries folder')
-            result[index] = CPP_INCLUDE_DIR    
+                result.pop(index-1)
+                result.pop(index-1)
+            else:
+                result[index] = CPP_INCLUDE_DIR
         except ValueError:
             pass
 
@@ -238,7 +240,7 @@ def _arg_parsing():
     main_args = parser.parse_args()
 
     global CPP_INCLUDE_DIR
-    CPP_INCLUDE_DIR = main_args.library
+    #CPP_INCLUDE_DIR = main_args.library
     return main_args.tool, main_args.regression, main_args.mode
 
 
