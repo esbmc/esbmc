@@ -8,10 +8,6 @@
 
 \*******************************************************************/
 
-#include <boost/algorithm/string.hpp>
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/xml_parser.hpp>
-#include <boost/version.hpp>
 #include <cassert>
 #include <cstring>
 #include <goto-symex/goto_trace.h>
@@ -23,7 +19,6 @@
 #include <langapi/languages.h>
 #include <util/arith_tools.h>
 #include <util/std_types.h>
-#include <boost/graph/graphml.hpp>
 
 extern std::string verification_file;
 

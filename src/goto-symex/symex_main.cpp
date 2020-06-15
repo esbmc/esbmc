@@ -7,7 +7,6 @@
 
 \*******************************************************************/
 
-#include <boost/shared_ptr.hpp>
 #include <cassert>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
@@ -87,9 +86,9 @@ void goto_symext::assume(const expr2tc &the_assumption)
     cur_state->guard.make_false();
 }
 
-boost::shared_ptr<goto_symext::symex_resultt> goto_symext::get_symex_result()
+std::shared_ptr<goto_symext::symex_resultt> goto_symext::get_symex_result()
 {
-  return boost::shared_ptr<goto_symext::symex_resultt>(
+  return std::shared_ptr<goto_symext::symex_resultt>(
     new goto_symext::symex_resultt(target, total_claims, remaining_claims));
 }
 

@@ -461,7 +461,7 @@ void runtime_encoded_equationt::convert(smt_convt &smt_conv)
       &smt_conv, &smt_convt::mk_or, assert_vec_list.back()));
 }
 
-boost::shared_ptr<symex_targett> runtime_encoded_equationt::clone() const
+std::shared_ptr<symex_targett> runtime_encoded_equationt::clone() const
 {
   // Only permit cloning at the start of a run - there should never be any data
   // in this formula when it happens. Cloning needs to be supported so that a
@@ -471,7 +471,7 @@ boost::shared_ptr<symex_targett> runtime_encoded_equationt::clone() const
     SSA_steps.size() == 0 &&
     "runtime_encoded_equationt shouldn't be "
     "cloned when it contains data");
-  auto nthis = boost::shared_ptr<runtime_encoded_equationt>(
+  auto nthis = std::shared_ptr<runtime_encoded_equationt>(
     new runtime_encoded_equationt(*this));
   nthis->cvt_progress = nthis->SSA_steps.end();
   return nthis;

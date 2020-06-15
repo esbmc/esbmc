@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void bmct::show_vcc(
   std::ostream &out,
-  boost::shared_ptr<symex_target_equationt> &eq)
+  std::shared_ptr<symex_target_equationt> &eq)
 {
   switch(ui)
   {
@@ -72,7 +72,7 @@ void bmct::show_vcc(
   }
 }
 
-void bmct::show_vcc(boost::shared_ptr<symex_target_equationt> &eq)
+void bmct::show_vcc(std::shared_ptr<symex_target_equationt> &eq)
 {
   const std::string &filename = options.get_option("output");
 

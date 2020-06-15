@@ -38,7 +38,6 @@ include(Sanitizers)
 
 if(BUILD_STATIC)
   include(BuildStatic)
-  add_definitions(-DBOOST_PYTHON_STATIC_LIB)
 endif()
 
 include(DefineLibM)
@@ -47,14 +46,8 @@ include(DefineLibM)
 find_package(Boost REQUIRED COMPONENTS filesystem system date_time)
 include(FindLLVM)
 
-if(ENABLE_PYTHON)
-  include(FindPython)
-else()
-  message(STATUS "Python support is off")
-endif()
-
 # Optimization
-include(OptimizationCCache) 
+include(OptimizationCCache)
 
 add_subdirectory(src)
 

@@ -9,15 +9,12 @@ add_subdirectory(prop)
 add_subdirectory(smt)
 add_subdirectory(smtlib)
 
-add_library(solve solve.cpp smt_python.cpp)
-target_include_directories(solve     
+add_library(solve solve.cpp)
+target_include_directories(solve
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-if (DEFINED HAVE_PYTHON)
-  target_link_libraries(solve ${PYTHON_LINK_LIBS})
-endif()
 
 add_library(solvers INTERFACE)
 target_link_libraries(solvers INTERFACE solve smtlib smttuple smtfp smt prop)
@@ -30,6 +27,6 @@ add_subdirectory(cvc4)
 add_subdirectory(mathsat)
 add_subdirectory(yices)
 
-set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS}" PARENT_SCOPE)    
+set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS}" PARENT_SCOPE)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/solver_config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/solver_config.h")

@@ -16,16 +16,16 @@ Date: July 2005
 #include <goto-symex/symex_target_equation.h>
 
 void build_goto_trace(
-  const boost::shared_ptr<symex_target_equationt> &target,
-  boost::shared_ptr<smt_convt> &smt_conv,
+  const std::shared_ptr<symex_target_equationt> &target,
+  std::shared_ptr<smt_convt> &smt_conv,
   goto_tracet &goto_trace);
 
 void build_successful_goto_trace(
-  const boost::shared_ptr<symex_target_equationt> &target,
+  const std::shared_ptr<symex_target_equationt> &target,
   const namespacet &ns,
   goto_tracet &goto_trace);
 
-expr2tc build_lhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs);
-expr2tc build_rhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &rhs);
+expr2tc build_lhs(std::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs);
+expr2tc build_rhs(std::shared_ptr<smt_convt> &smt_conv, const expr2tc &rhs);
 
 #endif

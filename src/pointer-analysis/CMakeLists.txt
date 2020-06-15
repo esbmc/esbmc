@@ -3,6 +3,3 @@ target_include_directories(pointeranalysis
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
 target_link_libraries(pointeranalysis util_esbmc)
-if (DEFINED HAVE_PYTHON)
-  target_link_libraries(pointeranalysis ${PYTHON_LINK_LIBS} dl util expat z pthread)
-endif()
