@@ -220,8 +220,8 @@ def create_tests(executor_path: str, base_dir: str, mode: str):
     test_cases = get_test_objects(base_dir)
     print(f'Found {len(test_cases)} test cases')
     assert len(test_cases) > 0
-    for test_case in test_cases:        
-        if test_case.test_mode == mode or mode == "ALL":            
+    for test_case in test_cases:
+        if test_case.test_mode == mode or mode == "ALL":
             test_func = _add_test(test_case, executor)
             # Add test case into RegressionBase class
             # FUTURE: Maybe change the class name for better report
