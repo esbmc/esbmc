@@ -36,4 +36,5 @@ clean:
 	find . -name *.ll | xargs rm -f
 	find . -name *.c | xargs rm -f
 	find . -name *.dat | xargs rm -f
+	find . -name *.report | xargs rm -f
 	rm -f tests.log	
