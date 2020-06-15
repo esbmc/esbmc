@@ -2061,7 +2061,14 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_ArrayToPointerDecay:
   case clang::CK_FunctionToPointerDecay:
   case clang::CK_BuiltinFnToFnPtr:
+  case clang::CK_UncheckedDerivedToBase:
     break;
+
+  case clang::CK_DerivedToBase:
+  case clang::CK_Dynamic:
+
+  case clang::CK_UserDefinedConversion:
+  case clang::CK_ConstructorConversion:
 
   case clang::CK_NoOp:
 
@@ -2077,6 +2084,7 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_ToVoid:
   case clang::CK_BitCast:
   case clang::CK_LValueToRValue:
+  case clang::CK_LValueBitCast:
 
   case clang::CK_PointerToBoolean:
   case clang::CK_PointerToIntegral:
