@@ -807,12 +807,6 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::RecordDecl &rd =
       *(static_cast<const clang::RecordType &>(the_type)).getDecl();
 
-    if(rd.isClass())
-    {
-      std::cerr << "Class Type is not supported yet" << std::endl;
-      return true;
-    }
-
     // Search for the type on the type map
     type_mapt::iterator it;
     if(search_add_type_map(rd, it))
