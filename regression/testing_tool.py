@@ -234,7 +234,7 @@ def _arg_parsing():
     parser.add_argument("--regression", required=True, help="regression suite path")
     parser.add_argument("--mode", required=True, help="tests to be executed [CORE, "
                                                       "KNOWNBUG, FUTURE, THOROUGH")
-    parser.add_argument("--library", required=False, help="Path for CPP Library")        
+    parser.add_argument("--library", required=False, help="Path for the Standard C++ Libraries abstractions")        
     main_args = parser.parse_args()
 
     global CPP_INCLUDE_DIR
