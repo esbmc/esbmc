@@ -6,7 +6,6 @@
 
 \*******************************************************************/
 
-#include <boost/shared_ptr.hpp>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/reachability_tree.h>
 #include <langapi/language_ui.h>
@@ -34,9 +33,9 @@ execution_statet::execution_statet(
   const goto_functionst &goto_functions,
   const namespacet &ns,
   reachability_treet *art,
-  boost::shared_ptr<symex_targett> _target,
+  std::shared_ptr<symex_targett> _target,
   contextt &context,
-  boost::shared_ptr<ex_state_level2t> l2init,
+  std::shared_ptr<ex_state_level2t> l2init,
   optionst &options,
   message_handlert &_message_handler)
   : goto_symext(ns, context, goto_functions, std::move(_target), options),
@@ -122,7 +121,7 @@ execution_statet::execution_statet(const execution_statet &ex)
   : goto_symext(ex),
     owning_rt(ex.owning_rt),
     state_level2(
-      boost::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
+      std::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
     global_value_set(ex.global_value_set),
     message_handler(ex.message_handler)
 {
@@ -211,8 +210,6 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   return *this;
 }
 
-void trap_to_python(reachability_treet *art);
-
 void execution_statet::symex_step(reachability_treet &art)
 {
   statet &state = get_active_state();
@@ -223,20 +220,11 @@ void execution_statet::symex_step(reachability_treet &art)
 
   if(break_insn != 0 && break_insn == instruction.location_number)
   {
-// This twisty turny passage of ifdefs traps to python if esbmc has been
-// built with python support; otherwise it executes a trap instruction.
-#ifdef WITH_PYTHON
-    std::cerr << "Trapping to python; call esbmc.trap() to break if you have "
-                 "gdb attached, then walk back up to symex frames"
-              << std::endl;
-    trap_to_python(owning_rt);
-#else
 #ifndef _WIN32
     __asm__("int $3");
 #else
     std::cerr << "Can't trap on windows, sorry" << std::endl;
     abort();
-#endif
 #endif
   }
 
@@ -1064,7 +1052,7 @@ bool execution_statet::can_execution_continue() const
 
 crypto_hash execution_statet::generate_hash() const
 {
-  auto l2 = boost::dynamic_pointer_cast<state_hashing_level2t>(state_level2);
+  auto l2 = std::dynamic_pointer_cast<state_hashing_level2t>(state_level2);
   assert(l2 != nullptr);
 
   crypto_hash state = l2->generate_l2_state_hash();
@@ -1188,10 +1176,10 @@ execution_statet::ex_state_level2t::ex_state_level2t(execution_statet &ref)
 {
 }
 
-boost::shared_ptr<renaming::level2t>
+std::shared_ptr<renaming::level2t>
 execution_statet::ex_state_level2t::clone() const
 {
-  return boost::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this));
+  return std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this));
 }
 
 void execution_statet::ex_state_level2t::rename(
@@ -1213,10 +1201,10 @@ dfs_execution_statet::~dfs_execution_statet()
     target->pop_ctx();
 }
 
-boost::shared_ptr<execution_statet> dfs_execution_statet::clone() const
+std::shared_ptr<execution_statet> dfs_execution_statet::clone() const
 {
-  boost::shared_ptr<dfs_execution_statet> d =
-    boost::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
+  std::shared_ptr<dfs_execution_statet> d =
+    std::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
 
   // Duplicate target equation; or if we're encoding at runtime, push a context.
   if(smt_during_symex)
@@ -1237,10 +1225,10 @@ schedule_execution_statet::~schedule_execution_statet()
   // Don't delete equation. Schedule requires all this data.
 }
 
-boost::shared_ptr<execution_statet> schedule_execution_statet::clone() const
+std::shared_ptr<execution_statet> schedule_execution_statet::clone() const
 {
-  boost::shared_ptr<schedule_execution_statet> s =
-    boost::shared_ptr<schedule_execution_statet>(
+  std::shared_ptr<schedule_execution_statet> s =
+    std::shared_ptr<schedule_execution_statet>(
       new schedule_execution_statet(*this));
 
   // Don't duplicate target equation.
@@ -1272,10 +1260,10 @@ execution_statet::state_hashing_level2t::state_hashing_level2t(
 {
 }
 
-boost::shared_ptr<renaming::level2t>
+std::shared_ptr<renaming::level2t>
 execution_statet::state_hashing_level2t::clone() const
 {
-  return boost::shared_ptr<state_hashing_level2t>(
+  return std::shared_ptr<state_hashing_level2t>(
     new state_hashing_level2t(*this));
 }
 

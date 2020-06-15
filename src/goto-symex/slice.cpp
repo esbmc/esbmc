@@ -35,7 +35,7 @@ bool symex_slicet::get_symbols(
   return fn(tmp) || res;
 }
 
-void symex_slicet::slice(boost::shared_ptr<symex_target_equationt> &eq)
+void symex_slicet::slice(std::shared_ptr<symex_target_equationt> &eq)
 {
   depends.clear();
 
@@ -144,14 +144,14 @@ void symex_slicet::slice_renumber(symex_target_equationt::SSA_stept &SSA_step)
   // Don't collect the symbol; this insn has no effect on dependencies.
 }
 
-BigInt slice(boost::shared_ptr<symex_target_equationt> &eq, bool slice_assumes)
+BigInt slice(std::shared_ptr<symex_target_equationt> &eq, bool slice_assumes)
 {
   symex_slicet symex_slice(slice_assumes);
   symex_slice.slice(eq);
   return symex_slice.ignored;
 }
 
-BigInt simple_slice(boost::shared_ptr<symex_target_equationt> &eq)
+BigInt simple_slice(std::shared_ptr<symex_target_equationt> &eq)
 {
   BigInt ignored = 0;
 

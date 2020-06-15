@@ -25,7 +25,6 @@
 #include <boost/mpl/vector.hpp>
 #include <boost/preprocessor/list/adt.hpp>
 #include <boost/preprocessor/list/for_each.hpp>
-#include <boost/shared_ptr.hpp>
 #include <cstdarg>
 #include <functional>
 #include <util/config.h>
@@ -1104,8 +1103,6 @@ public:
   size_t do_crc() const override;
   void hash(crypto_hash &hash) const override;
 
-  static void build_python_class(const typename container::id_field_type id);
-
 protected:
   // Fetch the type information about the field we are concerned with out
   // of the current type trait we're working on.
@@ -1136,9 +1133,6 @@ protected:
   // Similar story, but for type2tc
   void foreach_subtype_impl_rec(type2t::subtype_delegate &t);
   void foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &t) const;
-
-  template <typename T>
-  static void build_python_class_rec(T &obj, unsigned int idx);
 };
 
 // Base instance of irep_methods2. This is a template specialization that
@@ -1249,13 +1243,6 @@ protected:
   void foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &t) const
   {
     (void)t;
-  }
-
-  template <typename T>
-  static void build_python_class_rec(T &obj, unsigned int idx)
-  {
-    (void)obj;
-    (void)idx;
   }
 };
 

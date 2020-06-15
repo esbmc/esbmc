@@ -1231,23 +1231,3 @@ void BigInt::setPower2(unsigned exponent)
   digit[i] = 1;
   digit[i] <<= bitOffset;
 }
-
-#ifdef WITH_PYTHON
-#undef error
-#include <boost/python.hpp>
-
-// Build simplest BigInt wrapper: can construct, can get value. Nothing more.
-using namespace boost::python;
-void build_bigint_python_class()
-{
-  using boost::python::self_ns::self;
-
-  init<long signed int> init;
-  class_<BigInt>("BigInt", init)
-    .def("to_int", &BigInt::to_int)
-    .def(self == self)
-    .def(self != self)
-    .def(self < self);
-  return;
-}
-#endif

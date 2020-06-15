@@ -34,7 +34,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   if(!new_guard_false && options.get_bool_option("smt-symex-guard"))
   {
-    auto rte = boost::dynamic_pointer_cast<runtime_encoded_equationt>(target);
+    auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
     equality2tc question(gen_true_expr(), new_guard);
     try

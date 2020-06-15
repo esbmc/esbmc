@@ -2,7 +2,7 @@
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/witnesses.h>
 
-expr2tc build_lhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
+expr2tc build_lhs(std::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
 {
   if(is_nil_expr(lhs))
     return lhs;
@@ -39,7 +39,7 @@ expr2tc build_lhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
   return new_lhs;
 }
 
-expr2tc build_rhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &rhs)
+expr2tc build_rhs(std::shared_ptr<smt_convt> &smt_conv, const expr2tc &rhs)
 {
   if(is_nil_expr(rhs) || is_constant_expr(rhs))
     return rhs;
@@ -50,8 +50,8 @@ expr2tc build_rhs(boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &rhs)
 }
 
 void build_goto_trace(
-  const boost::shared_ptr<symex_target_equationt> &target,
-  boost::shared_ptr<smt_convt> &smt_conv,
+  const std::shared_ptr<symex_target_equationt> &target,
+  std::shared_ptr<smt_convt> &smt_conv,
   goto_tracet &goto_trace)
 {
   unsigned step_nr = 0;
@@ -110,7 +110,7 @@ void build_goto_trace(
 }
 
 void build_successful_goto_trace(
-  const boost::shared_ptr<symex_target_equationt> &target,
+  const std::shared_ptr<symex_target_equationt> &target,
   const namespacet &ns,
   goto_tracet &goto_trace)
 {

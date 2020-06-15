@@ -17,7 +17,6 @@ Also, you can set some variables which are not defined directly here:
 # GENERAL
 #############################
 option(ENABLE_WERROR "All warnings are treated as errors during compilation (default: OFF)" OFF)
-option(ENABLE_PYTHON "Build esbmc with python support (default: OFF)" OFF)
 option(BUILD_STATIC "Build ESBMC in static mode (default: OFF)" OFF)
 option(BUILD_DOC "Build ESBMC documentation" OFF)
 option(ENABLE_REGRESSION "Add Regressions Tests (default: OFF)" OFF)
@@ -39,7 +38,7 @@ option(ENABLE_FUZZER "Add fuzzing targets (default: OFF)" OFF)
 #############################
 # CMake extra Vars
 #############################
-set(Clang_DIR "${LLVM_DIR}" CACHE STRING "Clang Directory (if not set, this will be set to the LLVM_DIR")  
+set(Clang_DIR "${LLVM_DIR}" CACHE STRING "Clang Directory (if not set, this will be set to the LLVM_DIR")
 
 # Demand C++14
 set (CMAKE_CXX_STANDARD 14)

@@ -2,7 +2,6 @@
 #define _GOTO_SYMEX_RENAMING_H_
 
 #include <boost/functional/hash.hpp>
-#include <boost/shared_ptr.hpp>
 #include <util/crypto_hash.h>
 #include <util/expr_util.h>
 #include <util/guard.h>
@@ -39,7 +38,6 @@ public:
   class name_record
   {
   public:
-    // Appease boost.python error path
     name_record() : base_name("")
     {
     }
@@ -139,7 +137,6 @@ public:
   class name_record
   {
   public:
-    // Appease boost python error paths
     name_record() = default;
 
     name_record(const symbol2t &sym)
@@ -279,7 +276,7 @@ public:
 
   level2t() = default;
   ~level2t() override = default;
-  virtual boost::shared_ptr<level2t> clone() const = 0;
+  virtual std::shared_ptr<level2t> clone() const = 0;
 
   virtual void print(std::ostream &out) const;
   virtual void dump() const;

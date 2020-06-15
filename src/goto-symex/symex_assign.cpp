@@ -6,7 +6,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <boost/shared_ptr.hpp>
 #include <cassert>
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/execution_state.h>
@@ -24,7 +23,7 @@ goto_symext::goto_symext(
   const namespacet &_ns,
   contextt &_new_context,
   const goto_functionst &_goto_functions,
-  boost::shared_ptr<symex_targett> _target,
+  std::shared_ptr<symex_targett> _target,
   optionst &opts)
   : options(opts),
     guard_identifier_s("goto_symex::guard"),
