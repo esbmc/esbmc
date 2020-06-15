@@ -3,7 +3,6 @@
 #define size_t int
 
 void *memcpy(void *dst, const void *src, size_t n) {
-	__ESBMC_HIDE:
         char *cdst = static_cast<char *>(dst);
         const char *csrc = static_cast<const char *>(src);
         for (size_t i = 0; i < n; i++)
