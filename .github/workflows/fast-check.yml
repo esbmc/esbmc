@@ -17,6 +17,15 @@ jobs:
     - name: Throws error if changes were made
       run: git diff --exit-code
 
+  # Check project with clang-format
+  testing-tool:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Runs testing tool unit test
+      run: cd regression && python3 testing_tool_test.py
+
+
   fast-tests:
     runs-on: ubuntu-latest
     steps:
