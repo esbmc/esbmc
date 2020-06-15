@@ -223,7 +223,6 @@ def create_tests(executor_path: str, base_dir: str, mode: str):
     for test_case in test_cases:        
         if test_case.test_mode == mode or mode == "ALL":            
             test_func = _add_test(test_case, executor)
-            print(f'{test_case.name}')
             # Add test case into RegressionBase class
             # FUTURE: Maybe change the class name for better report
             setattr(RegressionBase, 'test_{0}'.format(test_case.name), test_func)
