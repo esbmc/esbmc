@@ -21,6 +21,7 @@
 #include <util/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
+#include <util/pretty.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <vector>
@@ -516,7 +517,7 @@ void goto_symext::finish_formula()
     target->assertion(
       it.alloc_guard.as_expr(),
       eq,
-      "dereference failure: forgotten memory: " + it.name,
+      "dereference failure: forgotten memory: " + get_pretty_name(it.name),
       cur_state->gen_stack_trace(),
       cur_state->source,
       first_loop);

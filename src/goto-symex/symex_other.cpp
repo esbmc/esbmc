@@ -68,7 +68,8 @@ void goto_symext::symex_decl(const expr2tc code)
   if(stack_limit > 0)
   {
     // extract the actual variable name.
-    const std::string pretty_name = get_pretty_name(code);
+    const std::string pretty_name =
+      get_pretty_name(to_code_decl2t(code).value.as_string());
 
     // check whether the stack size has been reached.
     claim(

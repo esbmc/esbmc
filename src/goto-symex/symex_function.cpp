@@ -19,6 +19,7 @@
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/prefix.h>
+#include <util/pretty.h>
 #include <util/std_expr.h>
 
 bool goto_symext::get_unwind_recursion(
@@ -185,8 +186,6 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
   const irep_idt &identifier = to_symbol2t(call.function).thename;
-  const std::string pretty_name =
-    identifier.as_string().substr(identifier.as_string().find_last_of('@') + 1);
 
   // find code in function map
   goto_functionst::function_mapt::const_iterator it =
@@ -201,7 +200,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
       return;
     }
 
-    std::cerr << "failed to find `" + pretty_name + "' in function_map";
+    std::cerr << "failed to find `" + get_pretty_name(identifier.as_string()) +
+                   "' in function_map";
     abort();
   }
 
@@ -230,7 +230,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 
   if(!goto_function.body_available)
   {
-    std::cerr << "**** WARNING: no body for function " << pretty_name << '\n';
+    std::cerr << "**** WARNING: no body for function "
+              << get_pretty_name(identifier.as_string()) << '\n';
 
     if(!is_nil_expr(call.ret))
     {
