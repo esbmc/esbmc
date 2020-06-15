@@ -17,10 +17,12 @@ set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 function(add_esbmc_regression folder mode)
     add_test(NAME "regression-${folder}-${mode}"
             COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
-            --tool=${ESBMC_BIN} --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder} --mode=${mode})
+            --tool=${ESBMC_BIN} --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder} --mode=${mode} --library=--regression=${CMAKE_SOURCE_DIR}/src/cpp/library)
 endfunction(add_esbmc_regression mode folder)
 
-set(REGRESSIONS esbmc cstd llvm floats floats-regression k-induction)
+# TODO: Do not merge into master, this is intended only for clang-cpp-branch
+set(REGRESSIONS esbmc-cpp/cpp)
+#set(REGRESSIONS esbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp)
 
 foreach(regression IN LISTS REGRESSIONS)
     add_esbmc_regression("${regression}" "CORE")
