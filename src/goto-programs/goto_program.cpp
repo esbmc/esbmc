@@ -120,7 +120,13 @@ void goto_programt::instructiont::output_instruction(
     break;
 
   case END_FUNCTION:
-    out << "END_FUNCTION" << std::endl;
+    out << "END_FUNCTION";
+    {
+      const irep_idt &function = location.function();
+      if(function != "")
+        out << " // " << function;
+    }
+    out << std::endl;
     break;
 
   case LOCATION:
