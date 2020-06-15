@@ -14,7 +14,7 @@ Author: Lucas Cordeiro, lucas.cordeiro@manchester.ac.uk
 #include <util/irep2.h>
 #include <util/irep2_expr.h>
 
-inline std::string get_pretty_name(const std::string name)
+inline std::string get_pretty_name(const std::string &name)
 {
   return name.substr(name.find_last_of('@') + 1);
 }
