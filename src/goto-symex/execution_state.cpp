@@ -26,8 +26,6 @@
 
 unsigned int execution_statet::node_count = 0;
 unsigned int execution_statet::dynamic_counter = 0;
-std::map<expr2tc, std::list<unsigned int>> vars_map;
-std::map<expr2tc, bool> is_global;
 
 execution_statet::execution_statet(
   const goto_functionst &goto_functions,
@@ -820,53 +818,53 @@ void execution_statet::get_expr_globals(
     {
       std::list<unsigned int> threadId_list;
       std::map<expr2tc, std::list<unsigned int>>::iterator it_find;
-      it_find = vars_map.find(expr);
+      it_find = art1->vars_map.find(expr);
 
-      //the expression was accessed in another interleaving
-      if(it_find != vars_map.end())
+      // the expression was accessed in another interleaving
+      if(it_find != art1->vars_map.end())
       {
         threadId_list = it_find->second;
         threadId_list.push_back(get_active_state().top().level1.thread_id);
 
-        vars_map.insert(
+        art1->vars_map.insert(
           std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
 
         std::list<unsigned int>::iterator it_list;
         for(it_list = threadId_list.begin(); it_list != threadId_list.end();
             ++it_list)
         {
-          //find if some thread access the same expression
+          // find if some thread access the same expression
           if(*it_list != get_active_state().top().level1.thread_id)
           {
             globals_list.insert(expr);
-            is_global.insert(std::pair<expr2tc, bool>(expr, true));
+            art1->is_global.insert(std::pair<expr2tc, bool>(expr, true));
           }
-          //expression was not accessed by other thread
+          // expression was not accessed by other thread
           else
           {
             std::map<expr2tc, bool>::iterator its_global;
-            its_global = is_global.find(expr);
-            //expression was defined as global in another interleaving
-            if(its_global != is_global.end())
+            its_global = art1->is_global.find(expr);
+            // expression was defined as global in another interleaving
+            if(its_global != art1->is_global.end())
             {
               globals_list.insert(expr);
             }
           }
         }
-        //first access of expression
+        // first access of expression
       }
       else
       {
         std::map<expr2tc, bool>::iterator its_global;
-        its_global = is_global.find(expr);
-        if(its_global != is_global.end())
+        its_global = art1->is_global.find(expr);
+        if(its_global != art1->is_global.end())
         {
           globals_list.insert(expr);
         }
         else
         {
           threadId_list.push_back(get_active_state().top().level1.thread_id);
-          vars_map.insert(
+          art1->vars_map.insert(
             std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
           globals_list.insert(expr);
         }
