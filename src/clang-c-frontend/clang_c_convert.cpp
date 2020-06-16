@@ -2671,6 +2671,18 @@ void clang_c_convertert::get_decl_name(
     return;
   }
 
+  case clang::Decl::Var:
+    if(name.empty())
+    {
+      // Anonymous variable, generate a name based on the type,
+      // see regression union1
+      const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(nd);
+      name = "anon";
+      id = getFullyQualifiedName(vd.getType(), *ASTContext);
+      return;
+    }
+    break;
+
   default:
     if(name.empty())
     {
