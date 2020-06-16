@@ -43,7 +43,7 @@ protected:
   void adjust_dereference(exprt &deref);
   void adjust_address_of(exprt &expr);
   void adjust_sizeof(exprt &expr);
-  void adjust_side_effect(side_effect_exprt &expr);
+  virtual void adjust_side_effect(side_effect_exprt &expr);
   void adjust_symbol(exprt &expr);
   void adjust_comma(exprt &expr);
   void adjust_builtin_va_arg(exprt &expr);
