@@ -119,6 +119,8 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::TypeAlias:
   case clang::Decl::NamespaceAlias:
   case clang::Decl::AccessSpec:
+  case clang::Decl::UnresolvedUsingValue:
+  case clang::Decl::UnresolvedUsingTypename:
     break;
 
   default:
