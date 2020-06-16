@@ -20,9 +20,13 @@ function(add_esbmc_regression folder mode)
             --tool=${ESBMC_BIN} --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder} --mode=${mode} --library=${CMAKE_SOURCE_DIR}/src/cpp/library)
 endfunction(add_esbmc_regression mode folder)
 
-# TODO: Do not merge into master, this is intended only for clang-cpp-branch
-set(REGRESSIONS esbmc-cpp/cpp)
-#set(REGRESSIONS esbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp)
+if(APPLE)
+    set(REGRESSIONS esbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp)
+else()
+    set(REGRESSIONS esbmc cstd llvm floats floats-regression k-induction)
+endif()
+
+
 
 foreach(regression IN LISTS REGRESSIONS)
     add_esbmc_regression("${regression}" "CORE")
