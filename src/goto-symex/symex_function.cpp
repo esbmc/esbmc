@@ -76,11 +76,10 @@ unsigned goto_symext::argument_assignments(
     }
 
     const irep_idt &identifier = function_type.argument_names[name_idx];
+
+    // Don't assign arguments if they have no name, see regression spec21
     if(identifier == "")
-    {
-      std::cerr << "no identifier for function argument" << std::endl;
-      abort();
-    }
+      continue;
 
     if(is_nil_expr(*it1))
     {
