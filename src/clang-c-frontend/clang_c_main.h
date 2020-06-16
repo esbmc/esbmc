@@ -12,9 +12,6 @@
 #include <util/message.h>
 #include <util/std_code.h>
 
-bool clang_main(
-  contextt &context,
-  const std::string &standard_main,
-  message_handlert &message_handler);
+bool clang_main(contextt &context, message_handlert &message_handler);
 
 #endif /* CLANG_C_FRONTEND_CLANG_MAIN_H_ */
