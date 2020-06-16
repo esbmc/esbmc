@@ -21,7 +21,7 @@ public:
 
   bool adjust();
 
-private:
+protected:
   contextt &context;
   namespacet ns;
 
@@ -51,10 +51,10 @@ private:
   void adjust_function_call_arguments(side_effect_expr_function_callt &expr);
 
   void adjust_code(codet &code);
-  void adjust_ifthenelse(codet &code);
-  void adjust_while(codet &code);
-  void adjust_for(codet &code);
-  void adjust_switch(codet &code);
+  virtual void adjust_ifthenelse(codet &code);
+  virtual void adjust_while(codet &code);
+  virtual void adjust_for(codet &code);
+  virtual void adjust_switch(codet &code);
   void adjust_assign(codet &code);
   void adjust_decl(codet &code);
 
