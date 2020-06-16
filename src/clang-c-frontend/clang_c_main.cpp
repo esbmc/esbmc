@@ -54,54 +54,48 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-bool clang_main(
-  contextt &context,
-  const std::string &standard_main,
-  message_handlert &message_handler)
+bool clang_main(contextt &context, message_handlert &message_handler)
 {
   irep_idt main_symbol;
 
+  std::string main = (config.main != "") ? config.main : "main";
+
   // find main symbol
-  if(config.main != "")
+  std::list<irep_idt> matches;
+
+  forall_symbol_base_map(it, context.symbol_base_map, main)
   {
-    std::list<irep_idt> matches;
+    // look it up
+    symbolt *s = context.find_symbol(it->second);
 
-    forall_symbol_base_map(it, context.symbol_base_map, config.main)
-    {
-      // look it up
-      symbolt *s = context.find_symbol(it->second);
+    if(s == nullptr)
+      continue;
 
-      if(s == nullptr)
-        continue;
-
-      if(s->type.is_code())
-        matches.push_back(it->second);
-    }
-
-    if(matches.empty())
-    {
-      messaget message(message_handler);
-      message.error("main symbol `" + config.main + "' not found");
-      return true; // give up
-    }
-
-    if(matches.size() >= 2)
-    {
-      messaget message(message_handler);
-      if(matches.size() == 2)
-        std::cerr << "warning: main symbol `" << config.main << "' is ambiguous"
-                  << std::endl;
-      else
-      {
-        message.error("main symbol `" + config.main + "' is ambiguous");
-        return true;
-      }
-    }
-
-    main_symbol = matches.front();
+    if(s->type.is_code())
+      matches.push_back(it->second);
   }
-  else
-    main_symbol = standard_main;
+
+  if(matches.empty())
+  {
+    messaget message(message_handler);
+    message.error("main symbol `" + main + "' not found");
+    return true; // give up
+  }
+
+  if(matches.size() >= 2)
+  {
+    messaget message(message_handler);
+    if(matches.size() == 2)
+      std::cerr << "warning: main symbol `" << main << "' is ambiguous"
+                << std::endl;
+    else
+    {
+      message.error("main symbol `" + main + "' is ambiguous");
+      return true;
+    }
+  }
+
+  main_symbol = matches.front();
 
   // look it up
   symbolt *s = context.find_symbol(main_symbol);
@@ -130,7 +124,7 @@ bool clang_main(
   const code_typet::argumentst &arguments =
     to_code_type(symbol.type).arguments();
 
-  if(symbol.id == standard_main)
+  if(symbol.name == "main")
   {
     if(arguments.size() == 0)
     {

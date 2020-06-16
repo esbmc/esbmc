@@ -70,7 +70,7 @@ bool clang_cpp_languaget::final(
   message_handlert &message_handler)
 {
   add_cprover_library(context, message_handler);
-  return clang_main(context, "c:@F@main#", message_handler);
+  return clang_main(context, message_handler);
 }
 
 bool clang_cpp_languaget::from_expr(
