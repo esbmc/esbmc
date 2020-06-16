@@ -378,6 +378,11 @@ protected:
   /** Are we using the --schedule scheduling method? */
   bool schedule;
 
+  /* data structures to store global variables*/
+  std::map<expr2tc, std::list<unsigned int>> vars_map;
+  /* associative container that contains global writes in */
+  std::map<expr2tc, bool> is_global;
+
   friend class execution_statet;
   friend void build_goto_symex_classes();
 };
