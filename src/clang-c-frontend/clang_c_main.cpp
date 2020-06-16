@@ -5,7 +5,6 @@
  *      Author: mramalho
  */
 
-#include <ansi-c/c_main.h>
 #include <cassert>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -15,6 +14,45 @@
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+
+static inline void init_variable(codet &dest, const symbolt &sym)
+{
+  const exprt &value = sym.value;
+
+  if(value.is_nil())
+    return;
+
+  assert(!value.type().is_code());
+
+  exprt symbol("symbol", sym.type);
+  symbol.identifier(sym.id);
+
+  code_assignt code(symbol, sym.value);
+  code.location() = sym.location;
+
+  dest.move_to_operands(code);
+}
+
+static inline void static_lifetime_init(const contextt &context, codet &dest)
+{
+  dest = code_blockt();
+
+  // Do assignments based on "value".
+  context.foreach_operand_in_order([&dest](const symbolt &s) {
+    if(s.static_lifetime)
+      init_variable(dest, s);
+  });
+
+  // call designated "initialization" functions
+  context.foreach_operand_in_order([&dest](const symbolt &s) {
+    if(s.type.initialization() && s.type.is_code())
+    {
+      code_function_callt function_call;
+      function_call.function() = symbol_expr(s);
+      dest.move_to_operands(function_call);
+    }
+  });
+}
 
 bool clang_main(
   contextt &context,
