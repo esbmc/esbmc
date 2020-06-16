@@ -62,7 +62,8 @@ class CTest1(ParseTest):
     def _argument_list_checks(self, test_obj):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         self.assertEqual(argument_list[0], "__test__")
-        self.assertEqual(argument_list[1], "--unwind")
+        self.assertEqual(argument_list[1], "main.c")
+        self.assertEqual(argument_list[2], "--unwind")
 
 
 class CTest2(ParseTest):
