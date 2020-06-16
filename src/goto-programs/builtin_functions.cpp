@@ -379,7 +379,7 @@ void goto_convertt::cpp_new_initializer(
     exprt default_value = gen_zero(rhs.type().subtype());
 
     assignment.move_to_operands(new_object, default_value);
-    initializer.move_to_operands(assignment);
+    initializer.expression() = assignment;
   }
   else
   {
