@@ -13,6 +13,10 @@ public:
   void adjust_while(codet &code) override;
   void adjust_switch(codet &code) override;
   void adjust_for(codet &code) override;
+
+  void adjust_side_effect(side_effect_exprt &expr) override;
+
+  void adjust_new(exprt &expr);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */

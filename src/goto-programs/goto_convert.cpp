@@ -432,7 +432,8 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   if(code.operands().size() != 1)
   {
     err_location(code);
-    throw "expression statement takes one operand";
+    std::cerr << "expression statement takes one operand\n";
+    abort();
   }
 
   exprt expr = code.op0();
