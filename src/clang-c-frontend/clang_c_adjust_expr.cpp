@@ -58,9 +58,7 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
   if(!symbol.value.is_nil())
     adjust_expr(symbol.value);
 
-  if(
-    symbol.type.is_code() &&
-    (symbol.id == "c:@F@main" || symbol.id == "c:@F@main#"))
+  if(symbol.type.is_code() && has_prefix(symbol.id.as_string(), "c:@F@main"))
     adjust_argc_argv(symbol);
 }
 
