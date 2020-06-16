@@ -1,8 +1,8 @@
-add_executable(c2goto c2goto.cpp)
+add_executable(c2goto c2goto.cpp cprover_blank_library.cpp)
 target_include_directories(c2goto
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_link_libraries(c2goto ansicfrontend clangcfrontend cppfrontend clangcppfrontend gotoprograms langapi  cprover_blank_library "${Boost_LIBRARIES}")
+target_link_libraries(c2goto clangcfrontend gotoprograms langapi "${Boost_LIBRARIES}")
 
 add_subdirectory (headers)
 
@@ -58,9 +58,3 @@ add_library(clibs ${mangled_files} cprover_library.cpp)
 target_include_directories(clibs
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-add_library(cprover_blank_library cprover_blank_library.cpp)
-target_include_directories(cprover_blank_library
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-    PRIVATE ${Boost_INCLUDE_DIRS}
-)
-
