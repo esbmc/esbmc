@@ -6,7 +6,7 @@
 extern "C" void abort();
 
 template <typename T>
-inline void *Foo (T arg) {  &arg[0]; }
+inline void *Foo (T arg) { return &arg[0]; }
 
 int main () {
   int bry[2];
