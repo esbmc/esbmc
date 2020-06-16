@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: UTF-8 -*-
 
 import os.path
 import os
@@ -31,7 +32,8 @@ import xml.etree.ElementTree as ET
 # ALL -> Run all tests
 SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
 FAIL_MODES = ["KNOWNBUG"]
-CPP_INCLUDE_DIR: str = None
+
+
 
 class BaseTest:
     """This class is responsible to:
@@ -45,11 +47,17 @@ class BaseTest:
     def generate_run_argument_list(self, executable: str):
         """Generates run command list to be used in Popen"""
         result = [executable]
+        result.append(self.test_file)
         for x in self.test_args.split(" "):
             if x != "":
                 result.append(x)
-        result.append(self.test_file)
         return result
+
+    def mark_test_as_knownbug(self, issue: str):
+        """This will change the test.desc marking the test
+            as a KNOWNBUG and (if supported) add the issue
+            to it"""
+        raise NotImplementedError
 
     def __str__(self):
         return f'[{self.name}]: {self.test_dir}, {self.test_mode}'
@@ -61,7 +69,9 @@ class BaseTest:
         self.test_dir = test_dir
         self.test_args = None
         self.test_file = None
+        self.test_mode = "CORE"
         self._initialize_test_case()
+
 
 class CTestCase(BaseTest):
     """This specialization will parse C test descriptions"""
@@ -73,7 +83,8 @@ class CTestCase(BaseTest):
         with open(os.path.join(self.test_dir, "test.desc")) as fp:
             # First line - TEST MODE
             self.test_mode = fp.readline().strip()
-            assert self.test_mode in SUPPORTED_TEST_MODES, str(self.test_mode) + " is not supported"
+            assert self.test_mode in SUPPORTED_TEST_MODES, str(
+                self.test_mode) + " is not supported"
 
             # Second line - Test file
             self.test_file = fp.readline().strip()
@@ -88,20 +99,36 @@ class CTestCase(BaseTest):
             for line in fp:
                 self.test_regex.append(line.strip())
 
+
 class XMLTestCase(BaseTest):
     """This specialization will parse XML test descriptions"""
 
     UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
+    # Custom library for CPP abstract libraries
+    CPP_INCLUDE_DIR: str = None
+
     def __init__(self, test_dir: str, name: str):
         super().__init__(test_dir, name)
 
+    def mark_test_as_knownbug(self, issue: str):
+        et = ET.parse(os.path.join(self.test_dir, "test.desc"))
+        root = et.getroot()
+        mode_tag = ET.SubElement(root, 'item_10_mode')
+        mode_tag.text = 'KNOWNBUG'
+
+        motive_tag = ET.SubElement(root, 'item_11_issue')
+        motive_tag.text = issue
+
+        et.write(os.path.join(self.test_dir, "test.desc"), encoding="utf-8", xml_declaration=True)
+
+
+
     def _initialize_test_case(self):
-        root = ET.parse(os.path.join(self.test_dir, "test.desc")).getroot()        
+        root = ET.parse(os.path.join(self.test_dir, "test.desc")).getroot()
         self.version: str = root[0].text.strip()
         self.module: str = root[1].text.strip()
         self.description: str = root[2].text.strip()
         self.test_file: str = root[3].text.strip()
-        self.test_args: str = root[4].text.strip()
         self.test_args: str = root[4].text.strip()
         # TODO: Multiline regex
         self.test_regex = [root[5].text.strip()]
@@ -114,15 +141,16 @@ class XMLTestCase(BaseTest):
         except:
             self.test_mode = "CORE"
         finally:
-            assert self.test_mode in SUPPORTED_TEST_MODES, str(self.test_mode) + " is not supported"
+            assert self.test_mode in SUPPORTED_TEST_MODES, str(
+                self.test_mode) + " is not supported"
         assert os.path.exists(os.path.join(self.test_dir, self.test_file))
-        
-    def generate_run_argument_list(self, executable: str):        
+
+    def generate_run_argument_list(self, executable: str):
         result = super().generate_run_argument_list(executable)
         # Some sins were committed into test.desc hack them here
         try:
             index = result.index("~/libraries/")
-            if CPP_INCLUDE_DIR is None:
+            if XMLTestCase.CPP_INCLUDE_DIR is None:
                 result.pop(index-1)
                 result.pop(index-1)
             else:
@@ -130,17 +158,18 @@ class XMLTestCase(BaseTest):
         except ValueError:
             pass
 
-        for x in self.__class__.UNSUPPORTED_OPTIONS:        
+        for x in self.__class__.UNSUPPORTED_OPTIONS:
             try:
                 index = result.index(x)
                 result.pop(index)
-                result.pop(index)            
+                result.pop(index)
             except ValueError:
                 pass
 
         return result
 
-class TestParser:    
+
+class TestParser:
 
     MODES = {"C_TEST": CTestCase, "XML": XMLTestCase}
 
@@ -154,16 +183,15 @@ class TestParser:
             return "C_TEST"
         raise ValueError(f'Invalid file header: {first_line}')
 
-
     @staticmethod
     def from_file(test_dir: str, name: str) -> BaseTest:
         """Tries to open a file and selects which class to parse the file"""
         file_path = os.path.join(test_dir, "test.desc")
         assert os.path.exists(file_path)
-        with open(file_path) as fp:            
+        with open(file_path) as fp:
             first_line = fp.readline().strip()
             return TestParser.MODES[TestParser.detect_mode_by_header(first_line)](test_dir, name)
-            
+
 
 class Executor:
     def __init__(self, tool="esbmc"):
@@ -181,9 +209,11 @@ def get_test_objects(base_dir: str):
     """Generates a TestCase from a list of files"""
     assert os.path.exists(base_dir)
     listdir = os.listdir(base_dir)
-    directories = [x for x in listdir if os.path.isdir(os.path.join(base_dir, x))]
+    directories = [x for x in listdir if os.path.isdir(
+        os.path.join(base_dir, x))]
     assert len(directories) > 10
-    tests = [TestParser.from_file(os.path.join(base_dir, x), x) for x in directories]
+    tests = [TestParser.from_file(os.path.join(base_dir, x), x)
+             for x in directories]
     assert len(tests) > 10
     return tests
 
@@ -192,6 +222,8 @@ class RegressionBase(unittest.TestCase):
     """Base class to use for test generation"""
     longMessage = True
 
+    FAIL_WITH_WORD: str = None
+
 
 def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
@@ -199,8 +231,11 @@ def _add_test(test_case, executor):
     def test(self):
         stdout, stderr = executor.run(test_case)
         output_to_validate = stdout.decode() + stderr.decode()
-        error_message_prefix = "\nTEST: " + str(test_case.test_dir) + "\nEXPECTED TO FIND: " + str(test_case.test_regex) + "\n\nPROGRAM OUTPUT\n"
-        error_message = output_to_validate + "\n\nARGUMENTS: " + str(test_case.generate_run_argument_list(executor.tool))
+        error_message_prefix = "\nTEST: " + \
+            str(test_case.test_dir) + "\nEXPECTED TO FIND: " + \
+            str(test_case.test_regex) + "\n\nPROGRAM OUTPUT\n"
+        error_message = output_to_validate + "\n\nARGUMENTS: " + \
+            str(test_case.generate_run_argument_list(executor.tool))
 
         matches_regex = True
         for regex in test_case.test_regex:
@@ -210,13 +245,19 @@ def _add_test(test_case, executor):
 
         if (test_case.test_mode in FAIL_MODES) and matches_regex:
             self.fail(error_message_prefix + error_message)
-        elif (test_case.test_mode not in FAIL_MODES) and (not matches_regex):
-            self.fail(error_message_prefix + error_message)
+        elif (test_case.test_mode not in FAIL_MODES) and (not matches_regex):            
+            if RegressionBase.FAIL_WITH_WORD is not None:
+                match_regex = re.compile(RegressionBase.FAIL_WITH_WORD, re.MULTILINE)
+                if match_regex.search(output_to_validate):
+                    test_case.mark_test_as_knownbug(RegressionBase.FAIL_WITH_WORD)
+                    self.fail(error_message_prefix + error_message)
+            else:
+                self.fail(error_message_prefix + error_message)
     return test
 
 
 def create_tests(executor_path: str, base_dir: str, mode: str):
-    assert mode in SUPPORTED_TEST_MODES, str(mode) + " is not supported"    
+    assert mode in SUPPORTED_TEST_MODES, str(mode) + " is not supported"
     executor = Executor(executor_path)
 
     test_cases = get_test_objects(base_dir)
@@ -227,20 +268,26 @@ def create_tests(executor_path: str, base_dir: str, mode: str):
             test_func = _add_test(test_case, executor)
             # Add test case into RegressionBase class
             # FUTURE: Maybe change the class name for better report
-            setattr(RegressionBase, 'test_{0}'.format(test_case.name), test_func)
+            setattr(RegressionBase, 'test_{0}'.format(
+                test_case.name), test_func)
 
 
 def _arg_parsing():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tool", required=True, help="tool executable path")
-    parser.add_argument("--regression", required=True, help="regression suite path")
+    parser.add_argument("--regression", required=True,
+                        help="regression suite path")
     parser.add_argument("--mode", required=True, help="tests to be executed [CORE, "
                                                       "KNOWNBUG, FUTURE, THOROUGH")
-    parser.add_argument("--library", required=False, help="Path for the Standard C++ Libraries abstractions")        
+    parser.add_argument("--library", required=False,
+                        help="Path for the Standard C++ Libraries abstractions")
+    parser.add_argument("--mark_knownbug_with_word", required=False,
+                        help="If test fails with word then mark it as a knownbug")
+
     main_args = parser.parse_args()
 
-    global CPP_INCLUDE_DIR
-    #CPP_INCLUDE_DIR = main_args.library
+    XMLTestCase.CPP_INCLUDE_DIR = main_args.library    
+    RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
     return main_args.tool, main_args.regression, main_args.mode
 
 
