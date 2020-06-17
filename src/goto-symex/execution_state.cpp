@@ -845,9 +845,7 @@ void execution_statet::get_expr_globals(
             auto its_global = art1->is_global.find(expr);
             // expression was defined as global in another interleaving
             if(its_global != art1->is_global.end())
-            {
               globals_list.insert(expr);
-            }
           }
         }
         // first access of expression
@@ -856,9 +854,7 @@ void execution_statet::get_expr_globals(
       {
         auto its_global = art1->is_global.find(expr);
         if(its_global != art1->is_global.end())
-        {
           globals_list.insert(expr);
-        }
         else
         {
           threadId_list.push_back(get_active_state().top().level1.thread_id);
