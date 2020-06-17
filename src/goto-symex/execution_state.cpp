@@ -842,8 +842,7 @@ void execution_statet::get_expr_globals(
           // expression was not accessed by other thread
           else
           {
-            std::map<expr2tc, bool>::iterator its_global;
-            its_global = art1->is_global.find(expr);
+            auto its_global = art1->is_global.find(expr);
             // expression was defined as global in another interleaving
             if(its_global != art1->is_global.end())
             {
@@ -855,8 +854,7 @@ void execution_statet::get_expr_globals(
       }
       else
       {
-        std::map<expr2tc, bool>::iterator its_global;
-        its_global = art1->is_global.find(expr);
+        auto its_global = art1->is_global.find(expr);
         if(its_global != art1->is_global.end())
         {
           globals_list.insert(expr);
