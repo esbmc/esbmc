@@ -380,7 +380,8 @@ protected:
   /** Are we using the --schedule scheduling method? */
   bool schedule;
 
-  /* data structures to store global variables*/
+  /* Map to store the expression and thread ID,
+   * which that expression belongs to. */
   std::unordered_map<expr2tc, std::list<unsigned int>, irep2_hash> vars_map;
   /* associative container that contains global writes in */
   std::unordered_set<expr2tc, irep2_hash> is_global;
