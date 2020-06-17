@@ -18,6 +18,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <iostream>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <util/crypto_hash.h>
 #include <util/message.h>
 #include <util/options.h>
@@ -379,7 +380,7 @@ protected:
   bool schedule;
 
   /* data structures to store global variables*/
-  std::map<expr2tc, std::list<unsigned int>> vars_map;
+  std::unordered_map<expr2tc, std::list<unsigned int>, irep2_hash> vars_map;
   /* associative container that contains global writes in */
   std::map<expr2tc, bool> is_global;
 
