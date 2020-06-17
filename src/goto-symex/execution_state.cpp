@@ -836,7 +836,7 @@ void execution_statet::get_expr_globals(
           if(*it_list != get_active_state().top().level1.thread_id)
           {
             globals_list.insert(expr);
-            art1->is_global.insert(std::pair<expr2tc, bool>(expr, true));
+            art1->is_global.insert(expr);
           }
           // expression was not accessed by other thread
           else

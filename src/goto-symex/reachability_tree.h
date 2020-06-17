@@ -19,6 +19,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <map>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <util/crypto_hash.h>
 #include <util/message.h>
 #include <util/options.h>
@@ -382,7 +383,7 @@ protected:
   /* data structures to store global variables*/
   std::unordered_map<expr2tc, std::list<unsigned int>, irep2_hash> vars_map;
   /* associative container that contains global writes in */
-  std::map<expr2tc, bool> is_global;
+  std::unordered_set<expr2tc, irep2_hash> is_global;
 
   friend class execution_statet;
   friend void build_goto_symex_classes();
