@@ -817,8 +817,7 @@ void execution_statet::get_expr_globals(
     if((symbol->static_lifetime || symbol->type.is_dynamic_set()))
     {
       std::list<unsigned int> threadId_list;
-      std::map<expr2tc, std::list<unsigned int>>::iterator it_find;
-      it_find = art1->vars_map.find(expr);
+      auto it_find = art1->vars_map.find(expr);
 
       // the expression was accessed in another interleaving
       if(it_find != art1->vars_map.end())
