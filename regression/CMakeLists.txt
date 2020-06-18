@@ -17,7 +17,7 @@ set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 function(add_esbmc_regression folder mode)
     add_test(NAME "regression-${folder}-${mode}"
             COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
-            --tool=${ESBMC_BIN} --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder} --mode=${mode} --library=${CMAKE_SOURCE_DIR}/src/cpp/library)
+            --tool=${ESBMC_BIN} --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder} --mode=${mode})
 endfunction(add_esbmc_regression mode folder)
 
 if(APPLE)
