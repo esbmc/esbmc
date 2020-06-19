@@ -1,5 +1,15 @@
 Release Notes of the ESBMC model checker
 
+*** Version 6.4
+* Refactored concurrency to check global writes in arrays.
+* Removed python API from ESBMC.
+* Updated CVC4 build instructions.
+* Fixed pointer arithmetic in the dereference module.
+* Fixed global array of pointers.
+* Added models for cond_broadcast and mutex_destroy.
+* Rename test cases that give trouble in Windows.
+* Added models for key_create, getspecific, and setspecific.
+
 *** Version 6.3
 * Stack property verification support
 * ESBMC now supports Microsoft extensions
