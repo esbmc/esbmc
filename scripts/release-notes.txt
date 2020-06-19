@@ -5,7 +5,6 @@ Release Notes of the ESBMC model checker
 * Removed python API from ESBMC.
 * Updated CVC4 build instructions.
 * Fixed pointer arithmetic in the dereference module.
-* Fixed global array of pointers.
 * Added models for cond_broadcast and mutex_destroy.
 * Rename test cases that give trouble in Windows.
 * Added models for key_create, getspecific, and setspecific.
