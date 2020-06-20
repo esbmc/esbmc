@@ -19,7 +19,6 @@ typedef __int64 streamsize;
 typedef unsigned int streamsize;
 #endif
 
-
 class smanip
 {
 };
