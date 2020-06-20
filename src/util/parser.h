@@ -105,4 +105,28 @@ private:
 
 exprt &_newstack(parsert &parser, unsigned &x);
 
+#define YY_INPUT(buf, result, max_size)                                        \
+  do                                                                           \
+  {                                                                            \
+    for(result = 0; result < max_size;)                                        \
+    {                                                                          \
+      char ch;                                                                 \
+      if(!PARSER.read(ch))                                                     \
+      {                                                                        \
+        if(result == 0)                                                        \
+          result = YY_NULL;                                                    \
+        break;                                                                 \
+      }                                                                        \
+                                                                               \
+      if(ch != '\r')                                                           \
+      {                                                                        \
+        buf[result++] = ch;                                                    \
+        if(ch == '\n')                                                         \
+        {                                                                      \
+          ++PARSER.line_no;                                                    \
+          break;                                                               \
+        }                                                                      \
+      }                                                                        \
+    }                                                                          \
+  } while(0)
 #endif
