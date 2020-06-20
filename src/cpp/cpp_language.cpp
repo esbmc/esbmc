@@ -117,19 +117,9 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "char nondet_char();" << std::endl;
   out << "unsigned char nondet_uchar();" << std::endl;
   out << "signed char nondet_schar();" << std::endl;
-
-  // And again, for TACAS VERIFIER versions,
-  out << "int __VERIFIER_nondet_int();" << std::endl;
-  out << "unsigned int __VERIFIER_nondet_uint();" << std::endl;
-  out << "long __VERIFIER_nondet_long();" << std::endl;
-  out << "unsigned long __VERIFIER_nondet_ulong();" << std::endl;
-  out << "short __VERIFIER_nondet_short();" << std::endl;
-  out << "unsigned short __VERIFIER_nondet_ushort();" << std::endl;
-  out << "short __VERIFIER_nondet_short();" << std::endl;
-  out << "unsigned short __VERIFIER_nondet_ushort();" << std::endl;
-  out << "char __VERIFIER_nondet_char();" << std::endl;
-  out << "unsigned char __VERIFIER_nondet_uchar();" << std::endl;
-  out << "signed char __VERIFIER_nondet_schar();" << std::endl;
+  out << "bool nondet_bool();" << std::endl;
+  out << "float nondet_float();" << std::endl;
+  out << "double nondet_double();" << std::endl;
 
   out << "const char *__PRETTY_FUNCTION__;" << std::endl;
   out << "const char *__FILE__ = \"\";" << std::endl;
