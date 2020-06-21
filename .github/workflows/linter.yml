@@ -4,7 +4,7 @@
 ###########################
 ###########################
 name: Lint Code Base
-
+on: [push, pull_request]
 jobs:
   super-linter:    
     name: Apply super-linter
