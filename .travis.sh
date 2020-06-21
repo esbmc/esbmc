@@ -78,10 +78,9 @@ travis_install() {
 
     # CVC 4
     if [ -z "$(ls -A $HOME/cvc4-release)" ]; then
-        git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $HOME/boolector-3.2.0 && cd build && make -s -j4 && make install
+        git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=$HOME/cvc4-release --static --no-static-binary && cd build && make -j4 && make install        
         cd $ROOT_DIR
     else
-        git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=$HOME/cvc4-release --static --no-static-binary && cd build && make -j4 && make install
         echo "CVC4 cache hit"
     fi
 }
