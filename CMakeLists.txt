@@ -35,6 +35,7 @@ include(SendFileHack)
 include(AppleConfiguration)
 include(InstallFiles)
 include(Sanitizers)
+include(ClangTidy)
 
 if(BUILD_STATIC)
   include(BuildStatic)
