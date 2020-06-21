@@ -100,6 +100,7 @@ travis_script() {
         cmake .. -GNinja $BASE_FLAGS $SOLVERS -DZ3_DIR=$HOME/z3
     fi
 
+    cd regression && ctest -j4 --output-on-failure --progress . 
 }
 
 travis_after_success() {
