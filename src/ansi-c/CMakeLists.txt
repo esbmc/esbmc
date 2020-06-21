@@ -7,6 +7,10 @@ BISON_TARGET(cparser parser.ypp ${CMAKE_CURRENT_BINARY_DIR}/parser.cpp COMPILE_F
 FLEX_TARGET(cscanner scanner.lpp ${CMAKE_CURRENT_BINARY_DIR}/scanner.cpp COMPILE_FLAGS "--header-file=scanner.hpp -Pyyansi_c")
 ADD_FLEX_BISON_DEPENDENCY(cscanner cparser)
 
+# For Coverage
+configure_file(parser.ypp  ${CMAKE_BINARY_DIR}/parser.ypp COPYONLY)
+configure_file(scanner.lpp  ${CMAKE_BINARY_DIR}/scanner.lpp COPYONLY)
+
 # These libraries are separated since it gives a lot of register warnings.
 add_library(ansic_with_register ${CMAKE_CURRENT_BINARY_DIR}/parser.cpp ${CMAKE_CURRENT_BINARY_DIR}/scanner.cpp)
 target_compile_options(ansic_with_register PRIVATE -Wno-deprecated-register)

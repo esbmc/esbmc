@@ -36,6 +36,7 @@ include(AppleConfiguration)
 include(InstallFiles)
 include(Sanitizers)
 include(ClangTidy)
+include(Coverage)
 
 if(BUILD_STATIC)
   include(BuildStatic)

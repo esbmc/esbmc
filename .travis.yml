@@ -19,6 +19,7 @@ addons:
       - libboost-all-dev
       - ninja-build
       - python3-setuptools
+      - lcov
   homebrew:
     packages:
       - gmp
@@ -43,10 +44,14 @@ jobs:
   include:
     - os: linux
       compiler: "gcc"
+      env: ENABLE_COVERAGE=1
     - os: linux
       compiler: "clang"
     - os: osx
       osx_image: xcode10.2
+      compiler: "clang"
+  allow_failures:
+    - os: linux
       compiler: "clang"
     
 
