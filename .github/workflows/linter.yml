@@ -44,3 +44,13 @@ jobs:
       run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/ansi-c/cpp | xargs ./clang9/bin/clang-format -style=file -i -fallback-style=none
     - name: Throws error if changes were made
       run: git diff --exit-code
+
+  cmake-lint:  
+    name: Check CMake modules
+    runs-on: ubuntu-latest
+    steps:      
+    - uses: actions/checkout@v1    
+    - name: Install cmakelint
+      run: pip3 install cmakelint
+    - name: Run CMake Lint
+      run: find . -iname *.cmake -o -iname CMakeLists.txt | grep -v build | xargs cmakelint
