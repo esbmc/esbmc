@@ -2,6 +2,14 @@
 include(CTest)
 enable_testing()
 
+# ctest_empty_binary_directory("${CTEST_BINARY_DIRECTORY}")
+
+#set(CTEST_SITE "${CMAKE_SYSTEM_NAME}")
+#set(CTEST_BUILD_NAME "experimental build")
+
+#set(CTEST_CMAKE_GENERATOR "Ninja")
+#set(CTEST_COVERAGE_COMMAND "gcov")
+
 find_package(Python)
 # TODO: Use add dependency
 
