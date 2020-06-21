@@ -44,6 +44,8 @@ travis_install() {
     if [ "$TRAVIS_OS_NAME" = linux ]; then
         wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.4/z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && unzip z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && mv z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04 $HOME/z3
         cd $ROOT_DIR
+    else
+        wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.8/z3-4.8.8-x64-osx-10.14.6.zip && unzip z3-4.8.8-x64-osx-10.14.6.zip && mv z3-4.8.8-x64-osx-10.14.6.zip $HOME/z3
     fi
 
     # MathSAT
@@ -86,7 +88,7 @@ travis_script() {
     # Compile ESBMC
 
     export BASE_FLAGS="-DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$HOME/clang9 -DLLVM_DIR=$HOME/clang9 -DCMAKE_INSTALL_PREFIX:PATH=$HOME/release"
-    export SOLVERS="-DBoolector_DIR=$HOME/boolector-3.2.0 -DMathsat_DIR=$HOME/mathsat -DCVC4_DIR=$HOME/cvc4-release"
+    export SOLVERS="-DBoolector_DIR=$HOME/boolector-3.2.0 -DMathsat_DIR=$HOME/mathsat -DZ3_DIR=$HOME/z3 -DCVC4_DIR=$HOME/cvc4-release"
     export MAC_EXCLUSIVE="-DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
 
     if [ "$TRAVIS_OS_NAME" = osx ]; then
@@ -97,7 +99,8 @@ travis_script() {
     else
         mkdir build
         cd build
-        cmake .. -GNinja $BASE_FLAGS $SOLVERS -DZ3_DIR=$HOME/z3
+        cmake .. -GNinja $BASE_FLAGS $SOLVERS
+        ninja
     fi
 
     cd regression && ctest -j4 --output-on-failure --progress . 
