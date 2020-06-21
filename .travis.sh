@@ -115,6 +115,7 @@ travis_script() {
         lcov -c --directory ./src/ --output-file main_coverage.info
         lcov --remove main_coverage.info '/usr/include/*' '*build*' '*clang9/include*' -o filtered_coverage.info
         genhtml filtered_coverage.info --output-directory out
+        bash <(curl -s https://codecov.io/bash) -f coverage.info || echo "Codecov did not collect coverage reports"
     fi
 }
 
