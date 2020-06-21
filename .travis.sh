@@ -88,22 +88,22 @@ travis_script() {
     # Compile ESBMC
 
     export BASE_FLAGS="-DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$HOME/clang9 -DLLVM_DIR=$HOME/clang9 -DCMAKE_INSTALL_PREFIX:PATH=$HOME/release"
-    export SOLVERS="-DBoolector_DIR=$HOME/boolector-3.2.0 -DMathsat_DIR=$HOME/mathsat -DZ3_DIR=$HOME/z3 -DCVC4_DIR=$HOME/cvc4-release"
+    export SOLVERS="-DBoolector_DIR=$HOME/boolector-3.2.0 -DMathsat_DIR=$HOME/mathsat -DCVC4_DIR=$HOME/cvc4-release"
     export MAC_EXCLUSIVE="-DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
 
     if [ "$TRAVIS_OS_NAME" = osx ]; then
         mkdir build
         cd build
-        cmake .. $BASE_FLAGS $SOLVERS $MAC_EXCLUSIVE -DENABLE_Z3=On || echo "cmake warning"
+        cmake .. $BASE_FLAGS $SOLVERS $MAC_EXCLUSIVE || echo "cmake warning"
         make -s -j4
     else
         mkdir build
         cd build
-        cmake .. -GNinja $BASE_FLAGS $SOLVERS
+        cmake .. -GNinja $BASE_FLAGS $SOLVERS -DZ3_DIR=$HOME/z3
         ninja
     fi
 
-    cd regression && ctest -j4 --output-on-failure --progress . 
+    # cd regression && ctest -j4 --output-on-failure --progress . 
 }
 
 travis_after_success() {
