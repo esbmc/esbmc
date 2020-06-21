@@ -47,6 +47,7 @@ jobs:
   cmake-lint:  
     name: Check CMake modules
     runs-on: ubuntu-latest
+    continue-on-error: true # TODO: Eventually this will be removed
     steps:      
     - uses: actions/checkout@v1
     - name: Set up Python 3.8
