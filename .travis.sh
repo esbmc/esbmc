@@ -32,7 +32,7 @@ travis_install() {
     fi
 
     # Boolector
-    if [ ! -d "$HOME/boolector-3.2.0" ]; then
+    if [ ! -z "$HOME/boolector-3.2.0" ]; then
         git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $HOME/boolector-3.2.0 && cd build && make -s -j4 && make install
         cd $ROOT_DIR  
     else
