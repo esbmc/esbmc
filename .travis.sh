@@ -16,6 +16,8 @@ travis_before_install() {
         # https://docs.travis-ci.com/user/caching/#ccache-on-macos
         export PATH="/usr/local/opt/ccache/libexec:$PATH"
     fi
+
+    pip3 install toml
 }
 
 travis_install() {
