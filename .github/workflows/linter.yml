@@ -12,7 +12,7 @@ on:
 
 jobs:
   super-linter:    
-    name: Lint Code Base (super-lint)
+    name: Apply super-linter
     runs-on: ubuntu-latest
 
     steps:
