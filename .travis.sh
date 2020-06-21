@@ -58,29 +58,24 @@ travis_install() {
     fi
 
     # GMP build (linux)
-    if [ -z "$(ls -A $HOME/gmp)" ] && [ "$TRAVIS_OS_NAME" = linux ]; then
+    if [ "$TRAVIS_OS_NAME" = linux ]; then
         wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz && rm gmp-6.1.2.tar.xz && cd gmp-6.1.2 && ./configure --prefix $HOME/gmp --disable-shared ABI=64 CFLAGS=-fPIC CPPFLAGS=-DPIC && make -j4 && make install
         cd $ROOT_DIR
     else
         echo "GMP cache hit"
     fi
 
-    # Yices 2
-    if [ -z "$(ls -A $HOME/yices)" ]; then
-        if [ "$TRAVIS_OS_NAME" = linux ]; then
-            git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $HOME/yices --with-static-gmp=$HOME/gmp/lib/libgmp.a && make -j4 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a $HOME/yices/lib
-            cd $ROOT_DIR
-        else
-            git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $HOME/yices && make -j4 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a $HOME/yices/lib
-            cd $ROOT_DIR
-        fi
+    if [ "$TRAVIS_OS_NAME" = linux ]; then
+        git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $HOME/yices --with-static-gmp=$HOME/gmp/lib/libgmp.a && make -j4 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a $HOME/yices/lib
+        cd $ROOT_DIR
     else
-        echo "Yices 2 cache hit"
+        git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $HOME/yices && make -j4 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a $HOME/yices/lib
+        cd $ROOT_DIR
     fi
 
     # CVC 4
     if [ -z "$(ls -A $HOME/cvc4-release)" ]; then
-        git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=$HOME/cvc4-release --static --no-static-binary && cd build && make -j4 && make install        
+        git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=$HOME/cvc4-release --static --no-static-binary && cd build && make -j4 && make install
         cd $ROOT_DIR
     else
         echo "CVC4 cache hit"
@@ -97,7 +92,7 @@ travis_script() {
     if [ "$TRAVIS_OS_NAME" = osx ]; then
         mkdir build
         cd build
-        cmake ..  $BASE_FLAGS $SOLVERS $MAC_EXCLUSIVE -DENABLE_Z3=On || echo "cmake warning"
+        cmake .. $BASE_FLAGS $SOLVERS $MAC_EXCLUSIVE -DENABLE_Z3=On || echo "cmake warning"
         make -s -j4
     else
         mkdir build
