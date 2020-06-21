@@ -1,4 +1,4 @@
-name: Unit Tests
+name: Health Checks
 
 on: [push, pull_request]
 jobs:  
@@ -13,6 +13,7 @@ jobs:
 
 
   fast-tests:
+    name: Run unit and fuzz targets
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
@@ -31,7 +32,26 @@ jobs:
     - name: Run tests
       run: cd build && ninja test
 
+  clang-tidy:
+    name: Run clang-tidy
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools
+    - name: Download Clang 9
+      run: wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+    - name: Extract Clang 9
+      run: tar xf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
+    - name: Get current folder and files
+      run: pwd && ls
+    - name: Configure CMake
+      run: mkdir build && cd build && CC=../clang9/bin/clang CXX=../clang9/bin/clang++ cmake .. -GNinja -DENABLE_CLANG_TIDY=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9    
+    - name: Run tests
+      run: cd build && ninja || echo "fail" # TODO: Eventually this will be removed
+
   windows-clone:
+    name: Check if Windows users can checkout this version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v1
