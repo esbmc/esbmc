@@ -56,4 +56,4 @@ jobs:
     - name: Install cmakelint
       run: pip install cmakelint
     - name: Run CMake Lint
-      run: find . -iname *.cmake -o -iname CMakeLists.txt | grep -v build | xargs python -m cmakelint
+      run: find . -iname *.cmake -o -iname CMakeLists.txt | grep -v build | xargs cmakelint
