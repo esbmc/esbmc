@@ -1,21 +1,7 @@
-name: ESBMC Fast Health Checks
+name: Unit Tests
 
 on: [push, pull_request]
-jobs:
-
-  # Check project with clang-format
-  code-style:  
-    runs-on: ubuntu-latest
-    steps:      
-    - uses: actions/checkout@v1    
-    - name: Download Clang 9
-      run: wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-    - name: Extract Clang 9
-      run: tar xf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
-    - name: Run clang-format
-      run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/ansi-c/cpp | xargs ./clang9/bin/clang-format -style=file -i -fallback-style=none
-    - name: Throws error if changes were made
-      run: git diff --exit-code
+jobs:  
 
   # Check testing tool suite
   testing-tool:
