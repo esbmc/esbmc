@@ -24,6 +24,7 @@ download_extract_zip() {
 travis_before_install() {
     # Here should go changes needed in the repo before continuing e.g git submodules
     # ESBMC does not have any for now.
+    echo "Configuring repository"
 }
 
 travis_install() {
