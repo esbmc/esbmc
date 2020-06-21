@@ -5,11 +5,6 @@
 ###########################
 name: Lint Code Base
 
-on:
-  push:
-    branches-ignore:
-      - 'master'
-
 jobs:
   super-linter:    
     name: Apply super-linter
