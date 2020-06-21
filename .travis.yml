@@ -36,6 +36,11 @@ cache:
     - $HOME/clcache
     - $HOME/boolector
     - $HOME/boolector-3.2.0
+    - $HOME/gmp
+    - $HOME/yices
+    - $HOME/yices2
+    - $HOME/cvc4
+    - $HOME/cvc4-release
 
 jobs:
   include:
