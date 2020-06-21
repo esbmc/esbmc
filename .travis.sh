@@ -88,9 +88,10 @@ travis_script() {
     # Compile ESBMC
 
     export BASE_FLAGS="-DBUILD_TESTING=On -DENABLE_REGRESSION=On-DClang_DIR=$HOME/clang9 -DLLVM_DIR=$HOME/clang9 -DCMAKE_INSTALL_PREFIX:PATH=$HOME/release"
+    export COVERAGE_FLAGS=""
     export SOLVERS="-DBoolector_DIR=$HOME/boolector-3.2.0 -DMathsat_DIR=$HOME/mathsat -DCVC4_DIR=$HOME/cvc4-release"
     export MAC_EXCLUSIVE=" -DBUILD_STATIC=On -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
-
+    
     if [ "$TRAVIS_OS_NAME" = osx ]; then
         mkdir build        
         cd build
@@ -98,16 +99,27 @@ travis_script() {
         cmake .. $BASE_FLAGS $SOLVERS $MAC_EXCLUSIVE || echo "cmake warning"
         make -s -j4
     else
+        if [ $ENABLE_COVERAGE = 1]; then
+            export COVERAGE_FLAGS="-DENABLE_COVERAGE=On"
+        fi
         mkdir build
         cd build
-        cmake .. -GNinja $BASE_FLAGS $SOLVERS -DZ3_DIR=$HOME/z3
+        cmake .. -GNinja $BASE_FLAGS $SOLVERS -DZ3_DIR=$HOME/z3 $COVERAGE_FLAGS
         ninja
     fi
 
-    cd regression && ctest -j4 --output-on-failure --progress . 
+    cd ctest -j4 --output-on-failure --progress .
+
+    if [ $ENABLE_COVERAGE = 1]; then
+        pwd
+        lcov -c --directory ./src/ --output-file main_coverage.info
+        lcov --remove main_coverage.info '/usr/include/*' '*build*' '*clang9/include*' -o filtered_coverage.info
+        genhtml filtered_coverage.info --output-directory out
+    fi
 }
 
 travis_after_success() {
+    ls build/out
     ccache -s
 }
 
