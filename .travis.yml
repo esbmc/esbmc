@@ -27,13 +27,14 @@ addons:
       - ninja
       - automake
 
+ # https://docs.travis-ci.com/user/caching/#things-not-to-cache
 cache:
   apt: true
   ccache: true
   directories:
     - $HOME/Library/Caches/Homebrew
     - $HOME/clcache
-
+    - $HOME/boolector-3.2.0
 
 jobs:
   include:
