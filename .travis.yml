@@ -1,0 +1,59 @@
+# https://travis-ci.org
+
+language: cpp
+
+os: linux
+dist: bionic
+
+addons:
+  apt:
+    packages:
+      - gperf
+      - libgmp-dev
+      - cmake
+      - bison
+      - flex
+      - ccache
+      - gcc-multilib
+      - linux-libc-dev
+      - libboost-all-dev
+      - ninja-build
+      - python3-setuptools
+  homebrew:
+    packages:
+      - gmp
+      - cmake
+      - boost
+      - ninja
+      - automake
+
+cache:
+  apt: true
+  ccache: true
+  directories:
+    - $HOME/Library/Caches/Homebrew
+    - $HOME/clcache
+
+
+jobs:
+  include:
+    - os: linux
+      compiler: "gcc"
+    - os: linux
+      compiler: "clang"
+    - os: osx
+      osx_image: xcode9
+      compiler: "clang"
+    
+
+before_install:
+  - travis_retry bash .travis.sh travis_before_install
+
+install:
+  - travis_retry bash .travis.sh travis_install
+
+script:
+  - bash .travis.sh travis_script
+
+after_success:
+  - bash .travis.sh travis_after_success
