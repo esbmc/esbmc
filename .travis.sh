@@ -17,7 +17,7 @@ travis_before_install() {
         export PATH="/usr/local/opt/ccache/libexec:$PATH"
     fi
 
-    pip3 install toml
+    pip install toml
 }
 
 travis_install() {
