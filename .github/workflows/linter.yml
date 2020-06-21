@@ -28,6 +28,7 @@ jobs:
           VALIDATE_YAML: true
           VALIDATE_XML: true
           VALIDATE_PERL: false
+          DISABLE_ERRORS: true # TODO: Eventually this will be removed
 
 # Check project with clang-format
   code-style:  
