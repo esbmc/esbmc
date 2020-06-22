@@ -93,6 +93,7 @@ travis_script() {
     export SOLVERS="-DBoolector_DIR=$HOME/boolector-3.2.0 -DMathsat_DIR=$HOME/mathsat "
     export MAC_EXCLUSIVE=" -DBUILD_STATIC=On -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
     
+    rm -rf $HOME/cvc4
     if [ "$TRAVIS_OS_NAME" = osx ]; then
         mkdir build        
         cd build
