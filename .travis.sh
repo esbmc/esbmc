@@ -76,12 +76,12 @@ travis_install() {
     fi
 
     # CVC 4
-    if [ -z "$(ls -A $HOME/cvc4-release)" ]; then
-        git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=$HOME/cvc4-release --static --no-static-binary && cd build && make -j4 && make install
-        cd $ROOT_DIR
-    else
-        echo "CVC4 cache hit"
-    fi
+    #if [ -z "$(ls -A $HOME/cvc4-release)" ]; then
+    #     git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=$HOME/cvc4-release --static --no-static-binary && cd build && make -j4 && make install
+    #    cd $ROOT_DIR
+    #else
+    #    echo "CVC4 cache hit"
+    #fi
 }
 
 travis_script() {
@@ -90,7 +90,7 @@ travis_script() {
     export BASE_FLAGS="-DBUILD_TESTING=On -DENABLE_REGRESSION=On-DClang_DIR=$HOME/clang9 -DLLVM_DIR=$HOME/clang9 -DCMAKE_INSTALL_PREFIX:PATH=$HOME/release"
     export COVERAGE_FLAGS=""    
     export SANITIZER_FLAGS=""
-    export SOLVERS="-DBoolector_DIR=$HOME/boolector-3.2.0 -DMathsat_DIR=$HOME/mathsat -DCVC4_DIR=$HOME/cvc4-release"
+    export SOLVERS="-DBoolector_DIR=$HOME/boolector-3.2.0 -DMathsat_DIR=$HOME/mathsat "
     export MAC_EXCLUSIVE=" -DBUILD_STATIC=On -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
     
     if [ "$TRAVIS_OS_NAME" = osx ]; then
