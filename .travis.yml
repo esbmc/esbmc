@@ -67,6 +67,9 @@ jobs:
       compiler: "clang"
       env: ENABLE_SANITIZER=1
            SANITIZER="UBSAN"
+    - os: osx
+      osx_image: xcode10.2
+      compiler: "clang"
     
   allow_failures:
     # TODO: Identify, fix, and remove each build mode from failure
