@@ -1,8 +1,14 @@
-![](https://github.com/esbmc/esbmc/workflows/ESBMC%20Build%20CI/CD%20(Full)/badge.svg)
-
 # The ESBMC model checker
 
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d14d06e975644907a2eb9521e09ccfe4)](https://app.codacy.com/gh/esbmc/esbmc?utm_source=github.com&utm_medium=referral&utm_content=esbmc/esbmc&utm_campaign=Badge_Grade_Dashboard)
+[![Build Status](https://travis-ci.com/esbmc/esbmc.svg?branch=master)](https://travis-ci.com/esbmc/esbmc)
+![Lint Code Base](https://github.com/esbmc/esbmc/workflows/Lint%20Code%20Base/badge.svg)
+![Health Checks](https://github.com/esbmc/esbmc/workflows/Health%20Checks/badge.svg)
+![Build All Solvers](https://github.com/esbmc/esbmc/workflows/Build%20All%20Solvers/badge.svg)
+[![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
+
+
+
 
 ESBMC, the efficient SMT based model checker, is a software verification tool for C and C++ code bases. The technique is sound but incomplete -- an error found by ESBMC will be correct (modulo errors in the tool), but a successful verification does not guarantee there are no errors.
 
