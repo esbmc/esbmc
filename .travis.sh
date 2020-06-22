@@ -106,7 +106,7 @@ travis_script() {
             export COVERAGE_FLAGS="-DENABLE_COVERAGE=On"
         fi
         if [ $ENABLE_SANITIZER = 1 ]; then
-            export SANITIZER_FLAGS="--DCMAKE_BUILD_TYPE=Sanitizer -DSANITIZER_TYPE=$SANITIZER"
+            export SANITIZER_FLAGS="-DCMAKE_BUILD_TYPE=Sanitizer -DSANITIZER_TYPE=$SANITIZER"
         fi
         mkdir build
         cd build
