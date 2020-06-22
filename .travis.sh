@@ -100,11 +100,12 @@ travis_script() {
         rm -rf $HOME/z3
         cmake .. $BASE_FLAGS $SOLVERS $MAC_EXCLUSIVE -DENABLE_Z3=OFF || echo "cmake warning"
         make -s -j4
+        chmod +x regression/macos-wrapper.sh
     else
-        if [ $ENABLE_COVERAGE = 1]; then
+        if [ $ENABLE_COVERAGE = 1 ]; then
             export COVERAGE_FLAGS="-DENABLE_COVERAGE=On"
         fi
-        if [ $ENABLE_SANITIZER = 1]; then
+        if [ $ENABLE_SANITIZER = 1 ]; then
             export SANITIZER_FLAGS="--DCMAKE_BUILD_TYPE=Sanitizer -DSANITIZER_TYPE=$SANITIZER"
         fi
         mkdir build
@@ -115,7 +116,7 @@ travis_script() {
 
     ctest -j4 --output-on-failure --progress .
 
-    if [ $ENABLE_COVERAGE = 1]; then
+    if [ $ENABLE_COVERAGE = 1 ]; then
         pwd
         lcov -c --directory ./src/ --output-file main_coverage.info
         lcov --remove main_coverage.info '/usr/include/*' '*build*' '*clang9/include*' -o filtered_coverage.info
