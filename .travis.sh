@@ -119,7 +119,7 @@ travis_script() {
     if [ $ENABLE_COVERAGE = 1 ]; then
         pwd
         lcov -c --directory ./src/ --output-file main_coverage.info
-        lcov --remove main_coverage.info '/usr/include/*' '*build*' '*clang9/include*' -o filtered_coverage.info
+        lcov --remove main_coverage.info '/usr/include/*' '*clang9/include*' -o filtered_coverage.info
         genhtml filtered_coverage.info --output-directory out
         bash <(curl -s https://codecov.io/bash) -f filtered_coverage.info || echo "Codecov did not collect coverage reports"
     fi
