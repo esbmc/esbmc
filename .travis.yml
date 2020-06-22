@@ -2,6 +2,10 @@
 
 language: cpp
 
+branches:
+  only:
+  - master
+  
 os: linux
 dist: bionic
 
