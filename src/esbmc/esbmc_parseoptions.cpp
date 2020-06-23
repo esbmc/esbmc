@@ -75,7 +75,7 @@ struct resultt
 void timeout_handler(int dummy __attribute__((unused)))
 {
   std::cout << "Timed out" << std::endl;
-  //messaget::status("Timed out"); //message handler not initialized
+  // TODO: message handler not initialized
 
   // Unfortunately some highly useful pieces of code hook themselves into
   // aexit and attempt to free some memory. That doesn't really make sense to

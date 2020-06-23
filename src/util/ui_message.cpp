@@ -11,6 +11,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/ui_message.h>
 #include <util/xml.h>
 #include <util/xml_irep.h>
+
+#define FMT_HEADER_ONLY 1
 #include <fmt/printf.h>
 
 const char *ui_message_handlert::level_string(unsigned level)
@@ -106,7 +108,5 @@ void ui_message_handlert::xml_ui_msg(
 
   std::cout << xml;
   std::cout << std::endl;
-  //comment to be removed:
-  //how xml should be handled?
-  //fmt::printf("%s\n",xml); //xml.data()?
+  // TODO: how xml should be handled using fmt?
 }
