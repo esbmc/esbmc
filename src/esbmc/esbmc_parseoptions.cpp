@@ -75,6 +75,7 @@ struct resultt
 void timeout_handler(int dummy __attribute__((unused)))
 {
   std::cout << "Timed out" << std::endl;
+  //messaget::status("Timed out"); //message handler not initialized
 
   // Unfortunately some highly useful pieces of code hook themselves into
   // aexit and attempt to free some memory. That doesn't really make sense to
@@ -123,7 +124,7 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
       mult = 86400;
       break;
     default:
-      std::cerr << "Unrecognized timeout suffix" << std::endl;
+      error("Unrecognized timeout suffix");
       abort();
     }
   }
@@ -158,7 +159,7 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
       mult = 1024 * 1024 * 1024;
       break;
     default:
-      std::cerr << "Unrecognized memlimit suffix" << std::endl;
+      error("Unrecognized memlimit suffix");
       abort();
     }
   }
@@ -194,14 +195,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("git-hash"))
   {
-    std::cout << esbmc_version_string << std::endl;
+    status(std::string(reinterpret_cast<const char *>(esbmc_version_string)));
     exit(0);
   }
 
   if(cmdline.isset("list-solvers"))
   {
     // Generated for us by autoconf,
-    std::cout << "Available solvers: " << ESBMC_AVAILABLE_SOLVERS << std::endl;
+    status(std::string("Available solvers: ")+ESBMC_AVAILABLE_SOLVERS);
     exit(0);
   }
 
@@ -238,8 +239,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("smt-during-symex"))
   {
-    std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
-    std::cout << std::endl;
+    status("Enabling --no-slice due to presence of --smt-during-symex");
     options.set_option("no-slice", true);
   }
 
@@ -247,9 +247,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     if(!cmdline.isset("smt-during-symex"))
     {
-      std::cerr << "Please explicitly specify --smt-during-symex if you want "
-                   "to use features that involve encoding SMT during symex"
-                << std::endl;
+      error( "Please explicitly specify --smt-during-symex if you want "
+             "to use features that involve encoding SMT during symex");
       abort();
     }
   }
@@ -284,7 +283,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("timeout"))
   {
 #ifdef _WIN32
-    std::cerr << "Timeout unimplemented on Windows, sorry" << std::endl;
+    error("Timeout unimplemented on Windows, sorry");
     abort();
 #else
     const char *time = cmdline.getval("timeout");
@@ -297,7 +296,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("memlimit"))
   {
 #ifdef _WIN32
-    std::cerr << "Can't memlimit on Windows, sorry" << std::endl;
+    error("Can't memlimit on Windows, sorry");
     abort();
 #else
     uint64_t size = read_mem_spec(cmdline.getval("memlimit"));
@@ -345,9 +344,7 @@ int esbmc_parseoptionst::doit()
   //
   // Print a banner
   //
-  std::cout << "ESBMC version " << ESBMC_VERSION " " << sizeof(void *) * 8
-            << "-bit " << config.this_architecture() << " "
-            << config.this_operating_system() << std::endl;
+  messaget::status(std::string("ESBMC version ")+ESBMC_VERSION+" "+ integer2string(sizeof(void *) * 8)+ "-bit "+ config.this_architecture()+" "+config.this_operating_system());
 
   if(cmdline.isset("version"))
     return 0;
@@ -469,7 +466,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
   if(process_type == PARENT && num_p != 3)
   {
-    std::cerr << "Child processes were not created sucessfully." << std::endl;
+    error("Child processes were not created sucessfully.");
     abort();
   }
 
@@ -532,10 +529,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         else
         {
           // Invalid size read.
-          std::cerr << "Short read communicating with kinduction children"
-                    << std::endl;
-          std::cerr << "Size " << read_size << ", expected " << sizeof(resultt)
-                    << std::endl;
+          error("Short read communicating with kinduction children");
+          error("Size " + integer2string(read_size) + ", expected "
+                  + integer2string(sizeof(resultt)));
           abort();
         }
       }
@@ -557,7 +553,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
         else
         {
-          std::cout << "**** WARNING: Base case process crashed." << std::endl;
+          warning("**** WARNING: Base case process crashed.");
           bc_finished = fc_finished = is_finished = true;
         }
       }
@@ -577,8 +573,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
         else
         {
-          std::cout << "**** WARNING: Forward condition process crashed."
-                    << std::endl;
+          warning("**** WARNING: Forward condition process crashed.");
 
           fc_finished = bc_finished = is_finished = true;
         }
@@ -599,8 +594,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
         else
         {
-          std::cout << "**** WARNING: Inductive step process crashed."
-                    << std::endl;
+          warning("**** WARNING: Inductive step process crashed.");
 
           is_finished = bc_finished = fc_finished = true;
         }
@@ -624,8 +618,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         break;
 
       default:
-        std::cerr << "Message from unrecognized k-induction child "
-                  << "process" << std::endl;
+        error("Message from unrecognized k-induction child process");
         abort();
       }
 
@@ -683,10 +676,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Check if a solution was found by the base case
     if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
     {
-      std::cout << std::endl
-                << "Bug found by the base case (k = " << bc_solution << ")"
-                << std::endl;
-      std::cout << "VERIFICATION FAILED" << std::endl;
+      status("\nBug found by the base case (k = "
+             +integer2string(bc_solution)+")");
+      status("VERIFICATION FAILED");
       return true;
     }
 
@@ -697,11 +689,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
       if(bc_finished && (bc_solution != max_k_step))
       {
-        std::cout << std::endl
-                  << "Solution found by the forward condition; "
-                  << "all states are reachable (k = " << fc_solution << ")"
-                  << std::endl;
-        std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+        status("\nSolution found by the forward condition; all states are reachable (k = "
+               + integer2string(fc_solution) + ")");
+        status("VERIFICATION SUCCESSFUL");
         return false;
       }
     }
@@ -713,16 +703,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
       if(bc_finished && (bc_solution != max_k_step))
       {
-        std::cout << std::endl
-                  << "Solution found by the inductive step "
-                  << "(k = " << is_solution << ")" << std::endl;
-        std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+        status("\nSolution found by the inductive step (k = "
+               + integer2string(is_solution) + ")" );
+        status("VERIFICATION SUCCESSFUL");
         return false;
       }
     }
 
     // Couldn't find a bug or a proof for the current deepth
-    std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
+    status("\nVERIFICATION UNKNOWN");
     return false;
     break;
   }
@@ -751,10 +740,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << k_step;
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking base case" << std::endl;
+      status("\n*** K-Induction Loop Iteration "+integer2string(k_step)+" ***");
+      status("*** Checking base case");
 
       // If an exception was thrown, we should abort the process
       bool res = true;
@@ -777,7 +764,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
+        status("BASE CASE PROCESS FINISHED.");
 
         return 1;
       }
@@ -802,10 +789,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         else
         {
           // Invalid size read.
-          std::cerr << "Short read communicating with kinduction parent"
-                    << std::endl;
-          std::cerr << "Size " << read_size << ", expected " << sizeof(resultt)
-                    << std::endl;
+          error("Short read communicating with kinduction parent");
+          error("Size " + std::to_string(read_size) + ", expected " + std::to_string(sizeof(resultt)));
           abort();
         }
       }
@@ -831,7 +816,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
+    status("BASE CASE PROCESS FINISHED.");
     break;
   }
 
@@ -862,10 +847,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << k_step;
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking forward condition" << std::endl;
+      status("\n*** K-Induction Loop Iteration "+ integer2string(k_step)+" ***" );
+      status("*** Checking forward condition");
 
       // If an exception was thrown, we should abort the process
       bool res = true;
@@ -888,7 +871,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+        status("FORWARD CONDITION PROCESS FINISHED.");
 
         return 0;
       }
@@ -901,7 +884,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+    status("FORWARD CONDITION PROCESS FINISHED.");
     break;
   }
 
@@ -929,10 +912,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << k_step + 1;
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking inductive step" << std::endl;
+      status("*** K-Induction Loop Iteration "+integer2string(k_step + 1)+" ***");
+      status("*** Checking inductive step");
 
       // If an exception was thrown, we should abort the process
       bool res = true;
@@ -955,7 +936,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
+        status("INDUCTIVE STEP PROCESS FINISHED.");
 
         return res;
       }
@@ -968,7 +949,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
+    status("INDUCTIVE STEP PROCESS FINISHED.");
     break;
   }
 
@@ -1007,9 +988,7 @@ int esbmc_parseoptionst::doit_k_induction()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    std::cout << "\n*** Iteration number ";
-    std::cout << k_step;
-    std::cout << " ***\n";
+    status("\n*** Iteration number "+ integer2string(k_step)+" ***");
 
     if(do_base_case(opts, goto_functions, k_step))
       return true;
@@ -1055,9 +1034,7 @@ int esbmc_parseoptionst::doit_falsification()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    std::cout << "\n*** Iteration number ";
-    std::cout << integer2string(k_step);
-    std::cout << " ***\n";
+    status("\n*** Iteration number "+integer2string(k_step)+" ***");
 
     if(do_base_case(opts, goto_functions, k_step))
       return true;
@@ -1097,9 +1074,7 @@ int esbmc_parseoptionst::doit_incremental()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    std::cout << "\n*** Iteration number ";
-    std::cout << k_step;
-    std::cout << " ***\n";
+    status("\n*** Iteration number "+ integer2string(k_step)+" ***");
 
     if(do_base_case(opts, goto_functions, k_step))
       return true;
@@ -1142,9 +1117,7 @@ int esbmc_parseoptionst::doit_termination()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    std::cout << "\n*** Iteration number ";
-    std::cout << k_step;
-    std::cout << " ***\n";
+    status("\n*** Iteration number "+ integer2string(k_step) +" ***");
 
     if(!do_forward_condition(opts, goto_functions, k_step))
       return false;
@@ -1176,7 +1149,7 @@ int esbmc_parseoptionst::do_base_case(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  std::cout << "*** Checking base case\n";
+  status("*** Checking base case");
   switch(do_bmc(bmc))
   {
   case smt_convt::P_UNSATISFIABLE:
@@ -1185,11 +1158,11 @@ int esbmc_parseoptionst::do_base_case(
     break;
 
   case smt_convt::P_SATISFIABLE:
-    std::cout << "\nBug found (k = " << k_step << ")\n";
+    status("\nBug found (k = " + integer2string(k_step) + ")");
     return true;
 
   default:
-    std::cout << "Unknown BMC result\n";
+    status("Unknown BMC result");
     abort();
   }
 
@@ -1223,7 +1196,7 @@ int esbmc_parseoptionst::do_forward_condition(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  std::cout << "*** Checking forward condition\n";
+  status("*** Checking forward condition");
   auto res = do_bmc(bmc);
 
   // Restore the no assertion flag, before checking the other steps
@@ -1237,12 +1210,12 @@ int esbmc_parseoptionst::do_forward_condition(
     break;
 
   case smt_convt::P_UNSATISFIABLE:
-    std::cout << "\nSolution found by the forward condition; "
-              << "all states are reachable (k = " << k_step << ")\n";
+    status("\nSolution found by the forward condition; all states are reachable (k = "
+           + integer2string(k_step) + ")");
     return false;
 
   default:
-    std::cout << "Unknown BMC result\n";
+    status("Unknown BMC result");
     abort();
   }
 
@@ -1278,7 +1251,7 @@ int esbmc_parseoptionst::do_inductive_step(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  std::cout << "*** Checking inductive step\n";
+  status("*** Checking inductive step");
   switch(do_bmc(bmc))
   {
   case smt_convt::P_SATISFIABLE:
@@ -1287,12 +1260,12 @@ int esbmc_parseoptionst::do_inductive_step(
     break;
 
   case smt_convt::P_UNSATISFIABLE:
-    std::cout << "\nSolution found by the inductive step "
-              << "(k = " << k_step << ")\n";
+    status("\nSolution found by the inductive step (k = "
+           + integer2string(k_step) + ")");
     return false;
 
   default:
-    std::cout << "Unknown BMC result\n";
+    status("Unknown BMC result");
     abort();
   }
 
@@ -1420,7 +1393,7 @@ bool esbmc_parseoptionst::get_goto_program(
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory" << std::endl;
+    status("Out of memory");
     return true;
   }
 
@@ -1463,7 +1436,7 @@ void esbmc_parseoptionst::preprocessing()
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory" << std::endl;
+    error("Out of memory");
   }
 }
 
@@ -1511,9 +1484,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // Warn the user if the forward condition was disabled
       if(options.get_bool_option("disable-forward-condition"))
       {
-        std::cout << "**** WARNING: this program contains infinite loops, "
-                  << "so we are not applying the forward condition!"
-                  << std::endl;
+        warning("**** WARNING: this program contains infinite loops, so we are not applying the forward condition!");
       }
     }
 
@@ -1606,7 +1577,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory" << std::endl;
+    error("Out of memory");
     return true;
   }
 
@@ -1639,9 +1610,9 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 
 void esbmc_parseoptionst::help()
 {
-  std::cout
-    << "\n"
-       "* * *           ESBMC " ESBMC_VERSION
+
+  status(
+       "\n* * *           ESBMC "  ESBMC_VERSION
        "          * * *\n"
        "\n"
        "Usage:                       Purpose:\n"
@@ -1856,5 +1827,5 @@ void esbmc_parseoptionst::help()
        " --enable-core-dump           do not disable core dump output\n"
        " --interval-analysis          enable interval analysis and add assumes "
        "to the program\n"
-       "\n";
+       "\n");
 }

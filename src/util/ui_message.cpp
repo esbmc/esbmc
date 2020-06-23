@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/ui_message.h>
 #include <util/xml.h>
 #include <util/xml_irep.h>
+#include <fmt/printf.h>
 
 const char *ui_message_handlert::level_string(unsigned level)
 {
@@ -33,9 +34,9 @@ void ui_message_handlert::print(unsigned level, const std::string &message)
   else
   {
     if(level == 1)
-      std::cerr << message << std::endl;
+      fmt::fprintf(stderr,"%s\n",message);
     else
-      std::cout << message << std::endl;
+      fmt::printf("%s\n",message);
   }
 }
 
@@ -66,11 +67,12 @@ void ui_message_handlert::old_gui_msg(
   const std::string &msg1,
   const locationt &location)
 {
-  std::cout << type << std::endl
-            << msg1 << std::endl
-            << location.get_file() << std::endl
-            << location.get_line() << std::endl
-            << location.get_column() << std::endl;
+  fmt::printf("%s\n%s\n%s\n%s\n%s\n",
+              type,
+              msg1,
+              location.get_file(),
+              location.get_line(),
+              location.get_column());
 }
 
 void ui_message_handlert::ui_msg(
@@ -104,4 +106,7 @@ void ui_message_handlert::xml_ui_msg(
 
   std::cout << xml;
   std::cout << std::endl;
+  //comment to be removed:
+  //how xml should be handled?
+  //fmt::printf("%s\n",xml); //xml.data()?
 }

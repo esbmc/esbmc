@@ -36,6 +36,9 @@ int parseoptions_baset::main()
   {
     std::cerr << "Unrecognized option \"" << cmdline.failing_option << "\"";
     std::cerr << std::endl;
+    //comment to be removed:
+    //messaget is not included, wont be initialized with handler
+    //messaget::error("Unrecognized option \"" + cmdline.failing_option "+"\");
     return EX_USAGE;
   }
 

@@ -22,4 +22,7 @@ target_include_directories(util_esbmc
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(util_esbmc "${Boost_LIBRARIES}")
+# fmt lib
+find_package(fmt)
+
+target_link_libraries(util_esbmc "${Boost_LIBRARIES}" fmt::fmt)
