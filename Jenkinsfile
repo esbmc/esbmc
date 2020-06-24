@@ -37,12 +37,10 @@ spec:
       }
       steps {
         script {
-          timeout(time: 5, unit: "MINUTES") { // Wait for user input for 5min
           def userInput = input(
             id: 'userInput', message: 'Type the category from benchmark file', parameters: [
               [$class: 'TextParameterDefinition', defaultValue: 'ConcurrencySafety-Main',  name: 'category']
             ])
-          }
 
           def built = build job: "Benchexec sv-benchmarks/high-res", parameters: [
             string(name: 'tool_url', value: "https://ssvlab.ddns.net/job/esbmc-master/job/${env.BRANCH_NAME}/$BUILD_NUMBER/artifact/esbmc.zip"),
