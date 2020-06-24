@@ -251,6 +251,12 @@ void execution_statet::symex_step(reachability_treet &art)
       end_thread();
       force_cswitch();
     }
+    else if(instruction.function == "c:@F@main")
+    {
+      end_thread();
+      // No need to force a context switch;
+      // an ended thread will cause the run to end
+    }
     else
     {
       // Fall through to base class
