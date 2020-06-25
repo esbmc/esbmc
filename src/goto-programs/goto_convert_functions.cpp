@@ -116,12 +116,6 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     throw "got invalid code for function `" + id2string(identifier) + "'";
   }
 
-  if(!symbol.value.is_code())
-  {
-    err_location(symbol.value);
-    throw "got invalid code for function `" + id2string(identifier) + "'";
-  }
-
   const codet &code = to_code(symbol.value);
 
   locationt end_location;
