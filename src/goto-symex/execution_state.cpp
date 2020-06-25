@@ -55,6 +55,7 @@ execution_statet::execution_statet(
   symex_trace = options.get_bool_option("symex-trace");
   smt_during_symex = options.get_bool_option("smt-during-symex");
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
+  deadlock_check = options.get_bool_option("deadlock-check");
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("__ESBMC_main");
@@ -251,7 +252,7 @@ void execution_statet::symex_step(reachability_treet &art)
       end_thread();
       force_cswitch();
     }
-    else if(instruction.function == "c:@F@main")
+    else if(instruction.function == "c:@F@main" && !deadlock_check)
     {
       end_thread();
       // No need to force a context switch;
@@ -1013,6 +1014,17 @@ void execution_statet::calculate_mpor_constraints()
     {
       can_run = false;
       break;
+    }
+  }
+
+  // Search for a dependancy chain
+  if(!can_run)
+  {
+    for(auto &a : thread_last_reads)
+    {
+      for(auto &b : thread_last_writes)
+        if(a == b)
+          can_run = true;
     }
   }
 

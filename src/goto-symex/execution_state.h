@@ -591,6 +591,9 @@ public:
    *  exists, compare the number of threads against this threshold. */
   unsigned int thread_cswitch_threshold;
 
+  /* Have we enabled the deadlock-check?*/
+  bool deadlock_check;
+
 protected:
   /** Number of context switches performed by this ex_state */
   int CS_number;
