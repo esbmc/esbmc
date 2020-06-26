@@ -252,6 +252,9 @@ void execution_statet::symex_step(reachability_treet &art)
       end_thread();
       force_cswitch();
     }
+    // if the main thread has ended; then we call end_thread.
+    // if we are verifying deadlock, then we want to allow ESBMC to
+    // check when some of the threads form a waiting cycle.
     else if(instruction.function == "c:@F@main" && !deadlock_check)
     {
       end_thread();
@@ -1014,17 +1017,6 @@ void execution_statet::calculate_mpor_constraints()
     {
       can_run = false;
       break;
-    }
-  }
-
-  // Search for a dependancy chain
-  if(!can_run)
-  {
-    for(auto &a : thread_last_reads)
-    {
-      for(auto &b : thread_last_writes)
-        if(a == b)
-          can_run = true;
     }
   }
 
