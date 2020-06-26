@@ -55,7 +55,6 @@ execution_statet::execution_statet(
   symex_trace = options.get_bool_option("symex-trace");
   smt_during_symex = options.get_bool_option("smt-during-symex");
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
-  deadlock_check = options.get_bool_option("deadlock-check");
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("__ESBMC_main");
@@ -255,7 +254,7 @@ void execution_statet::symex_step(reachability_treet &art)
     // if the main thread has ended; then we call end_thread.
     // if we are verifying deadlock, then we want to allow ESBMC to
     // check when some of the threads form a waiting cycle.
-    else if(instruction.function == "c:@F@main" && !deadlock_check)
+    else if(instruction.function == "c:@F@main" && !art.deadlock_check)
     {
       end_thread();
       // No need to force a context switch;
@@ -1018,6 +1017,15 @@ void execution_statet::calculate_mpor_constraints()
       can_run = false;
       break;
     }
+  }
+
+  // Search for a dependancy chain between active thread and main thread
+  if(!can_run)
+  {
+    if(
+      thread_last_reads[0] == thread_last_writes[active_thread] ||
+      thread_last_reads[active_thread] == thread_last_writes[0])
+      can_run = true;
   }
 
   mpor_says_no = !can_run;
