@@ -248,8 +248,6 @@ void goto_convert_functionst::collect_expr(
   {
     if(it->first == "type" || it->first == "subtype")
       collect_type(it->second, deps);
-    else
-      collect_type(it->second, deps);
   }
 
   forall_named_irep(it, expr.get_comments())
