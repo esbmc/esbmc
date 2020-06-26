@@ -45,11 +45,9 @@ void goto_inlinet::parameter_assignments(
 
     const irep_idt &identifier = argument.cmt_identifier();
 
+    // Don't assign arguments if they have no name, see regression spec21
     if(identifier == "")
-    {
-      err_location(location);
-      throw "no identifier for function argument";
-    }
+      continue;
 
     {
       goto_programt::targett decl = dest.add_instruction();

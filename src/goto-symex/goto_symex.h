@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
-#include <boost/shared_ptr.hpp>
 #include <goto-programs/goto_functions.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target.h>
@@ -49,7 +48,7 @@ public:
     const namespacet &_ns,
     contextt &_new_context,
     const goto_functionst &goto_functions,
-    boost::shared_ptr<symex_targett> _target,
+    std::shared_ptr<symex_targett> _target,
     optionst &opts);
   goto_symext(const goto_symext &sym);
   goto_symext &operator=(const goto_symext &sym);
@@ -96,12 +95,12 @@ public:
   {
   public:
     symex_resultt(
-      boost::shared_ptr<symex_targett> t,
+      std::shared_ptr<symex_targett> t,
       unsigned int claims,
       unsigned int remain)
       : target(std::move(t)), total_claims(claims), remaining_claims(remain){};
 
-    boost::shared_ptr<symex_targett> target;
+    std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
   };
@@ -132,7 +131,7 @@ public:
   /**
    *  Create a symex result for this run.
    */
-  boost::shared_ptr<goto_symext::symex_resultt> get_symex_result();
+  std::shared_ptr<goto_symext::symex_resultt> get_symex_result();
 
   /**
    *  Symbolically execute one instruction.
@@ -755,7 +754,7 @@ protected:
   /** GOTO functions that we're operating over. */
   const goto_functionst &goto_functions;
   /** Target listening to the execution trace */
-  boost::shared_ptr<symex_targett> target;
+  std::shared_ptr<symex_targett> target;
   /** Target thread we're currently operating upon */
   goto_symex_statet *cur_state;
   /** Symbol names for modelling arrays.

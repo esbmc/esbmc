@@ -57,14 +57,14 @@ bmct::bmct(
 
   if(options.get_bool_option("smt-during-symex"))
   {
-    runtime_solver = boost::shared_ptr<smt_convt>(create_solver_factory(
+    runtime_solver = std::shared_ptr<smt_convt>(create_solver_factory(
       "", opts.get_bool_option("int-encoding"), ns, options));
 
     symex = std::make_shared<reachability_treet>(
       funcs,
       ns,
       options,
-      boost::shared_ptr<runtime_encoded_equationt>(
+      std::shared_ptr<runtime_encoded_equationt>(
         new runtime_encoded_equationt(ns, *runtime_solver)),
       _context,
       _message_handler);
@@ -75,15 +75,15 @@ bmct::bmct(
       funcs,
       ns,
       options,
-      boost::shared_ptr<symex_target_equationt>(new symex_target_equationt(ns)),
+      std::shared_ptr<symex_target_equationt>(new symex_target_equationt(ns)),
       _context,
       _message_handler);
   }
 }
 
 void bmct::do_cbmc(
-  boost::shared_ptr<smt_convt> &smt_conv,
-  boost::shared_ptr<symex_target_equationt> &eq)
+  std::shared_ptr<smt_convt> &smt_conv,
+  std::shared_ptr<symex_target_equationt> &eq)
 {
   smt_conv->set_message_handler(message_handler);
   eq->convert(*smt_conv.get());
@@ -129,8 +129,8 @@ void bmct::successful_trace()
 }
 
 void bmct::error_trace(
-  boost::shared_ptr<smt_convt> &smt_conv,
-  boost::shared_ptr<symex_target_equationt> &eq)
+  std::shared_ptr<smt_convt> &smt_conv,
+  std::shared_ptr<symex_target_equationt> &eq)
 {
   if(options.get_bool_option("result-only"))
     return;
@@ -169,8 +169,8 @@ void bmct::error_trace(
 }
 
 smt_convt::resultt bmct::run_decision_procedure(
-  boost::shared_ptr<smt_convt> &smt_conv,
-  boost::shared_ptr<symex_target_equationt> &eq)
+  std::shared_ptr<smt_convt> &smt_conv,
+  std::shared_ptr<symex_target_equationt> &eq)
 {
   std::string logic;
 
@@ -289,7 +289,7 @@ void bmct::report_failure()
   }
 }
 
-void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
+void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
 {
   unsigned int count = 1;
 
@@ -361,7 +361,7 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
 
 void bmct::report_trace(
   smt_convt::resultt &res,
-  boost::shared_ptr<symex_target_equationt> &eq)
+  std::shared_ptr<symex_target_equationt> &eq)
 {
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
@@ -460,14 +460,14 @@ void bmct::report_result(smt_convt::resultt &res)
 
 smt_convt::resultt bmct::start_bmc()
 {
-  boost::shared_ptr<symex_target_equationt> eq;
+  std::shared_ptr<symex_target_equationt> eq;
   smt_convt::resultt res = run(eq);
   report_trace(res, eq);
   report_result(res);
   return res;
 }
 
-smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
+smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 {
   symex->options.set_option("unwind", options.get_option("unwind"));
   symex->setup_for_new_explore();
@@ -522,8 +522,8 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
 }
 
 void bmct::bidirectional_search(
-  boost::shared_ptr<smt_convt> &smt_conv,
-  boost::shared_ptr<symex_target_equationt> &eq)
+  std::shared_ptr<smt_convt> &smt_conv,
+  std::shared_ptr<symex_target_equationt> &eq)
 {
   // We should only analyse the inductive step's cex and we're running
   // in k-induction mode
@@ -651,10 +651,9 @@ void bmct::bidirectional_search(
   }
 }
 
-smt_convt::resultt
-bmct::run_thread(boost::shared_ptr<symex_target_equationt> &eq)
+smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 {
-  boost::shared_ptr<goto_symext::symex_resultt> result;
+  std::shared_ptr<goto_symext::symex_resultt> result;
 
   fine_timet symex_start = current_time();
   try
@@ -691,7 +690,7 @@ bmct::run_thread(boost::shared_ptr<symex_target_equationt> &eq)
 
   fine_timet symex_stop = current_time();
 
-  eq = boost::dynamic_pointer_cast<symex_target_equationt>(result->target);
+  eq = std::dynamic_pointer_cast<symex_target_equationt>(result->target);
 
   {
     std::ostringstream str;
@@ -766,7 +765,7 @@ bmct::run_thread(boost::shared_ptr<symex_target_equationt> &eq)
 
     if(!options.get_bool_option("smt-during-symex"))
     {
-      runtime_solver = boost::shared_ptr<smt_convt>(create_solver_factory(
+      runtime_solver = std::shared_ptr<smt_convt>(create_solver_factory(
         "", options.get_bool_option("int-encoding"), ns, options));
     }
 

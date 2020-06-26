@@ -14,10 +14,9 @@ Author: Lucas Cordeiro, lucas.cordeiro@manchester.ac.uk
 #include <util/irep2.h>
 #include <util/irep2_expr.h>
 
-inline std::string get_pretty_name(const expr2tc code)
+inline std::string get_pretty_name(const std::string &name)
 {
-  return to_code_decl2t(code).value.as_string().substr(
-    to_code_decl2t(code).value.as_string().find_last_of('@') + 1);
+  return name.substr(name.find_last_of('@') + 1);
 }
 
 #endif // CPROVER_UTIL_PRETTY_H

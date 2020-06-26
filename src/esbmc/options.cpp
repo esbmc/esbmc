@@ -179,8 +179,6 @@ const struct opt_templ esbmc_options[] = {
 
   // --break-at $insnnum will cause ESBMC to execute a trap
   // instruction when it executes the designated GOTO instruction number.
-  // Now breaks into python, although you can
-  // break further into gdb by executing esbmc.trap().
   {0, "break-at", string, ""},
 
   // I added some intrinsics along the line of "__ESBMC_switch_to_thread"

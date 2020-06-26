@@ -379,7 +379,7 @@ void goto_convertt::cpp_new_initializer(
     exprt default_value = gen_zero(rhs.type().subtype());
 
     assignment.move_to_operands(new_object, default_value);
-    initializer.move_to_operands(assignment);
+    initializer.expression() = assignment;
   }
   else
   {
@@ -727,7 +727,7 @@ void goto_convertt::do_function_call_symbol(
     t->location.comment(description);
     // we ignore any LHS
   }
-  else if(base_name == "operatorcpp_new(unsigned_int)")
+  else if(base_name == "operator new")
   {
     assert(arguments.size() == 1);
 

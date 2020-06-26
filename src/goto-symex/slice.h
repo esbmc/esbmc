@@ -13,14 +13,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/symex_target_equation.h>
 #include <unordered_set>
 
-BigInt slice(boost::shared_ptr<symex_target_equationt> &eq, bool slice_assume);
-BigInt simple_slice(boost::shared_ptr<symex_target_equationt> &eq);
+BigInt slice(std::shared_ptr<symex_target_equationt> &eq, bool slice_assume);
+BigInt simple_slice(std::shared_ptr<symex_target_equationt> &eq);
 
 class symex_slicet
 {
 public:
   symex_slicet(bool assume);
-  void slice(boost::shared_ptr<symex_target_equationt> &eq);
+  void slice(std::shared_ptr<symex_target_equationt> &eq);
 
   typedef std::unordered_set<std::string> symbol_sett;
   symbol_sett depends;

@@ -28,7 +28,7 @@ reachability_treet::reachability_treet(
   goto_functionst &goto_functions,
   const namespacet &ns,
   optionst &opts,
-  boost::shared_ptr<symex_targett> target,
+  std::shared_ptr<symex_targett> target,
   contextt &context,
   message_handlert &_message_handler)
   : goto_functions(goto_functions),
@@ -62,7 +62,7 @@ reachability_treet::reachability_treet(
 
 void reachability_treet::setup_for_new_explore()
 {
-  boost::shared_ptr<symex_targett> targ;
+  std::shared_ptr<symex_targett> targ;
 
   execution_states.clear();
 
@@ -258,7 +258,7 @@ bool reachability_treet::is_has_complete_formula()
 
 void reachability_treet::switch_to_next_execution_state()
 {
-  std::list<boost::shared_ptr<execution_statet>>::iterator it = cur_state_it;
+  std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
   it++;
 
   if(it != execution_states.end())
@@ -323,7 +323,7 @@ bool reachability_treet::reset_to_unexplored_state()
 
 void reachability_treet::go_next_state()
 {
-  std::list<boost::shared_ptr<execution_statet>>::iterator it = cur_state_it;
+  std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
   it++;
   if(it != execution_states.end())
     cur_state_it++;
@@ -348,7 +348,7 @@ void reachability_treet::go_next_state()
 
 reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
 {
-  std::list<boost::shared_ptr<execution_statet>>::const_iterator it;
+  std::list<std::shared_ptr<execution_statet>>::const_iterator it;
 
   // Iterate through each position in the DFS tree recording data into this
   // object.
@@ -523,7 +523,7 @@ fail:
 
 void reachability_treet::print_ileave_trace() const
 {
-  std::list<boost::shared_ptr<execution_statet>>::const_iterator it;
+  std::list<std::shared_ptr<execution_statet>>::const_iterator it;
   int i = 0;
 
   std::cout << "Context switch trace for interleaving:" << std::endl;
@@ -693,7 +693,7 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   return true;
 }
 
-boost::shared_ptr<goto_symext::symex_resultt>
+std::shared_ptr<goto_symext::symex_resultt>
 reachability_treet::get_next_formula()
 {
   assert(execution_states.size() > 0 && "Must setup RT before exploring");
@@ -745,7 +745,7 @@ bool reachability_treet::setup_next_formula()
   return reset_to_unexplored_state();
 }
 
-boost::shared_ptr<goto_symext::symex_resultt>
+std::shared_ptr<goto_symext::symex_resultt>
 reachability_treet::generate_schedule_formula()
 {
   int total_states = 0;
@@ -778,7 +778,7 @@ reachability_treet::generate_schedule_formula()
     go_next_state();
   }
 
-  return boost::shared_ptr<goto_symext::symex_resultt>(
+  return std::shared_ptr<goto_symext::symex_resultt>(
     new goto_symext::symex_resultt(
       schedule_target, schedule_total_claims, schedule_remaining_claims));
 }

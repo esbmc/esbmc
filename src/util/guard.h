@@ -16,8 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 class guardt
 {
-  friend void build_guard_python_class();
-
 public:
   // Default constructors
   guardt() = default;

@@ -1,30 +1,22 @@
 /*******************************************************************\
 
-Module: C++ Language Module
+Module: Clang C++ Language Module
 
-Author: Daniel Kroening, kroening@cs.cmu.edu
+Author:
 
 \*******************************************************************/
 
-#ifndef CPROVER_CPP_LANGUAGE_H
-#define CPROVER_CPP_LANGUAGE_H
+#ifndef CLANG_CPP_FRONTEND_CLANG_CPP_LANGUAGE_H_
+#define CLANG_CPP_FRONTEND_CLANG_CPP_LANGUAGE_H_
 
-#include <util/language.h>
+#include <clang-c-frontend/clang_c_language.h>
 
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
-class clang_cpp_languaget : public languaget
+class clang_cpp_languaget : public clang_c_languaget
 {
 public:
-  virtual bool preprocess(
-    const std::string &path,
-    std::ostream &outstream,
-    message_handlert &message_handler);
-
-  bool
-  parse(const std::string &path, message_handlert &message_handler) override;
-
   bool final(contextt &context, message_handlert &message_handler) override;
 
   bool typecheck(
@@ -32,12 +24,10 @@ public:
     const std::string &module,
     message_handlert &message_handler) override;
 
-  bool convert(
-    contextt &context,
-    const std::string &module,
-    message_handlert &message_handler);
-
-  void show_parse(std::ostream &out) override;
+  std::string id() const override
+  {
+    return "cpp";
+  }
 
   // conversion from expression into string
   bool from_expr(
@@ -61,6 +51,10 @@ public:
   // constructor, destructor
   ~clang_cpp_languaget() override = default;
   clang_cpp_languaget();
+
+protected:
+  std::string internal_additions() override;
+  void force_file_type() override;
 };
 
 languaget *new_clang_cpp_language();

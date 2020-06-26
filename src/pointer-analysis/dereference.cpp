@@ -24,6 +24,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
+#include <util/pretty.h>
 #include <util/rename.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
@@ -1861,7 +1862,7 @@ void dereferencet::valid_check(
         dereference_failure(
           "pointer dereference",
           "accessed expired variable pointer `" +
-            to_symbol2t(symbol).thename.as_string() + "'",
+            get_pretty_name(to_symbol2t(symbol).thename.as_string()) + "'",
           guard);
         return;
       }

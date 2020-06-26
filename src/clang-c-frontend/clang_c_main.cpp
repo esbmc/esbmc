@@ -5,7 +5,6 @@
  *      Author: mramalho
  */
 
-#include <ansi-c/c_main.h>
 #include <cassert>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -16,54 +15,87 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-bool clang_main(
-  contextt &context,
-  const std::string &standard_main,
-  message_handlert &message_handler)
+static inline void init_variable(codet &dest, const symbolt &sym)
+{
+  const exprt &value = sym.value;
+
+  if(value.is_nil())
+    return;
+
+  assert(!value.type().is_code());
+
+  exprt symbol("symbol", sym.type);
+  symbol.identifier(sym.id);
+
+  code_assignt code(symbol, sym.value);
+  code.location() = sym.location;
+
+  dest.move_to_operands(code);
+}
+
+static inline void static_lifetime_init(const contextt &context, codet &dest)
+{
+  dest = code_blockt();
+
+  // Do assignments based on "value".
+  context.foreach_operand_in_order([&dest](const symbolt &s) {
+    if(s.static_lifetime)
+      init_variable(dest, s);
+  });
+
+  // call designated "initialization" functions
+  context.foreach_operand_in_order([&dest](const symbolt &s) {
+    if(s.type.initialization() && s.type.is_code())
+    {
+      code_function_callt function_call;
+      function_call.function() = symbol_expr(s);
+      dest.move_to_operands(function_call);
+    }
+  });
+}
+
+bool clang_main(contextt &context, message_handlert &message_handler)
 {
   irep_idt main_symbol;
 
+  std::string main = (config.main != "") ? config.main : "main";
+
   // find main symbol
-  if(config.main != "")
+  std::list<irep_idt> matches;
+
+  forall_symbol_base_map(it, context.symbol_base_map, main)
   {
-    std::list<irep_idt> matches;
+    // look it up
+    symbolt *s = context.find_symbol(it->second);
 
-    forall_symbol_base_map(it, context.symbol_base_map, config.main)
-    {
-      // look it up
-      symbolt *s = context.find_symbol(it->second);
+    if(s == nullptr)
+      continue;
 
-      if(s == nullptr)
-        continue;
-
-      if(s->type.is_code())
-        matches.push_back(it->second);
-    }
-
-    if(matches.empty())
-    {
-      messaget message(message_handler);
-      message.error("main symbol `" + config.main + "' not found");
-      return true; // give up
-    }
-
-    if(matches.size() >= 2)
-    {
-      messaget message(message_handler);
-      if(matches.size() == 2)
-        std::cerr << "warning: main symbol `" << config.main << "' is ambiguous"
-                  << std::endl;
-      else
-      {
-        message.error("main symbol `" + config.main + "' is ambiguous");
-        return true;
-      }
-    }
-
-    main_symbol = matches.front();
+    if(s->type.is_code())
+      matches.push_back(it->second);
   }
-  else
-    main_symbol = standard_main;
+
+  if(matches.empty())
+  {
+    messaget message(message_handler);
+    message.error("main symbol `" + main + "' not found");
+    return true; // give up
+  }
+
+  if(matches.size() >= 2)
+  {
+    messaget message(message_handler);
+    if(matches.size() == 2)
+      std::cerr << "warning: main symbol `" << main << "' is ambiguous"
+                << std::endl;
+    else
+    {
+      message.error("main symbol `" + main + "' is ambiguous");
+      return true;
+    }
+  }
+
+  main_symbol = matches.front();
 
   // look it up
   symbolt *s = context.find_symbol(main_symbol);
@@ -92,7 +124,7 @@ bool clang_main(
   const code_typet::argumentst &arguments =
     to_code_type(symbol.type).arguments();
 
-  if(symbol.id == standard_main)
+  if(symbol.name == "main")
   {
     if(arguments.size() == 0)
     {

@@ -239,25 +239,17 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
 bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
-  if(rd.isClass())
+  if(rd.isInterface())
   {
-    std::cerr << "Class is not supported yet" << std::endl;
-    return true;
-  }
-  else if(rd.isInterface())
-  {
-    std::cerr << "Interface is not supported yet" << std::endl;
+    std::cerr << "Interface is not supported" << std::endl;
     return true;
   }
 
   struct_union_typet t;
-  if(rd.isStruct())
-    t = struct_typet();
-  else if(rd.isUnion())
+  if(rd.isUnion())
     t = union_typet();
   else
-    // This should never be reached
-    abort();
+    t = struct_typet();
 
   std::string id, name;
   get_decl_name(rd, name, id);
@@ -310,6 +302,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
       if(attr->getKind() == clang::attr::Packed)
         t.set("packed", "true");
   }
+
+  if(get_struct_union_class_methods(*rd_def, t))
+    return true;
 
   added_symbol.type = has_bitfields(t) ? fix_bitfields(t) : t;
 
@@ -811,12 +806,6 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   {
     const clang::RecordDecl &rd =
       *(static_cast<const clang::RecordType &>(the_type)).getDecl();
-
-    if(rd.isClass())
-    {
-      std::cerr << "Class Type is not supported yet" << std::endl;
-      return true;
-    }
 
     // Search for the type on the type map
     type_mapt::iterator it;
@@ -2072,7 +2061,14 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_ArrayToPointerDecay:
   case clang::CK_FunctionToPointerDecay:
   case clang::CK_BuiltinFnToFnPtr:
+  case clang::CK_UncheckedDerivedToBase:
     break;
+
+  case clang::CK_DerivedToBase:
+  case clang::CK_Dynamic:
+
+  case clang::CK_UserDefinedConversion:
+  case clang::CK_ConstructorConversion:
 
   case clang::CK_NoOp:
 
@@ -2088,6 +2084,7 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_ToVoid:
   case clang::CK_BitCast:
   case clang::CK_LValueToRValue:
+  case clang::CK_LValueBitCast:
 
   case clang::CK_PointerToBoolean:
   case clang::CK_PointerToIntegral:
@@ -2666,12 +2663,25 @@ void clang_c_convertert::get_decl_name(
     break;
 
   case clang::Decl::Record:
+  case clang::Decl::CXXRecord:
   {
     const clang::RecordDecl &rd = static_cast<const clang::RecordDecl &>(nd);
     name = getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
     id = "tag-" + name;
     return;
   }
+
+  case clang::Decl::Var:
+    if(name.empty())
+    {
+      // Anonymous variable, generate a name based on the type,
+      // see regression union1
+      const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(nd);
+      name = "anon";
+      id = getFullyQualifiedName(vd.getType(), *ASTContext);
+      return;
+    }
+    break;
 
   default:
     if(name.empty())
@@ -2704,7 +2714,7 @@ void clang_c_convertert::get_start_location_from_stmt(
   std::string function_name;
 
   if(current_functionDecl)
-    function_name = current_functionDecl->getName().str();
+    function_name = ::get_decl_name(*current_functionDecl);
 
   clang::PresumedLoc PLoc;
   get_presumed_location(stmt.getSourceRange().getBegin(), PLoc);
@@ -2721,7 +2731,7 @@ void clang_c_convertert::get_final_location_from_stmt(
   std::string function_name;
 
   if(current_functionDecl)
-    function_name = current_functionDecl->getName().str();
+    function_name = ::get_decl_name(*current_functionDecl);
 
   clang::PresumedLoc PLoc;
   get_presumed_location(stmt.getSourceRange().getEnd(), PLoc);
@@ -2742,7 +2752,7 @@ void clang_c_convertert::get_location_from_decl(
     const clang::FunctionDecl &funcd =
       static_cast<const clang::FunctionDecl &>(*decl.getDeclContext());
 
-    function_name = funcd.getName().str();
+    function_name = ::get_decl_name(funcd);
   }
 
   clang::PresumedLoc PLoc;

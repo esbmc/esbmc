@@ -23,7 +23,7 @@ public:
 
   bool convert();
 
-private:
+protected:
   clang::ASTContext *ASTContext;
   contextt &context;
   namespacet ns;
@@ -43,31 +43,31 @@ private:
   bool convert_builtin_types();
   bool convert_top_level_decl();
 
-  bool get_decl(const clang::Decl &decl, exprt &new_expr);
+  virtual bool get_decl(const clang::Decl &decl, exprt &new_expr);
 
-  bool get_var(const clang::VarDecl &vd, exprt &new_expr);
+  virtual bool get_var(const clang::VarDecl &vd, exprt &new_expr);
 
-  bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
+  virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
 
   bool get_function_params(const clang::ParmVarDecl &pd, exprt &param);
 
-  bool get_struct_union_class(const clang::RecordDecl &recordd);
+  virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
 
-  bool get_struct_union_class_fields(
+  virtual bool get_struct_union_class_fields(
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
-  bool get_struct_union_class_methods(
+  virtual bool get_struct_union_class_methods(
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
-  bool get_type(const clang::QualType &type, typet &new_type);
+  virtual bool get_type(const clang::QualType &type, typet &new_type);
 
-  bool get_type(const clang::Type &the_type, typet &new_type);
+  virtual bool get_type(const clang::Type &the_type, typet &new_type);
 
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 
-  bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
+  virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
   bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
 

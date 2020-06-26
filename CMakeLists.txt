@@ -5,7 +5,7 @@ cmake_minimum_required (VERSION 3.7)
 project (ESBMC)
 
 set (ESBMC_VERSION_MAJOR 6)
-set (ESBMC_VERSION_MINOR 3)
+set (ESBMC_VERSION_MINOR 4)
 set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
@@ -35,10 +35,11 @@ include(SendFileHack)
 include(AppleConfiguration)
 include(InstallFiles)
 include(Sanitizers)
+include(ClangTidy)
+include(Coverage)
 
 if(BUILD_STATIC)
   include(BuildStatic)
-  add_definitions(-DBOOST_PYTHON_STATIC_LIB)
 endif()
 
 include(DefineLibM)
@@ -47,14 +48,8 @@ include(DefineLibM)
 find_package(Boost REQUIRED COMPONENTS filesystem system date_time)
 include(FindLLVM)
 
-if(ENABLE_PYTHON)
-  include(FindPython)
-else()
-  message(STATUS "Python support is off")
-endif()
-
 # Optimization
-include(OptimizationCCache) 
+include(OptimizationCCache)
 
 add_subdirectory(src)
 

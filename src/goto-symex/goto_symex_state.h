@@ -10,7 +10,6 @@
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
-#include <boost/shared_ptr.hpp>
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -99,7 +98,7 @@ public:
   {
   public:
     unsigned depth;
-    boost::shared_ptr<renaming::level2t> level2_ptr;
+    std::shared_ptr<renaming::level2t> level2_ptr;
     renaming::level2t &level2;
     value_sett value_set;
     guardt guard;

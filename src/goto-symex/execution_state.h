@@ -11,7 +11,6 @@
 #define EXECUTION_STATE_H_
 
 #include <algorithm>
-#include <boost/shared_ptr.hpp>
 #include <deque>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_symex_state.h>
@@ -78,9 +77,9 @@ public:
     const goto_functionst &goto_functions,
     const namespacet &ns,
     reachability_treet *art,
-    boost::shared_ptr<symex_targett> _target,
+    std::shared_ptr<symex_targett> _target,
     contextt &context,
-    boost::shared_ptr<ex_state_level2t> l2init,
+    std::shared_ptr<ex_state_level2t> l2init,
     optionst &options,
     message_handlert &message_handler);
 
@@ -111,7 +110,7 @@ public:
   public:
     ex_state_level2t(execution_statet &ref);
     ~ex_state_level2t() override = default;
-    boost::shared_ptr<renaming::level2t> clone() const override;
+    std::shared_ptr<renaming::level2t> clone() const override;
     void rename(expr2tc &lhs_symbol, unsigned count) override;
     void rename(expr2tc &identifier) override;
 
@@ -128,7 +127,7 @@ public:
   public:
     state_hashing_level2t(execution_statet &ref);
     ~state_hashing_level2t() override = default;
-    boost::shared_ptr<renaming::level2t> clone() const override;
+    std::shared_ptr<renaming::level2t> clone() const override;
     void make_assignment(
       expr2tc &lhs_symbol,
       const expr2tc &const_value,
@@ -217,7 +216,7 @@ public:
    *  @see dfs_execution_statet
    *  @return New, duplicated execution state
    */
-  virtual boost::shared_ptr<execution_statet> clone() const = 0;
+  virtual std::shared_ptr<execution_statet> clone() const = 0;
 
   /**
    *  Make one symbolic execution step.
@@ -546,7 +545,7 @@ public:
   const goto_programt::instructiont *last_insn;
   /** Global L2 state of this execution_statet. It's also copied as a reference
    *  into each threads own state. */
-  boost::shared_ptr<ex_state_level2t> state_level2;
+  std::shared_ptr<ex_state_level2t> state_level2;
   /** Global pointer tracking state record. */
   value_sett global_value_set;
   /** Current active states thread ID. */
@@ -647,7 +646,7 @@ public:
     const goto_functionst &goto_functions,
     const namespacet &ns,
     reachability_treet *art,
-    boost::shared_ptr<symex_targett> _target,
+    std::shared_ptr<symex_targett> _target,
     contextt &context,
     optionst &options,
     message_handlert &_message_handler)
@@ -658,14 +657,14 @@ public:
         std::move(_target),
         context,
         options.get_bool_option("state-hashing")
-          ? boost::shared_ptr<state_hashing_level2t>(
+          ? std::shared_ptr<state_hashing_level2t>(
               new state_hashing_level2t(*this))
-          : boost::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
+          : std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
         options,
         _message_handler){};
 
   dfs_execution_statet(const dfs_execution_statet &ref) = default;
-  boost::shared_ptr<execution_statet> clone() const override;
+  std::shared_ptr<execution_statet> clone() const override;
   ~dfs_execution_statet() override;
 };
 
@@ -682,7 +681,7 @@ public:
     const goto_functionst &goto_functions,
     const namespacet &ns,
     reachability_treet *art,
-    boost::shared_ptr<symex_targett> _target,
+    std::shared_ptr<symex_targett> _target,
     contextt &context,
     optionst &options,
     unsigned int *ptotal_claims,
@@ -694,7 +693,7 @@ public:
         art,
         std::move(_target),
         context,
-        boost::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
+        std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
         options,
         _message_handler)
   {
@@ -705,7 +704,7 @@ public:
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref) = default;
-  boost::shared_ptr<execution_statet> clone() const override;
+  std::shared_ptr<execution_statet> clone() const override;
   ~schedule_execution_statet() override;
   void claim(const expr2tc &expr, const std::string &msg) override;
 

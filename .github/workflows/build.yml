@@ -1,4 +1,4 @@
-name: ESBMC Build CI/CD (Full)
+name: Build All Solvers
 
 on: 
   push:
@@ -10,6 +10,7 @@ on:
 jobs:
 
   build-linux:
+    name: Build ESBMC with all Solvers (Linux)
     runs-on: ubuntu-latest
     steps:      
     - uses: actions/checkout@v1
@@ -45,6 +46,7 @@ jobs:
       run: cd build/regression && ctest -j4 --output-on-failure --progress . 
 
   build-macos:  
+    name: Build ESBMC with all Solvers (macOS)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v1

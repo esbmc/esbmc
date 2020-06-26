@@ -3,6 +3,7 @@
 # Inspired on http://www.stablecoder.ca/2018/02/01/analyzer-build-types.html
 
 if(CMAKE_BUILD_TYPE STREQUAL "Sanitizer")
+    message(STATUS "Sanitizer Mode")
     set(SANITIZER_TYPE "ASAN" CACHE
             STRING "Choose the sanitizer to use.")
 

@@ -7,7 +7,6 @@
 
 \*******************************************************************/
 
-#include <boost/shared_ptr.hpp>
 #include <cassert>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
@@ -21,6 +20,7 @@
 #include <util/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
+#include <util/pretty.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <vector>
@@ -86,9 +86,9 @@ void goto_symext::assume(const expr2tc &the_assumption)
     cur_state->guard.make_false();
 }
 
-boost::shared_ptr<goto_symext::symex_resultt> goto_symext::get_symex_result()
+std::shared_ptr<goto_symext::symex_resultt> goto_symext::get_symex_result()
 {
-  return boost::shared_ptr<goto_symext::symex_resultt>(
+  return std::shared_ptr<goto_symext::symex_resultt>(
     new goto_symext::symex_resultt(target, total_claims, remaining_claims));
 }
 
@@ -516,7 +516,7 @@ void goto_symext::finish_formula()
     target->assertion(
       it.alloc_guard.as_expr(),
       eq,
-      "dereference failure: forgotten memory: " + it.name,
+      "dereference failure: forgotten memory: " + get_pretty_name(it.name),
       cur_state->gen_stack_trace(),
       cur_state->source,
       first_loop);

@@ -79,7 +79,7 @@ If you need more details on Boolector, please refer to [its Github](https://gith
 We have wrapped the entire build and setup of CVC4 in the following command:
 
 ```
-wget https://github.com/CVC4/CVC4/archive/1.7.tar.gz && tar xf 1.7.tar.gz && rm 1.7.tar.gz && cd CVC4-1.7 && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j8 && make install
+git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j4 && make install
 ```
 
 If you need more details on CVC4, please refer to [its Github](https://github.com/CVC4/CVC4).

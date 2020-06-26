@@ -1,97 +1,58 @@
 pipeline {
-  agent any
-  stages {
-    stage('Build') {
-      parallel {        
-        stage('Autoconf') {
-          environment {
-            CC = 'gcc'
-            CXX = 'g++'
-            CFLAGS = '-DNDEBUG -O3'
-            CXXFLAGS = '-DNDEBUG -O3'
-            solvers = "--with-boolector=$BTOR_DIR --with-mathsat=$MATHSAT_DIR --with-z3=$Z3_DIR --with-yices=$YICES_DIR --with-cvc4=$CVC4_DIR"
-            destiny = '--prefix=/home/jenkins/agent/workspace/esbmc-private_cmake/release-autoconf/'
-            static_python = '--enable-python --enable-static-link --disable-shared'
-            build_targets = '--enable-esbmc --disable-libesbmc'
-            clang_dir = "--with-clang=$CLANG_HOME --with-llvm=$CLANG_HOME"
-            flags = "$destiny $clang_dir $build_targets $static_python $solvers --disable-werror"
-          }
-          steps {
-            echo 'Building with Autoconf'
-            sh 'mkdir -p build-autoconf'
-            dir(path: 'src') {
-              sh './scripts/autoboot.sh'
-            }
-
-            dir(path: 'build-autoconf') {
-              sh '../src/configure $flags'
-              sh 'make -j`nproc`'
-              stash(includes: 'esbmc/esbmc', name: 'build-autoconf')
-              sh 'make install'
-            }
-
-            zip(zipFile: 'autoconf.zip', archive: true, dir: '/home/jenkins/agent/workspace/esbmc-private_cmake/release-autoconf/')
-          }
-        }
-      }
+  agent {
+    kubernetes {
+      yaml '''
+apiVersion: "v1"
+kind: "Pod"
+spec:
+  containers:
+    - name: "jnlp"
+      image: "rafaelsamenezes/esbmc-build:latest"
+      imagePullPolicy: "Always"
+'''
     }
-    stage('Test') {
-      parallel {
-        stage('ESBMC') {
-          steps {
-            dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./esbmc" --mode="CORE"'
-            }
-          }
-        }
-        stage('cstd - ctype') {
-          steps {
-            dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./cstd/ctype" --mode="CORE"'
-            }
-          }
-        }
-        stage('cstd - string') {
-          steps {
-            dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./cstd/string" --mode="CORE"'
-            }
-          }
-        }
-        stage('k-induction') {
-          steps {
-            dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./k-induction" --mode="CORE"'
-            }
-          }
-        }
-        stage('llvm') {
-          steps {
-            dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./llvm" --mode="CORE"'
-            }
-          }
-        }
-        stage('floats') {
-          steps {
-            dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="floats" --mode="CORE"'
-            }
-          }
-        }
-        stage('floats regression') {
-          steps {
-            dir(path: 'regression') {
-              sh 'python3 testing_tool.py --tool="$PWD/../build-autoconf/esbmc/esbmc" --regression="./floats-regression" --mode="CORE"'
-            }
-          }
-        }
-      }
-    }
+
   }
-  post {
-        always {
-            junit 'regression/test-reports/*.xml'
+  stages {
+    stage('Build ESBMC') {
+      when {
+        expression {
+          env.BRANCH_NAME.contains("benchexec")
         }
+
+      }
+      steps {
+        sh 'mkdir build && cd build && cmake .. -GNinja -DClang_DIR=$CLANG_HOME -DLLVM_DIR=$CLANG_HOME -DBUILD_STATIC=On -DBoolector_DIR=$HOME/boolector-3.2.0 -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release'
+        sh 'cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Linux.sh'
+        zip(zipFile: 'esbmc.zip', archive: true, glob: 'build/ESBMC-Linux.sh')
+      }
     }
+
+    stage('Run Benchexec') {
+      when {
+        expression {
+          env.BRANCH_NAME.contains("benchexec")
+        }
+
+      }
+      steps {
+        script {
+          def userInput = input(
+            id: 'userInput', message: 'Type the category from benchmark file', parameters: [
+              [$class: 'TextParameterDefinition', defaultValue: 'ConcurrencySafety-Main',  name: 'category']
+            ])
+
+          def built = build job: "Benchexec sv-benchmarks/high-res", parameters: [
+            string(name: 'tool_url', value: "https://ssvlab.ddns.net/job/esbmc-master/job/${env.BRANCH_NAME}/$BUILD_NUMBER/artifact/esbmc.zip"),
+            string(name: 'benchmark_url', value: "https://raw.githubusercontent.com/esbmc/esbmc/${env.BRANCH_NAME}/scripts/jenkins/benchmark.xml"),
+            string(name: 'prepare_environment_url', value: "https://raw.githubusercontent.com/esbmc/esbmc/${env.BRANCH_NAME}/scripts/jenkins/prepare_environment.sh"),
+            string(name: 'timeout', value: "900"),
+            string(name: 'category', value: userInput)
+          ]
+        }
+
+      }
+    }
+
+  }
 }

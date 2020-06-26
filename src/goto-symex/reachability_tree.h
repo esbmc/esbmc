@@ -9,7 +9,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef REACHABILITY_TREE_H_
 #define REACHABILITY_TREE_H_
 
-#include <boost/shared_ptr.hpp>
 #include <deque>
 #include <goto-programs/goto_program.h>
 #include <goto-symex/execution_state.h>
@@ -17,8 +16,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_target_equation.h>
 #include <iostream>
-#include <map>
-#include <set>
+#include <unordered_map>
+#include <unordered_set>
 #include <util/crypto_hash.h>
 #include <util/message.h>
 #include <util/options.h>
@@ -76,7 +75,7 @@ public:
     goto_functionst &goto_functions,
     const namespacet &ns,
     optionst &opts,
-    boost::shared_ptr<symex_targett> target,
+    std::shared_ptr<symex_targett> target,
     contextt &context,
     message_handlert &message_handler);
 
@@ -234,7 +233,7 @@ public:
    *  Explores a new thread interleaving and returns its trace.
    *  @return A symex_resultt recording the trace that we just generated.
    */
-  boost::shared_ptr<goto_symext::symex_resultt> get_next_formula();
+  std::shared_ptr<goto_symext::symex_resultt> get_next_formula();
 
   /**
    *  Run threads in --schedule manner.
@@ -242,7 +241,7 @@ public:
    *  trace.
    *  @return Symex result representing all interleavings
    */
-  boost::shared_ptr<goto_symext::symex_resultt> generate_schedule_formula();
+  std::shared_ptr<goto_symext::symex_resultt> generate_schedule_formula();
 
   /**
    *  Reset ex_state stack to unexplored state.
@@ -346,15 +345,15 @@ protected:
    *  contained in the list. At end of exploration, contains zero.
    *  @see print_ileave_trace
    */
-  std::list<boost::shared_ptr<execution_statet>> execution_states;
+  std::list<std::shared_ptr<execution_statet>> execution_states;
   /** Iterator recording the execution_statet in stack we're operating on */
-  std::list<boost::shared_ptr<execution_statet>>::iterator cur_state_it;
+  std::list<std::shared_ptr<execution_statet>>::iterator cur_state_it;
   /** "Global" symex target for output from --schedule exploration */
-  boost::shared_ptr<symex_targett> schedule_target;
+  std::shared_ptr<symex_targett> schedule_target;
   /** Target template; from which all targets are cloned.
    *  This allows for the use of a non-concrete target class throughout
    *  exploration */
-  boost::shared_ptr<symex_targett> target_template;
+  std::shared_ptr<symex_targett> target_template;
   /** Limit on context switches; -1 for no limit */
   int CS_bound;
   /** Limit on timeslices (--round-robin) */
@@ -379,9 +378,14 @@ protected:
   /** Are we using the --schedule scheduling method? */
   bool schedule;
 
+  /* Map to store the expression and thread ID,
+   * which that expression belongs to. */
+  std::unordered_map<expr2tc, std::list<unsigned int>, irep2_hash> vars_map;
+  /* associative container that contains global writes in */
+  std::unordered_set<expr2tc, irep2_hash> is_global;
+
   friend class execution_statet;
   friend void build_goto_symex_classes();
-  friend class python_rt_mangler;
 };
 
 #endif /* REACHABILITY_TREE_H_ */

@@ -25,27 +25,6 @@ public:
   virtual ~message_handlert() = default;
 };
 
-class nul_message_handlert : public message_handlert
-{
-};
-
-class stream_message_handlert : public message_handlert
-{
-public:
-  stream_message_handlert(std::ostream &_out) : out(_out)
-  {
-  }
-
-  void print(unsigned level __attribute__((unused)), const std::string &message)
-    override
-  {
-    out << message << std::endl;
-  }
-
-protected:
-  std::ostream &out;
-};
-
 class messaget
 {
 public:
