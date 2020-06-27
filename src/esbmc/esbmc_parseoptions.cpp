@@ -377,11 +377,14 @@ int esbmc_parseoptionst::doit()
     return 0;
   }
 
-  if(cmdline.isset("termination"))
-    return doit_termination();
+  // force incremental context-bound
+  return doit_incremental_cb();
 
   if(cmdline.isset("incremental-cb"))
     return doit_incremental_cb();
+
+  if(cmdline.isset("termination"))
+    return doit_termination();
 
   if(cmdline.isset("incremental-bmc"))
     return doit_incremental();
@@ -1122,6 +1125,9 @@ int esbmc_parseoptionst::doit_incremental_cb()
   optionst opts;
   get_command_line_options(opts);
 
+  // disable POR
+  opts.set_option("no-por", false);
+
   if(get_goto_program(opts, goto_functions))
     return 6;
 
@@ -1146,9 +1152,9 @@ int esbmc_parseoptionst::doit_incremental_cb()
     strtoul(cmdline.getval("context-bound-step"), nullptr, 10);
 
   // Get the unwind bound
-  unsigned unwind = atoi(opts.get_option("unwind").c_str());
+  unsigned unwind = 10; // atoi(opts.get_option("unwind").c_str());
 
-  for(unsigned int context_bound = 1; context_bound <= max_context_bound;
+  for(unsigned int context_bound = 2; context_bound <= max_context_bound;
       context_bound += context_bound_inc)
   {
     char str[5];
@@ -1159,14 +1165,12 @@ int esbmc_parseoptionst::doit_incremental_cb()
     std::cout << " ***\n";
 
     if(do_base_case(opts, goto_functions, unwind))
-      return true;
-
-    if(
+      break;
+    else if(
       !do_forward_condition(opts, goto_functions, unwind) &&
       context_bound == max_context_bound)
-      return false;
+      break;
   }
-  status("VERIFICATION SUCCESSFUL");
 
   return 0;
 }
