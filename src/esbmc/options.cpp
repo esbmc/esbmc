@@ -154,8 +154,8 @@ const struct opt_templ esbmc_options[] = {
   {0, "no-por", switc, ""},
   {0, "all-runs", switc, ""},
   {0, "incremental-cb", switc, ""},
-  {0, "context-bound-step", number, "4"},
-  {0, "max-context-bound", number, "20"},
+  {0, "context-bound-step", number, "5"},
+  {0, "max-context-bound", number, "15"},
   {0, "unlimited-context-bound", switc, ""},
 
   // Miscellaneous

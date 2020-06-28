@@ -1152,7 +1152,7 @@ int esbmc_parseoptionst::doit_incremental_cb()
     strtoul(cmdline.getval("context-bound-step"), nullptr, 10);
 
   // Get the unwind bound
-  unsigned unwind = 10; // atoi(opts.get_option("unwind").c_str());
+  unsigned unwind = 8; // atoi(opts.get_option("unwind").c_str());
 
   for(unsigned int context_bound = 2; context_bound <= max_context_bound;
       context_bound += context_bound_inc)
