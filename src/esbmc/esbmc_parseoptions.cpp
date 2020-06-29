@@ -1135,6 +1135,10 @@ int esbmc_parseoptionst::doit_incremental_cb()
   if(set_claims(goto_functions))
     return 7;
 
+  // Get the initial context bound
+  unsigned int initial_context_bound =
+    strtoul(cmdline.getval("initial-context-bound"), nullptr, 10);
+
   // Get max number of context bounds
   unsigned int max_context_bound =
     cmdline.isset("unlimited-context-bound")
@@ -1148,7 +1152,10 @@ int esbmc_parseoptionst::doit_incremental_cb()
   // Get the unwind bound
   unsigned unwind = atoi(opts.get_option("unwind").c_str());
 
-  for(unsigned int context_bound = 2; context_bound <= max_context_bound;
+  bool unknown = true;
+
+  for(unsigned int context_bound = initial_context_bound;
+      context_bound <= max_context_bound;
       context_bound += context_bound_inc)
   {
     char str[5];
@@ -1160,14 +1167,15 @@ int esbmc_parseoptionst::doit_incremental_cb()
 
     if(do_base_case(opts, goto_functions, unwind))
       return true;
-    else if(
-      !do_forward_condition(opts, goto_functions, unwind) &&
-      context_bound == (max_context_bound - context_bound_inc + 2))
-      return false;
+    else if(!do_forward_condition(opts, goto_functions, unwind))
+      unknown = false;
   }
 
-  status("Unable to prove or falsify the program, giving up.");
-  status("VERIFICATION UNKNOWN");
+  if(unknown)
+  {
+    status("Unable to prove or falsify the program, giving up.");
+    status("VERIFICATION UNKNOWN");
+  }
 
   return 0;
 }
@@ -1920,6 +1928,9 @@ void esbmc_parseoptionst::help()
        " --no-por                     do not do partial order reduction\n"
        " --all-runs                   check all interleavings, even if a bug "
        "was already found\n"
+       " --initial-context-bound nr   set the initial context-bound for "
+       "incremental verification (default "
+       "is 2)\n"
        " --context-bound-step nr      set k context bound increment (default "
        "is 5)\n"
        " --max-context-bound nr       set max number of context-bound "

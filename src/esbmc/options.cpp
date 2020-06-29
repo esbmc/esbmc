@@ -156,6 +156,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "incremental-cb", switc, ""},
   {0, "context-bound-step", number, "5"},
   {0, "max-context-bound", number, "15"},
+  {0, "initial-context-bound", number, "2"},
   {0, "unlimited-context-bound", switc, ""},
 
   // Miscellaneous
