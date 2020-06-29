@@ -377,9 +377,6 @@ int esbmc_parseoptionst::doit()
     return 0;
   }
 
-  // force incremental context-bound
-  return doit_incremental_cb();
-
   if(cmdline.isset("incremental-cb"))
     return doit_incremental_cb();
 
@@ -1125,9 +1122,6 @@ int esbmc_parseoptionst::doit_incremental_cb()
   optionst opts;
   get_command_line_options(opts);
 
-  // disable POR
-  opts.set_option("no-por", false);
-
   if(get_goto_program(opts, goto_functions))
     return 6;
 
@@ -1152,9 +1146,9 @@ int esbmc_parseoptionst::doit_incremental_cb()
     strtoul(cmdline.getval("context-bound-step"), nullptr, 10);
 
   // Get the unwind bound
-  unsigned unwind = 7; // atoi(opts.get_option("unwind").c_str());
+  unsigned unwind = atoi(opts.get_option("unwind").c_str());
 
-  for(unsigned int context_bound = 1; context_bound <= max_context_bound;
+  for(unsigned int context_bound = 2; context_bound <= max_context_bound;
       context_bound += context_bound_inc)
   {
     char str[5];
@@ -1165,12 +1159,15 @@ int esbmc_parseoptionst::doit_incremental_cb()
     std::cout << " ***\n";
 
     if(do_base_case(opts, goto_functions, unwind))
-      break;
+      return true;
     else if(
       !do_forward_condition(opts, goto_functions, unwind) &&
-      context_bound == max_context_bound)
-      break;
+      context_bound == (max_context_bound - context_bound_inc + 2))
+      return false;
   }
+
+  status("Unable to prove or falsify the program, giving up.");
+  status("VERIFICATION UNKNOWN");
 
   return 0;
 }
@@ -1924,11 +1921,11 @@ void esbmc_parseoptionst::help()
        " --all-runs                   check all interleavings, even if a bug "
        "was already found\n"
        " --context-bound-step nr      set k context bound increment (default "
-       "is 4)\n"
+       "is 5)\n"
        " --max-context-bound nr       set max number of context-bound "
        "(default "
        "is "
-       "20)\n"
+       "15)\n"
        " --unlimited-context-bound    set max number of context bounds to "
        "UINT_MAX\n"
 
