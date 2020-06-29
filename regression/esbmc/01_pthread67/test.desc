@@ -1,0 +1,4 @@
+CORE
+main.c
+--incremental-cb --deadlock-check --initial-context-bound 1 --unwind 3
+^VERIFICATION FAILED$
