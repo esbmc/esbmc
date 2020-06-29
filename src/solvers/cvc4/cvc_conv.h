@@ -91,6 +91,7 @@ public:
 
   smt_astt mk_smt_int(const BigInt &theint) override;
   smt_astt mk_smt_real(const std::string &str) override;
+  smt_astt mk_smt_string(const std::string &str);
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
   smt_astt mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw) override;

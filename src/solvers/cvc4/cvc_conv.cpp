@@ -1026,6 +1026,13 @@ smt_astt cvc_convt::mk_smt_real(const std::string &str)
   return new_ast(em.mkConst(CVC4::Rational(str)), s);
 }
 
+smt_astt cvc_convt::mk_smt_string(const std::string &str
+                                  __attribute__((unused)))
+{
+  std::cerr << "CVC can't create String sorts" << std::endl;
+  abort();
+}
+
 smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
   smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);

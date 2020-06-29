@@ -489,6 +489,13 @@ smt_astt boolector_convt::mk_smt_int(const BigInt &theint
   abort();
 }
 
+smt_astt boolector_convt::mk_smt_string(const std::string &str
+                                        __attribute__((unused)))
+{
+  std::cerr << "Boolector can't create String sorts" << std::endl;
+  abort();
+}
+
 smt_astt boolector_convt::mk_smt_real(const std::string &str
                                       __attribute__((unused)))
 {

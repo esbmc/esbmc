@@ -656,6 +656,13 @@ smt_astt mathsat_convt::mk_smt_int(const BigInt &theint)
   return new_ast(t, s);
 }
 
+smt_astt mathsat_convt::mk_smt_string(const std::string &str
+                                      __attribute__((unused)))
+{
+  std::cerr << "MathSAT can't create String sorts" << std::endl;
+  abort();
+}
+
 smt_astt mathsat_convt::mk_smt_real(const std::string &str)
 {
   msat_term t = msat_make_number(env, str.c_str());

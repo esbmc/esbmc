@@ -777,6 +777,13 @@ smt_astt smtlib_convt::mk_smt_int(const BigInt &theint)
   return a;
 }
 
+smt_astt smtlib_convt::mk_smt_string(const std::string &str
+                                     __attribute__((unused)))
+{
+  std::cerr << "SMTLib can't create String sorts" << std::endl;
+  abort();
+}
+
 smt_astt smtlib_convt::mk_smt_real(const std::string &str)
 {
   smt_sortt s = mk_real_sort();

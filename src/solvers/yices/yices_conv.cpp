@@ -670,6 +670,13 @@ smt_astt yices_convt::mk_smt_int(const BigInt &theint)
   return new_ast(term, s);
 }
 
+smt_astt yices_convt::mk_smt_string(const std::string &str
+                                    __attribute__((unused)))
+{
+  std::cerr << "Yices can't create String sorts" << std::endl;
+  abort();
+}
+
 smt_astt yices_convt::mk_smt_real(const std::string &str)
 {
   term_t term = yices_parse_rational(str.c_str());
