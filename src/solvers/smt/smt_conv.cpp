@@ -291,9 +291,16 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   case expr2t::constant_string_id:
   {
-    const constant_string2t &str = to_constant_string2t(expr);
-    expr2tc newarr = str.to_array();
-    a = convert_ast(newarr);
+    if(config.options.get_bool_option("string-solver") && config.options.get_bool_option("z3"))
+      {
+        //a = convert_terminal(expr);
+      }
+    //else
+     {
+       const constant_string2t &str = to_constant_string2t(expr);
+       expr2tc newarr = str.to_array();
+       a = convert_ast(newarr);
+     }
     break;
   }
   case expr2t::constant_struct_id:
@@ -1245,6 +1252,12 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
 
     return mk_smt_bv(theint.value, width);
   }
+  case expr2t::constant_string_id:
+  {
+    const constant_string2t &theStr = to_constant_string2t(expr);
+    std::string result = (theStr.value).as_string();
+    return mk_smt_string(result);
+  }
   case expr2t::constant_fixedbv_id:
   {
     const constant_fixedbv2t &thereal = to_constant_fixedbv2t(expr);
@@ -1330,8 +1343,24 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
 
     if(is_array_type(expr))
     {
-      smt_sortt subtype = convert_sort(get_flattened_array_subtype(sym.type));
-      return array_api->mk_array_symbol(name, sort, subtype);
+      //Procurar se tem jeito melhor de fazer
+      expr2tc res = expr;
+      type2tc subtp = get_array_subtype(expr->type);
+      int width = subtp->get_width();
+      //res->type->Foreach_subtype([this](type2tc &t) {
+      //    width += t->get_width();
+      //});
+      if(width == 8)
+      {
+        //std::cout << "Nome: ..... " << name << std::endl;
+        //sort = mk_string_sort();
+        //return mk_smt_symbol(name, sort);
+      }
+      //else
+      {
+        smt_sortt subtype = convert_sort(get_flattened_array_subtype(sym.type));
+        return array_api->mk_array_symbol(name, sort, subtype);
+      }
     }
 
     return mk_smt_symbol(name, sort);
@@ -2576,6 +2605,12 @@ smt_sortt smt_convt::mk_real_sort()
 smt_sortt smt_convt::mk_int_sort()
 {
   std::cerr << "Chosen solver doesn't support integer sorts\n";
+  abort();
+}
+
+smt_sortt smt_convt::mk_string_sort()
+{
+  std::cerr << "Chosen solver doesn't support string sorts\n";
   abort();
 }
 
