@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
---unwind 2
+--unwind 2 --incremental-cb
 ^VERIFICATION FAILED$
