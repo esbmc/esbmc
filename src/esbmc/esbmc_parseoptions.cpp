@@ -1158,9 +1158,7 @@ int esbmc_parseoptionst::doit_incremental_cb()
       context_bound <= max_context_bound;
       context_bound += context_bound_inc)
   {
-    char str[5];
-    snprintf(str, sizeof(str), "%d", context_bound);
-    opts.set_option("context-bound", str);
+    opts.set_option("context-bound", integer2string(context_bound));
     std::cout << "\n*** Context bound number ";
     std::cout << context_bound;
     std::cout << " ***\n";
