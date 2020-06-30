@@ -36,9 +36,9 @@ void ui_message_handlert::print(unsigned level, const std::string &message)
   else
   {
     if(level == 1)
-      fmt::fprintf(stderr,"%s\n",message);
+      fmt::fprintf(stderr, "%s\n", message);
     else
-      fmt::printf("%s\n",message);
+      fmt::printf("%s\n", message);
   }
 }
 
@@ -108,5 +108,5 @@ void ui_message_handlert::xml_ui_msg(
 
   std::cout << xml;
   std::cout << std::endl;
-  // TODO: how xml should be handled using fmt?
+  // TODO(Mohannad-Aldughaim): how xml should be handled using fmt?
 }

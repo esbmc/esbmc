@@ -75,7 +75,7 @@ struct resultt
 void timeout_handler(int dummy __attribute__((unused)))
 {
   std::cout << "Timed out" << std::endl;
-  // TODO: message handler not initialized
+  // TODO(Mohannad-Aldughaim): message handler not initialized
 
   // Unfortunately some highly useful pieces of code hook themselves into
   // aexit and attempt to free some memory. That doesn't really make sense to
@@ -247,7 +247,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     if(!cmdline.isset("smt-during-symex"))
     {
-      error( "Please explicitly specify --smt-during-symex if you want "
+      error("Please explicitly specify --smt-during-symex if you want "
              "to use features that involve encoding SMT during symex");
       abort();
     }
@@ -344,7 +344,10 @@ int esbmc_parseoptionst::doit()
   //
   // Print a banner
   //
-  messaget::status(std::string("ESBMC version ")+ESBMC_VERSION+" "+ integer2string(sizeof(void *) * 8)+ "-bit "+ config.this_architecture()+" "+config.this_operating_system());
+  messaget::status(std::string("ESBMC version ")+ESBMC_VERSION+" "
+                   + integer2string(sizeof(void *) * 8)+ "-bit "
+                   + config.this_architecture()+" "
+                   + config.this_operating_system());
 
   if(cmdline.isset("version"))
     return 0;
@@ -689,7 +692,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
       if(bc_finished && (bc_solution != max_k_step))
       {
-        status("\nSolution found by the forward condition; all states are reachable (k = "
+        status(std::string("\nSolution found by the forward condition;")
+               +"all states are reachable (k = "
                + integer2string(fc_solution) + ")");
         status("VERIFICATION SUCCESSFUL");
         return false;
@@ -704,7 +708,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       if(bc_finished && (bc_solution != max_k_step))
       {
         status("\nSolution found by the inductive step (k = "
-               + integer2string(is_solution) + ")" );
+               + integer2string(is_solution) + ")");
         status("VERIFICATION SUCCESSFUL");
         return false;
       }
@@ -790,7 +794,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         {
           // Invalid size read.
           error("Short read communicating with kinduction parent");
-          error("Size " + std::to_string(read_size) + ", expected " + std::to_string(sizeof(resultt)));
+          error("Size " + std::to_string(read_size)
+                + ", expected " + std::to_string(sizeof(resultt)));
           abort();
         }
       }
@@ -847,7 +852,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      status("\n*** K-Induction Loop Iteration "+ integer2string(k_step)+" ***" );
+      status("\n*** K-Induction Loop Iteration "
+             + integer2string(k_step)+" ***" );
       status("*** Checking forward condition");
 
       // If an exception was thrown, we should abort the process
@@ -912,7 +918,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      status("*** K-Induction Loop Iteration "+integer2string(k_step + 1)+" ***");
+      status("*** K-Induction Loop Iteration "
+             +integer2string(k_step + 1)+" ***");
       status("*** Checking inductive step");
 
       // If an exception was thrown, we should abort the process

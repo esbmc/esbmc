@@ -24,6 +24,7 @@ addons:
       - ninja-build
       - python3-setuptools
       - lcov
+      - libfmt-dev
   homebrew:
     packages:
       - gmp
