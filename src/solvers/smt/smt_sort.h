@@ -10,6 +10,7 @@
 enum smt_sort_kind
 {
   SMT_SORT_INT,
+  SMT_SORT_STRING,
   SMT_SORT_REAL,
   SMT_SORT_BV,
   SMT_SORT_FIXEDBV,
