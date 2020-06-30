@@ -377,9 +377,6 @@ int esbmc_parseoptionst::doit()
     return 0;
   }
 
-  if(cmdline.isset("incremental-cb"))
-    return doit_incremental_cb();
-
   if(cmdline.isset("termination"))
     return doit_termination();
 
@@ -1117,77 +1114,6 @@ int esbmc_parseoptionst::doit_incremental()
   return 0;
 }
 
-int esbmc_parseoptionst::doit_incremental_cb()
-{
-  optionst opts;
-  get_command_line_options(opts);
-
-  if(get_goto_program(opts, goto_functions))
-    return 6;
-
-  if(cmdline.isset("show-claims"))
-  {
-    const namespacet ns(context);
-    show_claims(ns, get_ui(), goto_functions);
-    return 0;
-  }
-
-  if(set_claims(goto_functions))
-    return 7;
-
-  // Get the initial context bound
-  unsigned int initial_context_bound =
-    strtoul(cmdline.getval("initial-context-bound"), nullptr, 10);
-
-  // Get max number of context bounds
-  unsigned int max_context_bound =
-    cmdline.isset("unlimited-context-bound")
-      ? UINT_MAX
-      : strtoul(cmdline.getval("max-context-bound"), nullptr, 10);
-
-  // Get the context bound increment
-  unsigned int context_bound_inc =
-    strtoul(cmdline.getval("context-bound-step"), nullptr, 10);
-
-  // Get the unwind bound
-  unsigned unwind = atoi(opts.get_option("unwind").c_str());
-
-  bool unknown = true;
-
-  for(unsigned int context_bound = initial_context_bound;
-      context_bound <= max_context_bound;
-      context_bound += context_bound_inc)
-  {
-    opts.set_option("context-bound", integer2string(context_bound));
-    std::cout << "\n*** Context bound number ";
-    std::cout << context_bound;
-    std::cout << " ***\n";
-
-    // If we have found a property violation, then
-    // we stop the verification and report that violation.
-    if(do_base_case(opts, goto_functions, unwind))
-      return true;
-
-    // If we report verification successfully,
-    // we still need to check the other context bounds
-    // since the bug can be exposed to higher context bounds.
-    if(!do_forward_condition(opts, goto_functions, unwind))
-      unknown = false;
-  }
-
-  // If we have explored all context bounds
-  // and did not find a property violation or
-  // the unwinding assertion does not hold,
-  // then we report verification unknown.
-  if(unknown)
-  {
-    status("Unable to prove or falsify the program, giving up.");
-    status("VERIFICATION UNKNOWN");
-  }
-
-  return 0;
-}
-
 int esbmc_parseoptionst::doit_termination()
 {
   optionst opts;
@@ -1250,21 +1176,52 @@ int esbmc_parseoptionst::do_base_case(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
+  // Get the initial context bound
+  int initial_context_bound =
+    cmdline.isset("incremental-cb")
+      ? strtoul(cmdline.getval("initial-context-bound"), nullptr, 10)
+      : strtoul(cmdline.getval("context-bound"), nullptr, 10);
+
+  // Get max number of context bounds
+  int max_context_bound =
+    cmdline.isset("incremental-cb")
+      ? cmdline.isset("unlimited-context-bound")
+          ? INT_MAX
+          : strtoul(cmdline.getval("max-context-bound"), nullptr, 10)
+      : strtoul(cmdline.getval("context-bound"), nullptr, 10);
+
+  // Get the context bound increment
+  int context_bound_inc =
+    strtoul(cmdline.getval("context-bound-step"), nullptr, 10);
+
   std::cout << "*** Checking base case\n";
-  switch(do_bmc(bmc))
+  for(int context_bound = initial_context_bound;
+      context_bound <= max_context_bound;
+      context_bound += context_bound_inc)
   {
-  case smt_convt::P_UNSATISFIABLE:
-  case smt_convt::P_SMTLIB:
-  case smt_convt::P_ERROR:
-    break;
+    if(cmdline.isset("incremental-cb"))
+    {
+      opts.set_option("context-bound", integer2string(context_bound));
+      std::cout << "\n*** Context bound number ";
+      std::cout << context_bound;
+      std::cout << " ***\n";
+    }
 
-  case smt_convt::P_SATISFIABLE:
-    std::cout << "\nBug found (k = " << k_step << ")\n";
-    return true;
+    switch(do_bmc(bmc))
+    {
+    case smt_convt::P_UNSATISFIABLE:
+    case smt_convt::P_SMTLIB:
+    case smt_convt::P_ERROR:
+      break;
 
-  default:
-    std::cout << "Unknown BMC result\n";
-    abort();
+    case smt_convt::P_SATISFIABLE:
+      std::cout << "\nBug found (k = " << k_step << ")\n";
+      return true;
+
+    default:
+      std::cout << "Unknown BMC result\n";
+      abort();
+    }
   }
 
   return false;
@@ -1296,6 +1253,10 @@ int esbmc_parseoptionst::do_forward_condition(
   set_verbosity_msg(bmc);
 
   bmc.options.set_option("unwind", integer2string(k_step));
+
+  // Set max number of context bounds
+  if(cmdline.isset("incremental-cb"))
+    opts.set_option("context-bound", cmdline.getval("max-context-bound"));
 
   std::cout << "*** Checking forward condition\n";
   auto res = do_bmc(bmc);
@@ -1351,6 +1312,10 @@ int esbmc_parseoptionst::do_inductive_step(
   set_verbosity_msg(bmc);
 
   bmc.options.set_option("unwind", integer2string(k_step));
+
+  // Set max number of context bounds
+  if(cmdline.isset("incremental-cb"))
+    opts.set_option("context-bound", cmdline.getval("max-context-bound"));
 
   std::cout << "*** Checking inductive step\n";
   switch(do_bmc(bmc))
@@ -1912,7 +1877,7 @@ void esbmc_parseoptionst::help()
 
        "\nConcurrency checking\n"
        " --incremental-cb             perform incremental context-bound "
-       "verification; this option is not compatible with incremental BMC\n"
+       "verification\n"
        " --context-bound nr           limit number of context switches for "
        "each thread \n"
        " --state-hashing              enable state-hashing, prunes duplicate "

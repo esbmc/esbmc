@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 3 --incremental-cb
-^VERIFICATION UNKNOWN$
+--incremental-bmc --incremental-cb
+^VERIFICATION FAILED$
