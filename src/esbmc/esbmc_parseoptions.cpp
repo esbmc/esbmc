@@ -1163,12 +1163,22 @@ int esbmc_parseoptionst::doit_incremental_cb()
     std::cout << context_bound;
     std::cout << " ***\n";
 
+    // If we have found a property violation, then
+    // we stop the verification and report that violation.
     if(do_base_case(opts, goto_functions, unwind))
       return true;
+
+    // If we report verification successfully,
+    // we still need to check the other context bounds
+    // since the bug can be exposed to higher context bounds.
     if(!do_forward_condition(opts, goto_functions, unwind))
       unknown = false;
   }
 
+  // If we have explored all context bounds
+  // and did not find a property violation or
+  // the unwinding assertion does not hold,
+  // then we report verification unknown.
   if(unknown)
   {
     status("Unable to prove or falsify the program, giving up.");
