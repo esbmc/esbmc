@@ -809,6 +809,12 @@ smt_astt z3_convt::mk_smt_int(const BigInt &theint)
   return new_ast(z3_ctx.int_val(theint.to_uint64()), s);
 }
 
+smt_astt z3_convt::mk_smt_string(const std::string &str)
+{
+  smt_sortt s = mk_string_sort();
+  return new_ast(z3_ctx.string_val(str.c_str()), s);
+}
+
 smt_astt z3_convt::mk_smt_real(const std::string &str)
 {
   smt_sortt s = mk_real_sort();
@@ -1314,6 +1320,11 @@ smt_sortt z3_convt::mk_bool_sort()
 smt_sortt z3_convt::mk_real_sort()
 {
   return new solver_smt_sort<z3::sort>(SMT_SORT_REAL, z3_ctx.real_sort());
+}
+
+smt_sortt z3_convt::mk_string_sort()
+{
+  return new solver_smt_sort<z3::sort>(SMT_SORT_STRING, z3_ctx.string_sort());
 }
 
 smt_sortt z3_convt::mk_int_sort()

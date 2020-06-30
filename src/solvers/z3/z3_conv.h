@@ -103,6 +103,7 @@ public:
   smt_astt mk_isint(smt_astt a) override;
 
   smt_sortt mk_bool_sort() override;
+  smt_sortt mk_string_sort() override;
   smt_sortt mk_real_sort() override;
   smt_sortt mk_int_sort() override;
   smt_sortt mk_bv_sort(std::size_t width) override;
@@ -115,6 +116,7 @@ public:
 
   smt_astt mk_smt_int(const BigInt &theint) override;
   smt_astt mk_smt_real(const std::string &str) override;
+  smt_astt mk_smt_string(const std::string &str) override;
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
   smt_astt mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw) override;

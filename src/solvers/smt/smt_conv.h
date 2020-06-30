@@ -363,6 +363,9 @@ public:
   /** Create a bool sort */
   virtual smt_sortt mk_bool_sort();
 
+  /** Create a string sort */
+  virtual smt_sortt mk_string_sort();
+
   /** Create a real sort */
   virtual smt_sortt mk_real_sort();
 
@@ -397,6 +400,8 @@ public:
    *         legitimate use of strings.
    *  @return The newly created terminal smt_ast of this real. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
+
+  virtual smt_astt mk_smt_string(const std::string &str) = 0;
 
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
