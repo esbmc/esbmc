@@ -14,7 +14,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@master
       - name: Install Dependencies
-        run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools
+        run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libfmt-dev
       - name: Download Clang 9
         run: wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
       - name: Extract Clang 9
@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Install Dependencies
-        run: brew install gmp cmake boost ninja python3 automake && pip3 install PySMT
+        run: brew install gmp cmake boost ninja python3 automake && pip3 install PySMT # TODO: add libfmt-dev
       - name: Download Clang 9
         run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-9.0.1/clang+llvm-9.0.1-x86_64-apple-darwin.tar.xz
       - name: Extract Clang 9
