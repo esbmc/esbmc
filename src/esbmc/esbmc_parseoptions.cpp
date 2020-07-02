@@ -457,7 +457,7 @@ int esbmc_parseoptionst::doit()
       return res;
   }
 
-  return 0;
+  return res;
 }
 
 int esbmc_parseoptionst::doit_k_induction_parallel()
