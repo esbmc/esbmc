@@ -1799,7 +1799,7 @@ void esbmc_parseoptionst::help()
        " --no-div-by-zero-check       do not do division by zero check\n"
        " --no-pointer-check           do not do pointer check\n"
        " --no-align-check             do not check pointer alignment\n"
-       " --memory-leak-check          enable memory leak check check\n"
+       " --memory-leak-check          enable memory leak check \n"
        " --nan-check                  check floating-point for NaN\n"
        " --overflow-check             enable arithmetic over- and underflow "
        "check\n"
