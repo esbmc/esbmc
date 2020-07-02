@@ -77,6 +77,16 @@ protected:
 
 public:
   goto_functionst goto_functions;
+
+private:
+  /* set all the parameters of the
+   * context-bound verification procedure */
+  void set_context_bound_params();
+
+  /* context-bound verification parameters */
+  int initial_context_bound;
+  int max_context_bound;
+  int context_bound_inc;
 };
 
 #endif
