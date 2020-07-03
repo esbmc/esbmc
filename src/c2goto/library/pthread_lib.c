@@ -691,10 +691,10 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_end();
   return result;
 }
-int pthread_equal(pthread_t tid1, pthread_t tid2)
-{
   __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  return tid1 == tid2;
+  tid1 = __ESBMC_get_thread_id();
+  tid2 = __ESBMC_get_thread_id();
+  bool res = tid1 == tid2;
   __ESBMC_atomic_end();
-}
+  return res;
