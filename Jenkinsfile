@@ -42,7 +42,7 @@ spec:
               [$class: 'TextParameterDefinition', defaultValue: 'ConcurrencySafety-Main',  name: 'category']
             ])
 
-          def built = build job: "Benchexec sv-benchmarks/high-res", parameters: [
+          def built = build job: "benchexec-jenkins-job/high-res", parameters: [
             string(name: 'tool_url', value: "https://ssvlab.ddns.net/job/esbmc-master/job/${env.BRANCH_NAME}/$BUILD_NUMBER/artifact/esbmc.zip"),
             string(name: 'benchmark_url', value: "https://raw.githubusercontent.com/esbmc/esbmc/${env.BRANCH_NAME}/scripts/jenkins/benchmark.xml"),
             string(name: 'prepare_environment_url', value: "https://raw.githubusercontent.com/esbmc/esbmc/${env.BRANCH_NAME}/scripts/jenkins/prepare_environment.sh"),
