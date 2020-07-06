@@ -691,3 +691,18 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_end();
   return result;
 }
+
+// The pthread_equal() function compares two thread identifiers.
+// source: https://man7.org/linux/man-pages/man3/pthread_equal.3.html
+int pthread_equal(pthread_t tid1, pthread_t tid2)
+{
+__ESBMC_HIDE:;
+  // If the two thread IDs are equal,
+  // it returns a nonzero value;
+  // otherwise, it returns 0.
+  __ESBMC_atomic_begin();
+  _Bool res = tid1 == tid2;
+  __ESBMC_atomic_end();
+  // This function always succeeds.
+  return res;
+}
