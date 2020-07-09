@@ -433,6 +433,14 @@ protected:
   void intrinsic_memset(
     reachability_treet &art,
     const code_function_call2t &func_call);
+  /** Assert the object size. */
+  void intrinsic_assert_object_size(
+    const code_function_call2t &call,
+    reachability_treet &art);
+  /** Build the capability pointer */
+  void intrinsic_cheri_bounds_set(
+    const code_function_call2t &call,
+    reachability_treet &art);
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();

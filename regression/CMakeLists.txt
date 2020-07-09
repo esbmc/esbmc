@@ -21,9 +21,9 @@ function(add_esbmc_regression folder mode)
 endfunction(add_esbmc_regression mode folder)
 
 if(APPLE)
-    set(REGRESSIONS esbmc cstd llvm floats floats-regression k-induction)
+    set(REGRESSIONS cheri-c esbmc cstd llvm floats floats-regression k-induction)
 else()
-    set(REGRESSIONS esbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp)
+    set(REGRESSIONS cheri-c esbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp)
 endif()
 
 

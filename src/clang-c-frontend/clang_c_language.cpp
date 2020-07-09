@@ -276,6 +276,8 @@ long long int __ESBMC_llabs(long long int);
 // pointers
 unsigned __ESBMC_POINTER_OBJECT(const void *);
 signed __ESBMC_POINTER_OFFSET(const void *);
+void __ESBMC_assert_object_size(const void *, unsigned int);
+void __ESBMC_cheri_bounds_set(void *, const void *, unsigned int);
 
 // malloc
 __attribute__((annotate("__ESBMC_inf_size")))

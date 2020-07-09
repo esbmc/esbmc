@@ -37,6 +37,9 @@ static void internal_additions(std::string &code)
     // pointers
     "unsigned __ESBMC_POINTER_OBJECT(const void *p);\n"
     "signed __ESBMC_POINTER_OFFSET(const void *p);\n"
+    "void __ESBMC_assert_object_size(const void *ptr, unsigned int len);\n"
+    "void __ESBMC_cheri_bounds_set(void *cap_ptr, const void *ptr, unsigned "
+    "int len);\n"
 
     // malloc / alloca
     "unsigned __ESBMC_constant_infinity_uint;\n"

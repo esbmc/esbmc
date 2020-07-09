@@ -399,6 +399,14 @@ void goto_symext::run_intrinsic(
   {
     intrinsic_register_monitor(func_call, art);
   }
+  else if(symname == "c:@F@__ESBMC_assert_object_size")
+  {
+    intrinsic_assert_object_size(func_call, art);
+  }
+  else if(symname == "c:@F@__ESBMC_cheri_bounds_set")
+  {
+    intrinsic_cheri_bounds_set(func_call, art);
+  }
   else if(symname == "c:@F@__ESBMC_kill_monitor")
   {
     intrinsic_kill_monitor(art);

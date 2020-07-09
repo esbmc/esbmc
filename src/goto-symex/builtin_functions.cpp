@@ -998,3 +998,177 @@ void goto_symext::intrinsic_memset(
     bump_call();
   }
 }
+
+static inline const array_type2t get_arr_type(const expr2tc &expr)
+{
+  return (is_array_type(expr))
+           ? to_array_type(expr->type)
+           : to_array_type(to_constant_string2t(expr).to_array()->type);
+}
+
+void goto_symext::intrinsic_assert_object_size(
+  const code_function_call2t &func_call,
+  reachability_treet &art)
+{
+  assert(
+    func_call.operands.size() == 2 && "Wrong assert_object_size signature");
+  auto &ex_state = art.get_cur_state();
+  expr2tc expr = func_call.operands[0];
+  expr2tc size = func_call.operands[1];
+
+  dereference(expr, dereferencet::READ);
+  replace_dynamic_allocation(expr);
+
+  if(options.get_bool_option("no-bounds-check"))
+    return;
+
+  unsigned int access_size = type_byte_size(expr->type).to_uint64();
+
+  assert(is_array_type(expr) || is_string_type(expr));
+  const array_type2t arr_type = get_arr_type(expr);
+
+  assert(
+    is_constant_array2t(expr) &&
+    !has_prefix(
+      ns.lookup(to_symbol2t(expr).thename).id.as_string(), "symex_dynamic::"));
+  assert(is_constant_int2t(arr_type.array_size));
+
+  expr2tc arrsize;
+
+  // Calculate size from type.
+  type2tc new_string_type;
+
+  // Firstly, bail if this is an infinite sized array. There are no bounds
+  // checks to be performed.
+  if(arr_type.size_is_infinite)
+    return;
+
+  // Secondly, try to calc the size of the array.
+  unsigned int array_size_int = arr_type.subtype->get_width();
+  constant_int2tc array_size(uint_type2(), BigInt(array_size_int));
+
+  // Then, expression as to whether the access is over the array size.
+  greaterthanequal2tc gte(array_size, size);
+  expr2tc tmp_expr(gte);
+
+  claim(tmp_expr, "dereference failure: object upper bound violated");
+}
+
+void goto_symext::intrinsic_cheri_bounds_set(
+  const code_function_call2t &func_call,
+  reachability_treet &art)
+{
+  assert(func_call.operands.size() == 3 && "Wrong cheri_bounds_set signature");
+  auto &ex_state = art.get_cur_state();
+  expr2tc cap_ptr = func_call.operands[0];
+  expr2tc ptr = func_call.operands[1];
+  expr2tc size = func_call.operands[2];
+
+  bool is_malloc = false;
+
+  if(is_dynamic_size2t(ptr))
+    is_malloc = true;
+
+  if(is_nil_expr(cap_ptr))
+    assert(0 && "capability pointer is nil");
+
+  // size
+  type2tc type = size->type;
+  bool size_is_one = false;
+
+  if(is_nil_expr(size))
+    size_is_one = true;
+  else
+  {
+    cur_state->rename(size);
+    BigInt i;
+    if(is_constant_int2t(size) && to_constant_int2t(size).as_ulong() == 1)
+      size_is_one = true;
+  }
+
+  if(is_nil_type(type))
+    type = char_type2();
+  else if(is_union_type(type))
+  {
+    // Filter out creation of instantiated unions. They're now all byte arrays.
+    size_is_one = false;
+    type = char_type2();
+  }
+
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
+
+  // value
+  symbolt symbol;
+
+  symbol.name = "dynamic_" + i2string(dynamic_counter) +
+                (size_is_one ? "_value" : "_array");
+
+  symbol.id = std::string("symex_dynamic::") + (!is_malloc ? "alloca::" : "") +
+              id2string(symbol.name);
+  symbol.lvalue = true;
+
+  typet renamedtype = ns.follow(migrate_type_back(type));
+  if(size_is_one)
+    symbol.type = renamedtype;
+  else
+  {
+    symbol.type = typet(typet::t_array);
+    symbol.type.subtype() = renamedtype;
+    symbol.type.size(migrate_expr_back(size));
+  }
+
+  symbol.type.dynamic(true);
+
+  symbol.mode = "C";
+
+  new_context.add(symbol);
+
+  type2tc new_type;
+  migrate_type(symbol.type, new_type);
+
+  address_of2tc rhs_addrof(get_empty_type(), expr2tc());
+
+  if(size_is_one)
+  {
+    rhs_addrof->type = get_pointer_type(pointer_typet(symbol.type));
+    rhs_addrof->ptr_obj = symbol2tc(new_type, symbol.id);
+  }
+  else
+  {
+    type2tc subtype;
+    migrate_type(symbol.type.subtype(), subtype);
+    expr2tc sym = symbol2tc(new_type, symbol.id);
+    expr2tc idx_val = gen_ulong(0);
+    expr2tc idx = index2tc(subtype, sym, idx_val);
+    rhs_addrof->type = get_pointer_type(pointer_typet(symbol.type.subtype()));
+    rhs_addrof->ptr_obj = idx;
+  }
+
+  expr2tc rhs = rhs_addrof;
+  expr2tc ptr_rhs = rhs;
+  guardt alloc_guard = cur_state->guard;
+
+  symbol2tc null_sym(rhs->type, "NULL");
+  constant_int2tc zero_val(size->type, BigInt(0));
+  equality2tc choice(size, zero_val);
+  rhs = if2tc(rhs->type, choice, null_sym, rhs);
+  alloc_guard.add(choice);
+
+  ptr_rhs = rhs;
+
+  if(rhs->type != cap_ptr->type)
+    rhs = typecast2tc(cap_ptr->type, rhs);
+
+  cur_state->rename(rhs);
+  expr2tc rhs_copy(rhs);
+
+  symex_assign(
+    code_assign2tc(cap_ptr, if2tc(rhs->type, choice, null_sym, ptr)), true);
+
+  pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
+  track_new_pointer(ptr_obj, new_type);
+
+  dynamic_memory.emplace_back(
+    rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());
+}
