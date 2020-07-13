@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/xml.h>
 #include <util/xml_irep.h>
 
-#define FMT_HEADER_ONLY 1
 #include <fmt/printf.h>
 
 const char *ui_message_handlert::level_string(unsigned level)

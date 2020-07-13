@@ -1219,6 +1219,7 @@ void z3_smt_ast::dump() const
 void z3_convt::dump_smt()
 {
   std::cout << solver << std::endl;
+  // TODO(Mohannad-Aldughaim): how solver type should be handled? override to_string()?
 }
 
 smt_astt z3_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
