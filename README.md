@@ -80,6 +80,47 @@ Here are some steps to contributing to the code base:
   1. Push your changes to your branch
   1. Create a Pull Request targeting the master branch
 
+Here is an example to prepare a pull request (PR) 
+
+
+A) Make sure that you are in the `master` branch and your fork is updated.
+
+```
+git checkout master
+git fetch upstream
+git pull --rebase upstream master    
+git push origin HEAD:master
+```
+
+Note that if you have not yet setup the `upstream`, you need to type the following command:
+
+```
+git remote add upstream https://github.com/esbmc/esbmc
+```
+
+B) Create a local branch (e.g., `model-pthread-create`) from the `master` branch:
+
+```
+git checkout -b model-pthread-equal --track master
+```
+
+C) Add your changes via commits to the local branch:
+
+```
+git add path-to-file/file.cpp
+git commit -sm "added opertational model for pthread_equal"
+```
+
+Note that you can check your changes via `git status`. 
+Note also that every PR should contain at least two test cases 
+to check your implementation: one successful and one failed test case.
+
+D) Push your changes in the local branch to the ESBMC repository:
+
+```
+git push origin model-pthread-equal
+```
+
 New contributors can check issues marked with `good first issue` by clicking [here](https://github.com/esbmc/esbmc/contribute).
 
 ### Documentation
