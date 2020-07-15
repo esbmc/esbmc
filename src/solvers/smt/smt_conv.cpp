@@ -230,11 +230,81 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
   assert_ast(a);
 }
 
+expr2tc to_string_expr(const expr2tc &expr)
+{
+  expr2tc result = expr;
+  if((expr)->expr_id == expr2t::with_id)
+  {
+    const with2t &with = to_with2t(expr);
+    expr2tc update_value = with.update_value;
+    if(update_value->expr_id == expr2t::bitcast_id)
+    {
+      const bitcast2t &cast = to_bitcast2t(update_value);
+      if((cast.from)->expr_id == expr2t::index_id)
+      {
+        expr2tc src_value = to_index2t(cast.from).source_value;
+        if(is_string_type(src_value))
+        {
+          result = src_value;
+        }
+      }
+    }
+  }
+  return result;
+}
+
+smt_astt smt_convt::convert_ast_string_symbol(const expr2tc &expr)
+{
+  //smt_cachet::const_iterator cache_result = smt_cache.find(expr);
+  //if(cache_result != smt_cache.end())
+    //return (cache_result->ast);
+  assert(is_array_type(expr));
+  //Procurar se tem jeito melhor de fazer
+  smt_astt a;
+  const symbol2t &sym = to_symbol2t(expr);
+  std::string name = sym.get_symbol_name();
+  name += "-Str";
+
+  type2tc subtype = get_array_subtype(expr->type);
+  int width = subtype->get_width();
+  smt_sortt sort;
+  if((width == 8) && (sym.rlevel == symbol2t::level2))
+  {
+    sort = mk_string_sort();
+  }
+  else
+  {
+    std::cerr << "[CASS] Couldn't convert expression in string format\n";
+    expr->dump();
+    abort();
+  }
+a = mk_smt_symbol(name, sort);
+//struct smt_cache_entryt entry = {expr, a, ctx_level};
+//smt_cache.insert(entry);
+return a;
+}
+
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
-  smt_astt side1 = convert_ast(eq.side_1);
-  smt_astt side2 = convert_ast(eq.side_2);
+  smt_astt side1;
+  smt_astt side2;
+  //expr->dump();
+  if(config.options.get_bool_option("string-solver"))
+  {
+    assert(is_symbol2t(eq.side_1));
+    expr2tc tmp = to_string_expr(eq.side_2);
+    if(is_string_type(tmp))
+    {
+      side1 = convert_ast_string_symbol(eq.side_1);
+      side2 = convert_terminal(tmp);
+      smt_astt test = mk_eq(side1, side2);
+      assert_ast(test);
+    }
+  }
+  side1 = convert_ast(eq.side_1);
+  side2 = convert_ast(eq.side_2);
+
   side2->assign(this, side1);
 
   // Put that into the smt cache, thus preserving the assigned symbols value.
@@ -291,11 +361,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   case expr2t::constant_string_id:
   {
-    if(config.options.get_bool_option("string-solver") && config.options.get_bool_option("z3"))
+    /*if(config.options.get_bool_option("string-solver"))// && config.options.get_bool_option("z3"))
       {
-        //a = convert_terminal(expr);
+        a = convert_terminal(expr);
       }
-    //else
+    else*/
      {
        const constant_string2t &str = to_constant_string2t(expr);
        expr2tc newarr = str.to_array();
@@ -1343,24 +1413,8 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
 
     if(is_array_type(expr))
     {
-      //Procurar se tem jeito melhor de fazer
-      expr2tc res = expr;
-      type2tc subtp = get_array_subtype(expr->type);
-      int width = subtp->get_width();
-      //res->type->Foreach_subtype([this](type2tc &t) {
-      //    width += t->get_width();
-      //});
-      if(width == 8)
-      {
-        //std::cout << "Nome: ..... " << name << std::endl;
-        //sort = mk_string_sort();
-        //return mk_smt_symbol(name, sort);
-      }
-      //else
-      {
         smt_sortt subtype = convert_sort(get_flattened_array_subtype(sym.type));
         return array_api->mk_array_symbol(name, sort, subtype);
-      }
     }
 
     return mk_smt_symbol(name, sort);
