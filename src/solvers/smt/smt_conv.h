@@ -184,6 +184,7 @@ public:
    *  @param expr The expression to convert into the SMT solver
    *  @return The resulting handle to the SMT value. */
   smt_astt convert_ast(const expr2tc &expr);
+  smt_astt convert_ast_string_symbol(const expr2tc &expr);
 
   /** Interface to specifig SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
