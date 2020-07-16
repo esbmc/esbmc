@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 10 --context-bound 2
+^VERIFICATION SUCCESSFUL$

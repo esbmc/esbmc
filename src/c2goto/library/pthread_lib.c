@@ -38,6 +38,9 @@ _Bool __ESBMC_pthread_thread_running[1];
 __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_ended[1];
 
+__attribute__((annotate("__ESBMC_inf_size")))
+_Bool __ESBMC_pthread_thread_detach[1];
+
 __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
 
@@ -275,6 +278,22 @@ __ESBMC_HIDE:;
   return 0;
 }
 
+// The pthread_detach() marks the thread identified by thread as detached.
+// source: https://man7.org/linux/man-pages/man3/pthread_detach.3.html
+int pthread_detach(pthread_t threadid)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  if(__ESBMC_pthread_thread_detach[(int)threadid])
+    return EINVAL; //  thread is not a joinable thread.
+  if(!__ESBMC_pthread_thread_running[(int)threadid])
+    return ESRCH; // No thread with the ID thread could be found.
+  __ESBMC_terminate_thread();
+  __ESBMC_pthread_thread_detach[(int)threadid] = 1;
+  __ESBMC_atomic_end();
+
+  return 0; // no error occurred
 /************************* Mutex manipulation routines ************************/
 
 int pthread_mutex_init(
