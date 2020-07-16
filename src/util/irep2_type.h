@@ -588,6 +588,61 @@ public:
   unsigned int get_width() const override;
 
   static std::string field_names[esbmct::num_type_fields];
+
+  void mark_as_capability(void)
+  {
+    is_capability = true;
+  }
+
+  bool is_capability_pointer(void)
+  {
+    return is_capability;
+  }
+
+  void set_length(expr2tc len)
+  {
+    assert(is_capability);
+    capability.length = len;
+  }
+
+  void set_perms(expr2tc perms)
+  {
+    assert(is_capability);
+    capability.perms = perms;
+  }
+
+  void set_otype(expr2tc otype)
+  {
+    assert(is_capability);
+    capability.otype = otype;
+  }
+
+  expr2tc get_length(void)
+  {
+    assert(is_capability);
+    return capability.length;
+  }
+
+  expr2tc get_perms(void)
+  {
+    assert(is_capability);
+    return capability.perms;
+  }
+
+  expr2tc get_otype(void)
+  {
+    assert(is_capability);
+    return capability.otype;
+  }
+
+protected:
+  bool is_capability = false;
+  struct
+  {
+    expr2tc perms;
+    expr2tc otype;
+    expr2tc length;
+  } capability;
 };
 
 /** Fixed bitvector type.
