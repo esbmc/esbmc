@@ -1,4 +1,4 @@
-CORE
+FUTURE
 main.c
 -I ../../../src/c2goto/library/cheri/
 ^VERIFICATION FAILED$
