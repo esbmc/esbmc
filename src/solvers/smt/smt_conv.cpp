@@ -230,58 +230,87 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
   assert_ast(a);
 }
 
-expr2tc to_string_expr(const expr2tc &expr)
+expr2tc smt_convt::to_string_expr(const expr2tc &expr)
 {
   expr2tc result = expr;
-  if((expr)->expr_id == expr2t::with_id)
+  switch (expr->expr_id)
   {
-    const with2t &with = to_with2t(expr);
-    expr2tc update_value = with.update_value;
-    if(update_value->expr_id == expr2t::bitcast_id)
+    case expr2t::constant_string_id:
     {
-      const bitcast2t &cast = to_bitcast2t(update_value);
-      if((cast.from)->expr_id == expr2t::index_id)
-      {
-        expr2tc src_value = to_index2t(cast.from).source_value;
-        if(is_string_type(src_value))
-        {
-          result = src_value;
-        }
-      }
+      result = expr;
+      break;
+    }
+    case expr2t::with_id:
+    {
+      const with2t &with = to_with2t(expr);
+      result = to_string_expr(with.update_value);
+      break;
+    }
+    case expr2t::bitcast_id:
+    {
+      const bitcast2t &cast = to_bitcast2t(expr);
+      result = to_string_expr(cast.from);
+      break;
+    }
+    case expr2t::index_id:
+    {
+      const index2t &index = to_index2t(expr);
+      result = to_string_expr(index.source_value);
+      break;
     }
   }
   return result;
 }
 
-smt_astt smt_convt::convert_ast_string_symbol(const expr2tc &expr)
+smt_astt smt_convt::convert_ast_string_symbol(const expr2tc &expr, const constant_string2t &c_str)
 {
-  //smt_cachet::const_iterator cache_result = smt_cache.find(expr);
-  //if(cache_result != smt_cache.end())
-    //return (cache_result->ast);
   assert(is_array_type(expr));
-  //Procurar se tem jeito melhor de fazer
-  smt_astt a;
+  //Find if there is a better way to do this
   const symbol2t &sym = to_symbol2t(expr);
-  std::string name = sym.get_symbol_name();
-  name += "-Str";
-
   type2tc subtype = get_array_subtype(expr->type);
   int width = subtype->get_width();
   smt_sortt sort;
-  if((width == 8) && (sym.rlevel == symbol2t::level2))
-  {
+  if((width == config.ansi_c.char_width) && (sym.rlevel == symbol2t::level2))
     sort = mk_string_sort();
-  }
   else
   {
-    std::cerr << "[CASS] Couldn't convert expression in string format\n";
+    std::cerr << "Couldn't convert expression in string format\n";
     expr->dump();
     abort();
   }
-a = mk_smt_symbol(name, sort);
-//struct smt_cache_entryt entry = {expr, a, ctx_level};
-//smt_cache.insert(entry);
-return a;
+
+  smt_astt a;
+
+  std::string sym_str_name = sym.thename.as_string() + "_str";
+  std::string c_str_value = (c_str.value).as_string();
+
+  sym_str_mapt::const_iterator map_result = sym_str_map.find(sym_str_name);
+
+  if(map_result != sym_str_map.end())
+  {
+    if(map_result->second == c_str_value)
+      return NULL; // Symbol has been assigned but with current value
+    else
+    {
+      sym_str_map[sym_str_name] = c_str_value;
+      sym_level_map[sym_str_name]++;
+    }
+  }
+  else
+  {
+    sym_str_map[sym_str_name] = c_str_value;
+    sym_level_map[sym_str_name] = 0;
+  }
+
+  symbol2t new_sym(get_empty_type(), sym_str_name);
+  new_sym.rlevel = symbol2t::level2;
+  new_sym.level1_num = sym.level1_num;
+  new_sym.level2_num = sym_level_map[sym_str_name];
+  new_sym.thread_num = sym.thread_num;
+  new_sym.node_num = sym.node_num;
+
+  a = mk_smt_symbol(new_sym.get_symbol_name(), sort);
+  return a;
 }
 
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
@@ -289,17 +318,20 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   const equality2t &eq = to_equality2t(expr);
   smt_astt side1;
   smt_astt side2;
-  //expr->dump();
+
   if(config.options.get_bool_option("string-solver"))
   {
     assert(is_symbol2t(eq.side_1));
     expr2tc tmp = to_string_expr(eq.side_2);
     if(is_string_type(tmp))
     {
-      side1 = convert_ast_string_symbol(eq.side_1);
+      side1 = convert_ast_string_symbol(eq.side_1, to_constant_string2t(tmp));
       side2 = convert_terminal(tmp);
-      smt_astt test = mk_eq(side1, side2);
-      assert_ast(test);
+      if(side1 != NULL)
+      {
+        smt_astt a = mk_eq(side1, side2);
+        assert_ast(a);
+      }
     }
   }
   side1 = convert_ast(eq.side_1);
@@ -361,16 +393,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   case expr2t::constant_string_id:
   {
-    /*if(config.options.get_bool_option("string-solver"))// && config.options.get_bool_option("z3"))
-      {
-        a = convert_terminal(expr);
-      }
-    else*/
-     {
-       const constant_string2t &str = to_constant_string2t(expr);
-       expr2tc newarr = str.to_array();
-       a = convert_ast(newarr);
-     }
+     const constant_string2t &str = to_constant_string2t(expr);
+     expr2tc newarr = str.to_array();
+     a = convert_ast(newarr);
     break;
   }
   case expr2t::constant_struct_id:

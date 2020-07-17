@@ -184,7 +184,8 @@ public:
    *  @param expr The expression to convert into the SMT solver
    *  @return The resulting handle to the SMT value. */
   smt_astt convert_ast(const expr2tc &expr);
-  smt_astt convert_ast_string_symbol(const expr2tc &expr);
+  smt_astt convert_ast_string_symbol(const expr2tc &expr, const constant_string2t &c_str);
+  expr2tc to_string_expr(const expr2tc &expr);
 
   /** Interface to specifig SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
@@ -784,6 +785,8 @@ public:
     smt_cachet;
 
   typedef std::unordered_map<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
+  typedef std::unordered_map<std::string, std::string> sym_str_mapt;
+  typedef std::unordered_map<std::string, unsigned int> sym_level_mapt;
 
   // Members
   /** Number of un-popped context pushes encountered so far. */
@@ -793,6 +796,9 @@ public:
   smt_cachet smt_cache;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
+
+  sym_str_mapt sym_str_map;
+  sym_level_mapt sym_level_map;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
