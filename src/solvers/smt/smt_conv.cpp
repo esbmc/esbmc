@@ -233,36 +233,39 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
 expr2tc smt_convt::to_string_expr(const expr2tc &expr)
 {
   expr2tc result = expr;
-  switch (expr->expr_id)
+  switch(expr->expr_id)
   {
-    case expr2t::constant_string_id:
-    {
-      result = expr;
-      break;
-    }
-    case expr2t::with_id:
-    {
-      const with2t &with = to_with2t(expr);
-      result = to_string_expr(with.update_value);
-      break;
-    }
-    case expr2t::bitcast_id:
-    {
-      const bitcast2t &cast = to_bitcast2t(expr);
-      result = to_string_expr(cast.from);
-      break;
-    }
-    case expr2t::index_id:
-    {
-      const index2t &index = to_index2t(expr);
-      result = to_string_expr(index.source_value);
-      break;
-    }
+  case expr2t::constant_string_id:
+  {
+    result = expr;
+    break;
+  }
+  case expr2t::with_id:
+  {
+    const with2t &with = to_with2t(expr);
+    result = to_string_expr(with.update_value);
+    break;
+  }
+  case expr2t::bitcast_id:
+  {
+    const bitcast2t &cast = to_bitcast2t(expr);
+    result = to_string_expr(cast.from);
+    break;
+  }
+  case expr2t::index_id:
+  {
+    const index2t &index = to_index2t(expr);
+    //index.dump();
+    result = to_string_expr(index.source_value);
+    break;
+  }
   }
   return result;
 }
 
-smt_astt smt_convt::convert_ast_string_symbol(const expr2tc &expr, const constant_string2t &c_str)
+smt_astt smt_convt::convert_ast_string_symbol(
+  const expr2tc &expr,
+  const constant_string2t &c_str)
 {
   assert(is_array_type(expr));
   //Find if there is a better way to do this
@@ -393,9 +396,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   case expr2t::constant_string_id:
   {
-     const constant_string2t &str = to_constant_string2t(expr);
-     expr2tc newarr = str.to_array();
-     a = convert_ast(newarr);
+    const constant_string2t &str = to_constant_string2t(expr);
+    expr2tc newarr = str.to_array();
+    a = convert_ast(newarr);
     break;
   }
   case expr2t::constant_struct_id:
@@ -1438,8 +1441,8 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
 
     if(is_array_type(expr))
     {
-        smt_sortt subtype = convert_sort(get_flattened_array_subtype(sym.type));
-        return array_api->mk_array_symbol(name, sort, subtype);
+      smt_sortt subtype = convert_sort(get_flattened_array_subtype(sym.type));
+      return array_api->mk_array_symbol(name, sort, subtype);
     }
 
     return mk_smt_symbol(name, sort);
