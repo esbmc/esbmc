@@ -723,6 +723,7 @@ int pthread_detach(pthread_t threadid)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+  int result = 0;
   // This assert also checks whether this thread is not a joinable thread.
   __ESBMC_assert(
     !__ESBMC_pthread_thread_detach[(int)threadid],
@@ -731,10 +732,9 @@ __ESBMC_HIDE:;
   if(
     __ESBMC_pthread_thread_ended[(int)threadid] ||
     (int)threadid > __ESBMC_num_total_threads)
-    return ESRCH; // No thread with the ID thread could be found.
+    result = ESRCH; // No thread with the ID thread could be found.
   else
     __ESBMC_pthread_thread_detach[(int)threadid] = 1;
   __ESBMC_atomic_end();
-  __ESBMC_assume(__ESBMC_pthread_thread_ended[(int)threadid]);
-  return 0; // no error occurred
+  return result; // no error occurred
 }
