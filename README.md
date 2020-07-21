@@ -61,7 +61,7 @@ The fundemental verification technique (unrolling programs to SSA then convertin
 
 ESBMC has now been released as open source software -- mainly distributed under the terms of the Apache License 2.0. ESBMC contains a signficant amount of other peoples software, however, please see the COPYING file for an explanation of who-owns-what, and under what terms they are distributed.
 
-We'd be extremely happy to receive contributions to make ESBMC better (under the terms of the Apache License 2.0). If you'd like to submit anything, please file a pull request against the public github repo. General discussion and release announcements will be made on the esbmc-users@googlegroups.com mailing list. To contact us about research or collaboration, please email the esbmc@ mailing list on ecs.soton.ac.uk.
+We'd be extremely happy to receive contributions to make ESBMC better (under the terms of the Apache License 2.0). If you'd like to submit anything, please file a pull request against the public github repo. General discussion and release announcements will be made via GitHub. To contact us about research or collaboration, please email the esbmc@ mailing list on ecs.soton.ac.uk.
 
 ### Getting started
 
