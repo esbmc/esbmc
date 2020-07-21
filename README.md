@@ -42,7 +42,7 @@ By default ESBMC performs a "lazy" depth first search of interleavings -- it can
 
 A number of SMT solvers are currently supported:
  * Z3 4.0+
- * Boolector 2.0+
+ * Boolector 3.0+
  * MathSAT
  * CVC4
  * Yices 2.2+
