@@ -241,7 +241,7 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   // IMPORTANT: the cache is now a fundemental part of how some flatteners work,
   // in that one can chose to create a set of expressions and their ASTs, then
   // store them in the cache, rather than have a more sophisticated conversion.
-  smt_cache_entryt e = {eq.side_1, side1, ctx_level};
+  smt_cache_entryt e = {expr, side2, ctx_level};
   smt_cache.insert(e);
 
   return side2;
