@@ -41,7 +41,7 @@ Concurrent software (using the pthread api) is verified by explicit exploration 
 By default ESBMC performs a "lazy" depth first search of interleavings -- it can also encode (explicitly) all interleavings into a single SMT formula.
 
 A number of SMT solvers are currently supported:
- * Z3 4.0+
+ * Z3 4.8+
  * Boolector 3.0+
  * MathSAT
  * CVC4
