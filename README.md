@@ -53,9 +53,13 @@ A limited subset of C++98 is supported too -- a library modelling the STL is als
 
 ### Differences from CBMC
 
-ESBMC is based on CBMC, the C bounded model checker. The primary differences between the two are that CBMC focuses on SAT-based encodings of unrolled C programs while ESBMC targets SMT; and CBMC's concurrency support is a fully symbolic encoding of a concurrent program in one SAT formulae.
+ESBMC originated from CBMC v2.9 in 2008, the C Bounded Model Checker. The primary differences between the two are:
 
-The fundemental verification technique (unrolling programs to SSA then converting to a formula) is still the same in ESBMC, although the program internal representation has been had some additional types added. ESBMC also implements a state-of-the-art k-induction proof rule to falsify and prove safety properties in C/C++ programs.
+* CBMC focuses on SAT-based encodings of unrolled programs while ESBMC targets SMT-based encodings. 
+* CBMC's concurrency support is an entirely symbolic encoding of a concurrent program in one SAT formulae, while ESBMC explores each interleaving individually.
+* CBMC uses a modified C parser written by James Roskind and a C++ parser based on OpenC++, while ESBMC relies on the Clang front-end.
+* CBMC implements k-induction, requiring three different calls: to generate the CFG, to annotate the program, and to verify it, whereas ESBMC handles the whole process in a single call. Additionally, CBMC does not have a forward condition to check if all states were reached and relies on a limited loop unwinding.
+* ESBMC adds some additional types to the program's internal representation.
 
 # Open source
 
