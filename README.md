@@ -53,7 +53,7 @@ A limited subset of C++98 is supported too -- a library modelling the STL is als
 
 ### Differences from CBMC
 
-ESBMC forked from CBMC v2.9 in 2008, the C Bounded Model Checker. The primary differences between the two are:
+ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary differences between the two are:
 
 * CBMC focuses on SAT-based encodings of unrolled programs while ESBMC targets SMT-based encodings. 
 * CBMC's concurrency support is an entirely symbolic encoding of a concurrent program in one SAT formulae, while ESBMC explores each interleaving individually.
