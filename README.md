@@ -12,8 +12,6 @@
 
 ESBMC (the Efficient SMT-based Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++ programs. It can verify both predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions automatically. ESBMC supports the Clang compiler as its C/C++ frontend, IEEE floating-point arithmetic for a variety of SMT solvers, and implements a state-of-the-art k-induction algorithm.
 
-ESBMC, the efficient SMT based model checker, is a software verification tool for C and C++ code bases. The technique is sound but incomplete -- an error found by ESBMC will be correct (modulo errors in the tool), but a successful verification does not guarantee there are no errors.
-
 To build ESBMC, please see the BUILDING file. For getting started, we recommend first reading some of the background material / publications, to understand exactly what this technique can provide, for example our SV-COMP tool papers.
 
 The cannonical public location of ESBMCs source is on github:
