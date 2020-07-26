@@ -361,6 +361,29 @@ void esbmc_parseoptionst::set_context_bound_params()
     strtoul(cmdline.getval("context-bound-step"), nullptr, 10);
 }
 
+int esbmc_parseoptionst::do_incremental_bmc(bmct &bmc, optionst &opts)
+{
+  int res = 0;
+
+  for(int context_bound = initial_context_bound;
+      context_bound <= max_context_bound;
+      context_bound += context_bound_inc)
+  {
+    if(cmdline.isset("incremental-cb"))
+    {
+      opts.set_option("context-bound", integer2string(context_bound));
+      std::cout << "\n*** Context bound number ";
+      std::cout << context_bound;
+      std::cout << " ***\n";
+    }
+    res = do_bmc(bmc);
+    if(res)
+      return res;
+  }
+
+  return res;
+}
+
 int esbmc_parseoptionst::doit()
 {
   //
@@ -439,25 +462,7 @@ int esbmc_parseoptionst::doit()
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
-  int res = 0;
-
-  for(int context_bound = initial_context_bound;
-      context_bound <= max_context_bound;
-      context_bound += context_bound_inc)
-  {
-    if(cmdline.isset("incremental-cb"))
-    {
-      opts.set_option("context-bound", integer2string(context_bound));
-      std::cout << "\n*** Context bound number ";
-      std::cout << context_bound;
-      std::cout << " ***\n";
-    }
-    res = do_bmc(bmc);
-    if(res)
-      return res;
-  }
-
-  return res;
+  return do_incremental_bmc(bmc, opts);
 }
 
 int esbmc_parseoptionst::doit_k_induction_parallel()
@@ -803,7 +808,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bool res = true;
       try
       {
-        res = do_bmc(bmc);
+        res = do_incremental_bmc(bmc, opts);
       }
       catch(...)
       {
@@ -914,7 +919,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bool res = true;
       try
       {
-        res = do_bmc(bmc);
+        res = do_incremental_bmc(bmc, opts);
       }
       catch(...)
       {
@@ -981,7 +986,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bool res = true;
       try
       {
-        res = do_bmc(bmc);
+        res = do_incremental_bmc(bmc, opts);
       }
       catch(...)
       {
