@@ -38,6 +38,9 @@ _Bool __ESBMC_pthread_thread_running[1];
 __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_ended[1];
 
+__attribute__((annotate("__ESBMC_inf_size")))
+_Bool __ESBMC_pthread_thread_detach[1];
+
 __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
 
@@ -608,6 +611,8 @@ __ESBMC_HIDE:;
   return 0;
 }
 
+/************************ key mainpulation routines ***********************/
+
 // The pthread_key_create() function shall create a thread-specific
 // data key visible to all threads in the process.
 // source: https://linux.die.net/man/3/pthread_key_create
@@ -690,4 +695,46 @@ __ESBMC_HIDE:;
   }
   __ESBMC_atomic_end();
   return result;
+}
+
+// The pthread_equal() function compares two thread identifiers.
+// source: https://man7.org/linux/man-pages/man3/pthread_equal.3.html
+int pthread_equal(pthread_t tid1, pthread_t tid2)
+{
+__ESBMC_HIDE:;
+  // If the two thread IDs are equal,
+  // it returns a nonzero value;
+  // otherwise, it returns 0.
+  __ESBMC_atomic_begin();
+  _Bool res = tid1 == tid2;
+  __ESBMC_atomic_end();
+  // This function always succeeds.
+  return res;
+}
+
+/************************ detach routine ***********************/
+
+// The pthread_detach() function marks the thread identified by thread
+// as detached.  When a detached thread terminates, its resources are
+// automatically released back to the system without the need for
+// another thread to join with the terminated thread.
+// source: https://man7.org/linux/man-pages/man3/pthread_detach.3.html
+int pthread_detach(pthread_t threadid)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  int result = 0;
+  // This assert also checks whether this thread is not a joinable thread.
+  __ESBMC_assert(
+    !__ESBMC_pthread_thread_detach[(int)threadid],
+    "Attempting to detach an already detached thread results in unspecified "
+    "behavior");
+  if(
+    __ESBMC_pthread_thread_ended[(int)threadid] ||
+    (int)threadid > __ESBMC_num_total_threads)
+    result = ESRCH; // No thread with the ID thread could be found.
+  else
+    __ESBMC_pthread_thread_detach[(int)threadid] = 1;
+  __ESBMC_atomic_end();
+  return result; // no error occurred
 }
