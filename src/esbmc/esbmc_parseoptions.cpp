@@ -805,7 +805,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       std::cout << "*** Checking base case" << std::endl;
 
       // If an exception was thrown, we should abort the process
-      bool res = true;
+      int res = 1;
       try
       {
         res = do_incremental_bmc(bmc, opts);
@@ -916,7 +916,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       std::cout << "*** Checking forward condition" << std::endl;
 
       // If an exception was thrown, we should abort the process
-      bool res = true;
+      int res = 1;
       try
       {
         res = do_incremental_bmc(bmc, opts);
@@ -983,7 +983,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       std::cout << "*** Checking inductive step" << std::endl;
 
       // If an exception was thrown, we should abort the process
-      bool res = true;
+      int res = 1;
       try
       {
         res = do_incremental_bmc(bmc, opts);
