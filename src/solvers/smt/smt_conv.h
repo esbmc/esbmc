@@ -184,10 +184,12 @@ public:
    *  @param expr The expression to convert into the SMT solver
    *  @return The resulting handle to the SMT value. */
   smt_astt convert_ast(const expr2tc &expr);
-  smt_astt convert_ast_string_symbol(
-    const expr2tc &expr,
-    const constant_string2t &c_str);
-  expr2tc to_string_expr(const expr2tc &expr);
+
+  /**/
+  void convert_str_assign(const expr2tc &expr);
+  smt_astt convert_str_symbol(const expr2tc &expr);
+  smt_astt convert_str_ast(const expr2tc &expr);
+  symbol2t to_str_symbol2t(const symbol2t &sym);
 
   /** Interface to specifig SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
@@ -463,6 +465,8 @@ public:
    * @param b the second part of the concatenation
    * @return the concatenation of a and b */
   virtual smt_astt mk_concat(smt_astt a, smt_astt b) = 0;
+
+  virtual smt_astt mk_str_concat(smt_astt a, smt_astt b) = 0;
 
   /** Create an ite operation
    * @param cond the ite condition
@@ -787,7 +791,7 @@ public:
     smt_cachet;
 
   typedef std::unordered_map<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
-  typedef std::unordered_map<std::string, std::string> sym_str_mapt;
+  typedef std::unordered_map<std::string, smt_astt> sym_str_mapt;
   typedef std::unordered_map<std::string, unsigned int> sym_level_mapt;
 
   // Members

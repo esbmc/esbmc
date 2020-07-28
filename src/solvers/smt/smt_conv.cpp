@@ -230,116 +230,109 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
   assert_ast(a);
 }
 
-expr2tc smt_convt::to_string_expr(const expr2tc &expr)
+symbol2t smt_convt::to_str_symbol2t(const symbol2t &sym)
 {
-  expr2tc result = expr;
+  std::string str_sym_name = sym.thename.as_string() + "_str";
+  symbol2t str_sym(get_empty_type(), str_sym_name);
+  str_sym.rlevel = sym.rlevel;
+  str_sym.level1_num = sym.level1_num;
+  str_sym.level2_num = sym_level_map[sym.thename.as_string()];
+  str_sym.thread_num = sym.thread_num;
+  str_sym.node_num = sym.node_num;
+  return str_sym;
+}
+
+void smt_convt::convert_str_assign(const expr2tc &expr)
+{
+  const equality2t &eq = to_equality2t(expr);
+
+  if(is_symbol2t(eq.side_1) && is_with2t(eq.side_2))
+  {
+    smt_sortt sort = mk_string_sort();
+    smt_astt source, update;
+
+    const with2t &with = to_with2t(eq.side_2);
+
+    std::string str_sym_name = to_symbol2t(eq.side_1).thename.as_string();
+
+    sym_level_mapt::const_iterator map_result =
+      sym_level_map.find(str_sym_name);
+    if(map_result == sym_level_map.end())
+      sym_level_map[str_sym_name] = 0;
+
+    update = convert_str_ast(with.update_value);
+
+    if((with.update_value)->expr_id == expr2t::constant_int_id)
+    {
+      if((with.update_field)->expr_id == expr2t::constant_int_id)
+      {
+        const constant_int2t &int_field = to_constant_int2t(with.update_field);
+        if((int_field.value == 0) && sym_level_map[str_sym_name])
+          sym_level_map[str_sym_name]++;
+      }
+      source = convert_str_ast(with.source_value);
+      sym_level_map[str_sym_name]++;
+      update = mk_str_concat(source, update);
+    }
+    else
+    {
+      if((with.update_field)->expr_id == expr2t::pointer_offset_id)
+        update = mk_str_concat(sym_str_map[str_sym_name], update);
+      sym_str_map[str_sym_name] = update;
+    }
+    source = convert_str_ast(eq.side_1);
+    update->assign(this, source);
+  }
+}
+
+smt_astt smt_convt::convert_str_symbol(const expr2tc &expr)
+{
+  smt_sortt sort = mk_string_sort();
+  const symbol2t &sym = to_symbol2t(expr);
+  symbol2t str_sym = to_str_symbol2t(sym);
+  return mk_smt_symbol(str_sym.get_symbol_name(), sort);
+}
+
+smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
+{
+  smt_astt a;
   switch(expr->expr_id)
   {
-  case expr2t::constant_string_id:
-  {
-    result = expr;
+  case expr2t::symbol_id:
+    a = convert_str_symbol(expr);
     break;
-  }
-  case expr2t::with_id:
+  case expr2t::constant_string_id:
+    a = convert_terminal(expr);
+    break;
+  case expr2t::constant_int_id:
   {
-    const with2t &with = to_with2t(expr);
-    result = to_string_expr(with.update_value);
+    const constant_int2t &int_char = to_constant_int2t(expr);
+    std::string char_value;
+    char_value = (char)(int_char.value).to_int64();
+    a = mk_smt_string(char_value);
     break;
   }
   case expr2t::bitcast_id:
   {
     const bitcast2t &cast = to_bitcast2t(expr);
-    result = to_string_expr(cast.from);
+    a = convert_str_ast(cast.from);
     break;
   }
   case expr2t::index_id:
   {
     const index2t &index = to_index2t(expr);
-    //index.dump();
-    result = to_string_expr(index.source_value);
+    a = convert_str_ast(index.source_value);
     break;
   }
   }
-  return result;
-}
-
-smt_astt smt_convt::convert_ast_string_symbol(
-  const expr2tc &expr,
-  const constant_string2t &c_str)
-{
-  assert(is_array_type(expr));
-  //Find if there is a better way to do this
-  const symbol2t &sym = to_symbol2t(expr);
-  type2tc subtype = get_array_subtype(expr->type);
-  int width = subtype->get_width();
-  smt_sortt sort;
-  if((width == config.ansi_c.char_width) && (sym.rlevel == symbol2t::level2))
-    sort = mk_string_sort();
-  else
-  {
-    std::cerr << "Couldn't convert expression in string format\n";
-    expr->dump();
-    abort();
-  }
-
-  smt_astt a;
-
-  std::string sym_str_name = sym.thename.as_string() + "_str";
-  std::string c_str_value = (c_str.value).as_string();
-
-  sym_str_mapt::const_iterator map_result = sym_str_map.find(sym_str_name);
-
-  if(map_result != sym_str_map.end())
-  {
-    if(map_result->second == c_str_value)
-      return NULL; // Symbol has been assigned but with current value
-    else
-    {
-      sym_str_map[sym_str_name] = c_str_value;
-      sym_level_map[sym_str_name]++;
-    }
-  }
-  else
-  {
-    sym_str_map[sym_str_name] = c_str_value;
-    sym_level_map[sym_str_name] = 0;
-  }
-
-  symbol2t new_sym(get_empty_type(), sym_str_name);
-  new_sym.rlevel = symbol2t::level2;
-  new_sym.level1_num = sym.level1_num;
-  new_sym.level2_num = sym_level_map[sym_str_name];
-  new_sym.thread_num = sym.thread_num;
-  new_sym.node_num = sym.node_num;
-
-  a = mk_smt_symbol(new_sym.get_symbol_name(), sort);
   return a;
 }
 
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
-  smt_astt side1;
-  smt_astt side2;
-
-  if(config.options.get_bool_option("string-solver"))
-  {
-    assert(is_symbol2t(eq.side_1));
-    expr2tc tmp = to_string_expr(eq.side_2);
-    if(is_string_type(tmp))
-    {
-      side1 = convert_ast_string_symbol(eq.side_1, to_constant_string2t(tmp));
-      side2 = convert_terminal(tmp);
-      if(side1 != NULL)
-      {
-        smt_astt a = mk_eq(side1, side2);
-        assert_ast(a);
-      }
-    }
-  }
-  side1 = convert_ast(eq.side_1);
-  side2 = convert_ast(eq.side_2);
-
+  smt_astt side1 = convert_ast(eq.side_1);
+  smt_astt side2 = convert_ast(eq.side_2);
   side2->assign(this, side1);
 
   // Put that into the smt cache, thus preserving the assigned symbols value.

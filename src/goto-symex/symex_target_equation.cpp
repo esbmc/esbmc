@@ -180,6 +180,16 @@ void symex_target_equationt::convert_internal_step(
   }
   else if(step.is_assignment())
   {
+    if(config.options.get_bool_option("string-solver"))
+    {
+      std::string function =
+        id2string((step.source.pc->location).get_function());
+      if(function == "strcpy")
+      {
+        smt_conv.convert_str_assign(step.cond);
+      }
+    }
+
     smt_astt assign = smt_conv.convert_assign(step.cond);
     if(ssa_smt_trace)
     {
