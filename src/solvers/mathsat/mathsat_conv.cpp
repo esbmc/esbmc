@@ -857,6 +857,12 @@ smt_astt mathsat_convt::mk_concat(smt_astt a, smt_astt b)
   return new_ast(t, s);
 }
 
+smt_astt mathsat_convt::mk_str_concat(smt_astt a, smt_astt b)
+{
+  std::cerr << "MathSAT can't support String sorts" << std::endl;
+  abort();
+}
+
 smt_astt mathsat_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 {
   assert(cond->sort->id == SMT_SORT_BOOL);

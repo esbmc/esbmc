@@ -1192,6 +1192,12 @@ smt_astt cvc_convt::mk_concat(smt_astt a, smt_astt b)
   return new_ast(e, s);
 }
 
+smt_astt cvc_convt::mk_str_concat(smt_astt a, smt_astt b)
+{
+  std::cerr << "CVC can't support String sorts" << std::endl;
+  abort();
+}
+
 smt_astt cvc_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 {
   assert(cond->sort->id == SMT_SORT_BOOL);

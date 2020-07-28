@@ -122,6 +122,7 @@ public:
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
+  smt_astt mk_str_concat(smt_astt a, smt_astt b) override;
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
   void push_ctx() override;
