@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--no-unwinding-assertions --unwind 15 --direct-interleavings --round-robin --ppc-macos --show-loops --print-stack-traces --boolector --ssa-full-names --z3 --memstats
+^VERIFICATION FAILED$
