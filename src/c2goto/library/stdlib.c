@@ -29,7 +29,8 @@ __ESBMC_HIDE:;
 
   size_t total_size = nmemb * size;
   void *res = malloc(total_size);
-  memset(res, 0, total_size);
+  if(res)
+    memset(res, 0, total_size);
   return res;
 }
 
