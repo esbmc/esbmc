@@ -39,14 +39,19 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <fcntl.h>
+
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32)
+// unistd is needed?
+#else
 #include <unistd.h>
+#include <getopt.h>
+#endif
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-#include <getopt.h>
 
 #include "compat.h"
 #include "cpp.h"
@@ -167,7 +172,7 @@ record_define(const char *value)
        struct initar *it;
 
        if ((it = malloc(sizeof(struct initar))) == NULL)
-               error("couldn't apply -D %s", optarg);
+               error("couldn't apply -D");
        it->type = 'D';
        it->str = strdup(value);
        it->next = initar;
@@ -181,7 +186,7 @@ record_include(const char *fname)
        struct incs *w, *w2;
 
        if ((w = calloc(sizeof(struct incs), 1)) == NULL)
-               error("couldn't apply -I %s", optarg);
+               error("couldn't apply -I");
        w->dir = strdup(fname);
        w2 = incdir[SYSINC];
 
