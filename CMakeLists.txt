@@ -33,6 +33,7 @@ endif()
 include(Options)
 include(SendFileHack)
 include(AppleConfiguration)
+include(WindowsConfiguration)
 include(InstallFiles)
 include(Sanitizers)
 include(ClangTidy)
@@ -43,6 +44,9 @@ if(BUILD_STATIC)
 endif()
 
 include(DefineLibM)
+
+# Python
+find_package(Python)
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
 find_package(Boost REQUIRED COMPONENTS filesystem system date_time)

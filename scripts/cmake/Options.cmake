@@ -39,12 +39,17 @@ option(ENABLE_FUZZER "Add fuzzing targets (default: OFF)" OFF)
 option(ENABLE_CLANG_TIDY "Activate clang tidy analysis (default: OFF)" OFF)
 
 #############################
+# WINDOWS
+#############################
+option(WINDOWS_USE_LLVM_CMAKE "Use cmake module from llvm build (default: OFF)" OFF)
+
+#############################
 # CMake extra Vars
 #############################
 set(Clang_DIR "${LLVM_DIR}" CACHE STRING "Clang Directory (if not set, this will be set to the LLVM_DIR")
 
-# Demand C++14
-set (CMAKE_CXX_STANDARD 14)
+# Demand C++17
+set (CMAKE_CXX_STANDARD 17)
 
 # Used by try_compile
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
