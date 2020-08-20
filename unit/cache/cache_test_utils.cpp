@@ -60,6 +60,19 @@ add2tc create_unsigned_32_add_expr(expr2tc &side1, expr2tc &side2)
   return expression;
 }
 
+neg2tc create_unsigned_32_neg_expr(expr2tc &value)
+{
+  unsignedbv_type2tc type(32);
+  neg2tc expression(type, value);
+  return expression;
+}
+not2tc create_not_expr(expr2tc &value)
+{
+  not2tc expression(value);
+  return expression;
+}
+
+
 add2tc create_signed_32_add_expr(expr2tc &side1, expr2tc &side2)
 {
   signedbv_type2tc type(32);

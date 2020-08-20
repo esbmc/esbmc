@@ -23,6 +23,10 @@ constant_int2tc create_signed_32_value_expr(int value);
 
 add2tc create_unsigned_32_add_expr(expr2tc &side1, expr2tc &side2);
 
+neg2tc create_unsigned_32_neg_expr(expr2tc &value);
+
+not2tc create_not_expr(expr2tc &value);
+
 add2tc create_signed_32_add_expr(expr2tc &side1, expr2tc &side2);
 
 mul2tc create_unsigned_32_mul_expr(expr2tc &side1, expr2tc &side2);
