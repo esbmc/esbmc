@@ -65,6 +65,13 @@ private:
   void run_on_relation(expr2tc &expr) noexcept;
 
   /**
+   * Parse the inner contents of a negation
+   *
+   * @param expr relation
+   */
+  void run_on_negation(expr2tc &expr) noexcept;
+
+  /**
    * Parses and adds the symbol or value
    *
    * This receives a reference and generates a copy of it to be later used
@@ -117,6 +124,7 @@ private:
     CONSTANT, /// for constants
     RELATION, /// for relations
     SYMBOL,   /// for symbols
+    NEG,      /// for negations
     SKIP      /// for expressions that shouldn't be analyzed
   };
 

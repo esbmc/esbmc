@@ -33,6 +33,11 @@ void expr_variable_reordering::run()
     this->run_on_relation(expr);
     break;
   }
+  case PARSE_AS::NEG:
+  {
+    this->run_on_negation(expr);
+    break;
+  }
   default:;
   }
 }
@@ -57,9 +62,12 @@ expr_variable_reordering::get_expr_type(expr2tc &expr)
     expr_to_function[expr2t::expr_ids::constant_int_id] = PARSE_AS::CONSTANT;
 
     expr_to_function[expr2t::expr_ids::symbol_id] = PARSE_AS::SYMBOL;
+
+    expr_to_function[expr2t::expr_ids::neg_id] = PARSE_AS::NEG;
+    expr_to_function[expr2t::expr_ids::not_id] = PARSE_AS::NEG;
+
     map_initialized = true;
   }
-
   if(expr_to_function.find(expr->expr_id) == expr_to_function.end())
   {
     return PARSE_AS::SKIP;
@@ -106,6 +114,28 @@ void expr_variable_reordering::run_on_binop(expr2tc &expr) noexcept
 
   // 3. Change all values
   this->transverse_replace_binop(arith, symbols, values);
+}
+
+void expr_variable_reordering::run_on_negation(expr2tc &expr) noexcept
+{
+  if(expr->expr_id == expr2t::expr_ids::neg_id)
+  {
+    std::shared_ptr<arith_1op> arith;
+    arith = std::dynamic_pointer_cast<arith_1op>(expr);
+    // If arith is false then the cast failed
+    assert(arith);
+    expr_variable_reordering inner(arith->value);
+    inner.run();
+  } else if(expr->expr_id == expr2t::expr_ids::not_id)
+  {
+    std::shared_ptr<bool_1op> arith;
+    arith = std::dynamic_pointer_cast<bool_1op>(expr);
+    // If arith is false then the cast failed
+    assert(arith);
+    expr_variable_reordering inner(arith->value);
+    inner.run();
+
+  }
 }
 
 void expr_variable_reordering::run_on_relation(expr2tc &expr) noexcept
