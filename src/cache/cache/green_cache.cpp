@@ -28,7 +28,6 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
   if(cond->expr_id != expr2t::expr_ids::implies_id)
   {
     cond->dump();
-    // TODO: Support NOT
     return;
   }
 
@@ -174,7 +173,7 @@ void green_cache::load_unsat_container()
   // Load default unsat cache
   std::string filename("unsat_database");
   text_file_crc_set_storage storage(filename);
-  unsat_container.set(storage.load());
+  //unsat_container.set(storage.load());
 }
 
 void green_cache::mark_ssa_as_unsat()
@@ -188,5 +187,5 @@ void green_cache::mark_ssa_as_unsat()
     unsat_container.add(value);
   }
   // Stores it in the cache
-  storage.store(unsat_container);
+  //storage.store(unsat_container);
 }
