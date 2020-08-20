@@ -81,7 +81,7 @@ bool ssa_set_container::check(const std::set<long> &items)
   //  return false;
   if(cache.exists(items))
   {
-    std::cout << "Got " << hits++ << " hits\n\n\n";
+    std::cout << "Got " << ++hits << " hits\n\n\n";
     return true;
   }
   for(auto it : this->expressions)
@@ -89,7 +89,7 @@ bool ssa_set_container::check(const std::set<long> &items)
     if(it->is_subset_of(items))
     {
       cache.insert(items);
-      std::cout << "Got " << hits++ << " hits\n\n\n";
+      std::cout << "Got " << ++hits << " hits\n\n\n";
       return true;
     }
   }
