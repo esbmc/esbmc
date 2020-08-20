@@ -69,7 +69,7 @@ Since this guide focuses primarily on ESBMC build, we will only cover the steps 
 We have wrapped the entire build and setup of Boolector in the following command:
 
 ```
-git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
+git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
 ```
 
 If you need more details on Boolector, please refer to [its Github](https://github.com/Boolector/boolector).
