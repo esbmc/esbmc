@@ -62,6 +62,7 @@ public:
     {
       filter.set(f(elem) % N, true);
     }
+    ++num_of_elements;
   }
   bool test_element(const T &elem)
   {
@@ -69,11 +70,9 @@ public:
     {
       if(!filter[f(elem) % N])
       {
-        std::cout << "Didnt Found element in filter!\n";
         return false;
       }
     }
-    std::cout << "Found element in filter!\n";
     return true;
   }
 

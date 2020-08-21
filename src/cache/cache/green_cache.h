@@ -30,15 +30,18 @@
 class green_cache : public ssa_step_algorithm_hidden
 {
 public:
+
   green_cache(
     symex_target_equationt::SSA_stepst &steps,
+    ssa_set_container &unsat_container,
     bool apply_reordering = true,
     bool apply_renaming = true,
     bool apply_normalization = true)
     : ssa_step_algorithm_hidden(steps),
       apply_reordering(apply_reordering),
       apply_renaming(apply_renaming),
-      apply_normalization(apply_normalization)
+      apply_normalization(apply_normalization),
+      unsat_container(unsat_container)
   {
   }
 
@@ -139,7 +142,7 @@ private:
   const bool apply_renaming;
   const bool apply_normalization;
 
-  ssa_set_container unsat_container;
+  ssa_set_container &unsat_container;
   // TODO: Add sat_container
 };
 

@@ -9,15 +9,15 @@ void green_cache::canonize_expr(expr2tc &expr)
   if(apply_reordering)
   {
     expr_variable_reordering reordering(expr);
-    reordering.run();
+    //reordering.run();
   }
 
   if(apply_normalization)
   {
     expr_green_normal_form gnf(expr);
-    gnf.run();
+    //gnf.run();
   }
-  // TODO: add variable renaming
+
 }
 
 void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
@@ -109,7 +109,6 @@ void green_cache::parse_implication_guard(
   {
     // This should be executed to each guard.
     std::shared_ptr<logic_2ops> and_expr;
-    // TODO: Add support to ||
     and_expr = std::dynamic_pointer_cast<logic_2ops>(expr);
     parse_implication_guard(and_expr->side_1, inner_items);
     parse_implication_guard(and_expr->side_2, inner_items);
@@ -173,14 +172,11 @@ void green_cache::load_unsat_container()
   // Load default unsat cache
   std::string filename("unsat_database");
   text_file_crc_set_storage storage(filename);
-  //unsat_container.set(storage.load());
+  //--enable-caching file.c --incremental-bmc --max-k-step 5.set(storage.load());
 }
 
 void green_cache::mark_ssa_as_unsat()
 {
-  // Load a default file
-  std::string filename("unsat_database");
-  text_file_crc_set_storage storage(filename);
   for(const auto &[key, value] : items)
   {
     // Adds all items from the SSA to the unsat container

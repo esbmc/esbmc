@@ -26,7 +26,7 @@ using crc_lru = lru_cache<crc_expr>;
  * theoretical best values. From there empirical evaluation was used to find
  * the best values.
  */
-const size_t bloom_filter_size = 100000;
+const size_t bloom_filter_size = 200;
 const size_t number_of_hashes = 3;
 
 crc_hash_function f1([](const guards_crc &t) {
@@ -35,7 +35,7 @@ crc_hash_function f1([](const guards_crc &t) {
   {
     value += i;
   }
-  return (size_t)0;
+  return (size_t) value;
 });
 
 const crc_hash_function f2([](const guards_crc &t) {
@@ -61,7 +61,7 @@ crc_bloom_filter<bloom_filter_size, number_of_hashes> filter(hash_functions);
 
 // LRU Cache
 
-const size_t lru_cache_size = 100;
+const size_t lru_cache_size = 1000;
 crc_lru cache(lru_cache_size);
 
 } // namespace
@@ -77,11 +77,9 @@ bool expr_set_container::is_subset_of(const std::set<long> &other)
 
 bool ssa_set_container::check(const std::set<long> &items)
 {
-  //if(!filter.test_element(items))
-  //  return false;
   if(cache.exists(items))
   {
-    std::cout << "Got " << ++hits << " hits\n\n\n";
+    ++hits;
     return true;
   }
   for(auto it : this->expressions)
@@ -89,17 +87,16 @@ bool ssa_set_container::check(const std::set<long> &items)
     if(it->is_subset_of(items))
     {
       cache.insert(items);
-      std::cout << "Got " << ++hits << " hits\n\n\n";
+      ++hits;
       return true;
     }
   }
-  std::cout << "No hits\n\n\n";
   return false;
 }
 
 void ssa_set_container::add(const std::set<long> &items)
 {
-  filter.insert_element(items);
+  //filter.insert_element(items);
   cache.insert(items);
   this->expressions.insert(std::make_shared<expr_set_container>(items));
 }
