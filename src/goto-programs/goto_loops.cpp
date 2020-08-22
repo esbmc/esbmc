@@ -165,7 +165,7 @@ void goto_loopst::get_modified_variables(
   {
     add_loop_var(*loop, instruction->guard, false);
   }
-  else if(instruction->is_return())
+  else if(instruction->is_end_function())
   {
     function_names.pop_back();
   }
