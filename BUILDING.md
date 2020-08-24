@@ -50,10 +50,10 @@ Then, we need to extract the package. You can use the following __tar__ command:
 
 ```
 Linux:
-tar xf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
+tar xJf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
 
 macOS:
-tar xf clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz && mv clang+llvm-9.0.0-x86_64-darwin-apple clang9
+tar xJf clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz && mv clang+llvm-9.0.0-x86_64-darwin-apple clang9
 ```
 
 ## Setting Up Solvers
@@ -69,7 +69,7 @@ Since this guide focuses primarily on ESBMC build, we will only cover the steps 
 We have wrapped the entire build and setup of Boolector in the following command:
 
 ```
-git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
+git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
 ```
 
 If you need more details on Boolector, please refer to [its Github](https://github.com/Boolector/boolector).
@@ -146,10 +146,10 @@ First, we need to setup __cmake__, by using the following command:
 
 ```
 Linux:
-cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
+cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../../clang9 -DLLVM_DIR=$PWD/../../clang9 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../../yices -DCVC4_DIR=$PWD/../../cvc4 -DGMP_DIR=$PWD/../../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 
 macOS:
-mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
+mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../../clang9 -DLLVM_DIR=$PWD/../../clang9 -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/..//..release
 ```
 
 Finally, we can trigger the build process, by using the following command:
