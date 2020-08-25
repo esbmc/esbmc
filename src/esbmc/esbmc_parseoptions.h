@@ -77,6 +77,19 @@ protected:
 
 public:
   goto_functionst goto_functions;
+
+private:
+  /* set all the parameters of the
+   * context-bound verification procedure */
+  void set_context_bound_params();
+
+  /* do incremental context-bound with BMC */
+  int do_incremental_bmc(bmct &bmc, optionst &opts);
+
+  /* context-bound verification parameters */
+  int initial_context_bound;
+  int max_context_bound;
+  int context_bound_inc;
 };
 
 #endif
