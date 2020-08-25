@@ -901,6 +901,25 @@ smt_astt smtlib_convt::mk_str_concat(smt_astt a, smt_astt b)
   abort();
 }
 
+smt_astt smtlib_convt::mk_str_concat(smt_astt a, smt_astt b, smt_astt c)
+{
+  std::cerr << "SMTLib can't support String sorts" << std::endl;
+  abort();
+}
+
+smt_astt
+smtlib_convt::mk_str_extract(smt_astt s, smt_astt offset, smt_astt length)
+{
+  std::cerr << "SMTLib can't support String sorts" << std::endl;
+  abort();
+}
+
+smt_astt smtlib_convt::mk_str_length(smt_astt a)
+{
+  std::cerr << "SMTLib can't support String sorts" << std::endl;
+  abort();
+}
+
 smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 {
   assert(cond->sort->id == SMT_SORT_BOOL);
