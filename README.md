@@ -10,9 +10,9 @@
 
 
 
-ESBMC, the efficient SMT based model checker, is a software verification tool for C and C++ code bases. The technique is sound but incomplete -- an error found by ESBMC will be correct (modulo errors in the tool), but a successful verification does not guarantee there are no errors.
+ESBMC (the Efficient SMT-based Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++ programs. It can verify both predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions automatically. ESBMC supports the Clang compiler as its C/C++ frontend, IEEE floating-point arithmetic for a variety of SMT solvers, and implements a state-of-the-art k-induction algorithm.
 
-To build ESBMC, please see the BUILDING file. For getting started, we recommend first reading some of the background material / publications, to understand exactly what this technique can provide, for example our SV-COMP tool papers.
+To build ESBMC, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. For getting started, we recommend first reading some of the background material / publications, to understand exactly what this technique can provide, for example our SV-COMP tool papers, which are available at [online](https://ssvlab.github.io/esbmc/publications.html).
 
 The cannonical public location of ESBMCs source is on github:
 
@@ -22,7 +22,7 @@ While our main website is esbmc.org
 
 ### Features
 
-ESBMC aims to support all of C99, and detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of problems that can be detected include:
+ESBMC aims to support all of C99/C11, and detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of problems that can be detected include:
  * User specified assertion failures
  * Out of bounds array access
  * Illegal pointer dereferences, such as:
@@ -41,8 +41,8 @@ Concurrent software (using the pthread api) is verified by explicit exploration 
 By default ESBMC performs a "lazy" depth first search of interleavings -- it can also encode (explicitly) all interleavings into a single SMT formula.
 
 A number of SMT solvers are currently supported:
- * Z3 4.0+
- * Boolector 2.0+
+ * Z3 4.8+
+ * Boolector 3.0+
  * MathSAT
  * CVC4
  * Yices 2.2+
@@ -53,15 +53,19 @@ A limited subset of C++98 is supported too -- a library modelling the STL is als
 
 ### Differences from CBMC
 
-ESBMC is based on CBMC, the C bounded model checker. The primary differences between the two are that CBMC focuses on SAT-based encodings of unrolled C programs while ESBMC targets SMT; and CBMC's concurrency support is a fully symbolic encoding of a concurrent program in one SAT formulae.
+ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary differences between the two are:
 
-The fundemental verification technique (unrolling programs to SSA then converting to a formula) is still the same in ESBMC, although the program internal representation has been had some additional types added.
+* CBMC focuses on SAT-based encodings of unrolled programs while ESBMC targets SMT-based encodings. 
+* CBMC's concurrency support is an entirely symbolic encoding of a concurrent program in one SAT formulae, while ESBMC explores each interleaving individually.
+* CBMC uses a modified C parser written by James Roskind and a C++ parser based on OpenC++, while ESBMC relies on the Clang front-end.
+* CBMC implements k-induction, requiring three different calls: to generate the CFG, to annotate the program, and to verify it, whereas ESBMC handles the whole process in a single call. Additionally, CBMC does not have a forward condition to check if all states were reached and relies on a limited loop unwinding.
+* ESBMC adds some additional types to the program's internal representation.
 
 # Open source
 
 ESBMC has now been released as open source software -- mainly distributed under the terms of the Apache License 2.0. ESBMC contains a signficant amount of other peoples software, however, please see the COPYING file for an explanation of who-owns-what, and under what terms they are distributed.
 
-We'd be extremely happy to receive contributions to make ESBMC better (under the terms of the Apache License 2.0). If you'd like to submit anything, please file a pull request against the public github repo. General discussion and release announcements will be made on the esbmc-users@googlegroups.com mailing list. To contact us about research or collaboration, please email the esbmc@ mailing list on ecs.soton.ac.uk.
+We'd be extremely happy to receive contributions to make ESBMC better (under the terms of the Apache License 2.0). If you'd like to submit anything, please file a pull request against the public github repo. General discussion and release announcements will be made via GitHub. To contact us about research or collaboration, please post an issue in GitHub.
 
 ### Getting started
 
