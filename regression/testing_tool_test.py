@@ -144,7 +144,7 @@ class XMLTest1(ParseTest):
         self.assertEqual(self.test_case.test_mode, "CORE")
         self.assertEqual(self.test_case.test_file, "main.cpp")
         self.assertEqual(self.test_case.test_args,
-                         "--unwind 10 --no-unwinding-assertions -I ~/libraries/ --memlimit 22000000 --timeout 60m")
+                         "--unwind 10 --no-unwinding-assertions -I ~/libraries/ --memlimit 14000000 --timeout 900")
         self.assertEqual(self.test_case.test_regex, ["^VERIFICATION FAILED$"])
 
     def _argument_list_checks(self, test_obj: BaseTest):

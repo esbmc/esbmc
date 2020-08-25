@@ -1,0 +1,4 @@
+CORE
+main.c
+--incremental-cb
+^VERIFICATION SUCCESSFUL$

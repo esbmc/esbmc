@@ -11,6 +11,19 @@ int main ()
   list<unsigned int>::iterator it1,it2;
 
   // set some values:
+  for (i=1; i<10; i++) mylist.push_back(i*10); // 10 20 30 40 50 60 70 80 90
+
+  //it1 = it2 = mylist.begin();
+  //assert(*it1 == 10);
+  //advance (it2,6); // it2 == 70
+  //assert(*it2 == 70);
+  //++it1; // it1 == 20  
+  //it1 = mylist.erase (it1);  // it1 == 30 
+  //assert(*it1 == 30);
+  //assert(*it2 == 70);
+
+#if 0
+  // set some values:
   for (i=1; i<10; i++) mylist.push_back(i*10);
 
                               // 10 20 30 40 50 60 70 80 90
@@ -28,7 +41,7 @@ int main ()
                               //    ^           ^
   assert(*it2 == 80);
   assert(mylist.size() == 7);
-
+#if 0
   ++it1;                      //       ^        ^
   --it2;                      //       ^     ^
 
@@ -42,6 +55,7 @@ int main ()
   for (it1=mylist.begin(); it1!=mylist.end(); ++it1)
     cout << " " << *it1;
   cout << endl;
-
+#endif
+#endif
   return 0;
 }

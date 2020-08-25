@@ -345,6 +345,50 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   config.options = options;
 }
 
+void esbmc_parseoptionst::set_context_bound_params()
+{
+  // Get the initial context bound
+  initial_context_bound =
+    cmdline.isset("incremental-cb")
+      ? strtoul(cmdline.getval("initial-context-bound"), nullptr, 10)
+      : strtoul(cmdline.getval("context-bound"), nullptr, 10);
+
+  // Get max number of context bounds
+  max_context_bound =
+    cmdline.isset("incremental-cb")
+      ? cmdline.isset("unlimited-context-bound")
+          ? INT_MAX
+          : strtoul(cmdline.getval("max-context-bound"), nullptr, 10)
+      : strtoul(cmdline.getval("context-bound"), nullptr, 10);
+
+  // Get the context bound increment
+  context_bound_inc =
+    strtoul(cmdline.getval("context-bound-step"), nullptr, 10);
+}
+
+int esbmc_parseoptionst::do_incremental_bmc(bmct &bmc, optionst &opts)
+{
+  int res = 0;
+
+  for(int context_bound = initial_context_bound;
+      context_bound <= max_context_bound;
+      context_bound += context_bound_inc)
+  {
+    if(cmdline.isset("incremental-cb"))
+    {
+      opts.set_option("context-bound", integer2string(context_bound));
+      std::cout << "\n*** Context bound number ";
+      std::cout << context_bound;
+      std::cout << " ***\n";
+    }
+    res = do_bmc(bmc);
+    if(res)
+      return res;
+  }
+
+  return res;
+}
+
 int esbmc_parseoptionst::doit()
 {
   //
@@ -416,10 +460,14 @@ int esbmc_parseoptionst::doit()
   if(opts.get_bool_option("skip-bmc"))
     return 0;
 
+  // set the context-bound verification parameters
+  set_context_bound_params();
+
   // do actual BMC
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
-  return do_bmc(bmc);
+
+  return do_incremental_bmc(bmc, opts);
 }
 
 int esbmc_parseoptionst::doit_k_induction_parallel()
@@ -762,10 +810,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       std::cout << "*** Checking base case" << std::endl;
 
       // If an exception was thrown, we should abort the process
-      bool res = true;
+      int res = 1;
       try
       {
-        res = do_bmc(bmc);
+        res = do_incremental_bmc(bmc, opts);
       }
       catch(...)
       {
@@ -873,10 +921,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       std::cout << "*** Checking forward condition" << std::endl;
 
       // If an exception was thrown, we should abort the process
-      bool res = true;
+      int res = 1;
       try
       {
-        res = do_bmc(bmc);
+        res = do_incremental_bmc(bmc, opts);
       }
       catch(...)
       {
@@ -940,10 +988,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       std::cout << "*** Checking inductive step" << std::endl;
 
       // If an exception was thrown, we should abort the process
-      bool res = true;
+      int res = 1;
       try
       {
-        res = do_bmc(bmc);
+        res = do_incremental_bmc(bmc, opts);
       }
       catch(...)
       {
@@ -1181,21 +1229,37 @@ int esbmc_parseoptionst::do_base_case(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
+  // set the context-bound verification parameters
+  set_context_bound_params();
+
   std::cout << "*** Checking base case\n";
-  switch(do_bmc(bmc))
+  for(int context_bound = initial_context_bound;
+      context_bound <= max_context_bound;
+      context_bound += context_bound_inc)
   {
-  case smt_convt::P_UNSATISFIABLE:
-  case smt_convt::P_SMTLIB:
-  case smt_convt::P_ERROR:
-    break;
+    if(cmdline.isset("incremental-cb"))
+    {
+      opts.set_option("context-bound", integer2string(context_bound));
+      std::cout << "\n*** Context bound number ";
+      std::cout << context_bound;
+      std::cout << " ***\n";
+    }
 
-  case smt_convt::P_SATISFIABLE:
-    std::cout << "\nBug found (k = " << k_step << ")\n";
-    return true;
+    switch(do_bmc(bmc))
+    {
+    case smt_convt::P_UNSATISFIABLE:
+    case smt_convt::P_SMTLIB:
+    case smt_convt::P_ERROR:
+      break;
 
-  default:
-    std::cout << "Unknown BMC result\n";
-    abort();
+    case smt_convt::P_SATISFIABLE:
+      std::cout << "\nBug found (k = " << k_step << ")\n";
+      return true;
+
+    default:
+      std::cout << "Unknown BMC result\n";
+      abort();
+    }
   }
 
   return false;
@@ -1227,6 +1291,10 @@ int esbmc_parseoptionst::do_forward_condition(
   set_verbosity_msg(bmc);
 
   bmc.options.set_option("unwind", integer2string(k_step));
+
+  // Set max number of context bounds
+  if(cmdline.isset("incremental-cb"))
+    opts.set_option("context-bound", cmdline.getval("max-context-bound"));
 
   std::cout << "*** Checking forward condition\n";
   auto res = do_bmc(bmc);
@@ -1282,6 +1350,10 @@ int esbmc_parseoptionst::do_inductive_step(
   set_verbosity_msg(bmc);
 
   bmc.options.set_option("unwind", integer2string(k_step));
+
+  // Set max number of context bounds
+  if(cmdline.isset("incremental-cb"))
+    opts.set_option("context-bound", cmdline.getval("max-context-bound"));
 
   std::cout << "*** Checking inductive step\n";
   switch(do_bmc(bmc))
@@ -1805,7 +1877,7 @@ void esbmc_parseoptionst::help()
        " --no-div-by-zero-check       do not do division by zero check\n"
        " --no-pointer-check           do not do pointer check\n"
        " --no-align-check             do not check pointer alignment\n"
-       " --memory-leak-check          enable memory leak check check\n"
+       " --memory-leak-check          enable memory leak check\n"
        " --nan-check                  check floating-point for NaN\n"
        " --overflow-check             enable arithmetic over- and underflow "
        "check\n"
@@ -1843,6 +1915,8 @@ void esbmc_parseoptionst::help()
        "                              (default is 1) \n"
 
        "\nConcurrency checking\n"
+       " --incremental-cb             perform incremental context-bound "
+       "verification\n"
        " --context-bound nr           limit number of context switches for "
        "each thread \n"
        " --state-hashing              enable state-hashing, prunes duplicate "
@@ -1850,6 +1924,14 @@ void esbmc_parseoptionst::help()
        " --no-por                     do not do partial order reduction\n"
        " --all-runs                   check all interleavings, even if a bug "
        "was already found\n"
+       " --initial-context-bound nr   set the initial context-bound for "
+       "incremental verification (default is 2)\n"
+       " --context-bound-step nr      set k context bound increment (default "
+       "is 5)\n"
+       " --max-context-bound nr       set max number of context-bound (default "
+       "is 15)\n"
+       " --unlimited-context-bound    set max number of context bounds to "
+       "UINT_MAX\n"
 
        "\nMiscellaneous options\n"
        " --memlimit                   configure memory limit, of form \"100m\" "
