@@ -190,6 +190,7 @@ public:
   smt_astt convert_str_symbol(const expr2tc &expr);
   smt_astt convert_str_ast(const expr2tc &expr);
   symbol2t to_str_symbol2t(const symbol2t &sym);
+  bool is_str_expr(const expr2tc &expr);
 
   /** Interface to specifig SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
@@ -467,6 +468,10 @@ public:
   virtual smt_astt mk_concat(smt_astt a, smt_astt b) = 0;
 
   virtual smt_astt mk_str_concat(smt_astt a, smt_astt b) = 0;
+  virtual smt_astt mk_str_concat(smt_astt a, smt_astt b, smt_astt c) = 0;
+  virtual smt_astt
+  mk_str_extract(smt_astt s, smt_astt offset, smt_astt length) = 0;
+  virtual smt_astt mk_str_length(smt_astt a) = 0;
 
   /** Create an ite operation
    * @param cond the ite condition

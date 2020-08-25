@@ -249,7 +249,8 @@ void smt_convt::convert_str_assign(const expr2tc &expr)
   if(is_symbol2t(eq.side_1) && is_with2t(eq.side_2))
   {
     smt_sortt sort = mk_string_sort();
-    smt_astt source, update;
+    expr2tc update_value, update_field;
+    smt_astt source, update, _char, pre_str, pos_str, position;
 
     const with2t &with = to_with2t(eq.side_2);
 
@@ -260,26 +261,63 @@ void smt_convt::convert_str_assign(const expr2tc &expr)
     if(map_result == sym_level_map.end())
       sym_level_map[str_sym_name] = 0;
 
-    update = convert_str_ast(with.update_value);
+    update_field = with.update_field;
+    update_value = with.update_value;
 
-    if((with.update_value)->expr_id == expr2t::constant_int_id)
+    switch(update_field->expr_id)
     {
-      if((with.update_field)->expr_id == expr2t::constant_int_id)
-      {
-        const constant_int2t &int_field = to_constant_int2t(with.update_field);
-        if((int_field.value == 0) && sym_level_map[str_sym_name])
-          sym_level_map[str_sym_name]++;
-      }
-      source = convert_str_ast(with.source_value);
-      sym_level_map[str_sym_name]++;
-      update = mk_str_concat(source, update);
+    case expr2t::constant_int_id:
+    {
+      const constant_int2t &i = to_constant_int2t(update_field);
+      position = mk_smt_int(i.value);
+      break;
+    }
+    case expr2t::pointer_offset_id:
+    {
+      position = convert_ast(update_field);
+      break;
+    }
+    default:
+    {
+      std::cerr << "Couldn't convert update_field expression\n";
+      update_field->dump();
+      abort();
+    }
+    }
+
+    switch(update_value->expr_id)
+    {
+    case expr2t::constant_int_id:
+    {
+      _char = convert_str_ast(update_value);
+      break;
+    }
+    case expr2t::bitcast_id:
+    {
+      return;
+    }
+    default:
+    {
+      std::cerr << "Couldn't convert update_value expression\n";
+      update_value->dump();
+      abort();
+    }
+    }
+
+    source = convert_str_ast(with.source_value);
+    sym_level_map[str_sym_name]++;
+    pre_str = mk_str_extract(source, mk_smt_int(0), position);
+
+    const constant_int2t &int_char = to_constant_int2t(update_value);
+    if(int_char.value != 0)
+    {
+      smt_astt x = mk_add(position, mk_smt_int(1));
+      pos_str = mk_str_extract(source, x, mk_sub(mk_str_length(source), x));
+      update = mk_str_concat(pre_str, _char, pos_str);
     }
     else
-    {
-      if((with.update_field)->expr_id == expr2t::pointer_offset_id)
-        update = mk_str_concat(sym_str_map[str_sym_name], update);
-      sym_str_map[str_sym_name] = update;
-    }
+      update = pre_str;
+
     source = convert_str_ast(eq.side_1);
     update->assign(this, source);
   }
@@ -328,6 +366,26 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
   return a;
 }
 
+bool smt_convt::is_str_expr(const expr2tc &expr)
+{
+  switch(expr->expr_id)
+  {
+  case expr2t::symbol_id:
+  {
+    const symbol2t &sym = to_symbol2t(expr);
+    if(is_array_type(expr))
+    {
+      type2tc subtype = get_base_array_subtype(expr->type);
+      int width = subtype->get_width();
+      if(width == config.ansi_c.char_width)
+        return true;
+    }
+    break;
+  }
+  }
+  return false;
+}
+
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
@@ -335,6 +393,13 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   smt_astt side2 = convert_ast(eq.side_2);
   side2->assign(this, side1);
 
+  if(config.options.get_bool_option("string-solver"))
+  {
+    if(is_str_expr(eq.side_1))
+    {
+      convert_str_assign(expr);
+    }
+  }
   // Put that into the smt cache, thus preserving the assigned symbols value.
   // IMPORTANT: the cache is now a fundemental part of how some flatteners work,
   // in that one can chose to create a set of expressions and their ASTs, then
