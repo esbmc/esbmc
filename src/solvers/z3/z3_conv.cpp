@@ -798,7 +798,9 @@ smt_astt z3_convt::mk_str_concat(smt_astt a, smt_astt b)
 smt_astt z3_convt::mk_str_concat(smt_astt a, smt_astt b, smt_astt c)
 {
   Z3_ast _args[3] = {
-    to_solver_smt_ast<z3_smt_ast>(a)->a, to_solver_smt_ast<z3_smt_ast>(b)->a, to_solver_smt_ast<z3_smt_ast>(c)->a};
+    to_solver_smt_ast<z3_smt_ast>(a)->a,
+    to_solver_smt_ast<z3_smt_ast>(b)->a,
+    to_solver_smt_ast<z3_smt_ast>(c)->a};
   return new_ast(
     z3::to_expr(z3_ctx, Z3_mk_seq_concat(z3_ctx, 3, _args)), a->sort);
 }
@@ -807,13 +809,22 @@ smt_astt z3_convt::mk_str_length(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_STRING);
   return new_ast(
-    z3::to_expr(z3_ctx, Z3_mk_seq_length(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a)), mk_int_sort());
+    z3::to_expr(
+      z3_ctx, Z3_mk_seq_length(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a)),
+    mk_int_sort());
 }
 
 smt_astt z3_convt::mk_str_extract(smt_astt s, smt_astt offset, smt_astt length)
 {
   return new_ast(
-    z3::to_expr(z3_ctx, Z3_mk_seq_extract(z3_ctx, to_solver_smt_ast<z3_smt_ast>(s)->a, to_solver_smt_ast<z3_smt_ast>(offset)->a, to_solver_smt_ast<z3_smt_ast>(length)->a)), s->sort);
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_seq_extract(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(s)->a,
+        to_solver_smt_ast<z3_smt_ast>(offset)->a,
+        to_solver_smt_ast<z3_smt_ast>(length)->a)),
+    s->sort);
 }
 
 smt_astt z3_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
