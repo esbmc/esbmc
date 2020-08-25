@@ -68,10 +68,17 @@ def run(cmd_line):
 
   the_args = shlex.split(cmd_line)
 
-  p = subprocess.Popen(the_args, shell=True, stdout=subprocess.PIPE)
+  p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
-  for line in iter(p.stdout.readline, ""):
-    print(line)
+  while True:
+    output = p.stdout.readline()
+    if output == '' and p.poll() is not None:
+      break
+    if output:
+      print(output.strip())
+    rc = p.poll()
+
+  stdout = p.communicate()[0]
 
   return stdout
 
@@ -229,9 +236,9 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
 
   # Add strategy
   if strat == "fixed":
-    command_line += "--k-induction --max-inductive-step 3 "
+    command_line += "--k-induction-parallel --max-inductive-step 3 "
   elif strat == "kinduction":
-    command_line += "--k-induction --max-inductive-step 3 "
+    command_line += "--k-induction-parallel --max-inductive-step 3 "
   elif strat == "falsi":
     command_line += "--falsification "
   elif strat == "incr":
@@ -309,7 +316,7 @@ if "CHECK( init(main()), LTL(G valid-free) )" in property_file_content:
   category_property = Property.memory
 elif "CHECK( init(main()), LTL(G ! overflow) )" in property_file_content:
   category_property = Property.overflow
-elif "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )" in property_file_content:
+elif "CHECK( init(main()), LTL(G ! call(reach_error())) )" in property_file_content:
   category_property = Property.reach
 elif "CHECK( init(main()), LTL(F end) )" in property_file_content:
   category_property = Property.termination
