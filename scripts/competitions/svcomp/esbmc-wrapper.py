@@ -317,7 +317,7 @@ if "CHECK( init(main()), LTL(G valid-free) )" in property_file_content:
   category_property = Property.memory
 elif "CHECK( init(main()), LTL(G ! overflow) )" in property_file_content:
   category_property = Property.overflow
-elif "CHECK( init(main()), LTL(G ! call(reach_error())) )" in property_file_content:
+elif "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )" in property_file_content:
   category_property = Property.reach
 elif "CHECK( init(main()), LTL(F end) )" in property_file_content:
   category_property = Property.termination
