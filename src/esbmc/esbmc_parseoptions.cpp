@@ -433,7 +433,7 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("k-induction"))
     return doit_k_induction();
 
-#if 1
+#if 0
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
 #elif
