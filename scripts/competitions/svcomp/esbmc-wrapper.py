@@ -70,17 +70,18 @@ def run(cmd_line):
 
   p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
+  stdout = []
+
   while True:
     output = p.stdout.readline()
     if output == '' and p.poll() is not None:
       break
     if output:
       print(output.strip())
+      stdout.append(output.strip())
     rc = p.poll()
 
-  stdout = p.communicate()[0]
-
-  return stdout
+  return "\n".join(stdout)
 
 def parse_result(the_output, prop):
 
