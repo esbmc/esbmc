@@ -436,9 +436,8 @@ int esbmc_parseoptionst::doit()
 #if 0
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
-#elif
-  return doit_k_induction_parallel();
 #endif
+  return doit_k_induction_parallel();
 
   optionst opts;
   get_command_line_options(opts);
