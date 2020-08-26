@@ -237,11 +237,11 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   smt_astt side2 = convert_ast(eq.side_2);
   side2->assign(this, side1);
 
-  // Put that into the smt cache, thus preserving the assigned symbols value.
-  // IMPORTANT: the cache is now a fundemental part of how some flatteners work,
-  // in that one can chose to create a set of expressions and their ASTs, then
+  // Put that into the smt cache, thus preserving the value of the assigned symbols.
+  // IMPORTANT: the cache is now a fundamental part of how some flatteners work,
+  // in that one can choose to create a set of expressions and their ASTs, then
   // store them in the cache, rather than have a more sophisticated conversion.
-  smt_cache_entryt e = {eq.side_1, side1, ctx_level};
+  smt_cache_entryt e = {eq.side_1, side2, ctx_level};
   smt_cache.insert(e);
 
   return side2;
