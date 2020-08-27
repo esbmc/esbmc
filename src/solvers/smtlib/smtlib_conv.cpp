@@ -920,6 +920,12 @@ smt_astt smtlib_convt::mk_str_length(smt_astt a)
   abort();
 }
 
+smt_astt smtlib_convt::mk_str_at(smt_astt s, smt_astt index)
+{
+  std::cerr << "SMTLib can't support String sorts" << std::endl;
+  abort();
+}
+
 smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 {
   assert(cond->sort->id == SMT_SORT_BOOL);

@@ -127,6 +127,7 @@ public:
   smt_astt
   mk_str_extract(smt_astt s, smt_astt offset, smt_astt length) override;
   smt_astt mk_str_length(smt_astt a) override;
+  smt_astt mk_str_at(smt_astt s, smt_astt index) override;
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
   void push_ctx() override;

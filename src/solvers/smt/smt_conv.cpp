@@ -230,36 +230,32 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
   assert_ast(a);
 }
 
-symbol2t smt_convt::to_str_symbol2t(const symbol2t &sym)
+smt_astt smt_convt::convert_str_assign(const expr2tc &expr)
 {
-  std::string str_sym_name = sym.thename.as_string() + "_str";
-  symbol2t str_sym(get_empty_type(), str_sym_name);
-  str_sym.rlevel = sym.rlevel;
-  str_sym.level1_num = sym.level1_num;
-  str_sym.level2_num = sym_level_map[sym.thename.as_string()];
-  str_sym.thread_num = sym.thread_num;
-  str_sym.node_num = sym.node_num;
-  return str_sym;
-}
+  smt_sortt sort = mk_string_sort();
+  expr2tc update_value, update_field;
+  smt_astt source, update, _char, pre_str, pos_str, position;
 
-void smt_convt::convert_str_assign(const expr2tc &expr)
-{
   const equality2t &eq = to_equality2t(expr);
+
+  if(is_typecast2t(eq.side_1) && is_constant_int2t(eq.side_2))
+  {
+    update_field = to_typecast2t(eq.side_1).from;
+    const index2t &index = to_index2t(update_field);
+    expr2tc sym = index.source_value;
+    update_field = index.index;
+    position =  mk_smt_int((to_constant_int2t(update_field)).value);
+    source = str_symbol(sym, false);
+    update = convert_str_ast(eq.side_2);
+    update = mk_eq(mk_str_at(source, position), update);
+    return update;
+  }
 
   if(is_symbol2t(eq.side_1) && is_with2t(eq.side_2))
   {
-    smt_sortt sort = mk_string_sort();
-    expr2tc update_value, update_field;
-    smt_astt source, update, _char, pre_str, pos_str, position;
-
     const with2t &with = to_with2t(eq.side_2);
 
-    std::string str_sym_name = to_symbol2t(eq.side_1).thename.as_string();
-
-    sym_level_mapt::const_iterator map_result =
-      sym_level_map.find(str_sym_name);
-    if(map_result == sym_level_map.end())
-      sym_level_map[str_sym_name] = 0;
+    //std::string str_sym_name = to_symbol2t(eq.side_1).thename.as_string();
 
     update_field = with.update_field;
     update_value = with.update_value;
@@ -294,7 +290,7 @@ void smt_convt::convert_str_assign(const expr2tc &expr)
     }
     case expr2t::bitcast_id:
     {
-      return;
+      return 0;
     }
     default:
     {
@@ -304,8 +300,7 @@ void smt_convt::convert_str_assign(const expr2tc &expr)
     }
     }
 
-    source = convert_str_ast(with.source_value);
-    sym_level_map[str_sym_name]++;
+    source = str_symbol(with.source_value, true);
     pre_str = mk_str_extract(source, mk_smt_int(0), position);
 
     const constant_int2t &int_char = to_constant_int2t(update_value);
@@ -318,17 +313,43 @@ void smt_convt::convert_str_assign(const expr2tc &expr)
     else
       update = pre_str;
 
-    source = convert_str_ast(eq.side_1);
+    source = str_symbol(eq.side_1, false);//convert_str_ast(eq.side_1);
     update->assign(this, source);
+
+    return update;
   }
+  return 0;
 }
 
-smt_astt smt_convt::convert_str_symbol(const expr2tc &expr)
+std::string smt_convt::str_fresh_name(const std::string &tag, bool is_new)
+{
+  std::string new_name = "str::" + tag + "::";
+  std::stringstream ss;
+  if(is_new)
+    ss << new_name << fresh_map[new_name]++;
+  else
+    ss << new_name << fresh_map[new_name];
+  return ss.str();
+}
+
+smt_astt smt_convt::str_symbol(const expr2tc &expr, bool is_new)
 {
   smt_sortt sort = mk_string_sort();
-  const symbol2t &sym = to_symbol2t(expr);
-  symbol2t str_sym = to_str_symbol2t(sym);
-  return mk_smt_symbol(str_sym.get_symbol_name(), sort);
+  std::string str_sym_name = to_symbol2t(expr).thename.as_string();
+  str_sym_name = str_fresh_name(str_sym_name, is_new);
+  return mk_smt_symbol(str_sym_name, sort);
+}
+
+smt_astt smt_convt::convert_str_ast_assert(const expr2tc &expr, ast_vec &assertions)
+{
+  assert(expt->expr_id == expr2t::implies_id);
+  expr2tc e = *expr->get_sub_expr(1);
+  if(is_str_expr(e))
+  {
+    //smt_astt b = mk_implies(args[0], convert_str_assign(e));
+    smt_astt b = convert_str_assign(e);
+    b->dump();
+  }
 }
 
 smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
@@ -337,7 +358,7 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
   switch(expr->expr_id)
   {
   case expr2t::symbol_id:
-    a = convert_str_symbol(expr);
+    a = str_symbol(expr, true);
     break;
   case expr2t::constant_string_id:
     a = convert_terminal(expr);
@@ -350,12 +371,17 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
     a = mk_smt_string(char_value);
     break;
   }
-  case expr2t::bitcast_id:
+  /*case expr2t::bitcast_id:
   {
     const bitcast2t &cast = to_bitcast2t(expr);
     a = convert_str_ast(cast.from);
     break;
   }
+  case expr2t::typecast_id:
+  {
+    const typecast2t &tc = to_typecast2t(expr);
+    return(convert_str_ast(tc.from));
+  }*/
   case expr2t::index_id:
   {
     const index2t &index = to_index2t(expr);
@@ -382,6 +408,21 @@ bool smt_convt::is_str_expr(const expr2tc &expr)
     }
     break;
   }
+  case expr2t::equality_id:
+  {
+    const equality2t &eq = to_equality2t(expr);
+    return(is_str_expr(eq.side_1) || is_str_expr(eq.side_2));
+  }
+  case expr2t::typecast_id:
+  {
+    const typecast2t &tc = to_typecast2t(expr);
+    return(is_str_expr(tc.from));
+  }
+  case expr2t::index_id:
+  {
+    const index2t &idx = to_index2t(expr);
+    return(is_str_expr(idx.source_value));
+  }
   }
   return false;
 }
@@ -404,7 +445,7 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   // IMPORTANT: the cache is now a fundemental part of how some flatteners work,
   // in that one can chose to create a set of expressions and their ASTs, then
   // store them in the cache, rather than have a more sophisticated conversion.
-  smt_cache_entryt e = {eq.side_1, side1, ctx_level};
+  smt_cache_entryt e = {eq.side_1, side2, ctx_level};
   smt_cache.insert(e);
 
   return side2;
