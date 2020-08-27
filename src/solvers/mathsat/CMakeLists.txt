@@ -9,8 +9,8 @@ if(EXISTS $ENV{HOME}/mathsat)
 endif()
 
 if(ENABLE_MATHSAT)
-    find_library(Mathsat_LIB mathsat PATHS "${Mathsat_DIR}" $ENV{HOME}/mathsat PATH_SUFFIXES lib)
-    find_path(Mathsat_INCLUDE_DIRS mathsat.h PATHS ${Mathsat_DIR} $ENV{HOME}/mathsat PATH_SUFFIXES include)
+    find_library(Mathsat_LIB mathsat HINTS "${Mathsat_DIR}" $ENV{HOME}/mathsat PATH_SUFFIXES lib)
+    find_path(Mathsat_INCLUDE_DIRS mathsat.h HINTS ${Mathsat_DIR} $ENV{HOME}/mathsat PATH_SUFFIXES include)
 
     if(Mathsat_INCLUDE_DIRS STREQUAL "Mathsat_INCLUDE_DIRS-NOTFOUND")
         message(FATAL_ERROR "Could not find mathsat include headers, please check Mathsat_DIR")
