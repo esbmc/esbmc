@@ -10,7 +10,7 @@ endif()
 
 if(ENABLE_BOOLECTOR)
     find_package(Boolector REQUIRED
-            PATHS ${Boolector_DIR}/lib/cmake $ENV{HOME}/boolector)
+            HINTS ${Boolector_DIR}/lib/cmake $ENV{HOME}/boolector)
 
     message(STATUS "Found Boolector at: ${Boolector_DIR}")
     message(STATUS "Boolector version: ${Boolector_VERSION}")
