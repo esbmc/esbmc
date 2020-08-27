@@ -425,6 +425,7 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
 #endif
+  // forcing changes in git
   return doit_k_induction_parallel();
 
   if(cmdline.isset("termination"))
