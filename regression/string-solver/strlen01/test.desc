@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 10 --string-solver --z3
+--unwind 10 --string-solver --z3 --ir
 ^VERIFICATION SUCCESSFUL$
