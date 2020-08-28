@@ -186,10 +186,11 @@ public:
   smt_astt convert_ast(const expr2tc &expr);
 
   /**/
-  void convert_str_assign(const expr2tc &expr);
-  smt_astt convert_str_symbol(const expr2tc &expr);
+  smt_astt convert_str_assign(const expr2tc &expr);
   smt_astt convert_str_ast(const expr2tc &expr);
-  symbol2t to_str_symbol2t(const symbol2t &sym);
+  std::string str_fresh_name(const std::string &tag, bool is_new);
+  smt_astt str_symbol(const expr2tc &expr, bool is_new);
+  smt_astt convert_str_ast_assert(const expr2tc &expr, ast_vec &assertions);
   bool is_str_expr(const expr2tc &expr);
 
   /** Interface to specifig SMT conversion.
@@ -472,6 +473,7 @@ public:
   virtual smt_astt
   mk_str_extract(smt_astt s, smt_astt offset, smt_astt length) = 0;
   virtual smt_astt mk_str_length(smt_astt a) = 0;
+  virtual smt_astt mk_str_at(smt_astt s, smt_astt index) = 0;
 
   /** Create an ite operation
    * @param cond the ite condition

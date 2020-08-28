@@ -244,7 +244,7 @@ smt_astt smt_convt::convert_str_assign(const expr2tc &expr)
     const index2t &index = to_index2t(update_field);
     expr2tc sym = index.source_value;
     update_field = index.index;
-    position =  mk_smt_int((to_constant_int2t(update_field)).value);
+    position = mk_smt_int((to_constant_int2t(update_field)).value);
     source = str_symbol(sym, false);
     update = convert_str_ast(eq.side_2);
     update = mk_eq(mk_str_at(source, position), update);
@@ -313,7 +313,7 @@ smt_astt smt_convt::convert_str_assign(const expr2tc &expr)
     else
       update = pre_str;
 
-    source = str_symbol(eq.side_1, false);//convert_str_ast(eq.side_1);
+    source = str_symbol(eq.side_1, false);
     update->assign(this, source);
 
     return update;
@@ -340,16 +340,20 @@ smt_astt smt_convt::str_symbol(const expr2tc &expr, bool is_new)
   return mk_smt_symbol(str_sym_name, sort);
 }
 
-smt_astt smt_convt::convert_str_ast_assert(const expr2tc &expr, ast_vec &assertions)
+smt_astt
+smt_convt::convert_str_ast_assert(const expr2tc &expr, ast_vec &assertions)
 {
   assert(expt->expr_id == expr2t::implies_id);
+  expr2tc sym = *expr->get_sub_expr(0);
   expr2tc e = *expr->get_sub_expr(1);
+
   if(is_str_expr(e))
   {
-    //smt_astt b = mk_implies(args[0], convert_str_assign(e));
-    smt_astt b = convert_str_assign(e);
-    b->dump();
+    smt_astt cond = mk_implies(convert_ast(sym), convert_str_assign(e));
+    cond = imply_ast(convert_ast(gen_true_expr()), cond);
+    assertions.push_back(invert_ast(cond));
   }
+  return 0;
 }
 
 smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
@@ -371,17 +375,6 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
     a = mk_smt_string(char_value);
     break;
   }
-  /*case expr2t::bitcast_id:
-  {
-    const bitcast2t &cast = to_bitcast2t(expr);
-    a = convert_str_ast(cast.from);
-    break;
-  }
-  case expr2t::typecast_id:
-  {
-    const typecast2t &tc = to_typecast2t(expr);
-    return(convert_str_ast(tc.from));
-  }*/
   case expr2t::index_id:
   {
     const index2t &index = to_index2t(expr);
@@ -411,17 +404,17 @@ bool smt_convt::is_str_expr(const expr2tc &expr)
   case expr2t::equality_id:
   {
     const equality2t &eq = to_equality2t(expr);
-    return(is_str_expr(eq.side_1) || is_str_expr(eq.side_2));
+    return (is_str_expr(eq.side_1) || is_str_expr(eq.side_2));
   }
   case expr2t::typecast_id:
   {
     const typecast2t &tc = to_typecast2t(expr);
-    return(is_str_expr(tc.from));
+    return (is_str_expr(tc.from));
   }
   case expr2t::index_id:
   {
     const index2t &idx = to_index2t(expr);
-    return(is_str_expr(idx.source_value));
+    return (is_str_expr(idx.source_value));
   }
   }
   return false;
