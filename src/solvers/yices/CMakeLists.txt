@@ -9,8 +9,8 @@ if(EXISTS $ENV{HOME}/yices)
 endif()
 
 if(ENABLE_YICES)
-    find_path(Yices_INCLUDE_DIRS yices.h PATHS "${Yices_DIR}" $ENV{HOME}/yices PATH_SUFFIXES include)
-    find_library(Yices_LIB yices NAMES yices PATHS "${Yices_DIR}" $ENV{HOME}/yices PATH_SUFFIXES lib)
+    find_path(Yices_INCLUDE_DIRS yices.h HINTS "${Yices_DIR}" $ENV{HOME}/yices PATH_SUFFIXES include)
+    find_library(Yices_LIB yices NAMES yices HINTS "${Yices_DIR}" $ENV{HOME}/yices PATH_SUFFIXES lib)
 
     if(Yices_INCLUDE_DIRS STREQUAL "Yices_INCLUDE_DIRS-NOTFOUND")
         message(FATAL_ERROR "Could not find yices headers, please check Yices_DIR")
@@ -50,7 +50,7 @@ if(ENABLE_YICES)
 
     # Hack needed for Ubuntu, since it is not linking with static libs from system
     if(DEFINED GMP_DIR)
-        find_library(LIBGMP_CUSTOM gmp NAMES libgmp.a PATHS ${GMP_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
+        find_library(LIBGMP_CUSTOM gmp NAMES libgmp.a HINTS ${GMP_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
         message(STATUS "Custom gmp found: ${LIBGMP_CUSTOM}")
         target_link_libraries(solveryices "${Yices_LIB}" "${LIBGMP_CUSTOM}")
     else ()
