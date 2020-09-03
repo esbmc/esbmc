@@ -1,7 +1,4 @@
 build
-<<<<<<< HEAD
-=======
 .DS_Store
 __pycache__
->>>>>>> master
 release
