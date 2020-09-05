@@ -354,6 +354,10 @@ public:
    *         the value_set::object_numbering mapping.
    *  @param object The offset data for the pointer record being inserted.
    */
+  #ifdef min
+  #undef min
+  #endif
+  #include <algorithm>
   bool insert(object_mapt &dest, unsigned n, const objectt &object) const
   {
     object_mapt::const_iterator it = dest.find(n);
