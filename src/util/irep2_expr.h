@@ -2225,7 +2225,7 @@ public:
   bitnot2t(
     const type2tc &type,
     const expr2tc &v,
-    const expr2tc &__attribute__((unused)))
+    const expr2tc &p [[maybe_unused]])
     : bitnot_expr_methods(type, bitnot_id, v)
   {
   }
@@ -3531,4 +3531,4 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MACROS_ENUM, foo, ESBMC_LIST_OF_EXPRS)
 #undef dynamic_cast
 #endif
 
-#endif /* IREP2_EXPR_H_ */
+#endif
