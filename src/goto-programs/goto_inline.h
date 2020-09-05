@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_INLINE_H
 #define CPROVER_GOTO_INLINE_H
 
-#include <goto-programs/goto_functions.h>
 #include <unordered_set>
+#include <goto-programs/goto_functions.h>
 #include <util/message_stream.h>
 #include <util/std_types.h>
 
