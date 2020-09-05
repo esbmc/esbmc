@@ -10,4 +10,13 @@ if (WIN32)
   
   set(LIBGOMP_LIB "-lgomp -ldl")
   set(OS_FLEX_FLAGS "--wincompat")
+  set(OS_X86_INCLUDE_FOLDER "C:/")
+  set(OS_C2GOTO_FLAGS "-D_MSVC")
+endif()
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+else()
+message(AUTHOR_WARNING "${CMAKE_CXX_COMPILER_ID} is not tested in Windows. You may run into issues.")	
 endif()

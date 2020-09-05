@@ -14,4 +14,6 @@ if (APPLE)
     # MacOS Z3 does not need libgomp
     set(LIBGOMP_LIB "")
     set(OS_FLEX_FLAGS "")
+    set(OS_X86_INCLUDE_FOLDER "/usr/include/${CMAKE_LIBRARY_ARCHITECTURE}")
+    set(OS_C2GOTO_FLAGS "")
 endif()
