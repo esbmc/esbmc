@@ -20,12 +20,12 @@ expr2tc expr2t::simplify() const
     // Corner case! Don't even try to simplify address of's operands, might end up
     // taking the address of some /completely/ arbitary pice of data, by
     // simplifiying an index to its data, discarding the symbol.
-    if(__builtin_expect((expr_id == address_of_id), 0)) // unlikely
+    if(expr_id == address_of_id) [[unlikely]]
       return expr2tc();
 
     // And overflows too. We don't wish an add to distribute itself, for example,
     // when we're trying to work out whether or not it's going to overflow.
-    if(__builtin_expect((expr_id == overflow_id), 0))
+    if(expr_id == overflow_id) [[unlikely]]
       return expr2tc();
 
     // Try initial simplification
@@ -1364,7 +1364,7 @@ expr2tc bitnxor2t::do_simplify() const
 expr2tc bitnot2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op =
-    [](int64_t op1, int64_t op2 __attribute__((unused))) { return ~(op1); };
+    [](int64_t op1, int64_t op2 [[maybe_unused]]) { return ~(op1); };
 
   return do_bit_munge_operation<bitnot2t>(op, type, value, value);
 }
