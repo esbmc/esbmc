@@ -179,7 +179,7 @@ inline __host__ double __signbitd(double x) {
 // functions. Temporarily redefine __forceinline__ to include
 // __device__.
 #pragma push_macro("__forceinline__")
-#define __forceinline__ __device__ __inline__ __attribute__((always_inline))
+#define __forceinline__ __device__ __inline__ [[gnu::always_inline]]
 #if CUDA_VERSION < 9000
 #include "device_functions.hpp"
 #endif

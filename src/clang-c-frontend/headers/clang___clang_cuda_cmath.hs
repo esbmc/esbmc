@@ -31,9 +31,9 @@
 // std covers all of the known knowns.
 
 #ifdef _OPENMP
-#define __DEVICE__ static __attribute__((always_inline))
+#define __DEVICE__ static [[gnu::always_inline]]
 #else
-#define __DEVICE__ static __device__ __inline__ __attribute__((always_inline))
+#define __DEVICE__ static __device__ __inline__ [[gnu::always_inline]]
 #endif
 
 // For C++ 17 we need to include noexcept attribute to be compatible

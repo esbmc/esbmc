@@ -17,8 +17,7 @@
  * Also fall back on Darwin to allow additional definitions and
  * implementation-defined values.
  */
-#if (defined(__APPLE__) || (defined(__MINGW32__) || defined(_MSC_VER))) && \
-    __STDC_HOSTED__ && __has_include_next(<float.h>)
+#if (defined(__APPLE__) || (defined(__MINGW32__) || defined(_MSC_VER))) && __STDC_HOSTED__ && __has_include_next(<float.h>)
 
 /* Prior to Apple's 10.7 SDK, float.h SDK header used to apply an extra level
  * of #include_next<float.h> to keep Metrowerks compilers happy. Avoid this

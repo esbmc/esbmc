@@ -21,10 +21,10 @@
 
 #pragma push_macro("__DEVICE__")
 #ifdef _OPENMP
-#define __DEVICE__ static __inline__ __attribute__((always_inline))
+#define __DEVICE__ static __inline__ [[gnu::always_inline]]
 #else
 #define __DEVICE__                                                             \
-  static __inline__ __attribute__((always_inline)) __attribute__((device))
+  static __inline__ [[gnu::always_inline]] __attribute__((device))
 #endif
 
 // For C++ 17 we need to include noexcept attribute to be compatible
