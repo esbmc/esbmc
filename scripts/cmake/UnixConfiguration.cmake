@@ -4,4 +4,5 @@ if(UNIX AND NOT APPLE)
     # Linux and BSDs
     message(STATUS "Detected non-apple Unix")
     set(LIBGOMP_LIB "-lgomp -ldl")
+    set(OS_FLEX_FLAGS "")
 endif()
