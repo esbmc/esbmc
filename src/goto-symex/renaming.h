@@ -8,6 +8,7 @@
 #include <util/i2string.h>
 #include <util/irep2_expr.h>
 #include <util/std_expr.h>
+#include <set>
 
 namespace renaming
 {
