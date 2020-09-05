@@ -32,8 +32,8 @@ class contextt
   typedef std::function<void(symbolt &symbol)> symbol_delegate;
 
 public:
-  typedef ::symbolst symbolst;
-  typedef ::ordered_symbolst ordered_symbolst;
+  typedef symbolst symbolst;
+  typedef ordered_symbolst ordered_symbolst;
 
   symbol_base_mapt symbol_base_map;
 
