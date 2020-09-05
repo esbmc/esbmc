@@ -1332,7 +1332,7 @@ bool simplify_exprt::simplify_if(exprt &expr)
   return result;
 }
 
-bool simplify_exprt::simplify_switch(exprt &expr __attribute__((unused)))
+bool simplify_exprt::simplify_switch(exprt &expr [[maybe_unused]])
 {
   return true;
 }

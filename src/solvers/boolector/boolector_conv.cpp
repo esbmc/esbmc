@@ -13,7 +13,7 @@ void error_handler(const char *msg)
 smt_convt *create_new_boolector_solver(
   bool int_encoding,
   const namespacet &ns,
-  tuple_iface **tuple_api __attribute__((unused)),
+  tuple_iface **tuple_api [[maybe_unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
@@ -483,14 +483,14 @@ smt_astt boolector_convt::mk_select(smt_astt a, smt_astt b)
 }
 
 smt_astt boolector_convt::mk_smt_int(const BigInt &theint
-                                     __attribute__((unused)))
+                                     [[maybe_unused]])
 {
   std::cerr << "Boolector can't create integer sorts" << std::endl;
   abort();
 }
 
 smt_astt boolector_convt::mk_smt_real(const std::string &str
-                                      __attribute__((unused)))
+                                      [[maybe_unused]])
 {
   std::cerr << "Boolector can't create Real sorts" << std::endl;
   abort();
@@ -513,7 +513,7 @@ smt_astt boolector_convt::mk_smt_bool(bool val)
 smt_astt boolector_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
-  smt_sortt array_subtype __attribute__((unused)))
+  smt_sortt array_subtype [[maybe_unused]])
 {
   return mk_smt_symbol(name, s);
 }

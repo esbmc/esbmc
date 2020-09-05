@@ -126,7 +126,7 @@ void goto_inlinet::parameter_assignments(
 void goto_inlinet::replace_return(
   goto_programt &dest,
   const exprt &lhs,
-  const exprt &constrain __attribute__((unused)) /* ndebug */)
+  const exprt &constrain [[maybe_unused]] /* ndebug */)
 {
   for(goto_programt::instructionst::iterator it = dest.instructions.begin();
       it != dest.instructions.end();

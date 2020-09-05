@@ -66,7 +66,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
   const type2tc &array_type,
   smt_astt *inputargs,
   bool const_array,
-  smt_sortt domain __attribute__((unused)))
+  smt_sortt domain [[maybe_unused]])
 {
   // Create a tuple array from a constant representation. This means that
   // either we have an array_of or a constant_array. Handle this by creating

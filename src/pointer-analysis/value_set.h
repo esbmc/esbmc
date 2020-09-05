@@ -124,7 +124,7 @@ public:
     }
 
     explicit objectt(
-      bool offset_set __attribute__((unused)),
+      bool offset_set [[maybe_unused]],
       const BigInt &_offset)
       : offset(_offset), offset_is_set(true)
     {

@@ -6,7 +6,7 @@
 smt_convt *create_new_cvc_solver(
   bool int_encoding,
   const namespacet &ns,
-  tuple_iface **tuple_api __attribute__((unused)),
+  tuple_iface **tuple_api [[maybe_unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {

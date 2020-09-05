@@ -118,7 +118,7 @@ smt_astt tuple_sym_smt_ast::update(
   smt_convt *ctx,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr __attribute__((unused)) /*ndebug*/) const
+  expr2tc idx_expr [[maybe_unused]] /*ndebug*/) const
 {
   smt_convt::ast_vec eqs;
   assert(
@@ -158,8 +158,8 @@ smt_astt tuple_sym_smt_ast::update(
 }
 
 smt_astt tuple_sym_smt_ast::select(
-  smt_convt *ctx __attribute__((unused)),
-  const expr2tc &idx __attribute__((unused))) const
+  smt_convt *ctx [[maybe_unused]],
+  const expr2tc &idx [[maybe_unused]]) const
 {
   std::cerr << "Select operation applied to tuple" << std::endl;
   abort();

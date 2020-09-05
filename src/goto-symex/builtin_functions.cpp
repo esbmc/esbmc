@@ -332,7 +332,7 @@ void goto_symext::symex_free(const expr2tc &expr)
 }
 
 void goto_symext::symex_printf(
-  const expr2tc &lhs __attribute__((unused)),
+  const expr2tc &lhs [[maybe_unused]],
   const expr2tc &rhs)
 {
   assert(is_code_printf2t(rhs));
@@ -428,7 +428,7 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 }
 
 // XXX - implement as a call to free?
-void goto_symext::symex_cpp_delete(const expr2tc &code __attribute__((unused)))
+void goto_symext::symex_cpp_delete(const expr2tc &code [[maybe_unused]])
 {
   //bool do_array=code.statement()=="delete[]";
 }

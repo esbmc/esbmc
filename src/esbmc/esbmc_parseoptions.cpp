@@ -54,7 +54,9 @@ extern "C"
 #include <pointer-analysis/show_value_sets.h>
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/symbol.h>
+#ifndef _WIN32
 #include <sys/wait.h>
+#endif
 #include <util/time_stopping.h>
 
 enum PROCESS_TYPE
@@ -72,7 +74,7 @@ struct resultt
 };
 
 #ifndef _WIN32
-void timeout_handler(int dummy __attribute__((unused)))
+void timeout_handler(int dummy [[maybe_unused]])
 {
   std::cout << "Timed out" << std::endl;
 
@@ -100,7 +102,9 @@ void esbmc_parseoptionst::set_verbosity_msg(messaget &message)
   message.set_verbosity(v);
 }
 
+#ifndef _WIN32
 extern "C" uint8_t *esbmc_version_string;
+#endif
 
 uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
 {
@@ -194,7 +198,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("git-hash"))
   {
+      #ifndef _WIN32
     std::cout << esbmc_version_string << std::endl;
+    #endif
     exit(0);
   }
 
@@ -467,6 +473,7 @@ int esbmc_parseoptionst::doit()
 
 int esbmc_parseoptionst::doit_k_induction_parallel()
 {
+    #ifndef _WIN32
   // Pipes for communication between processes
   int forward_pipe[2], backward_pipe[2];
 
@@ -1023,6 +1030,11 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   default:
     assert(0 && "Unknown process type.");
   }
+
+  
+  #else
+  std::cerr << "Windows does not support parallel mode" << std::endl;
+  #endif
 
   return 0;
 }

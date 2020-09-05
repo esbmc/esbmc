@@ -700,7 +700,7 @@ type_poolt::type_poolt()
   // This space is deliberately left blank
 }
 
-type_poolt::type_poolt(bool yolo __attribute__((unused)))
+type_poolt::type_poolt(bool yolo [[maybe_unused]])
 {
   bool_type = type2tc(new bool_type2t());
   empty_type = type2tc(new empty_type2t());
@@ -765,7 +765,7 @@ type_poolt &type_poolt::operator=(type_poolt const &ref)
 // XXX investigate performance implications of this cache
 static const type2tc &get_type_from_pool(
   const typet &val,
-  std::map<typet, type2tc> &map __attribute__((unused)))
+  std::map<typet, type2tc> &map [[maybe_unused]])
 {
 #if 0
   std::map<const typet, type2tc>::const_iterator it = map.find(val);
@@ -879,15 +879,16 @@ type_poolt type_pool;
 static_assert(type2t::end_type_id <= 256, "Type id overflow");
 static_assert(expr2t::end_expr_id <= 256, "Expr id overflow");
 
-static inline __attribute__((always_inline)) std::string
-type_to_string(const bool &thebool, int indent __attribute__((unused)))
+static inline std::string
+type_to_string(const bool &thebool, int indent [[maybe_unused]])
+  [[gnu::always_inline]]
 {
   return (thebool) ? "true" : "false";
 }
 
-static inline __attribute__((always_inline)) std::string type_to_string(
+static inline std::string type_to_string(
   const sideeffect_data::allockind &data,
-  int indent __attribute__((unused)))
+  int indent [[maybe_unused]]) [[gnu::always_inline]]
 {
   return (data == sideeffect_data::allockind::malloc)
            ? "malloc"
@@ -909,17 +910,18 @@ static inline __attribute__((always_inline)) std::string type_to_string(
                                        : "unknown";
 }
 
-static inline __attribute__((always_inline)) std::string
-type_to_string(const unsigned int &theval, int indent __attribute__((unused)))
+static inline std::string
+type_to_string(const unsigned int &theval, int indent [[maybe_unused]])
+  [[gnu::always_inline]]
 {
   char buffer[64];
   snprintf(buffer, 63, "%d", theval);
   return std::string(buffer);
 }
 
-static inline __attribute__((always_inline)) std::string type_to_string(
+static inline std::string type_to_string(
   const symbol_data::renaming_level &theval,
-  int indent __attribute__((unused)))
+  int indent [[maybe_unused]]) [[gnu::always_inline]]
 {
   switch(theval)
   {
@@ -939,8 +941,9 @@ static inline __attribute__((always_inline)) std::string type_to_string(
   }
 }
 
-static inline __attribute__((always_inline)) std::string
-type_to_string(const BigInt &theint, int indent __attribute__((unused)))
+static inline std::string
+type_to_string(const BigInt &theint, int indent [[maybe_unused]])
+  [[gnu::always_inline]]
 {
   char buffer[256], *buf;
 
@@ -948,20 +951,23 @@ type_to_string(const BigInt &theint, int indent __attribute__((unused)))
   return std::string(buf);
 }
 
-static inline __attribute__((always_inline)) std::string
-type_to_string(const fixedbvt &theval, int indent __attribute__((unused)))
+static inline std::string
+type_to_string(const fixedbvt &theval, int indent [[maybe_unused]])
+  [[gnu::always_inline]]
 {
   return theval.to_ansi_c_string();
 }
 
-static inline __attribute__((always_inline)) std::string
-type_to_string(const ieee_floatt &theval, int indent __attribute__((unused)))
+static inline std::string
+type_to_string(const ieee_floatt &theval, int indent [[maybe_unused]])
+  [[gnu::always_inline]]
 {
   return theval.to_ansi_c_string();
 }
 
-static inline __attribute__((always_inline)) std::string
+static inline std::string
 type_to_string(const std::vector<expr2tc> &theval, int indent)
+  [[gnu::always_inline]]
 {
   char buffer[64];
   std::string astring = "\n";
@@ -980,8 +986,9 @@ type_to_string(const std::vector<expr2tc> &theval, int indent)
   return astring;
 }
 
-static inline __attribute__((always_inline)) std::string
+static inline std::string
 type_to_string(const std::vector<type2tc> &theval, int indent)
+  [[gnu::always_inline]]
 {
   char buffer[64];
   std::string astring = "\n";
@@ -1000,9 +1007,9 @@ type_to_string(const std::vector<type2tc> &theval, int indent)
   return astring;
 }
 
-static inline __attribute__((always_inline)) std::string type_to_string(
-  const std::vector<irep_idt> &theval,
-  int indent __attribute__((unused)))
+static inline std::string type_to_string(
+  const std::vector<irep_idt> &theval, int indent [[maybe_unused]])
+  [[gnu::always_inline]]
 {
   char buffer[64];
   std::string astring = "\n";
@@ -1021,16 +1028,16 @@ static inline __attribute__((always_inline)) std::string type_to_string(
   return astring;
 }
 
-static inline __attribute__((always_inline)) std::string
-type_to_string(const expr2tc &theval, int indent)
+static inline std::string type_to_string(const expr2tc &theval, int indent)
+  [[gnu::always_inline]]
 {
   if(theval.get() != nullptr)
     return theval->pretty(indent + 2);
   return "";
 }
 
-static inline __attribute__((always_inline)) std::string
-type_to_string(const type2tc &theval, int indent)
+static inline std::string type_to_string(const type2tc &theval, int indent)
+  [[gnu::always_inline]]
 {
   if(theval.get() != nullptr)
     return theval->pretty(indent + 2);
@@ -1038,80 +1045,83 @@ type_to_string(const type2tc &theval, int indent)
     return "";
 }
 
-static inline __attribute__((always_inline)) std::string
-type_to_string(const irep_idt &theval, int indent __attribute__((unused)))
+static inline std::string
+type_to_string(const irep_idt &theval, int indent [[maybe_unused]])
+  [[gnu::always_inline]]
 {
   return theval.as_string();
 }
 
-static inline __attribute__((always_inline)) bool
-do_type_cmp(const bool &side1, const bool &side2)
+static inline bool do_type_cmp(const bool &side1, const bool &side2)
+  [[gnu::always_inline]]
 {
   return (side1 == side2) ? true : false;
 }
 
-static inline __attribute__((always_inline)) bool
+static inline bool
 do_type_cmp(const unsigned int &side1, const unsigned int &side2)
+  [[gnu::always_inline]]
 {
   return (side1 == side2) ? true : false;
 }
 
-static inline __attribute__((always_inline)) bool do_type_cmp(
+static inline bool do_type_cmp(
   const sideeffect_data::allockind &side1,
-  const sideeffect_data::allockind &side2)
+  const sideeffect_data::allockind &side2) [[gnu::always_inline]]
 {
   return (side1 == side2) ? true : false;
 }
 
-static inline __attribute__((always_inline)) bool do_type_cmp(
+static inline bool do_type_cmp(
   const symbol_data::renaming_level &side1,
-  const symbol_data::renaming_level &side2)
+  const symbol_data::renaming_level &side2) [[gnu::always_inline]]
 {
   return (side1 == side2) ? true : false;
 }
 
-static inline __attribute__((always_inline)) bool
-do_type_cmp(const BigInt &side1, const BigInt &side2)
+static inline bool do_type_cmp(const BigInt &side1, const BigInt &side2)
+  [[gnu::always_inline]]
 {
   // BigInt has its own equality operator.
   return (side1 == side2) ? true : false;
 }
 
-static inline __attribute__((always_inline)) bool
-do_type_cmp(const fixedbvt &side1, const fixedbvt &side2)
+static inline bool do_type_cmp(const fixedbvt &side1, const fixedbvt &side2)
+  [[gnu::always_inline]]
 {
   return (side1 == side2) ? true : false;
 }
 
-static inline __attribute__((always_inline)) bool
+static inline bool
 do_type_cmp(const ieee_floatt &side1, const ieee_floatt &side2)
+  [[gnu::always_inline]]
 {
   return (side1 == side2) ? true : false;
 }
 
-static inline __attribute__((always_inline)) bool do_type_cmp(
+static inline bool do_type_cmp(
   const std::vector<expr2tc> &side1,
-  const std::vector<expr2tc> &side2)
+  const std::vector<expr2tc> &side2) [[gnu::always_inline]]
 {
   return (side1 == side2);
 }
 
-static inline __attribute__((always_inline)) bool do_type_cmp(
+static inline bool do_type_cmp(
   const std::vector<type2tc> &side1,
-  const std::vector<type2tc> &side2)
+  const std::vector<type2tc> &side2) [[gnu::always_inline]]
 {
   return (side1 == side2);
 }
 
-static inline __attribute__((always_inline)) bool do_type_cmp(
+static inline bool do_type_cmp(
   const std::vector<irep_idt> &side1,
-  const std::vector<irep_idt> &side2)
+  const std::vector<irep_idt> &side2) [[gnu::always_inline]]
 {
   return (side1 == side2);
 }
 
-static inline __attribute__((always_inline)) bool
-do_type_cmp(const expr2tc &side1, const expr2tc &side2)
+static inline bool do_type_cmp(const expr2tc &side1, const expr2tc &side2)
+  [[gnu::always_inline]]
 {
   if(side1.get() == side2.get())
     return true; // Catch null
@@ -1121,8 +1131,8 @@ do_type_cmp(const expr2tc &side1, const expr2tc &side2)
     return (side1 == side2);
 }
 
-static inline __attribute__((always_inline)) bool
-do_type_cmp(const type2tc &side1, const type2tc &side2)
+static inline bool do_type_cmp(const type2tc &side1, const type2tc &side2)
+  [[gnu::always_inline]]
 {
   if(side1.get() == side2.get())
     return true; // both null ptr check
@@ -1131,28 +1141,28 @@ do_type_cmp(const type2tc &side1, const type2tc &side2)
   return (side1 == side2);
 }
 
-static inline __attribute__((always_inline)) bool
-do_type_cmp(const irep_idt &side1, const irep_idt &side2)
+static inline bool do_type_cmp(const irep_idt &side1, const irep_idt &side2)
+  [[gnu::always_inline]]
 {
   return (side1 == side2);
 }
 
-static inline __attribute__((always_inline)) bool do_type_cmp(
-  const type2t::type_ids &id __attribute__((unused)),
-  const type2t::type_ids &id2 __attribute__((unused)))
+static inline bool do_type_cmp(
+  const type2t::type_ids &id [[maybe_unused]],
+  const type2t::type_ids &id2 [[maybe_unused]]) [[gnu::always_inline]]
 {
   return true; // Dummy field comparison.
 }
 
-static inline __attribute__((always_inline)) bool do_type_cmp(
-  const expr2t::expr_ids &id __attribute__((unused)),
-  const expr2t::expr_ids &id2 __attribute__((unused)))
+static inline bool do_type_cmp(
+  const expr2t::expr_ids &id [[maybe_unused]],
+  const expr2t::expr_ids &id2 [[maybe_unused]]) [[gnu::always_inline]]
 {
   return true; // Dummy field comparison.
 }
 
-static inline __attribute__((always_inline)) int
-do_type_lt(const bool &side1, const bool &side2)
+static inline int do_type_lt(const bool &side1, const bool &side2)
+  [[gnu::always_inline]]
 {
   if(side1 < side2)
     return -1;
@@ -1162,8 +1172,9 @@ do_type_lt(const bool &side1, const bool &side2)
     return 0;
 }
 
-static inline __attribute__((always_inline)) int
+static inline int
 do_type_lt(const unsigned int &side1, const unsigned int &side2)
+  [[gnu::always_inline]]
 {
   if(side1 < side2)
     return -1;
@@ -1173,9 +1184,9 @@ do_type_lt(const unsigned int &side1, const unsigned int &side2)
     return 0;
 }
 
-static inline __attribute__((always_inline)) int do_type_lt(
+static inline int do_type_lt(
   const sideeffect_data::allockind &side1,
-  const sideeffect_data::allockind &side2)
+  const sideeffect_data::allockind &side2) [[gnu::always_inline]]
 {
   if(side1 < side2)
     return -1;
@@ -1185,9 +1196,9 @@ static inline __attribute__((always_inline)) int do_type_lt(
     return 0;
 }
 
-static inline __attribute__((always_inline)) int do_type_lt(
+static inline int do_type_lt(
   const symbol_data::renaming_level &side1,
-  const symbol_data::renaming_level &side2)
+  const symbol_data::renaming_level &side2) [[gnu::always_inline]]
 {
   if(side1 < side2)
     return -1;
@@ -1197,15 +1208,15 @@ static inline __attribute__((always_inline)) int do_type_lt(
     return 0;
 }
 
-static inline __attribute__((always_inline)) int
-do_type_lt(const BigInt &side1, const BigInt &side2)
+static inline int do_type_lt(const BigInt &side1, const BigInt &side2)
+  [[gnu::always_inline]]
 {
   // BigInt also has its own less than comparator.
   return side1.compare(side2);
 }
 
-static inline __attribute__((always_inline)) int
-do_type_lt(const fixedbvt &side1, const fixedbvt &side2)
+static inline int do_type_lt(const fixedbvt &side1, const fixedbvt &side2)
+  [[gnu::always_inline]]
 {
   if(side1 < side2)
     return -1;
@@ -1214,8 +1225,8 @@ do_type_lt(const fixedbvt &side1, const fixedbvt &side2)
   return 0;
 }
 
-static inline __attribute__((always_inline)) int
-do_type_lt(const ieee_floatt &side1, const ieee_floatt &side2)
+static inline int do_type_lt(const ieee_floatt &side1, const ieee_floatt &side2)
+  [[gnu::always_inline]]
 {
   if(side1 < side2)
     return -1;
@@ -1224,8 +1235,9 @@ do_type_lt(const ieee_floatt &side1, const ieee_floatt &side2)
   return 0;
 }
 
-static inline __attribute__((always_inline)) int
+static inline int
 do_type_lt(const std::vector<expr2tc> &side1, const std::vector<expr2tc> &side2)
+  [[gnu::always_inline]]
 {
   int tmp = 0;
   std::vector<expr2tc>::const_iterator it2 = side2.begin();
@@ -1239,8 +1251,9 @@ do_type_lt(const std::vector<expr2tc> &side1, const std::vector<expr2tc> &side2)
   return 0;
 }
 
-static inline __attribute__((always_inline)) int
+static inline int
 do_type_lt(const std::vector<type2tc> &side1, const std::vector<type2tc> &side2)
+  [[gnu::always_inline]]
 {
   if(side1.size() < side2.size())
     return -1;
@@ -1259,9 +1272,9 @@ do_type_lt(const std::vector<type2tc> &side1, const std::vector<type2tc> &side2)
   return 0;
 }
 
-static inline __attribute__((always_inline)) int do_type_lt(
+static inline  int do_type_lt(
   const std::vector<irep_idt> &side1,
-  const std::vector<irep_idt> &side2)
+  const std::vector<irep_idt> &side2) [[gnu::always_inline]]
 {
   if(side1 < side2)
     return -1;
@@ -1270,8 +1283,8 @@ static inline __attribute__((always_inline)) int do_type_lt(
   return 0;
 }
 
-static inline __attribute__((always_inline)) int
-do_type_lt(const expr2tc &side1, const expr2tc &side2)
+static inline int do_type_lt(const expr2tc &side1, const expr2tc &side2)
+  [[gnu::always_inline]]
 {
   if(side1.get() == side2.get())
     return 0; // Catch nulls
@@ -1283,8 +1296,8 @@ do_type_lt(const expr2tc &side1, const expr2tc &side2)
     return side1->ltchecked(*side2.get());
 }
 
-static inline __attribute__((always_inline)) int
-do_type_lt(const type2tc &side1, const type2tc &side2)
+static inline int do_type_lt(const type2tc &side1, const type2tc &side2)
+  [[gnu::always_inline]]
 {
   if(*side1.get() == *side2.get())
     return 0; // Both may be null;
@@ -1296,8 +1309,8 @@ do_type_lt(const type2tc &side1, const type2tc &side2)
     return side1->ltchecked(*side2.get());
 }
 
-static inline __attribute__((always_inline)) int
-do_type_lt(const irep_idt &side1, const irep_idt &side2)
+static inline int do_type_lt(const irep_idt &side1, const irep_idt &side2)
+  [[gnu::always_inline]]
 {
   if(side1 < side2)
     return -1;
@@ -1306,28 +1319,27 @@ do_type_lt(const irep_idt &side1, const irep_idt &side2)
   return 0;
 }
 
-static inline __attribute__((always_inline)) int do_type_lt(
-  const type2t::type_ids &id __attribute__((unused)),
-  const type2t::type_ids &id2 __attribute__((unused)))
+static inline  int do_type_lt(
+  const type2t::type_ids &id [[maybe_unused]],
+  const type2t::type_ids &id2 [[maybe_unused]]) [[gnu::always_inline]]
 {
   return 0; // Dummy field comparison
 }
 
-static inline __attribute__((always_inline)) int do_type_lt(
-  const expr2t::expr_ids &id __attribute__((unused)),
-  const expr2t::expr_ids &id2 __attribute__((unused)))
+static inline int do_type_lt(
+  const expr2t::expr_ids &id [[maybe_unused]],
+  const expr2t::expr_ids &id2 [[maybe_unused]]) [[gnu::always_inline]]
 {
   return 0; // Dummy field comparison
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const bool &theval)
+static inline size_t do_type_crc(const bool &theval) [[gnu::always_inline]]
 {
   return boost::hash<bool>()(theval);
 }
 
-static inline __attribute__((always_inline)) void
-do_type_hash(const bool &thebool, crypto_hash &hash)
+static inline void do_type_hash(const bool &thebool, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   if(thebool)
   {
@@ -1341,44 +1353,45 @@ do_type_hash(const bool &thebool, crypto_hash &hash)
   }
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const unsigned int &theval)
+static inline size_t do_type_crc(const unsigned int &theval)
+  [[gnu::always_inline]]
 {
   return boost::hash<unsigned int>()(theval);
 }
 
-static inline __attribute__((always_inline)) void
-do_type_hash(const unsigned int &theval, crypto_hash &hash)
+static inline void do_type_hash(const unsigned int &theval, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   hash.ingest((void *)&theval, sizeof(theval));
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const sideeffect_data::allockind &theval)
+static inline size_t do_type_crc(const sideeffect_data::allockind &theval)
+  [[gnu::always_inline]]
 {
   return boost::hash<uint8_t>()(theval);
 }
 
-static inline __attribute__((always_inline)) void
+static inline void
 do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   hash.ingest((void *)&theval, sizeof(theval));
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const symbol_data::renaming_level &theval)
+static inline size_t do_type_crc(const symbol_data::renaming_level &theval)
+  [[gnu::always_inline]]
 {
   return boost::hash<uint8_t>()(theval);
 }
 
-static inline __attribute__((always_inline)) void
+static inline void
 do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   hash.ingest((void *)&theval, sizeof(theval));
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const BigInt &theint)
+static inline size_t do_type_crc(const BigInt &theint) [[gnu::always_inline]]
 {
   if(theint.is_zero())
     return boost::hash<uint8_t>()(0);
@@ -1400,8 +1413,8 @@ do_type_crc(const BigInt &theint)
   return crc;
 }
 
-static inline __attribute__((always_inline)) void
-do_type_hash(const BigInt &theint, crypto_hash &hash)
+static inline void do_type_hash(const BigInt &theint, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   // Zero has no data in bigints.
   if(theint.is_zero())
@@ -1425,32 +1438,31 @@ do_type_hash(const BigInt &theint, crypto_hash &hash)
   }
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const fixedbvt &theval)
+static inline size_t do_type_crc(const fixedbvt &theval) [[gnu::always_inline]]
 {
   return do_type_crc(BigInt(theval.to_ansi_c_string().c_str()));
 }
 
-static inline __attribute__((always_inline)) void
-do_type_hash(const fixedbvt &theval, crypto_hash &hash)
+static inline void do_type_hash(const fixedbvt &theval, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   do_type_hash(BigInt(theval.to_ansi_c_string().c_str()), hash);
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const ieee_floatt &theval)
+static inline size_t do_type_crc(const ieee_floatt &theval)
+  [[gnu::always_inline]]
 {
   return do_type_crc(theval.pack());
 }
 
-static inline __attribute__((always_inline)) void
-do_type_hash(const ieee_floatt &theval, crypto_hash &hash)
+static inline void do_type_hash(const ieee_floatt &theval, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   do_type_hash(theval.pack(), hash);
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const std::vector<expr2tc> &theval)
+static inline size_t do_type_crc(const std::vector<expr2tc> &theval)
+  [[gnu::always_inline]]
 {
   size_t crc = 0;
   for(auto const &it : theval)
@@ -1459,15 +1471,16 @@ do_type_crc(const std::vector<expr2tc> &theval)
   return crc;
 }
 
-static inline __attribute__((always_inline)) void
+static inline void
 do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   for(auto const &it : theval)
     it->hash(hash);
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const std::vector<type2tc> &theval)
+static inline size_t do_type_crc(const std::vector<type2tc> &theval)
+  [[gnu::always_inline]]
 {
   size_t crc = 0;
   for(auto const &it : theval)
@@ -1476,15 +1489,16 @@ do_type_crc(const std::vector<type2tc> &theval)
   return crc;
 }
 
-static inline __attribute__((always_inline)) void
+static inline void
 do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   for(auto const &it : theval)
     it->hash(hash);
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const std::vector<irep_idt> &theval)
+static inline size_t do_type_crc(const std::vector<irep_idt> &theval)
+  [[gnu::always_inline]]
 {
   size_t crc = 0;
   for(auto const &it : theval)
@@ -1493,77 +1507,75 @@ do_type_crc(const std::vector<irep_idt> &theval)
   return crc;
 }
 
-static inline __attribute__((always_inline)) void
+static inline void
 do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   for(auto const &it : theval)
     hash.ingest((void *)it.as_string().c_str(), it.as_string().size());
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const expr2tc &theval)
+static inline size_t do_type_crc(const expr2tc &theval) [[gnu::always_inline]]
 {
   if(theval.get() != nullptr)
     return theval->do_crc();
   return boost::hash<uint8_t>()(0);
 }
 
-static inline __attribute__((always_inline)) void
-do_type_hash(const expr2tc &theval, crypto_hash &hash)
+static inline void do_type_hash(const expr2tc &theval, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   if(theval.get() != nullptr)
     theval->hash(hash);
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const type2tc &theval)
+static inline size_t do_type_crc(const type2tc &theval) [[gnu::always_inline]]
 {
   if(theval.get() != nullptr)
     return theval->do_crc();
   return boost::hash<uint8_t>()(0);
 }
 
-static inline __attribute__((always_inline)) void
-do_type_hash(const type2tc &theval, crypto_hash &hash)
+static inline void do_type_hash(const type2tc &theval, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   if(theval.get() != nullptr)
     theval->hash(hash);
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const irep_idt &theval)
+static inline size_t do_type_crc(const irep_idt &theval) [[gnu::always_inline]]
 {
   return boost::hash<std::string>()(theval.as_string());
 }
 
-static inline __attribute__((always_inline)) void
-do_type_hash(const irep_idt &theval, crypto_hash &hash)
+static inline void do_type_hash(const irep_idt &theval, crypto_hash &hash)
+  [[gnu::always_inline]]
 {
   hash.ingest((void *)theval.as_string().c_str(), theval.as_string().size());
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const type2t::type_ids &i)
+static inline size_t do_type_crc(const type2t::type_ids &i)
+  [[gnu::always_inline]]
 {
   return boost::hash<uint8_t>()(i);
 }
 
-static inline __attribute__((always_inline)) void do_type_hash(
-  const type2t::type_ids &i __attribute__((unused)),
-  crypto_hash &hash __attribute__((unused)))
+static inline  void do_type_hash(
+  const type2t::type_ids &i [[maybe_unused]],
+  crypto_hash &hash [[maybe_unused]]) [[gnu::always_inline]]
 {
   // Dummy field crc
 }
 
-static inline __attribute__((always_inline)) size_t
-do_type_crc(const expr2t::expr_ids &i __attribute__((unused)))
+static inline size_t do_type_crc(const expr2t::expr_ids &i [[maybe_unused]])
+  [[gnu::always_inline]]
 {
   return boost::hash<uint8_t>()(i);
 }
 
-static inline __attribute__((always_inline)) void do_type_hash(
-  const expr2t::expr_ids &i __attribute__((unused)),
-  crypto_hash &hash __attribute__((unused)))
+static inline void do_type_hash(
+  const expr2t::expr_ids &i [[maybe_unused]],
+  crypto_hash &hash [[maybe_unused]]) [[gnu::always_inline]]
 {
   // Dummy field crc
 }
@@ -1581,32 +1593,32 @@ void do_type2string(
 
 template <>
 void do_type2string<type2t::type_ids>(
-  const type2t::type_ids &thething __attribute__((unused)),
-  unsigned int idx __attribute__((unused)),
-  std::string (&names)[esbmct::num_type_fields] __attribute__((unused)),
-  list_of_memberst &vec __attribute__((unused)),
-  unsigned int indent __attribute__((unused)))
+  const type2t::type_ids &thething [[maybe_unused]],
+  unsigned int idx [[maybe_unused]],
+  std::string (&names)[esbmct::num_type_fields],
+  list_of_memberst &vec [[maybe_unused]],
+  unsigned int indent [[maybe_unused]])
 {
   // Do nothing; this is a dummy member.
 }
 
 template <>
 void do_type2string<const expr2t::expr_ids>(
-  const expr2t::expr_ids &thething __attribute__((unused)),
-  unsigned int idx __attribute__((unused)),
-  std::string (&names)[esbmct::num_type_fields] __attribute__((unused)),
-  list_of_memberst &vec __attribute__((unused)),
-  unsigned int indent __attribute__((unused)))
+  const expr2t::expr_ids &thething [[maybe_unused]],
+  unsigned int idx [[maybe_unused]],
+  std::string (&names)[esbmct::num_type_fields],
+  list_of_memberst &vec [[maybe_unused]],
+  unsigned int indent [[maybe_unused]])
 {
   // Do nothing; this is a dummy member.
 }
 
 template <class T>
 bool do_get_sub_expr(
-  const T &item __attribute__((unused)),
-  unsigned int idx __attribute__((unused)),
-  unsigned int &it __attribute__((unused)),
-  const expr2tc *&ptr __attribute__((unused)))
+  const T &item [[maybe_unused]],
+  unsigned int idx [[maybe_unused]],
+  unsigned int &it [[maybe_unused]],
+  const expr2tc *&ptr [[maybe_unused]])
 {
   return false;
 }
@@ -1653,10 +1665,10 @@ bool do_get_sub_expr<std::vector<expr2tc>>(
 
 template <class T>
 bool do_get_sub_expr_nc(
-  T &item __attribute__((unused)),
-  unsigned int idx __attribute__((unused)),
-  unsigned int &it __attribute__((unused)),
-  expr2tc *&ptr __attribute__((unused)))
+  T &item [[maybe_unused]],
+  unsigned int idx [[maybe_unused]],
+  unsigned int &it [[maybe_unused]],
+  expr2tc *&ptr [[maybe_unused]])
 {
   return false;
 }
@@ -1700,14 +1712,14 @@ bool do_get_sub_expr_nc<std::vector<expr2tc>>(
 }
 
 template <class T>
-unsigned int do_count_sub_exprs(T &item __attribute__((unused)))
+unsigned int do_count_sub_exprs(T &item [[maybe_unused]])
 {
   return 0;
 }
 
 template <>
 unsigned int do_count_sub_exprs<const expr2tc>(const expr2tc &item
-                                               __attribute__((unused)))
+                                               [[maybe_unused]])
 {
   return 1;
 }

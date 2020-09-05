@@ -715,7 +715,7 @@ expr2ct::convert_statement_expression(const exprt &src, unsigned &precedence)
 std::string expr2ct::convert_function(
   const exprt &src,
   const std::string &name,
-  unsigned precedence __attribute__((unused)))
+  unsigned precedence [[maybe_unused]])
 {
   std::string dest = name;
   dest += '(';
@@ -911,14 +911,14 @@ expr2ct::convert_struct_member_value(const exprt &src, unsigned precedence)
 
 std::string expr2ct::convert_norep(
   const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+  unsigned &precedence [[maybe_unused]])
 {
   return src.pretty(0);
 }
 
 std::string expr2ct::convert_symbol(
   const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+  unsigned &precedence [[maybe_unused]])
 {
   const irep_idt &id = src.identifier();
   std::string dest;
@@ -936,7 +936,7 @@ std::string expr2ct::convert_symbol(
 
 std::string expr2ct::convert_nondet_symbol(
   const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+  unsigned &precedence [[maybe_unused]])
 {
   const std::string &id = src.identifier().as_string();
   return "nondet_symbol(" + id + ")";
@@ -944,7 +944,7 @@ std::string expr2ct::convert_nondet_symbol(
 
 std::string expr2ct::convert_predicate_symbol(
   const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+  unsigned &precedence [[maybe_unused]])
 {
   const std::string &id = src.identifier().as_string();
   return "ps(" + id + ")";
@@ -952,7 +952,7 @@ std::string expr2ct::convert_predicate_symbol(
 
 std::string expr2ct::convert_predicate_next_symbol(
   const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+  unsigned &precedence [[maybe_unused]])
 {
   const std::string &id = src.identifier().as_string();
   return "pns(" + id + ")";
@@ -960,15 +960,15 @@ std::string expr2ct::convert_predicate_next_symbol(
 
 std::string expr2ct::convert_quantified_symbol(
   const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+  unsigned &precedence [[maybe_unused]])
 {
   const std::string &id = src.identifier().as_string();
   return id;
 }
 
 std::string expr2ct::convert_nondet_bool(
-  const exprt &src __attribute__((unused)),
-  unsigned &precedence __attribute__((unused)))
+  const exprt &src [[maybe_unused]],
+  unsigned &precedence [[maybe_unused]])
 {
   return "nondet_bool()";
 }
@@ -1179,7 +1179,7 @@ std::string expr2ct::convert_union(const exprt &src, unsigned &precedence)
 
 std::string expr2ct::convert_array(
   const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+  unsigned &precedence [[maybe_unused]])
 {
   std::string dest = "{ ";
 
@@ -1239,7 +1239,7 @@ std::string expr2ct::convert_array_list(const exprt &src, unsigned &precedence)
 
 std::string expr2ct::convert_function_call(
   const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+  unsigned &precedence [[maybe_unused]])
 {
   if(src.operands().size() != 2)
   {
@@ -1309,7 +1309,7 @@ std::string expr2ct::indent_str(unsigned indent)
 }
 
 std::string expr2ct::convert_code_asm(
-  const codet &src __attribute__((unused)),
+  const codet &src [[maybe_unused]],
   unsigned indent)
 {
   std::string dest = indent_str(indent);
@@ -1438,7 +1438,7 @@ std::string expr2ct::convert_code_gcc_goto(const codet &src, unsigned indent)
 }
 
 std::string expr2ct::convert_code_break(
-  const codet &src __attribute__((unused)),
+  const codet &src [[maybe_unused]],
   unsigned indent)
 {
   std::string dest = indent_str(indent);
@@ -1488,7 +1488,7 @@ std::string expr2ct::convert_code_switch(const codet &src, unsigned indent)
 }
 
 std::string expr2ct::convert_code_continue(
-  const codet &src __attribute__((unused)),
+  const codet &src [[maybe_unused]],
   unsigned indent)
 {
   std::string dest = indent_str(indent);
@@ -1808,8 +1808,8 @@ std::string expr2ct::convert_code_unlock(const codet &src, unsigned indent)
 }
 
 std::string expr2ct::convert_code_function_call(
-  const code_function_callt &src __attribute__((unused)),
-  unsigned indent __attribute__((unused)))
+  const code_function_callt &src [[maybe_unused]],
+  unsigned indent [[maybe_unused]])
 {
   if(src.operands().size() != 3)
   {
@@ -2009,7 +2009,7 @@ std::string expr2ct::convert_extractbit(const exprt &src, unsigned precedence)
 
 std::string expr2ct::convert_sizeof(
   const exprt &src,
-  unsigned precedence __attribute__((unused)))
+  unsigned precedence [[maybe_unused]])
 {
   std::string dest = "sizeof(";
   dest += convert(static_cast<const typet &>(src.c_sizeof_type()));

@@ -784,7 +784,7 @@ reachability_treet::generate_schedule_formula()
 }
 
 bool reachability_treet::restore_from_dfs_state(void *_dfs
-                                                __attribute__((unused)))
+                                                [[maybe_unused]])
 {
   abort();
 #if 0
@@ -845,7 +845,7 @@ bool reachability_treet::restore_from_dfs_state(void *_dfs
 }
 
 void reachability_treet::save_checkpoint(const std::string &&fname
-                                         __attribute__((unused))) const
+                                         [[maybe_unused]]) const
 {
 #if 0
   reachability_treet::dfs_position pos(*this);

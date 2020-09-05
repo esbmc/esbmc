@@ -231,16 +231,16 @@ bool clang_c_languaget::typecheck(
   return false;
 }
 
-void clang_c_languaget::show_parse(std::ostream &out __attribute__((unused)))
+void clang_c_languaget::show_parse(std::ostream &out [[maybe_unused]])
 {
   for(auto const &translation_unit : ASTs)
     (*translation_unit).getASTContext().getTranslationUnitDecl()->dump();
 }
 
 bool clang_c_languaget::preprocess(
-  const std::string &path __attribute__((unused)),
-  std::ostream &outstream __attribute__((unused)),
-  message_handlert &message_handler __attribute__((unused)))
+  const std::string &path [[maybe_unused]],
+  std::ostream &outstream [[maybe_unused]],
+  message_handlert &message_handler [[maybe_unused]])
 {
 // TODO: Check the preprocess situation.
 #if 0

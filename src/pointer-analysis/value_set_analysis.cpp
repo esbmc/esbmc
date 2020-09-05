@@ -172,7 +172,7 @@ bool value_set_analysist::check_type(const typet &type)
 
 void value_set_analysist::convert(
   const goto_programt &goto_program,
-  const irep_idt &identifier __attribute__((unused)),
+  const irep_idt &identifier [[maybe_unused]],
   xmlt &dest) const
 {
   ::locationt previous_location;

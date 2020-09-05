@@ -906,7 +906,7 @@ void cpp_typecheckt::typecheck_expr_delete(exprt &expr)
 }
 
 void cpp_typecheckt::typecheck_expr_typecast(exprt &expr
-                                             __attribute__((unused)))
+                                             [[maybe_unused]])
 {
 // should not be called
 #if 0

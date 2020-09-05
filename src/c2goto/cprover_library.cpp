@@ -136,8 +136,8 @@ void ingest_symbol(
 
 #ifdef NO_CPROVER_LIBRARY
 void add_cprover_library(
-  contextt &context __attribute__((unused)),
-  message_handlert &message_handler __attribute__((unused)))
+  contextt &context [[maybe_unused]],
+  message_handlert &message_handler [[maybe_unused]])
 {
 }
 
