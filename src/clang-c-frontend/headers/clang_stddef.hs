@@ -7,13 +7,9 @@
  *===-----------------------------------------------------------------------===
  */
 
-#if !defined(__STDDEF_H) || defined(__need_ptrdiff_t) ||                       \
-    defined(__need_size_t) || defined(__need_wchar_t) ||                       \
-    defined(__need_NULL) || defined(__need_wint_t)
+#if !defined(__STDDEF_H) || defined(__need_ptrdiff_t) ||  defined(__need_size_t) || defined(__need_wchar_t) || defined(__need_NULL) || defined(__need_wint_t)
 
-#if !defined(__need_ptrdiff_t) && !defined(__need_size_t) &&                   \
-    !defined(__need_wchar_t) && !defined(__need_NULL) &&                       \
-    !defined(__need_wint_t)
+#if !defined(__need_ptrdiff_t) && !defined(__need_size_t) && !defined(__need_wchar_t) && !defined(__need_NULL) && !defined(__need_wint_t)
 /* Always define miscellaneous pieces when modules are available. */
 #if !__has_feature(modules)
 #define __STDDEF_H
@@ -51,8 +47,7 @@ typedef __SIZE_TYPE__ size_t;
 #if defined(__need_STDDEF_H_misc)
 /* ISO9899:2011 7.20 (C11 Annex K): Define rsize_t if __STDC_WANT_LIB_EXT1__ is
  * enabled. */
-#if (defined(__STDC_WANT_LIB_EXT1__) && __STDC_WANT_LIB_EXT1__ >= 1 && \
-     !defined(_RSIZE_T)) || __has_feature(modules)
+#if (defined(__STDC_WANT_LIB_EXT1__) && __STDC_WANT_LIB_EXT1__ >= 1 && !defined(_RSIZE_T)) || __has_feature(modules)
 /* Always define rsize_t when modules are available. */
 #if !__has_feature(modules)
 #define _RSIZE_T
