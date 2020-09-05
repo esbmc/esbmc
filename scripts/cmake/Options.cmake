@@ -39,11 +39,6 @@ option(ENABLE_FUZZER "Add fuzzing targets (default: OFF)" OFF)
 option(ENABLE_CLANG_TIDY "Activate clang tidy analysis (default: OFF)" OFF)
 
 #############################
-# WINDOWS
-#############################
-option(WINDOWS_USE_LLVM_CMAKE "Use cmake module from llvm build (default: OFF)" OFF)
-
-#############################
 # CMake extra Vars
 #############################
 set(Clang_DIR "${LLVM_DIR}" CACHE STRING "Clang Directory (if not set, this will be set to the LLVM_DIR")
