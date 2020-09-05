@@ -83,7 +83,7 @@ class Flail:
 
     def obtain_var_name(self):
         obj = Path(self.filepath)
-        return obj.name.replace('.hs', '_buf')
+        return obj.name.replace('.hs', '_buf').replace('.goto', '_buf').replace('.txt', '_buf').replace('buildidobj', 'buildidstring')
 
     def _step_2(self, content: str):
         return Flail.REGEX_REMOVE_ADDR.sub('', content)
@@ -122,7 +122,7 @@ class Flail:
 
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) < 3:
         raise ValueError("Program expects <input> <output> arguments")
 
     filepath = sys.argv[1]
