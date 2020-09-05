@@ -17,7 +17,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   # There are a LOT of warnings from clang headers
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-everything")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-everything")
+  set(OS_Z3_LIBS "stdc++")
+  
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+  set(OS_Z3_LIBS "")
 else()
-message(AUTHOR_WARNING "${CMAKE_CXX_COMPILER_ID} is not tested in Windows. You may run into issues.")	
+  message(AUTHOR_WARNING "${CMAKE_CXX_COMPILER_ID} is not tested in Windows. You may run into issues.")	
 endif()

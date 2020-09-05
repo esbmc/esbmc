@@ -20,6 +20,7 @@ The global variables that all modules NEED to define are:
     will find the headers by adding -I <folder>;
 - OS_C2GOTO_FLAGS: Flags used by c2goto. This may add defines exclusive for the
     OS;
+- OS_Z3_LIBS: Flags used by Z3 link;
 ]]
 
 # This function will check if a variable is defined
@@ -41,3 +42,4 @@ assert_variable_is_defined(OS_FLEX_ANSI_FLAGS)
 assert_variable_is_defined(OS_FLEX_SMTLIB_FLAGS)
 assert_variable_is_defined(OS_X86_INCLUDE_FOLDER)
 assert_variable_is_defined(OS_C2GOTO_FLAGS)
+assert_variable_is_defined(OS_Z3_LIBS)
