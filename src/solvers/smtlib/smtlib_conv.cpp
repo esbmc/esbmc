@@ -6,7 +6,11 @@
 #include <smtlib.hpp>
 #include <smtlib_tok.hpp>
 #include <sstream>
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 const std::string smtlib_convt::smt_func_name_table[expr2t::end_expr_id] = {
   "hack_func_id",
@@ -160,7 +164,10 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
               << std::endl;
     abort();
   }
-
+  #ifdef _WIN32
+  // TODO: The current implementation uses UNIX Process
+  std::cerr << "smtlib works only in unix systems" << std::endl;
+  #else
   if(pipe(inpipe) != 0)
   {
     std::cerr << "Couldn't open a pipe for smtlib solver" << std::endl;
@@ -197,7 +204,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
     out_stream = fdopen(outpipe[1], "w");
     in_stream = fdopen(inpipe[0], "r");
   }
-
+#endif
   // Execution continues as the parent ESBMC process. Child dying will
   // trigger SIGPIPE or an EOF eventually, which we'll be able to detect
   // and crash upon.

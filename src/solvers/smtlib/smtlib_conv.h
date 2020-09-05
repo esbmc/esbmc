@@ -4,8 +4,13 @@
 #include <list>
 #include <solvers/smt/smt_conv.h>
 #include <string>
-#include <unistd.h>
 #include <util/irep2.h>
+
+#ifdef _WIN32
+typedef uint64_t pid_t;
+#else
+#include <unistd.h>
+#endif
 
 /** Identifiers for SMT functions.
  *  Each SMT function gets a unique identifier, representing its interpretation
