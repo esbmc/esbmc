@@ -11,7 +11,7 @@ time_t __VERIFIER_nondet_time_t();
 time_t time(time_t *tloc)
 {
   time_t res = __VERIFIER_nondet_time_t();
-  if(tloc == NULL)
+  if(tloc != NULL)
     *tloc = res;
   return res;
 }
