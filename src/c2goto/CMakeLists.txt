@@ -38,7 +38,7 @@ function(mangle_clib output)
 
     add_custom_command(OUTPUT ${out_goto}
       COMMAND c2goto ${OS_C2GOTO_FLAGS} ${c2goto_library_files} ${in_flags} --output ${out_goto}
-      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/c2goto
+      DEPENDS c2goto
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generating libc model ${out_goto}"
       VERBATIM
