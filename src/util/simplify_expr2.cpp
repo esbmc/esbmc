@@ -20,13 +20,13 @@ expr2tc expr2t::simplify() const
     // Corner case! Don't even try to simplify address of's operands, might end up
     // taking the address of some /completely/ arbitary pice of data, by
     // simplifiying an index to its data, discarding the symbol.
-    if(expr_id == address_of_id) [[unlikely]]
-      return expr2tc();
+    if(expr_id == address_of_id)
+      [[unlikely]] return expr2tc();
 
     // And overflows too. We don't wish an add to distribute itself, for example,
     // when we're trying to work out whether or not it's going to overflow.
-    if(expr_id == overflow_id) [[unlikely]]
-      return expr2tc();
+    if(expr_id == overflow_id)
+      [[unlikely]] return expr2tc();
 
     // Try initial simplification
     expr2tc res = do_simplify();

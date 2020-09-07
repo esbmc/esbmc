@@ -2431,12 +2431,12 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
 
   assert(is_constant_array2t(expr));
   const constant_array2t &arr = to_constant_array2t(expr);
-  #ifdef _MSC_VER
-  #pragma message("MSVC does not support VLA's and probably never will.")
+#ifdef _MSC_VER
+#pragma message("MSVC does not support VLA's and probably never will.")
   smt_astt *args = (smt_astt *)_malloca(arr.datatype_members.size());
-  #else
+#else
   smt_astt args[arr.datatype_members.size()];
-  #endif
+#endif
   unsigned int i = 0;
   for(auto const &it : arr.datatype_members)
   {

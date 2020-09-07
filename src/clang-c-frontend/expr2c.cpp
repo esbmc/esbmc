@@ -909,16 +909,14 @@ expr2ct::convert_struct_member_value(const exprt &src, unsigned precedence)
   return "." + src.name().as_string() + "=" + convert(src.op0());
 }
 
-std::string expr2ct::convert_norep(
-  const exprt &src,
-  unsigned &precedence [[maybe_unused]])
+std::string
+expr2ct::convert_norep(const exprt &src, unsigned &precedence [[maybe_unused]])
 {
   return src.pretty(0);
 }
 
-std::string expr2ct::convert_symbol(
-  const exprt &src,
-  unsigned &precedence [[maybe_unused]])
+std::string
+expr2ct::convert_symbol(const exprt &src, unsigned &precedence [[maybe_unused]])
 {
   const irep_idt &id = src.identifier();
   std::string dest;
@@ -1177,9 +1175,8 @@ std::string expr2ct::convert_union(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2ct::convert_array(
-  const exprt &src,
-  unsigned &precedence [[maybe_unused]])
+std::string
+expr2ct::convert_array(const exprt &src, unsigned &precedence [[maybe_unused]])
 {
   std::string dest = "{ ";
 
@@ -1308,9 +1305,8 @@ std::string expr2ct::indent_str(unsigned indent)
   return dest;
 }
 
-std::string expr2ct::convert_code_asm(
-  const codet &src [[maybe_unused]],
-  unsigned indent)
+std::string
+expr2ct::convert_code_asm(const codet &src [[maybe_unused]], unsigned indent)
 {
   std::string dest = indent_str(indent);
   dest += "asm();\n";
@@ -1437,9 +1433,8 @@ std::string expr2ct::convert_code_gcc_goto(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2ct::convert_code_break(
-  const codet &src [[maybe_unused]],
-  unsigned indent)
+std::string
+expr2ct::convert_code_break(const codet &src [[maybe_unused]], unsigned indent)
 {
   std::string dest = indent_str(indent);
   dest += "break";
@@ -2007,9 +2002,8 @@ std::string expr2ct::convert_extractbit(const exprt &src, unsigned precedence)
   return dest;
 }
 
-std::string expr2ct::convert_sizeof(
-  const exprt &src,
-  unsigned precedence [[maybe_unused]])
+std::string
+expr2ct::convert_sizeof(const exprt &src, unsigned precedence [[maybe_unused]])
 {
   std::string dest = "sizeof(";
   dest += convert(static_cast<const typet &>(src.c_sizeof_type()));

@@ -164,10 +164,10 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
               << std::endl;
     abort();
   }
-  #ifdef _WIN32
+#ifdef _WIN32
   // TODO: The current implementation uses UNIX Process
   std::cerr << "smtlib works only in unix systems" << std::endl;
-  #else
+#else
   if(pipe(inpipe) != 0)
   {
     std::cerr << "Couldn't open a pipe for smtlib solver" << std::endl;
@@ -841,8 +841,7 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return a;
 }
 
-smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type
-                                       [[maybe_unused]])
+smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type [[maybe_unused]])
 {
   std::cerr << "Attempted to make struct type in smtlib conversion"
             << std::endl;
