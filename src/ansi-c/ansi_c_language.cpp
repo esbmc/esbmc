@@ -26,7 +26,7 @@ Author: Daniel Kroening, kroening@kroening.com
 static void internal_additions(std::string &code)
 {
   code +=
-		"typedef long time_t;\n"
+    "typedef long time_t;\n"
     "void __ESBMC_assume(_Bool assumption);\n"
     "void assert(_Bool assertion);\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"
