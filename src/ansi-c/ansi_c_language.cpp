@@ -26,7 +26,6 @@ Author: Daniel Kroening, kroening@kroening.com
 static void internal_additions(std::string &code)
 {
   code +=
-    "typedef long time_t;\n"
     "void __ESBMC_assume(_Bool assumption);\n"
     "void assert(_Bool assertion);\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"
@@ -71,8 +70,7 @@ static void internal_additions(std::string &code)
     "signed char nondet_schar();\n"
     "_Bool nondet_bool();\n"
     "float nondet_float();\n"
-    "double nondet_double();\n"
-    "time_t nondet_time_t();"
+    "double nondet_double();"
 
     // TACAS definitions,
     "int __VERIFIER_nondet_int();\n"
@@ -87,7 +85,6 @@ static void internal_additions(std::string &code)
     "_Bool __VERIFIER_nondet_bool();\n"
     "float __VERIFIER_nondet_float();\n"
     "double __VERIFIER_nondet_double();\n"
-    "time_t __VERIFIER_nondet_time_t();\n"
 
     "const char *__PRETTY_FUNCTION__;\n"
     "const char *__FILE__ = \"\";\n"
