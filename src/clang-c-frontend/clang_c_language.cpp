@@ -302,7 +302,6 @@ void *__ESBMC_memset(void *, int, unsigned int);
 void pthread_start_main_hook(void);
 void pthread_end_main_hook(void);
 
-
 // Forward declarations for nondeterministic types.
 int nondet_int();
 unsigned int nondet_uint();
