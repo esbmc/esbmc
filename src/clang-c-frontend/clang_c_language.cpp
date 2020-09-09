@@ -262,6 +262,7 @@ std::string clang_c_languaget::internal_additions()
   std::string intrinsics =
     R"(
 # 1 "esbmc_intrinsics.h" 1
+typedef long time_t;
 void __ESBMC_assume(_Bool);
 void assert(_Bool);
 void __ESBMC_assert(_Bool, const char *);
@@ -302,6 +303,7 @@ void *__ESBMC_memset(void *, int, unsigned int);
 void pthread_start_main_hook(void);
 void pthread_end_main_hook(void);
 
+
 // Forward declarations for nondeterministic types.
 int nondet_int();
 unsigned int nondet_uint();
@@ -315,6 +317,7 @@ signed char nondet_schar();
 _Bool nondet_bool();
 float nondet_float();
 double nondet_double();
+time_t nondet_time_t();
 
 // TACAS definitions,
 int __VERIFIER_nondet_int();
@@ -329,6 +332,7 @@ signed char __VERIFIER_nondet_schar();
 _Bool __VERIFIER_nondet_bool();
 float __VERIFIER_nondet_float();
 double __VERIFIER_nondet_double();
+time_t __VERIFIER_nondet_time_t();
 
 void __VERIFIER_error();
 void __VERIFIER_assume(int);
