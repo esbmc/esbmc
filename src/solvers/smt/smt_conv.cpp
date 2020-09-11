@@ -2431,7 +2431,7 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
 
   assert(is_constant_array2t(expr));
   const constant_array2t &arr = to_constant_array2t(expr);
-  smt_astt args[arr.datatype_members.size()];
+  std::vector<smt_astt> args(arr.datatype_members.size());
   unsigned int i = 0;
   for(auto const &it : arr.datatype_members)
   {
@@ -2439,7 +2439,7 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
     i++;
   }
 
-  return tuple_api->tuple_array_create(arr_type, args, false, domain);
+  return tuple_api->tuple_array_create(arr_type, args.data(), false, domain);
 }
 
 void smt_convt::rewrite_ptrs_to_structs(type2tc &type)
