@@ -237,6 +237,9 @@ def _add_test(test_case, executor):
         error_message = output_to_validate + "\n\nARGUMENTS: " + \
             str(test_case.generate_run_argument_list(executor.tool))
 
+        # Hack for windows: $ does not match \r\n, so we remove all \r
+        output_to_validate = output_to_validate.replace('\r', '')
+
         matches_regex = True
         for regex in test_case.test_regex:
             match_regex = re.compile(regex, re.MULTILINE)
