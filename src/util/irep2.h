@@ -525,6 +525,7 @@ public:
   {
 // Boost preprocessor magic: enumerate over each expression and pump out
 // a foo_id enum element. See list of ireps at top of file.
+// NOTE: For some reason BOOST_PP_LIST_FOR_EACH is not working with MSVC.
 #define _ESBMC_IREP2_EXPRID_ENUM(r, data, elem) BOOST_PP_CAT(elem, _id),
     constant_int_id,
     constant_fixedbv_id,
@@ -625,10 +626,9 @@ public:
     bswap_id,
     concat_id,
     extract_id,
-    code_cpp_del_array,
+    code_cpp_del_array_id,
     end_expr_id
   };
-
   /** Type for list of constant expr operands */
   typedef std::list<const expr2tc *> expr_operands;
   /** Type for list of non-constant expr operands */
