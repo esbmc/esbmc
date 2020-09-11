@@ -614,7 +614,7 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett a = dest.add_instruction(ASSUME);
     a->guard = gen_false_expr();
     a->location = function.location();
-    t->location.user_provided(true);
+    a->location.user_provided(true);
   }
   else if(base_name == "printf")
   {
