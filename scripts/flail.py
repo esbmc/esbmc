@@ -95,6 +95,8 @@ class Flail:
     def _step_5(self, content: str):
         if Flail.REGEX_ADD_COMMA_END.match(content):
             return content + ','
+        if content == "":
+            return ""
         return '0\n'
 
     def _step_6(self, content, output):
