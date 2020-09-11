@@ -93,11 +93,9 @@ class Flail:
         return Flail.REGEX_MULTI_SPACE.sub(',', content)
 
     def _step_5(self, content: str):
-        if Flail.REGEX_ADD_COMMA_END.match(content):
-            return content + ','
-        if content == "":
-            return ""
-        return '0\n'
+        if len(content) > 0 and content[-1] != ",":
+            return content + ',\n'
+        return content
 
     def _step_6(self, content, output):
         # its hard to use '{' '}' in F-Strings
