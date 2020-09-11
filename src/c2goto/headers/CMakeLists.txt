@@ -7,7 +7,7 @@ function(mangle_hs output)
     string(REGEX REPLACE .hs .c out_f "${out_f}")
     set(out_f "${CMAKE_CURRENT_BINARY_DIR}/${out_f}")
     add_custom_command(OUTPUT ${out_f}
-      COMMAND ${CMAKE_SOURCE_DIR}/scripts/flail.sh ${CMAKE_CURRENT_SOURCE_DIR}/${in_f} ${CMAKE_CURRENT_SOURCE_DIR}/${in_f} > ${out_f}
+      COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py ${CMAKE_CURRENT_SOURCE_DIR}/${in_f} ${out_f}
       DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${in_f}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Converting internal headers ${in_f} to data"
