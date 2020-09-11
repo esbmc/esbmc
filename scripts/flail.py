@@ -94,7 +94,7 @@ class Flail:
 
     def _step_5(self, content: str):
         if len(content) > 0 and content[-1] != ",":
-            return content + ',\n'
+            return content + ','
         return content
 
     def _step_6(self, content, output):
