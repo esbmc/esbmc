@@ -94,19 +94,19 @@ class Flail:
 
     def _step_5(self, content: str):
         if len(content) > 0 and content[-1] != ",":
-            return content + ','
-        return content
+            return content + ',\n'
+        return content + '\n'
 
     def _step_6(self, content, output):
         # its hard to use '{' '}' in F-Strings
         left_curly = '{'
         right_curly = '}'
         with open(output, 'w') as f:
-            f.write(f'char {self.obtain_var_name()} [] = {left_curly}')
+            f.write(f'char {self.obtain_var_name()} [] = {left_curly}\n')
             f.writelines(content)
-            f.write(f'{right_curly};')
+            f.write(f'{right_curly};\n')
             f.write(
-                f'unsigned int {self.obtain_var_name()}_size = sizeof({self.obtain_var_name()});')
+                f'unsigned int {self.obtain_var_name()}_size = sizeof({self.obtain_var_name()});\n')
 
     def run(self, output_file: str):
         ps = subprocess.Popen(self.cat_cli_command().split(
