@@ -18,6 +18,8 @@ jobs:
       run: .\scripts\configure_environment.ps1
     - name: Install Boost
       run: choco install -y boost-msvc-14.1
+    - name: Install Bison/Flex
+      run: choco install -y winflexbison
     - name: Configure CMake
       run: cmake.exe -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:\deps\clang\llvm9d -DClang_DIR=C:\deps\clang\llvm9d
     - name: Build ESBMC
