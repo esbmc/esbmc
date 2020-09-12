@@ -30,6 +30,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer")
 endif()
 
+include(Utils)
 include(Options)
 include(SendFileHack)
 include(AppleConfiguration)
