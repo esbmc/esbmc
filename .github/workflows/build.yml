@@ -20,3 +20,5 @@ jobs:
       run: cmake.exe -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:\deps\clang\llvm9d -DClang_DIR=C:\deps\clang\llvm9d
     - name: Build ESBMC
       run: cmake --build .
+      env:
+        BOOST_ROOT: $BOOST_ROOT_1_69_0 
