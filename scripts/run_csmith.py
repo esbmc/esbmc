@@ -79,6 +79,9 @@ class Driver:
                     os.makedirs('csmith-error')
                 shutil.copyfile(c_file, "csmith-error/error.c")
                 shutil.copyfile(os.path.join(self.csmith.csmith_inc, "csmith.h"), "csmith-error/csmith.h")
+                with open("csmith-error/desc") as f:
+                    f.write(self.esbmc.esbmc_args)
+                    f.write(res)
                 return
 
 
