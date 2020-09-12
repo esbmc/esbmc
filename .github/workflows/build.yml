@@ -14,16 +14,20 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v1
+    - name: Instal gnu tools (od)
+      run: choco install -y gnuwin32-coreutils.portable
+    - name: Check if od is on path
+      run: od.exe --version
+    - name: Check flail
+      run: |
+        python3.exe scripts/flail.py src/clang-c-frontend/headers/clang_stdint.hs out.c
+        cat out.c    
     - name: Prepare Environment
       run: .\scripts\configure_environment.ps1
     - name: Install Boost
       run: choco install -y boost-msvc-14.1
     - name: Install Bison/Flex
       run: choco install -y winflexbison
-    - name: Instal gnu tools (od)
-      run: choco install -y gnuwin32-coreutils.portable
-    - name: Check if od is on path
-      run: od.exe --version
     - name: Configure CMake
       run: |
         mkdir build
