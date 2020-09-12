@@ -86,7 +86,7 @@ class Driver:
         """Start driver with defined timeout"""
         ps = Process(target=self._main)
         ps.start()
-        ps.join(timeout=timeout)
+        ps.join(timeout=int(timeout))
         ps.terminate()
 
 def main():
@@ -99,11 +99,13 @@ def main():
     esbmc_args = sys.argv[5]
     esbmc_timeout = sys.argv[6]
 
+    driver_timeout = sys.argv[7]
+
     csmith_obj = Csmith(csmith, csmith_inc, csmith_args)
     esbmc_obj = ESBMC(esbmc, esbmc_args)
 
     driver = Driver(csmith_obj, esbmc_obj, esbmc_timeout)
-    driver.run()
+    driver.run(driver_timeout)
 
     print("Done")
 
