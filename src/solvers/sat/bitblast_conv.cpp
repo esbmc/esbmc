@@ -319,15 +319,13 @@ smt_sort *bitblast_convt::mk_sort(smt_sort_kind k, ...)
   return s;
 }
 
-smt_ast *bitblast_convt::mk_smt_int(const BigInt &intval
-                                    [[maybe_unused]])
+smt_ast *bitblast_convt::mk_smt_int(const BigInt &intval [[maybe_unused]])
 {
   std::cerr << "Can't create integers in bitblast solver" << std::endl;
   abort();
 }
 
-smt_ast *bitblast_convt::mk_smt_real(const std::string &value
-                                     [[maybe_unused]])
+smt_ast *bitblast_convt::mk_smt_real(const std::string &value [[maybe_unused]])
 {
   std::cerr << "Can't create reals in bitblast solver" << std::endl;
   abort();
@@ -390,8 +388,7 @@ smt_astt bitblast_convt::mk_smt_symbol(const std::string &name, smt_sortt sort)
   return result;
 }
 
-smt_sort *bitblast_convt::mk_struct_sort(const type2tc &t
-                                         [[maybe_unused]])
+smt_sort *bitblast_convt::mk_struct_sort(const type2tc &t [[maybe_unused]])
 {
   abort();
 }

@@ -32,13 +32,13 @@ class contextt
   typedef std::function<void(symbolt &symbol)> symbol_delegate;
 
 public:
-  #ifdef _MSC_VER
+#ifdef _MSC_VER
   typedef symbolst symbolst;
   typedef ordered_symbolst ordered_symbolst;
-  #else
+#else
   typedef ::symbolst symbolst;
   typedef ::ordered_symbolst ordered_symbolst;
-  #endif;
+#endif;
 
   symbol_base_mapt symbol_base_map;
 

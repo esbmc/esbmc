@@ -198,9 +198,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("git-hash"))
   {
-      #ifndef _WIN32
+#ifndef _WIN32
     std::cout << esbmc_version_string << std::endl;
-    #endif
+#endif
     exit(0);
   }
 
@@ -473,7 +473,7 @@ int esbmc_parseoptionst::doit()
 
 int esbmc_parseoptionst::doit_k_induction_parallel()
 {
-    #ifndef _WIN32
+#ifndef _WIN32
   // Pipes for communication between processes
   int forward_pipe[2], backward_pipe[2];
 
@@ -1031,10 +1031,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(0 && "Unknown process type.");
   }
 
-  
-  #else
+#else
   std::cerr << "Windows does not support parallel mode" << std::endl;
-  #endif
+#endif
 
   return 0;
 }

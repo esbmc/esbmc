@@ -123,9 +123,7 @@ public:
       }
     }
 
-    explicit objectt(
-      bool offset_set [[maybe_unused]],
-      const BigInt &_offset)
+    explicit objectt(bool offset_set [[maybe_unused]], const BigInt &_offset)
       : offset(_offset), offset_is_set(true)
     {
       assert(offset_set);
@@ -337,7 +335,7 @@ public:
     return insert(dest, object_numbering.number(src), objectt(true, offset));
   }
 
-  /** Insert an object record into the given object map. This method has
+/** Insert an object record into the given object map. This method has
    *  various overloaded instances, that all descend to this particular method.
    *  The essential elements are a) an object map, b) an l1 data object or
    *  the index number (in value_sett::object_numbering) that identifies
@@ -354,10 +352,10 @@ public:
    *         the value_set::object_numbering mapping.
    *  @param object The offset data for the pointer record being inserted.
    */
-  #ifdef min
-  #undef min
-  #endif
-  #include <algorithm>
+#ifdef min
+#undef min
+#endif
+#include <algorithm>
   bool insert(object_mapt &dest, unsigned n, const objectt &object) const
   {
     object_mapt::const_iterator it = dest.find(n);

@@ -1007,8 +1007,8 @@ type_to_string(const std::vector<type2tc> &theval, int indent)
   return astring;
 }
 
-static inline std::string type_to_string(
-  const std::vector<irep_idt> &theval, int indent [[maybe_unused]])
+static inline std::string
+type_to_string(const std::vector<irep_idt> &theval, int indent [[maybe_unused]])
   [[gnu::always_inline]]
 {
   char buffer[64];
@@ -1272,7 +1272,7 @@ do_type_lt(const std::vector<type2tc> &side1, const std::vector<type2tc> &side2)
   return 0;
 }
 
-static inline  int do_type_lt(
+static inline int do_type_lt(
   const std::vector<irep_idt> &side1,
   const std::vector<irep_idt> &side2) [[gnu::always_inline]]
 {
@@ -1319,7 +1319,7 @@ static inline int do_type_lt(const irep_idt &side1, const irep_idt &side2)
   return 0;
 }
 
-static inline  int do_type_lt(
+static inline int do_type_lt(
   const type2t::type_ids &id [[maybe_unused]],
   const type2t::type_ids &id2 [[maybe_unused]]) [[gnu::always_inline]]
 {
@@ -1560,7 +1560,7 @@ static inline size_t do_type_crc(const type2t::type_ids &i)
   return boost::hash<uint8_t>()(i);
 }
 
-static inline  void do_type_hash(
+static inline void do_type_hash(
   const type2t::type_ids &i [[maybe_unused]],
   crypto_hash &hash [[maybe_unused]]) [[gnu::always_inline]]
 {
