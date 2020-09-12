@@ -26,7 +26,7 @@ jobs:
       run: od.exe --version
     - name: Check flail
       run: |
-        python3 scripts/flail.py src/clang-c-frontend/headers/clang_stdint.hs out.c
+        python scripts/flail.py src/clang-c-frontend/headers/clang_stdint.hs out.c
         cat out.c    
     - name: Prepare Environment
       run: .\scripts\configure_environment.ps1
