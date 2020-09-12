@@ -43,7 +43,7 @@ jobs:
         name: release-linux
         path: ./release
     - name: Run tests
-      run: cd build/ && ctest -j4 --output-on-failure --progress .
+      run: cd build/ &&  ctest -R csmith-kind --verbose
     - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
       with:
         name: csmith-linux
@@ -88,7 +88,7 @@ jobs:
           name: release-macos
           path: ./release
       - name: Run tests
-        run: cd build/ && chmod +x macos-wrapper.sh && ctest -j4 --output-on-failure --progress .
+        run: cd build/ && chmod +x macos-wrapper.sh && ctest -R csmith-kind --verbose
       - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
         with:
           name: csmith-macos
