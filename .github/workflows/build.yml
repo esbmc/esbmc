@@ -13,6 +13,12 @@ jobs:
     name: Build ESBMC with all Solvers (Windows)
     runs-on: windows-latest
     steps:
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - name: check python
+      run: python --version
     - uses: actions/checkout@v1
     - name: Instal gnu tools (od)
       run: choco install -y gnuwin32-coreutils.portable
