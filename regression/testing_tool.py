@@ -211,10 +211,10 @@ def get_test_objects(base_dir: str):
     listdir = os.listdir(base_dir)
     directories = [x for x in listdir if os.path.isdir(
         os.path.join(base_dir, x))]
-    assert len(directories) > 10
+    assert len(directories) > 5
     tests = [TestParser.from_file(os.path.join(base_dir, x), x)
              for x in directories]
-    assert len(tests) > 10
+    assert len(tests) > 5
     return tests
 
 

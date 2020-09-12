@@ -2431,12 +2431,8 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
 
   assert(is_constant_array2t(expr));
   const constant_array2t &arr = to_constant_array2t(expr);
-#ifdef _MSC_VER
-#pragma message("MSVC does not support VLA's and probably never will.")
-  smt_astt *args = (smt_astt *)_malloca(arr.datatype_members.size());
-#else
-  smt_astt args[arr.datatype_members.size()];
-#endif
+
+  std::vector<smt_astt> args(arr.datatype_members.size());
   unsigned int i = 0;
   for(auto const &it : arr.datatype_members)
   {
@@ -2444,13 +2440,7 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
     i++;
   }
 
-#ifdef _MSC_VER
-  auto _result = tuple_api->tuple_array_create(arr_type, args, false, domain);
-  _freea(args);
-  return _result;
-#else
-  return tuple_api->tuple_array_create(arr_type, args, false, domain);
-#endif
+  return tuple_api->tuple_array_create(arr_type, args.data(), false, domain);
 }
 
 void smt_convt::rewrite_ptrs_to_structs(type2tc &type)

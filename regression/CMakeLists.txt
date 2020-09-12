@@ -23,7 +23,7 @@ endfunction(add_esbmc_regression mode folder)
 if(APPLE)
     set(REGRESSIONS esbmc cstd llvm floats floats-regression k-induction)
 else()
-    set(REGRESSIONS esbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp)
+    set(REGRESSIONS esbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp csmith)
 endif()
 
 
