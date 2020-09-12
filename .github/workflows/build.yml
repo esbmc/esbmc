@@ -22,7 +22,14 @@ jobs:
       run: choco install -y winflexbison
     - name: Instal gnu tools (od)
       run: choco install -y gnuwin32-coreutils.portable
+    - name: Check if od is on path
+      run: od.exe --version
     - name: Configure CMake
-      run: cmake.exe -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:\deps\clang\llvm9d -DClang_DIR=C:\deps\clang\llvm9d
+      run: |
+        mkdir build
+        cd build
+        cmake.exe .. -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:\deps\clang\llvm9d -DClang_DIR=C:\deps\clang\llvm9d
     - name: Build ESBMC
-      run: cmake --build .
+      run: |
+        cd build
+        cmake --build .
