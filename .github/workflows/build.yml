@@ -38,7 +38,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake.exe .. -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:\deps\clang\llvm9d -DClang_DIR=C:\deps\clang\llvm9d
+        cmake.exe .. -GNinja -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:\deps\clang\llvm9d -DClang_DIR=C:\deps\clang\llvm9d
     - name: Build ESBMC
       run: |
         cd build
