@@ -47,7 +47,7 @@ jobs:
     - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
       with:
         name: csmith-linux
-        path: ./csmith-error
+        path: ./build/csmith-error
         if-no-files-found: ignore
 
   build-macos:  
@@ -92,5 +92,5 @@ jobs:
       - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
         with:
           name: csmith-macos
-          path: ./csmith-error
+          path: ./build/csmith-error
           if-no-files-found: ignore
