@@ -52,6 +52,10 @@ include(FindLLVM)
 # Optimization
 include(OptimizationCCache)
 
+if(ENABLE_OLD_FRONTEND)
+  add_definitions(-DENABLE_OLD_FRONTEND)
+endif()
+
 add_subdirectory(src)
 
 # Generate ac_config.h. This must be generated after solvers
