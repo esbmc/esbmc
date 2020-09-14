@@ -1523,7 +1523,7 @@ void esbmc_parseoptionst::preprocessing()
     }
 #ifdef ENABLE_OLD_FRONTEND
     if(c_preprocess(filename, std::cout, false, *get_message_handler()))
-      error("PREPROCESSING ERROR");  
+      error("PREPROCESSING ERROR");
 #endif
   }
   catch(const char *e)
@@ -1794,15 +1794,15 @@ void esbmc_parseoptionst::help()
        " --i386-linux                 set Linux/I386 architecture\n"
        " --i386-win32                 set Windows/I386 architecture (default)\n"
 #elif __APPLE__
-         " --i386-macos                 set MACOS/I386 architecture (default)\n"
-         " --ppc-macos                  set PPC/I386 architecture\n"
-         " --i386-linux                 set Linux/I386 architecture\n"
-         " --i386-win32                 set Windows/I386 architecture\n"
+       " --i386-macos                 set MACOS/I386 architecture (default)\n"
+       " --ppc-macos                  set PPC/I386 architecture\n"
+       " --i386-linux                 set Linux/I386 architecture\n"
+       " --i386-win32                 set Windows/I386 architecture\n"
 #else
-         " --i386-macos                 set MACOS/I386 architecture\n"
-         " --ppc-macos                  set PPC/I386 architecture\n"
-         " --i386-linux                 set Linux/I386 architecture (default)\n"
-         " --i386-win32                 set Windows/I386 architecture\n"
+       " --i386-macos                 set MACOS/I386 architecture\n"
+       " --ppc-macos                  set PPC/I386 architecture\n"
+       " --i386-linux                 set Linux/I386 architecture (default)\n"
+       " --i386-win32                 set Windows/I386 architecture\n"
 #endif
        " --funsigned-char              make \"char\" unsigned by default\n"
        " --fms-extensions              enable microsoft C extensions\n"
