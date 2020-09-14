@@ -21,6 +21,7 @@ option(BUILD_STATIC "Build ESBMC in static mode (default: OFF)" OFF)
 option(BUILD_DOC "Build ESBMC documentation" OFF)
 option(ENABLE_REGRESSION "Add Regressions Tests (default: OFF)" OFF)
 option(ENABLE_COVERAGE "Generate Coverage Report (default: OFF)" OFF)
+option(ENABLE_OLD_FRONTEND "Enable flex/bison language frontend (default: OFF)" OFF)
 
 #############################
 # SOLVERS
