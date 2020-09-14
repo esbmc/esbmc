@@ -2,10 +2,10 @@
 
 const mode_table_et mode_table[] = {LANGAPI_HAVE_MODE_CLANG_C,
                                     LANGAPI_HAVE_MODE_CLANG_CPP,
-                                    #ifdef ENABLE_OLD_FRONTEND
+#ifdef ENABLE_OLD_FRONTEND
                                     LANGAPI_HAVE_MODE_C,
                                     LANGAPI_HAVE_MODE_CPP,
-                                    #endif
+#endif
                                     LANGAPI_HAVE_MODE_END};
 
 extern "C" uint8_t buildidstring_buf[1];
