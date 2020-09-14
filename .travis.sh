@@ -87,7 +87,7 @@ travis_install() {
 travis_script() {
     # Compile ESBMC
 
-    export BASE_FLAGS="-DBUILD_TESTING=On -DENABLE_REGRESSION=On-DClang_DIR=$HOME/clang9 -DLLVM_DIR=$HOME/clang9 -DCMAKE_INSTALL_PREFIX:PATH=$HOME/release"
+    export BASE_FLAGS=" -DENABLE_OLD_FRONTEND=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On-DClang_DIR=$HOME/clang9 -DLLVM_DIR=$HOME/clang9 -DCMAKE_INSTALL_PREFIX:PATH=$HOME/release"
     export COVERAGE_FLAGS=""    
     export SANITIZER_FLAGS=""
     export SOLVERS="-DBoolector_DIR=$HOME/boolector-3.2.0 -DMathsat_DIR=$HOME/mathsat "
