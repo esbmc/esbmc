@@ -30,6 +30,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer")
 endif()
 
+include(Utils)
 include(Options)
 include(SendFileHack)
 include(AppleConfiguration)
@@ -51,6 +52,10 @@ include(FindLLVM)
 # Optimization
 include(OptimizationCCache)
 
+if(ENABLE_OLD_FRONTEND)
+  add_definitions(-DENABLE_OLD_FRONTEND)
+endif()
+
 add_subdirectory(src)
 
 # Generate ac_config.h. This must be generated after solvers
@@ -71,3 +76,4 @@ endif()
 if(ENABLE_REGRESSION)
     add_subdirectory(regression)
 endif()
+include(FindCsmith)

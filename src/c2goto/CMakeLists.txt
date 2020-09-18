@@ -40,8 +40,8 @@ function(mangle_clib output)
       )
 
     add_custom_command(OUTPUT ${out_file}
-      COMMAND ${CMAKE_SOURCE_DIR}/scripts/flail.sh ${barename} ${out_goto} > ${out_file}
-      DEPENDS ${out_goto}
+      COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py ${out_goto} ${out_file}
+      DEPENDS ${out_goto} ${CMAKE_SOURCE_DIR}/scripts/flail.py
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Converting libc model ${out_goto} to data"
       VERBATIM
