@@ -783,8 +783,7 @@ reachability_treet::generate_schedule_formula()
       schedule_target, schedule_total_claims, schedule_remaining_claims));
 }
 
-bool reachability_treet::restore_from_dfs_state(void *_dfs
-                                                [[gnu::unused]])
+bool reachability_treet::restore_from_dfs_state(void *_dfs [[gnu::unused]])
 {
   abort();
 #if 0

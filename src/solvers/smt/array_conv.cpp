@@ -1312,8 +1312,7 @@ void array_convt::add_initial_ackerman_constraints(
   }
 }
 
-smt_astt
-array_ast::eq(smt_convt *ctx [[gnu::unused]], smt_astt sym) const
+smt_astt array_ast::eq(smt_convt *ctx [[gnu::unused]], smt_astt sym) const
 {
   const array_ast *other = array_downcast(sym);
 
@@ -1325,8 +1324,7 @@ array_ast::eq(smt_convt *ctx [[gnu::unused]], smt_astt sym) const
   return array_ctx->mk_bounded_array_equality(this, other);
 }
 
-void array_ast::assign(smt_convt *ctx [[gnu::unused]], smt_astt sym)
-  const
+void array_ast::assign(smt_convt *ctx [[gnu::unused]], smt_astt sym) const
 {
   array_ctx->convert_array_assign(this, sym);
 }
@@ -1344,9 +1342,8 @@ smt_astt array_ast::update(
   return array_ctx->mk_store(this, idx_expr, value, sort);
 }
 
-smt_astt array_ast::select(
-  smt_convt *ctx [[gnu::unused]],
-  const expr2tc &idx) const
+smt_astt
+array_ast::select(smt_convt *ctx [[gnu::unused]], const expr2tc &idx) const
 {
   // Look up the array subtype sort. If we're unbounded, use the base array id
   // to do that, otherwise pull the subtype out of an element.

@@ -2222,10 +2222,7 @@ public:
     : bitnot_expr_methods(type, bitnot_id, v)
   {
   }
-  bitnot2t(
-    const type2tc &type,
-    const expr2tc &v,
-    const expr2tc &)
+  bitnot2t(const type2tc &type, const expr2tc &v, const expr2tc &)
     : bitnot_expr_methods(type, bitnot_id, v)
   {
   }
