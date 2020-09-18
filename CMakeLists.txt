@@ -51,6 +51,7 @@ include(FindLLVM)
 
 # Optimization
 include(OptimizationCCache)
+include(WError)
 
 if(ENABLE_OLD_FRONTEND)
   add_definitions(-DENABLE_OLD_FRONTEND)
