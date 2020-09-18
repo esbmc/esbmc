@@ -906,7 +906,7 @@ smt_astt z3_convt::mk_smt_bool(bool val)
 smt_astt z3_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
-  smt_sortt array_subtype __attribute__((unused)))
+  smt_sortt array_subtype [[gnu::unused]])
 {
   return mk_smt_symbol(name, s);
 }

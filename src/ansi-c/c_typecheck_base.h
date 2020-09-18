@@ -90,7 +90,7 @@ protected:
       return pos < array.operands().size();
     }
 
-    init_statet &operator++(int x __attribute__((unused)))
+    init_statet &operator++(int x [[gnu::unused]])
     {
       pos++;
       return *this;

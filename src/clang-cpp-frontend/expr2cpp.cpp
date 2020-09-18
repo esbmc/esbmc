@@ -304,15 +304,15 @@ std::string expr2cppt::convert_rec(
 }
 
 std::string expr2cppt::convert_cpp_this(
-  const exprt &src __attribute__((unused)),
-  unsigned precedence __attribute__((unused)))
+  const exprt &src [[gnu::unused]],
+  unsigned precedence [[gnu::unused]])
 {
   return "this";
 }
 
 std::string expr2cppt::convert_cpp_new(
   const exprt &src,
-  unsigned precedence __attribute__((unused)))
+  unsigned precedence [[gnu::unused]])
 {
   std::string dest;
 

@@ -88,7 +88,7 @@ void c_typecheck_baset::typecheck_code(codet &code)
   }
 }
 
-void c_typecheck_baset::typecheck_asm(codet &code __attribute__((unused)))
+void c_typecheck_baset::typecheck_asm(codet &code [[gnu::unused]])
 {
 }
 
@@ -360,7 +360,7 @@ void c_typecheck_baset::typecheck_switch_case(code_switch_caset &code)
   }
 }
 
-void c_typecheck_baset::typecheck_goto(codet &code __attribute__((unused)))
+void c_typecheck_baset::typecheck_goto(codet &code [[gnu::unused]])
 {
 }
 

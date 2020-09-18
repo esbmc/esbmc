@@ -127,7 +127,7 @@ public:
     {
     }
 
-    goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
+    goto_statet &operator=(const goto_statet &ref [[gnu::unused]])
     {
       abort();
     }

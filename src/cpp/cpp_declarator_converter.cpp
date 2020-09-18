@@ -516,7 +516,7 @@ irep_idt cpp_declarator_convertert::get_pretty_name()
 }
 
 void cpp_declarator_convertert::operator_overloading_rules(
-  const symbolt &symbol __attribute__((unused)))
+  const symbolt &symbol [[gnu::unused]])
 {
   // TODO
 }

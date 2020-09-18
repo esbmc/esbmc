@@ -291,7 +291,7 @@ void renaming::level2t::dump() const
 void renaming::level2t::make_assignment(
   expr2tc &lhs_symbol,
   const expr2tc &const_value,
-  const expr2tc &assigned_value __attribute__((unused)))
+  const expr2tc &assigned_value [[gnu::unused]])
 {
   assert(
     to_symbol2t(lhs_symbol).rlevel == symbol2t::level1 ||
