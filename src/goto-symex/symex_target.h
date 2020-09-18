@@ -104,7 +104,7 @@ public:
   {
   }
 
-  stack_framet &operator=(const stack_ framet &) = default;
+  stack_framet& operator=(const stack_framet&) = default; 
   stack_framet(const stack_framet &ref)
   {
     *this = ref;
