@@ -780,7 +780,7 @@ yices_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 }
 
 // Hack for GCC 7.3.0, in 9.3 this gives no warnings
-#pragma GCC diagnostics ignore "-Wunused-parameter"
+#pragma GCC diagnostic ignore "-Wunused-parameter"
 bool yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
@@ -789,7 +789,7 @@ bool yices_convt::get_bool(smt_astt a)
   assert(!res && "Can't get boolean value from Yices");
   return val ? true : false;
 }
-#pragma GCC diagnostics pop
+#pragma GCC diagnostic pop
 
 BigInt yices_convt::get_bv(smt_astt a)
 {
