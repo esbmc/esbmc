@@ -715,7 +715,7 @@ smt_astt yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
 smt_astt yices_convt::mk_array_symbol(
   const std::string &name,
   smt_sortt s,
-  smt_sortt array_subtype __attribute__((unused)))
+  smt_sortt array_subtype [[gnu::unused]])
 {
   // For array symbols, store the symbol name in the ast to implement
   // assign semantics
@@ -944,7 +944,7 @@ smt_astt yices_convt::tuple_array_create(
   const type2tc &array_type,
   smt_astt *inputargs,
   bool const_array,
-  smt_sortt domain __attribute__((unused)))
+  smt_sortt domain [[gnu::unused]])
 {
   const array_type2t &arr_type = to_array_type(array_type);
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);

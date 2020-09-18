@@ -2383,7 +2383,7 @@ smt_astt array_iface::default_convert_array_of(
 }
 
 smt_astt smt_convt::pointer_array_of(
-  const expr2tc &init_val __attribute__((unused)),
+  const expr2tc &init_val [[gnu::unused]],
   unsigned long array_width)
 {
   // Actually a tuple, but the operand is going to be a symbol, null.
@@ -2525,8 +2525,8 @@ smt_astt smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 }
 
 smt_astt smt_ast::project(
-  smt_convt *ctx __attribute__((unused)),
-  unsigned int idx __attribute__((unused))) const
+  smt_convt *ctx [[gnu::unused]],
+  unsigned int idx [[gnu::unused]]) const
 {
   std::cerr << "Projecting from non-tuple based AST\n";
   abort();

@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 
 void symex_dereference_statet::dereference_failure(
-  const std::string &property __attribute__((unused)),
+  const std::string &property [[gnu::unused]],
   const std::string &msg,
   const guardt &guard)
 {

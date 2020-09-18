@@ -921,7 +921,7 @@ bool Parser::rTempArgDeclaration(cpp_declarationt &declaration)
    extern.template.decl
    : EXTERN TEMPLATE declaration
 */
-bool Parser::rExternTemplateDecl(irept &decl __attribute__((unused)))
+bool Parser::rExternTemplateDecl(irept &decl [[gnu::unused]])
 {
   Token tk1, tk2;
 
@@ -1214,10 +1214,10 @@ bool Parser::rIntegralDeclaration(
 }
 
 bool Parser::rConstDeclaration(
-  cpp_declarationt &declaration __attribute__((unused)),
-  cpp_storage_spect &storage_spec __attribute__((unused)),
-  cpp_member_spect &member_spec __attribute__((unused)),
-  typet &cv_q __attribute__((unused)))
+  cpp_declarationt &declaration [[gnu::unused]],
+  cpp_storage_spect &storage_spec [[gnu::unused]],
+  cpp_member_spect &member_spec [[gnu::unused]],
+  typet &cv_q [[gnu::unused]])
 {
 #ifdef DEBUG
   std::cout << "Parser::rConstDeclaration\n";
@@ -2118,7 +2118,7 @@ bool Parser::rDeclaratorQualifier()
 bool Parser::rDeclarator(
   cpp_declaratort &declarator,
   DeclKind kind,
-  bool recursive __attribute__((unused)),
+  bool recursive [[gnu::unused]],
   bool should_be_declarator,
   bool is_statement)
 {
@@ -3560,7 +3560,7 @@ bool Parser::rClassMember(cpp_itemt &member)
   access.decl
   : name ';'                e.g. <qualified class>::<member name>;
 */
-bool Parser::rAccessDecl(irept &mem __attribute__((unused)))
+bool Parser::rAccessDecl(irept &mem [[gnu::unused]])
 {
   irept name;
   Token tk;

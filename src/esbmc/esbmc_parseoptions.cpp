@@ -75,7 +75,7 @@ struct resultt
 };
 
 #ifndef _WIN32
-void timeout_handler(int dummy __attribute__((unused)))
+void timeout_handler(int dummy [[gnu::unused]])
 {
   std::cout << "Timed out" << std::endl;
 
