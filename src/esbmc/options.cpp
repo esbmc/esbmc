@@ -119,6 +119,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "no-div-by-zero-check", switc, ""},
   {0, "no-pointer-check", switc, ""},
   {0, "no-align-check", switc, ""},
+  {0, "no-pointer-relation-check", switc, ""},
   {0, "nan-check", switc, ""},
   {0, "memory-leak-check", switc, ""},
   {0, "overflow-check", switc, ""},
