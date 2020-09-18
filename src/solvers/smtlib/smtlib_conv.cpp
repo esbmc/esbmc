@@ -366,7 +366,7 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
     // Continue.
   }
 
-  for(auto i = 0; i < ast->args.size(); i++)
+  for(unsigned long int i = 0; i < ast->args.size(); i++)
     brace_level +=
       emit_ast(static_cast<const smtlib_smt_ast *>(ast->args[i]), args[i]);
 
@@ -394,7 +394,7 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
   }
 
   // Its operands
-  for(auto i = 0; i < ast->args.size(); i++)
+  for(unsigned long int i = 0; i < ast->args.size(); i++)
     fprintf(out_stream, " %s", args[i].c_str());
 
   // End func enclosing brace, then operand to let (two braces).
