@@ -230,218 +230,319 @@ void smt_convt::set_to(const expr2tc &expr, bool value)
   assert_ast(a);
 }
 
-smt_astt smt_convt::convert_str_assign(const expr2tc &expr)
+bool smt_convt::is_str_expr(const expr2tc &expr)
 {
-  smt_sortt sort = mk_string_sort();
-  expr2tc update_value, update_field;
-  smt_astt source, update, _char, pre_str, pos_str, position;
+  if(is_bool_type(expr) || is_pointer_type(expr))
+    return false;
 
-  const equality2t &eq = to_equality2t(expr);
-
-  if(is_typecast2t(eq.side_1) && is_constant_int2t(eq.side_2))
-  {
-    update_field = to_typecast2t(eq.side_1).from;
-    const index2t &index = to_index2t(update_field);
-    expr2tc sym = index.source_value;
-    update_field = index.index;
-    position = mk_smt_int((to_constant_int2t(update_field)).value);
-    source = str_symbol(sym, false);
-    update = convert_str_ast(eq.side_2);
-    update = mk_eq(mk_str_at(source, position), update);
-    return update;
-  }
-
-  if(is_symbol2t(eq.side_1) && is_with2t(eq.side_2))
-  {
-    const with2t &with = to_with2t(eq.side_2);
-
-    //std::string str_sym_name = to_symbol2t(eq.side_1).thename.as_string();
-
-    update_field = with.update_field;
-    update_value = with.update_value;
-
-    switch(update_field->expr_id)
-    {
-    case expr2t::constant_int_id:
-    {
-      const constant_int2t &i = to_constant_int2t(update_field);
-      position = mk_smt_int(i.value);
-      break;
-    }
-    case expr2t::pointer_offset_id:
-    {
-      position = convert_ast(update_field);
-      break;
-    }
-    default:
-    {
-      std::cerr << "Couldn't convert update_field expression\n";
-      update_field->dump();
-      abort();
-    }
-    }
-
-    switch(update_value->expr_id)
-    {
-    case expr2t::constant_int_id:
-    {
-      _char = convert_str_ast(update_value);
-      break;
-    }
-    case expr2t::bitcast_id:
-    {
-      return 0;
-    }
-    default:
-    {
-      std::cerr << "Couldn't convert update_value expression\n";
-      update_value->dump();
-      abort();
-    }
-    }
-
-    source = str_symbol(with.source_value, true);
-    pre_str = mk_str_extract(source, mk_smt_int(0), position);
-
-    const constant_int2t &int_char = to_constant_int2t(update_value);
-    if(int_char.value != 0)
-    {
-      smt_astt x = mk_add(position, mk_smt_int(1));
-      pos_str = mk_str_extract(source, x, mk_sub(mk_str_length(source), x));
-      update = mk_str_concat(pre_str, _char, pos_str);
-    }
-    else
-      update = pre_str;
-
-    source = str_symbol(eq.side_1, false);
-    update->assign(this, source);
-
-    return update;
-  }
-  return 0;
-}
-
-std::string smt_convt::str_fresh_name(const std::string &tag, bool is_new)
-{
-  std::string new_name = "str::" + tag + "::";
-  std::stringstream ss;
-  if(is_new)
-    ss << new_name << fresh_map[new_name]++;
+  type2tc type;
+  if(is_array_type(expr))
+    type = get_base_array_subtype(expr->type);
   else
-    ss << new_name << fresh_map[new_name];
-  return ss.str();
-}
+    type = expr->type;
 
-smt_astt smt_convt::str_symbol(const expr2tc &expr, bool is_new)
-{
-  smt_sortt sort = mk_string_sort();
-  std::string str_sym_name = to_symbol2t(expr).thename.as_string();
-  str_sym_name = str_fresh_name(str_sym_name, is_new);
-  return mk_smt_symbol(str_sym_name, sort);
-}
+  int width = type->get_width();
+  if(width == config.ansi_c.char_width)
+    return true;
 
-smt_astt
-smt_convt::convert_str_ast_assert(const expr2tc &expr, ast_vec &assertions)
-{
-  assert(expt->expr_id == expr2t::implies_id);
-  expr2tc sym = *expr->get_sub_expr(0);
-  expr2tc e = *expr->get_sub_expr(1);
-
-  if(is_str_expr(e))
+  if(expr->expr_id == expr2t::equality_id)
   {
-    smt_astt cond = mk_implies(convert_ast(sym), convert_str_assign(e));
-    cond = imply_ast(convert_ast(gen_true_expr()), cond);
-    assertions.push_back(invert_ast(cond));
+    const equality2t &eq = to_equality2t(expr);
+    return has_str_expr(eq.side_1);
   }
-  return 0;
+
+  return false;
 }
 
-smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
+smt_astt smt_convt::convert_str_terminal(const expr2tc &expr)
 {
-  smt_astt a;
   switch(expr->expr_id)
   {
-  case expr2t::symbol_id:
-    a = str_symbol(expr, true);
-    break;
-  case expr2t::constant_string_id:
-    a = convert_terminal(expr);
-    break;
   case expr2t::constant_int_id:
   {
     const constant_int2t &int_char = to_constant_int2t(expr);
     std::string char_value;
     char_value = (char)(int_char.value).to_int64();
-    a = mk_smt_string(char_value);
+    return mk_smt_string(char_value);
+  }
+  case expr2t::constant_string_id:
+  {
+    const constant_string2t &theStr = to_constant_string2t(expr);
+    std::string result = (theStr.value).as_string();
+    return mk_smt_string(result);
+  }
+  case expr2t::symbol_id:
+  {
+    smt_sortt sort = mk_string_sort();
+    const symbol2t &sym = to_symbol2t(expr);
+    std::string name = sym.get_symbol_name();
+    return mk_smt_symbol(name, sort);
+    ;
+  }
+  default:
+    std::cerr << "Converting unrecognized terminal expr to SMT String\n";
+    expr->dump();
+    abort();
+  }
+}
+
+smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
+{
+  /*smt_cachet::const_iterator cache_result = smt_cache.find(expr);
+  if(cache_result != smt_cache.end())
+    return (cache_result->ast);*/
+  std::vector<smt_astt> args;
+  args.reserve(expr->get_num_sub_exprs());
+
+  switch(expr->expr_id)
+  {
+  case expr2t::with_id:
+  case expr2t::constant_array_id:
+  case expr2t::constant_array_of_id:
+  case expr2t::index_id:
+  case expr2t::address_of_id:
+  case expr2t::ieee_add_id:
+  case expr2t::ieee_sub_id:
+  case expr2t::ieee_mul_id:
+  case expr2t::ieee_div_id:
+  case expr2t::ieee_fma_id:
+  case expr2t::ieee_sqrt_id:
+    break; // Don't convert their operands
+
+  default:
+  {
+    // Convert /all the arguments/. Via magical delegates.
+    unsigned int i = 0;
+    expr->foreach_operand(
+      [this, &args, &i](const expr2tc &e) { args[i++] = convert_str_ast(e); });
+  }
+  }
+
+  smt_astt a;
+  switch(expr->expr_id)
+  {
+  case expr2t::constant_int_id:
+    a = convert_str_terminal(expr);
+    break;
+  case expr2t::symbol_id:
+  {
+    if(is_str_expr(expr))
+      a = convert_str_terminal(expr);
+    else
+      a = convert_ast(expr);
+    break;
+  }
+  case expr2t::constant_string_id:
+  {
+    const constant_string2t &str = to_constant_string2t(expr);
+    expr2tc newarr = str.to_array();
+    a = convert_ast(newarr);
     break;
   }
   case expr2t::index_id:
   {
     const index2t &index = to_index2t(expr);
-    a = convert_str_ast(index.source_value);
+    if(is_str_expr(expr))
+    {
+      smt_astt source = convert_str_terminal(index.source_value);
+      smt_astt position = convert_ast(index.index);
+      a = mk_str_at(source, position);
+    }
     break;
   }
-  }
-  return a;
-}
-
-bool smt_convt::is_str_expr(const expr2tc &expr)
-{
-  switch(expr->expr_id)
+  case expr2t::with_id:
   {
-  case expr2t::symbol_id:
-  {
-    const symbol2t &sym = to_symbol2t(expr);
-    if(is_array_type(expr))
+    const with2t &with = to_with2t(expr);
+    if(is_str_expr(expr))
     {
-      type2tc subtype = get_base_array_subtype(expr->type);
-      int width = subtype->get_width();
-      if(width == config.ansi_c.char_width)
-        return true;
+      smt_sortt sort = mk_string_sort();
+      smt_astt position, source, update, _char, pre_str, pos_str, x;
+      expr2tc update_value, update_field;
+      update_field = with.update_field;
+      update_value = with.update_value;
+
+      position = convert_ast(update_field);
+
+      switch(update_field->expr_id)
+      {
+      case expr2t::constant_int_id:
+      {
+        const constant_int2t &i = to_constant_int2t(update_field);
+        x = mk_smt_int(i.value + 1);
+        break;
+      }
+      case expr2t::pointer_offset_id:
+      {
+        x = mk_add(position, mk_smt_int(1));
+        break;
+      }
+      }
+
+      _char = convert_str_ast(update_value);
+      source = convert_str_ast(with.source_value);
+      pre_str = mk_str_extract(source, mk_smt_int(0), position);
+
+      const constant_int2t &int_char = to_constant_int2t(update_value);
+      if(int_char.value != 0)
+      {
+        pos_str = mk_str_extract(source, x, mk_sub(mk_str_length(source), x));
+        update = mk_str_concat(pre_str, _char, pos_str);
+      }
+      else
+        update = pre_str;
+
+      a = update;
     }
+
+    break;
+  }
+  case expr2t::member_id:
+  {
+    a = convert_member(expr);
+    break;
+  }
+  case expr2t::same_object_id:
+  {
+    // Two projects, then comparison.
+    args[0] = args[0]->project(this, 0);
+    args[1] = args[1]->project(this, 0);
+    a = mk_eq(args[0], args[1]);
+    break;
+  }
+  case expr2t::pointer_object_id:
+  {
+    const pointer_object2t &obj = to_pointer_object2t(expr);
+    // Potentially walk through some typecasts
+    const expr2tc *ptr = &obj.ptr_obj;
+    while(is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
+      ptr = &to_typecast2t(*ptr).from;
+
+    args[0] = convert_ast(*ptr);
+    a = args[0]->project(this, 0);
+    break;
+  }
+  case expr2t::typecast_id:
+  {
+    a = convert_str_typecast(expr);
+    break;
+  }
+  case expr2t::if_id:
+  {
+    const if2t &if_ref = to_if2t(expr);
+    args[0] = convert_str_ast(if_ref.cond);
+    args[1] = convert_str_ast(if_ref.true_value);
+    args[2] = convert_str_ast(if_ref.false_value);
+    a = args[1]->ite(this, args[0], args[2]);
     break;
   }
   case expr2t::equality_id:
   {
-    const equality2t &eq = to_equality2t(expr);
-    return (is_str_expr(eq.side_1) || is_str_expr(eq.side_2));
+    a = args[0]->eq(this, args[1]);
+    break;
   }
-  case expr2t::typecast_id:
+  case expr2t::notequal_id:
   {
-    const typecast2t &tc = to_typecast2t(expr);
-    return (is_str_expr(tc.from));
+    a = args[0]->eq(this, args[1]);
+    a = mk_not(a);
+    break;
   }
-  case expr2t::index_id:
+  case expr2t::lessthan_id:
   {
-    const index2t &idx = to_index2t(expr);
-    return (is_str_expr(idx.source_value));
+    a = mk_str_lt(args[0], args[1]);
+    break;
   }
+  case expr2t::lessthanequal_id:
+  {
+    a = mk_str_le(args[0], args[1]);
+    break;
   }
-  return false;
+  case expr2t::greaterthan_id:
+  {
+    a = mk_str_gt(args[0], args[1]);
+    break;
+  }
+  case expr2t::greaterthanequal_id:
+  {
+    a = mk_str_ge(args[0], args[1]);
+    break;
+  }
+  case expr2t::implies_id:
+  {
+    a = mk_implies(args[0], args[1]);
+    break;
+  }
+  case expr2t::not_id:
+  {
+    assert(is_bool_type(expr));
+    a = mk_not(args[0]);
+    break;
+  }
+  case expr2t::bitcast_id:
+  {
+    const bitcast2t &cast = to_bitcast2t(expr);
+    if(is_str_expr(expr))
+      a = convert_str_ast(cast.from);
+    break;
+  }
+  case expr2t::extract_id:
+  {
+    const extract2t &ex = to_extract2t(expr);
+    a = convert_ast(ex.from);
+    a = mk_extract(a, ex.upper, ex.lower);
+    break;
+  }
+  default:
+    a = convert_ast(expr);
+  }
+
+  //struct smt_cache_entryt entry = {expr, a, ctx_level};
+  //smt_cache.insert(entry);
+  return a;
 }
 
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
-  smt_astt side1 = convert_ast(eq.side_1);
-  smt_astt side2 = convert_ast(eq.side_2);
+
+  smt_astt side1, side2;
+
+  if(config.options.get_bool_option("string-solver") && has_str_expr(expr))
+  {
+    side1 = convert_str_ast(eq.side_1);
+    side2 = convert_str_ast(eq.side_2);
+  }
+  else
+  {
+    side1 = convert_ast(eq.side_1);
+    side2 = convert_ast(eq.side_2);
+    smt_cache_entryt e = {eq.side_1, side2, ctx_level};
+    smt_cache.insert(e);
+  }
+
   side2->assign(this, side1);
 
-  if(config.options.get_bool_option("string-solver"))
-  {
-    if(is_str_expr(eq.side_1))
-    {
-      convert_str_assign(expr);
-    }
-  }
   // Put that into the smt cache, thus preserving the assigned symbols value.
   // IMPORTANT: the cache is now a fundemental part of how some flatteners work,
   // in that one can chose to create a set of expressions and their ASTs, then
   // store them in the cache, rather than have a more sophisticated conversion.
-  smt_cache_entryt e = {eq.side_1, side2, ctx_level};
-  smt_cache.insert(e);
+  //smt_cache_entryt e = {eq.side_1, side2, ctx_level};
+  //smt_cache.insert(e);
+  smt_astt t = mk_eq(side2, side1);
+  return t;
+  //return side2;
+}
 
-  return side2;
+bool smt_convt::has_str_expr(const expr2tc &expr)
+{
+  if(is_str_expr(expr))
+    return true;
+  bool found = false;
+  if(!is_pointer_type(expr))
+  {
+    expr->foreach_operand(
+      [this, &found](const expr2tc &e) { found |= has_str_expr(e); });
+  }
+  return found;
 }
 
 smt_astt smt_convt::convert_ast(const expr2tc &expr)
@@ -1442,12 +1543,12 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
 
     return mk_smt_bv(theint.value, width);
   }
-  case expr2t::constant_string_id:
+  /*case expr2t::constant_string_id:
   {
     const constant_string2t &theStr = to_constant_string2t(expr);
     std::string result = (theStr.value).as_string();
     return mk_smt_string(result);
-  }
+  }*/
   case expr2t::constant_fixedbv_id:
   {
     const constant_fixedbv2t &thereal = to_constant_fixedbv2t(expr);
@@ -3060,6 +3161,14 @@ smt_astt smt_convt::mk_lt(smt_astt a, smt_astt b)
   abort();
 }
 
+smt_astt smt_convt::mk_str_lt(smt_astt a, smt_astt b)
+{
+  std::cerr << "Chosen solver doesn't support string sorts\n";
+  (void)a;
+  (void)b;
+  abort();
+}
+
 smt_astt smt_convt::mk_bvult(smt_astt a, smt_astt b)
 {
   (void)a;
@@ -3079,6 +3188,12 @@ smt_astt smt_convt::mk_gt(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   return mk_lt(b, a);
+}
+
+smt_astt smt_convt::mk_str_gt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_STRING && b->sort->id == SMT_SORT_STRING);
+  return mk_str_lt(b, a);
 }
 
 smt_astt smt_convt::mk_bvugt(smt_astt a, smt_astt b)
@@ -3104,6 +3219,14 @@ smt_astt smt_convt::mk_le(smt_astt a, smt_astt b)
   abort();
 }
 
+smt_astt smt_convt::mk_str_le(smt_astt a, smt_astt b)
+{
+  std::cerr << "Chosen solver doesn't support string sorts\n";
+  (void)a;
+  (void)b;
+  abort();
+}
+
 smt_astt smt_convt::mk_bvule(smt_astt a, smt_astt b)
 {
   (void)a;
@@ -3124,6 +3247,12 @@ smt_astt smt_convt::mk_ge(smt_astt a, smt_astt b)
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   return mk_not(mk_lt(a, b));
+}
+
+smt_astt smt_convt::mk_str_ge(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_STRING && b->sort->id == SMT_SORT_STRING);
+  return mk_not(mk_str_lt(a, b));
 }
 
 smt_astt smt_convt::mk_bvuge(smt_astt a, smt_astt b)

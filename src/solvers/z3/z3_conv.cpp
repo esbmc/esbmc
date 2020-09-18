@@ -507,6 +507,19 @@ smt_astt z3_convt::mk_lt(smt_astt a, smt_astt b)
     boolean_sort);
 }
 
+smt_astt z3_convt::mk_str_lt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_STRING || a->sort->id == SMT_SORT_STRING);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_str_lt(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
 smt_astt z3_convt::mk_bvult(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
@@ -589,6 +602,19 @@ smt_astt z3_convt::mk_le(smt_astt a, smt_astt b)
     z3::to_expr(
       z3_ctx,
       Z3_mk_le(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_str_le(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_STRING || a->sort->id == SMT_SORT_STRING);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_str_le(
         z3_ctx,
         to_solver_smt_ast<z3_smt_ast>(a)->a,
         to_solver_smt_ast<z3_smt_ast>(b)->a)),

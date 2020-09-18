@@ -83,12 +83,14 @@ public:
   smt_astt mk_and(smt_astt a, smt_astt b) override;
   smt_astt mk_not(smt_astt a) override;
   smt_astt mk_lt(smt_astt a, smt_astt b) override;
+  smt_astt mk_str_lt(smt_astt a, smt_astt b) override;
   smt_astt mk_bvult(smt_astt a, smt_astt b) override;
   smt_astt mk_bvslt(smt_astt a, smt_astt b) override;
   smt_astt mk_gt(smt_astt a, smt_astt b) override;
   smt_astt mk_bvugt(smt_astt a, smt_astt b) override;
   smt_astt mk_bvsgt(smt_astt a, smt_astt b) override;
   smt_astt mk_le(smt_astt a, smt_astt b) override;
+  smt_astt mk_str_le(smt_astt a, smt_astt b) override;
   smt_astt mk_bvule(smt_astt a, smt_astt b) override;
   smt_astt mk_bvsle(smt_astt a, smt_astt b) override;
   smt_astt mk_ge(smt_astt a, smt_astt b) override;

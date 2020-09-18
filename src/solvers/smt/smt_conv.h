@@ -186,11 +186,10 @@ public:
   smt_astt convert_ast(const expr2tc &expr);
 
   /**/
-  smt_astt convert_str_assign(const expr2tc &expr);
+
   smt_astt convert_str_ast(const expr2tc &expr);
-  std::string str_fresh_name(const std::string &tag, bool is_new);
-  smt_astt str_symbol(const expr2tc &expr, bool is_new);
-  smt_astt convert_str_ast_assert(const expr2tc &expr, ast_vec &assertions);
+  smt_astt convert_str_terminal(const expr2tc &expr);
+  bool has_str_expr(const expr2tc &expr);
   bool is_str_expr(const expr2tc &expr);
 
   /** Interface to specifig SMT conversion.
@@ -328,15 +327,19 @@ public:
   virtual smt_astt mk_and(smt_astt a, smt_astt b);
   virtual smt_astt mk_not(smt_astt a);
   virtual smt_astt mk_lt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_str_lt(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvult(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvslt(smt_astt a, smt_astt b);
   virtual smt_astt mk_gt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_str_gt(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvugt(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvsgt(smt_astt a, smt_astt b);
   virtual smt_astt mk_le(smt_astt a, smt_astt b);
+  virtual smt_astt mk_str_le(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvule(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvsle(smt_astt a, smt_astt b);
   virtual smt_astt mk_ge(smt_astt a, smt_astt b);
+  virtual smt_astt mk_str_ge(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvuge(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvsge(smt_astt a, smt_astt b);
   virtual smt_astt mk_eq(smt_astt a, smt_astt b);
@@ -689,6 +692,9 @@ public:
   smt_astt convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast);
   smt_astt convert_typecast_to_ints_from_unsigned(const typecast2t &cast);
   smt_astt convert_typecast_to_ints_from_bool(const typecast2t &cast);
+
+  smt_astt convert_str_typecast_to_ints(const typecast2t &cast);
+  smt_astt convert_str_typecast_to_ints_intmode(const typecast2t &cast);
   /** Typecast something (i.e. an integer) to a pointer */
   smt_astt convert_typecast_to_ptr(const typecast2t &cast);
   /** Typecast a pointer to an integer */
@@ -697,6 +703,8 @@ public:
   smt_astt convert_typecast_to_struct(const typecast2t &cast);
   /** Despatch a typecast expression to a more specific typecast method */
   smt_astt convert_typecast(const expr2tc &expr);
+
+  smt_astt convert_str_typecast(const expr2tc &expr);
   /** Typecast to a floatbv*/
   smt_astt convert_typecast_to_fpbv(const typecast2t &cast);
   /** Typecast from a floatbv */

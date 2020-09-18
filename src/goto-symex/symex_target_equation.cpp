@@ -170,11 +170,13 @@ void symex_target_equationt::convert_internal_step(
   if(step.is_assume() || step.is_assert())
   {
     expr2tc tmp(step.cond);
-    if(config.options.get_bool_option("string-solver") && step.is_assert())
-    {
-      smt_conv.convert_str_ast_assert(tmp, assertions);
-    }
-    step.cond_ast = smt_conv.convert_ast(tmp);
+
+    if(
+      config.options.get_bool_option("string-solver") &&
+      smt_conv.has_str_expr(tmp))
+      step.cond_ast = smt_conv.convert_str_ast(tmp);
+    else
+      step.cond_ast = smt_conv.convert_ast(tmp);
 
     if(ssa_smt_trace)
     {
