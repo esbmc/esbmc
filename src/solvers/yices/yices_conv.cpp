@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <sstream>
 #include <yices_conv.h>
-
+#include <assert.h>
 // From yices 2.3 (I think) various API calls have had new non-binary
 // operand versions added. The maintainers have chosen to break backwards
 // compatibility in the process by moving the old functions to new names, and
