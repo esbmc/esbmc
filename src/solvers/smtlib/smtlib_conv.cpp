@@ -834,8 +834,7 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return a;
 }
 
-smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type
-                                       [[gnu::unused]])
+smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type [[gnu::unused]])
 {
   std::cerr << "Attempted to make struct type in smtlib conversion"
             << std::endl;

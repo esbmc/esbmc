@@ -879,13 +879,15 @@ type_poolt type_pool;
 static_assert(type2t::end_type_id <= 256, "Type id overflow");
 static_assert(expr2t::end_expr_id <= 256, "Expr id overflow");
 
-static inline std::string type_to_string(const bool &thebool, int indent [[gnu::unused]])
+static inline std::string
+type_to_string(const bool &thebool, int indent [[gnu::unused]])
 {
   return (thebool) ? "true" : "false";
 }
 
-static inline std::string
-type_to_string(const sideeffect_data::allockind &data, int indent [[gnu::unused]])
+static inline std::string type_to_string(
+  const sideeffect_data::allockind &data,
+  int indent [[gnu::unused]])
 {
   return (data == sideeffect_data::allockind::malloc)
            ? "malloc"
@@ -907,15 +909,17 @@ type_to_string(const sideeffect_data::allockind &data, int indent [[gnu::unused]
                                        : "unknown";
 }
 
-static inline std::string type_to_string(const unsigned int &theval, int indent [[gnu::unused]])
+static inline std::string
+type_to_string(const unsigned int &theval, int indent [[gnu::unused]])
 {
   char buffer[64];
   snprintf(buffer, 63, "%d", theval);
   return std::string(buffer);
 }
 
-static inline std::string
-type_to_string(const symbol_data::renaming_level &theval, int indent [[gnu::unused]])
+static inline std::string type_to_string(
+  const symbol_data::renaming_level &theval,
+  int indent [[gnu::unused]])
 {
   switch(theval)
   {
@@ -935,7 +939,8 @@ type_to_string(const symbol_data::renaming_level &theval, int indent [[gnu::unus
   }
 }
 
-static inline std::string type_to_string(const BigInt &theint, int indent [[gnu::unused]])
+static inline std::string
+type_to_string(const BigInt &theint, int indent [[gnu::unused]])
 {
   char buffer[256], *buf;
 
@@ -943,12 +948,14 @@ static inline std::string type_to_string(const BigInt &theint, int indent [[gnu:
   return std::string(buf);
 }
 
-static inline std::string type_to_string(const fixedbvt &theval, int indent [[gnu::unused]])
+static inline std::string
+type_to_string(const fixedbvt &theval, int indent [[gnu::unused]])
 {
   return theval.to_ansi_c_string();
 }
 
-static inline std::string type_to_string(const ieee_floatt &theval, int indent [[gnu::unused]])
+static inline std::string
+type_to_string(const ieee_floatt &theval, int indent [[gnu::unused]])
 {
   return theval.to_ansi_c_string();
 }
@@ -1028,7 +1035,8 @@ static inline std::string type_to_string(const type2tc &theval, int indent)
     return "";
 }
 
-static inline std::string type_to_string(const irep_idt &theval, int indent [[gnu::unused]])
+static inline std::string
+type_to_string(const irep_idt &theval, int indent [[gnu::unused]])
 {
   return theval.as_string();
 }
@@ -1120,14 +1128,16 @@ static inline bool do_type_cmp(const irep_idt &side1, const irep_idt &side2)
   return (side1 == side2);
 }
 
-static inline bool
-do_type_cmp(const type2t::type_ids &id [[gnu::unused]], const type2t::type_ids &id2 [[gnu::unused]])
+static inline bool do_type_cmp(
+  const type2t::type_ids &id [[gnu::unused]],
+  const type2t::type_ids &id2 [[gnu::unused]])
 {
   return true; // Dummy field comparison.
 }
 
-static inline bool
-do_type_cmp(const expr2t::expr_ids &id [[gnu::unused]], const expr2t::expr_ids &id2 [[gnu::unused]])
+static inline bool do_type_cmp(
+  const expr2t::expr_ids &id [[gnu::unused]],
+  const expr2t::expr_ids &id2 [[gnu::unused]])
 {
   return true; // Dummy field comparison.
 }
@@ -1280,14 +1290,16 @@ static inline int do_type_lt(const irep_idt &side1, const irep_idt &side2)
   return 0;
 }
 
-static inline int
-do_type_lt(const type2t::type_ids &id [[gnu::unused]], const type2t::type_ids &id2 [[gnu::unused]])
+static inline int do_type_lt(
+  const type2t::type_ids &id [[gnu::unused]],
+  const type2t::type_ids &id2 [[gnu::unused]])
 {
   return 0; // Dummy field comparison
 }
 
-static inline int
-do_type_lt(const expr2t::expr_ids &id [[gnu::unused]], const expr2t::expr_ids &id2 [[gnu::unused]])
+static inline int do_type_lt(
+  const expr2t::expr_ids &id [[gnu::unused]],
+  const expr2t::expr_ids &id2 [[gnu::unused]])
 {
   return 0; // Dummy field comparison
 }
@@ -1498,7 +1510,9 @@ static inline size_t do_type_crc(const type2t::type_ids &i)
   return boost::hash<uint8_t>()(i);
 }
 
-static inline void do_type_hash(const type2t::type_ids &i [[gnu::unused]], crypto_hash &hash [[gnu::unused]])
+static inline void do_type_hash(
+  const type2t::type_ids &i [[gnu::unused]],
+  crypto_hash &hash [[gnu::unused]])
 {
   // Dummy field crc
 }
@@ -1508,7 +1522,9 @@ static inline size_t do_type_crc(const expr2t::expr_ids &i)
   return boost::hash<uint8_t>()(i);
 }
 
-static inline void do_type_hash(const expr2t::expr_ids &i [[gnu::unused]], crypto_hash &hash [[gnu::unused]])
+static inline void do_type_hash(
+  const expr2t::expr_ids &i [[gnu::unused]],
+  crypto_hash &hash [[gnu::unused]])
 {
   // Dummy field crc
 }

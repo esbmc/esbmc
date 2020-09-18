@@ -905,8 +905,7 @@ void cpp_typecheckt::typecheck_expr_delete(exprt &expr)
   expr.set("destructor", destructor_code);
 }
 
-void cpp_typecheckt::typecheck_expr_typecast(exprt &expr
-                                             [[gnu::unused]])
+void cpp_typecheckt::typecheck_expr_typecast(exprt &expr [[gnu::unused]])
 {
 // should not be called
 #if 0

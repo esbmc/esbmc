@@ -482,15 +482,13 @@ smt_astt boolector_convt::mk_select(smt_astt a, smt_astt b)
     a->sort->get_range_sort());
 }
 
-smt_astt boolector_convt::mk_smt_int(const BigInt &theint
-                                     [[gnu::unused]])
+smt_astt boolector_convt::mk_smt_int(const BigInt &theint [[gnu::unused]])
 {
   std::cerr << "Boolector can't create integer sorts" << std::endl;
   abort();
 }
 
-smt_astt boolector_convt::mk_smt_real(const std::string &str
-                                      [[gnu::unused]])
+smt_astt boolector_convt::mk_smt_real(const std::string &str [[gnu::unused]])
 {
   std::cerr << "Boolector can't create Real sorts" << std::endl;
   abort();

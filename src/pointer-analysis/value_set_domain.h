@@ -44,8 +44,8 @@ public:
     return value_set->make_union(*other.value_set, keepnew);
   }
 
-  void output(const namespacet &ns [[gnu::unused]], std::ostream &out)
-    const override
+  void
+  output(const namespacet &ns [[gnu::unused]], std::ostream &out) const override
   {
     value_set->output(out);
   }

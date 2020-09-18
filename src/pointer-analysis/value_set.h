@@ -123,9 +123,7 @@ public:
       }
     }
 
-    explicit objectt(
-      bool offset_set [[gnu::unused]],
-      const BigInt &_offset)
+    explicit objectt(bool offset_set [[gnu::unused]], const BigInt &_offset)
       : offset(_offset), offset_is_set(true)
     {
       assert(offset_set);
