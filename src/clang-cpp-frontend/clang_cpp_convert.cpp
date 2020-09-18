@@ -1,11 +1,14 @@
 #include "clang_cpp_convert.h"
 
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclFriend.h>
 #include <clang/AST/DeclTemplate.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/StmtCXX.h>
+#pragma GCC diagnostic pop
 #pragma GCC diagnostic pop
 #include <util/expr_util.h>
 #include <util/std_code.h>
