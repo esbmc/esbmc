@@ -103,6 +103,8 @@ public:
   stack_framet(const irep_idt &func) : function(func), src(nullptr)
   {
   }
+
+  stack_framet &operator=(const stack_ framet &) = default;
   stack_framet(const stack_framet &ref)
   {
     *this = ref;
