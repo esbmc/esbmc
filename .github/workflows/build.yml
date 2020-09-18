@@ -15,7 +15,7 @@ jobs:
     steps:      
     - uses: actions/checkout@v1
     - name: Install Dependencies
-      run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools && pip install toml
+      run: sudo apt-get update && sudo apt-get install csmith libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools && pip install toml
     - name: Download Clang 9
       run: wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
     - name: Extract Clang 9
@@ -35,7 +35,7 @@ jobs:
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
+      run: mkdir build && cd build && cmake .. -GNinja -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
     - name: Build ESBMC
       run: cd build && cmake --build . && ninja install
     - uses: actions/upload-artifact@v1
@@ -43,7 +43,12 @@ jobs:
         name: release-linux
         path: ./release
     - name: Run tests
-      run: cd build/regression && ctest -j4 --output-on-failure --progress . 
+      run: cd build/ && ctest -j4 --output-on-failure --progress . 
+    - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
+      with:
+        name: csmith-linux
+        path: ./build/csmith-error
+        if-no-files-found: ignore
 
   build-macos:  
     name: Build ESBMC with all Solvers (macOS)
@@ -54,7 +59,7 @@ jobs:
         with:
           java-version: '9.0.4'
       - name: Install Dependencies
-        run: brew install gmp cmake boost ninja python3 automake && pip3 install PySMT toml
+        run: brew install gmp csmith cmake boost ninja python3 automake && pip3 install PySMT toml
       - name: Download Clang 9
         run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-9.0.1/clang+llvm-9.0.1-x86_64-apple-darwin.tar.xz
       - name: Extract Clang 9
@@ -75,7 +80,7 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
+        run: mkdir build && cd build && cmake .. -GNinja -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
       - name: Build ESBMC
         run: cd build && cmake --build . && cmake --install .
       - uses: actions/upload-artifact@v1
@@ -83,4 +88,9 @@ jobs:
           name: release-macos
           path: ./release
       - name: Run tests
-        run: cd build/regression && chmod +x macos-wrapper.sh && ctest -j4 --output-on-failure --progress .
+        run: cd build/ && chmod +x macos-wrapper.sh && ctest -j2 --output-on-failure --progress . 
+      - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
+        with:
+          name: csmith-macos
+          path: ./build/csmith-error
+          if-no-files-found: ignore

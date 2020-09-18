@@ -26,7 +26,6 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
-#include <ansi-c/c_preprocess.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
@@ -56,6 +55,10 @@ extern "C"
 #include <util/symbol.h>
 #include <sys/wait.h>
 #include <util/time_stopping.h>
+
+#ifdef ENABLE_OLD_FRONTEND
+#include <ansi-c/c_preprocess.h>
+#endif
 
 enum PROCESS_TYPE
 {
@@ -1523,11 +1526,11 @@ void esbmc_parseoptionst::preprocessing()
       error("failed to open input file");
       return;
     }
-
+#ifdef ENABLE_OLD_FRONTEND
     if(c_preprocess(filename, std::cout, false, *get_message_handler()))
       error("PREPROCESSING ERROR");
+#endif
   }
-
   catch(const char *e)
   {
     error(e);

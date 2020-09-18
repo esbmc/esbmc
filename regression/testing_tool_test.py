@@ -6,7 +6,7 @@ class CTestGeneration(unittest.TestCase):
     """This will parse a directory containing C tests and will check for a min/max"""
 
     def test_quantity(self):
-        minimum = 500
+        minimum = 400
         maximum = 5000
         actual = len(get_test_objects("./esbmc"))
         self.assertGreater(actual, minimum)
@@ -48,9 +48,9 @@ class CTest1(ParseTest):
 
     def setUp(self):
         self.test_case: CTestCase = CTestCase(
-            "./esbmc/00_bbuf_02", "00_bbuf_02")
+            "./esbmc-unix/00_bbuf_02", "00_bbuf_02")
         self.test_parsed: CTestCase = TestParser.from_file(
-            "./esbmc/00_bbuf_02", "00_bbuf_02")
+            "./esbmc-unix/00_bbuf_02", "00_bbuf_02")
 
     def _read_file_checks(self, test_obj):
         self.assertEqual(test_obj.test_mode, "CORE")
@@ -90,9 +90,9 @@ class CTest3(ParseTest):
 
     def setUp(self):
         self.test_case: CTestCase = CTestCase(
-            "./esbmc/00_account_02", "00_account_02")
+            "./esbmc-unix/00_account_02", "00_account_02")
         self.test_parsed: CTestCase = TestParser.from_file(
-            "./esbmc/00_account_02", "00_account_02")
+            "./esbmc-unix/00_account_02", "00_account_02")
 
     def _read_file_checks(self, test_obj: BaseTest):
         self.assertEqual(self.test_case.test_mode, "CORE")
