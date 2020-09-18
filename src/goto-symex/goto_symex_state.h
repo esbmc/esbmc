@@ -184,9 +184,6 @@ public:
      *  resulting function invocations with. */
     expr2tc orig_func_ptr_call;
 
-    /** The stack size of the frame. */
-    unsigned stack_frame_total;
-
     /**
      * Process a block adding the width of each symbol into the stack length
      * @param expr Expr to search for symbols.
@@ -220,6 +217,9 @@ public:
 
     /** Record if the function body is hidden */
     bool hidden;
+
+    /** The stack size of the frame. */
+    unsigned stack_frame_total;
 
     framet(unsigned int thread_id)
       : return_value(expr2tc()), hidden(false), stack_frame_total(0)
