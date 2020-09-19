@@ -8,12 +8,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 extern "C"
 {
-#include <unistd.h>
-
 #ifdef _WIN32
 #include <windows.h>
 #include <io.h>
 #undef small // MinGW header workaround
+#else
+#include <unistd.h>
 #endif
 }
 
