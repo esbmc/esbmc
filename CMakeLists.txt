@@ -34,6 +34,7 @@ include(CheckIncludeFile)
 check_include_file(unistd.h HAVE_UNISTD)
 
 include(Utils)
+include(OSConfiguration)
 include(Options)
 include(SendFileHack)
 include(AppleConfiguration)
