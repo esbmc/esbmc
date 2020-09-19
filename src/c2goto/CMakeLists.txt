@@ -2,8 +2,7 @@ add_executable(c2goto c2goto.cpp cprover_blank_library.cpp)
 target_include_directories(c2goto
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_link_libraries(c2goto clangcfrontend gotoprograms langapi "${Boost_LIBRARIES}")
-
+target_link_libraries(c2goto clangcfrontend gotoprograms langapi ${Boost_LIBRARIES})
 add_subdirectory (headers)
 
 if(DEFINED C2GOTO_INCLUDE_DIR)
@@ -12,15 +11,19 @@ else()
   set(multiarch "/usr/include/${CMAKE_LIBRARY_ARCHITECTURE}")
 endif()
 
-set (clib32_config clib32.c "--32 --fixedbv -D__ESBMC_FIXEDBV")
-set (clib64_config clib64.c "--64 --fixedbv -D__ESBMC_FIXEDBV")
-set (clib32f_config clib32_fp.c "--32 --floatbv")
-set (clib64f_config clib64_fp.c "--64 --floatbv")
+set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
+set (clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
+set (clib32f_config clib32_fp.c --32 --floatbv)
+set (clib64f_config clib64_fp.c --64 --floatbv)
 
 set (inputs clib32_config clib64_config clib32f_config clib64f_config)
 
 function(mangle_clib output)
   set(result "")
+   file(GLOB c2goto_library_files
+    "${CMAKE_CURRENT_SOURCE_DIR}/library/*.c")
+  file(GLOB c2goto_libm_files
+    "${CMAKE_CURRENT_SOURCE_DIR}/library/libm/*.c")
   foreach(in_f ${ARGN})
     set (in_f "${${in_f}}")
     list(GET in_f 0 in_file)
@@ -32,8 +35,8 @@ function(mangle_clib output)
     set(out_file "${CMAKE_CURRENT_BINARY_DIR}/${out_file}")
 
     add_custom_command(OUTPUT ${out_goto}
-      COMMAND sh -c "${CMAKE_CURRENT_BINARY_DIR}/c2goto -I ${multiarch} ${CMAKE_CURRENT_SOURCE_DIR}/library/*.c ${LIBM_PATTERN} ${in_flags} --output ${out_goto}"
-      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/c2goto
+      COMMAND c2goto -I ${multiarch} ${OS_C2GOTO_FLAGS} ${c2goto_library_files} ${in_flags} --output ${out_goto}
+      DEPENDS c2goto
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generating libc model ${out_goto}"
       VERBATIM
