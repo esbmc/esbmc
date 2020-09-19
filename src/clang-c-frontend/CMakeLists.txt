@@ -7,7 +7,7 @@ target_include_directories(clangcfrontend_stuff
     PRIVATE ${CLANG_INCLUDE_DIRS}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_precompile_headers(clangcfrontend_stuff PRIVATE ${CMAKE_SOURCE_DIR}/src/util/irep2.h)
+target_precompile_headers(clangcfrontend_stuff PUBLIC ${CMAKE_SOURCE_DIR}/src/util/irep2.h)
 target_link_libraries(clangcfrontend_stuff gotoprograms clangTooling)
 
 add_library(clangcfrontend INTERFACE)
