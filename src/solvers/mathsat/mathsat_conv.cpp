@@ -656,13 +656,6 @@ smt_astt mathsat_convt::mk_smt_int(const BigInt &theint)
   return new_ast(t, s);
 }
 
-smt_astt mathsat_convt::mk_smt_string(const std::string &str
-                                      __attribute__((unused)))
-{
-  std::cerr << "MathSAT can't create String sorts" << std::endl;
-  abort();
-}
-
 smt_astt mathsat_convt::mk_smt_real(const std::string &str)
 {
   msat_term t = msat_make_number(env, str.c_str());
@@ -855,37 +848,6 @@ smt_astt mathsat_convt::mk_concat(smt_astt a, smt_astt b)
   smt_sortt s =
     mk_bv_sort(a->sort->get_data_width() + b->sort->get_data_width());
   return new_ast(t, s);
-}
-
-smt_astt mathsat_convt::mk_str_concat(smt_astt a, smt_astt b)
-{
-  std::cerr << "MathSAT can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt mathsat_convt::mk_str_concat(smt_astt a, smt_astt b, smt_astt c)
-{
-  std::cerr << "MathSAT can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt
-mathsat_convt::mk_str_extract(smt_astt s, smt_astt offset, smt_astt length)
-{
-  std::cerr << "MathSAT can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt mathsat_convt::mk_str_length(smt_astt a)
-{
-  std::cerr << "MathSAT can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt mathsat_convt::mk_str_at(smt_astt s, smt_astt index)
-{
-  std::cerr << "MathSAT can't support String sorts" << std::endl;
-  abort();
 }
 
 smt_astt mathsat_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)

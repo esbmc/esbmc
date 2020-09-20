@@ -76,7 +76,6 @@ public:
 
   smt_astt mk_smt_int(const BigInt &theint) override;
   smt_astt mk_smt_real(const std::string &str) override;
-  smt_astt mk_smt_string(const std::string &str);
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
@@ -88,12 +87,6 @@ public:
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
-  smt_astt mk_str_concat(smt_astt a, smt_astt b) override;
-  smt_astt mk_str_concat(smt_astt a, smt_astt b, smt_astt c) override;
-  smt_astt
-  mk_str_extract(smt_astt s, smt_astt offset, smt_astt length) override;
-  smt_astt mk_str_length(smt_astt a) override;
-  smt_astt mk_str_at(smt_astt s, smt_astt index) override;
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
   smt_astt

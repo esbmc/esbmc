@@ -1026,13 +1026,6 @@ smt_astt cvc_convt::mk_smt_real(const std::string &str)
   return new_ast(em.mkConst(CVC4::Rational(str)), s);
 }
 
-smt_astt cvc_convt::mk_smt_string(const std::string &str
-                                  __attribute__((unused)))
-{
-  std::cerr << "CVC can't create String sorts" << std::endl;
-  abort();
-}
-
 smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
   smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);
@@ -1190,36 +1183,6 @@ smt_astt cvc_convt::mk_concat(smt_astt a, smt_astt b)
     to_solver_smt_ast<cvc_smt_ast>(b)->a);
 
   return new_ast(e, s);
-}
-
-smt_astt cvc_convt::mk_str_concat(smt_astt a, smt_astt b)
-{
-  std::cerr << "CVC can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_str_concat(smt_astt a, smt_astt b, smt_astt c)
-{
-  std::cerr << "CVC can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_str_extract(smt_astt s, smt_astt offset, smt_astt length)
-{
-  std::cerr << "CVC can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_str_length(smt_astt a)
-{
-  std::cerr << "CVC can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_str_at(smt_astt s, smt_astt index)
-{
-  std::cerr << "CVC can't support String sorts" << std::endl;
-  abort();
 }
 
 smt_astt cvc_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)

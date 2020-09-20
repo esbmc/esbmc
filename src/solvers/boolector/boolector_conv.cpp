@@ -489,13 +489,6 @@ smt_astt boolector_convt::mk_smt_int(const BigInt &theint
   abort();
 }
 
-smt_astt boolector_convt::mk_smt_string(const std::string &str
-                                        __attribute__((unused)))
-{
-  std::cerr << "Boolector can't create String sorts" << std::endl;
-  abort();
-}
-
 smt_astt boolector_convt::mk_smt_real(const std::string &str
                                       __attribute__((unused)))
 {
@@ -601,37 +594,6 @@ smt_astt boolector_convt::mk_concat(smt_astt a, smt_astt b)
       to_solver_smt_ast<btor_smt_ast>(a)->a,
       to_solver_smt_ast<btor_smt_ast>(b)->a),
     s);
-}
-
-smt_astt boolector_convt::mk_str_concat(smt_astt a, smt_astt b)
-{
-  std::cerr << "Boolector can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_str_concat(smt_astt a, smt_astt b, smt_astt c)
-{
-  std::cerr << "Boolector can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt
-boolector_convt::mk_str_extract(smt_astt s, smt_astt offset, smt_astt length)
-{
-  std::cerr << "Boolector can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_str_length(smt_astt a)
-{
-  std::cerr << "Boolector can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_str_at(smt_astt s, smt_astt index)
-{
-  std::cerr << "Boolector can't support String sorts" << std::endl;
-  abort();
 }
 
 smt_astt boolector_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)

@@ -777,13 +777,6 @@ smt_astt smtlib_convt::mk_smt_int(const BigInt &theint)
   return a;
 }
 
-smt_astt smtlib_convt::mk_smt_string(const std::string &str
-                                     __attribute__((unused)))
-{
-  std::cerr << "SMTLib can't create String sorts" << std::endl;
-  abort();
-}
-
 smt_astt smtlib_convt::mk_smt_real(const std::string &str)
 {
   smt_sortt s = mk_real_sort();
@@ -893,37 +886,6 @@ smt_astt smtlib_convt::mk_concat(smt_astt a, smt_astt b)
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
-}
-
-smt_astt smtlib_convt::mk_str_concat(smt_astt a, smt_astt b)
-{
-  std::cerr << "SMTLib can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt smtlib_convt::mk_str_concat(smt_astt a, smt_astt b, smt_astt c)
-{
-  std::cerr << "SMTLib can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt
-smtlib_convt::mk_str_extract(smt_astt s, smt_astt offset, smt_astt length)
-{
-  std::cerr << "SMTLib can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt smtlib_convt::mk_str_length(smt_astt a)
-{
-  std::cerr << "SMTLib can't support String sorts" << std::endl;
-  abort();
-}
-
-smt_astt smtlib_convt::mk_str_at(smt_astt s, smt_astt index)
-{
-  std::cerr << "SMTLib can't support String sorts" << std::endl;
-  abort();
 }
 
 smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
