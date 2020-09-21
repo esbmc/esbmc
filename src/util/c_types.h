@@ -47,6 +47,7 @@ type2tc long_double_type2();
 typet size_type();
 typet signed_size_type();
 typet bool_type();
+typet pointer_diff_type();
 
 typet pointer_type();
 type2tc pointer_type2();

@@ -277,9 +277,64 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
       expr.id() == "+" || expr.id() == "-" || expr.id() == "*" ||
       expr.id() == "/")
     {
+      if(type0.id() == "pointer" || type1.id() == "pointer")
+      {
+        adjust_expr_pointer_arithmetic(expr);
+        return;
+      }
+
       adjust_float_arith(expr);
       return;
     }
+  }
+}
+
+void clang_c_adjust::adjust_expr_pointer_arithmetic(exprt &expr)
+{
+  exprt &op0 = expr.op0();
+  exprt &op1 = expr.op1();
+
+  const typet &type0 = op0.type();
+  const typet &type1 = op1.type();
+
+  if(
+    expr.id() == "-" ||
+    (expr.id() == "sideeffect" && expr.statement() == "assign-"))
+  {
+    if(type0.id() == "pointer" && type1.id() == "pointer")
+    {
+      expr.type() = pointer_diff_type();
+      return;
+    }
+
+    if(type0.id() == "pointer")
+    {
+      gen_typecast(ns, op1, index_type());
+      expr.type() = type0;
+      return;
+    }
+  }
+  else if(
+    expr.id() == "+" ||
+    (expr.id() == "sideeffect" && expr.statement() == "assign+"))
+  {
+    exprt *pop, *intop;
+
+    if(type0.id() == "pointer")
+    {
+      pop = &op0;
+      intop = &op1;
+    }
+    else if(type1.id() == "pointer")
+    {
+      pop = &op1;
+      intop = &op0;
+    }
+    else
+      abort();
+
+    gen_typecast(ns, *intop, index_type());
+    expr.type() = pop->type();
   }
 }
 
@@ -525,21 +580,40 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     if(is_number(op1.type()))
     {
       if(statement == "assign_shl")
-      {
         return;
-      }
 
       if(type0.id() == "unsignedbv")
       {
         expr.statement("assign_lshr");
         return;
       }
+
       if(type0.id() == "signedbv")
       {
         expr.statement("assign_ashr");
         return;
       }
     }
+  }
+  else
+  {
+    if(
+      type0.id() == "pointer" &&
+      (statement == "assign-" || statement == "assign+"))
+    {
+      adjust_expr_pointer_arithmetic(expr);
+      return;
+    }
+
+    if(type0.is_bool())
+    {
+      gen_typecast_arithmetic(ns, op1);
+      return;
+    }
+
+    gen_typecast(ns, op1, op0.type());
+    if(is_number(op0.type()))
+      expr.type() = type0;
   }
 }
 
