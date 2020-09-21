@@ -28,7 +28,6 @@ public:
     unsigned single_width;
     unsigned double_width;
     unsigned long_double_width;
-    unsigned pointer_diff_width;
     unsigned word_size;
     unsigned wchar_t_width;
 

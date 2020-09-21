@@ -118,8 +118,19 @@ type2tc uint_type2()
 
 typet bool_type()
 {
-  typet result = bool_typet();
-  return result;
+  return bool_typet();
+}
+
+typet pointer_diff_type()
+{
+  if(config.ansi_c.pointer_width == config.ansi_c.int_width)
+    return int_type();
+
+  if(config.ansi_c.pointer_width == config.ansi_c.long_int_width)
+    return long_int_type();
+
+  assert(config.ansi_c.pointer_width == config.ansi_c.long_long_int_width);
+  return long_long_int_type();
 }
 
 typet long_int_type()

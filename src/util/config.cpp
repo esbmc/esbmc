@@ -21,7 +21,6 @@ void configt::ansi_ct::set_16()
   short_int_width = 2 * 8;
   long_long_int_width = 8 * 8;
   pointer_width = 4 * 8;
-  pointer_diff_width = 4 * 8;
   single_width = 4 * 8;
   double_width = 8 * 8;
   long_double_width = 8 * 8;
@@ -40,7 +39,6 @@ void configt::ansi_ct::set_32()
   short_int_width = 2 * 8;
   long_long_int_width = 8 * 8;
   pointer_width = 4 * 8;
-  pointer_diff_width = 4 * 8;
   single_width = 4 * 8;
   double_width = 8 * 8;
   long_double_width = 12 * 8;
@@ -59,7 +57,6 @@ void configt::ansi_ct::set_64()
   short_int_width = 2 * 8;
   long_long_int_width = 8 * 8;
   pointer_width = 8 * 8;
-  pointer_diff_width = 8 * 8;
   single_width = 4 * 8;
   double_width = 8 * 8;
   long_double_width = 16 * 8;
