@@ -212,10 +212,46 @@ void goto_checkt::overflow_check(
   if(is_pointer_type(*expr->get_sub_expr(0)))
     return;
 
+  expr2tc new_expr = expr;
+
+  if(is_add2t(expr) || is_sub2t(expr) || is_mul2t(expr) || is_shl2t(expr))
+  {
+    expr2tc side_1 = *expr->get_sub_expr(0);
+    expr2tc side_2 = *expr->get_sub_expr(1);
+
+    if(side_1->type != side_2->type)
+    {
+      typecast2tc casted_size_2(side_1->type, side_2);
+
+      switch(expr->expr_id)
+      {
+      case expr2t::add_id:
+        new_expr = add2tc(side_1->type, side_1, casted_size_2);
+        break;
+
+      case expr2t::sub_id:
+        new_expr = sub2tc(side_1->type, side_1, casted_size_2);
+        break;
+
+      case expr2t::mul_id:
+        new_expr = mul2tc(side_1->type, side_1, casted_size_2);
+        break;
+
+      case expr2t::shl_id:
+        new_expr = shl2tc(side_1->type, side_1, casted_size_2);
+        break;
+
+      default:
+        abort();
+      }
+    }
+  }
+
   // add overflow subgoal
-  expr2tc overflow = is_neg2t(expr)
-                       ? expr2tc(new overflow_neg2t(to_neg2t(expr).value))
-                       : expr2tc(new overflow2t(expr));
+  expr2tc overflow = is_neg2t(new_expr)
+                       ? expr2tc(new overflow_neg2t(to_neg2t(new_expr).value))
+                       : expr2tc(new overflow2t(new_expr));
+
   make_not(overflow);
 
   add_guarded_claim(
