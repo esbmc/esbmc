@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 main.c
---floatbv --overflow-check --mathsat
+--floatbv --overflow-check --mathsat --32
 ^VERIFICATION FAILED$
