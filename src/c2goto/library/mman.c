@@ -23,7 +23,7 @@ int munmap(void *addr, size_t length)
 {
 __ESBMC_HIDE:;
   (void)length;
-  if(addr)
+  if(addr && addr != MAP_FAILED)
   {
     free(addr);
     return 0;
