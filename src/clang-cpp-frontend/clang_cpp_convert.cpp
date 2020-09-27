@@ -1,10 +1,15 @@
 #include "clang_cpp_convert.h"
 
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclFriend.h>
 #include <clang/AST/DeclTemplate.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/StmtCXX.h>
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 #include <util/expr_util.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
@@ -258,7 +263,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 
 bool clang_cpp_convertert::get_struct_union_class_methods(
   const clang::RecordDecl &recordd,
-  struct_union_typet &type)
+  struct_union_typet &)
 {
   // If a struct is defined inside a extern C, it will be a RecordDecl
   const clang::CXXRecordDecl *cxxrd =
@@ -541,7 +546,7 @@ template <typename SpecializationDecl>
 bool clang_cpp_convertert::get_template_decl_specialization(
   const SpecializationDecl *D,
   bool DumpExplicitInst,
-  bool DumpRefOnly,
+  bool,
   exprt &new_expr)
 {
   for(auto *redecl_with_bad_type : D->redecls())

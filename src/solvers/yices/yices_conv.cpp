@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <sstream>
 #include <yices_conv.h>
-
+#include <assert.h>
 // From yices 2.3 (I think) various API calls have had new non-binary
 // operand versions added. The maintainers have chosen to break backwards
 // compatibility in the process by moving the old functions to new names, and
@@ -655,6 +655,7 @@ smt_astt yices_convt::mk_select(smt_astt a, smt_astt b)
     a->sort->get_range_sort());
 }
 
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 smt_astt yices_convt::mk_isint(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
@@ -662,6 +663,7 @@ smt_astt yices_convt::mk_isint(smt_astt a)
             << "therefore certain casts and operations don't work, sorry\n";
   abort();
 }
+#pragma GCC diagnostic pop
 
 smt_astt yices_convt::mk_smt_int(const BigInt &theint)
 {
@@ -779,6 +781,10 @@ yices_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return default_convert_array_of(init_val, domain_width, this);
 }
 
+// Hack for GCC 7.3.0, in 9.3 this gives no warnings
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 bool yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
@@ -787,6 +793,8 @@ bool yices_convt::get_bool(smt_astt a)
   assert(!res && "Can't get boolean value from Yices");
   return val ? true : false;
 }
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 
 BigInt yices_convt::get_bv(smt_astt a)
 {

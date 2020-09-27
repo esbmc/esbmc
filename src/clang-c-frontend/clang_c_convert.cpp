@@ -1,8 +1,14 @@
+// Remove warnings from Clang headers
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <clang/AST/Attr.h>
 #include <clang/AST/QualTypeNames.h>
 #include <clang/Index/USRGeneration.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
 #include <util/c_types.h>
@@ -334,8 +340,8 @@ bool clang_c_convertert::get_struct_union_class_fields(
 }
 
 bool clang_c_convertert::get_struct_union_class_methods(
-  const clang::RecordDecl &recordd,
-  struct_union_typet &type)
+  const clang::RecordDecl &,
+  struct_union_typet &)
 {
   // We don't add methods to the struct in C
   return false;
@@ -419,9 +425,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
-bool clang_c_convertert::get_function(
-  const clang::FunctionDecl &fd,
-  exprt &new_expr)
+bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 {
   // Don't convert if clang thinks that the functions was implicitly converted
   if(fd.isImplicit())

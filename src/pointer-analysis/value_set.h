@@ -173,6 +173,8 @@ public:
     {
     }
 
+    object_map_dt &operator=(const object_map_dt &other) = default;
+
     object_map_dt(const object_map_dt &ref)
     {
       *this = ref;

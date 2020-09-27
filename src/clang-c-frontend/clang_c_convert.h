@@ -4,9 +4,14 @@
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <clang/AST/Expr.h>
 #include <clang/AST/Type.h>
 #include <clang/Frontend/ASTUnit.h>
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_types.h>
