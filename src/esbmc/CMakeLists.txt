@@ -1,9 +1,3 @@
-if(ENABLE_OLD_FRONTEND)
-  set(OLD_FRONTEND_TARGETS ansicfrontend cppfrontend)
-else()
-  set(OLD_FRONTEND_TARGETS "")
-endif()
-
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
   COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/buildidobj.py ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
