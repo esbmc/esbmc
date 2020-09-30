@@ -1,12 +1,5 @@
-if(ENABLE_OLD_FRONTEND)
-  set(BUILD_OBJ_OLD_TARGETS ansicfrontend cppfrontend)
-else()
-set(BUILD_OBJ_OLD_TARGETS "")
-endif()
-
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
-  COMMAND ${CMAKE_SOURCE_DIR}/scripts/buildidobj.sh ${CMAKE_CURRENT_BINARY_DIR}
-  DEPENDS ${BUILD_OBJ_OLD_TARGETS} main.cpp esbmc_parseoptions.cpp bmc.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp  clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs # Depends on... everything else linked into esbmc. Add more as necessary.
+  COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/buildidobj.py ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   COMMENT "Generating ESBMC version ID"
   VERBATIM
