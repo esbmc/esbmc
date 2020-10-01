@@ -3,6 +3,7 @@
 #define __declspec /* hacks */
 #endif
 
+#define _INC_TIME_INL
 #include <time.h>
 #undef time
 

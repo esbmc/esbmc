@@ -1,5 +1,6 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <fenv.h>
 
