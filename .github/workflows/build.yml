@@ -87,3 +87,49 @@ jobs:
           name: csmith-macos
           path: ./build/csmith-error
           if-no-files-found: ignore
+
+  build-windows:
+    name: Build ESBMC with all Solvers (Windows)
+    runs-on: windows-latest
+    steps:
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - name: check python
+      run: python --version
+    - name: Make git use LF only
+      run: |
+        git config --system core.autocrlf false
+        git config --system core.eol lf
+    - uses: actions/checkout@v1
+    - name: Instal gnu tools (od)
+      run: choco install -y gnuwin32-coreutils.portable
+    - name: Check if od is on path
+      run: od.exe --version
+    - name: Check flail
+      run: |
+        python scripts/flail.py src/clang-c-frontend/headers/clang_stdint.hs out.c
+        cat out.c    
+    - name: Prepare Environment
+      run: .\scripts\configure_environment.ps1
+    - name: Update vcpkg
+      run: |
+        vcpkg.exe update
+        cd C:/vcpkg
+        git.exe pull
+    - name: vcpkg integrate
+      run: vcpkg.exe integrate install    
+    - name: Install Boost
+      run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows
+    - name: Install Bison/Flex
+      run: choco install -y winflexbison
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake.exe .. -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:/deps/clang/llvm9d -DClang_DIR=C:/deps/clang/llvm9d
+    - name: Build ESBMC
+      run: |
+        cd build
+        cmake --build .
