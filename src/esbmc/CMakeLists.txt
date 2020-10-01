@@ -1,3 +1,9 @@
+if(ENABLE_OLD_FRONTEND)
+  set(OLD_FRONTEND_TARGETS ansicfrontend cppfrontend)
+else()
+  set(OLD_FRONTEND_TARGETS "")
+endif()
+
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
   COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/buildidobj.py ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -19,6 +25,6 @@ target_include_directories(esbmc
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_link_libraries(esbmc ${BUILD_OBJ_OLD_TARGETS} clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs)
+target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs)
 
 install(TARGETS esbmc DESTINATION bin)
