@@ -10,7 +10,7 @@ endif()
 
 
 if(ENABLE_Z3)
-    find_library(Z3_LIB z3 HINTS ${Z3_DIR} $ENV{HOME}/z3 PATH_SUFFIXES lib bin)
+    find_library(Z3_LIB z3 libz3 HINTS ${Z3_DIR} $ENV{HOME}/z3 PATH_SUFFIXES lib bin)
     find_path(Z3_INCLUDE_DIRS z3.h HINTS ${Z3_DIR} $ENV{HOME}/z3 PATH_SUFFIXES include)
 
     if(Z3_INCLUDE_DIRS STREQUAL "Z3_INCLUDE_DIRS-NOTFOUND")
@@ -23,7 +23,7 @@ if(ENABLE_Z3)
 
     try_run(Z3_RUNS Z3_COMPILES ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/try_z3.c
             CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${Z3_INCLUDE_DIRS}
-            LINK_LIBRARIES ${Z3_LIB} stdc++ m -pthread
+            LINK_LIBRARIES ${Z3_LIB} ${OS_Z3_LIBS}
             COMPILE_OUTPUT_VARIABLE Z3COMPILESTR
             RUN_OUTPUT_VARIABLE Z3_VERSION)
 
@@ -53,6 +53,13 @@ if(ENABLE_Z3)
     endif ()
     # Add to solver link
     target_link_libraries(solvers INTERFACE solverz3)
+
+    # Install dll for Windows
+    if(WIN32)
+        find_file(Z3_DLL libz3.dll HINTS ${Z3_DIR} $ENV{HOME}/z3 PATH_SUFFIXES lib bin)
+        message(STATUS "Windows will install ${Z3_DLL}")
+        install(FILES ${Z3_DLL} DESTINATION bin)
+    endif()
     
     set(ESBMC_ENABLE_z3 1 PARENT_SCOPE)
     set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} z3" PARENT_SCOPE)
