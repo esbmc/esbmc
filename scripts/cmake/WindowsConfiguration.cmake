@@ -18,7 +18,6 @@ if (WIN32)
   set(OS_X86_INCLUDE_FOLDER "C:/")
   set(OS_C2GOTO_FLAGS "-D_MSVC")
 
-
   if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 	  # There are a LOT of warnings from clang headers
 	  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-everything")
