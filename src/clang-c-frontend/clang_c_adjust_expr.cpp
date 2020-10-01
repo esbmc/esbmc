@@ -553,6 +553,11 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
       }
     }
   }
+  else if(type0.is_bool())
+  {
+    gen_typecast_arithmetic(ns, op1);
+    return;
+  }
 }
 
 void clang_c_adjust::adjust_side_effect_function_call(
