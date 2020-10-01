@@ -1,6 +1,6 @@
 name: Build All Solvers
 
-on: 
+on:
   push:
     branches:
       - master
@@ -12,7 +12,7 @@ jobs:
   build-linux:
     name: Build ESBMC with all Solvers (Linux)
     runs-on: ubuntu-20.04
-    steps:      
+    steps:
     - uses: actions/checkout@v1
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install csmith libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev && pip install toml
@@ -41,14 +41,14 @@ jobs:
         name: release-linux
         path: ./release
     - name: Run tests
-      run: cd build/ && ctest -j4 --output-on-failure --progress . 
+      run: cd build/ && ctest -j4 --output-on-failure --progress .
     - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
       with:
         name: csmith-linux
         path: ./build/csmith-error
         if-no-files-found: ignore
 
-  build-macos:  
+  build-macos:
     name: Build ESBMC with all Solvers (macOS)
     runs-on: macos-latest
     steps:
@@ -81,7 +81,7 @@ jobs:
           name: release-macos
           path: ./release
       - name: Run tests
-        run: cd build/ && chmod +x macos-wrapper.sh && ctest -j2 --output-on-failure --progress . 
+        run: cd build/ && chmod +x macos-wrapper.sh && ctest -j2 --output-on-failure --progress .
       - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
         with:
           name: csmith-macos
@@ -110,7 +110,7 @@ jobs:
     - name: Check flail
       run: |
         python scripts/flail.py src/clang-c-frontend/headers/clang_stdint.hs out.c
-        cat out.c    
+        cat out.c
     - name: Prepare Environment
       run: .\scripts\configure_environment.ps1
     - name: Update vcpkg
@@ -119,7 +119,7 @@ jobs:
         cd C:/vcpkg
         git.exe pull
     - name: vcpkg integrate
-      run: vcpkg.exe integrate install    
+      run: vcpkg.exe integrate install
     - name: Install Boost
       run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows
     - name: Install Bison/Flex
