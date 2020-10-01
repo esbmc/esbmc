@@ -4,7 +4,11 @@
 #include <list>
 #include <solvers/smt/smt_conv.h>
 #include <string>
+#ifdef _WIN32
+typedef uint64_t pid_t;
+#else
 #include <unistd.h>
+#endif
 #include <util/irep2.h>
 
 /** Identifiers for SMT functions.
