@@ -6,6 +6,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <clang/Frontend/ASTUnit.h>
+#pragma GCC diagnostic pop
+
 #include <AST/build_ast.h>
 #include <ansi-c/c_preprocess.h>
 #include <boost/filesystem.hpp>
