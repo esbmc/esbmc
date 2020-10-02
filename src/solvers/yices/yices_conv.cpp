@@ -655,15 +655,12 @@ smt_astt yices_convt::mk_select(smt_astt a, smt_astt b)
     a->sort->get_range_sort());
 }
 
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-smt_astt yices_convt::mk_isint(smt_astt a)
+smt_astt yices_convt::mk_isint(smt_astt)
 {
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   std::cerr << "Yices does not support an is-integer operation on reals, "
             << "therefore certain casts and operations don't work, sorry\n";
   abort();
 }
-#pragma GCC diagnostic pop
 
 smt_astt yices_convt::mk_smt_int(const BigInt &theint)
 {
