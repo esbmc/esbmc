@@ -4,19 +4,41 @@
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#include <clang/AST/Expr.h>
-#include <clang/AST/Type.h>
-#include <clang/Frontend/ASTUnit.h>
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic pop
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_types.h>
 
 #define BITFIELD_MAX_FIELD 64
+
+// Forward dec, to avoid bringing in clang headers
+namespace clang
+{
+class ASTUnit;
+class ASTContext;
+class SourceManager;
+class FunctionDecl;
+class Decl;
+class VarDecl;
+class ParmVarDecl;
+class RecordDecl;
+class QualType;
+class Type;
+class BuiltinType;
+class Stmt;
+class BinaryOperator;
+class CompoundAssignOperator;
+class UnaryOperator;
+class AtomicExpr;
+class CastExpr;
+class NamedDecl;
+class PresumedLoc;
+class SourceLocation;
+class CharacterLiteral;
+class StringLiteral;
+class IntegerLiteral;
+class FloatingLiteral;
+class TagDecl;
+} // namespace clang
 
 class clang_c_convertert
 {

@@ -1,14 +1,17 @@
 // Remove warnings from Clang headers
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <clang/AST/Attr.h>
+#include <clang/AST/Expr.h>
 #include <clang/AST/QualTypeNames.h>
+#include <clang/AST/Type.h>
 #include <clang/Index/USRGeneration.h>
+#include <clang/Frontend/ASTUnit.h>
+#pragma GCC diagnostic pop
+
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic pop
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
 #include <util/c_types.h>
