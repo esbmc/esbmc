@@ -8,13 +8,12 @@
 #ifndef CLANG_C_FRONTEND_AST_ESBMC_ACTION_H_
 #define CLANG_C_FRONTEND_AST_ESBMC_ACTION_H_
 
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendActions.h>
 #include <clang/Lex/Preprocessor.h>
-#pragma GCC diagnostic pop
 #pragma GCC diagnostic pop
 #include <string>
 

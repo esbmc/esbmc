@@ -5,10 +5,8 @@
  *      Author: mramalho
  */
 
-#include <clang-c-frontend/AST/build_ast.h>
-#include <clang-c-frontend/AST/esbmc_action.h>
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <clang/Basic/Version.inc>
 #include <clang/Driver/Compilation.h>
@@ -24,7 +22,9 @@
 #include <llvm/Option/ArgList.h>
 #include <llvm/Support/Path.h>
 #pragma GCC diagnostic pop
-#pragma GCC diagnostic pop
+
+#include <clang-c-frontend/AST/build_ast.h>
+#include <clang-c-frontend/AST/esbmc_action.h>
 
 std::unique_ptr<clang::ASTUnit> buildASTs(
   const std::string &intrinsics,
