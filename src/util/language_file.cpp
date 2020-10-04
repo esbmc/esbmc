@@ -125,7 +125,7 @@ bool language_filest::final(contextt &context)
   return false;
 }
 
-bool language_filest::interfaces(contextt &context [[gnu::unused]])
+bool language_filest::interfaces(contextt &)
 {
 #if 0
   for(filemapt::iterator it=filemap.begin();

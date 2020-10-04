@@ -407,7 +407,7 @@ void goto_convertt::cpp_new_initializer(
 }
 
 void goto_convertt::do_exit(
-  const exprt &lhs [[gnu::unused]],
+  const exprt &,
   const exprt &function,
   const exprt::operandst &arguments,
   goto_programt &dest)
@@ -426,7 +426,7 @@ void goto_convertt::do_exit(
 }
 
 void goto_convertt::do_abort(
-  const exprt &lhs [[gnu::unused]],
+  const exprt &,
   const exprt &function,
   const exprt::operandst &arguments,
   goto_programt &dest)

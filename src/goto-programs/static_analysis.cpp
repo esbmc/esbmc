@@ -233,7 +233,7 @@ void static_analysis_baset::do_function_call(
   locationt l_call,
   const goto_functionst &goto_functions,
   const goto_functionst::function_mapt::const_iterator f_it,
-  const std::vector<expr2tc> &arguments [[gnu::unused]], // XXX -- why?
+  const std::vector<expr2tc> &, // XXX -- why?
   statet &new_state)
 {
   const goto_functiont &goto_function = f_it->second;

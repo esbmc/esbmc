@@ -314,8 +314,8 @@ void violation_graphml_goto_trace(
 
 void correctness_graphml_goto_trace(
   optionst &options,
-  const namespacet &ns [[gnu::unused]],
-  const goto_tracet &goto_trace [[gnu::unused]])
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
 {
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = verification_file;

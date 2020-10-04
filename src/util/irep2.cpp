@@ -700,7 +700,7 @@ type_poolt::type_poolt()
   // This space is deliberately left blank
 }
 
-type_poolt::type_poolt(bool yolo [[gnu::unused]])
+type_poolt::type_poolt(bool)
 {
   bool_type = type2tc(new bool_type2t());
   empty_type = type2tc(new empty_type2t());
@@ -763,9 +763,8 @@ type_poolt &type_poolt::operator=(type_poolt const &ref)
 }
 
 // XXX investigate performance implications of this cache
-static const type2tc &get_type_from_pool(
-  const typet &val,
-  std::map<typet, type2tc> &map [[gnu::unused]])
+static const type2tc &
+get_type_from_pool(const typet &val, std::map<typet, type2tc> &)
 {
 #if 0
   std::map<const typet, type2tc>::const_iterator it = map.find(val);
@@ -879,15 +878,13 @@ type_poolt type_pool;
 static_assert(type2t::end_type_id <= 256, "Type id overflow");
 static_assert(expr2t::end_expr_id <= 256, "Expr id overflow");
 
-static inline std::string
-type_to_string(const bool &thebool, int indent [[gnu::unused]])
+static inline std::string type_to_string(const bool &thebool, int)
 {
   return (thebool) ? "true" : "false";
 }
 
-static inline std::string type_to_string(
-  const sideeffect_data::allockind &data,
-  int indent [[gnu::unused]])
+static inline std::string
+type_to_string(const sideeffect_data::allockind &data, int)
 {
   return (data == sideeffect_data::allockind::malloc)
            ? "malloc"
@@ -909,17 +906,15 @@ static inline std::string type_to_string(
                                        : "unknown";
 }
 
-static inline std::string
-type_to_string(const unsigned int &theval, int indent [[gnu::unused]])
+static inline std::string type_to_string(const unsigned int &theval, int)
 {
   char buffer[64];
   snprintf(buffer, 63, "%d", theval);
   return std::string(buffer);
 }
 
-static inline std::string type_to_string(
-  const symbol_data::renaming_level &theval,
-  int indent [[gnu::unused]])
+static inline std::string
+type_to_string(const symbol_data::renaming_level &theval, int)
 {
   switch(theval)
   {
@@ -939,8 +934,7 @@ static inline std::string type_to_string(
   }
 }
 
-static inline std::string
-type_to_string(const BigInt &theint, int indent [[gnu::unused]])
+static inline std::string type_to_string(const BigInt &theint, int)
 {
   char buffer[256], *buf;
 
@@ -948,14 +942,12 @@ type_to_string(const BigInt &theint, int indent [[gnu::unused]])
   return std::string(buf);
 }
 
-static inline std::string
-type_to_string(const fixedbvt &theval, int indent [[gnu::unused]])
+static inline std::string type_to_string(const fixedbvt &theval, int)
 {
   return theval.to_ansi_c_string();
 }
 
-static inline std::string
-type_to_string(const ieee_floatt &theval, int indent [[gnu::unused]])
+static inline std::string type_to_string(const ieee_floatt &theval, int)
 {
   return theval.to_ansi_c_string();
 }
@@ -1035,8 +1027,7 @@ static inline std::string type_to_string(const type2tc &theval, int indent)
     return "";
 }
 
-static inline std::string
-type_to_string(const irep_idt &theval, int indent [[gnu::unused]])
+static inline std::string type_to_string(const irep_idt &theval, int)
 {
   return theval.as_string();
 }
@@ -1128,16 +1119,14 @@ static inline bool do_type_cmp(const irep_idt &side1, const irep_idt &side2)
   return (side1 == side2);
 }
 
-static inline bool do_type_cmp(
-  const type2t::type_ids &id [[gnu::unused]],
-  const type2t::type_ids &id2 [[gnu::unused]])
+static inline bool
+do_type_cmp(const type2t::type_ids &, const type2t::type_ids &)
 {
   return true; // Dummy field comparison.
 }
 
-static inline bool do_type_cmp(
-  const expr2t::expr_ids &id [[gnu::unused]],
-  const expr2t::expr_ids &id2 [[gnu::unused]])
+static inline bool
+do_type_cmp(const expr2t::expr_ids &, const expr2t::expr_ids &)
 {
   return true; // Dummy field comparison.
 }
@@ -1290,16 +1279,12 @@ static inline int do_type_lt(const irep_idt &side1, const irep_idt &side2)
   return 0;
 }
 
-static inline int do_type_lt(
-  const type2t::type_ids &id [[gnu::unused]],
-  const type2t::type_ids &id2 [[gnu::unused]])
+static inline int do_type_lt(const type2t::type_ids &, const type2t::type_ids &)
 {
   return 0; // Dummy field comparison
 }
 
-static inline int do_type_lt(
-  const expr2t::expr_ids &id [[gnu::unused]],
-  const expr2t::expr_ids &id2 [[gnu::unused]])
+static inline int do_type_lt(const expr2t::expr_ids &, const expr2t::expr_ids &)
 {
   return 0; // Dummy field comparison
 }
@@ -1510,9 +1495,7 @@ static inline size_t do_type_crc(const type2t::type_ids &i)
   return boost::hash<uint8_t>()(i);
 }
 
-static inline void do_type_hash(
-  const type2t::type_ids &i [[gnu::unused]],
-  crypto_hash &hash [[gnu::unused]])
+static inline void do_type_hash(const type2t::type_ids &, crypto_hash &)
 {
   // Dummy field crc
 }
@@ -1522,9 +1505,7 @@ static inline size_t do_type_crc(const expr2t::expr_ids &i)
   return boost::hash<uint8_t>()(i);
 }
 
-static inline void do_type_hash(
-  const expr2t::expr_ids &i [[gnu::unused]],
-  crypto_hash &hash [[gnu::unused]])
+static inline void do_type_hash(const expr2t::expr_ids &, crypto_hash &)
 {
   // Dummy field crc
 }
@@ -1542,32 +1523,28 @@ void do_type2string(
 
 template <>
 void do_type2string<type2t::type_ids>(
-  const type2t::type_ids &thething [[gnu::unused]],
-  unsigned int idx [[gnu::unused]],
-  std::string (&names)[esbmct::num_type_fields] [[gnu::unused]],
-  list_of_memberst &vec [[gnu::unused]],
-  unsigned int indent [[gnu::unused]])
+  const type2t::type_ids &,
+  unsigned int,
+  std::string (&)[esbmct::num_type_fields],
+  list_of_memberst &,
+  unsigned int)
 {
   // Do nothing; this is a dummy member.
 }
 
 template <>
 void do_type2string<const expr2t::expr_ids>(
-  const expr2t::expr_ids &thething [[gnu::unused]],
-  unsigned int idx [[gnu::unused]],
-  std::string (&names)[esbmct::num_type_fields] [[gnu::unused]],
-  list_of_memberst &vec [[gnu::unused]],
-  unsigned int indent [[gnu::unused]])
+  const expr2t::expr_ids &,
+  unsigned int,
+  std::string (&)[esbmct::num_type_fields],
+  list_of_memberst &,
+  unsigned int)
 {
   // Do nothing; this is a dummy member.
 }
 
 template <class T>
-bool do_get_sub_expr(
-  const T &item [[gnu::unused]],
-  unsigned int idx [[gnu::unused]],
-  unsigned int &it [[gnu::unused]],
-  const expr2tc *&ptr [[gnu::unused]])
+bool do_get_sub_expr(const T &, unsigned int, unsigned int &, const expr2tc *&)
 {
   return false;
 }
@@ -1613,11 +1590,7 @@ bool do_get_sub_expr<std::vector<expr2tc>>(
 // Non-const versions of the above.
 
 template <class T>
-bool do_get_sub_expr_nc(
-  T &item [[gnu::unused]],
-  unsigned int idx [[gnu::unused]],
-  unsigned int &it [[gnu::unused]],
-  expr2tc *&ptr [[gnu::unused]])
+bool do_get_sub_expr_nc(T &, unsigned int, unsigned int &, expr2tc *&)
 {
   return false;
 }
@@ -1661,14 +1634,13 @@ bool do_get_sub_expr_nc<std::vector<expr2tc>>(
 }
 
 template <class T>
-unsigned int do_count_sub_exprs(T &item [[gnu::unused]])
+unsigned int do_count_sub_exprs(T &)
 {
   return 0;
 }
 
 template <>
-unsigned int do_count_sub_exprs<const expr2tc>(const expr2tc &item
-                                               [[gnu::unused]])
+unsigned int do_count_sub_exprs<const expr2tc>(const expr2tc &)
 {
   return 1;
 }

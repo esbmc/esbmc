@@ -40,16 +40,12 @@ public:
 
   virtual ~abstract_domain_baset() = default;
 
-  virtual void output(
-    const namespacet &ns [[gnu::unused]],
-    std::ostream &out [[gnu::unused]]) const
+  virtual void output(const namespacet &, std::ostream &) const
   {
   }
 
-  virtual void get_reference_set(
-    const namespacet &ns [[gnu::unused]],
-    const expr2tc &expr [[gnu::unused]],
-    std::list<expr2tc> &dest [[gnu::unused]])
+  virtual void
+  get_reference_set(const namespacet &, const expr2tc &, std::list<expr2tc> &)
   {
     assert(0);
   };

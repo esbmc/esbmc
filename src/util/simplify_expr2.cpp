@@ -1363,8 +1363,9 @@ expr2tc bitnxor2t::do_simplify() const
 
 expr2tc bitnot2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op =
-    [](int64_t op1, int64_t op2 [[gnu::unused]]) { return ~(op1); };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t) {
+    return ~(op1);
+  };
 
   return do_bit_munge_operation<bitnot2t>(op, type, value, value);
 }
