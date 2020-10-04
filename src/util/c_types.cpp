@@ -18,7 +18,7 @@ typet build_float_type(unsigned width)
     fixedbv_typet result;
     result.set_width(width);
     result.set_integer_bits(width / 2);
-    return result;
+    return std::move(result);
   }
   floatbv_typet result;
   result.set_width(width);
@@ -44,7 +44,7 @@ typet build_float_type(unsigned width)
     assert(false);
   }
 
-  return result;
+  return std::move(result);
 }
 
 type2tc build_float_type2(unsigned width)
