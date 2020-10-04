@@ -134,9 +134,7 @@ void ingest_symbol(
 }
 
 #ifdef NO_CPROVER_LIBRARY
-void add_cprover_library(
-  contextt &context [[gnu::unused]],
-  message_handlert &message_handler [[gnu::unused]])
+void add_cprover_library(contextt &, message_handlert &)
 {
 }
 

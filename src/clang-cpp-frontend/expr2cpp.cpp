@@ -303,16 +303,12 @@ std::string expr2cppt::convert_rec(
     return expr2ct::convert_rec(src, qualifiers, declarator);
 }
 
-std::string expr2cppt::convert_cpp_this(
-  const exprt &src [[gnu::unused]],
-  unsigned precedence [[gnu::unused]])
+std::string expr2cppt::convert_cpp_this(const exprt &, unsigned)
 {
   return "this";
 }
 
-std::string expr2cppt::convert_cpp_new(
-  const exprt &src,
-  unsigned precedence [[gnu::unused]])
+std::string expr2cppt::convert_cpp_new(const exprt &src, unsigned)
 {
   std::string dest;
 
