@@ -30,6 +30,9 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer")
 endif()
 
+include(CheckIncludeFile)
+check_include_file(unistd.h HAVE_UNISTD)
+
 include(Utils)
 include(Options)
 include(SendFileHack)
