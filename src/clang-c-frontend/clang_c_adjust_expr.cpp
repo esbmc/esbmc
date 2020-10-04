@@ -1,10 +1,3 @@
-/*
- * clang_c_adjust.cpp
- *
- *  Created on: Aug 30, 2015
- *      Author: mramalho
- */
-
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>

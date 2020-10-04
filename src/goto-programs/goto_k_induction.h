@@ -1,10 +1,3 @@
-/*
- * goto_unwind.h
- *
- *  Created on: Jun 3, 2015
- *      Author: mramalho
- */
-
 #ifndef GOTO_PROGRAMS_GOTO_K_INDUCTION_H_
 #define GOTO_PROGRAMS_GOTO_K_INDUCTION_H_
 

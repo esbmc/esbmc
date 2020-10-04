@@ -1,10 +1,3 @@
-/*
- * loopst.h
- *
- *  Created on: Jul 20, 2015
- *      Author: mramalho
- */
-
 #ifndef GOTO_PROGRAMS_LOOPST_H_
 #define GOTO_PROGRAMS_LOOPST_H_
 

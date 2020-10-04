@@ -1,10 +1,3 @@
-/*
- * clang_c_main.h
- *
- *  Created on: Jul 29, 2015
- *      Author: mramalho
- */
-
 #ifndef CLANG_C_FRONTEND_CLANG_MAIN_H_
 #define CLANG_C_FRONTEND_CLANG_MAIN_H_
 

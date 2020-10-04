@@ -1,10 +1,3 @@
-/*
- * loopst.cpp
- *
- *  Created on: Jun 30, 2015
- *      Author: mramalho
- */
-
 #include <goto-programs/goto_loops.h>
 #include <util/expr_util.h>
 
