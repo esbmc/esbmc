@@ -1,15 +1,16 @@
-#include "clang_cpp_convert.h"
-
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+// Remove warnings from Clang headers
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
-#include <clang/AST/DeclCXX.h>
-#include <clang/AST/DeclFriend.h>
-#include <clang/AST/DeclTemplate.h>
-#include <clang/AST/ExprCXX.h>
-#include <clang/AST/StmtCXX.h>
+#include <clang/AST/Attr.h>
+#include <clang/AST/Expr.h>
+#include <clang/AST/QualTypeNames.h>
+#include <clang/AST/Type.h>
+#include <clang/Index/USRGeneration.h>
+#include <clang/Frontend/ASTUnit.h>
 #pragma GCC diagnostic pop
-#pragma GCC diagnostic pop
+
+#include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <util/expr_util.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
