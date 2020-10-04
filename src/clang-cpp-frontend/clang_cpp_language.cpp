@@ -6,6 +6,13 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+// Remove warnings from Clang headers
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <clang/Frontend/ASTUnit.h>
+#pragma GCC diagnostic pop
+
 #include <util/c_link.h>
 #include <c2goto/cprover_library.h>
 #include <clang-c-frontend/clang_c_main.h>
