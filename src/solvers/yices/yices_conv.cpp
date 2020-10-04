@@ -778,20 +778,17 @@ yices_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return default_convert_array_of(init_val, domain_width, this);
 }
 
-// Hack for GCC 7.3.0, in 9.3 this gives no warnings
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
 bool yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
-  auto res = yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val);
-  assert(!res && "Can't get boolean value from Yices");
+  if(!yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val))
+  {
+    std::cerr << "Can't get boolean value from Yices\n";
+    abort();
+  }
   return val ? true : false;
 }
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic pop
 
 BigInt yices_convt::get_bv(smt_astt a)
 {
