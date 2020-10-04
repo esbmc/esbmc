@@ -2976,8 +2976,7 @@ typet clang_c_convertert::fix_bitfields(const typet &_type)
   if(bitfield_fixed_type_map.find(type) != bitfield_fixed_type_map.end())
     return bitfield_fixed_type_map.find(type)->second;
 
-  typet new_type = type;
-  auto sutype = to_struct_union_type(new_type);
+  auto sutype = to_struct_union_type(type);
   auto &components = sutype.components(); // It's a vector of components
   std::decay<decltype(components)>::type new_components;
   bool is_packed = sutype.get("packed").as_string() == "true";
@@ -3049,7 +3048,7 @@ typet clang_c_convertert::fix_bitfields(const typet &_type)
   bitfield_fixed_type_map.insert(std::make_pair(type, sutype));
   bitfield_orig_type_map.insert(std::make_pair(sutype, type));
 
-  return sutype;
+  return std::move(sutype);
 }
 
 void clang_c_convertert::fix_constant_bitfields(exprt &expr)
