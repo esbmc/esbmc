@@ -4,22 +4,6 @@
 #include <util/c_types.h>
 #include <utility>
 
-static inline bool array_indexes_are_same(
-  const array_convt::idx_record_containert &a,
-  const array_convt::idx_record_containert &b)
-{
-  if(a.size() != b.size())
-    return false;
-
-  for(auto const &e : a)
-  {
-    if(b.find(e.idx) == b.end())
-      return false;
-  }
-
-  return true;
-}
-
 array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true), ctx(_ctx)
 {
 }
