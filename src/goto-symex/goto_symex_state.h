@@ -72,6 +72,8 @@ public:
     renaming::level2t &l2,
     value_sett &vs);
 
+  goto_symex_statet(goto_symex_statet const &) = default;
+
   goto_symex_statet &operator=(const goto_symex_statet &state);
 
   // Types
