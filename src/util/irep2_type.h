@@ -1,10 +1,3 @@
-/*
- * irep2_type.h
- *
- *  Created on: Jun 2, 2017
- *      Author: mramalho
- */
-
 #ifndef IREP2_TYPE_H_
 #define IREP2_TYPE_H_
 

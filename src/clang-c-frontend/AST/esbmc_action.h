@@ -1,13 +1,7 @@
-/*
- * esbmcaction.h
- *
- *  Created on: Apr 25, 2017
- *      Author: mramalho
- */
-
 #ifndef CLANG_C_FRONTEND_AST_ESBMC_ACTION_H_
 #define CLANG_C_FRONTEND_AST_ESBMC_ACTION_H_
 
+// Remove warnings from Clang headers
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"

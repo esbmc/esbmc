@@ -1,10 +1,4 @@
-/*
- * build_ast.cpp
- *
- *  Created on: Apr 14, 2017
- *      Author: mramalho
- */
-
+// Remove warnings from Clang headers
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
