@@ -17,10 +17,8 @@ lessthanequal2tc goto_symex_statet::framet::process_stack_size(
   const expr2tc &expr,
   unsigned long stack_limit)
 {
-  const code_decl2t &decl_code = to_code_decl2t(expr);
-
   // Store the total number of bits for a given stack frame.
-  stack_frame_total += decl_code.type->get_width();
+  stack_frame_total += expr->type->get_width();
 
   // Create two constants to define stack frame size and stack limit.
   BigInt f_size(stack_frame_total);
