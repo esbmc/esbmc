@@ -136,6 +136,6 @@ jobs:
         cpack
         mv ESBMC-*.exe ESBMC-Windows.exe
     - uses: actions/upload-artifact@v1
-        with:
+      with:
           name: release-windows
           path: ./build/ESBMC-Windows.exe
