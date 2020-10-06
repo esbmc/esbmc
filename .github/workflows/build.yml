@@ -133,9 +133,15 @@ jobs:
       run: |
         cd build
         cmake --build . --target INSTALL --config Release
+        cmake --install .
         cpack
         mv ESBMC-*.exe ESBMC-Windows.exe
     - uses: actions/upload-artifact@v1
       with:
           name: release-windows
           path: ./build/ESBMC-Windows.exe
+    - name: Run Tests
+      run: |
+        cd build
+        ctest -j4 --output-on-failure --progress . 
+
