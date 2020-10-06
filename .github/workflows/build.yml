@@ -128,8 +128,8 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake.exe .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:/deps/clang/llvm9d -DClang_DIR=C:/deps/clang/llvm9d
+        cmake.exe .. -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:/deps/clang/llvm9d -DClang_DIR=C:/deps/clang/llvm9d
     - name: Build ESBMC
       run: |
         cd build
-        cmake --build .
+        MSBuild.exe INSTALL.vcxproj /p:Configuration=Release -maxCpuCount
