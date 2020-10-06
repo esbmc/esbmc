@@ -5,6 +5,13 @@ if (WIN32)
   message(STATUS "Detected MS Windows")
   # Note: This should check for the CMake version instead of OS
   cmake_policy(SET CMP0079 NEW)  
+
+  find_package (Python COMPONENTS Interpreter)
+  if(NOT Python_FOUND)
+	message(WARNING "Python not found, cmake will assume that it is on path")
+	set(Python_EXECUTABLE python)
+  endif()
+  message(STATUS "Found Python: ${Python_EXECUTABLE}")
   
   set(LIBGOMP_LIB "-lgomp -ldl")
   set(OS_FLEX_SMTLIB_FLAGS "--wincompat")
