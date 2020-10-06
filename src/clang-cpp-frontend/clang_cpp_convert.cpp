@@ -243,7 +243,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
       assert(base != nullptr);
 
       // First, parse the fields
-      for(auto const &field : base->fields())
+      for(auto const *field : base->fields())
       {
         // We don't add if private
         if(field->getAccess() >= clang::AS_private)
@@ -276,7 +276,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   if(cxxrd == nullptr)
     return false;
 
-  for(const auto &decl : cxxrd->methods())
+  for(const auto *decl : cxxrd->methods())
   {
     exprt dummy;
     if(get_decl(*decl, dummy))
