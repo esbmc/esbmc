@@ -325,7 +325,7 @@ bool clang_c_convertert::get_struct_union_class_fields(
   struct_union_typet &type)
 {
   // First, parse the fields
-  for(auto const &field : recordd.fields())
+  for(auto const *field : recordd.fields())
   {
     struct_typet::componentt comp;
     if(get_decl(*field, comp))
