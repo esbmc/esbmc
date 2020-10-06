@@ -93,6 +93,8 @@ endif()
 
 add_subdirectory(src)
 
+include(Irep2Optimization)
+
 # Generate ac_config.h. This must be generated after solvers
 configure_file (
  "${PROJECT_SOURCE_DIR}/scripts/cmake/cmake_config.in"
