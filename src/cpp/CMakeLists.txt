@@ -1,5 +1,3 @@
-find_package(BISON)
-find_package(FLEX)
 
 FLEX_TARGET(cppscanner scanner.lpp ${CMAKE_CURRENT_BINARY_DIR}/scanner.cpp COMPILE_FLAGS "--header-file=scanner.hpp -Pyycpp")
 

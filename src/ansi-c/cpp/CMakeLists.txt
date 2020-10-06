@@ -1,5 +1,3 @@
-find_package(BISON)
-find_package(FLEX)
 
 BISON_TARGET(cpy cpy.y ${CMAKE_CURRENT_BINARY_DIR}/cpy.c COMPILE_FLAGS "-pcpp -d --defines=cpy.h" DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/cpy.h)
 # For Coverage
