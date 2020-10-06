@@ -128,7 +128,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake.exe .. -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_DIR=C:/deps/clang/llvm9d -DClang_DIR=C:/deps/clang/llvm9d -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE=C:/deps/boost_filesystem-vc142-mt-x64-1_73.dll
+        cmake.exe .. -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_DIR=C:/deps/clang/llvm9d -DClang_DIR=C:/deps/clang/llvm9d -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE=C:/deps/boost_filesystem-vc142-mt-x64-1_73.dll
     - name: Build ESBMC
       run: |
         cd build
