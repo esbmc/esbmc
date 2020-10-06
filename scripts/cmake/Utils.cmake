@@ -3,7 +3,7 @@
 
 set(ESBMC_BIN "${CMAKE_BINARY_DIR}/src/esbmc/esbmc")
 if(WIN32)
-    set(ESBMC_BIN "${CMAKE_BINARY_DIR}/src/esbmc/esbmc.exe")
+    set(ESBMC_BIN "${CMAKE_INSTALL_PREFIX}/bin/esbmc.exe")
 elseif(APPLE)
     set(MACOS_ESBMC_WRAPPER "#!/bin/sh\n${ESBMC_BIN} -I${C2GOTO_INCLUDE_DIR} $@")
     file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/macos-wrapper.sh ${MACOS_ESBMC_WRAPPER})
