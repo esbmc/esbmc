@@ -6,7 +6,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 	return()
 endif()
 
-if(${CMAKE_VERSION} VERSION_LESS "3.16.0") 
+if(${CMAKE_VERSION} VERSION_LESS "3.16.0")
     message(AUTHOR_WARNING "This optimization is available only for CMake 3.16+")
     return()
 endif()
