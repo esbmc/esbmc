@@ -14,7 +14,6 @@ add_library(util_esbmc irep2.cpp
     string_constant.cpp c_types.cpp ieee_float.cpp c_qualifiers.cpp
     c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp
 )
-target_precompile_headers(util_esbmc PRIVATE ${CMAKE_SOURCE_DIR}/src/util/irep2.h)
 # Boost is needed by anything that touches irep2
 target_include_directories(util_esbmc
     PRIVATE ${CMAKE_BINARY_DIR}/src
