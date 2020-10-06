@@ -104,7 +104,7 @@ jobs:
         git config --system core.eol lf
     - uses: actions/checkout@v1
     - name: Instal gnu tools (od)
-      run: choco install -y gnuwin32-coreutils.portable
+      run: choco install -y gnuwin32-coreutils.portable nsis.portable
     - name: Check if od is on path
       run: od.exe --version
     - name: Check flail
@@ -128,8 +128,14 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake.exe .. -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:/deps/clang/llvm9d -DClang_DIR=C:/deps/clang/llvm9d
+        cmake.exe .. -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:/deps/clang/llvm9d -DClang_DIR=C:/deps/clang/llvm9d -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE=C:/deps/boost_filesystem-vc142-mt-x64-1_73.dll
     - name: Build ESBMC
       run: |
         cd build
         cmake --build . --target INSTALL --config Release
+        cpack
+        mv ESBMC-*.exe ESBMC-Windows.exe
+    - uses: actions/upload-artifact@v1
+        with:
+          name: release-windows
+          path: ./build/ESBMC-Windows.exe
