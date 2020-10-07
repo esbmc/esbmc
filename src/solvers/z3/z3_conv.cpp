@@ -1151,7 +1151,7 @@ bool z3_convt::get_bool(smt_astt a)
 BigInt z3_convt::get_bv(smt_astt a)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
-  z3::expr e = solver.get_model().eval(za->a, false);
+  z3::expr e = solver.get_model().eval(za->a, true);
 
   // Not a numeral? Let's not try to convert it
   return string2integer(Z3_get_numeral_string(z3_ctx, e));
