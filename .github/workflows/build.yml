@@ -142,5 +142,5 @@ jobs:
     - name: Run Tests
       run: |
         cd build
-        cmake --build . --target RUN_TESTS --config Release
+        cmake --build . --target RUN_TESTS --config Release --parallel 4
 
