@@ -45,7 +45,7 @@ jobs:
     - name: Run clang-format (tests)
       run: find unit -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh  | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
     - name: Throws error if changes were made
-      run: git diff --exit-code
+      run: git diff --exit-code --ignore-cr-at-eol
 
   cmake-lint:
     name: Check CMake modules
