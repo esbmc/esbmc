@@ -15,4 +15,3 @@ extern "C" uint8_t *esbmc_version_string = buildidstring_buf;
 #else
 uint8_t *esbmc_version_string = buildidstring_buf;
 #endif
-

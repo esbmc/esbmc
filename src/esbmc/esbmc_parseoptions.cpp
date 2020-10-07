@@ -993,7 +993,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
 #endif
 
-  return 0;  
+  return 0;
 }
 
 int esbmc_parseoptionst::doit_k_induction()
