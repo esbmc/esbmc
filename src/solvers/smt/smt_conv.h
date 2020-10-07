@@ -262,6 +262,12 @@ public:
    *          reason. */
   virtual expr2tc get_by_ast(const type2tc &type, smt_astt a);
 
+  /** Builds the bitvector based on the value retrieved from the solver.
+   *  @param type the type (fixedbv or (un)signedbv),
+   *  @param value the value retrieved from the solver.
+   *  @return Expression representation of a's value */
+  expr2tc get_by_value(const type2tc &type, BigInt value);
+
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the
@@ -471,12 +477,6 @@ public:
    *  @param a The AST whos value we wish to know.
    *  @return Expression representation of a's value */
   virtual BigInt get_bv(smt_astt a) = 0;
-
-  /** Builds the bitvector based on the value retrieved from the solver.
-   *  @param type the type (fixedbv or (un)signedbv),
-   *  @param value the value retrieved from the solver.
-   *  @return Expression representation of a's value */
-  expr2tc build_bv(const type2tc &type, BigInt value);
 
   /** Reduction or: equals bit0 iff all bits are 0
    * @param op the expr to be reduced
