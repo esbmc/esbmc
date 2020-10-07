@@ -4,6 +4,22 @@
 #include <util/c_types.h>
 #include <utility>
 
+static inline bool array_indexes_are_same(
+  const array_convt::idx_record_containert &a,
+  const array_convt::idx_record_containert &b)
+{
+  if(a.size() != b.size())
+    return false;
+
+  for(auto const &e : a)
+  {
+    if(b.find(e.idx) == b.end())
+      return false;
+  }
+
+  return true;
+}
+
 array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true), ctx(_ctx)
 {
 }
@@ -946,8 +962,10 @@ void array_convt::add_array_equalities()
 
   for(auto &it = pair.first; it != pair.second; it++)
   {
+#ifndef NDEBUG
     assert(array_indexes_are_same(
       array_indexes[it->second.arr1_id], array_indexes[it->second.arr2_id]));
+#endif
 
     add_array_equality(
       it->second.arr1_id,
@@ -1173,8 +1191,10 @@ void array_convt::execute_array_joining_ite(
 
   ast_vect selects;
   selects.reserve(array_indexes[cur_id].size());
+#ifndef NDEBUG
   assert(array_indexes_are_same(
     array_indexes[cur_id], array_indexes[remote_ast->base_array_id]));
+#endif
 
   for(auto const &elem : array_indexes[remote_ast->base_array_id])
   {
