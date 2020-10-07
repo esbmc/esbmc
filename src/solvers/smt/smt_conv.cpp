@@ -2159,7 +2159,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
-    return build_bv(type, get_bv(a));
+    return get_by_value(type, get_bv(a));
 
   case type2t::floatbv_id:
     return constant_floatbv2tc(fp_api->get_fpbv(a));
@@ -2548,9 +2548,18 @@ tvt smt_convt::l_get(smt_astt a)
   return get_bool(a) ? tvt(true) : tvt(false);
 }
 
-expr2tc smt_convt::build_bv(const type2tc &type, BigInt value)
+expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
 {
-  if(is_fixedbv_type(type))
+  switch(type->type_id)
+  {
+  case type2t::bool_id:
+    return value.is_zero() ? gen_false_expr() : gen_true_expr();
+
+  case type2t::unsignedbv_id:
+  case type2t::signedbv_id:
+    return constant_int2tc(type, value);
+
+  case type2t::fixedbv_id:
   {
     fixedbvt fbv(constant_exprt(
       integer2binary(value, type->get_width()),
@@ -2558,7 +2567,21 @@ expr2tc smt_convt::build_bv(const type2tc &type, BigInt value)
       migrate_type_back(type)));
     return constant_fixedbv2tc(fbv);
   }
-  return constant_int2tc(type, value);
+
+  case type2t::floatbv_id:
+  {
+    ieee_floatt f(constant_exprt(
+      integer2binary(value, type->get_width()),
+      integer2string(value),
+      migrate_type_back(type)));
+    return constant_floatbv2tc(f);
+  }
+
+  default:;
+  }
+
+  std::cerr << "Can't generate one for type " << get_type_id(type) << '\n';
+  abort();
 }
 
 smt_sortt smt_convt::mk_bool_sort()

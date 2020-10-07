@@ -673,7 +673,7 @@ expr2tc boolector_convt::get_array_elem(
     }
 
     boolector_free_array_assignment(btor, indicies, values, size);
-    return build_bv(subtype, val);
+    return get_by_value(subtype, val);
   }
 
   return gen_zero(subtype);
