@@ -104,7 +104,7 @@ travis_script() {
         chmod +x regression/macos-wrapper.sh
     else
         if [ $ENABLE_COVERAGE = 1 ]; then
-            export COVERAGE_FLAGS="-DENABLE_COVERAGE=On"
+            export COVERAGE_FLAGS="-DENABLE_COVERAGE=On -DCMAKE_BUILD_TYPE=Debug"
         fi
         if [ $ENABLE_SANITIZER = 1 ]; then
             export SANITIZER_FLAGS="-DCMAKE_BUILD_TYPE=Sanitizer -DSANITIZER_TYPE=$SANITIZER"
