@@ -240,7 +240,7 @@ def _add_test(test_case, executor):
         matches_regex = True
         for regex in test_case.test_regex:
             match_regex = re.compile(regex, re.MULTILINE)
-            if not match_regex.search(output_to_validate.strip()):
+            if not match_regex.search(output_to_validate.replace("\r", "")):
                 matches_regex = False
 
         if (test_case.test_mode in FAIL_MODES) and matches_regex:
