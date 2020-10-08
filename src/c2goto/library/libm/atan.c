@@ -1,6 +1,9 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
-#define _USE_MATH_DEFINES
+#ifdef _MSVC
+#define _USE_MATH_DEFINES 
+#endif
+
 #include <math.h>
 
 static double _atan(double f, int n)
