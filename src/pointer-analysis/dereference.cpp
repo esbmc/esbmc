@@ -1694,7 +1694,6 @@ expr2tc *dereferencet::extract_bytes_from_array(
 
   expr2tc *exprs = new expr2tc[bytes];
 
-  assert(bytes <= 8 && "Too many bytes for extraction/stitching in deref");
   assert(
     (is_array_type(array) || is_string_type(array)) &&
     "Can only extract bytes for stitching from arrays");
