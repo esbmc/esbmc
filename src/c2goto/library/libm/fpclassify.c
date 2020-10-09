@@ -1,7 +1,25 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
+#ifdef _MSVC
+#define _USE_MATH_DEFINES
+#define _CRT_FUNCTIONS_REQUIRED 0
+
+// There is no easy way to fix this :(
+#define _fdclass crt_fdclass
+#define _ldclass crt_ldclass
+#define _dclass crt_dclass
+#endif
 #include <math.h>
 
+#ifdef _MSVC
+#undef _fdclass
+#undef _ldclass
+#undef _dclass
+#endif
+
+#ifdef _MSVC
+
+#endif
 #define classify_def(type, name, isnan_func, isinf_func, isnormal_func)        \
   int name(type f)                                                             \
   {                                                                            \
