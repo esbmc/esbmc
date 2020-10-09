@@ -35,7 +35,7 @@ function(mangle_clib output)
     set(out_file "${CMAKE_CURRENT_BINARY_DIR}/${out_file}")
     set(CMD c2goto -I ${multiarch} ${OS_C2GOTO_FLAGS} ${c2goto_library_files} ${c2goto_libm_files} ${in_flags} --output ${out_goto})
     add_custom_command(OUTPUT ${out_goto}
-      COMMAND c2goto -I ${multiarch} ${OS_C2GOTO_FLAGS} ${c2goto_library_files} ${in_flags} --output ${out_goto}
+      COMMAND ${CMD}
       DEPENDS c2goto
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generating libc model ${out_goto}"
