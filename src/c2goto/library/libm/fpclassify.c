@@ -15,7 +15,7 @@
 #define _signbit(type, name)                      \
     int name(type d)                              \
     {                                             \
-        __ESBMC_HIDE:;                            \ 
+        __ESBMC_HIDE:;                            \
         return __builtin_signbit((float)d); \
     }
 
@@ -27,6 +27,15 @@ _signbit(float, _fdsign);
 #define classify_return_type int
 #endif
 
+#ifdef _MSVC
+#undef _fdclass
+#undef _ldclass
+#undef _dclass
+#endif
+
+#ifdef _MSVC
+
+#endif
 #define classify_def(type, name, isnan_func, isinf_func, isnormal_func)        \
   classify_return_type name(type f)                                            \
   {                                                                            \
