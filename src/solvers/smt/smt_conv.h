@@ -348,6 +348,7 @@ public:
   virtual smt_astt mk_select(smt_astt a, smt_astt b);
   virtual smt_astt mk_real2int(smt_astt a);
   virtual smt_astt mk_int2real(smt_astt a);
+  virtual smt_astt mk_bv2int(smt_astt a, bool is_signed);
   virtual smt_astt mk_isint(smt_astt a);
 
   /** Create an integer or SBV/UBV sort */
@@ -412,7 +413,7 @@ public:
    *  @return The newly created terminal smt_ast of this real. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
 
-  virtual smt_astt mk_smt_string(const std::string &str) = 0;
+  virtual smt_astt mk_smt_string(const std::string &str);
 
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
@@ -471,12 +472,13 @@ public:
    * @return the concatenation of a and b */
   virtual smt_astt mk_concat(smt_astt a, smt_astt b) = 0;
 
-  virtual smt_astt mk_str_concat(smt_astt a, smt_astt b) = 0;
-  virtual smt_astt mk_str_concat(smt_astt a, smt_astt b, smt_astt c) = 0;
+  virtual smt_astt mk_str_concat(smt_astt a, smt_astt b);
+  virtual smt_astt mk_str_concat(smt_astt a, smt_astt b, smt_astt c);
   virtual smt_astt
-  mk_str_extract(smt_astt s, smt_astt offset, smt_astt length) = 0;
-  virtual smt_astt mk_str_length(smt_astt a) = 0;
-  virtual smt_astt mk_str_at(smt_astt s, smt_astt index) = 0;
+  mk_str_extract(smt_astt s, smt_astt offset, smt_astt length);
+  virtual smt_astt mk_str_length(smt_astt a);
+  virtual smt_astt mk_str_at(smt_astt s, smt_astt index);
+  virtual smt_astt mk_seq_unit(smt_astt a);
 
   /** Create an ite operation
    * @param cond the ite condition
@@ -815,6 +817,7 @@ public:
 
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
+  smt_cachet smt_str_cache;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
 

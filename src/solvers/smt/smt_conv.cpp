@@ -244,13 +244,6 @@ bool smt_convt::is_str_expr(const expr2tc &expr)
   int width = type->get_width();
   if(width == config.ansi_c.char_width)
     return true;
-
-  if(expr->expr_id == expr2t::equality_id)
-  {
-    const equality2t &eq = to_equality2t(expr);
-    return has_str_expr(eq.side_1);
-  }
-
   return false;
 }
 
@@ -288,9 +281,9 @@ smt_astt smt_convt::convert_str_terminal(const expr2tc &expr)
 
 smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
 {
-  /*smt_cachet::const_iterator cache_result = smt_cache.find(expr);
-  if(cache_result != smt_cache.end())
-    return (cache_result->ast);*/
+  smt_cachet::const_iterator cache_result = smt_str_cache.find(expr);
+  if(cache_result != smt_str_cache.end())
+    return (cache_result->ast);
   std::vector<smt_astt> args;
   args.reserve(expr->get_num_sub_exprs());
 
@@ -346,8 +339,50 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
     {
       smt_astt source = convert_str_terminal(index.source_value);
       smt_astt position = convert_ast(index.index);
+      if(!int_encoding)
+        position = mk_bv2int(position, false);
       a = mk_str_at(source, position);
     }
+    break;
+  }
+  case expr2t::sub_id:
+  {
+    unsigned int char_width = config.ansi_c.char_width;
+    unsigned int expr_width = expr->type->get_width();
+    unsigned int additional_bits =expr_width - char_width;
+    smt_astt x, y;
+
+    const sub2t &sub = to_sub2t(expr);
+    if(!is_constant_int2t(sub.side_1))
+    {
+      x = mk_smt_symbol(mk_fresh_name("str_solver::tmp#"), mk_bv_sort(char_width));
+      smt_astt ux = mk_seq_unit(x);
+      ux->assign(this, args[0]);
+      x = mk_sign_ext(x, additional_bits);
+      if(int_encoding)
+        x = mk_bv2int(x, true);
+    }
+    else
+      x = convert_ast(sub.side_1);
+
+    if(!is_constant_int2t(sub.side_2))
+      {
+        y = mk_smt_symbol(mk_fresh_name("str_solver::tmp#"), mk_bv_sort(char_width));
+        smt_astt uy = mk_seq_unit(y);
+
+        uy->assign(this, args[1]);
+        y = mk_sign_ext(y, additional_bits);
+        if(int_encoding)
+          y = mk_bv2int(y, true);
+      }
+      else
+        y = convert_ast(sub.side_2);
+
+    if(int_encoding)
+      a = mk_sub(x,y);
+    else
+      a = mk_bvsub(x,y);
+
     break;
   }
   case expr2t::with_id:
@@ -362,6 +397,8 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
       update_value = with.update_value;
 
       position = convert_ast(update_field);
+      if(!int_encoding)
+        position = mk_bv2int(position, false);
 
       switch(update_field->expr_id)
       {
@@ -423,7 +460,7 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
   }
   case expr2t::typecast_id:
   {
-    a = convert_str_typecast(expr);
+    a = convert_typecast(expr);
     break;
   }
   case expr2t::if_id:
@@ -495,28 +532,38 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
     a = convert_ast(expr);
   }
 
-  //struct smt_cache_entryt entry = {expr, a, ctx_level};
-  //smt_cache.insert(entry);
+  struct smt_cache_entryt entry = {expr, a, ctx_level};
+  smt_str_cache.insert(entry);
   return a;
 }
 
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
-
   smt_astt side1, side2;
 
   if(config.options.get_bool_option("string-solver") && has_str_expr(expr))
   {
     side1 = convert_str_ast(eq.side_1);
     side2 = convert_str_ast(eq.side_2);
+
+    if(!is_str_expr(eq.side_1) && is_signedbv_type(eq.side_1->type) && (eq.side_2->expr_id == expr2t::typecast_id))
+    {
+      unsigned int char_width = config.ansi_c.char_width;
+      unsigned int expr_width = eq.side_1->type->get_width();
+      unsigned int additional_bits =expr_width - char_width;
+
+      smt_astt x = mk_smt_symbol(mk_fresh_name("str_solver::tmp#"), mk_bv_sort(char_width));
+      smt_astt ux = mk_seq_unit(x);
+      ux->assign(this, side2);
+
+      side2 = mk_sign_ext(x, additional_bits);
+    }
   }
   else
   {
     side1 = convert_ast(eq.side_1);
     side2 = convert_ast(eq.side_2);
-    smt_cache_entryt e = {eq.side_1, side2, ctx_level};
-    smt_cache.insert(e);
   }
 
   side2->assign(this, side1);
@@ -525,11 +572,17 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   // IMPORTANT: the cache is now a fundemental part of how some flatteners work,
   // in that one can chose to create a set of expressions and their ASTs, then
   // store them in the cache, rather than have a more sophisticated conversion.
-  //smt_cache_entryt e = {eq.side_1, side2, ctx_level};
-  //smt_cache.insert(e);
-  smt_astt t = mk_eq(side2, side1);
-  return t;
-  //return side2;
+  if(config.options.get_bool_option("string-solver") && has_str_expr(expr))
+  {
+    smt_cache_entryt e = {eq.side_1, side2, ctx_level};
+    smt_str_cache.insert(e);
+  }
+  else
+  {
+    smt_cache_entryt e = {eq.side_1, side2, ctx_level};
+    smt_cache.insert(e);
+  }
+  return side2;
 }
 
 bool smt_convt::has_str_expr(const expr2tc &expr)
@@ -1543,12 +1596,6 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
 
     return mk_smt_bv(theint.value, width);
   }
-  /*case expr2t::constant_string_id:
-  {
-    const constant_string2t &theStr = to_constant_string2t(expr);
-    std::string result = (theStr.value).as_string();
-    return mk_smt_string(result);
-  }*/
   case expr2t::constant_fixedbv_id:
   {
     const constant_fixedbv2t &thereal = to_constant_fixedbv2t(expr);
@@ -2326,6 +2373,9 @@ expr2tc smt_convt::get(const expr2tc &expr)
     return expr;
 
   if(is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
+    return expr;
+
+  if(expr->expr_id == expr2t::sub_id)
     return expr;
 
   expr2tc res = expr;
@@ -3313,5 +3363,53 @@ smt_astt smt_convt::mk_int2real(smt_astt a)
 smt_astt smt_convt::mk_isint(smt_astt a)
 {
   (void)a;
+  abort();
+}
+
+smt_astt smt_convt::mk_smt_string(const std::string &str)
+{
+  std::cerr << "Chosen solver doesn't support string sorts\n";
+  abort();
+}
+
+smt_astt smt_convt::mk_str_concat(smt_astt a, smt_astt b)
+{
+  std::cerr << "Chosen solver doesn't support string sorts\n";
+  abort();
+}
+
+smt_astt smt_convt::mk_str_concat(smt_astt a, smt_astt b, smt_astt c)
+{
+  std::cerr << "Chosen solver doesn't support string sorts\n";
+  abort();
+}
+
+smt_astt smt_convt::mk_str_extract(smt_astt s, smt_astt offset, smt_astt length)
+{
+  std::cerr << "Chosen solver doesn't support string sorts\n";
+  abort();
+}
+
+smt_astt smt_convt::mk_str_length(smt_astt a)
+{
+  std::cerr << "Chosen solver doesn't support string sorts\n";
+  abort();
+}
+
+smt_astt smt_convt::mk_str_at(smt_astt s, smt_astt index)
+{
+  std::cerr << "Chosen solver doesn't support string sorts\n";
+  abort();
+}
+
+smt_astt smt_convt::mk_seq_unit(smt_astt a)
+{
+  std::cerr << "Chosen solver doesn't support string sorts\n";
+  abort();
+}
+
+smt_astt smt_convt::mk_bv2int(smt_astt a, bool is_signed)
+{
+  std::cerr << "Chosen solver doesn't support string sorts\n";
   abort();
 }
