@@ -869,10 +869,7 @@ smt_astt z3_convt::mk_seq_unit(smt_astt a)
 {
   return new_ast(
     z3::to_expr(
-      z3_ctx,
-      Z3_mk_seq_unit(
-        z3_ctx,
-        to_solver_smt_ast<z3_smt_ast>(a)->a)),
+      z3_ctx, Z3_mk_seq_unit(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a)),
     a->sort);
 }
 
@@ -1681,6 +1678,7 @@ smt_astt z3_convt::mk_bv2int(smt_astt a, bool is_signed)
   //assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   return new_ast(
     z3::to_expr(
-      z3_ctx, Z3_mk_bv2int(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a, is_signed)),
+      z3_ctx,
+      Z3_mk_bv2int(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a, is_signed)),
     mk_int_sort());
 }

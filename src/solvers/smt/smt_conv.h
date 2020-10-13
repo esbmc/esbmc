@@ -474,8 +474,7 @@ public:
 
   virtual smt_astt mk_str_concat(smt_astt a, smt_astt b);
   virtual smt_astt mk_str_concat(smt_astt a, smt_astt b, smt_astt c);
-  virtual smt_astt
-  mk_str_extract(smt_astt s, smt_astt offset, smt_astt length);
+  virtual smt_astt mk_str_extract(smt_astt s, smt_astt offset, smt_astt length);
   virtual smt_astt mk_str_length(smt_astt a);
   virtual smt_astt mk_str_at(smt_astt s, smt_astt index);
   virtual smt_astt mk_seq_unit(smt_astt a);

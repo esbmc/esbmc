@@ -349,13 +349,14 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
   {
     unsigned int char_width = config.ansi_c.char_width;
     unsigned int expr_width = expr->type->get_width();
-    unsigned int additional_bits =expr_width - char_width;
+    unsigned int additional_bits = expr_width - char_width;
     smt_astt x, y;
 
     const sub2t &sub = to_sub2t(expr);
     if(!is_constant_int2t(sub.side_1))
     {
-      x = mk_smt_symbol(mk_fresh_name("str_solver::tmp#"), mk_bv_sort(char_width));
+      x = mk_smt_symbol(
+        mk_fresh_name("str_solver::tmp#"), mk_bv_sort(char_width));
       smt_astt ux = mk_seq_unit(x);
       ux->assign(this, args[0]);
       x = mk_sign_ext(x, additional_bits);
@@ -366,22 +367,23 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
       x = convert_ast(sub.side_1);
 
     if(!is_constant_int2t(sub.side_2))
-      {
-        y = mk_smt_symbol(mk_fresh_name("str_solver::tmp#"), mk_bv_sort(char_width));
-        smt_astt uy = mk_seq_unit(y);
+    {
+      y = mk_smt_symbol(
+        mk_fresh_name("str_solver::tmp#"), mk_bv_sort(char_width));
+      smt_astt uy = mk_seq_unit(y);
 
-        uy->assign(this, args[1]);
-        y = mk_sign_ext(y, additional_bits);
-        if(int_encoding)
-          y = mk_bv2int(y, true);
-      }
-      else
-        y = convert_ast(sub.side_2);
+      uy->assign(this, args[1]);
+      y = mk_sign_ext(y, additional_bits);
+      if(int_encoding)
+        y = mk_bv2int(y, true);
+    }
+    else
+      y = convert_ast(sub.side_2);
 
     if(int_encoding)
-      a = mk_sub(x,y);
+      a = mk_sub(x, y);
     else
-      a = mk_bvsub(x,y);
+      a = mk_bvsub(x, y);
 
     break;
   }
@@ -547,13 +549,16 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
     side1 = convert_str_ast(eq.side_1);
     side2 = convert_str_ast(eq.side_2);
 
-    if(!is_str_expr(eq.side_1) && is_signedbv_type(eq.side_1->type) && (eq.side_2->expr_id == expr2t::typecast_id))
+    if(
+      !is_str_expr(eq.side_1) && is_signedbv_type(eq.side_1->type) &&
+      (eq.side_2->expr_id == expr2t::typecast_id))
     {
       unsigned int char_width = config.ansi_c.char_width;
       unsigned int expr_width = eq.side_1->type->get_width();
-      unsigned int additional_bits =expr_width - char_width;
+      unsigned int additional_bits = expr_width - char_width;
 
-      smt_astt x = mk_smt_symbol(mk_fresh_name("str_solver::tmp#"), mk_bv_sort(char_width));
+      smt_astt x = mk_smt_symbol(
+        mk_fresh_name("str_solver::tmp#"), mk_bv_sort(char_width));
       smt_astt ux = mk_seq_unit(x);
       ux->assign(this, side2);
 

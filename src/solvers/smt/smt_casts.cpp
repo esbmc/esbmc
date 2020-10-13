@@ -285,7 +285,9 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
 
   unsigned from_width = cast.from->type->get_width();
 
-  if(config.options.get_bool_option("string-solver") && (from_width == config.ansi_c.char_width))
+  if(
+    config.options.get_bool_option("string-solver") &&
+    (from_width == config.ansi_c.char_width))
   {
     a = convert_str_ast(cast.from);
     return a;
@@ -326,7 +328,9 @@ smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
 
   unsigned from_width = cast.from->type->get_width();
 
-  if(config.options.get_bool_option("string-solver") && (from_width == config.ansi_c.char_width))
+  if(
+    config.options.get_bool_option("string-solver") &&
+    (from_width == config.ansi_c.char_width))
   {
     a = convert_str_ast(cast.from);
     return a;
