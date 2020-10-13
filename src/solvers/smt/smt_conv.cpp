@@ -241,7 +241,7 @@ bool smt_convt::is_str_expr(const expr2tc &expr)
   else
     type = expr->type;
 
-  int width = type->get_width();
+  unsigned int width = type->get_width();
   if(width == config.ansi_c.char_width)
     return true;
   return false;
@@ -392,7 +392,6 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
     const with2t &with = to_with2t(expr);
     if(is_str_expr(expr))
     {
-      smt_sortt sort = mk_string_sort();
       smt_astt position, source, update, _char, pre_str, pos_str, x;
       expr2tc update_value, update_field;
       update_field = with.update_field;
@@ -415,6 +414,7 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
         x = mk_add(position, mk_smt_int(1));
         break;
       }
+      default:;
       }
 
       _char = convert_str_ast(update_value);
@@ -3373,48 +3373,63 @@ smt_astt smt_convt::mk_isint(smt_astt a)
 
 smt_astt smt_convt::mk_smt_string(const std::string &str)
 {
+  (void)str;
   std::cerr << "Chosen solver doesn't support string sorts\n";
   abort();
 }
 
 smt_astt smt_convt::mk_str_concat(smt_astt a, smt_astt b)
 {
+  (void)a;
+  (void)b;
   std::cerr << "Chosen solver doesn't support string sorts\n";
   abort();
 }
 
 smt_astt smt_convt::mk_str_concat(smt_astt a, smt_astt b, smt_astt c)
 {
+  (void)a;
+  (void)b;
+  (void)c;
   std::cerr << "Chosen solver doesn't support string sorts\n";
   abort();
 }
 
 smt_astt smt_convt::mk_str_extract(smt_astt s, smt_astt offset, smt_astt length)
 {
+  (void)s;
+  (void)offset;
+  (void)length;
   std::cerr << "Chosen solver doesn't support string sorts\n";
   abort();
 }
 
 smt_astt smt_convt::mk_str_length(smt_astt a)
 {
+  (void)a;
   std::cerr << "Chosen solver doesn't support string sorts\n";
   abort();
 }
 
 smt_astt smt_convt::mk_str_at(smt_astt s, smt_astt index)
 {
+  (void)s;
+  (void)index;
   std::cerr << "Chosen solver doesn't support string sorts\n";
   abort();
 }
 
 smt_astt smt_convt::mk_seq_unit(smt_astt a)
 {
+  (void)a;
   std::cerr << "Chosen solver doesn't support string sorts\n";
   abort();
 }
 
 smt_astt smt_convt::mk_bv2int(smt_astt a, bool is_signed)
 {
+  (void)a;
+  (void)is_signed;
   std::cerr << "Chosen solver doesn't support string sorts\n";
   abort();
 }
