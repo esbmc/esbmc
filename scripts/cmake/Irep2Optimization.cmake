@@ -6,6 +6,11 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 	return()
 endif()
 
+if(${CMAKE_VERSION} VERSION_LESS "3.16.0") 
+    message(AUTHOR_WARNING "This optimization is available only for CMake 3.16+")
+    return()
+endif()
+
 target_precompile_headers(util_esbmc PRIVATE ${CMAKE_SOURCE_DIR}/src/util/irep2.h ${CMAKE_SOURCE_DIR}/src/util/irep2_expr.h)
 target_precompile_headers(clangcfrontend_stuff REUSE_FROM util_esbmc)
 target_precompile_headers(clangcppfrontend REUSE_FROM util_esbmc)
