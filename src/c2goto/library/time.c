@@ -1,10 +1,11 @@
 #ifdef _MINGW
-#define __CRT__NO_INLINE
+
 #define __declspec /* hacks */
 #endif
 
 #ifdef _MSVC
 #define _INC_TIME_INL
+#define time crt_time
 #endif
 #include <time.h>
 #undef time

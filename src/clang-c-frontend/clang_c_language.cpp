@@ -165,6 +165,12 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
   compiler_args.push_back("-Wno-deprecated-register");
 #endif
 
+#ifdef _WIN32
+  compiler_args.push_back("-D_INC_TIME_INL");
+  compiler_args.push_back("-D__CRT__NO_INLINE");
+  compiler_args.push_back("-D_USE_MATH_DEFINES");
+#endif
+
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
 
