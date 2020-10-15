@@ -56,7 +56,7 @@ void grapht::generate_graphml(optionst &options)
 }
 
 /* */
-void grapht::check_create_new_thread(uint16_t thread_id, nodet *prev_node)
+void grapht::check_create_new_thread(BigInt thread_id, nodet *prev_node)
 {
   if(
     std::find(std::begin(this->threads), std::end(this->threads), thread_id) ==
@@ -65,7 +65,7 @@ void grapht::check_create_new_thread(uint16_t thread_id, nodet *prev_node)
     this->threads.push_back(thread_id);
     nodet *new_node = new nodet();
     edget *new_edge = new edget();
-    new_edge->create_thread = std::to_string(thread_id);
+    new_edge->create_thread = integer2string(thread_id);
     new_edge->from_node = prev_node;
     new_edge->to_node = new_node;
     this->edges.push_back(*new_edge);
@@ -187,28 +187,28 @@ void create_edge_node(edget &edge, xmlnodet &edgenode)
   {
     xmlnodet data_lineNumberInOrigin;
     data_lineNumberInOrigin.add("<xmlattr>.key", "startline");
-    data_lineNumberInOrigin.put_value(edge.start_line);
+    data_lineNumberInOrigin.put_value(integer2string(edge.start_line));
     edgenode.add_child("data", data_lineNumberInOrigin);
   }
   if(edge.end_line != c_nonset)
   {
     xmlnodet data_endLine;
     data_endLine.add("<xmlattr>.key", "endline");
-    data_endLine.put_value(edge.end_line);
+    data_endLine.put_value(integer2string(edge.end_line));
     edgenode.add_child("data", data_endLine);
   }
   if(edge.start_offset != c_nonset)
   {
     xmlnodet data_startoffset;
     data_startoffset.add("<xmlattr>.key", "startoffset");
-    data_startoffset.put_value(edge.start_offset);
+    data_startoffset.put_value(integer2string(edge.start_offset));
     edgenode.add_child("data", data_startoffset);
   }
   if(edge.end_offset != c_nonset)
   {
     xmlnodet data_endoffset;
     data_endoffset.add("<xmlattr>.key", "endoffset");
-    data_endoffset.put_value(edge.end_offset);
+    data_endoffset.put_value(integer2string(edge.end_offset));
     edgenode.add_child("data", data_endoffset);
   }
   if(!edge.return_from_function.empty())
@@ -635,15 +635,15 @@ void reformat_assignment_array(
 {
   std::regex re{R"(((-?[0-9]+(.[0-9]+)?)))"};
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
-  uint16_t pos = 0;
+  BigInt pos = 0;
   std::string lhs = from_expr(ns, "", step.lhs);
   std::string assignment_array = "";
   for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
       it != end;)
   {
     std::string value = *it++;
-    assignment_array +=
-      lhs + "[" + std::to_string(pos++) + "] = " + value + "; ";
+    assignment_array += lhs + "[" + integer2string(pos) + "] = " + value + "; ";
+    ++pos;
   }
   assignment_array.pop_back();
   assignment = assignment_array;
@@ -745,9 +745,9 @@ bool is_valid_witness_expr(
 }
 
 /* */
-uint16_t get_line_number(
+BigInt get_line_number(
   std::string &verified_file,
-  uint16_t relative_line_number,
+  BigInt relative_line_number,
   optionst &options)
 {
   std::string program_file = options.get_option("witness-programfile");
@@ -760,14 +760,15 @@ uint16_t get_line_number(
   std::string relative_content;
   std::ifstream stream_relative(verified_file);
   std::ifstream stream_programfile(program_file);
-  uint16_t line_count = 0;
+  BigInt line_count = 0;
+
   /* get the relative content */
   if(stream_relative.is_open())
   {
     while(getline(stream_relative, line) && line_count < relative_line_number)
     {
       relative_content = line;
-      line_count++;
+      ++line_count;
     }
   }
   /* file for the line in the programfile */
@@ -776,24 +777,24 @@ uint16_t get_line_number(
   {
     while(getline(stream_programfile, line) && line != relative_content)
     {
-      line_count++;
+      ++line_count;
     }
   }
   return line_count;
 }
 
-std::string read_line(std::string file, uint16_t line_number)
+std::string read_line(std::string file, BigInt line_number)
 {
   std::string line;
   std::string line_code = "";
   std::ifstream stream(file);
-  uint16_t line_count = 0;
+  BigInt line_count = 0;
   if(stream.is_open())
   {
     while(getline(stream, line) && line_count < line_number)
     {
       line_code = line;
-      line_count++;
+      ++line_count;
     }
   }
   return line_code;
@@ -804,10 +805,8 @@ const std::regex regex_invariants(
   "+)?(__((VERIFIER|ESBMC))_)?(assume|assert)\\([a-zA-Z(-?(0-9))\\[\\]_>=+/"
   "*<~.&! \\(\\)]+\\);( +)?");
 
-std::string get_invariant(
-  std::string verified_file,
-  uint16_t line_number,
-  optionst &options)
+std::string
+get_invariant(std::string verified_file, BigInt line_number, optionst &options)
 {
   std::string invariant = "";
   std::string line_code = "";
@@ -819,7 +818,7 @@ std::string get_invariant(
   }
   else
   {
-    uint16_t program_file_line_number =
+    BigInt program_file_line_number =
       get_line_number(verified_file, line_number, options);
     line_code = read_line(program_file, program_file_line_number);
   }

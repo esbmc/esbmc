@@ -8,8 +8,7 @@
 
 typedef boost::property_tree::ptree xmlnodet;
 
-#define lightweight_witness
-#define c_nonset 0xFFFF
+#define c_nonset -1
 
 class nodet
 {
@@ -45,10 +44,10 @@ public:
   std::string return_from_function;
   std::string thread_id;
   std::string create_thread;
-  unsigned short int start_line = c_nonset;
-  unsigned short int end_line = c_nonset;
-  unsigned short int start_offset = c_nonset;
-  unsigned short int end_offset = c_nonset;
+  BigInt start_line = c_nonset;
+  BigInt end_line = c_nonset;
+  BigInt start_offset = c_nonset;
+  BigInt end_offset = c_nonset;
   bool control = false;
   bool enter_loop_head = false;
   nodet *from_node;
@@ -72,7 +71,7 @@ public:
 class grapht
 {
 private:
-  std::vector<uint16_t> threads;
+  std::vector<BigInt> threads;
   void create_initial_edge();
 
 public:
@@ -90,7 +89,7 @@ public:
     create_initial_edge();
   }
   void generate_graphml(optionst &options);
-  void check_create_new_thread(uint16_t thread_id, nodet *prev_node);
+  void check_create_new_thread(BigInt thread_id, nodet *prev_node);
 };
 
 /**
@@ -159,9 +158,9 @@ bool is_valid_witness_expr(
 /**
  *
  */
-uint16_t get_line_number(
+BigInt get_line_number(
   std::string &verified_file,
-  uint16_t relative_line_number,
+  BigInt relative_line_number,
   optionst &options);
 
 /**
@@ -172,7 +171,5 @@ int generate_sha1_hash_for_file(const char *path, std::string &output);
 /**
  *
  */
-std::string get_invariant(
-  std::string verified_file,
-  uint16_t line_number,
-  optionst &options);
+std::string
+get_invariant(std::string verified_file, BigInt line_number, optionst &options);
