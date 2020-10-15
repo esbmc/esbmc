@@ -1,0 +1,34 @@
+name: SV-Comp release
+
+on: [push, pull_request]
+
+jobs:
+
+  build-linux:
+    name: Build Linux Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@master
+      - name: Install Dependencies
+        run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools
+      - name: Download Clang 9
+        run: wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+      - name: Extract Clang 9
+        run: tar xf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
+      - name: Setup boolector
+        run: git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
+      - name: Setup Z3
+        run: wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.4/z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && unzip z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04.zip && mv z3-4.8.4.d6df51951f4c-x64-ubuntu-16.04 z3
+      - name: Get current folder and files
+        run: pwd && ls
+      - name: Configure CMake
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3
+      - name: Build ESBMC
+        run: cd build && cmake --build .
+      - name: Create Release
+        run: cd build && mkdir esbmc && cp ../scripts/licenses/* esbmc && cp ./src/esbmc/esbmc esbmc && cp ../scripts/competitions/svcomp/* esbmc
+      - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
+        with:
+          name: esbmc
+          path: ./build/esbmc
