@@ -152,23 +152,6 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step);
 /**
  *
  */
-std::string w_string_replace(
-  std::string subject,
-  const std::string &search,
-  const std::string &replace);
-
-/**
- *
- */
-void get_offsets(
-  const std::string &file_path,
-  const uint16_t line_number,
-  uint16_t &p_startoffset,
-  uint16_t &p_endoffset);
-
-/**
- *
- */
 bool is_valid_witness_expr(
   const namespacet &ns,
   const irep_container<expr2t> &exp);
@@ -185,13 +168,6 @@ uint16_t get_line_number(
  *
  */
 int generate_sha1_hash_for_file(const char *path, std::string &output);
-
-/**
- *
- */
-void map_line_number_to_content(
-  const std::string &source_code_file,
-  std::map<int, std::string> &line_content_map);
 
 /**
  *

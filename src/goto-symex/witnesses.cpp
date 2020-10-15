@@ -130,27 +130,6 @@ std::string trim(const std::string &str)
 }
 
 /* */
-void map_line_number_to_content(
-  const std::string &source_code_file,
-  std::map<int, std::string> &line_content_map)
-{
-  std::ifstream sfile(source_code_file);
-  if(!sfile)
-  {
-    return;
-  }
-  std::string source_content = read_file(source_code_file);
-  std::istringstream source_stream(source_content);
-  std::string line;
-  int line_count = 0;
-  while(std::getline(source_stream, line))
-  {
-    line_count++;
-    line_content_map[line_count] = trim(line);
-  }
-}
-
-/* */
 void create_node_node(nodet &node, xmlnodet &nodenode)
 {
   nodenode.add("<xmlattr>.id", node.id);
@@ -738,65 +717,6 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
     check_replace_invalid_assignment(assignment);
   }
   return assignment;
-}
-
-/* */
-std::string w_string_replace(
-  std::string subject,
-  const std::string &search,
-  const std::string &replace)
-{
-  size_t pos = 0;
-  while((pos = subject.find(search, pos)) != std::string::npos)
-  {
-    subject.replace(pos, search.length(), replace);
-    pos += replace.length();
-  }
-  return subject;
-}
-
-/* */
-void get_offsets(
-  const std::string &file_path,
-  const uint16_t line_number,
-  uint16_t &p_startoffset,
-  uint16_t &p_endoffset)
-{
-  uint16_t startoffset = 0;
-  uint16_t endoffset = 0;
-  uint8_t whiteSpaces = 0;
-  size_t endOfAssignment = std::string::npos;
-  std::string line;
-  std::ifstream file(file_path.c_str());
-
-  if(file.is_open())
-  {
-    for(int currentLineNumber = 1;
-        getline(file, line) && (endOfAssignment == std::string::npos);
-        currentLineNumber++)
-    {
-      line += '\n';
-      if(currentLineNumber >= line_number)
-      {
-        if(currentLineNumber == line_number)
-        {
-          endoffset = line.size();
-          for(; line.at(whiteSpaces) == ' ' && (whiteSpaces < line.size());
-              whiteSpaces++)
-            startoffset += whiteSpaces;
-        }
-        endOfAssignment = line.rfind(';');
-      }
-      else
-      {
-        startoffset += line.size();
-      }
-    }
-    endoffset += startoffset;
-    file.close();
-  }
-  p_startoffset = startoffset;
-  p_endoffset = endoffset;
 }
 
 /* */
