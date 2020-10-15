@@ -343,6 +343,7 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
         position = mk_bv2int(position, false);
       a = mk_str_at(source, position);
     }
+    else a = convert_ast(expr);
     break;
   }
   case expr2t::sub_id:
@@ -432,7 +433,7 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
 
       a = update;
     }
-
+    else a = convert_ast(expr);
     break;
   }
   case expr2t::member_id:
@@ -521,6 +522,7 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
     const bitcast2t &cast = to_bitcast2t(expr);
     if(is_str_expr(expr))
       a = convert_str_ast(cast.from);
+    else a = convert_ast(cast.from);
     break;
   }
   case expr2t::extract_id:
