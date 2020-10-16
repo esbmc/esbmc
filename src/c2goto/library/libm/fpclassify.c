@@ -3,6 +3,7 @@
 #ifdef _MSVC
 #define _USE_MATH_DEFINES
 #define _CRT_FUNCTIONS_REQUIRED 0
+
 #endif
 #include <math.h>
 #ifdef _MSVC
@@ -29,6 +30,7 @@ _signbit(float, _fdsign);
 #ifdef _MSVC
 #undef isnan
 #undef isinf
+
 #define classify_return_type short
 
 #define _signbit(type, name)                      \
