@@ -3,19 +3,20 @@
 #ifdef _MSVC
 #define _USE_MATH_DEFINES
 #define _CRT_FUNCTIONS_REQUIRED 0
+
 #endif
 #include <math.h>
-
 #ifdef _MSVC
 #undef isnan
 #undef isinf
+
 #define classify_return_type short
 
 #define _signbit(type, name)                      \
     int name(type d)                              \
     {                                             \
         __ESBMC_HIDE:;                            \ 
-        return !(d >= 0 || isinf(d) || isnan(d)); \
+        return __builtin_signbit((float)d); \
     }
 
 _signbit(double, _dsign);
