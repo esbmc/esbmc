@@ -234,13 +234,11 @@ bool smt_convt::is_str_expr(const expr2tc &expr)
 {
   if(is_bool_type(expr) || is_pointer_type(expr))
     return false;
-
   type2tc type;
   if(is_array_type(expr))
     type = get_base_array_subtype(expr->type);
   else
     type = expr->type;
-
   unsigned int width = type->get_width();
   if(width == config.ansi_c.char_width)
     return true;
@@ -343,7 +341,8 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
         position = mk_bv2int(position, false);
       a = mk_str_at(source, position);
     }
-    else a = convert_ast(expr);
+    else
+      a = convert_ast(expr);
     break;
   }
   case expr2t::sub_id:
@@ -352,7 +351,6 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
     unsigned int expr_width = expr->type->get_width();
     unsigned int additional_bits = expr_width - char_width;
     smt_astt x, y;
-
     const sub2t &sub = to_sub2t(expr);
     if(!is_constant_int2t(sub.side_1))
     {
@@ -370,9 +368,8 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
     if(!is_constant_int2t(sub.side_2))
     {
       y = mk_smt_symbol(
-        mk_fresh_name("str_solver::tmp#"), mk_bv_sort(char_width));
+      mk_fresh_name("str_solver::tmp#"), mk_bv_sort(char_width));
       smt_astt uy = mk_seq_unit(y);
-
       uy->assign(this, args[1]);
       y = mk_sign_ext(y, additional_bits);
       if(int_encoding)
@@ -385,7 +382,6 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
       a = mk_sub(x, y);
     else
       a = mk_bvsub(x, y);
-
     break;
   }
   case expr2t::with_id:
@@ -397,11 +393,9 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
       expr2tc update_value, update_field;
       update_field = with.update_field;
       update_value = with.update_value;
-
       position = convert_ast(update_field);
       if(!int_encoding)
         position = mk_bv2int(position, false);
-
       switch(update_field->expr_id)
       {
       case expr2t::constant_int_id:
@@ -417,11 +411,9 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
       }
       default:;
       }
-
       _char = convert_str_ast(update_value);
       source = convert_str_ast(with.source_value);
       pre_str = mk_str_extract(source, mk_smt_int(0), position);
-
       const constant_int2t &int_char = to_constant_int2t(update_value);
       if(int_char.value != 0)
       {
@@ -433,7 +425,8 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
 
       a = update;
     }
-    else a = convert_ast(expr);
+    else
+      a = convert_ast(expr);
     break;
   }
   case expr2t::member_id:
@@ -456,7 +449,6 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
     const expr2tc *ptr = &obj.ptr_obj;
     while(is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
       ptr = &to_typecast2t(*ptr).from;
-
     args[0] = convert_ast(*ptr);
     a = args[0]->project(this, 0);
     break;
@@ -522,7 +514,8 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
     const bitcast2t &cast = to_bitcast2t(expr);
     if(is_str_expr(expr))
       a = convert_str_ast(cast.from);
-    else a = convert_ast(cast.from);
+    else
+      a = convert_ast(cast.from);
     break;
   }
   case expr2t::extract_id:
@@ -535,7 +528,6 @@ smt_astt smt_convt::convert_str_ast(const expr2tc &expr)
   default:
     a = convert_ast(expr);
   }
-
   struct smt_cache_entryt entry = {expr, a, ctx_level};
   smt_str_cache.insert(entry);
   return a;
