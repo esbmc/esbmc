@@ -1,6 +1,6 @@
 name: Build All Solvers
 
-on:
+on: 
   push:
     branches:
       - master
@@ -12,7 +12,7 @@ jobs:
   build-linux:
     name: Build ESBMC with all Solvers (Linux)
     runs-on: ubuntu-latest
-    steps:
+    steps:      
     - uses: actions/checkout@v1
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install csmith libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools && pip install toml
@@ -43,14 +43,14 @@ jobs:
         name: release-linux
         path: ./release
     - name: Run tests
-      run: cd build/ && ctest -j4 --output-on-failure --progress .
+      run: cd build/ && ctest -j4 --output-on-failure --progress . 
     - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
       with:
         name: csmith-linux
         path: ./build/csmith-error
         if-no-files-found: ignore
 
-  build-macos:
+  build-macos:  
     name: Build ESBMC with all Solvers (macOS)
     runs-on: macos-latest
     steps:
@@ -67,7 +67,7 @@ jobs:
       - name: Setup boolector
         run: git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j4 && make install
       - name: Setup Z3
-        run: brew install z3
+        run: brew install z3 
       - name: Setup MathSAT
         run: wget http://mathsat.fbk.eu/download.php?file=mathsat-5.5.4-darwin-libcxx-x86_64.tar.gz -O mathsat.tar.gz && tar xf mathsat.tar.gz && mv mathsat-5.5.4-darwin-libcxx-x86_64 mathsat
       - name: MathSAT brew hack
@@ -88,7 +88,7 @@ jobs:
           name: release-macos
           path: ./release
       - name: Run tests
-        run: cd build/ && chmod +x macos-wrapper.sh && ctest -j2 --output-on-failure --progress .
+        run: cd build/ && chmod +x macos-wrapper.sh && ctest -j2 --output-on-failure --progress . 
       - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
         with:
           name: csmith-macos
