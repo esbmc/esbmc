@@ -261,14 +261,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     options.set_option("base-case", true);
     options.set_option("no-unwinding-assertions", true);
-    options.set_option("partial-loops", false);
+    //options.set_option("partial-loops", false);
   }
 
   if(cmdline.isset("forward-condition"))
   {
     options.set_option("forward-condition", true);
     options.set_option("no-unwinding-assertions", false);
-    options.set_option("partial-loops", false);
+    //options.set_option("partial-loops", false);
     options.set_option("no-assertions", true);
   }
 
@@ -276,7 +276,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     options.set_option("inductive-step", true);
     options.set_option("no-unwinding-assertions", true);
-    options.set_option("partial-loops", false);
+    //options.set_option("partial-loops", false);
   }
 
   if(cmdline.isset("overflow-check"))
@@ -1220,7 +1220,7 @@ int esbmc_parseoptionst::do_base_case(
   opts.set_option("inductive-step", false);
 
   opts.set_option("no-unwinding-assertions", true);
-  opts.set_option("partial-loops", false);
+  //opts.set_option("partial-loops", false);
 
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
@@ -1342,7 +1342,7 @@ int esbmc_parseoptionst::do_inductive_step(
   opts.set_option("inductive-step", true);
 
   opts.set_option("no-unwinding-assertions", true);
-  opts.set_option("partial-loops", true);
+  //opts.set_option("partial-loops", true);
 
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
