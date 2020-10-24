@@ -42,6 +42,7 @@ public:
     const expr2tc &lhs,
     const expr2tc &original_lhs,
     const expr2tc &rhs,
+    const expr2tc &original_rhs,
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
     const bool hidden,
@@ -124,7 +125,8 @@ public:
     expr2tc guard;
 
     // for ASSIGNMENT
-    expr2tc lhs, rhs, original_lhs;
+    expr2tc lhs, rhs;
+    expr2tc original_lhs, original_rhs;
 
     // for ASSUME/ASSERT
     expr2tc cond;

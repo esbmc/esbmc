@@ -318,6 +318,7 @@ void goto_symext::symex_assign_symbol(
     renamed_lhs,
     new_lhs,
     rhs,
+    full_rhs,
     cur_state->source,
     cur_state->gen_stack_trace(),
     hidden,
