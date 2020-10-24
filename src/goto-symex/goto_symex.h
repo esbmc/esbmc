@@ -515,6 +515,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,
+    expr2tc full_rhs,
     guardt &guard,
     const bool hidden);
 
@@ -531,6 +532,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,
+    expr2tc &full_rhs,
     guardt &guard,
     const bool hidden);
 
@@ -556,6 +558,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,
+    expr2tc &full_rhs,
     guardt &guard,
     const bool hidden);
 
@@ -576,6 +579,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,
+    expr2tc &full_rhs,
     guardt &guard,
     const bool hidden);
 
@@ -591,6 +595,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,
+    expr2tc &full_rhs,
     guardt &guard,
     const bool hidden);
 
@@ -608,6 +613,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,
+    expr2tc &full_rhs,
     guardt &guard,
     const bool hidden);
 
@@ -624,6 +630,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,
+    expr2tc &full_rhs,
     guardt &guard,
     const bool hidden);
 
@@ -640,6 +647,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,
+    expr2tc &full_rhs,
     guardt &guard,
     const bool hidden);
 
@@ -657,6 +665,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,
+    expr2tc &full_rhs,
     guardt &guard,
     const bool hidden);
 
@@ -675,6 +684,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,
+    expr2tc &full_rhs,
     guardt &guard,
     const bool hidden);
 
