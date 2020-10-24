@@ -56,6 +56,9 @@ void build_goto_trace(
 {
   unsigned step_nr = 0;
 
+  // Set of pairs<lhs, rhs>, so we don't print repeated assignments
+  std::set<std::pair<size_t, size_t>> assignments;
+
   for(auto const &SSA_step : target->SSA_steps)
   {
     if(SSA_step.hidden)
@@ -78,20 +81,26 @@ void build_goto_trace(
 
     if(SSA_step.is_assignment())
     {
-      goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
+      expr2tc cex_lhs = build_lhs(smt_conv, SSA_step.original_lhs);
 
+      expr2tc cex_rhs;
       try
       {
-        if(is_nil_expr(SSA_step.original_rhs))
-          goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
-        else
-          goto_trace_step.value = build_rhs(smt_conv, SSA_step.original_rhs);
+        cex_rhs = is_nil_expr(SSA_step.original_rhs)
+                    ? build_rhs(smt_conv, SSA_step.rhs)
+                    : build_rhs(smt_conv, SSA_step.original_rhs);
       }
       catch(type2t::symbolic_type_excp *e)
       {
         // Don't add this assignment to the cex if we couldn't build the rhs value
         continue;
       }
+
+      if(!assignments.insert({cex_lhs.crc(), cex_rhs.crc()}).second)
+        continue;
+
+      goto_trace_step.lhs = cex_lhs;
+      goto_trace_step.value = cex_rhs;
     }
 
     if(SSA_step.is_output())
