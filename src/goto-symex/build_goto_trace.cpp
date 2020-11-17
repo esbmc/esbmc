@@ -58,9 +58,10 @@ void build_goto_trace(
 
   for(auto const &SSA_step : target->SSA_steps)
   {
+    /*
     if(SSA_step.hidden)
       continue;
-
+    */
     if(!smt_conv->l_get(SSA_step.guard_ast).is_true())
       continue;
 
