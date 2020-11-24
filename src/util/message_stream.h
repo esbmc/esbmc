@@ -76,7 +76,7 @@ public:
 
   void status()
   {
-    send_msg(6, str.str());
+    send_msg(6, "");
     clear_err();
   }
 

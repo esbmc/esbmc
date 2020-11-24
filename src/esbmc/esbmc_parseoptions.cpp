@@ -1148,9 +1148,9 @@ int esbmc_parseoptionst::doit_incremental()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    std::cout << "\n*** Iteration number ";
-    std::cout << k_step;
-    std::cout << " ***\n";
+    //std::cout << "\n*** Iteration number ";
+    //std::cout << k_step;
+    //std::cout << " ***\n";
 
     if(do_base_case(opts, goto_functions, k_step))
       return true;

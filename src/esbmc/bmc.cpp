@@ -147,8 +147,8 @@ void bmct::error_trace(
     /* fallthrough */
 
   case ui_message_handlert::PLAIN:
-    std::cout << std::endl << "Counterexample:" << std::endl;
-    show_goto_trace(std::cout, ns, goto_trace);
+    //std::cout << std::endl << "Counterexample:" << std::endl;
+    //show_goto_trace(std::cout, ns, goto_trace);
     break;
 
   case ui_message_handlert::OLD_GUI:
@@ -510,7 +510,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     str << "BMC program time: ";
     output_time(bmc_stop - bmc_start, str);
     str << "s";
-    status(str.str());
+    //status(str.str());
 
     // Only run for one run
     if(options.get_bool_option("interactive-ileaves"))
