@@ -1190,6 +1190,23 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = mk_array_sort(d, r);
     break;
   }
+  case type2t::union_id:
+  {
+    // Create an array of bytes to encode unions
+    type2tc flattened_union = array_type2tc(
+      get_uint8_type(),
+      constant_int2tc(uint_type2(), type_byte_size(type)),
+      false);
+
+    type2tc t = make_array_domain_type(
+      to_array_type(flatten_array_type(flattened_union)));
+    smt_sortt d = mk_int_bv_sort(t->get_width());
+
+    type2tc range = get_flattened_array_subtype(flattened_union);
+
+    result = mk_array_sort(d, convert_sort(range));
+    break;
+  }
   default:
     std::cerr << "Unexpected type ID " << get_type_id(type);
     std::cerr << " reached SMT conversion\n";
@@ -1900,22 +1917,20 @@ smt_astt smt_convt::convert_array_store(const expr2tc &expr)
     newidx = fix_array_idx(with.update_field, with.type);
   }
 
-  assert(is_array_type(expr->type));
-  smt_astt src, update;
-  const array_type2t &arrtype = to_array_type(expr->type);
-
-  // Workaround for bools-in-arrays.
-  if(is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays)
+  smt_astt update;
+  if(
+    is_array_type(expr->type) &&
+    (is_bool_type(to_array_type(expr->type).subtype) &&
+     !array_api->supports_bools_in_arrays))
   {
+    // Workaround for bools-in-arrays.
     typecast2tc cast(get_uint_type(1), update_val);
     update = convert_ast(cast);
   }
   else
-  {
     update = convert_ast(update_val);
-  }
 
-  src = convert_ast(with.source_value);
+  smt_astt src = convert_ast(with.source_value);
   return src->update(this, update, 0, newidx);
 }
 
