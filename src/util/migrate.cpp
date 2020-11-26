@@ -2696,7 +2696,6 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt member("member", thetype);
     member.set("component_name", ref2.member);
-    exprt member_name("member_name");
     member.copy_to_operands(migrate_expr_back(ref2.source_value));
     return member;
   }
