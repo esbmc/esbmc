@@ -1,5 +1,6 @@
 name: Build All Solvers
 
+
 on: 
   push:
     branches:
