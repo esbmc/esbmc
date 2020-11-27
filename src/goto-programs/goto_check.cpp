@@ -26,6 +26,8 @@ public:
       disable_pointer_check(options.get_bool_option("no-pointer-check")),
       disable_div_by_zero_check(
         options.get_bool_option("no-div-by-zero-check")),
+      disable_pointer_relation_check(
+        options.get_bool_option("no-pointer-relation-check")),
       enable_overflow_check(options.get_bool_option("overflow-check")),
       enable_nan_check(options.get_bool_option("nan-check"))
   {
@@ -84,6 +86,7 @@ protected:
   bool disable_bounds_check;
   bool disable_pointer_check;
   bool disable_div_by_zero_check;
+  bool disable_pointer_relation_check;
   bool enable_overflow_check;
   bool enable_nan_check;
 };
@@ -251,7 +254,7 @@ void goto_checkt::pointer_rel_check(
   const guardt &guard,
   const locationt &loc)
 {
-  if(disable_pointer_check)
+  if(disable_pointer_check || disable_pointer_relation_check)
     return;
 
   assert(expr->get_num_sub_exprs() == 2);

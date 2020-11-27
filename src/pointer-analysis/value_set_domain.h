@@ -44,8 +44,8 @@ public:
     return value_set->make_union(*other.value_set, keepnew);
   }
 
-  void output(const namespacet &ns __attribute__((unused)), std::ostream &out)
-    const override
+  void
+  output(const namespacet &ns [[gnu::unused]], std::ostream &out) const override
   {
     value_set->output(out);
   }
@@ -61,7 +61,7 @@ public:
   transform(const namespacet &ns, locationt from_l, locationt to_l) override;
 
   void get_reference_set(
-    const namespacet &ns __attribute__((unused)),
+    const namespacet &ns [[gnu::unused]],
     const expr2tc &expr,
     value_setst::valuest &dest) override
   {

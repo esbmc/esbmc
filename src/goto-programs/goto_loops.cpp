@@ -1,10 +1,3 @@
-/*
- * loopst.cpp
- *
- *  Created on: Jun 30, 2015
- *      Author: mramalho
- */
-
 #include <goto-programs/goto_loops.h>
 #include <util/expr_util.h>
 
@@ -80,13 +73,17 @@ void goto_loopst::create_function_loop(
   it1->set_original_loop_head(loop_head);
   it1->set_original_loop_exit(loop_exit);
 
-  std::size_t size = 0;
+  // Push the current function name to the list of functions
+  std::vector<irep_idt> function_names;
+  function_names.push_back(function_name);
+
   // Copy the loop body
+  std::size_t size = 0;
   while(it != loop_exit)
   {
     // This should be done only when we're running k-induction
     // Maybe a flag on the class?
-    get_modified_variables(it, it1, function_name);
+    get_modified_variables(it, it1, function_names);
     ++it;
 
     // Count the number of instruction
@@ -100,7 +97,7 @@ void goto_loopst::create_function_loop(
 void goto_loopst::get_modified_variables(
   goto_programt::instructionst::iterator instruction,
   function_loopst::iterator loop,
-  const irep_idt &_function_name)
+  std::vector<irep_idt> &function_names)
 {
   if(instruction->is_assign())
   {
@@ -124,8 +121,13 @@ void goto_loopst::get_modified_variables(
     irep_idt &identifier = to_symbol2t(function_call.function).thename;
 
     // This means recursion, do nothing
-    if(identifier == _function_name)
+    if(
+      std::find(function_names.begin(), function_names.end(), identifier) !=
+      function_names.end())
       return;
+
+    // We didn't entered this function yet, so add it to the list
+    function_names.push_back(identifier);
 
     // find code in function map
     goto_functionst::function_mapt::iterator it =
@@ -147,14 +149,18 @@ void goto_loopst::get_modified_variables(
         head != it->second.body.instructions.end();
         ++head)
     {
-      get_modified_variables(head, loop, identifier);
+      get_modified_variables(head, loop, function_names);
     }
   }
   else if(
-    instruction->is_goto() || instruction->is_return() ||
-    instruction->is_assert() || instruction->is_assume())
+    instruction->is_goto() || instruction->is_assert() ||
+    instruction->is_assume())
   {
     add_loop_var(*loop, instruction->guard, false);
+  }
+  else if(instruction->is_end_function())
+  {
+    function_names.pop_back();
   }
 }
 

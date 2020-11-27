@@ -1,10 +1,3 @@
-/*
- * clang_main.cpp
- *
- *  Created on: Jul 29, 2015
- *      Author: mramalho
- */
-
 #include <cassert>
 #include <util/arith_tools.h>
 #include <util/c_types.h>

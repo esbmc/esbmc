@@ -1,10 +1,20 @@
-#include "clang_cpp_convert.h"
-
+// Remove warnings from Clang headers
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <clang/AST/Attr.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclFriend.h>
 #include <clang/AST/DeclTemplate.h>
+#include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
-#include <clang/AST/StmtCXX.h>
+#include <clang/AST/QualTypeNames.h>
+#include <clang/AST/Type.h>
+#include <clang/Index/USRGeneration.h>
+#include <clang/Frontend/ASTUnit.h>
+#pragma GCC diagnostic pop
+
+#include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <util/expr_util.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
@@ -233,7 +243,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
       assert(base != nullptr);
 
       // First, parse the fields
-      for(auto const &field : base->fields())
+      for(auto const *field : base->fields())
       {
         // We don't add if private
         if(field->getAccess() >= clang::AS_private)
@@ -258,7 +268,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 
 bool clang_cpp_convertert::get_struct_union_class_methods(
   const clang::RecordDecl &recordd,
-  struct_union_typet &type)
+  struct_union_typet &)
 {
   // If a struct is defined inside a extern C, it will be a RecordDecl
   const clang::CXXRecordDecl *cxxrd =
@@ -266,7 +276,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods(
   if(cxxrd == nullptr)
     return false;
 
-  for(const auto &decl : cxxrd->methods())
+  for(const auto *decl : cxxrd->methods())
   {
     exprt dummy;
     if(get_decl(*decl, dummy))
@@ -541,7 +551,7 @@ template <typename SpecializationDecl>
 bool clang_cpp_convertert::get_template_decl_specialization(
   const SpecializationDecl *D,
   bool DumpExplicitInst,
-  bool DumpRefOnly,
+  bool,
   exprt &new_expr)
 {
   for(auto *redecl_with_bad_type : D->redecls())

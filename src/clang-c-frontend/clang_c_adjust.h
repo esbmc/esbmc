@@ -1,10 +1,3 @@
-/*
- * clang_c_adjust.h
- *
- *  Created on: Aug 30, 2015
- *      Author: mramalho
- */
-
 #ifndef CLANG_C_FRONTEND_CLANG_C_ADJUST_H_
 #define CLANG_C_FRONTEND_CLANG_C_ADJUST_H_
 

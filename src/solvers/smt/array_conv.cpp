@@ -223,7 +223,7 @@ smt_astt array_convt::mk_store(
 smt_astt array_convt::mk_unbounded_select(
   const array_ast *ma,
   const expr2tc &real_idx,
-  smt_sortt ressort __attribute__((unused)))
+  smt_sortt ressort [[gnu::unused]])
 {
   // Store everything about this select, and return a free variable, that then
   // gets constrained at the end of conversion to tie up with the correct
@@ -962,8 +962,10 @@ void array_convt::add_array_equalities()
 
   for(auto &it = pair.first; it != pair.second; it++)
   {
+#ifndef NDEBUG
     assert(array_indexes_are_same(
       array_indexes[it->second.arr1_id], array_indexes[it->second.arr2_id]));
+#endif
 
     add_array_equality(
       it->second.arr1_id,
@@ -1189,8 +1191,10 @@ void array_convt::execute_array_joining_ite(
 
   ast_vect selects;
   selects.reserve(array_indexes[cur_id].size());
+#ifndef NDEBUG
   assert(array_indexes_are_same(
     array_indexes[cur_id], array_indexes[remote_ast->base_array_id]));
+#endif
 
   for(auto const &elem : array_indexes[remote_ast->base_array_id])
   {
@@ -1312,8 +1316,7 @@ void array_convt::add_initial_ackerman_constraints(
   }
 }
 
-smt_astt
-array_ast::eq(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
+smt_astt array_ast::eq(smt_convt *ctx [[gnu::unused]], smt_astt sym) const
 {
   const array_ast *other = array_downcast(sym);
 
@@ -1325,14 +1328,13 @@ array_ast::eq(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
   return array_ctx->mk_bounded_array_equality(this, other);
 }
 
-void array_ast::assign(smt_convt *ctx __attribute__((unused)), smt_astt sym)
-  const
+void array_ast::assign(smt_convt *ctx [[gnu::unused]], smt_astt sym) const
 {
   array_ctx->convert_array_assign(this, sym);
 }
 
 smt_astt array_ast::update(
-  smt_convt *ctx __attribute__((unused)),
+  smt_convt *ctx [[gnu::unused]],
   smt_astt value,
   unsigned int idx,
   expr2tc idx_expr) const
@@ -1344,9 +1346,8 @@ smt_astt array_ast::update(
   return array_ctx->mk_store(this, idx_expr, value, sort);
 }
 
-smt_astt array_ast::select(
-  smt_convt *ctx __attribute__((unused)),
-  const expr2tc &idx) const
+smt_astt
+array_ast::select(smt_convt *ctx [[gnu::unused]], const expr2tc &idx) const
 {
   // Look up the array subtype sort. If we're unbounded, use the base array id
   // to do that, otherwise pull the subtype out of an element.
@@ -1360,7 +1361,7 @@ smt_astt array_ast::select(
 }
 
 smt_astt array_ast::ite(
-  smt_convt *ctx __attribute__((unused)),
+  smt_convt *ctx [[gnu::unused]],
   smt_astt cond,
   smt_astt falseop) const
 {

@@ -123,9 +123,7 @@ public:
       }
     }
 
-    explicit objectt(
-      bool offset_set __attribute__((unused)),
-      const BigInt &_offset)
+    explicit objectt(bool offset_set [[gnu::unused]], const BigInt &_offset)
       : offset(_offset), offset_is_set(true)
     {
       assert(offset_set);
@@ -172,6 +170,8 @@ public:
     object_map_dt()
     {
     }
+
+    object_map_dt &operator=(const object_map_dt &other) = default;
 
     object_map_dt(const object_map_dt &ref)
     {

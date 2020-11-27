@@ -1,14 +1,19 @@
+if(ENABLE_OLD_FRONTEND)
+  set(OLD_FRONTEND_TARGETS ansicfrontend cppfrontend)
+else()
+  set(OLD_FRONTEND_TARGETS "")
+endif()
+
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
-  COMMAND ${CMAKE_SOURCE_DIR}/scripts/buildidobj.sh ${CMAKE_CURRENT_BINARY_DIR}
-  DEPENDS main.cpp esbmc_parseoptions.cpp bmc.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp ansicfrontend cppfrontend clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs # Depends on... everything else linked into esbmc. Add more as necessary.
+  COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/buildidobj.py ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   COMMENT "Generating ESBMC version ID"
   VERBATIM
 )
-
+set(BUILD_ID_OBJ_OUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
-  COMMAND sh -c "${CMAKE_SOURCE_DIR}/scripts/flail.sh buildidstring ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt > ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c"
-  DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
+  COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py ${BUILD_ID_OBJ_OUT} ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
+  DEPENDS  ${BUILD_ID_OBJ_OUT} ${CMAKE_SOURCE_DIR}/scripts/flail.py
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   COMMENT "Flailing build ID object"
   VERBATIM
@@ -20,6 +25,8 @@ target_include_directories(esbmc
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_link_libraries(esbmc ansicfrontend cppfrontend clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs smt_cache)
+
+target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} clangcfrontend clangcppfrontend symex pointeranalysis langapi util_esbmc bigint solvers clibs smt_cache)
+
 
 install(TARGETS esbmc DESTINATION bin)

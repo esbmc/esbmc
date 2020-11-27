@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--no-unwinding-assertions --unwind 15 --show-goto-value-sets --falsification --no-pointer-check --ssa-symbol-table --partial-loops --no-align-check --memory-leak-check --little-endian --force-malloc-success --mathsat
+^VERIFICATION FAILED$

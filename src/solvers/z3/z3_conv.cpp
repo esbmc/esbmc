@@ -906,7 +906,7 @@ smt_astt z3_convt::mk_smt_bool(bool val)
 smt_astt z3_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
-  smt_sortt array_subtype __attribute__((unused)))
+  smt_sortt array_subtype [[gnu::unused]])
 {
   return mk_smt_symbol(name, s);
 }
@@ -1151,7 +1151,7 @@ bool z3_convt::get_bool(smt_astt a)
 BigInt z3_convt::get_bv(smt_astt a)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
-  z3::expr e = solver.get_model().eval(za->a, false);
+  z3::expr e = solver.get_model().eval(za->a, true);
 
   // Not a numeral? Let's not try to convert it
   return string2integer(Z3_get_numeral_string(z3_ctx, e));

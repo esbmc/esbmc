@@ -1,10 +1,3 @@
-/*
- * loopst.h
- *
- *  Created on: Jun 30, 2015
- *      Author: mramalho
- */
-
 #ifndef GOTO_PROGRAMS_GOTO_LOOPS_H_
 #define GOTO_PROGRAMS_GOTO_LOOPS_H_
 
@@ -16,7 +9,7 @@
 class goto_loopst : public message_streamt
 {
 protected:
-  const irep_idt function_name;
+  irep_idt function_name;
   goto_functionst &goto_functions;
   goto_functiont &goto_function;
 
@@ -30,7 +23,7 @@ protected:
   void get_modified_variables(
     goto_programt::instructionst::iterator instruction,
     function_loopst::iterator loop,
-    const irep_idt &_function_name);
+    std::vector<irep_idt> &function_name);
 
   void add_modified_var(loopst &loop, const expr2tc &expr);
   void add_unmodified_var(loopst &loop, const expr2tc &expr);

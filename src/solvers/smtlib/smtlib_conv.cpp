@@ -99,7 +99,7 @@ extern sexpr *smtlib_output;
 smt_convt *create_new_smtlib_solver(
   bool int_encoding,
   const namespacet &ns,
-  tuple_iface **tuple_api __attribute__((unused)),
+  tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
@@ -366,7 +366,7 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
     // Continue.
   }
 
-  for(auto i = 0; i < ast->args.size(); i++)
+  for(unsigned long int i = 0; i < ast->args.size(); i++)
     brace_level +=
       emit_ast(static_cast<const smtlib_smt_ast *>(ast->args[i]), args[i]);
 
@@ -394,7 +394,7 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
   }
 
   // Its operands
-  for(auto i = 0; i < ast->args.size(); i++)
+  for(unsigned long int i = 0; i < ast->args.size(); i++)
     fprintf(out_stream, " %s", args[i].c_str());
 
   // End func enclosing brace, then operand to let (two braces).
@@ -802,7 +802,7 @@ smt_astt smtlib_convt::mk_smt_bool(bool val)
 smt_astt smtlib_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
-  smt_sortt array_subtype __attribute__((unused)))
+  smt_sortt array_subtype [[gnu::unused]])
 {
   return mk_smt_symbol(name, s);
 }
@@ -834,8 +834,7 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return a;
 }
 
-smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type
-                                       __attribute__((unused)))
+smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type [[gnu::unused]])
 {
   std::cerr << "Attempted to make struct type in smtlib conversion"
             << std::endl;
@@ -900,7 +899,7 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
   return ast;
 }
 
-int smtliberror(int startsym __attribute__((unused)), const std::string &error)
+int smtliberror(int startsym [[gnu::unused]], const std::string &error)
 {
   std::cerr << "SMTLIB response parsing error: \"" << error << "\""
             << std::endl;

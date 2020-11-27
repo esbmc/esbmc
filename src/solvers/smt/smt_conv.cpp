@@ -2159,7 +2159,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
-    return build_bv(type, get_bv(a));
+    return get_by_value(type, get_bv(a));
 
   case type2t::floatbv_id:
     return constant_floatbv2tc(fp_api->get_fpbv(a));
@@ -2383,7 +2383,7 @@ smt_astt array_iface::default_convert_array_of(
 }
 
 smt_astt smt_convt::pointer_array_of(
-  const expr2tc &init_val __attribute__((unused)),
+  const expr2tc &init_val [[gnu::unused]],
   unsigned long array_width)
 {
   // Actually a tuple, but the operand is going to be a symbol, null.
@@ -2431,7 +2431,7 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
 
   assert(is_constant_array2t(expr));
   const constant_array2t &arr = to_constant_array2t(expr);
-  smt_astt args[arr.datatype_members.size()];
+  std::vector<smt_astt> args(arr.datatype_members.size());
   unsigned int i = 0;
   for(auto const &it : arr.datatype_members)
   {
@@ -2439,7 +2439,7 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
     i++;
   }
 
-  return tuple_api->tuple_array_create(arr_type, args, false, domain);
+  return tuple_api->tuple_array_create(arr_type, args.data(), false, domain);
 }
 
 void smt_convt::rewrite_ptrs_to_structs(type2tc &type)
@@ -2525,8 +2525,8 @@ smt_astt smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 }
 
 smt_astt smt_ast::project(
-  smt_convt *ctx __attribute__((unused)),
-  unsigned int idx __attribute__((unused))) const
+  smt_convt *ctx [[gnu::unused]],
+  unsigned int idx [[gnu::unused]]) const
 {
   std::cerr << "Projecting from non-tuple based AST\n";
   abort();
@@ -2548,9 +2548,18 @@ tvt smt_convt::l_get(smt_astt a)
   return get_bool(a) ? tvt(true) : tvt(false);
 }
 
-expr2tc smt_convt::build_bv(const type2tc &type, BigInt value)
+expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
 {
-  if(is_fixedbv_type(type))
+  switch(type->type_id)
+  {
+  case type2t::bool_id:
+    return value.is_zero() ? gen_false_expr() : gen_true_expr();
+
+  case type2t::unsignedbv_id:
+  case type2t::signedbv_id:
+    return constant_int2tc(type, value);
+
+  case type2t::fixedbv_id:
   {
     fixedbvt fbv(constant_exprt(
       integer2binary(value, type->get_width()),
@@ -2558,7 +2567,21 @@ expr2tc smt_convt::build_bv(const type2tc &type, BigInt value)
       migrate_type_back(type)));
     return constant_fixedbv2tc(fbv);
   }
-  return constant_int2tc(type, value);
+
+  case type2t::floatbv_id:
+  {
+    ieee_floatt f(constant_exprt(
+      integer2binary(value, type->get_width()),
+      integer2string(value),
+      migrate_type_back(type)));
+    return constant_floatbv2tc(f);
+  }
+
+  default:;
+  }
+
+  std::cerr << "Can't generate one for type " << get_type_id(type) << '\n';
+  abort();
 }
 
 smt_sortt smt_convt::mk_bool_sort()

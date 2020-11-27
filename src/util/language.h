@@ -31,15 +31,12 @@ public:
 
   // add modules provided by currently parsed file to set
 
-  virtual void modules_provided(std::set<std::string> &modules
-                                __attribute__((unused)))
+  virtual void modules_provided(std::set<std::string> &)
   {
   }
 
   // final adjustments, e.g., initialization and call to main()
-  virtual bool final(
-    contextt &context __attribute__((unused)),
-    message_handlert &message_handler __attribute__((unused)))
+  virtual bool final(contextt &, message_handlert &)
   {
     return false;
   }

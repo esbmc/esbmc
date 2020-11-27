@@ -40,7 +40,7 @@ void mathsat_convt::check_msat_error(msat_term &r) const
 smt_convt *create_new_mathsat_solver(
   bool int_encoding,
   const namespacet &ns,
-  tuple_iface **tuple_api __attribute__((unused)),
+  tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
@@ -173,9 +173,7 @@ ieee_floatt mathsat_convt::get_fpbv(smt_astt a)
   mpz_get_str(buffer, 10, num);
 
   size_t ew, sw;
-  if(
-    msat_is_fp_type(env, to_solver_smt_sort<msat_type>(a->sort)->s, &ew, &sw) !=
-    0)
+  if(!msat_is_fp_type(env, to_solver_smt_sort<msat_type>(a->sort)->s, &ew, &sw))
   {
     std::cerr << "Non FP type passed to mathsat_convt::get_exp_width"
               << std::endl;
@@ -781,7 +779,7 @@ smt_astt mathsat_convt::mk_smt_bool(bool val)
 smt_astt mathsat_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
-  smt_sortt array_subtype __attribute__((unused)))
+  smt_sortt array_subtype [[gnu::unused]])
 {
   return mk_smt_symbol(name, s);
 }

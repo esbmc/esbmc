@@ -122,6 +122,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "no-div-by-zero-check", switc, ""},
   {0, "no-pointer-check", switc, ""},
   {0, "no-align-check", switc, ""},
+  {0, "no-pointer-relation-check", switc, ""},
   {0, "nan-check", switc, ""},
   {0, "memory-leak-check", switc, ""},
   {0, "overflow-check", switc, ""},
@@ -156,6 +157,11 @@ const struct opt_templ esbmc_options[] = {
   {0, "state-hashing", switc, ""},
   {0, "no-por", switc, ""},
   {0, "all-runs", switc, ""},
+  {0, "incremental-cb", switc, ""},
+  {0, "context-bound-step", number, "5"},
+  {0, "max-context-bound", number, "15"},
+  {0, "initial-context-bound", number, "2"},
+  {0, "unlimited-context-bound", switc, ""},
 
   // Miscellaneous
   {0, "memlimit", string, ""},

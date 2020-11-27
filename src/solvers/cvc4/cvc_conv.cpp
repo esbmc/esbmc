@@ -6,7 +6,7 @@
 smt_convt *create_new_cvc_solver(
   bool int_encoding,
   const namespacet &ns,
-  tuple_iface **tuple_api __attribute__((unused)),
+  tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
@@ -1113,7 +1113,7 @@ smt_astt cvc_convt::mk_smt_bool(bool val)
 smt_astt cvc_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
-  smt_sortt array_subtype)
+  smt_sortt)
 {
   return mk_smt_symbol(name, s);
 }

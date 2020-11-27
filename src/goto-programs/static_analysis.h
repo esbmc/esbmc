@@ -40,16 +40,12 @@ public:
 
   virtual ~abstract_domain_baset() = default;
 
-  virtual void output(
-    const namespacet &ns __attribute__((unused)),
-    std::ostream &out __attribute__((unused))) const
+  virtual void output(const namespacet &, std::ostream &) const
   {
   }
 
-  virtual void get_reference_set(
-    const namespacet &ns __attribute__((unused)),
-    const expr2tc &expr __attribute__((unused)),
-    std::list<expr2tc> &dest __attribute__((unused)))
+  virtual void
+  get_reference_set(const namespacet &, const expr2tc &, std::list<expr2tc> &)
   {
     assert(0);
   };

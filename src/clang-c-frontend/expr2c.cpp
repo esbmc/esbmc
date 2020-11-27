@@ -712,10 +712,8 @@ expr2ct::convert_statement_expression(const exprt &src, unsigned &precedence)
   return "(" + convert_code(to_code_block(to_code(src.op0())), 0) + ")";
 }
 
-std::string expr2ct::convert_function(
-  const exprt &src,
-  const std::string &name,
-  unsigned precedence __attribute__((unused)))
+std::string
+expr2ct::convert_function(const exprt &src, const std::string &name, unsigned)
 {
   std::string dest = name;
   dest += '(';
@@ -909,16 +907,12 @@ expr2ct::convert_struct_member_value(const exprt &src, unsigned precedence)
   return "." + src.name().as_string() + "=" + convert(src.op0());
 }
 
-std::string expr2ct::convert_norep(
-  const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+std::string expr2ct::convert_norep(const exprt &src, unsigned &)
 {
   return src.pretty(0);
 }
 
-std::string expr2ct::convert_symbol(
-  const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+std::string expr2ct::convert_symbol(const exprt &src, unsigned &)
 {
   const irep_idt &id = src.identifier();
   std::string dest;
@@ -934,41 +928,31 @@ std::string expr2ct::convert_symbol(
   return dest;
 }
 
-std::string expr2ct::convert_nondet_symbol(
-  const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+std::string expr2ct::convert_nondet_symbol(const exprt &src, unsigned &)
 {
   const std::string &id = src.identifier().as_string();
   return "nondet_symbol(" + id + ")";
 }
 
-std::string expr2ct::convert_predicate_symbol(
-  const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+std::string expr2ct::convert_predicate_symbol(const exprt &src, unsigned &)
 {
   const std::string &id = src.identifier().as_string();
   return "ps(" + id + ")";
 }
 
-std::string expr2ct::convert_predicate_next_symbol(
-  const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+std::string expr2ct::convert_predicate_next_symbol(const exprt &src, unsigned &)
 {
   const std::string &id = src.identifier().as_string();
   return "pns(" + id + ")";
 }
 
-std::string expr2ct::convert_quantified_symbol(
-  const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+std::string expr2ct::convert_quantified_symbol(const exprt &src, unsigned &)
 {
   const std::string &id = src.identifier().as_string();
   return id;
 }
 
-std::string expr2ct::convert_nondet_bool(
-  const exprt &src __attribute__((unused)),
-  unsigned &precedence __attribute__((unused)))
+std::string expr2ct::convert_nondet_bool(const exprt &, unsigned &)
 {
   return "nondet_bool()";
 }
@@ -1177,9 +1161,7 @@ std::string expr2ct::convert_union(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2ct::convert_array(
-  const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+std::string expr2ct::convert_array(const exprt &src, unsigned &)
 {
   std::string dest = "{ ";
 
@@ -1237,9 +1219,7 @@ std::string expr2ct::convert_array_list(const exprt &src, unsigned &precedence)
   return dest;
 }
 
-std::string expr2ct::convert_function_call(
-  const exprt &src,
-  unsigned &precedence __attribute__((unused)))
+std::string expr2ct::convert_function_call(const exprt &src, unsigned &)
 {
   if(src.operands().size() != 2)
   {
@@ -1308,9 +1288,7 @@ std::string expr2ct::indent_str(unsigned indent)
   return dest;
 }
 
-std::string expr2ct::convert_code_asm(
-  const codet &src __attribute__((unused)),
-  unsigned indent)
+std::string expr2ct::convert_code_asm(const codet &, unsigned indent)
 {
   std::string dest = indent_str(indent);
   dest += "asm();\n";
@@ -1437,9 +1415,7 @@ std::string expr2ct::convert_code_gcc_goto(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2ct::convert_code_break(
-  const codet &src __attribute__((unused)),
-  unsigned indent)
+std::string expr2ct::convert_code_break(const codet &, unsigned indent)
 {
   std::string dest = indent_str(indent);
   dest += "break";
@@ -1487,9 +1463,7 @@ std::string expr2ct::convert_code_switch(const codet &src, unsigned indent)
   return dest;
 }
 
-std::string expr2ct::convert_code_continue(
-  const codet &src __attribute__((unused)),
-  unsigned indent)
+std::string expr2ct::convert_code_continue(const codet &, unsigned indent)
 {
   std::string dest = indent_str(indent);
   dest += "continue";
@@ -1807,9 +1781,8 @@ std::string expr2ct::convert_code_unlock(const codet &src, unsigned indent)
   return indent_str(indent) + "UNLOCK(" + convert(src.op0()) + ");";
 }
 
-std::string expr2ct::convert_code_function_call(
-  const code_function_callt &src __attribute__((unused)),
-  unsigned indent __attribute__((unused)))
+std::string
+expr2ct::convert_code_function_call(const code_function_callt &src, unsigned)
 {
   if(src.operands().size() != 3)
   {
@@ -2007,9 +1980,7 @@ std::string expr2ct::convert_extractbit(const exprt &src, unsigned precedence)
   return dest;
 }
 
-std::string expr2ct::convert_sizeof(
-  const exprt &src,
-  unsigned precedence __attribute__((unused)))
+std::string expr2ct::convert_sizeof(const exprt &src, unsigned)
 {
   std::string dest = "sizeof(";
   dest += convert(static_cast<const typet &>(src.c_sizeof_type()));

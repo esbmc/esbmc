@@ -72,6 +72,8 @@ public:
     renaming::level2t &l2,
     value_sett &vs);
 
+  goto_symex_statet(goto_symex_statet const &) = default;
+
   goto_symex_statet &operator=(const goto_symex_statet &state);
 
   // Types
@@ -127,7 +129,7 @@ public:
     {
     }
 
-    goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
+    goto_statet &operator=(const goto_statet &)
     {
       abort();
     }
@@ -184,9 +186,6 @@ public:
      *  resulting function invocations with. */
     expr2tc orig_func_ptr_call;
 
-    /** The stack size of the frame. */
-    unsigned stack_frame_total;
-
     /**
      * Process a block adding the width of each symbol into the stack length
      * @param expr Expr to search for symbols.
@@ -220,6 +219,9 @@ public:
 
     /** Record if the function body is hidden */
     bool hidden;
+
+    /** The stack size of the frame. */
+    unsigned stack_frame_total;
 
     framet(unsigned int thread_id)
       : return_value(expr2tc()), hidden(false), stack_frame_total(0)

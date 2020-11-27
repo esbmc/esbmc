@@ -1,10 +1,3 @@
-/*
- * loopst.cpp
- *
- *  Created on: Jul 20, 2015
- *      Author: mramalho
- */
-
 #include <goto-programs/loopst.h>
 
 const loopst::loop_varst &loopst::get_modified_loop_vars() const

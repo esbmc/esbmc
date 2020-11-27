@@ -783,8 +783,7 @@ reachability_treet::generate_schedule_formula()
       schedule_target, schedule_total_claims, schedule_remaining_claims));
 }
 
-bool reachability_treet::restore_from_dfs_state(void *_dfs
-                                                __attribute__((unused)))
+bool reachability_treet::restore_from_dfs_state(void *)
 {
   abort();
 #if 0
@@ -844,8 +843,7 @@ bool reachability_treet::restore_from_dfs_state(void *_dfs
   return false;
 }
 
-void reachability_treet::save_checkpoint(const std::string &&fname
-                                         __attribute__((unused))) const
+void reachability_treet::save_checkpoint(const std::string &&) const
 {
 #if 0
   reachability_treet::dfs_position pos(*this);

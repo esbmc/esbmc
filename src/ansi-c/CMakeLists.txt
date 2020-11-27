@@ -1,8 +1,5 @@
 add_subdirectory(cpp)
 
-find_package(BISON)
-find_package(FLEX)
-
 BISON_TARGET(cparser parser.ypp ${CMAKE_CURRENT_BINARY_DIR}/parser.cpp COMPILE_FLAGS "-d -pyyansi_c")
 FLEX_TARGET(cscanner scanner.lpp ${CMAKE_CURRENT_BINARY_DIR}/scanner.cpp COMPILE_FLAGS "--header-file=scanner.hpp -Pyyansi_c")
 ADD_FLEX_BISON_DEPENDENCY(cscanner cparser)

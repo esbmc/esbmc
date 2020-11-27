@@ -1,9 +1,9 @@
-/*
- * clang_c_convert_literals.cpp
- *
- *  Created on: Jul 23, 2015
- *      Author: mramalho
- */
+// Remove warnings from Clang headers
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <clang/AST/Expr.h>
+#pragma GCC diagnostic pop
 
 #include <clang-c-frontend/clang_c_convert.h>
 #include <util/arith_tools.h>

@@ -1657,8 +1657,7 @@ void c_typecheck_baset::typecheck_function_call_arguments(
   }
 }
 
-void c_typecheck_baset::typecheck_expr_constant(exprt &expr
-                                                __attribute__((unused)))
+void c_typecheck_baset::typecheck_expr_constant(exprt &)
 {
   // Do nothing
 }
@@ -2022,6 +2021,6 @@ void c_typecheck_baset::make_constant_index(exprt &expr)
   }
 }
 
-void c_typecheck_baset::make_constant_rec(exprt &expr __attribute__((unused)))
+void c_typecheck_baset::make_constant_rec(exprt &)
 {
 }

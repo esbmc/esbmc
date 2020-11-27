@@ -1,10 +1,3 @@
-/*
- * clang_c_adjust.cpp
- *
- *  Created on: Aug 30, 2015
- *      Author: mramalho
- */
-
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -1054,11 +1047,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
     return;
 
   if(arguments.size() != 2 && arguments.size() != 3)
-  {
-    std::cerr << "main expected to have no or two or three arguments"
-              << std::endl;
-    abort();
-  }
+    return;
 
   const exprt &op0 = arguments[0];
   const exprt &op1 = arguments[1];

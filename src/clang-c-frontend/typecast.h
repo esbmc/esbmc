@@ -1,10 +1,3 @@
-/*
- * typecast.h
- *
- *  Created on: Sep 11, 2015
- *      Author: mramalho
- */
-
 #ifndef TYPECAST_H_
 #define TYPECAST_H_
 

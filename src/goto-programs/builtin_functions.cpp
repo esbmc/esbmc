@@ -407,7 +407,7 @@ void goto_convertt::cpp_new_initializer(
 }
 
 void goto_convertt::do_exit(
-  const exprt &lhs __attribute__((unused)),
+  const exprt &,
   const exprt &function,
   const exprt::operandst &arguments,
   goto_programt &dest)
@@ -426,7 +426,7 @@ void goto_convertt::do_exit(
 }
 
 void goto_convertt::do_abort(
-  const exprt &lhs __attribute__((unused)),
+  const exprt &,
   const exprt &function,
   const exprt::operandst &arguments,
   goto_programt &dest)
@@ -614,7 +614,7 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett a = dest.add_instruction(ASSUME);
     a->guard = gen_false_expr();
     a->location = function.location();
-    t->location.user_provided(true);
+    a->location.user_provided(true);
   }
   else if(base_name == "printf")
   {

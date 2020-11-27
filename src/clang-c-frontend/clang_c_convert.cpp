@@ -1,6 +1,15 @@
+// Remove warnings from Clang headers
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <clang/AST/Attr.h>
+#include <clang/AST/Expr.h>
 #include <clang/AST/QualTypeNames.h>
+#include <clang/AST/Type.h>
 #include <clang/Index/USRGeneration.h>
+#include <clang/Frontend/ASTUnit.h>
+#pragma GCC diagnostic pop
+
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -316,7 +325,7 @@ bool clang_c_convertert::get_struct_union_class_fields(
   struct_union_typet &type)
 {
   // First, parse the fields
-  for(auto const &field : recordd.fields())
+  for(auto const *field : recordd.fields())
   {
     struct_typet::componentt comp;
     if(get_decl(*field, comp))
@@ -334,8 +343,8 @@ bool clang_c_convertert::get_struct_union_class_fields(
 }
 
 bool clang_c_convertert::get_struct_union_class_methods(
-  const clang::RecordDecl &recordd,
-  struct_union_typet &type)
+  const clang::RecordDecl &,
+  struct_union_typet &)
 {
   // We don't add methods to the struct in C
   return false;
@@ -419,9 +428,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
-bool clang_c_convertert::get_function(
-  const clang::FunctionDecl &fd,
-  exprt &new_expr)
+bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 {
   // Don't convert if clang thinks that the functions was implicitly converted
   if(fd.isImplicit())
@@ -2969,8 +2976,7 @@ typet clang_c_convertert::fix_bitfields(const typet &_type)
   if(bitfield_fixed_type_map.find(type) != bitfield_fixed_type_map.end())
     return bitfield_fixed_type_map.find(type)->second;
 
-  typet new_type = type;
-  auto sutype = to_struct_union_type(new_type);
+  auto sutype = to_struct_union_type(type);
   auto &components = sutype.components(); // It's a vector of components
   std::decay<decltype(components)>::type new_components;
   bool is_packed = sutype.get("packed").as_string() == "true";
@@ -3042,7 +3048,7 @@ typet clang_c_convertert::fix_bitfields(const typet &_type)
   bitfield_fixed_type_map.insert(std::make_pair(type, sutype));
   bitfield_orig_type_map.insert(std::make_pair(sutype, type));
 
-  return sutype;
+  return std::move(sutype);
 }
 
 void clang_c_convertert::fix_constant_bitfields(exprt &expr)

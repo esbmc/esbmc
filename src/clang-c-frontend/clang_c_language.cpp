@@ -6,6 +6,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <clang/Frontend/ASTUnit.h>
+#pragma GCC diagnostic pop
+
 #include <AST/build_ast.h>
 #include <ansi-c/c_preprocess.h>
 #include <boost/filesystem.hpp>
@@ -231,16 +237,16 @@ bool clang_c_languaget::typecheck(
   return false;
 }
 
-void clang_c_languaget::show_parse(std::ostream &out __attribute__((unused)))
+void clang_c_languaget::show_parse(std::ostream &)
 {
   for(auto const &translation_unit : ASTs)
     (*translation_unit).getASTContext().getTranslationUnitDecl()->dump();
 }
 
 bool clang_c_languaget::preprocess(
-  const std::string &path __attribute__((unused)),
-  std::ostream &outstream __attribute__((unused)),
-  message_handlert &message_handler __attribute__((unused)))
+  const std::string &,
+  std::ostream &,
+  message_handlert &)
 {
 // TODO: Check the preprocess situation.
 #if 0

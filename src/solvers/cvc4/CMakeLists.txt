@@ -10,7 +10,7 @@ endif()
 
 if(ENABLE_CVC4)
     find_package(CVC4 REQUIRED
-            PATHS ${CVC4_DIR}/lib/cmake/CVC4 $ENV{HOME}/cvc4)
+            HINTS ${CVC4_DIR}/lib/cmake/CVC4 $ENV{HOME}/cvc4)
 
     message(STATUS "Found CVC4 at: ${CVC4_DIR}")
     message(STATUS "CVC4 version: ${CVC4_VERSION}")

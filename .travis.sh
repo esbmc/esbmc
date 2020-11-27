@@ -87,7 +87,7 @@ travis_install() {
 travis_script() {
     # Compile ESBMC
 
-    export BASE_FLAGS="-DBUILD_TESTING=On -DENABLE_REGRESSION=On-DClang_DIR=$HOME/clang9 -DLLVM_DIR=$HOME/clang9 -DCMAKE_INSTALL_PREFIX:PATH=$HOME/release"
+    export BASE_FLAGS=" -DENABLE_OLD_FRONTEND=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On-DClang_DIR=$HOME/clang9 -DLLVM_DIR=$HOME/clang9 -DCMAKE_INSTALL_PREFIX:PATH=$HOME/release"
     export COVERAGE_FLAGS=""    
     export SANITIZER_FLAGS=""
     export SOLVERS="-DBoolector_DIR=$HOME/boolector-3.2.0 -DMathsat_DIR=$HOME/mathsat "
@@ -104,7 +104,7 @@ travis_script() {
         chmod +x regression/macos-wrapper.sh
     else
         if [ $ENABLE_COVERAGE = 1 ]; then
-            export COVERAGE_FLAGS="-DENABLE_COVERAGE=On"
+            export COVERAGE_FLAGS="-DENABLE_COVERAGE=On -DCMAKE_BUILD_TYPE=Debug"
         fi
         if [ $ENABLE_SANITIZER = 1 ]; then
             export SANITIZER_FLAGS="-DCMAKE_BUILD_TYPE=Sanitizer -DSANITIZER_TYPE=$SANITIZER"

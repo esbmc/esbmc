@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <sstream>
 #include <yices_conv.h>
-
+#include <assert.h>
 // From yices 2.3 (I think) various API calls have had new non-binary
 // operand versions added. The maintainers have chosen to break backwards
 // compatibility in the process by moving the old functions to new names, and
@@ -655,9 +655,8 @@ smt_astt yices_convt::mk_select(smt_astt a, smt_astt b)
     a->sort->get_range_sort());
 }
 
-smt_astt yices_convt::mk_isint(smt_astt a)
+smt_astt yices_convt::mk_isint(smt_astt)
 {
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   std::cerr << "Yices does not support an is-integer operation on reals, "
             << "therefore certain casts and operations don't work, sorry\n";
   abort();
@@ -713,7 +712,7 @@ smt_astt yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
 smt_astt yices_convt::mk_array_symbol(
   const std::string &name,
   smt_sortt s,
-  smt_sortt array_subtype __attribute__((unused)))
+  smt_sortt array_subtype [[gnu::unused]])
 {
   // For array symbols, store the symbol name in the ast to implement
   // assign semantics
@@ -783,8 +782,11 @@ bool yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
-  auto res = yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val);
-  assert(!res && "Can't get boolean value from Yices");
+  if(yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val))
+  {
+    std::cerr << "Can't get boolean value from Yices\n";
+    abort();
+  }
   return val ? true : false;
 }
 
@@ -936,7 +938,7 @@ smt_astt yices_convt::tuple_array_create(
   const type2tc &array_type,
   smt_astt *inputargs,
   bool const_array,
-  smt_sortt domain __attribute__((unused)))
+  smt_sortt domain [[gnu::unused]])
 {
   const array_type2t &arr_type = to_array_type(array_type);
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
