@@ -303,14 +303,30 @@ void goto_symext::symex_free(const expr2tc &expr)
   // Only add assertions to check pointer offset if pointer check is enabled
   if(!options.get_bool_option("no-pointer-check"))
   {
+    // Get all dynamic objects allocated using alloca
+    std::vector<allocated_obj> allocad;
+    for(auto const &item : dynamic_memory)
+      if(item.auto_deallocd)
+        allocad.push_back(item);
+
     for(auto const &item : internal_deref_items)
     {
       guardt g = cur_state->guard;
       g.add(item.guard);
+
+      // Check if the offset of the object being freed is zero
       expr2tc offset = item.offset;
       expr2tc eq = equality2tc(offset, gen_ulong(0));
       g.guard_expr(eq);
       claim(eq, "Operand of free must have zero pointer offset");
+
+      // Check if we are not freeing an dynamic object allocated using alloca
+      for(auto const &a : allocad)
+      {
+        expr2tc noteq = notequal2tc(get_base_object(a.obj), item.object);
+        g.guard_expr(noteq);
+        claim(noteq, "dereference failure: invalid pointer freed");
+      }
     }
   }
 
