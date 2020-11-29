@@ -308,6 +308,7 @@ if benchmark is None:
 if concurrency:
   esbmc_dargs += "--incremental-cb --context-bound-step 5 "
   esbmc_dargs += "--unwind 8 "
+  esbmc_dargs += "--no-slice " # TODO: Witness validation is only working without slicing
   # NOTE: max-context-bound and no-por are already in the default params
 
 # Parse property files
