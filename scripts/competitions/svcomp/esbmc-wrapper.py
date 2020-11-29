@@ -232,23 +232,25 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-assertions "
+    strat = "incr"
   elif prop == Property.memcleanup:
     command_line += "--memory-leak-check --no-assertions "
+    strat = "incr"
   elif prop == Property.reach:
     command_line += "--no-pointer-check --no-bounds-check --interval-analysis "
   else:
     print "Unknown property"
     exit(1)
-    
+
   # Add strategy
   if strat == "fixed":
     command_line += "--k-induction --max-inductive-step 3 "
-  elif strat == "kinduction" and prop != Property.memory:
+  elif strat == "kinduction":
     command_line += "--k-induction --max-inductive-step 3 "
   elif strat == "falsi":
     command_line += "--falsification "
-  elif strat == "incr" or prop == Property.memory:
-    command_line += "--incremental-bmc --incremental-cb " if prop == Property.reach else "--incremental-bmc "
+  elif strat == "incr":
+    command_line += "--incremental-bmc "
   else:
     print "Unknown strategy"
     exit(1)
@@ -280,6 +282,7 @@ parser.add_argument("-v", "--version", help="Prints ESBMC's version", action='st
 parser.add_argument("-p", "--propertyfile", help="Path to the property file")
 parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
 parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="fixed")
+parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
 
 args = parser.parse_args()
 
@@ -288,6 +291,7 @@ version = args.version
 property_file = args.propertyfile
 benchmark = args.benchmark
 strategy = args.strategy
+concurrency = args.concurrency
 
 if version:
   print os.popen(esbmc_path + "--version").read()[6:],
@@ -300,6 +304,11 @@ if property_file is None:
 if benchmark is None:
   print "Please, specify a benchmark to verify"
   exit(1)
+
+if concurrency:
+  esbmc_dargs += "--incremental-cb --context-bound-step 5 "
+  esbmc_dargs += "--unwind 8 "
+  # NOTE: max-context-bound and no-por are already in the default params
 
 # Parse property files
 f = open(property_file, 'r')
