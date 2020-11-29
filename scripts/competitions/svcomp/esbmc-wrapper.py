@@ -229,26 +229,33 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
     return command_line
 
   # Add strategy
-  if strat == "fixed":
-    command_line += "--k-induction --max-inductive-step 3 "
-  elif strat == "kinduction":
-    command_line += "--k-induction --max-inductive-step 3 "
-  elif strat == "falsi":
-    command_line += "--falsification "
-  elif strat == "incr":
-    command_line += "--incremental-bmc --incremental-cb "
-  else:
-    print "Unknown strategy"
-    exit(1)
+  #if strat == "fixed":
+  #  command_line += "--k-induction --max-inductive-step 3 "
+  #elif strat == "kinduction":
+  #  command_line += "--k-induction --max-inductive-step 3 "
+  #elif strat == "falsi":
+  #  command_line += "--falsification "
+  #elif strat == "incr":
+  #  command_line += "--incremental-bmc --incremental-cb "
+  #else:
+  #  print "Unknown strategy"
+  #  exit(1)
 
   if prop == Property.overflow:
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
+    command_line += "--incremental-bmc --incremental-cb "
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-assertions "
+    command_line += "--incremental-bmc --incremental-cb "
   elif prop == Property.memcleanup:
     command_line += "--memory-leak-check --no-assertions "
+    command_line += "--incremental-bmc --incremental-cb "
   elif prop == Property.reach:
     command_line += "--no-pointer-check --no-bounds-check --interval-analysis "
+    if strat == "kinduction":
+      command_line += "--k-induction --max-inductive-step 3 "
+    else:
+      command_line += "--incremental-bmc --incremental-cb "
   else:
     print "Unknown property"
     exit(1)
