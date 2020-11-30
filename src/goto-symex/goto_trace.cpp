@@ -261,6 +261,9 @@ void violation_graphml_goto_trace(
     case goto_trace_stept::ASSERT:
       if(!step.guard)
       {
+        graph.check_create_new_thread(step.thread_nr, prev_node);
+        prev_node = graph.edges.back().to_node;
+
         nodet *violation_node = new nodet();
         violation_node->violation = true;
 
