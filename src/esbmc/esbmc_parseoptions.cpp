@@ -1200,8 +1200,8 @@ int esbmc_parseoptionst::doit_termination()
     if(!do_forward_condition(opts, goto_functions, k_step))
       return false;
 
-    if(!do_inductive_step(opts, goto_functions, k_step))
-      return false;
+    // if(!do_inductive_step(opts, goto_functions, k_step))
+    //   return false;
   }
 
   status("Unable to prove or falsify the program, giving up.");
