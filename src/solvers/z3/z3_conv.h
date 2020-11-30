@@ -83,12 +83,14 @@ public:
   smt_astt mk_and(smt_astt a, smt_astt b) override;
   smt_astt mk_not(smt_astt a) override;
   smt_astt mk_lt(smt_astt a, smt_astt b) override;
+  smt_astt mk_str_lt(smt_astt a, smt_astt b) override;
   smt_astt mk_bvult(smt_astt a, smt_astt b) override;
   smt_astt mk_bvslt(smt_astt a, smt_astt b) override;
   smt_astt mk_gt(smt_astt a, smt_astt b) override;
   smt_astt mk_bvugt(smt_astt a, smt_astt b) override;
   smt_astt mk_bvsgt(smt_astt a, smt_astt b) override;
   smt_astt mk_le(smt_astt a, smt_astt b) override;
+  smt_astt mk_str_le(smt_astt a, smt_astt b) override;
   smt_astt mk_bvule(smt_astt a, smt_astt b) override;
   smt_astt mk_bvsle(smt_astt a, smt_astt b) override;
   smt_astt mk_ge(smt_astt a, smt_astt b) override;
@@ -100,9 +102,11 @@ public:
   smt_astt mk_select(smt_astt a, smt_astt b) override;
   smt_astt mk_real2int(smt_astt a) override;
   smt_astt mk_int2real(smt_astt a) override;
+  smt_astt mk_bv2int(smt_astt a, bool is_signed) override;
   smt_astt mk_isint(smt_astt a) override;
 
   smt_sortt mk_bool_sort() override;
+  smt_sortt mk_string_sort() override;
   smt_sortt mk_real_sort() override;
   smt_sortt mk_int_sort() override;
   smt_sortt mk_bv_sort(std::size_t width) override;
@@ -115,6 +119,7 @@ public:
 
   smt_astt mk_smt_int(const BigInt &theint) override;
   smt_astt mk_smt_real(const std::string &str) override;
+  smt_astt mk_smt_string(const std::string &str) override;
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override;
   smt_astt mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw) override;
@@ -169,6 +174,14 @@ public:
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_concat(smt_astt a, smt_astt b) override;
+  smt_astt mk_str_concat(smt_astt a, smt_astt b) override;
+  smt_astt mk_str_concat(smt_astt a, smt_astt b, smt_astt c) override;
+  smt_astt
+  mk_str_extract(smt_astt s, smt_astt offset, smt_astt length) override;
+  smt_astt mk_str_length(smt_astt a) override;
+  smt_astt mk_str_at(smt_astt s, smt_astt index) override;
+  smt_astt mk_seq_unit(smt_astt a) override;
+
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override;
 
   smt_astt tuple_create(const expr2tc &structdef) override;

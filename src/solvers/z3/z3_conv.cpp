@@ -507,6 +507,19 @@ smt_astt z3_convt::mk_lt(smt_astt a, smt_astt b)
     boolean_sort);
 }
 
+smt_astt z3_convt::mk_str_lt(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_STRING || a->sort->id == SMT_SORT_STRING);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_str_lt(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
 smt_astt z3_convt::mk_bvult(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
@@ -589,6 +602,19 @@ smt_astt z3_convt::mk_le(smt_astt a, smt_astt b)
     z3::to_expr(
       z3_ctx,
       Z3_mk_le(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(a)->a,
+        to_solver_smt_ast<z3_smt_ast>(b)->a)),
+    boolean_sort);
+}
+
+smt_astt z3_convt::mk_str_le(smt_astt a, smt_astt b)
+{
+  assert(a->sort->id == SMT_SORT_STRING || a->sort->id == SMT_SORT_STRING);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_str_le(
         z3_ctx,
         to_solver_smt_ast<z3_smt_ast>(a)->a,
         to_solver_smt_ast<z3_smt_ast>(b)->a)),
@@ -787,6 +813,65 @@ smt_astt z3_convt::mk_concat(smt_astt a, smt_astt b)
     s);
 }
 
+smt_astt z3_convt::mk_str_concat(smt_astt a, smt_astt b)
+{
+  Z3_ast _args[2] = {to_solver_smt_ast<z3_smt_ast>(a)->a,
+                     to_solver_smt_ast<z3_smt_ast>(b)->a};
+  return new_ast(
+    z3::to_expr(z3_ctx, Z3_mk_seq_concat(z3_ctx, 2, _args)), a->sort);
+}
+
+smt_astt z3_convt::mk_str_concat(smt_astt a, smt_astt b, smt_astt c)
+{
+  Z3_ast _args[3] = {to_solver_smt_ast<z3_smt_ast>(a)->a,
+                     to_solver_smt_ast<z3_smt_ast>(b)->a,
+                     to_solver_smt_ast<z3_smt_ast>(c)->a};
+  return new_ast(
+    z3::to_expr(z3_ctx, Z3_mk_seq_concat(z3_ctx, 3, _args)), a->sort);
+}
+
+smt_astt z3_convt::mk_str_length(smt_astt a)
+{
+  assert(a->sort->id == SMT_SORT_STRING);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx, Z3_mk_seq_length(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a)),
+    mk_int_sort());
+}
+
+smt_astt z3_convt::mk_str_extract(smt_astt s, smt_astt offset, smt_astt length)
+{
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_seq_extract(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(s)->a,
+        to_solver_smt_ast<z3_smt_ast>(offset)->a,
+        to_solver_smt_ast<z3_smt_ast>(length)->a)),
+    s->sort);
+}
+
+smt_astt z3_convt::mk_str_at(smt_astt s, smt_astt index)
+{
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_seq_at(
+        z3_ctx,
+        to_solver_smt_ast<z3_smt_ast>(s)->a,
+        to_solver_smt_ast<z3_smt_ast>(index)->a)),
+    s->sort);
+}
+
+smt_astt z3_convt::mk_seq_unit(smt_astt a)
+{
+  return new_ast(
+    z3::to_expr(
+      z3_ctx, Z3_mk_seq_unit(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a)),
+    a->sort);
+}
+
 smt_astt z3_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 {
   assert(cond->sort->id == SMT_SORT_BOOL);
@@ -807,6 +892,12 @@ smt_astt z3_convt::mk_smt_int(const BigInt &theint)
     return new_ast(z3_ctx.int_val(theint.to_int64()), s);
 
   return new_ast(z3_ctx.int_val(theint.to_uint64()), s);
+}
+
+smt_astt z3_convt::mk_smt_string(const std::string &str)
+{
+  smt_sortt s = mk_string_sort();
+  return new_ast(z3_ctx.string_val(str.c_str()), s);
 }
 
 smt_astt z3_convt::mk_smt_real(const std::string &str)
@@ -1316,6 +1407,11 @@ smt_sortt z3_convt::mk_real_sort()
   return new solver_smt_sort<z3::sort>(SMT_SORT_REAL, z3_ctx.real_sort());
 }
 
+smt_sortt z3_convt::mk_string_sort()
+{
+  return new solver_smt_sort<z3::sort>(SMT_SORT_STRING, z3_ctx.string_sort());
+}
+
 smt_sortt z3_convt::mk_int_sort()
 {
   return new solver_smt_sort<z3::sort>(SMT_SORT_INT, z3_ctx.int_sort());
@@ -1574,4 +1670,14 @@ smt_astt z3_convt::mk_smt_fpbv_abs(smt_astt op)
     z3::to_expr(
       z3_ctx, Z3_mk_fpa_abs(z3_ctx, to_solver_smt_ast<z3_smt_ast>(op)->a)),
     op->sort);
+}
+
+smt_astt z3_convt::mk_bv2int(smt_astt a, bool is_signed)
+{
+  //assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_bv2int(z3_ctx, to_solver_smt_ast<z3_smt_ast>(a)->a, is_signed)),
+    mk_int_sort());
 }

@@ -107,6 +107,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "tuple-node-flattener", switc, ""},
   {0, "tuple-sym-flattener", switc, ""},
   {0, "array-flattener", switc, ""},
+  {0, "string-solver", switc, ""},
 
   // Incremental SMT
   {0, "smt-during-symex", switc, ""},

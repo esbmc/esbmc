@@ -218,6 +218,11 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", true);
   }
 
+  if(cmdline.isset("string-solver"))
+  {
+    options.set_option("string-solver", true);
+  }
+
   if(cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);
   else
@@ -1838,6 +1843,7 @@ void esbmc_parseoptionst::help()
        " --cvc                        use CVC4\n"
        " --yices                      use Yices\n"
        " --bv                         use solver with bit-vector arithmetic\n"
+       " --string-solver              use solver with string support\n"
        " --ir                         use solver with integer/real arithmetic\n"
        " --smtlib                     use SMT lib format\n"
        " --smtlib-solver-prog         SMT lib program name\n"

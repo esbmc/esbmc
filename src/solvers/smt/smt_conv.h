@@ -185,6 +185,13 @@ public:
    *  @return The resulting handle to the SMT value. */
   smt_astt convert_ast(const expr2tc &expr);
 
+  /**/
+
+  smt_astt convert_str_ast(const expr2tc &expr);
+  smt_astt convert_str_terminal(const expr2tc &expr);
+  bool has_str_expr(const expr2tc &expr);
+  bool is_str_expr(const expr2tc &expr);
+
   /** Interface to specifig SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
    *  depending on the type of the expression.
@@ -326,15 +333,19 @@ public:
   virtual smt_astt mk_and(smt_astt a, smt_astt b);
   virtual smt_astt mk_not(smt_astt a);
   virtual smt_astt mk_lt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_str_lt(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvult(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvslt(smt_astt a, smt_astt b);
   virtual smt_astt mk_gt(smt_astt a, smt_astt b);
+  virtual smt_astt mk_str_gt(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvugt(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvsgt(smt_astt a, smt_astt b);
   virtual smt_astt mk_le(smt_astt a, smt_astt b);
+  virtual smt_astt mk_str_le(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvule(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvsle(smt_astt a, smt_astt b);
   virtual smt_astt mk_ge(smt_astt a, smt_astt b);
+  virtual smt_astt mk_str_ge(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvuge(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvsge(smt_astt a, smt_astt b);
   virtual smt_astt mk_eq(smt_astt a, smt_astt b);
@@ -343,6 +354,7 @@ public:
   virtual smt_astt mk_select(smt_astt a, smt_astt b);
   virtual smt_astt mk_real2int(smt_astt a);
   virtual smt_astt mk_int2real(smt_astt a);
+  virtual smt_astt mk_bv2int(smt_astt a, bool is_signed);
   virtual smt_astt mk_isint(smt_astt a);
 
   /** Create an integer or SBV/UBV sort */
@@ -368,6 +380,9 @@ public:
 
   /** Create a bool sort */
   virtual smt_sortt mk_bool_sort();
+
+  /** Create a string sort */
+  virtual smt_sortt mk_string_sort();
 
   /** Create a real sort */
   virtual smt_sortt mk_real_sort();
@@ -403,6 +418,8 @@ public:
    *         legitimate use of strings.
    *  @return The newly created terminal smt_ast of this real. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
+
+  virtual smt_astt mk_smt_string(const std::string &str);
 
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
@@ -460,6 +477,13 @@ public:
    * @param b the second part of the concatenation
    * @return the concatenation of a and b */
   virtual smt_astt mk_concat(smt_astt a, smt_astt b) = 0;
+
+  virtual smt_astt mk_str_concat(smt_astt a, smt_astt b);
+  virtual smt_astt mk_str_concat(smt_astt a, smt_astt b, smt_astt c);
+  virtual smt_astt mk_str_extract(smt_astt s, smt_astt offset, smt_astt length);
+  virtual smt_astt mk_str_length(smt_astt a);
+  virtual smt_astt mk_str_at(smt_astt s, smt_astt index);
+  virtual smt_astt mk_seq_unit(smt_astt a);
 
   /** Create an ite operation
    * @param cond the ite condition
@@ -669,6 +693,9 @@ public:
   smt_astt convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast);
   smt_astt convert_typecast_to_ints_from_unsigned(const typecast2t &cast);
   smt_astt convert_typecast_to_ints_from_bool(const typecast2t &cast);
+
+  smt_astt convert_str_typecast_to_ints(const typecast2t &cast);
+  smt_astt convert_str_typecast_to_ints_intmode(const typecast2t &cast);
   /** Typecast something (i.e. an integer) to a pointer */
   smt_astt convert_typecast_to_ptr(const typecast2t &cast);
   /** Typecast a pointer to an integer */
@@ -677,6 +704,8 @@ public:
   smt_astt convert_typecast_to_struct(const typecast2t &cast);
   /** Despatch a typecast expression to a more specific typecast method */
   smt_astt convert_typecast(const expr2tc &expr);
+
+  smt_astt convert_str_typecast(const expr2tc &expr);
   /** Typecast to a floatbv*/
   smt_astt convert_typecast_to_fpbv(const typecast2t &cast);
   /** Typecast from a floatbv */
@@ -778,6 +807,8 @@ public:
     smt_cachet;
 
   typedef std::unordered_map<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
+  typedef std::unordered_map<std::string, smt_astt> sym_str_mapt;
+  typedef std::unordered_map<std::string, unsigned int> sym_level_mapt;
 
   // Members
   /** Number of un-popped context pushes encountered so far. */
@@ -785,8 +816,12 @@ public:
 
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
+  smt_cachet smt_str_cache;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
+
+  sym_str_mapt sym_str_map;
+  sym_level_mapt sym_level_map;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
