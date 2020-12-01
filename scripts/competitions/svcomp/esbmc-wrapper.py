@@ -233,7 +233,6 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-assertions "
-    strat = "incr"
   elif prop == Property.memcleanup:
     command_line += "--memory-leak-check --no-assertions "
     strat = "incr"
