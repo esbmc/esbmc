@@ -667,7 +667,7 @@ expr2tc boolector_convt::get_array_elem(
       auto idx = string2integer(indicies[i], 2);
       if(idx == index)
       {
-        val = string2integer(values[i], 2);
+        val = binary2integer(values[i], is_signedbv_type(subtype));
         break;
       }
     }
