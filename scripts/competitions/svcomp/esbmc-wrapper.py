@@ -166,13 +166,13 @@ def get_result_string(the_result):
     return "FALSE_MEMCLEANUP"
 
   if the_result == Result.fail_memtrack:
-    return "FALSE_MEMTRACK"
+    return "Unknown"
 
   if the_result == Result.fail_free:
-    return "FALSE_FREE"
+    return "Unknown"
 
   if the_result == Result.fail_deref:
-    return "FALSE_DEREF"
+    return "Unknown"
 
   if the_result == Result.fail_overflow:
     return "FALSE_OVERFLOW"
@@ -233,6 +233,7 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-assertions "
+    strat = "incr"
   elif prop == Property.memcleanup:
     command_line += "--memory-leak-check --no-assertions "
     strat = "incr"
