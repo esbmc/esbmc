@@ -698,7 +698,9 @@ void check_replace_invalid_assignment(std::string &assignment)
     std::regex_search(assignment, m, std::regex("POINTER_OFFSET")) ||
     std::regex_search(assignment, m, std::regex("SAME-OBJECT")) ||
     std::regex_search(assignment, m, std::regex("CONCAT")) ||
-    std::regex_search(assignment, m, std::regex("BITCAST:")))
+    std::regex_search(assignment, m, std::regex("BITCAST:")) ||
+    std::regex_search(assignment, m, std::regex("byte_extract")) ||
+    std::regex_search(assignment, m, std::regex("byte_update")))
     assignment.clear();
 }
 
@@ -717,7 +719,6 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
     assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
-
     if(std::regex_match(assignment, regex_array))
       reformat_assignment_array(ns, step, assignment);
     else if(std::regex_match(assignment, regex_structs))
