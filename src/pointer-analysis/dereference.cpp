@@ -815,14 +815,7 @@ void dereferencet::build_reference_rec(
   else if(is_scalar_type(type))
     flags |= flag_dst_scalar;
   else if(is_array_type(type) || is_string_type(type))
-  {
-    std::cerr
-      << "Can't construct rvalue reference to array type during dereference";
-    std::cerr << std::endl;
-    std::cerr << "(It isn't allowed by C anyway)";
-    std::cerr << std::endl;
-    abort();
-  }
+    flags |= flag_dst_union; // Hack because unions are arrays
   else
   {
     std::cerr << "Unrecognized dest type during dereference" << std::endl;
@@ -1453,6 +1446,21 @@ void dereferencet::construct_struct_ref_from_const_offset(
     // padding.
     dereference_failure(
       "Memory model", "Object accessed with illegal offset", guard);
+    return;
+  }
+  else if(is_array_type(value) || is_string_type(value))
+  {
+    const array_type2t arr_type = get_arr_type(value);
+    type2tc arr_subtype = arr_type.subtype;
+
+    unsigned int subtype_size = type_byte_size(arr_subtype).to_uint64();
+    constant_int2tc subtype_sz_expr(offs->type, BigInt(subtype_size));
+    div2tc div(pointer_type2(), offs, subtype_sz_expr);
+    simplify(div);
+
+    expr2tc *bytes =
+      extract_bytes_from_array(value, type->get_width() / 8, div);
+    stitch_together_from_byte_array(value, type, bytes);
     return;
   }
 
