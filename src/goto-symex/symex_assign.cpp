@@ -523,7 +523,6 @@ void goto_symext::symex_assign_concat(
   const concat2t &cat = to_concat2t(lhs);
   assert(cat.type->get_width() > 8);
 #endif
-  assert(is_scalar_type(rhs));
 
   // Second attempt at this code: byte stitching guarantees that all the concats
   // occur in one large grouping. Produce a list of them.
@@ -558,8 +557,34 @@ void goto_symext::symex_assign_concat(
   std::list<expr2tc> extracts;
   for(unsigned int i = 0; i < operand_list.size(); i++)
   {
-    byte_extract2tc byte(get_uint_type(8), rhs, gen_ulong(i), is_big_endian);
-    extracts.push_back(byte);
+    if(is_scalar_type(rhs))
+    {
+      extracts.push_back(
+        byte_extract2tc(get_uint_type(8), rhs, gen_ulong(i), is_big_endian));
+    }
+    else
+    {
+      assert(is_array_type(rhs));
+
+      // Easy case
+      if(is_constant_array2t(rhs))
+      {
+        auto const &arr = to_constant_array2t(rhs);
+        assert(arr.datatype_members.size() == operand_list.size());
+        extracts.push_back(arr.datatype_members[i]);
+      }
+      else
+      {
+        auto const &arr_type = to_array_type(rhs->type);
+        assert(!arr_type.size_is_infinite);
+        assert(
+          to_constant_int2t(arr_type.array_size).value.to_uint64() ==
+          operand_list.size());
+
+        extracts.push_back(
+          index2tc(arr_type.subtype, rhs, constant_int2tc(index_type2(), i)));
+      }
+    }
   }
 
   // Now proceed to pair them up
