@@ -710,7 +710,7 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
 {
   std::string assignment = "";
   if(
-     !is_nil_expr(step.value) && (is_constant_expr(step.value) || is_byte_extract_constant(step.value)) &&
+    !is_nil_expr(step.value) && (is_constant_expr(step.value)) &&
     (is_valid_witness_step(ns, step)))
   {
     assignment += from_expr(ns, "", step.lhs);
