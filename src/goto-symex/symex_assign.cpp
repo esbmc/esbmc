@@ -211,8 +211,11 @@ void goto_symext::symex_assign(
     if(is_symbol2t(maybe_symbol))
     {
       auto const s = to_symbol2t(maybe_symbol).thename.as_string();
-      hidden_ssa |= (s.find('$') != std::string::npos) ||
-                    (s.find("__ESBMC_") != std::string::npos);
+      if(s.find("__VERIFIER_nondet_") != std::string::npos)
+        hidden_ssa = false;
+      else
+        hidden_ssa |= (s.find('$') != std::string::npos) ||
+                      (s.find("__ESBMC_") != std::string::npos);
     }
   }
 

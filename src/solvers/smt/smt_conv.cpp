@@ -2208,14 +2208,14 @@ expr2tc smt_convt::get_array(const expr2tc &expr)
   if(w > 10)
     w = 10;
 
-  const array_type2t &ar = to_array_type(flatten_array_type(expr->type));
+  type2tc subtype = get_flattened_array_subtype(expr->type);
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
-  type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
+  type2tc arr_type = type2tc(new array_type2t(subtype, arr_size, false));
   std::vector<expr2tc> fields;
 
   for(size_t i = 0; i < (1ULL << w); i++)
   {
-    fields.push_back(array_api->get_array_elem(array, i, ar.subtype));
+    fields.push_back(array_api->get_array_elem(array, i, subtype));
   }
 
   return constant_array2tc(arr_type, fields);
