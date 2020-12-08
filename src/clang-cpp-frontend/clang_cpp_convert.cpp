@@ -460,7 +460,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::MaterializeTemporaryExpr &mtemp =
       static_cast<const clang::MaterializeTemporaryExpr &>(stmt);
 
-    if(get_expr(*mtemp.GetTemporaryExpr(), new_expr))
+    if(get_expr(*mtemp.getSubExpr(), new_expr))
       return true;
 
     break;

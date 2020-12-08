@@ -4,6 +4,7 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <clang/AST/Attr.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/ParentMapContext.h>
 #include <clang/AST/QualTypeNames.h>
 #include <clang/AST/Type.h>
 #include <clang/Index/USRGeneration.h>

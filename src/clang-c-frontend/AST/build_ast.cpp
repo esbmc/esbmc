@@ -14,11 +14,27 @@
 #include <clang/Lex/PreprocessorOptions.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Option/ArgList.h>
+#include <llvm/Support/Host.h>
 #include <llvm/Support/Path.h>
 #pragma GCC diagnostic pop
 
 #include <clang-c-frontend/AST/build_ast.h>
 #include <clang-c-frontend/AST/esbmc_action.h>
+
+/// Builds a clang driver initialized for running clang tools.
+static clang::driver::Driver *newDriver(
+  clang::DiagnosticsEngine *Diagnostics,
+  const char *BinaryName,
+  llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS)
+{
+  clang::driver::Driver *CompilerDriver = new clang::driver::Driver(
+    BinaryName,
+    llvm::sys::getDefaultTargetTriple(),
+    *Diagnostics,
+    std::move(VFS));
+  CompilerDriver->setTitle("clang_based_tool");
+  return CompilerDriver;
+}
 
 std::unique_ptr<clang::ASTUnit> buildASTs(
   const std::string &intrinsics,
@@ -40,36 +56,30 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts =
     new clang::DiagnosticOptions();
 
-  std::unique_ptr<llvm::opt::OptTable> Opts(
-    clang::driver::createDriverOptTable());
-
   std::vector<const char *> Argv;
   for(const std::string &Str : compiler_args)
     Argv.push_back(Str.c_str());
+  const char *const BinaryName = Argv[0];
 
   unsigned MissingArgIndex, MissingArgCount;
-  llvm::opt::InputArgList ParsedArgs = Opts->ParseArgs(
-    llvm::ArrayRef<const char *>(Argv).slice(1),
-    MissingArgIndex,
-    MissingArgCount);
+  llvm::opt::InputArgList ParsedArgs =
+    clang::driver::getDriverOptTable().ParseArgs(
+      llvm::ArrayRef<const char *>(Argv).slice(1),
+      MissingArgIndex,
+      MissingArgCount);
 
   clang::ParseDiagnosticArgs(*DiagOpts, ParsedArgs);
 
-  clang::TextDiagnosticPrinter *DiagnosticPrinter =
-    new clang::TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
+  clang::TextDiagnosticPrinter DiagnosticPrinter(llvm::errs(), &*DiagOpts);
 
   clang::DiagnosticsEngine *Diagnostics = new clang::DiagnosticsEngine(
     llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs>(new clang::DiagnosticIDs()),
     &*DiagOpts,
-    DiagnosticPrinter,
+    &DiagnosticPrinter,
     false);
 
-  const std::unique_ptr<clang::driver::Driver> Driver(new clang::driver::Driver(
-    "clang-tool",
-    llvm::sys::getDefaultTargetTriple(),
-    *Diagnostics,
-    &Files->getVirtualFileSystem()));
-  Driver->setTitle("clang_based_tool");
+  const std::unique_ptr<clang::driver::Driver> Driver(
+    newDriver(Diagnostics, BinaryName, &Files->getVirtualFileSystem()));
 
   // Since the input might only be virtual, don't check whether it exists.
   Driver->setCheckInputsExist(false);
@@ -81,12 +91,8 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 
   const llvm::opt::ArgStringList *const CC1Args = &Jobs.begin()->getArguments();
 
-#if(CLANG_VERSION_MAJOR >= 4)
   std::shared_ptr<clang::CompilerInvocation> Invocation(
-    clang::tooling::newInvocation(Diagnostics, *CC1Args));
-#else
-  auto Invocation = clang::tooling::newInvocation(Diagnostics, *CC1Args);
-#endif
+    clang::tooling::newInvocation(Diagnostics, *CC1Args, BinaryName));
 
   // Show the invocation, with -v.
   if(Invocation->getHeaderSearchOpts().Verbose)
@@ -102,11 +108,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   // Create ASTUnit
   std::unique_ptr<clang::ASTUnit> unit(
     clang::ASTUnit::LoadFromCompilerInvocationAction(
-#if(CLANG_VERSION_MAJOR >= 4)
       std::move(Invocation),
-#else
-      Invocation,
-#endif
       std::make_shared<clang::PCHContainerOperations>(),
       Diagnostics,
       action));

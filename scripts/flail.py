@@ -84,7 +84,7 @@ class Flail:
 
     def obtain_var_name(self):
         obj = Path(self.filepath)
-        return obj.name.replace('.hs', '_buf').replace('.goto', '_buf').replace('.txt', '_buf').replace('buildidobj', 'buildidstring')
+        return obj.name.replace('.h', '_buf').replace('.goto', '_buf').replace('.txt', '_buf').replace('buildidobj', 'buildidstring')
 
     def _step_2(self, content: str):
         return Flail.REGEX_REMOVE_ADDR.sub('', content)
@@ -175,7 +175,7 @@ class TestFlail(unittest.TestCase):
         self.assertEqual(self.step_5, self.__class__.STEP_5_EXPECTED)
 
     def test_variable_name_1(self):
-        obj = Flail("a.hs")
+        obj = Flail("a.h")
         expected = "a_buf"
         self.assertEqual(obj.obtain_var_name(), expected)
 
