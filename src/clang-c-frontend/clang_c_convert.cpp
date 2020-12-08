@@ -919,6 +919,23 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     break;
   }
 
+  case clang::Type::ExtInt:
+  {
+    const clang::ExtIntType &eit =
+      static_cast<const clang::ExtIntType &>(the_type);
+
+    const unsigned n = eit.getNumBits();
+    if(eit.isSigned())
+      new_type = signedbv_typet(n);
+    else
+    {
+      assert(eit.isUnsigned());
+      new_type = unsignedbv_typet(n);
+    }
+
+    break;
+  }
+
   default:
     std::cerr << "Conversion of unsupported clang type: \"";
     std::cerr << the_type.getTypeClassName() << std::endl;
