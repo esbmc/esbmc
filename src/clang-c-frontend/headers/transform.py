@@ -31,8 +31,10 @@ if __name__ == "__main__":
     name_ = name.replace('-', '_')
     print(f'{{"{filename}", {name_}_buf, &{name_}_buf_size}},')
 
+    os.rename(filename, name_ + ext)
+
   print('{nullptr, nullptr, nullptr}};\n}')
 
   for filename in files:
-    print(filename, end=' ')
+    print(filename.replace('-', '_'), end=' ')
 
