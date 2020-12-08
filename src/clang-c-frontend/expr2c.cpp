@@ -1032,7 +1032,7 @@ std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
     {
       if(src.type() == float_type())
         dest += "f";
-      else if(src.type() == double_type())
+      else if(src.type() == long_double_type())
         dest += "l";
     }
   }
@@ -1044,7 +1044,7 @@ std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
     {
       if(src.type() == float_type())
         dest += "f";
-      else if(src.type() == double_type())
+      else if(src.type() == long_double_type())
         dest += "l";
     }
   }
