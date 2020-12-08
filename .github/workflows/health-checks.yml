@@ -19,14 +19,14 @@ jobs:
     - uses: actions/checkout@v1
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools
-    - name: Download Clang 9
-      run: wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-    - name: Extract Clang 9
-      run: tar xf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
+    - name: Download Clang 11
+      run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+    - name: Extract Clang 11
+      run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && CC=../clang9/bin/clang CXX=../clang9/bin/clang++ cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_FUZZER=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9
+      run: mkdir build && cd build && CC=../clang/bin/clang CXX=../clang/bin/clang++ cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_FUZZER=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang
     - name: Build BigInt Tests
       run: cd build && ninja biginttest && ninja bigintfuzz
     - name: Run tests
@@ -39,14 +39,14 @@ jobs:
     - uses: actions/checkout@v1
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install clang-tidy gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools
-    - name: Download Clang 9
-      run: wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-    - name: Extract Clang 9
-      run: tar xf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
+    - name: Download Clang 11
+      run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+    - name: Extract Clang 11
+      run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && CC=../clang9/bin/clang CXX=../clang9/bin/clang++ cmake .. -GNinja -DENABLE_CLANG_TIDY=On -DClang_DIR=$PWD/../clang9 -DLLVM_DIR=$PWD/../clang9    
+      run: mkdir build && cd build && CC=../clang/bin/clang CXX=../clang/bin/clang++ cmake .. -GNinja -DENABLE_CLANG_TIDY=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang
     - name: Run tests
       run: cd build && ninja || echo "fail" # TODO: Eventually this will be removed
 
