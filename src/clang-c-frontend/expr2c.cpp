@@ -97,25 +97,22 @@ std::string expr2ct::convert_rec(
     std::string sign_str = is_signed ? "signed " : "unsigned ";
 
     if(width == config.ansi_c.int_width)
-    {
       return q + sign_str + "int" + d;
-    }
+
     if(width == config.ansi_c.long_int_width)
-    {
       return q + sign_str + "long int" + d;
-    }
-    else if(width == config.ansi_c.char_width)
-    {
+
+    if(width == config.ansi_c.char_width)
       return q + sign_str + "char" + d;
-    }
-    else if(width == config.ansi_c.short_int_width)
-    {
+
+    if(width == config.ansi_c.short_int_width)
       return q + sign_str + "short int" + d;
-    }
-    else if(width == config.ansi_c.long_long_int_width)
-    {
+
+    if(width == config.ansi_c.long_long_int_width)
       return q + sign_str + "long long int" + d;
-    }
+
+    return q + sign_str + "_ExtInt(" + std::to_string(width.to_uint64()) + ")" +
+           d;
   }
   else if(src.id() == "floatbv" || src.id() == "fixedbv")
   {
