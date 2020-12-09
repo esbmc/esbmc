@@ -5,7 +5,7 @@ jobs:
 
   # Check testing tool suite
   testing-tool:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v1
     - name: Runs testing tool unit test
@@ -14,7 +14,7 @@ jobs:
 
   fast-tests:
     name: Run unit and fuzz targets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v1
     - name: Install Dependencies
@@ -34,7 +34,7 @@ jobs:
 
   clang-tidy:
     name: Run clang-tidy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v1
     - name: Install Dependencies
