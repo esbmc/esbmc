@@ -8,7 +8,7 @@ on: [push, pull_request]
 jobs:
   super-linter:    
     name: Apply super-linter
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     steps:
       - name: Checkout Code
@@ -27,7 +27,7 @@ jobs:
 # Check project with clang-format
   code-style:  
     name: Check C/C++ code-style
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:      
     - uses: actions/checkout@v1    
     - name: Install Dependencies
@@ -43,7 +43,7 @@ jobs:
 
   cmake-lint:  
     name: Check CMake modules
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     continue-on-error: true # TODO: Eventually this will be removed
     steps:      
     - uses: actions/checkout@v1

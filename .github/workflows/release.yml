@@ -9,7 +9,7 @@ name: Upload Release Asset
 jobs:
   build-linux:
     name: Build Linux Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout code
         uses: actions/checkout@master
@@ -63,7 +63,7 @@ jobs:
 
   create-release:
     name: Upload Release Asset
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [build-linux, build-macos]
     steps:
       - name: Download Linux Build

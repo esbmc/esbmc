@@ -11,7 +11,7 @@ jobs:
 
   build-linux:
     name: Build ESBMC with all Solvers (Linux)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:      
     - uses: actions/checkout@v1
     - name: Install Dependencies
