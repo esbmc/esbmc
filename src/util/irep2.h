@@ -1080,7 +1080,7 @@ public:
   typedef typename baseclass::base_type base2t;
 
   template <typename... Args>
-  irep_methods2(const Args &... args) : superclass(args...)
+  irep_methods2(const Args &...args) : superclass(args...)
   {
   }
 
@@ -1269,7 +1269,7 @@ public:
     superclass;
 
   template <typename... Args>
-  expr_methods2(const Args &... args) : superclass(args...)
+  expr_methods2(const Args &...args) : superclass(args...)
   {
   }
 
@@ -1305,7 +1305,7 @@ public:
     superclass;
 
   template <typename... Args>
-  type_methods2(const Args &... args) : superclass(args...)
+  type_methods2(const Args &...args) : superclass(args...)
   {
   }
 

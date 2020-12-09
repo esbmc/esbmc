@@ -334,7 +334,8 @@ public:
   {
     bool is_ite;
     expr2tc idx;
-    union {
+    union
+    {
       struct
       {
         unsigned int src_array_update_num;

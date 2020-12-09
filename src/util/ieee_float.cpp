@@ -1098,7 +1098,8 @@ void ieee_floatt::from_double(const double d)
   spec.e = 11;
   assert(spec.width() == 64);
 
-  union {
+  union
+  {
     double d;
     long long unsigned int i;
   } u;
@@ -1114,7 +1115,8 @@ void ieee_floatt::from_float(const float f)
   spec.e = 8;
   assert(spec.width() == 32);
 
-  union {
+  union
+  {
     float f;
     unsigned int i;
   } u;
@@ -1171,7 +1173,8 @@ bool ieee_floatt::is_float() const
 
 double ieee_floatt::to_double() const
 {
-  union {
+  union
+  {
     double f;
     unsigned int i;
   } a;
@@ -1206,7 +1209,8 @@ float ieee_floatt::to_float() const
     throw "ieee_floatt::to_float not supported on this architecture";
   }
 
-  union {
+  union
+  {
     float f;
     unsigned int i;
   } a;

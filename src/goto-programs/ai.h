@@ -25,7 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 // on this to use std::make_unique instead.
 
 template <typename T, typename... Ts>
-static inline std::unique_ptr<T> util_make_unique(Ts &&... ts)
+static inline std::unique_ptr<T> util_make_unique(Ts &&...ts)
 {
   return std::unique_ptr<T>(new T(std::forward<Ts>(ts)...));
 }

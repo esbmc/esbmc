@@ -2200,7 +2200,8 @@ expr2tc extract2t::do_simplify() const
   if(is_signedbv_type(type) && isneg)
   {
     // Type punning.
-    union {
+    union
+    {
       int64_t sign;
       uint64_t nosign;
     } totallytmp;

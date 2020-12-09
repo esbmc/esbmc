@@ -9,15 +9,16 @@
 #include <util/parseoptions.h>
 #include <util/ui_message.h>
 
-const struct opt_templ c2goto_options[] = {{0, "16", switc, ""},
-                                           {0, "32", switc, ""},
-                                           {0, "64", switc, ""},
-                                           {0, "fixedbv", switc, ""},
-                                           {0, "floatbv", switc, ""},
-                                           {0, "output", string, ""},
-                                           {'I', "", string, ""},
-                                           {'D', "", string, ""},
-                                           {0, "", switc, ""}};
+const struct opt_templ c2goto_options[] = {
+  {0, "16", switc, ""},
+  {0, "32", switc, ""},
+  {0, "64", switc, ""},
+  {0, "fixedbv", switc, ""},
+  {0, "floatbv", switc, ""},
+  {0, "output", string, ""},
+  {'I', "", string, ""},
+  {'D', "", string, ""},
+  {0, "", switc, ""}};
 
 class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
@@ -67,5 +68,6 @@ int main(int argc, const char **argv)
   return parseopt.main();
 }
 
-const mode_table_et mode_table[] = {LANGAPI_HAVE_MODE_CLANG_C,
-                                    LANGAPI_HAVE_MODE_END};
+const mode_table_et mode_table[] = {
+  LANGAPI_HAVE_MODE_CLANG_C,
+  LANGAPI_HAVE_MODE_END};
