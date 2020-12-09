@@ -121,20 +121,21 @@ static const char *cpp_normal_defs[] = {
   nullptr};
 
 #if !defined(WIN32) && !defined(__APPLE__)
-static const char *cpp_linux_defs[] = {"i386",
-                                       "__i386",
-                                       "__i386__",
-                                       "linux",
-                                       "__linux",
-                                       "__linux__",
-                                       "__gnu_linux__",
-                                       "unix",
-                                       "__unix",
-                                       "__unix__",
-                                       "__null=0",
-                                       "__restrict__=/**/",
-                                       "__restrict=/**/",
-                                       nullptr};
+static const char *cpp_linux_defs[] = {
+  "i386",
+  "__i386",
+  "__i386__",
+  "linux",
+  "__linux",
+  "__linux__",
+  "__gnu_linux__",
+  "unix",
+  "__unix",
+  "__unix__",
+  "__null=0",
+  "__restrict__=/**/",
+  "__restrict=/**/",
+  nullptr};
 #endif
 
 #ifdef __APPLE__
@@ -148,17 +149,16 @@ static const char *cpp_mac_defs[] = {
 #endif
 
 #ifdef WIN32
-static const char *cpp_windows_defs[] = {"_WIN32",
-                                         "__restrict__=/**/",
-                                         "__restrict=/**/",
-                                         NULL};
+static const char *cpp_windows_defs[] =
+  {"_WIN32", "__restrict__=/**/", "__restrict=/**/", NULL};
 #endif
 
-static const char *cpp_ansic_defs[] = {"__STDC_VERSION__=199901L",
-                                       "__STDC_IEC_559__=1",
-                                       "__STDC_IEC_559_COMPLEX__=1",
-                                       "__STDC__",
-                                       nullptr};
+static const char *cpp_ansic_defs[] = {
+  "__STDC_VERSION__=199901L",
+  "__STDC_IEC_559__=1",
+  "__STDC_IEC_559_COMPLEX__=1",
+  "__STDC__",
+  nullptr};
 
 static const char *cpp_cpp_defs[] = {"__cplusplus=1", nullptr};
 

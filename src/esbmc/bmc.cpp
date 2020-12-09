@@ -606,8 +606,8 @@ void bmct::bidirectional_search(
       if(all_loop_vars.find(new_lhs) == all_loop_vars.end())
         continue;
 
-      var_ssa_list[to_symbol2t(new_lhs).thename] = {ssait.original_lhs,
-                                                    ssait.rhs};
+      var_ssa_list[to_symbol2t(new_lhs).thename] = {
+        ssait.original_lhs, ssait.rhs};
     }
 
     if(!var_ssa_list.size())

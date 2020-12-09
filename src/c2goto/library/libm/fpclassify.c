@@ -6,12 +6,11 @@
   int name(type f)                                                             \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    return isnan_func(f)                                                       \
-             ? FP_NAN                                                          \
-             : isinf_func(f)                                                   \
-                 ? FP_INFINITE                                                 \
-                 : f == 0 ? FP_ZERO                                            \
-                          : isnormal_func(f) ? FP_NORMAL : FP_SUBNORMAL;       \
+    return isnan_func(f)      ? FP_NAN                                         \
+           : isinf_func(f)    ? FP_INFINITE                                    \
+           : f == 0           ? FP_ZERO                                        \
+           : isnormal_func(f) ? FP_NORMAL                                      \
+                              : FP_SUBNORMAL;                                  \
   }
 
 classify_def(float, _fdclass, isnan, isinf, __builtin_isnormal);
