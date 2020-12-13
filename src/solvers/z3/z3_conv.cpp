@@ -1155,6 +1155,9 @@ BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
   z3::expr e = solver.get_model().eval(za->a, true);
 
+  if(int_encoding)
+    return string2integer(Z3_get_numeral_string(z3_ctx, e));
+
   // Not a numeral? Let's not try to convert it
   return binary2integer(Z3_get_numeral_binary_string(z3_ctx, e), is_signed);
 }
