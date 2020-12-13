@@ -1,4 +1,4 @@
-set(Z3_MIN_VERSION "4.8.4")
+set(Z3_MIN_VERSION "4.8.9")
 
 if(DEFINED Z3_DIR)
     set(ENABLE_Z3 ON)
