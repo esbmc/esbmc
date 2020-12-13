@@ -103,11 +103,14 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   }
   else if(
     expr.id() == "+" || expr.id() == "-" || expr.id() == "*" ||
-    expr.id() == "/" || expr.id() == "mod" || expr.id() == "shl" ||
-    expr.id() == "shr" || expr.id() == "bitand" || expr.id() == "bitxor" ||
-    expr.id() == "bitor")
+    expr.id() == "/" || expr.id() == "mod" || expr.id() == "bitand" ||
+    expr.id() == "bitxor" || expr.id() == "bitor")
   {
     adjust_expr_binary_arithmetic(expr);
+  }
+  else if(expr.id() == "shl" || expr.id() == "shr")
+  {
+    adjust_expr_shifts(expr);
   }
   else if(expr.id() == "comma")
   {
@@ -228,6 +231,44 @@ void clang_c_adjust::adjust_member(member_exprt &expr)
   }
 }
 
+void clang_c_adjust::adjust_expr_shifts(exprt &expr)
+{
+  assert(expr.id() == "shr" || expr.id() == "shl");
+
+  adjust_operands(expr);
+
+  exprt &op0 = expr.op0();
+  exprt &op1 = expr.op1();
+
+  const typet type0 = ns.follow(op0.type());
+  const typet type1 = ns.follow(op1.type());
+
+  gen_typecast_arithmetic(ns, op0);
+  gen_typecast_arithmetic(ns, op1);
+
+  if(is_number(op0.type()) && is_number(op1.type()))
+  {
+    expr.type() = op0.type();
+
+    if(expr.id() == "shr") // shifting operation depends on types
+    {
+      const typet &op0_type = op0.type();
+
+      if(op0_type.id() == "unsignedbv")
+      {
+        expr.id("lshr");
+        return;
+      }
+
+      if(op0_type.id() == "signedbv")
+      {
+        expr.id("ashr");
+        return;
+      }
+    }
+  }
+}
+
 void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
 {
   adjust_operands(expr);
@@ -240,37 +281,11 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
 
   gen_typecast_arithmetic(ns, op0, op1);
 
-  if(expr.id() == "shr" || expr.id() == "shl")
+  if(
+    expr.id() == "+" || expr.id() == "-" || expr.id() == "*" ||
+    expr.id() == "/")
   {
-    if(is_number(op0.type()) && is_number(op1.type()))
-    {
-      if(expr.id() == "shr") // shifting operation depends on types
-      {
-        if(type0.id() == "unsignedbv")
-        {
-          expr.id("lshr");
-          return;
-        }
-
-        if(type0.id() == "signedbv")
-        {
-          expr.id("ashr");
-          return;
-        }
-      }
-
-      return;
-    }
-  }
-  else
-  {
-    if(
-      expr.id() == "+" || expr.id() == "-" || expr.id() == "*" ||
-      expr.id() == "/")
-    {
-      adjust_float_arith(expr);
-      return;
-    }
+    adjust_float_arith(expr);
   }
 }
 
