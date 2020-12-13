@@ -1116,8 +1116,10 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
       convert_sort(strct.members[1]));
 
-    unsigned int num = get_bv(object).to_uint64();
-    unsigned int offs = get_bv(offset).to_uint64();
+    unsigned int num =
+      get_bv(object, is_signedbv_type(strct.members[0])).to_uint64();
+    unsigned int offs =
+      get_bv(offset, is_signedbv_type(strct.members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, expr->type);
   }
@@ -1148,13 +1150,13 @@ bool z3_convt::get_bool(smt_astt a)
   return false;
 }
 
-BigInt z3_convt::get_bv(smt_astt a)
+BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
   z3::expr e = solver.get_model().eval(za->a, true);
 
   // Not a numeral? Let's not try to convert it
-  return string2integer(Z3_get_numeral_string(z3_ctx, e));
+  return binary2integer(Z3_get_numeral_binary_string(z3_ctx, e), is_signed);
 }
 
 ieee_floatt z3_convt::get_fpbv(smt_astt a)

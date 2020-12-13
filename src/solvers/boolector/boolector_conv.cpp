@@ -632,12 +632,12 @@ bool boolector_convt::get_bool(smt_astt a)
   return res;
 }
 
-BigInt boolector_convt::get_bv(smt_astt a)
+BigInt boolector_convt::get_bv(smt_astt a, bool is_signed)
 {
   const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
 
   const char *result = boolector_bv_assignment(btor, ast->a);
-  BigInt val = string2integer(result, 2);
+  BigInt val = binary2integer(result, is_signed);
   boolector_free_bv_assignment(btor, result);
 
   return val;
@@ -667,7 +667,7 @@ expr2tc boolector_convt::get_array_elem(
       auto idx = string2integer(indicies[i], 2);
       if(idx == index)
       {
-        val = string2integer(values[i], 2);
+        val = binary2integer(values[i], is_signedbv_type(subtype));
         break;
       }
     }

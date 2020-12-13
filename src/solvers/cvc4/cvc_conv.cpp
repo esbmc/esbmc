@@ -75,12 +75,12 @@ ieee_floatt cvc_convt::get_fpbv(smt_astt a)
   return number;
 }
 
-BigInt cvc_convt::get_bv(smt_astt a)
+BigInt cvc_convt::get_bv(smt_astt a, bool is_signed)
 {
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
   CVC4::Expr e = smt.getValue(ca->a);
-  CVC4::BitVector foo = e.getConst<CVC4::BitVector>();
-  return BigInt(foo.toInteger().getUnsignedLong());
+  std::string str = e.getConst<CVC4::BitVector>().toString(2);
+  return binary2integer(str, is_signed);
 }
 
 expr2tc cvc_convt::get_array_elem(

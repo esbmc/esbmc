@@ -2159,7 +2159,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
-    return get_by_value(type, get_bv(a));
+    return get_by_value(type, get_bv(a, is_signedbv_type(type)));
 
   case type2t::floatbv_id:
     return constant_floatbv2tc(fp_api->get_fpbv(a));

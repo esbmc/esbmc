@@ -450,7 +450,7 @@ smt_convt::resultt smtlib_convt::dec_solve()
   }
 }
 
-BigInt smtlib_convt::get_bv(smt_astt a)
+BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
 {
   // This should always be a symbol.
   const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(a);
@@ -514,7 +514,7 @@ BigInt smtlib_convt::get_bv(smt_astt a)
   else if(respval.token == TOK_BINNUM)
   {
     std::string data = respval.data.substr(2);
-    m = string2integer(data, 2);
+    m = binary2integer(data, is_signed);
   }
 
   delete smtlib_output;
