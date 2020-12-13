@@ -790,7 +790,7 @@ bool yices_convt::get_bool(smt_astt a)
   return val ? true : false;
 }
 
-BigInt yices_convt::get_bv(smt_astt a)
+BigInt yices_convt::get_bv(smt_astt a, bool is_signed)
 {
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
 
@@ -802,19 +802,17 @@ BigInt yices_convt::get_bv(smt_astt a)
   }
 
   unsigned int width = a->sort->get_data_width();
-  assert(width <= 64);
 
-  int32_t data[64];
+  int32_t *data = new int32_t[width];
   yices_get_bv_value(yices_get_model(yices_ctx, 1), ast->a, data);
 
-  int i;
-  for(i = width - 1; i >= 0; i--)
-  {
-    val <<= 1;
-    val |= data[i];
-  }
+  std::string s;
+  for(unsigned i = 0; i < width; i++)
+    s.append(std::to_string(data[width - i - 1]));
 
-  return BigInt(val);
+  delete[] data;
+
+  return binary2integer(s, is_signed);
 }
 
 expr2tc yices_convt::get_array_elem(
@@ -1034,8 +1032,10 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
     smt_astt offset =
       new_ast(yices_select(2, to_solver_smt_ast<yices_smt_ast>(sym)->a), s2);
 
-    unsigned int num = get_bv(object).to_uint64();
-    unsigned int offs = get_bv(offset).to_uint64();
+    unsigned int num =
+      get_bv(object, is_signedbv_type(strct.members[0])).to_uint64();
+    unsigned int offs =
+      get_bv(offset, is_signedbv_type(strct.members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, expr->type);
   }

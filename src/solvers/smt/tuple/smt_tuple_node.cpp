@@ -172,7 +172,8 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     }
     else if(is_number_type(it))
     {
-      res = ctx->get_by_value(it, ctx->get_bv(tuple->elements[i]));
+      res = ctx->get_by_value(
+        it, ctx->get_bv(tuple->elements[i], is_signedbv_type(it)));
     }
     else if(is_array_type(it))
     {

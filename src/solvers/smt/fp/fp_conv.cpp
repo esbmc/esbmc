@@ -1159,7 +1159,7 @@ ieee_floatt fp_convt::get_fpbv(smt_astt a)
   std::size_t swidth = a->sort->get_significand_width();
 
   ieee_floatt number(ieee_float_spect(swidth - 1, width - swidth));
-  number.unpack(ctx->get_bv(a));
+  number.unpack(ctx->get_bv(a, true));
   return number;
 }
 

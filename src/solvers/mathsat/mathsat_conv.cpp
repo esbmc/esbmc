@@ -119,7 +119,7 @@ bool mathsat_convt::get_bool(smt_astt a)
   return res;
 }
 
-BigInt mathsat_convt::get_bv(smt_astt a)
+BigInt mathsat_convt::get_bv(smt_astt a, bool is_signed)
 {
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
   msat_term t = msat_get_model_value(env, mast->a);
@@ -136,20 +136,12 @@ BigInt mathsat_convt::get_bv(smt_astt a)
   mpz_t num;
   mpz_init(num);
   mpz_set(num, mpq_numref(val));
-  char buffer[mpz_sizeinbase(num, 10) + 2];
-  mpz_get_str(buffer, 10, num);
+  std::string buffer = mpz_get_str(nullptr, 2, num);
 
-  char *foo = buffer;
-  int64_t finval = strtoll(buffer, &foo, 10);
+  mpz_clear(num);
+  mpq_clear(val);
 
-  if(buffer[0] != '\0' && (foo == buffer || *foo != '\0'))
-  {
-    std::cerr << "Couldn't parse string representation of number \"" << buffer
-              << "\"" << std::endl;
-    abort();
-  }
-
-  return BigInt(finval);
+  return binary2integer(buffer, is_signed);
 }
 
 ieee_floatt mathsat_convt::get_fpbv(smt_astt a)

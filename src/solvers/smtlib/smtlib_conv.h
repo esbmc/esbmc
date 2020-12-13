@@ -258,7 +258,7 @@ public:
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
   bool get_bool(smt_astt a) override;
-  BigInt get_bv(smt_astt a) override;
+  BigInt get_bv(smt_astt a, bool is_signed) override;
   expr2tc
   get_array_elem(smt_astt array, uint64_t index, const type2tc &type) override;
 

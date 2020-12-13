@@ -475,8 +475,9 @@ public:
 
   /** Extract the assignment to a bitvector from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
+   *  @param is_signed whether the bitvector is signed
    *  @return Expression representation of a's value */
-  virtual BigInt get_bv(smt_astt a) = 0;
+  virtual BigInt get_bv(smt_astt a, bool is_signed) = 0;
 
   /** Reduction or: equals bit0 iff all bits are 0
    * @param op the expr to be reduced
