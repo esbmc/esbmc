@@ -48,3 +48,32 @@ jobs:
         name: csmith-linux
         path: ./build/csmith-error
         if-no-files-found: ignore
+
+
+  intel-release:
+    name: Build Linux Release (SEND THIS!!!)
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@master
+      - name: Install Dependencies
+        run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev
+      - name: Download Clang 11
+        run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+      - name: Extract Clang 11
+        run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
+      - name: Setup boolector
+        run: git clone https://github.com/boolector/boolector && cd boolector && git reset --hard 3.2.0 && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
+      - name: Setup Z3
+        run: wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.9/z3-4.8.9-x64-ubuntu-16.04.zip && unzip z3-4.8.9-x64-ubuntu-16.04.zip && mv z3-4.8.9-x64-ubuntu-16.04/ z3
+      - name: Get current folder and files
+        run: pwd && ls
+      - name: Configure CMake
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3
+      - name: Build ESBMC
+        run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Linux.sh
+      - uses: actions/upload-artifact@v1
+        with:
+          name: intel-release
+          path: ./build/ESBMC-Linux.sh
+      
