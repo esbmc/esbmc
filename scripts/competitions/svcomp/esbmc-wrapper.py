@@ -10,6 +10,7 @@ import resource
 
 # Start time for this script
 start_time = time.time()
+SVCOMP_EXTRA_VERSION = " svcomp 0"
 
 class Result:
   success = 1
@@ -165,13 +166,13 @@ def get_result_string(the_result):
     return "FALSE_MEMCLEANUP"
 
   if the_result == Result.fail_memtrack:
-    return "FALSE_MEMTRACK"
+    return "Unknown"
 
   if the_result == Result.fail_free:
-    return "FALSE_FREE"
+    return "Unknown"
 
   if the_result == Result.fail_deref:
-    return "FALSE_DEREF"
+    return "Unknown"
 
   if the_result == Result.fail_overflow:
     return "FALSE_OVERFLOW"
@@ -294,7 +295,7 @@ strategy = args.strategy
 concurrency = args.concurrency
 
 if version:
-  print os.popen(esbmc_path + "--version").read()[6:],
+  print os.popen(esbmc_path + "--version").read()[6:] + SVCOMP_EXTRA_VERSION,
   exit(0)
 
 if property_file is None:

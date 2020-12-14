@@ -22,6 +22,7 @@ void symex_target_equationt::assignment(
   const expr2tc &lhs,
   const expr2tc &original_lhs,
   const expr2tc &rhs,
+  const expr2tc &original_rhs,
   const sourcet &source,
   std::vector<stack_framet> stack_trace,
   const bool hidden,
@@ -35,6 +36,7 @@ void symex_target_equationt::assignment(
   SSA_step.guard = guard;
   SSA_step.lhs = lhs;
   SSA_step.original_lhs = original_lhs;
+  SSA_step.original_rhs = original_rhs;
   SSA_step.rhs = rhs;
   SSA_step.hidden = hidden;
   SSA_step.cond = equality2tc(lhs, rhs);

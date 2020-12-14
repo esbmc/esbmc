@@ -83,7 +83,10 @@ void build_goto_trace(
 
       try
       {
-        goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
+        if(is_nil_expr(SSA_step.original_rhs))
+          goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
+        else
+          goto_trace_step.value = build_rhs(smt_conv, SSA_step.original_rhs);
       }
       catch(type2t::symbolic_type_excp *e)
       {

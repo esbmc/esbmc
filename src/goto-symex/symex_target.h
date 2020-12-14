@@ -48,6 +48,7 @@ public:
     const expr2tc &lhs,
     const expr2tc &original_lhs,
     const expr2tc &rhs,
+    const expr2tc &original_rhs,
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
     const bool hidden,
