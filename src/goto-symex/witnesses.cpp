@@ -593,8 +593,16 @@ void _create_graph_node(
     boost::posix_time::microsec_clock::universal_time();
   xmlnodet p_creationTime;
   p_creationTime.add("<xmlattr>.key", "creationtime");
-  p_creationTime.put_value(
-    boost::posix_time::to_iso_extended_string(creation_time));
+
+  // Conversion to string using the ISO 8601.
+  // Source: https://www.boost.org/doc/libs/1_49_0/doc/html/date_time/posix_time.html
+  std::string tmp = boost::posix_time::to_iso_extended_string(creation_time);
+  // However, SV-COMP witness format slightly modifies the ISO 8601 format,
+  // where the seconds field is written as SS instead of SS.fffffffff
+  // Here we want to make the witness validators happy.
+  // source: https://github.com/sosy-lab/sv-witnesses
+  std::string new_creation_time = tmp.substr(0, tmp.find(".", 0));
+  p_creationTime.put_value(new_creation_time);
   graphnode.add_child("data", p_creationTime);
 }
 
@@ -700,7 +708,7 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
 {
   std::string assignment = "";
   if(
-    !is_nil_expr(step.value) && is_constant_expr(step.value) &&
+     !is_nil_expr(step.value) && (is_constant_expr(step.value) || is_byte_extract_constant(step.value)) &&
     (is_valid_witness_step(ns, step)))
   {
     assignment += from_expr(ns, "", step.lhs);
