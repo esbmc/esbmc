@@ -32,28 +32,28 @@ You can get the latest version using the following __git__ command:
 git clone https://github.com/esbmc/esbmc
 ```
 
-## Preparing Clang 9
+## Preparing Clang 11
 
-ESBMC uses [__clang__](https://clang.llvm.org/) in its front-end. It currently supports version 9.0.0.
+ESBMC uses [__clang__](https://clang.llvm.org/) in its front-end. It currently supports version 11.0.0.
 
 First, we need to download the package. It can be performed using the following __wget__ command:
 
 ```
 Linux:
-wget http://releases.llvm.org/11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
 
 macOS:
-wget http://releases.llvm.org/11.0.0/clang+llvm-11.0.0-x86_64-darwin-apple.tar.xz
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz
 ```
 
 Then, we need to extract the package. You can use the following __tar__ command:
 
 ```
 Linux:
-tar xJf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
+tar xJf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-18.04 clang11
 
 macOS:
-tar xJf clang+llvm-11.0.0-x86_64-darwin-apple.tar.xz && mv clang+llvm-11.0.0-x86_64-darwin-apple clang9
+tar xJf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-darwin-apple clang11
 ```
 
 ## Setting Up Solvers
@@ -146,10 +146,10 @@ First, we need to setup __cmake__, by using the following command:
 
 ```
 Linux:
-cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../../clang9 -DLLVM_DIR=$PWD/../../clang9 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../../yices -DCVC4_DIR=$PWD/../../cvc4 -DGMP_DIR=$PWD/../../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
+cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../../clang11 -DLLVM_DIR=$PWD/../../clang11 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../../yices -DCVC4_DIR=$PWD/../../cvc4 -DGMP_DIR=$PWD/../../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 
 macOS:
-cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../../clang9 -DLLVM_DIR=$PWD/../../clang9 -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/..//..release
+cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../../clang11 -DLLVM_DIR=$PWD/../../clang11 -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/..//..release
 ```
 
 Finally, we can trigger the build process, by using the following command:
