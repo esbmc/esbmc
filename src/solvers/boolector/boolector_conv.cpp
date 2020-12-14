@@ -167,7 +167,12 @@ smt_astt boolector_convt::mk_bvshl(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return fix_up_shift(boolector_sll, a, b, a->sort);
+  return new_ast(
+    boolector_sll(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
 }
 
 smt_astt boolector_convt::mk_bvashr(smt_astt a, smt_astt b)
@@ -175,7 +180,12 @@ smt_astt boolector_convt::mk_bvashr(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return fix_up_shift(boolector_sra, a, b, a->sort);
+  return new_ast(
+    boolector_sra(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
 }
 
 smt_astt boolector_convt::mk_bvlshr(smt_astt a, smt_astt b)
@@ -183,7 +193,12 @@ smt_astt boolector_convt::mk_bvlshr(smt_astt a, smt_astt b)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return fix_up_shift(boolector_srl, a, b, a->sort);
+  return new_ast(
+    boolector_srl(
+      btor,
+      to_solver_smt_ast<btor_smt_ast>(a)->a,
+      to_solver_smt_ast<btor_smt_ast>(b)->a),
+    a->sort);
 }
 
 smt_astt boolector_convt::mk_bvneg(smt_astt a)
@@ -752,43 +767,6 @@ boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
       to_solver_smt_sort<BoolectorSort>(arrsort)->s,
       to_solver_smt_ast<btor_smt_ast>(init_val)->a),
     arrsort);
-}
-
-smt_astt boolector_convt::fix_up_shift(
-  shift_func_ptr fptr,
-  smt_astt op0,
-  smt_astt op1,
-  smt_sortt res_sort)
-{
-  BoolectorNode *data_op, *shift_amount;
-  bool need_to_shift_down = false;
-  unsigned int bwidth;
-
-  data_op = to_solver_smt_ast<btor_smt_ast>(op0)->a;
-  bwidth = log2(op0->sort->get_data_width());
-
-  // If we're a non-power-of-x number, some zero extension has to occur
-  if((pow(2.0, bwidth)) < op0->sort->get_data_width())
-  {
-    // Zero extend up to bwidth + 1
-    bwidth++;
-    unsigned int new_size = pow(2.0, bwidth);
-    smt_astt zeroext = mk_zero_ext(op0, new_size - op0->sort->get_data_width());
-    data_op = to_solver_smt_ast<btor_smt_ast>(zeroext)->a;
-    need_to_shift_down = true;
-  }
-
-  // We also need to reduce the shift-amount operand down to log2(data_op) len
-  shift_amount = boolector_slice(
-    btor, to_solver_smt_ast<btor_smt_ast>(op1)->a, bwidth - 1, 0);
-
-  BoolectorNode *shift = fptr(btor, data_op, shift_amount);
-
-  // If zero extension occurred, cut off the top few bits of this value.
-  if(need_to_shift_down)
-    shift = boolector_slice(btor, shift, res_sort->get_data_width() - 1, 0);
-
-  return new_ast(shift, res_sort);
 }
 
 void boolector_convt::dump_smt()

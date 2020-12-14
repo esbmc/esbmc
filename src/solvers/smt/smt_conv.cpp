@@ -762,6 +762,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::shl_id:
   {
     const shl2t &shl = to_shl2t(expr);
+    if(shl.side_1->type->get_width() != shl.side_2->type->get_width())
+    {
+      // frontend doesn't cast the second operand up to the width of
+      // the first, which SMT does not enjoy.
+      typecast2tc cast(shl.side_1->type, shl.side_2);
+      args[1] = convert_ast(cast);
+    }
 
     if(int_encoding)
     {
@@ -780,6 +787,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::ashr_id:
   {
     const ashr2t &ashr = to_ashr2t(expr);
+    if(ashr.side_1->type->get_width() != ashr.side_2->type->get_width())
+    {
+      // frontend doesn't cast the second operand up to the width of
+      // the first, which SMT does not enjoy.
+      typecast2tc cast(ashr.side_1->type, ashr.side_2);
+      args[1] = convert_ast(cast);
+    }
 
     if(int_encoding)
     {
@@ -797,8 +811,14 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::lshr_id:
   {
-    // Like ashr. Haven't got around to cleaning this up yet.
     const lshr2t &lshr = to_lshr2t(expr);
+    if(lshr.side_1->type->get_width() != lshr.side_2->type->get_width())
+    {
+      // frontend doesn't cast the second operand up to the width of
+      // the first, which SMT does not enjoy.
+      typecast2tc cast(lshr.side_1->type, lshr.side_2);
+      args[1] = convert_ast(cast);
+    }
 
     if(int_encoding)
     {
