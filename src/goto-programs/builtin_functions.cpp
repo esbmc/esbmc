@@ -589,7 +589,9 @@ void goto_convertt::do_function_call_symbol(
       throw id2string(base_name) + " expected not to have LHS";
     }
   }
-  else if(base_name == "__VERIFIER_error" || base_name == "reach_error" || base_name == "__builtin_unreachable")
+  else if(
+    base_name == "__VERIFIER_error" || base_name == "reach_error" ||
+    base_name == "__builtin_unreachable")
   {
     if(!arguments.empty())
     {
@@ -856,7 +858,8 @@ void goto_convertt::do_function_call_symbol(
       t->location = function.location();
     }
   }
-  else if(base_name == "__builtin_constant_p") {
+  else if(base_name == "__builtin_constant_p")
+  {
     if(arguments.size() != 1)
     {
       err_location(function);
@@ -864,7 +867,8 @@ void goto_convertt::do_function_call_symbol(
     }
 
     exprt new_expr("sideeffect", lhs.type());
-    new_expr.make_bool(arguments[0].type().cmt_constant() || arguments[0].is_constant());
+    new_expr.make_bool(
+      arguments[0].type().cmt_constant() || arguments[0].is_constant());
     new_expr.location() = function.location();
 
     goto_programt::targett t_n = dest.add_instruction(ASSIGN);
