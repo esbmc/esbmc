@@ -589,7 +589,7 @@ void goto_convertt::do_function_call_symbol(
       throw id2string(base_name) + " expected not to have LHS";
     }
   }
-  else if(base_name == "__VERIFIER_error" || base_name == "reach_error")
+  else if(base_name == "__VERIFIER_error" || base_name == "reach_error" || base_name == "__builtin_unreachable")
   {
     if(!arguments.empty())
     {
