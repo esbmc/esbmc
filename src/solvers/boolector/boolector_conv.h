@@ -99,14 +99,6 @@ public:
 
   smt_astt overflow_arith(const expr2tc &expr) override;
 
-  typedef BoolectorNode *(
-    *shift_func_ptr)(Btor *, BoolectorNode *, BoolectorNode *);
-  smt_astt fix_up_shift(
-    shift_func_ptr fptr,
-    smt_astt op0,
-    smt_astt op1,
-    smt_sortt res_sort);
-
   void dump_smt() override;
   void print_model() override;
 
