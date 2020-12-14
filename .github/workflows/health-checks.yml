@@ -29,6 +29,8 @@ jobs:
       run: mkdir build && cd build && CC=../clang/bin/clang CXX=../clang/bin/clang++ cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_FUZZER=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang
     - name: Build BigInt Tests
       run: cd build && ninja biginttest && ninja bigintfuzz
+    - name: Build C2Goto model Tests
+      run: cd build && ninja builtin_libs_test && ninja builtin_libs_fuzz
     - name: Run tests
       run: cd build && ninja test
 
