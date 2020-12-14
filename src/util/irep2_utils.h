@@ -80,13 +80,16 @@ inline bool is_byte_extract_constant(const expr2tc &t)
   if(t->expr_id != expr2t::byte_extract_id)
     return false;
 
-  std::shared_ptr<byte_extract_data> data = std::dynamic_pointer_cast<byte_extract_data>(t);
-  return is_constant_expr(data->source_value) && is_constant_expr(data->source_offset);
+  std::shared_ptr<byte_extract_data> data =
+    std::dynamic_pointer_cast<byte_extract_data>(t);
+  return is_constant_expr(data->source_value) &&
+         is_constant_expr(data->source_offset);
 }
 
 inline bool is_constant_expr(const expr2tc &t)
 {
-  if(is_byte_extract_constant(t)) return true;
+  if(is_byte_extract_constant(t))
+    return true;
   return t->expr_id == expr2t::constant_int_id ||
          t->expr_id == expr2t::constant_fixedbv_id ||
          t->expr_id == expr2t::constant_floatbv_id ||
@@ -95,7 +98,7 @@ inline bool is_constant_expr(const expr2tc &t)
          t->expr_id == expr2t::constant_struct_id ||
          t->expr_id == expr2t::constant_union_id ||
          t->expr_id == expr2t::constant_array_id ||
-    t->expr_id == expr2t::constant_array_of_id;
+         t->expr_id == expr2t::constant_array_of_id;
 }
 
 inline bool is_structure_type(const type2tc &t)
