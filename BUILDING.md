@@ -40,20 +40,20 @@ First, we need to download the package. It can be performed using the following 
 
 ```
 Linux:
-wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+wget http://releases.llvm.org/11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
 
 macOS:
-wget http://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz
+wget http://releases.llvm.org/11.0.0/clang+llvm-11.0.0-x86_64-darwin-apple.tar.xz
 ```
 
 Then, we need to extract the package. You can use the following __tar__ command:
 
 ```
 Linux:
-tar xJf clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
+tar xJf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-18.04 clang9
 
 macOS:
-tar xJf clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz && mv clang+llvm-9.0.0-x86_64-darwin-apple clang9
+tar xJf clang+llvm-11.0.0-x86_64-darwin-apple.tar.xz && mv clang+llvm-11.0.0-x86_64-darwin-apple clang9
 ```
 
 ## Setting Up Solvers
