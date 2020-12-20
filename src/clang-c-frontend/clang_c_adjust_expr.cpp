@@ -276,10 +276,16 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   exprt &op0 = expr.op0();
   exprt &op1 = expr.op1();
 
-  const typet type0 = ns.follow(op0.type());
-  const typet type1 = ns.follow(op1.type());
+  const typet o_type0 = ns.follow(op0.type());
+  const typet o_type1 = ns.follow(op1.type());
 
   gen_typecast_arithmetic(ns, op0, op1);
+
+  const typet &type0 = op0.type();
+  const typet &type1 = op1.type();
+
+  if(type0 == type1 && is_number(type0))
+    expr.type() = type0;
 
   if(
     expr.id() == "+" || expr.id() == "-" || expr.id() == "*" ||
