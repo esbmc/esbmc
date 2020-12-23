@@ -315,7 +315,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
       std::cout << " (" << it.comment << ")";
     std::cout << '\n';
 
-    std::cout << "(" << count << ") ";
+    std::cout << "/* " << count << "*/ ";
 
     std::string string_value;
     languages.from_expr(migrate_expr_back(it.cond), string_value);
