@@ -302,7 +302,6 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
   bool print_guard = config.options.get_bool_option("ssa-guards");
   bool sparse = config.options.get_bool_option("ssa-no-location");
   bool no_sliced = config.options.get_bool_option("ssa-no-sliced");
-  bool fullname = config.options.get_bool_option("ssa-full-names");
 
   for(auto const &it : eq->SSA_steps)
   {
@@ -324,7 +323,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
     std::cout << "(" << count << ") ";
 
     std::string string_value;
-    languages.from_expr(migrate_expr_back(it.cond), string_value, fullname);
+    languages.from_expr(migrate_expr_back(it.cond), string_value);
 
     if(it.is_assignment())
     {
@@ -345,7 +344,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
 
     if(!migrate_expr_back(it.guard).is_true() && print_guard)
     {
-      languages.from_expr(migrate_expr_back(it.guard), string_value, fullname);
+      languages.from_expr(migrate_expr_back(it.guard), string_value);
       std::cout << std::string(i2string(count).size() + 3, ' ');
       std::cout << "guard: " << string_value << "\n";
     }

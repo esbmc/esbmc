@@ -16,14 +16,14 @@ class languagest
 public:
   // conversion of expressions
 
-  bool from_expr(const exprt &expr, std::string &code, bool fullname = false)
+  bool from_expr(const exprt &expr, std::string &code)
   {
-    return language->from_expr(expr, code, ns, fullname);
+    return language->from_expr(expr, code, ns);
   }
 
-  bool from_type(const typet &type, std::string &code, bool fullname = false)
+  bool from_type(const typet &type, std::string &code)
   {
-    return language->from_type(type, code, ns, fullname);
+    return language->from_type(type, code, ns);
   }
 
   // constructor / destructor

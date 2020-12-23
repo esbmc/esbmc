@@ -252,19 +252,17 @@ languaget *new_cpp_language()
 bool cpp_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns,
-  bool fullname)
+  const namespacet &ns)
 {
-  code = expr2cpp(expr, ns, fullname);
+  code = expr2cpp(expr, ns);
   return false;
 }
 
 bool cpp_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns,
-  bool fullname)
+  const namespacet &ns)
 {
-  code = type2cpp(type, ns, fullname);
+  code = type2cpp(type, ns);
   return false;
 }

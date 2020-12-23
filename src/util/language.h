@@ -68,17 +68,11 @@ public:
   virtual void show_parse(std::ostream &out) = 0;
 
   // conversion of expressions
-  virtual bool from_expr(
-    const exprt &expr,
-    std::string &code,
-    const namespacet &ns,
-    bool fullname = false) = 0;
+  virtual bool
+  from_expr(const exprt &expr, std::string &code, const namespacet &ns) = 0;
 
-  virtual bool from_type(
-    const typet &type,
-    std::string &code,
-    const namespacet &ns,
-    bool fullname = false) = 0;
+  virtual bool
+  from_type(const typet &type, std::string &code, const namespacet &ns) = 0;
 
   virtual languaget *new_language() = 0;
 

@@ -383,19 +383,17 @@ _Bool __ESBMC_overflow_umulll(unsigned long long int, unsigned long long int, un
 bool clang_c_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns,
-  bool fullname)
+  const namespacet &ns)
 {
-  code = expr2c(expr, ns, fullname);
+  code = expr2c(expr, ns);
   return false;
 }
 
 bool clang_c_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns,
-  bool fullname)
+  const namespacet &ns)
 {
-  code = type2c(type, ns, fullname);
+  code = type2c(type, ns);
   return false;
 }

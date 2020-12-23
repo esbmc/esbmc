@@ -1740,7 +1740,6 @@ void esbmc_parseoptionst::help()
        " --ssa-no-location            do not print the SSA's original "
        "location\n"
        " --ssa-no-sliced              do not print the sliced SSAs\n"
-       " --ssa-full-names             print SSAs with full variable names\n"
        " --smt-formula-only           only show SMT formula (not supported by "
        "all solvers)\n"
        " --smt-formula-too            show SMT formula (not supported by all "
