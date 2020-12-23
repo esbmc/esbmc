@@ -1736,7 +1736,6 @@ void esbmc_parseoptionst::help()
        " --program-only               only show program expression\n"
        " --program-too                show program expression and verify\n"
        " --ssa-symbol-table           show symbol table along with SSA\n"
-       " --ssa-guards                 print SSA's guards, if any\n"
        " --ssa-no-location            do not print the SSA's original "
        "location\n"
        " --ssa-no-sliced              do not print the sliced SSAs\n"

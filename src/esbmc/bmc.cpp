@@ -299,7 +299,6 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
   languagest languages(ns, MODE_C);
   std::cout << "\nProgram constraints: \n";
 
-  bool print_guard = config.options.get_bool_option("ssa-guards");
   bool sparse = config.options.get_bool_option("ssa-no-location");
   bool no_sliced = config.options.get_bool_option("ssa-no-sliced");
 
@@ -342,7 +341,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
       std::cout << "renumber: " << from_expr(ns, "", it.lhs) << "\n";
     }
 
-    if(!migrate_expr_back(it.guard).is_true() && print_guard)
+    if(!migrate_expr_back(it.guard).is_true())
     {
       languages.from_expr(migrate_expr_back(it.guard), string_value);
       std::cout << std::string(i2string(count).size() + 3, ' ');
