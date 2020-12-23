@@ -300,14 +300,14 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
   std::cout << "\nProgram constraints: \n";
 
   bool sparse = config.options.get_bool_option("ssa-no-location");
-  bool no_sliced = config.options.get_bool_option("ssa-no-sliced");
+  bool sliced = config.options.get_bool_option("ssa-sliced");
 
   for(auto const &it : eq->SSA_steps)
   {
     if(!(it.is_assert() || it.is_assignment() || it.is_assume()))
       continue;
 
-    if(it.ignore && no_sliced)
+    if(it.ignore && !sliced)
       continue;
 
     if(!sparse)

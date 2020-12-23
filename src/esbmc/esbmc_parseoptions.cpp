@@ -1738,7 +1738,7 @@ void esbmc_parseoptionst::help()
        " --ssa-symbol-table           show symbol table along with SSA\n"
        " --ssa-no-location            do not print the SSA's original "
        "location\n"
-       " --ssa-no-sliced              do not print the sliced SSAs\n"
+       " --ssa-sliced                 print the sliced SSAs\n"
        " --smt-formula-only           only show SMT formula (not supported by "
        "all solvers)\n"
        " --smt-formula-too            show SMT formula (not supported by all "

@@ -21,7 +21,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "program-too", switc, ""},
   {0, "ssa-symbol-table", switc, ""},
   {0, "ssa-guards", switc, ""},
-  {0, "ssa-no-sliced", switc, ""},
+  {0, "ssa-sliced", switc, ""},
   {0, "ssa-no-location", switc, ""},
   {0, "smt-formula-only", switc, ""},
   {0, "smt-formula-too", switc, ""},
