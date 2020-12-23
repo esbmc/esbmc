@@ -71,7 +71,7 @@ enum PROCESS_TYPE
 struct resultt
 {
   PROCESS_TYPE type;
-  BigInt k;
+  uint64_t k;
 };
 
 #ifndef _WIN32
@@ -700,7 +700,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = fc_solution;
+        r.k = fc_solution.to_uint64();
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -719,7 +719,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = is_solution;
+        r.k = is_solution.to_uint64();
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -820,7 +820,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if(res == smt_convt::P_SATISFIABLE)
       {
-        r.k = k_step;
+        r.k = k_step.to_uint64();
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -932,7 +932,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if(res == smt_convt::P_UNSATISFIABLE)
       {
-        r.k = k_step;
+        r.k = k_step.to_uint64();
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -1001,7 +1001,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if(res == smt_convt::P_UNSATISFIABLE)
       {
-        r.k = k_step;
+        r.k = k_step.to_uint64();
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
