@@ -1,5 +1,14 @@
 Release Notes of the ESBMC model checker
 
+*** Version 6.5
+* Initial C++ clang frontend.
+* Added new option for incremental context bound verification.
+* Added support for _ExtInt to create custom sized bitvectors.
+* Several fixes and improvements to our libc models.
+* Fix infinite loop when verifying recursive programs with k-induction.
+* Update clang to 11.0.
+* Several minor bug fixes.
+
 *** Version 6.4
 * Refactored concurrency to check global writes in arrays.
 * Removed python API from ESBMC.
