@@ -1736,8 +1736,6 @@ void esbmc_parseoptionst::help()
        " --program-only               only show program expression\n"
        " --program-too                show program expression and verify\n"
        " --ssa-symbol-table           show symbol table along with SSA\n"
-       " --ssa-no-location            do not print the SSA's original "
-       "location\n"
        " --ssa-sliced                 print the sliced SSAs\n"
        " --smt-formula-only           only show SMT formula (not supported by "
        "all solvers)\n"

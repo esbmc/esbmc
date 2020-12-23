@@ -299,7 +299,6 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
   languagest languages(ns, MODE_C);
   std::cout << "\nProgram constraints: \n";
 
-  bool sparse = config.options.get_bool_option("ssa-no-location");
   bool sliced = config.options.get_bool_option("ssa-sliced");
 
   for(auto const &it : eq->SSA_steps)
@@ -310,14 +309,11 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
     if(it.ignore && !sliced)
       continue;
 
-    if(!sparse)
-    {
-      std::cout << "// " << it.source.pc->location_number << " ";
-      std::cout << it.source.pc->location.as_string();
-      if(!it.comment.empty())
-        std::cout << " (" << it.comment << ")";
-      std::cout << '\n';
-    }
+    std::cout << "// " << it.source.pc->location_number << " ";
+    std::cout << it.source.pc->location.as_string();
+    if(!it.comment.empty())
+      std::cout << " (" << it.comment << ")";
+    std::cout << '\n';
 
     std::cout << "(" << count << ") ";
 
@@ -348,10 +344,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
       std::cout << "guard: " << string_value << "\n";
     }
 
-    if(!sparse)
-    {
-      std::cout << "\n";
-    }
+    std::cout << "\n";
 
     count++;
   }
