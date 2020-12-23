@@ -775,7 +775,6 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Couldn't find a bug or a proof for the current deepth
     std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
     return false;
-    break;
   }
 
   case BASE_CASE:
@@ -808,7 +807,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       std::cout << "*** Checking base case, k = " << k_step << '\n';
 
       // If an exception was thrown, we should abort the process
-      int res = 1;
+      int res = smt_convt::P_ERROR;
       try
       {
         res = do_incremental_bmc(bmc, opts);
@@ -830,7 +829,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
         std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
 
-        return 1;
+        return true;
       }
 
       // Check if the parent process is asking questions
@@ -883,7 +882,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     (void)len; //ndebug
 
     std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
-    break;
+    return false;
   }
 
   case FORWARD_CONDITION:
@@ -920,7 +919,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       std::cout << "*** Checking forward condition, k = " << k_step << '\n';
 
       // If an exception was thrown, we should abort the process
-      int res = 1;
+      int res = smt_convt::P_ERROR;
       try
       {
         res = do_incremental_bmc(bmc, opts);
@@ -941,8 +940,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         (void)len; //ndebug
 
         std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
-
-        return 0;
+        return false;
       }
     }
 
@@ -954,7 +952,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     (void)len; //ndebug
 
     std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
-    break;
+    return true;
   }
 
   case INDUCTIVE_STEP:
@@ -990,7 +988,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       std::cout << "*** Checking inductive step, k = " << k_step << '\n';
 
       // If an exception was thrown, we should abort the process
-      int res = 1;
+      int res = smt_convt::P_ERROR;
       try
       {
         res = do_incremental_bmc(bmc, opts);
@@ -1011,8 +1009,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         (void)len; //ndebug
 
         std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
-
-        return res;
+        return false;
       }
     }
 
@@ -1024,7 +1021,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     (void)len; //ndebug
 
     std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
-    break;
+    return true;
   }
 
   default:
