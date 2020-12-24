@@ -39,6 +39,7 @@ irep_idt typet::t_pointer = dstring("pointer");
 irep_idt typet::t_reference = dstring("#reference");
 irep_idt typet::t_bv = dstring("bv");
 irep_idt typet::t_string = dstring("string");
+irep_idt typet::t_vector = dstring("vector");
 
 irep_idt typet::a_identifier = dstring("identifier");
 irep_idt typet::a_name = dstring("name");
