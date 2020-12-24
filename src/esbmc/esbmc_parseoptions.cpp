@@ -1508,14 +1508,6 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("k-induction-parallel"))
     {
       goto_k_induction(goto_functions, ui_message_handler);
-
-      // Warn the user if the forward condition was disabled
-      if(options.get_bool_option("disable-forward-condition"))
-      {
-        std::cout << "**** WARNING: this program contains infinite loops, "
-                  << "so we are not applying the forward condition!"
-                  << std::endl;
-      }
     }
 
     if(cmdline.isset("termination"))
