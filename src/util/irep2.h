@@ -311,6 +311,7 @@ public:
     union_id,
     code_id,
     array_id,
+    vector_id,
     pointer_id,
     unsignedbv_id,
     signedbv_id,
