@@ -108,6 +108,30 @@ type2tc migrate_type(const typet &type)
     array_type2t *a = new array_type2t(subtype, size, is_infinite);
     return type2tc(a);
   }
+  else if(type.id() == typet::t_vector)
+  {
+    type2tc subtype = migrate_type(type.subtype());
+    expr2tc size((expr2t *)nullptr);
+
+    if(type.find(typet::a_size).id() == "infinity")
+    {
+      assert(
+        0 &&
+        "Vector type has a constant size"
+        "Please, refer to: "
+        "https://clang.llvm.org/docs/"
+        "LanguageExtensions.html#vectors-and-extended-vectors");
+      abort();
+    }
+
+    exprt sz = (exprt &)type.find(typet::a_size);
+    simplify(sz);
+    migrate_expr(sz, size);
+    size = fixup_containerof_in_sizeof(size);
+
+    array_type2t *a = new array_type2t(subtype, size, false);
+    return type2tc(a);
+  }
 
   if(type.id() == typet::t_pointer)
   {
