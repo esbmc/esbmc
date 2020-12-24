@@ -16,6 +16,7 @@ class unsignedbv_type2t;
 class signedbv_type2t;
 class code_type2t;
 class array_type2t;
+class vector_type2t;
 class pointer_type2t;
 class fixedbv_type2t;
 class floatbv_type2t;
@@ -201,6 +202,32 @@ public:
       traits;
 };
 
+class vector_data : public type2t
+{
+public:
+  vector_data(type2t::type_ids id, const type2tc &st, const expr2tc &sz, bool i)
+    : type2t(id), subtype(st), vector_size(sz), size_is_infinite(i)
+  {
+  }
+  vector_data(const vector_data &ref) = default;
+
+  type2tc subtype;
+  expr2tc vector_size;
+  bool size_is_infinite;
+
+  // Type mangling:
+  typedef esbmct::field_traits<type2tc, vector_data, &vector_data::subtype>
+    subtype_field;
+  typedef esbmct::field_traits<expr2tc, vector_data, &vector_data::vector_size>
+    vector_size_field;
+  typedef esbmct::
+    field_traits<bool, vector_data, &vector_data::size_is_infinite>
+      size_is_infinite_field;
+  typedef esbmct::
+    type2t_traits<subtype_field, vector_size_field, size_is_infinite_field>
+      traits;
+};
+
 class pointer_data : public type2t
 {
 public:
@@ -335,6 +362,7 @@ irep_typedefs(bool, type2t) irep_typedefs(empty, type2t)
               irep_typedefs(floatbv, floatbv_data)
                 irep_typedefs(string, string_data)
                   irep_typedefs(cpp_name, cpp_name_data)
+                    irep_typedefs(vector, vector_data)
 #undef irep_typedefs
 
   /** Boolean type.
@@ -576,6 +604,43 @@ public:
 
     expr2tc size;
   };
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Array type.
+ *  Comes with a subtype of the array and a size that might be constant, might
+ *  be nondeterministic, might be infinite. These facts are recorded in the
+ *  array_size and size_is_infinite fields.
+ *
+ *  If size_is_infinite is true, array_size will be null. If array_size is
+ *  not a constant number, then it's a dynamically sized array.
+ *  @extends array_data
+ */
+class vector_type2t : public vector_type_methods
+{
+public:
+  /** Primary constructor.
+   *  @param subtype Type of elements in this array.
+   *  @param size Size of this array.
+   *  @param inf Whether or not this array is infinitely sized
+   */
+  vector_type2t(const type2tc &_subtype, const expr2tc &size, bool inf)
+    : vector_type_methods(vector_id, _subtype, size, inf)
+  {
+    // If we can simplify the array size, do so
+    // XXX, this is probably massively inefficient. Some kind of boundry in
+    // the checking process should exist to eliminate this requirement.
+    if(!is_nil_expr(size))
+    {
+      expr2tc sz = size->simplify();
+      if(!is_nil_expr(sz))
+        vector_size = sz;
+    }
+  }
+  vector_type2t(const vector_type2t &ref) = default;
+
+  unsigned int get_width() const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
