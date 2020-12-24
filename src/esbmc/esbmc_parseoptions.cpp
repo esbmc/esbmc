@@ -343,50 +343,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   config.options = options;
 }
 
-void esbmc_parseoptionst::set_context_bound_params()
-{
-  // Get the initial context bound
-  initial_context_bound =
-    cmdline.isset("incremental-cb")
-      ? strtoul(cmdline.getval("initial-context-bound"), nullptr, 10)
-      : strtoul(cmdline.getval("context-bound"), nullptr, 10);
-
-  // Get max number of context bounds
-  max_context_bound =
-    cmdline.isset("incremental-cb")
-      ? cmdline.isset("unlimited-context-bound")
-          ? INT_MAX
-          : strtoul(cmdline.getval("max-context-bound"), nullptr, 10)
-      : strtoul(cmdline.getval("context-bound"), nullptr, 10);
-
-  // Get the context bound increment
-  context_bound_inc =
-    strtoul(cmdline.getval("context-bound-step"), nullptr, 10);
-}
-
-int esbmc_parseoptionst::do_incremental_bmc(bmct &bmc, optionst &opts)
-{
-  int res = 0;
-
-  for(int context_bound = initial_context_bound;
-      context_bound <= max_context_bound;
-      context_bound += context_bound_inc)
-  {
-    if(cmdline.isset("incremental-cb"))
-    {
-      opts.set_option("context-bound", integer2string(context_bound));
-      std::cout << "\n*** Context bound number ";
-      std::cout << context_bound;
-      std::cout << " ***\n";
-    }
-    res = do_bmc(bmc);
-    if(res)
-      return res;
-  }
-
-  return res;
-}
-
 int esbmc_parseoptionst::doit()
 {
   //
@@ -458,14 +414,11 @@ int esbmc_parseoptionst::doit()
   if(opts.get_bool_option("skip-bmc"))
     return 0;
 
-  // set the context-bound verification parameters
-  set_context_bound_params();
-
   // do actual BMC
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
-  return do_incremental_bmc(bmc, opts);
+  return do_bmc(bmc);
 }
 
 int esbmc_parseoptionst::doit_k_induction_parallel()
@@ -815,7 +768,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       int res = smt_convt::P_ERROR;
       try
       {
-        res = do_incremental_bmc(bmc, opts);
+        res = do_bmc(bmc);
       }
       catch(...)
       {
@@ -923,7 +876,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       int res = smt_convt::P_ERROR;
       try
       {
-        res = do_incremental_bmc(bmc, opts);
+        res = do_bmc(bmc);
       }
       catch(...)
       {
@@ -992,7 +945,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       int res = smt_convt::P_ERROR;
       try
       {
-        res = do_incremental_bmc(bmc, opts);
+        res = do_bmc(bmc);
       }
       catch(...)
       {
@@ -1216,37 +1169,21 @@ int esbmc_parseoptionst::do_base_case(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  // set the context-bound verification parameters
-  set_context_bound_params();
-
   std::cout << "*** Checking base case, k = " << k_step << '\n';
-  for(int context_bound = initial_context_bound;
-      context_bound <= max_context_bound;
-      context_bound += context_bound_inc)
+  switch(do_bmc(bmc))
   {
-    if(cmdline.isset("incremental-cb"))
-    {
-      opts.set_option("context-bound", integer2string(context_bound));
-      std::cout << "\n*** Context bound number ";
-      std::cout << context_bound;
-      std::cout << " ***\n";
-    }
+  case smt_convt::P_UNSATISFIABLE:
+  case smt_convt::P_SMTLIB:
+  case smt_convt::P_ERROR:
+    break;
 
-    switch(do_bmc(bmc))
-    {
-    case smt_convt::P_UNSATISFIABLE:
-    case smt_convt::P_SMTLIB:
-    case smt_convt::P_ERROR:
-      break;
+  case smt_convt::P_SATISFIABLE:
+    std::cout << "\nBug found (k = " << k_step << ")\n";
+    return true;
 
-    case smt_convt::P_SATISFIABLE:
-      std::cout << "\nBug found (k = " << k_step << ")\n";
-      return true;
-
-    default:
-      std::cout << "Unknown BMC result\n";
-      abort();
-    }
+  default:
+    std::cout << "Unknown BMC result\n";
+    abort();
   }
 
   return false;
