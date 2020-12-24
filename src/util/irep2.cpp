@@ -45,6 +45,7 @@ static const char *type_names[] = {
   "union",
   "code",
   "array",
+  "vector",
   "pointer",
   "unsignedbv",
   "signedbv",
@@ -795,6 +796,11 @@ const type2tc &type_poolt::get_union(const typet &val)
 const type2tc &type_poolt::get_array(const typet &val)
 {
   return get_type_from_pool(val, array_map);
+}
+
+const type2tc &type_poolt::get_vector(const typet &val)
+{
+  return get_type_from_pool(val, vector_map);
 }
 
 const type2tc &type_poolt::get_pointer(const typet &val)
