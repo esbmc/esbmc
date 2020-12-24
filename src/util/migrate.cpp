@@ -110,6 +110,28 @@ void real_migrate_type(
     array_type2t *a = new array_type2t(subtype, size, is_infinite);
     new_type_ref = type2tc(a);
   }
+  else if(type.id() == typet::t_vector)
+  {
+    type2tc subtype;
+    expr2tc size((expr2t*) nullptr);
+
+    migrate_type(type.subtype(), subtype, ns, cache);
+
+    if(type.find(typet::a_size).id() == "infinity")
+    {
+      std::cerr << "Vector type has a constant size" << std::endl;
+      std::cerr << "Please, refer to: https://clang.llvm.org/docs/LanguageExtensions.html#vectors-and-extended-vectors";
+      abort();
+    }
+    
+    exprt sz = (exprt&)type.find(typet::a_size);
+    simplify(sz);
+    migrate_expr(sz,size);
+    size = fixup_containerof_in_sizeof(size);
+
+    array_type2t *a = new array_type2t(subtype, size, false);
+    new_type_ref = type2tc(a);    
+  }
   else if(type.id() == typet::t_pointer)
   {
     type2tc subtype;
@@ -367,6 +389,10 @@ void migrate_type(
   else if(type.id() == typet::t_array)
   {
     new_type_ref = type_pool.get_array(type);
+  }
+  else if(type.id() == typet::t_vector)
+  {
+    new_type_ref = type_pool.get_vector(type);
   }
   else if(type.id() == typet::t_pointer)
   {
