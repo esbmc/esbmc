@@ -2,6 +2,7 @@ Release Notes of the ESBMC model checker
 
 *** Version 6.6
 * Fix parallel k-induction verification.
+* Removed incremental context bound options.
 
 *** Version 6.5
 * Initial C++ clang frontend.
@@ -224,7 +225,7 @@ the variables from the inlined function were global
 *** Version 1.25
 + Bugfixes for the k-induction implementation.
 + Boolector is now the default solver.
-+ Improved the C++ parser and template. 
++ Improved the C++ parser and template.
 + Decreased memory usage.
 
 *** Version 1.23
@@ -289,7 +290,7 @@ Date: 10/05/2011
 *** Version 1.15.1 ***
 Date: 18/01/2011
 + Enhancements
- - Minor bug fixes related to data race detection of arrays and the 
+ - Minor bug fixes related to data race detection of arrays and the
    counterexample beautification;
 
 *** Version 1.15 ***
@@ -329,7 +330,7 @@ Date: 18/10/2010
 *** Version 1.10 ***
 Date: 13/10/2010
 + New Feature
- - Support for static partial order reduction (use the 
+ - Support for static partial order reduction (use the
    option --no-por to disable it);
 + Enhancements
  - Fixed one bug related to context-switch before array updates;
@@ -338,7 +339,7 @@ Date: 13/10/2010
 *** Version 1.9 ***
 Date: 17/09/2010
 + New Feature
- - Support for checking atomicity violation at visible statements 
+ - Support for checking atomicity violation at visible statements
    (use the option --atomicity-check)
 
 *** Version 1.8 ***
@@ -382,11 +383,11 @@ Date: 14/05/2010
  - Support for data race detection (use the option --data-races-detection).
 + Enhancements
  - Improved the command-line interface: (i) we provide more details about the
-   UW algorithm in the console and (ii) we also allow the user to disable the 
+   UW algorithm in the console and (ii) we also allow the user to disable the
    deadlock detection through the command line (thus simplifying the formula
    to be sent to the SMT solver);
  - Minor bug fixes related to the pthread_join function and the UW procedure
-   (now we can support thousands of control literals). 
+   (now we can support thousands of control literals).
 + Known Issues
  - We do not add deadlock assertions to be checked using the UW procedure;
  - We do not add data race assertions for pointers (i.e., we miss data race
@@ -409,7 +410,7 @@ Date: 25/04/2010
  - Detection of abandoned locks;
  - Detection of lost signals;
  - Support for creating dynamically threads, mutexes, and condition variables.
-+ Known Issues 
++ Known Issues
  - The UW procedure does not work for multi-threaded C programs that require
    more than 500 control literals.
 
@@ -430,7 +431,7 @@ Date: 13/03/2010
 + New features:
  - Lazy exploration of the threads interleavings;
  - Generate one single formula using the schedule recording approach to verify multi-threaded programs;
- - Generate underapproximation and widening models for the multi-threaded programs; 
+ - Generate underapproximation and widening models for the multi-threaded programs;
  - Support for concurrent C programs with shared memory;
  - Support for synchronization primitives with mutexes and conditions;
  - Detection of global deadlock with mutexes and conditions;
