@@ -1,4 +1,4 @@
 KNOWNBUG
 main.cpp
---k-induction -I ~/libraries
+--k-induction-parallel-parallel -I ~/libraries
 ^VERIFICATION FAILED$
