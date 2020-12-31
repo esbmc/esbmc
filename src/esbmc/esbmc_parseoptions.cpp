@@ -1216,10 +1216,6 @@ int esbmc_parseoptionst::do_forward_condition(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  // Set max number of context bounds
-  if(cmdline.isset("incremental-cb"))
-    opts.set_option("context-bound", cmdline.getval("max-context-bound"));
-
   std::cout << "*** Checking forward condition, k = " << k_step << '\n';
   auto res = do_bmc(bmc);
 
@@ -1274,10 +1270,6 @@ int esbmc_parseoptionst::do_inductive_step(
   set_verbosity_msg(bmc);
 
   bmc.options.set_option("unwind", integer2string(k_step));
-
-  // Set max number of context bounds
-  if(cmdline.isset("incremental-cb"))
-    opts.set_option("context-bound", cmdline.getval("max-context-bound"));
 
   std::cout << "*** Checking inductive step, k = " << k_step << '\n';
   switch(do_bmc(bmc))
@@ -1827,8 +1819,6 @@ void esbmc_parseoptionst::help()
        "                              (default is 1) \n"
 
        "\nConcurrency checking\n"
-       " --incremental-cb             perform incremental context-bound "
-       "verification\n"
        " --context-bound nr           limit number of context switches for "
        "each thread \n"
        " --state-hashing              enable state-hashing, prunes duplicate "
@@ -1836,14 +1826,6 @@ void esbmc_parseoptionst::help()
        " --no-por                     do not do partial order reduction\n"
        " --all-runs                   check all interleavings, even if a bug "
        "was already found\n"
-       " --initial-context-bound nr   set the initial context-bound for "
-       "incremental verification (default is 2)\n"
-       " --context-bound-step nr      set k context bound increment (default "
-       "is 5)\n"
-       " --max-context-bound nr       set max number of context-bound (default "
-       "is 15)\n"
-       " --unlimited-context-bound    set max number of context bounds to "
-       "UINT_MAX\n"
 
        "\nMiscellaneous options\n"
        " --memlimit                   configure memory limit, of form \"100m\" "
