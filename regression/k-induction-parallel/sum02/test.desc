@@ -1,4 +1,4 @@
 KNOWNBUG
 main.c
---k-induction-parallel-parallel 
+--k-induction-parallel 
 ^VERIFICATION SUCCESSFUL$
