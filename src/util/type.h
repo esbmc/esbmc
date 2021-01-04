@@ -172,5 +172,5 @@ pre-defined types:
 
 bool is_number(const typet &type);
 // rational, real, integer, complex, unsignedbv, signedbv, floatbv
-
+bool is_array_like(const typet &type);
 #endif
