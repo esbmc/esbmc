@@ -118,17 +118,19 @@
               BOOST_PP_LIST_CONS(                                              \
                 array,                                                         \
                 BOOST_PP_LIST_CONS(                                            \
-                  pointer,                                                     \
+                  vector,                                                      \
                   BOOST_PP_LIST_CONS(                                          \
-                    unsignedbv,                                                \
+                    pointer,                                                   \
                     BOOST_PP_LIST_CONS(                                        \
-                      signedbv,                                                \
+                      unsignedbv,                                              \
                       BOOST_PP_LIST_CONS(                                      \
-                        fixedbv,                                               \
+                        signedbv,                                              \
                         BOOST_PP_LIST_CONS(                                    \
-                          string,                                              \
+                          fixedbv,                                             \
                           BOOST_PP_LIST_CONS(                                  \
-                            cpp_name, BOOST_PP_LIST_NIL)))))))))))))
+                            string,                                            \
+                            BOOST_PP_LIST_CONS(                                \
+                              cpp_name, BOOST_PP_LIST_NIL))))))))))))))
 
 // Even crazier forward decs,
 namespace esbmct

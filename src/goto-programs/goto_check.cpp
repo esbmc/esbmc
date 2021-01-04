@@ -347,7 +347,7 @@ void goto_checkt::bounds_check(
   greaterthanequal2tc lower(the_index, zero);
   add_guarded_claim(lower, name + " lower bound", "array bounds", loc, guard);
 
-  assert(is_array_type(t) || is_string_type(t));
+  assert(is_array_type(t) || is_string_type(t) || is_vector_type(t));
 
   // We can't check the upper bound of an infinite sized array
   // or of FAMs
@@ -379,8 +379,9 @@ void goto_checkt::bounds_check(
   }
 
   const expr2tc &array_size =
-    is_array_type(t)
-      ? to_array_type(t).array_size
+    is_array_type(t) ? to_array_type(t).array_size
+    : is_vector_type(t)
+      ? to_vector_type(t).vector_size
       : constant_int2tc(get_uint32_type(), to_string_type(t).get_length());
 
   // Cast size to index type

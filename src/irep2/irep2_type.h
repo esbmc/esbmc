@@ -794,6 +794,7 @@ type_macros(struct);
 type_macros(union);
 type_macros(code);
 type_macros(array);
+type_macros(vector);
 type_macros(pointer);
 type_macros(unsignedbv);
 type_macros(signedbv);
