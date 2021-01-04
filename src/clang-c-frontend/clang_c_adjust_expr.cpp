@@ -405,7 +405,7 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
   expr.type() = typet("pointer");
 
   // turn &array into &(array[0])
-  if(op.type().is_array() || op.type().is_incomplete_array())
+  if(is_array_like(op.type()))
   {
     index_exprt index;
     index.array() = op;
@@ -426,7 +426,7 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
 
   const typet op_type = ns.follow(op.type());
 
-  if(op_type.is_array() || op_type.is_incomplete_array())
+  if(is_array_like(op_type))
   {
     // *a is the same as a[0]
     deref.id("index");
@@ -656,7 +656,7 @@ void clang_c_adjust::adjust_function_call_arguments(
       // don't know type, just do standard conversion
 
       const typet &type = ns.follow(op.type());
-      if(type.is_array() || type.is_incomplete_array())
+      if(is_array_like(type))
         gen_typecast(ns, op, pointer_typet(empty_typet()));
     }
   }
