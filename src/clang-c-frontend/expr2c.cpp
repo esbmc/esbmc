@@ -1045,7 +1045,7 @@ std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
         dest += "l";
     }
   }
-  else if(type.is_array() || type.id() == "incomplete_array")
+  else if(is_array_like(type))
   {
     dest = "{ ";
 

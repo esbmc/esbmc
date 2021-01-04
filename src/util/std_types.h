@@ -661,7 +661,7 @@ class vector_typet : public typet
     subtype() = _subtype;
   }
 
-  vector_typet(const typet &_subtype, const constant_exprt &_size) : typet(t_vector)
+  vector_typet(const typet &_subtype, const exprt &_size) : typet(t_vector)
   {
     subtype() = _subtype;
     size() = _size;
