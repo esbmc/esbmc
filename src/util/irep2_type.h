@@ -219,13 +219,13 @@ public:
     subtype_field;
   typedef esbmct::field_traits<expr2tc, vector_data, &vector_data::vector_size>
     vector_size_field;
-  typedef esbmct::field_traits<bool, vector_data, &vector_data::size_is_infinite>
-    size_is_infinite_field;
+  typedef esbmct::
+    field_traits<bool, vector_data, &vector_data::size_is_infinite>
+      size_is_infinite_field;
   typedef esbmct::
     type2t_traits<subtype_field, vector_size_field, size_is_infinite_field>
       traits;
 };
-
 
 class pointer_data : public type2t
 {
@@ -630,7 +630,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-
 /** Pointer type.
  *  Simply has a subtype, of what it points to. No other attributes.
  *  @extends pointer_data
@@ -780,6 +779,7 @@ type_macros(struct);
 type_macros(union);
 type_macros(code);
 type_macros(array);
+type_macros(vector);
 type_macros(pointer);
 type_macros(unsignedbv);
 type_macros(signedbv);
