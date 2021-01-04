@@ -651,7 +651,7 @@ const string_typet &to_string_type(const typet &type);
 
 class vector_typet : public typet
 {
-  public:
+public:
   vector_typet() : typet(t_vector)
   {
   }
@@ -676,7 +676,7 @@ class vector_typet : public typet
   {
     return (exprt &)add(a_size);
   }
-  
+
   friend const vector_typet &to_vector_type(const typet &type)
   {
     assert(type.id() == t_vector);
