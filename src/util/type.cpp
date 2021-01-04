@@ -22,7 +22,8 @@ bool is_number(const typet &type)
          id == "floatbv" || id == "fixedbv";
 }
 
-bool is_array_like(const typet &type) {
+bool is_array_like(const typet &type)
+{
   return type.is_vector() || type.is_array() || type.is_incomplete_array();
 }
 
