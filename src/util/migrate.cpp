@@ -117,7 +117,7 @@ type2tc migrate_type(const typet &type)
     {
       assert(
         0 &&
-        "Vector type has a constant size"
+        "Vector type has a constant size\n"
         "Please, refer to: "
         "https://clang.llvm.org/docs/"
         "LanguageExtensions.html#vectors-and-extended-vectors");
@@ -575,7 +575,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr.id() == irept::id_constant && expr.type().id() != typet::t_pointer &&
     expr.type().id() != typet::t_bool && expr.type().id() != "c_enum" &&
     expr.type().id() != typet::t_fixedbv &&
-    expr.type().id() != typet::t_floatbv && expr.type().id() != typet::t_array)
+    expr.type().id() != typet::t_floatbv &&
+    expr.type().id() != typet::t_array && expr.type().id() != typet::t_vector)
   {
     type = migrate_type(expr.type());
 
@@ -733,7 +734,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else if(
     (expr.id() == irept::id_constant && expr.type().id() == typet::t_array) ||
-    expr.id() == typet::t_array)
+    (expr.id() == irept::id_constant && expr.type().id() == typet::t_vector) ||
+    expr.id() == typet::t_array || expr.id() == typet::t_vector)
   {
     // Fixed size array.
     type = migrate_type(expr.type());
@@ -1965,6 +1967,23 @@ typet migrate_type_back(const type2tc &ref)
     else
     {
       thetype.size() = migrate_expr_back(ref2.array_size);
+    }
+
+    return std::move(thetype);
+  }
+  case type2t::vector_id:
+  {
+    const vector_type2t &ref2 = to_vector_type(ref);
+
+    vector_typet thetype;
+    thetype.subtype() = migrate_type_back(ref2.subtype);
+    if(ref2.size_is_infinite)
+    {
+      thetype.set("size", "infinity");
+    }
+    else
+    {
+      thetype.size() = migrate_expr_back(ref2.vector_size);
     }
 
     return std::move(thetype);
