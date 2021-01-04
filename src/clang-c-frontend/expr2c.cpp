@@ -229,6 +229,12 @@ std::string expr2ct::convert_rec(
       convert(static_cast<const exprt &>(src.size_irep()));
     return convert(src.subtype()) + " [" + size_string + "]" + d;
   }
+  else if(src.is_vector())
+  {
+    std::string size_string =
+      convert(static_cast<const exprt &>(src.size_irep()));
+    return convert(src.subtype()) + " vector [" + size_string + "]" + d;
+  }
   else if(src.id() == "incomplete_array")
   {
     return convert(src.subtype()) + " []";
