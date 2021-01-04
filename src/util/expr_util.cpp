@@ -74,9 +74,9 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
   else if(type_id == "vector")
   {
     vector_typet vec = to_vector_type(type);
-    BigInt size = string2integer(vec.size().value().as_string(),2);
+    BigInt size = string2integer(vec.size().value().as_string(), 2);
     for(uint64_t i = 0; i < size.to_uint64(); i++)
-        result.copy_to_operands(gen_zero(type.subtype(), array_as_array_of));
+      result.copy_to_operands(gen_zero(type.subtype(), array_as_array_of));
   }
   else if(type_id == "union")
   {
