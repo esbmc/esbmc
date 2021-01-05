@@ -1967,7 +1967,9 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
   smt_astt a = convert_ast(src_value);
   a = a->select(this, newidx);
 
-  const type2tc &arrsubtype = is_vector_type(index.source_value->type) ? get_vector_subtype(index.source_value->type) : get_array_subtype(index.source_value->type);
+  const type2tc &arrsubtype = is_vector_type(index.source_value->type)
+                                ? get_vector_subtype(index.source_value->type)
+                                : get_array_subtype(index.source_value->type);
   if(is_bool_type(arrsubtype) && !array_api->supports_bools_in_arrays)
     return make_bit_bool(a);
 
