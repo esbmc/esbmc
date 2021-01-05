@@ -3071,7 +3071,7 @@ typet clang_c_convertert::fix_bitfields(const typet &_type)
 
 void clang_c_convertert::fix_constant_bitfields(exprt &expr)
 {
-  assert(expr.type().id() == "struct");
+  assert(expr.type().id() == "struct" || expr.type().id() == "union");
   assert(
     bitfield_fixed_type_map.find(expr.type()) != bitfield_fixed_type_map.end());
 
