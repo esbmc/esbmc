@@ -90,6 +90,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return false;
   }
 
+  if(is_vector_type(expr))
+    return true;
+
   // It's fine to constant propagate something that's absent.
   if(is_nil_expr(expr))
     return true;
