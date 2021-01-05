@@ -11,8 +11,6 @@
  \*******************************************************************/
 
 #define BOOST_TEST_MODULE "Builtin Models"
-
-#include <buitin_libs.hs>
 #include <boost/test/included/unit_test.hpp>
 
 void __ESBMC_atomic_begin()
@@ -21,6 +19,8 @@ void __ESBMC_atomic_begin()
 void __ESBMC_atomic_end()
 {
 }
+
+#include <library/builtin_libs.c>
 
 namespace utf = boost::unit_test;
 
