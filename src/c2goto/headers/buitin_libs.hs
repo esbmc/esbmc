@@ -13,6 +13,6 @@ Description: Models for custom functions that are easier to implement
 #ifndef ESBMC_BUILTIN_LIBS_HS_H
 #define ESBMC_BUILTIN_LIBS_HS_H
 
-int __builtin_esbmc_sync_fetch_and_add(int *ptr, int value);
+int __ESBMC_sync_fetch_and_add(int *ptr, int value);
 
 #endif //ESBMC_BUILTIN_LIBS_HS_H
