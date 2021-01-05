@@ -1472,6 +1472,7 @@ irep_typedefs(constant_floatbv, constant_floatbv_data);
 irep_typedefs(constant_struct, constant_datatype_data);
 irep_typedefs(constant_union, constant_union_data);
 irep_typedefs(constant_array, constant_datatype_data);
+irep_typedefs(constant_vector, constant_datatype_data);
 irep_typedefs(constant_bool, constant_bool_data);
 irep_typedefs(constant_array_of, constant_array_of_data);
 irep_typedefs(constant_string, constant_string_data);
@@ -1757,6 +1758,28 @@ public:
   constant_array2t(const constant_array2t &ref) = default;
 
   expr2tc do_simplify() const override;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Constant array.
+ *  Contains a vector of array elements, pretty self explanatory. Only valid if
+ *  its type has a constant sized array, can't have constant arrays of dynamic
+ *  or infinitely sized arrays.
+ *  @extends constant_datatype_data
+ */
+class constant_vector2t : public constant_vector_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this array, must be a constant sized array
+   *  @param membrs Vector of elements in this array
+   */
+  constant_vector2t(const type2tc &type, const std::vector<expr2tc> &members)
+    : constant_vector_expr_methods(type, constant_vector_id, members)
+  {
+  }
+  constant_vector2t(const constant_vector2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
