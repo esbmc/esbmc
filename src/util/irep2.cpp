@@ -448,6 +448,7 @@ static const char *expr_names[] = {
   "constant_struct",
   "constant_union",
   "constant_array",
+  "constant_vector",
   "constant_array_of",
   "symbol",
   "typecast",
@@ -2319,6 +2320,8 @@ std::string constant_bool2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string constant_array2t::field_names[esbmct::num_type_fields] =
   {"members", "", "", "", ""};
+std::string constant_vector2t::field_names[esbmct::num_type_fields] =
+  {"members", "", "", "", ""};
 std::string constant_array_of2t::field_names[esbmct::num_type_fields] =
   {"initializer", "", "", "", ""};
 std::string constant_string2t::field_names[esbmct::num_type_fields] =
@@ -2944,6 +2947,7 @@ expr_typedefs1(constant_floatbv, constant_floatbv_data);
 expr_typedefs1(constant_struct, constant_datatype_data);
 expr_typedefs1(constant_union, constant_datatype_data);
 expr_typedefs1(constant_array, constant_datatype_data);
+expr_typedefs1(constant_vector, constant_datatype_data);
 expr_typedefs1(constant_bool, constant_bool_data);
 expr_typedefs1(constant_array_of, constant_array_of_data);
 expr_typedefs1(constant_string, constant_string_data);
