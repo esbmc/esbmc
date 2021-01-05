@@ -211,6 +211,11 @@ inline const type2tc &get_array_subtype(const type2tc &type)
   return to_array_type(type).subtype;
 }
 
+inline const type2tc &get_vector_subtype(const type2tc &type)
+{
+  return to_vector_type(type).subtype;
+}
+
 inline const type2tc &get_base_array_subtype(const type2tc &type)
 {
   const auto &subtype = to_array_type(type).subtype;

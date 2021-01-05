@@ -749,7 +749,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       members.push_back(new_ref);
     }
 
-    constant_array2t *a = new constant_array2t(type, members);
+    expr2t *a;
+    if(
+      (expr.id() == irept::id_constant && expr.type().id() == typet::t_array) ||
+      expr.id() == typet::t_array)
+      a = new constant_array2t(type, members);
+    else
+      a = new constant_vector2t(type, members);
     new_expr_ref = expr2tc(a);
   }
   else if(expr.id() == exprt::arrayof)
@@ -2136,6 +2142,15 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::constant_array_id:
   {
     const constant_array2t &ref2 = to_constant_array2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt thearray("constant", thetype);
+    for(auto const &it : ref2.datatype_members)
+      thearray.operands().push_back(migrate_expr_back(it));
+    return thearray;
+  }
+  case expr2t::constant_vector_id:
+  {
+    const constant_vector2t &ref2 = to_constant_vector2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt thearray("constant", thetype);
     for(auto const &it : ref2.datatype_members)
