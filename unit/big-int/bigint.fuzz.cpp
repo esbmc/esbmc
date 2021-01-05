@@ -34,7 +34,6 @@ void test_construct_bigint(const char *Data, size_t DataSize)
     return;
   if(Data[0] == '0')
     return;
-  ;
   if(!is_valid_input(Data, DataSize))
     return;
   BigInt obj(Data, 10);
