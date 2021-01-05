@@ -152,7 +152,7 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
   compiler_args.emplace_back(
     "-D__builtin_umulll_overflow=__ESBMC_overflow_umulll");
   compiler_args.emplace_back(
-    "-D__sync_fetch_and_add=__builtin_esbmc_sync_fetch_and_add");
+    "-D__sync_fetch_and_add=__ESBMC_sync_fetch_and_add");
 
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
@@ -361,7 +361,7 @@ _Bool __ESBMC_overflow_smulll(long long int, long long int, long long int *);
 _Bool __ESBMC_overflow_umul(unsigned int, unsigned int, unsigned int *);
 _Bool __ESBMC_overflow_umull(unsigned long int, unsigned long int, unsigned long int *);
 _Bool __ESBMC_overflow_umulll(unsigned long long int, unsigned long long int, unsigned long long int *);
-int __builtin_esbmc_sync_fetch_and_add(int*, int);
+int __ESBMC_sync_fetch_and_add(int*, int);
 
 // This is causing problems when using the C++ frontend. It needs to be rewritten
 #define __atomic_load_n(PTR, MO)                                               \

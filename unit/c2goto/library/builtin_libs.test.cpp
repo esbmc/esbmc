@@ -28,7 +28,7 @@ namespace utf = boost::unit_test;
   {                                                                            \
     int dest = 10;                                                             \
     TYPE value = 5;                                                            \
-    int fetch = __builtin_esbmc_sync_fetch_and_##OPERATOR(&dest, value);       \
+    int fetch = __ESBMC_sync_fetch_and_##OPERATOR(&dest, value);       \
     BOOST_TEST(dest == 15);                                                    \
     BOOST_TEST(fetch == 10);                                                   \
   }

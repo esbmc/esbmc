@@ -18,7 +18,7 @@ void __ESBMC_atomic_begin()
 void __ESBMC_atomic_end()
 {
 }
-extern int __builtin_esbmc_sync_fetch_and_add(int *, int);
+extern int __ESBMC_sync_fetch_and_add(int *, int);
 
 bool is_valid_input(const int *Data, size_t Size)
 {
