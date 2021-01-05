@@ -955,6 +955,23 @@ expr2tc index2t::do_simplify() const
 
     return arr.datatype_members[the_idx];
   }
+  else if(is_constant_vector2t(source_value) && is_constant_int2t(index))
+  {
+    const constant_vector2t &arr = to_constant_vector2t(source_value);
+    const constant_int2t &idx = to_constant_int2t(index);
+
+    // Index might be greater than the constant array size. This means we can't
+    // simplify it, and the user might be eaten by an assertion failure in the
+    // model. We don't have to think about this now though.
+    if(idx.value.is_negative())
+      return expr2tc();
+
+    unsigned long the_idx = idx.as_ulong();
+    if(the_idx >= arr.datatype_members.size())
+      return expr2tc();
+
+    return arr.datatype_members[the_idx];
+  }
 
   if(is_constant_string2t(src) && is_constant_int2t(new_index))
   {
