@@ -18,7 +18,7 @@ void __ESBMC_atomic_begin()
 void __ESBMC_atomic_end()
 {
 }
-extern int __ESBMC_sync_fetch_and_add(int *, int);
+#include <library/builtin_libs.c>
 
 bool is_valid_input(const int *Data, size_t Size)
 {
@@ -30,7 +30,7 @@ void test_sync_fetch_add(int initial, int value)
   int actual = initial;
   int num = value;
   int expected = initial + value;
-  int fetch = __builtin_esbmc_sync_fetch_and_add(&actual, num);
+  int fetch = __ESBMC_sync_fetch_and_add(&actual, num);
   assert(expected == actual);
   assert(fetch == initial);
 }
