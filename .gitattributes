@@ -1,2 +1,5 @@
+# Flail doesn't like CRLF
+* text=auto eol=lf
+
 src/c2goto/headers/*.hs linguist-vendored
 src/clang-c-frontend/headers/*.hs linguist-vendored
