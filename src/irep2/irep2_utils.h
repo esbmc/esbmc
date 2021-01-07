@@ -109,7 +109,8 @@ inline bool is_constant_expr(const expr2tc &t)
          t->expr_id == expr2t::constant_struct_id ||
          t->expr_id == expr2t::constant_union_id ||
          t->expr_id == expr2t::constant_array_id ||
-         t->expr_id == expr2t::constant_array_of_id;
+         t->expr_id == expr2t::constant_array_of_id ||
+         t->expr_id == expr2t::constant_vector_id;
 }
 
 inline bool is_structure_type(const type2tc &t)
