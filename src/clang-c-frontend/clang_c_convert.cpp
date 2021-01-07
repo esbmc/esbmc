@@ -2139,6 +2139,8 @@ bool clang_c_convertert::get_cast_expr(
     expr = gen_zero(type);
     break;
 
+  case clang::CK_VectorSplat:
+    break;
   default:
     std::cerr << "Conversion of unsupported clang cast operator: \"";
     std::cerr << cast.getCastKindName() << "\" to expression" << std::endl;
