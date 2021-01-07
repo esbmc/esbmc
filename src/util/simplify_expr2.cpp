@@ -267,7 +267,7 @@ static expr2tc simplify_arith_2ops(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  if(!is_number_type(type) && !is_pointer_type(type))
+  if(!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
     return expr2tc();
 
   // Try to recursively simplify nested operations both sides, if any
@@ -292,7 +292,18 @@ static expr2tc simplify_arith_2ops(
   assert(!is_floatbv_type(type));
 
   expr2tc simpl_res;
-  if(is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
+  if(is_vector_type(type)) {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_int2t;
+
+    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
+      return to_constant_int2t(c).value; };
+
+      simpl_res = TFunctor<BigInt>::simplify(
+        simplied_side_1, simplied_side_2, is_constant, get_value);
+
+  }
+  else if(is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
@@ -350,6 +361,34 @@ struct Addtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Two constants? Simplify to result of the addition
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      if(!is_constant_vector2t(op1) || !is_constant_vector2t(op2))
+      {
+        expr2tc c = !is_constant_vector2t(op1) ? op1 : op2;
+        constant_vector2tc vector(is_constant_vector2t(op1) ? op1 : op2);
+        for(size_t i = 0; i < vector->datatype_members.size(); i++)
+        {
+          auto &op = vector->datatype_members[i];
+          add2tc add(op->type, op, c);
+          vector->datatype_members[i] = add;
+
+        }
+        return vector;
+      }
+      constant_vector2tc vec1(op1);
+      constant_vector2tc vec2(op2);
+      for(size_t i = 0; i < vec1->datatype_members.size(); i++)
+      {
+        auto &A = vec1->datatype_members[i];
+        auto &B = vec2->datatype_members[i];
+        add2tc add(A->type, A, B);
+        vec1->datatype_members[i] = add;
+      }
+      return vec1;
+    }
+
     if(is_constant(op1))
     {
       // Found a zero? Simplify to op2
