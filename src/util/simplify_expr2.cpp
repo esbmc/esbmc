@@ -624,7 +624,7 @@ expr2tc modulus2t::do_simplify() const
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
 {
-  if(!is_number_type(type))
+  if(!is_number_type(type) && !is_vector_type(type))
     return expr2tc();
 
   // Try to recursively simplify nested operation, if any
