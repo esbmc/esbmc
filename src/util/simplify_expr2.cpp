@@ -725,6 +725,17 @@ struct Negator
 
 expr2tc neg2t::do_simplify() const
 {
+  if(is_constant_vector2t(value))
+  {
+    constant_vector2tc vector(value);
+    for(size_t i = 0; i < vector->datatype_members.size(); i++)
+    {
+      auto &op = vector->datatype_members[i];
+      neg2tc neg(op->type, op);
+      vector->datatype_members[i] = neg;
+    }
+    return vector;
+  }
   return simplify_arith_1op<Negator, neg2t>(type, value);
 }
 
