@@ -2183,6 +2183,8 @@ bool clang_c_convertert::get_cast_expr(
     gen_typecast_to_union(expr, type);
     break;
 
+  case clang::CK_VectorSplat:
+    break;
   default:
     std::cerr << "Conversion of unsupported clang cast operator: \"";
     std::cerr << cast.getCastKindName() << "\" to expression" << std::endl;
