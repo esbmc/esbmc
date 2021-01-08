@@ -361,18 +361,18 @@ struct Addtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
-    // Two constants? Simplify to result of the addition
+    // Is a vector operation ? Apply the sum
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       if(!is_constant_vector2t(op1) || !is_constant_vector2t(op2))
       {
         expr2tc c = !is_constant_vector2t(op1) ? op1 : op2;
         constant_vector2tc vector(is_constant_vector2t(op1) ? op1 : op2);
-        for(size_t i = 0; i < vector->datatype_members.size(); i++)
+        for(auto & datatype_member : vector->datatype_members)
         {
-          auto &op = vector->datatype_members[i];
+          auto &op = datatype_member;
           add2tc add(op->type, op, c);
-          vector->datatype_members[i] = add;
+          datatype_member = add;
 
         }
         return vector;
