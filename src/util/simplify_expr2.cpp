@@ -478,6 +478,34 @@ struct Subtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the sum
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      if(!is_constant_vector2t(op1) || !is_constant_vector2t(op2))
+      {
+        expr2tc c = !is_constant_vector2t(op1) ? op1 : op2;
+        constant_vector2tc vector(is_constant_vector2t(op1) ? op1 : op2);
+        for(auto & datatype_member : vector->datatype_members)
+        {
+          auto &op = datatype_member;
+          sub2tc sub(op->type, op, c);
+          datatype_member = sub;
+
+        }
+        return vector;
+      }
+      constant_vector2tc vec1(op1);
+      constant_vector2tc vec2(op2);
+      for(size_t i = 0; i < vec1->datatype_members.size(); i++)
+      {
+        auto &A = vec1->datatype_members[i];
+        auto &B = vec2->datatype_members[i];
+        sub2tc sub(A->type, A, B);
+        vec1->datatype_members[i] = sub;
+      }
+      return vec1;
+    }
+
     if(is_constant(op1))
     {
       // Found a zero? Simplify to -op2
