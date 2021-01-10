@@ -1142,7 +1142,10 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
 bool z3_convt::get_bool(smt_astt a)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
-  z3::expr e = solver.get_model().eval(za->a, false);
+  // Set the model_completion to TRUE.
+  // Z3 will assign an interpretation to the Boolean constants,
+  // which are essentially don't cares.
+  z3::expr e = solver.get_model().eval(za->a, true);
 
   Z3_lbool result = Z3_get_bool_value(z3_ctx, e);
 
