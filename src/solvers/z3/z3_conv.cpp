@@ -1181,7 +1181,7 @@ BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
 ieee_floatt z3_convt::get_fpbv(smt_astt a)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
-  z3::expr e = solver.get_model().eval(za->a, false);
+  z3::expr e = solver.get_model().eval(za->a, true);
 
   assert(Z3_get_ast_kind(z3_ctx, e) == Z3_APP_AST);
 
@@ -1226,7 +1226,7 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
     idx = to_solver_smt_ast<z3_smt_ast>(
       mk_smt_bv(BigInt(index), mk_bv_sort(array_bound)));
 
-  z3::expr e = solver.get_model().eval(select(za->a, idx->a), false);
+  z3::expr e = solver.get_model().eval(select(za->a, idx->a), true);
   return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }
 
