@@ -1144,10 +1144,22 @@ bool z3_convt::get_bool(smt_astt a)
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
   z3::expr e = solver.get_model().eval(za->a, false);
 
-  if(Z3_get_bool_value(z3_ctx, e) == Z3_L_TRUE)
-    return true;
+  Z3_lbool result = Z3_get_bool_value(z3_ctx, e);
 
-  return false;
+  bool res;
+  switch(result)
+  {
+  case Z3_L_TRUE:
+    res = true;
+    break;
+  case Z3_L_FALSE:
+    res = false;
+    break;
+  default:
+    abort();
+  }
+
+  return res;
 }
 
 BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
