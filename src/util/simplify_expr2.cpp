@@ -1461,6 +1461,14 @@ expr2tc bitnand2t::do_simplify() const
     return ~(op1 & op2);
   };
 
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitnand2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
+
   return do_bit_munge_operation<bitnand2t>(op, type, side_1, side_2);
 }
 
@@ -1470,6 +1478,14 @@ expr2tc bitnor2t::do_simplify() const
     return ~(op1 | op2);
   };
 
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitnor2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
+
   return do_bit_munge_operation<bitnor2t>(op, type, side_1, side_2);
 }
 
@@ -1478,6 +1494,14 @@ expr2tc bitnxor2t::do_simplify() const
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return ~(op1 ^ op2);
   };
+
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitnxor2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
 
   return do_bit_munge_operation<bitnxor2t>(op, type, side_1, side_2);
 }
@@ -1509,6 +1533,13 @@ expr2tc shl2t::do_simplify() const
     return ((uint64_t)op1 << op2);
   };
 
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return shl2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
+
   return do_bit_munge_operation<shl2t>(op, type, side_1, side_2);
 }
 
@@ -1518,6 +1549,13 @@ expr2tc lshr2t::do_simplify() const
     return ((uint64_t)op1) >> ((uint64_t)op2);
   };
 
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return lshr2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
+
   return do_bit_munge_operation<lshr2t>(op, type, side_1, side_2);
 }
 
@@ -1526,6 +1564,14 @@ expr2tc ashr2t::do_simplify() const
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return (op1 >> op2);
   };
+
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return ashr2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
 
   return do_bit_munge_operation<ashr2t>(op, type, side_1, side_2);
 }
