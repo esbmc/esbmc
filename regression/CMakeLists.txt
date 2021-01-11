@@ -26,12 +26,12 @@ endfunction()
 
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
-    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc esbmc-solidity cbmc cstd llvm floats floats-regression k-induction k-induction-parallel nonz3 bitwuzla incremental-smt)
+    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc esbmc-solidity cbmc cstd llvm floats floats-regression k-induction k-induction-parallel nonz3 bitwuzla incremental-smt extensions)
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
-    set(REGRESSIONS esbmc cbmc cstd llvm floats  k-induction )
+    set(REGRESSIONS esbmc cbmc cstd llvm floats  k-induction extensions)
 else()
-    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc esbmc-solidity esbmc-old cbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith k-induction-parallel nonz3 bitwuzla incremental-smt)
+    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc esbmc-solidity esbmc-old cbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith k-induction-parallel nonz3 bitwuzla incremental-smt extensions)
 endif()
 
 foreach(regression IN LISTS REGRESSIONS)
