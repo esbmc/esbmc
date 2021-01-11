@@ -314,17 +314,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::constant_vector_id:
   {
-    const vector_type2t &vec = to_vector_type(expr->type);
-    smt_sortt domain;
-    if(int_encoding)
-    {
-      domain = machine_int_sort;
-    }
-    else
-    {
-      constant_int2tc thesize = vec.vector_size;
-      domain = mk_int_bv_sort(size_to_bit_width(thesize->value.to_uint64()));
-    }
     a = array_create((constant_vector2tc)expr);
     break;
   }
