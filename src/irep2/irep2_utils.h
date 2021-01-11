@@ -302,6 +302,20 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
     return constant_floatbv2tc(
       ieee_floatt(ieee_float_spect(to_floatbv_type(type))));
 
+  case type2t::vector_id:
+  {
+    auto vec_type = to_vector_type(type);
+    assert(is_constant_int2t(vec_type.vector_size));
+    auto s = to_constant_int2t(vec_type.vector_size);
+
+    std::vector<expr2tc> members;
+    for(long int i = 0; i < s.as_long(); i++)
+      members.push_back(
+        gen_zero(to_vector_type(type).subtype, array_as_array_of));
+
+    return constant_vector2tc(type, members);
+
+  }
   case type2t::array_id:
   {
     if(array_as_array_of)
