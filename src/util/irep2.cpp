@@ -190,6 +190,41 @@ unsigned int vector_type2t::get_width() const
   return num_elems * sub_width;
 }
 
+expr2tc vector_type2t::distribute_operation(
+  std::function<expr2tc(type2tc, expr2tc, expr2tc)> func,
+  expr2tc op1,
+  expr2tc op2)
+{
+  if(is_constant_vector2t(op1) && is_constant_vector2t(op2))
+  {
+    constant_vector2tc vec1(op1);
+    constant_vector2tc vec2(op2);
+    for(size_t i = 0; i < vec1->datatype_members.size(); i++)
+    {
+      auto &A = vec1->datatype_members[i];
+      auto &B = vec2->datatype_members[i];
+      auto new_op = func(A->type, A, B);
+      vec1->datatype_members[i] = new_op;
+    }
+    return vec1;
+  }
+  else
+  {
+    bool is_op1_vec = is_constant_vector2t(op1);
+    expr2tc c = !is_op1_vec ? op1 : op2;
+    constant_vector2tc vector(is_op1_vec ? op1 : op2);
+    for(auto &datatype_member : vector->datatype_members)
+    {
+      auto &op = datatype_member;
+      auto e1 = is_op1_vec ? op : c;
+      auto e2 = is_op1_vec ? c : op;
+      auto new_op = func(op->type, e1, e2);
+      datatype_member = new_op;
+    }
+    return vector;
+  }
+}
+
 unsigned int pointer_type2t::get_width() const
 {
   return config.ansi_c.pointer_width;
