@@ -643,6 +643,10 @@ public:
   unsigned int get_width() const override;
 
   static std::string field_names[esbmct::num_type_fields];
+  static expr2tc distribute_operation(
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> func,
+    expr2tc op1,
+    expr2tc op2);
 };
 
 /** Pointer type.
