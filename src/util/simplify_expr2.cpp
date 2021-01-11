@@ -1978,6 +1978,14 @@ struct Equalitytor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [](type2tc t, expr2tc e1, expr2tc e2) { return equality2tc(e1, e2); };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
+
     if(is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
