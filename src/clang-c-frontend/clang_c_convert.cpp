@@ -935,7 +935,26 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     break;
   }
+  case clang::Type::ExtVector:
+  {
+    // NOTE: some bitshift operations with classic vectors are parsed as this
+    //   e.g vsi << 2 becomes ExtVector
+    //       vsi << vsi2 becomes Vector
+    const clang::ExtVectorType &vec =
+      static_cast<const clang::ExtVectorType &>(the_type);
 
+    typet the_type;
+    if(get_type(vec.getElementType(), the_type))
+      return true;
+
+    new_type = vector_typet(
+      the_type,
+      constant_exprt(
+        integer2binary(vec.getNumElements(), bv_width(int_type())),
+        integer2string(vec.getNumElements()),
+        int_type()));
+    break;
+  }
   case clang::Type::Vector:
   {
     const clang::VectorType &vec =
