@@ -633,6 +633,51 @@ struct Divtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      if(is_constant_vector2t(op1) && is_constant_vector2t(op2))
+      {
+        constant_vector2tc vec1(op1);
+        constant_vector2tc vec2(op2);
+        for(size_t i = 0; i < vec1->datatype_members.size(); i++)
+        {
+          auto &A = vec1->datatype_members[i];
+          auto &B = vec2->datatype_members[i];
+          div2tc add(A->type, A, B);
+          vec1->datatype_members[i] = add;
+        }
+        return vec1;
+      }
+      if(is_constant_vector2t(op1))
+      {
+        expr2tc c = !is_constant_vector2t(op1) ? op1 : op2;
+        constant_vector2tc vector(is_constant_vector2t(op1) ? op1 : op2);
+        for(auto & datatype_member : vector->datatype_members)
+        {
+          auto &op = datatype_member;
+          div2tc add(op->type, op, c);
+          datatype_member = add;
+
+        }
+        return vector;
+      }
+      else
+      {
+        expr2tc c = !is_constant_vector2t(op1) ? op1 : op2;
+        constant_vector2tc vector(is_constant_vector2t(op1) ? op1 : op2);
+        for(auto & datatype_member : vector->datatype_members)
+        {
+          auto &op = datatype_member;
+          div2tc add(op->type, c, op);
+          datatype_member = add;
+
+        }
+        return vector;
+      }
+
+    }
+
     if(is_constant(op2))
     {
       expr2tc c2 = op2;
@@ -672,7 +717,7 @@ expr2tc div2t::do_simplify() const
 
 expr2tc modulus2t::do_simplify() const
 {
-  if(!is_number_type(type))
+  if(!is_number_type(type) && !is_vector_type(type))
     return expr2tc();
 
   // Try to recursively simplify nested operations both sides, if any
@@ -693,7 +738,56 @@ expr2tc modulus2t::do_simplify() const
     return expr2tc();
   }
 
-  if(is_bv_type(type))
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(simplied_side_1) || is_constant_vector2t(simplied_side_2))
+  {
+    if(
+      is_constant_vector2t(simplied_side_1) &&
+      is_constant_vector2t(simplied_side_2))
+    {
+      constant_vector2tc vec1(simplied_side_1);
+      constant_vector2tc vec2(simplied_side_2);
+      for(size_t i = 0; i < vec1->datatype_members.size(); i++)
+      {
+        auto &A = vec1->datatype_members[i];
+        auto &B = vec2->datatype_members[i];
+        modulus2tc add(A->type, A, B);
+        vec1->datatype_members[i] = add;
+      }
+      return vec1;
+    }
+    if(is_constant_vector2t(simplied_side_1))
+    {
+      expr2tc c = !is_constant_vector2t(simplied_side_1) ? simplied_side_1
+                                                         : simplied_side_2;
+      constant_vector2tc vector(
+        is_constant_vector2t(simplied_side_1) ? simplied_side_1
+                                              : simplied_side_2);
+      for(auto &datatype_member : vector->datatype_members)
+      {
+        auto &op = datatype_member;
+        modulus2tc add(op->type, op, c);
+        datatype_member = add;
+      }
+      return vector;
+    }
+    else
+    {
+      expr2tc c = !is_constant_vector2t(simplied_side_1) ? simplied_side_1
+                                                         : simplied_side_2;
+      constant_vector2tc vector(
+        is_constant_vector2t(simplied_side_1) ? simplied_side_1
+                                              : simplied_side_2);
+      for(auto &datatype_member : vector->datatype_members)
+      {
+        auto &op = datatype_member;
+        modulus2tc add(op->type, c, op);
+        datatype_member = add;
+      }
+      return vector;
+    }
+  }
+    else if(is_bv_type(type))
   {
     if(is_constant_int2t(simplied_side_2))
     {
