@@ -219,7 +219,7 @@ expr2tc vector_type2t::distribute_operation(
       auto e1 = is_op1_vec ? op : c;
       auto e2 = is_op1_vec ? c : op;
       auto new_op = func(op->type, e1, e2);
-      datatype_member = new_op;
+      datatype_member = new_op->do_simplify();
     }
     return vector;
   }
