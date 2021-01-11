@@ -292,16 +292,17 @@ static expr2tc simplify_arith_2ops(
   assert(!is_floatbv_type(type));
 
   expr2tc simpl_res;
-  if(is_vector_type(type)) {
+  if(is_vector_type(type))
+  {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
 
     std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value; };
+      return to_constant_int2t(c).value;
+    };
 
-      simpl_res = TFunctor<BigInt>::simplify(
-        simplied_side_1, simplied_side_2, is_constant, get_value);
-
+    simpl_res = TFunctor<BigInt>::simplify(
+      simplied_side_1, simplied_side_2, is_constant, get_value);
   }
   else if(is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
   {
@@ -361,32 +362,12 @@ struct Addtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
-    // Is a vector operation ? Apply the sum
+    // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      if(!is_constant_vector2t(op1) || !is_constant_vector2t(op2))
-      {
-        expr2tc c = !is_constant_vector2t(op1) ? op1 : op2;
-        constant_vector2tc vector(is_constant_vector2t(op1) ? op1 : op2);
-        for(auto & datatype_member : vector->datatype_members)
-        {
-          auto &op = datatype_member;
-          add2tc add(op->type, op, c);
-          datatype_member = add;
-
-        }
-        return vector;
-      }
-      constant_vector2tc vec1(op1);
-      constant_vector2tc vec2(op2);
-      for(size_t i = 0; i < vec1->datatype_members.size(); i++)
-      {
-        auto &A = vec1->datatype_members[i];
-        auto &B = vec2->datatype_members[i];
-        add2tc add(A->type, A, B);
-        vec1->datatype_members[i] = add;
-      }
-      return vec1;
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [](type2tc t, expr2tc e1, expr2tc e2) { return add2tc(t, e1, e2); };
+      return vector_type2t::distribute_operation(op, op1, op2);
     }
 
     if(is_constant(op1))
@@ -478,32 +459,12 @@ struct Subtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
-    // Is a vector operation ? Apply the sum
+    // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      if(!is_constant_vector2t(op1) || !is_constant_vector2t(op2))
-      {
-        expr2tc c = !is_constant_vector2t(op1) ? op1 : op2;
-        constant_vector2tc vector(is_constant_vector2t(op1) ? op1 : op2);
-        for(auto & datatype_member : vector->datatype_members)
-        {
-          auto &op = datatype_member;
-          sub2tc sub(op->type, op, c);
-          datatype_member = sub;
-
-        }
-        return vector;
-      }
-      constant_vector2tc vec1(op1);
-      constant_vector2tc vec2(op2);
-      for(size_t i = 0; i < vec1->datatype_members.size(); i++)
-      {
-        auto &A = vec1->datatype_members[i];
-        auto &B = vec2->datatype_members[i];
-        sub2tc sub(A->type, A, B);
-        vec1->datatype_members[i] = sub;
-      }
-      return vec1;
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [](type2tc t, expr2tc e1, expr2tc e2) { return sub2tc(t, e1, e2); };
+      return vector_type2t::distribute_operation(op, op1, op2);
     }
 
     if(is_constant(op1))
@@ -555,31 +516,10 @@ struct Multor
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      if(!is_constant_vector2t(op1) || !is_constant_vector2t(op2))
-      {
-        expr2tc c = !is_constant_vector2t(op1) ? op1 : op2;
-        constant_vector2tc vector(is_constant_vector2t(op1) ? op1 : op2);
-        for(auto & datatype_member : vector->datatype_members)
-        {
-          auto &op = datatype_member;
-          mul2tc add(op->type, op, c);
-          datatype_member = add;
-
-        }
-        return vector;
-      }
-      constant_vector2tc vec1(op1);
-      constant_vector2tc vec2(op2);
-      for(size_t i = 0; i < vec1->datatype_members.size(); i++)
-      {
-        auto &A = vec1->datatype_members[i];
-        auto &B = vec2->datatype_members[i];
-        mul2tc add(A->type, A, B);
-        vec1->datatype_members[i] = add;
-      }
-      return vec1;
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [](type2tc t, expr2tc e1, expr2tc e2) { return mul2tc(t, e1, e2); };
+      return vector_type2t::distribute_operation(op, op1, op2);
     }
-
 
     if(is_constant(op1))
     {
@@ -636,46 +576,9 @@ struct Divtor
     // Is a vector operation ? Apply the op
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      if(is_constant_vector2t(op1) && is_constant_vector2t(op2))
-      {
-        constant_vector2tc vec1(op1);
-        constant_vector2tc vec2(op2);
-        for(size_t i = 0; i < vec1->datatype_members.size(); i++)
-        {
-          auto &A = vec1->datatype_members[i];
-          auto &B = vec2->datatype_members[i];
-          div2tc add(A->type, A, B);
-          vec1->datatype_members[i] = add;
-        }
-        return vec1;
-      }
-      if(is_constant_vector2t(op1))
-      {
-        expr2tc c = !is_constant_vector2t(op1) ? op1 : op2;
-        constant_vector2tc vector(is_constant_vector2t(op1) ? op1 : op2);
-        for(auto & datatype_member : vector->datatype_members)
-        {
-          auto &op = datatype_member;
-          div2tc add(op->type, op, c);
-          datatype_member = add;
-
-        }
-        return vector;
-      }
-      else
-      {
-        expr2tc c = !is_constant_vector2t(op1) ? op1 : op2;
-        constant_vector2tc vector(is_constant_vector2t(op1) ? op1 : op2);
-        for(auto & datatype_member : vector->datatype_members)
-        {
-          auto &op = datatype_member;
-          div2tc add(op->type, c, op);
-          datatype_member = add;
-
-        }
-        return vector;
-      }
-
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [](type2tc t, expr2tc e1, expr2tc e2) { return div2tc(t, e1, e2); };
+      return vector_type2t::distribute_operation(op, op1, op2);
     }
 
     if(is_constant(op2))
@@ -739,55 +642,17 @@ expr2tc modulus2t::do_simplify() const
   }
 
   // Is a vector operation ? Apply the op
-  if(is_constant_vector2t(simplied_side_1) || is_constant_vector2t(simplied_side_2))
+  if(
+    is_constant_vector2t(simplied_side_1) ||
+    is_constant_vector2t(simplied_side_2))
   {
-    if(
-      is_constant_vector2t(simplied_side_1) &&
-      is_constant_vector2t(simplied_side_2))
-    {
-      constant_vector2tc vec1(simplied_side_1);
-      constant_vector2tc vec2(simplied_side_2);
-      for(size_t i = 0; i < vec1->datatype_members.size(); i++)
-      {
-        auto &A = vec1->datatype_members[i];
-        auto &B = vec2->datatype_members[i];
-        modulus2tc add(A->type, A, B);
-        vec1->datatype_members[i] = add;
-      }
-      return vec1;
-    }
-    if(is_constant_vector2t(simplied_side_1))
-    {
-      expr2tc c = !is_constant_vector2t(simplied_side_1) ? simplied_side_1
-                                                         : simplied_side_2;
-      constant_vector2tc vector(
-        is_constant_vector2t(simplied_side_1) ? simplied_side_1
-                                              : simplied_side_2);
-      for(auto &datatype_member : vector->datatype_members)
-      {
-        auto &op = datatype_member;
-        modulus2tc add(op->type, op, c);
-        datatype_member = add;
-      }
-      return vector;
-    }
-    else
-    {
-      expr2tc c = !is_constant_vector2t(simplied_side_1) ? simplied_side_1
-                                                         : simplied_side_2;
-      constant_vector2tc vector(
-        is_constant_vector2t(simplied_side_1) ? simplied_side_1
-                                              : simplied_side_2);
-      for(auto &datatype_member : vector->datatype_members)
-      {
-        auto &op = datatype_member;
-        modulus2tc add(op->type, c, op);
-        datatype_member = add;
-      }
-      return vector;
-    }
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return modulus2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(
+      op, simplied_side_1, simplied_side_2);
   }
-    else if(is_bv_type(type))
+
+  if(is_bv_type(type))
   {
     if(is_constant_int2t(simplied_side_2))
     {
@@ -1525,6 +1390,14 @@ expr2tc bitand2t::do_simplify() const
     return (op1 & op2);
   };
 
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitand2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
+
   return do_bit_munge_operation<bitand2t>(op, type, side_1, side_2);
 }
 
@@ -1534,6 +1407,14 @@ expr2tc bitor2t::do_simplify() const
     return (op1 | op2);
   };
 
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitor2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
+
   return do_bit_munge_operation<bitor2t>(op, type, side_1, side_2);
 }
 
@@ -1542,6 +1423,14 @@ expr2tc bitxor2t::do_simplify() const
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return (op1 ^ op2);
   };
+
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitxor2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
 
   return do_bit_munge_operation<bitxor2t>(op, type, side_1, side_2);
 }
@@ -1578,6 +1467,18 @@ expr2tc bitnot2t::do_simplify() const
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t) {
     return ~(op1);
   };
+
+  if(is_constant_vector2t(value))
+  {
+    constant_vector2tc vector(value);
+    for(size_t i = 0; i < vector->datatype_members.size(); i++)
+    {
+      auto &op = vector->datatype_members[i];
+      bitnot2tc neg(op->type, op);
+      vector->datatype_members[i] = neg;
+    }
+    return vector;
+  }
 
   return do_bit_munge_operation<bitnot2t>(op, type, value, value);
 }
