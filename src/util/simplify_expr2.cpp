@@ -1982,7 +1982,7 @@ struct Equalitytor
     if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
-        [](type2tc t, expr2tc e1, expr2tc e2) { return equality2tc(e1, e2); };
+        [](type2tc, expr2tc e1, expr2tc e2) { return equality2tc(e1, e2); };
       return vector_type2t::distribute_operation(op, op1, op2);
     }
 
