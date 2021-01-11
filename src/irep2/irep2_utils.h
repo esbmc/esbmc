@@ -314,7 +314,6 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
         gen_zero(to_vector_type(type).subtype, array_as_array_of));
 
     return constant_vector2tc(type, members);
-
   }
   case type2t::array_id:
   {
