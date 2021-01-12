@@ -827,6 +827,23 @@ expr2tc with2t::do_simplify() const
     arr->datatype_members[index.as_ulong()] = update_value;
     return arr;
   }
+  else if(is_constant_vector2t(source_value))
+  {
+    const constant_vector2t &vec = to_constant_vector2t(source_value);
+    const constant_int2t &index = to_constant_int2t(update_field);
+
+    // Index may be out of bounds. That's an error in the program, but not in
+    // the model we're generating, so permit it. Can't simplify it though.
+    if(index.value.is_negative())
+      return expr2tc();
+
+    if(index.as_ulong() >= vec.datatype_members.size())
+      return expr2tc();
+
+    constant_vector2tc vec2 = vec;
+    vec2->datatype_members[index.as_ulong()] = update_value;
+    return vec2;
+  }
   else if(is_constant_array_of2t(source_value))
   {
     const constant_array_of2t &array = to_constant_array_of2t(source_value);
@@ -2553,9 +2570,12 @@ static expr2tc simplify_floatbv_2ops(
   const expr2tc &side_2,
   const expr2tc &rounding_mode)
 {
-  assert(is_floatbv_type(type));
+  bool is_float = is_vector_type(type)
+                    ? is_floatbv_type(to_vector_type(type).subtype)
+                    : is_floatbv_type(type);
+  assert(is_float);
 
-  if(!is_number_type(type) && !is_pointer_type(type))
+  if(!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
     return expr2tc();
 
   // Try to recursively simplify nested operations both sides, if any
@@ -2589,7 +2609,20 @@ static expr2tc simplify_floatbv_2ops(
 
   expr2tc simpl_res = expr2tc();
 
-  if(is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
+  if(is_vector_type(type))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
+
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
+
+    simpl_res = TFunctor<ieee_floatt>::simplify(
+      simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);
+  }
+  else if(is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -2618,6 +2651,16 @@ struct IEEE_addtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [rm](type2tc t, expr2tc e1, expr2tc e2) {
+          return ieee_add2tc(t, e1, e2, rm);
+        };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
+
     // Two constants? Simplify to result of the addition
     if(is_constant(op1) && is_constant(op2))
     {
@@ -2655,6 +2698,15 @@ struct IEEE_subtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [rm](type2tc t, expr2tc e1, expr2tc e2) {
+          return ieee_sub2tc(t, e1, e2, rm);
+        };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
     // Two constants? Simplify to result of the subtraction
     if(is_constant(op1) && is_constant(op2))
     {
@@ -2692,6 +2744,16 @@ struct IEEE_multor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [rm](type2tc t, expr2tc e1, expr2tc e2) {
+          return ieee_mul2tc(t, e1, e2, rm);
+        };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
+
     // Two constants? Simplify to result of the multiplication
     if(is_constant(op1) && is_constant(op2))
     {
@@ -2729,6 +2791,14 @@ struct IEEE_divtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [rm](type2tc t, expr2tc e1, expr2tc e2) {
+          return ieee_div2tc(t, e1, e2, rm);
+        };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
     // Two constants? Simplify to result of the division
     if(is_constant(op1) && is_constant(op2))
     {
