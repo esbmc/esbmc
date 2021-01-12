@@ -51,3 +51,5 @@ exprt symbol_expr(const symbolt &symbol);
 void make_next_state(exprt &expr);
 
 exprt make_binary(const exprt &src);
+
+bool expr_has_float(const exprt &src);
