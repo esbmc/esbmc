@@ -98,6 +98,7 @@ public:
   static irep_idt t_reference;
   static irep_idt t_bv;
   static irep_idt t_string;
+  static irep_idt t_vector;
 
   static irep_idt a_identifier;
   static irep_idt a_name;
@@ -171,5 +172,5 @@ pre-defined types:
 
 bool is_number(const typet &type);
 // rational, real, integer, complex, unsignedbv, signedbv, floatbv
-
+bool is_array_like(const typet &type);
 #endif

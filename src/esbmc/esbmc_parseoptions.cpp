@@ -71,7 +71,7 @@ enum PROCESS_TYPE
 struct resultt
 {
   PROCESS_TYPE type;
-  BigInt k;
+  uint64_t k;
 };
 
 #ifndef _WIN32
@@ -343,50 +343,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   config.options = options;
 }
 
-void esbmc_parseoptionst::set_context_bound_params()
-{
-  // Get the initial context bound
-  initial_context_bound =
-    cmdline.isset("incremental-cb")
-      ? strtoul(cmdline.getval("initial-context-bound"), nullptr, 10)
-      : strtoul(cmdline.getval("context-bound"), nullptr, 10);
-
-  // Get max number of context bounds
-  max_context_bound =
-    cmdline.isset("incremental-cb")
-      ? cmdline.isset("unlimited-context-bound")
-          ? INT_MAX
-          : strtoul(cmdline.getval("max-context-bound"), nullptr, 10)
-      : strtoul(cmdline.getval("context-bound"), nullptr, 10);
-
-  // Get the context bound increment
-  context_bound_inc =
-    strtoul(cmdline.getval("context-bound-step"), nullptr, 10);
-}
-
-int esbmc_parseoptionst::do_incremental_bmc(bmct &bmc, optionst &opts)
-{
-  int res = 0;
-
-  for(int context_bound = initial_context_bound;
-      context_bound <= max_context_bound;
-      context_bound += context_bound_inc)
-  {
-    if(cmdline.isset("incremental-cb"))
-    {
-      opts.set_option("context-bound", integer2string(context_bound));
-      std::cout << "\n*** Context bound number ";
-      std::cout << context_bound;
-      std::cout << " ***\n";
-    }
-    res = do_bmc(bmc);
-    if(res)
-      return res;
-  }
-
-  return res;
-}
-
 int esbmc_parseoptionst::doit()
 {
   //
@@ -458,14 +414,11 @@ int esbmc_parseoptionst::doit()
   if(opts.get_bool_option("skip-bmc"))
     return 0;
 
-  // set the context-bound verification parameters
-  set_context_bound_params();
-
   // do actual BMC
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
-  return do_incremental_bmc(bmc, opts);
+  return do_bmc(bmc);
 }
 
 int esbmc_parseoptionst::doit_k_induction_parallel()
@@ -688,19 +641,21 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // If the either the forward condition or inductive step finds a
       // solution, first check if base case couldn't find a bug in that code,
       // if there is no bug, inductive step can present the result
-
       if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
       {
         // If base case finished, then we can present the result
         if(bc_finished)
           break;
 
-        // Otherwise, ask base case for a solution
+        // Otherwise, kill the inductive step process
+        kill(children_pid[2], SIGKILL);
+
+        // And ask base case for a solution
 
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = fc_solution;
+        r.k = fc_solution.to_uint64();
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -714,12 +669,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         if(bc_finished)
           break;
 
-        // Otherwise, ask base case for a solution
+        // Otherwise, kill the forward condition process
+        kill(children_pid[1], SIGKILL);
+
+        // And ask base case for a solution
 
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = is_solution;
+        r.k = is_solution.to_uint64();
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -775,7 +733,6 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Couldn't find a bug or a proof for the current deepth
     std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
     return false;
-    break;
   }
 
   case BASE_CASE:
@@ -784,6 +741,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     opts.set_option("base-case", true);
     opts.set_option("forward-condition", false);
     opts.set_option("inductive-step", false);
+
+    opts.set_option("no-unwinding-assertions", true);
+    opts.set_option("partial-loops", false);
 
     // Start communication to the parent process
     close(forward_pipe[0]);
@@ -802,16 +762,13 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << k_step;
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking base case" << std::endl;
+      std::cout << "*** Checking base case, k = " << k_step << '\n';
 
       // If an exception was thrown, we should abort the process
-      int res = 1;
+      int res = smt_convt::P_ERROR;
       try
       {
-        res = do_incremental_bmc(bmc, opts);
+        res = do_bmc(bmc);
       }
       catch(...)
       {
@@ -821,7 +778,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if(res == smt_convt::P_SATISFIABLE)
       {
-        r.k = k_step;
+        r.k = k_step.to_uint64();
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -830,7 +787,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
         std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
 
-        return 1;
+        return true;
       }
 
       // Check if the parent process is asking questions
@@ -867,12 +824,11 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // If the value being asked is greater or equal the current step,
       // then we can stop the base case. It can be equal, because we
       // have just checked the current value of k
-
-      if(a_result.k >= k_step)
+      if(a_result.k < k_step)
         break;
 
       // Otherwise, we just need to check the base case for k = a_result.k
-      k_step = max_k_step = a_result.k;
+      max_k_step = a_result.k + k_step_inc;
     }
 
     // Send information to parent that a bug was not found
@@ -883,7 +839,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     (void)len; //ndebug
 
     std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
-    break;
+    return false;
   }
 
   case FORWARD_CONDITION:
@@ -892,6 +848,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     opts.set_option("base-case", false);
     opts.set_option("forward-condition", true);
     opts.set_option("inductive-step", false);
+
+    opts.set_option("no-unwinding-assertions", false);
+    opts.set_option("partial-loops", false);
+    opts.set_option("no-assertions", true);
 
     // Start communication to the parent process
     close(forward_pipe[0]);
@@ -905,34 +865,31 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a proof
     for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
-      if(opts.get_bool_option("disable-forward-condition"))
-        break;
-
       bmct bmc(goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << k_step;
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking forward condition" << std::endl;
+      std::cout << "*** Checking forward condition, k = " << k_step << '\n';
 
       // If an exception was thrown, we should abort the process
-      int res = 1;
+      int res = smt_convt::P_ERROR;
       try
       {
-        res = do_incremental_bmc(bmc, opts);
+        res = do_bmc(bmc);
       }
       catch(...)
       {
         break;
       }
 
+      if(opts.get_bool_option("disable-forward-condition"))
+        break;
+
       // Send information to parent if no bug was found
       if(res == smt_convt::P_UNSATISFIABLE)
       {
-        r.k = k_step;
+        r.k = k_step.to_uint64();
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -940,8 +897,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         (void)len; //ndebug
 
         std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
-
-        return 0;
+        return false;
       }
     }
 
@@ -953,7 +909,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     (void)len; //ndebug
 
     std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
-    break;
+    return true;
   }
 
   case INDUCTIVE_STEP:
@@ -962,6 +918,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     opts.set_option("base-case", false);
     opts.set_option("forward-condition", false);
     opts.set_option("inductive-step", true);
+
+    opts.set_option("no-unwinding-assertions", true);
+    opts.set_option("partial-loops", true);
 
     // Start communication to the parent process
     close(forward_pipe[0]);
@@ -980,26 +939,26 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << k_step + 1;
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking inductive step" << std::endl;
+      std::cout << "*** Checking inductive step, k = " << k_step << '\n';
 
       // If an exception was thrown, we should abort the process
-      int res = 1;
+      int res = smt_convt::P_ERROR;
       try
       {
-        res = do_incremental_bmc(bmc, opts);
+        res = do_bmc(bmc);
       }
       catch(...)
       {
         break;
       }
 
+      if(opts.get_bool_option("disable-inductive-step"))
+        break;
+
       // Send information to parent if no bug was found
       if(res == smt_convt::P_UNSATISFIABLE)
       {
-        r.k = k_step;
+        r.k = k_step.to_uint64();
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -1007,8 +966,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         (void)len; //ndebug
 
         std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
-
-        return res;
+        return false;
       }
     }
 
@@ -1020,7 +978,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     (void)len; //ndebug
 
     std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
-    break;
+    return true;
   }
 
   default:
@@ -1058,10 +1016,6 @@ int esbmc_parseoptionst::doit_k_induction()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    std::cout << "\n*** Iteration number ";
-    std::cout << k_step;
-    std::cout << " ***\n";
-
     if(do_base_case(opts, goto_functions, k_step))
       return true;
 
@@ -1106,10 +1060,6 @@ int esbmc_parseoptionst::doit_falsification()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    std::cout << "\n*** Iteration number ";
-    std::cout << integer2string(k_step);
-    std::cout << " ***\n";
-
     if(do_base_case(opts, goto_functions, k_step))
       return true;
   }
@@ -1148,10 +1098,6 @@ int esbmc_parseoptionst::doit_incremental()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    //std::cout << "\n*** Iteration number ";
-    //std::cout << k_step;
-    //std::cout << " ***\n";
-
     if(do_base_case(opts, goto_functions, k_step))
       return true;
 
@@ -1193,10 +1139,6 @@ int esbmc_parseoptionst::doit_termination()
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    std::cout << "\n*** Iteration number ";
-    std::cout << k_step;
-    std::cout << " ***\n";
-
     if(!do_forward_condition(opts, goto_functions, k_step))
       return false;
 
@@ -1227,37 +1169,21 @@ int esbmc_parseoptionst::do_base_case(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  // set the context-bound verification parameters
-  set_context_bound_params();
-
-  std::cout << "*** Checking base case\n";
-  for(int context_bound = initial_context_bound;
-      context_bound <= max_context_bound;
-      context_bound += context_bound_inc)
+  std::cout << "*** Checking base case, k = " << k_step << '\n';
+  switch(do_bmc(bmc))
   {
-    if(cmdline.isset("incremental-cb"))
-    {
-      opts.set_option("context-bound", integer2string(context_bound));
-      std::cout << "\n*** Context bound number ";
-      std::cout << context_bound;
-      std::cout << " ***\n";
-    }
+  case smt_convt::P_UNSATISFIABLE:
+  case smt_convt::P_SMTLIB:
+  case smt_convt::P_ERROR:
+    break;
 
-    switch(do_bmc(bmc))
-    {
-    case smt_convt::P_UNSATISFIABLE:
-    case smt_convt::P_SMTLIB:
-    case smt_convt::P_ERROR:
-      break;
+  case smt_convt::P_SATISFIABLE:
+    std::cout << "\nBug found (k = " << k_step << ")\n";
+    return true;
 
-    case smt_convt::P_SATISFIABLE:
-      std::cout << "\nBug found (k = " << k_step << ")\n";
-      return true;
-
-    default:
-      std::cout << "Unknown BMC result\n";
-      abort();
-    }
+  default:
+    std::cout << "Unknown BMC result\n";
+    abort();
   }
 
   return false;
@@ -1290,11 +1216,7 @@ int esbmc_parseoptionst::do_forward_condition(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  // Set max number of context bounds
-  if(cmdline.isset("incremental-cb"))
-    opts.set_option("context-bound", cmdline.getval("max-context-bound"));
-
-  std::cout << "*** Checking forward condition\n";
+  std::cout << "*** Checking forward condition, k = " << k_step << '\n';
   auto res = do_bmc(bmc);
 
   // Restore the no assertion flag, before checking the other steps
@@ -1349,11 +1271,7 @@ int esbmc_parseoptionst::do_inductive_step(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  // Set max number of context bounds
-  if(cmdline.isset("incremental-cb"))
-    opts.set_option("context-bound", cmdline.getval("max-context-bound"));
-
-  std::cout << "*** Checking inductive step\n";
+  std::cout << "*** Checking inductive step, k = " << k_step << '\n';
   switch(do_bmc(bmc))
   {
   case smt_convt::P_SATISFIABLE:
@@ -1582,14 +1500,6 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("k-induction-parallel"))
     {
       goto_k_induction(goto_functions, ui_message_handler);
-
-      // Warn the user if the forward condition was disabled
-      if(options.get_bool_option("disable-forward-condition"))
-      {
-        std::cout << "**** WARNING: this program contains infinite loops, "
-                  << "so we are not applying the forward condition!"
-                  << std::endl;
-      }
     }
 
     if(cmdline.isset("termination"))
@@ -1736,11 +1646,7 @@ void esbmc_parseoptionst::help()
        " --program-only               only show program expression\n"
        " --program-too                show program expression and verify\n"
        " --ssa-symbol-table           show symbol table along with SSA\n"
-       " --ssa-guards                 print SSA's guards, if any\n"
-       " --ssa-no-location            do not print the SSA's original "
-       "location\n"
-       " --ssa-no-sliced              do not print the sliced SSAs\n"
-       " --ssa-full-names             print SSAs with full variable names\n"
+       " --ssa-sliced                 print the sliced SSAs\n"
        " --smt-formula-only           only show SMT formula (not supported by "
        "all solvers)\n"
        " --smt-formula-too            show SMT formula (not supported by all "
@@ -1913,8 +1819,6 @@ void esbmc_parseoptionst::help()
        "                              (default is 1) \n"
 
        "\nConcurrency checking\n"
-       " --incremental-cb             perform incremental context-bound "
-       "verification\n"
        " --context-bound nr           limit number of context switches for "
        "each thread \n"
        " --state-hashing              enable state-hashing, prunes duplicate "
@@ -1922,14 +1826,6 @@ void esbmc_parseoptionst::help()
        " --no-por                     do not do partial order reduction\n"
        " --all-runs                   check all interleavings, even if a bug "
        "was already found\n"
-       " --initial-context-bound nr   set the initial context-bound for "
-       "incremental verification (default is 2)\n"
-       " --context-bound-step nr      set k context bound increment (default "
-       "is 5)\n"
-       " --max-context-bound nr       set max number of context-bound (default "
-       "is 15)\n"
-       " --unlimited-context-bound    set max number of context bounds to "
-       "UINT_MAX\n"
 
        "\nMiscellaneous options\n"
        " --memlimit                   configure memory limit, of form \"100m\" "

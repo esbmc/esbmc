@@ -44,18 +44,12 @@ public:
   cpp_languaget() = default;
 
   // conversion from expression into string
-  bool from_expr(
-    const exprt &expr,
-    std::string &code,
-    const namespacet &ns,
-    bool fullname = false) override;
+  bool from_expr(const exprt &expr, std::string &code, const namespacet &ns)
+    override;
 
   // conversion from type into string
-  bool from_type(
-    const typet &type,
-    std::string &code,
-    const namespacet &ns,
-    bool fullname = false) override;
+  bool from_type(const typet &type, std::string &code, const namespacet &ns)
+    override;
 
   languaget *new_language() override
   {

@@ -22,6 +22,11 @@ bool is_number(const typet &type)
          id == "floatbv" || id == "fixedbv";
 }
 
+bool is_array_like(const typet &type)
+{
+  return type.is_vector() || type.is_array() || type.is_incomplete_array();
+}
+
 irep_idt typet::t_signedbv = dstring("signedbv");
 irep_idt typet::t_unsignedbv = dstring("unsignedbv");
 irep_idt typet::t_complex = dstring("complex");
@@ -39,6 +44,7 @@ irep_idt typet::t_pointer = dstring("pointer");
 irep_idt typet::t_reference = dstring("#reference");
 irep_idt typet::t_bv = dstring("bv");
 irep_idt typet::t_string = dstring("string");
+irep_idt typet::t_vector = dstring("vector");
 
 irep_idt typet::a_identifier = dstring("identifier");
 irep_idt typet::a_name = dstring("name");

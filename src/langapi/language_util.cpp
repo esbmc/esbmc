@@ -10,11 +10,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <langapi/mode.h>
 #include <memory>
 
-std::string from_expr(
-  const namespacet &ns,
-  const irep_idt &identifier,
-  const exprt &expr,
-  const bool fullname)
+std::string
+from_expr(const namespacet &ns, const irep_idt &identifier, const exprt &expr)
 {
   int mode;
 
@@ -39,15 +36,12 @@ std::string from_expr(
 
   std::unique_ptr<languaget> p(mode_table[mode].new_language());
   std::string result;
-  p->from_expr(expr, result, ns, fullname);
+  p->from_expr(expr, result, ns);
   return result;
 }
 
-std::string from_type(
-  const namespacet &ns,
-  const irep_idt &identifier,
-  const typet &type,
-  const bool fullname)
+std::string
+from_type(const namespacet &ns, const irep_idt &identifier, const typet &type)
 {
   int mode;
 
@@ -72,7 +66,7 @@ std::string from_type(
 
   std::unique_ptr<languaget> p(mode_table[mode].new_language());
   std::string result;
-  p->from_type(type, result, ns, fullname);
+  p->from_type(type, result, ns);
   return result;
 }
 

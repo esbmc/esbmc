@@ -935,6 +935,43 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     break;
   }
+  case clang::Type::ExtVector:
+  {
+    // NOTE: some bitshift operations with classic vectors are parsed as this
+    //   e.g vsi << 2 becomes ExtVector
+    //       vsi << vsi2 becomes Vector
+    const clang::ExtVectorType &vec =
+      static_cast<const clang::ExtVectorType &>(the_type);
+
+    typet the_type;
+    if(get_type(vec.getElementType(), the_type))
+      return true;
+
+    new_type = vector_typet(
+      the_type,
+      constant_exprt(
+        integer2binary(vec.getNumElements(), bv_width(int_type())),
+        integer2string(vec.getNumElements()),
+        int_type()));
+    break;
+  }
+  case clang::Type::Vector:
+  {
+    const clang::VectorType &vec =
+      static_cast<const clang::VectorType &>(the_type);
+
+    typet the_type;
+    if(get_type(vec.getElementType(), the_type))
+      return true;
+
+    new_type = vector_typet(
+      the_type,
+      constant_exprt(
+        integer2binary(vec.getNumElements(), bv_width(int_type())),
+        integer2string(vec.getNumElements()),
+        int_type()));
+    break;
+  }
 
   default:
     std::cerr << "Conversion of unsupported clang type: \"";
@@ -1517,7 +1554,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     exprt inits;
 
     // Structs/unions/arrays put the initializer on operands
-    if(t.is_struct() || t.is_union() || t.is_array())
+    if(t.is_struct() || t.is_union() || t.is_array() || t.is_vector())
     {
       inits = gen_zero(t);
 
@@ -1532,9 +1569,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
         if(t.is_struct() || t.is_union())
           elem_type = to_struct_union_type(t).components()[i].type();
-        else
+        else if(t.is_array())
           elem_type = to_array_type(t).subtype();
-
+        else
+          elem_type = to_vector_type(t).subtype();
         gen_typecast(ns, init, elem_type);
 
         inits.operands().at(i) = init;
@@ -2120,6 +2158,8 @@ bool clang_c_convertert::get_cast_expr(
     expr = gen_zero(type);
     break;
 
+  case clang::CK_VectorSplat:
+    break;
   default:
     std::cerr << "Conversion of unsupported clang cast operator: \"";
     std::cerr << cast.getCastKindName() << "\" to expression" << std::endl;
@@ -3071,7 +3111,7 @@ typet clang_c_convertert::fix_bitfields(const typet &_type)
 
 void clang_c_convertert::fix_constant_bitfields(exprt &expr)
 {
-  assert(expr.type().id() == "struct");
+  assert(expr.type().id() == "struct" || expr.type().id() == "union");
   assert(
     bitfield_fixed_type_map.find(expr.type()) != bitfield_fixed_type_map.end());
 

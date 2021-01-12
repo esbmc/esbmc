@@ -21,8 +21,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "program-too", switc, ""},
   {0, "ssa-symbol-table", switc, ""},
   {0, "ssa-guards", switc, ""},
-  {0, "ssa-no-sliced", switc, ""},
-  {0, "ssa-full-names", switc, ""},
+  {0, "ssa-sliced", switc, ""},
   {0, "ssa-no-location", switc, ""},
   {0, "smt-formula-only", switc, ""},
   {0, "smt-formula-too", switc, ""},
@@ -154,11 +153,6 @@ const struct opt_templ esbmc_options[] = {
   {0, "state-hashing", switc, ""},
   {0, "no-por", switc, ""},
   {0, "all-runs", switc, ""},
-  {0, "incremental-cb", switc, ""},
-  {0, "context-bound-step", number, "5"},
-  {0, "max-context-bound", number, "15"},
-  {0, "initial-context-bound", number, "2"},
-  {0, "unlimited-context-bound", switc, ""},
 
   // Miscellaneous
   {0, "memlimit", string, ""},

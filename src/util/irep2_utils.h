@@ -98,7 +98,8 @@ inline bool is_constant_expr(const expr2tc &t)
          t->expr_id == expr2t::constant_struct_id ||
          t->expr_id == expr2t::constant_union_id ||
          t->expr_id == expr2t::constant_array_id ||
-         t->expr_id == expr2t::constant_array_of_id;
+         t->expr_id == expr2t::constant_array_of_id ||
+         t->expr_id == expr2t::constant_vector_id;
 }
 
 inline bool is_structure_type(const type2tc &t)
@@ -265,6 +266,11 @@ inline const type2tc &get_array_subtype(const type2tc &type)
   return to_array_type(type).subtype;
 }
 
+inline const type2tc &get_vector_subtype(const type2tc &type)
+{
+  return to_vector_type(type).subtype;
+}
+
 inline const type2tc &get_base_array_subtype(const type2tc &type)
 {
   const auto &subtype = to_array_type(type).subtype;
@@ -339,6 +345,19 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
     return constant_floatbv2tc(
       ieee_floatt(ieee_float_spect(to_floatbv_type(type))));
 
+  case type2t::vector_id:
+  {
+    auto vec_type = to_vector_type(type);
+    assert(is_constant_int2t(vec_type.vector_size));
+    auto s = to_constant_int2t(vec_type.vector_size);
+
+    std::vector<expr2tc> members;
+    for(long int i = 0; i < s.as_long(); i++)
+      members.push_back(
+        gen_zero(to_vector_type(type).subtype, array_as_array_of));
+
+    return constant_vector2tc(type, members);
+  }
   case type2t::array_id:
   {
     if(array_as_array_of)

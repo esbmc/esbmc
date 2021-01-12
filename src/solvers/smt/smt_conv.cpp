@@ -237,11 +237,11 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   smt_astt side2 = convert_ast(eq.side_2);
   side2->assign(this, side1);
 
-  // Put that into the smt cache, thus preserving the assigned symbols value.
-  // IMPORTANT: the cache is now a fundemental part of how some flatteners work,
-  // in that one can chose to create a set of expressions and their ASTs, then
+  // Put that into the smt cache, thus preserving the value of the assigned symbols.
+  // IMPORTANT: the cache is now a fundamental part of how some flatteners work,
+  // in that one can choose to create a set of expressions and their ASTs, then
   // store them in the cache, rather than have a more sophisticated conversion.
-  smt_cache_entryt e = {eq.side_1, side1, ctx_level};
+  smt_cache_entryt e = {eq.side_1, side2, ctx_level};
   smt_cache.insert(e);
 
   return side2;
@@ -259,6 +259,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
   case expr2t::with_id:
   case expr2t::constant_array_id:
+  case expr2t::constant_vector_id:
   case expr2t::constant_array_of_id:
   case expr2t::index_id:
   case expr2t::address_of_id:
@@ -304,6 +305,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::constant_union_id:
     std::cerr << "Post-parse union literals are deprecated and broken, sorry\n";
     abort();
+  case expr2t::constant_vector_id:
+  {
+    a = array_create((constant_vector2tc)expr);
+    break;
+  }
   case expr2t::constant_array_id:
   case expr2t::constant_array_of_id:
   {
@@ -1210,6 +1216,32 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = mk_array_sort(d, r);
     break;
   }
+  case type2t::vector_id:
+  {
+    // Index arrays by the smallest integer required to represent its size.
+    // Unless it's either infinite or dynamic in size, in which case use the
+    // machine int size. Also, faff about if it's an array of arrays, extending
+    // the domain.
+    type2tc t = make_array_domain_type(to_array_type(flatten_array_type(type)));
+    smt_sortt d = mk_int_bv_sort(t->get_width());
+    type2tc range = get_flattened_array_subtype(type);
+
+    if(is_tuple_ast_type(range))
+    {
+      type2tc thetype = flatten_array_type(type);
+      rewrite_ptrs_to_structs(thetype);
+      result = tuple_api->mk_struct_sort(thetype);
+      break;
+    }
+
+    // Work around QF_AUFBV demanding arrays of bitvectors.
+    smt_sortt r;
+    r = convert_sort(range);
+    result = mk_array_sort(d, r);
+    //abort();
+    break;
+  }
+
   default:
     std::cerr << "Unexpected type ID " << get_type_id(type);
     std::cerr << " reached SMT conversion\n";
@@ -1897,8 +1929,10 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
   a = convert_ast(src_value);
   a = a->select(this, newidx);
 
-  const array_type2t &arrtype = to_array_type(index.source_value->type);
-  if(is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays)
+  const type2tc &arrsubtype = is_vector_type(index.source_value->type)
+                                ? get_vector_subtype(index.source_value->type)
+                                : get_array_subtype(index.source_value->type);
+  if(is_bool_type(arrsubtype) && !array_api->supports_bools_in_arrays)
     return make_bit_bool(a);
 
   return a;
@@ -2018,9 +2052,10 @@ type2tc smt_convt::get_flattened_array_subtype(const type2tc &type)
   // been flattened.
 
   type2tc type_rec = type;
-  while(is_array_type(type_rec))
+  while(is_array_type(type_rec) || is_vector_type(type_rec))
   {
-    type_rec = to_array_type(type_rec).subtype;
+    type_rec = is_array_type(type_rec) ? to_array_type(type_rec).subtype
+                                       : to_vector_type(type_rec).subtype;
   }
 
   // type_rec is now the base type.
@@ -2248,11 +2283,12 @@ const struct_union_data &smt_convt::get_type_def(const type2tc &type) const
            : dynamic_cast<const struct_union_data &>(*type.get());
 }
 
-smt_astt smt_convt::array_create(const expr2tc &expr)
+smt_astt smt_convt::array_create(
+  const expr2tc &expr,
+  bool is_infinite,
+  const expr2tc &size,
+  const std::vector<expr2tc> &members)
 {
-  if(is_constant_array_of2t(expr))
-    return convert_array_of_prep(expr);
-
   // Handle constant array expressions: these don't have tuple type and so
   // don't need funky handling, but we need to create a fresh new symbol and
   // repeatedly store the desired data into it, to create an SMT array
@@ -2260,34 +2296,28 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
   std::string name = mk_fresh_name("array_create::") + ".";
   expr2tc newsym = symbol2tc(expr->type, name);
 
-  // Check size
-  const array_type2t &arr_type = to_array_type(expr->type);
-
   // Guarentee nothing, this is modelling only.
-  if(arr_type.size_is_infinite)
+  if(is_infinite)
     return convert_ast(newsym);
 
-  if(!is_constant_int2t(arr_type.array_size))
+  if(!is_constant_int2t(size))
   {
     std::cerr << "Non-constant sized array of type constant_array_of2t\n";
     abort();
   }
 
-  const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
+  const constant_int2t &thesize = to_constant_int2t(size);
   unsigned int sz = thesize.value.to_uint64();
-
-  assert(is_constant_array2t(expr));
-  const constant_array2t &array = to_constant_array2t(expr);
 
   // Repeatedly store things into this.
   smt_astt newsym_ast = convert_ast(newsym);
   for(unsigned int i = 0; i < sz; i++)
   {
-    expr2tc init = array.datatype_members[i];
+    expr2tc init = members[i];
 
     // Workaround for bools-in-arrays
     if(
-      is_bool_type(array.datatype_members[i]->type) && !int_encoding &&
+      is_bool_type(members[i]->type) && !int_encoding &&
       !array_api->supports_bools_in_arrays)
       init = typecast2tc(type2tc(new unsignedbv_type2t(1)), init);
 
@@ -2295,6 +2325,32 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
   }
 
   return newsym_ast;
+}
+
+smt_astt smt_convt::array_create(const constant_vector2tc &expr)
+{
+  const vector_type2t &arr_type = to_vector_type(expr->type);
+  return array_create(
+    expr,
+    arr_type.size_is_infinite,
+    arr_type.vector_size,
+    expr->datatype_members);
+}
+
+smt_astt smt_convt::array_create(const expr2tc &expr)
+{
+  if(is_constant_array_of2t(expr))
+    return convert_array_of_prep(expr);
+  // Check size
+  const array_type2t &arr_type = to_array_type(expr->type);
+
+  assert(is_constant_array2t(expr));
+  const constant_array2t &array = to_constant_array2t(expr);
+  return array_create(
+    expr,
+    arr_type.size_is_infinite,
+    arr_type.array_size,
+    array.datatype_members);
 }
 
 smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)

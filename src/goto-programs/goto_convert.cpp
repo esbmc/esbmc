@@ -712,20 +712,6 @@ void goto_convertt::convert_assign(
       return;
     }
 
-    if(lhs.id() == "typecast")
-    {
-      assert(lhs.operands().size() == 1);
-
-      // move to rhs
-      exprt tmp_rhs(lhs);
-      tmp_rhs.op0() = rhs;
-      rhs = tmp_rhs;
-
-      // remove from lhs
-      exprt tmp(lhs.op0());
-      lhs.swap(tmp);
-    }
-
     int atomic = 0;
     if(options.get_bool_option("atomicity-check"))
     {

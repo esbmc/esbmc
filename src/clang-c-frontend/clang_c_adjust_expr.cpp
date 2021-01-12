@@ -276,10 +276,16 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   exprt &op0 = expr.op0();
   exprt &op1 = expr.op1();
 
-  const typet type0 = ns.follow(op0.type());
-  const typet type1 = ns.follow(op1.type());
+  const typet o_type0 = ns.follow(op0.type());
+  const typet o_type1 = ns.follow(op1.type());
 
   gen_typecast_arithmetic(ns, op0, op1);
+
+  const typet &type0 = op0.type();
+  const typet &type1 = op1.type();
+
+  if(type0 == type1 && is_number(type0))
+    expr.type() = type0;
 
   if(
     expr.id() == "+" || expr.id() == "-" || expr.id() == "*" ||
@@ -346,8 +352,13 @@ void clang_c_adjust::adjust_float_arith(exprt &expr)
 {
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size() == 2);
+  auto t = ns.follow(expr.type());
+  bool need_float_hack = t.is_floatbv();
 
-  if(ns.follow(expr.type()).is_floatbv())
+  if(!need_float_hack && t.is_vector())
+    need_float_hack = to_vector_type(t).subtype().is_floatbv();
+
+  if(need_float_hack)
   {
     // And change id
     if(expr.id() == "+")
@@ -398,7 +409,7 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
   expr.type() = typet("pointer");
 
   // turn &array into &(array[0])
-  if(op.type().is_array() || op.type().is_incomplete_array())
+  if(is_array_like(op.type()))
   {
     index_exprt index;
     index.array() = op;
@@ -419,7 +430,7 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
 
   const typet op_type = ns.follow(op.type());
 
-  if(op_type.is_array() || op_type.is_incomplete_array())
+  if(is_array_like(op_type))
   {
     // *a is the same as a[0]
     deref.id("index");
@@ -517,6 +528,7 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
   exprt &op1 = expr.op1();
 
   const typet type0 = op0.type();
+  expr.type() = type0;
 
   if(statement == "assign")
   {
@@ -531,15 +543,14 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     if(is_number(op1.type()))
     {
       if(statement == "assign_shl")
-      {
         return;
-      }
 
       if(type0.id() == "unsignedbv")
       {
         expr.statement("assign_lshr");
         return;
       }
+
       if(type0.id() == "signedbv")
       {
         expr.statement("assign_ashr");
@@ -547,6 +558,8 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
       }
     }
   }
+
+  gen_typecast_arithmetic(ns, op0, op1);
 }
 
 void clang_c_adjust::adjust_side_effect_function_call(
@@ -646,7 +659,7 @@ void clang_c_adjust::adjust_function_call_arguments(
       // don't know type, just do standard conversion
 
       const typet &type = ns.follow(op.type());
-      if(type.is_array() || type.is_incomplete_array())
+      if(is_array_like(type))
         gen_typecast(ns, op, pointer_typet(empty_typet()));
     }
   }

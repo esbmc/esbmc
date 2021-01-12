@@ -1,4 +1,0 @@
-CORE
-main.c
---incremental-bmc --incremental-cb --max-context-bound 10 --context-bound-step 5 --initial-context-bound 7
-^VERIFICATION SUCCESSFUL$

@@ -45,6 +45,7 @@ static const char *type_names[] = {
   "union",
   "code",
   "array",
+  "vector",
   "pointer",
   "unsignedbv",
   "signedbv",
@@ -174,6 +175,54 @@ unsigned int array_type2t::get_width() const
   unsigned long num_elems = const_elem_size->as_ulong();
 
   return num_elems * sub_width;
+}
+
+unsigned int vector_type2t::get_width() const
+{
+  unsigned int sub_width = subtype->get_width();
+
+  const expr2t *elem_size = vector_size.get();
+  const constant_int2t *const_elem_size =
+    dynamic_cast<const constant_int2t *>(elem_size);
+  assert(const_elem_size != nullptr);
+  unsigned long num_elems = const_elem_size->as_ulong();
+
+  return num_elems * sub_width;
+}
+
+expr2tc vector_type2t::distribute_operation(
+  std::function<expr2tc(type2tc, expr2tc, expr2tc)> func,
+  expr2tc op1,
+  expr2tc op2)
+{
+  if(is_constant_vector2t(op1) && is_constant_vector2t(op2))
+  {
+    constant_vector2tc vec1(op1);
+    constant_vector2tc vec2(op2);
+    for(size_t i = 0; i < vec1->datatype_members.size(); i++)
+    {
+      auto &A = vec1->datatype_members[i];
+      auto &B = vec2->datatype_members[i];
+      auto new_op = func(A->type, A, B);
+      vec1->datatype_members[i] = new_op;
+    }
+    return vec1;
+  }
+  else
+  {
+    bool is_op1_vec = is_constant_vector2t(op1);
+    expr2tc c = !is_op1_vec ? op1 : op2;
+    constant_vector2tc vector(is_op1_vec ? op1 : op2);
+    for(auto &datatype_member : vector->datatype_members)
+    {
+      auto &op = datatype_member;
+      auto e1 = is_op1_vec ? op : c;
+      auto e2 = is_op1_vec ? c : op;
+      auto new_op = func(op->type, e1, e2);
+      datatype_member = new_op->do_simplify();
+    }
+    return vector;
+  }
 }
 
 unsigned int pointer_type2t::get_width() const
@@ -434,6 +483,7 @@ static const char *expr_names[] = {
   "constant_struct",
   "constant_union",
   "constant_array",
+  "constant_vector",
   "constant_array_of",
   "symbol",
   "typecast",
@@ -749,6 +799,7 @@ type_poolt &type_poolt::operator=(type_poolt const &ref)
   floatbv_map = ref.floatbv_map;
   string_map = ref.string_map;
   code_map = ref.code_map;
+  vector_map = ref.vector_map;
 
   // Re-establish some pointers
   uint8 = &unsignedbv_map[unsignedbv_typet(8)];
@@ -795,6 +846,11 @@ const type2tc &type_poolt::get_union(const typet &val)
 const type2tc &type_poolt::get_array(const typet &val)
 {
   return get_type_from_pool(val, array_map);
+}
+
+const type2tc &type_poolt::get_vector(const typet &val)
+{
+  return get_type_from_pool(val, vector_map);
 }
 
 const type2tc &type_poolt::get_pointer(const typet &val)
@@ -2270,6 +2326,8 @@ std::string code_type2t::field_names[esbmct::num_type_fields] =
   {"arguments", "ret_type", "argument_names", "ellipsis", ""};
 std::string array_type2t::field_names[esbmct::num_type_fields] =
   {"subtype", "array_size", "size_is_infinite", "", ""};
+std::string vector_type2t::field_names[esbmct::num_type_fields] =
+  {"subtype", "vector_size", "size_is_infinite", "", ""};
 std::string pointer_type2t::field_names[esbmct::num_type_fields] =
   {"subtype", "", "", "", ""};
 std::string fixedbv_type2t::field_names[esbmct::num_type_fields] =
@@ -2296,6 +2354,8 @@ std::string constant_union2t::field_names[esbmct::num_type_fields] =
 std::string constant_bool2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string constant_array2t::field_names[esbmct::num_type_fields] =
+  {"members", "", "", "", ""};
+std::string constant_vector2t::field_names[esbmct::num_type_fields] =
   {"members", "", "", "", ""};
 std::string constant_array_of2t::field_names[esbmct::num_type_fields] =
   {"initializer", "", "", "", ""};
@@ -2841,11 +2901,12 @@ type_typedefs_empty(bool_type) type_typedefs_empty(empty_type)
           type_typedefs1(signedbv_type, bv_data)
             type_typedefs4(code_type, code_data)
               type_typedefs3(array_type, array_data)
-                type_typedefs1(pointer_type, pointer_data)
-                  type_typedefs2(fixedbv_type, fixedbv_data)
-                    type_typedefs2(floatbv_type, floatbv_data)
-                      type_typedefs1(string_type, string_data)
-                        type_typedefs2(cpp_name_type, cpp_name_data)
+                type_typedefs3(vector_type, vector_data)
+                  type_typedefs1(pointer_type, pointer_data)
+                    type_typedefs2(fixedbv_type, fixedbv_data)
+                      type_typedefs2(floatbv_type, floatbv_data)
+                        type_typedefs1(string_type, string_data)
+                          type_typedefs2(cpp_name_type, cpp_name_data)
 
 // Explicit instanciation for exprs.
 
@@ -2915,12 +2976,13 @@ type_typedefs_empty(bool_type) type_typedefs_empty(empty_type)
     basename##2tc,                                                             \
     boost::mpl::pop_front<typename superclass::traits::fields>::type>;
 
-                          expr_typedefs1(constant_int, constant_int_data);
+                            expr_typedefs1(constant_int, constant_int_data);
 expr_typedefs1(constant_fixedbv, constant_fixedbv_data);
 expr_typedefs1(constant_floatbv, constant_floatbv_data);
 expr_typedefs1(constant_struct, constant_datatype_data);
 expr_typedefs1(constant_union, constant_datatype_data);
 expr_typedefs1(constant_array, constant_datatype_data);
+expr_typedefs1(constant_vector, constant_datatype_data);
 expr_typedefs1(constant_bool, constant_bool_data);
 expr_typedefs1(constant_array_of, constant_array_of_data);
 expr_typedefs1(constant_string, constant_string_data);

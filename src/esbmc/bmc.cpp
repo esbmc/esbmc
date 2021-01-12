@@ -299,32 +299,26 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
   languagest languages(ns, MODE_C);
   std::cout << "\nProgram constraints: \n";
 
-  bool print_guard = config.options.get_bool_option("ssa-guards");
-  bool sparse = config.options.get_bool_option("ssa-no-location");
-  bool no_sliced = config.options.get_bool_option("ssa-no-sliced");
-  bool fullname = config.options.get_bool_option("ssa-full-names");
+  bool sliced = config.options.get_bool_option("ssa-sliced");
 
   for(auto const &it : eq->SSA_steps)
   {
     if(!(it.is_assert() || it.is_assignment() || it.is_assume()))
       continue;
 
-    if(it.ignore && no_sliced)
+    if(it.ignore && !sliced)
       continue;
 
-    if(!sparse)
-    {
-      std::cout << "// " << it.source.pc->location_number << " ";
-      std::cout << it.source.pc->location.as_string();
-      if(!it.comment.empty())
-        std::cout << " (" << it.comment << ")";
-      std::cout << '\n';
-    }
+    std::cout << "// " << it.source.pc->location_number << " ";
+    std::cout << it.source.pc->location.as_string();
+    if(!it.comment.empty())
+      std::cout << " (" << it.comment << ")";
+    std::cout << '\n';
 
-    std::cout << "(" << count << ") ";
+    std::cout << "/* " << count << "*/ ";
 
     std::string string_value;
-    languages.from_expr(migrate_expr_back(it.cond), string_value, fullname);
+    languages.from_expr(migrate_expr_back(it.cond), string_value);
 
     if(it.is_assignment())
     {
@@ -343,17 +337,14 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
       std::cout << "renumber: " << from_expr(ns, "", it.lhs) << "\n";
     }
 
-    if(!migrate_expr_back(it.guard).is_true() && print_guard)
+    if(!migrate_expr_back(it.guard).is_true())
     {
-      languages.from_expr(migrate_expr_back(it.guard), string_value, fullname);
+      languages.from_expr(migrate_expr_back(it.guard), string_value);
       std::cout << std::string(i2string(count).size() + 3, ' ');
       std::cout << "guard: " << string_value << "\n";
     }
 
-    if(!sparse)
-    {
-      std::cout << "\n";
-    }
+    std::cout << "\n";
 
     count++;
   }
