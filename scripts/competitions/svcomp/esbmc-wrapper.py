@@ -166,13 +166,13 @@ def get_result_string(the_result):
     return "FALSE_MEMCLEANUP"
 
   if the_result == Result.fail_memtrack:
-    return "Unknown"
+    return "FALSE_MEMTRACK"
 
   if the_result == Result.fail_free:
-    return "Unknown"
+    return "FALSE_FREE"
 
   if the_result == Result.fail_deref:
-    return "Unknown"
+    return "FALSE_DEREF"
 
   if the_result == Result.fail_overflow:
     return "FALSE_OVERFLOW"
