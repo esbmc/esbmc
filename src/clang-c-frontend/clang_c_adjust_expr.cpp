@@ -353,8 +353,13 @@ void clang_c_adjust::adjust_float_arith(exprt &expr)
 {
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size() == 2);
+  auto t = ns.follow(expr.type());
+  bool need_float_hack = t.is_floatbv();
 
-  if(ns.follow(expr.type()).is_floatbv())
+  if(!need_float_hack && t.is_vector())
+    need_float_hack = to_vector_type(t).subtype().is_floatbv();
+
+  if(need_float_hack)
   {
     // And change id
     if(expr.id() == "+")
