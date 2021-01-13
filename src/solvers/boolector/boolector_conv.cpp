@@ -640,6 +640,7 @@ bool boolector_convt::get_bool(smt_astt a)
     res = false;
     break;
   default:
+    std::cerr << "Can't get boolean value from Boolector\n";
     abort();
   }
 

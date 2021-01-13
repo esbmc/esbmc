@@ -1142,12 +1142,28 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
 bool z3_convt::get_bool(smt_astt a)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
-  z3::expr e = solver.get_model().eval(za->a, false);
+  // Set the model_completion to TRUE.
+  // Z3 will assign an interpretation to the Boolean constants,
+  // which are essentially don't cares.
+  z3::expr e = solver.get_model().eval(za->a, true);
 
-  if(Z3_get_bool_value(z3_ctx, e) == Z3_L_TRUE)
-    return true;
+  Z3_lbool result = Z3_get_bool_value(z3_ctx, e);
 
-  return false;
+  bool res;
+  switch(result)
+  {
+  case Z3_L_TRUE:
+    res = true;
+    break;
+  case Z3_L_FALSE:
+    res = false;
+    break;
+  default:
+    std::cerr << "Can't get boolean value from Z3\n";
+    abort();
+  }
+
+  return res;
 }
 
 BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
@@ -1165,7 +1181,7 @@ BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
 ieee_floatt z3_convt::get_fpbv(smt_astt a)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
-  z3::expr e = solver.get_model().eval(za->a, false);
+  z3::expr e = solver.get_model().eval(za->a, true);
 
   assert(Z3_get_ast_kind(z3_ctx, e) == Z3_APP_AST);
 
@@ -1210,7 +1226,7 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
     idx = to_solver_smt_ast<z3_smt_ast>(
       mk_smt_bv(BigInt(index), mk_bv_sort(array_bound)));
 
-  z3::expr e = solver.get_model().eval(select(za->a, idx->a), false);
+  z3::expr e = solver.get_model().eval(select(za->a, idx->a), true);
   return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }
 
