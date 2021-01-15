@@ -220,7 +220,6 @@ def get_command_line(strat, prop, arch, benchmark, concurrency):
     command_line += "--64 "
 
   if concurrency:  
-    esbmc_dargs += "--incremental-cb --context-bound-step 5 "
     esbmc_dargs += "--unwind 8 --no-par "
     esbmc_dargs += "--no-slice " # TODO: Witness validation is only working without slicing
   
@@ -289,7 +288,7 @@ version = args.version
 property_file = args.propertyfile
 benchmark = args.benchmark
 strategy = args.strategy
-concurrency = True if args.concurrency else False
+concurrency = args.concurrency
 
 if version:
   print os.popen(esbmc_path + "--version").read()[6:] + SVCOMP_EXTRA_VERSION,
