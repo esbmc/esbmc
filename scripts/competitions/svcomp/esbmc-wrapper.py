@@ -220,7 +220,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency):
     command_line += "--64 "
 
   if concurrency:  
-    esbmc_dargs += "--unwind 8 --no-par "
+    esbmc_dargs += "--unwind 8 --no-por "
     esbmc_dargs += "--no-slice " # TODO: Witness validation is only working without slicing
   
   # Add witness arg
