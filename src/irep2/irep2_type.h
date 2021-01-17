@@ -362,7 +362,7 @@ irep_typedefs(bool, type2t) irep_typedefs(empty, type2t)
               irep_typedefs(floatbv, floatbv_data)
                 irep_typedefs(string, string_data)
                   irep_typedefs(cpp_name, cpp_name_data)
-                    irep_typedefs(vector, vector_data)
+                    irep_typedefs(vector, array_data)
 #undef irep_typedefs
 
   /** Boolean type.
@@ -635,7 +635,7 @@ public:
     {
       expr2tc sz = size->simplify();
       if(!is_nil_expr(sz))
-        vector_size = sz;
+        array_size = sz;
     }
   }
   vector_type2t(const vector_type2t &ref) = default;

@@ -305,8 +305,8 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
   case type2t::vector_id:
   {
     auto vec_type = to_vector_type(type);
-    assert(is_constant_int2t(vec_type.vector_size));
-    auto s = to_constant_int2t(vec_type.vector_size);
+    assert(is_constant_int2t(vec_type.array_size));
+    auto s = to_constant_int2t(vec_type.array_size);
 
     std::vector<expr2tc> members;
     for(long int i = 0; i < s.as_long(); i++)
