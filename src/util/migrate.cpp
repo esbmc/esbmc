@@ -1989,7 +1989,7 @@ typet migrate_type_back(const type2tc &ref)
     }
     else
     {
-      thetype.size() = migrate_expr_back(ref2.vector_size);
+      thetype.size() = migrate_expr_back(ref2.array_size);
     }
 
     return std::move(thetype);
