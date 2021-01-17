@@ -2447,7 +2447,7 @@ smt_astt smt_convt::array_create(const constant_vector2tc &expr)
   return array_create(
     expr,
     arr_type.size_is_infinite,
-    arr_type.vector_size,
+    arr_type.array_size,
     expr->datatype_members);
 }
 
