@@ -181,7 +181,7 @@ unsigned int vector_type2t::get_width() const
 {
   unsigned int sub_width = subtype->get_width();
 
-  const expr2t *elem_size = vector_size.get();
+  const expr2t *elem_size = array_size.get();
   const constant_int2t *const_elem_size =
     dynamic_cast<const constant_int2t *>(elem_size);
   assert(const_elem_size != nullptr);
@@ -2327,7 +2327,7 @@ std::string code_type2t::field_names[esbmct::num_type_fields] =
 std::string array_type2t::field_names[esbmct::num_type_fields] =
   {"subtype", "array_size", "size_is_infinite", "", ""};
 std::string vector_type2t::field_names[esbmct::num_type_fields] =
-  {"subtype", "vector_size", "size_is_infinite", "", ""};
+  {"subtype", "array_size", "size_is_infinite", "", ""};
 std::string pointer_type2t::field_names[esbmct::num_type_fields] =
   {"subtype", "", "", "", ""};
 std::string fixedbv_type2t::field_names[esbmct::num_type_fields] =
@@ -2901,7 +2901,7 @@ type_typedefs_empty(bool_type) type_typedefs_empty(empty_type)
           type_typedefs1(signedbv_type, bv_data)
             type_typedefs4(code_type, code_data)
               type_typedefs3(array_type, array_data)
-                type_typedefs3(vector_type, vector_data)
+                type_typedefs3(vector_type, array_data)
                   type_typedefs1(pointer_type, pointer_data)
                     type_typedefs2(fixedbv_type, fixedbv_data)
                       type_typedefs2(floatbv_type, floatbv_data)
