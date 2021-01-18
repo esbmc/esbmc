@@ -858,27 +858,6 @@ void goto_convertt::do_function_call_symbol(
       t->location = function.location();
     }
   }
-  else if(base_name == "__builtin_constant_p")
-  {
-    if(arguments.size() != 1)
-    {
-      err_location(function);
-      throw "`" + id2string(base_name) + "' expected to have one argument";
-    }
-
-    exprt new_expr("sideeffect", lhs.type());
-    new_expr.make_bool(
-      arguments[0].type().cmt_constant() || arguments[0].is_constant());
-    new_expr.location() = function.location();
-
-    goto_programt::targett t_n = dest.add_instruction(ASSIGN);
-
-    exprt new_assign = code_assignt(lhs, new_expr);
-    expr2tc new_assign_expr;
-    migrate_expr(new_assign, new_assign_expr);
-    t_n->code = new_assign_expr;
-    t_n->location = function.location();
-  }
   else
   {
     // insert function call
