@@ -2121,7 +2121,7 @@ bool clang_c_convertert::get_cast_expr(
     break;
 
   case clang::CK_ToUnion:
-    gen_typecast_to_union(expr,type);
+    gen_typecast_to_union(expr, type);
     break;
 
   default:
