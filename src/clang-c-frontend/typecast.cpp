@@ -48,7 +48,8 @@ void gen_typecast_to_union(exprt &e, const typet &t)
 
   /* We should never reach here since clang frontend already checks for this
    * however... we should prevent any funny things to happen */
-  std::cerr << "Couldn't map type " << e.type().pretty_name() << " into the union" << std::endl;
+  std::cerr << "Couldn't map type " << e.type().pretty_name()
+            << " into the union" << std::endl;
   t.dump();
   abort();
 }
