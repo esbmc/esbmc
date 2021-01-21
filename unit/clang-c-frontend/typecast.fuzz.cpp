@@ -50,7 +50,7 @@ void test_to_union(const int *Data, size_t Size)
     }
     std::ostringstream name;
     name << "var_" << i;
-    auto component = gen_component(name.str().c_str(), Builtin_Type::Int);
+    auto component = gen_component(name.str().c_str(), (Builtin_Type)(Data[i]));
     t.components().push_back(component);
   }
 
