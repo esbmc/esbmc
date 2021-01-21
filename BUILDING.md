@@ -3,7 +3,11 @@
 This is a guide on how to build ESBMC and its supported solvers.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 It has been tested with Ubuntu 20.04.1 and macOS Catalina as well as [Windows 10 WSL](https://docs.microsoft.com/en-us/windows/wsl/about) v1 or v2 [Ubuntu WSL](https://ubuntu.com/wsl), but the steps are mostly the same for other Linux and macOS distributions.
+=======
+It has been tested with Ubuntu 20.04.1 and macOS Catalina as well as [Windows 10 WSL](https://docs.microsoft.com/en-us/windows/wsl/about)s, but the steps are mostly the same for other Linux and macOS distributions.
+>>>>>>> 974f7507b... Show that it is possible to use WIndows 10 WSL
 
 It is recommended that the RAM should be 6 GB at least.
 =======
