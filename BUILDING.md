@@ -2,7 +2,9 @@
 
 This is a guide on how to build ESBMC and its supported solvers.
 
-It has been tested with Ubuntu 19.10 and macOS Catalina, but the steps are mostly the same for other Linux and macOS distributions.
+It has been tested with Ubuntu 20.04.1 and macOS Catalina, but the steps are mostly the same for other Linux and macOS distributions.
+
+It is recommended that the RAM should be 6 GB at least.
 
 Before starting, note that ESBMC is mainly distributed under the terms of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), so please make sure to read it carefully.
 
@@ -14,7 +16,7 @@ All of them are listed in the following installation command:
 
 ```
 Linux:
-sudo apt-get update && sudo apt-get install build-essential git gperf libgmp-dev cmake bison curl flex gcc-multilib linux-libc-dev libboost-all-dev libtinfo-dev ninja-build python3-setuptools unzip wget
+sudo apt-get update && sudo apt-get install build-essential git gperf libgmp-dev cmake bison curl flex gcc-multilib linux-libc-dev libboost-all-dev libtinfo-dev ninja-build python3-setuptools unzip wget python3-pip openjdk-8-jre
 
 macOS:
 brew install gmp cmake boost ninja python3 automake && pip3 install PySMT
@@ -26,10 +28,12 @@ Note that they are listed with their name in Debian/Ubuntu, but they can be foun
 
 ESBMC source code is publicly available in [Github](https://github.com/esbmc/esbmc).
 
+Before Cloning ESBMC Source Code, it is better to make a directory to contain the whole project in “ESBMC_Project”.
+
 You can get the latest version using the following __git__ command:
 
 ```
-git clone https://github.com/esbmc/esbmc
+mkdir ESBMC_Project && cd ESBMC_Project && git clone https://github.com/esbmc/esbmc 
 ```
 
 ## Preparing Clang 11
@@ -69,7 +73,7 @@ Since this guide focuses primarily on ESBMC build, we will only cover the steps 
 We have wrapped the entire build and setup of Boolector in the following command:
 
 ```
-git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install
+git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
 ```
 
 If you need more details on Boolector, please refer to [its Github](https://github.com/Boolector/boolector).
@@ -79,7 +83,7 @@ If you need more details on Boolector, please refer to [its Github](https://gith
 We have wrapped the entire build and setup of CVC4 in the following command:
 
 ```
-git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j4 && make install
+pip3 install toml && git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j4 && make install && cd .. && cd ..
 ```
 
 If you need more details on CVC4, please refer to [its Github](https://github.com/CVC4/CVC4).
@@ -109,14 +113,14 @@ If you need more details on MathSAT, please refer to [its webpage](https://maths
 First, we need to setup and build [GMP library](https://gmplib.org), by entering the following command (Linux only):
 
 ```
-wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz && rm gmp-6.1.2.tar.xz && cd gmp-6.1.2 && ./configure --prefix $PWD/../gmp --disable-shared ABI=64 CFLAGS=-fPIC CPPFLAGS=-DPIC && make -j4 && make install
+wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz && rm gmp-6.1.2.tar.xz && cd gmp-6.1.2 && ./configure --prefix $PWD/../gmp --disable-shared ABI=64 CFLAGS=-fPIC CPPFLAGS=-DPIC && make -j4 && make install && cd ..
 ```
 
 Then, we are able build and setup Yices 2 using the following command:
 
 ```
 Linux:
-git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices --with-static-gmp=$PWD/../gmp/lib/libgmp.a && make -j9 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib
+git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices --with-static-gmp=$PWD/../gmp/lib/libgmp.a && make -j9 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib && cd ..
 
 macOS:
 git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices && make -j9 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a ../yices/lib
