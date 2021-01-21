@@ -323,9 +323,17 @@ void goto_symext::symex_free(const expr2tc &expr)
       // Check if we are not freeing an dynamic object allocated using alloca
       for(auto const &a : allocad)
       {
-        expr2tc noteq = notequal2tc(get_base_object(a.obj), item.object);
-        g.guard_expr(noteq);
-        claim(noteq, "dereference failure: invalid pointer freed");
+        expr2tc alloc_obj = get_base_object(a.obj);
+        const irep_idt &id_alloc_obj = to_symbol2t(alloc_obj).thename;
+        const irep_idt &id_item_obj = to_symbol2t(item.object).thename;
+        // Check if the object allocated with alloca is the same
+        // as given in the free function
+        if(id_alloc_obj == id_item_obj)
+        {
+          expr2tc noteq = notequal2tc(alloc_obj, item.object);
+          g.guard_expr(noteq);
+          claim(noteq, "dereference failure: invalid pointer freed");
+        }
       }
     }
   }

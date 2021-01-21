@@ -485,6 +485,11 @@ void goto_symext::run_intrinsic(
         : gen_false_expr();
     symex_assign(code_assign2tc(func_call.ret, is_little_endian));
   }
+  else if(has_prefix(symname, "c:@F@__ESBMC_sync_fetch_and_add"))
+  {
+    // Already modelled in builtin_libs
+    return;
+  }
   else
   {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC";

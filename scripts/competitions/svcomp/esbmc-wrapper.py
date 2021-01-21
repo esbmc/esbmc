@@ -166,13 +166,13 @@ def get_result_string(the_result):
     return "FALSE_MEMCLEANUP"
 
   if the_result == Result.fail_memtrack:
-    return "Unknown"
+    return "FALSE_MEMTRACK"
 
   if the_result == Result.fail_free:
-    return "Unknown"
+    return "FALSE_FREE"
 
   if the_result == Result.fail_deref:
-    return "Unknown"
+    return "FALSE_DEREF"
 
   if the_result == Result.fail_overflow:
     return "FALSE_OVERFLOW"
@@ -206,9 +206,8 @@ esbmc_path = "./esbmc "
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --state-hashing "
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
-esbmc_dargs += "--no-por --context-bound-step 5 --max-context-bound 15 "
 
-def get_command_line(strat, prop, arch, benchmark, fp_mode):
+def get_command_line(strat, prop, arch, benchmark, concurrency):
   command_line = esbmc_path + esbmc_dargs
 
   # Add benchmark
@@ -220,6 +219,10 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
   else:
     command_line += "--64 "
 
+  if concurrency:  
+    esbmc_dargs += "--unwind 8 --no-por "
+    esbmc_dargs += "--no-slice " # TODO: Witness validation is only working without slicing
+  
   # Add witness arg
   command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
 
@@ -256,23 +259,16 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
     print "Unknown strategy"
     exit(1)
 
-  # if we're running in FP mode, use MathSAT
-  if fp_mode:
-    command_line += "--mathsat "
-
   return command_line
 
-def verify(strat, prop, fp_mode):
+def verify(strat, prop, concurrency):
   # Get command line
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, fp_mode)
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency)
 
   # Call ESBMC
   output = run(esbmc_command_line)
 
   res = parse_result(output, category_property)
-  if(res == Result.force_fp_mode):
-    return verify(strat, prop, True)
-
   # Parse output
   return res
 
@@ -306,12 +302,6 @@ if benchmark is None:
   print "Please, specify a benchmark to verify"
   exit(1)
 
-if concurrency:
-  esbmc_dargs += "--incremental-cb --context-bound-step 5 "
-  esbmc_dargs += "--unwind 8 "
-  esbmc_dargs += "--no-slice " # TODO: Witness validation is only working without slicing
-  # NOTE: max-context-bound and no-por are already in the default params
-
 # Parse property files
 f = open(property_file, 'r')
 property_file_content = f.read()
@@ -329,5 +319,5 @@ else:
   print "Unsupported Property"
   exit(1)
 
-result = verify(strategy, category_property, False)
+result = verify(strategy, category_property, concurrency)
 print get_result_string(result)

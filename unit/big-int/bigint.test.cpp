@@ -357,35 +357,40 @@ math_test_signed_generator(multiplication, *);
 math_test_signed_generator(division, /);
 math_test_signed_generator(mod, %);
 
-BOOST_AUTO_TEST_CASE(floor_pow_ok_1){
+BOOST_AUTO_TEST_CASE(floor_pow_ok_1)
+{
   BigInt obj(31);
   unsigned expected = 4;
   unsigned actual = obj.floorPow2();
   BOOST_TEST(expected == actual);
 };
 
-BOOST_AUTO_TEST_CASE(floor_pow_ok_2){
+BOOST_AUTO_TEST_CASE(floor_pow_ok_2)
+{
   BigInt obj(-31);
   unsigned expected = 4;
   unsigned actual = obj.floorPow2();
   BOOST_TEST(expected == actual);
 }
 
-BOOST_AUTO_TEST_CASE(floor_pow_ok_3){
+BOOST_AUTO_TEST_CASE(floor_pow_ok_3)
+{
   BigInt obj(32);
   unsigned expected = 5;
   unsigned actual = obj.floorPow2();
   BOOST_TEST(expected == actual);
 }
 
-BOOST_AUTO_TEST_CASE(floor_pow_ok_4){
+BOOST_AUTO_TEST_CASE(floor_pow_ok_4)
+{
   BigInt obj(-32);
   unsigned expected = 5;
   unsigned actual = obj.floorPow2();
   BOOST_TEST(expected == actual);
 }
 
-BOOST_AUTO_TEST_CASE(set_pow_ok_1){
+BOOST_AUTO_TEST_CASE(set_pow_ok_1)
+{
   BigInt obj;
   obj.setPower2(5);
   unsigned expected = 32;
@@ -393,7 +398,8 @@ BOOST_AUTO_TEST_CASE(set_pow_ok_1){
   BOOST_TEST(expected_is_equal_to_actual);
 };
 
-BOOST_AUTO_TEST_CASE(set_pow_ok_2){
+BOOST_AUTO_TEST_CASE(set_pow_ok_2)
+{
   BigInt obj;
   obj.setPower2(0);
   unsigned expected = 1;
