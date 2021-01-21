@@ -107,4 +107,24 @@ BOOST_AUTO_TEST_CASE(basic_union_4)
   BOOST_TEST(to_union_expr(e).op0().type() == component2.type());
 }
 
+BOOST_AUTO_TEST_CASE(basic_union_5)
+{
+  auto component = gen_component("var_1", Builtin_Type::Double);
+  auto component2 = gen_component("var_2", Builtin_Type::UInt);
+  auto component3 = gen_component("var_3", Builtin_Type::UInt);
+
+  union_typet t;
+  t.components().push_back(component);
+  t.components().push_back(component2);
+  t.components().push_back(component3);
+
+  typet builtin;
+  gen_builtin_type(builtin, Builtin_Type::Double);
+  exprt e = gen_zero(builtin);
+
+  BOOST_CHECK_NO_THROW(gen_typecast_to_union(e, t));
+  BOOST_TEST(to_union_expr(e).get_component_name() == "var_1");
+  BOOST_TEST(to_union_expr(e).op0().type() == component.type());
+}
+
 BOOST_AUTO_TEST_SUITE_END()
