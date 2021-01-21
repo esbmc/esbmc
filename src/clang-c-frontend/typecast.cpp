@@ -2,6 +2,8 @@
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/simplify_expr_class.h>
+#include <stdexcept>
+#include <sstream>
 
 void gen_typecast(const namespacet &ns, exprt &dest, const typet &type)
 {
@@ -48,8 +50,8 @@ void gen_typecast_to_union(exprt &e, const typet &t)
 
   /* We should never reach here since clang frontend already checks for this
    * however... we should prevent any funny things to happen */
-  std::cerr << "Couldn't map type " << e.type().pretty_name()
-            << " into the union" << std::endl;
-  t.dump();
-  abort();
+  std::ostringstream msg;
+  msg << "Couldn't map type " << e.type().pretty_name() << " into the union"
+      << std::endl;
+  throw std::domain_error(msg.str());
 }
