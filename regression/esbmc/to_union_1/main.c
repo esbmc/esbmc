@@ -6,6 +6,6 @@ int main() {
     __VERIFIER_assume(x > 10);
 
     FOO = (union foo) x;
-    __ESBMC_assert(FOO.d > 10, "Initialized correctly");
+    __ESBMC_assert(FOO.d > 10, "double value should initialize union foo properly");
     return 0;
 }

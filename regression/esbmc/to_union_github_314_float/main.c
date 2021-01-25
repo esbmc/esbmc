@@ -1,5 +1,7 @@
+#include <math.h>
+
 typedef union{
-    unsigned long long raw64;
+    double raw64;
     struct {
         unsigned raw32lo;
         unsigned raw32hi;
@@ -11,13 +13,14 @@ typedef union{
 } union_t;
 
 
-unsigned long long foo(unsigned addr) {
+double foo(double addr) {
     return addr + 100;
 }
 
 int main() {
-  unsigned nondet = __VERIFIER_nondet_uint();
+  double nondet = __VERIFIER_nondet_double();
+  __ESBMC_assume(!isnan(nondet));
    union_t x = (union_t) foo(nondet);
-   __ESBMC_assert(x.raw64 == (nondet+100), "unsigned value should initialize union_t properly");
+   __ESBMC_assert(x.raw64 == (nondet+100), "double value should initialize union_t properly");
    return 0;
 }

@@ -6,7 +6,7 @@ class CTestGeneration(unittest.TestCase):
     """This will parse a directory containing C tests and will check for a min/max"""
 
     def test_quantity(self):
-        minimum = 400
+        minimum = 200
         maximum = 5000
         actual = len(get_test_objects("./esbmc"))
         self.assertGreater(actual, minimum)

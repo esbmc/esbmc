@@ -781,13 +781,15 @@ static expr2tc flatten_union(const exprt &expr)
   migrate_type(expr.type(), type);
   BigInt full_size = type_byte_size(type);
 
-  // Union literals should have one field.
+  // Union literals should have zero/one field.
   assert(
-    expr.operands().size() == 1 && "Union literal with more than one field");
+    expr.operands().size() < 2 && "Union literal with more than one field");
 
   // Cannot have unbounded size; flatten to an array of bytes.
   std::vector<expr2tc> byte_array;
-  flatten_to_bytes(expr.op0(), byte_array);
+
+  if(expr.operands().size() == 1)
+    flatten_to_bytes(expr.op0(), byte_array);
 
   // Potentially extend this array further if this literal is smaller than
   // the overall size of the union.
