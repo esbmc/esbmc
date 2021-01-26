@@ -875,6 +875,17 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     break;
   }
 
+  case clang::Type::MacroQualified:
+  {
+    const clang::MacroQualifiedType &macro =
+      static_cast<const clang::MacroQualifiedType &>(the_type);
+
+    if(get_type(macro.desugar(), new_type))
+      return true;
+
+    break;
+  }
+
   case clang::Type::Attributed:
   {
     const clang::AttributedType &att =
@@ -2116,6 +2127,7 @@ bool clang_c_convertert::get_cast_expr(
     gen_typecast(ns, expr, type);
     break;
 
+  case clang::CK_AddressSpaceConversion:
   case clang::CK_NullToPointer:
     expr = gen_zero(type);
     break;
