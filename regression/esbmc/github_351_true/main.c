@@ -31,7 +31,3 @@ void foo(__linseg_supovr uint32_t* param1_p, uint32_t param2) {
   *param1_p = param2;
   __ESBMC_assert(*param1_p == param2, "Value should be set correctly");
 }
-
-int main() {
-  return 0;
-}
