@@ -32,7 +32,7 @@ if(ENABLE_Z3)
     endif()
 
     message(STATUS "Using Z3 at: ${Z3_LIB}")
-    string(REGEX MATCH "Z3 ([0-9].[0-9].[0-9].[0-9])"  REGEX_OUTPUT ${Z3_VERSION})
+    string(REGEX MATCH "Z3 ([0-9]+.[0-9]+.[0-9]+.[0-9]+)"  REGEX_OUTPUT ${Z3_VERSION})
     set(Z3_VERSION "${CMAKE_MATCH_1}")    
     message(STATUS "Z3 version: ${Z3_VERSION}")
     if(Z3_VERSION VERSION_LESS Z3_MIN_VERSION)
