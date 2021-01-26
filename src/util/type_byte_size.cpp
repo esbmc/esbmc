@@ -57,9 +57,9 @@ BigInt member_offset(const type2tc &type, const irep_idt &member)
   BigInt result = 0;
   unsigned idx = 0;
 
-  if(is_array_type(type))
+  // empty union generate an array
+  if(!is_struct_type(type))
     return result;
-
   const struct_type2t &thetype = to_struct_type(type);
 
   for(auto const &it : thetype.members)
