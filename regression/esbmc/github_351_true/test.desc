@@ -1,4 +1,4 @@
 CORE
 main.c
 --function foo
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESFUL$
