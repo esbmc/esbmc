@@ -14,9 +14,4 @@ $Z3_DEST = "C:\deps"
 Invoke-WebRequest $Z3 -OutFile $Z3_ZIP
 Expand-Archive -LiteralPath $Z3_ZIP -DestinationPath $Z3_DEST
 
-$BOOST = "https://www.dropbox.com/s/n6846t9q9wxmzvi/boost-dll.zip?dl=1"
-$BOOST_ZIP = "boost-dll.zip"
-$BOOST_DEST = "C:\deps"
-
-Invoke-WebRequest $BOOST -OutFile $BOOST_ZIP
-Expand-Archive -LiteralPath $BOOST_ZIP -DestinationPath $BOOST_DEST
+Copy-Item C:\vcpkg\installed\x64-windows\bin\boost_filesystem-vc141-mt-x64*.dll C:\Deps
