@@ -107,8 +107,6 @@ jobs:
       run: choco install -y gnuwin32-coreutils.portable nsis.portable
     - name: Check if od is on path
       run: od.exe --version
-    - name: Prepare Environment
-      run: .\scripts\configure_environment.ps1
     - name: Update vcpkg
       run: |
         vcpkg.exe update
@@ -121,6 +119,8 @@ jobs:
       run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows
     - name: Install Bison/Flex
       run: choco install -y winflexbison
+    - name: Prepare Environment
+      run: .\scripts\configure_environment.ps1
     - name: Configure CMake
       run: |
         mkdir build
