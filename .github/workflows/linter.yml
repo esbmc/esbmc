@@ -29,10 +29,6 @@ jobs:
     name: Check C/C++ code-style
     runs-on: ubuntu-20.04
     steps:
-    - name: Make git use LF only
-      run: |
-        git config --system core.autocrlf false
-        git config --system core.eol lf
     - uses: actions/checkout@v1
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install libtinfo-dev
