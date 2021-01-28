@@ -12,12 +12,12 @@
 
 #define classify_return_type short
 
-#define _signbit(type, name)                      \
-    int name(type d)                              \
-    {                                             \
-        __ESBMC_HIDE:;                            \
-        return __builtin_signbit((float)d); \
-    }
+#define _signbit(type, name)                                                   \
+  int name(type d)                                                             \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return __builtin_signbit((float)d);                                        \
+  }
 
 _signbit(double, _dsign);
 _signbit(long double, _ldsign);
@@ -33,12 +33,12 @@ _signbit(float, _fdsign);
 
 #define classify_return_type short
 
-#define _signbit(type, name)                      \
-    int name(type d)                              \
-    {                                             \
-        __ESBMC_HIDE:;                            \
-        return !(d >= 0 || isinf(d) || isnan(d)); \
-    }
+#define _signbit(type, name)                                                   \
+  int name(type d)                                                             \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return !(d >= 0 || isinf(d) || isnan(d));                                  \
+  }
 
 _signbit(double, _dsign);
 _signbit(long double, _ldsign);
