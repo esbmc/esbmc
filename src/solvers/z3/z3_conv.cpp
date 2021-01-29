@@ -61,7 +61,11 @@ z3_convt::z3_convt(bool int_encoding, bool parallel, const namespacet &_ns)
 {
   z3::params p(z3_ctx);
   if(!parallel)
+  {
     p.set("relevancy", 0U);
+    p.set("model", true);
+    p.set("proof", false);
+  }
   solver.set(p);
 
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
