@@ -14,4 +14,4 @@ $Z3_DEST = "C:\deps"
 Invoke-WebRequest $Z3 -OutFile $Z3_ZIP
 Expand-Archive -LiteralPath $Z3_ZIP -DestinationPath $Z3_DEST
 
-Copy-Item C:\vcpkg\installed\x64-windows\bin\boost_filesystem-vc141-mt-x64*.dll C:\Deps
+Copy-Item C:\vcpkg\installed\x64-windows\bin\boost_filesystem-vc141-mt-x64*.dll C:\deps
