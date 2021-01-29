@@ -1,0 +1,4 @@
+CORE
+main.c
+--z3 --nan-check --overflow-check --parallel
+^VERIFICATION FAILED$
