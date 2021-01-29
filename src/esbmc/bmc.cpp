@@ -58,7 +58,11 @@ bmct::bmct(
   if(options.get_bool_option("smt-during-symex"))
   {
     runtime_solver = std::shared_ptr<smt_convt>(create_solver_factory(
-      "", opts.get_bool_option("int-encoding"), ns, options));
+      "",
+      opts.get_bool_option("int-encoding"),
+      opts.get_bool_option("parallel"),
+      ns,
+      options));
 
     symex = std::make_shared<reachability_treet>(
       funcs,
@@ -757,7 +761,11 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     if(!options.get_bool_option("smt-during-symex"))
     {
       runtime_solver = std::shared_ptr<smt_convt>(create_solver_factory(
-        "", options.get_bool_option("int-encoding"), ns, options));
+        "",
+        options.get_bool_option("int-encoding"),
+        options.get_bool_option("parallel"),
+        ns,
+        options));
     }
 
     return run_decision_procedure(runtime_solver, eq);

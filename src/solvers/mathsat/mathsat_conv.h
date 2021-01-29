@@ -17,7 +17,7 @@ public:
 class mathsat_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  mathsat_convt(bool int_encoding, const namespacet &ns);
+  mathsat_convt(bool int_encoding, bool parallel, const namespacet &ns);
   ~mathsat_convt() override;
 
   resultt dec_solve() override;

@@ -97,6 +97,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "yices", switc, ""},
   {0, "bv", switc, ""},
   {0, "ir", switc, ""},
+  {0, "parallel", switc, ""},
   {0, "smtlib", switc, ""},
   {0, "smtlib-solver-prog", string, ""},
   {0, "output", string, ""},

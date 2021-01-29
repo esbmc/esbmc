@@ -98,19 +98,25 @@ extern sexpr *smtlib_output;
 
 smt_convt *create_new_smtlib_solver(
   bool int_encoding,
+  bool parallel,
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  smtlib_convt *conv = new smtlib_convt(int_encoding, ns);
+  smtlib_convt *conv = new smtlib_convt(int_encoding, parallel, ns);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
-  : smt_convt(int_encoding, _ns), array_iface(false, false), fp_convt(this)
+smtlib_convt::smtlib_convt(
+  bool int_encoding,
+  bool parallel,
+  const namespacet &_ns)
+  : smt_convt(int_encoding, parallel, _ns),
+    array_iface(false, false),
+    fp_convt(this)
 {
   temp_sym_count.push_back(1);
   std::string cmd;

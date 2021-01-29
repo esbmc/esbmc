@@ -43,7 +43,7 @@ class yices_convt : public smt_convt,
                     public fp_convt
 {
 public:
-  yices_convt(bool int_encoding, const namespacet &ns);
+  yices_convt(bool int_encoding, bool parallel, const namespacet &ns);
   ~yices_convt() override;
 
   resultt dec_solve() override;

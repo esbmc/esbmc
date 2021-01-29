@@ -39,23 +39,32 @@ void mathsat_convt::check_msat_error(msat_term &r) const
 
 smt_convt *create_new_mathsat_solver(
   bool int_encoding,
+  bool parallel,
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  mathsat_convt *conv = new mathsat_convt(int_encoding, ns);
+  mathsat_convt *conv = new mathsat_convt(int_encoding, parallel, ns);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-mathsat_convt::mathsat_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns),
+mathsat_convt::mathsat_convt(
+  bool int_encoding,
+  bool parallel,
+  const namespacet &ns)
+  : smt_convt(int_encoding, parallel, ns),
     array_iface(false, false),
     fp_convt(this),
     use_fp_api(false)
 {
+  if(parallel)
+  {
+    std::cerr << "MathSAT does not support parallel solving yet" << std::endl;
+    abort();
+  }
   cfg = msat_parse_config(mathsat_config);
   msat_set_option(cfg, "model_generation", "true");
   env = msat_create_env(cfg);

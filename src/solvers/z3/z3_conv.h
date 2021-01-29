@@ -33,7 +33,7 @@ class z3_convt : public smt_convt,
                  public fp_convt
 {
 public:
-  z3_convt(bool int_encoding, const namespacet &ns);
+  z3_convt(bool int_encoding, bool parallel, const namespacet &ns);
   ~z3_convt() override = default;
 
 public:

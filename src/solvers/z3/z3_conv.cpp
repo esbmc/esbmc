@@ -36,31 +36,32 @@ static void error_handler(Z3_context c, Z3_error_code e)
 
 smt_convt *create_new_z3_solver(
   bool int_encoding,
+  bool parallel,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  z3_convt *conv = new z3_convt(int_encoding, ns);
+  z3_convt *conv = new z3_convt(int_encoding, parallel, ns);
   *tuple_api = static_cast<tuple_iface *>(conv);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
-  : smt_convt(int_encoding, _ns),
+z3_convt::z3_convt(bool int_encoding, bool parallel, const namespacet &_ns)
+  : smt_convt(int_encoding, parallel, _ns),
     array_iface(true, true),
     fp_convt(this),
     z3_ctx(),
     solver((z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "solve-eqs") &
-            z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "smt"))
+            z3::tactic(z3_ctx, "simplify") &
+            z3::tactic(z3_ctx, parallel ? "psmt" : "smt"))
              .mk_solver())
 {
   z3::params p(z3_ctx);
-  p.set("relevancy", 0U);
-  p.set("model", true);
-  p.set("proof", false);
+  if(!parallel)
+    p.set("relevancy", 0U);
   solver.set(p);
 
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);

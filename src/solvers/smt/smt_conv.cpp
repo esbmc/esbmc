@@ -60,8 +60,12 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(bool intmode, const namespacet &_ns)
-  : ctx_level(0), boolean_sort(nullptr), int_encoding(intmode), ns(_ns)
+smt_convt::smt_convt(bool intmode, bool parallelmode, const namespacet &_ns)
+  : ctx_level(0),
+    boolean_sort(nullptr),
+    int_encoding(intmode),
+    parallel(parallelmode),
+    ns(_ns)
 {
   tuple_api = nullptr;
   array_api = nullptr;

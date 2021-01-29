@@ -48,6 +48,7 @@ const unsigned int esbmc_num_solvers =
 static smt_convt *create_solver(
   const std::string &&the_solver,
   bool int_encoding,
+  bool parallel,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
@@ -58,7 +59,7 @@ static smt_convt *create_solver(
     if(the_solver == esbmc_solver.name)
     {
       return esbmc_solver.create(
-        int_encoding, ns, tuple_api, array_api, fp_api);
+        int_encoding, parallel, ns, tuple_api, array_api, fp_api);
     }
   }
 
@@ -93,6 +94,7 @@ static const std::string pick_default_solver()
 
 static smt_convt *pick_solver(
   bool int_encoding,
+  bool parallel,
   const namespacet &ns,
   const optionst &options,
   tuple_iface **tuple_api,
@@ -120,12 +122,19 @@ static smt_convt *pick_solver(
     the_solver = pick_default_solver();
 
   return create_solver(
-    std::move(the_solver), int_encoding, ns, tuple_api, array_api, fp_api);
+    std::move(the_solver),
+    int_encoding,
+    parallel,
+    ns,
+    tuple_api,
+    array_api,
+    fp_api);
 }
 
 smt_convt *create_solver_factory1(
   const std::string &solver_name,
   bool int_encoding,
+  bool parallel,
   const namespacet &ns,
   const optionst &options,
   tuple_iface **tuple_api,
@@ -134,15 +143,23 @@ smt_convt *create_solver_factory1(
 {
   if(solver_name == "")
     // Pick one based on options.
-    return pick_solver(int_encoding, ns, options, tuple_api, array_api, fp_api);
+    return pick_solver(
+      int_encoding, parallel, ns, options, tuple_api, array_api, fp_api);
 
   return create_solver(
-    std::move(solver_name), int_encoding, ns, tuple_api, array_api, fp_api);
+    std::move(solver_name),
+    int_encoding,
+    parallel,
+    ns,
+    tuple_api,
+    array_api,
+    fp_api);
 }
 
 smt_convt *create_solver_factory(
   const std::string &solver_name,
   bool int_encoding,
+  bool parallel,
   const namespacet &ns,
   const optionst &options)
 {
@@ -150,7 +167,14 @@ smt_convt *create_solver_factory(
   array_iface *array_api = nullptr;
   fp_convt *fp_api = nullptr;
   smt_convt *ctx = create_solver_factory1(
-    solver_name, int_encoding, ns, options, &tuple_api, &array_api, &fp_api);
+    solver_name,
+    int_encoding,
+    parallel,
+    ns,
+    options,
+    &tuple_api,
+    &array_api,
+    &fp_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");

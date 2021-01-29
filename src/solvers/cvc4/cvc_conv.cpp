@@ -5,19 +5,20 @@
 
 smt_convt *create_new_cvc_solver(
   bool int_encoding,
+  bool parallel,
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  cvc_convt *conv = new cvc_convt(int_encoding, ns);
+  cvc_convt *conv = new cvc_convt(int_encoding, parallel, ns);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns),
+cvc_convt::cvc_convt(bool int_encoding, bool parallel, const namespacet &ns)
+  : smt_convt(int_encoding, parallel, ns),
     array_iface(false, false),
     fp_convt(this),
     to_bv_counter(0),
@@ -25,6 +26,12 @@ cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
     smt(&em),
     sym_tab()
 {
+  if(parallel)
+  {
+    std::cerr << "CVC4 does not support parallel solving yet" << std::endl;
+    abort();
+  }
+
   // Already initialized stuff in the constructor list,
   smt.setOption("produce-models", true);
   smt.setOption("produce-assertions", true);

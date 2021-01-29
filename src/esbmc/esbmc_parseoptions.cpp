@@ -218,6 +218,11 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", true);
   }
 
+  if(cmdline.isset("parallel"))
+  {
+    options.set_option("parallel", true);
+  }
+
   if(cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);
   else
@@ -1745,6 +1750,7 @@ void esbmc_parseoptionst::help()
        " --yices                      use Yices\n"
        " --bv                         use solver with bit-vector arithmetic\n"
        " --ir                         use solver with integer/real arithmetic\n"
+       " --parallel                   use parallel solver\n"
        " --smtlib                     use SMT lib format\n"
        " --smtlib-solver-prog         SMT lib program name\n"
        " --output <filename>          output VCCs in SMT lib format to given "

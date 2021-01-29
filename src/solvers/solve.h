@@ -8,6 +8,7 @@
 
 typedef smt_convt *(solver_creator)(
   bool int_encoding,
+  bool parallel,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
@@ -15,6 +16,7 @@ typedef smt_convt *(solver_creator)(
 
 typedef smt_convt *(*solver_creator_ptr)(
   bool int_encoding,
+  bool parallel,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
@@ -32,6 +34,7 @@ extern const unsigned int esbmc_num_solvers;
 smt_convt *create_solver_factory(
   const std::string &solver_name,
   bool int_encoding,
+  bool parallel,
   const namespacet &ns,
   const optionst &options);
 

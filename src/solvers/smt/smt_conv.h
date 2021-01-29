@@ -146,8 +146,9 @@ public:
    *  before the object is used as a solver converter.
    *
    *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
+   *  @param parallel Whether nor not we should use parallel solver.
    *  @param _ns Namespace for looking up the type of certain symbols. */
-  smt_convt(bool int_encoding, const namespacet &_ns);
+  smt_convt(bool int_encoding, bool parallel, const namespacet &_ns);
   ~smt_convt() override = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
@@ -811,6 +812,8 @@ public:
   smt_sortt boolean_sort;
   /** Whether we are encoding expressions in integer mode or not. */
   bool int_encoding;
+  /** Whether we are running a parallel solver or not. */
+  bool parallel;
   /** A namespace containing all the types in the program. Used to resolve the
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
