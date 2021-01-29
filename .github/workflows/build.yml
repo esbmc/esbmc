@@ -121,11 +121,13 @@ jobs:
       run: choco install -y winflexbison
     - name: Prepare Environment
       run: .\scripts\configure_environment.ps1
+    - name: Check environment
+      run: ls C:\Deps
     - name: Configure CMake
       run: |
         mkdir build
         cd build
-        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE=C:/deps/boost_filesystem-vc142-mt-x64-1_74.dll
+        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE=C:/deps/boost_filesystem-vc141-mt-x64-1_74.dll
     - name: Build ESBMC
       run: |
         cd build
