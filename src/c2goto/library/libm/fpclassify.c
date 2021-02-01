@@ -16,8 +16,7 @@
   int name(type d)                                                             \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    \ 
-        return __builtin_signbit((float)d);                                    \
+  return __builtin_signbit((float)d);                                          \
   }
 
 _signbit(double, _dsign);
