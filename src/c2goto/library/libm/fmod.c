@@ -1,5 +1,9 @@
 #define __CRT__NO_INLINE /* Don't let mingw insert code */
 
+#ifdef _MSVC
+#define _USE_MATH_DEFINES
+#define _CRT_FUNCTIONS_REQUIRED 0
+#endif
 #include <math.h>
 
 #define fmod_def(type, name, isnan_func, isinf_func, isfinite_func)                    \

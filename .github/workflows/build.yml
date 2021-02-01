@@ -1,6 +1,6 @@
 name: Build All Solvers
 
-on: 
+on:
   push:
     branches:
       - master
@@ -34,4 +34,56 @@ jobs:
         with:
           name: intel-release
           path: ./build/ESBMC-Linux.sh
-      
+
+  build-windows:
+    name: Build ESBMC with Z3 (Windows)
+    runs-on: windows-latest
+    steps:
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - name: check python
+      run: python --version
+    - name: Make git use LF only
+      run: |
+        git config --system core.autocrlf false
+        git config --system core.eol lf
+    - uses: actions/checkout@v1
+    - name: Instal gnu tools (od)
+      run: choco install -y gnuwin32-coreutils.portable nsis.portable
+    - name: Check if od is on path
+      run: od.exe --version
+    - name: Update vcpkg
+      run: |
+        vcpkg.exe update
+        cd C:/vcpkg
+        git.exe pull
+        .\bootstrap-vcpkg.bat
+    - name: vcpkg integrate
+      run: vcpkg.exe integrate install
+    - name: Install Boost
+      run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows
+    - name: Install Bison/Flex
+      run: choco install -y winflexbison
+    - name: Prepare Environment
+      run: .\scripts\configure_environment.ps1
+    - name: Check environment
+      run: |
+        ls C:\vcpkg\installed\x64-windows\bin\
+        ls C:\Deps
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE=C:/deps/boost_filesystem-vc142-mt-x64-1_75.dll
+    - name: Build ESBMC
+      run: |
+        cd build
+        cmake --build . --target INSTALL --config Release
+        cpack -G ZIP
+        mv ESBMC-*.zip ESBMC-Windows.zip
+    - uses: actions/upload-artifact@v1
+      with:
+          name: release-windows
+          path: ./build/ESBMC-Windows.zip

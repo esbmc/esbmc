@@ -22,7 +22,9 @@
 
 #include <stdint.h>
 
+#ifndef _MSVC
 #define NULL 0
+#endif
 
 #if __WORDSIZE == 64
 # define __SIZEOF_PTHREAD_ATTR_T 56
