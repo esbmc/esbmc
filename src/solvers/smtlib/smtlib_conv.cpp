@@ -140,7 +140,6 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
     in_stream = nullptr;
     solver_name = "Text output";
     solver_version = "";
-    solver_proc_pid = 0;
 
     fprintf(out_stream, "(set-logic %s)\n", logic.c_str());
     fprintf(out_stream, "(set-info :status unknown)\n");
@@ -178,7 +177,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
     abort();
   }
 
-  solver_proc_pid = fork();
+  pid_t solver_proc_pid = fork();
   if(solver_proc_pid == 0)
   {
     close(outpipe[1]);
