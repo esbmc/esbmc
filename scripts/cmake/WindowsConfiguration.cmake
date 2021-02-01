@@ -6,6 +6,10 @@ if (WIN32)
   # Note: This should check for the CMake version instead of OS
   cmake_policy(SET CMP0079 NEW)
 
+  # std::min fails on windows after including windows.h
+  # this is a workaround
+  add_compile_definitions(NOMINMAX=1)
+
   find_package (Python COMPONENTS Interpreter)
   if(NOT Python_FOUND)
 	message(WARNING "Python not found, cmake will assume that it is on path")
