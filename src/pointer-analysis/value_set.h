@@ -17,9 +17,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/numbering.h>
 #include <util/type_byte_size.h>
 
-#undef min
-#include <algorithm>
-
 /** Code for tracking "value sets" across assignments in ESBMC.
  *
  *  The values in a value set are /references/ to /objects/, and additional data
