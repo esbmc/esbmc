@@ -427,7 +427,8 @@ int esbmc_parseoptionst::doit()
 int esbmc_parseoptionst::doit_k_induction_parallel()
 {
 #ifdef _WIN32
-  std::cerr << "Windows does not support parallel kind" << std::endl;
+  std::cerr << "Windows does not support parallel kind\n";
+  abort();
 #else
   // Pipes for communication between processes
   int forward_pipe[2], backward_pipe[2];
