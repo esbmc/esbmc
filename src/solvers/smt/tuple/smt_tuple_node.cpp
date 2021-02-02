@@ -180,6 +180,7 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
       std::cerr << "Fetching array elements inside tuples currently "
                    "unimplemented, sorry"
                 << std::endl;
+      abort();
       res = expr2tc();
     }
     else
