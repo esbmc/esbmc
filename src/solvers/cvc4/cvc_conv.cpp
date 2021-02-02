@@ -247,7 +247,7 @@ smt_astt cvc_convt::mk_ge(smt_astt a, smt_astt b)
 
 smt_astt cvc_convt::mk_real2int(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == SMT_SORT_REAL);
   return new_ast(
     em.mkExpr(CVC4::kind::TO_INTEGER, to_solver_smt_ast<cvc_smt_ast>(a)->a),
     a->sort);
@@ -255,7 +255,7 @@ smt_astt cvc_convt::mk_real2int(smt_astt a)
 
 smt_astt cvc_convt::mk_int2real(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == SMT_SORT_INT);
   return new_ast(
     em.mkExpr(CVC4::kind::TO_REAL, to_solver_smt_ast<cvc_smt_ast>(a)->a),
     a->sort);

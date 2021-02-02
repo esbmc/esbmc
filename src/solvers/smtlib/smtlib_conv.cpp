@@ -1387,7 +1387,7 @@ smt_astt smtlib_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt smtlib_convt::mk_real2int(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == SMT_SORT_REAL);
   smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_REAL2INT);
   ast->args.push_back(a);
   return ast;
@@ -1395,7 +1395,7 @@ smt_astt smtlib_convt::mk_real2int(smt_astt a)
 
 smt_astt smtlib_convt::mk_int2real(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == SMT_SORT_INT);
   smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_INT2REAL);
   ast->args.push_back(a);
   return ast;
