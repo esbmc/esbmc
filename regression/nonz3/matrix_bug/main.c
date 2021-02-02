@@ -1,5 +1,5 @@
-//  Aluno: Fredson Souza da Costa  Matr�cula: 20902628
-//  Verifica��o de propriedades de seguran�a
+//  Aluno: Fredson Souza da Costa  Matrícula: 20902628
+//  Verificação de propriedades de segurança
 //  programa: I) ENCONTRA O MAIOR ELEMENTO EM UMA MATRIZ
 
 #ifdef ESBMC
