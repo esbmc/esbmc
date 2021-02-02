@@ -1,4 +1,5 @@
 set (ESBMC_ENABLE_z3 0)
+set (ESBMC_ENABLE_vampire 0)
 set (ESBMC_ENABLE_minisat 0)
 set (ESBMC_ENABLE_boolector 0)
 set (ESBMC_ENABLE_cvc4 0)
@@ -22,6 +23,7 @@ target_link_libraries(solvers INTERFACE solve smtlib smttuple smtfp smt prop)
 # Logic for each of these are duplicated -- cmake doesn't have indirect function
 # calling, so it's hard to structure it how I want
 add_subdirectory(z3)
+add_subdirectory(vampire)
 add_subdirectory(boolector)
 add_subdirectory(cvc4)
 add_subdirectory(mathsat)

@@ -8,6 +8,7 @@
 
 solver_creator create_new_smtlib_solver;
 solver_creator create_new_z3_solver;
+solver_creator create_new_vampire_solver;
 solver_creator create_new_minisat_solver;
 solver_creator create_new_boolector_solver;
 solver_creator create_new_cvc_solver;
@@ -37,7 +38,7 @@ const struct esbmc_solver_config esbmc_solvers[] = {
 };
 
 const std::string list_of_all_solvers[] =
-  {"z3", "smtlib", "minisat", "boolector", "mathsat", "cvc", "yices"};
+  {"z3", "vampire", "smtlib", "minisat", "boolector", "mathsat", "cvc", "yices"};
 
 const unsigned int total_num_of_solvers =
   sizeof(list_of_all_solvers) / sizeof(std::string);
