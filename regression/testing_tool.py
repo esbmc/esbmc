@@ -240,12 +240,12 @@ def _add_test(test_case, executor):
         matches_regex = True
         for regex in test_case.test_regex:
             match_regex = re.compile(regex, re.MULTILINE)
-            if not match_regex.search(output_to_validate):
+            if not match_regex.search(output_to_validate.replace("\r", "")):
                 matches_regex = False
 
         if (test_case.test_mode in FAIL_MODES) and matches_regex:
             self.fail(error_message_prefix + error_message)
-        elif (test_case.test_mode not in FAIL_MODES) and (not matches_regex):            
+        elif (test_case.test_mode not in FAIL_MODES) and (not matches_regex):
             if RegressionBase.FAIL_WITH_WORD is not None:
                 match_regex = re.compile(RegressionBase.FAIL_WITH_WORD, re.MULTILINE)
                 if match_regex.search(output_to_validate):
@@ -286,7 +286,7 @@ def _arg_parsing():
 
     main_args = parser.parse_args()
 
-    XMLTestCase.CPP_INCLUDE_DIR = main_args.library    
+    XMLTestCase.CPP_INCLUDE_DIR = main_args.library
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
     return main_args.tool, main_args.regression, main_args.mode
 
