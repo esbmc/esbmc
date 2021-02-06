@@ -23,6 +23,9 @@ const struct esbmc_solver_config esbmc_solvers[] = {
 #ifdef MINISAT
   {"minisat", create_new_minisat_solver},
 #endif
+#ifdef VAMPIRE
+  {"vampire", create_new_vampire_solver},
+#endif
 #ifdef BOOLECTOR
   {"boolector", create_new_boolector_solver},
 #endif

@@ -2,6 +2,10 @@
 #define Z3
 #endif
 
+#if @ESBMC_ENABLE_vampire@
+#define VAMPIRE
+#endif
+
 #if @ESBMC_ENABLE_minisat@
 #define MINISAT
 #endif

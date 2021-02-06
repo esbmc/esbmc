@@ -1743,6 +1743,7 @@ void esbmc_parseoptionst::help()
        " --mathsat                    use MathSAT\n"
        " --cvc                        use CVC4\n"
        " --yices                      use Yices\n"
+       " --vampire                    use Vampire\n"
        " --bv                         use solver with bit-vector arithmetic\n"
        " --ir                         use solver with integer/real arithmetic\n"
        " --smtlib                     use SMT lib format\n"

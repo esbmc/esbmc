@@ -30,12 +30,11 @@
 smt_convt *create_new_vampire_solver(
   bool int_encoding,
   const namespacet &ns,
-  tuple_iface **tuple_api,
+  tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
   vampire_convt *conv = new vampire_convt(int_encoding, ns);
-  *tuple_api = static_cast<tuple_iface *>(conv);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
@@ -334,7 +333,29 @@ smt_astt vampire_convt::mk_ge(smt_astt a, smt_astt b)
     a->sort);
 }
 
-smt_astt vampire_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
+smt_astt vampire_convt::mk_eq(smt_astt a, smt_astt b)
+{
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    (solver->equality(
+      to_solver_smt_ast<vampire_smt_ast>(a)->a,
+      to_solver_smt_ast<vampire_smt_ast>(b)->a, true)
+    ),
+    a->sort);
+}
+
+smt_astt vampire_convt::mk_neq(smt_astt a, smt_astt b)
+{
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  return new_ast(
+    (solver->equality(
+      to_solver_smt_ast<vampire_smt_ast>(a)->a,
+      to_solver_smt_ast<vampire_smt_ast>(b)->a, false)
+    ),
+    a->sort);
+}
+
+/*mt_astt vampire_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
 {
   assert(a->sort->id == SMT_SORT_ARRAY);
   assert(a->sort->get_domain_width() == b->sort->get_data_width());
@@ -348,7 +369,7 @@ smt_astt vampire_convt::mk_select(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_ARRAY);
   assert(a->sort->get_domain_width() == b->sort->get_data_width());
   return a;
-}
+}*/
 
 smt_astt vampire_convt::mk_real2int(smt_astt a)
 {
@@ -426,12 +447,19 @@ smt_astt vampire_convt::mk_smt_real(const std::string &str)
   return new_ast(solver->rationalConstant(num, denom), s);
 }
 
+smt_astt vampire_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
+{
+  return new_ast(
+    solver->constant("garbage", solver->sort("rubbish")),
+    s);
+}
+
 smt_astt vampire_convt::mk_smt_bool(bool val)
 {
   return new_ast(solver->boolFormula(val), boolean_sort);
 }
 
-/*smt_astt vampire_convt::mk_array_symbol(
+smt_astt vampire_convt::mk_array_symbol(
   const std::string &name,
   const smt_sort *s,
   smt_sortt array_subtype [[gnu::unused]])
@@ -442,10 +470,10 @@ smt_astt vampire_convt::mk_smt_bool(bool val)
 smt_astt vampire_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   return new_ast(
-    vampire_ctx.constant(name.c_str(), to_solver_smt_sort<vampire::sort>(s)->s), s);
+    solver->constant(name, to_solver_smt_sort<Vampire::Sort>(s)->s), s);
 }
 
-smt_sortt vampire_convt::mk_struct_sort(const type2tc &type)
+/*smt_sortt vampire_convt::mk_struct_sort(const type2tc &type)
 {
   if(is_array_type(type))
   {
@@ -548,22 +576,17 @@ smt_astt vampire_convt::tuple_fresh(const smt_sort *s, std::string name)
 {
   const char *n = (name == "") ? nullptr : name.c_str();
   return new_ast(vampire_ctx.constant(n, to_solver_smt_sort<vampire::sort>(s)->s), s);
-}
+}*/
 
 smt_astt
 vampire_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
-  smt_sortt dom_sort = mk_int_bv_sort(domain_width);
-
-  vampire::expr val = to_solver_smt_ast<vampire_smt_ast>(init_val)->a;
-  vampire::expr output = vampire::to_expr(
-    vampire_ctx,
-    Z3_mk_const_array(vampire_ctx, to_solver_smt_sort<vampire::sort>(dom_sort)->s, val));
-
-  return new_ast(output, mk_array_sort(dom_sort, init_val->sort));
+  return new_ast(
+    solver->constant("garbage", solver->boolSort()),
+    boolean_sort);
 }
 
-smt_astt vampire_convt::tuple_array_create(
+/*smt_astt vampire_convt::tuple_array_create(
   const type2tc &arr_type,
   smt_astt *input_args,
   bool const_array,
@@ -694,19 +717,21 @@ bool vampire_convt::get_bool(smt_astt a)
   return false;
 }
 
-/*BigInt vampire_convt::get_bv(smt_astt a, bool is_signed)
+BigInt vampire_convt::get_bv(smt_astt a, bool is_signed)
 {
-  const vampire_smt_ast *za = to_solver_smt_ast<vampire_smt_ast>(a);
-  vampire::expr e = solver.get_model().eval(za->a, true);
-
-  if(int_encoding)
-    return string2integer(Z3_get_numeral_string(vampire_ctx, e));
-
-  // Not a numeral? Let's not try to convert it
-  return binary2integer(Z3_get_numeral_binary_string(vampire_ctx, e), is_signed);
+  return 1000;
 }
 
-ieee_floatt vampire_convt::get_fpbv(smt_astt a)
+expr2tc vampire_convt::get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  return gen_zero(subtype);
+}
+
+
+/*ieee_floatt vampire_convt::get_fpbv(smt_astt a)
 {
   const vampire_smt_ast *za = to_solver_smt_ast<vampire_smt_ast>(a);
   vampire::expr e = solver.get_model().eval(za->a, true);
@@ -791,17 +816,17 @@ smt_sortt vampire_convt::mk_int_sort()
 }
 
 
-/*smt_sortt vampire_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
+smt_sortt vampire_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  auto domain_sort = to_solver_smt_sort<vampire::sort>(domain);
-  auto range_sort = to_solver_smt_sort<vampire::sort>(range);
+  auto domain_sort = to_solver_smt_sort<Vampire::Sort>(domain);
+  auto range_sort = to_solver_smt_sort<Vampire::Sort>(range);
 
-  auto t = vampire_ctx.array_sort(domain_sort->s, range_sort->s);
-  return new solver_smt_sort<vampire::sort>(
+  auto t = solver->arraySort(domain_sort->s, range_sort->s);
+  return new solver_smt_sort<Vampire::Sort>(
     SMT_SORT_ARRAY, t, domain->get_data_width(), range);
 }
 
-smt_astt vampire_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
+/*smt_astt vampire_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 {
   return new_ast(
     vampire::to_expr(

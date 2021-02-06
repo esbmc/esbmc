@@ -11,10 +11,10 @@ endif()
 if(ENABLE_VAMPIRE)
     find_library(VAMPIRE_LIB vampire HINTS ${Vampire_DIR} $ENV{HOME}/vampire_code_test PATH_SUFFIXES lib bin)
 
-    find_path(VAMPIRE_INCLUDE_DIRS1 Solver.hpp HINTS ${Vampire_DIR}/../Api $ENV{HOME}/vampire_code_test PATH_SUFFIXES include)
+    find_path(VAMPIRE_INCLUDE_DIRS Solver.hpp HINTS ${Vampire_DIR}/../Api $ENV{HOME}/vampire_code_test PATH_SUFFIXES include)
 
 
-    if(VAMPIRE_INCLUDE_DIRS1 STREQUAL "VAMPIRE_INCLUDE_DIRS-NOTFOUND")
+    if(VAMPIRE_INCLUDE_DIRS STREQUAL "VAMPIRE_INCLUDE_DIRS-NOTFOUND")
         message(FATAL_ERROR "Could not find vampire include headers, please check Vampire_DIR")
     endif()
 
@@ -22,10 +22,19 @@ if(ENABLE_VAMPIRE)
         message(FATAL_ERROR "Could not find libvampire, please check Vampire_DIR")
     endif() 
 
+    try_run(VAMPIRE_RUNS VAMPIRE_COMPILES ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/try_vampire.cpp
+            CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${VAMPIRE_INCLUDE_DIRS}
+            LINK_LIBRARIES ${VAMPIRE_LIB}
+            COMPILE_OUTPUT_VARIABLE VAMPIRECOMPILESTR
+            RUN_OUTPUT_VARIABLE RUN_OUTPUT)
+
+    if(NOT VAMPIRE_COMPILES)
+        message(FATAL_ERROR "Could not use Vampire: \n${VAMPIRECOMPILESTR}")
+    endif()
+
     add_library(solvervamp vampire_conv.cpp)
     target_include_directories(solvervamp
-            PRIVATE ${VAMPIRE_INCLUDE_DIRS1}
-            PRIVATE ${VAMPIRE_INCLUDE_DIRS2}
+            PRIVATE ${VAMPIRE_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
     if (BUILD_STATIC)
@@ -37,5 +46,7 @@ if(ENABLE_VAMPIRE)
     target_link_libraries(solvers INTERFACE solvervamp)
     
     set(ESBMC_ENABLE_vampire 1 PARENT_SCOPE)
+    message(${ESBMC_AVAILABLE_SOLVERS})
     set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} vampire" PARENT_SCOPE)
+    message(${ESBMC_AVAILABLE_SOLVERS})
 endif()
