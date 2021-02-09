@@ -1,4 +1,8 @@
 CORE
 main.c
+<<<<<<< HEAD:regression/clang_builtins/constant_p_call_1_true/test.desc
 
+=======
+--32
+>>>>>>> master:regression/llvm/static_assert_fail/test.desc
 ^VERIFICATION SUCCESSFUL$
