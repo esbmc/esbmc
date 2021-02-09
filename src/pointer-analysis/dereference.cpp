@@ -1796,10 +1796,12 @@ void dereferencet::stitch_together_from_byte_array(
   }
 
   // That's going to come out as a bitvector; cast by bit-representation
-  if(!is_array_type(type) && type != accuml->type)
+  if(type != accuml->type)
   {
-    //assert(type->get_width() == accuml->type->get_width());
-    accuml = bitcast2tc(type, accuml);
+    if(!is_array_type(type))
+      accuml = bitcast2tc(type, accuml);
+    else
+      return;
   }
 
   value = accuml;
