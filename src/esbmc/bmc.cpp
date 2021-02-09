@@ -147,8 +147,8 @@ void bmct::error_trace(
     /* fallthrough */
 
   case ui_message_handlert::PLAIN:
-    //std::cout << std::endl << "Counterexample:" << std::endl;
-    //show_goto_trace(std::cout, ns, goto_trace);
+    std::cout << std::endl << "Counterexample:" << std::endl;
+    show_goto_trace(std::cout, ns, goto_trace);
     break;
 
   case ui_message_handlert::OLD_GUI:
