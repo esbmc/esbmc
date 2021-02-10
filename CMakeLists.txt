@@ -34,6 +34,7 @@ include(CheckIncludeFile)
 check_include_file(unistd.h HAVE_UNISTD)
 
 include(Utils)
+include(OSConfiguration)
 include(Options)
 include(SendFileHack)
 include(AppleConfiguration)
@@ -91,6 +92,8 @@ if(ENABLE_OLD_FRONTEND)
 endif()
 
 add_subdirectory(src)
+
+include(Irep2Optimization)
 
 # Generate ac_config.h. This must be generated after solvers
 configure_file (

@@ -6,8 +6,9 @@
 #include <smtlib.hpp>
 #include <smtlib_tok.hpp>
 #include <sstream>
+#ifndef _WIN32
 #include <unistd.h>
-
+#endif
 const std::string smtlib_convt::smt_func_name_table[expr2t::end_expr_id] = {
   "hack_func_id",
   "invalid_func_id",
@@ -139,7 +140,6 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
     in_stream = nullptr;
     solver_name = "Text output";
     solver_version = "";
-    solver_proc_pid = 0;
 
     fprintf(out_stream, "(set-logic %s)\n", logic.c_str());
     fprintf(out_stream, "(set-info :status unknown)\n");
@@ -160,7 +160,11 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
               << std::endl;
     abort();
   }
-
+#ifdef _WIN32
+  // TODO: The current implementation uses UNIX Process
+  std::cerr << "smtlib works only in unix systems\n";
+  abort();
+#else
   if(pipe(inpipe) != 0)
   {
     std::cerr << "Couldn't open a pipe for smtlib solver" << std::endl;
@@ -173,7 +177,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
     abort();
   }
 
-  solver_proc_pid = fork();
+  pid_t solver_proc_pid = fork();
   if(solver_proc_pid == 0)
   {
     close(outpipe[1]);
@@ -197,7 +201,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
     out_stream = fdopen(outpipe[1], "w");
     in_stream = fdopen(inpipe[0], "r");
   }
-
+#endif
   // Execution continues as the parent ESBMC process. Child dying will
   // trigger SIGPIPE or an EOF eventually, which we'll be able to detect
   // and crash upon.
@@ -1387,7 +1391,7 @@ smt_astt smtlib_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt smtlib_convt::mk_real2int(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == SMT_SORT_REAL);
   smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_REAL2INT);
   ast->args.push_back(a);
   return ast;
@@ -1395,7 +1399,7 @@ smt_astt smtlib_convt::mk_real2int(smt_astt a)
 
 smt_astt smtlib_convt::mk_int2real(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == SMT_SORT_INT);
   smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_INT2REAL);
   ast->args.push_back(a);
   return ast;

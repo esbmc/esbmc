@@ -6,13 +6,13 @@
 name: Lint Code Base
 on: [push, pull_request]
 jobs:
-  super-linter:    
+  super-linter:
     name: Apply super-linter
     runs-on: ubuntu-20.04
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v2      
+        uses: actions/checkout@v2
       - name: Lint Code Base
         uses: docker://github/super-linter:v2.1.1
         env:
@@ -25,11 +25,11 @@ jobs:
           DISABLE_ERRORS: true # TODO: Eventually this will be removed
 
 # Check project with clang-format
-  code-style:  
+  code-style:
     name: Check C/C++ code-style
     runs-on: ubuntu-20.04
-    steps:      
-    - uses: actions/checkout@v1    
+    steps:
+    - uses: actions/checkout@v1
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install libtinfo-dev
     - name: Download Clang 11
@@ -38,16 +38,16 @@ jobs:
       run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
     - name: Run clang-format (src)
       run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/ansi-c/cpp | grep -v src/clang-c-frontend/headers/ | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
-    - name: Run clang-format (tests)  
+    - name: Run clang-format (tests)
       run: find unit -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh  | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
     - name: Throws error if changes were made
-      run: git diff --exit-code
+      run: git diff --exit-code --ignore-cr-at-eol
 
-  cmake-lint:  
+  cmake-lint:
     name: Check CMake modules
     runs-on: ubuntu-20.04
     continue-on-error: true # TODO: Eventually this will be removed
-    steps:      
+    steps:
     - uses: actions/checkout@v1
     - name: Set up Python 3.8
       uses: actions/setup-python@v2

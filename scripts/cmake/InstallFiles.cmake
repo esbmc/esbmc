@@ -20,3 +20,8 @@ install(DIRECTORY scripts/licenses/ DESTINATION license)
 # EXTRA
 install(FILES scripts/README DESTINATION .)
 install(FILES scripts/release-notes.txt DESTINATION .)
+
+# Hack to ship boost dll's if needed
+if(DEFINED BOOST_DLL_FILE)
+  install(FILES ${BOOST_DLL_FILE} DESTINATION bin)
+endif()

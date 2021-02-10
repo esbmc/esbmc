@@ -74,11 +74,14 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
   else if(type_id == "union")
   {
     union_exprt new_result(type);
-    new_result.set_component_name(
-      to_union_type(type).components().begin()->name());
+    if(to_union_type(type).components().size() > 0)
+    {
+      new_result.set_component_name(
+        to_union_type(type).components().begin()->name());
 
-    new_result.copy_to_operands(gen_zero(
-      to_union_type(type).components().begin()->type(), array_as_array_of));
+      new_result.copy_to_operands(gen_zero(
+        to_union_type(type).components().begin()->type(), array_as_array_of));
+    }
 
     result = new_result;
   }
