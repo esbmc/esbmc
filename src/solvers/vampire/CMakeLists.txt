@@ -46,7 +46,5 @@ if(ENABLE_VAMPIRE)
     target_link_libraries(solvers INTERFACE solvervamp)
     
     set(ESBMC_ENABLE_vampire 1 PARENT_SCOPE)
-    message(${ESBMC_AVAILABLE_SOLVERS})
     set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} vampire" PARENT_SCOPE)
-    message(${ESBMC_AVAILABLE_SOLVERS})
 endif()

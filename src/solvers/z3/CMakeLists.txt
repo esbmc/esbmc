@@ -5,7 +5,7 @@ if(DEFINED Z3_DIR)
 endif()
 
 if(EXISTS $ENV{HOME}/z3)
-    set(ENABLE_Z3 ON)
+#    set(ENABLE_Z3 ON)
 endif()
 
 
