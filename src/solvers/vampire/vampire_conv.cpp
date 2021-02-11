@@ -812,7 +812,7 @@ smt_sortt vampire_convt::mk_real_sort()
 
 smt_sortt vampire_convt::mk_int_sort()
 {
-  return new solver_smt_sort<Vampire::Sort>(SMT_SORT_INT, solver->rationalSort());
+  return new solver_smt_sort<Vampire::Sort>(SMT_SORT_INT, solver->integerSort());
 }
 
 
