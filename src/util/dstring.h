@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define DSTRING_H
 
 #include <iostream>
+#include <algorithm>
 #include <util/string_container.h>
 
 class dstring final
@@ -126,6 +127,17 @@ public:
     if(no == b.no)
       return 0; // equal
     return as_string().compare(b.as_string());
+  }
+
+  int compare_uppercase(const dstring &b) const
+  {
+    if(no == b.no)
+      return 0; // equal
+    return std::equal(
+      as_string().begin(),
+      as_string().end(),
+      b.as_string().begin(),
+      [](char a, char b) { return toupper(a) == toupper(b); });
   }
 
   // the reference returned is guaranteed to be stable
