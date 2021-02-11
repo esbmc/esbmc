@@ -237,6 +237,13 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       {
         // ignore
       }
+#ifdef _WIN32
+      // Windows is not case-sensitive
+      else if(in_context.module.compare_uppercase(new_symbol.module))
+      {
+        // ignore
+      }
+#endif
       else
       {
         err_location(new_symbol.location);
