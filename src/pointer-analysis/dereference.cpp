@@ -815,7 +815,14 @@ void dereferencet::build_reference_rec(
   else if(is_scalar_type(type))
     flags |= flag_dst_scalar;
   else if(is_array_type(type) || is_string_type(type))
+  {
+    // Check size
+    const array_type2t &arr_type = to_array_type(type);
+    const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
+    if(!thesize.value.to_uint64())
+      return;
     flags |= flag_dst_union; // Hack because unions are arrays
+  }
   else
   {
     std::cerr << "Unrecognized dest type during dereference" << std::endl;
@@ -1802,7 +1809,6 @@ void dereferencet::stitch_together_from_byte_array(
     //assert(type->get_width() == accuml->type->get_width());
     if(is_array_type(type))
       return;
-
     accuml = bitcast2tc(type, accuml);
   }
 
