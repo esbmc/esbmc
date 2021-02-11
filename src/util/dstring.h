@@ -133,10 +133,11 @@ public:
   {
     if(no == b.no)
       return 0; // equal
-    return std::equal(as_string().begin(), 
-        as_string().end(), b.as_string().begin(), 
-        [](char a, char b) { return toupper(a) == toupper(b);
-    });
+    return std::equal(
+      as_string().begin(),
+      as_string().end(),
+      b.as_string().begin(),
+      [](char a, char b) { return toupper(a) == toupper(b); });
   }
 
   // the reference returned is guaranteed to be stable
