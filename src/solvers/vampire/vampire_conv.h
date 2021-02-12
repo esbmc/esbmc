@@ -70,8 +70,8 @@ public:
   smt_astt mk_ge(smt_astt a, smt_astt b) override;
   smt_astt mk_eq(smt_astt a, smt_astt b) override;
   smt_astt mk_neq(smt_astt a, smt_astt b) override;
- // smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c) override;
- // smt_astt mk_select(smt_astt a, smt_astt b) override;
+  smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c) override;
+  smt_astt mk_select(smt_astt a, smt_astt b) override;
   smt_astt mk_real2int(smt_astt a) override;
   smt_astt mk_int2real(smt_astt a) override;
   smt_astt mk_isint(smt_astt a) override;
@@ -120,11 +120,9 @@ public:
 
   const std::string solver_text() override
   {
-    /*unsigned int major, minor, build, revision;
-    vampire_get_version(&major, &minor, &build, &revision);
     std::stringstream ss;
-    ss << "vampire v" << major << "." << minor << "." << build;*/
-    return "DUMMY VAMPIRE TEST";
+    ss << "Vampire v" << solver->version() << " commit: " << solver->commit();
+    return ss.str();
   }
 
   void dump_smt() override;
