@@ -89,6 +89,9 @@ const struct opt_templ esbmc_options[] = {
   {0, "falsification", switc, ""},
   {0, "termination", switc, ""},
 
+  // Caching
+  {0, "enable-caching", switc, ""},
+
   // Solver
   {0, "list-solvers", switc, ""},
   {0, "boolector", switc, ""},

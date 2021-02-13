@@ -40,6 +40,14 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
+#include <cache/cache.h>
+
+namespace
+{
+std::shared_ptr<ssa_step_algorithm> cache;
+ssa_set_container unsat_container;
+} // namespace
+
 
 bmct::bmct(
   goto_functionst &funcs,
@@ -227,6 +235,16 @@ smt_convt::resultt bmct::run_decision_procedure(
   output_time(sat_stop - sat_start, str);
   str << "s";
   status(str.str());
+
+  if(dec_result == smt_convt::P_UNSATISFIABLE)
+  {
+    if(options.get_bool_option("enable-caching"))
+    {
+      std::shared_ptr<green_cache> result_cache;
+      result_cache = std::dynamic_pointer_cast<green_cache>(cache);
+      result_cache->mark_ssa_as_unsat();
+    }
+  }
 
   return dec_result;
 }
@@ -734,6 +752,13 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       str << result->remaining_claims << " remaining after simplification ";
       str << "(" << BigInt(eq->SSA_steps.size()) - ignored << " assignments)";
       status(str.str());
+    }
+
+    if(options.get_bool_option("enable-caching"))
+    {
+        cache = std::make_shared<green_cache>(eq->SSA_steps, unsat_container);
+        cache->run();
+        std::cout << "Got " << unsat_container.get_hits() << " hits" << std::endl;
     }
 
     if(options.get_bool_option("document-subgoals"))
