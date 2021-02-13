@@ -17,7 +17,6 @@ void green_cache::canonize_expr(expr2tc &expr)
     expr_green_normal_form gnf(expr);
     //gnf.run();
   }
-
 }
 
 void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
@@ -102,7 +101,7 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
 }
 
 void green_cache::parse_implication_guard(
-      const expr2tc &expr,
+  const expr2tc &expr,
   crc_expr &inner_items)
 {
   if(expr->expr_id == expr2t::expr_ids::and_id)
