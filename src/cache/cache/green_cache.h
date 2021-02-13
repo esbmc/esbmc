@@ -30,7 +30,6 @@
 class green_cache : public ssa_step_algorithm_hidden
 {
 public:
-
   green_cache(
     symex_target_equationt::SSA_stepst &steps,
     ssa_set_container &unsat_container,

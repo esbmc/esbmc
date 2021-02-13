@@ -35,7 +35,7 @@ crc_hash_function f1([](const guards_crc &t) {
   {
     value += i;
   }
-  return (size_t) value;
+  return (size_t)value;
 });
 
 const crc_hash_function f2([](const guards_crc &t) {

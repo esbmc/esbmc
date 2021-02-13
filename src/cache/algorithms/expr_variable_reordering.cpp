@@ -6,8 +6,9 @@
 
 namespace
 {
-std::array<expr2t::expr_ids, 2> binary_operations = {expr2t::expr_ids::add_id,
-                                                     expr2t::expr_ids::mul_id};
+std::array<expr2t::expr_ids, 2> binary_operations = {
+  expr2t::expr_ids::add_id,
+  expr2t::expr_ids::mul_id};
 
 std::array<expr2t::expr_ids, 6> relations = {
   expr2t::expr_ids::equality_id,
@@ -126,7 +127,8 @@ void expr_variable_reordering::run_on_negation(expr2tc &expr) noexcept
     assert(arith);
     expr_variable_reordering inner(arith->value);
     inner.run();
-  } else if(expr->expr_id == expr2t::expr_ids::not_id)
+  }
+  else if(expr->expr_id == expr2t::expr_ids::not_id)
   {
     std::shared_ptr<bool_1op> arith;
     arith = std::dynamic_pointer_cast<bool_1op>(expr);
@@ -134,7 +136,6 @@ void expr_variable_reordering::run_on_negation(expr2tc &expr) noexcept
     assert(arith);
     expr_variable_reordering inner(arith->value);
     inner.run();
-
   }
 }
 
@@ -154,7 +155,7 @@ void expr_variable_reordering::run_on_relation(expr2tc &expr) noexcept
 }
 
 inline void expr_variable_reordering::transverse_read_binop(
-    const std::shared_ptr<arith_2ops> op,
+  const std::shared_ptr<arith_2ops> op,
   expr_variable_reordering::symbols_vec &symbols,
   expr_variable_reordering::values_vec &values)
 {
@@ -249,7 +250,7 @@ void expr_variable_reordering::replace_value(
   auto side_expr = is_lhs ? op->side_1 : op->side_2;
   auto expr_type = get_expr_type(side_expr);
   bool should_change =
-  expr_type == PARSE_AS::SYMBOL || expr_type == PARSE_AS::CONSTANT;
+    expr_type == PARSE_AS::SYMBOL || expr_type == PARSE_AS::CONSTANT;
 
   if(should_change)
   {
