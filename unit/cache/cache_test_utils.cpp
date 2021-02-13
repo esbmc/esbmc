@@ -72,7 +72,6 @@ not2tc create_not_expr(expr2tc &value)
   return expression;
 }
 
-
 add2tc create_signed_32_add_expr(expr2tc &side1, expr2tc &side2)
 {
   signedbv_type2tc type(32);
