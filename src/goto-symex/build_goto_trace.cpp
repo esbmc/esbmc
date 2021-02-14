@@ -52,13 +52,14 @@ expr2tc build_rhs(std::shared_ptr<smt_convt> &smt_conv, const expr2tc &rhs)
 void build_goto_trace(
   const std::shared_ptr<symex_target_equationt> &target,
   std::shared_ptr<smt_convt> &smt_conv,
-  goto_tracet &goto_trace)
+  goto_tracet &goto_trace,
+  const bool &is_compact_trace)
 {
   unsigned step_nr = 0;
 
   for(auto const &SSA_step : target->SSA_steps)
   {
-    if(SSA_step.hidden)
+    if(SSA_step.hidden && is_compact_trace)
       continue;
 
     if(!smt_conv->l_get(SSA_step.guard_ast).is_true())
