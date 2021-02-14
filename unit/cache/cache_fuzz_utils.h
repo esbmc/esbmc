@@ -32,7 +32,7 @@ public:
     is_valid = is_valid_input();
   }
 
-  const bool is_expr_valid()
+  bool is_expr_valid() const
   {
     return is_valid;
   }
@@ -85,12 +85,12 @@ private:
   relation expr_relation = relation::EQUAL;
   binary_operation expr_binop = binary_operation::ADD;
 
-  static inline relation relation_from_unsigned(unsigned t)
+  static inline relation relation_from_unsigned(unsigned)
   {
     // TODO: support all relations
     return relation::EQUAL;
   }
-  static inline binary_operation binop_from_unsigned(unsigned t)
+  static inline binary_operation binop_from_unsigned(unsigned)
   {
     // TODO: support all binary operations
     return binary_operation::ADD;
@@ -145,11 +145,11 @@ public:
     std::vector<char> lhs,
     std::vector<char> rhs);
 
-  const relation get_relation()
+  relation get_relation() const
   {
     return expr_relation;
   }
-  const binary_operation get_binop()
+  binary_operation get_binop() const
   {
     return expr_binop;
   }

@@ -171,8 +171,6 @@ BOOST_AUTO_TEST_CASE(not_b_add_a_should_become_a_add_b)
   BOOST_TEST(is_symbols_equal(add->side_1, b));
   BOOST_TEST(is_symbols_equal(add->side_2, a));
 
-  auto crc = add->crc();
-
   expr_variable_reordering algorithm(neg);
   algorithm.run();
 
@@ -196,8 +194,6 @@ BOOST_AUTO_TEST_CASE(neg_b_add_a_should__become_a_add_b)
   // Check if object is created as expected
   BOOST_TEST(is_symbols_equal(add->side_1, b));
   BOOST_TEST(is_symbols_equal(add->side_2, a));
-
-  auto crc = add->crc();
 
   expr_variable_reordering algorithm(neg);
   algorithm.run();
