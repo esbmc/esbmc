@@ -22,8 +22,8 @@ expr2tc expr_generator_fuzzer::convert_input_to_expression()
 }
 
 expr2tc expr_generator_fuzzer::get_correct_expression(
-  expr_generator_fuzzer::relation expr_relation,
-  expr_generator_fuzzer::binary_operation binop,
+  expr_generator_fuzzer::relation,
+  expr_generator_fuzzer::binary_operation,
   std::vector<char> lhs,
   std::vector<char> rhs)
 {
@@ -32,7 +32,7 @@ expr2tc expr_generator_fuzzer::get_correct_expression(
 
 expr2tc expr_generator_fuzzer::convert_char_vector_to_expression(
   std::vector<char> entries,
-  expr_generator_fuzzer::binary_operation binop)
+  expr_generator_fuzzer::binary_operation)
 {
   assert(entries.size() != 0);
 
@@ -64,7 +64,7 @@ expr2tc expr_generator_fuzzer::convert_char_vector_to_expression(
   add2tc result = create_unsigned_32_add_expr(first, second);
 
   // Fold like algorithm applying the binary operation
-  for(int i = 2; i < entries.size(); i++)
+  for(size_t i = 2; i < entries.size(); i++)
   {
     symbol2tc rhs = create_unsigned_32_symbol_expr(std::string(1, entries[i]));
 
@@ -126,7 +126,7 @@ bool expr_generator_fuzzer::is_valid_input()
 
   // The LHS begins after the binary operation and goes until a '%' is found
   // it must contain at least one symbol.
-  for(int i = 2; i < data.size(); i++)
+  for(size_t i = 2; i < data.size(); i++)
   {
     char buf = data[i];
     if(buf == '%')
@@ -146,7 +146,7 @@ bool expr_generator_fuzzer::is_valid_input()
   // Parse RHS
 
   // For RHS we only need to parse the rest of the string.
-  for(int i = rhs_index; i < data.size(); i++)
+  for(size_t i = rhs_index; i < data.size(); i++)
   {
     char buf = data[i];
     rhs_names.push_back(convert_char_to_letter(buf));
