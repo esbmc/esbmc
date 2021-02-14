@@ -499,7 +499,8 @@ void value_sett::get_value_set_rec(
       return;
     }
   }
-  else if(is_add2t(expr) || is_sub2t(expr))
+
+  if(is_add2t(expr) || is_sub2t(expr))
   {
     // Consider pointer arithmetic. This takes takes the form of finding the
     // value sets of the operands, then speculating on how the addition /
@@ -984,8 +985,10 @@ void value_sett::assign(
         assign(lhs_member, rhs_member, add_to_sets);
       }
     }
+    return;
   }
-  else if(is_array_type(lhs_type))
+
+  if(is_array_type(lhs_type))
   {
     const array_type2t &arr_type = to_array_type(lhs_type);
     unknown2tc unknown(index_type2());
@@ -1030,14 +1033,13 @@ void value_sett::assign(
         assign(lhs_index, rhs_idx, true);
       }
     }
+    return;
   }
-  else
-  {
-    // basic type
-    object_mapt values_rhs;
-    get_value_set(rhs, values_rhs);
-    assign_rec(lhs, values_rhs, "", add_to_sets);
-  }
+
+  // basic type
+  object_mapt values_rhs;
+  get_value_set(rhs, values_rhs);
+  assign_rec(lhs, values_rhs, "", add_to_sets);
 }
 
 void value_sett::do_free(const expr2tc &op)
