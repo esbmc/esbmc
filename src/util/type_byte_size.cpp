@@ -14,93 +14,29 @@
 #include <util/std_types.h>
 #include <util/type_byte_size.h>
 
-static inline void round_up_to_word(BigInt &mp)
-{
-  const unsigned int word_bytes = config.ansi_c.word_size / 8;
-  const unsigned int align_mask = word_bytes - 1;
-
-  if(mp == 0)
-    return;
-
-  if(mp < word_bytes)
-  {
-    mp = BigInt(word_bytes);
-    // Or if it's an array of chars etc. that doesn't end on a boundry,
-  }
-  else if(mp.to_uint64() & align_mask)
-  {
-    mp += word_bytes - (mp.to_uint64() & align_mask);
-  }
-}
-
-static inline void round_up_to_int64(BigInt &mp)
-{
-  const unsigned int word_bytes = 8;
-  const unsigned int align_mask = 7;
-
-  if(mp == 0)
-    return;
-
-  if(mp < word_bytes)
-  {
-    mp = BigInt(word_bytes);
-    // Or if it's an array of chars etc. that doesn't end on a boundry,
-  }
-  else if(mp.to_uint64() & align_mask)
-  {
-    mp += word_bytes - (mp.to_uint64() & align_mask);
-  }
-}
-
 BigInt member_offset(const type2tc &type, const irep_idt &member)
 {
   BigInt result = 0;
-  unsigned idx = 0;
 
   // empty union generate an array
   if(!is_struct_type(type))
     return result;
-  const struct_type2t &thetype = to_struct_type(type);
 
+  const struct_type2t &thetype = to_struct_type(type);
+  unsigned idx = 0;
   for(auto const &it : thetype.members)
   {
-    // If the current field is 64 bits, and we're on a 32 bit machine, then we
-    // _must_ round up to 64 bits now. No early padding in packed mode though.
-    if(!thetype.packed)
-    {
-      if(
-        is_scalar_type(it) && !is_code_type(it) && (it)->get_width() > 32 &&
-        config.ansi_c.word_size == 32)
-        round_up_to_int64(result);
-
-      if(is_structure_type(it))
-        round_up_to_int64(result);
-
-      // Unions are now being converted to arrays: conservatively round up
-      // all array alignment to 64 bits. This is because we can't easily
-      // work out whether someone is going to store a double into it.
-      if(is_array_type(it))
-        round_up_to_int64(result);
-    }
-
     if(thetype.member_names[idx] == member.as_string())
       break;
 
     // XXX 100% unhandled: bitfields.
-
-    BigInt sub_size = type_byte_size(it);
-    // Handle padding: we need to observe the usual struct constraints.
-    if(!thetype.packed)
-      round_up_to_word(sub_size);
-
-    result += sub_size;
+    result += type_byte_size(it);
     idx++;
   }
 
   assert(
     idx != thetype.members.size() &&
-    "Attempted to find member offset of "
-    "member not in a struct");
+    "Attempted to find member offset of member not in a struct");
 
   return result;
 }
@@ -126,28 +62,35 @@ BigInt type_byte_size(const type2tc &type)
   case type2t::bool_id:
   case type2t::empty_id:
     return 1;
+
   case type2t::code_id:
     return 1;
+
   case type2t::symbol_id:
     std::cerr << "Symbolic type id in type_byte_size" << std::endl;
     type->dump();
     abort();
+
   case type2t::cpp_name_id:
     std::cerr << "C++ symbolic type id in type_byte_size" << std::endl;
     type->dump();
     abort();
+
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
     return BigInt(type->get_width() / 8);
+
   case type2t::pointer_id:
     return BigInt(config.ansi_c.pointer_width / 8);
+
   case type2t::string_id:
   {
     const string_type2t &t2 = to_string_type(type);
     return BigInt(t2.width);
   }
+
   case type2t::array_id:
   {
     // Array width is the subtype width, rounded up to whatever alignment is
@@ -176,6 +119,7 @@ BigInt type_byte_size(const type2tc &type)
     const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
     return subsize * arrsize_int.value;
   }
+
   case type2t::struct_id:
   {
     // Compute the size of all members of this struct, and add padding bytes
@@ -185,36 +129,7 @@ BigInt type_byte_size(const type2tc &type)
     const struct_type2t &t2 = to_struct_type(type);
     BigInt accumulated_size(0);
     for(auto const &it : t2.members)
-    {
-      if(!t2.packed)
-      {
-        // If the current field is 64 bits, and we're on a 32 bit machine, then
-        // we _must_ round up to 64 bits now. Also guard against symbolic types
-        // as operands.
-        if(
-          is_scalar_type(it) && !is_code_type(it) && (it)->get_width() > 32 &&
-          config.ansi_c.word_size == 32)
-          round_up_to_int64(accumulated_size);
-
-        // While we're at it, round any struct/union up to 64 bit alignment too,
-        // as that might require such alignment due to internal doubles.
-        if(is_structure_type(it))
-          round_up_to_int64(accumulated_size);
-
-        // Unions are now being converted to arrays: conservatively round up
-        // all array alignment to 64 bits. This is because we can't easily
-        // work out whether someone is going to store a double into it.
-        if(is_array_type(it))
-          round_up_to_int64(accumulated_size);
-      }
-
-      BigInt memb_size = type_byte_size(it);
-
-      if(!t2.packed)
-        round_up_to_word(memb_size);
-
-      accumulated_size += memb_size;
-    }
+      accumulated_size += type_byte_size(it);
 
     // At the end of that, the tests above should have rounded accumulated size
     // up to a size that contains the required trailing padding for array
@@ -223,6 +138,7 @@ BigInt type_byte_size(const type2tc &type)
       t2.packed || ((accumulated_size % (config.ansi_c.word_size / 8)) == 0));
     return accumulated_size;
   }
+
   case type2t::union_id:
   {
     // Very simple: the largest field size, rounded up to a word boundry for
@@ -230,14 +146,10 @@ BigInt type_byte_size(const type2tc &type)
     const union_type2t &t2 = to_union_type(type);
     BigInt max_size(0);
     for(auto const &it : t2.members)
-    {
-      BigInt memb_size = type_byte_size(it);
-      max_size = std::max(max_size, memb_size);
-    }
-
-    round_up_to_word(max_size);
+      max_size = std::max(max_size, type_byte_size(it));
     return max_size;
   }
+
   default:
     std::cerr << "Unrecognised type in type_byte_size:" << std::endl;
     type->dump();
