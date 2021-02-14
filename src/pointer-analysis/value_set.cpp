@@ -120,7 +120,7 @@ expr2tc value_sett::to_expr(object_mapt::const_iterator it) const
 
   expr2tc offs;
   if(it->second.offset_is_set)
-    offs = constant_int2tc(index_type2(), it->second.offset);
+    offs = gen_ulong(it->second.offset.to_int64());
   else
     offs = unknown2tc(index_type2());
 
