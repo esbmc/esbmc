@@ -349,6 +349,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
       dereference(deref.value, to_type, guard, mode, offset_to_scalar);
     return result;
   }
+
   if(is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
   {
     index2t &index = to_index2t(expr);
@@ -369,7 +370,8 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     expr2tc result = dereference(tmp, to_type, guard, mode, offset_to_scalar);
     return result;
   }
-  else if(is_non_scalar_expr(expr))
+
+  if(is_non_scalar_expr(expr))
   {
     expr2tc res;
     if(is_member2t(expr))
@@ -422,22 +424,20 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
     return res;
   }
-  else if(is_typecast2t(expr))
+
+  if(is_typecast2t(expr))
   {
     // Just blast straight through
     return dereference_expr_nonscalar(
       to_typecast2t(expr).from, guard, mode, scalar_step_list);
   }
-  else
-  {
-    // This should end up being either a constant or a symbol; either way
-    // there should be no sudden transition back to scalars, except through
-    // dereferences. Return nil to indicate that there was no dereference at
-    // the bottom of this.
-    assert(
-      !is_scalar_type(expr) && (is_constant_expr(expr) || is_symbol2t(expr)));
-    return expr2tc();
-  }
+
+  // there should be no sudden transition back to scalars, except through
+  // dereferences. Return nil to indicate that there was no dereference at
+  // the bottom of this.
+  assert(
+    !is_scalar_type(expr) && (is_constant_expr(expr) || is_symbol2t(expr)));
+  return expr2tc();
 }
 
 /********************** Intermediate reference munging code *******************/
@@ -1557,6 +1557,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       index, new_offset, type, range_guard, mode, output);
     return;
   }
+
   if(is_struct_type(value->type))
   {
     // OK. If this type is compatible and matches, we're good. There can't
@@ -1603,8 +1604,10 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
         memb, new_offset, type, range_guard, mode, output);
       i++;
     }
+    return;
   }
-  else if(
+
+  if(
     is_array_type(value->type) &&
     get_base_array_subtype(value->type)->get_width() == 8)
   {
@@ -1642,10 +1645,6 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     // We now have a vector of fields reconstructed from the byte array
     constant_struct2tc the_struct(type, fields);
     output.emplace_back(accuml_guard, the_struct);
-  }
-  else
-  {
-    // Not legal
     return;
   }
 }
