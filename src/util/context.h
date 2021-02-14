@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <functional>
 #include <iostream>
 #include <map>
+#include <util/config.h>
 #include <util/symbol.h>
 #include <util/type.h>
 
@@ -53,7 +54,7 @@ public:
     ordered_symbols.clear();
   }
 
-  void dump() const;
+  DUMP_METHOD void dump() const;
 
   void swap(contextt &other)
   {
