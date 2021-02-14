@@ -381,6 +381,7 @@ public:
       old.offset_alignment = std::min(old_align, new_align);
       return true;
     }
+
     if(!old.offset_is_set)
     {
       unsigned int oldalign = old.offset_alignment;
