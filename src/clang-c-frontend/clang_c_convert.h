@@ -62,11 +62,6 @@ protected:
 
   const clang::FunctionDecl *current_functionDecl;
 
-  typedef std::map<std::size_t, std::string> type_mapt;
-  type_mapt type_map;
-
-  void dump_type_map();
-
   bool convert_builtin_types();
   bool convert_top_level_decl();
 
@@ -162,9 +157,6 @@ protected:
   bool convert_float_literal(
     const clang::FloatingLiteral &floating_literal,
     exprt &dest);
-
-  bool
-  search_add_type_map(const clang::TagDecl &tag, type_mapt::iterator &type_it);
 
   const clang::Decl *get_DeclContext_from_Stmt(const clang::Stmt &stmt);
 
