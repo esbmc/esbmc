@@ -113,9 +113,9 @@ class CTest4(ParseTest):
 
     def setUp(self):
         self.test_case: CTestCase = CTestCase(
-            "./esbmc/29_exStbHwAcc", "29_exStbHwAcc")
+            "./nonz3/29_exStbHwAcc", "29_exStbHwAcc")
         self.test_parsed: CTestCase = TestParser.from_file(
-            "./esbmc/29_exStbHwAcc", "29_exStbHwAcc")
+            "./nonz3/29_exStbHwAcc", "29_exStbHwAcc")
 
     def _read_file_checks(self, test_obj: BaseTest):
         self.assertEqual(self.test_case.test_mode, "CORE")
