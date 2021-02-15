@@ -1261,13 +1261,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::UnaryExprOrTypeTraitExpr &unary =
       static_cast<const clang::UnaryExprOrTypeTraitExpr &>(stmt);
 
-    // Use clang to calculate alignof
-    if(unary.getKind() == clang::UETT_AlignOf)
+    // Use clang to calculate sizeof/alignof
+    clang::Expr::EvalResult result;
+    if(unary.EvaluateAsInt(result, *ASTContext))
     {
-      clang::Expr::EvalResult result;
-      if(!unary.EvaluateAsInt(result, *ASTContext))
-        return true;
-
       new_expr = constant_exprt(
         integer2binary(
           result.Val.getInt().getZExtValue(), bv_width(uint_type())),
@@ -1282,20 +1279,19 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if(get_type(unary.getType(), t))
         return true;
 
+      typet size_type;
+      if(get_type(unary.getTypeOfArgument(), size_type))
+        return true;
+
+      if(size_type.is_struct() || size_type.is_union())
+      {
+        struct_union_typet t = to_struct_union_type(size_type);
+        size_type = symbol_typet("tag-" + t.tag().as_string());
+      }
+
       new_expr = exprt("sizeof", t);
+      new_expr.set("#c_sizeof_type", size_type);
     }
-
-    typet size_type;
-    if(get_type(unary.getTypeOfArgument(), size_type))
-      return true;
-
-    if(size_type.is_struct() || size_type.is_union())
-    {
-      struct_union_typet t = to_struct_union_type(size_type);
-      size_type = symbol_typet("tag-" + t.tag().as_string());
-    }
-
-    new_expr.set("#c_sizeof_type", size_type);
     break;
   }
 
