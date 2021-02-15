@@ -255,14 +255,19 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     return true;
   }
 
+  std::string id, name;
+  get_decl_name(rd, name, id);
+
+  // Check if the symbol is already added to the context, do nothing if it is
+  // already in the context. See next comment
+  if(context.find_symbol(id) != nullptr)
+    return false;
+
   struct_union_typet t;
   if(rd.isUnion())
     t = union_typet();
   else
     t = struct_typet();
-
-  std::string id, name;
-  get_decl_name(rd, name, id);
   t.tag(name);
 
   locationt location_begin;
@@ -277,12 +282,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     id,
     location_begin);
 
-  // Save the struct/union/class type address and name to the type map
   std::string symbol_name = symbol.id.as_string();
-
-  std::size_t address = reinterpret_cast<std::size_t>(rd.getFirstDecl());
-  type_map[address] = symbol_name;
-
   symbol.is_type = true;
 
   // We have to add the struct/union/class to the context before converting its
@@ -477,8 +477,6 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
     name,
     id,
     location_begin);
-
-  std::string symbol_name = symbol.id.as_string();
 
   symbol.lvalue = true;
   symbol.is_extern = fd.getStorageClass() == clang::SC_Extern ||
@@ -815,14 +813,14 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::RecordDecl &rd =
       *(static_cast<const clang::RecordType &>(the_type)).getDecl();
 
-    // Search for the type on the type map
-    type_mapt::iterator it;
-    if(search_add_type_map(rd, it))
+    if(get_struct_union_class(rd))
       return true;
 
-    symbolt &s = *context.find_symbol(it->second);
-    new_type = s.type;
+    std::string id, name;
+    get_decl_name(rd, name, id);
 
+    symbolt &s = *context.find_symbol(id);
+    new_type = s.type;
     break;
   }
 
@@ -2880,13 +2878,6 @@ symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
   return s;
 }
 
-void clang_c_convertert::dump_type_map()
-{
-  std::cout << "Type_map:" << std::endl;
-  for(auto const &it : type_map)
-    std::cout << it.first << ": " << it.second << std::endl;
-}
-
 void clang_c_convertert::convert_expression_to_code(exprt &expr)
 {
   if(expr.is_code())
@@ -2897,30 +2888,6 @@ void clang_c_convertert::convert_expression_to_code(exprt &expr)
   code.move_to_operands(expr);
 
   expr.swap(code);
-}
-
-bool clang_c_convertert::search_add_type_map(
-  const clang::TagDecl &tag,
-  type_mapt::iterator &type_it)
-{
-  std::size_t address = reinterpret_cast<std::size_t>(tag.getFirstDecl());
-
-  // Search for the type on the type map
-  type_it = type_map.find(address);
-  if(type_it == type_map.end())
-  {
-    // Force the declaration to be added to the type_map
-    exprt decl;
-    if(get_decl(tag, decl))
-      return true;
-  }
-
-  type_it = type_map.find(address);
-  if(type_it == type_map.end())
-    // BUG! This should be added already
-    return true;
-
-  return false;
 }
 
 const clang::Decl *
