@@ -1556,24 +1556,31 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // Structs/unions/arrays put the initializer on operands
     if(t.is_struct() || t.is_union() || t.is_array())
     {
+      // Initializer everything to zero, even pads
+      // TODO: should we initialize pads with nondet values?
       inits = gen_zero(t);
 
       unsigned int num = init_stmt.getNumInits();
-      for(unsigned int i = 0; i < num; i++)
+      for(unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
+          ++i)
       {
+        // if it is an struct/union, we should skip padding
+        if(t.is_struct() || t.is_union())
+          if(to_struct_union_type(t).components()[i].get_is_padding())
+            continue;
+
+        // Get the value being initialized
         exprt init;
-        if(get_expr(*init_stmt.getInit(i), init))
+        if(get_expr(*init_stmt.getInit(j++), init))
           return true;
 
         typet elem_type;
-
         if(t.is_struct() || t.is_union())
           elem_type = to_struct_union_type(t).components()[i].type();
         else
           elem_type = to_array_type(t).subtype();
 
         gen_typecast(ns, init, elem_type);
-
         inits.operands().at(i) = init;
       }
 
