@@ -56,22 +56,21 @@ vampire_convt::vampire_convt(bool int_encoding, const namespacet &_ns)
 
 void vampire_convt::push_ctx()
 {
-  std::cerr << "Vampire does not support push and pop semantics"
-            << std::endl;
-  abort();       
+  std::cerr << "Vampire does not support push and pop semantics" << std::endl;
+  abort();
 }
 
 void vampire_convt::pop_ctx()
 {
-  std::cerr << "Vampire does not support push and pop semantics"
-            << std::endl;
-  abort(); 
+  std::cerr << "Vampire does not support push and pop semantics" << std::endl;
+  abort();
 }
 
 smt_convt::resultt vampire_convt::dec_solve()
 {
   pre_solve();
 
+  solver->setTimeLimit(30);
   Vampire::Result result = solver->solve();
 
   if(result.satisfiable())
@@ -89,12 +88,13 @@ void vampire_convt::assert_ast(smt_astt a)
   solver->addFormula(exp);
 }
 
-Vampire::Expression
-vampire_convt::mk_tuple_update(const Vampire::Expression &t, unsigned i, const Vampire::Expression &newval)
+Vampire::Expression vampire_convt::mk_tuple_update(
+  const Vampire::Expression &t,
+  unsigned i,
+  const Vampire::Expression &newval)
 {
-  std::cerr << "Tuples!"
-          << std::endl;
-  abort(); 
+  std::cerr << "Tuples!" << std::endl;
+  abort();
   /*Vampire::Sort sort = t.getSort();
   if(!sort.isTupleSort())
   {
@@ -115,26 +115,26 @@ vampire_convt::mk_tuple_update(const Vampire::Expression &t, unsigned i, const V
     if(i == j)
     {
       /* use new_val at position i */
-    /*  args.push_back(newval);
+  /*  args.push_back(newval);
     }
     else
     {
       /* use field j of t */
-      /*vampire::func_decl proj_decl =
+  /*vampire::func_decl proj_decl =
         vampire::to_func_decl(vampire_ctx, Z3_get_tuple_sort_field_decl(vampire_ctx, ty, j));
       args.push_back(proj_decl(t));
     }
   }
 
   return vampire::to_func_decl(vampire_ctx, Z3_get_tuple_sort_mk_decl(vampire_ctx, ty))(args);*/
-  return solver->term(solver->function("f", 0));  
+  return solver->term(solver->function("f", 0));
 }
 
-Vampire::Expression vampire_convt::mk_tuple_select(const Vampire::Expression &t, unsigned i)
+Vampire::Expression
+vampire_convt::mk_tuple_select(const Vampire::Expression &t, unsigned i)
 {
-  std::cerr << "Tuples!"
-          << std::endl;
-  abort(); 
+  std::cerr << "Tuples!" << std::endl;
+  abort();
   /*vampire::sort ty = t.get_sort();
   if(!ty.is_datatype())
   {
@@ -153,7 +153,7 @@ Vampire::Expression vampire_convt::mk_tuple_select(const Vampire::Expression &t,
   vampire::func_decl proj_decl =
     vampire::to_func_decl(vampire_ctx, Z3_get_tuple_sort_field_decl(vampire_ctx, ty, i));
   return proj_decl(t);*/
-  return solver->term(solver->function("f", 0));  
+  return solver->term(solver->function("f", 0));
 }
 
 // SMT-abstraction migration routines.
@@ -165,8 +165,7 @@ smt_astt vampire_convt::mk_add(smt_astt a, smt_astt b)
   return new_ast(
     (solver->sum(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     a->sort);
 }
 
@@ -178,11 +177,9 @@ smt_astt vampire_convt::mk_sub(smt_astt a, smt_astt b)
   return new_ast(
     (solver->difference(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     a->sort);
 }
-
 
 smt_astt vampire_convt::mk_mul(smt_astt a, smt_astt b)
 {
@@ -192,11 +189,9 @@ smt_astt vampire_convt::mk_mul(smt_astt a, smt_astt b)
   return new_ast(
     (solver->multiply(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     a->sort);
 }
-
 
 smt_astt vampire_convt::mk_mod(smt_astt a, smt_astt b)
 {
@@ -206,11 +201,9 @@ smt_astt vampire_convt::mk_mod(smt_astt a, smt_astt b)
   return new_ast(
     (solver->mod(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     a->sort);
 }
-
 
 smt_astt vampire_convt::mk_div(smt_astt a, smt_astt b)
 {
@@ -220,8 +213,7 @@ smt_astt vampire_convt::mk_div(smt_astt a, smt_astt b)
   return new_ast(
     (solver->div(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     a->sort);
 }
 
@@ -234,15 +226,11 @@ smt_astt vampire_convt::mk_shl(smt_astt a, smt_astt b)
   abort();
 }
 
-
 smt_astt vampire_convt::mk_neg(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   return new_ast(
-    (solver->neg(
-      to_solver_smt_ast<vampire_smt_ast>(a)->a)
-    ),
-    a->sort);
+    solver->neg(to_solver_smt_ast<vampire_smt_ast>(a)->a), a->sort);
 }
 
 smt_astt vampire_convt::mk_implies(smt_astt a, smt_astt b)
@@ -251,8 +239,7 @@ smt_astt vampire_convt::mk_implies(smt_astt a, smt_astt b)
   return new_ast(
     (solver->implies(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     a->sort);
 }
 
@@ -262,8 +249,7 @@ smt_astt vampire_convt::mk_xor(smt_astt a, smt_astt b)
   return new_ast(
     (solver->exor(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     a->sort);
 }
 
@@ -273,8 +259,7 @@ smt_astt vampire_convt::mk_or(smt_astt a, smt_astt b)
   return new_ast(
     (solver->orFormula(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     a->sort);
 }
 
@@ -284,8 +269,7 @@ smt_astt vampire_convt::mk_and(smt_astt a, smt_astt b)
   return new_ast(
     (solver->andFormula(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     a->sort);
 }
 
@@ -293,10 +277,7 @@ smt_astt vampire_convt::mk_not(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
   return new_ast(
-    (solver->negation(
-      to_solver_smt_ast<vampire_smt_ast>(a)->a)
-    ),
-    a->sort);
+    (solver->negation(to_solver_smt_ast<vampire_smt_ast>(a)->a)), a->sort);
 }
 
 smt_astt vampire_convt::mk_lt(smt_astt a, smt_astt b)
@@ -306,8 +287,7 @@ smt_astt vampire_convt::mk_lt(smt_astt a, smt_astt b)
   return new_ast(
     (solver->lt(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     boolean_sort);
 }
 
@@ -318,8 +298,7 @@ smt_astt vampire_convt::mk_gt(smt_astt a, smt_astt b)
   return new_ast(
     (solver->gt(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     boolean_sort);
 }
 
@@ -330,8 +309,7 @@ smt_astt vampire_convt::mk_le(smt_astt a, smt_astt b)
   return new_ast(
     (solver->leq(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     boolean_sort);
 }
 
@@ -342,8 +320,7 @@ smt_astt vampire_convt::mk_ge(smt_astt a, smt_astt b)
   return new_ast(
     (solver->geq(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a)),
     boolean_sort);
 }
 
@@ -352,18 +329,20 @@ smt_astt vampire_convt::mk_eq(smt_astt a, smt_astt b)
   assert(a->sort->get_data_width() == b->sort->get_data_width());
 
   //vampire does not allow equality between bools
-  if(a->sort->id == SMT_SORT_BOOL){
+  if(a->sort->id == SMT_SORT_BOOL)
+  {
     return new_ast(
       solver->iff(
         to_solver_smt_ast<vampire_smt_ast>(a)->a,
         to_solver_smt_ast<vampire_smt_ast>(b)->a),
-    a->sort);
+      a->sort);
   }
 
   return new_ast(
     solver->equality(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a, true),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a,
+      true),
     boolean_sort);
 }
 
@@ -371,15 +350,16 @@ smt_astt vampire_convt::mk_neq(smt_astt a, smt_astt b)
 {
   assert(a->sort->get_data_width() == b->sort->get_data_width());
 
-  if(a->sort->id == SMT_SORT_BOOL){
+  if(a->sort->id == SMT_SORT_BOOL)
+  {
     return mk_xor(a, b);
   }
 
   return new_ast(
     (solver->equality(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
-      to_solver_smt_ast<vampire_smt_ast>(b)->a, false)
-    ),
+      to_solver_smt_ast<vampire_smt_ast>(b)->a,
+      false)),
     boolean_sort);
 }
 
@@ -393,8 +373,8 @@ smt_astt vampire_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
     solver->store(
       to_solver_smt_ast<vampire_smt_ast>(a)->a,
       to_solver_smt_ast<vampire_smt_ast>(b)->a,
-      to_solver_smt_ast<vampire_smt_ast>(c)->a), 
-   a->sort);
+      to_solver_smt_ast<vampire_smt_ast>(c)->a),
+    a->sort);
 }
 
 smt_astt vampire_convt::mk_select(smt_astt a, smt_astt b)
@@ -412,59 +392,51 @@ smt_astt vampire_convt::mk_real2int(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   return new_ast(
-    solver->real2int(
-      to_solver_smt_ast<vampire_smt_ast>(a)->a),
-    a->sort);
+    solver->real2int(to_solver_smt_ast<vampire_smt_ast>(a)->a), a->sort);
 }
 
 smt_astt vampire_convt::mk_int2real(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   return new_ast(
-    solver->int2real(
-      to_solver_smt_ast<vampire_smt_ast>(a)->a),
-    a->sort);
+    solver->int2real(to_solver_smt_ast<vampire_smt_ast>(a)->a), a->sort);
 }
 
 smt_astt vampire_convt::mk_isint(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
-  std::cerr << "ISINT ERROR!"
-          << std::endl;
-  abort(); 
+  std::cerr << "ISINT ERROR!" << std::endl;
+  abort();
   return a;
 }
 
-smt_astt vampire_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
+smt_astt
+vampire_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   // If it's a floatbv, convert it to bv
-  std::cerr << "EXTRACT ERROR!"
-          << std::endl;
-  abort(); 
+  std::cerr << "EXTRACT ERROR!" << std::endl;
+  abort();
   return a;
 }
 
 smt_astt vampire_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
-  std::cerr << "SIGN EXTEND ERROR!"
-          << std::endl;
-  abort(); 
+  std::cerr << "SIGN EXTEND ERROR!" << std::endl;
+  abort();
   return a;
 }
 
 smt_astt vampire_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
-  std::cerr << "ZERO EXTEND ERROR!"
-          << std::endl;
-  abort(); 
+  std::cerr << "ZERO EXTEND ERROR!" << std::endl;
+  abort();
   return a;
 }
 
 smt_astt vampire_convt::mk_concat(smt_astt a, smt_astt b)
 {
-  std::cerr << "CONCAT ERROR!"
-          << std::endl;
-  abort();   
+  std::cerr << "CONCAT ERROR!" << std::endl;
+  abort();
   return a;
 }
 
@@ -484,7 +456,15 @@ smt_astt vampire_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 smt_astt vampire_convt::mk_smt_int(const BigInt &theint)
 {
   smt_sortt s = mk_int_sort();
-  std::string num = std::to_string(theint.to_uint64());
+  std::string num;
+  if(theint.is_negative())
+  {
+    num = std::to_string(theint.to_int64());
+  }
+  else
+  {
+    num = std::to_string(theint.to_uint64());
+  }
   return new_ast(solver->integerConstant(num), s);
 }
 
@@ -496,12 +476,9 @@ smt_astt vampire_convt::mk_smt_real(const std::string &str)
 
 smt_astt vampire_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
-  std::cerr << "BV ERROR!"
-          << std::endl;  
-  abort();             
-  return new_ast(
-    solver->constant("garbage", solver->sort("rubbish")),
-    s);
+  std::cerr << "BV ERROR!" << std::endl;
+  abort();
+  return new_ast(solver->constant("garbage", solver->sort("rubbish")), s);
 }
 
 smt_astt vampire_convt::mk_smt_bool(bool val)
@@ -517,7 +494,8 @@ smt_astt vampire_convt::mk_array_symbol(
   return mk_smt_symbol(name, s);
 }
 
-smt_astt vampire_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
+smt_astt
+vampire_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   return new_ast(
     solver->constant(name, to_solver_smt_sort<Vampire::Sort>(s)->s), s);
@@ -631,10 +609,9 @@ smt_astt vampire_convt::tuple_fresh(const smt_sort *s, std::string name)
 smt_astt
 vampire_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
-  std::cout << "HERE" << std::endl;
-  return new_ast(
-    solver->constant("garbage", solver->boolSort()),
-    boolean_sort);
+  std::cerr << "ARRAY ERROR" << std::endl;
+  abort();
+  return new_ast(solver->constant("garbage", solver->boolSort()), boolean_sort);
 }
 
 /*smt_astt vampire_convt::tuple_array_create(
@@ -781,7 +758,6 @@ expr2tc vampire_convt::get_array_elem(
   return gen_zero(subtype);
 }
 
-
 /*ieee_floatt vampire_convt::get_fpbv(smt_astt a)
 {
   const vampire_smt_ast *za = to_solver_smt_ast<vampire_smt_ast>(a);
@@ -850,10 +826,10 @@ void vampire_convt::print_model()
   //std::cout << Z3_model_to_string(vampire_ctx, solver.get_model());
 }
 
-
 smt_sortt vampire_convt::mk_bool_sort()
 {
-  return new solver_smt_sort<Vampire::Sort>(SMT_SORT_BOOL, solver->boolSort(), 1);
+  return new solver_smt_sort<Vampire::Sort>(
+    SMT_SORT_BOOL, solver->boolSort(), 1);
 }
 
 smt_sortt vampire_convt::mk_real_sort()
@@ -863,9 +839,9 @@ smt_sortt vampire_convt::mk_real_sort()
 
 smt_sortt vampire_convt::mk_int_sort()
 {
-  return new solver_smt_sort<Vampire::Sort>(SMT_SORT_INT, solver->integerSort());
+  return new solver_smt_sort<Vampire::Sort>(
+    SMT_SORT_INT, solver->integerSort());
 }
-
 
 smt_sortt vampire_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
