@@ -304,13 +304,27 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if(get_struct_union_class_fields(*rd_def, t))
     return true;
 
-  // Check for packed specifier.
+  // Check for packed and aligned attributes
   if(rd_def->hasAttrs())
   {
     const auto &attrs = rd_def->getAttrs();
     for(const auto &attr : attrs)
+    {
       if(attr->getKind() == clang::attr::Packed)
         t.set("packed", "true");
+
+      if(attr->getKind() == clang::attr::Aligned)
+      {
+        const clang::AlignedAttr &aattr =
+          static_cast<const clang::AlignedAttr &>(*attr);
+
+        exprt alignment;
+        if(get_expr(*(aattr.getAlignmentExpr()), alignment))
+          return true;
+
+        t.set("alignment", alignment);
+      }
+    }
   }
 
   if(get_struct_union_class_methods(*rd_def, t))
@@ -330,6 +344,38 @@ bool clang_c_convertert::get_struct_union_class_fields(
     struct_typet::componentt comp;
     if(get_decl(*field, comp))
       return true;
+
+    // Check for alignment attributes
+    if(field->hasAttrs())
+    {
+      const auto &attrs = field->getAttrs();
+      for(const auto &attr : attrs)
+      {
+        if(attr->getKind() == clang::attr::Aligned)
+        {
+          const clang::AlignedAttr &aattr =
+            static_cast<const clang::AlignedAttr &>(*attr);
+
+          if(aattr.isAlignmentExpr())
+          {
+            // This is usually a constant
+            clang::Expr *alignExpr = aattr.getAlignmentExpr();
+            exprt alignment;
+            if(alignExpr && get_expr(*(aattr.getAlignmentExpr()), alignment))
+              return true;
+            comp.type().set("alignment", alignment);
+          }
+          else
+          {
+            // I was not able to find an example to test this, so abort for now
+            std::cerr << "ESBMC currently does not support type alignments"
+                      << std::endl;
+            aattr.getAlignmentType()->getType()->dump();
+            return true;
+          }
+        }
+      }
+    }
 
     // Don't add fields that have global storage (e.g., static)
     if(const clang::VarDecl *nd = llvm::dyn_cast<clang::VarDecl>(field))
