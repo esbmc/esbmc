@@ -33,7 +33,7 @@ Before Cloning ESBMC Source Code, it is better to make a directory to contain th
 You can get the latest version using the following __git__ command:
 
 ```
-mkdir ESBMC_Project && cd ESBMC_Project && git clone https://github.com/esbmc/esbmc 
+mkdir ESBMC_Project && cd ESBMC_Project && git clone https://github.com/esbmc/esbmc
 ```
 
 ## Preparing Clang 11
@@ -57,7 +57,7 @@ Linux:
 tar xJf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang11
 
 macOS:
-tar xJf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-darwin-apple clang11
+tar xJf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin clang11
 ```
 
 ## Setting Up Solvers
@@ -142,18 +142,56 @@ brew install z3
 
 If you need more details on Z3, please refer to [its Github](https://github.com/Z3Prover/z3).
 
+If you are using macOS and have installed z3 using brew, you'll need to copy the entire z3 directory from the place where Homebrew keeps packages to your workspace:
+
+```
+cp -rp $(brew info z3 | egrep "/usr[/a-zA-Z\.0-9]+ " -o) z3
+```
+
+Before proceeding to the next section, make sure you have clang, LLVM and all the solvers ready in your workspace:
+
+```
+clang and LLVM:
+<path_to_your_project>/ESBMC_Project/clang11
+
+Boolector:
+<path_to_your_project>/ESBMC_Project/boolector
+
+CVC4: (Linux only)
+<path_to_your_project>/ESBMC_Project/CVC4
+
+MathSAT:
+<path_to_your_project>/ESBMC_Project/mathsat
+
+Yices:
+<path_to_your_project>/ESBMC_Project/yices
+
+Z3:
+<path_to_your_project>/ESBMC_Project/z3
+```
+
+The above paths will be used in ESBMC's build command in the next section.
+
+If you are using macOS, make sure you have Xcode.app in your Applications directory by checking:
+
+```
+ls /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/
+```
+
+If no such directory, please go to App Store and install Xcode.
+
 ## Building ESBMC
 
 Now we are ready to build ESBMC. Please note that we describe the same build option used in our CI/CD. If you want to all available _cmake_ options, refer to our [Options.cmake file](https://github.com/esbmc/esbmc/blob/master/scripts/cmake/Options.cmake).
 
-First, we need to setup __cmake__, by using the following command:
+First, we need to setup __cmake__, by using the following command in ESBMC_Project directory you just created:
 
 ```
 Linux:
 cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../../clang11 -DLLVM_DIR=$PWD/../../clang11 -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../../yices -DCVC4_DIR=$PWD/../../cvc4 -DGMP_DIR=$PWD/../../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 
 macOS:
-cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../../clang11 -DLLVM_DIR=$PWD/../../clang11 -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/..//..release
+cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../../clang11 -DLLVM_DIR=$PWD/../../clang11 -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 ```
 
 Finally, we can trigger the build process, by using the following command:
