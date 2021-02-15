@@ -1243,7 +1243,7 @@ std::string expr2ct::convert_function_call(const exprt &src, unsigned &)
 
     if(i > 0)
       dest += ", ";
-    // TODO: ggf. Klammern je nach p
+    // TODO: [add] brackets, if necessary, depending on p
     dest += arg_str;
 
     i++;
@@ -1268,7 +1268,7 @@ std::string expr2ct::convert_overflow(const exprt &src, unsigned &precedence)
     std::string arg_str = convert(*it, p);
 
     dest += ", ";
-    // TODO: ggf. Klammern je nach p
+    // TODO: [add] brackets, if necessary, depending on p
     dest += arg_str;
   }
 
@@ -1794,7 +1794,7 @@ expr2ct::convert_code_function_call(const code_function_callt &src, unsigned)
     unsigned p;
     std::string lhs_str = convert(src.lhs(), p);
 
-    // TODO: ggf. Klammern je nach p
+    // TODO: [add] brackets, if necessary, depending on p
     dest += lhs_str;
     dest += "=";
   }
@@ -1818,7 +1818,7 @@ expr2ct::convert_code_function_call(const code_function_callt &src, unsigned)
 
     if(i > 0)
       dest += ", ";
-    // TODO: ggf. Klammern je nach p
+    // TODO: [add] brackets, if necessary, depending on p
     dest += arg_str;
 
     i++;
@@ -1840,7 +1840,7 @@ std::string expr2ct::convert_code_printf(const codet &src, unsigned indent)
 
     if(it != src.operands().begin())
       dest += ", ";
-    // TODO: ggf. Klammern je nach p
+    // TODO: [add] brackets, if necessary, depending on p
     dest += arg_str;
   }
 
