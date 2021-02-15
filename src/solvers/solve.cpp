@@ -40,8 +40,15 @@ const struct esbmc_solver_config esbmc_solvers[] = {
 #endif
 };
 
-const std::string list_of_all_solvers[] =
-  {"z3", "vampire", "smtlib", "minisat", "boolector", "mathsat", "cvc", "yices"};
+const std::string list_of_all_solvers[] = {
+  "z3",
+  "vampire",
+  "smtlib",
+  "minisat",
+  "boolector",
+  "mathsat",
+  "cvc",
+  "yices"};
 
 const unsigned int total_num_of_solvers =
   sizeof(list_of_all_solvers) / sizeof(std::string);

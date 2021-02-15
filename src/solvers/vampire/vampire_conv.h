@@ -28,9 +28,9 @@ public:
 };
 
 class vampire_convt : public smt_convt,
-                 //public tuple_iface,
-                 public array_iface,
-                 public fp_convt
+                      //public tuple_iface,
+                      public array_iface,
+                      public fp_convt
 {
 public:
   vampire_convt(bool int_encoding, const namespacet &ns);
@@ -47,8 +47,10 @@ public:
   expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
     override;
 
-  Vampire::Expression
-  mk_tuple_update(const Vampire::Expression &t, unsigned i, const Vampire::Expression &new_val);
+  Vampire::Expression mk_tuple_update(
+    const Vampire::Expression &t,
+    unsigned i,
+    const Vampire::Expression &new_val);
   Vampire::Expression mk_tuple_select(const Vampire::Expression &t, unsigned i);
 
   // SMT-abstraction migration:
@@ -129,7 +131,7 @@ public:
   void print_model() override;
 
 public:
-  Vampire::Solver* solver;
+  Vampire::Solver *solver;
 };
 
 #endif /* _ESBMC_SOLVERS_vampire_vampire_CONV_H_ */
