@@ -6,7 +6,6 @@
 
 \*******************************************************************/
 
-#include <cassert>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr.h>
@@ -33,10 +32,6 @@ BigInt member_offset(const type2tc &type, const irep_idt &member)
     result += type_byte_size(it);
     idx++;
   }
-
-  assert(
-    idx != thetype.members.size() &&
-    "Attempted to find member offset of member not in a struct");
 
   return result;
 }
@@ -134,8 +129,6 @@ BigInt type_byte_size(const type2tc &type)
     // At the end of that, the tests above should have rounded accumulated size
     // up to a size that contains the required trailing padding for array
     // allocation alignment.
-    assert(
-      t2.packed || ((accumulated_size % (config.ansi_c.word_size / 8)) == 0));
     return accumulated_size;
   }
 
