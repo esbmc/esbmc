@@ -29,6 +29,7 @@ const struct opt_templ esbmc_options[] = {
 
   // Trace
   {0, "quiet", switc, ""},
+  {0, "compact-trace", switc, ""},
   {0, "symex-trace", switc, ""},
   {0, "ssa-trace", switc, ""},
   {0, "ssa-smt-trace", switc, ""},

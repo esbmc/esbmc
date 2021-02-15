@@ -18,7 +18,8 @@ Date: July 2005
 void build_goto_trace(
   const std::shared_ptr<symex_target_equationt> &target,
   std::shared_ptr<smt_convt> &smt_conv,
-  goto_tracet &goto_trace);
+  goto_tracet &goto_trace,
+  const bool &is_compact_trace);
 
 void build_successful_goto_trace(
   const std::shared_ptr<symex_target_equationt> &target,

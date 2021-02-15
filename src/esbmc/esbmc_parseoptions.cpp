@@ -242,6 +242,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("deadlock-check", false);
 
+  if(cmdline.isset("compact-trace"))
+    options.set_option("no-slice", true);
+
   if(cmdline.isset("smt-during-symex"))
   {
     std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
@@ -1666,6 +1669,7 @@ void esbmc_parseoptionst::help()
        "\nTrace options\n"
        " --quiet                      do not print unwinding information "
        "during symbolic execution\n"
+       " --compact-trace              do not print hidden variables\n"
        " --symex-trace                print instructions during symbolic "
        "execution\n"
        " --symex-ssa-trace            print generated SSA during symbolic "

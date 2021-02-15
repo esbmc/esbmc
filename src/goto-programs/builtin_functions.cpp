@@ -521,6 +521,21 @@ void goto_convertt::do_function_call_symbol(
       "' type mismatch: expected code";
   }
 
+  // If the symbol is not nil, i.e., the user defined the expected behaviour of
+  // the builtin function, we should honour the user function and call it
+  if(symbol->value.is_not_nil())
+  {
+    // insert function call
+    code_function_callt function_call;
+    function_call.lhs() = lhs;
+    function_call.function() = function;
+    function_call.arguments() = arguments;
+    function_call.location() = function.location();
+
+    copy(function_call, FUNCTION_CALL, dest);
+    return;
+  }
+
   std::string base_name = symbol->name.as_string();
 
   bool is_assume =

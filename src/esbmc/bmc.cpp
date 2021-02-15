@@ -137,8 +137,14 @@ void bmct::error_trace(
 
   status("Building error trace");
 
+  bool is_compact_trace = true;
+  if(
+    options.get_bool_option("no-slice") &&
+    !options.get_bool_option("compact-trace"))
+    is_compact_trace = false;
+
   goto_tracet goto_trace;
-  build_goto_trace(eq, smt_conv, goto_trace);
+  build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace);
 
   switch(ui)
   {
