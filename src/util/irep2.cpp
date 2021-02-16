@@ -1,4 +1,5 @@
 #include <memory>
+#include <unordered_map>
 #include <ac_config.h>
 #include <boost/functional/hash.hpp>
 #include <util/fixedbv.h>
@@ -776,23 +777,19 @@ type_poolt &type_poolt::operator=(type_poolt const &ref)
   return *this;
 }
 
-// XXX investigate performance implications of this cache
+// TODO: investigate performance implications of this cache
 static const type2tc &
-get_type_from_pool(const typet &val, std::map<typet, type2tc> &)
+get_type_from_pool(const typet &val, std::map<typet, type2tc> &map)
 {
-#if 0
-  std::map<const typet, type2tc>::const_iterator it = map.find(val);
+  auto it = map.find(val);
   if (it != map.end())
     return it->second;
-#endif
 
   type2tc new_type;
   real_migrate_type(val, new_type);
-#if 0
+
   map[val] = new_type;
   return map[val];
-#endif
-  return *(new type2tc(new_type));
 }
 
 const type2tc &type_poolt::get_struct(const typet &val)
