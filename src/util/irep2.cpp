@@ -782,7 +782,7 @@ static const type2tc &
 get_type_from_pool(const typet &val, std::map<typet, type2tc> &map)
 {
   auto it = map.find(val);
-  if (it != map.end())
+  if(it != map.end())
     return it->second;
 
   type2tc new_type;
