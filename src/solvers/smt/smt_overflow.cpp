@@ -104,9 +104,14 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     arg1_ext = is_signedbv_type(opers.side_1) ? mk_sign_ext(arg1_ext, sz)
                                               : mk_zero_ext(arg1_ext, sz);
 
-    smt_astt arg2_ext = convert_ast(opers.side_2);
-    arg2_ext = is_signedbv_type(opers.side_2) ? mk_sign_ext(arg2_ext, sz)
-                                              : mk_zero_ext(arg2_ext, sz);
+    expr2tc op2 = opers.side_2;
+    if(is_shl2t(overflow.operand))
+      if(opers.side_1->type->get_width() != opers.side_2->type->get_width())
+        op2 = typecast2tc(opers.side_1->type, opers.side_2);
+
+    smt_astt arg2_ext = convert_ast(op2);
+    arg2_ext = is_signedbv_type(op2) ? mk_sign_ext(arg2_ext, sz)
+                                     : mk_zero_ext(arg2_ext, sz);
 
     smt_astt result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
                                                  : mk_bvshl(arg1_ext, arg2_ext);
