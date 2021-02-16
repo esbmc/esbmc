@@ -1,5 +1,4 @@
 #include <memory>
-#include <unordered_map>
 #include <ac_config.h>
 #include <boost/functional/hash.hpp>
 #include <util/fixedbv.h>
