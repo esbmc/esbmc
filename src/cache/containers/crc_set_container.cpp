@@ -146,7 +146,7 @@ text_file_crc_set_storage::load(std::istream &infile)
     container.add(items);
     infile >> line;
   }
-  return container;
+  return std::move(container);
 }
 void text_file_crc_set_storage::store(ssa_container<ssa_container_type> &output)
 {
