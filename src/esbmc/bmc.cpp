@@ -48,7 +48,6 @@ std::shared_ptr<ssa_step_algorithm> cache;
 ssa_set_container unsat_container;
 } // namespace
 
-
 bmct::bmct(
   goto_functionst &funcs,
   optionst &opts,
@@ -756,9 +755,9 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if(options.get_bool_option("enable-caching"))
     {
-        cache = std::make_shared<green_cache>(eq->SSA_steps, unsat_container);
-        cache->run();
-        std::cout << "Got " << unsat_container.get_hits() << " hits" << std::endl;
+      cache = std::make_shared<green_cache>(eq->SSA_steps, unsat_container);
+      cache->run();
+      std::cout << "Got " << unsat_container.get_hits() << " hits" << std::endl;
     }
 
     if(options.get_bool_option("document-subgoals"))
