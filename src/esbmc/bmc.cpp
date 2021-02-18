@@ -432,9 +432,11 @@ void bmct::report_result(smt_convt::resultt &res)
     else
     {
       status("No bug has been found in the base case");
-      std::shared_ptr<green_cache> result_cache;
-      result_cache = std::dynamic_pointer_cast<green_cache>(cache);
-      result_cache->mark_ssa_as_unsat();
+      if(options.get_bool_option("enable-caching")) {
+        std::shared_ptr<green_cache> result_cache;
+        result_cache = std::dynamic_pointer_cast<green_cache>(cache);
+        result_cache->mark_ssa_as_unsat();
+      }
     }
     break;
 
