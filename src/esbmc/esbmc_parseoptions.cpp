@@ -1834,7 +1834,7 @@ void esbmc_parseoptionst::help()
        "\nConcurrency checking\n"
        " --context-bound nr           limit number of context switches for "
        "each thread \n"
-       " --state-hashing              enable state-hashing, prunes duplicate "
+       " --state-hashing              enable state-hashing, prune duplicate "
        "states\n"
        " --no-por                     do not do partial order reduction\n"
        " --all-runs                   check all interleavings, even if a bug "
