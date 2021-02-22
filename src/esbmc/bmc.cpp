@@ -239,6 +239,7 @@ smt_convt::resultt bmct::run_decision_procedure(
   {
     if(options.get_bool_option("enable-caching"))
     {
+      status("Storing formulae as UNSAT");
       std::shared_ptr<green_cache> result_cache;
       result_cache = std::dynamic_pointer_cast<green_cache>(cache);
       result_cache->mark_ssa_as_unsat();
@@ -432,7 +433,9 @@ void bmct::report_result(smt_convt::resultt &res)
     else
     {
       status("No bug has been found in the base case");
-      if(options.get_bool_option("enable-caching")) {
+      if(options.get_bool_option("enable-caching"))
+      {
+        status("Storing formulae as UNSAT");
         std::shared_ptr<green_cache> result_cache;
         result_cache = std::dynamic_pointer_cast<green_cache>(cache);
         result_cache->mark_ssa_as_unsat();
@@ -760,6 +763,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if(options.get_bool_option("enable-caching"))
     {
+      std::cout << "Applying cache SSA\n";
       cache = std::make_shared<green_cache>(eq->SSA_steps, unsat_container);
       cache->run();
       std::cout << "Got " << unsat_container.get_hits() << " hits" << std::endl;
