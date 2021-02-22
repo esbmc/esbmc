@@ -1074,17 +1074,20 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     const bitcast2t &cast = to_bitcast2t(expr);
     assert(is_scalar_type(cast.type) && is_scalar_type(cast.from));
 
-    // As it stands, the only circusmtance where bitcast can make a difference
+    // As it stands, the only circumstance where bitcast can make a difference
     // is where we're casting to or from a float, where casting by value means
     // something different. Filter that case out, pass everything else to normal
     // cast.
-    bool to_float = is_floatbv_type(cast.type);
-    bool from_float = is_floatbv_type(cast.from);
-
-    if((to_float && !from_float) || (!to_float && from_float))
+    if(is_floatbv_type(cast.type))
     {
-      a = to_float ? fp_api->mk_from_bv_to_fp(args[0], convert_sort(cast.type))
-                   : fp_api->mk_from_fp_to_bv(args[0]);
+      a = fp_api->mk_from_bv_to_fp(args[0], convert_sort(cast.type));
+    }
+    else if(is_floatbv_type(cast.from))
+    {
+      unsigned int sz = expr->type->get_width() - cast.from->type->get_width();
+      a = is_signedbv_type(expr->type)
+            ? mk_sign_ext(fp_api->mk_from_fp_to_bv(args[0]), sz)
+            : mk_zero_ext(fp_api->mk_from_fp_to_bv(args[0]), sz);
     }
     else
     {
