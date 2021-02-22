@@ -1078,11 +1078,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     // is where we're casting to or from a float, where casting by value means
     // something different. Filter that case out, pass everything else to normal
     // cast.
-    if(is_floatbv_type(cast.type))
+    if(is_floatbv_type(cast.type) && is_bv_type(cast.from))
     {
       a = fp_api->mk_from_bv_to_fp(args[0], convert_sort(cast.type));
     }
-    else if(is_floatbv_type(cast.from))
+    else if(is_floatbv_type(cast.from) && is_bv_type(cast.type))
     {
       unsigned int sz = expr->type->get_width() - cast.from->type->get_width();
       a = is_signedbv_type(expr->type)
