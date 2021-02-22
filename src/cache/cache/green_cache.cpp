@@ -65,6 +65,16 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
   }
   else
   {
+    if(rhs->expr_id == expr2t::expr_ids::symbol_id)
+    {
+      std::shared_ptr<symbol_data> rhs_symbol;
+      rhs_symbol = std::dynamic_pointer_cast<symbol_data>(rhs);
+      std::string rhs_name = rhs_symbol->get_symbol_name();
+      if(rhs_name.find("@F@assert") != std::string::npos)
+      {
+        return;
+      }
+    }
     // Simple guard
     canonize_expr(rhs);
     auto expr_hash = convert_expr_to_hash(rhs);
@@ -111,6 +121,12 @@ void green_cache::parse_implication_guard(
     and_expr = std::dynamic_pointer_cast<logic_2ops>(expr);
     parse_implication_guard(and_expr->side_1, inner_items);
     parse_implication_guard(and_expr->side_2, inner_items);
+  }
+
+  if(expr->expr_id == expr2t::expr_ids::or_id)
+  {
+    //std::cerr << "This is not supported\n";
+    //abort();
   }
 
   // Recursively get to the last element which should be a guard
