@@ -1089,8 +1089,6 @@ void dereferencet::construct_from_const_struct_offset(
       // is supposed to point at.
       // If user is seeking a reference to this substruct, a different method
       // should have been called (construct_struct_ref_from_const_offset).
-      assert(is_struct_type(it));
-      assert(!is_struct_type(type));
       i++;
       continue;
     }
