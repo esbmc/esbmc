@@ -1726,9 +1726,10 @@ expr2tc *dereferencet::extract_bytes_from_array(
 
 expr2tc *dereferencet::extract_bytes_from_scalar(
   const expr2tc &object,
-  unsigned int num_bytes,
+  unsigned int _bytes,
   const expr2tc &offset)
 {
+  unsigned int num_bytes = _bytes ?: 1;
   assert(num_bytes != 0);
 
   assert(is_scalar_type(object) && "Can't extract bytes out of non-scalars");
@@ -1759,6 +1760,7 @@ void dereferencet::stitch_together_from_byte_array(
   const expr2tc *bytes)
 {
   int num_bytes = type->get_width() / 8;
+  num_bytes = num_bytes ?: 1;
 
   assert(num_bytes != 0);
 
