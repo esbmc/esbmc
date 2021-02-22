@@ -1203,7 +1203,10 @@ void value_sett::assign_rec(
     assign_rec(to_byte_extract2t(lhs).source_value, values_rhs, suffix, true);
   }
   else
-    throw "assign NYI: `" + get_expr_id(lhs) + "'";
+  {
+    std::cerr << "assign NYI: `" + get_expr_id(lhs) + "'\n";
+    abort();
+  }
 }
 
 void value_sett::do_function_call(
