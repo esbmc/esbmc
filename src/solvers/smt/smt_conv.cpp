@@ -333,10 +333,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if(is_struct_type(arr.subtype) || is_pointer_type(arr.subtype))
     {
       // Domain sort may be mesed with:
-      smt_sortt domain =
-        int_encoding
-          ? domain = machine_int_sort
-          : domain = mk_int_bv_sort(calculate_array_domain_width(arr));
+      smt_sortt domain = int_encoding
+                           ? machine_int_sort
+                           : mk_int_bv_sort(calculate_array_domain_width(arr));
 
       a = tuple_array_create_despatch(flat_expr, domain);
     }
