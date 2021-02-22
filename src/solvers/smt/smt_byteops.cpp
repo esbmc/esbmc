@@ -11,8 +11,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   assert(
     is_scalar_type(data.source_value) &&
-    "Byte extract now only works on "
-    "scalar variables");
+    "Byte extract now only works on scalar variables");
   if(!is_constant_int2t(data.source_offset))
   {
     // The approach: the argument is now a bitvector. Just shift it the
