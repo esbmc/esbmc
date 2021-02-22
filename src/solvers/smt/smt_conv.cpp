@@ -325,24 +325,21 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       break;
     }
 
-    // Domain sort may be mesed with:
-    smt_sortt domain;
-    if(int_encoding)
-    {
-      domain = machine_int_sort;
-    }
-    else
-    {
-      domain = mk_int_bv_sort(calculate_array_domain_width(arr));
-    }
-
     expr2tc flat_expr = expr;
     if(
       is_array_type(get_array_subtype(expr->type)) && is_constant_array2t(expr))
       flat_expr = flatten_array_body(expr);
 
     if(is_struct_type(arr.subtype) || is_pointer_type(arr.subtype))
+    {
+      // Domain sort may be mesed with:
+      smt_sortt domain =
+        int_encoding
+          ? domain = machine_int_sort
+          : domain = mk_int_bv_sort(calculate_array_domain_width(arr));
+
       a = tuple_array_create_despatch(flat_expr, domain);
+    }
     else
       a = array_create(flat_expr);
     break;
@@ -1136,23 +1133,23 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
   case type2t::bool_id:
     result = boolean_sort;
     break;
+
   case type2t::struct_id:
     result = tuple_api->mk_struct_sort(type);
     break;
+
   case type2t::code_id:
   case type2t::pointer_id:
     result = tuple_api->mk_struct_sort(pointer_struct);
     break;
+
   case type2t::unsignedbv_id:
-  {
-    result = mk_int_bv_sort(type->get_width());
-    break;
-  }
   case type2t::signedbv_id:
   {
     result = mk_int_bv_sort(type->get_width());
     break;
   }
+
   case type2t::fixedbv_id:
   {
     unsigned int int_bits = to_fixedbv_type(type).integer_bits;
@@ -1160,6 +1157,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = mk_real_fp_sort(int_bits, width - int_bits);
     break;
   }
+
   case type2t::floatbv_id:
   {
     unsigned int sw = to_floatbv_type(type).fraction;
@@ -1167,6 +1165,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = mk_real_fp_sort(ew, sw);
     break;
   }
+
   case type2t::string_id:
   {
     const string_type2t &str_type = to_string_type(type);
@@ -1176,6 +1175,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = convert_sort(new_type);
     break;
   }
+
   case type2t::array_id:
   {
     // Index arrays by the smallest integer required to represent its size.
@@ -1873,7 +1873,6 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &update_val)
 
 smt_astt smt_convt::convert_array_index(const expr2tc &expr)
 {
-  smt_astt a;
   const index2t &index = to_index2t(expr);
   expr2tc src_value = index.source_value;
 
@@ -1894,7 +1893,7 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
     return tmp->select(this, newidx);
   }
 
-  a = convert_ast(src_value);
+  smt_astt a = convert_ast(src_value);
   a = a->select(this, newidx);
 
   const array_type2t &arrtype = to_array_type(index.source_value->type);
