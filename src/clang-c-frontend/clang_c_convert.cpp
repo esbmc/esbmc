@@ -1588,8 +1588,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       // set which field is being initialized
       if(t.is_union())
       {
-        to_union_expr(inits).set_component_name(
-          init_stmt.getInitializedFieldInUnion()->getName().str());
+        auto init_union_field = init_stmt.getInitializedFieldInUnion();
+        if(init_union_field)
+          to_union_expr(inits).set_component_name(
+            init_union_field->getName().str());
       }
     }
     else
