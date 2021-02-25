@@ -107,7 +107,7 @@ BigInt type_byte_size_bits(const type2tc &type)
     if(!is_constant_int2t(arrsize))
       throw new array_type2t::dyn_sized_array_excp(arrsize);
 
-    BigInt subsize = type_byte_size(t2.subtype);
+    BigInt subsize = type_byte_size_bits(t2.subtype);
     const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
     return subsize * arrsize_int.value;
   }
