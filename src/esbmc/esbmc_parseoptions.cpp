@@ -1154,8 +1154,10 @@ int esbmc_parseoptionst::doit_termination()
     if(!do_forward_condition(opts, goto_functions, k_step))
       return false;
 
+    /* Disable this for now as it is causing more than 100 errors on SV-COMP
     if(!do_inductive_step(opts, goto_functions, k_step))
       return false;
+    */
   }
 
   status("Unable to prove or falsify the program, giving up.");
