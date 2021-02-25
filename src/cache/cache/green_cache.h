@@ -17,7 +17,7 @@
  * Green algorithm consists in:
  *
  * 1. Slice the original formula
- * 2. Canonization: Puts the formula in a normal form
+ * 2. Canonization: Puts the formula in a normal form (optional)
  * 3. Recover: Checks formula on database and slices it
  * 4. Translate: Transform the formula into SAT/SMT form
  * 5. Storage: Save formula results
@@ -67,6 +67,10 @@ protected:
    * using this dictionary we can check what is guard1 and guard2
    */
   std::unordered_map<std::string, crc_expr> items;
+  std::set<crc_expr> to_add_container;
+
+  // This will serve to only cache assertions
+  std::set<std::string> assertions;
 
   /**
    * Convert a simple guard expression into a set of the RHS expressions
@@ -96,7 +100,10 @@ protected:
    * @param expr
    * @return
    */
-  void parse_implication_guard(const expr2tc &expr, crc_expr &inner_items);
+  void parse_implication_guard(
+    const expr2tc &expr,
+    crc_expr &inner_items,
+    crc_hash parent);
 
   /**
    * Simple take a expression and apply a hashing algorithm

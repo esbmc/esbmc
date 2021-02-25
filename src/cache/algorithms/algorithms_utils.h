@@ -33,13 +33,24 @@ public:
     return symbol->get_symbol_name();
   }
 
-  static bool is_guard(const expr2tc &expr, std::string &name)
+  static bool
+  is_guard(const expr2tc &expr, std::string &name, bool check_not = false)
   {
-    if(expr->expr_id != expr2t::expr_ids::symbol_id)
+    expr2tc to_check = expr;
+    if(expr->expr_id == expr2t::expr_ids::not_id)
+    {
+      if(!check_not)
+        return false;
+
+      not2tc n = to_not2t(expr);
+      to_check = n->value;
+    }
+
+    if(to_check->expr_id != expr2t::expr_ids::symbol_id)
       return false;
 
     std::shared_ptr<symbol_data> symbol;
-    symbol = std::dynamic_pointer_cast<symbol_data>(expr);
+    symbol = std::dynamic_pointer_cast<symbol_data>(to_check);
     std::string symbol_name = symbol->get_symbol_name();
     name = symbol_name;
     return symbol_name.find("goto_symex::guard") != std::string::npos;

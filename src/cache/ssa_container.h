@@ -69,9 +69,15 @@ public:
     return hits;
   }
 
+  virtual unsigned get_size() const
+  {
+    return size;
+  }
+
 protected:
   T expressions;
   unsigned hits = 0;
+  unsigned size = 0;
 };
 
 template <class T>
