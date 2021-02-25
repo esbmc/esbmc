@@ -1578,6 +1578,37 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  // A shufflevector statement
+  case clang::Stmt::ShuffleVectorExprClass:
+  {
+    // TODO: Creating a fake call that is a passthrough should be simpler
+    const clang::ShuffleVectorExpr &shuffle =
+      static_cast<const clang::ShuffleVectorExpr &>(stmt);
+
+    side_effect_expr_function_callt fake_call;
+    code_typet t;
+    if(get_type(shuffle.getType(), t.return_type()))
+      return true;
+
+    assert(t.return_type().is_vector());
+    fake_call.type() = t;
+
+    for(unsigned j = 0; j < shuffle.getNumSubExprs(); j++)
+    {
+      exprt e;
+      if(get_expr(*shuffle.getExpr(j), e))
+        return true;
+
+      t.arguments().push_back(code_typet::argumentt(e.type()));
+      fake_call.arguments().push_back(e);
+    }
+
+    fake_call.function() = symbol_exprt("c:@F@__ESBMC_shufflevector", t);
+    fake_call.function().name("__ESBMC_shufflevector");
+    new_expr.swap(fake_call);
+    return false;
+  }
+
   // An initialize statement, such as int a[3] = {1, 2, 3}
   case clang::Stmt::InitListExprClass:
   {
