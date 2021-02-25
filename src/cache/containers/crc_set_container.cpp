@@ -66,7 +66,7 @@ crc_lru cache(lru_cache_size);
 
 } // namespace
 
-bool expr_set_container::is_subset_of(const std::set<long> &other)
+bool expr_set_container::is_subset_of(const crc_expr &other)
 {
   return std::includes(
     other.begin(),
@@ -75,7 +75,7 @@ bool expr_set_container::is_subset_of(const std::set<long> &other)
     this->expression.end());
 }
 
-bool ssa_set_container::check(const std::set<long> &items)
+bool ssa_set_container::check(const crc_expr &items)
 {
   if(cache.exists(items))
   {
@@ -94,11 +94,14 @@ bool ssa_set_container::check(const std::set<long> &items)
   return false;
 }
 
-void ssa_set_container::add(const std::set<long> &items)
+void ssa_set_container::add(const crc_expr &items)
 {
+  for(auto i : items) std::cout << "\t" << i << "\n";
+
   //filter.insert_element(items);
   cache.insert(items);
   this->expressions.insert(std::make_shared<expr_set_container>(items));
+  size = this->expressions.size();
 }
 
 void ssa_set_container::clear_cache()

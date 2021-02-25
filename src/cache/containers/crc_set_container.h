@@ -19,7 +19,7 @@
 #include <memory>
 
 // Typedefs
-typedef long crc_hash;
+using crc_hash = unsigned long long;
 typedef std::set<crc_hash> crc_expr;
 
 /**
