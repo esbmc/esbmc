@@ -543,7 +543,6 @@ void goto_symext::run_intrinsic(
       members.push_back(vec.datatype_members[index]);
     }
     constant_vector2tc result(func_call.ret->type, members);
-    result->dump();
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
