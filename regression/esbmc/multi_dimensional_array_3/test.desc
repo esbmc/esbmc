@@ -1,4 +1,4 @@
 CORE
 main.c
---no-slice --memory-leak-check
+--k-induction
 ^VERIFICATION FAILED$

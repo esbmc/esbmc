@@ -28,9 +28,9 @@ std::string expr2ct::id_shorthand(const exprt &expr) const
 
   std::string sh = id2string(identifier);
 
-  std::string::size_type pos = sh.rfind("::");
+  std::string::size_type pos = sh.rfind("@");
   if(pos != std::string::npos)
-    sh.erase(0, pos + 2);
+    sh.erase(0, pos + 1);
 
   return sh;
 }

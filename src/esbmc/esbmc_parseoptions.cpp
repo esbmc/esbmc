@@ -1154,8 +1154,10 @@ int esbmc_parseoptionst::doit_termination()
     if(!do_forward_condition(opts, goto_functions, k_step))
       return false;
 
-    // if(!do_inductive_step(opts, goto_functions, k_step))
-    //   return false;
+    /* Disable this for now as it is causing more than 100 errors on SV-COMP
+    if(!do_inductive_step(opts, goto_functions, k_step))
+      return false;
+    */
   }
 
   status("Unable to prove or falsify the program, giving up.");
@@ -1834,7 +1836,7 @@ void esbmc_parseoptionst::help()
        "\nConcurrency checking\n"
        " --context-bound nr           limit number of context switches for "
        "each thread \n"
-       " --state-hashing              enable state-hashing, prunes duplicate "
+       " --state-hashing              enable state-hashing, prune duplicate "
        "states\n"
        " --no-por                     do not do partial order reduction\n"
        " --all-runs                   check all interleavings, even if a bug "

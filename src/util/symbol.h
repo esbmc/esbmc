@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <algorithm>
 #include <iostream>
 #include <list>
+#include <util/config.h>
 #include <util/expr.h>
 #include <util/location.h>
 
@@ -39,7 +40,7 @@ public:
   void swap(symbolt &b);
 
   void show(std::ostream &out = std::cout) const;
-  void dump() const;
+  DUMP_METHOD void dump() const;
 
   void to_irep(irept &dest) const;
   void from_irep(const irept &src);

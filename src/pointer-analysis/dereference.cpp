@@ -2059,10 +2059,13 @@ void dereferencet::check_data_obj_access(
   add2tc add(access_sz_e->type, offset, access_sz_e);
   greaterthan2tc gt(add, data_sz_e);
 
-  guardt tmp_guard = guard;
-  tmp_guard.add(gt);
-  dereference_failure(
-    "pointer dereference", "Access to object out of bounds", tmp_guard);
+  if(!options.get_bool_option("no-bounds-check"))
+  {
+    guardt tmp_guard = guard;
+    tmp_guard.add(gt);
+    dereference_failure(
+      "pointer dereference", "Access to object out of bounds", tmp_guard);
+  }
 
   // Also, if if it's a scalar, check that the access being made is aligned.
   if(is_scalar_type(type))
