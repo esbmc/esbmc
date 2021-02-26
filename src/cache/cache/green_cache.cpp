@@ -56,8 +56,6 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
      */
 
     // TODO: Fix this
-    std::cout << "Found an implication\n";
-    return;
     std::shared_ptr<logic_2ops> inner_implies;
     inner_implies = std::dynamic_pointer_cast<logic_2ops>(rhs);
 
@@ -67,7 +65,6 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
     // This is needed
     auto not_p = not2tc(inner_implies->side_2);
     auto inner_expr_hash = convert_expr_to_hash(not_p);
-    std::cout << "Inner hash " << inner_expr_hash << "\n";
     guard_items.insert(inner_expr_hash);
     parse_implication_guard(
       inner_implies->side_1, guard_items, inner_expr_hash);
@@ -163,7 +160,7 @@ void green_cache::parse_implication_guard(
     load_unsat_container();
     if(unsat_container.check(side_1) || unsat_container.check(side_2))
     {
-      // TODO: abort();
+      abort();
       constant_bool2tc false_value(false);
       and_expr->side_2 = false_value;
     }
@@ -189,13 +186,13 @@ void green_cache::parse_implication_guard(
     load_unsat_container();
     if(unsat_container.check(side_1))
     {
-      std::cout << "Hit OR simplification\n";
+      abort();
       // TODO: abort();
     }
 
     if(unsat_container.check(side_2))
     {
-      std::cout << "Hit OR simplification\n";
+      abort();
       // TODO: abort();
     }
 
@@ -205,12 +202,10 @@ void green_cache::parse_implication_guard(
 
   else if(expr->expr_id == expr2t::expr_ids::not_id)
   {
-    std::cout << "Not expression\n";
     std::string guard_name;
     if(expr_algorithm_util::is_guard(expr, guard_name, true)) {
       if(unsat_container.check(items[guard_name])) {
-        std::cout << "hit not cache\n";
-        // TODO: abort();
+        abort();
         inner_items.insert(expr->crc());
       } else {
         inner_items.insert(expr->crc());
@@ -262,7 +257,6 @@ void green_cache::run_on_assignment(symex_target_equationt::SSA_stept &step)
     crc_expr relations = parse_guard(rhs);
     // Adds it to the dictionary
     items.insert({guard_name, relations});
-    std::cout << "Got guard " << guard_name << ": " << rhs->crc() << "\n";
   }
 }
 
@@ -294,15 +288,15 @@ void green_cache::load_unsat_container()
 
 void green_cache::mark_ssa_as_unsat()
 {
-  std::cout << "Saving cache\n";
+  //std::cout << "Saving cache\n";
   for(const auto i : this->to_add_container)
   {
-    std::cout << "ITEM\n";
+    //std::cout << "ITEM\n";
       unsat_container.add(i);
 
   }
 
-  std::cout << "Total size " << unsat_container.get_size() << "\n";
+ // std::cout << "Total size " << unsat_container.get_size() << "\n";
   // Stores it in the cache
   //storage.store(unsat_container);
 }
