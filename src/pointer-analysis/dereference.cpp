@@ -1082,8 +1082,9 @@ void dereferencet::construct_from_const_struct_offset(
   unsigned int i = 0;
   for(auto const &it : struct_type.members)
   {
-    BigInt m_offs = member_offset(value->type, struct_type.member_names[i]);
-    BigInt m_size = type_byte_size(it);
+    BigInt m_offs =
+      member_offset_bits(value->type, struct_type.member_names[i]);
+    BigInt m_size = type_byte_size_bits(it);
 
     if(m_size == 0)
     {
@@ -1094,6 +1095,8 @@ void dereferencet::construct_from_const_struct_offset(
       // is supposed to point at.
       // If user is seeking a reference to this substruct, a different method
       // should have been called (construct_struct_ref_from_const_offset).
+      assert(is_struct_type(it));
+      assert(!is_struct_type(type));
       i++;
       continue;
     }
@@ -1178,6 +1181,15 @@ void dereferencet::construct_from_dyn_struct_offset(
   modet mode,
   const expr2tc *failed_symbol)
 {
+  // if we are accessing the struct using a byte, we can ignore alignment
+  // rules, so convert the struct to bv and dispatch it to
+  // construct_from_dyn_offset
+  if(type->get_width() == 8)
+  {
+    value = bitcast2tc(get_uint_type(value->type->get_width()), value);
+    return construct_from_dyn_offset(value, offset, type);
+  }
+
   // For each element of the struct, look at the alignment, and produce an
   // appropriate access (that we'll switch on).
   assert(is_struct_type(value->type));
@@ -1197,13 +1209,12 @@ void dereferencet::construct_from_dyn_struct_offset(
   unsigned int i = 0;
   for(auto const &it : struct_type.members)
   {
-    BigInt offs = member_offset(value->type, struct_type.member_names[i]);
+    BigInt offs = member_offset_bits(value->type, struct_type.member_names[i]);
 
     // Compute some kind of guard
-    unsigned int field_size = it->get_width() / 8;
+    BigInt field_size = type_byte_size_bits(it);
+
     // Round up to word size
-    unsigned int word_mask = (config.ansi_c.word_size / 8) - 1;
-    field_size = (field_size + word_mask) & (~word_mask);
     expr2tc field_offs = constant_int2tc(offset->type, offs);
     expr2tc field_top = constant_int2tc(offset->type, offs + field_size);
     expr2tc lower_bound = greaterthanequal2tc(offset, field_offs);
@@ -1226,7 +1237,7 @@ void dereferencet::construct_from_dyn_struct_offset(
       build_reference_rec(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
     }
-    else if(access_sz > (it->get_width() / 8))
+    else if((access_sz > (it->get_width() / 8)) && (type->get_width() != 8))
     {
       guardt newguard(guard);
       newguard.add(field_guard);
@@ -1303,9 +1314,7 @@ void dereferencet::construct_from_dyn_offset(
 
   // Ensure we're dealing with a BV. A floatbv is not a bv!
   if(!is_bv_type(value->type) && !is_fixedbv_type(value->type))
-  {
     value = bitcast2tc(get_uint_type(value->type->get_width()), value);
-  }
 
   expr2tc *bytes =
     extract_bytes_from_scalar(value, type->get_width() / 8, offset);
@@ -1681,9 +1690,7 @@ void dereferencet::alignment_failure(
 {
   // This just wraps dereference failure in a no-pointer-check check.
   if(!options.get_bool_option("no-align-check"))
-  {
     dereference_failure("Pointer alignment", error_name, guard);
-  }
 }
 
 expr2tc *dereferencet::extract_bytes_from_array(
