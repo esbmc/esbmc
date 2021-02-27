@@ -952,13 +952,9 @@ void dereferencet::construct_from_array(
   unsigned long alignment)
 {
   assert(is_array_type(value) || is_string_type(value));
-  bool is_const_offset = is_constant_int2t(offset);
 
   const array_type2t arr_type = get_arr_type(value);
   type2tc arr_subtype = arr_type.subtype;
-
-  unsigned int subtype_size = type_byte_size(arr_subtype).to_uint64();
-  unsigned int deref_size = type->get_width() / 8;
 
   if(is_array_type(arr_type.subtype))
   {
@@ -966,6 +962,7 @@ void dereferencet::construct_from_array(
     return;
   }
 
+  unsigned int subtype_size = type_byte_size(arr_subtype).to_uint64();
   constant_int2tc subtype_sz_expr(offset->type, BigInt(subtype_size));
   div2tc div(pointer_type2(), offset, subtype_sz_expr);
   simplify(div);
@@ -989,7 +986,7 @@ void dereferencet::construct_from_array(
 
   // Can we just select this out?
   bool is_correctly_aligned = false;
-  if(is_const_offset)
+  if(is_constant_int2t(offset))
   {
     // Constant offset is aligned with array boundaries?
     unsigned int offs = to_constant_int2t(offset).value.to_uint64();
@@ -1002,6 +999,7 @@ void dereferencet::construct_from_array(
   }
 
   // Additional complexity occurs if it's aligned but overflows boundaries
+  unsigned int deref_size = type->get_width() / 8;
   bool overflows_boundaries = (deref_size > subtype_size);
 
   // No alignment guarantee: assert that it's correct.
@@ -1043,23 +1041,30 @@ void dereferencet::construct_from_const_offset(
     // Offset is zero, and we select the entire contents of the field. We may
     // need to perform a cast though.
     if(!base_type_eq(value->type, type, ns))
-    {
       value = bitcast2tc(type, value);
+    return;
+  }
+
+  if(value->type->get_width() < type->get_width())
+  {
+    // Oversized read
+    if(!is_member2t(value))
+    {
+      // give up, rely on dereference failure
+      value = expr2tc();
+      return;
     }
+
+    // Try to handle unaligned write by writting directly to the base_object
+    // TODO: should we recurse and find the base_object using get_base_object?
+    value = to_member2t(value).source_value;
   }
-  else if(value->type->get_width() < type->get_width())
-  {
-    // Oversized read -> give up, rely on dereference failure
-    value = expr2tc();
-  }
-  else
-  {
-    // Either nonzero offset, or a smaller / bigger read.
-    expr2tc *bytes =
-      extract_bytes_from_scalar(value, type->get_width() / 8, offset);
-    stitch_together_from_byte_array(value, type, bytes);
-    delete[] bytes;
-  }
+
+  // Either nonzero offset, or a smaller / bigger read.
+  expr2tc *bytes =
+    extract_bytes_from_scalar(value, type->get_width() / 8, offset);
+  stitch_together_from_byte_array(value, type, bytes);
+  delete[] bytes;
 }
 
 void dereferencet::construct_from_const_struct_offset(
