@@ -92,7 +92,8 @@ BigInt type_byte_size_bits(const type2tc &type)
     return config.ansi_c.pointer_width;
 
   case type2t::string_id:
-    return to_string_type(type).width;
+    // TODO: Strings of wchar will return the wrong result here
+    return to_string_type(type).width * config.ansi_c.char_width;
 
   case type2t::array_id:
   {
