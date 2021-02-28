@@ -26,9 +26,14 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
   // First assert irep should begin with an implies
   if(cond->expr_id != expr2t::expr_ids::implies_id)
   {
-    cond->dump();
     // TODO: Fix this, a condition may be !guard
     return;
+  }
+
+  if(step.source.pc->location.is_not_nil()) {
+    auto function = step.source.pc->location.function().as_string();
+    if(function == "reach_error")
+      return;
   }
 
   std::shared_ptr<logic_2ops> implies;
@@ -86,28 +91,24 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
     }
     // Simple guard
     canonize_expr(rhs);
-    bool initialized = false;
     if(rhs->expr_id == expr2t::expr_ids::not_id)
     {
       std::string guard_name;
       if(expr_algorithm_util::is_guard(rhs, guard_name, true))
       {
-        if(items.find(guard_name) == items.end())
-        {
-          std::cerr << "Guard " << guard_name << " wasn't parsed\n";
-          abort();
-        }
         for(const auto &item : items[guard_name])
         {
           guard_items.insert(item);
         }
-        initialized = true;
+      } else {
+        not2tc n = to_not2t(rhs);
+        auto value = n->value;
+        guard_items.insert(hash_value(value));
       }
     }
-    if(!initialized)
-    {
-      auto expr_hash = convert_expr_to_hash(rhs);
-      guard_items.insert(expr_hash);
+    else {
+      auto not_expr = not2tc(rhs);
+      guard_items.insert(hash_value(not_expr));
     }
   }
 
@@ -205,7 +206,6 @@ void green_cache::parse_implication_guard(
     std::string guard_name;
     if(expr_algorithm_util::is_guard(expr, guard_name, true)) {
       if(unsat_container.check(items[guard_name])) {
-        abort();
         inner_items.insert(expr->crc());
       } else {
         inner_items.insert(expr->crc());
