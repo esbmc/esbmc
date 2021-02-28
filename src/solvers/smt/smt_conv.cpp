@@ -2092,6 +2092,18 @@ expr2tc smt_convt::get(const expr2tc &expr)
   case expr2t::symbol_id:
     return get_by_type(res);
 
+  case expr2t::member_id:
+  {
+    if(is_array_type(expr))
+    {
+      std::cerr << "Fetching array elements inside tuples currently "
+                   "unimplemented, sorry"
+                << std::endl;
+      return expr2tc();
+    }
+    break;
+  }
+
   case expr2t::if_id:
   {
     // Special case for ternary if, for cases when we are updating the member
