@@ -956,7 +956,7 @@ void dereferencet::construct_from_array(
   const array_type2t arr_type = get_arr_type(value);
   type2tc arr_subtype = arr_type.subtype;
 
-  if(is_array_type(arr_type.subtype))
+  if(is_array_type(arr_subtype))
   {
     construct_from_multidir_array(value, offset, type, guard, alignment, mode);
     return;
@@ -1019,7 +1019,7 @@ void dereferencet::construct_from_array(
     // Alignment assertion / guarantee ensures we don't do something silly.
     // This will construct from whatever the subtype is...
     expr2tc *bytes =
-      extract_bytes_from_array(value, type->get_width() / 8, div);
+      extract_bytes_from_array(value, type_byte_size(type).to_uint64(), div);
     stitch_together_from_byte_array(value, type, bytes);
     delete[] bytes;
   }
@@ -1149,7 +1149,8 @@ void dereferencet::construct_from_const_struct_offset(
       // This access is in the bounds of this member, but isn't at the start.
       // XXX that might be an alignment error.
       expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
-      constant_int2tc new_offs(pointer_type2(), int_offset - m_offs);
+      constant_int2tc new_offs(
+        pointer_type2(), (int_offset - m_offs) / config.ansi_c.char_width);
 
       // Extract.
       build_reference_rec(memb, new_offs, type, guard, mode);
@@ -1198,7 +1199,11 @@ void dereferencet::construct_from_dyn_struct_offset(
   // appropriate access (that we'll switch on).
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
-  unsigned int access_sz = type->get_width() / 8;
+  unsigned int access_sz = type_byte_size_bits(type).to_uint64();
+  expr2tc bits_offset = mul2tc(
+    offset->type,
+    offset,
+    constant_int2tc(offset->type, config.ansi_c.char_width));
 
   expr2tc failed_container;
   if(failed_symbol == nullptr)
@@ -1221,14 +1226,16 @@ void dereferencet::construct_from_dyn_struct_offset(
     // Round up to word size
     expr2tc field_offs = constant_int2tc(offset->type, offs);
     expr2tc field_top = constant_int2tc(offset->type, offs + field_size);
-    expr2tc lower_bound = greaterthanequal2tc(offset, field_offs);
-    expr2tc upper_bound = lessthan2tc(offset, field_top);
+    expr2tc lower_bound = greaterthanequal2tc(bits_offset, field_offs);
+    expr2tc upper_bound = lessthan2tc(bits_offset, field_top);
     expr2tc field_guard = and2tc(lower_bound, upper_bound);
 
     if(is_struct_type(it))
     {
-      // Handle recursive structs
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
+      // Handle recursive structs in bytes
+      expr2tc field_offs_byte =
+        constant_int2tc(offset->type, type_byte_size(it));
+      expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       construct_from_dyn_struct_offset(
         field, new_offset, type, guard, alignment, mode, &failed_container);
@@ -1236,12 +1243,14 @@ void dereferencet::construct_from_dyn_struct_offset(
     }
     else if(is_array_type(it))
     {
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
+      expr2tc field_offs_byte =
+        constant_int2tc(offset->type, type_byte_size(it));
+      expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       build_reference_rec(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
     }
-    else if((access_sz > (it->get_width() / 8)) && (type->get_width() != 8))
+    else if((access_sz > it->get_width()) && (type->get_width() != 8))
     {
       guardt newguard(guard);
       newguard.add(field_guard);
@@ -1262,7 +1271,9 @@ void dereferencet::construct_from_dyn_struct_offset(
     else
     {
       // Not fully aligned; devolve to byte extract.
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
+      expr2tc field_offs_byte =
+        constant_int2tc(offset->type, type_byte_size(it));
+      expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
 
       expr2tc *bytes = extract_bytes_from_scalar(
