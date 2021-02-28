@@ -1062,7 +1062,7 @@ void dereferencet::construct_from_const_offset(
 
   // Either nonzero offset, or a smaller / bigger read.
   expr2tc *bytes =
-    extract_bytes_from_scalar(value, type->get_width() / 8, offset);
+    extract_bytes_from_scalar(value, type_byte_size(type).to_uint64(), offset);
   stitch_together_from_byte_array(value, type, bytes);
   delete[] bytes;
 }
@@ -1261,8 +1261,8 @@ void dereferencet::construct_from_dyn_struct_offset(
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
 
-      expr2tc *bytes =
-        extract_bytes_from_scalar(field, type->get_width() / 8, new_offset);
+      expr2tc *bytes = extract_bytes_from_scalar(
+        field, type_byte_size(type).to_uint64(), new_offset);
       stitch_together_from_byte_array(field, type, bytes);
       delete[] bytes;
 
@@ -1317,7 +1317,7 @@ void dereferencet::construct_from_dyn_offset(
     value = bitcast2tc(get_uint_type(value->type->get_width()), value);
 
   expr2tc *bytes =
-    extract_bytes_from_scalar(value, type->get_width() / 8, offset);
+    extract_bytes_from_scalar(value, type_byte_size(type).to_uint64(), offset);
   stitch_together_from_byte_array(value, type, bytes);
   delete[] bytes;
 }
@@ -1736,13 +1736,11 @@ expr2tc *dereferencet::extract_bytes_from_array(
 
 expr2tc *dereferencet::extract_bytes_from_scalar(
   const expr2tc &object,
-  unsigned int _bytes,
+  unsigned int num_bytes,
   const expr2tc &offset)
 {
-  unsigned int num_bytes = _bytes ?: 1;
   assert(num_bytes != 0);
 
-  assert(is_scalar_type(object) && "Can't extract bytes out of non-scalars");
   const type2tc &bytetype = get_uint8_type();
 
   expr2tc *bytes = new expr2tc[num_bytes];
@@ -1769,9 +1767,7 @@ void dereferencet::stitch_together_from_byte_array(
   const type2tc &type,
   const expr2tc *bytes)
 {
-  int num_bytes = type->get_width() / 8;
-  num_bytes = num_bytes ?: 1;
-
+  unsigned int num_bytes = type_byte_size(type).to_uint64();
   assert(num_bytes != 0);
 
   // We are composing a larger data type out of bytes -- we must consider
@@ -1781,7 +1777,7 @@ void dereferencet::stitch_together_from_byte_array(
   {
     // First bytes at top of accumulated bitstring
     accuml = bytes[0];
-    for(int i = 1; i < num_bytes; i++)
+    for(unsigned int i = 1; i < num_bytes; i++)
     {
       type2tc res_type = get_uint_type(accuml->type->get_width() + 8);
       accuml = concat2tc(res_type, accuml, bytes[i]);
