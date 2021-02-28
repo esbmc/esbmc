@@ -1076,8 +1076,9 @@ void dereferencet::construct_from_const_struct_offset(
 {
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
-  const BigInt int_offset = to_constant_int2t(offset).value;
-  BigInt access_size = type_byte_size(type);
+  const BigInt int_offset =
+    to_constant_int2t(offset).value * config.ansi_c.char_width;
+  BigInt access_size = type_byte_size_bits(type);
 
   unsigned int i = 0;
   for(auto const &it : struct_type.members)
@@ -1122,8 +1123,10 @@ void dereferencet::construct_from_const_struct_offset(
           "Dereference reads between struct fields",
           guard);
       }
+      return;
     }
-    else if(int_offset == m_offs)
+
+    if(int_offset == m_offs)
     {
       // Does this over-read?
       if(access_size > m_size)
@@ -1140,8 +1143,8 @@ void dereferencet::construct_from_const_struct_offset(
 
       return;
     }
-    else if(
-      int_offset > m_offs && (int_offset - m_offs + access_size <= m_size))
+
+    if(int_offset > m_offs && (int_offset - m_offs + access_size <= m_size))
     {
       // This access is in the bounds of this member, but isn't at the start.
       // XXX that might be an alignment error.
@@ -1153,7 +1156,8 @@ void dereferencet::construct_from_const_struct_offset(
       value = memb;
       return;
     }
-    else if(int_offset < (m_offs + m_size))
+
+    if(int_offset < (m_offs + m_size))
     {
       // This access starts in this field, but by process of elimination,
       // doesn't end in it. Which means reading padding data (or an alignment
