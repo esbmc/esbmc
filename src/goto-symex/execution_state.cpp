@@ -677,12 +677,6 @@ void execution_statet::execute_guard()
   if(is_false(parent_guard))
     guard_expr = parent_guard;
 
-  for(auto &i : threads_state)
-  {
-    i.global_guard.make_true();
-    i.global_guard.add(get_guard_identifier());
-  }
-
   // Check to see whether or not the state guard is false, indicating we've
   // found an unviable interleaving. However don't do this if we didn't
   // /actually/ switch between threads, because it's acceptable to have a
