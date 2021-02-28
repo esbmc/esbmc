@@ -96,8 +96,6 @@ bool ssa_set_container::check(const crc_expr &items)
 
 void ssa_set_container::add(const crc_expr &items)
 {
-  for(auto i : items) std::cout << "\t" << i << "\n";
-
   //filter.insert_element(items);
   cache.insert(items);
   this->expressions.insert(std::make_shared<expr_set_container>(items));
