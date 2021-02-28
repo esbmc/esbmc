@@ -10,9 +10,6 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
   if(!is_bv_type(source->type) && !is_fixedbv_type(source->type))
     source = bitcast2tc(get_uint_type(src_width), source);
 
-  assert(
-    is_scalar_type(data.source_value) &&
-    "Byte extract now only works on scalar variables");
   if(!is_constant_int2t(data.source_offset))
   {
     // The approach: the argument is now a bitvector. Just shift it the
@@ -85,11 +82,6 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
 {
   const byte_update2t &data = to_byte_update2t(expr);
-
-  assert(
-    is_scalar_type(data.source_value) &&
-    "Byte update only works on "
-    "scalar variables now");
   assert(data.type == data.source_value->type);
 
   if(!is_bv_type(data.type) && !is_fixedbv_type(data.type))
