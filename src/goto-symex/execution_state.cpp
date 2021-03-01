@@ -803,12 +803,13 @@ void execution_statet::get_expr_globals(
       return;
 
     if(
-      name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
-      name == "c:@__ESBMC_is_dynamic" || name == "c:@__ESBMC_rounding_mode")
-    {
+      name.find("c:@__ESBMC_") != std::string::npos ||
+      name.find("c:@F@pthread_") != std::string::npos ||
+      name.find("c:pthread_lib") != std::string::npos)
       return;
-    }
-    if((symbol->static_lifetime || symbol->type.is_dynamic_set()))
+    else if(
+      (symbol->static_lifetime || symbol->type.is_dynamic_set()) ||
+      name.find("tmp") != std::string::npos)
     {
       std::list<unsigned int> threadId_list;
       auto it_find = art1->vars_map.find(expr);
@@ -832,9 +833,9 @@ void execution_statet::get_expr_globals(
             globals_list.insert(expr);
             art1->is_global.insert(expr);
           }
-          // expression was not accessed by other thread
           else
           {
+            // expression was not accessed by other thread
             auto its_global = art1->is_global.find(expr);
             // expression was defined as global in another interleaving
             if(its_global != art1->is_global.end())

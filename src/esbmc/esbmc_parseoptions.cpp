@@ -1838,7 +1838,7 @@ void esbmc_parseoptionst::help()
        "each thread \n"
        " --state-hashing              enable state-hashing, prune duplicate "
        "states\n"
-       " --no-por                     do not do partial order reduction\n"
+       " --por                        do partial order reduction\n"
        " --all-runs                   check all interleavings, even if a bug "
        "was already found\n"
 
