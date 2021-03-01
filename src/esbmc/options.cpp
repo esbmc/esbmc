@@ -150,7 +150,7 @@ const struct opt_templ esbmc_options[] = {
   {0, "time-slice", number, "1"},
 
   // Concurrency checking
-  {0, "context-bound", number, "-1"},
+  {0, "context-bound", number, "2"},
   {0, "state-hashing", switc, ""},
   {0, "por", switc, ""},
   {0, "all-runs", switc, ""},

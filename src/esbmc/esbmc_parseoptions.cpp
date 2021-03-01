@@ -229,7 +229,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("context-bound"))
     options.set_option("context-bound", cmdline.getval("context-bound"));
   else
-    options.set_option("context-bound", -1);
+    options.set_option("context-bound", 2);
 
   if(cmdline.isset("lock-order-check"))
     options.set_option("lock-order-check", true);
@@ -1835,7 +1835,7 @@ void esbmc_parseoptionst::help()
 
        "\nConcurrency checking\n"
        " --context-bound nr           limit number of context switches for "
-       "each thread \n"
+       "each thread (default is 2) \n"
        " --state-hashing              enable state-hashing, prune duplicate "
        "states\n"
        " --por                        do partial order reduction\n"
