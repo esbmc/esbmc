@@ -803,11 +803,13 @@ void execution_statet::get_expr_globals(
       return;
 
     if(
-      name.find("c:@__ESBMC_") != std::string::npos ||
+      name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
+      name == "c:@__ESBMC_is_dynamic" || name == "c:@__ESBMC_rounding_mode" ||
       name.find("c:@F@pthread_") != std::string::npos ||
       name.find("c:pthread_lib") != std::string::npos)
       return;
-    else if((symbol->static_lifetime || symbol->type.is_dynamic_set()))
+
+    if((symbol->static_lifetime || symbol->type.is_dynamic_set()) || 1)
     {
       std::list<unsigned int> threadId_list;
       auto it_find = art1->vars_map.find(expr);
