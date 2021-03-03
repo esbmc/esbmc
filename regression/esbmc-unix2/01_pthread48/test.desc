@@ -1,4 +1,4 @@
 CORE
 main.c
---force-malloc-success --unwind 3
+--force-malloc-success --unwind 3 --context-bound 1 --state-hashing --no-bounds-check --no-pointer-check
 ^VERIFICATION SUCCESSFUL$
