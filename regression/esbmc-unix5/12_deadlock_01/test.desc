@@ -1,4 +1,4 @@
 CORE
 stateful01.c
---deadlock-check --context-bound 3
+--deadlock-check --context-bound 2
 ^VERIFICATION SUCCESSFUL$
