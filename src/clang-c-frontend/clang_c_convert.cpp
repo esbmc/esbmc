@@ -1578,6 +1578,33 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::ConvertVectorExprClass:
+  {
+    // TODO: Creating a fake call that is a passthrough should be simpler
+    const clang::ConvertVectorExpr &convertVector =
+      static_cast<const clang::ConvertVectorExpr &>(stmt);
+
+    side_effect_expr_function_callt fake_call;
+    code_typet t;
+    if(get_type(convertVector.getType(), t.return_type()))
+      return true;
+
+    assert(t.return_type().is_vector());
+    fake_call.type() = t;
+
+    exprt e;
+    if(get_expr(*convertVector.getSrcExpr(), e))
+      return true;
+
+    t.arguments().push_back(code_typet::argumentt(e.type()));
+    fake_call.arguments().push_back(e);
+
+    fake_call.function() = symbol_exprt("c:@F@__ESBMC_convertvector", t);
+    fake_call.function().name("__ESBMC_convertvector");
+    new_expr.swap(fake_call);
+    return false;
+  }
+
   // A shufflevector statement
   case clang::Stmt::ShuffleVectorExprClass:
   {
