@@ -1298,7 +1298,24 @@ static expr2tc do_bit_munge_operation(
       type,
       expr2tc(new constructor(type, simplified_side_1, simplified_side_2)));
 
-  return expr2tc();
+  // This has potentially become negative. Check the top bit.
+  __uint128_t upper_bit = 1;
+  upper_bit <<= (type->get_width() - 1);
+  if(val1 & upper_bit && is_signedbv_type(type))
+  {
+    // Sign extend.
+    val1 |= ULLONG_MAX << (type->get_width());
+  }
+
+  // And now, restore, paying attention to whether this is supposed to be
+  // signed or not.
+  constant_int2t *theint;
+  if(is_signedbv_type(type))
+    theint = new constant_int2t(type, BigInt(val1));
+  else
+    theint = new constant_int2t(type, BigInt((uint64_t)val1));
+
+  return expr2tc(theint);
 }
 
 expr2tc bitand2t::do_simplify() const
