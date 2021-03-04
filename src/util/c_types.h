@@ -17,10 +17,16 @@ type2tc index_type2();
 
 typet int_type();
 type2tc int_type2();
-
 typet uint_type();
 type2tc uint_type2();
-
+typet int128_type();
+type2tc int128_type2();
+typet uint_type();
+type2tc uint_type2();
+typet uint128_type();
+type2tc uint128_type2();
+typet signed_short_int_type();
+typet unsigned_short_int_type();added support to integers larger than 64
 typet long_int_type();
 type2tc long_int_type2();
 
