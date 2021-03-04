@@ -1067,12 +1067,15 @@ bool clang_c_convertert::get_builtin_type(
     break;
 
   case clang::BuiltinType::Int128:
+    new_type = int128_type();
+    c_type = "__int128";
+    break;
+
   case clang::BuiltinType::UInt128:
     // Various simplification / big-int related things use uint64_t's...
-    std::cerr << "ESBMC currently does not support integers bigger "
-              << "than 64 bits" << std::endl;
-    bt.dump();
-    return true;
+    new_type = uint128_type();
+    c_type = "__uint128";
+    break;
 
   default:
     std::cerr << "Unrecognized clang builtin type "
