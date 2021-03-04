@@ -809,7 +809,7 @@ void execution_statet::get_expr_globals(
       name.find("c:pthread_lib") != std::string::npos)
       return;
 
-    if((symbol->static_lifetime || symbol->type.is_dynamic_set()) || 1)
+    if((symbol->static_lifetime || symbol->type.is_dynamic_set()))
     {
       std::list<unsigned int> threadId_list;
       auto it_find = art1->vars_map.find(expr);
