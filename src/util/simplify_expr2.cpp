@@ -1392,7 +1392,9 @@ static expr2tc do_bit_munge_operation(
   val1 = opfunc(val1, val2);
 
   // This has potentially become negative. Check the top bit.
-  if(val1 & (1 << (type->get_width() - 1)) && is_signedbv_type(type))
+  __uint128_t upper_bit = 1;
+  upper_bit <<= (type->get_width() - 1);
+  if(val1 & upper_bit && is_signedbv_type(type))
   {
     // Sign extend.
     val1 |= ULLONG_MAX << (type->get_width());

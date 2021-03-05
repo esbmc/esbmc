@@ -96,7 +96,9 @@ protected:
     LONGDOUBLE,
     VOIDPTR,
     PTR,
-    OTHER
+    OTHER,
+    INT128,
+    UINT128
   };
 
   c_typet get_c_type(const typet &type);
