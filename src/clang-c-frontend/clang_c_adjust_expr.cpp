@@ -384,6 +384,10 @@ void clang_c_adjust::adjust_float_arith(exprt &expr)
       expr.id("ieee_div");
     }
 
+    // BUG: setting rounding_mode breaks migration
+    if(t.is_vector())
+      return;
+
     // Add rounding mode
     expr.set(
       "rounding_mode",
