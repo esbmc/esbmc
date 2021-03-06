@@ -811,23 +811,10 @@ expr2tc pointer_offset2t::do_simplify() const
       const index2t &index = to_index2t(addrof.ptr_obj);
       if(is_constant_int2t(index.index))
       {
-        if(is_symbol2t(index.source_value))
-        {
-          // We can reduce to that index offset.
-          const array_type2t &arr = to_array_type(index.source_value->type);
-          unsigned int widthbits = arr.subtype->get_width();
-          unsigned int widthbytes = widthbits / 8;
-          BigInt val = to_constant_int2t(index.index).value;
-          val *= widthbytes;
-          return constant_int2tc(type, val);
-        }
-
-        if(is_constant_string2t(index.source_value))
-        {
-          // This can also be simplified to an array offset. Just return the index,
-          // as the string elements are all 8 bit bytes.
-          return index.index;
-        }
+        expr2tc offs =
+          try_simplification(compute_pointer_offset(addrof.ptr_obj));
+        if(is_constant_int2t(offs))
+          return offs;
       }
     }
   }
