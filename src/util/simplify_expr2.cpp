@@ -862,8 +862,7 @@ expr2tc pointer_offset2t::do_simplify() const
     // And multiply the non pointer one by the type size.
     type2tc ptr_int_type = get_int_type(config.ansi_c.pointer_width);
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
-    BigInt thesize =
-      (is_empty_type(ptr_subtype)) ? 1 : type_byte_size(ptr_subtype);
+    BigInt thesize = type_byte_size(ptr_subtype);
     constant_int2tc type_size(type, thesize);
 
     // SV-Comp workaround
