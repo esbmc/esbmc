@@ -888,43 +888,43 @@ expr2tc pointer_offset2t::do_simplify() const
 
 expr2tc index2t::do_simplify() const
 {
+  expr2tc new_index = try_simplification(index);
+
   if(is_with2t(source_value))
   {
-    if(index == to_with2t(source_value).update_field)
-    {
-      // Index is the same as an update to the thing we're indexing; we can
-      // just take the update value from the "with" below.
+    // Index is the same as an update to the thing we're indexing; we can
+    // just take the update value from the "with" below.
+    if(new_index == to_with2t(source_value).update_field)
       return to_with2t(source_value).update_value;
-    }
 
     return expr2tc();
   }
-  if(is_constant_array2t(source_value) && is_constant_int2t(index))
-  {
-    const constant_array2t &arr = to_constant_array2t(source_value);
-    const constant_int2t &idx = to_constant_int2t(index);
 
+  if(is_constant_array2t(source_value) && is_constant_int2t(new_index))
+  {
     // Index might be greater than the constant array size. This means we can't
     // simplify it, and the user might be eaten by an assertion failure in the
     // model. We don't have to think about this now though.
+    const constant_int2t &idx = to_constant_int2t(new_index);
     if(idx.value.is_negative())
       return expr2tc();
 
+    const constant_array2t &arr = to_constant_array2t(source_value);
     unsigned long the_idx = idx.as_ulong();
     if(the_idx >= arr.datatype_members.size())
       return expr2tc();
 
     return arr.datatype_members[the_idx];
   }
-  else if(is_constant_string2t(source_value) && is_constant_int2t(index))
-  {
-    const constant_string2t &str = to_constant_string2t(source_value);
-    const constant_int2t &idx = to_constant_int2t(index);
 
+  if(is_constant_string2t(source_value) && is_constant_int2t(new_index))
+  {
     // Same index situation
+    const constant_int2t &idx = to_constant_int2t(new_index);
     if(idx.value.is_negative())
       return expr2tc();
 
+    const constant_string2t &str = to_constant_string2t(source_value);
     unsigned long the_idx = idx.as_ulong();
     if(the_idx > str.value.as_string().size()) // allow reading null term.
       return expr2tc();
@@ -934,15 +934,12 @@ expr2tc index2t::do_simplify() const
     unsigned long val = str.value.as_string().c_str()[the_idx];
     return constant_int2tc(type, BigInt(val));
   }
-  else if(is_constant_array_of2t(source_value))
-  {
-    // Only thing this index can evaluate to is the default value of this array
+
+  // Only thing this index can evaluate to is the default value of this array
+  if(is_constant_array_of2t(source_value))
     return to_constant_array_of2t(source_value).initializer;
-  }
-  else
-  {
-    return expr2tc();
-  }
+
+  return expr2tc();
 }
 
 expr2tc not2t::do_simplify() const
