@@ -2709,3 +2709,87 @@ expr2tc ieee_sqrt2t::do_simplify() const
 
   return expr2tc();
 }
+
+expr2tc constant_struct2t::do_simplify() const
+{
+  return expr2tc();
+}
+
+expr2tc constant_array2t::do_simplify() const
+{
+  return expr2tc();
+}
+
+expr2tc byte_update2t::do_simplify() const
+{
+  expr2tc simplied_source = try_simplification(source_value);
+  expr2tc simplied_offset = try_simplification(source_offset);
+  expr2tc simplied_value = try_simplification(update_value);
+  if(
+    !is_constant_int2t(simplied_source) ||
+    !is_constant_int2t(simplied_offset) || !is_constant_int2t(simplied_value))
+  {
+    // Were we able to simplify the sides?
+    if(
+      (source_value != simplied_source) || (source_offset != simplied_offset) ||
+      (update_value != simplied_value))
+    {
+      expr2tc new_op = byte_update2tc(
+        type, simplied_source, simplied_offset, simplied_value, big_endian);
+
+      return typecast_check_return(type, new_op);
+    }
+    return expr2tc();
+  }
+
+  std::string value = integer2binary(
+    to_constant_int2t(simplied_value).value, simplied_value->type->get_width());
+  std::string src_value = integer2binary(
+    to_constant_int2t(simplied_source).value,
+    simplied_source->type->get_width());
+
+  unsigned int width_op0 = simplied_source->type->get_width();
+  unsigned int src_offset =
+    to_constant_int2t(simplied_offset).value.to_uint64();
+
+  // Flip location if we're in big-endian mode
+  if(big_endian)
+  {
+    unsigned int data_size =
+      type_byte_size(simplied_source->type).to_uint64() - 1;
+    src_offset = data_size - src_offset;
+  }
+
+  unsigned int top_of_update = (8 * src_offset) + 8;
+  unsigned int bottom_of_update = (8 * src_offset);
+
+  std::string top;
+  if(top_of_update == width_op0)
+    top = value;
+  else
+    top = src_value.substr(top_of_update, width_op0 - 1);
+
+  std::string middle;
+  if(top != value)
+    middle = value;
+
+  std::string bottom;
+  if(src_offset == 0)
+  {
+    middle = "";
+    bottom = value;
+  }
+  else
+    bottom = src_value.substr(0, bottom_of_update - 1);
+
+  std::string concat;
+  if(middle != "")
+    concat = top + middle;
+  else
+    concat = top;
+
+  concat += bottom;
+  return typecast_check_return(
+    type,
+    constant_int2tc(get_uint_type(concat.length()), string2integer(concat, 2)));
+}
