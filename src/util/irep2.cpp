@@ -780,14 +780,15 @@ type_poolt &type_poolt::operator=(type_poolt const &ref)
 static const type2tc &
 get_type_from_pool(const typet &val, std::map<typet, type2tc> &map)
 {
+/* BUG: This is creating problems
   auto it = map.find(val);
   if(it != map.end())
-    return it->second;
-
+    return map[val];
+*/
   type2tc new_type;
   real_migrate_type(val, new_type);
-
   map[val] = new_type;
+
   return map[val];
 }
 
