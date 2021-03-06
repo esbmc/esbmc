@@ -780,7 +780,7 @@ type_poolt &type_poolt::operator=(type_poolt const &ref)
 static const type2tc &
 get_type_from_pool(const typet &val, std::map<typet, type2tc> &map)
 {
-/* BUG: This is creating problems
+  /* BUG: This is creating problems
   auto it = map.find(val);
   if(it != map.end())
     return map[val];
