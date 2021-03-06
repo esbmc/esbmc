@@ -12,7 +12,6 @@
 #include <util/message.h>
 #include <util/namespace.h>
 #include <util/threeval.h>
-#include <util/type_byte_size.h>
 
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
