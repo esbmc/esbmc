@@ -1233,8 +1233,8 @@ void dereferencet::construct_from_dyn_struct_offset(
     if(is_struct_type(it))
     {
       // Handle recursive structs in bytes
-      expr2tc field_offs_byte =
-        constant_int2tc(offset->type, type_byte_size(it));
+      expr2tc field_offs_byte = constant_int2tc(
+        offset->type, member_offset(value->type, struct_type.member_names[i]));
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       construct_from_dyn_struct_offset(
@@ -1243,8 +1243,8 @@ void dereferencet::construct_from_dyn_struct_offset(
     }
     else if(is_array_type(it))
     {
-      expr2tc field_offs_byte =
-        constant_int2tc(offset->type, type_byte_size(it));
+      expr2tc field_offs_byte = constant_int2tc(
+        offset->type, member_offset(value->type, struct_type.member_names[i]));
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       build_reference_rec(field, new_offset, type, guard, mode, alignment);
@@ -1271,8 +1271,8 @@ void dereferencet::construct_from_dyn_struct_offset(
     else
     {
       // Not fully aligned; devolve to byte extract.
-      expr2tc field_offs_byte =
-        constant_int2tc(offset->type, type_byte_size(it));
+      expr2tc field_offs_byte = constant_int2tc(
+        offset->type, member_offset(value->type, struct_type.member_names[i]));
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
 
