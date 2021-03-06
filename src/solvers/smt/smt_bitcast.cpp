@@ -33,7 +33,7 @@ static expr2tc flatten_to_bitvector_rec(const expr2tc &new_expr)
     for(unsigned int i = 1; i < intref.value.to_uint64(); i++)
     {
       expr2tc tmp = index2tc(
-        arraytype.subtype, new_expr, constant_int2tc(index_type2(), 0));
+        arraytype.subtype, new_expr, constant_int2tc(index_type2(), i));
       tmp = flatten_to_bitvector_rec(tmp);
       type2tc res_type =
         get_uint_type(expr->type->get_width() + tmp->type->get_width());
