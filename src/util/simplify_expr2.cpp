@@ -1392,7 +1392,11 @@ static expr2tc do_bit_munge_operation(
   val1 = opfunc(val1, val2);
 
   // This has potentially become negative. Check the top bit.
+  #ifndef _WIN32
   __uint128_t upper_bit = 1;
+  #else
+  uint64_t upper_bit = 1;
+  #endif
   upper_bit <<= (type->get_width() - 1);
   if(val1 & upper_bit && is_signedbv_type(type))
   {
