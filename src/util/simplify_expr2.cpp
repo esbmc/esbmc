@@ -2747,6 +2747,10 @@ expr2tc byte_update2t::do_simplify() const
   unsigned int top_of_update = (8 * src_offset) + 8;
   unsigned int bottom_of_update = (8 * src_offset);
 
+  // Overflow? The backend will encode that
+  if(top_of_update > width_op0 || bottom_of_update < 0)
+    return expr2tc();
+
   std::string top;
   if(top_of_update == width_op0)
     top = value;
