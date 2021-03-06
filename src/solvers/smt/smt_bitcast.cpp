@@ -1,4 +1,5 @@
 #include <solvers/smt/smt_conv.h>
+#include <util/type_byte_size.h>
 
 static expr2tc flatten_to_bitvector_rec(const expr2tc &new_expr)
 {
