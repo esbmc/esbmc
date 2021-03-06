@@ -156,11 +156,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
     type2tc followed_type;
     migrate_type(followed_type_old, followed_type);
-    BigInt type_size;
-    if(is_empty_type(followed_type))
-      type_size = 1;
-    else
-      type_size = type_byte_size(followed_type);
+    BigInt type_size = type_byte_size(followed_type);
 
     // Generate nonptr * constant.
     type2tc inttype = machine_ptr;
