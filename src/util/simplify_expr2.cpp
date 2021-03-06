@@ -1413,11 +1413,10 @@ expr2tc typecast2t::do_simplify() const
     // Casts from constant operands can be done here.
     if(is_bool_type(simp) && is_number_type(type))
     {
+      // bool to int
       if(is_bv_type(type))
-      {
-        // bool to int
         return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
-      }
+
       if(is_fixedbv_type(type))
       {
         fixedbvt fbv;
@@ -1425,7 +1424,8 @@ expr2tc typecast2t::do_simplify() const
         fbv.from_integer(to_constant_bool2t(simp).value);
         return constant_fixedbv2tc(fbv);
       }
-      else if(is_floatbv_type(simp))
+
+      if(is_floatbv_type(simp))
       {
         if(!is_constant_int2t(rounding_mode))
           return expr2tc();
@@ -1458,6 +1458,7 @@ expr2tc typecast2t::do_simplify() const
 
         return constant_int2tc(type, new_number);
       }
+
       if(is_fixedbv_type(type))
       {
         fixedbvt fbv;
@@ -1465,12 +1466,14 @@ expr2tc typecast2t::do_simplify() const
         fbv.from_integer(theint.value);
         return constant_fixedbv2tc(fbv);
       }
-      else if(is_bool_type(type))
+
+      if(is_bool_type(type))
       {
         const constant_int2t &theint = to_constant_int2t(simp);
         return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
       }
-      else if(is_floatbv_type(type))
+
+      if(is_floatbv_type(type))
       {
         if(!is_constant_int2t(rounding_mode))
           return expr2tc();
@@ -1492,15 +1495,15 @@ expr2tc typecast2t::do_simplify() const
       fixedbvt fbv(to_constant_fixedbv2t(simp).value);
 
       if(is_bv_type(type))
-      {
         return constant_int2tc(type, fbv.to_integer());
-      }
+
       if(is_fixedbv_type(type))
       {
         fbv.round(to_fixedbv_type(migrate_type_back(type)));
         return constant_fixedbv2tc(fbv);
       }
-      else if(is_bool_type(type))
+
+      if(is_bool_type(type))
       {
         const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
         return fbv.value.is_zero() ? gen_false_expr() : gen_true_expr();
@@ -1518,18 +1521,16 @@ expr2tc typecast2t::do_simplify() const
       fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
       if(is_bv_type(type))
-      {
         return constant_int2tc(type, fpbv.to_integer());
-      }
+
       if(is_floatbv_type(type))
       {
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
         return constant_floatbv2tc(fpbv);
       }
-      else if(is_bool_type(type))
-      {
+
+      if(is_bool_type(type))
         return fpbv.is_zero() ? gen_false_expr() : gen_true_expr();
-      }
     }
   }
   else if(is_bool_type(type))
