@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/c_types.h>
 #include <util/irep2_utils.h>
 #include <util/format_constant.h>
-#include <util/type_byte_size.h>
 
 const expr2tc
 printf_formattert::make_type(const expr2tc &src, const type2tc &dest)

@@ -1658,6 +1658,8 @@ public:
   }
   constant_struct2t(const constant_struct2t &ref) = default;
 
+  expr2tc do_simplify() const override;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1702,6 +1704,8 @@ public:
   {
   }
   constant_array2t(const constant_array2t &ref) = default;
+
+  expr2tc do_simplify() const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2757,6 +2761,8 @@ public:
   {
   }
   byte_update2t(const byte_update2t &ref) = default;
+
+  expr2tc do_simplify() const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };

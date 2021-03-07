@@ -895,23 +895,10 @@ expr2tc pointer_offset2t::do_simplify() const
       const index2t &index = to_index2t(addrof.ptr_obj);
       if(is_constant_int2t(index.index))
       {
-        if(is_symbol2t(index.source_value))
-        {
-          // We can reduce to that index offset.
-          const array_type2t &arr = to_array_type(index.source_value->type);
-          unsigned int widthbits = arr.subtype->get_width();
-          unsigned int widthbytes = widthbits / 8;
-          BigInt val = to_constant_int2t(index.index).value;
-          val *= widthbytes;
-          return constant_int2tc(type, val);
-        }
-
-        if(is_constant_string2t(index.source_value))
-        {
-          // This can also be simplified to an array offset. Just return the index,
-          // as the string elements are all 8 bit bytes.
-          return index.index;
-        }
+        expr2tc offs =
+          try_simplification(compute_pointer_offset(addrof.ptr_obj));
+        if(is_constant_int2t(offs))
+          return offs;
       }
     }
   }
@@ -959,8 +946,7 @@ expr2tc pointer_offset2t::do_simplify() const
     // And multiply the non pointer one by the type size.
     type2tc ptr_int_type = get_int_type(config.ansi_c.pointer_width);
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
-    BigInt thesize =
-      (is_empty_type(ptr_subtype)) ? 1 : type_byte_size(ptr_subtype);
+    BigInt thesize = type_byte_size(ptr_subtype);
     constant_int2tc type_size(type, thesize);
 
     // SV-Comp workaround
@@ -985,28 +971,28 @@ expr2tc pointer_offset2t::do_simplify() const
 
 expr2tc index2t::do_simplify() const
 {
+  expr2tc new_index = try_simplification(index);
+
   if(is_with2t(source_value))
   {
-    if(index == to_with2t(source_value).update_field)
-    {
-      // Index is the same as an update to the thing we're indexing; we can
-      // just take the update value from the "with" below.
+    // Index is the same as an update to the thing we're indexing; we can
+    // just take the update value from the "with" below.
+    if(new_index == to_with2t(source_value).update_field)
       return to_with2t(source_value).update_value;
-    }
 
     return expr2tc();
   }
-  if(is_constant_array2t(source_value) && is_constant_int2t(index))
-  {
-    const constant_array2t &arr = to_constant_array2t(source_value);
-    const constant_int2t &idx = to_constant_int2t(index);
 
+  if(is_constant_array2t(source_value) && is_constant_int2t(new_index))
+  {
     // Index might be greater than the constant array size. This means we can't
     // simplify it, and the user might be eaten by an assertion failure in the
     // model. We don't have to think about this now though.
+    const constant_int2t &idx = to_constant_int2t(new_index);
     if(idx.value.is_negative())
       return expr2tc();
 
+    const constant_array2t &arr = to_constant_array2t(source_value);
     unsigned long the_idx = idx.as_ulong();
     if(the_idx >= arr.datatype_members.size())
       return expr2tc();
@@ -1036,10 +1022,14 @@ expr2tc index2t::do_simplify() const
     const constant_string2t &str = to_constant_string2t(source_value);
     const constant_int2t &idx = to_constant_int2t(index);
 
+  if(is_constant_string2t(source_value) && is_constant_int2t(new_index))
+  {
     // Same index situation
+    const constant_int2t &idx = to_constant_int2t(new_index);
     if(idx.value.is_negative())
       return expr2tc();
 
+    const constant_string2t &str = to_constant_string2t(source_value);
     unsigned long the_idx = idx.as_ulong();
     if(the_idx > str.value.as_string().size()) // allow reading null term.
       return expr2tc();
@@ -1049,15 +1039,12 @@ expr2tc index2t::do_simplify() const
     unsigned long val = str.value.as_string().c_str()[the_idx];
     return constant_int2tc(type, BigInt(val));
   }
-  else if(is_constant_array_of2t(source_value))
-  {
-    // Only thing this index can evaluate to is the default value of this array
+
+  // Only thing this index can evaluate to is the default value of this array
+  if(is_constant_array_of2t(source_value))
     return to_constant_array_of2t(source_value).initializer;
-  }
-  else
-  {
-    return expr2tc();
-  }
+
+  return expr2tc();
 }
 
 expr2tc not2t::do_simplify() const
@@ -1619,11 +1606,10 @@ expr2tc typecast2t::do_simplify() const
     // Casts from constant operands can be done here.
     if(is_bool_type(simp) && is_number_type(type))
     {
+      // bool to int
       if(is_bv_type(type))
-      {
-        // bool to int
         return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
-      }
+
       if(is_fixedbv_type(type))
       {
         fixedbvt fbv;
@@ -1631,7 +1617,8 @@ expr2tc typecast2t::do_simplify() const
         fbv.from_integer(to_constant_bool2t(simp).value);
         return constant_fixedbv2tc(fbv);
       }
-      else if(is_floatbv_type(simp))
+
+      if(is_floatbv_type(simp))
       {
         if(!is_constant_int2t(rounding_mode))
           return expr2tc();
@@ -1664,6 +1651,7 @@ expr2tc typecast2t::do_simplify() const
 
         return constant_int2tc(type, new_number);
       }
+
       if(is_fixedbv_type(type))
       {
         fixedbvt fbv;
@@ -1671,12 +1659,14 @@ expr2tc typecast2t::do_simplify() const
         fbv.from_integer(theint.value);
         return constant_fixedbv2tc(fbv);
       }
-      else if(is_bool_type(type))
+
+      if(is_bool_type(type))
       {
         const constant_int2t &theint = to_constant_int2t(simp);
         return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
       }
-      else if(is_floatbv_type(type))
+
+      if(is_floatbv_type(type))
       {
         if(!is_constant_int2t(rounding_mode))
           return expr2tc();
@@ -1698,15 +1688,15 @@ expr2tc typecast2t::do_simplify() const
       fixedbvt fbv(to_constant_fixedbv2t(simp).value);
 
       if(is_bv_type(type))
-      {
         return constant_int2tc(type, fbv.to_integer());
-      }
+
       if(is_fixedbv_type(type))
       {
         fbv.round(to_fixedbv_type(migrate_type_back(type)));
         return constant_fixedbv2tc(fbv);
       }
-      else if(is_bool_type(type))
+
+      if(is_bool_type(type))
       {
         const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
         return fbv.value.is_zero() ? gen_false_expr() : gen_true_expr();
@@ -1724,18 +1714,16 @@ expr2tc typecast2t::do_simplify() const
       fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
       if(is_bv_type(type))
-      {
         return constant_int2tc(type, fpbv.to_integer());
-      }
+
       if(is_floatbv_type(type))
       {
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
         return constant_floatbv2tc(fpbv);
       }
-      else if(is_bool_type(type))
-      {
+
+      if(is_bool_type(type))
         return fpbv.is_zero() ? gen_false_expr() : gen_true_expr();
-      }
     }
   }
   else if(is_bool_type(type))
@@ -2959,4 +2947,92 @@ expr2tc ieee_sqrt2t::do_simplify() const
     return typecast_check_return(type, value);
 
   return expr2tc();
+}
+
+expr2tc constant_struct2t::do_simplify() const
+{
+  return expr2tc();
+}
+
+expr2tc constant_array2t::do_simplify() const
+{
+  return expr2tc();
+}
+
+expr2tc byte_update2t::do_simplify() const
+{
+  expr2tc simplied_source = try_simplification(source_value);
+  expr2tc simplied_offset = try_simplification(source_offset);
+  expr2tc simplied_value = try_simplification(update_value);
+  if(
+    !is_constant_int2t(simplied_source) ||
+    !is_constant_int2t(simplied_offset) || !is_constant_int2t(simplied_value))
+  {
+    // Were we able to simplify the sides?
+    if(
+      (source_value != simplied_source) || (source_offset != simplied_offset) ||
+      (update_value != simplied_value))
+    {
+      expr2tc new_op = byte_update2tc(
+        type, simplied_source, simplied_offset, simplied_value, big_endian);
+
+      return typecast_check_return(type, new_op);
+    }
+    return expr2tc();
+  }
+
+  std::string value = integer2binary(
+    to_constant_int2t(simplied_value).value, simplied_value->type->get_width());
+  std::string src_value = integer2binary(
+    to_constant_int2t(simplied_source).value,
+    simplied_source->type->get_width());
+
+  unsigned int width_op0 = simplied_source->type->get_width();
+  unsigned int src_offset =
+    to_constant_int2t(simplied_offset).value.to_uint64();
+
+  // Flip location if we're in big-endian mode
+  if(big_endian)
+  {
+    unsigned int data_size =
+      type_byte_size(simplied_source->type).to_uint64() - 1;
+    src_offset = data_size - src_offset;
+  }
+
+  unsigned int top_of_update = (8 * src_offset) + 8;
+  int bottom_of_update = (8 * src_offset);
+
+  // Overflow? The backend will encode that
+  if(top_of_update > width_op0 || bottom_of_update < 0)
+    return expr2tc();
+
+  std::string top;
+  if(top_of_update == width_op0)
+    top = value;
+  else
+    top = src_value.substr(top_of_update, width_op0 - 1);
+
+  std::string middle;
+  if(top != value)
+    middle = value;
+
+  std::string bottom;
+  if(src_offset == 0)
+  {
+    middle = "";
+    bottom = value;
+  }
+  else
+    bottom = src_value.substr(0, bottom_of_update - 1);
+
+  std::string concat;
+  if(middle != "")
+    concat = top + middle;
+  else
+    concat = top;
+
+  concat += bottom;
+  return typecast_check_return(
+    type,
+    constant_int2tc(get_uint_type(concat.length()), string2integer(concat, 2)));
 }
