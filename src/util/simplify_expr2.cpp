@@ -1017,11 +1017,6 @@ expr2tc index2t::do_simplify() const
     return arr.datatype_members[the_idx];
   }
 
-  else if(is_constant_string2t(source_value) && is_constant_int2t(index))
-  {
-    const constant_string2t &str = to_constant_string2t(source_value);
-    const constant_int2t &idx = to_constant_int2t(index);
-
   if(is_constant_string2t(source_value) && is_constant_int2t(new_index))
   {
     // Same index situation
