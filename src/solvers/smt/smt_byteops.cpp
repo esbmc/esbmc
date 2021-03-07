@@ -24,6 +24,8 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
     // appropriate amount, according to the source offset, and select out the
     // bottom byte.
     expr2tc offs = data.source_offset;
+    if(offs->type->get_width() != src_width)
+      offs = typecast2tc(source->type, data.source_offset);
 
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
     // offset distance. The rest of these calculations will still apply.
@@ -34,10 +36,6 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
       sub2tc sub(source->type, data_size_expr, offs);
       offs = sub;
     }
-
-    if(offs->type->get_width() != src_width)
-      // Z3 requires these two arguments to be the same width
-      offs = typecast2tc(source->type, data.source_offset);
 
     offs = mul2tc(offs->type, offs, constant_int2tc(offs->type, BigInt(8)));
 
@@ -114,6 +112,8 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
       source = typecast2tc(get_uint_type(src_width), source);
 
     expr2tc offs = data.source_offset;
+    if(offs->type->get_width() != src_width)
+      offs = typecast2tc(get_uint_type(src_width), offs);
 
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
     // offset distance. The rest of these calculations will still apply.
@@ -124,9 +124,6 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
       sub2tc sub(source->type, data_size_expr, offs);
       offs = sub;
     }
-
-    if(offs->type->get_width() != src_width)
-      offs = typecast2tc(get_uint_type(src_width), offs);
 
     expr2tc update = data.update_value;
     if(update->type->get_width() != src_width)
