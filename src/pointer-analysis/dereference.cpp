@@ -1056,8 +1056,7 @@ void dereferencet::construct_from_const_offset(
     }
 
     // Try to handle unaligned write by writting directly to the base_object
-    // TODO: should we recurse and find the base_object using get_base_object?
-    value = to_member2t(value).source_value;
+    value = get_base_object(value);
   }
 
   // Either nonzero offset, or a smaller / bigger read.
