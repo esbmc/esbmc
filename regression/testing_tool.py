@@ -33,7 +33,6 @@ import time
 SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
 FAIL_MODES = ["KNOWNBUG"]
 
-TIMEOUT = None
 class BaseTest:
     """This class is responsible to:
        (a) parse and validate test descriptions.
@@ -229,14 +228,14 @@ class RegressionBase(unittest.TestCase):
     longMessage = True
 
     FAIL_WITH_WORD: str = None
+    TIMEOUT = None
 
     def setUp(self):
         self.startTime = time.time()
 
     def tearDown(self):
-        global TIMEOUT
         t = time.time() - self.startTime
-        if TIMEOUT and t >= TIMEOUT:
+        if RegressionBase.TIMEOUT and t >= RegressionBase.TIMEOUT:
             print('TIMEOUT')
         else:
             print('%.3f' %  t)
@@ -289,7 +288,6 @@ def create_tests(executor_path: str, base_dir: str, mode: str):
                 test_case.name), test_func)
 
 def _arg_parsing():
-    global TIMEOUT
     parser = argparse.ArgumentParser()
     parser.add_argument("--tool", required=True, help="tool executable path")
     parser.add_argument("--timeout", required=False, help="timeout value")
@@ -304,7 +302,7 @@ def _arg_parsing():
 
     main_args = parser.parse_args()
     if main_args.timeout:
-        TIMEOUT = int(main_args.timeout)
+        RegressionBase.TIMEOUT = int(main_args.timeout)
     XMLTestCase.CPP_INCLUDE_DIR = main_args.library
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
     return main_args.tool, main_args.regression, main_args.mode
