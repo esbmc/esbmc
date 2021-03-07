@@ -24,13 +24,15 @@ static expr2tc flatten_to_bitvector_rec(const expr2tc &new_expr)
     const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
     assert(intref.value > 0);
 
+    int sz = intref.value.to_uint64();
+
     // First element
-    expr2tc expr =
-      index2tc(arraytype.subtype, new_expr, constant_int2tc(index_type2(), 0));
+    expr2tc expr = index2tc(
+      arraytype.subtype, new_expr, constant_int2tc(index_type2(), sz - 1));
     expr = flatten_to_bitvector_rec(expr);
 
     // Concat elements if there are more than 1
-    for(unsigned int i = 1; i < intref.value.to_uint64(); i++)
+    for(int i = sz - 2; i >= 0; i--)
     {
       expr2tc tmp = index2tc(
         arraytype.subtype, new_expr, constant_int2tc(index_type2(), i));
