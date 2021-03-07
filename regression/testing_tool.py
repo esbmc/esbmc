@@ -194,7 +194,7 @@ class TestParser:
 class Executor:
     def __init__(self, tool="esbmc"):
         self.tool = tool
-        self.timeout = TIMEOUT
+        self.timeout = RegressionBase.TIMEOUT
 
     def run(self, test_case: BaseTest):
         """Execute the test case with `executable`"""
