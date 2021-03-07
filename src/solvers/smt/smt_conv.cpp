@@ -1078,6 +1078,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     const extract2t &ex = to_extract2t(expr);
     a = convert_ast(ex.from);
+    if(ex.from->type->get_width() == ex.upper - ex.lower + 1)
+      return a;
     a = mk_extract(a, ex.upper, ex.lower);
     break;
   }
