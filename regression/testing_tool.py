@@ -236,7 +236,7 @@ class RegressionBase(unittest.TestCase):
     def tearDown(self):
         global TIMEOUT
         t = time.time() - self.startTime
-        if t >= TIMEOUT:
+        if TIMEOUT and t >= TIMEOUT:
             print('TIMEOUT')
         else:
             print('%.3f' %  t)
