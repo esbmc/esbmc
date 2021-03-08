@@ -73,6 +73,36 @@ flatten_to_bitvector_rec(const expr2tc &new_expr, const messaget &msg)
     return expr;
   }
 
+  if(is_union_type(new_expr))
+  {
+    bool big_endian =
+      config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+
+    expr2tc expr = byte_extract2tc(
+      get_uint8_type(),
+      new_expr,
+      constant_int2tc(index_type2(), 0),
+      big_endian);
+    expr = flatten_to_bitvector_rec(expr, msg);
+
+    // Concat elements if there are more than 1
+    BigInt size = type_byte_size(new_expr->type);
+    for(int i = 1; i < size; i++)
+    {
+      expr2tc tmp = byte_extract2tc(
+        get_uint8_type(),
+        new_expr,
+        constant_int2tc(index_type2(), i),
+        big_endian);
+      tmp = flatten_to_bitvector_rec(tmp, msg);
+      type2tc res_type =
+        get_uint_type(expr->type->get_width() + tmp->type->get_width());
+      expr = concat2tc(res_type, expr, tmp);
+    }
+
+    return expr;
+  }
+
   msg.error(fmt::format(
     "Unrecognized type {} when flattening to bytes",
     get_type_id(*new_expr->type)));
