@@ -7,6 +7,7 @@
 #include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/type_byte_size.h>
 
 // Helpers extracted from z3_convt.
 
@@ -295,8 +296,14 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   case expr2t::constant_union_id:
-    msg.error("Post-parse union literals are deprecated and broken, sorry");
-    abort();
+  {
+    // Get size
+    BigInt size = type_byte_size_bits(expr->type);
+    a = convert_ast(bitcast2tc(
+      get_uint_type(size.to_uint64()),
+      to_constant_union2t(expr).datatype_members.at(0)));
+    break;
+  }
   case expr2t::constant_array_id:
   case expr2t::constant_array_of_id:
   {
@@ -589,6 +596,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 #endif
 
       a = srcval->update(this, convert_ast(with.update_value), idx);
+    }
+    else if(is_union_type(expr))
+    {
+      // We ignore the member name and typecast it to bv
+      BigInt size = type_byte_size_bits(expr->type);
+      a = convert_ast(
+        bitcast2tc(get_uint_type(size.to_uint64()), with.update_value));
     }
     else
     {
@@ -1184,6 +1198,13 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = mk_array_sort(d, r);
     break;
   }
+
+  case type2t::union_id:
+  {
+    result = mk_int_bv_sort(type_byte_size_bits(type).to_uint64());
+    break;
+  }
+
   default:
     msg.error(fmt::format(
       "Unexpected type ID {} reached SMT conversion", get_type_id(type)));
@@ -1548,12 +1569,22 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
 smt_astt smt_convt::convert_member(const expr2tc &expr)
 {
   const member2t &member = to_member2t(expr);
-  unsigned int idx = -1;
+
+  // Special case unions: bitcast it to bv then convert it back to the
+  // requested member type
+  if(is_union_type(member.source_value))
+  {
+    BigInt size = type_byte_size_bits(member.source_value->type);
+    expr2tc to_bv = bitcast2tc(
+      get_uint_type(size.to_uint64()), get_base_object(member.source_value));
+    return convert_ast(bitcast2tc(expr->type, to_bv));
+  }
 
   assert(
     is_struct_type(member.source_value) ||
     is_pointer_type(member.source_value));
-  idx = get_member_name_field(member.source_value->type, member.member);
+  unsigned int idx =
+    get_member_name_field(member.source_value->type, member.member);
 
   smt_astt src = convert_ast(member.source_value);
   return src->project(this, idx);
