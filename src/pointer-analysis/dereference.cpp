@@ -779,7 +779,7 @@ enum target_flags
   flag_src_scalar = 0,
   flag_src_array = 1,
   flag_src_struct = 2,
-  // Union sources are now illegal
+  flag_src_union = 3,
 
   flag_dst_scalar = 0,
   flag_dst_array = 4,
@@ -833,10 +833,7 @@ void dereferencet::build_reference_rec(
   if(is_struct_type(value))
     flags |= flag_src_struct;
   else if(is_union_type(value))
-  {
-    std::cerr << "Dereference target of type union is now illegal" << std::endl;
-    abort();
-  }
+    flags |= flag_src_union;
   else if(is_scalar_type(value))
     flags |= flag_src_scalar;
   else if(is_array_type(value) || is_string_type(value))
@@ -934,6 +931,20 @@ void dereferencet::build_reference_rec(
     // Extract a structure from inside an array or another struct. Single
     // function supports both (which is bad).
     construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
+    break;
+
+  case flag_src_union | flag_dst_union | flag_is_const_offs:
+    construct_struct_ref_from_const_offset(value, offset, type, guard);
+    break;
+  case flag_src_union | flag_dst_union | flag_is_dyn_offs:
+    construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
+    break;
+
+    // This
+  case flag_src_union | flag_dst_scalar | flag_is_const_offs:
+  case flag_src_union | flag_dst_struct | flag_is_const_offs:
+  case flag_src_union | flag_dst_scalar | flag_is_dyn_offs:
+  case flag_src_union | flag_dst_struct | flag_is_dyn_offs:
     break;
 
   // No scope for constructing references to arrays

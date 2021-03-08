@@ -72,6 +72,36 @@ static expr2tc flatten_to_bitvector_rec(const expr2tc &new_expr)
     return expr;
   }
 
+  if(is_union_type(new_expr))
+  {
+    bool big_endian =
+      config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+
+    expr2tc expr = byte_extract2tc(
+      get_uint8_type(),
+      new_expr,
+      constant_int2tc(index_type2(), 0),
+      big_endian);
+    expr = flatten_to_bitvector_rec(expr);
+
+    // Concat elements if there are more than 1
+    BigInt size = type_byte_size(new_expr->type);
+    for(int i = 1; i < size; i++)
+    {
+      expr2tc tmp = byte_extract2tc(
+        get_uint8_type(),
+        new_expr,
+        constant_int2tc(index_type2(), i),
+        big_endian);
+      tmp = flatten_to_bitvector_rec(tmp);
+      type2tc res_type =
+        get_uint_type(expr->type->get_width() + tmp->type->get_width());
+      expr = concat2tc(res_type, expr, tmp);
+    }
+
+    return expr;
+  }
+
   std::cerr << "Unrecognized type " << get_type_id(*new_expr->type);
   std::cerr << " when flattening to bytes" << std::endl;
   abort();
