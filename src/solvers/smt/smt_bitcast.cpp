@@ -104,16 +104,9 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       new_from = flatten_to_bitvector(new_from, msg);
 
     // from bitvectors should go through the fp api
-    if(is_bv_type(new_from))
+    if(is_bv_type(new_from) || is_union_type(new_from))
       return fp_api->mk_from_bv_to_fp(
         convert_ast(new_from), convert_sort(to_type));
-
-    if(is_union_type(new_from))
-    {
-      msg.error(fmt::format(
-        "Unions not supported when bitcasting to fp for now\n{}", *expr));
-      abort();
-    }
   }
   else if(is_bv_type(to_type))
   {
@@ -124,11 +117,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       return convert_ast(flatten_to_bitvector(from, msg));
 
     if(is_union_type(from))
-    {
-      msg.error(fmt::format(
-        "Unions not supported when bitcasting to bv for now\n{}", *expr));
-      abort();
-    }
+      return convert_ast(from);
   }
   else if(is_struct_type(to_type))
   {
@@ -145,7 +134,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
     if(is_array_type(new_from))
       new_from = flatten_to_bitvector(new_from, msg);
 
-    if(is_bv_type(new_from))
+    if(is_bv_type(new_from) || is_union_type(new_from))
     {
       const struct_type2t &structtype = to_struct_type(to_type);
 
@@ -165,13 +154,6 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
       return convert_ast(constant_struct2tc(to_type, fields));
     }
-
-    if(is_union_type(new_from))
-    {
-      msg.error(fmt::format(
-        "Unions not supported when bitcasting to struct for now\n{}", *expr));
-      abort();
-    }
   }
   else if(is_array_type(to_type))
   {
@@ -186,7 +168,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
     if(is_struct_type(new_from))
       new_from = flatten_to_bitvector(new_from, msg);
 
-    if(is_bv_type(new_from))
+    if(is_bv_type(new_from) || is_union_type(new_from))
     {
       // TODO: handle multidimensional arrays
       assert(
@@ -214,13 +196,6 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       }
 
       return convert_ast(constant_array2tc(to_type, elems));
-    }
-
-    if(is_union_type(new_from))
-    {
-      msg.error(fmt::format(
-        "Unions not supported when bitcasting to struct for now\n{}", *expr));
-      abort();
     }
   }
 
