@@ -37,7 +37,7 @@ function(mangle_clib output)
     if(ENABLE_LIBM)
       set(inputs_c ${c2goto_library_files} ${c2goto_libm_files})
     else()
-    set(inputs_c ${c2goto_library_files})
+      set(inputs_c ${c2goto_library_files})
     endif()
     set(CMD c2goto -I ${multiarch} ${OS_C2GOTO_FLAGS} ${inputs_c} ${in_flags} --output ${out_goto})
     add_custom_command(OUTPUT ${out_goto}
