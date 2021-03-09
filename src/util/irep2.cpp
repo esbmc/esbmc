@@ -176,7 +176,6 @@ unsigned int array_type2t::get_width() const
 
   return num_elems * sub_width;
 }
-
 unsigned int vector_type2t::get_width() const
 {
   unsigned int sub_width = subtype->get_width();
@@ -189,12 +188,26 @@ unsigned int vector_type2t::get_width() const
 
   return num_elems * sub_width;
 }
-
 expr2tc vector_type2t::distribute_operation(
   std::function<expr2tc(type2tc, expr2tc, expr2tc)> func,
   expr2tc op1,
   expr2tc op2)
 {
+  /*
+   * If both op1 and op2 are vectors the resulting value
+   * would be the operation over each member
+   *
+   * Example:
+   *
+   * op1 = {1,2,3,4}
+   * op2 = {1,1,1,1}
+   * func = add
+   *
+   * This would result in:
+   *
+   * { add(op1[0], op2[0]), add(op1[1], op2[1]), ...}
+   * {2,3,4,5}
+   */
   if(is_constant_vector2t(op1) && is_constant_vector2t(op2))
   {
     constant_vector2tc vec1(op1);
@@ -208,6 +221,22 @@ expr2tc vector_type2t::distribute_operation(
     }
     return vec1;
   }
+  /*
+   * If only one of the operator is a vector, then the result
+   * would extract each value of the vector and apply the value to
+   * the other operator
+   *
+   * Example:
+   *
+   * op1 = {1,2,3,4}
+   * op2 = 1
+   * func = add
+   *
+   * This would result in:
+   *
+   * { add(op1[0], 1), add(op1[1], 1), ...}
+   * {2,3,4,5}
+   */
   else
   {
     bool is_op1_vec = is_constant_vector2t(op1);
