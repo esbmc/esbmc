@@ -1191,6 +1191,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     break;
   }
 
+  case type2t::vector_id:
   case type2t::array_id:
   {
     // Index arrays by the smallest integer required to represent its size.
@@ -1225,35 +1226,9 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = mk_array_sort(d, r);
     break;
   }
-
   case type2t::union_id:
   {
     result = mk_int_bv_sort(type_byte_size_bits(type).to_uint64());
-    break;
-  }
-  case type2t::vector_id:
-  {
-    // Index arrays by the smallest integer required to represent its size.
-    // Unless it's either infinite or dynamic in size, in which case use the
-    // machine int size. Also, faff about if it's an array of arrays, extending
-    // the domain.
-    type2tc t = make_array_domain_type(to_array_type(flatten_array_type(type)));
-    smt_sortt d = mk_int_bv_sort(t->get_width());
-    type2tc range = get_flattened_array_subtype(type);
-
-    if(is_tuple_ast_type(range))
-    {
-      type2tc thetype = flatten_array_type(type);
-      rewrite_ptrs_to_structs(thetype);
-      result = tuple_api->mk_struct_sort(thetype);
-      break;
-    }
-
-    // Work around QF_AUFBV demanding arrays of bitvectors.
-    smt_sortt r;
-    r = convert_sort(range);
-    result = mk_array_sort(d, r);
-    //abort();
     break;
   }
 
