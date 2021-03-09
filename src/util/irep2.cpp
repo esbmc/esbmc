@@ -3005,7 +3005,7 @@ type_typedefs_empty(bool_type) type_typedefs_empty(empty_type)
     basename##2tc,                                                             \
     boost::mpl::pop_front<typename superclass::traits::fields>::type>;
 
-                            expr_typedefs1(constant_int, constant_int_data);
+expr_typedefs1(constant_int, constant_int_data);
 expr_typedefs1(constant_fixedbv, constant_fixedbv_data);
 expr_typedefs1(constant_floatbv, constant_floatbv_data);
 expr_typedefs1(constant_struct, constant_datatype_data);
