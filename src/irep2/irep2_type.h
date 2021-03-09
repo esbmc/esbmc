@@ -202,7 +202,6 @@ public:
       traits;
 };
 
-
 class pointer_data : public type2t
 {
 public:
@@ -608,10 +607,17 @@ public:
     }
   }
   vector_type2t(const vector_type2t &ref) = default;
-
   unsigned int get_width() const override;
-
   static std::string field_names[esbmct::num_type_fields];
+  /**
+   * @brief Distribute the functor `func` over op1 and op2
+   * at least one of those must be a vector
+   *
+   * @param func the functor operation e.g add, sub, mul
+   * @param op1 the first operand
+   * @param op2 the second operand
+   * @return expr2tc with the resulting vector
+   */
   static expr2tc distribute_operation(
     std::function<expr2tc(type2tc, expr2tc, expr2tc)> func,
     expr2tc op1,
