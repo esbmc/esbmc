@@ -521,12 +521,12 @@ void goto_symext::run_intrinsic(
     // v should be a vector
     expr2tc v = func_call.operands[0];
     ex_state.get_active_state().level2.rename(v);
-    assert(
-      v->expr_id == expr2t::expr_ids::constant_vector_id);
+    assert(v->expr_id == expr2t::expr_ids::constant_vector_id);
 
     // Create new vector
     std::vector<expr2tc> members;
-    for(const auto &x : to_constant_vector2t(v).datatype_members) {
+    for(const auto &x : to_constant_vector2t(v).datatype_members)
+    {
       // Create a typecast call
       auto typecast = typecast2tc(subtype, x);
       members.push_back(typecast);
