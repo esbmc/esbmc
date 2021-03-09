@@ -17,6 +17,8 @@ const char *extensions_cpp[] = {"cpp", "cc", "ipp", "cxx", NULL};
 const char *extensions_cpp[] = {"cpp", "cc", "ipp", "C", "cxx", nullptr};
 #endif
 
+const char *extensions_sol_ast[] = {"sol.ast", nullptr};
+
 int get_mode(const std::string &str)
 {
   unsigned i;

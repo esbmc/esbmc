@@ -13,6 +13,7 @@ add_subdirectory (cpp)
 endif()
 
 add_subdirectory (clang-c-frontend)
+add_subdirectory (solidity-ast-frontend)
 add_subdirectory (pointer-analysis)
 add_subdirectory (langapi)
 add_subdirectory (big-int)
