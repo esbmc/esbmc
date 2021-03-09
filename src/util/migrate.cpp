@@ -130,7 +130,7 @@ void real_migrate_type(
     simplify(sz);
     migrate_expr(sz, size);
     size = fixup_containerof_in_sizeof(size);
-    vector_type2t *a = new vector_type2t(subtype, size, false);
+    vector_type2t *a = new vector_type2t(subtype, size);
     new_type_ref = type2tc(a);
   }
   else if(type.id() == typet::t_pointer)
