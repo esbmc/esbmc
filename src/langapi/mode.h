@@ -27,11 +27,13 @@ extern const mode_table_et mode_table[];
 
 extern const char *extensions_ansi_c[];
 extern const char *extensions_cpp[];
+extern const char *extensions_sol_ast[];
 
 languaget *new_clang_c_language(const messaget &msg);
 languaget *new_clang_cpp_language(const messaget &msg);
 languaget *new_ansi_c_language();
 languaget *new_cpp_language();
+languaget *new_solidity_ast_language();
 
 // List of language entries, one can put in the mode table:
 #define LANGAPI_HAVE_MODE_CLANG_C                                              \
@@ -49,6 +51,10 @@ languaget *new_cpp_language();
 #define LANGAPI_HAVE_MODE_CPP                                                  \
   {                                                                            \
     "C++", &new_cpp_language, extensions_cpp                                   \
+  }
+#define LANGAPI_HAVE_MODE_SOLAST                                               \
+  {                                                                            \
+    "Solidity AST", &new_solidity_ast_language, extensions_cpp                 \
   }
 #define LANGAPI_HAVE_MODE_END                                                  \
   {                                                                            \
