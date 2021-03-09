@@ -8,8 +8,8 @@ v4si vsi = (v4si){1, 2, 3, 4};
 
 // Should Initialize Correctly
 int main() {
-    vsi += 2.2;
+    vsi = vsi + 2.2;
    for(int i = 0; i < 4; i++)
       __ESBMC_assert(vsi[i] == (i+3.2), "The vector should be initialized correctly");
-   return 0; 
+   return 0;
 }
