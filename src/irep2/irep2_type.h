@@ -583,13 +583,7 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Array type.
- *  Comes with a subtype of the array and a size that might be constant, might
- *  be nondeterministic, might be infinite. These facts are recorded in the
- *  array_size and size_is_infinite fields.
- *
- *  If size_is_infinite is true, array_size will be null. If array_size is
- *  not a constant number, then it's a dynamically sized array.
+/** Vector type.
  *  @extends array_data
  */
 class vector_type2t : public vector_type_methods
@@ -600,8 +594,8 @@ public:
    *  @param size Size of this array.
    *  @param inf Whether or not this array is infinitely sized
    */
-  vector_type2t(const type2tc &_subtype, const expr2tc &size, bool inf)
-    : vector_type_methods(vector_id, _subtype, size, inf)
+  vector_type2t(const type2tc &_subtype, const expr2tc &size)
+    : vector_type_methods(vector_id, _subtype, size, false)
   {
     // If we can simplify the array size, do so
     // XXX, this is probably massively inefficient. Some kind of boundry in

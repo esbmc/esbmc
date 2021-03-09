@@ -128,8 +128,7 @@ type2tc migrate_type(const typet &type)
     simplify(sz);
     migrate_expr(sz, size);
     size = fixup_containerof_in_sizeof(size);
-
-    array_type2t *a = new array_type2t(subtype, size, false);
+    vector_type2t *a = new vector_type2t(subtype, size);
     return type2tc(a);
   }
 
