@@ -54,43 +54,43 @@
                 constant_union,                                                     \
                 BOOST_PP_LIST_CONS(                                                 \
                   constant_array,                                                   \
-                                  BOOST_PP_LIST_CONS(                                                 \
-                  constant_vector,                                                   \
                   BOOST_PP_LIST_CONS(                                               \
-                    constant_array_of,                                              \
+                    constant_vector,                                                \
                     BOOST_PP_LIST_CONS(                                             \
-                      symbol,                                                       \
+                      constant_array_of,                                            \
                       BOOST_PP_LIST_CONS(                                           \
-                        typecast,                                                   \
+                        symbol,                                                     \
                         BOOST_PP_LIST_CONS(                                         \
-                          bitcast,                                                  \
+                          typecast,                                                 \
                           BOOST_PP_LIST_CONS(                                       \
-                            nearbyint,                                              \
+                            bitcast,                                                \
                             BOOST_PP_LIST_CONS(                                     \
-                              if,                                                   \
+                              nearbyint,                                            \
                               BOOST_PP_LIST_CONS(                                   \
-                                equality,                                           \
+                                if,                                                 \
                                 BOOST_PP_LIST_CONS(                                 \
-                                  notequal,                                         \
+                                  equality,                                         \
                                   BOOST_PP_LIST_CONS(                               \
-                                    lessthan,                                       \
+                                    notequal,                                       \
                                     BOOST_PP_LIST_CONS(                             \
-                                      greaterthan,                                  \
+                                      lessthan,                                     \
                                       BOOST_PP_LIST_CONS(                           \
-                                        lessthanequal,                              \
+                                        greaterthan,                                \
                                         BOOST_PP_LIST_CONS(                         \
-                                          greaterthanequal,                         \
+                                          lessthanequal,                            \
                                           BOOST_PP_LIST_CONS(                       \
-                                            not,                                    \
+                                            greaterthanequal,                       \
                                             BOOST_PP_LIST_CONS(                     \
-                                              and,                                  \
+                                              not,                                  \
                                               BOOST_PP_LIST_CONS(                   \
-                                                or,                                 \
-                                                BOOST_PP_LIST_CONS (                \
-                                                  xor,                              \
-                                                  BOOST_PP_LIST_CONS(               \
-                                                    implies,                        \
+                                                and,                                \
+                                                BOOST_PP_LIST_CONS(                 \
+                                                  or,                               \
+                                                  BOOST_PP_LIST_CONS (              \
+                                                    xor,                            \
                                                     BOOST_PP_LIST_CONS(             \
+                                                      implies,                      \
+                                                      BOOST_PP_LIST_CONS(           \
                                                         bitand,                     \
                                                         BOOST_PP_LIST_CONS(         \
                                                           bitor,                    \
@@ -101,8 +101,7 @@
                                                               BOOST_PP_LIST_CONS(   \
                                                                 bitnor,             \
                                                                 BOOST_PP_LIST_CONS( \
-                                                                  bitnxor,          \
-                                                                  BOOST_PP_LIST_CONS(bitnot, BOOST_PP_LIST_CONS(lshr, BOOST_PP_LIST_CONS(neg, BOOST_PP_LIST_CONS(abs, BOOST_PP_LIST_CONS(add, BOOST_PP_LIST_CONS(sub, BOOST_PP_LIST_CONS(mul, BOOST_PP_LIST_CONS(div, BOOST_PP_LIST_CONS(ieee_add, BOOST_PP_LIST_CONS(ieee_sub, BOOST_PP_LIST_CONS(ieee_mul, BOOST_PP_LIST_CONS(ieee_div, BOOST_PP_LIST_CONS(ieee_fma, BOOST_PP_LIST_CONS(ieee_sqrt, BOOST_PP_LIST_CONS(popcount, BOOST_PP_LIST_CONS(bswap, BOOST_PP_LIST_CONS(modulus, BOOST_PP_LIST_CONS(shl, BOOST_PP_LIST_CONS(ashr, BOOST_PP_LIST_CONS(dynamic_object, BOOST_PP_LIST_CONS(same_object, BOOST_PP_LIST_CONS(pointer_offset, BOOST_PP_LIST_CONS(pointer_object, BOOST_PP_LIST_CONS(address_of, BOOST_PP_LIST_CONS(byte_extract, BOOST_PP_LIST_CONS(byte_update, BOOST_PP_LIST_CONS(with, BOOST_PP_LIST_CONS(member, BOOST_PP_LIST_CONS(index, BOOST_PP_LIST_CONS(isnan, BOOST_PP_LIST_CONS(overflow, BOOST_PP_LIST_CONS(overflow_cast, BOOST_PP_LIST_CONS(overflow_neg, BOOST_PP_LIST_CONS(unknown, BOOST_PP_LIST_CONS(invalid, BOOST_PP_LIST_CONS(null_object, BOOST_PP_LIST_CONS(dereference, BOOST_PP_LIST_CONS(valid_object, BOOST_PP_LIST_CONS(deallocated_obj, BOOST_PP_LIST_CONS(dynamic_size, BOOST_PP_LIST_CONS(sideeffect, BOOST_PP_LIST_CONS(code_block, BOOST_PP_LIST_CONS(code_assign, BOOST_PP_LIST_CONS(code_init, BOOST_PP_LIST_CONS(code_decl, BOOST_PP_LIST_CONS(code_dead, BOOST_PP_LIST_CONS(code_printf, BOOST_PP_LIST_CONS(code_expression, BOOST_PP_LIST_CONS(code_return, BOOST_PP_LIST_CONS(code_skip, BOOST_PP_LIST_CONS(code_free, BOOST_PP_LIST_CONS(code_goto, BOOST_PP_LIST_CONS(object_descriptor, BOOST_PP_LIST_CONS(code_function_call, BOOST_PP_LIST_CONS(code_comma, BOOST_PP_LIST_CONS(invalid_pointer, BOOST_PP_LIST_CONS(code_asm, BOOST_PP_LIST_CONS(code_cpp_del_array, BOOST_PP_LIST_CONS(code_cpp_delete, BOOST_PP_LIST_CONS(code_cpp_catch, BOOST_PP_LIST_CONS(code_cpp_throw, BOOST_PP_LIST_CONS(code_cpp_throw_decl, BOOST_PP_LIST_CONS(code_cpp_throw_decl_end, BOOST_PP_LIST_CONS(isinf, BOOST_PP_LIST_CONS(isnormal, BOOST_PP_LIST_CONS(isfinite, BOOST_PP_LIST_CONS(signbit, BOOST_PP_LIST_CONS(concat, BOOST_PP_LIST_CONS(extract, BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+                                                                  bitnxor, BOOST_PP_LIST_CONS(bitnot, BOOST_PP_LIST_CONS(lshr, BOOST_PP_LIST_CONS(neg, BOOST_PP_LIST_CONS(abs, BOOST_PP_LIST_CONS(add, BOOST_PP_LIST_CONS(sub, BOOST_PP_LIST_CONS(mul, BOOST_PP_LIST_CONS(div, BOOST_PP_LIST_CONS(ieee_add, BOOST_PP_LIST_CONS(ieee_sub, BOOST_PP_LIST_CONS(ieee_mul, BOOST_PP_LIST_CONS(ieee_div, BOOST_PP_LIST_CONS(ieee_fma, BOOST_PP_LIST_CONS(ieee_sqrt, BOOST_PP_LIST_CONS(popcount, BOOST_PP_LIST_CONS(bswap, BOOST_PP_LIST_CONS(modulus, BOOST_PP_LIST_CONS(shl, BOOST_PP_LIST_CONS(ashr, BOOST_PP_LIST_CONS(dynamic_object, BOOST_PP_LIST_CONS(same_object, BOOST_PP_LIST_CONS(pointer_offset, BOOST_PP_LIST_CONS(pointer_object, BOOST_PP_LIST_CONS(address_of, BOOST_PP_LIST_CONS(byte_extract, BOOST_PP_LIST_CONS(byte_update, BOOST_PP_LIST_CONS(with, BOOST_PP_LIST_CONS(member, BOOST_PP_LIST_CONS(index, BOOST_PP_LIST_CONS(isnan, BOOST_PP_LIST_CONS(overflow, BOOST_PP_LIST_CONS(overflow_cast, BOOST_PP_LIST_CONS(overflow_neg, BOOST_PP_LIST_CONS(unknown, BOOST_PP_LIST_CONS(invalid, BOOST_PP_LIST_CONS(null_object, BOOST_PP_LIST_CONS(dereference, BOOST_PP_LIST_CONS(valid_object, BOOST_PP_LIST_CONS(deallocated_obj, BOOST_PP_LIST_CONS(dynamic_size, BOOST_PP_LIST_CONS(sideeffect, BOOST_PP_LIST_CONS(code_block, BOOST_PP_LIST_CONS(code_assign, BOOST_PP_LIST_CONS(code_init, BOOST_PP_LIST_CONS(code_decl, BOOST_PP_LIST_CONS(code_dead, BOOST_PP_LIST_CONS(code_printf, BOOST_PP_LIST_CONS(code_expression, BOOST_PP_LIST_CONS(code_return, BOOST_PP_LIST_CONS(code_skip, BOOST_PP_LIST_CONS(code_free, BOOST_PP_LIST_CONS(code_goto, BOOST_PP_LIST_CONS(object_descriptor, BOOST_PP_LIST_CONS(code_function_call, BOOST_PP_LIST_CONS(code_comma, BOOST_PP_LIST_CONS(invalid_pointer, BOOST_PP_LIST_CONS(code_asm, BOOST_PP_LIST_CONS(code_cpp_del_array, BOOST_PP_LIST_CONS(code_cpp_delete, BOOST_PP_LIST_CONS(code_cpp_catch, BOOST_PP_LIST_CONS(code_cpp_throw, BOOST_PP_LIST_CONS(code_cpp_throw_decl, BOOST_PP_LIST_CONS(code_cpp_throw_decl_end, BOOST_PP_LIST_CONS(isinf, BOOST_PP_LIST_CONS(isnormal, BOOST_PP_LIST_CONS(isfinite, BOOST_PP_LIST_CONS(signbit, BOOST_PP_LIST_CONS(concat, BOOST_PP_LIST_CONS(extract, BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 #define ESBMC_LIST_OF_TYPES                                                    \
   BOOST_PP_LIST_CONS(                                                          \
