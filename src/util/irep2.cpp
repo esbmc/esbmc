@@ -2935,7 +2935,7 @@ type_typedefs_empty(bool_type) type_typedefs_empty(empty_type)
                     type_typedefs2(fixedbv_type, fixedbv_data)
                       type_typedefs2(floatbv_type, floatbv_data)
                         type_typedefs1(string_type, string_data)
-                          type_typedefs2(cpp_name_type, cpp_name_data)
+                          type_typedefs2(cpp_name_type, cpp_name_data);
 
 // Explicit instanciation for exprs.
 
