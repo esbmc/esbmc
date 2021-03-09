@@ -202,31 +202,6 @@ public:
       traits;
 };
 
-class vector_data : public type2t
-{
-public:
-  vector_data(type2t::type_ids id, const type2tc &st, const expr2tc &sz, bool i)
-    : type2t(id), subtype(st), vector_size(sz), size_is_infinite(i)
-  {
-  }
-  vector_data(const vector_data &ref) = default;
-
-  type2tc subtype;
-  expr2tc vector_size;
-  bool size_is_infinite;
-
-  // Type mangling:
-  typedef esbmct::field_traits<type2tc, vector_data, &vector_data::subtype>
-    subtype_field;
-  typedef esbmct::field_traits<expr2tc, vector_data, &vector_data::vector_size>
-    vector_size_field;
-  typedef esbmct::
-    field_traits<bool, vector_data, &vector_data::size_is_infinite>
-      size_is_infinite_field;
-  typedef esbmct::
-    type2t_traits<subtype_field, vector_size_field, size_is_infinite_field>
-      traits;
-};
 
 class pointer_data : public type2t
 {
