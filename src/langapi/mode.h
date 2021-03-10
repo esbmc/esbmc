@@ -54,7 +54,7 @@ languaget *new_solidity_ast_language();
   }
 #define LANGAPI_HAVE_MODE_SOLAST                                               \
   {                                                                            \
-    "Solidity AST", &new_solidity_ast_language, extensions_cpp                 \
+    "Solidity AST", &new_solidity_ast_language, extensions_sol_ast             \
   }
 #define LANGAPI_HAVE_MODE_END                                                  \
   {                                                                            \

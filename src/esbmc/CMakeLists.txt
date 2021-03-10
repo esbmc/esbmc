@@ -25,8 +25,8 @@ target_include_directories(esbmc
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} clangcfrontend 
-  clangcppfrontend symex pointeranalysis langapi util_esbmc bigint 
+target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} solidityfrontend clangcfrontend
+  clangcppfrontend symex pointeranalysis langapi util_esbmc bigint
   solvers clibs default_message ${Boost_LIBRARIES})
 
 install(TARGETS esbmc DESTINATION bin)

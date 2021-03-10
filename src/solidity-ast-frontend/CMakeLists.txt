@@ -7,7 +7,7 @@ target_include_directories(solidityfrontend_stuff
     PRIVATE ${CLANG_INCLUDE_DIRS}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-#target_link_libraries(solidityfrontend_stuff gotoprograms clangTooling)
+target_link_libraries(solidityfrontend_stuff gotoprograms clangTooling)
 
 add_library(solidityfrontend INTERFACE)
 target_link_libraries(solidityfrontend INTERFACE solidityfrontend_stuff) # clangcfrontendast cheaders)
