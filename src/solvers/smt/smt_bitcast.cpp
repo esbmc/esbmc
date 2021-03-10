@@ -114,21 +114,11 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
   }
   else if(is_bv_type(to_type))
   {
-    unsigned int sz = expr->type->get_width() - from->type->get_width();
     if(is_floatbv_type(from))
-      return is_signedbv_type(expr->type)
-               ? mk_sign_ext(fp_api->mk_from_fp_to_bv(convert_ast(from)), sz)
-               : mk_zero_ext(fp_api->mk_from_fp_to_bv(convert_ast(from)), sz);
+      return fp_api->mk_from_fp_to_bv(convert_ast(from));
 
     if(is_struct_type(from) || is_array_type(from))
-    {
-      expr2tc new_bv = flatten_to_bitvector(from);
-      if(!sz)
-        return convert_ast(new_bv);
-
-      return is_signedbv_type(to_type) ? mk_sign_ext(convert_ast(new_bv), sz)
-                                       : mk_zero_ext(convert_ast(new_bv), sz);
-    }
+      return convert_ast(flatten_to_bitvector(from));
 
     if(is_union_type(from))
     {

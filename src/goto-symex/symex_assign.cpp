@@ -356,21 +356,19 @@ void goto_symext::symex_assign_typecast(
   const bool hidden)
 {
   // these may come from dereferencing on the lhs
-
-  const typecast_data &cast = dynamic_cast<const typecast_data &>(*lhs.get());
-  expr2tc rhs_typecasted = rhs;
+  expr2tc rhs_typecasted, from;
   if(is_typecast2t(lhs))
   {
-    rhs_typecasted = typecast2tc(cast.from->type, rhs);
+    from = to_typecast2t(lhs).from;
+    rhs_typecasted = typecast2tc(from->type, rhs);
   }
   else
   {
-    assert(is_bitcast2t(lhs));
-    rhs_typecasted = bitcast2tc(cast.from->type, rhs);
+    from = to_bitcast2t(lhs).from;
+    rhs_typecasted = bitcast2tc(from->type, rhs);
   }
 
-  symex_assign_rec(
-    cast.from, full_lhs, rhs_typecasted, full_rhs, guard, hidden);
+  symex_assign_rec(from, full_lhs, rhs_typecasted, full_rhs, guard, hidden);
 }
 
 void goto_symext::symex_assign_array(

@@ -3265,7 +3265,6 @@ exprt migrate_expr_back(const expr2tc &ref)
     const bitcast2t &ref2 = to_bitcast2t(ref);
     exprt back("bitcast", migrate_type_back(ref2.type));
     back.copy_to_operands(migrate_expr_back(ref2.from));
-    back.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
     return back;
   }
   default:
