@@ -1,5 +1,7 @@
 typedef unsigned int __kernel_size_t;
+#ifndef _WIN32
 typedef __kernel_size_t size_t;
+#endif
 typedef unsigned int __u32;
 
 struct compstat {
