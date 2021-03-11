@@ -2103,7 +2103,8 @@ expr2tc smt_convt::get(const expr2tc &expr)
                 << std::endl;
       return expr2tc();
     }
-    break;
+    simplify(res);
+    return res;
   }
 
   case expr2t::if_id:
