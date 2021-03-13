@@ -11,14 +11,13 @@
 
 #include "../testing-utils/util_irep.h"
 
-#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
 #include <clang-c-frontend/typecast.h>
 #include <util/type.h>
 #include <util/expr_util.h>
 
 // ******************** TESTS ********************
-
 
 SCENARIO("ToUnion typecast construction", "[core][clang-c-frontend][typecast]")
 {
@@ -32,7 +31,8 @@ SCENARIO("ToUnion typecast construction", "[core][clang-c-frontend][typecast]")
     union_typet t;
     typet builtin;
 
-    AND_GIVEN("An union_type {int;}") {
+    AND_GIVEN("An union_type {int;}")
+    {
       t.components().push_back(component1);
       THEN("t should contain a Int")
       {
@@ -43,14 +43,16 @@ SCENARIO("ToUnion typecast construction", "[core][clang-c-frontend][typecast]")
         CHECK(to_union_expr(e).op0().type() == component1.type());
       }
 
-      THEN("t shouldn't contain an Uint") {
+      THEN("t shouldn't contain an Uint")
+      {
         gen_builtin_type(builtin, Builtin_Type::UInt);
         exprt e = gen_zero(builtin);
         CHECK_THROWS_AS(gen_typecast_to_union(e, t), std::domain_error);
       }
     }
 
-    AND_GIVEN("An union type {int;uint;}") {
+    AND_GIVEN("An union type {int;uint;}")
+    {
       t.components().push_back(component1);
       t.components().push_back(component2);
 
@@ -64,7 +66,8 @@ SCENARIO("ToUnion typecast construction", "[core][clang-c-frontend][typecast]")
       }
     }
 
-    AND_GIVEN("An union type {double;int;}") {
+    AND_GIVEN("An union type {double;int;}")
+    {
       t.components().push_back(component4);
       t.components().push_back(component1);
 
@@ -78,7 +81,8 @@ SCENARIO("ToUnion typecast construction", "[core][clang-c-frontend][typecast]")
       }
     }
 
-    AND_GIVEN("An union type {double;uint;uint}") {
+    AND_GIVEN("An union type {double;uint;uint}")
+    {
       t.components().push_back(component4);
       t.components().push_back(component2);
       t.components().push_back(component3);

@@ -10,7 +10,7 @@
    - Functions (Async - Pthread)
  \*******************************************************************/
 
-#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
 
 void __ESBMC_atomic_begin()
@@ -27,28 +27,34 @@ void __ESBMC_atomic_end()
     int dest = 10;                                                             \
     TYPE value = 5;                                                            \
     int fetch = __ESBMC_sync_fetch_and_##OPERATOR(&dest, value);               \
-    CHECK(dest == 15);                                                    \
-    CHECK(fetch == 10);                                                   \
+    CHECK(dest == 15);                                                         \
+    CHECK(fetch == 10);                                                        \
   }
 
-TEST_CASE("sync_fetch_add", "[core][c2goto][builtin]") {
-  SECTION("Int") {
+TEST_CASE("sync_fetch_add", "[core][c2goto][builtin]")
+{
+  SECTION("Int")
+  {
     sync_fetch_generator(int, add);
   }
 
-  SECTION("Double") {
+  SECTION("Double")
+  {
     sync_fetch_generator(double, add);
   }
 
-  SECTION("Float") {
+  SECTION("Float")
+  {
     sync_fetch_generator(float, add);
   }
 
-  SECTION("Short") {
+  SECTION("Short")
+  {
     sync_fetch_generator(short, add);
   }
 
-  SECTION("Char") {
+  SECTION("Char")
+  {
     sync_fetch_generator(char, add);
   }
 }
