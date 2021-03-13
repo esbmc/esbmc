@@ -1,5 +1,5 @@
-# For some reason those tests are causing issues in Windows
-if(UNIX OR APPLE)
+# For some reason those tests are causing issues in Windows and macos (compilation)
+if(UNIX AND NOT APPLE)
     new_unit_test(xmltest "xml.test.cpp" "util_esbmc")
     new_unit_test(stdexprtest "std_expr.test.cpp" "util_esbmc;bigint")
 endif()
