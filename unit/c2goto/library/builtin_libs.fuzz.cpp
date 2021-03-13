@@ -20,7 +20,7 @@ void __ESBMC_atomic_end()
 }
 #include <library/builtin_libs.c>
 
-bool is_valid_input(const int *Data, size_t Size)
+bool is_valid_input(const int*, size_t Size)
 {
   return Size >= 2 && Size < 3;
 }
