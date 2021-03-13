@@ -10,10 +10,9 @@
    - Template based tests
  \*******************************************************************/
 
-#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
 #include <big-int/bigint.hh>
-
 
 const char *as_string(BigInt const &obj, std::vector<char> &vec)
 {
@@ -23,62 +22,78 @@ const char *as_string(BigInt const &obj, std::vector<char> &vec)
 // ** Basic scenarios
 // Check whether the object is initialized correctly
 
-SCENARIO( "bigint basic construction sets the correct values", "[bigint]" ) {
-  GIVEN( "A bigint without a value" ) {
+SCENARIO("bigint basic construction sets the correct values", "[bigint]")
+{
+  GIVEN("A bigint without a value")
+  {
     BigInt obj;
     REQUIRE(obj.to_int64() == 0);
   }
-  GIVEN( "A bigint with some positive 64-bit value" ) {
+  GIVEN("A bigint with some positive 64-bit value")
+  {
     BigInt obj(42);
     REQUIRE(obj.to_int64() == 42);
   }
-  GIVEN( "A bigint with some negative 64-bit value" ) {
+  GIVEN("A bigint with some negative 64-bit value")
+  {
     BigInt obj(-42);
     REQUIRE(obj.to_int64() == -42);
   }
-  GIVEN( "A bigint with some string") {
+  GIVEN("A bigint with some string")
+  {
     BigInt obj("-42", 10);
     REQUIRE(obj.to_int64() == -42);
   }
 }
 
-SCENARIO( "bigint basic usage", "[bigint]" ) {
-  GIVEN( "A bigint with a int64 value" ) {
+SCENARIO("bigint basic usage", "[bigint]")
+{
+  GIVEN("A bigint with a int64 value")
+  {
     BigInt obj(42);
-    WHEN("A new value is moved") {
+    WHEN("A new value is moved")
+    {
       obj = -15;
       REQUIRE_FALSE(obj.to_int64() == 42);
       REQUIRE(obj.to_int64() == -15);
     }
-    WHEN("Add is run") {
+    WHEN("Add is run")
+    {
       obj += 10;
       REQUIRE(obj.to_int64() == 52);
     }
-    WHEN("Sub is run") {
+    WHEN("Sub is run")
+    {
       obj -= 10;
       REQUIRE(obj.to_int64() == 32);
     }
-    WHEN("Mul is run") {
+    WHEN("Mul is run")
+    {
       obj *= 10;
       REQUIRE(obj.to_int64() == 420);
     }
-    WHEN("Div is run") {
+    WHEN("Div is run")
+    {
       obj /= 10;
       REQUIRE(obj.to_int64() == 4);
     }
-    WHEN("Neg is run") {
+    WHEN("Neg is run")
+    {
       obj = -obj;
       REQUIRE(obj.to_int64() == -42);
     }
   }
 }
 
-SCENARIO( "bigint comparations", "[bigint]" ) {
-  GIVEN( "Two bigints with int64 values" ) {
+SCENARIO("bigint comparations", "[bigint]")
+{
+  GIVEN("Two bigints with int64 values")
+  {
     BigInt A;
     BigInt B;
 
-    WHEN("A is less than B") {
+    WHEN("A is less than B")
+    {
       A = 42;
       B = 100;
 
@@ -94,7 +109,8 @@ SCENARIO( "bigint comparations", "[bigint]" ) {
       REQUIRE_FALSE(A >= B);
     }
 
-    WHEN("A is equal to B") {
+    WHEN("A is equal to B")
+    {
       A = 42;
       B = 42;
 
@@ -110,7 +126,8 @@ SCENARIO( "bigint comparations", "[bigint]" ) {
       REQUIRE(A >= B);
     }
 
-    WHEN("A is greater than B") {
+    WHEN("A is greater than B")
+    {
       A = 100;
       B = 42;
 
@@ -249,7 +266,7 @@ TEST_CASE("arbitrary precision integers", "[core][big-int][bigint]")
   // space delimited with line breaks meaning nothing special. Read
   // operator and operands, compute, compare with expected result and
   // complain if not.
- SECTION("clisp tests")
+  SECTION("clisp tests")
   {
     const std::vector<std::string> number_tst = {
 #include "number.tst"

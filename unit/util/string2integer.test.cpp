@@ -7,7 +7,7 @@ Notes:
     the BigInt API, which doesn't throw errors
 \*******************************************************************/
 
-#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
 #include <util/mp_arith.h>
 
@@ -50,7 +50,6 @@ TEST_CASE(
   BigInt q = string2integer("c0fefe", 16);
   REQUIRE_FALSE(q.is_negative());
   REQUIRE(q == 0xc0fefeu);
-
 }
 
 TEST_CASE(
