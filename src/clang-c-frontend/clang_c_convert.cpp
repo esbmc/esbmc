@@ -1580,63 +1580,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     new_expr = gcc_ternary;
     break;
   }
-   case clang::Stmt::ConvertVectorExprClass:
-  {
-    // TODO: Creating a fake call that is a passthrough should be simpler
-    const clang::ConvertVectorExpr &convertVector =
-      static_cast<const clang::ConvertVectorExpr &>(stmt);
-
-    side_effect_expr_function_callt fake_call;
-    code_typet t;
-    if(get_type(convertVector.getType(), t.return_type()))
-      return true;
-
-    assert(t.return_type().is_vector());
-    fake_call.type() = t;
-
-    exprt e;
-    if(get_expr(*convertVector.getSrcExpr(), e))
-      return true;
-
-    t.arguments().push_back(code_typet::argumentt(e.type()));
-    fake_call.arguments().push_back(e);
-
-    fake_call.function() = symbol_exprt("c:@F@__ESBMC_convertvector", t);
-    fake_call.function().name("__ESBMC_convertvector");
-    new_expr.swap(fake_call);
-    return false;
-  }
-
-  // A shufflevector statement
-  case clang::Stmt::ShuffleVectorExprClass:
-  {
-    // TODO: Creating a fake call that is a passthrough should be simpler
-    const clang::ShuffleVectorExpr &shuffle =
-      static_cast<const clang::ShuffleVectorExpr &>(stmt);
-
-    side_effect_expr_function_callt fake_call;
-    code_typet t;
-    if(get_type(shuffle.getType(), t.return_type()))
-      return true;
-
-    assert(t.return_type().is_vector());
-    fake_call.type() = t;
-
-    for(unsigned j = 0; j < shuffle.getNumSubExprs(); j++)
-    {
-      exprt e;
-      if(get_expr(*shuffle.getExpr(j), e))
-        return true;
-
-      t.arguments().push_back(code_typet::argumentt(e.type()));
-      fake_call.arguments().push_back(e);
-    }
-
-    fake_call.function() = symbol_exprt("c:@F@__ESBMC_shufflevector", t);
-    fake_call.function().name("__ESBMC_shufflevector");
-    new_expr.swap(fake_call);
-    return false;
-  }
 
   case clang::Stmt::ConvertVectorExprClass:
   {
@@ -2322,8 +2265,6 @@ bool clang_c_convertert::get_cast_expr(
     gen_typecast_to_union(expr, type);
     break;
 
-  case clang::CK_VectorSplat:
-    break;
   default:
     std::cerr << "Conversion of unsupported clang cast operator: \"";
     std::cerr << cast.getCastKindName() << "\" to expression" << std::endl;
