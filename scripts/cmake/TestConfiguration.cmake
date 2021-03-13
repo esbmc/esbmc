@@ -17,13 +17,16 @@ list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/contrib)
 include(Catch)
 set(UNIT_TEST_LIB Catch2::Catch2)
 
-# Functions
+# FUNCTIONS DEFINED
+
+# Adds a new Unit based test
 function (new_unit_test TARGET SRC LIBS)
   add_executable(${TARGET} ${SRC})
   target_link_libraries(${TARGET} PRIVATE ${LIBS} ${UNIT_TEST_LIB})
   catch_discover_tests(${TARGET})
 endfunction()
 
+# Add a new Fuzz based test
 function (new_fuzz_test TARGET SRC LIBS)
   if(NOT ENABLE_FUZZER)
     return()
