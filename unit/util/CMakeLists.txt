@@ -1,0 +1,1 @@
+new_unit_test(xmltest "xml.test.cpp" "util_esbmc")
