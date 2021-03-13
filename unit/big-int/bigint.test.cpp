@@ -19,61 +19,6 @@ const char *as_string(BigInt const &obj, std::vector<char> &vec)
 {
   return obj.as_string(vec.data(), vec.size());
 }
-/*
-void check_bigint_str(BigInt const &obj, const char *expected, bool is_correct)
-{
-  std::vector<char> bigint_str(obj.digits());
-  const char *actual = as_string(obj, bigint_str);
-  if(is_correct)
-    BOOST_TEST(expected == actual);
-  else
-    BOOST_TEST(expected != actual);
-
-}
-*/
-/*
-template <class T>
-struct BigIntHelper
-{
-  BigInt obj;
-
-  BigIntHelper()
-  {
-  }
-  explicit BigIntHelper(T val) : obj(val)
-  {
-  }
-  BigIntHelper(char const *val, BigInt::onedig_t base) : obj(val, base)
-  {
-  }
-  void check_value(const char *expected, bool is_correct = true)
-  {
-    check_bigint_str(obj, expected, is_correct);
-  }
-};
-} // namespace
-
-
-#define binary_op_test(FIRST_OPERATOR, SECOND_OPERATOR, BIN_OP)                \
-  BigInt obj(FIRST_OPERATOR);                                                  \
-  int expected = FIRST_OPERATOR BIN_OP SECOND_OPERATOR;                        \
-  int actual = obj BIN_OP SECOND_OPERATOR;                                     \
-  BOOST_TEST(expected == actual);
-
-#define math_test(FIRST_OPERATOR, SECOND_OPERATOR, BIN_OP)                     \
-  BigInt obj(FIRST_OPERATOR);                                                  \
-  int expected_result = FIRST_OPERATOR BIN_OP SECOND_OPERATOR;                 \
-  BigInt actual_result = obj BIN_OP SECOND_OPERATOR;                           \
-  bool expected_equals_actual = actual_result == expected_result;              \
-  BOOST_TEST(expected_equals_actual);
-
-#define math_test_signed_generator(NAME, OP)                                   \
-  BOOST_AUTO_TEST_CASE(signed_1_##NAME){math_test(-255, -300, OP)};            \
-  BOOST_AUTO_TEST_CASE(signed_2_##NAME){math_test(-255, 300, OP)};             \
-  BOOST_AUTO_TEST_CASE(signed_3_##NAME){math_test(-255, 255, OP)};             \
-  BOOST_AUTO_TEST_CASE(signed_4_##NAME){math_test(-255, 230, OP)};
-*/
-// ******************** TESTS ********************
 
 // ** Basic scenarios
 // Check whether the object is initialized correctly
