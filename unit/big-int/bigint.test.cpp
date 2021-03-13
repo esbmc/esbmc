@@ -6,25 +6,20 @@
  Date: December 2019
 
  Test Plan:
-   - Constructors
-   - Assignments
-   - Comparator
-   - Math Operations
+   - Basic usage scenarios
+   - Template based tests
  \*******************************************************************/
 
-#define BOOST_TEST_MODULE "Big Int"
-
+#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
+#include <catch2/catch.hpp>
 #include <big-int/bigint.hh>
-#include <boost/test/included/unit_test.hpp>
-namespace utf = boost::unit_test;
 
-namespace
-{
+
 const char *as_string(BigInt const &obj, std::vector<char> &vec)
 {
   return obj.as_string(vec.data(), vec.size());
 }
-
+/*
 void check_bigint_str(BigInt const &obj, const char *expected, bool is_correct)
 {
   std::vector<char> bigint_str(obj.digits());
@@ -33,8 +28,10 @@ void check_bigint_str(BigInt const &obj, const char *expected, bool is_correct)
     BOOST_TEST(expected == actual);
   else
     BOOST_TEST(expected != actual);
-}
 
+}
+*/
+/*
 template <class T>
 struct BigIntHelper
 {
@@ -56,6 +53,7 @@ struct BigIntHelper
 };
 } // namespace
 
+
 #define binary_op_test(FIRST_OPERATOR, SECOND_OPERATOR, BIN_OP)                \
   BigInt obj(FIRST_OPERATOR);                                                  \
   int expected = FIRST_OPERATOR BIN_OP SECOND_OPERATOR;                        \
@@ -74,340 +72,300 @@ struct BigIntHelper
   BOOST_AUTO_TEST_CASE(signed_2_##NAME){math_test(-255, 300, OP)};             \
   BOOST_AUTO_TEST_CASE(signed_3_##NAME){math_test(-255, 255, OP)};             \
   BOOST_AUTO_TEST_CASE(signed_4_##NAME){math_test(-255, 230, OP)};
-
+*/
 // ******************** TESTS ********************
 
-// ** Constructors
+// ** Basic scenarios
 // Check whether the object is initialized correctly
 
-BOOST_AUTO_TEST_SUITE(constructors)
-BOOST_AUTO_TEST_CASE(null_constructor_ok)
-{
-  BigIntHelper<int> obj;
-  obj.check_value(NULL);
-}
-BOOST_AUTO_TEST_CASE(null_constructor_fail)
-{
-  BigIntHelper<int> obj;
-  obj.check_value("32", false);
-}
-
-BOOST_AUTO_TEST_CASE(signed_constructor_ok)
-{
-  const int input = -42;
-  BigIntHelper<int> obj(input);
-  obj.check_value("-42");
-}
-BOOST_AUTO_TEST_CASE(signed_constructor_fail)
-{
-  const int input = -42;
-  BigIntHelper<int> obj(input);
-  obj.check_value("32", false);
+SCENARIO( "bigint basic construction sets the correct values", "[bigint]" ) {
+  GIVEN( "A bigint without a value" ) {
+    BigInt obj;
+    REQUIRE(obj.to_int64() == 0);
+  }
+  GIVEN( "A bigint with some positive 64-bit value" ) {
+    BigInt obj(42);
+    REQUIRE(obj.to_int64() == 42);
+  }
+  GIVEN( "A bigint with some negative 64-bit value" ) {
+    BigInt obj(-42);
+    REQUIRE(obj.to_int64() == -42);
+  }
+  GIVEN( "A bigint with some string") {
+    BigInt obj("-42", 10);
+    REQUIRE(obj.to_int64() == -42);
+  }
 }
 
-BOOST_AUTO_TEST_CASE(unsigned_constructor_ok)
-{
-  const unsigned input = 398;
-  BigIntHelper<int> obj(input);
-  obj.check_value("398");
-}
-BOOST_AUTO_TEST_CASE(unsigned_constructor_fail)
-{
-  const unsigned input = 0;
-  BigIntHelper<int> obj(input);
-  obj.check_value("398", false);
-}
-
-BOOST_AUTO_TEST_CASE(string_constructor_ok_1)
-{
-  const BigInt::onedig_t base = 10;
-  const char *input = "42";
-  BigIntHelper<int> obj(input, base);
-  obj.check_value("42");
-}
-BOOST_AUTO_TEST_CASE(string_constructor_fail_1)
-{
-  const BigInt::onedig_t base = 10;
-  const char *input = "42";
-  BigIntHelper<int> obj(input, base);
-  obj.check_value("79", false);
-}
-
-BOOST_AUTO_TEST_CASE(string_constructor_ok_2)
-{
-  const BigInt::onedig_t base = 16;
-  const char *input = "FF";
-  BigIntHelper<int> obj(input, base);
-  obj.check_value("255");
-}
-BOOST_AUTO_TEST_CASE(string_constructor_fail_2)
-{
-  const BigInt::onedig_t base = 16;
-  const char *input = "A";
-  BigIntHelper<int> obj(input, base);
-  obj.check_value("100", false);
+SCENARIO( "bigint basic usage", "[bigint]" ) {
+  GIVEN( "A bigint with a int64 value" ) {
+    BigInt obj(42);
+    WHEN("A new value is moved") {
+      obj = -15;
+      REQUIRE_FALSE(obj.to_int64() == 42);
+      REQUIRE(obj.to_int64() == -15);
+    }
+    WHEN("Add is run") {
+      obj += 10;
+      REQUIRE(obj.to_int64() == 52);
+    }
+    WHEN("Sub is run") {
+      obj -= 10;
+      REQUIRE(obj.to_int64() == 32);
+    }
+    WHEN("Mul is run") {
+      obj *= 10;
+      REQUIRE(obj.to_int64() == 420);
+    }
+    WHEN("Div is run") {
+      obj /= 10;
+      REQUIRE(obj.to_int64() == 4);
+    }
+    WHEN("Neg is run") {
+      obj = -obj;
+      REQUIRE(obj.to_int64() == -42);
+    }
+  }
 }
 
-BOOST_AUTO_TEST_CASE(string_constructor_ok_3)
-{
-  const BigInt::onedig_t base = 10;
-  const char *input = "12345678987654321234567890";
-  BigIntHelper<int> obj(input, base);
-  obj.check_value("12345678987654321234567890");
-}
-BOOST_AUTO_TEST_CASE(string_constructor_fail_3)
-{
-  const BigInt::onedig_t base = 10;
-  const char *input = "12345678987654321234567890";
-  BigIntHelper<int> obj(input, base);
-  obj.check_value("1234567898765432123456789", false);
-}
+SCENARIO( "bigint comparations", "[bigint]" ) {
+  GIVEN( "Two bigints with int64 values" ) {
+    BigInt A;
+    BigInt B;
 
-BOOST_AUTO_TEST_CASE(bigint_constructor_ok)
-{
-  BigInt input(42);
-  BigIntHelper<BigInt> obj(input);
-  obj.check_value("42");
-}
-BOOST_AUTO_TEST_CASE(bigint_constructor_fail)
-{
-  BigInt input(42);
-  BigIntHelper<BigInt> obj(input);
-  obj.check_value(NULL, false);
-}
-BOOST_AUTO_TEST_SUITE_END()
+    WHEN("A is less than B") {
+      A = 42;
+      B = 100;
 
-// ** Assignment
-// Check whether the object is initialized correctly after an assignement
+      REQUIRE(A != B);
+      REQUIRE_FALSE(A == B);
+      REQUIRE(A < B);
+      REQUIRE_FALSE(B < A);
+      REQUIRE(A <= B);
+      REQUIRE_FALSE(B <= A);
+      REQUIRE(B > A);
+      REQUIRE_FALSE(A > B);
+      REQUIRE(B >= A);
+      REQUIRE_FALSE(A >= B);
+    }
 
-BOOST_AUTO_TEST_SUITE(assignment)
-BOOST_AUTO_TEST_CASE(signed_assignment_ok)
-{
-  BigIntHelper<unsigned> obj(42);
-  obj.obj = -9090;
-  obj.check_value("-9090");
-}
-BOOST_AUTO_TEST_CASE(signed_assignment_fail)
-{
-  BigIntHelper<int> obj(-42);
-  obj.obj = -9090;
-  obj.check_value("-42", false);
-}
+    WHEN("A is equal to B") {
+      A = 42;
+      B = 42;
 
-BOOST_AUTO_TEST_CASE(unsigned_assignment_ok)
-{
-  BigIntHelper<int> obj(-255);
-  unsigned value = 400000;
-  obj.obj = value;
-  obj.check_value("400000");
-}
-BOOST_AUTO_TEST_CASE(unsigned_assignment_fail)
-{
-  BigIntHelper<int> obj(40000);
-  obj.obj = 9090;
-  obj.check_value("40000", false);
+      REQUIRE_FALSE(A != B);
+      REQUIRE(A == B);
+      REQUIRE_FALSE(A < B);
+      REQUIRE_FALSE(B < A);
+      REQUIRE(A <= B);
+      REQUIRE(B <= A);
+      REQUIRE_FALSE(B > A);
+      REQUIRE_FALSE(A > B);
+      REQUIRE(B >= A);
+      REQUIRE(A >= B);
+    }
+
+    WHEN("A is greater than B") {
+      A = 100;
+      B = 42;
+
+      REQUIRE(A != B);
+      REQUIRE_FALSE(A == B);
+      REQUIRE_FALSE(A < B);
+      REQUIRE(B < A);
+      REQUIRE_FALSE(A <= B);
+      REQUIRE(B <= A);
+      REQUIRE_FALSE(B > A);
+      REQUIRE(A > B);
+      REQUIRE_FALSE(B >= A);
+      REQUIRE(A >= B);
+    }
+  }
 }
 
-BOOST_AUTO_TEST_CASE(bigint_assignment_ok)
-{
-  BigIntHelper<int> obj(-255);
-  BigInt value(42);
-  obj.obj = value;
-  obj.check_value("42");
-}
-BOOST_AUTO_TEST_CASE(bigint_assignment_fail)
-{
-  BigInt value(42);
-  BigIntHelper<BigInt> obj(value);
-  obj.obj = 9090;
-  obj.check_value("42", false);
-}
+/**
+ * Next tests comes from CBMC, the only difference is that I
+ * renamed some of the tags, I've removed tests that were dependent
+ * on bigint support for doubles
+ *
+ * TODO: Add double tests
+ *
+ * Author: Daniel Kroening
+ */
 
-BOOST_AUTO_TEST_CASE(string_assignment_ok_1)
-{
-  const char *input = "12345678987654321234567890";
-  BigIntHelper<int> obj(-255);
-  obj.obj = input;
-  obj.check_value(input);
-}
+// =====================================================================
+// Printing and reading bignums.
+// =====================================================================
 
-BOOST_AUTO_TEST_CASE(string_assignment_ok_2)
+static std::string to_string(BigInt const &x, unsigned base = 10)
 {
-  BigIntHelper<int> obj(-255);
-  obj.obj = "255";
-  obj.check_value("255");
+  const std::size_t len = x.digits(base) + 2;
+  std::vector<char> dest(len, 0);
+  const char *s = x.as_string(dest.data(), len, base);
+  return std::string(s);
 }
 
-BOOST_AUTO_TEST_CASE(string_assignment_ok_3)
+static bool read(const std::string &input, BigInt &x, unsigned base = 10)
 {
-  BigIntHelper<int> obj(255);
-  obj.obj = "-255";
-  obj.check_value("-255");
+  return x.scan(input.c_str(), base) == input.c_str() + input.size();
 }
 
-BOOST_AUTO_TEST_CASE(string_assignment_ok_4)
+TEST_CASE("arbitrary precision integers", "[core][big-int][bigint]")
 {
-  const BigInt::onedig_t base = 10;
-  const char *input = "12345678987654321234567890";
-  BigIntHelper<char> obj(input, base);
-  obj.obj = input;
-  obj.check_value(input);
+  // =====================================================================
+  // Simple tests.
+  // =====================================================================
+  // Good when something basic is broken an must be debugged.
+  SECTION("simple tests")
+  {
+    REQUIRE(to_string(BigInt(0xFFFFFFFFu)) == "4294967295");
+    REQUIRE(
+      to_string(BigInt(0xFFFFFFFFu), 2) == "11111111111111111111111111111111");
+    REQUIRE(
+      to_string(BigInt("123456789012345678901234567890")) ==
+      "123456789012345678901234567890");
+
+    REQUIRE(
+      to_string(
+        BigInt("99999999999999999999999999999999", 10) /
+        BigInt("999999999999999999999999", 10)) == "100000000");
+    REQUIRE(
+      to_string(
+        BigInt("99999999999999999999999999999999", 10) %
+        BigInt("999999999999999999999999", 10)) == "99999999");
+
+    BigInt t(100);
+    t -= 300;
+    REQUIRE(to_string(t) == "-200");
+
+    BigInt r = BigInt(-124) + 124;
+    REQUIRE(to_string(r) == "0");
+    REQUIRE(BigInt(0) <= r);
+
+    BigInt i(1);
+    for(int j = 0; j < 1000; j++)
+      i += 100000000;
+    REQUIRE(to_string(i) == "100000000001");
+
+    for(int j = 0; j < 2000; j++)
+      i -= 100000000;
+    REQUIRE(to_string(i) == "-99999999999");
+
+    for(int j = 0; j < 1000; j++)
+      i += 100000000;
+    REQUIRE(to_string(i) == "1");
+  }
+
+  // =====================================================================
+  // Test cases from the clisp test suite in number.tst.
+  // =====================================================================
+
+  // I took those test cases in number.tst from file
+  //
+  //  clisp-1998-09-09/tests/number.tst
+  //
+  // in clispsrc.tar.gz. From the README file in that directory:
+  /*
+
+  This directory contains a test suite for testing Common Lisp (CLtL1)
+  implementations.
+
+  In its original version it was built by
+
+      Horst Friedrich, ISST of FhG         <horst.friedrich@isst.fhg.de>
+      Ingo Mohr, ISST of FhG               <ingo.mohr@isst.fhg.de>
+      Ulrich Kriegel, ISST of FhG          <ulrich.kriegel@isst.fhg.de>
+      Windfried Heicking, ISST of FhG      <winfried.heicking@isst.fhg.de>
+      Rainer Rosenmueller, ISST of FhG     <rainer.rosenmueller@isst.fhg.de>
+
+  at
+
+      Institut für Software- und Systemtechnik der Fraunhofer-Gesellschaft
+      (Fraunhofer Institute for Software Engineering and Systems Engineering)
+      Kurstraße 33
+    D-10117 Berlin
+      Germany
+
+  for their Common Lisp implementation named XCL.
+
+  What you see here is a version adapted to CLISP and AKCL by
+
+      Bruno Haible              <haible@ma2s2.mathematik.uni-karlsruhe.de>
+  */
+
+  // Actually I have no idea what principles directed the choice of test
+  // cases and what they are worth. Nevertheless it makes me feel better
+  // when BigInt comes to the same results as a Common Lisp should. Note
+  // that Lisp uses a floored divide operator which means that the
+  // quotient is rounded towards negative infinity. The remainder has to
+  // be adjusted accordingly.
+
+  // Each test is operator op1 op2 result [result2]. Everything is white
+  // space delimited with line breaks meaning nothing special. Read
+  // operator and operands, compute, compare with expected result and
+  // complain if not.
+ SECTION("clisp tests")
+  {
+    const std::vector<std::string> number_tst = {
+#include "number.tst"
+    };
+
+    for(std::size_t i = 0; i < number_tst.size(); i += 4)
+    {
+      const std::string op = number_tst[i];
+      REQUIRE(!op.empty());
+
+      BigInt a, b, r, er;
+      REQUIRE(read(number_tst[i + 1], a));
+      REQUIRE(read(number_tst[i + 2], b));
+      REQUIRE(read(number_tst[i + 3], er));
+
+      switch(op[0])
+      {
+      case '+':
+        r = a + b;
+        REQUIRE(r == er);
+        break;
+      case '-':
+        r = a - b;
+        REQUIRE(r == er);
+        break;
+      case '*':
+        r = a * b;
+        REQUIRE(r == er);
+        break;
+      case '/':
+      {
+        // These lines also have a remainder.
+        REQUIRE(i + 4 < number_tst.size());
+        BigInt em;
+        REQUIRE(read(number_tst[i + 4], em));
+        ++i;
+
+        r = a / b;
+        BigInt m = a % b;
+        // The test-data from the Lisp testsuite are assuming
+        // floored divide. Fix the results accordingly.
+        if(!m.is_zero() && a.is_positive() != b.is_positive())
+        {
+          r -= 1;
+          m += b;
+        }
+        REQUIRE(r == er);
+        REQUIRE(m == em);
+
+        // Also try the method returning both.
+        BigInt::div(a, b, r, m);
+        // Again, transform to floored divide.
+        if(!m.is_zero() && a.is_positive() != b.is_positive())
+        {
+          r -= 1;
+          m += b;
+        }
+        REQUIRE(r == er);
+        REQUIRE(m == em);
+      }
+      }
+    }
+  }
 }
-
-BOOST_AUTO_TEST_CASE(string_assignment_fail_1)
-{
-  const BigInt::onedig_t base = 10;
-  const char *input = "12345678987654321234567890";
-  BigIntHelper<char> obj(input, base);
-  obj.obj = 255;
-  obj.check_value(input, false);
-}
-
-BOOST_AUTO_TEST_CASE(string_assignment_fail_2)
-{
-  const BigInt::onedig_t base = 10;
-  const char *input = "255";
-  BigIntHelper<char> obj(input, base);
-  obj.obj = -255;
-  obj.check_value("-255255", false);
-}
-BOOST_AUTO_TEST_SUITE_END()
-
-// ** Comparator
-// Check whether comparations are working
-
-BOOST_AUTO_TEST_SUITE(compare)
-
-BOOST_AUTO_TEST_CASE(signed_cmp_lesser_ok_1){binary_op_test(-4567, -300, <)}
-
-BOOST_AUTO_TEST_CASE(signed_cmp_lesser_ok_2){binary_op_test(-1235, -2000, <)}
-
-BOOST_AUTO_TEST_CASE(signed_cmp_greater_ok_1){binary_op_test(-255, -300, >)}
-
-BOOST_AUTO_TEST_CASE(signed_cmp_greater_ok_2){binary_op_test(-255, -200, >)}
-
-BOOST_AUTO_TEST_CASE(signed_cmp_lesser_equal_ok_1){
-  binary_op_test(-4567, -300, <=)}
-
-BOOST_AUTO_TEST_CASE(signed_cmp_lesser_equal_ok_2){
-  binary_op_test(-4567, -4567, <=)}
-
-BOOST_AUTO_TEST_CASE(signed_cmp_lesser_equal_ok_3){
-  binary_op_test(-1235, -2000, <=)}
-
-BOOST_AUTO_TEST_CASE(signed_cmp_greater_equal_ok_1){
-  binary_op_test(-300, -4567, >=)}
-
-BOOST_AUTO_TEST_CASE(signed_cmp_greater_equal_ok_2){
-  binary_op_test(-4567, -4567, >=)}
-
-BOOST_AUTO_TEST_CASE(signed_cmp_greater_equal_ok_3){
-  binary_op_test(-4567, -4566, >=)}
-
-BOOST_AUTO_TEST_CASE(signed_cmp_equal_ok_1){binary_op_test(-255, -255, ==)}
-
-BOOST_AUTO_TEST_CASE(signed_cmp_equal_ok_2){binary_op_test(-255, 0, ==)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_1){
-  binary_op_test(0, (unsigned)200, <)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_ok_2){
-  binary_op_test(200, (unsigned)0, <)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_1){
-  binary_op_test(300, (unsigned)200, >)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_ok_2){
-  binary_op_test(0, (unsigned)200, >)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_1){
-  binary_op_test(0, (unsigned)200, <=)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_2){
-  binary_op_test(200, (unsigned)0, <=)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_lesser_equal_ok_4){
-  binary_op_test(20, (unsigned)20, <=)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_1){
-  binary_op_test(300, (unsigned)0, >=)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_3){
-  binary_op_test(400, (unsigned)600, >=)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_greater_equal_ok_4){
-  binary_op_test(400, (unsigned)400, >=)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_equal_ok_1){
-  binary_op_test(255, (unsigned)255, ==)}
-
-BOOST_AUTO_TEST_CASE(unsigned_cmp_equal_ok_2){
-  binary_op_test(-255, (unsigned)255, ==)}
-
-BOOST_AUTO_TEST_SUITE_END();
-
-// ** Math Operations
-// Check whether math operations are working
-
-BOOST_AUTO_TEST_SUITE(math);
-
-math_test_signed_generator(addition, +);
-math_test_signed_generator(subtraction, -);
-math_test_signed_generator(multiplication, *);
-math_test_signed_generator(division, /);
-math_test_signed_generator(mod, %);
-
-BOOST_AUTO_TEST_CASE(floor_pow_ok_1)
-{
-  BigInt obj(31);
-  unsigned expected = 4;
-  unsigned actual = obj.floorPow2();
-  BOOST_TEST(expected == actual);
-};
-
-BOOST_AUTO_TEST_CASE(floor_pow_ok_2)
-{
-  BigInt obj(-31);
-  unsigned expected = 4;
-  unsigned actual = obj.floorPow2();
-  BOOST_TEST(expected == actual);
-}
-
-BOOST_AUTO_TEST_CASE(floor_pow_ok_3)
-{
-  BigInt obj(32);
-  unsigned expected = 5;
-  unsigned actual = obj.floorPow2();
-  BOOST_TEST(expected == actual);
-}
-
-BOOST_AUTO_TEST_CASE(floor_pow_ok_4)
-{
-  BigInt obj(-32);
-  unsigned expected = 5;
-  unsigned actual = obj.floorPow2();
-  BOOST_TEST(expected == actual);
-}
-
-BOOST_AUTO_TEST_CASE(set_pow_ok_1)
-{
-  BigInt obj;
-  obj.setPower2(5);
-  unsigned expected = 32;
-  int expected_is_equal_to_actual = obj == expected;
-  BOOST_TEST(expected_is_equal_to_actual);
-};
-
-BOOST_AUTO_TEST_CASE(set_pow_ok_2)
-{
-  BigInt obj;
-  obj.setPower2(0);
-  unsigned expected = 1;
-  int expected_is_equal_to_actual = obj == expected;
-  BOOST_TEST(expected_is_equal_to_actual);
-};
-
-BOOST_AUTO_TEST_SUITE_END()
-
-#undef binary_op_test
-#undef math_test
