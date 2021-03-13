@@ -749,16 +749,7 @@ type_macros(cpp_name);
  *  types with common bit widths, and methods to enter a used type into a cache
  *  of them, allowing migration of typet <=> type2t to be faster.
  */
-
-struct typet_hash
-{
-  std::size_t operator()(typet const &t) const noexcept
-  {
-    return t.full_hash();
-  }
-};
-
-using type2t_pool_map = std::unordered_map<typet, type2tc, typet_hash>;
+using type2t_pool_map = std::unordered_map<typet, type2tc, irep_full_hash>;
 class type_poolt
 {
 public:
