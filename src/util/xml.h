@@ -1,9 +1,9 @@
 /*******************************************************************\
- 
+
 Module:
- 
+
 Author: Daniel Kroening, kroening@kroening.com
- 
+
 \*******************************************************************/
 
 #ifndef XML_H
@@ -99,4 +99,6 @@ protected:
   static void do_indent(std::ostream &out, unsigned indent);
 };
 
+bool operator==(const xmlt &a, const xmlt &b);
+bool operator!=(const xmlt &a, const xmlt &b);
 #endif
