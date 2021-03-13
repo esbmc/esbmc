@@ -777,8 +777,7 @@ type_poolt &type_poolt::operator=(type_poolt const &ref)
 }
 
 // TODO: investigate performance implications of this cache
-static const type2tc &
-get_type_from_pool(const typet &val, type2t_pool_map &map)
+static const type2tc &get_type_from_pool(const typet &val, type2t_pool_map &map)
 {
   /* BUG: This is creating problems
   */

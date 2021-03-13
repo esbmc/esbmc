@@ -752,13 +752,13 @@ type_macros(cpp_name);
 
 struct typet_hash
 {
-    std::size_t operator()(typet const& t) const noexcept
-    {
-      return t.full_hash();
-    }
+  std::size_t operator()(typet const &t) const noexcept
+  {
+    return t.full_hash();
+  }
 };
 
-using  type2t_pool_map = std::unordered_map<typet, type2tc, typet_hash>;
+using type2t_pool_map = std::unordered_map<typet, type2tc, typet_hash>;
 class type_poolt
 {
 public:
