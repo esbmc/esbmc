@@ -6,8 +6,7 @@ Author: Diffblue Ltd.
 
 \*******************************************************************/
 
-
-#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
 #include <util/symbol.h>
 
@@ -29,7 +28,7 @@ SCENARIO(
       //REQUIRE(symbol.is_well_formed());
     }
   }
-/* TODO: Add check for well formed symbols
+  /* TODO: Add check for well formed symbols
   GIVEN("An improperly initialised symbol")
   {
     symbolt symbol;
