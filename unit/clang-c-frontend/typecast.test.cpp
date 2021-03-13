@@ -9,122 +9,88 @@
    - ToUnion (builtins, exceptions)
  \*******************************************************************/
 
-#define BOOST_TEST_MODULE "Typecast Test"
+#include "../testing-utils/util_irep.h"
+
+#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
+#include <catch2/catch.hpp>
 #include <clang-c-frontend/typecast.h>
 #include <util/type.h>
 #include <util/expr_util.h>
-#include "util.h"
-#include <boost/test/included/unit_test.hpp>
-namespace utf = boost::unit_test;
 
 // ******************** TESTS ********************
 
-BOOST_AUTO_TEST_SUITE(ToUnion)
-BOOST_AUTO_TEST_CASE(basic_union_1)
+
+SCENARIO("ToUnion typecast construction", "[core][clang-c-frontend][typecast]")
 {
-  auto component = gen_component("var_1", Builtin_Type::Int);
+  GIVEN("Some components")
+  {
+    auto component1 = gen_component("var_1", Builtin_Type::Int);
+    auto component2 = gen_component("var_2", Builtin_Type::UInt);
+    auto component3 = gen_component("var_3", Builtin_Type::UInt);
+    auto component4 = gen_component("var_4", Builtin_Type::Double);
 
-  union_typet t;
-  t.components().push_back(component);
+    union_typet t;
+    typet builtin;
 
-  typet builtin;
-  gen_builtin_type(builtin, Builtin_Type::Int);
-  exprt e = gen_zero(builtin);
+    AND_GIVEN("An union_type {int;}") {
+      t.components().push_back(component1);
+      THEN("t should contain a Int")
+      {
+        gen_builtin_type(builtin, Builtin_Type::Int);
+        exprt e = gen_zero(builtin);
+        CHECK_NOTHROW(gen_typecast_to_union(e, t));
+        CHECK(to_union_expr(e).get_component_name() == "var_1");
+        CHECK(to_union_expr(e).op0().type() == component1.type());
+      }
 
-  gen_typecast_to_union(e, t);
+      THEN("t shouldn't contain an Uint") {
+        gen_builtin_type(builtin, Builtin_Type::UInt);
+        exprt e = gen_zero(builtin);
+        CHECK_THROWS_AS(gen_typecast_to_union(e, t), std::domain_error);
+      }
+    }
 
-  BOOST_TEST(to_union_expr(e).get_component_name() == "var_1");
-  BOOST_TEST(to_union_expr(e).op0().type() == component.type());
+    AND_GIVEN("An union type {int;uint;}") {
+      t.components().push_back(component1);
+      t.components().push_back(component2);
+
+      THEN("t should contain a UInt")
+      {
+        gen_builtin_type(builtin, Builtin_Type::UInt);
+        exprt e = gen_zero(builtin);
+        CHECK_NOTHROW(gen_typecast_to_union(e, t));
+        CHECK(to_union_expr(e).get_component_name() == "var_2");
+        CHECK(to_union_expr(e).op0().type() == component2.type());
+      }
+    }
+
+    AND_GIVEN("An union type {double;int;}") {
+      t.components().push_back(component4);
+      t.components().push_back(component1);
+
+      THEN("t should contain a Int")
+      {
+        gen_builtin_type(builtin, Builtin_Type::Int);
+        exprt e = gen_zero(builtin);
+        CHECK_NOTHROW(gen_typecast_to_union(e, t));
+        CHECK(to_union_expr(e).get_component_name() == "var_1");
+        CHECK(to_union_expr(e).op0().type() == component1.type());
+      }
+    }
+
+    AND_GIVEN("An union type {double;uint;uint}") {
+      t.components().push_back(component4);
+      t.components().push_back(component2);
+      t.components().push_back(component3);
+
+      THEN("t should contain Uint and return component2")
+      {
+        gen_builtin_type(builtin, Builtin_Type::UInt);
+        exprt e = gen_zero(builtin);
+        CHECK_NOTHROW(gen_typecast_to_union(e, t));
+        CHECK(to_union_expr(e).get_component_name() == "var_2");
+        CHECK(to_union_expr(e).op0().type() == component2.type());
+      }
+    }
+  }
 }
-
-BOOST_AUTO_TEST_CASE(basic_union_1_error)
-{
-  auto component = gen_component("var_1", Builtin_Type::Int);
-
-  union_typet t;
-  t.components().push_back(component);
-
-  typet builtin;
-  gen_builtin_type(builtin, Builtin_Type::UInt);
-  exprt e = gen_zero(builtin);
-
-  BOOST_CHECK_THROW(gen_typecast_to_union(e, t), std::domain_error);
-}
-
-BOOST_AUTO_TEST_CASE(basic_union_2)
-{
-  auto component = gen_component("var_1", Builtin_Type::Int);
-  auto component2 = gen_component("var_2", Builtin_Type::UInt);
-
-  union_typet t;
-  t.components().push_back(component);
-  t.components().push_back(component2);
-
-  typet builtin;
-  gen_builtin_type(builtin, Builtin_Type::UInt);
-  exprt e = gen_zero(builtin);
-
-  BOOST_CHECK_NO_THROW(gen_typecast_to_union(e, t));
-  BOOST_TEST(to_union_expr(e).get_component_name() == "var_2");
-  BOOST_TEST(to_union_expr(e).op0().type() == component2.type());
-}
-
-BOOST_AUTO_TEST_CASE(basic_union_3)
-{
-  auto component = gen_component("var_1", Builtin_Type::Double);
-  auto component2 = gen_component("var_2", Builtin_Type::UInt);
-
-  union_typet t;
-  t.components().push_back(component);
-  t.components().push_back(component2);
-
-  typet builtin;
-  gen_builtin_type(builtin, Builtin_Type::UInt);
-  exprt e = gen_zero(builtin);
-
-  BOOST_CHECK_NO_THROW(gen_typecast_to_union(e, t));
-  BOOST_TEST(to_union_expr(e).get_component_name() == "var_2");
-  BOOST_TEST(to_union_expr(e).op0().type() == component2.type());
-}
-
-BOOST_AUTO_TEST_CASE(basic_union_4)
-{
-  auto component = gen_component("var_1", Builtin_Type::Double);
-  auto component2 = gen_component("var_2", Builtin_Type::UInt);
-  auto component3 = gen_component("var_3", Builtin_Type::UInt);
-
-  union_typet t;
-  t.components().push_back(component);
-  t.components().push_back(component2);
-  t.components().push_back(component3);
-
-  typet builtin;
-  gen_builtin_type(builtin, Builtin_Type::UInt);
-  exprt e = gen_zero(builtin);
-
-  BOOST_CHECK_NO_THROW(gen_typecast_to_union(e, t));
-  BOOST_TEST(to_union_expr(e).get_component_name() == "var_2");
-  BOOST_TEST(to_union_expr(e).op0().type() == component2.type());
-}
-
-BOOST_AUTO_TEST_CASE(basic_union_5)
-{
-  auto component = gen_component("var_1", Builtin_Type::Double);
-  auto component2 = gen_component("var_2", Builtin_Type::UInt);
-  auto component3 = gen_component("var_3", Builtin_Type::UInt);
-
-  union_typet t;
-  t.components().push_back(component);
-  t.components().push_back(component2);
-  t.components().push_back(component3);
-
-  typet builtin;
-  gen_builtin_type(builtin, Builtin_Type::Double);
-  exprt e = gen_zero(builtin);
-
-  BOOST_CHECK_NO_THROW(gen_typecast_to_union(e, t));
-  BOOST_TEST(to_union_expr(e).get_component_name() == "var_1");
-  BOOST_TEST(to_union_expr(e).op0().type() == component.type());
-}
-
-BOOST_AUTO_TEST_SUITE_END()

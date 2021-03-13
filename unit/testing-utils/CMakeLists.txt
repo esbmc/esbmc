@@ -1,0 +1,2 @@
+add_library(test_util_irep util_irep.cpp)
+target_link_libraries(test_util_irep bigint util_esbmc)
