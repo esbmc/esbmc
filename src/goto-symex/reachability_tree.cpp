@@ -51,11 +51,7 @@ reachability_treet::reachability_treet(
   interactive_ileaves = options.get_bool_option("interactive-ileaves");
   round_robin = options.get_bool_option("round-robin");
   schedule = options.get_bool_option("schedule");
-
-  if(options.get_bool_option("no-por"))
-    por = false;
-  else
-    por = true;
+  por = !options.get_bool_option("no-por");
 
   target_template = std::move(target);
 }

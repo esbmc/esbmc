@@ -269,6 +269,23 @@ public:
   typedef esbmct::expr2t_traits<from_field, rounding_mode_field> traits;
 };
 
+class bitcast_data : public expr2t
+{
+public:
+  bitcast_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
+    : expr2t(t, id), from(v)
+  {
+  }
+  bitcast_data(const bitcast_data &ref) = default;
+
+  expr2tc from;
+
+  // Type mangling:
+  typedef esbmct::field_traits<expr2tc, bitcast_data, &bitcast_data::from>
+    from_field;
+  typedef esbmct::expr2t_traits<from_field> traits;
+};
+
 class if_data : public expr2t
 {
 public:
@@ -1431,7 +1448,7 @@ irep_typedefs(constant_string, constant_string_data);
 irep_typedefs(symbol, symbol_data);
 irep_typedefs(nearbyint, typecast_data);
 irep_typedefs(typecast, typecast_data);
-irep_typedefs(bitcast, typecast_data);
+irep_typedefs(bitcast, bitcast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);
@@ -1873,7 +1890,7 @@ public:
  *  is bitcasting floats: if one typecasted them to integers, they would be
  *  rounded; bitcasting them produces the bit-representation of the float, as
  *  an integer value.
- *  @extends typecast_data
+ *  @extends bitcast_data
  */
 class bitcast2t : public bitcast_expr_methods
 {
@@ -1883,17 +1900,7 @@ public:
    *  @param from Expression to cast from.
    */
   bitcast2t(const type2tc &type, const expr2tc &from)
-    : bitcast_expr_methods(
-        type,
-        bitcast_id,
-        from,
-        expr2tc(
-          new symbol2t(type_pool.get_int32(), "c:@__ESBMC_rounding_mode")))
-  {
-  }
-
-  bitcast2t(const type2tc &type, const expr2tc &from, const expr2tc &roundsym)
-    : bitcast_expr_methods(type, bitcast_id, from, roundsym)
+    : bitcast_expr_methods(type, bitcast_id, from)
   {
   }
 

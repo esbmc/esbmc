@@ -11,6 +11,7 @@
 #include <clang/Frontend/ASTUnit.h>
 #pragma GCC diagnostic pop
 
+#include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -152,7 +153,8 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
         return true;
 
       comp.type().width(width.cformat());
-      comp.type().set("#bitfield", "true");
+      comp.type().set("#bitfield", true);
+      comp.type().subtype() = t;
     }
 
     new_expr.swap(comp);
@@ -178,8 +180,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       if(get_expr(*fd.getAnonField()->getBitWidth(), width))
         return true;
 
-      comp.type().set("#bitfield", "true");
       comp.type().width(width.cformat());
+      comp.type().set("#bitfield", true);
+      comp.type().subtype() = t;
     }
 
     new_expr.swap(comp);
@@ -304,20 +307,38 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if(get_struct_union_class_fields(*rd_def, t))
     return true;
 
-  // Check for packed specifier.
+  // Check for packed and aligned attributes
   if(rd_def->hasAttrs())
   {
     const auto &attrs = rd_def->getAttrs();
     for(const auto &attr : attrs)
+    {
       if(attr->getKind() == clang::attr::Packed)
         t.set("packed", "true");
+
+      if(attr->getKind() == clang::attr::Aligned)
+      {
+        const clang::AlignedAttr &aattr =
+          static_cast<const clang::AlignedAttr &>(*attr);
+
+        exprt alignment;
+        if(get_expr(*(aattr.getAlignmentExpr()), alignment))
+          return true;
+
+        t.set("alignment", alignment);
+      }
+    }
   }
 
   if(get_struct_union_class_methods(*rd_def, t))
     return true;
 
-  added_symbol.type = has_bitfields(t) ? fix_bitfields(t) : t;
+  if(rd.isUnion())
+    add_padding(to_union_type(t), ns);
+  else
+    add_padding(to_struct_type(t), ns);
 
+  added_symbol.type = t;
   return false;
 }
 
@@ -331,6 +352,38 @@ bool clang_c_convertert::get_struct_union_class_fields(
     struct_typet::componentt comp;
     if(get_decl(*field, comp))
       return true;
+
+    // Check for alignment attributes
+    if(field->hasAttrs())
+    {
+      const auto &attrs = field->getAttrs();
+      for(const auto &attr : attrs)
+      {
+        if(attr->getKind() == clang::attr::Aligned)
+        {
+          const clang::AlignedAttr &aattr =
+            static_cast<const clang::AlignedAttr &>(*attr);
+
+          if(aattr.isAlignmentExpr())
+          {
+            // This is usually a constant
+            clang::Expr *alignExpr = aattr.getAlignmentExpr();
+            exprt alignment;
+            if(alignExpr && get_expr(*(aattr.getAlignmentExpr()), alignment))
+              return true;
+            comp.type().set("alignment", alignment);
+          }
+          else
+          {
+            // I was not able to find an example to test this, so abort for now
+            std::cerr << "ESBMC currently does not support type alignments"
+                      << std::endl;
+            aattr.getAlignmentType()->getType()->dump();
+            return true;
+          }
+        }
+      }
+    }
 
     // Don't add fields that have global storage (e.g., static)
     if(const clang::VarDecl *nd = llvm::dyn_cast<clang::VarDecl>(field))
@@ -1302,13 +1355,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::UnaryExprOrTypeTraitExpr &unary =
       static_cast<const clang::UnaryExprOrTypeTraitExpr &>(stmt);
 
-    // Use clang to calculate alignof
-    if(unary.getKind() == clang::UETT_AlignOf)
+    // Use clang to calculate sizeof/alignof
+    clang::Expr::EvalResult result;
+    if(unary.EvaluateAsInt(result, *ASTContext))
     {
-      clang::Expr::EvalResult result;
-      if(!unary.EvaluateAsInt(result, *ASTContext))
-        return true;
-
       new_expr = constant_exprt(
         integer2binary(
           result.Val.getInt().getZExtValue(), bv_width(uint_type())),
@@ -1389,24 +1439,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     new_expr = member_exprt(base, comp.name(), comp.type());
-
-    // Potentially fix up a bitfield
-    typet base_type = base.type();
-    if(base.type().id() == "pointer")
-      base_type = base.type().subtype();
-
-    typet fixed_version;
-    if(has_bitfields(base_type, &fixed_version))
-    {
-      // Look up record for this struct kind. Should be converted.
-      const auto bmit = bitfield_mappings.find(fixed_version);
-      assert(bmit != bitfield_mappings.end());
-      const auto &backmap = bmit->second;
-
-      auto it = backmap.find(comp.name());
-      if(it != backmap.end())
-        rewrite_bitfield_member(new_expr, it->second);
-    }
     break;
   }
 
@@ -1606,6 +1638,64 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     return false;
   }
 
+  case clang::Stmt::ConvertVectorExprClass:
+  {
+    // TODO: Creating a fake call that is a passthrough should be simpler
+    const clang::ConvertVectorExpr &convertVector =
+      static_cast<const clang::ConvertVectorExpr &>(stmt);
+
+    side_effect_expr_function_callt fake_call;
+    code_typet t;
+    if(get_type(convertVector.getType(), t.return_type()))
+      return true;
+
+    assert(t.return_type().is_vector());
+    fake_call.type() = t;
+
+    exprt e;
+    if(get_expr(*convertVector.getSrcExpr(), e))
+      return true;
+
+    t.arguments().push_back(code_typet::argumentt(e.type()));
+    fake_call.arguments().push_back(e);
+
+    fake_call.function() = symbol_exprt("c:@F@__ESBMC_convertvector", t);
+    fake_call.function().name("__ESBMC_convertvector");
+    new_expr.swap(fake_call);
+    return false;
+  }
+
+  // A shufflevector statement
+  case clang::Stmt::ShuffleVectorExprClass:
+  {
+    // TODO: Creating a fake call that is a passthrough should be simpler
+    const clang::ShuffleVectorExpr &shuffle =
+      static_cast<const clang::ShuffleVectorExpr &>(stmt);
+
+    side_effect_expr_function_callt fake_call;
+    code_typet t;
+    if(get_type(shuffle.getType(), t.return_type()))
+      return true;
+
+    assert(t.return_type().is_vector());
+    fake_call.type() = t;
+
+    for(unsigned j = 0; j < shuffle.getNumSubExprs(); j++)
+    {
+      exprt e;
+      if(get_expr(*shuffle.getExpr(j), e))
+        return true;
+
+      t.arguments().push_back(code_typet::argumentt(e.type()));
+      fake_call.arguments().push_back(e);
+    }
+
+    fake_call.function() = symbol_exprt("c:@F@__ESBMC_shufflevector", t);
+    fake_call.function().name("__ESBMC_shufflevector");
+    new_expr.swap(fake_call);
+    return false;
+  }
+
   // An initialize statement, such as int a[3] = {1, 2, 3}
   case clang::Stmt::InitListExprClass:
   {
@@ -1616,26 +1706,30 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if(get_type(init_stmt.getType(), t))
       return true;
 
-    // If it _was_ a bitfield, treat is as non-mangled for the moment.
-    if(has_bitfields(t))
-      t = bitfield_orig_type_map[t];
-
     exprt inits;
 
     // Structs/unions/arrays put the initializer on operands
     if(t.is_struct() || t.is_union() || t.is_array() || t.is_vector())
     {
+      // Initializer everything to zero, even pads
+      // TODO: should we initialize pads with nondet values?
       inits = gen_zero(t);
 
       unsigned int num = init_stmt.getNumInits();
-      for(unsigned int i = 0; i < num; i++)
+      for(unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
+          ++i)
       {
+        // if it is an struct/union, we should skip padding
+        if(t.is_struct() || t.is_union())
+          if(to_struct_union_type(t).components()[i].get_is_padding())
+            continue;
+
+        // Get the value being initialized
         exprt init;
-        if(get_expr(*init_stmt.getInit(i), init))
+        if(get_expr(*init_stmt.getInit(j++), init))
           return true;
 
         typet elem_type;
-
         if(t.is_struct() || t.is_union())
           elem_type = to_struct_union_type(t).components()[i].type();
         else if(t.is_array())
@@ -1643,23 +1737,17 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         else
           elem_type = to_vector_type(t).subtype();
         gen_typecast(ns, init, elem_type);
-
         inits.operands().at(i) = init;
-      }
-
-      // Handle bitfields again..
-      if(has_bitfields(t))
-      {
-        fix_constant_bitfields(inits);
-        t = bitfield_orig_type_map[t];
       }
 
       // If this expression is initializing an union, we should
       // set which field is being initialized
       if(t.is_union())
       {
-        to_union_expr(inits).set_component_name(
-          init_stmt.getInitializedFieldInUnion()->getName().str());
+        auto init_union_field = init_stmt.getInitializedFieldInUnion();
+        if(init_union_field)
+          to_union_expr(inits).set_component_name(
+            init_union_field->getName().str());
       }
     }
     else
@@ -2234,6 +2322,8 @@ bool clang_c_convertert::get_cast_expr(
     gen_typecast_to_union(expr, type);
     break;
 
+  case clang::CK_VectorSplat:
+    break;
   default:
     std::cerr << "Conversion of unsupported clang cast operator: \"";
     std::cerr << cast.getCastKindName() << "\" to expression" << std::endl;
@@ -3022,257 +3112,4 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   }
 
   return nullptr;
-}
-
-bool clang_c_convertert::has_bitfields(const typet &_type, typet *converted)
-{
-  typet type = _type;
-  if(type.id() == "symbol")
-    type = ns.follow(type);
-
-  auto fixed_it = bitfield_fixed_type_map.find(type);
-  if(fixed_it != bitfield_fixed_type_map.end())
-  {
-    if(converted)
-      *converted = fixed_it->second;
-    return true; // Yes, and the unfixed version version was passed in
-  }
-
-  auto orig_it = bitfield_orig_type_map.find(type);
-  if(orig_it != bitfield_orig_type_map.end())
-  {
-    if(converted)
-      *converted = type;
-    return true; // Yes, and this is the fixed version
-  }
-
-  if(type.id() != "struct" && type.id() != "union")
-    return false; // Could have been a symbol of a union
-
-  auto sutype = to_struct_union_type(type);
-  for(const auto &comp : sutype.components())
-  {
-    if(comp.type().get("#bitfield").as_string() == "true")
-    {
-      if(converted)
-        *converted = typet();
-      return true; // Yes, this is unconverted, and to date unknown.
-    }
-  }
-
-  return false;
-}
-
-static std::string gen_bitfield_blob_name(unsigned int num)
-{
-  return "#BITFIELD" + std::to_string(num);
-}
-
-typet clang_c_convertert::fix_bitfields(const typet &_type)
-{
-  typet type = _type;
-  if(type.id() == "symbol")
-    type = ns.follow(type);
-
-  if(bitfield_fixed_type_map.find(type) != bitfield_fixed_type_map.end())
-    return bitfield_fixed_type_map.find(type)->second;
-
-  auto sutype = to_struct_union_type(type);
-  auto &components = sutype.components(); // It's a vector of components
-  std::decay<decltype(components)>::type new_components;
-  bool is_packed = sutype.get("packed").as_string() == "true";
-
-  unsigned int bit_offs = 0;
-  unsigned int blob_count = 0;
-
-  std::map<irep_idt, bitfield_map> backmap;
-
-  auto pop_blob = [is_packed, &bit_offs, &blob_count, &new_components]() {
-    // We have to pop the current bitfield blob into the struct and create
-    // a new one to make space.
-
-    // Size of the bitfield depends on whether we're packed or not.
-    typet ubv;
-    if(is_packed)
-    {
-      // Round up to nearest byte.
-      bit_offs += 7;
-      bit_offs &= 0xFFFFFFF8;
-      ubv = unsignedbv_typet(bit_offs);
-    }
-    else
-    {
-      // Always generate a 64 bit blob for now, optimise later.
-      ubv = unsignedbv_typet(BITFIELD_MAX_FIELD);
-    }
-
-    std::string name = gen_bitfield_blob_name(blob_count);
-    struct_union_typet::componentt newcomp(name, name, ubv);
-    new_components.push_back(newcomp);
-
-    bit_offs = 0;
-    blob_count++;
-  };
-
-  for(const auto &comp : components)
-  { // Go through all components...
-    if(comp.type().get("#bitfield").as_string() != "true")
-    {
-      if(bit_offs != 0)
-        pop_blob();
-
-      new_components.push_back(comp);
-      continue;
-    }
-
-    // Otherwise: this is a bitfield.
-    unsigned int width = bv_width(comp.type());
-    assert(width <= BITFIELD_MAX_FIELD && "Humoungous bitfield");
-
-    if(width + bit_offs > BITFIELD_MAX_FIELD)
-      pop_blob();
-
-    // Add this bitfield to the current blob.
-    backmap.insert(
-      std::make_pair(comp.name(), bitfield_map{bit_offs, blob_count}));
-    bit_offs += width;
-  }
-
-  if(bit_offs != 0)
-    pop_blob();
-
-  // We now have: to replace the components in the new type, and store the
-  // backmap so that subsequent read/writes can work out what replacement
-  // operation to build.
-  sutype.components() = new_components;
-  bitfield_mappings.insert(std::make_pair(sutype, std::move(backmap)));
-  bitfield_fixed_type_map.insert(std::make_pair(type, sutype));
-  bitfield_orig_type_map.insert(std::make_pair(sutype, type));
-
-  return std::move(sutype);
-}
-
-void clang_c_convertert::fix_constant_bitfields(exprt &expr)
-{
-  assert(expr.type().id() == "struct" || expr.type().id() == "union");
-  assert(
-    bitfield_fixed_type_map.find(expr.type()) != bitfield_fixed_type_map.end());
-
-  // Well, we now need to fix up this constant struct expr into one that doesn't
-  // feature any bitfields, because:
-  auto sutype = to_struct_union_type(bitfield_fixed_type_map[expr.type()]);
-  bool is_packed = sutype.get("packed").as_string() == "true";
-
-  const auto &orig_type = to_struct_union_type(expr.type());
-
-  exprt new_expr = expr;
-  new_expr.operands().clear();
-  new_expr.type() = sutype;
-  exprt accuml;
-  accuml.make_nil();
-
-  unsigned int bit_offs = 0;
-
-  auto pop_blob = [is_packed, &accuml, &bit_offs, &new_expr]() {
-    if(is_packed)
-    {
-      // Round number of bits up to nearest byte,
-      bit_offs += 7;
-      bit_offs &= 0xFFFFFFF8;
-      accuml = typecast_exprt(accuml, unsignedbv_typet(bit_offs));
-    }
-    else if(bv_width(accuml.type()) != BITFIELD_MAX_FIELD)
-    {
-      accuml = typecast_exprt(accuml, unsignedbv_typet(BITFIELD_MAX_FIELD));
-    } // Otherwise it's already at the right size
-
-    new_expr.operands().push_back(accuml);
-    accuml = exprt();
-    accuml.make_nil();
-    bit_offs = 0;
-  };
-
-  // OK: iterate through all operands, concatting the bitfields, and then
-  // storing back into the operand list. XXX, work out how to use bitfield
-  // map to make this better?
-  for(unsigned int i = 0; i < expr.operands().size(); ++i)
-  {
-    const exprt &orig_elem = expr.operands()[i];
-    const exprt &orig_comp = orig_type.components()[i];
-    if(orig_comp.type().get("#bitfield") != "true")
-    {
-      if(bit_offs > 0)
-        pop_blob();
-
-      new_expr.operands().push_back(orig_elem);
-      continue;
-    }
-
-    unsigned int width = bv_width(orig_elem.type());
-    if(bit_offs + width > BITFIELD_MAX_FIELD)
-      pop_blob();
-
-    if(accuml.is_nil())
-    {
-      accuml = orig_elem;
-    }
-    else
-    {
-      unsigned int a_width = bv_width(accuml.type());
-      unsigned int b_width = bv_width(orig_elem.type());
-      unsignedbv_typet ubv(a_width + b_width);
-      exprt tmp("concat", ubv);
-      tmp.copy_to_operands(orig_elem, accuml); // XXX: ordering!
-      accuml = tmp;
-    }
-
-    bit_offs += width;
-  }
-
-  if(bit_offs != 0)
-    pop_blob();
-
-  // We should now have replaced all operands corresponding to bitfields with
-  // single concatted operands.
-  assert(sutype.components().size() == new_expr.operands().size());
-  // Just check the sub-operands now.
-  expr = new_expr;
-}
-
-void clang_c_convertert::rewrite_bitfield_member(
-  exprt &expr,
-  const bitfield_map &bm)
-{
-  // The plan: build a new member expression accessing the blob field that
-  // contains the bitfield. Then create an extract expression that pulls out
-  // the relevant bits.
-
-  // Erk. Clang applies members to pointers sometimes.
-  auto &memb = to_member_expr(expr);
-  typet basetype = expr.op0().type();
-  if(basetype.id() == "pointer")
-  {
-    basetype = basetype.subtype();
-    basetype = ns.follow(basetype);
-  }
-
-  auto &sutype = to_struct_union_type(basetype);
-
-  std::string fieldname = gen_bitfield_blob_name(bm.blobloc);
-  auto &this_comp = sutype.get_component(fieldname);
-  assert(bv_width(this_comp.type()) != 0);
-  unsignedbv_typet ubv_size(bv_width(this_comp.type()));
-  // Note that we depend on the member expression still carrying the bitfield
-  // width here. If that isn't true in the future, it'll have to be stored in
-  // the bitfield map struct.
-  unsigned int our_width = bv_width(memb.type());
-
-  member_exprt new_memb(memb.struct_op(), irep_idt(fieldname), ubv_size);
-
-  // Welp. Today, the bit ordering is that the 'bitloc' is the bottommost bit.
-  exprt extract("extract", memb.type());
-  extract.copy_to_operands(new_memb);
-  extract.set("lower", irep_idt(std::to_string(bm.bitloc)));
-  extract.set("upper", irep_idt(std::to_string(bm.bitloc + (our_width - 1))));
-  expr = extract;
 }

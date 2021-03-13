@@ -176,6 +176,83 @@ unsigned int array_type2t::get_width() const
 
   return num_elems * sub_width;
 }
+unsigned int vector_type2t::get_width() const
+{
+  unsigned int sub_width = subtype->get_width();
+
+  const expr2t *elem_size = array_size.get();
+  const constant_int2t *const_elem_size =
+    dynamic_cast<const constant_int2t *>(elem_size);
+  assert(const_elem_size != nullptr);
+  unsigned long num_elems = const_elem_size->as_ulong();
+
+  return num_elems * sub_width;
+}
+expr2tc vector_type2t::distribute_operation(
+  std::function<expr2tc(type2tc, expr2tc, expr2tc)> func,
+  expr2tc op1,
+  expr2tc op2)
+{
+  /*
+   * If both op1 and op2 are vectors the resulting value
+   * would be the operation over each member
+   *
+   * Example:
+   *
+   * op1 = {1,2,3,4}
+   * op2 = {1,1,1,1}
+   * func = add
+   *
+   * This would result in:
+   *
+   * { add(op1[0], op2[0]), add(op1[1], op2[1]), ...}
+   * {2,3,4,5}
+   */
+  if(is_constant_vector2t(op1) && is_constant_vector2t(op2))
+  {
+    constant_vector2tc vec1(op1);
+    constant_vector2tc vec2(op2);
+    for(size_t i = 0; i < vec1->datatype_members.size(); i++)
+    {
+      auto &A = vec1->datatype_members[i];
+      auto &B = vec2->datatype_members[i];
+      auto new_op = func(A->type, A, B);
+      vec1->datatype_members[i] = new_op;
+    }
+    return vec1;
+  }
+  /*
+   * If only one of the operator is a vector, then the result
+   * would extract each value of the vector and apply the value to
+   * the other operator
+   *
+   * Example:
+   *
+   * op1 = {1,2,3,4}
+   * op2 = 1
+   * func = add
+   *
+   * This would result in:
+   *
+   * { add(op1[0], 1), add(op1[1], 1), ...}
+   * {2,3,4,5}
+   */
+  else
+  {
+    bool is_op1_vec = is_constant_vector2t(op1);
+    expr2tc c = !is_op1_vec ? op1 : op2;
+    constant_vector2tc vector(is_op1_vec ? op1 : op2);
+    for(auto &datatype_member : vector->datatype_members)
+    {
+      auto &op = datatype_member;
+      auto e1 = is_op1_vec ? op : c;
+      auto e2 = is_op1_vec ? c : op;
+      auto new_op = func(op->type, e1, e2);
+      datatype_member = new_op->do_simplify();
+    }
+    return vector;
+  }
+}
 
 unsigned int vector_type2t::get_width() const
 {
@@ -2366,7 +2443,7 @@ std::string symbol2t::field_names[esbmct::num_type_fields] =
 std::string typecast2t::field_names[esbmct::num_type_fields] =
   {"from", "rounding_mode", "", "", "", ""};
 std::string bitcast2t::field_names[esbmct::num_type_fields] =
-  {"from", "rounding_mode", "", "", "", ""};
+  {"from", "", "", "", ""};
 std::string nearbyint2t::field_names[esbmct::num_type_fields] =
   {"from", "rounding_mode", "", "", "", ""};
 std::string if2t::field_names[esbmct::num_type_fields] =
@@ -2906,7 +2983,7 @@ type_typedefs_empty(bool_type) type_typedefs_empty(empty_type)
                     type_typedefs2(fixedbv_type, fixedbv_data)
                       type_typedefs2(floatbv_type, floatbv_data)
                         type_typedefs1(string_type, string_data)
-                          type_typedefs2(cpp_name_type, cpp_name_data)
+                          type_typedefs2(cpp_name_type, cpp_name_data);
 
 // Explicit instanciation for exprs.
 
@@ -2976,7 +3053,7 @@ type_typedefs_empty(bool_type) type_typedefs_empty(empty_type)
     basename##2tc,                                                             \
     boost::mpl::pop_front<typename superclass::traits::fields>::type>;
 
-                            expr_typedefs1(constant_int, constant_int_data);
+expr_typedefs1(constant_int, constant_int_data);
 expr_typedefs1(constant_fixedbv, constant_fixedbv_data);
 expr_typedefs1(constant_floatbv, constant_floatbv_data);
 expr_typedefs1(constant_struct, constant_datatype_data);
@@ -2989,7 +3066,7 @@ expr_typedefs1(constant_string, constant_string_data);
 expr_typedefs6(symbol, symbol_data);
 expr_typedefs2(nearbyint, typecast_data);
 expr_typedefs2(typecast, typecast_data);
-expr_typedefs2(bitcast, typecast_data);
+expr_typedefs2(bitcast, bitcast_data);
 expr_typedefs3(if, if_data);
 expr_typedefs2(equality, relation_data);
 expr_typedefs2(notequal, relation_data);

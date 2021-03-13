@@ -2982,52 +2982,28 @@ expr2tc byte_update2t::do_simplify() const
     to_constant_int2t(simplied_source).value,
     simplied_source->type->get_width());
 
-  unsigned int width_op0 = simplied_source->type->get_width();
-  unsigned int src_offset =
-    to_constant_int2t(simplied_offset).value.to_uint64();
-
-  // Flip location if we're in big-endian mode
-  if(big_endian)
-  {
-    unsigned int data_size =
-      type_byte_size(simplied_source->type).to_uint64() - 1;
-    src_offset = data_size - src_offset;
-  }
-
-  unsigned int top_of_update = (8 * src_offset) + 8;
-  int bottom_of_update = (8 * src_offset);
-
-  // Overflow? The backend will encode that
-  if(top_of_update > width_op0 || bottom_of_update < 0)
+  // Overflow? The backend will handle that
+  int src_offset = to_constant_int2t(simplied_offset).value.to_int64();
+  if(src_offset * 8 + value.length() > src_value.length() || src_offset * 8 < 0)
     return expr2tc();
 
-  std::string top;
-  if(top_of_update == width_op0)
-    top = value;
-  else
-    top = src_value.substr(top_of_update, width_op0 - 1);
-
-  std::string middle;
-  if(top != value)
-    middle = value;
-
-  std::string bottom;
-  if(src_offset == 0)
+  // Reverse both the source value and the value that will be updated if we are
+  // assuming little endian, because in string the pos 0 is the leftmost element
+  // while in bvs, pos 0 is the rightmost bit
+  if(!big_endian)
   {
-    middle = "";
-    bottom = value;
+    std::reverse(src_value.begin(), src_value.end());
+    std::reverse(value.begin(), value.end());
   }
-  else
-    bottom = src_value.substr(0, bottom_of_update - 1);
 
-  std::string concat;
-  if(middle != "")
-    concat = top + middle;
-  else
-    concat = top;
+  src_value.replace(src_offset * 8, value.length(), value);
 
-  concat += bottom;
+  // Reverse back
+  if(!big_endian)
+    std::reverse(src_value.begin(), src_value.end());
+
   return typecast_check_return(
     type,
-    constant_int2tc(get_uint_type(concat.length()), string2integer(concat, 2)));
+    constant_int2tc(
+      get_uint_type(src_value.length()), string2integer(src_value, 2)));
 }

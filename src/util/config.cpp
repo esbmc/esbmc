@@ -28,7 +28,7 @@ void configt::ansi_ct::set_16()
   char_is_unsigned = false;
   word_size = 16;
   wchar_t_width = 2 * 8;
-  alignment = 2;
+  alignment = 1;
 }
 
 void configt::ansi_ct::set_32()
@@ -47,7 +47,7 @@ void configt::ansi_ct::set_32()
   char_is_unsigned = false;
   word_size = 32;
   wchar_t_width = 4 * 8;
-  alignment = 4;
+  alignment = 1;
 }
 
 void configt::ansi_ct::set_64()
@@ -66,7 +66,7 @@ void configt::ansi_ct::set_64()
   char_is_unsigned = false;
   word_size = 64;
   wchar_t_width = 4 * 8;
-  alignment = 4;
+  alignment = 1;
 }
 
 bool configt::set(const cmdlinet &cmdline)

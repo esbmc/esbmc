@@ -165,6 +165,16 @@ public:
     {
       return set("anonymous", anonymous);
     }
+
+    bool get_is_padding() const
+    {
+      return get_bool("is_padding");
+    }
+
+    void set_is_padding(bool is_padding)
+    {
+      return set("is_padding", is_padding);
+    }
   };
 
   typedef std::vector<componentt> componentst;
