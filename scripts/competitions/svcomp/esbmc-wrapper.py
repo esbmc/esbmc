@@ -207,8 +207,8 @@ esbmc_path = "./esbmc "
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --state-hashing "
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 
-def get_command_line(strat, prop, arch, benchmark, concurrency):
-  command_line = esbmc_path + esbmc_dargs
+def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
+  command_line = esbmc_path + dargs
 
   # Add benchmark
   command_line += benchmark + " "
@@ -261,9 +261,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency):
 
   return command_line
 
-def verify(strat, prop, concurrency):
+def verify(strat, prop, concurrency, dargs):
   # Get command line
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency)
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs)
 
   # Call ESBMC
   output = run(esbmc_command_line)
@@ -319,5 +319,5 @@ else:
   print "Unsupported Property"
   exit(1)
 
-result = verify(strategy, category_property, concurrency)
+result = verify(strategy, category_property, concurrency, esbmc_dargs)
 print get_result_string(result)
