@@ -21,7 +21,7 @@
 #include <clang-c-frontend/typecast.h>
 #include <util/type.h>
 #include <util/expr_util.h>
-#include "util.h"
+#include "../testing-utils/util_irep.h"
 #include <sstream>
 
 void test_to_union(const int *Data, size_t Size)
