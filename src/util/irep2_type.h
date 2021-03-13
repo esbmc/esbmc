@@ -2,6 +2,7 @@
 #define IREP2_TYPE_H_
 
 #include <util/irep2.h>
+#include <util/type.h>
 
 // Start with forward class definitions
 
@@ -748,6 +749,16 @@ type_macros(cpp_name);
  *  types with common bit widths, and methods to enter a used type into a cache
  *  of them, allowing migration of typet <=> type2t to be faster.
  */
+
+struct typet_hash
+{
+    std::size_t operator()(typet const& t) const noexcept
+    {
+      return t.full_hash();
+    }
+};
+
+using  type2t_pool_map = std::unordered_map<typet, type2tc, typet_hash>;
 class type_poolt
 {
 public:
@@ -769,17 +780,17 @@ public:
   }
 
   // For other types, have a pool of them for quick lookup.
-  std::map<typet, type2tc> struct_map;
-  std::map<typet, type2tc> union_map;
-  std::map<typet, type2tc> array_map;
-  std::map<typet, type2tc> pointer_map;
-  std::map<typet, type2tc> unsignedbv_map;
-  std::map<typet, type2tc> signedbv_map;
-  std::map<typet, type2tc> fixedbv_map;
-  std::map<typet, type2tc> floatbv_map;
-  std::map<typet, type2tc> string_map;
-  std::map<typet, type2tc> symbol_map;
-  std::map<typet, type2tc> code_map;
+  type2t_pool_map struct_map;
+  type2t_pool_map union_map;
+  type2t_pool_map array_map;
+  type2t_pool_map pointer_map;
+  type2t_pool_map unsignedbv_map;
+  type2t_pool_map signedbv_map;
+  type2t_pool_map fixedbv_map;
+  type2t_pool_map floatbv_map;
+  type2t_pool_map string_map;
+  type2t_pool_map symbol_map;
+  type2t_pool_map code_map;
 
   // And refs to some of those for /really/ quick lookup;
   const type2tc *uint8;

@@ -778,17 +778,16 @@ type_poolt &type_poolt::operator=(type_poolt const &ref)
 
 // TODO: investigate performance implications of this cache
 static const type2tc &
-get_type_from_pool(const typet &val, std::map<typet, type2tc> &map)
+get_type_from_pool(const typet &val, type2t_pool_map &map)
 {
   /* BUG: This is creating problems
+  */
   auto it = map.find(val);
   if(it != map.end())
-    return map[val];
-*/
+    return it->second;
   type2tc new_type;
   real_migrate_type(val, new_type);
   map[val] = new_type;
-
   return map[val];
 }
 
