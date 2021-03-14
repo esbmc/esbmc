@@ -33,7 +33,6 @@ else()
     set(REGRESSIONS esbmc cbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp csmith esbmc-unix esbmc-unix2 k-induction-parallel nonz3)
 endif()
 
-set(REGRESSIONS esbmc-cpp/cpp)
 foreach(regression IN LISTS REGRESSIONS)
     if(ENABLE_YICES AND ENABLE_CVC4) # FUTURE: configure suites using an option
         set(MODES CORE KNOWNBUG FUTURE THOROUGH)
