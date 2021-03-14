@@ -287,14 +287,26 @@ def create_tests(executor_path: str, base_dir: str, mode: str):
             setattr(RegressionBase, 'test_{0}'.format(
                 test_case.name), test_func)
 
+
+def gen_one_test(base_dir: str, test: str, executor_path: str, modes):
+    executor = Executor(executor_path)
+    test_case = TestParser.from_file(os.path.join(base_dir, test), test)
+    if test_case.test_mode not in modes:
+        exit(10)
+    test_func = _add_test(test_case, executor)
+    setattr(RegressionBase, 'test_{0}'.format(test_case.name), test_func)
+
+
 def _arg_parsing():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tool", required=True, help="tool executable path")
+    parser.add_argument("--tool", required=False, help="tool executable path")
     parser.add_argument("--timeout", required=False, help="timeout value")
-    parser.add_argument("--regression", required=True,
+    parser.add_argument('--modes', nargs='+', help="a list of modes that are supported")
+    parser.add_argument("--regression", required=False,
                         help="regression suite path")
-    parser.add_argument("--mode", required=True, help="tests to be executed [CORE, "
+    parser.add_argument("--mode", required=False, help="tests to be executed [CORE, "
                                                       "KNOWNBUG, FUTURE, THOROUGH")
+    parser.add_argument("--file", required=False, help="specific test to be executed")
     parser.add_argument("--library", required=False,
                         help="Path for the Standard C++ Libraries abstractions")
     parser.add_argument("--mark_knownbug_with_word", required=False,
@@ -305,13 +317,16 @@ def _arg_parsing():
         RegressionBase.TIMEOUT = int(main_args.timeout)
     XMLTestCase.CPP_INCLUDE_DIR = main_args.library
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
-    return main_args.tool, main_args.regression, main_args.mode
 
-def main(tool, regression, mode):
-    create_tests(tool, regression, mode)
+    if main_args.file:
+        gen_one_test(main_args.regression, main_args.file, main_args.tool, main_args.modes)
+    else:
+        create_tests(main_args.tool, main_args.regression, main_args.mode)
+
+def main():
+    _arg_parsing()
     suite = unittest.TestLoader().loadTestsFromTestCase(RegressionBase)
     unittest.main(argv=[sys.argv[0], "-v"])
 
 if __name__ == "__main__":
-    tool, regression, mode = _arg_parsing()
-    main(tool, regression, mode)
+    main()
