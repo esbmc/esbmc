@@ -35,7 +35,7 @@ endif()
 
 set(REGRESSIONS esbmc-cpp/cpp)
 foreach(regression IN LISTS REGRESSIONS)
-    if(NOT WIN32) # FUTURE: configure suites using an option
+    if(ENABLE_YICES AND ENABLE_CVC4) # FUTURE: configure suites using an option
         set(MODES CORE KNOWNBUG FUTURE THOROUGH)
     else()
         set(MODES CORE KNOWNBUG FUTURE)
