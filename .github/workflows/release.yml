@@ -107,7 +107,7 @@ jobs:
       run: |
         cd build
         cmake --build . --target INSTALL --config RelWithDebInfo
-        cpack -G ZIP
+        cpack -G ZIP -C RelWithDebInfo
         mv ESBMC-*.zip ESBMC-Windows.zip
     - uses: actions/upload-artifact@v1
       with:
