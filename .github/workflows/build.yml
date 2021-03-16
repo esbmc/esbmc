@@ -133,7 +133,7 @@ jobs:
     - name: Build ESBMC
       run: |
         cd build
-        cmake --build . --target ALL_BUILD --config RelWithDebInfo
+        cmake --build . --target INSTALL  --config RelWithDebInfo
         cpack -G ZIP -C RelWithDebInfo
         mv ESBMC-*.zip ESBMC-Windows.zip
     - uses: actions/upload-artifact@v1
