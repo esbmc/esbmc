@@ -15,6 +15,7 @@ class unsignedbv_type2t;
 class signedbv_type2t;
 class code_type2t;
 class array_type2t;
+class vector_type2t;
 class pointer_type2t;
 class fixedbv_type2t;
 class floatbv_type2t;
@@ -334,6 +335,7 @@ irep_typedefs(bool, type2t) irep_typedefs(empty, type2t)
               irep_typedefs(floatbv, floatbv_data)
                 irep_typedefs(string, string_data)
                   irep_typedefs(cpp_name, cpp_name_data)
+                    irep_typedefs(vector, array_data)
 #undef irep_typedefs
 
   /** Boolean type.
@@ -565,6 +567,48 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Vector type.
+ *  @extends array_data
+ */
+class vector_type2t : public vector_type_methods
+{
+public:
+  /** Primary constructor.
+   *  @param subtype Type of elements in this array.
+   *  @param size Size of this array.
+   *  @param inf Whether or not this array is infinitely sized
+   */
+  vector_type2t(const type2tc &_subtype, const expr2tc &size)
+    : vector_type_methods(vector_id, _subtype, size, false)
+  {
+    // If we can simplify the array size, do so
+    // XXX, this is probably massively inefficient. Some kind of boundry in
+    // the checking process should exist to eliminate this requirement.
+    if(!is_nil_expr(size))
+    {
+      expr2tc sz = size->simplify();
+      if(!is_nil_expr(sz))
+        array_size = sz;
+    }
+  }
+  vector_type2t(const vector_type2t &ref) = default;
+  unsigned int get_width() const override;
+  static std::string field_names[esbmct::num_type_fields];
+  /**
+   * @brief Distribute the functor `func` over op1 and op2
+   * at least one of those must be a vector
+   *
+   * @param func the functor operation e.g add, sub, mul
+   * @param op1 the first operand
+   * @param op2 the second operand
+   * @return expr2tc with the resulting vector
+   */
+  static expr2tc distribute_operation(
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> func,
+    expr2tc op1,
+    expr2tc op2);
+};
+
 /** Pointer type.
  *  Simply has a subtype, of what it points to. No other attributes.
  *  @extends pointer_data
@@ -714,6 +758,7 @@ type_macros(struct);
 type_macros(union);
 type_macros(code);
 type_macros(array);
+type_macros(vector);
 type_macros(pointer);
 type_macros(unsignedbv);
 type_macros(signedbv);
@@ -766,6 +811,7 @@ public:
   std::map<typet, type2tc> string_map;
   std::map<typet, type2tc> symbol_map;
   std::map<typet, type2tc> code_map;
+  std::map<typet, type2tc> vector_map;
 
   // And refs to some of those for /really/ quick lookup;
   const type2tc *uint8;
@@ -789,7 +835,7 @@ public:
   const type2tc &get_string(const typet &val);
   const type2tc &get_symbol(const typet &val);
   const type2tc &get_code(const typet &val);
-
+  const type2tc &get_vector(const typet &val);
   const type2tc &get_uint(unsigned int size);
   const type2tc &get_int(unsigned int size);
 
