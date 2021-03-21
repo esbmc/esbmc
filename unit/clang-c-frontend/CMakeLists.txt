@@ -1,13 +1,5 @@
-add_library(test_c_frontend_util util.cpp)
-add_executable(typecfrontend typecast.test.cpp)
-target_link_libraries(typecfrontend ${Boost_LIBRARIES} clangcfrontend test_c_frontend_util)
-add_test(NAME TypecastCFrontend COMMAND typecfrontend)
-
-
-if(ENABLE_FUZZER)
-    add_executable(typecast_fuzz typecast.fuzz.cpp)
-    add_test(NAME TypecastFuzz COMMAND typecast_fuzz -runs=6500000)
-    target_compile_options(typecast_fuzz PRIVATE $<$<C_COMPILER_ID:Clang>:-g -O1 -fsanitize=fuzzer>)
-    target_include_directories(typecast_fuzz PRIVATE ${MODELS_INCLUDE})
-    target_link_libraries(typecast_fuzz PUBLIC $<$<C_COMPILER_ID:Clang>:-fsanitize=fuzzer> clangcfrontend test_c_frontend_util)
+# This test don't work in Windows and neither macOS
+if(UNIX AND NOT APPLE)
+    new_unit_test(typecasttest "typecast.test.cpp" "clangcfrontend;bigint;util_esbmc;test_util_irep")
 endif()
+new_fuzz_test(typecastfuzz "typecast.fuzz.cpp" "clangcfrontend;bigint;util_esbmc;test_util_irep")

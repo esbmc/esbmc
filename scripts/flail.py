@@ -84,7 +84,7 @@ class Flail:
 
     def obtain_var_name(self):
         obj = Path(self.filepath)
-        return obj.name.replace('.h', '_buf').replace('.goto', '_buf').replace('.txt', '_buf').replace('buildidobj', 'buildidstring')
+        return obj.name.replace('.hs', '_buf').replace('.h', '_buf').replace('.goto', '_buf').replace('.txt', '_buf').replace('buildidobj', 'buildidstring')
 
     def _step_2(self, content: str):
         return Flail.REGEX_REMOVE_ADDR.sub('', content)

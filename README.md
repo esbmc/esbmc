@@ -1,7 +1,6 @@
 # The ESBMC model checker
 
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d14d06e975644907a2eb9521e09ccfe4)](https://app.codacy.com/gh/esbmc/esbmc?utm_source=github.com&utm_medium=referral&utm_content=esbmc/esbmc&utm_campaign=Badge_Grade_Dashboard)
-[![Build Status](https://travis-ci.com/esbmc/esbmc.svg?branch=master)](https://travis-ci.com/esbmc/esbmc)
 ![Lint Code Base](https://github.com/esbmc/esbmc/workflows/Lint%20Code%20Base/badge.svg)
 ![Health Checks](https://github.com/esbmc/esbmc/workflows/Health%20Checks/badge.svg)
 ![Build All Solvers](https://github.com/esbmc/esbmc/workflows/Build%20All%20Solvers/badge.svg)
@@ -55,7 +54,7 @@ A limited subset of C++98 is supported too -- a library modelling the STL is als
 
 ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary differences between the two are:
 
-* CBMC focuses on SAT-based encodings of unrolled programs while ESBMC targets SMT-based encodings. 
+* CBMC focuses on SAT-based encodings of unrolled programs while ESBMC targets SMT-based encodings.
 * CBMC's concurrency support is an entirely symbolic encoding of a concurrent program in one SAT formulae, while ESBMC explores each interleaving individually.
 * CBMC uses a modified C parser written by James Roskind and a C++ parser based on OpenC++, while ESBMC relies on the Clang front-end.
 * CBMC implements k-induction, requiring three different calls: to generate the CFG, to annotate the program, and to verify it, whereas ESBMC handles the whole process in a single call. Additionally, CBMC does not have a forward condition to check if all states were reached and relies on a limited loop unwinding.
@@ -84,7 +83,7 @@ Here are some steps to contributing to the code base:
   1. Push your changes to your branch
   1. Create a Pull Request targeting the master branch
 
-Here is an example to prepare a pull request (PR) 
+Here is an example to prepare a pull request (PR)
 
 
 A) Make sure that you are in the `master` branch and your fork is updated.
@@ -92,7 +91,7 @@ A) Make sure that you are in the `master` branch and your fork is updated.
 ```
 git checkout master
 git fetch upstream
-git pull --rebase upstream master    
+git pull --rebase upstream master
 git push origin HEAD:master
 ```
 
@@ -115,8 +114,8 @@ git add path-to-file/file.cpp
 git commit -sm "added opertational model for pthread_equal"
 ```
 
-Note that you can check your changes via `git status`. 
-Note also that every PR should contain at least two test cases 
+Note that you can check your changes via `git status`.
+Note also that every PR should contain at least two test cases
 to check your implementation: one successful and one failed test case.
 
 D) Push your changes in the local branch to the ESBMC repository:
@@ -133,4 +132,4 @@ A limited number of classes have been marked up with doxygen documentation heade
 
     doxygen .doxygen
 
-Output will be in docs/html, open index.html to get started. 
+Output will be in docs/html, open index.html to get started.

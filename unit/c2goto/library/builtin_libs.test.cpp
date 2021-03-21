@@ -10,8 +10,8 @@
    - Functions (Async - Pthread)
  \*******************************************************************/
 
-#define BOOST_TEST_MODULE "Builtin Models"
-#include <boost/test/included/unit_test.hpp>
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
+#include <catch2/catch.hpp>
 
 void __ESBMC_atomic_begin()
 {
@@ -22,25 +22,39 @@ void __ESBMC_atomic_end()
 
 #include <library/builtin_libs.c>
 
-namespace utf = boost::unit_test;
-
 #define sync_fetch_generator(TYPE, OPERATOR)                                   \
   {                                                                            \
     int dest = 10;                                                             \
     TYPE value = 5;                                                            \
     int fetch = __ESBMC_sync_fetch_and_##OPERATOR(&dest, value);               \
-    BOOST_TEST(dest == 15);                                                    \
-    BOOST_TEST(fetch == 10);                                                   \
+    CHECK(dest == 15);                                                         \
+    CHECK(fetch == 10);                                                        \
   }
 
-BOOST_AUTO_TEST_SUITE(functions_sync)
-
-BOOST_AUTO_TEST_CASE(sync_fetch_add)
+TEST_CASE("sync_fetch_add", "[core][c2goto][builtin]")
 {
-  sync_fetch_generator(int, add);
-  sync_fetch_generator(double, add);
-  sync_fetch_generator(float, add);
-  sync_fetch_generator(short, add);
-  sync_fetch_generator(char, add);
+  SECTION("Int")
+  {
+    sync_fetch_generator(int, add);
+  }
+
+  SECTION("Double")
+  {
+    sync_fetch_generator(double, add);
+  }
+
+  SECTION("Float")
+  {
+    sync_fetch_generator(float, add);
+  }
+
+  SECTION("Short")
+  {
+    sync_fetch_generator(short, add);
+  }
+
+  SECTION("Char")
+  {
+    sync_fetch_generator(char, add);
+  }
 }
-BOOST_AUTO_TEST_SUITE_END()
