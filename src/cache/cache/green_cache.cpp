@@ -30,7 +30,8 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
     return;
   }
 
-  if(step.source.pc->location.is_not_nil()) {
+  if(step.source.pc->location.is_not_nil())
+  {
     auto function = step.source.pc->location.function().as_string();
     if(function == "reach_error")
       return;
@@ -100,13 +101,16 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
         {
           guard_items.insert(item);
         }
-      } else {
+      }
+      else
+      {
         not2tc n = to_not2t(rhs);
         auto value = n->value;
         guard_items.insert(hash_value(value));
       }
     }
-    else {
+    else
+    {
       auto not_expr = not2tc(rhs);
       guard_items.insert(hash_value(not_expr));
     }
@@ -204,13 +208,19 @@ void green_cache::parse_implication_guard(
   else if(expr->expr_id == expr2t::expr_ids::not_id)
   {
     std::string guard_name;
-    if(expr_algorithm_util::is_guard(expr, guard_name, true)) {
-      if(unsat_container.check(items[guard_name])) {
-        inner_items.insert(expr->crc());
-      } else {
+    if(expr_algorithm_util::is_guard(expr, guard_name, true))
+    {
+      if(unsat_container.check(items[guard_name]))
+      {
         inner_items.insert(expr->crc());
       }
-    } else inner_items.insert(expr->crc());
+      else
+      {
+        inner_items.insert(expr->crc());
+      }
+    }
+    else
+      inner_items.insert(expr->crc());
     return;
   }
 
@@ -292,11 +302,10 @@ void green_cache::mark_ssa_as_unsat()
   for(const auto i : this->to_add_container)
   {
     //std::cout << "ITEM\n";
-      unsat_container.add(i);
-
+    unsat_container.add(i);
   }
 
- // std::cout << "Total size " << unsat_container.get_size() << "\n";
+  // std::cout << "Total size " << unsat_container.get_size() << "\n";
   // Stores it in the cache
   //storage.store(unsat_container);
 }
