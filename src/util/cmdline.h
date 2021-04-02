@@ -12,7 +12,17 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <list>
 #include <string>
 #include <vector>
+#include <boost/program_options.hpp>
 
+namespace po = boost::program_options;
+#include <iterator>
+// A helper function to print a vector.
+template <class T>
+std::ostream &operator<<(std::ostream &os, const std::vector<T> &v)
+{
+  copy(v.begin(), v.end(), std::ostream_iterator<T>(os, " "));
+  return os;
+}
 enum opt_types
 {
   switc,
@@ -31,12 +41,11 @@ struct opt_templ
 class cmdlinet
 {
 public:
-  bool parse(int argc, const char **argv, const struct opt_templ *opts);
+  void parse(int argc, const char **argv);
   const char *getval(char option) const;
   const char *getval(const char *option) const;
   const std::list<std::string> &get_values(const char *option) const;
-  const std::list<std::string> &get_values(char option) const;
-  bool isset(char option) const;
+
   bool isset(const char *option) const;
 
   void clear();
@@ -44,25 +53,11 @@ public:
   typedef std::vector<std::string> argst;
   argst args;
   std::string failing_option;
-
+  po::variables_map vm;
+  po::options_description cmdline_options;
   cmdlinet() = default;
   ~cmdlinet();
 
-protected:
-  struct optiont
-  {
-    bool isset, hasval, islong;
-    char optchar;
-    std::string optstring;
-    std::list<std::string> values;
-  };
-
-  std::vector<optiont> options;
-
-  int getoptnr(char option) const;
-  int getoptnr(const char *option) const;
-
-  friend class optionst;
 };
 
 #endif

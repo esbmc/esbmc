@@ -90,17 +90,17 @@ bool configt::set(const cmdlinet &cmdline)
   if(cmdline.isset("function"))
     main = cmdline.getval("function");
 
-  if(cmdline.isset('D'))
-    ansi_c.defines = cmdline.get_values('D');
+  if(cmdline.isset("define"))
+    ansi_c.defines = cmdline.get_values("define");
 
-  if(cmdline.isset('I'))
-    ansi_c.include_paths = cmdline.get_values('I');
+  if(cmdline.isset("include"))
+    ansi_c.include_paths = cmdline.get_values("include");
 
-  if(cmdline.isset('f'))
-    ansi_c.forces = cmdline.get_values('f');
+  if(cmdline.isset("force"))
+    ansi_c.forces = cmdline.get_values("force");
 
-  if(cmdline.isset('W'))
-    ansi_c.warnings = cmdline.get_values('W');
+  if(cmdline.isset("warning"))
+    ansi_c.warnings = cmdline.get_values("warning");
 
   if(cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
   {
