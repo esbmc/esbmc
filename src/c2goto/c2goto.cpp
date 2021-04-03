@@ -9,22 +9,12 @@
 #include <util/parseoptions.h>
 #include <util/ui_message.h>
 
-const struct opt_templ c2goto_options[] = {
-  {0, "16", switc, ""},
-  {0, "32", switc, ""},
-  {0, "64", switc, ""},
-  {0, "fixedbv", switc, ""},
-  {0, "floatbv", switc, ""},
-  {0, "output", string, ""},
-  {'I', "", string, ""},
-  {'D', "", string, ""},
-  {0, "", switc, ""}};
 
 class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
 public:
   c2goto_parseopt(int argc, const char **argv)
-    : parseoptions_baset(c2goto_options, argc, argv), language_uit(cmdline)
+    : parseoptions_baset(argc, argv), language_uit(cmdline)
   {
   }
 

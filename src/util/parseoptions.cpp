@@ -22,7 +22,6 @@ Author: Daniel Kroening, kroening@kroening.com
 using namespace boost::program_options;
 #include <ac_config.h>
 parseoptions_baset::parseoptions_baset(
-  const struct opt_templ *opts,
   int argc,
   const char **argv)
 {
@@ -60,7 +59,7 @@ int parseoptions_baset::main()
     std::cerr << std::endl;
     return EX_USAGE;
   }
-  if(cmdline.isset("help") || cmdline.isset("h"))
+  if(cmdline.isset("help"))
   // if(cmdline.isset('?') || cmdline.isset('h') || cmdline.isset("help"))
   {
     std::cout << "\n* * *           ESBMC " ESBMC_VERSION "          * * *\n";

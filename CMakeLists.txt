@@ -79,6 +79,9 @@ find_package(FLEX 2.6.1 REQUIRED)
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
 find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options)
+if(Boost_FOUND)
+  include_directories(${Boost_INCLUDE_DIRS})
+endif()
 include(FindLLVM)
 
 # Optimization

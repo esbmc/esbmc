@@ -26,19 +26,14 @@ void cmdlinet::clear()
 
 bool cmdlinet::isset(const char *option) const
 {
-  //std::cout<<"calling isset for "<<option<<" with value "<<vm.count(option)<<"\n";
   return vm.count(option);
 }
 
-const char *cmdlinet::getval(char option) const
-{
-  return getval(option + "");
-}
+
 
 const std::list<std::string> &cmdlinet::get_values(const char *option) const
 {
   auto src = vm[option].as<std::vector<std::string>>();
-  //  std::cout<<"Values for "<<option<<" are: \n"<<src<<"\n";
   auto dest = new std::list<std::string>(src.begin(), src.end());
   return *dest;
 }
@@ -50,7 +45,7 @@ const char *cmdlinet::getval(const char *option) const
   auto &value = vm[option].value();
   if(auto v = boost::any_cast<int>(&value))
   {
-    auto res = std::to_string(*v).c_str();
+    const auto res = std::to_string(*v).c_str();
     char *newstr = new char[strlen(res) + 1];
     strcpy(newstr, res);
     return newstr;
@@ -77,7 +72,7 @@ void cmdlinet::parse(int argc, const char **argv)
   p.add("input-file", -1);
 
   po::options_description group1("Options");
-  group1.add_options()("h", "show help")("help,?", "show help");
+  group1.add_options()("help,?", "show help");
   po::options_description group2("Printing options");
   group2.add_options()("symbol-table-only", "only show symbol table")(
     "symbol-table-too",

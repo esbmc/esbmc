@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class parseoptions_baset
 {
 public:
-  parseoptions_baset(const struct opt_templ *opts, int argc, const char **argv);
+  parseoptions_baset(int argc, const char **argv);
 
   cmdlinet cmdline;
 
