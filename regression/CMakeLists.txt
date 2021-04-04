@@ -3,6 +3,7 @@ include(CTest)
 enable_testing()
 
 find_package(Python)
+find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options)
 # TODO: Use add dependency
 
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")

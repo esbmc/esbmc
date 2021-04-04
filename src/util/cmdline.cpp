@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdlib>
 #include <iostream>
 #include <util/cmdline.h>
+#include <sstream>
 
 std::string verification_file;
 
@@ -29,8 +30,6 @@ bool cmdlinet::isset(const char *option) const
   return vm.count(option);
 }
 
-
-
 const std::list<std::string> &cmdlinet::get_values(const char *option) const
 {
   auto src = vm[option].as<std::vector<std::string>>();
@@ -45,35 +44,33 @@ const char *cmdlinet::getval(const char *option) const
   auto &value = vm[option].value();
   if(auto v = boost::any_cast<int>(&value))
   {
-    const auto res = std::to_string(*v).c_str();
-    char *newstr = new char[strlen(res) + 1];
-    strcpy(newstr, res);
-    return newstr;
-  }
-  else if(auto v = boost::any_cast<std::string>(&value))
-    return v->c_str();
-  else if(auto v = boost::any_cast<std::vector<std::string>>(&value))
-    return v->front().c_str();
+    auto res = new std::string(std::to_string(*v));
 
-  else
-    return (const char *)nullptr;
+    return res->c_str();
+  }
+  if(auto v = boost::any_cast<std::string>(&value))
+    return v->c_str();
+  if(auto v = boost::any_cast<std::vector<std::string>>(&value))
+    return v->front().c_str();
+  return (const char *)nullptr;
 }
 
 void cmdlinet::parse(int argc, const char **argv)
 {
   clear();
 
-  po::options_description group0("file_name");
+  boost::program_options::options_description group0("file_name");
   group0.add_options()(
     "input-file",
-    po::value<std::vector<std::string>>()->value_name("file.c ..."),
+    boost::program_options::value<std::vector<std::string>>()->value_name(
+      "file.c ..."),
     "source file names");
-  po::positional_options_description p;
+  boost::program_options::positional_options_description p;
   p.add("input-file", -1);
 
-  po::options_description group1("Options");
+  boost::program_options::options_description group1("Options");
   group1.add_options()("help,?", "show help");
-  po::options_description group2("Printing options");
+  boost::program_options::options_description group2("Printing options");
   group2.add_options()("symbol-table-only", "only show symbol table")(
     "symbol-table-too",
     "show symbol table and verify")("parse-tree-only", "only show parse tree")(
@@ -89,7 +86,7 @@ void cmdlinet::parse(int argc, const char **argv)
     "show SMT formula (not supported by all solvers) and verify")(
     "smt-model",
     "show SMT model (not supported by all solvers), if the formula is SAT");
-  po::options_description group3("Trace");
+  boost::program_options::options_description group3("Trace");
   group3.add_options()(
     "quiet", " do not print unwinding information during symbolic execution")(
     "symex-trace", "print instructions during symbolic execution")(
@@ -99,16 +96,18 @@ void cmdlinet::parse(int argc, const char **argv)
     "show-goto-value-sets ", "show value-set analysis for the goto functions")(
     "show-symex-value-sets",
     "show value-set analysis during symbolic execution");
-  po::options_description group4("Frontend");
+  boost::program_options::options_description group4("Frontend");
   group4.add_options()(
     "include,I",
-    po::value<std::vector<std::string>>()->value_name("path"),
+    boost::program_options::value<std::vector<std::string>>()->value_name(
+      "path"),
     "set include path")(
     "define,D",
-    po::value<std::vector<std::string>>()->value_name("macro"),
+    boost::program_options::value<std::vector<std::string>>()->value_name(
+      "macro"),
     "define preprocessor macro")(
-    "warning,W", po::value<std::vector<std::string>>(), "")(
-    "force,f", po::value<std::vector<std::string>>(), "")(
+    "warning,W", boost::program_options::value<std::vector<std::string>>(), "")(
+    "force,f", boost::program_options::value<std::vector<std::string>>(), "")(
     "preprocess", "stop after preprocessing")(
     "no-inlining", "disable inlining function calls")(
     "full-inlining",
@@ -127,10 +126,10 @@ void cmdlinet::parse(int argc, const char **argv)
     "64", "set width of machine word (default is 64)")(
     "version", "show current ESBMC version and exit")(
     "witness-output",
-    po::value<std::string>(),
+    boost::program_options::value<std::string>(),
     "generate the verification result witness in GraphML format")(
-    "witness-producer", po::value<std::string>(), "")(
-    "witness-programfile", po::value<std::string>(), "")(
+    "witness-producer", boost::program_options::value<std::string>(), "")(
+    "witness-programfile", boost::program_options::value<std::string>(), "")(
     "old-frontend", "parse source files using our old frontend (deprecated)")(
     "result-only", "do not print the counter-example")(
     "i386-linux", "set Linux/I386 architecture (default)")(
@@ -139,43 +138,51 @@ void cmdlinet::parse(int argc, const char **argv)
     "set Windows/I386 architecture")("ppc-macos", "set PPC/I386 architecture")(
     "funsigned-char", "make \"char\" unsigned by default")(
     "fms-extensions", "enable microsoft C extensions");
-  po::options_description group5("BMC");
+  boost::program_options::options_description group5("BMC");
   group5.add_options()(
     "function",
-    po::value<std::string>()->value_name("name"),
+    boost::program_options::value<std::string>()->value_name("name"),
     "set main function name")(
-    "claim", po::value<int>()->value_name("nr"), "only check specific claim")(
-    "depth", po::value<int>()->value_name("nr"), "limit search depth")(
-    "unwind", po::value<int>()->value_name("nr"), "unwind nr times")(
+    "claim",
+    boost::program_options::value<int>()->value_name("nr"),
+    "only check specific claim")(
+    "depth",
+    boost::program_options::value<int>()->value_name("nr"),
+    "limit search depth")(
+    "unwind",
+    boost::program_options::value<int>()->value_name("nr"),
+    "unwind nr times")(
     "unwindset",
-    po::value<std::string>()->value_name("nr"),
+    boost::program_options::value<std::string>()->value_name("nr"),
     "unwind given loop nr times")(
     "no-unwinding-assertions", "do not generate unwinding assertions")(
     "partial-loops", "permit paths with partial loops")("unroll-loops", "")(
     "no-slice", "do not remove unused equations")("slice-assumes", "")(
     "extended-try-analysis", "")("skip-bmc", "")("no-return-value-opt", "");
-  po::options_description group6("IBMC");
+  boost::program_options::options_description group6("IBMC");
   group6.add_options()(
     "incremental-bmc", "incremental loop unwinding verification")(
     "falsification", "incremental loop unwinding for bug searching")(
     "termination", "incremental loop unwinding assertion verification")(
     "k-step",
-    po::value<int>()->value_name("nr"),
+    boost::program_options::value<int>()->value_name("nr"),
     "set k increment (default is 1)")(
     "max-k-step",
-    po::value<int>()->value_name("nr"),
+    boost::program_options::value<int>()->value_name("nr"),
     "set max number of iteration (default is 50)")(
     "unlimited-k-steps", "set max number of iteration to UINT_MAX");
-  po::options_description group7("Solver");
+  boost::program_options::options_description group7("Solver");
   group7.add_options()("list-solvers", "list available solvers and exit")(
     "boolector", "use Boolector (default)")("z3", "use Z3")(
     "mathsat", "use MathSAT")("cvc", "use CVC4")("yices", "use Yices")(
     "bv", "use solver with bit-vector arithmetic")(
     "ir",
     "use solver with integer/real arithmetic")("smtlib", "use SMT lib format")(
-    "smtlib-solver-prog", po::value<std::string>(), "SMT lib program name")(
+    "smtlib-solver-prog",
+    boost::program_options::value<std::string>(),
+    "SMT lib program name")(
     "output",
-    po::value<std::string>()->value_name("<filename>"),
+    boost::program_options::value<std::string>()->value_name("<filename>"),
     "output VCCs in SMT lib format to given file")(
     "floatbv",
     "encode floating-point using the SMT floating-point theory(default)")(
@@ -189,14 +196,14 @@ void cmdlinet::parse(int argc, const char **argv)
     "no-return-value-opt",
     "disable return value optimization to compute the stack size");
 
-  po::options_description group8("Incremental SMT");
+  boost::program_options::options_description group8("Incremental SMT");
   group8.add_options()(
     "smt-during-symex", "enable incremental SMT solving (experimental)")(
     "smt-thread-guard",
     "call the solver during thread exploration (experimental)")(
     "smt-symex-guard",
     "call the solver during symbolic execution (experimental)");
-  po::options_description group9("Property checking");
+  boost::program_options::options_description group9("Property checking");
   group9.add_options()("no-assertions", "ignore assertions")(
     "no-bounds-check", "do not do array bounds check")(
     "no-div-by-zero-check", "do not do division by zero check")(
@@ -211,13 +218,14 @@ void cmdlinet::parse(int argc, const char **argv)
     "lock-order-check", "enable for lock acquisition ordering check")(
     "atomicity-check", "enable atomicity check at visible assignments")(
     "stack-limit",
-    po::value<int>()->default_value(-1)->value_name("bytes"),
+    boost::program_options::value<int>()->default_value(-1)->value_name(
+      "bytes"),
     "check if stack limit is respected")(
     "error-label",
-    po::value<std::string>()->value_name("label"),
+    boost::program_options::value<std::string>()->value_name("label"),
     "check if label is unreachable")(
     "force-malloc-success", "do not check for malloc/new failure");
-  po::options_description group10("k-induction");
+  boost::program_options::options_description group10("k-induction");
   group10.add_options()("base-case", "check the base case")(
     "forward-condition", "check the forward condition")(
     "inductive-step",
@@ -225,40 +233,40 @@ void cmdlinet::parse(int argc, const char **argv)
     "k-induction-parallel",
     "prove by k-induction, running each step on a separate process")(
     "k-step",
-    po::value<int>()->default_value(1)->value_name("nr"),
+    boost::program_options::value<int>()->default_value(1)->value_name("nr"),
     "set k increment (default is 1)")(
     "max-k-step",
-    po::value<int>()->default_value(50)->value_name("nr"),
+    boost::program_options::value<int>()->default_value(50)->value_name("nr"),
     "set max number of iteration (default is 50)")(
     "show-cex", "print the counter-example produced by the inductive step")(
     "bidirectional",
     "")("unlimited-k-steps", "set max number of iteration to UINT_MAX")(
     "max-inductive-step",
-    po::value<int>()->default_value(-1)->value_name("nr"),
+    boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
     "");
-  po::options_description group11("Scheduling");
+  boost::program_options::options_description group11("Scheduling");
   group11.add_options()("schedule", "use schedule recording approach")(
     "round-robin", "use the round robin scheduling approach")(
     "time-slice",
-    po::value<int>()->default_value(1)->value_name("nr"),
+    boost::program_options::value<int>()->default_value(1)->value_name("nr"),
     "set the time slice of the round robin algorithm (default is 1) ");
-  po::options_description group12("Concurrency checking");
+  boost::program_options::options_description group12("Concurrency checking");
   group12.add_options()(
     "context-bound",
-    po::value<int>()->default_value(-1)->value_name("nr"),
+    boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
     "limit number of context switches for each thread")(
     "state-hashing", "enable state-hashing, prunes duplicate states")(
     "no-por", "do not do partial order reduction")(
     "all-runs", "check all interleavings, even if a bug was already found");
-  po::options_description group13("Miscellaneous options");
+  boost::program_options::options_description group13("Miscellaneous options");
   group13.add_options()
 
     ("memlimit",
-     po::value<std::string>()->value_name("limit"),
+     boost::program_options::value<std::string>()->value_name("limit"),
      "configure memory limit, of form \"100m\" or \"2g\"")(
       "memstats", "print memory usage statistics")(
       "timeout",
-      po::value<std::string>()->value_name("t"),
+      boost::program_options::value<std::string>()->value_name("t"),
       "configure time limit, integer followed by {s,m,h}")(
       "enable-core-dump", "do not disable core dump output")(
       "no-simplify", "do not simplify any expression")(
@@ -266,7 +274,7 @@ void cmdlinet::parse(int argc, const char **argv)
       "interval-analysis",
       "enable interval analysis and add assumes to the program");
 
-  po::options_description group14("DEBUG options");
+  boost::program_options::options_description group14("DEBUG options");
   group14.add_options()
 
     // Print commit hash for current binary
@@ -276,10 +284,10 @@ void cmdlinet::parse(int argc, const char **argv)
     // Abort if the program contains a recursion
     ("abort-on-recursion", "")
     // Verbosity of message, probably does nothing
-    ("verbosity", po::value<int>(), "")
+    ("verbosity", boost::program_options::value<int>(), "")
     // --break-at $insnnum will cause ESBMC to execute a trap
     // instruction when it executes the designated GOTO instruction number.
-    ("break-at", po::value<std::string>(), "")
+    ("break-at", boost::program_options::value<std::string>(), "")
     // I added some intrinsics along the line of "__ESBMC_switch_to_thread"
     // that immediately transitioned to a particular thread and didn't allow
     // any other exploration from that point. Useful for constructing an
@@ -311,7 +319,7 @@ void cmdlinet::parse(int argc, const char **argv)
     .add(group14);
 
   store(
-    po::command_line_parser(argc, argv)
+    boost::program_options::command_line_parser(argc, argv)
       .options(cmdline_options)
       .positional(p)
       .run(),

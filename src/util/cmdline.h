@@ -14,15 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <vector>
 #include <boost/program_options.hpp>
 
-namespace po = boost::program_options;
-#include <iterator>
-// A helper function to print a vector.
-template <class T>
-std::ostream &operator<<(std::ostream &os, const std::vector<T> &v)
-{
-  copy(v.begin(), v.end(), std::ostream_iterator<T>(os, " "));
-  return os;
-}
 
 class cmdlinet
 {
@@ -37,8 +28,8 @@ public:
 
   typedef std::vector<std::string> argst;
   argst args;
-  po::variables_map vm;
-  po::options_description cmdline_options;
+   boost::program_options::variables_map vm;
+   boost::program_options::options_description cmdline_options;
   cmdlinet() = default;
   ~cmdlinet();
 

@@ -78,7 +78,9 @@ find_package(BISON 2.6.1 REQUIRED)
 find_package(FLEX 2.6.1 REQUIRED)
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
+set(_Boost_DEBUG on) 
 find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options)
+add_definitions(${Boost_LIB_DIAGNOSTIC_DEFINITIONS})
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS})
 endif()

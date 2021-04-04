@@ -18,8 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/parseoptions.h>
 #include <util/signal_catcher.h>
 #include <boost/program_options.hpp>
-
-using namespace boost::program_options;
 #include <ac_config.h>
 parseoptions_baset::parseoptions_baset(
   int argc,
@@ -28,18 +26,9 @@ parseoptions_baset::parseoptions_baset(
   exception_message = "";
   try
   {
-    //  if( argc > 1 )
-    // {
-    //     std::cout << "there are " << argc-1 << " (more) arguments, they are:\n" ;
 
-    //     std::copy( argv+1, argv+argc, std::ostream_iterator<const char*>( std::cout, "\n" ) ) ;
-    // }
     cmdline.parse(argc, argv);
-    //     if(cmdline.vm.count("input-file"))
-    //     {
-    // auto src = cmdline.vm["input-file"].as<std::vector<std::string>>();
-    //   std::cout<<"Values for input-file are: \n"<<src<<"\n";
-    //     }
+ 
   }
   catch(std::exception &e)
   {
@@ -60,7 +49,7 @@ int parseoptions_baset::main()
     return EX_USAGE;
   }
   if(cmdline.isset("help"))
-  // if(cmdline.isset('?') || cmdline.isset('h') || cmdline.isset("help"))
+
   {
     std::cout << "\n* * *           ESBMC " ESBMC_VERSION "          * * *\n";
 
