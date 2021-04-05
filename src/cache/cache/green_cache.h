@@ -124,7 +124,7 @@ protected:
   /**
    * Loads a ssa_container with all expressions known to be unsat
    */
-  void load_unsat_container();
+  void load_unsat_container(std::string filename = "esbmc.dat");
 
   void run_on_assignment(symex_target_equationt::SSA_stept &step) override;
   void run_on_assert(symex_target_equationt::SSA_stept &step) override;

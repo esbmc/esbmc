@@ -116,7 +116,6 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
     }
   }
 
-  //items.insert({guard_name, guard_items});
   this->to_add_container.emplace(guard_items);
   load_unsat_container();
   // Check the full assertion
@@ -277,7 +276,6 @@ crc_hash green_cache::convert_expr_to_hash(const expr2tc &expr)
 
 crc_expr green_cache::parse_guard(const expr2tc &expr)
 {
-  //assert(expr->expr_id == expr2t::expr_ids::equality_id);
   crc_expr local_items;
   // TODO: support other relations (<=, !=)
   //if(expr->expr_id != expr2t::expr_ids::equality_id)
@@ -288,24 +286,23 @@ crc_expr green_cache::parse_guard(const expr2tc &expr)
   return local_items;
 }
 
-void green_cache::load_unsat_container()
+void green_cache::load_unsat_container(std::string filename)
 {
   // Load default unsat cache
-  std::string filename("unsat_database");
   text_file_crc_set_storage storage(filename);
   //--enable-caching file.c --incremental-bmc --max-k-step 5.set(storage.load());
 }
 
 void green_cache::mark_ssa_as_unsat()
 {
-  //std::cout << "Saving cache\n";
+  unsat_container.clear_cache();
   for(const auto i : this->to_add_container)
   {
-    //std::cout << "ITEM\n";
     unsat_container.add(i);
   }
 
-  // std::cout << "Total size " << unsat_container.get_size() << "\n";
   // Stores it in the cache
-  //storage.store(unsat_container);
+  std::string file = "esbmc.dat";
+  text_file_crc_set_storage storage(file);
+  storage.store(unsat_container);
 }

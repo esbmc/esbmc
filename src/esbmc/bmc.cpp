@@ -646,7 +646,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if(options.get_bool_option("enable-caching"))
     {
-      std::cout << "Applying cache SSA\n";
+      status("Checking SSA over cache\n");
       cache = std::make_shared<green_cache>(eq->SSA_steps, unsat_container);
       cache->run();
       std::cout << "Got " << unsat_container.get_hits() << " hits" << std::endl;
