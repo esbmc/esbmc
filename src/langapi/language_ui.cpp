@@ -53,7 +53,9 @@ bool language_uit::parse(const std::string &filename)
   }
 
   if(config.options.get_bool_option("old-frontend"))
-    mode++;
+  {
+    mode = mode + 2;
+  }
 
   // Check that it opens
   std::ifstream infile(filename.c_str());
