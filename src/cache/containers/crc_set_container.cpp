@@ -151,9 +151,12 @@ text_file_crc_set_storage::load(std::istream &infile)
 }
 void text_file_crc_set_storage::store(ssa_container<ssa_container_type> &output)
 {
+  // TODO: This should add one item only
+  std::cout << "STORING " << filename << "\n";
   std::ofstream outfile;
   outfile.open(filename);
   outfile << "BEGIN" << std::endl;
+
   for(const auto &guard : output.get())
   {
     outfile << "GUARD" << std::endl;
