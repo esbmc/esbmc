@@ -17,20 +17,14 @@ class parseoptions_baset
 {
 public:
   parseoptions_baset(int argc, const char **argv);
-
   cmdlinet cmdline;
-
   virtual void help();
-
   virtual int doit() = 0;
-
   virtual int main();
   virtual ~parseoptions_baset() = default;
 
 private:
-
   std::string exception_message;
-
 };
 
 #endif

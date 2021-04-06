@@ -69,4 +69,3 @@ void optionst::cmdline(cmdlinet &cmds)
     }
   }
 }
-

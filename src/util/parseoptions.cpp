@@ -19,6 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/signal_catcher.h>
 #include <boost/program_options.hpp>
 #include <ac_config.h>
+
 parseoptions_baset::parseoptions_baset(
   int argc,
   const char **argv)
@@ -26,9 +27,7 @@ parseoptions_baset::parseoptions_baset(
   exception_message = "";
   try
   {
-
     cmdline.parse(argc, argv);
- 
   }
   catch(std::exception &e)
   {
@@ -49,16 +48,13 @@ int parseoptions_baset::main()
     return EX_USAGE;
   }
   if(cmdline.isset("help"))
-
   {
     std::cout << "\n* * *           ESBMC " ESBMC_VERSION "          * * *\n";
-
     std::cout << cmdline.cmdline_options << "\n";
     return EX_OK;
   }
 
   // install signal catcher
   install_signal_catcher();
-
   return doit();
 }

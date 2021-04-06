@@ -32,6 +32,19 @@ bool cmdlinet::isset(const char *option) const
 
 const std::list<std::string> &cmdlinet::get_values(const char *option) const
 {
+  auto &value = vm[option].value();
+  if(auto v = boost::any_cast<int>(&value))
+  {
+    auto res = new std::list<std::string>();
+    res->emplace_front(std::to_string(*v));
+    return *res;
+  }
+  if(auto v = boost::any_cast<std::string>(&value))
+   {
+    auto res = new std::list<std::string>();
+    res->emplace_front(*v);
+    return *res;
+  }
   auto src = vm[option].as<std::vector<std::string>>();
   auto dest = new std::list<std::string>(src.begin(), src.end());
   return *dest;
@@ -45,7 +58,6 @@ const char *cmdlinet::getval(const char *option) const
   if(auto v = boost::any_cast<int>(&value))
   {
     auto res = new std::string(std::to_string(*v));
-
     return res->c_str();
   }
   if(auto v = boost::any_cast<std::string>(&value))

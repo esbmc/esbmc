@@ -9,7 +9,6 @@
 #include <util/parseoptions.h>
 #include <util/ui_message.h>
 
-
 class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
 public:

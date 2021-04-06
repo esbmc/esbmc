@@ -17,8 +17,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/parseoptions.h>
 #include <util/ui_message.h>
 
-
-
 class esbmc_parseoptionst : public parseoptions_baset, public language_uit
 {
 public:
