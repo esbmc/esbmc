@@ -501,6 +501,8 @@ expr2tc dereferencet::dereference(
     // the line. To make this a valid formula though, return a failed symbol,
     // so that this assignment gets a well typed free value.
     value = make_failed_symbol(type);
+    // Produce assertions to check for invalid objects
+    valid_check(value, guard, mode);
   }
   else if(mode == INTERNAL)
   {
@@ -1846,7 +1848,12 @@ void dereferencet::valid_check(
     // making dereferencet persistent.
     if(has_prefix(
          to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
+    {
+      // This is an invalid object; if we're in read or write mode, that's an error.
+      if(mode == READ || mode == WRITE)
+        dereference_failure("pointer dereference", "invalid pointer", guard);
       return;
+    }
 
     const symbolt &sym = ns.lookup(to_symbol2t(symbol).thename);
     if(has_prefix(sym.id.as_string(), "symex_dynamic::"))
