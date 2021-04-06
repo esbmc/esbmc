@@ -20,9 +20,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <boost/program_options.hpp>
 #include <ac_config.h>
 
-parseoptions_baset::parseoptions_baset(
-  int argc,
-  const char **argv)
+parseoptions_baset::parseoptions_baset(int argc, const char **argv)
 {
   exception_message = "";
   try

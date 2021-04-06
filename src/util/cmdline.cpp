@@ -40,7 +40,7 @@ const std::list<std::string> &cmdlinet::get_values(const char *option) const
     return *res;
   }
   if(auto v = boost::any_cast<std::string>(&value))
-   {
+  {
     auto res = new std::list<std::string>();
     res->emplace_front(*v);
     return *res;
