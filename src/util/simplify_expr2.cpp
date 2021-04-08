@@ -848,7 +848,7 @@ expr2tc member2t::do_simplify() const
     {
       s = to_constant_struct2t(source_value).datatype_members[no];
 
-    /*  assert(
+      /*  assert(
         is_pointer_type(type) ||
         base_type_eq(type, s->type, namespacet(contextt())));
         */
@@ -1373,12 +1373,12 @@ static expr2tc do_bit_munge_operation(
 
   val1 = opfunc(val1, val2);
 
-  // This has potentially become negative. Check the top bit.
-  #ifndef _WIN32
+// This has potentially become negative. Check the top bit.
+#ifndef _WIN32
   __uint128_t upper_bit = 1;
-  #else
+#else
   uint64_t upper_bit = 1;
-  #endif
+#endif
   upper_bit <<= (type->get_width() - 1);
   if(val1 & upper_bit && is_signedbv_type(type))
   {
@@ -2983,27 +2983,55 @@ expr2tc byte_update2t::do_simplify() const
     simplied_source->type->get_width());
 
   // Overflow? The backend will handle that
-  int src_offset = to_constant_int2t(simplied_offset).value.to_int64();
-  if(src_offset * 8 + value.length() > src_value.length() || src_offset * 8 < 0)
+  unsigned int width_op0 = simplied_source->type->get_width();
+  unsigned int src_offset =
+    to_constant_int2t(simplied_offset).value.to_uint64();
+
+  // Flip location if we're in big-endian mode
+  if(big_endian)
+  {
+    unsigned int data_size =
+      type_byte_size(simplied_source->type).to_uint64() - 1;
+    src_offset = data_size - src_offset;
+  }
+
+  unsigned int top_of_update = (8 * src_offset) + 8;
+  int bottom_of_update = (8 * src_offset);
+
+  // Overflow? The backend will encode that
+  if(top_of_update > width_op0 || bottom_of_update < 0)
     return expr2tc();
+
+  std::string top;
+  if(top_of_update == width_op0)
+    top = value;
+  else
+    top = src_value.substr(top_of_update, width_op0 - 1);
+
+  std::string middle;
+  if(top != value)
+    middle = value;
+
+  std::string bottom;
 
   // Reverse both the source value and the value that will be updated if we are
   // assuming little endian, because in string the pos 0 is the leftmost element
   // while in bvs, pos 0 is the rightmost bit
-  if(!big_endian)
+  if(src_offset == 0)
   {
-    std::reverse(src_value.begin(), src_value.end());
-    std::reverse(value.begin(), value.end());
+    middle = "";
+    bottom = value;
   }
+  else
+    bottom = src_value.substr(0, bottom_of_update - 1);
 
-  src_value.replace(src_offset * 8, value.length(), value);
-
-  // Reverse back
-  if(!big_endian)
-    std::reverse(src_value.begin(), src_value.end());
-
+  std::string concat;
+  if(middle != "")
+    concat = top + middle;
+  else
+    concat = top;
+  concat += bottom;
   return typecast_check_return(
     type,
-    constant_int2tc(
-      get_uint_type(src_value.length()), string2integer(src_value, 2)));
+    constant_int2tc(get_uint_type(concat.length()), string2integer(concat, 2)));
 }

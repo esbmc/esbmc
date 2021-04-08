@@ -221,7 +221,7 @@ public:
     bool hidden;
 
     /** The stack size of the frame. */
-    BigInt stack_frame_total;
+    unsigned stack_frame_total;
 
     framet(unsigned int thread_id)
       : return_value(expr2tc()), hidden(false), stack_frame_total(0)

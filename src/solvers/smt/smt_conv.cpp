@@ -1077,15 +1077,36 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::bitcast_id:
   {
-    a = convert_bitcast(expr);
+    const bitcast2t &cast = to_bitcast2t(expr);
+    assert(is_scalar_type(cast.type) && is_scalar_type(cast.from));
+
+    // As it stands, the only circumstance where bitcast can make a difference
+    // is where we're casting to or from a float, where casting by value means
+    // something different. Filter that case out, pass everything else to normal
+    // cast.
+    if(is_floatbv_type(cast.type))
+    {
+      a = fp_api->mk_from_bv_to_fp(args[0], convert_sort(cast.type));
+    }
+    else if(is_floatbv_type(cast.from))
+    {
+      unsigned int sz = expr->type->get_width() - cast.from->type->get_width();
+      a = is_signedbv_type(expr->type)
+            ? mk_sign_ext(fp_api->mk_from_fp_to_bv(args[0]), sz)
+            : mk_zero_ext(fp_api->mk_from_fp_to_bv(args[0]), sz);
+    }
+    else
+    {
+      // Cast by value is fine
+      typecast2tc tcast(cast.type, cast.from);
+      a = convert_ast(tcast);
+    }
     break;
   }
   case expr2t::extract_id:
   {
     const extract2t &ex = to_extract2t(expr);
     a = convert_ast(ex.from);
-    if(ex.from->type->get_width() == ex.upper - ex.lower + 1)
-      return a;
     a = mk_extract(a, ex.upper, ex.lower);
     break;
   }
@@ -2104,19 +2125,6 @@ expr2tc smt_convt::get(const expr2tc &expr)
   case expr2t::same_object_id:
   case expr2t::symbol_id:
     return get_by_type(res);
-
-  case expr2t::member_id:
-  {
-    if(is_array_type(expr))
-    {
-      std::cerr << "Fetching array elements inside tuples currently "
-                   "unimplemented, sorry"
-                << std::endl;
-      return expr2tc();
-    }
-    simplify(res);
-    return res;
-  }
 
   case expr2t::if_id:
   {
