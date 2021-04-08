@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdlib>
 #include <util/i2string.h>
 #include <util/options.h>
-
+#include <iostream>
 void optionst::set_option(const std::string &option, const std::string &value)
 {
   std::pair<option_mapt::iterator, bool> result =
@@ -56,16 +56,14 @@ void optionst::cmdline(cmdlinet &cmds)
   for(const auto &it : cmds.vm)
   {
     auto option_name = it.first;
-    if(cmds.isset(option_name.c_str())&&!it.second.defaulted())
+    if(cmds.isset(option_name.c_str()) && !it.second.defaulted())
     {
-      if(!it.second.empty())
-      {
-        set_option(option_name, cmds.getval(option_name.c_str()));
-      }
+      auto value = cmds.getval(option_name.c_str());
+      bool hasArgument = *value != 0;
+      if(hasArgument)
+        set_option(option_name, value);
       else
-      {
         set_option(option_name, true);
-      }
     }
   }
 }
