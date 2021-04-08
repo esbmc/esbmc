@@ -507,7 +507,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     str << "BMC program time: ";
     output_time(bmc_stop - bmc_start, str);
     str << "s";
-    status(str.str());
+    //status(str.str());
 
     // Only run for one run
     if(options.get_bool_option("interactive-ileaves"))

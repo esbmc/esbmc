@@ -266,7 +266,7 @@ static expr2tc simplify_arith_2ops(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  if(!is_number_type(type) && !is_pointer_type(type))
+  if(!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
     return expr2tc();
 
   // Try to recursively simplify nested operations both sides, if any
@@ -291,7 +291,19 @@ static expr2tc simplify_arith_2ops(
   assert(!is_floatbv_type(type));
 
   expr2tc simpl_res;
-  if(is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
+  if(is_vector_type(type))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_int2t;
+
+    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
+      return to_constant_int2t(c).value;
+    };
+
+    simpl_res = TFunctor<BigInt>::simplify(
+      simplied_side_1, simplied_side_2, is_constant, get_value);
+  }
+  else if(is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
@@ -349,6 +361,14 @@ struct Addtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [](type2tc t, expr2tc e1, expr2tc e2) { return add2tc(t, e1, e2); };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
+
     if(is_constant(op1))
     {
       // Found a zero? Simplify to op2
@@ -401,6 +421,14 @@ struct Subtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [](type2tc t, expr2tc e1, expr2tc e2) { return sub2tc(t, e1, e2); };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
+
     if(is_constant(op1))
     {
       // Found a zero? Simplify to -op2
@@ -447,6 +475,14 @@ struct Multor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [](type2tc t, expr2tc e1, expr2tc e2) { return mul2tc(t, e1, e2); };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
+
     if(is_constant(op1))
     {
       expr2tc c1 = op1;
@@ -499,6 +535,14 @@ struct Divtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [](type2tc t, expr2tc e1, expr2tc e2) { return div2tc(t, e1, e2); };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
+
     if(is_constant(op2))
     {
       expr2tc c2 = op2;
@@ -538,7 +582,7 @@ expr2tc div2t::do_simplify() const
 
 expr2tc modulus2t::do_simplify() const
 {
-  if(!is_number_type(type))
+  if(!is_number_type(type) && !is_vector_type(type))
     return expr2tc();
 
   // Try to recursively simplify nested operations both sides, if any
@@ -557,6 +601,17 @@ expr2tc modulus2t::do_simplify() const
     }
 
     return expr2tc();
+  }
+
+  // Is a vector operation ? Apply the op
+  if(
+    is_constant_vector2t(simplied_side_1) ||
+    is_constant_vector2t(simplied_side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return modulus2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(
+      op, simplied_side_1, simplied_side_2);
   }
 
   if(is_bv_type(type))
@@ -586,7 +641,7 @@ expr2tc modulus2t::do_simplify() const
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
 {
-  if(!is_number_type(type))
+  if(!is_number_type(type) && !is_vector_type(type))
     return expr2tc();
 
   // Try to recursively simplify nested operation, if any
@@ -648,6 +703,17 @@ struct Negator
 
 expr2tc neg2t::do_simplify() const
 {
+  if(is_constant_vector2t(value))
+  {
+    constant_vector2tc vector(value);
+    for(size_t i = 0; i < vector->datatype_members.size(); i++)
+    {
+      auto &op = vector->datatype_members[i];
+      neg2tc neg(op->type, op);
+      vector->datatype_members[i] = neg;
+    }
+    return vector;
+  }
   return simplify_arith_1op<Negator, neg2t>(type, value);
 }
 
@@ -724,6 +790,23 @@ expr2tc with2t::do_simplify() const
     arr->datatype_members[index.as_ulong()] = update_value;
     return arr;
   }
+  else if(is_constant_vector2t(source_value))
+  {
+    const constant_vector2t &vec = to_constant_vector2t(source_value);
+    const constant_int2t &index = to_constant_int2t(update_field);
+
+    // Index may be out of bounds. That's an error in the program, but not in
+    // the model we're generating, so permit it. Can't simplify it though.
+    if(index.value.is_negative())
+      return expr2tc();
+
+    if(index.as_ulong() >= vec.datatype_members.size())
+      return expr2tc();
+
+    constant_vector2tc vec2 = vec;
+    vec2->datatype_members[index.as_ulong()] = update_value;
+    return vec2;
+  }
   else if(is_constant_array_of2t(source_value))
   {
     const constant_array_of2t &array = to_constant_array_of2t(source_value);
@@ -765,9 +848,10 @@ expr2tc member2t::do_simplify() const
     {
       s = to_constant_struct2t(source_value).datatype_members[no];
 
-      assert(
+      /*  assert(
         is_pointer_type(type) ||
         base_type_eq(type, s->type, namespacet(contextt())));
+        */
     }
     else
     {
@@ -909,6 +993,23 @@ expr2tc index2t::do_simplify() const
       return expr2tc();
 
     const constant_array2t &arr = to_constant_array2t(source_value);
+    unsigned long the_idx = idx.as_ulong();
+    if(the_idx >= arr.datatype_members.size())
+      return expr2tc();
+
+    return arr.datatype_members[the_idx];
+  }
+  else if(is_constant_vector2t(source_value) && is_constant_int2t(index))
+  {
+    const constant_vector2t &arr = to_constant_vector2t(source_value);
+    const constant_int2t &idx = to_constant_int2t(index);
+
+    // Index might be greater than the constant array size. This means we can't
+    // simplify it, and the user might be eaten by an assertion failure in the
+    // model. We don't have to think about this now though.
+    if(idx.value.is_negative())
+      return expr2tc();
+
     unsigned long the_idx = idx.as_ulong();
     if(the_idx >= arr.datatype_members.size())
       return expr2tc();
@@ -1272,8 +1373,14 @@ static expr2tc do_bit_munge_operation(
 
   val1 = opfunc(val1, val2);
 
-  // This has potentially become negative. Check the top bit.
-  if(val1 & (1 << (type->get_width() - 1)) && is_signedbv_type(type))
+// This has potentially become negative. Check the top bit.
+#ifndef _WIN32
+  __uint128_t upper_bit = 1;
+#else
+  uint64_t upper_bit = 1;
+#endif
+  upper_bit <<= (type->get_width() - 1);
+  if(val1 & upper_bit && is_signedbv_type(type))
   {
     // Sign extend.
     val1 |= ULLONG_MAX << (type->get_width());
@@ -1296,6 +1403,14 @@ expr2tc bitand2t::do_simplify() const
     return (op1 & op2);
   };
 
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitand2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
+
   return do_bit_munge_operation<bitand2t>(op, type, side_1, side_2);
 }
 
@@ -1304,6 +1419,14 @@ expr2tc bitor2t::do_simplify() const
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return (op1 | op2);
   };
+
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitor2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
 
   return do_bit_munge_operation<bitor2t>(op, type, side_1, side_2);
 }
@@ -1314,6 +1437,14 @@ expr2tc bitxor2t::do_simplify() const
     return (op1 ^ op2);
   };
 
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitxor2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
+
   return do_bit_munge_operation<bitxor2t>(op, type, side_1, side_2);
 }
 
@@ -1322,6 +1453,14 @@ expr2tc bitnand2t::do_simplify() const
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return ~(op1 & op2);
   };
+
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitnand2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
 
   return do_bit_munge_operation<bitnand2t>(op, type, side_1, side_2);
 }
@@ -1332,6 +1471,14 @@ expr2tc bitnor2t::do_simplify() const
     return ~(op1 | op2);
   };
 
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitnor2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
+
   return do_bit_munge_operation<bitnor2t>(op, type, side_1, side_2);
 }
 
@@ -1340,6 +1487,14 @@ expr2tc bitnxor2t::do_simplify() const
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return ~(op1 ^ op2);
   };
+
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return bitnxor2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
 
   return do_bit_munge_operation<bitnxor2t>(op, type, side_1, side_2);
 }
@@ -1350,6 +1505,18 @@ expr2tc bitnot2t::do_simplify() const
     return ~(op1);
   };
 
+  if(is_constant_vector2t(value))
+  {
+    constant_vector2tc vector(value);
+    for(size_t i = 0; i < vector->datatype_members.size(); i++)
+    {
+      auto &op = vector->datatype_members[i];
+      bitnot2tc neg(op->type, op);
+      vector->datatype_members[i] = neg;
+    }
+    return vector;
+  }
+
   return do_bit_munge_operation<bitnot2t>(op, type, value, value);
 }
 
@@ -1358,6 +1525,13 @@ expr2tc shl2t::do_simplify() const
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return (op1 << op2);
   };
+
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return shl2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
 
   return do_bit_munge_operation<shl2t>(op, type, side_1, side_2);
 }
@@ -1368,6 +1542,13 @@ expr2tc lshr2t::do_simplify() const
     return ((uint64_t)op1) >> ((uint64_t)op2);
   };
 
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return lshr2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
+
   return do_bit_munge_operation<lshr2t>(op, type, side_1, side_2);
 }
 
@@ -1376,6 +1557,14 @@ expr2tc ashr2t::do_simplify() const
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
     return (op1 >> op2);
   };
+
+  // Is a vector operation ? Apply the op
+  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+      [](type2tc t, expr2tc e1, expr2tc e2) { return ashr2tc(t, e1, e2); };
+    return vector_type2t::distribute_operation(op, side_1, side_2);
+  }
 
   return do_bit_munge_operation<ashr2t>(op, type, side_1, side_2);
 }
@@ -1802,6 +1991,14 @@ struct Equalitytor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [](type2tc, expr2tc e1, expr2tc e2) { return equality2tc(e1, e2); };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
+
     if(is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
@@ -2369,9 +2566,12 @@ static expr2tc simplify_floatbv_2ops(
   const expr2tc &side_2,
   const expr2tc &rounding_mode)
 {
-  assert(is_floatbv_type(type));
+  bool is_float = is_vector_type(type)
+                    ? is_floatbv_type(to_vector_type(type).subtype)
+                    : is_floatbv_type(type);
+  assert(is_float);
 
-  if(!is_number_type(type) && !is_pointer_type(type))
+  if(!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
     return expr2tc();
 
   // Try to recursively simplify nested operations both sides, if any
@@ -2405,7 +2605,20 @@ static expr2tc simplify_floatbv_2ops(
 
   expr2tc simpl_res = expr2tc();
 
-  if(is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
+  if(is_vector_type(type))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
+
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
+
+    simpl_res = TFunctor<ieee_floatt>::simplify(
+      simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);
+  }
+  else if(is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -2434,6 +2647,16 @@ struct IEEE_addtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [rm](type2tc t, expr2tc e1, expr2tc e2) {
+          return ieee_add2tc(t, e1, e2, rm);
+        };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
+
     // Two constants? Simplify to result of the addition
     if(is_constant(op1) && is_constant(op2))
     {
@@ -2471,6 +2694,15 @@ struct IEEE_subtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [rm](type2tc t, expr2tc e1, expr2tc e2) {
+          return ieee_sub2tc(t, e1, e2, rm);
+        };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
     // Two constants? Simplify to result of the subtraction
     if(is_constant(op1) && is_constant(op2))
     {
@@ -2508,6 +2740,16 @@ struct IEEE_multor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    // Is a vector operation ? Apply the op
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [rm](type2tc t, expr2tc e1, expr2tc e2) {
+          return ieee_mul2tc(t, e1, e2, rm);
+        };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
+
     // Two constants? Simplify to result of the multiplication
     if(is_constant(op1) && is_constant(op2))
     {
@@ -2545,6 +2787,14 @@ struct IEEE_divtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
+    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    {
+      std::function<expr2tc(type2tc, expr2tc, expr2tc)> op =
+        [rm](type2tc t, expr2tc e1, expr2tc e2) {
+          return ieee_div2tc(t, e1, e2, rm);
+        };
+      return vector_type2t::distribute_operation(op, op1, op2);
+    }
     // Two constants? Simplify to result of the division
     if(is_constant(op1) && is_constant(op2))
     {
@@ -2733,27 +2983,55 @@ expr2tc byte_update2t::do_simplify() const
     simplied_source->type->get_width());
 
   // Overflow? The backend will handle that
-  int src_offset = to_constant_int2t(simplied_offset).value.to_int64();
-  if(src_offset * 8 + value.length() > src_value.length() || src_offset * 8 < 0)
+  unsigned int width_op0 = simplied_source->type->get_width();
+  unsigned int src_offset =
+    to_constant_int2t(simplied_offset).value.to_uint64();
+
+  // Flip location if we're in big-endian mode
+  if(big_endian)
+  {
+    unsigned int data_size =
+      type_byte_size(simplied_source->type).to_uint64() - 1;
+    src_offset = data_size - src_offset;
+  }
+
+  unsigned int top_of_update = (8 * src_offset) + 8;
+  int bottom_of_update = (8 * src_offset);
+
+  // Overflow? The backend will encode that
+  if(top_of_update > width_op0 || bottom_of_update < 0)
     return expr2tc();
+
+  std::string top;
+  if(top_of_update == width_op0)
+    top = value;
+  else
+    top = src_value.substr(top_of_update, width_op0 - 1);
+
+  std::string middle;
+  if(top != value)
+    middle = value;
+
+  std::string bottom;
 
   // Reverse both the source value and the value that will be updated if we are
   // assuming little endian, because in string the pos 0 is the leftmost element
   // while in bvs, pos 0 is the rightmost bit
-  if(!big_endian)
+  if(src_offset == 0)
   {
-    std::reverse(src_value.begin(), src_value.end());
-    std::reverse(value.begin(), value.end());
+    middle = "";
+    bottom = value;
   }
+  else
+    bottom = src_value.substr(0, bottom_of_update - 1);
 
-  src_value.replace(src_offset * 8, value.length(), value);
-
-  // Reverse back
-  if(!big_endian)
-    std::reverse(src_value.begin(), src_value.end());
-
+  std::string concat;
+  if(middle != "")
+    concat = top + middle;
+  else
+    concat = top;
+  concat += bottom;
   return typecast_check_return(
     type,
-    constant_int2tc(
-      get_uint_type(src_value.length()), string2integer(src_value, 2)));
+    constant_int2tc(get_uint_type(concat.length()), string2integer(concat, 2)));
 }

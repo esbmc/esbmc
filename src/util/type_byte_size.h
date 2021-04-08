@@ -15,10 +15,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/namespace.h>
 #include <util/std_types.h>
 
-BigInt member_offset_bits(const type2tc &type, const irep_idt &member);
 BigInt member_offset(const type2tc &type, const irep_idt &member);
 
-BigInt type_byte_size_bits(const type2tc &type);
 BigInt type_byte_size(const type2tc &type);
 BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval);
 

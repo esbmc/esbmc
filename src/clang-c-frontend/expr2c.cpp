@@ -229,6 +229,16 @@ std::string expr2ct::convert_rec(
       convert(static_cast<const exprt &>(src.size_irep()));
     return convert(src.subtype()) + " [" + size_string + "]" + d;
   }
+  /** int vector [3]
+   *   /          |
+   * type        size
+   */
+  else if(src.is_vector())
+  {
+    std::string size_string =
+      convert(static_cast<const exprt &>(src.size_irep()));
+    return convert(src.subtype()) + " vector [" + size_string + "]" + d;
+  }
   else if(src.id() == "incomplete_array")
   {
     return convert(src.subtype()) + " []";
@@ -1045,7 +1055,7 @@ std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
         dest += "l";
     }
   }
-  else if(type.is_array() || type.id() == "incomplete_array")
+  else if(is_array_like(type))
   {
     dest = "{ ";
 
@@ -1087,14 +1097,13 @@ std::string expr2ct::convert_struct(const exprt &src, unsigned &precedence)
   if(full_type.id() != "struct")
     return convert_norep(src, precedence);
 
-  const struct_typet &struct_type = to_struct_type(full_type);
-
-  const struct_typet::componentst &components = struct_type.components();
-
-  if(components.size() != src.operands().size())
-    return convert_norep(src, precedence);
-
   std::string dest = "{ ";
+  //  const struct_typet &struct_type = to_struct_type(full_type);
+
+  const irept::subt &components = full_type.components().get_sub();
+  //  const struct_typet::componentst &components = struct_type.components();
+
+  assert(components.size() == src.operands().size());
 
   exprt::operandst::const_iterator o_it = src.operands().begin();
 
@@ -1102,16 +1111,10 @@ std::string expr2ct::convert_struct(const exprt &src, unsigned &precedence)
   bool newline = false;
   unsigned last_size = 0;
 
-  for(const auto &component : struct_type.components())
+  for(auto const &c_it : components)
   {
     if(o_it->type().is_code())
       continue;
-
-    if(component.get_is_padding())
-    {
-      ++o_it;
-      continue;
-    }
 
     if(first)
       first = false;
@@ -1136,7 +1139,8 @@ std::string expr2ct::convert_struct(const exprt &src, unsigned &precedence)
       newline = false;
 
     dest += ".";
-    dest += component.pretty_name().as_string();
+    dest += c_it.pretty_name().as_string();
+    //    dest += component.pretty_name().as_string();
     dest += "=";
     dest += tmp;
 

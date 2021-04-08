@@ -3,14 +3,6 @@
 
 smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 {
-  if(int_encoding)
-  {
-    std::cerr << "Refusing to byte extract in integer mode; re-run in "
-                 "bitvector mode"
-              << std::endl;
-    abort();
-  }
-
   const byte_extract2t &data = to_byte_extract2t(expr);
   expr2tc source = data.source_value;
   unsigned int src_width = source->type->get_width();
@@ -18,15 +10,15 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
   if(!is_bv_type(source->type) && !is_fixedbv_type(source->type))
     source = bitcast2tc(get_uint_type(src_width), source);
 
+  assert(
+    is_scalar_type(data.source_value) &&
+    "Byte extract now only works on scalar variables");
   if(!is_constant_int2t(data.source_offset))
   {
     // The approach: the argument is now a bitvector. Just shift it the
     // appropriate amount, according to the source offset, and select out the
     // bottom byte.
     expr2tc offs = data.source_offset;
-    if(offs->type->get_width() != src_width)
-      offs = typecast2tc(source->type, data.source_offset);
-
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
     // offset distance. The rest of these calculations will still apply.
     if(data.big_endian)
@@ -36,6 +28,10 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
       sub2tc sub(source->type, data_size_expr, offs);
       offs = sub;
     }
+
+    if(offs->type->get_width() != src_width)
+      // Z3 requires these two arguments to be the same width
+      offs = typecast2tc(source->type, data.source_offset);
 
     offs = mul2tc(offs->type, offs, constant_int2tc(offs->type, BigInt(8)));
 
@@ -65,26 +61,34 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   smt_astt source_ast = convert_ast(source);
 
-  unsigned int sort_sz = data.source_value->type->get_width();
-  if(sort_sz <= upper)
+  if(int_encoding)
   {
-    smt_sortt s = mk_int_bv_sort(8);
-    return mk_smt_symbol("out_of_bounds_byte_extract", s);
+    std::cerr << "Refusing to byte extract in integer mode; re-run in "
+                 "bitvector mode"
+              << std::endl;
+    abort();
   }
+  else
+  {
+    unsigned int sort_sz = data.source_value->type->get_width();
+    if(sort_sz <= upper)
+    {
+      smt_sortt s = mk_int_bv_sort(8);
+      return mk_smt_symbol("out_of_bounds_byte_extract", s);
+    }
 
-  return mk_extract(source_ast, upper, lower);
+    return mk_extract(source_ast, upper, lower);
+  }
 }
 
 smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
 {
-  if(int_encoding)
-  {
-    std::cerr << "Can't byte update in integer mode; rerun in bitvector mode"
-              << std::endl;
-    abort();
-  }
-
   const byte_update2t &data = to_byte_update2t(expr);
+
+  assert(
+    is_scalar_type(data.source_value) &&
+    "Byte update only works on "
+    "scalar variables now");
   assert(data.type == data.source_value->type);
 
   if(!is_bv_type(data.type) && !is_fixedbv_type(data.type))
@@ -112,8 +116,6 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
       source = typecast2tc(get_uint_type(src_width), source);
 
     expr2tc offs = data.source_offset;
-    if(offs->type->get_width() != src_width)
-      offs = typecast2tc(get_uint_type(src_width), offs);
 
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
     // offset distance. The rest of these calculations will still apply.
@@ -124,6 +126,9 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
       sub2tc sub(source->type, data_size_expr, offs);
       offs = sub;
     }
+
+    if(offs->type->get_width() != src_width)
+      offs = typecast2tc(get_uint_type(src_width), offs);
 
     expr2tc update = data.update_value;
     if(update->type->get_width() != src_width)
@@ -150,12 +155,13 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     is_number_type(data.source_value->type) &&
     "Byte update of unsupported data type");
 
-  smt_astt value = convert_ast(data.update_value);
-  smt_astt src_value = convert_ast(data.source_value);
+  smt_astt value, src_value;
+  unsigned int width_op0, src_offset;
 
-  unsigned int width_op0 = data.source_value->type->get_width();
-  unsigned int src_offset =
-    to_constant_int2t(data.source_offset).value.to_uint64();
+  value = convert_ast(data.update_value);
+  src_value = convert_ast(data.source_value);
+  width_op0 = data.source_value->type->get_width();
+  src_offset = to_constant_int2t(data.source_offset).value.to_uint64();
 
   // Flip location if we're in big-endian mode
   if(data.big_endian)
@@ -165,6 +171,12 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     src_offset = data_size - src_offset;
   }
 
+  if(int_encoding)
+  {
+    std::cerr << "Can't byte update in integer mode; rerun in bitvector mode"
+              << std::endl;
+    abort();
+  }
 // Assertion some of our assumptions, which broadly mean that we'll only work
 // on bytes that are going into non-byte words
 #ifndef NDEBUG

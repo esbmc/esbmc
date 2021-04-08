@@ -165,16 +165,6 @@ public:
     {
       return set("anonymous", anonymous);
     }
-
-    bool get_is_padding() const
-    {
-      return get_bool("is_padding");
-    }
-
-    void set_is_padding(bool is_padding)
-    {
-      return set("is_padding", is_padding);
-    }
   };
 
   typedef std::vector<componentt> componentst;
@@ -638,5 +628,42 @@ public:
 };
 
 const string_typet &to_string_type(const typet &type);
+
+class vector_typet : public typet
+{
+public:
+  vector_typet() : typet(t_vector)
+  {
+  }
+
+  vector_typet(const typet &_subtype) : typet(t_vector)
+  {
+    subtype() = _subtype;
+  }
+
+  vector_typet(const typet &_subtype, const exprt &_size) : typet(t_vector)
+  {
+    subtype() = _subtype;
+    size() = _size;
+  }
+
+  const exprt &size() const
+  {
+    return (const exprt &)find(a_size);
+  }
+
+  exprt &size()
+  {
+    return (exprt &)add(a_size);
+  }
+
+  friend const vector_typet &to_vector_type(const typet &type)
+  {
+    assert(type.id() == t_vector);
+    return static_cast<const vector_typet &>(type);
+  }
+};
+
+const vector_typet &to_vector_type(const typet &type);
 
 #endif
