@@ -56,7 +56,7 @@ void optionst::cmdline(cmdlinet &cmds)
   for(const auto &it : cmds.vm)
   {
     auto option_name = it.first;
-    if(cmds.isset(option_name.c_str()))
+    if(cmds.isset(option_name.c_str())&&!it.second.defaulted())
     {
       if(!it.second.empty())
       {
