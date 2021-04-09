@@ -170,7 +170,7 @@ void cmdlinet::parse(int argc, const char **argv)
     "no-unwinding-assertions", "do not generate unwinding assertions")(
     "partial-loops", "permit paths with partial loops")("unroll-loops", "")(
     "no-slice", "do not remove unused equations")("slice-assumes", "")(
-    "extended-try-analysis", "")("skip-bmc", "")("no-return-value-opt", "");
+    "extended-try-analysis", "")("skip-bmc", "");
   boost::program_options::options_description group6("IBMC");
   group6.add_options()(
     "incremental-bmc", "incremental loop unwinding verification")(
@@ -247,13 +247,9 @@ void cmdlinet::parse(int argc, const char **argv)
     "k-step",
     boost::program_options::value<int>()->default_value(1)->value_name("nr"),
     "set k increment (default is 1)")(
-    "max-k-step",
-    boost::program_options::value<int>()->default_value(50)->value_name("nr"),
-    "set max number of iteration (default is 50)")(
-    "show-cex", "print the counter-example produced by the inductive step")(
-    "bidirectional",
-    "")("unlimited-k-steps", "set max number of iteration to UINT_MAX")(
-    "max-inductive-step",
+    "show-cex", "print the counter-example produced by the inductive step")
+    ("bidirectional","")
+    ("max-inductive-step",
     boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
     "");
   boost::program_options::options_description group11("Scheduling");
