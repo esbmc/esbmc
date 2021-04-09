@@ -47,8 +47,7 @@ int parseoptions_baset::main()
   }
   if(cmdline.isset("help"))
   {
-    std::cout << "\n* * *           ESBMC " ESBMC_VERSION "          * * *\n";
-    std::cout << cmdline.cmdline_options << "\n";
+    help();
     return EX_OK;
   }
 
