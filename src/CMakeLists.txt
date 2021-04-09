@@ -4,6 +4,7 @@
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
 add_subdirectory (util)
+add_subdirectory (util_solidity)
 add_subdirectory (goto-programs)
 add_subdirectory (c2goto)
 
