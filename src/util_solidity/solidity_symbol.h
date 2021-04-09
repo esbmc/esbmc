@@ -13,7 +13,7 @@ Author: Kunjian Song
 #include <iostream>
 #include <list>
 //#include <util/config.h>
-//#include <util/expr.h>
+#include <util_solidity/solidity_expr.h>
 //#include <util/location.h>
 
 class solidity_symbolt

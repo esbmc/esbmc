@@ -14,7 +14,7 @@ solidity_symbolt::solidity_symbolt()
   clear();
 }
 
-void symbolt::clear()
+void solidity_symbolt::clear()
 {
     assert(!"hit");
 }

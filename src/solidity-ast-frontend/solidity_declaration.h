@@ -12,10 +12,10 @@ Author: Kunjian Song
 #include <cassert>
 #include <util_solidity/solidity_symbol.h>
 
-class solidity_declarationt : public exprt
+class solidity_declarationt : public solidity_exprt
 {
 public:
-    solidity_declarationt() : exprt("declaration")
+    solidity_declarationt()
     {
     }
 
