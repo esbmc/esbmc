@@ -247,9 +247,9 @@ void cmdlinet::parse(int argc, const char **argv)
     "k-step",
     boost::program_options::value<int>()->default_value(1)->value_name("nr"),
     "set k increment (default is 1)")(
-    "show-cex", "print the counter-example produced by the inductive step")
-    ("bidirectional","")
-    ("max-inductive-step",
+    "show-cex", "print the counter-example produced by the inductive step")(
+    "bidirectional", "")(
+    "max-inductive-step",
     boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
     "");
   boost::program_options::options_description group11("Scheduling");
