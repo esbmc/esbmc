@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdlib>
 #include <util/i2string.h>
 #include <util/options.h>
-#include <iostream>
+
 void optionst::set_option(const std::string &option, const std::string &value)
 {
   std::pair<option_mapt::iterator, bool> result =

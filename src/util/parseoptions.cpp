@@ -18,7 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/parseoptions.h>
 #include <util/signal_catcher.h>
 #include <boost/program_options.hpp>
-#include <ac_config.h>
 
 parseoptions_baset::parseoptions_baset(int argc, const char **argv)
 {
@@ -39,7 +38,7 @@ void parseoptions_baset::help()
 
 int parseoptions_baset::main()
 {
-  if(exception_message != "")
+  if(!exception_message.empty())
   {
     std::cerr << "esbmc error: " << exception_message;
     std::cerr << std::endl;
