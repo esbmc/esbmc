@@ -143,4 +143,4 @@ jobs:
     - name: Run Tests
       run: |
         cd build
-        ctest -j4 --progress . -C RelWithDebInfo
+        ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
