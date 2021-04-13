@@ -341,17 +341,17 @@ bool cmdlinet::parse(int argc, const char **argv)
 
   try
   {
-      store(
-    boost::program_options::command_line_parser(argc, argv)
-      .options(cmdline_options)
-      .positional(p)
-      .run(),
-    vm);
+    store(
+      boost::program_options::command_line_parser(argc, argv)
+        .options(cmdline_options)
+        .positional(p)
+        .run(),
+      vm);
   }
   catch(std::exception &e)
   {
-   std::cerr<< "ESBMC error: "<<e.what()<<"\n";
-   return true;
+    std::cerr << "ESBMC error: " << e.what() << "\n";
+    return true;
   }
 
   if(vm.count("input-file"))

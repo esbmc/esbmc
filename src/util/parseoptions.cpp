@@ -21,7 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 parseoptions_baset::parseoptions_baset(int argc, const char **argv)
 {
-  exception_occured= cmdline.parse(argc, argv);
+  exception_occured = cmdline.parse(argc, argv);
 }
 
 void parseoptions_baset::help()
@@ -30,7 +30,7 @@ void parseoptions_baset::help()
 
 int parseoptions_baset::main()
 {
- if(exception_occured)
+  if(exception_occured)
   {
     return EX_USAGE;
   }
