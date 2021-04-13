@@ -17,7 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class cmdlinet
 {
 public:
-  void parse(int argc, const char **argv);
+  bool parse(int argc, const char **argv);
   const char *getval(const char *option) const;
   const std::list<std::string> &get_values(const char *option) const;
   bool isset(const char *option) const;

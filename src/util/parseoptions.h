@@ -24,7 +24,7 @@ public:
   virtual ~parseoptions_baset() = default;
 
 private:
-  std::string exception_message;
+  bool exception_occured;
 };
 
 #endif

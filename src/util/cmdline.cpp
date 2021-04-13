@@ -67,7 +67,7 @@ const char *cmdlinet::getval(const char *option) const
   return (const char *)nullptr;
 }
 
-void cmdlinet::parse(int argc, const char **argv)
+bool cmdlinet::parse(int argc, const char **argv)
 {
   clear();
 
@@ -339,15 +339,25 @@ void cmdlinet::parse(int argc, const char **argv)
     .add(group13)
     .add(group14);
 
-  store(
+  try
+  {
+      store(
     boost::program_options::command_line_parser(argc, argv)
       .options(cmdline_options)
       .positional(p)
       .run(),
     vm);
+  }
+  catch(std::exception &e)
+  {
+   std::cerr<< "ESBMC error: "<<e.what()<<"\n";
+   return true;
+  }
+
   if(vm.count("input-file"))
   {
     args = vm["input-file"].as<std::vector<std::string>>();
     verification_file = args.back();
   }
+  return false;
 }

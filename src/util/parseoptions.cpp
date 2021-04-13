@@ -21,15 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 parseoptions_baset::parseoptions_baset(int argc, const char **argv)
 {
-  exception_message = "";
-  try
-  {
-    cmdline.parse(argc, argv);
-  }
-  catch(std::exception &e)
-  {
-    exception_message = e.what();
-  }
+  exception_occured= cmdline.parse(argc, argv);
 }
 
 void parseoptions_baset::help()
@@ -38,10 +30,8 @@ void parseoptions_baset::help()
 
 int parseoptions_baset::main()
 {
-  if(!exception_message.empty())
+ if(exception_occured)
   {
-    std::cerr << "esbmc error: " << exception_message;
-    std::cerr << std::endl;
     return EX_USAGE;
   }
   if(cmdline.isset("help"))
@@ -49,7 +39,6 @@ int parseoptions_baset::main()
     help();
     return EX_OK;
   }
-
   // install signal catcher
   install_signal_catcher();
   return doit();
