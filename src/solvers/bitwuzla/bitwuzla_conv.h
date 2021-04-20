@@ -6,26 +6,28 @@
 #include <util/irep2.h>
 #include <util/namespace.h>
 
-/*
+
 extern "C"
 {
-#include <boolector/boolector.h>
+#include <bitwuzla/bitwuzla.h>
 }
 
-class btor_smt_ast : public solver_smt_ast<BoolectorNode *>
+
+class bitw_smt_ast : public solver_smt_ast<BitwuzlaTerm *>
 {
 public:
-  using solver_smt_ast<BoolectorNode *>::solver_smt_ast;
-  ~btor_smt_ast() override = default;
+  using solver_smt_ast<BitwuzlaTerm *>::solver_smt_ast;
+  ~bitw_smt_ast() override = default;
 
   void dump() const override;
 };
 
-class boolector_convt : public smt_convt, public array_iface, public fp_convt
+
+class bitwuzla_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  boolector_convt(bool int_encoding, const namespacet &ns);
-  ~boolector_convt() override;
+  bitwuzla_convt(bool int_encoding, const namespacet &ns);
+  ~bitwuzla_convt() override;
 
   resultt dec_solve() override;
   const std::string solver_text() override;
@@ -104,10 +106,10 @@ public:
   void print_model() override;
 
   // Members
-  Btor *btor;
+  Bitwuzla *bitw;
 
   typedef std::unordered_map<std::string, smt_astt> symtable_type;
   symtable_type symtable;
 };
-*/
+
 #endif /* _ESBMC_SOLVERS_BITWUZLA_BITWUZLA_CONV_H_ */
