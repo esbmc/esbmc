@@ -549,14 +549,15 @@ smt_astt bitwuzla_convt::mk_smt_real(const std::string &str [[gnu::unused]])
   std::cerr << "Boolector can't create Real sorts" << std::endl;
   abort();
 }
-/*
+
 smt_astt bitwuzla_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
+  // Fedor: double check the second argument of the function
+  BitwuzlaSort *bitwsort = bitwuzla_mk_bv_sort(bitw, s->get_data_width());
   return new_ast(
-    boolector_const(btor, integer2binary(theint, s->get_data_width()).c_str()),
-    s);
+    bitwuzla_mk_const(bitw, bitwsort, integer2binary(theint, s->get_data_width()).c_str()), s);
 }
-*/
+
 smt_astt bitwuzla_convt::mk_smt_bool(bool val)
 {
   BitwuzlaTerm *node = (val) ? bitwuzla_mk_true(bitw) : bitwuzla_mk_false(bitw);
@@ -587,17 +588,19 @@ smt_astt bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *
   case SMT_SORT_BVFP:
   case SMT_SORT_BVFP_RM:
     node = bitwuzla_mk_var(
-      bitw, to_solver_smt_sort<BitwuzlaSort>(s)->s, name.c_str());
+      bitw, to_solver_smt_sort<BitwuzlaSort*>(s)->s, name.c_str());
     break;
 
   case SMT_SORT_BOOL:
     node = bitwuzla_mk_var(
-      bitw, to_solver_smt_sort<BitwuzlaSort>(s)->s, name.c_str());
+      bitw, to_solver_smt_sort<BitwuzlaSort*>(s)->s, name.c_str());
     break;
 
   case SMT_SORT_ARRAY:
-    node = bitwuzla_mk_const_array(
-      bitw, to_solver_smt_sort<BitwuzlaSort>(s)->s, name.c_str());
+    // Fedor: not entirely sure about this one here
+    //node = bitwuzla_mk_const_array(bitw, to_solver_smt_sort<BitwuzlaSort*>(s)->s, name.c_str());
+    node = bitwuzla_mk_var(
+      bitw, to_solver_smt_sort<BitwuzlaSort*>(s)->s, name.c_str());
     break;
 
   default:
@@ -611,15 +614,16 @@ smt_astt bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *
   return ast;
 }
 
-/*
+
 smt_astt bitwuzla_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   smt_sortt s = mk_bv_sort(high - low + 1);
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  BoolectorNode *b = boolector_slice(btor, ast->a, high, low);
+  //BoolectorNode *b = boolector_slice(btor, ast->a, high, low);
+  BitwuzlaTerm *b = bitwuzla_mk_term1_indexed2(bitw, BITWUZLA_KIND_BV_EXTRACT, ast->a, high, low);
   return new_ast(b, s);
 }
-*/
+
 
 smt_astt bitwuzla_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
@@ -759,12 +763,10 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
   {
     if(is_signed)
     {
-      //res = boolector_saddo(btor, side1->a, side2->a);
       res = bitwuzla_mk_term2(bitw, BITWUZLA_KIND_BV_SADD_OVERFLOW, side1->a, side2->a);
     }
     else
     {
-      //res = boolector_uaddo(btor, side1->a, side2->a);
       res = bitwuzla_mk_term2(bitw, BITWUZLA_KIND_BV_UADD_OVERFLOW, side1->a, side2->a);
     }
   }
@@ -772,12 +774,10 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
   {
     if(is_signed)
     {
-      //res = boolector_ssubo(btor, side1->a, side2->a);
       res = bitwuzla_mk_term2(bitw, BITWUZLA_KIND_BV_SSUB_OVERFLOW, side1->a, side2->a);
     }
     else
     {
-      //res = boolector_usubo(btor, side1->a, side2->a);
       res = bitwuzla_mk_term2(bitw, BITWUZLA_KIND_BV_USUB_OVERFLOW, side1->a, side2->a);
     }
   }
@@ -785,18 +785,15 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
   {
     if(is_signed)
     {
-      //res = boolector_smulo(btor, side1->a, side2->a);
       res = bitwuzla_mk_term2(bitw, BITWUZLA_KIND_BV_SMUL_OVERFLOW, side1->a, side2->a);
     }
     else
     {
-      //res = boolector_umulo(btor, side1->a, side2->a);
       res = bitwuzla_mk_term2(bitw, BITWUZLA_KIND_BV_UMUL_OVERFLOW, side1->a, side2->a);
     }
   }
   else if(is_div2t(overflow.operand) || is_modulus2t(overflow.operand))
   {
-    //res = boolector_sdivo(btor, side1->a, side2->a);
     res = bitwuzla_mk_term2(bitw, BITWUZLA_KIND_BV_SDIV_OVERFLOW, side1->a, side2->a);
   }
   else
@@ -808,7 +805,6 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
   return new_ast(res, s);
 }
 
-/*
 smt_astt
 bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
@@ -818,11 +814,11 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return new_ast(
     bitwuzla_mk_const_array(
       bitw,
-      to_solver_smt_sort<BitwuzlaSort>(arrsort)->s,
+      to_solver_smt_sort<BitwuzlaSort*>(arrsort)->s,
       to_solver_smt_ast<bitw_smt_ast>(init_val)->a),
     arrsort);
 }
-*/
+
 void bitwuzla_convt::dump_smt()
 {
   bitwuzla_dump_formula(bitw, const_cast<char *>("smt2"), stdout);
@@ -838,38 +834,38 @@ void bitwuzla_convt::print_model()
 {
   bitwuzla_print_model(bitw, const_cast<char *>("smt2"), stdout);
 }
-/*
+
 smt_sortt bitwuzla_convt::mk_bool_sort()
 {
-  return new solver_smt_sort<BitwuzlaSort>(
+  return new solver_smt_sort<BitwuzlaSort*>(
     SMT_SORT_BOOL, bitwuzla_mk_bool_sort(bitw), 1);
 }
 
 smt_sortt bitwuzla_convt::mk_bv_sort(std::size_t width)
 {
-  return new solver_smt_sort<BitwuzlaSort>(
+  return new solver_smt_sort<BitwuzlaSort*>(
     SMT_SORT_BV, bitwuzla_mk_bv_sort(bitw, width), width);
 }
 
 smt_sortt bitwuzla_convt::mk_fbv_sort(std::size_t width)
 {
-  return new solver_smt_sort<BitwuzlaSort>(
+  return new solver_smt_sort<BitwuzlaSort*>(
     SMT_SORT_FIXEDBV, bitwuzla_mk_bv_sort(bitw, width), width);
 }
 
 smt_sortt bitwuzla_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  auto domain_sort = to_solver_smt_sort<BitwuzlaSort>(domain);
-  auto range_sort = to_solver_smt_sort<BitwuzlaSort>(range);
+  auto domain_sort = to_solver_smt_sort<BitwuzlaSort*>(domain);
+  auto range_sort = to_solver_smt_sort<BitwuzlaSort*>(range);
 
   auto t = bitwuzla_mk_array_sort(bitw, domain_sort->s, range_sort->s);
-  return new solver_smt_sort<BitwuzlaSort>(
+  return new solver_smt_sort<BitwuzlaSort*>(
     SMT_SORT_ARRAY, t, domain_sort->get_data_width(), range);
 }
 
 smt_sortt bitwuzla_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 {
-  return new solver_smt_sort<BitwuzlaSort>(
+  return new solver_smt_sort<BitwuzlaSort*>(
     SMT_SORT_BVFP,
     bitwuzla_mk_bv_sort(bitw, ew + sw + 1),
     ew + sw + 1,
@@ -878,7 +874,7 @@ smt_sortt bitwuzla_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 
 smt_sortt bitwuzla_convt::mk_bvfp_rm_sort()
 {
-  return new solver_smt_sort<BitwuzlaSort>(
+  return new solver_smt_sort<BitwuzlaSort*>(
     SMT_SORT_BVFP_RM, bitwuzla_mk_bv_sort(bitw, 3), 3);
 }
-*/
+
