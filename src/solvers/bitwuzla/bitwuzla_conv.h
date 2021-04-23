@@ -6,12 +6,10 @@
 #include <util/irep2.h>
 #include <util/namespace.h>
 
-
 extern "C"
 {
 #include <bitwuzla/bitwuzla.h>
 }
-
 
 class bitw_smt_ast : public solver_smt_ast<BitwuzlaTerm *>
 {
@@ -21,7 +19,6 @@ public:
 
   void dump() const override;
 };
-
 
 class bitwuzla_convt : public smt_convt, public array_iface, public fp_convt
 {
