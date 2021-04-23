@@ -14,11 +14,15 @@ if(ENABLE_BITWUZLA)
 
     message(STATUS "Found Bitwuzla at: ${Bitwuzla_DIR}")
     message(STATUS "Bitwuzla version: ${Bitwuzla_VERSION}")
+    #message(STATUS "Bitwuzla libs:" Bitwuzla::bitwuzla)
 
 	if(Bitwuzla_VERSION VERSION_LESS Bitwuzla_MIN_VERSION)
         message(FATAL_ERROR "Expected version ${Bitwuzla_MIN_VERSION} or greater")
     endif()
-    
+   
+	include_directories("${Bitwuzla_DIR}/src/api/c")
+	link_directories("${Bitwuzla_DIR}/build/lib")
+	 
     add_library(solverbitw bitwuzla_conv.cpp)
     target_include_directories(solverbitw
            # PRIVATE ${Boost_INCLUDE_DIRS}
