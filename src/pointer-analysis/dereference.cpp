@@ -1936,9 +1936,8 @@ void dereferencet::bounds_check(
       return;
 
     // Secondly, try to calc the size of the array.
-    unsigned int subtype_size_int =
-      type_byte_size(arr_type.subtype).to_uint64();
-    constant_int2tc subtype_size(uint_type2(), BigInt(subtype_size_int));
+    constant_int2tc subtype_size(
+      uint_type2(), type_byte_size(arr_type.subtype));
     expr2tc array_size = typecast2tc(uint_type2(), arr_type.array_size);
     arrsize = mul2tc(uint_type2(), array_size, subtype_size);
   }
