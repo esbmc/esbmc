@@ -341,7 +341,7 @@ bool cmdlinet::parse(int argc, const char **argv)
 
   try
   {
-    store(
+    boost::program_options::store(
       boost::program_options::command_line_parser(argc, argv)
         .options(cmdline_options)
         .positional(p)
