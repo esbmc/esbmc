@@ -601,7 +601,7 @@ void execution_statet::restore_last_paths()
     auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
 
     // Proceed to fill new_gs with old data. Ideally this would be a method...
-    new_gs.depth = gs.depth;
+    new_gs.num_instructions = gs.num_instructions;
     new_gs.guard = gs.guard;
     assert(new_gs.thread_id == gs.thread_id);
 

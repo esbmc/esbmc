@@ -99,7 +99,7 @@ public:
   class goto_statet
   {
   public:
-    unsigned depth;
+    unsigned num_instructions;
     std::shared_ptr<renaming::level2t> level2_ptr;
     renaming::level2t &level2;
     value_sett value_set;
@@ -108,7 +108,7 @@ public:
     variable_name_sett local_variables;
 
     explicit goto_statet(const goto_symex_statet &s)
-      : depth(s.depth),
+      : num_instructions(s.num_instructions),
         level2_ptr(s.level2.clone()),
         level2(*level2_ptr),
         value_set(s.value_set),
@@ -119,7 +119,7 @@ public:
     }
 
     goto_statet(const goto_statet &s)
-      : depth(s.depth),
+      : num_instructions(s.num_instructions),
         level2_ptr(s.level2_ptr->clone()),
         level2(*level2_ptr),
         value_set(s.value_set),
@@ -434,7 +434,7 @@ public:
   // Members
 
   /** Number of instructions executed in this thread. */
-  unsigned depth;
+  unsigned num_instructions;
 
   /** Flag indicating this thread has stopped executing. */
   bool thread_ended;
