@@ -28,18 +28,19 @@ void cmdlinet::clear()
 
 bool cmdlinet::isset(const char *option) const
 {
-  return vm.count(option);
+  return vm.count(option) > 0;
 }
 
 const std::list<std::string> &cmdlinet::get_values(const char *option) const
 {
-  auto value = options_map.find(option);
+  cmdlinet::options_mapt::const_iterator value = options_map.find(option);
+  assert(value != options_map.end());
   return value->second;
 }
 
 const char *cmdlinet::getval(const char *option) const
 {
-  auto value = options_map.find(option);
+  cmdlinet::options_mapt::const_iterator value = options_map.find(option);
   if(value == options_map.end())
   {
     return (const char *)nullptr;
@@ -60,8 +61,10 @@ bool cmdlinet::parse(
   for(unsigned int i = 0; opts[i].groupname != "end"; i++)
   {
     boost::program_options::options_description op_desc(opts[i].groupname);
-    auto groupoptions = opts[i].options;
-    for(auto it = groupoptions.begin(); it != groupoptions.end(); ++it)
+    std::vector<opt_templ> groupoptions = opts[i].options;
+    for(std::vector<opt_templ>::iterator it = groupoptions.begin();
+        it != groupoptions.end();
+        ++it)
     {
       if(!it->type_default_value)
       {
@@ -97,25 +100,27 @@ bool cmdlinet::parse(
     args = vm["input-file"].as<std::vector<std::string>>();
     verification_file = args.back();
   }
-  for(const auto &it : vm)
+  for(const std::pair<const std::string, boost::program_options::variable_value>
+        &it : vm)
   {
     std::list<std::string> res;
-    auto option_name = it.first;
-    auto &value = vm[option_name].value();
-    if(auto v = boost::any_cast<int>(&value))
+    std::string option_name = it.first;
+    const boost::any &value = vm[option_name].value();
+    if(const int *v = boost::any_cast<int>(&value))
     {
       res.emplace_front(std::to_string(*v));
     }
-    else if(auto v = boost::any_cast<std::string>(&value))
+    else if(const std::string *v = boost::any_cast<std::string>(&value))
     {
       res.emplace_front(*v);
     }
     else
     {
-      auto src = vm[option_name].as<std::vector<std::string>>();
+      std::vector<std::string> src =
+        vm[option_name].as<std::vector<std::string>>();
       res.assign(src.begin(), src.end());
     }
-    auto result =
+    std::pair<options_mapt::iterator, bool> result =
       options_map.insert(options_mapt::value_type(option_name, res));
     if(!result.second)
       result.first->second = res;
