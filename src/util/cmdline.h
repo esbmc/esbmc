@@ -12,57 +12,22 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <list>
 #include <string>
 #include <vector>
-
-enum opt_types
-{
-  switc,
-  number,
-  string
-};
-
-struct opt_templ
-{
-  char optchar;
-  std::string optstring;
-  opt_types type;
-  std::string init;
-};
+#include <boost/program_options.hpp>
 
 class cmdlinet
 {
 public:
-  bool parse(int argc, const char **argv, const struct opt_templ *opts);
-  const char *getval(char option) const;
+  bool parse(int argc, const char **argv);
   const char *getval(const char *option) const;
   const std::list<std::string> &get_values(const char *option) const;
-  const std::list<std::string> &get_values(char option) const;
-  bool isset(char option) const;
   bool isset(const char *option) const;
-
   void clear();
-
   typedef std::vector<std::string> argst;
   argst args;
-  std::string failing_option;
-
+  boost::program_options::variables_map vm;
+  boost::program_options::options_description cmdline_options;
   cmdlinet() = default;
   ~cmdlinet();
-
-protected:
-  struct optiont
-  {
-    bool isset, hasval, islong;
-    char optchar;
-    std::string optstring;
-    std::list<std::string> values;
-  };
-
-  std::vector<optiont> options;
-
-  int getoptnr(char option) const;
-  int getoptnr(const char *option) const;
-
-  friend class optionst;
 };
 
 #endif
