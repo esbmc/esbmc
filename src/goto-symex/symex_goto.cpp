@@ -283,7 +283,8 @@ void goto_symext::merge_gotos()
       merge_value_sets(goto_state);
 
       // adjust depth
-      cur_state->depth = std::min(cur_state->depth, goto_state.depth);
+      cur_state->num_instructions =
+        std::min(cur_state->num_instructions, goto_state.num_instructions);
     }
 
     cur_state->guard = std::move(new_guard);

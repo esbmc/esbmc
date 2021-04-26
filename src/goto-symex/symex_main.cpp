@@ -100,9 +100,9 @@ void goto_symext::symex_step(reachability_treet &art)
 
   // depth exceeded?
   {
-    if(depth_limit != 0 && cur_state->depth > depth_limit)
+    if(depth_limit != 0 && cur_state->num_instructions > depth_limit)
       cur_state->guard.add(gen_false_expr());
-    cur_state->depth++;
+    cur_state->num_instructions++;
   }
 
   // Remember the first loop we're entering

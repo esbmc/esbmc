@@ -26,7 +26,7 @@ goto_symex_statet::goto_symex_statet(
   : level2(l2), value_set(vs), ns(_ns)
 {
   use_value_set = true;
-  depth = 0;
+  num_instructions = 0;
   thread_ended = false;
   guard.make_true();
 }
@@ -42,7 +42,7 @@ goto_symex_statet::goto_symex_statet(
 
 goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
 {
-  depth = state.depth;
+  num_instructions = state.num_instructions;
   thread_ended = state.thread_ended;
   guard = state.guard;
   global_guard = state.global_guard;
