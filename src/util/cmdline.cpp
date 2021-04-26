@@ -59,22 +59,21 @@ bool cmdlinet::parse(
   clear();
   for(unsigned int i = 0; opts[i].groupname != "end"; i++)
   {
-    auto desptr =
-      new boost::program_options::options_description(opts[i].groupname);
+    boost::program_options::options_description op_desc(opts[i].groupname);
     auto groupoptions = opts[i].options;
     for(auto it = groupoptions.begin(); it != groupoptions.end(); ++it)
     {
       if(!it->type_default_value)
       {
-        desptr->add_options()(it->optstring, it->description);
+        op_desc.add_options()(it->optstring, it->description);
       }
       else
       {
-        desptr->add_options()(
+        op_desc.add_options()(
           it->optstring, it->type_default_value, it->description);
       }
     }
-    cmdline_options.add(*desptr);
+    cmdline_options.add(op_desc);
   }
   boost::program_options::positional_options_description p;
   p.add("input-file", -1);
@@ -116,7 +115,10 @@ bool cmdlinet::parse(
       auto src = vm[option_name].as<std::vector<std::string>>();
       res.assign(src.begin(), src.end());
     }
-    options_map.insert(options_mapt::value_type(option_name, res));
+    auto result =
+      options_map.insert(options_mapt::value_type(option_name, res));
+    if(!result.second)
+      result.first->second = res;
   }
   return false;
 }
