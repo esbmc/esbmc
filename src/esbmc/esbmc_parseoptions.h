@@ -17,7 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/parseoptions.h>
 #include <util/ui_message.h>
 
-extern const struct opt_templ esbmc_options[];
+extern const struct group_opt_templ all_cmd_options[];
 
 class esbmc_parseoptionst : public parseoptions_baset, public language_uit
 {
@@ -26,7 +26,7 @@ public:
   void help() override;
 
   esbmc_parseoptionst(int argc, const char **argv)
-    : parseoptions_baset(esbmc_options, argc, argv), language_uit(cmdline)
+    : parseoptions_baset(all_cmd_options,argc, argv), language_uit(cmdline)
   {
   }
 

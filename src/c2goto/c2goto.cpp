@@ -9,17 +9,32 @@
 #include <util/parseoptions.h>
 #include <util/ui_message.h>
 
-const struct opt_templ c2goto_options[] = {
-  {0, "16", switc, ""},
-  {0, "32", switc, ""},
-  {0, "64", switc, ""},
-  {0, "fixedbv", switc, ""},
-  {0, "floatbv", switc, ""},
-  {0, "output", string, ""},
-  {'I', "", string, ""},
-  {'D', "", string, ""},
-  {0, "", switc, ""}};
+const struct group_opt_templ c2goto_options[] = {
+   {"file_name",
+   {{"input-file",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "file.c ..."),
+     "source file names"}}},
+  {"Options",
+   {{"16", NULL, "set width of machine word (default is 64)"},
+    {"32", NULL, "set width of machine word (default is 64)"},
+    {"64", NULL, "set width of machine word (default is 64)"},
+    {"fixedbv", NULL, "encode floating-point as fixed bit-vectors"},
+    {"floatbv",
+     NULL,
+     "encode floating-point using the SMT floating-point theory(default)"},
+    {"output", boost::program_options::value<std::string>()->value_name("<filename>"),
+     "output VCCs in SMT lib format to given file"},
+    {"include,I", boost::program_options::value<std::vector<std::string>>()->value_name("path"),"set include path"},
+    {"define,D", boost::program_options::value<std::vector<std::string>>()->value_name("macro"), "define preprocessor macro"}
 
+   }},
+    {"end",
+      {
+        {"", NULL, "end of options"}
+      }
+    }
+    };
 class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
 public:

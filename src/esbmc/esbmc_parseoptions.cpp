@@ -1657,6 +1657,7 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 
 void esbmc_parseoptionst::help()
 {
+<<<<<<< HEAD
   std::cout
     << "\n"
        "* * *           ESBMC " ESBMC_VERSION
@@ -1874,4 +1875,8 @@ void esbmc_parseoptionst::help()
        " --interval-analysis          enable interval analysis and add assumes "
        "to the program\n"
        "\n";
+=======
+  std::cout << "\n* * *           ESBMC " ESBMC_VERSION "          * * *\n";
+  std::cout << cmdline.cmdline_options << "\n";
+>>>>>>> Updates copied from Alaa-Fkirin with some modifications
 }
