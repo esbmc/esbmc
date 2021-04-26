@@ -116,8 +116,7 @@ bool cmdlinet::parse(
       auto src = vm[option_name].as<std::vector<std::string>>();
       res.assign(src.begin(), src.end());
     }
-    auto result =
-      options_map.insert(options_mapt::value_type(option_name, res));
+    options_map.insert(options_mapt::value_type(option_name, res));
   }
   return false;
 }

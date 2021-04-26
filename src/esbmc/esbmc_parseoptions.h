@@ -26,7 +26,7 @@ public:
   void help() override;
 
   esbmc_parseoptionst(int argc, const char **argv)
-    : parseoptions_baset(all_cmd_options,argc, argv), language_uit(cmdline)
+    : parseoptions_baset(all_cmd_options, argc, argv), language_uit(cmdline)
   {
   }
 

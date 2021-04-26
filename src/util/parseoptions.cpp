@@ -19,9 +19,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/signal_catcher.h>
 #include <boost/program_options.hpp>
 
-parseoptions_baset::parseoptions_baset(const struct group_opt_templ *opts,int argc, const char **argv)
+parseoptions_baset::parseoptions_baset(
+  const struct group_opt_templ *opts,
+  int argc,
+  const char **argv)
 {
-  exception_occured = cmdline.parse(argc, argv,opts);
+  exception_occured = cmdline.parse(argc, argv, opts);
 }
 
 void parseoptions_baset::help()

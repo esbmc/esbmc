@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <vector>
 #include <map>
 #include <boost/program_options.hpp>
-  struct opt_templ
+struct opt_templ
 {
   const char *optstring;
   const boost::program_options::value_semantic *type_default_value;
@@ -30,19 +30,19 @@ struct group_opt_templ
 class cmdlinet
 {
 public:
-  bool parse(int argc, const char **argv,const struct group_opt_templ *opts);
+  bool parse(int argc, const char **argv, const struct group_opt_templ *opts);
   const char *getval(const char *option) const;
   const std::list<std::string> &get_values(const char *option) const;
   bool isset(const char *option) const;
   void clear();
   typedef std::vector<std::string> argst;
-  argst args; 
+  argst args;
   boost::program_options::variables_map vm;
   boost::program_options::options_description cmdline_options;
   cmdlinet() = default;
   ~cmdlinet();
-  typedef std::map<std::string,std::list<std::string>> options_mapt;
-  options_mapt options_map; 
+  typedef std::map<std::string, std::list<std::string>> options_mapt;
+  options_mapt options_map;
 };
 
 #endif

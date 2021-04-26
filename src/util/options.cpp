@@ -59,7 +59,7 @@ void optionst::cmdline(cmdlinet &cmds)
     if(cmds.isset(option_name.c_str()) && !it.second.defaulted())
     {
       auto value = cmds.getval(option_name.c_str());
-      bool hasArgument = *value !=0;
+      bool hasArgument = *value != 0;
       if(hasArgument)
         set_option(option_name, value);
       else
