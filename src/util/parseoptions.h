@@ -16,19 +16,15 @@ Author: Daniel Kroening, kroening@kroening.com
 class parseoptions_baset
 {
 public:
-  parseoptions_baset(const struct opt_templ *opts, int argc, const char **argv);
-
+  parseoptions_baset(const struct group_opt_templ *opts,int argc, const char **argv);
   cmdlinet cmdline;
-
   virtual void help();
-
   virtual int doit() = 0;
-
   virtual int main();
   virtual ~parseoptions_baset() = default;
 
 private:
-  bool parse_result;
+  bool exception_occured;
 };
 
 #endif

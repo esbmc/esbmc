@@ -116,7 +116,7 @@ jobs:
     - name: vcpkg integrate
       run: vcpkg.exe integrate install
     - name: Install Boost
-      run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows
+      run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows boost-program-options:x64-windows
     - name: Install Bison/Flex
       run: choco install -y winflexbison
     - name: Prepare Environment
@@ -143,4 +143,4 @@ jobs:
     - name: Run Tests
       run: |
         cd build
-        ctest -j4 --progress . -C RelWithDebInfo
+        ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
