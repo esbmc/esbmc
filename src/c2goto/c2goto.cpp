@@ -27,10 +27,12 @@ const struct group_opt_templ c2goto_options[] = {
      boost::program_options::value<std::string>()->value_name("<filename>"),
      "output VCCs in SMT lib format to given file"},
     {"include,I",
-     boost::program_options::value<std::string>()->value_name("path"),
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "path"),
      "set include path"},
     {"define,D",
-     boost::program_options::value<std::string>()->value_name("macro"),
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "macro"),
      "define preprocessor macro"}
 
    }},

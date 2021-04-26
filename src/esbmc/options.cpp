@@ -48,17 +48,17 @@ const struct group_opt_templ all_cmd_options[] = {
      "show value-set analysis during symbolic execution"}}},
   {"Frontend",
    {{"include,I",
-     boost::program_options::value<std::string>()->value_name(
+     boost::program_options::value<std::vector<std::string>>()->value_name(
        "path"),
      "set include path"},
     {"define,D",
-     boost::program_options::value<std::string>()->value_name(
+     boost::program_options::value<std::vector<std::string>>()->value_name(
        "macro"),
      "define preprocessor macro"},
     {"warning,W",
-     boost::program_options::value<std::string>(),
+     boost::program_options::value<std::vector<std::string>>(),
      ""},
-    {"force,f", boost::program_options::value<std::string>(), ""},
+    {"force,f", boost::program_options::value<std::vector<std::string>>(), ""},
     {"preprocess", NULL, "stop after preprocessing"},
     {"no-inlining", NULL, "disable inlining function calls"},
     {"full-inlining", NULL, "perform full inlining of function calls"},
