@@ -108,7 +108,7 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("name"),
      "set main function name"},
     {"claim",
-     boost::program_options::value<int>()->value_name("nr"),
+     boost::program_options::value<std::vector<int>>()->value_name("nr"),
      "only check specific claim"},
     {"depth",
      boost::program_options::value<int>()->value_name("nr"),

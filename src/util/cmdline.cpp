@@ -114,6 +114,15 @@ bool cmdlinet::parse(
     {
       res.emplace_front(*v);
     }
+    else if(
+      const std::vector<int> *v = boost::any_cast<std::vector<int>>(&value))
+    {
+      for(std::vector<int>::const_iterator iter = v->begin(); iter != v->end();
+          ++iter)
+      {
+        res.emplace_front(std::to_string(*iter));
+      }
+    }
     else
     {
       std::vector<std::string> src =
