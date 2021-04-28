@@ -91,6 +91,7 @@ const struct opt_templ esbmc_options[] = {
 
   // Caching
   {0, "enable-caching", switc, ""},
+  {0, "caching-file", string, "esbmc.dat"},
 
   // Solver
   {0, "list-solvers", switc, ""},

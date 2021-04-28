@@ -85,16 +85,17 @@ public:
   text_file_crc_set_storage() : crc_set_storage()
   {
   }
-  explicit text_file_crc_set_storage(std::string &output)
+  explicit text_file_crc_set_storage(std::string output = "filename")
     : crc_set_storage(), filename(output)
   {
   }
   ssa_container<ssa_container_type> load();
   ssa_container<ssa_container_type> load(std::istream &) override;
   void store(ssa_container<ssa_container_type> &) override;
+  void set_filename(std::string file) { this->filename = file; }
 
 protected:
-  std::string filename = "database";
+  std::string filename;
 };
 
 #endif //ESBMC_EXPR_HASH_CONTAINER_H

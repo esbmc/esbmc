@@ -246,7 +246,8 @@ void green_cache::parse_implication_guard(
   {
     std::cerr << "This type of expression is not supported\n";
     expr->dump();
-    abort();
+    //abort();
+    return;
   }
 }
 
@@ -286,7 +287,7 @@ crc_expr green_cache::parse_guard(const expr2tc &expr)
   return local_items;
 }
 
-void green_cache::load_unsat_container(std::string filename)
+void green_cache::load_unsat_container()
 {
   // Load default unsat cache
   text_file_crc_set_storage storage(filename);
@@ -302,7 +303,6 @@ void green_cache::mark_ssa_as_unsat()
   }
 
   // Stores it in the cache
-  std::string file = "esbmc.dat";
-  text_file_crc_set_storage storage(file);
+  text_file_crc_set_storage storage(filename);
   storage.store(unsat_container);
 }

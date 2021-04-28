@@ -33,6 +33,7 @@ public:
   green_cache(
     symex_target_equationt::SSA_stepst &steps,
     ssa_set_container &unsat_container,
+    std::string filename,
     bool apply_reordering = true,
     bool apply_renaming = true,
     bool apply_normalization = true)
@@ -40,8 +41,10 @@ public:
       apply_reordering(apply_reordering),
       apply_renaming(apply_renaming),
       apply_normalization(apply_normalization),
-      unsat_container(unsat_container)
+      unsat_container(unsat_container),
+      filename(filename)
   {
+    load_unsat_container();
   }
 
   /**
@@ -51,6 +54,7 @@ public:
   void mark_ssa_as_unsat();
 
 protected:
+  std::string filename;
   /**
    * A map of guards referencing their expressions.
    *
@@ -124,7 +128,7 @@ protected:
   /**
    * Loads a ssa_container with all expressions known to be unsat
    */
-  void load_unsat_container(std::string filename = "esbmc.dat");
+  void load_unsat_container();
 
   void run_on_assignment(symex_target_equationt::SSA_stept &step) override;
   void run_on_assert(symex_target_equationt::SSA_stept &step) override;

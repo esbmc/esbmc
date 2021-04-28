@@ -12,6 +12,7 @@ jobs:
   build-linux:
     name: Build ESBMC with all Solvers (Linux)
     runs-on: ubuntu-20.04
+    continue-on-error: true
     steps:
     - uses: actions/checkout@v1
     - name: Install Dependencies
@@ -41,6 +42,8 @@ jobs:
         name: release-linux
         path: ./release
     - name: Run tests
+      run: cd build/ && ctest -j4 --output-on-failure --progress .
+    - name: Run tests (caching)
       run: cd build/ && ctest -j4 --output-on-failure --progress .
     - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
       with:
