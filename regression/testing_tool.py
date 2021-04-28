@@ -42,13 +42,20 @@ class BaseTest:
         """Reads test description and initialize this object"""
         raise NotImplementedError
 
-    def generate_run_argument_list(self, executable: str):
+    def generate_run_argument_list(self, executable: str, cache = True):
         """Generates run command list to be used in Popen"""
         result = [executable]
         result.append(self.test_file)
         for x in self.test_args.split(" "):
             if x != "":
                 result.append(x)
+
+        if(cache):
+            result.append("--enable-caching")
+            result.append("--caching-file")
+            cache_file = os.path.join(self.test_dir, "cache")
+            result.append(str(cache_file))
+            print(f"Using {str(cache_file)}")
         return result
 
     def mark_test_as_knownbug(self, issue: str):
@@ -198,6 +205,7 @@ class Executor:
 
     def run(self, test_case: BaseTest):
         """Execute the test case with `executable`"""
+        print(test_case.generate_run_argument_list(self.tool))
         process = Popen(test_case.generate_run_argument_list(self.tool), stdout=PIPE, stderr=PIPE,
                         cwd=test_case.test_dir)
         try:

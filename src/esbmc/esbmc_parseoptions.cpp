@@ -220,6 +220,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", false);
   }
 
+
+
   if(cmdline.isset("ir"))
   {
     options.set_option("int-encoding", true);
