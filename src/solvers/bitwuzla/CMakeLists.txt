@@ -10,23 +10,20 @@ endif()
 
 if(ENABLE_BITWUZLA)
     find_package(Bitwuzla REQUIRED
-            HINTS $ENV{HOME}/bitwuzla)
+            HINTS ${Bitwuzla_DIR}/lib/cmake $ENV{HOME}/bitwuzla)
 
     message(STATUS "Found Bitwuzla at: ${Bitwuzla_DIR}")
     message(STATUS "Bitwuzla version: ${Bitwuzla_VERSION}")
-    #message(STATUS "Bitwuzla libs:" Bitwuzla::bitwuzla)
-
-	if(Bitwuzla_VERSION VERSION_LESS Bitwuzla_MIN_VERSION)
+    if(Bitwuzla_VERSION VERSION_LESS Bitwuzla_MIN_VERSION)
         message(FATAL_ERROR "Expected version ${Bitwuzla_MIN_VERSION} or greater")
     endif()
    
-	include_directories("${Bitwuzla_DIR}/src/api/c")
-	link_directories("${Bitwuzla_DIR}/build/lib")
-	 
     add_library(solverbitw bitwuzla_conv.cpp)
     target_include_directories(solverbitw
            # PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    # We cannot link both Bitwuzla::bitwuzla and Boolector::boolector at the moment
+    # due to "multiple definition" errors
     target_link_libraries(solverbitw Bitwuzla::bitwuzla)
 
     target_link_libraries(solvers INTERFACE solverbitw)
