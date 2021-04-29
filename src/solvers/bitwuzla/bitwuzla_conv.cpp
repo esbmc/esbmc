@@ -17,8 +17,6 @@ smt_convt *create_new_bitwuzla_solver(
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  //std::cerr << "Bitwuzla support has not been yet implemented\n";
-  //abort();
   bitwuzla_convt *conv = new bitwuzla_convt(int_encoding, ns);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
@@ -42,6 +40,7 @@ bitwuzla_convt::bitwuzla_convt(bool int_encoding, const namespacet &ns)
   boolector_set_abort(error_handler);
   */
   bitw = bitwuzla_new();
+  bitwuzla_set_option(bitw, BITWUZLA_OPT_PRODUCE_MODELS, 1);
   bitwuzla_set_abort_callback(error_handler);
 }
 
@@ -544,13 +543,13 @@ smt_astt bitwuzla_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt bitwuzla_convt::mk_smt_int(const BigInt &theint [[gnu::unused]])
 {
-  std::cerr << "Boolector can't create integer sorts" << std::endl;
+  std::cerr << "Bitwuzla can't create integer sorts" << std::endl;
   abort();
 }
 
 smt_astt bitwuzla_convt::mk_smt_real(const std::string &str [[gnu::unused]])
 {
-  std::cerr << "Boolector can't create Real sorts" << std::endl;
+  std::cerr << "Bitwuzla can't create Real sorts" << std::endl;
   abort();
 }
 
@@ -559,8 +558,11 @@ smt_astt bitwuzla_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
   // Fedor: double check the second argument of the function
   BitwuzlaSort *bitwsort = bitwuzla_mk_bv_sort(bitw, s->get_data_width());
   return new_ast(
-    bitwuzla_mk_const(
-      bitw, bitwsort, integer2binary(theint, s->get_data_width()).c_str()),
+    bitwuzla_mk_bv_value(
+      bitw,
+      bitwsort,
+      integer2binary(theint, s->get_data_width()).c_str(),
+      BITWUZLA_BV_BASE_BIN),
     s);
 }
 
@@ -594,19 +596,19 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   case SMT_SORT_FIXEDBV:
   case SMT_SORT_BVFP:
   case SMT_SORT_BVFP_RM:
-    node = bitwuzla_mk_var(
+    node = bitwuzla_mk_const(
       bitw, to_solver_smt_sort<BitwuzlaSort *>(s)->s, name.c_str());
     break;
 
   case SMT_SORT_BOOL:
-    node = bitwuzla_mk_var(
+    node = bitwuzla_mk_const(
       bitw, to_solver_smt_sort<BitwuzlaSort *>(s)->s, name.c_str());
     break;
 
   case SMT_SORT_ARRAY:
     // Fedor: not entirely sure about this one here
     //node = bitwuzla_mk_const_array(bitw, to_solver_smt_sort<BitwuzlaSort*>(s)->s, name.c_str());
-    node = bitwuzla_mk_var(
+    node = bitwuzla_mk_const(
       bitw, to_solver_smt_sort<BitwuzlaSort *>(s)->s, name.c_str());
     break;
 
@@ -618,6 +620,7 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   smt_astt ast = new_ast(node, s);
 
   symtable.insert(symtable_type::value_type(name, ast));
+
   return ast;
 }
 
@@ -680,9 +683,23 @@ smt_astt bitwuzla_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
       to_solver_smt_ast<bitw_smt_ast>(f)->a),
     t->sort);
 }
-/*
+
 bool bitwuzla_convt::get_bool(smt_astt a)
 {
+  const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
+  BitwuzlaTerm *true_term = bitwuzla_mk_true(bitw);
+  BitwuzlaTerm *false_term = bitwuzla_mk_false(bitw);
+  BitwuzlaTerm *bitw_term = bitwuzla_get_value(bitw, ast->a);
+
+  if(bitw_term == true_term)
+    return true;
+
+  if(bitw_term == false_term)
+    return false;
+
+  std::cerr << "Can't get boolean value from Bitwuzla\n";
+  abort();
+  /*
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
   const char *result = boolector_bv_assignment(btor, ast->a);
 
@@ -704,10 +721,15 @@ bool bitwuzla_convt::get_bool(smt_astt a)
 
   boolector_free_bv_assignment(btor, result);
   return res;
+*/
 }
 
 BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
 {
+  std::cerr << "Counter-example generation with Bitwuzla has not been fully "
+               "implemented yet\n";
+  abort();
+  /*
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
 
   const char *result = boolector_bv_assignment(btor, ast->a);
@@ -715,6 +737,7 @@ BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
   boolector_free_bv_assignment(btor, result);
 
   return val;
+*/
 }
 
 expr2tc bitwuzla_convt::get_array_elem(
@@ -722,10 +745,14 @@ expr2tc bitwuzla_convt::get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
+  std::cerr << "Counter-example generation with Bitwuzla has not been fully "
+               "implemented yet\n";
+  abort();
+  /*
   // We do the cast directly here instead of using to_solver_smt_ast because
   // in release mode the dynamic_cast is converted to a static_cast, but we
   // want to catch if the conversion fails
-  const bitw_smt_ast *ast = dynamic_cast<const bitw_smt_ast *>(array);
+  const btor_smt_ast *ast = dynamic_cast<const btor_smt_ast *>(array);
   if(ast == nullptr)
     throw new type2t::symbolic_type_excp();
 
@@ -751,8 +778,9 @@ expr2tc bitwuzla_convt::get_array_elem(
   }
 
   return gen_zero(subtype);
-}
 */
+}
+
 smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
