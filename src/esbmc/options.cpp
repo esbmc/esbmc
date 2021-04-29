@@ -110,7 +110,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"claim",
      boost::program_options::value<std::vector<int>>()->value_name("nr"),
      "only check specific claim"},
-    {"depth",
+    {"instruction",
      boost::program_options::value<int>()->value_name("nr"),
      "limit search depth"},
     {"unwind",
