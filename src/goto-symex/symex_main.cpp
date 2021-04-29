@@ -563,6 +563,56 @@ void goto_symext::run_intrinsic(
     // Already modelled in builtin_libs
     return;
   }
+  else if(has_prefix(symname, "c:@F@__ESBMC_init_var"))
+  {
+    assert(
+      func_call.operands.size() == 1 && "Wrong __ESBMC_init_var signature");
+    auto &ex_state = art.get_cur_state();
+    if(ex_state.cur_state->guard.is_false())
+      return;
+
+    // Get the argument
+    expr2tc arg0 = func_call.operands[0];
+    internal_deref_items.clear();
+    dereference2tc deref(get_empty_type(), arg0);
+    dereference(deref, dereferencet::INTERNAL);
+
+    for(const auto &item : internal_deref_items)
+    {
+      assert(
+        item.object->expr_id == expr2t::expr_ids::symbol_id &&
+        "__ESBMC_init_var only works for variables");
+
+      // Get the length of the type. This will propagate an exception for dynamic/infinite
+      // sized arrays (as expected)
+      try
+      {
+        type_byte_size(item.object->type).to_int64();
+      }
+      catch(array_type2t::dyn_sized_array_excp *e)
+      {
+        std::cerr << "__ESBMC_init_var does not support VLAs\n";
+        abort();
+      }
+      catch(array_type2t::inf_sized_array_excp *e)
+      {
+        std::cerr
+          << "__ESBMC_init_var does not support infinite-length arrays\n";
+        abort();
+      }
+      expr2tc val = sideeffect2tc(
+        item.object->type,
+        expr2tc(),
+        expr2tc(),
+        std::vector<expr2tc>(),
+        type2tc(),
+        sideeffect2t::nondet);
+
+      symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
+    }
+
+    return;
+  }
   else
   {
     std::ostringstream oss;
