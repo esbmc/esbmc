@@ -3,7 +3,7 @@
 
 #define new_ast new_solver_ast<bitw_smt_ast>
 
-void error_handler(const char *msg)
+void bitwuzla_error_handler(const char *msg)
 {
   std::cerr << "Bitwuzla error encountered\n";
   std::cerr << msg << '\n';
@@ -41,7 +41,7 @@ bitwuzla_convt::bitwuzla_convt(bool int_encoding, const namespacet &ns)
   */
   bitw = bitwuzla_new();
   bitwuzla_set_option(bitw, BITWUZLA_OPT_PRODUCE_MODELS, 1);
-  bitwuzla_set_abort_callback(error_handler);
+  bitwuzla_set_abort_callback(bitwuzla_error_handler);
 }
 
 bitwuzla_convt::~bitwuzla_convt()
