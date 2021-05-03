@@ -20,10 +20,8 @@ if(ENABLE_BITWUZLA)
    
     add_library(solverbitw bitwuzla_conv.cpp)
     target_include_directories(solverbitw
-           # PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    # We cannot link both Bitwuzla::bitwuzla and Boolector::boolector at the moment
-    # due to "multiple definition" errors
+    
     target_link_libraries(solverbitw Bitwuzla::bitwuzla)
 
     target_link_libraries(solvers INTERFACE solverbitw)
