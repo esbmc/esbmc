@@ -26,19 +26,6 @@ smt_convt *create_new_bitwuzla_solver(
 bitwuzla_convt::bitwuzla_convt(bool int_encoding, const namespacet &ns)
   : smt_convt(int_encoding, ns), array_iface(true, true), fp_convt(this)
 {
-  /*
-  if(int_encoding)
-  {
-    std::cerr << "Boolector does not support integer encoding mode"
-              << std::endl;
-    abort();
-  }
-  
-  btor = boolector_new();
-  boolector_set_opt(btor, BTOR_OPT_MODEL_GEN, 1);
-  boolector_set_opt(btor, BTOR_OPT_AUTO_CLEANUP, 1);
-  boolector_set_abort(error_handler);
-  */
   bitw = bitwuzla_new();
   bitwuzla_set_option(bitw, BITWUZLA_OPT_PRODUCE_MODELS, 1);
   bitwuzla_set_abort_callback(bitwuzla_error_handler);
@@ -126,7 +113,6 @@ smt_astt bitwuzla_convt::mk_bvsmod(smt_astt a, smt_astt b)
   return new_ast(
     bitwuzla_mk_term2(
       bitw,
-      //BITWUZLA_KIND_BV_SMOD,
       BITWUZLA_KIND_BV_SREM,
       to_solver_smt_ast<bitw_smt_ast>(a)->a,
       to_solver_smt_ast<bitw_smt_ast>(b)->a),
@@ -555,7 +541,6 @@ smt_astt bitwuzla_convt::mk_smt_real(const std::string &str [[gnu::unused]])
 
 smt_astt bitwuzla_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
-  // Fedor: double check the second argument of the function
   BitwuzlaSort *bitwsort = bitwuzla_mk_bv_sort(bitw, s->get_data_width());
   return new_ast(
     bitwuzla_mk_bv_value(
@@ -606,8 +591,6 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     break;
 
   case SMT_SORT_ARRAY:
-    // Fedor: not entirely sure about this one here
-    //node = bitwuzla_mk_const_array(bitw, to_solver_smt_sort<BitwuzlaSort*>(s)->s, name.c_str());
     node = bitwuzla_mk_const(
       bitw, to_solver_smt_sort<BitwuzlaSort *>(s)->s, name.c_str());
     break;
@@ -629,7 +612,6 @@ bitwuzla_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   smt_sortt s = mk_bv_sort(high - low + 1);
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  //BoolectorNode *b = boolector_slice(btor, ast->a, high, low);
   BitwuzlaTerm *b = bitwuzla_mk_term1_indexed2(
     bitw, BITWUZLA_KIND_BV_EXTRACT, ast->a, high, low);
   return new_ast(b, s);
@@ -639,7 +621,6 @@ smt_astt bitwuzla_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
   smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  //BoolectorNode *b = boolector_sext(btor, ast->a, topwidth);
   BitwuzlaTerm *b = bitwuzla_mk_term1_indexed1(
     bitw, BITWUZLA_KIND_BV_SIGN_EXTEND, ast->a, topwidth);
   return new_ast(b, s);
@@ -649,7 +630,6 @@ smt_astt bitwuzla_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
   smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  //BoolectorNode *b = boolector_uext(btor, ast->a, topwidth);
   BitwuzlaTerm *b = bitwuzla_mk_term1_indexed1(
     bitw, BITWUZLA_KIND_BV_ZERO_EXTEND, ast->a, topwidth);
   return new_ast(b, s);
@@ -699,29 +679,6 @@ bool bitwuzla_convt::get_bool(smt_astt a)
 
   std::cerr << "Can't get boolean value from Bitwuzla\n";
   abort();
-  /*
-  const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  const char *result = boolector_bv_assignment(btor, ast->a);
-
-  assert(result != NULL && "Boolector returned null bv assignment string");
-
-  bool res;
-  switch(*result)
-  {
-  case '1':
-    res = true;
-    break;
-  case '0':
-    res = false;
-    break;
-  default:
-    std::cerr << "Can't get boolean value from Boolector\n";
-    abort();
-  }
-
-  boolector_free_bv_assignment(btor, result);
-  return res;
-*/
 }
 
 BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
@@ -729,15 +686,6 @@ BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
   std::cerr << "Counter-example generation with Bitwuzla has not been fully "
                "implemented yet\n";
   abort();
-  /*
-  const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-
-  const char *result = boolector_bv_assignment(btor, ast->a);
-  BigInt val = binary2integer(result, is_signed);
-  boolector_free_bv_assignment(btor, result);
-
-  return val;
-*/
 }
 
 expr2tc bitwuzla_convt::get_array_elem(
@@ -748,37 +696,6 @@ expr2tc bitwuzla_convt::get_array_elem(
   std::cerr << "Counter-example generation with Bitwuzla has not been fully "
                "implemented yet\n";
   abort();
-  /*
-  // We do the cast directly here instead of using to_solver_smt_ast because
-  // in release mode the dynamic_cast is converted to a static_cast, but we
-  // want to catch if the conversion fails
-  const btor_smt_ast *ast = dynamic_cast<const btor_smt_ast *>(array);
-  if(ast == nullptr)
-    throw new type2t::symbolic_type_excp();
-
-  uint32_t size;
-  char **indicies, **values;
-  boolector_array_assignment(btor, ast->a, &indicies, &values, &size);
-
-  BigInt val = 0;
-  if(size > 0)
-  {
-    for(uint32_t i = 0; i < size; i++)
-    {
-      auto idx = string2integer(indicies[i], 2);
-      if(idx == index)
-      {
-        val = binary2integer(values[i], is_signedbv_type(subtype));
-        break;
-      }
-    }
-
-    boolector_free_array_assignment(btor, indicies, values, size);
-    return get_by_value(subtype, val);
-  }
-
-  return gen_zero(subtype);
-*/
 }
 
 smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
