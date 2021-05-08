@@ -99,7 +99,7 @@ bool get_loop_bounds::run()
    */
   goto_programt::targett t = loop.get_original_loop_head();
   symbol2tc SYMBOL;
-  unsigned K = 0;
+  int K = 0;
 
   // 1. Check the condition. 't' should be IF !(SYMBOL < K) THEN GOTO x
   if(!t->is_goto())
@@ -151,7 +151,7 @@ bool get_loop_bounds::run()
 
   // 3. Look for K0
   t--; // Previous instruction from the loop creation
-  unsigned K0 = 0;
+  int K0 = 0;
   if(!t->is_assign())
     return false;
   // Pattern matching K0 from SYMBOL = K0
