@@ -1,0 +1,2 @@
+add_library(goto_algorithms goto_algorithms.cpp)
+target_link_libraries(goto_algorithms gotoprograms)
