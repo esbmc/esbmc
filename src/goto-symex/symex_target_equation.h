@@ -17,7 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/symex_target.h>
 #include <list>
 #include <map>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt_conv.h>
 #include <util/config.h>
 #include <util/irep2.h>
 #include <util/namespace.h>

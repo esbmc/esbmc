@@ -14,7 +14,6 @@
 #include <goto-symex/symex_target_equation.h>
 #include <iostream>
 #include <langapi/language_ui.h>
-#include <solvers/smtlib/smtlib_conv.h>
 #include <util/expr_util.h>
 #include <util/irep2.h>
 #include <util/migrate.h>

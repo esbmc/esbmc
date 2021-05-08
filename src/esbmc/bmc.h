@@ -14,8 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
-#include <solvers/smt/smt_conv.h>
-#include <solvers/smtlib/smtlib_conv.h>
+#include <solvers/smt_conv.h>
 #include <solvers/solve.h>
 #include <util/options.h>
 
