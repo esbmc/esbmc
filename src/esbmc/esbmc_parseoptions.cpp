@@ -55,6 +55,7 @@ extern "C"
 #include <util/symbol.h>
 #include <util/time_stopping.h>
 #include <util/message/format.h>
+#include <algorithms/goto_algorithms.h>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -1588,6 +1589,15 @@ bool esbmc_parseoptionst::process_goto_program(
       add_race_assertions(value_set_analysis, context, goto_functions, msg);
 
       value_set_analysis.update(goto_functions);
+    }
+
+    // unwind loops
+    // TODO: add an option for this
+    if(true)
+    {
+      bounded_unwind_goto_functions unwind_loops(
+        goto_functions, ui_message_handler);
+      unwind_loops.run();
     }
 
     // show it?
