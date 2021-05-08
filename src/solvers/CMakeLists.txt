@@ -29,8 +29,10 @@ target_include_directories(
   PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
   PRIVATE ${Boost_INCLUDE_DIRS})
 
+find_package(camada REQUIRED)
+
 add_library(solvers INTERFACE)
-target_link_libraries(solvers INTERFACE solve)
+target_link_libraries(solvers INTERFACE solve camada::camada)
 
 set(ESBMC_AVAILABLE_SOLVERS
     "${ESBMC_AVAILABLE_SOLVERS}"
