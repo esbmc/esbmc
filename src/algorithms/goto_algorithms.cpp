@@ -7,7 +7,8 @@ void unwind_goto_functions::unroll_loop(
   loopst &loop)
 {
   get_loop_bounds bounds(goto_program, loop);
-  if(!bounds.run()) {
+  if(!bounds.run())
+  {
     std::cout << "couldn't expand loop\n";
     return;
   }
@@ -101,7 +102,8 @@ bool get_loop_bounds::run()
   unsigned K = 0;
 
   // 1. Check the condition. 't' should be IF !(SYMBOL < K) THEN GOTO x
-  if(!t->is_goto()) return false;
+  if(!t->is_goto())
+    return false;
   // Pattern match SYMBOL and K, if the relation is <= then K = K + 1
   {
     auto &cond = to_not2t(t->guard).value;
@@ -129,7 +131,8 @@ bool get_loop_bounds::run()
 
   // 2. Check for SYMBOL = SYMBOL + 1
   te--; // the previous instruction should be the increment
-  if(!te->is_assign()) return false;
+  if(!te->is_assign())
+    return false;
   // for now only increments of one will work
   {
     auto &x = to_code_assign2t(te->code);
@@ -149,7 +152,8 @@ bool get_loop_bounds::run()
   // 3. Look for K0
   t--; // Previous instruction from the loop creation
   unsigned K0 = 0;
-  if(!t->is_assign()) return false;
+  if(!t->is_assign())
+    return false;
   // Pattern matching K0 from SYMBOL = K0
   {
     auto &x = to_code_assign2t(t->code);
@@ -175,7 +179,7 @@ bool get_loop_bounds::run()
       auto &x = to_code_assign2t(t->code);
       if(x.target == SYMBOL)
         return false;
-    } 
+    }
   }
 
   // Saves the bound

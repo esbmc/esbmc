@@ -23,7 +23,7 @@ public:
   }
   bool run() override;
 
-protected:  
+protected:
   void unroll_loop(goto_programt &goto_program, loopst &loop);
 
 private:
@@ -61,7 +61,6 @@ public:
     : unwind_goto_functions(goto_functions, msg)
   {
   }
-
 };
 
 /**
