@@ -114,7 +114,7 @@ bool get_loop_bounds::run()
     relation = std::dynamic_pointer_cast<relation_data>(cond);
     if(relation)
     {
-      if(!is_symbol2t(relation->side_1) && !is_constant_int2t(relation->side_2))
+      if(!is_symbol2t(relation->side_1) || !is_constant_int2t(relation->side_2))
         return false;
       SYMBOL = relation->side_1;
       K = to_constant_int2t(relation->side_2).value.to_int64();
