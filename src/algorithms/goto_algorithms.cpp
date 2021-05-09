@@ -8,10 +8,8 @@ void unwind_goto_functions::unroll_loop(
 {
   get_loop_bounds bounds(goto_program, loop);
   if(!bounds.run())
-  {
-    std::cout << "couldn't expand loop\n";
     return;
-  }
+
   unsigned unwind = bounds.get_bound();
   // TODO: What happens when K == K0? Should we optimize it out?
   if(unwind == 0)
