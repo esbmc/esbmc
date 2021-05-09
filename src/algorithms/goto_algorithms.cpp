@@ -178,6 +178,15 @@ bool get_loop_bounds::run()
       if(x.target == SYMBOL)
         return false;
     }
+
+    else if(t->is_goto())
+    {
+      /* This means an inner loop or goto
+       * which needs to be treated correctly
+       * and every reference needs to be updated
+       */
+      return false;
+    }
   }
 
   // Saves the bound
