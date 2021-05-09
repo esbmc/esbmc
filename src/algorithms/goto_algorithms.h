@@ -60,6 +60,7 @@ public:
     message_handlert &msg)
     : unwind_goto_functions(goto_functions, msg)
   {
+    unsupported_options = {"unwind", "context-bound"};
   }
 };
 

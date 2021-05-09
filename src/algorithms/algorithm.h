@@ -38,6 +38,35 @@ public:
    * @return success of the algorithm
    */
   virtual bool run() = 0;
+
+  /**
+   * @brief Check the conditions for the
+   * algorithm to run, this is useful when
+   * there are strategies, options that
+   * contradict the algorithm
+   * 
+   * @return true 
+   * @return false 
+   */
+  virtual bool can_run(const cmdlinet &cmd)
+  {
+    for(auto &x : unsupported_options)
+    {
+      if(cmd.isset(x.c_str()))
+      {
+        std::cout << x << " cannot be used with the algorithm\n";
+        return false;
+      }
+      std::cout << "Looking for " << x;
+    }
+    return true;
+  }
+
+protected:
+  /**
+   * Which options if set break the analysis? 
+   */
+  std::vector<std::string> unsupported_options = {};
 };
 
 /**

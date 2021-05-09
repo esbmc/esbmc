@@ -1593,10 +1593,10 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // unwind loops
     // TODO: add an option for this
-    if(true)
+    bounded_unwind_goto_functions unwind_loops(
+      goto_functions, ui_message_handler);
+    if(unwind_loops.can_run(cmdline))
     {
-      bounded_unwind_goto_functions unwind_loops(
-        goto_functions, ui_message_handler);
       unwind_loops.run();
     }
 
