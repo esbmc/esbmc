@@ -168,9 +168,8 @@ bool get_loop_bounds::run()
   // 3. It mustn't exist an assignment over SYMBOL inside the loop
   t++;
   t++; // First instruction of the loop
-
   // Check if forall assignements exists one that targets SYMBOL
-  for(t++; t != te; t++)
+  for(; t != te; t++)
   {
     if(t->is_assign())
     {
@@ -179,7 +178,7 @@ bool get_loop_bounds::run()
         return false;
     }
 
-    else if(t->is_goto())
+    else if(t->is_goto() || t->is_backwards_goto())
     {
       /* This means an inner loop or goto
        * which needs to be treated correctly
