@@ -263,6 +263,27 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     }
   }
 
+  // check the user's parameters to run incremental verification
+  if(!cmdline.isset("unlimited-k-steps"))
+  {
+    // Get max number of iterations
+    BigInt max_k_step = cmdline.isset("unlimited-k-steps")
+                          ? UINT_MAX
+                          : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+
+    // Get the increment
+    unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+    // check whether k-step is greater than max-k-step
+    if(k_step_inc >= max_k_step)
+    {
+      std::cerr
+        << "Please specify --k-step smaller than max-k-step if you want "
+           "to use incremental verification.\n";
+      abort();
+    }
+  }
+
   if(cmdline.isset("base-case"))
   {
     options.set_option("base-case", true);
@@ -516,9 +537,6 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
-
-  // check the user's parameters to run incremental verification
-  check_step(max_k_step, k_step_inc);
 
   // All processes were created successfully
   switch(process_type)
@@ -1029,9 +1047,6 @@ int esbmc_parseoptionst::doit_k_induction()
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  // check the user's parameters to run incremental verification
-  check_step(max_k_step, k_step_inc);
-
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
     if(do_base_case(opts, goto_functions, k_step))
@@ -1076,9 +1091,6 @@ int esbmc_parseoptionst::doit_falsification()
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  // check the user's parameters to run incremental verification
-  check_step(max_k_step, k_step_inc);
-
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
     if(do_base_case(opts, goto_functions, k_step))
@@ -1116,9 +1128,6 @@ int esbmc_parseoptionst::doit_incremental()
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
-
-  // check the user's parameters to run incremental verification
-  check_step(max_k_step, k_step_inc);
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
@@ -1160,9 +1169,6 @@ int esbmc_parseoptionst::doit_termination()
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
-
-  // check the user's parameters to run incremental verification
-  check_step(max_k_step, k_step_inc);
 
   for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
@@ -1319,21 +1325,6 @@ int esbmc_parseoptionst::do_inductive_step(
   }
 
   return true;
-}
-
-void esbmc_parseoptionst::check_step(BigInt max_k_step, unsigned k_step_inc)
-{
-  // check the user's parameters to run incremental verification
-  if(!cmdline.isset("unlimited-k-steps"))
-  {
-    if(k_step_inc >= max_k_step)
-    {
-      std::cerr
-        << "Please specify --k-step smaller than max-k-step if you want "
-           "to use incremental verification.\n";
-      abort();
-    }
-  }
 }
 
 bool esbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
