@@ -75,6 +75,8 @@ protected:
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
 
+  void check_step(BigInt max_k_step, unsigned k_step_inc);
+
 public:
   goto_functionst goto_functions;
 };
