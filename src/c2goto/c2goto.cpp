@@ -38,8 +38,7 @@ const struct group_opt_templ c2goto_options[] = {
    }},
   {"end", {{"", NULL, "end of options"}}},
   {"Hidden Options", {{"", NULL, ""}}}};
-}
-;
+
 class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
 public:
