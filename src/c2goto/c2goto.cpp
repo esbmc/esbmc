@@ -36,7 +36,10 @@ const struct group_opt_templ c2goto_options[] = {
      "define preprocessor macro"}
 
    }},
-  {"end", {{"", NULL, "end of options"}}}};
+  {"end", {{"", NULL, "end of options"}}},
+  {"Hidden Options", {{"", NULL, ""}}}};
+}
+;
 class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
 public:
