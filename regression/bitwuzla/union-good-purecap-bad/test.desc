@@ -1,0 +1,4 @@
+THOROUGH
+union-good-purecap-bad.c
+--bitwuzla --result-only
+^VERIFICATION SUCCESSFUL$

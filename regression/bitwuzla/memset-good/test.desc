@@ -1,0 +1,4 @@
+THOROUGH
+memset-good.c
+--bitwuzla --result-only
+^VERIFICATION SUCCESSFUL$
