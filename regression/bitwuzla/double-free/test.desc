@@ -1,0 +1,4 @@
+THOROUGH
+double_free.c
+--bitwuzla --result-only
+^VERIFICATION FAILED$
