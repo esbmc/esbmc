@@ -782,18 +782,18 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 void bitwuzla_convt::dump_smt()
 {
-  bitwuzla_dump_formula(bitw, const_cast<char *>("smt2"), stdout);
+  bitwuzla_dump_formula(bitw, "smt2", stdout);
 }
 
 void bitw_smt_ast::dump() const
 {
-  bitwuzla_term_dump(a, const_cast<char *>("smt2"), stdout);
+  bitwuzla_term_dump(a, "smt2", stdout);
   std::cout << std::flush;
 }
 
 void bitwuzla_convt::print_model()
 {
-  bitwuzla_print_model(bitw, const_cast<char *>("smt2"), stdout);
+  bitwuzla_print_model(bitw, "smt2", stdout);
 }
 
 smt_sortt bitwuzla_convt::mk_bool_sort()
