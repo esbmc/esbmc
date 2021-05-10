@@ -82,7 +82,7 @@ bool cmdlinet::parse(
   std::vector<opt_templ> hidden_group_options = opts[i + 1].options;
   boost::program_options::options_description hidden_cmdline_options;
   for(std::vector<opt_templ>::iterator it = hidden_group_options.begin();
-      it != hidden_group_options.end() && it->optstring != "";
+      it != hidden_group_options.end() && it->optstring[0] != '\0';
       ++it)
   {
     if(!it->type_default_value)
@@ -155,7 +155,7 @@ bool cmdlinet::parse(
       result.first->second = res;
   }
   for(std::vector<opt_templ>::iterator it = hidden_group_options.begin();
-      it != hidden_group_options.end() && it->optstring != "";
+      it != hidden_group_options.end() && it->optstring[0] != '\0';
       ++it)
   {
     if(vm.count(it->description))
