@@ -681,7 +681,7 @@ bool bitwuzla_convt::get_bool(smt_astt a)
   abort();
 }
 
-BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
+BigInt bitwuzla_convt::get_bv(smt_astt a [[gnu::unused]], bool is_signed [[gnu::unused]])
 {
   std::cerr << "Counter-example generation with Bitwuzla has not been fully "
                "implemented yet\n";
@@ -689,9 +689,9 @@ BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
 }
 
 expr2tc bitwuzla_convt::get_array_elem(
-  smt_astt array,
-  uint64_t index,
-  const type2tc &subtype)
+  smt_astt array [[gnu::unused]],
+  uint64_t index [[gnu::unused]],
+  const type2tc &subtype [[gnu::unused]])
 {
   std::cerr << "Counter-example generation with Bitwuzla has not been fully "
                "implemented yet\n";
