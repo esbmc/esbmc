@@ -112,7 +112,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "only check specific claim"},
     {"instruction",
      boost::program_options::value<int>()->value_name("nr"),
-     "limit search depth"},
+     "limit the number of instructions executed during symbolic execution"},
     {"unwind",
      boost::program_options::value<int>()->value_name("nr"),
      "unwind nr times"},
@@ -280,4 +280,8 @@ const struct group_opt_templ all_cmd_options[] = {
     // transition to. Useful again for trying to replicate a particular context
     // switch order, or quickly explore what's reachable.
     {"interactive-ileaves", NULL, ""}}},
-  {"end", {{"", NULL, "end of options"}}}};
+  {"end", {{"", NULL, "end of options"}}},
+  {"Hidden Options",
+   {{"depth",
+     boost::program_options::value<int>(),
+     "instruction"}}}};

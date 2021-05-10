@@ -58,7 +58,8 @@ bool cmdlinet::parse(
   const struct group_opt_templ *opts)
 {
   clear();
-  for(unsigned int i = 0; opts[i].groupname != "end"; i++)
+  unsigned int i = 0;
+  for(; opts[i].groupname != "end"; i++)
   {
     boost::program_options::options_description op_desc(opts[i].groupname);
     std::vector<opt_templ> groupoptions = opts[i].options;
@@ -78,13 +79,32 @@ bool cmdlinet::parse(
     }
     cmdline_options.add(op_desc);
   }
+  std::vector<opt_templ> hidden_group_options = opts[i + 1].options;
+  boost::program_options::options_description hidden_cmdline_options;
+  for(std::vector<opt_templ>::iterator it = hidden_group_options.begin();
+      it != hidden_group_options.end() && it->optstring != "";
+      ++it)
+  {
+    if(!it->type_default_value)
+    {
+      hidden_cmdline_options.add_options()(it->optstring, "");
+    }
+    else
+    {
+      hidden_cmdline_options.add_options()(
+        it->optstring, it->type_default_value, "");
+    }
+  }
+
+  boost::program_options::options_description all_cmdline_options;
+  all_cmdline_options.add(cmdline_options).add(hidden_cmdline_options);
   boost::program_options::positional_options_description p;
   p.add("input-file", -1);
   try
   {
     boost::program_options::store(
       boost::program_options::command_line_parser(argc, argv)
-        .options(cmdline_options)
+        .options(all_cmdline_options)
         .positional(p)
         .run(),
       vm);
@@ -133,6 +153,19 @@ bool cmdlinet::parse(
       options_map.insert(options_mapt::value_type(option_name, res));
     if(!result.second)
       result.first->second = res;
+  }
+  for(std::vector<opt_templ>::iterator it = hidden_group_options.begin();
+      it != hidden_group_options.end() && it->optstring != "";
+      ++it)
+  {
+    if(vm.count(it->description))
+    {
+      std::list<std::string> value = get_values(it->description);
+      std::pair<options_mapt::iterator, bool> result =
+        options_map.insert(options_mapt::value_type(it->optstring, value));
+      if(!result.second)
+        result.first->second = value;
+    }
   }
   return false;
 }
