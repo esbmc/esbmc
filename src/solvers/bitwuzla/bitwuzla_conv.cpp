@@ -681,7 +681,9 @@ bool bitwuzla_convt::get_bool(smt_astt a)
   abort();
 }
 
-BigInt bitwuzla_convt::get_bv(smt_astt a [[gnu::unused]], bool is_signed [[gnu::unused]])
+BigInt bitwuzla_convt::get_bv(
+  smt_astt a [[gnu::unused]],
+  bool is_signed [[gnu::unused]])
 {
   std::cerr << "Counter-example generation with Bitwuzla has not been fully "
                "implemented yet\n";
