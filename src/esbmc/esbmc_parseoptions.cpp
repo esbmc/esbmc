@@ -1330,8 +1330,7 @@ void esbmc_parseoptionst::check_step(BigInt max_k_step, unsigned k_step_inc)
     {
       std::cerr
         << "Please specify --k-step smaller than max-k-step if you want "
-           "to use incremental verification."
-        << std::endl;
+           "to use incremental verification.\n";
       abort();
     }
   }
