@@ -51,6 +51,7 @@ class BaseTest:
                 result.append(x)
 
         if(cache):
+            result.append("--no-simplify")
             result.append("--enable-caching")
             result.append("--caching-file")
             cache_file = os.path.join(self.test_dir, "cache")
