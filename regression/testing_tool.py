@@ -322,8 +322,7 @@ def _arg_parsing():
                         help="If test fails with word then mark it as a knownbug")
 
     main_args = parser.parse_args()
-    if main_args.timeout:
-        RegressionBase.TIMEOUT = int(main_args.timeout)
+    RegressionBase.TIMEOUT = 120
     XMLTestCase.CPP_INCLUDE_DIR = main_args.library
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
