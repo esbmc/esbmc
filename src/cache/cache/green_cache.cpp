@@ -291,6 +291,7 @@ void green_cache::load_unsat_container()
 {
   // Load default unsat cache
   text_file_crc_set_storage storage(filename);
+  unsat_container.set(storage.load());
   //--enable-caching file.c --incremental-bmc --max-k-step 5.set(storage.load());
 }
 
