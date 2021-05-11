@@ -51,7 +51,7 @@ class BaseTest:
                 result.append(x)
 
         if(cache):
-            result.append("--no-simplify")
+            #result.append("--no-simplify")
             result.append("--enable-caching")
             result.append("--caching-file")
             cache_file = os.path.join(self.test_dir, "cache")
@@ -322,7 +322,6 @@ def _arg_parsing():
                         help="If test fails with word then mark it as a knownbug")
 
     main_args = parser.parse_args()
-    RegressionBase.TIMEOUT = 30
     XMLTestCase.CPP_INCLUDE_DIR = main_args.library
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
