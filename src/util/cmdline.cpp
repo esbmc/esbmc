@@ -120,8 +120,7 @@ bool cmdlinet::parse(
     args = vm["input-file"].as<std::vector<std::string>>();
     verification_file = args.back();
   }
-  for(const std::pair<const std::string, boost::program_options::variable_value>
-        &it : vm)
+  for(auto &it : vm)
   {
     std::list<std::string> res;
     std::string option_name = it.first;
@@ -137,8 +136,7 @@ bool cmdlinet::parse(
     else if(
       const std::vector<int> *v = boost::any_cast<std::vector<int>>(&value))
     {
-      for(std::vector<int>::const_iterator iter = v->begin(); iter != v->end();
-          ++iter)
+      for(auto iter = v->begin(); iter != v->end(); ++iter)
       {
         res.emplace_front(std::to_string(*iter));
       }

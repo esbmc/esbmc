@@ -53,8 +53,7 @@ const std::string optionst::get_option(const std::string &option) const
 void optionst::cmdline(cmdlinet &cmds)
 {
   // Pump command line options into options list
-  for(const std::pair<const std::string, boost::program_options::variable_value>
-        &it : cmds.vm)
+  for(auto &it : cmds.vm)
   {
     std::string option_name = it.first;
     if(cmds.isset(option_name.c_str()) && !it.second.defaulted())
