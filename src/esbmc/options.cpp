@@ -3,7 +3,7 @@
 #include <util/cmdline.h>
 
 const struct group_opt_templ all_cmd_options[] = {
-  {"file_name",
+  {"Main Usage",
    {{"input-file",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "file.c ..."),
@@ -282,4 +282,5 @@ const struct group_opt_templ all_cmd_options[] = {
     {"interactive-ileaves", NULL, ""}}},
   {"end", {{"", NULL, "end of options"}}},
   {"Hidden Options",
-   {{"depth", boost::program_options::value<int>(), "instruction"}}}};
+   {{"depth", boost::program_options::value<int>(), "instruction"},
+    {"explain,h", NULL, ""}}}};

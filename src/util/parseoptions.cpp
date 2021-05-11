@@ -37,7 +37,7 @@ int parseoptions_baset::main()
   {
     return EX_USAGE;
   }
-  if(cmdline.isset("help"))
+  if(cmdline.isset("help") || cmdline.isset("explain"))
   {
     help();
     return EX_OK;
