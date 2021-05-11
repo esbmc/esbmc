@@ -5,7 +5,7 @@ formula.
 
 The best reference is probably the boolector backend, see
 solvers/boolector. There's also some documentation on how the new solver
-backends are arranged in solvers/smt/smt_conv.h in a file comment. There
+backends are arranged in solvers/smt_conv.h in a file comment. There
 are also (mostly) comments about the purpose of each class in that file.
 A brief overview:
 
@@ -39,7 +39,7 @@ something that constructs formulae out of function applications.
 There's some funkyness to do with array's and tuples: most SMT solvers
 don't support tuples, and I tried to keep the door open for SAT solvers
 by abstracting arrays. There are two "interfaces" in
-solvers/smt/smt_array.h and solvers/smt/smt_tuple.h, which solvers have
+solvers/smt_array.h and solvers/smt_tuple.h, which solvers have
 to implement if they support arrays or tuples; plus some virtual methods
 in smt_ast. It's worth reading up on C++ virtual interface classes
 before dealing with this (tl;dr, like java interfaces, but worse. It's
