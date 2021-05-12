@@ -10,7 +10,7 @@
 #include <util/ui_message.h>
 
 const struct group_opt_templ c2goto_options[] = {
-  {"file_name",
+  {"Basic Usage",
    {{"input-file",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "file.c ..."),
@@ -22,7 +22,7 @@ const struct group_opt_templ c2goto_options[] = {
     {"fixedbv", NULL, "encode floating-point as fixed bit-vectors"},
     {"floatbv",
      NULL,
-     "encode floating-point using the SMT floating-point theory(default)"},
+     "encode floating-point using the SMT floating-point theory (default)"},
     {"output",
      boost::program_options::value<std::string>()->value_name("<filename>"),
      "output VCCs in SMT lib format to given file"},

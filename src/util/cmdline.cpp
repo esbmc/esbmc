@@ -156,7 +156,7 @@ bool cmdlinet::parse(
       it != hidden_group_options.end() && it->optstring[0] != '\0';
       ++it)
   {
-    if(vm.count(it->description))
+    if(it->description[0] != '\0' && vm.count(it->description))
     {
       std::list<std::string> value = get_values(it->description);
       std::pair<options_mapt::iterator, bool> result =
