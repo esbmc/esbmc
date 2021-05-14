@@ -77,7 +77,7 @@ bool expr_set_container::is_subset_of(const crc_expr &other)
 
 bool ssa_set_container::check(const crc_expr &items)
 {
-  /*
+  
   if(cache.exists(items))
   {
     ++hits;
@@ -92,7 +92,7 @@ bool ssa_set_container::check(const crc_expr &items)
       return true;
     }
   }
-  */
+  
   return false;
 }
 
