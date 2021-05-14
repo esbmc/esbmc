@@ -52,7 +52,7 @@ class BaseTest:
 
         if(cache):
             #result.append("--no-simplify")
-            result.append("incremental-bmc)
+            result.append("--incremental-bmc)
             result.append("--enable-caching")
             result.append("--caching-file")            
             cache_file = os.path.join(self.test_dir, "cache")
