@@ -54,10 +54,11 @@ class BaseTest:
             #result.append("--no-simplify")
             result.append("--incremental-bmc")
             result.append("--enable-caching")
-            result.append("--caching-file")            
-            cache_file = os.path.join(self.test_dir, "cache")
-            result.append(str(cache_file))
-            print(f"Using {str(cache_file)}")
+            result.append("--caching-file")
+            result.append("cachefile")            
+            #cache_file = os.path.join(self.test_dir, "cache")
+            #result.append(str(cache_file))
+            #print(f"Using {str(cache_file)}")
         return result
 
     def mark_test_as_knownbug(self, issue: str):
@@ -254,6 +255,10 @@ def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
+        if "^VERIFICATION SUCCESSFUL$" not in test_case.test_regex:
+            print(str(test_case.test_regex))
+            return True
+
         stdout, stderr = executor.run(test_case)
         if stdout == None:
             timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
