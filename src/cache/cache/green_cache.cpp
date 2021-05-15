@@ -22,7 +22,7 @@ void green_cache::canonize_expr(expr2tc &expr)
 void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
 {
   expr2tc &cond = step.cond;
-
+  
   // First assert irep should begin with an implies
   if(cond->expr_id != expr2t::expr_ids::implies_id)
   {
@@ -117,8 +117,8 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
   }
 
   this->to_add_container.emplace(guard_items);
-  load_unsat_container();
-  // Check the full assertion
+  
+  // Check the full assertion  
   if(unsat_container.check(guard_items))
   {
     /**
@@ -161,7 +161,7 @@ void green_cache::parse_implication_guard(
     parse_implication_guard(and_expr->side_2, side_2, parent_property);
 
     // Check wether one of the sides is UNSAT
-    load_unsat_container();
+    //load_unsat_container();
     if(unsat_container.check(side_1) || unsat_container.check(side_2))
     {
       abort();
@@ -244,8 +244,8 @@ void green_cache::parse_implication_guard(
   }
   else
   {
-    std::cerr << "This type of expression is not supported\n";
-    expr->dump();
+    //std::cerr << "This type of expression is not supported\n";
+    //expr->dump();
     //abort();
     return;
   }

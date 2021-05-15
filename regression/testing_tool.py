@@ -51,11 +51,14 @@ class BaseTest:
                 result.append(x)
 
         if(cache):
-            #result.append("--no-simplify")
-            result.append("--incremental-bmc")
+            #result.append("--timeout")
+            #result.append("30")
             result.append("--enable-caching")
+            #result.append("--generate-caching")
             result.append("--caching-file")
             result.append("cachefile")            
+            #result.append("--no-simplify")
+            #result.append("--falsification")
             #cache_file = os.path.join(self.test_dir, "cache")
             #result.append(str(cache_file))
             #print(f"Using {str(cache_file)}")
@@ -255,9 +258,9 @@ def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
-        if "^VERIFICATION SUCCESSFUL$" not in test_case.test_regex:
-            print(str(test_case.test_regex))
-            return True
+        #if "^VERIFICATION SUCCESSFUL$" not in test_case.test_regex:
+        #    print(str(test_case.test_regex))
+        #    return True
 
         stdout, stderr = executor.run(test_case)
         if stdout == None:

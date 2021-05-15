@@ -46,6 +46,7 @@ namespace
 {
 std::shared_ptr<ssa_step_algorithm> cache;
 ssa_set_container unsat_container;
+fine_timet total_solving_time = 0;
 } // namespace
 
 bmct::bmct(
@@ -232,6 +233,7 @@ smt_convt::resultt bmct::run_decision_procedure(
   str.clear();
   str << "\nRuntime decision procedure: ";
   output_time(sat_stop - sat_start, str);
+  total_solving_time = (sat_stop - sat_start);
   str << "s";
   status(str.str());
 
@@ -416,8 +418,8 @@ void bmct::report_result(smt_convt::resultt &res)
       report_failure();
     }
     else if(!bs)
-    {
-      if(options.get_bool_option("enable-caching"))
+    {      
+      if(options.get_bool_option("generate-caching") && (total_solving_time > 1000))
       {
         status("Storing formulae as UNSAT");
         std::shared_ptr<green_cache> result_cache;
@@ -429,7 +431,7 @@ void bmct::report_result(smt_convt::resultt &res)
     else
     {
       status("No bug has been found in the base case");
-      if(options.get_bool_option("enable-caching"))
+      if(options.get_bool_option("generate-caching") && (total_solving_time > 1000))
       {
         status("Storing formulae as UNSAT");
         std::shared_ptr<green_cache> result_cache;
@@ -761,9 +763,13 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     {
       status("Checking SSA over cache\n");
       std::string filename = options.get_option("caching-file");
-      cache = std::make_shared<green_cache>(eq->SSA_steps, unsat_container, filename);
-      cache->run();
-      std::cout << "Got " << unsat_container.get_hits() << " hits" << std::endl;
+      std::ifstream inputFile(filename);
+      if(inputFile.good() || options.get_bool_option("generate-caching"))
+      {
+        cache = std::make_shared<green_cache>(eq->SSA_steps, unsat_container, filename);
+        cache->run();
+        std::cout << "Got " << unsat_container.get_hits() << " hits" << std::endl;
+      }      
     }
 
     if(options.get_bool_option("document-subgoals"))

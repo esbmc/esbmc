@@ -22,19 +22,9 @@ jobs:
     - name: Extract Clang 11
       run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
     - name: Setup boolector
-      run: git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j4 && make install
-    - name: Setup Z3
-      run: wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.9/z3-4.8.9-x64-ubuntu-16.04.zip && unzip z3-4.8.9-x64-ubuntu-16.04.zip && mv z3-4.8.9-x64-ubuntu-16.04/ z3
-    - name: Setup Yices 2 (GMP)
-      run: wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz && rm gmp-6.1.2.tar.xz && cd gmp-6.1.2 && ./configure --prefix $PWD/../gmp --disable-shared ABI=64 CFLAGS=-fPIC CPPFLAGS=-DPIC && make -j4 && make install
-    - name: Setup Yices 2
-      run: git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices --with-static-gmp=$PWD/../gmp/lib/libgmp.a && make -j4 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib
-    - name: Setup CVC4
-      run: git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j4 && make install
-    - name: Get current folder and files
-      run: pwd && ls
+      run: git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j4 && make install          
     - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=Off -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_YICES=On -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug
+      run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=Off -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release  -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug
     - name: Build ESBMC
       run: cd build && cmake --build . && ninja install
     - uses: actions/upload-artifact@v1
@@ -42,15 +32,12 @@ jobs:
         name: release-linux
         path: ./release
     - name: Run tests
-      run: cd build/ && ctest -j4 --output-on-failure --progress . || true
+      run: cd build/ && ./src/esbmc/esbmc ../regression/caching/1/main.c --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --floatbv --unlimited-k-steps --context-bound 2 --32 --falsification --no-pointer-check --no-bounds-check --interval-analysis --no-slice  || true
     - name: Run tests (caching)
-      run: cd build/ && ctest -j4 --output-on-failure --progress . || true
-    - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
-      with:
-        name: csmith-linux
-        path: ./build/csmith-error
-        if-no-files-found: ignore
-
+      run: cd build/ && ./src/esbmc/esbmc ../regression/caching/1/main.c --enable-caching --generate-caching --caching-file asd --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --floatbv --unlimited-k-steps --context-bound 2 --32 --falsification --no-pointer-check --no-bounds-check --interval-analysis --no-slice  || true
+    - name: Run tests (caching 2)
+      run: cd build/ && ./src/esbmc/esbmc ../regression/caching/1/main.c --enable-caching --caching-file asd --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --floatbv --unlimited-k-steps --context-bound 2 --32 --falsification --no-pointer-check --no-bounds-check --interval-analysis --no-slice  || true
+    
   build-macos:
     name: Build ESBMC with all Solvers (macOS)
     runs-on: macos-latest
