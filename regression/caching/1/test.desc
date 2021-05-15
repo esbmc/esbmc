@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --floatbv --unlimited-k-steps --context-bound 2 --32 --falsification --no-pointer-check --no-bounds-check --interval-analysis --no-slice 
+^VERIFICATION SUCCESSFUL$
