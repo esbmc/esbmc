@@ -121,14 +121,11 @@ jobs:
         name: release-linux
         path: ./release
     - name: Run tests
-      run: cd build/ && ctest -j4 --output-on-failure --progress . || true
+      run: cd build/ && ./src/esbmc/esbmc ../regression/caching/1/main.c --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --floatbv --unlimited-k-steps --context-bound 2 --32 --falsification --no-pointer-check --no-bounds-check --interval-analysis --no-slice  || true
     - name: Run tests (caching)
-      run: cd build/ && ctest -j4 --output-on-failure --progress . || true
-    - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
-      with:
-        name: csmith-linux
-        path: ./build/csmith-error
-        if-no-files-found: ignore
+      run: cd build/ && ./src/esbmc/esbmc ../regression/caching/1/main.c --enable-caching --generate-caching --caching-file asd --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --floatbv --unlimited-k-steps --context-bound 2 --32 --falsification --no-pointer-check --no-bounds-check --interval-analysis --no-slice  || true
+    - name: Run tests (caching 2)
+      run: cd build/ && ./src/esbmc/esbmc ../regression/caching/1/main.c --enable-caching --caching-file asd --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --floatbv --unlimited-k-steps --context-bound 2 --32 --falsification --no-pointer-check --no-bounds-check --interval-analysis --no-slice  || true
 
   build-macos:
     name: Build ESBMC with all Solvers (macOS)
