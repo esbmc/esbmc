@@ -194,7 +194,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"atomicity-check", NULL, "enable atomicity check at visible assignments"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(
-       "bytes"),
+       "bits"),
      "check if stack limit is respected"},
     {"error-label",
      boost::program_options::value<std::string>()->value_name("label"),
