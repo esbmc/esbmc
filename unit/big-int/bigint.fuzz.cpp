@@ -13,6 +13,7 @@
 #include <cassert>
 #include <big-int/bigint.hh>
 #include <vector>
+#include <stddef.h>
 
 // Checks whether the input contains digits only
 int is_valid_input(const char *Data, size_t DataSize)
