@@ -11,6 +11,7 @@
 
 #include <stdlib.h>
 #include <cassert>
+#include <stddef.h>
 
 void __ESBMC_atomic_begin()
 {

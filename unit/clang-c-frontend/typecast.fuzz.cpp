@@ -23,6 +23,7 @@
 #include <util/expr_util.h>
 #include "../testing-utils/util_irep.h"
 #include <sstream>
+#include <stddef.h>
 
 void test_to_union(const int *Data, size_t Size)
 {
