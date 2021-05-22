@@ -23,10 +23,17 @@ public:
   }
   bool run() override;
 
+  unsigned get_number_of_functions() { return number_of_functions; }
+  unsigned get_number_of_loops() { return number_of_loops; }
+  unsigned get_number_of_bounded_loops() { return number_of_bounded_loops; }
+
 protected:
   void unroll_loop(goto_programt &goto_program, loopst &loop);
+  unsigned number_of_functions = 0;
+  unsigned number_of_loops = 0;
+  unsigned number_of_bounded_loops = 0;
 
-private:
+private:  
   message_handlert &msg; // This is needed to get the program loop
 };
 
