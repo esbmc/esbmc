@@ -9,14 +9,15 @@
  * and generates goto-functions
  * 
  */
-class goto_factory {
+class goto_factory
+{
 public:
-    /**
+  /**
      * @brief Get the goto functions object
      * 
      * @param c_inputstream input stream containing the C program
      * @return goto_functionst of the parsed object
      */
-    static goto_functionst get_goto_functions(std::istream &c_inputstream);
-    static ui_message_handlert get_message_handlert();
+  static goto_functionst get_goto_functions(std::istream &c_inputstream);
+  static ui_message_handlert get_message_handlert();
 };
