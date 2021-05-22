@@ -10,6 +10,7 @@ void unwind_goto_functions::unroll_loop(
   if(!bounds.run())
     return;
 
+  number_of_bounded_loops++;
   unsigned unwind = bounds.get_bound();
   // TODO: What happens when K == K0? Should we optimize it out?
   if(unwind == 0)
@@ -58,10 +59,12 @@ bool unwind_goto_functions::run()
   // TODO: This can be generalized into a all_loops_algorithms or similar
   Forall_goto_functions(it, goto_functions)
   {
+    number_of_functions++;
     if(it->second.body_available)
     {
       goto_loopst goto_loops(it->first, goto_functions, it->second, this->msg);
       auto function_loops = goto_loops.get_loops();
+      number_of_loops += function_loops.size();
       if(function_loops.size())
       {
         goto_functiont &goto_function = it->second;
