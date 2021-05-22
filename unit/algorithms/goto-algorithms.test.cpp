@@ -24,7 +24,10 @@ SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
     std::istringstream empty("");
     auto goto_function = goto_factory::get_goto_functions(empty);
     unsigned functions = 0;
-    Forall_goto_functions(it, goto_function) { functions++; }
+    Forall_goto_functions(it, goto_function)
+    {
+      functions++;
+    }
     REQUIRE(functions == 0);
   }
   GIVEN("A loopless goto-functions")
@@ -33,13 +36,11 @@ SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
       "int main() {"
       "int a = nondet_int();"
       "return a;"
-      "}"
-    );
-    auto goto_functions = goto_factory::get_goto_functions(program);  
+      "}");
+    auto goto_functions = goto_factory::get_goto_functions(program);
     auto msg = goto_factory::get_message_handlert();
-    
-    bounded_unwind_goto_functions unwind_loops(
-      goto_functions, msg);
+
+    bounded_unwind_goto_functions unwind_loops(goto_functions, msg);
     unwind_loops.run();
 
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
@@ -51,13 +52,11 @@ SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
       "int main() {"
       "while(1) __ESBMC_assert(1,\"\");"
       "return 0;"
-      "}"
-    );
-    auto goto_functions = goto_factory::get_goto_functions(program);  
+      "}");
+    auto goto_functions = goto_factory::get_goto_functions(program);
     auto msg = goto_factory::get_message_handlert();
-    
-    bounded_unwind_goto_functions unwind_loops(
-      goto_functions, msg);
+
+    bounded_unwind_goto_functions unwind_loops(goto_functions, msg);
     unwind_loops.run();
 
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
@@ -71,13 +70,11 @@ SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
       "  int a; "
       "  for(int i = 0; i < 5; i++) a = i; "
       "  return 0; "
-      "}"
-    );
-    auto goto_functions = goto_factory::get_goto_functions(program);  
+      "}");
+    auto goto_functions = goto_factory::get_goto_functions(program);
     auto msg = goto_factory::get_message_handlert();
-    
-    bounded_unwind_goto_functions unwind_loops(
-      goto_functions, msg);
+
+    bounded_unwind_goto_functions unwind_loops(goto_functions, msg);
     unwind_loops.run();
 
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
