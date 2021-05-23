@@ -5,8 +5,10 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
   int bound = get_loop_bounds(loop);
   if(bound <= 0)
     return false; // Can't unroll this
+
   // Get loop exit goto number
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
+  // TODO: If we want a sound version: loop_exit++ so we have the skip instruction
   if(loop_exit != goto_program.instructions.begin())
   {
     goto_programt::targett t_before = loop_exit;
@@ -26,22 +28,79 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
       t_goto->guard = gen_true_expr();
     }
   }
+  /* TODO: For sound version
+  goto_programt::targett t_skip = goto_program.insert(loop_exit);
+  goto_programt::targett loop_iter = t_skip;
+
+  const goto_programt::targett loop_head = loop->get_original_loop_head();
+
+  t_skip->make_skip();
+  t_skip->location = loop_head->location;
+  t_skip->function = loop_head->function;
+  */
+
+  // If there is an inner control flow we need a map for it 
+  std::map<goto_programt::targett, unsigned> target_map;
+  {
+    unsigned count = 0;
+    goto_programt::targett t = loop.get_original_loop_head();
+    t++; // get first instruction of the loop
+    for(;
+        t != loop_exit;
+        t++, count++)
+    {
+      assert(t != goto_program.instructions.end());
+      target_map[t] = count;
+    }
+  }
+
+  // re-direct any branches that go to loop_head to loop_iter
+  // TODO: not sure how to deal with this
+  /*
+  for(goto_programt::targett t = loop_head; t != loop_iter; t++)
+  {
+    assert(t != goto_program.instructions.end());
+    for(auto &target : t->targets)
+      if(target == loop_head)
+        target = loop_iter;
+  }
+  */
+
   // we make k-1 copies, to be inserted before loop_exit
   goto_programt copies;
   for(int i = 1; i < bound; i++)
   {
+    // make a copy
+    std::vector<goto_programt::targett> target_vector;
+    target_vector.reserve(target_map.size());
     // IF !COND GOTO X
     goto_programt::targett t = loop.get_original_loop_head();
     t++; // get first instruction of the loop
     for(; t != loop_exit; t++)
     {
       assert(t != goto_program.instructions.end());
-      copies.add_instruction(*t);
+      goto_programt::targett copied_t = copies.add_instruction(*t);
+      target_vector.push_back(copied_t);
+    }
+
+    for(unsigned i = 0; i < target_vector.size(); i++)
+    {
+      goto_programt::targett t = target_vector[i];
+      for(auto &target : t->targets)
+      {
+        std::map<goto_programt::targett, unsigned>::const_iterator m_it =
+          target_map.find(target);
+        if(m_it != target_map.end()) // intra-loop?
+        {
+          assert(m_it->second < target_vector.size());
+          target = target_vector[m_it->second];
+        }
+      }
     }
   }
   // now insert copies before loop_exit
   goto_program.destructive_insert(loop_exit, copies);
-  //remove_skip(goto_function.body);
+  // TODO: Is this needed? remove_skip(goto_function.body);
   return true;
 }
 
@@ -132,7 +191,7 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
   // 3. It mustn't exist an assignment over SYMBOL inside the loop
   t++;
   t++; // First instruction of the loop
-  // Check if forall assignements exists one that targets SYMBOL
+  // Check if forall assignments exists one that targets SYMBOL
   for(; t != te; t++)
   {
     if(t->is_assign())
@@ -142,13 +201,13 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
         return -1;
     }
 
-    else if(t->is_goto() || t->is_backwards_goto())
+    else if(t->is_goto() && !t->is_backwards_goto())
     {
       /* This means an inner loop or goto
        * which needs to be treated correctly
        * and every reference needs to be updated
        */
-      return -1;
+      // Don't care
     }
   }
   number_of_bounded_loops++;

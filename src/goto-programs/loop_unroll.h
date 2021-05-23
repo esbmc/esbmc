@@ -65,7 +65,8 @@ public:
   bounded_loop_unroller(goto_functionst &goto_functions, message_handlert &msg)
     : unsound_loop_unroller(goto_functions, msg, "no-unroll")
   {
-    unsupported_options = {"unwind", "context-bound"};
+    unsupported_options = {"unwind"};
+    valued_options = {std::make_pair("context-bound", "-1")};
   }
 
   unsigned get_number_of_bounded_loops()
