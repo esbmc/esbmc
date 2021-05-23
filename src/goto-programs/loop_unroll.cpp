@@ -28,7 +28,7 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
   }
   // we make k-1 copies, to be inserted before loop_exit
   goto_programt copies;
-  for(unsigned i = 1; i < bound; i++)
+  for(int i = 1; i < bound; i++)
   {
     // IF !COND GOTO X
     goto_programt::targett t = loop.get_original_loop_head();

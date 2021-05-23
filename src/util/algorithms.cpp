@@ -29,3 +29,13 @@ bool goto_functions_algorithm::run()
   goto_functions.update();
   return true;
 }
+
+bool goto_functions_algorithm::runOnLoop(loopst &, goto_programt &)
+  {
+    return true;
+  }
+
+bool goto_functions_algorithm::runOnFunction(std::pair<const dstring, goto_functiont> &)
+  {
+    return true;
+  }
