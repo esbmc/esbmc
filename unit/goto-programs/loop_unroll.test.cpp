@@ -12,7 +12,7 @@
 #define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
 #include "../testing-utils/goto_factory.h"
-#include <algorithms/goto_algorithms.h>
+#include <goto-programs/loop_unroll.h>
 
 // ** Bounded loop unroller
 // Check whether the object converts a loop properly
@@ -40,7 +40,7 @@ SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
     auto goto_functions = goto_factory::get_goto_functions(program);
     auto msg = goto_factory::get_message_handlert();
 
-    bounded_unwind_goto_functions unwind_loops(goto_functions, msg);
+    bounded_loop_unroller unwind_loops(goto_functions, msg);
     unwind_loops.run();
 
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
@@ -56,7 +56,7 @@ SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
     auto goto_functions = goto_factory::get_goto_functions(program);
     auto msg = goto_factory::get_message_handlert();
 
-    bounded_unwind_goto_functions unwind_loops(goto_functions, msg);
+    bounded_loop_unroller unwind_loops(goto_functions, msg);
     unwind_loops.run();
 
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
@@ -74,7 +74,7 @@ SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
     auto goto_functions = goto_factory::get_goto_functions(program);
     auto msg = goto_factory::get_message_handlert();
 
-    bounded_unwind_goto_functions unwind_loops(goto_functions, msg);
+    bounded_loop_unroller unwind_loops(goto_functions, msg);
     unwind_loops.run();
 
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
