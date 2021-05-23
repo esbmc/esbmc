@@ -63,10 +63,15 @@ public:
   virtual bool can_run(const cmdlinet &cmd)
   {
     if(cmd.isset(disable_command.c_str()))
-      return false;
-    for(auto &x : unsupported_options)
-      if(cmd.isset(x.c_str()))
+      return false;  
+    for(auto &x : unsupported_options)    
+      if(cmd.isset(x.c_str())) 
         return false;
+    for(auto &x : valued_options) {
+      std::string v(cmd.getval(x.first.c_str()));
+      if(v != x.second)
+        return false;
+    } 
     return true;
   }
 
@@ -83,6 +88,8 @@ public:
 protected:
   // Which options if set break the analysis?
   std::vector<std::string> unsupported_options = {};
+  // Which valued_options only works in specific values?
+  std::vector<std::pair<std::string, std::string>> valued_options = {};
   // Every algorithm should have a way to be disabled
   std::string &disable_command;
   // The algorithm changes the CFG, container in some way?
