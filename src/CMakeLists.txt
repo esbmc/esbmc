@@ -5,7 +5,6 @@
 include_directories(${CMAKE_SOURCE_DIR}/src)
 add_subdirectory (util)
 add_subdirectory (goto-programs)
-add_subdirectory (algorithms)
 add_subdirectory (c2goto)
 
 if(ENABLE_OLD_FRONTEND)

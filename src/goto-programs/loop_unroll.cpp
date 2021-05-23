@@ -1,21 +1,10 @@
-#include <algorithms/goto_algorithms.h>
-#include <goto-programs/goto_loops.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/loop_unroll.h>
 
-void unwind_goto_functions::unroll_loop(
-  goto_programt &goto_program,
-  loopst &loop)
+bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
 {
-  get_loop_bounds bounds(goto_program, loop);
-  if(!bounds.run())
-    return;
-
-  number_of_bounded_loops++;
-  unsigned unwind = bounds.get_bound();
-  // TODO: What happens when K == K0? Should we optimize it out?
-  if(unwind == 0)
-    return;
-
+  int bound = get_loop_bounds(loop);
+  if(bound <= 0)
+    return false; // Can't unroll this
   // Get loop exit goto number
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
   if(loop_exit != goto_program.instructions.begin())
@@ -39,7 +28,7 @@ void unwind_goto_functions::unroll_loop(
   }
   // we make k-1 copies, to be inserted before loop_exit
   goto_programt copies;
-  for(unsigned i = 1; i < unwind; i++)
+  for(unsigned i = 1; i < bound; i++)
   {
     // IF !COND GOTO X
     goto_programt::targett t = loop.get_original_loop_head();
@@ -52,39 +41,11 @@ void unwind_goto_functions::unroll_loop(
   }
   // now insert copies before loop_exit
   goto_program.destructive_insert(loop_exit, copies);
-}
-
-bool unwind_goto_functions::run()
-{
-  // TODO: This can be generalized into a all_loops_algorithms or similar
-  Forall_goto_functions(it, goto_functions)
-  {
-    number_of_functions++;
-    if(it->second.body_available)
-    {
-      goto_loopst goto_loops(it->first, goto_functions, it->second, this->msg);
-      auto function_loops = goto_loops.get_loops();
-      number_of_loops += function_loops.size();
-      if(function_loops.size())
-      {
-        goto_functiont &goto_function = it->second;
-        goto_programt &goto_program = goto_function.body;
-
-        // Foreach loop in the function
-        for(auto itt = function_loops.rbegin(); itt != function_loops.rend();
-            ++itt)
-        {
-          unroll_loop(goto_program, *itt);
-          remove_skip(goto_function.body);
-        }
-      }
-    }
-  }
-  goto_functions.update();
+  //remove_skip(goto_function.body);
   return true;
 }
 
-bool get_loop_bounds::run()
+int bounded_loop_unroller::get_loop_bounds(loopst &loop)
 {
   /**
    * This looks for the following template
@@ -104,23 +65,23 @@ bool get_loop_bounds::run()
 
   // 1. Check the condition. 't' should be IF !(SYMBOL < K) THEN GOTO x
   if(!t->is_goto())
-    return false;
+    return -1;
   // Pattern match SYMBOL and K, if the relation is <= then K = K + 1
   {
     auto &cond = to_not2t(t->guard).value;
     if(!is_lessthan2t(cond) && !is_lessthanequal2t(cond))
-      return false;
+      return -1;
 
     std::shared_ptr<relation_data> relation;
     relation = std::dynamic_pointer_cast<relation_data>(cond);
     if(relation)
     {
       if(!is_symbol2t(relation->side_1) || !is_constant_int2t(relation->side_2))
-        return false;
+        return -1;
       SYMBOL = relation->side_1;
       K = to_constant_int2t(relation->side_2).value.to_int64();
       if(K < 0)
-        return false;
+        return -1;
     }
     if(cond->expr_id == expr2t::expr_ids::lessthanequal_id)
     {
@@ -133,39 +94,39 @@ bool get_loop_bounds::run()
   // 2. Check for SYMBOL = SYMBOL + 1
   te--; // the previous instruction should be the increment
   if(!te->is_assign())
-    return false;
+    return -1;
   // for now only increments of one will work
   {
     auto &x = to_code_assign2t(te->code);
     if(x.target != SYMBOL || !is_add2t(x.source))
     {
-      return false;
+      return -1;
     }
 
     auto &add = to_add2t(x.source);
     if(add.side_1 != SYMBOL || !is_constant_int2t(add.side_2))
-      return false;
+      return -1;
 
     if(to_constant_int2t(add.side_2).value.to_int64() != 1)
-      return false;
+      return -1;
   }
 
   // 3. Look for K0
   t--; // Previous instruction from the loop creation
   int K0 = 0;
   if(!t->is_assign())
-    return false;
+    return -1;
   // Pattern matching K0 from SYMBOL = K0
   {
     auto &x = to_code_assign2t(t->code);
     if(x.target != SYMBOL || !is_constant_int2t(x.source))
     {
-      return false;
+      return -1;
     }
 
     K0 = to_constant_int2t(x.source).value.to_int64();
     if(K0 < 0 || K0 >= K)
-      return false;
+      return -1;
   }
 
   // 3. It mustn't exist an assignment over SYMBOL inside the loop
@@ -178,7 +139,7 @@ bool get_loop_bounds::run()
     {
       auto &x = to_code_assign2t(t->code);
       if(x.target == SYMBOL)
-        return false;
+        return -1;
     }
 
     else if(t->is_goto() || t->is_backwards_goto())
@@ -187,11 +148,9 @@ bool get_loop_bounds::run()
        * which needs to be treated correctly
        * and every reference needs to be updated
        */
-      return false;
+      return -1;
     }
   }
-
-  // Saves the bound
-  bound = K - K0;
-  return true;
+  number_of_bounded_loops++;
+  return K - K0;
 }

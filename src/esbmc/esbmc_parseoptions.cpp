@@ -45,6 +45,7 @@ extern "C"
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
+#include <goto-programs/loop_unroll.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -55,7 +56,6 @@ extern "C"
 #include <util/symbol.h>
 #include <util/time_stopping.h>
 #include <util/message/format.h>
-#include <algorithms/goto_algorithms.h>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -1592,13 +1592,8 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     // unwind loops
-    // TODO: add an option for this
-    bounded_unwind_goto_functions unwind_loops(
-      goto_functions, ui_message_handler);
-    if(unwind_loops.can_run(cmdline))
-    {
-      unwind_loops.run();
-    }
+    bounded_loop_unroller unwind_loops(goto_functions, ui_message_handler);
+    unwind_loops.check_and_run(cmdline);
 
     // show it?
     if(cmdline.isset("show-loops"))
