@@ -46,7 +46,7 @@ SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
     REQUIRE(unwind_loops.get_number_of_loops() == 0);
   }
-  GIVEN("An unbounded goto-functions")
+  GIVEN("An unbounded loop")
   {
     std::istringstream program(
       "int main() {"
@@ -69,6 +69,25 @@ SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
       "int main() { "
       "  int a; "
       "  for(int i = 0; i < 5; i++) a = i; "
+      "  return 0; "
+      "}");
+    auto goto_functions = goto_factory::get_goto_functions(program);
+    auto msg = goto_factory::get_message_handlert();
+
+    bounded_loop_unroller unwind_loops(goto_functions, msg);
+    unwind_loops.run();
+
+    REQUIRE(unwind_loops.get_number_of_functions() > 0);
+    REQUIRE(unwind_loops.get_number_of_loops() == 1);
+    REQUIRE(unwind_loops.get_number_of_bounded_loops() == 1);
+  }
+  GIVEN("A bounded crescent-for loop with control-flow")
+  {
+    std::istringstream program(
+      "int main() { "
+      "  int a; "
+      "  for(int i = 0; i < 5; i++) "
+      "    if(i == 2) a = 3;"
       "  return 0; "
       "}");
     auto goto_functions = goto_factory::get_goto_functions(program);
