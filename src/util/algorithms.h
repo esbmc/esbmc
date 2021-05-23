@@ -24,7 +24,7 @@
 class algorithm
 {
 public:
-  explicit algorithm(std::string disable_cmd, bool sideeffect = false)
+  algorithm(std::string disable_cmd, bool sideeffect)
     : disable_command(disable_cmd), sideeffect(sideeffect)
   {
   }
@@ -83,10 +83,10 @@ public:
 protected:
   // Which options if set break the analysis?
   std::vector<std::string> unsupported_options = {};
-  // The algorithm changes the CFG, container in some way?
-  const bool sideeffect;
   // Every algorithm should have a way to be disabled
   std::string &disable_command;
+  // The algorithm changes the CFG, container in some way?
+  const bool sideeffect;  
 };
 
 /**
@@ -99,10 +99,10 @@ public:
     goto_functionst &goto_functions,
     message_handlert &msg,
     std::string disable_cmd,
-    bool sideffect = false)
-    : goto_functions(goto_functions),
-      msg(msg),
-      algorithm(disable_cmd, sideffect)
+    bool sideffect)
+    : algorithm(disable_cmd, sideffect),
+      goto_functions(goto_functions),
+      msg(msg)
   {
   }
 
@@ -118,14 +118,8 @@ public:
   bool run() override;
 
 protected:
-  virtual bool runOnFunction(std::pair<const dstring, goto_functiont> &F)
-  {
-    return true;
-  }
-  virtual bool runOnLoop(loopst &loop, goto_programt &goto_program)
-  {
-    return true;
-  }
+  virtual bool runOnFunction(std::pair<const dstring, goto_functiont> &F);
+  virtual bool runOnLoop(loopst &loop, goto_programt &goto_program);
   goto_functionst &goto_functions;
 
 private:

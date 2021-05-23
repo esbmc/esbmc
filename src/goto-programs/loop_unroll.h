@@ -34,10 +34,7 @@ protected:
    * @param loop 
    * @return int negative means error, positive is the quantity to unroll
    */
-  virtual int get_loop_bounds(loopst &loop)
-  {
-    return 0;
-  }
+  virtual int get_loop_bounds(loopst &loop) = 0;
 };
 
 /**
