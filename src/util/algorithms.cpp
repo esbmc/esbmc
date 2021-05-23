@@ -31,11 +31,12 @@ bool goto_functions_algorithm::run()
 }
 
 bool goto_functions_algorithm::runOnLoop(loopst &, goto_programt &)
-  {
-    return true;
-  }
+{
+  return true;
+}
 
-bool goto_functions_algorithm::runOnFunction(std::pair<const dstring, goto_functiont> &)
-  {
-    return true;
-  }
+bool goto_functions_algorithm::runOnFunction(
+  std::pair<const dstring, goto_functiont> &)
+{
+  return true;
+}

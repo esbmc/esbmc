@@ -86,7 +86,7 @@ protected:
   // Every algorithm should have a way to be disabled
   std::string &disable_command;
   // The algorithm changes the CFG, container in some way?
-  const bool sideeffect;  
+  const bool sideeffect;
 };
 
 /**
