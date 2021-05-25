@@ -136,7 +136,7 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
     auto msg = goto_factory::get_message_handlert();
 
     bounded_loop_unroller unwind_loops(goto_functions, msg);
-    //unwind_loops.check_and_run()
+    unwind_loops.check_and_run(opts);
 
     REQUIRE(unwind_loops.get_number_of_functions() == 0);
     REQUIRE(unwind_loops.get_number_of_loops() == 0);
