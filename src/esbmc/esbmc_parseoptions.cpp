@@ -1594,8 +1594,10 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     // unwind loops
+    optionst opts;
+    get_command_line_options(opts);
     bounded_loop_unroller unwind_loops(goto_functions, ui_message_handler);
-    unwind_loops.check_and_run(cmdline);
+    unwind_loops.check_and_run(opts);
 
     // show it?
     if(cmdline.isset("show-loops"))
