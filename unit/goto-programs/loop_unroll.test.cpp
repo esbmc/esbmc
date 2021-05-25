@@ -17,7 +17,7 @@
 // ** Bounded loop unroller
 // Check whether the object converts a loop properly
 
-SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
+SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
 {
   GIVEN("An empty goto-functions")
   {
@@ -81,7 +81,7 @@ SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
     REQUIRE(unwind_loops.get_number_of_loops() == 1);
     REQUIRE(unwind_loops.get_number_of_bounded_loops() == 1);
   }
-  GIVEN("A bounded crescent-for loop with control-flow")
+  GIVEN("A bounded incremental-for loop with control-flow")
   {
     std::istringstream program(
       "int main() { "
@@ -99,5 +99,47 @@ SCENARIO("the loop unroller detects a bounded loop", "[algorithms]")
     REQUIRE(unwind_loops.get_number_of_functions() > 0);
     REQUIRE(unwind_loops.get_number_of_loops() == 1);
     REQUIRE(unwind_loops.get_number_of_bounded_loops() == 1);
+  }
+  GIVEN("A bounded incremental-for loop with inner-loop")
+  {
+    std::istringstream program(
+      "int main() { "
+      "  int a; "
+      "  for(int i = 0; i < 5; i++) "
+      "    for(int j = 0; j < 4; j++) a = 4;"
+      "  return 0; "
+      "}");
+    auto goto_functions = goto_factory::get_goto_functions(program);
+    auto msg = goto_factory::get_message_handlert();
+
+    bounded_loop_unroller unwind_loops(goto_functions, msg);
+    unwind_loops.run();
+
+    REQUIRE(unwind_loops.get_number_of_functions() > 0);
+    REQUIRE(unwind_loops.get_number_of_loops() == 2);
+    REQUIRE(unwind_loops.get_number_of_bounded_loops() == 2);
+  }
+  GIVEN("A bounded incremental-for loop with the no-unroll option")
+  {
+    std::istringstream program(
+      "int main() { "
+      "  int a; "
+      "  for(int i = 0; i < 5; i++) "
+      "    for(int j = 0; j < 4; j++) a = 4;"
+      "  return 0; "
+      "}");
+
+    cmdlinet cmd = goto_factory::get_default_cmdline("tmp.c");
+    optionst opts = goto_factory::get_default_options(cmd);
+    opts.set_option("no-unroll", true);
+    auto goto_functions = goto_factory::get_goto_functions(program, cmd, opts);
+    auto msg = goto_factory::get_message_handlert();
+
+    bounded_loop_unroller unwind_loops(goto_functions, msg);
+    //unwind_loops.check_and_run()
+
+    REQUIRE(unwind_loops.get_number_of_functions() == 0);
+    REQUIRE(unwind_loops.get_number_of_loops() == 0);
+    REQUIRE(unwind_loops.get_number_of_bounded_loops() == 0);
   }
 }
