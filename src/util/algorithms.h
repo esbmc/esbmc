@@ -44,9 +44,9 @@ public:
    * @brief Check if algorithm can be
    * executed and run it
    */
-  bool check_and_run(const cmdlinet &cmd)
+  bool check_and_run(const optionst &opt)
   {
-    if(can_run(cmd))
+    if(can_run(opt))
       return run();
     return false;
   }
@@ -60,18 +60,19 @@ public:
    * @return true 
    * @return false 
    */
-  virtual bool can_run(const cmdlinet &cmd)
+  virtual bool can_run(const optionst &opt)
   {
-    if(cmd.isset(disable_command.c_str()))
-      return false;  
-    for(auto &x : unsupported_options)    
-      if(cmd.isset(x.c_str())) 
+    if(opt.get_bool_option(disable_command.c_str()))
+      return false;
+    for(auto &x : unsupported_options)
+      if(opt.get_bool_option(x.c_str()))
         return false;
-    for(auto &x : valued_options) {
-      std::string v(cmd.getval(x.first.c_str()));
+    for(auto &x : valued_options)
+    {
+      std::string v(opt.get_option(x.first.c_str()));
       if(v != x.second)
         return false;
-    } 
+    }
     return true;
   }
 

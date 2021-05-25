@@ -123,6 +123,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"partial-loops", NULL, "permit paths with partial loops"},
     {"unroll-loops", NULL, ""},
     {"no-slice", NULL, "do not remove unused equations"},
+    {"no-unroll", NULL, "do not unroll bounded loops"},
     {"slice-assumes", NULL, ""},
     {"extended-try-analysis", NULL, ""},
     {"skip-bmc", NULL, ""}}},
