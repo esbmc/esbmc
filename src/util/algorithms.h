@@ -91,7 +91,7 @@ protected:
   // Which valued_options only works in specific values?
   std::vector<std::pair<std::string, std::string>> valued_options = {};
   // Every algorithm should have a way to be disabled
-  std::string &disable_command;
+  std::string disable_command;
   // The algorithm changes the CFG, container in some way?
   const bool sideeffect;
 };
