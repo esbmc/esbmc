@@ -39,15 +39,13 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
   t_skip->function = loop_head->function;
   */
 
-  // If there is an inner control flow we need a map for it 
+  // If there is an inner control flow we need a map for it
   std::map<goto_programt::targett, unsigned> target_map;
   {
     unsigned count = 0;
     goto_programt::targett t = loop.get_original_loop_head();
     t++; // get first instruction of the loop
-    for(;
-        t != loop_exit;
-        t++, count++)
+    for(; t != loop_exit; t++, count++)
     {
       assert(t != goto_program.instructions.end());
       target_map[t] = count;
