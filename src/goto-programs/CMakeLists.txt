@@ -4,4 +4,7 @@ target_link_libraries(gotoalgorithms algorithms gotoprograms)
 target_include_directories(gotoprograms
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
+target_include_directories(gotoalgorithms
+    PRIVATE ${Boost_INCLUDE_DIRS}
+)
 target_link_libraries(gotoprograms pointeranalysis bigint)
