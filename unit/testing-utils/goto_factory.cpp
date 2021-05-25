@@ -15,9 +15,56 @@ const mode_table_et mode_table[] = {
   LANGAPI_HAVE_MODE_CLANG_CPP,
   LANGAPI_HAVE_MODE_END}; // This is the simplest way to have this
 
-goto_functionst goto_factory::get_goto_functions(std::istream &c_file)
+void goto_factory::create_file_from_istream(
+  std::istream &c_inputstream,
+  std::string filename)
 {
-  goto_functionst goto_functions;
+  std::ofstream output(filename); // Change this for C++
+  if(!output.good())
+  {
+    perror("Could not create output C file\n");
+    exit(1);
+  }
+
+  while(c_inputstream.good())
+  {
+    std::string line;
+    c_inputstream >> line;
+    output << line;
+    output << " ";
+  }
+
+  output.close();
+}
+
+void goto_factory::config_environment(
+  goto_factory::Architecture arch,
+  optionst o)
+{
+  switch(arch)
+  {
+  case goto_factory::Architecture::BIT_16:
+    config.ansi_c.set_16();
+    break;
+
+  case goto_factory::Architecture::BIT_32:
+    config.ansi_c.set_32();
+    break;
+
+  case goto_factory::Architecture::BIT_64:
+    config.ansi_c.set_64();
+    break;
+  default:
+    break;
+  }
+
+  config.options = o;
+}
+
+goto_functionst goto_factory::get_goto_functions(
+  std::istream &c_file,
+  goto_factory::Architecture arch)
+{
   /*
      * 1. Create an tmp file from istream
      * 2. Parse the file using clang-frontend
@@ -27,43 +74,80 @@ goto_functionst goto_factory::get_goto_functions(std::istream &c_file)
   // Create tmp file
   std::string filename(
     "tmp.c"); // TODO: Make this unique and add support for CPP
-  std::ofstream output(filename); // Change this for C++
-  if(!output.good())
-  {
-    perror("Could not create output C file\n");
-    exit(1);
-  }
+  goto_factory::create_file_from_istream(c_file, filename);
 
-  while(c_file.good())
-  {
-    std::string line;
-    c_file >> line;
-    output << line;
-    output << " ";
-  }
+  cmdlinet cmd = goto_factory::get_default_cmdline(filename);
+  optionst opts = goto_factory::get_default_options(cmd);
 
-  output.close();
+  goto_factory::config_environment(arch, opts);
+  return goto_factory::get_goto_functions(cmd, opts);
+}
 
+goto_functionst goto_factory::get_goto_functions(
+  std::istream &c_file,
+  cmdlinet &cmd,
+  optionst &opts,
+  goto_factory::Architecture arch)
+{
+  /*
+     * 1. Create an tmp file from istream
+     * 2. Parse the file using clang-frontend
+     * 3. Return the result
+     */
+
+  // Create tmp file
+  std::string filename(
+    "tmp.c"); // TODO: Make this unique and add support for CPP
+  goto_factory::create_file_from_istream(c_file, filename);
+  goto_factory::config_environment(arch, opts);
+  return goto_factory::get_goto_functions(cmd, opts);
+}
+
+ui_message_handlert goto_factory::get_message_handlert()
+{
   cmdlinet cmdline;
-  optionst opts;
-  cmdline.args.push_back(filename);
-  config.ansi_c.set_16();
-  opts.cmdline(cmdline);
-  opts.set_option("floatbv", true);
-  opts.set_option("context-bound", -1);
-  opts.set_option("deadlock-check", false);
-  opts.set_option("no-bounds-check", true);
-  config.options = opts;
   language_uit lui(cmdline);
-  lui.context.clear();
   lui.set_verbosity(8);
-  if(lui.parse())
-    return goto_functions; // TODO: This can be used to add testcases for frontend
-  if(lui.typecheck())
+  return lui.ui_message_handler;
+}
+
+cmdlinet goto_factory::get_default_cmdline(const std::string filename)
+{
+  cmdlinet cmdline;
+  cmdline.args.push_back(filename);
+  return cmdline;
+}
+
+optionst goto_factory::get_default_options(cmdlinet cmd)
+{
+  optionst options;
+  options.cmdline(cmd);
+  options.set_option("floatbv", true);
+  options.set_option("context-bound", -1);
+  options.set_option("deadlock-check", false);
+  return options;
+}
+
+bool goto_factory::parse(language_uit &l)
+{
+  l.context.clear();
+  l.set_verbosity(8);
+  if(l.parse())
+    return false; // TODO: This can be used to add testcases for frontend
+  if(l.typecheck())
+    return false;
+  if(l.final())
+    return false;
+  l.clear_parse();
+  return true;
+}
+
+goto_functionst goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
+{
+  goto_functionst goto_functions;
+  language_uit lui(cmd);
+  if(!goto_factory::parse(lui))
     return goto_functions;
-  if(lui.final())
-    return goto_functions;
-  lui.clear_parse();
 
   migrate_namespace_lookup = new namespacet(lui.context);
 
@@ -87,12 +171,4 @@ goto_functionst goto_factory::get_goto_functions(std::istream &c_file)
   // add loop ids
   goto_functions.compute_loop_numbers();
   return goto_functions;
-}
-
-ui_message_handlert goto_factory::get_message_handlert()
-{
-  cmdlinet cmdline;
-  language_uit lui(cmdline);
-  lui.set_verbosity(8);
-  return lui.ui_message_handler;
 }
