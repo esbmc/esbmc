@@ -7,7 +7,6 @@ Module: Solidity AST module
 #ifndef SOLIDITY_AST_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 #define SOLIDITY_AST_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 
-#include <solidity-ast-frontend/solidity_parse_tree.h>
 #include <util/language.h>
 
 class solidity_ast_languaget : public languaget
@@ -45,11 +44,7 @@ public:
 
   // constructor, destructor
   ~solidity_ast_languaget() override = default;
-  solidity_ast_languaget() = default;
-
-protected:
-  solidity_parse_treet parse_tree;
-  std::string parse_path;
+  solidity_ast_languaget();
 };
 
 languaget *new_solidity_ast_language();
