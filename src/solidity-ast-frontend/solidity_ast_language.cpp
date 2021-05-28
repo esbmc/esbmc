@@ -5,22 +5,24 @@ Module: Solidity AST module
 \*******************************************************************/
 
 #include <solidity-ast-frontend/solidity_ast_language.h>
-#include <solidity-ast-frontend/solidity_ast_convert.h>
 
 languaget *new_solidity_ast_language()
 {
   return new solidity_ast_languaget;
 }
 
+solidity_ast_languaget::solidity_ast_languaget()
+{
+    printf("    TODO: solidity_ast_languaget constructor. Actions TBD ...\n");
+}
+
 bool solidity_ast_languaget::parse(
   const std::string &path,
   message_handlert &message_handler)
 {
-    // function to get parse tree (AST):
-    //   - In clang_c_language.cpp counterpart, we generate the AST of C programs using clang's utilities.
-    //   - For Solidity AST files, we do nothing. Because we are already using Solidity's AST.
-    parse_path = path;
-    printf("Parsing... Already using Solidity AST\n");
+    // In clang_c_language.cpp counterpart, we generate the AST of C programs using clang's utilities.
+    // For Solidity AST files, we do nothing. Because we've already using Solidity's AST.
+    printf("    TODO: solidity_ast_languaget::parse function. Actions TBD ...\n");
     return false;
 }
 
@@ -29,11 +31,8 @@ bool solidity_ast_languaget::typecheck(
   const std::string &module,
   message_handlert &message_handler)
 {
-    if(solidity_ast_convert(parse_tree, module, message_handler))
-        return true;
-
-    assert(!"come back and continue!");
-    return false;
+  assert(!"come back and continue - solidity_ast_languaget::typecheck");
+  return false;
 }
 
 void solidity_ast_languaget::show_parse(std::ostream &)
