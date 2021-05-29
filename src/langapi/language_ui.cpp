@@ -63,6 +63,9 @@ bool language_uit::parse(const std::string &filename)
 
   msg.status("Parsing", filename);
 
+  if(mode == 4)
+      language.set_is_solidity();
+
   if(language.parse(filename, msg))
   {
     msg.error("PARSING ERROR");
