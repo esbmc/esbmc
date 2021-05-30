@@ -1,4 +1,6 @@
+add_subdirectory(nlohmann_json)
 add_library(solidityutil Utils.cpp)
+
 target_include_directories(solidityutil
     PRIVATE ${CLANG_INCLUDE_DIRS}
 )
