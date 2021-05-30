@@ -5,7 +5,8 @@ Module: Solidity AST module
 \*******************************************************************/
 
 #include <solidity-ast-frontend/solidity_ast_language.h>
-#include <libUtils/Utils.h>
+#include <libUtils/Utils.hpp>
+#include <nlohmann/json.hpp>
 
 languaget *new_solidity_ast_language()
 {
@@ -56,7 +57,28 @@ bool solidity_ast_languaget::parse(
     printf("%s", ast_json_content.c_str());
     printf("\n");
 
-    assert("cool");
+    nlohmann::json ast_json;
+    if (ast_json_content != "") {
+        ast_json = nlohmann::json::parse(ast_json_content);
+        /*
+        Sif::ASTAnalyser ast_analyser(ast_text_stream, ast_json, true, sol_name, visitor_arg);
+
+        Sif::RootNodePtr root_node = ast_analyser.analyse();
+        Sif::Indentation indentation;
+        std::string new_source = root_node->source_code(indentation);
+        //std::cout << sol_name << " " << ast_json.at("absolutePath") << std::endl;
+        std::string output_file_name = "generated_contract.sol";
+        if (output_file_name != "") {
+            std::ofstream output_file_stream(output_file_name);
+            output_file_stream << new_source;
+            output_file_stream.close();
+        } else {
+            assert(!"should not be here");
+        }
+        */
+    }
+
+    assert(!"cool");
 
     return false;
 }
