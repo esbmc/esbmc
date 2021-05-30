@@ -1,7 +1,7 @@
 #add_subdirectory(headers)
 #add_subdirectory(AST)
 
-add_library(solidityfrontend_stuff solidity_ast_language.cpp)
+add_library(solidityfrontend_stuff solidity_ast_language.cpp Utils.cpp)
 target_include_directories(solidityfrontend_stuff
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CLANG_INCLUDE_DIRS}

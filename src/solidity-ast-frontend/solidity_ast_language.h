@@ -8,6 +8,9 @@ Module: Solidity AST module
 #define SOLIDITY_AST_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 
 #include <util/language.h>
+#include <fstream>
+#include <iostream>
+#include <sstream>
 
 class solidity_ast_languaget : public languaget
 {
