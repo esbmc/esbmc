@@ -5,7 +5,7 @@ Module: Solidity AST module
 \*******************************************************************/
 
 #include <solidity-ast-frontend/solidity_ast_language.h>
-#include <solidity-ast-frontend/Utils.h>
+#include <libUtils/Utils.h>
 
 languaget *new_solidity_ast_language()
 {
