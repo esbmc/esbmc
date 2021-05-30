@@ -9,5 +9,6 @@ add_library(solidityutil ${sources} ${headers})
 
 target_include_directories(solidityutil
     PRIVATE ${CLANG_INCLUDE_DIRS}
+    PRIVATE "${CMAKE_SOURCE_DIR}"
 )
 set_target_properties(solidityutil PROPERTIES COMPILE_FLAGS "-fno-rtti")
