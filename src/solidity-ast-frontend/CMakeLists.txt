@@ -9,4 +9,4 @@ target_include_directories(solidityfrontend_stuff
 target_link_libraries(solidityfrontend_stuff gotoprograms clangTooling)
 
 add_library(solidityfrontend INTERFACE)
-target_link_libraries(solidityfrontend INTERFACE solidityfrontend_stuff solidityutil)
+target_link_libraries(solidityfrontend INTERFACE solidityfrontend_stuff solidityutil nlohmann_json::nlohmann_json)
