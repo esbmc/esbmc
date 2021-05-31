@@ -6,7 +6,7 @@
 
 /**
  * @brief This is the base class that unroll
- * an loop (in an unsound way), the idea is to
+ * a loop (in an unsound way), the idea is to
  * copy-paste the contents of the loop N times
  * and ignore its conditions.
  * 
@@ -40,7 +40,7 @@ protected:
 /**
  * @brief This goes through every loop of the program and tries to
  * check if it is a bounded loop, if it is, it will be unrolled all
- * times needed. The intentation is to simplify structures such as:
+ * times needed. The intention is to simplify structures such as:
  * 
  * SYMBOL = K0
  * 1: IF !(SYMBOL < K) THEN GOTO 2
@@ -69,6 +69,12 @@ public:
     valued_options = {std::make_pair("context-bound", "-1")};
   }
 
+  /**
+   * @brief Get the number of bounded loops that were detected
+   *        after the algorithm has run
+   * 
+   * @return number of bounded loops 
+   */
   unsigned get_number_of_bounded_loops()
   {
     return number_of_bounded_loops;
