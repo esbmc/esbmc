@@ -20,13 +20,13 @@ bool goto_functions_algorithm::run()
         // Foreach loop in the function
         for(auto itt = function_loops.rbegin(); itt != function_loops.rend();
             ++itt)
-        {
           runOnLoop(*itt, goto_program);
-        }
       }
     }
   }
   goto_functions.update();
+  if(has_sideeffect())
+    remove_skip(goto_functions);
   return true;
 }
 
