@@ -1,4 +1,4 @@
 CORE
 main.c
 --incremental-bmc --no-unroll
-^VERIFICATION FAILED$
+^VERIFICATION UNKNOWN$
