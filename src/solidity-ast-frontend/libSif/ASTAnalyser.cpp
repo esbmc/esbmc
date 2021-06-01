@@ -54,7 +54,7 @@ RootNodePtr ASTAnalyser::analyse() {
             // using original source
             get_next_token(TokenSource);
             line = Utils::substr_by_edge(*ptr_ast_line, "Source: \"", "\"");
-            remove_escapes(line); 
+            remove_escapes(line);
             import << line;
         } else if (keyword == TokenContractDefinition ) {
             std::string contract_name = Utils::retrieve_string_element(*ptr_ast_line, 1, " ");
@@ -93,7 +93,7 @@ RootNodePtr ASTAnalyser::analyse() {
                 if (get_current_indentation() <= indentation) break;
                 auto ast_var_decl = std::static_pointer_cast<ASTNode>(handle_variable_declaration());
                 struct_node->add_field(ast_var_decl);
-            } 
+            }
             auto ast_struct_node = std::static_pointer_cast<ASTNode>(struct_node);
             current_contract->add_member(ast_struct_node);
             continue;
@@ -121,7 +121,7 @@ RootNodePtr ASTAnalyser::analyse() {
             bool is_constructor = function_is_constructor(current_contract_name, function_name);
             function_node->set_is_constructor(is_constructor);
 
-            get_next_token(TokenParameterList); 
+            get_next_token(TokenParameterList);
             ParameterListNodePtr params = handle_parameter_list();
             function_node->set_params(params);
 
@@ -135,7 +135,7 @@ RootNodePtr ASTAnalyser::analyse() {
                 modifier_invocation = handle_modifier_invocation();
                 function_node->add_modifier_invocation(modifier_invocation);
                 token = get_next_token();
-            }            
+            }
             BlockNodePtr function_body = nullptr;
             if (token == TokenBlock) {
                 function_body = handle_block();
@@ -329,7 +329,7 @@ VariableDeclarationNodePtr ASTAnalyser::handle_variable_declaration(){
     // then try to get type
     std::string next_token = get_next_token();
     type = get_type_name(next_token);
-    return std::make_shared<VariableDeclarationNode>(type, variable_name); 
+    return std::make_shared<VariableDeclarationNode>(type, variable_name);
     /*
     if (next_token == TokenElementaryTypeName) {
         ++ptr_ast_line;
@@ -340,7 +340,7 @@ VariableDeclarationNodePtr ASTAnalyser::handle_variable_declaration(){
         ParameterListNodePtr parameters = handle_parameter_list();
         get_next_token(TokenParameterList);
         ParameterListNodePtr returns = handle_parameter_list();
-        type = "function" + parameters->source_code(); 
+        type = "function" + parameters->source_code();
         if (returns->subnodes_size()){
             type = type + " returns" + returns->source_code();
         }
@@ -361,7 +361,7 @@ VariableDeclarationNodePtr ASTAnalyser::handle_variable_declaration(){
         } else {
             --ptr_ast_line;
             type = type + "[]";
-        }        
+        }
         return std::make_shared<VariableDeclarationNode>(type, variable_name);
     }*/
 
@@ -496,7 +496,7 @@ IdentifierNodePtr ASTAnalyser::handle_identifier() {
 
 ReturnNodePtr ASTAnalyser::handle_return() {
     int indentation = get_current_indentation();
-    std::string token = get_next_token();    
+    std::string token = get_next_token();
     ReturnNodePtr return_node = std::make_shared<ReturnNode>();
     while (token!= "" && indentation < get_current_indentation()) {
         ASTNodePtr sub_node = get_value_equivalent_node(token);
@@ -793,9 +793,11 @@ ASTNodePtr ASTAnalyser::get_type_name(std::string& token) {
         std::string next_token = get_next_token();
         if (next_token != "" && indentation < get_current_indentation()) {
             index = get_value_equivalent_node(next_token);
-        } else {
+        }
+        else
+        {
             --ptr_ast_line;
-        } 
+        }
         type_name = std::make_shared<ArrayTypeNameNode>(base_type_node, index);
     } else if (token == TokenUserDefinedTypeName) {
         type_str = Utils::substr_by_edge(*ptr_ast_line, TokenUserDefinedTypeName + " \"", "\"");
@@ -879,6 +881,21 @@ bool ASTAnalyser::function_is_constructor(const std::string& _contract_name, con
         }
     }
     return false;
+}
+
+void ASTAnalyser::print_ast_node()
+{
+    // debug info for each contract
+    unsigned index = 0;
+    printf("### Contracts: size=%lu ###\n", contracts.size());
+    for (auto it_contract = contracts.begin(); it_contract != contracts.end(); ++it_contract, ++index)
+    {
+        auto _contract = (*it_contract);
+        printf("\n## contract[%d]: size=%lu ##\n", index, _contract->get_num_ast_nodes());
+        _contract->print_ast_nodes();
+        printf("\n## contract[%d] AST node print done ##\n", index);
+    }
+    printf("#############################################\n");
 }
 
 }

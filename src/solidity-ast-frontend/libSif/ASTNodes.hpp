@@ -1,5 +1,5 @@
 // Copyright (c) 2019 Chao Peng
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
@@ -17,6 +17,8 @@
 #include <vector>
 
 #include <libUtils/Utils.hpp>
+
+#define TYPE_TO_STR(s) case s: { return #s; }
 
 namespace Sif{
 
@@ -242,6 +244,10 @@ public:
     void insert_text_after(const std::string& _text);
     std::string get_added_text_before() const;
     std::string get_added_text_after() const;
+    const char* node_type_as_string(NodeType _type);
+    void print_ast_nodes();
+    size_t get_num_ast_nodes();
+
 protected:
     void append_sub_node(const ASTNodePtr& _node);
     void delete_sub_node(const unsigned int& x);
@@ -659,7 +665,7 @@ public:
     void set_as_non_library();
     bool contract_is_library() const;
     void set_name(const std::string& _name);
-    std::string get_name() const; 
+    std::string get_name() const;
     void add_member(const ASTNodePtr& _node);
     void delete_member(const unsigned int& x);
     void update_member(const unsigned int& x, const ASTNodePtr& _node);
