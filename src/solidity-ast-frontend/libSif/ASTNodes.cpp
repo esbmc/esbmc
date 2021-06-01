@@ -1,5 +1,5 @@
 // Copyright (c) 2019 chao
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
@@ -85,6 +85,79 @@ std::string ASTNode::get_added_text_before() const {
 
 std::string ASTNode::get_added_text_after() const {
     return text_after;
+}
+
+const char* ASTNode::node_type_as_string(NodeType _type)
+{
+    switch(_type)
+    {
+        TYPE_TO_STR(NodeTypeSourceUnit)
+        TYPE_TO_STR(NodeTypeRoot)
+        TYPE_TO_STR(NodeTypePragmaDirective)
+        TYPE_TO_STR(NodeTypeImportDirective)
+        TYPE_TO_STR(NodeTypeUsingForDirective)
+        TYPE_TO_STR(NodeTypeVariableDeclaration)
+        TYPE_TO_STR(NodeTypeStructDefinition)
+        TYPE_TO_STR(NodeTypeParameterList)
+        TYPE_TO_STR(NodeTypeEventDefinition)
+        TYPE_TO_STR(NodeTypeBlockNode)
+        TYPE_TO_STR(NodeTypeFunctionDefinition)
+        TYPE_TO_STR(NodeTypeContractDefinition)
+        TYPE_TO_STR(NodeTypeFunctionCall)
+        TYPE_TO_STR(NodeTypeEnumDefinition)
+        TYPE_TO_STR(NodeTypeEnumValue)
+        TYPE_TO_STR(NodeTypeModifierDefinition)
+        TYPE_TO_STR(NodeTypeModifierInvocation)
+        TYPE_TO_STR(NodeTypeMapping)
+        TYPE_TO_STR(NodeTypeInlineAssembly)
+        TYPE_TO_STR(NodeTypePlaceholderStatement)
+        TYPE_TO_STR(NodeTypeIfStatement)
+        TYPE_TO_STR(NodeTypeDoWhileStatement)
+        TYPE_TO_STR(NodeTypeWhileStatement)
+        TYPE_TO_STR(NodeTypeForStatement)
+        TYPE_TO_STR(NodeTypeContinue)
+        TYPE_TO_STR(NodeTypeBreak)
+        TYPE_TO_STR(NodeTypeReturn)
+        TYPE_TO_STR(NodeTypeThrow)
+        TYPE_TO_STR(NodeTypeEmitStatement)
+        TYPE_TO_STR(NodeTypeVariableDeclarationStatement)
+        TYPE_TO_STR(NodeTypeExpressionStatement)
+        TYPE_TO_STR(NodeTypeConditional)
+        TYPE_TO_STR(NodeTypeAssignment)
+        TYPE_TO_STR(NodeTypeTupleExpression)
+        TYPE_TO_STR(NodeTypeUnaryOperation)
+        TYPE_TO_STR(NodeTypeBinaryOperation)
+        TYPE_TO_STR(NodeTypeNewExpression)
+        TYPE_TO_STR(NodeTypeMemberAccess)
+        TYPE_TO_STR(NodeTypeIndexAccess)
+        TYPE_TO_STR(NodeTypeIdentifier)
+        TYPE_TO_STR(NodeTypeElementaryTypeNameExpression)
+        TYPE_TO_STR(NodeTypeLiteral)
+        TYPE_TO_STR(NodeTypeElementaryTypeName)
+        TYPE_TO_STR(NodeTypeUserDefinedTypeName)
+        TYPE_TO_STR(NodeTypeFunctionTypeName)
+        TYPE_TO_STR(NodeTypeArrayTypeName)
+        default:
+        {
+            assert(!"Unknown node type");
+            return "UNKNOWN"; // to make compiler happy
+        }
+    }
+}
+
+void ASTNode::print_ast_nodes()
+{
+    unsigned id = 0;
+    for (auto item : ast_nodes)
+    {
+        printf("\t node[%d]: type=%s\n", id, node_type_as_string(item->get_node_type()));
+        ++id;
+    }
+}
+
+size_t ASTNode::get_num_ast_nodes()
+{
+    return ast_nodes.size();
 }
 
 void ASTNode::append_sub_node(const ASTNodePtr& _node) {
@@ -485,8 +558,8 @@ std::string BinaryOperationNode::source_code(Indentation& _indentation) {
     visit(this);
     Indentation empty_indentation(0);
     std::string result = text_before + _indentation
-                        + left_hand_operand->source_code(empty_indentation) 
-                        + " " + op + " " 
+                        + left_hand_operand->source_code(empty_indentation)
+                        + " " + op + " "
                         + right_hand_operand->source_code(empty_indentation)
                         + text_after;
     return result;
@@ -509,7 +582,7 @@ void BinaryOperationNode::set_operator(const std::string& _operator) {
 }
 
 ASTNodePtr BinaryOperationNode::get_left_hand_operand() const {
-    return left_hand_operand;    
+    return left_hand_operand;
 }
 
 ASTNodePtr BinaryOperationNode::get_right_hand_operand() const {
@@ -1025,7 +1098,7 @@ std::string IfStatementNode::source_code(Indentation& _indentation) {
     if (if_else != nullptr) result = result + " else " + if_else->source_code(_indentation) + "\n";
     else result = result  + "\n";
     result = result + text_after;
-    return result; 
+    return result;
 }
 
 void IfStatementNode::set_condition(const ASTNodePtr& _condition){
@@ -1064,7 +1137,7 @@ void DoWhileStatementNode::set_condition(const ASTNodePtr& _condition){
 }
 
 ASTNodePtr DoWhileStatementNode::get_condition() const{
-    return condition;    
+    return condition;
 }
 
 void DoWhileStatementNode::set_loop_body(const ASTNodePtr& _loop_body){
@@ -1087,7 +1160,7 @@ void WhileStatementNode::set_condition(const ASTNodePtr& _condition){
 }
 
 ASTNodePtr WhileStatementNode::get_condition() const{
-    return condition;    
+    return condition;
 }
 
 void WhileStatementNode::set_loop_body(const ASTNodePtr& _loop_body){
@@ -1125,8 +1198,8 @@ std::string ForStatementNode::source_code(Indentation& _indentation) {
         increment_str = increment_str.substr(0, increment_str_len);
     }
 
-    std::string result = text_before 
-                         + _indentation + "for (" + init_str + condition_str + increment_str + ") " 
+    std::string result = text_before
+                         + _indentation + "for (" + init_str + condition_str + increment_str + ") "
                          + body->source_code(_indentation) + "\n"
                          + text_after;
     return result;
@@ -1168,8 +1241,8 @@ std::string ConditionalNode::source_code(Indentation& _indentation) {
     visit(this);
     Indentation empty_indentation(0);
     std::string result = text_before
-                         + condition->source_code(empty_indentation) 
-                         + " ? " + yes->source_code(empty_indentation) 
+                         + condition->source_code(empty_indentation)
+                         + " ? " + yes->source_code(empty_indentation)
                          + ", " + no->source_code(empty_indentation)
                          + text_after;
     return result;
@@ -1203,8 +1276,8 @@ std::string AssignmentNode::source_code(Indentation& _indentation) {
     visit(this);
     Indentation empty_indentation(0);
     std::string result = text_before
-                         + left_hand_operand->source_code(empty_indentation) 
-                         + " " + op + " " 
+                         + left_hand_operand->source_code(empty_indentation)
+                         + " " + op + " "
                          + right_hand_operand->source_code(empty_indentation)
                          + text_after;
     return result;
@@ -1219,7 +1292,7 @@ void AssignmentNode::set_operator(const std::string& _operator) {
 }
 
 ASTNodePtr AssignmentNode::get_left_hand_operand() const {
-    return left_hand_operand;    
+    return left_hand_operand;
 }
 
 ASTNodePtr AssignmentNode::get_right_hand_operand() const {
@@ -1331,8 +1404,8 @@ void PlaceHolderStatement::set_placeholder(const std::string& _placeholder) {
 std::string MappingNode::source_code(Indentation& _indentation) {
     visit(this);
     Indentation empty_indentation(0);
-    std::string result = text_before + _indentation 
-                         + "mapping(" + key_type->source_code(empty_indentation) 
+    std::string result = text_before + _indentation
+                         + "mapping(" + key_type->source_code(empty_indentation)
                          + " => " + value_type->source_code(empty_indentation) + ")"
                          + text_after;
     return result;
