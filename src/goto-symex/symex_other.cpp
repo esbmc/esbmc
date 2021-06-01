@@ -71,10 +71,16 @@ void goto_symext::symex_decl(const expr2tc code)
     const std::string pretty_name =
       get_pretty_name(to_code_decl2t(code).value.as_string());
 
+    auto size = (type_byte_size(code->type)).to_int64();
+      stack_total += size;
+      std::stringstream ss;
+      ss << "Stack limit property was violated";
+      ss << " while constructing variable " << pretty_name << " with size " << size;
+      ss << ". Stack size: " << stack_total;
     // check whether the stack size has been reached.
     claim(
-      (cur_state->top().process_stack_size(code2, stack_limit)),
-      "Stack limit property was violated when declaring " + pretty_name);
+      (cur_state->top().process_stack_size(code2, stack_limit, stack_total)),
+      ss.str());
   }
 
   const code_decl2t &decl_code = to_code_decl2t(code2);

@@ -594,15 +594,28 @@ void goto_symext::symex_return(const expr2tc &code)
 
   // check whether the stack limit and return
   // value optimization have been activated.
-  if(stack_limit > 0 && no_return_value_opt)
+  if(stack_limit > 0)
   {
-    code->foreach_operand([this](const expr2tc &e) {
+    if(no_return_value_opt) {      
+        code->foreach_operand([this](const expr2tc &e) {
       // check whether the stack size has been reached.
+      auto size = (type_byte_size(e->type)).to_int64();
+      stack_total += size;
+      std::stringstream ss;
+      ss << "Stack limit property was violated";
+      ss << " while constructing return variable with size " << size;
+      ss << ". Stack size: " << stack_total;
       claim(
-        (cur_state->top().process_stack_size(e, stack_limit)),
-        "Stack limit property was violated");
+        (cur_state->top().process_stack_size(e, stack_limit, stack_total)),
+        ss.str());
     });
+    } else {
+
+    }
+    
   }
+  if(!stack_inlining)
+    stack_total -= cur_state->top().stack_frame_total.to_int64();
 
   // kill this one
   cur_state->guard.make_false();

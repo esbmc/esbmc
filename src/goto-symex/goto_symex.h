@@ -801,8 +801,11 @@ protected:
 
   /** Disable return value optimization */
   bool no_return_value_opt;
+  /** Simulate stack inlining */
+  bool stack_inlining;
   /** Limit size for stack */
   unsigned long stack_limit;
+  unsigned long stack_total = 0;
   /** Depth limit, as given by the --depth option */
   unsigned long depth_limit;
   /** Instruction number we are to break at -- that is, trap, to the debugger.

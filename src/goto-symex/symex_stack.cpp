@@ -15,14 +15,16 @@ Date: April 2020
 
 lessthanequal2tc goto_symex_statet::framet::process_stack_size(
   const expr2tc &expr,
-  unsigned long stack_limit)
+  unsigned long stack_limit,
+  unsigned long stack_total)
 {
   // Store the total number of bits for a given stack frame.
-  stack_frame_total += (type_byte_size(expr->type) * 8);
+  stack_frame_total += type_byte_size(expr->type);
 
   // Create two constants to define stack frame size and stack limit.
-  BigInt f_size(stack_frame_total);
+  BigInt f_size(stack_total);
   BigInt s_size(stack_limit);
+  
   constant_int2tc function_irep2(type_pool.get_uint64(), f_size);
   constant_int2tc limit_irep2(type_pool.get_uint64(), s_size);
 
@@ -36,5 +38,5 @@ void goto_symex_statet::framet::decrease_stack_frame_size(const expr2tc &expr)
 
   // Obtain the width of the dead expression and decrease it from the
   // total number of bits for a given stack frame.
-  stack_frame_total -= (type_byte_size(decl_code.type) * 8);
+  stack_frame_total -= type_byte_size(decl_code.type);
 }

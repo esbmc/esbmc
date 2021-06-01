@@ -164,7 +164,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"array-flattener", NULL, "encode arrays using our array API"},
     {"no-return-value-opt",
      NULL,
-     "disable return value optimization to compute the stack size"}}},
+     "disable return value optimization to compute the stack size"},
+     {"stack-inlining",
+     NULL,
+     "do not remove the function from stack after return statement"}}},
 
   {"Incremental SMT",
    {{"smt-during-symex",
