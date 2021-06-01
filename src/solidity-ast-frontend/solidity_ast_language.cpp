@@ -61,7 +61,7 @@ bool solidity_ast_languaget::parse(
     std::string visitor_arg = "";
     nlohmann::json ast_json;
     if (ast_json_content != "") {
-        ast_json = nlohmann::json::parse(ast_json_content);
+        ast_json = nlohmann::json::parse(ast_json_content); // parse explicitly
         Sif::ASTAnalyser ast_analyser(ast_text_stream, ast_json, true, sol_name, visitor_arg);
 
         Sif::RootNodePtr root_node = ast_analyser.analyse();
