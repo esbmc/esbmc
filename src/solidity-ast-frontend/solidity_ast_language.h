@@ -11,6 +11,9 @@ Module: Solidity AST module
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <libSif/ASTAnalyser.hpp>
+#include <libUtils/Utils.hpp>
+#include <nlohmann/json.hpp>
 
 class solidity_ast_languaget : public languaget
 {
@@ -48,6 +51,9 @@ public:
   // constructor, destructor
   ~solidity_ast_languaget() override = default;
   solidity_ast_languaget();
+
+  // store AST json in nlohmann::json data structure
+  nlohmann::json ast_json;
 };
 
 languaget *new_solidity_ast_language();

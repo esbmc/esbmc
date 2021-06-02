@@ -5,9 +5,7 @@ Module: Solidity AST module
 \*******************************************************************/
 
 #include <solidity-ast-frontend/solidity_ast_language.h>
-#include <nlohmann/json.hpp>
-#include <libSif/ASTAnalyser.hpp>
-#include <libUtils/Utils.hpp>
+#include <solidity-ast-frontend/solidity_convert.h>
 
 languaget *new_solidity_ast_language()
 {
@@ -59,9 +57,9 @@ bool solidity_ast_languaget::parse(
     printf("\n");
 
     std::string visitor_arg = "";
-    nlohmann::json ast_json;
     if (ast_json_content != "") {
         ast_json = nlohmann::json::parse(ast_json_content); // parse explicitly
+        //std::cout << "This is ast_json: " << ast_json.at("absolutePath") << std::endl;
         Sif::ASTAnalyser ast_analyser(ast_text_stream, ast_json, true, sol_name, visitor_arg);
 
         Sif::RootNodePtr root_node = ast_analyser.analyse();
@@ -80,8 +78,6 @@ bool solidity_ast_languaget::parse(
 
     ast_json_file_stream.close();
 
-    assert(!"cool");
-
     return false;
 }
 
@@ -90,6 +86,13 @@ bool solidity_ast_languaget::typecheck(
   const std::string &module,
   message_handlert &message_handler)
 {
+  contextt new_context;
+
+  solidity_convertert converter(new_context, ast_json);
+
+  if(converter.convert())
+    return true;
+
   assert(!"come back and continue - solidity_ast_languaget::typecheck");
   return false;
 }
