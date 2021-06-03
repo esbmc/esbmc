@@ -7,6 +7,7 @@
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <iomanip>
 
 solidity_convertert::solidity_convertert(
   contextt &_context,
@@ -19,15 +20,24 @@ solidity_convertert::solidity_convertert(
 
 bool solidity_convertert::convert()
 {
-  if(convert_top_level_decl())
-    return true;
+  // Iterate through each intrinsic nodes and AST nodes, creating
+  // symbols as we go.
+  nlohmann::json::iterator it = ast_json.begin();
+  unsigned index = 0;
+  for (; it != ast_json.end(); ++it, ++index)
+  {
+    print_json_element(*it, index, it.key());
+  }
+
+  assert(!"cool");
 
   return false;
 }
 
-bool solidity_convertert::convert_top_level_decl()
+void solidity_convertert::print_json_element(const nlohmann::json &json_in, const unsigned index, const std::string &key)
 {
-  assert(!"cool ...");
-
-  return false;
+  printf("\n### json element[%u] content: key=%s, size=%lu ###\n", index, key.c_str(), json_in.size());
+  std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations
+  printf("\n");
 }
+

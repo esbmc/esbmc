@@ -21,9 +21,8 @@ public:
 
 protected:
   contextt &context;
-  nlohmann::json &ast_json;
-
-  bool convert_top_level_decl();
+  nlohmann::json &ast_json; // hold Solidity AST json data. Use vector for multiple contracts
+  void print_json_element(const nlohmann::json &json_in, const unsigned index, const std::string &key);
 };
 
 #endif /* SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_ */
