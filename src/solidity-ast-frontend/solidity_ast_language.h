@@ -54,6 +54,10 @@ public:
 
   // store AST json in nlohmann::json data structure
   nlohmann::json ast_json;
+  void print_json(const nlohmann::json &json_in);
+
+private:
+  std::string internal_additions();
 };
 
 languaget *new_solidity_ast_language();
