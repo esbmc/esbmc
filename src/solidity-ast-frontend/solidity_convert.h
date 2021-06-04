@@ -23,6 +23,8 @@ protected:
   contextt &context;
   nlohmann::json &ast_json; // hold Solidity AST json data. Use vector for multiple contracts
   void print_json_element(const nlohmann::json &json_in, const unsigned index, const std::string &key);
+
+  unsigned int current_scope_var_num; // tracking scope while getting declarations
 };
 
 #endif /* SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_ */
