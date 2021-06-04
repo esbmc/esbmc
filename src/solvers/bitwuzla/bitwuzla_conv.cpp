@@ -667,37 +667,68 @@ smt_astt bitwuzla_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 bool bitwuzla_convt::get_bool(smt_astt a)
 {
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  BitwuzlaTerm *true_term = bitwuzla_mk_true(bitw);
-  BitwuzlaTerm *false_term = bitwuzla_mk_false(bitw);
-  BitwuzlaTerm *bitw_term = bitwuzla_get_value(bitw, ast->a);
+  const char *result = bitwuzla_get_bv_value(bitw, ast->a);
 
-  if(bitw_term == true_term)
-    return true;
-
-  if(bitw_term == false_term)
-    return false;
-
-  std::cerr << "Can't get boolean value from Bitwuzla\n";
-  abort();
+  assert(result != NULL && "Bitwuzla returned null bv value string");
+  
+  bool res;
+  switch(*result)
+  {
+  case '1':
+    res = true;
+    break;
+  case '0':
+    res = false;
+    break;
+  default:
+    std::cerr << "Can't get boolean value from Bitwuzla\n";
+    abort();
+  }
+  return res;
 }
 
 BigInt bitwuzla_convt::get_bv(
-  smt_astt a [[gnu::unused]],
-  bool is_signed [[gnu::unused]])
+  smt_astt a,
+  bool is_signed)
 {
-  std::cerr << "Counter-example generation with Bitwuzla has not been fully "
-               "implemented yet\n";
-  abort();
+  const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
+  const char *result = bitwuzla_get_bv_value(bitw, ast->a);
+  BigInt val = binary2integer(result, is_signed);
+  return val;
 }
 
 expr2tc bitwuzla_convt::get_array_elem(
-  smt_astt array [[gnu::unused]],
-  uint64_t index [[gnu::unused]],
-  const type2tc &subtype [[gnu::unused]])
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
 {
-  std::cerr << "Counter-example generation with Bitwuzla has not been fully "
-               "implemented yet\n";
-  abort();
+  const bitw_smt_ast *ast = dynamic_cast<const bitw_smt_ast *>(array);
+  if(ast == nullptr)
+    throw new type2t::symbolic_type_excp();
+
+  size_t size;
+  BitwuzlaTerm **indicies, **values, *default_value;
+  bitwuzla_get_array_value(bitw, ast->a, &indicies, &values, &size, &default_value);
+
+  BigInt val = 0;
+  if(size > 0)
+  {
+    for(size_t i = 0; i < size; i++)
+    {
+      const char *index_str = bitwuzla_get_bv_value(bitw, indicies[i]);
+      auto idx = string2integer(index_str, 2);
+      if(idx == index)
+      {
+        const char *value_str = bitwuzla_get_bv_value(bitw, values[i]);
+        val = binary2integer(value_str, is_signedbv_type(subtype));
+        break;
+      }
+    }
+
+    return get_by_value(subtype, val);
+  }
+
+  return gen_zero(subtype);
 }
 
 smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)

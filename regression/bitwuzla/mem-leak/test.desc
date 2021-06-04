@@ -1,4 +1,4 @@
 THOROUGH
 mem_leak.c
---bitwuzla --result-only --memory-leak-check
+--bitwuzla --memory-leak-check
 ^VERIFICATION FAILED$

@@ -1,4 +1,4 @@
 THOROUGH
 memset-bad.c
---bitwuzla --result-only
+--bitwuzla
 ^VERIFICATION FAILED$

@@ -1,4 +1,4 @@
 THOROUGH
-union-bad.c
+get_array_elem.c
 --bitwuzla
 ^VERIFICATION FAILED$
