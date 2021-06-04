@@ -52,8 +52,8 @@ bool solidity_ast_languaget::parse(
     //printf("new_line: %s\n", new_line.c_str());
     if (new_line.find(".sol =======") == std::string::npos)
     {
-      printf("  new_line: ");
-      printf("%s\n", new_line.c_str());
+      //printf("  new_line: ");
+      //printf("%s\n", new_line.c_str());
       ast_json_content = ast_json_content + new_line + "\n";
     }
     else
@@ -67,7 +67,7 @@ bool solidity_ast_languaget::parse(
   nlohmann::json intrinsic_json = nlohmann::json::parse(internal_additions()); // parse explicitly
   ast_json.update(intrinsic_json);
 
-  print_json(ast_json);
+  //print_json(ast_json);
 
   return false;
 }
@@ -131,17 +131,23 @@ std::string solidity_ast_languaget::internal_additions()
   std::string intrinsics =
     R"(
         {
-         "Image": {
-             "Width":  800,
-             "Height": 600,
-             "Title":  "View from 15th Floor",
-             "Thumbnail": {
-                 "Url":    "http://www.example.com/image/481989943",
-                 "Height": 125,
-                 "Width":  100
-             },
-             "Animated" : false,
-             "IDs": [116, 943, 234, 38793]
+         "__ESBMC_assume": {
+             "isImplicit": false,
+             "isDefined": false,
+             "isThisDeclarationADefinition": false,
+             "typeClass" : "TypeBuiltin",
+             "builtInTypes" : "BuiltInVoid",
+             "isConstQualified" : false,
+             "isVolatileQualified": false,
+             "isRestrictQualified": false,
+             "isVariadic": false,
+             "isInlined": false,
+             "isFunctionOrMethod": false,
+             "PLoc_getLine": 1,
+             "id": "c:@F@__ESBMC_assume",
+             "is_extern": false,
+             "file_local": false,
+             "hasBody": false
          }
      }
     )";

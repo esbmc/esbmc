@@ -18,6 +18,9 @@ solidity_convertert::solidity_convertert(
 {
 }
 
+// This method convert declarations. They are called when those declarations
+// are to be added to the context. If a variable or function is being called
+// but then get_decl_expr is called instead
 bool solidity_convertert::convert()
 {
   // Iterate through each intrinsic nodes and AST nodes, creating
