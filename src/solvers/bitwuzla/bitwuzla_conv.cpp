@@ -670,7 +670,7 @@ bool bitwuzla_convt::get_bool(smt_astt a)
   const char *result = bitwuzla_get_bv_value(bitw, ast->a);
 
   assert(result != NULL && "Bitwuzla returned null bv value string");
-  
+
   bool res;
   switch(*result)
   {
@@ -687,9 +687,7 @@ bool bitwuzla_convt::get_bool(smt_astt a)
   return res;
 }
 
-BigInt bitwuzla_convt::get_bv(
-  smt_astt a,
-  bool is_signed)
+BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
 {
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
   const char *result = bitwuzla_get_bv_value(bitw, ast->a);
@@ -708,7 +706,8 @@ expr2tc bitwuzla_convt::get_array_elem(
 
   size_t size;
   BitwuzlaTerm **indicies, **values, *default_value;
-  bitwuzla_get_array_value(bitw, ast->a, &indicies, &values, &size, &default_value);
+  bitwuzla_get_array_value(
+    bitw, ast->a, &indicies, &values, &size, &default_value);
 
   BigInt val = 0;
   if(size > 0)
