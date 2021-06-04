@@ -1,4 +1,4 @@
 THOROUGH
 builtin_alloca_test_2.c
---bitwuzla --result-only
+--bitwuzla
 ^VERIFICATION SUCCESSFUL$
