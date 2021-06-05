@@ -1,12 +1,12 @@
 /*
     __ _____ _____ _____
  __|  |   __|     |   | |  JSON for Modern C++ (test suite)
-|  |  |__   |  |  | | | |  version 3.5.0
+|  |  |__   |  |  | | | |  version 3.9.1
 |_____|_____|_____|_|___|  https://github.com/nlohmann/json
 
 Licensed under the MIT License <http://opensource.org/licenses/MIT>.
 SPDX-License-Identifier: MIT
-Copyright (c) 2013-2018 Niels Lohmann <http://nlohmann.me>.
+Copyright (c) 2013-2019 Niels Lohmann <http://nlohmann.me>.
 
 Permission is hereby  granted, free of charge, to any  person obtaining a copy
 of this software and associated  documentation files (the "Software"), to deal
@@ -27,11 +27,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE  OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "catch.hpp"
+#include "doctest_compatibility.h"
 
-#include <fstream>
 #include <nlohmann/json.hpp>
 using nlohmann::json;
+
+#include <fstream>
+#include <sstream>
+#include <test_data.hpp>
 
 TEST_CASE("object inspection")
 {
@@ -40,34 +43,36 @@ TEST_CASE("object inspection")
         SECTION("object")
         {
             json j {{"foo", 1}, {"bar", false}};
-            CHECK(not j.is_null());
-            CHECK(not j.is_boolean());
-            CHECK(not j.is_number());
-            CHECK(not j.is_number_integer());
-            CHECK(not j.is_number_unsigned());
-            CHECK(not j.is_number_float());
+            CHECK(!j.is_null());
+            CHECK(!j.is_boolean());
+            CHECK(!j.is_number());
+            CHECK(!j.is_number_integer());
+            CHECK(!j.is_number_unsigned());
+            CHECK(!j.is_number_float());
+            CHECK(!j.is_binary());
             CHECK(j.is_object());
-            CHECK(not j.is_array());
-            CHECK(not j.is_string());
-            CHECK(not j.is_discarded());
-            CHECK(not j.is_primitive());
+            CHECK(!j.is_array());
+            CHECK(!j.is_string());
+            CHECK(!j.is_discarded());
+            CHECK(!j.is_primitive());
             CHECK(j.is_structured());
         }
 
         SECTION("array")
         {
             json j {"foo", 1, 1u, 42.23, false};
-            CHECK(not j.is_null());
-            CHECK(not j.is_boolean());
-            CHECK(not j.is_number());
-            CHECK(not j.is_number_integer());
-            CHECK(not j.is_number_unsigned());
-            CHECK(not j.is_number_float());
-            CHECK(not j.is_object());
+            CHECK(!j.is_null());
+            CHECK(!j.is_boolean());
+            CHECK(!j.is_number());
+            CHECK(!j.is_number_integer());
+            CHECK(!j.is_number_unsigned());
+            CHECK(!j.is_number_float());
+            CHECK(!j.is_binary());
+            CHECK(!j.is_object());
             CHECK(j.is_array());
-            CHECK(not j.is_string());
-            CHECK(not j.is_discarded());
-            CHECK(not j.is_primitive());
+            CHECK(!j.is_string());
+            CHECK(!j.is_discarded());
+            CHECK(!j.is_primitive());
             CHECK(j.is_structured());
         }
 
@@ -75,119 +80,144 @@ TEST_CASE("object inspection")
         {
             json j(nullptr);
             CHECK(j.is_null());
-            CHECK(not j.is_boolean());
-            CHECK(not j.is_number());
-            CHECK(not j.is_number_integer());
-            CHECK(not j.is_number_unsigned());
-            CHECK(not j.is_number_float());
-            CHECK(not j.is_object());
-            CHECK(not j.is_array());
-            CHECK(not j.is_string());
-            CHECK(not j.is_discarded());
+            CHECK(!j.is_boolean());
+            CHECK(!j.is_number());
+            CHECK(!j.is_number_integer());
+            CHECK(!j.is_number_unsigned());
+            CHECK(!j.is_number_float());
+            CHECK(!j.is_binary());
+            CHECK(!j.is_object());
+            CHECK(!j.is_array());
+            CHECK(!j.is_string());
+            CHECK(!j.is_discarded());
             CHECK(j.is_primitive());
-            CHECK(not j.is_structured());
+            CHECK(!j.is_structured());
         }
 
         SECTION("boolean")
         {
             json j(true);
-            CHECK(not j.is_null());
+            CHECK(!j.is_null());
             CHECK(j.is_boolean());
-            CHECK(not j.is_number());
-            CHECK(not j.is_number_integer());
-            CHECK(not j.is_number_unsigned());
-            CHECK(not j.is_number_float());
-            CHECK(not j.is_object());
-            CHECK(not j.is_array());
-            CHECK(not j.is_string());
-            CHECK(not j.is_discarded());
+            CHECK(!j.is_number());
+            CHECK(!j.is_number_integer());
+            CHECK(!j.is_number_unsigned());
+            CHECK(!j.is_number_float());
+            CHECK(!j.is_binary());
+            CHECK(!j.is_object());
+            CHECK(!j.is_array());
+            CHECK(!j.is_string());
+            CHECK(!j.is_discarded());
             CHECK(j.is_primitive());
-            CHECK(not j.is_structured());
+            CHECK(!j.is_structured());
         }
 
         SECTION("string")
         {
             json j("Hello world");
-            CHECK(not j.is_null());
-            CHECK(not j.is_boolean());
-            CHECK(not j.is_number());
-            CHECK(not j.is_number_integer());
-            CHECK(not j.is_number_unsigned());
-            CHECK(not j.is_number_float());
-            CHECK(not j.is_object());
-            CHECK(not j.is_array());
+            CHECK(!j.is_null());
+            CHECK(!j.is_boolean());
+            CHECK(!j.is_number());
+            CHECK(!j.is_number_integer());
+            CHECK(!j.is_number_unsigned());
+            CHECK(!j.is_number_float());
+            CHECK(!j.is_binary());
+            CHECK(!j.is_object());
+            CHECK(!j.is_array());
             CHECK(j.is_string());
-            CHECK(not j.is_discarded());
+            CHECK(!j.is_discarded());
             CHECK(j.is_primitive());
-            CHECK(not j.is_structured());
+            CHECK(!j.is_structured());
         }
 
         SECTION("number (integer)")
         {
             json j(42);
-            CHECK(not j.is_null());
-            CHECK(not j.is_boolean());
+            CHECK(!j.is_null());
+            CHECK(!j.is_boolean());
             CHECK(j.is_number());
             CHECK(j.is_number_integer());
-            CHECK(not j.is_number_unsigned());
-            CHECK(not j.is_number_float());
-            CHECK(not j.is_object());
-            CHECK(not j.is_array());
-            CHECK(not j.is_string());
-            CHECK(not j.is_discarded());
+            CHECK(!j.is_number_unsigned());
+            CHECK(!j.is_number_float());
+            CHECK(!j.is_binary());
+            CHECK(!j.is_object());
+            CHECK(!j.is_array());
+            CHECK(!j.is_string());
+            CHECK(!j.is_discarded());
             CHECK(j.is_primitive());
-            CHECK(not j.is_structured());
+            CHECK(!j.is_structured());
         }
 
         SECTION("number (unsigned)")
         {
             json j(42u);
-            CHECK(not j.is_null());
-            CHECK(not j.is_boolean());
+            CHECK(!j.is_null());
+            CHECK(!j.is_boolean());
             CHECK(j.is_number());
             CHECK(j.is_number_integer());
             CHECK(j.is_number_unsigned());
-            CHECK(not j.is_number_float());
-            CHECK(not j.is_object());
-            CHECK(not j.is_array());
-            CHECK(not j.is_string());
-            CHECK(not j.is_discarded());
+            CHECK(!j.is_number_float());
+            CHECK(!j.is_binary());
+            CHECK(!j.is_object());
+            CHECK(!j.is_array());
+            CHECK(!j.is_string());
+            CHECK(!j.is_discarded());
             CHECK(j.is_primitive());
-            CHECK(not j.is_structured());
+            CHECK(!j.is_structured());
         }
 
         SECTION("number (floating-point)")
         {
             json j(42.23);
-            CHECK(not j.is_null());
-            CHECK(not j.is_boolean());
+            CHECK(!j.is_null());
+            CHECK(!j.is_boolean());
             CHECK(j.is_number());
-            CHECK(not j.is_number_integer());
-            CHECK(not j.is_number_unsigned());
+            CHECK(!j.is_number_integer());
+            CHECK(!j.is_number_unsigned());
             CHECK(j.is_number_float());
-            CHECK(not j.is_object());
-            CHECK(not j.is_array());
-            CHECK(not j.is_string());
-            CHECK(not j.is_discarded());
+            CHECK(!j.is_binary());
+            CHECK(!j.is_object());
+            CHECK(!j.is_array());
+            CHECK(!j.is_string());
+            CHECK(!j.is_discarded());
             CHECK(j.is_primitive());
-            CHECK(not j.is_structured());
+            CHECK(!j.is_structured());
+        }
+
+        SECTION("binary")
+        {
+            json j(json::value_t::binary);
+            CHECK(!j.is_null());
+            CHECK(!j.is_boolean());
+            CHECK(!j.is_number());
+            CHECK(!j.is_number_integer());
+            CHECK(!j.is_number_unsigned());
+            CHECK(!j.is_number_float());
+            CHECK(j.is_binary());
+            CHECK(!j.is_object());
+            CHECK(!j.is_array());
+            CHECK(!j.is_string());
+            CHECK(!j.is_discarded());
+            CHECK(j.is_primitive());
+            CHECK(!j.is_structured());
         }
 
         SECTION("discarded")
         {
             json j(json::value_t::discarded);
-            CHECK(not j.is_null());
-            CHECK(not j.is_boolean());
-            CHECK(not j.is_number());
-            CHECK(not j.is_number_integer());
-            CHECK(not j.is_number_unsigned());
-            CHECK(not j.is_number_float());
-            CHECK(not j.is_object());
-            CHECK(not j.is_array());
-            CHECK(not j.is_string());
+            CHECK(!j.is_null());
+            CHECK(!j.is_boolean());
+            CHECK(!j.is_number());
+            CHECK(!j.is_number_integer());
+            CHECK(!j.is_number_unsigned());
+            CHECK(!j.is_number_float());
+            CHECK(!j.is_binary());
+            CHECK(!j.is_object());
+            CHECK(!j.is_array());
+            CHECK(!j.is_string());
             CHECK(j.is_discarded());
-            CHECK(not j.is_primitive());
-            CHECK(not j.is_structured());
+            CHECK(!j.is_primitive());
+            CHECK(!j.is_structured());
         }
     }
 
@@ -231,6 +261,9 @@ TEST_CASE("object inspection")
             // important test, because it yields a resize of the indent_string
             // inside the dump() function
             CHECK(j.dump(1024).size() == 15472);
+
+            const auto binary = json::binary({1, 2, 3}, 128);
+            CHECK(binary.dump(1024).size() == 2086);
         }
 
         SECTION("dump and floating-point numbers")
@@ -263,8 +296,8 @@ TEST_CASE("object inspection")
         {
             SECTION("parsing yields the same JSON value")
             {
-                std::ifstream f_escaped("test/data/json_nlohmann_tests/all_unicode_ascii.json");
-                std::ifstream f_unescaped("test/data/json_nlohmann_tests/all_unicode.json");
+                std::ifstream f_escaped(TEST_DATA_DIRECTORY "/json_nlohmann_tests/all_unicode_ascii.json");
+                std::ifstream f_unescaped(TEST_DATA_DIRECTORY "/json_nlohmann_tests/all_unicode.json");
 
                 json j1 = json::parse(f_escaped);
                 json j2 = json::parse(f_unescaped);
@@ -273,8 +306,8 @@ TEST_CASE("object inspection")
 
             SECTION("dumping yields the same JSON text")
             {
-                std::ifstream f_escaped("test/data/json_nlohmann_tests/all_unicode_ascii.json");
-                std::ifstream f_unescaped("test/data/json_nlohmann_tests/all_unicode.json");
+                std::ifstream f_escaped(TEST_DATA_DIRECTORY "/json_nlohmann_tests/all_unicode_ascii.json");
+                std::ifstream f_unescaped(TEST_DATA_DIRECTORY "/json_nlohmann_tests/all_unicode.json");
 
                 json value = json::parse(f_unescaped);
                 std::string text = value.dump(4, ' ', true);
@@ -433,6 +466,13 @@ TEST_CASE("object inspection")
         SECTION("number (floating-point)")
         {
             json j = 42.23;
+            json::value_t t = j;
+            CHECK(t == j.type());
+        }
+
+        SECTION("binary")
+        {
+            json j = json::binary({});
             json::value_t t = j;
             CHECK(t == j.type());
         }

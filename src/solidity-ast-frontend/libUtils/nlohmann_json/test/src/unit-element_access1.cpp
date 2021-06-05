@@ -1,12 +1,12 @@
 /*
     __ _____ _____ _____
  __|  |   __|     |   | |  JSON for Modern C++ (test suite)
-|  |  |__   |  |  | | | |  version 3.5.0
+|  |  |__   |  |  | | | |  version 3.9.1
 |_____|_____|_____|_|___|  https://github.com/nlohmann/json
 
 Licensed under the MIT License <http://opensource.org/licenses/MIT>.
 SPDX-License-Identifier: MIT
-Copyright (c) 2013-2018 Niels Lohmann <http://nlohmann.me>.
+Copyright (c) 2013-2019 Niels Lohmann <http://nlohmann.me>.
 
 Permission is hereby  granted, free of charge, to any  person obtaining a copy
 of this software and associated  documentation files (the "Software"), to deal
@@ -27,7 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE  OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "catch.hpp"
+#include "doctest_compatibility.h"
 
 #include <nlohmann/json.hpp>
 using nlohmann::json;
@@ -694,6 +694,22 @@ TEST_CASE("element access 1")
                     CHECK(it == j.end());
                 }
             }
+
+            SECTION("binary")
+            {
+                {
+                    json j = json::binary({1, 2, 3});
+                    json::iterator it = j.erase(j.begin());
+                    CHECK(j.type() == json::value_t::null);
+                    CHECK(it == j.end());
+                }
+                {
+                    json j = json::binary({1, 2, 3});
+                    json::const_iterator it = j.erase(j.cbegin());
+                    CHECK(j.type() == json::value_t::null);
+                    CHECK(it == j.end());
+                }
+            }
         }
 
         SECTION("erase with one invalid iterator")
@@ -871,6 +887,22 @@ TEST_CASE("element access 1")
                 }
                 {
                     json j = 23.42;
+                    json::const_iterator it = j.erase(j.cbegin(), j.cend());
+                    CHECK(j.type() == json::value_t::null);
+                    CHECK(it == j.end());
+                }
+            }
+
+            SECTION("binary")
+            {
+                {
+                    json j = json::binary({1, 2, 3});
+                    json::iterator it = j.erase(j.begin(), j.end());
+                    CHECK(j.type() == json::value_t::null);
+                    CHECK(it == j.end());
+                }
+                {
+                    json j = json::binary({1, 2, 3});
                     json::const_iterator it = j.erase(j.cbegin(), j.cend());
                     CHECK(j.type() == json::value_t::null);
                     CHECK(it == j.end());

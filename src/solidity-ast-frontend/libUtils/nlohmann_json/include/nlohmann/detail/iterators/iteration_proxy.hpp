@@ -1,18 +1,26 @@
 #pragma once
 
 #include <cstddef> // size_t
-#include <string> // string, to_string
 #include <iterator> // input_iterator_tag
+#include <string> // string, to_string
 #include <tuple> // tuple_size, get, tuple_element
+#include <utility> // move
 
-#include <nlohmann/detail/value_t.hpp>
 #include <nlohmann/detail/meta/type_traits.hpp>
+#include <nlohmann/detail/value_t.hpp>
 
 namespace nlohmann
 {
 namespace detail
 {
-template <typename IteratorType> class iteration_proxy_value
+template<typename string_type>
+void int_to_string( string_type& target, std::size_t value )
+{
+    // For ADL
+    using std::to_string;
+    target = to_string(value);
+}
+template<typename IteratorType> class iteration_proxy_value
 {
   public:
     using difference_type = std::ptrdiff_t;
@@ -20,6 +28,7 @@ template <typename IteratorType> class iteration_proxy_value
     using pointer = value_type * ;
     using reference = value_type & ;
     using iterator_category = std::input_iterator_tag;
+    using string_type = typename std::remove_cv< typename std::remove_reference<decltype( std::declval<IteratorType>().key() ) >::type >::type;
 
   private:
     /// the iterator
@@ -29,12 +38,14 @@ template <typename IteratorType> class iteration_proxy_value
     /// last stringified array index
     mutable std::size_t array_index_last = 0;
     /// a string representation of the array index
-    mutable std::string array_index_str = "0";
+    mutable string_type array_index_str = "0";
     /// an empty string (to return a reference for primitive values)
-    const std::string empty_str = "";
+    const string_type empty_str{};
 
   public:
-    explicit iteration_proxy_value(IteratorType it) noexcept : anchor(it) {}
+    explicit iteration_proxy_value(IteratorType it) noexcept
+        : anchor(std::move(it))
+    {}
 
     /// dereference operator (needed for range-based for)
     iteration_proxy_value& operator*()
@@ -52,21 +63,21 @@ template <typename IteratorType> class iteration_proxy_value
     }
 
     /// equality operator (needed for InputIterator)
-    bool operator==(const iteration_proxy_value& o) const noexcept
+    bool operator==(const iteration_proxy_value& o) const
     {
         return anchor == o.anchor;
     }
 
     /// inequality operator (needed for range-based for)
-    bool operator!=(const iteration_proxy_value& o) const noexcept
+    bool operator!=(const iteration_proxy_value& o) const
     {
         return anchor != o.anchor;
     }
 
     /// return key of the iterator
-    const std::string& key() const
+    const string_type& key() const
     {
-        assert(anchor.m_object != nullptr);
+        JSON_ASSERT(anchor.m_object != nullptr);
 
         switch (anchor.m_object->type())
         {
@@ -75,7 +86,7 @@ template <typename IteratorType> class iteration_proxy_value
             {
                 if (array_index != array_index_last)
                 {
-                    array_index_str = std::to_string(array_index);
+                    int_to_string( array_index_str, array_index );
                     array_index_last = array_index;
                 }
                 return array_index_str;
@@ -125,7 +136,7 @@ template<typename IteratorType> class iteration_proxy
 // Structured Bindings Support
 // For further reference see https://blog.tartanllama.xyz/structured-bindings/
 // And see https://github.com/nlohmann/json/pull/1391
-template <std::size_t N, typename IteratorType, enable_if_t<N == 0, int> = 0>
+template<std::size_t N, typename IteratorType, enable_if_t<N == 0, int> = 0>
 auto get(const nlohmann::detail::iteration_proxy_value<IteratorType>& i) -> decltype(i.key())
 {
     return i.key();
@@ -133,7 +144,7 @@ auto get(const nlohmann::detail::iteration_proxy_value<IteratorType>& i) -> decl
 // Structured Bindings Support
 // For further reference see https://blog.tartanllama.xyz/structured-bindings/
 // And see https://github.com/nlohmann/json/pull/1391
-template <std::size_t N, typename IteratorType, enable_if_t<N == 1, int> = 0>
+template<std::size_t N, typename IteratorType, enable_if_t<N == 1, int> = 0>
 auto get(const nlohmann::detail::iteration_proxy_value<IteratorType>& i) -> decltype(i.value())
 {
     return i.value();
@@ -147,11 +158,16 @@ auto get(const nlohmann::detail::iteration_proxy_value<IteratorType>& i) -> decl
 // And see https://github.com/nlohmann/json/pull/1391
 namespace std
 {
-template <typename IteratorType>
+#if defined(__clang__)
+    // Fix: https://github.com/nlohmann/json/issues/1401
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wmismatched-tags"
+#endif
+template<typename IteratorType>
 class tuple_size<::nlohmann::detail::iteration_proxy_value<IteratorType>>
             : public std::integral_constant<std::size_t, 2> {};
 
-template <std::size_t N, typename IteratorType>
+template<std::size_t N, typename IteratorType>
 class tuple_element<N, ::nlohmann::detail::iteration_proxy_value<IteratorType >>
 {
   public:
@@ -159,4 +175,7 @@ class tuple_element<N, ::nlohmann::detail::iteration_proxy_value<IteratorType >>
                      get<N>(std::declval <
                             ::nlohmann::detail::iteration_proxy_value<IteratorType >> ()));
 };
-}
+#if defined(__clang__)
+    #pragma clang diagnostic pop
+#endif
+} // namespace std

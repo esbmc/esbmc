@@ -1,12 +1,12 @@
 /*
     __ _____ _____ _____
  __|  |   __|     |   | |  JSON for Modern C++ (test suite)
-|  |  |__   |  |  | | | |  version 3.5.0
+|  |  |__   |  |  | | | |  version 3.9.1
 |_____|_____|_____|_|___|  https://github.com/nlohmann/json
 
 Licensed under the MIT License <http://opensource.org/licenses/MIT>.
 SPDX-License-Identifier: MIT
-Copyright (c) 2013-2018 Niels Lohmann <http://nlohmann.me>.
+Copyright (c) 2013-2019 Niels Lohmann <http://nlohmann.me>.
 
 Permission is hereby  granted, free of charge, to any  person obtaining a copy
 of this software and associated  documentation files (the "Software"), to deal
@@ -27,13 +27,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE  OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "catch.hpp"
+#include "doctest_compatibility.h"
 
-#define private public
+#define JSON_TESTS_PRIVATE
 #include <nlohmann/json.hpp>
 using nlohmann::json;
 
-void check_escaped(const char* original, const char* escaped = "", const bool ensure_ascii = false);
+#include <sstream>
+
+namespace
+{
+void check_escaped(const char* original, const char* escaped = "", bool ensure_ascii = false);
 void check_escaped(const char* original, const char* escaped, const bool ensure_ascii)
 {
     std::stringstream ss;
@@ -41,6 +45,7 @@ void check_escaped(const char* original, const char* escaped, const bool ensure_
     s.dump_escaped(original, ensure_ascii);
     CHECK(ss.str() == escaped);
 }
+} // namespace
 
 TEST_CASE("convenience functions")
 {
@@ -52,6 +57,7 @@ TEST_CASE("convenience functions")
         CHECK(std::string(json(json::value_t::number_integer).type_name()) == "number");
         CHECK(std::string(json(json::value_t::number_unsigned).type_name()) == "number");
         CHECK(std::string(json(json::value_t::number_float).type_name()) == "number");
+        CHECK(std::string(json(json::value_t::binary).type_name()) == "binary");
         CHECK(std::string(json(json::value_t::boolean).type_name()) == "boolean");
         CHECK(std::string(json(json::value_t::string).type_name()) == "string");
         CHECK(std::string(json(json::value_t::discarded).type_name()) == "discarded");

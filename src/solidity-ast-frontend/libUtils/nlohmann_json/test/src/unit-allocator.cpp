@@ -1,12 +1,12 @@
 /*
     __ _____ _____ _____
  __|  |   __|     |   | |  JSON for Modern C++ (test suite)
-|  |  |__   |  |  | | | |  version 3.5.0
+|  |  |__   |  |  | | | |  version 3.9.1
 |_____|_____|_____|_|___|  https://github.com/nlohmann/json
 
 Licensed under the MIT License <http://opensource.org/licenses/MIT>.
 SPDX-License-Identifier: MIT
-Copyright (c) 2013-2018 Niels Lohmann <http://nlohmann.me>.
+Copyright (c) 2013-2019 Niels Lohmann <http://nlohmann.me>.
 
 Permission is hereby  granted, free of charge, to any  person obtaining a copy
 of this software and associated  documentation files (the "Software"), to deal
@@ -27,23 +27,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE  OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "catch.hpp"
+#include "doctest_compatibility.h"
 
-#define private public
+#define JSON_TESTS_PRIVATE
 #include <nlohmann/json.hpp>
 using nlohmann::json;
 
+namespace
+{
 // special test case to check if memory is leaked if constructor throws
-
 template<class T>
 struct bad_allocator : std::allocator<T>
 {
     template<class... Args>
-    void construct(T*, Args&& ...)
+    void construct(T* /*unused*/, Args&& ... /*unused*/)
     {
         throw std::bad_alloc();
     }
 };
+} // namespace
 
 TEST_CASE("bad_alloc")
 {
@@ -64,13 +66,17 @@ TEST_CASE("bad_alloc")
     }
 }
 
-static bool next_construct_fails = false;
-static bool next_destroy_fails = false;
-static bool next_deallocate_fails = false;
+namespace
+{
+bool next_construct_fails = false;
+bool next_destroy_fails = false;
+bool next_deallocate_fails = false;
 
 template<class T>
 struct my_allocator : std::allocator<T>
 {
+    using std::allocator<T>::allocator;
+
     template<class... Args>
     void construct(T* p, Args&& ... args)
     {
@@ -79,10 +85,8 @@ struct my_allocator : std::allocator<T>
             next_construct_fails = false;
             throw std::bad_alloc();
         }
-        else
-        {
-            ::new (reinterpret_cast<void*>(p)) T(std::forward<Args>(args)...);
-        }
+
+        ::new (reinterpret_cast<void*>(p)) T(std::forward<Args>(args)...);
     }
 
     void deallocate(T* p, std::size_t n)
@@ -92,10 +96,8 @@ struct my_allocator : std::allocator<T>
             next_deallocate_fails = false;
             throw std::bad_alloc();
         }
-        else
-        {
-            std::allocator<T>::deallocate(p, n);
-        }
+
+        std::allocator<T>::deallocate(p, n);
     }
 
     void destroy(T* p)
@@ -105,11 +107,15 @@ struct my_allocator : std::allocator<T>
             next_destroy_fails = false;
             throw std::bad_alloc();
         }
-        else
-        {
-            p->~T();
-        }
+
+        p->~T();
     }
+
+    template <class U>
+    struct rebind
+    {
+        using other = my_allocator<U>;
+    };
 };
 
 // allows deletion of raw pointer, usually hold by json_value
@@ -121,6 +127,7 @@ void my_allocator_clean_up(T* p)
     alloc.destroy(p);
     alloc.deallocate(p, 1);
 }
+} // namespace
 
 TEST_CASE("controlled bad_alloc")
 {
@@ -218,5 +225,48 @@ TEST_CASE("controlled bad_alloc")
             CHECK_THROWS_AS(my_json(s), std::bad_alloc&);
             next_construct_fails = false;
         }
+    }
+}
+
+namespace
+{
+template<class T>
+struct allocator_no_forward : std::allocator<T>
+{
+    allocator_no_forward() = default;
+    template <class U>
+    allocator_no_forward(allocator_no_forward<U> /*unused*/) {}
+
+    template <class U>
+    struct rebind
+    {
+        using other =  allocator_no_forward<U>;
+    };
+
+    template <class... Args>
+    void construct(T* p, const Args& ... args) noexcept(noexcept(::new (static_cast<void*>(p)) T(args...)))
+    {
+        // force copy even if move is available
+        ::new (static_cast<void*>(p)) T(args...);
+    }
+};
+} // namespace
+
+TEST_CASE("bad my_allocator::construct")
+{
+    SECTION("my_allocator::construct doesn't forward")
+    {
+        using bad_alloc_json = nlohmann::basic_json<std::map,
+              std::vector,
+              std::string,
+              bool,
+              std::int64_t,
+              std::uint64_t,
+              double,
+              allocator_no_forward>;
+
+        bad_alloc_json j;
+        j["test"] = bad_alloc_json::array_t();
+        j["test"].push_back("should not leak");
     }
 }
