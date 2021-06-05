@@ -61,17 +61,28 @@ bool solidity_convertert::get_decl_intrinsics(
     // Declaration of functions
     case SolidityTypes::DeclFunction:
     {
-      printf("processing DeclFunction ...");
-      assert(0);
+      // make a tracker from the json object to facilitate our symbol conversion
+      // avoid using a global tracker as a member within this class for performance reasons
+      DeclTrackerPtr json_tracker = std::make_shared<solidity_decl_tracker>();
+      printf("@@ This is the numebr returned from json_tracker: %u\n", json_tracker->test_number());
+      get_function(json_tracker);
+
+      assert(!"processing DeclFunction ...\n");
       break;
     }
     default:
       std::cerr << "**** ERROR: ";
       std::cerr << "Unrecognized / unimplemented declaration "
                 << decl.at("declClass") << std::endl;
-      return true;
+      return true; // 'true' indicates something is wrong
   }
 
+  return false; // 'false' indicates everything is fine
+}
+
+bool solidity_convertert::get_function(DeclTrackerPtr& json_tracker)
+{
+  printf("@@@ This is the numebr returned from json_tracker: %u\n", json_tracker->test_number());
   return false;
 }
 
