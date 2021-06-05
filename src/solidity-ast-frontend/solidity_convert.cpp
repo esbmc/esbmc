@@ -29,17 +29,16 @@ bool solidity_convertert::convert()
   {
     // iterate over each json object (i.e. ESBMC or TACAS definitions) and add symbols as we go
     const std::string& top_level_key = it.key();
-    printf("@@ current key=%s\n", top_level_key.c_str());
+    printf("@@ converting %s ... \n", top_level_key.c_str());
     exprt dummy_decl;
     get_decl_intrinsics(it.value(), dummy_decl, index, top_level_key, "intrinsic_json");
   }
 
   //TODO:  - PART 2: get declarations from AST nodes
-  assert(!"cool");
+  assert(!"come back and continue - PART 2 conversion");
 
   return false;
 }
-
 
 bool solidity_convertert::get_decl_intrinsics(
     const nlohmann::json& decl, exprt &new_expr,
@@ -47,8 +46,31 @@ bool solidity_convertert::get_decl_intrinsics(
 {
   // This method convert declarations from intrinsics. They are called when those declarations
   // are to be added to the context.
-  printf("In function %s: \n", __func__);
-  print_json_element(decl, index, key, json_name);
+  //print_json_element(decl, index, key, json_name);
+
+  if (!decl.contains("declClass"))
+  {
+    printf("missing \'declClass\' key in %s[%u]: %s\n", json_name.c_str(), index, key.c_str());
+    assert(0);
+  }
+
+  SolidityTypes::declClass decl_class =
+    SolidityTypes::get_decl_class(static_cast<std::string>(decl.at("declClass")));
+  switch(decl_class)
+  {
+    // Declaration of functions
+    case SolidityTypes::DeclFunction:
+    {
+      printf("processing DeclFunction ...");
+      assert(0);
+      break;
+    }
+    default:
+      std::cerr << "**** ERROR: ";
+      std::cerr << "Unrecognized / unimplemented declaration "
+                << decl.at("declClass") << std::endl;
+      return true;
+  }
 
   return false;
 }
@@ -56,7 +78,7 @@ bool solidity_convertert::get_decl_intrinsics(
 void solidity_convertert::print_json_element(const nlohmann::json &json_in, const unsigned index,
     const std::string &key, const std::string& json_name)
 {
-  printf("\n### %s element[%u] content: key=%s, size=%lu ###\n",
+  printf("### %s element[%u] content: key=%s, size=%lu ###\n",
       json_name.c_str(), index, key.c_str(), json_in.size());
   std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
   printf("\n");
