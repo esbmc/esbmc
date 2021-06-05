@@ -64,10 +64,10 @@ bool solidity_ast_languaget::parse(
   ast_json = nlohmann::json::parse(ast_json_content); // parse explicitly
 
   // add internal additions
-  nlohmann::json intrinsic_json = nlohmann::json::parse(internal_additions()); // parse explicitly
-  ast_json.update(intrinsic_json);
+  intrinsic_json = nlohmann::json::parse(internal_additions()); // parse explicitly
 
-  //print_json(ast_json);
+  print_json(ast_json);
+  print_json(intrinsic_json);
 
   return false;
 }
@@ -79,7 +79,7 @@ bool solidity_ast_languaget::typecheck(
 {
   contextt new_context;
 
-  solidity_convertert converter(new_context, ast_json);
+  solidity_convertert converter(new_context, ast_json, intrinsic_json);
 
   if(converter.convert())
     return true;
@@ -131,7 +131,6 @@ std::string solidity_ast_languaget::internal_additions()
   std::string intrinsics =
     R"(
         {
-         "ESBMC_intrinsics" : {
            "__ESBMC_assume": {
                "isImplicit": false,
                "isDefined": false,
@@ -149,8 +148,25 @@ std::string solidity_ast_languaget::internal_additions()
                "is_extern": false,
                "file_local": false,
                "hasBody": false
+           },
+           "__ESBMC_assert": {
+               "isImplicit": false,
+               "isDefined": false,
+               "isThisDeclarationADefinition": false,
+               "typeClass" : "TypeBuiltin",
+               "builtInTypes" : "BuiltInVoid",
+               "isConstQualified" : false,
+               "isVolatileQualified": false,
+               "isRestrictQualified": false,
+               "isVariadic": false,
+               "isInlined": false,
+               "isFunctionOrMethod": false,
+               "PLoc_getLine": 1,
+               "id": "c:@F@__ESBMC_assert",
+               "is_extern": false,
+               "file_local": false,
+               "hasBody": false
            }
-        }
      }
     )";
 
