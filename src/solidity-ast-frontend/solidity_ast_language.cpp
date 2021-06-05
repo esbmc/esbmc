@@ -131,24 +131,26 @@ std::string solidity_ast_languaget::internal_additions()
   std::string intrinsics =
     R"(
         {
-         "__ESBMC_assume": {
-             "isImplicit": false,
-             "isDefined": false,
-             "isThisDeclarationADefinition": false,
-             "typeClass" : "TypeBuiltin",
-             "builtInTypes" : "BuiltInVoid",
-             "isConstQualified" : false,
-             "isVolatileQualified": false,
-             "isRestrictQualified": false,
-             "isVariadic": false,
-             "isInlined": false,
-             "isFunctionOrMethod": false,
-             "PLoc_getLine": 1,
-             "id": "c:@F@__ESBMC_assume",
-             "is_extern": false,
-             "file_local": false,
-             "hasBody": false
-         }
+         "ESBMC_intrinsics" : {
+           "__ESBMC_assume": {
+               "isImplicit": false,
+               "isDefined": false,
+               "isThisDeclarationADefinition": false,
+               "typeClass" : "TypeBuiltin",
+               "builtInTypes" : "BuiltInVoid",
+               "isConstQualified" : false,
+               "isVolatileQualified": false,
+               "isRestrictQualified": false,
+               "isVariadic": false,
+               "isInlined": false,
+               "isFunctionOrMethod": false,
+               "PLoc_getLine": 1,
+               "id": "c:@F@__ESBMC_assume",
+               "is_extern": false,
+               "file_local": false,
+               "hasBody": false
+           }
+        }
      }
     )";
 
