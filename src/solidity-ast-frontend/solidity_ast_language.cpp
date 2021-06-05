@@ -132,6 +132,7 @@ std::string solidity_ast_languaget::internal_additions()
     R"(
         {
            "__ESBMC_assume": {
+               "declClass" : "DeclFunction",
                "isImplicit": false,
                "isDefined": false,
                "isThisDeclarationADefinition": false,
@@ -148,8 +149,15 @@ std::string solidity_ast_languaget::internal_additions()
                "is_extern": false,
                "file_local": false,
                "hasBody": false
-           },
+           }
+     }
+    )";
+
+    return intrinsics;
+
+  /*
            "__ESBMC_assert": {
+               "declClass" : "DeclFunction",
                "isImplicit": false,
                "isDefined": false,
                "isThisDeclarationADefinition": false,
@@ -167,8 +175,5 @@ std::string solidity_ast_languaget::internal_additions()
                "file_local": false,
                "hasBody": false
            }
-     }
-    )";
-
-    return intrinsics;
+    */
 }

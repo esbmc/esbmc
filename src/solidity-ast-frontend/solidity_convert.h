@@ -8,6 +8,7 @@
 #include <util/namespace.h>
 #include <util/std_types.h>
 #include <nlohmann/json.hpp>
+#include <solidity-ast-frontend/solidity_type.h>
 
 class solidity_convertert
 {

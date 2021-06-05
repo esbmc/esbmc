@@ -1,12 +1,23 @@
 #ifndef SOLIDITY_TYPE_H_
 #define SOLIDITY_TYPE_H_
 
-namespace solidityTypes
+#include <map>
+#include <string>
+
+namespace SolidityTypes
 {
+  enum declClass
+  {
+    DeclLabel = 0, // corresponds to clang::Decl::Label
+    DeclFunction,  // corresponds to clang::Decl::Function
+    DeclError
+  };
+  declClass get_decl_class(const std::string& kind);
+
   // counterparts of type cases of clang::Type::getTypeClass()
   enum typeClass
   {
-    TypeBuiltin = 0,
+    TypeBuiltin = 0, // corresponds to clang::Type::Builtin
     TypeParen
   };
 
@@ -16,6 +27,8 @@ namespace solidityTypes
     BuiltInVoid = 0,
     BuiltInBool
   };
+
+
 };
 
 #endif /* SOLIDITY_TYPE_H_ */
