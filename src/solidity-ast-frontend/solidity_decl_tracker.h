@@ -4,29 +4,41 @@
 #include <nlohmann/json.hpp>
 #include <solidity-ast-frontend/solidity_type.h>
 
-class solidity_decl_tracker
+class decl_function_tracker;
+typedef std::shared_ptr<decl_function_tracker> DeclTrackerPtr;
+namespace ConfigureTracker
+{
+  // contains functions to parse the json value and configure the trackers accordingly
+  void configre_decl_function_tracker(const nlohmann::json& decl, DeclTrackerPtr& json_tracker); // configure tracker based on json values
+};
+
+class decl_function_tracker
 {
 public:
-  solidity_decl_tracker()
+  decl_function_tracker()
   {
       clear_all();
   }
 
-  solidity_decl_tracker(const solidity_decl_tracker &rhs) = default; // default copy constructor
-  solidity_decl_tracker(solidity_decl_tracker &&rhs) = default;      // default move constructor
-  solidity_decl_tracker& operator=(const solidity_decl_tracker &rhs) = default; // default copy assignment operator
-  solidity_decl_tracker& operator=(solidity_decl_tracker &&rhs) = default;      // default move assignment operator
+  decl_function_tracker(const decl_function_tracker &rhs) = default; // default copy constructor
+  decl_function_tracker(decl_function_tracker &&rhs) = default;      // default move constructor
+  decl_function_tracker& operator=(const decl_function_tracker &rhs) = default; // default copy assignment operator
+  decl_function_tracker& operator=(decl_function_tracker &&rhs) = default;      // default move assignment operator
 
   void clear_all()
   {
-    printf("making decl tracker ...\n");
-    test = false;
+    isImplicit = false;
   }
 
-  unsigned test_number() { return 12345; }
+  // setters
+  void set_isImplicit(bool _isImplicit) { isImplicit = _isImplicit; }
+
+  // getters
+  bool get_isImplicit() { return isImplicit; }
 
 private:
-  bool test;
+  bool isImplicit;
+
 };
 
 #endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_
