@@ -63,8 +63,8 @@ bool solidity_convertert::get_decl_intrinsics(
     {
       // make a tracker from the json object to facilitate our symbol conversion
       // avoid using a global tracker as a member within this class for performance reasons
-      DeclTrackerPtr json_tracker = std::make_shared<solidity_decl_tracker>();
-      printf("@@ This is the numebr returned from json_tracker: %u\n", json_tracker->test_number());
+      DeclTrackerPtr json_tracker = std::make_shared<decl_function_tracker>();
+      ConfigureTracker::configre_decl_function_tracker(decl, json_tracker);
       get_function(json_tracker);
 
       assert(!"processing DeclFunction ...\n");
@@ -82,7 +82,9 @@ bool solidity_convertert::get_decl_intrinsics(
 
 bool solidity_convertert::get_function(DeclTrackerPtr& json_tracker)
 {
-  printf("@@@ This is the numebr returned from json_tracker: %u\n", json_tracker->test_number());
+  if (json_tracker->get_isImplicit())
+    return false;
+
   return false;
 }
 

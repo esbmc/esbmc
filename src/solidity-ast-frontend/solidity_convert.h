@@ -12,7 +12,7 @@
 #include <solidity-ast-frontend/solidity_type.h>
 #include <solidity-ast-frontend/solidity_decl_tracker.h>
 
-typedef std::shared_ptr<solidity_decl_tracker> DeclTrackerPtr; // to tracker json object when getting declarations
+typedef std::shared_ptr<decl_function_tracker> DeclTrackerPtr; // to tracker json object when getting declarations
 
 class solidity_convertert
 {
