@@ -39,6 +39,9 @@ protected:
   bool get_type(const SolidityTypes::typeClass the_type,
       typet &new_type, std::shared_ptr<decl_function_tracker>& json_tracker);
   bool get_builtin_type(SolidityTypes::builInTypes the_blti_type, typet &new_type);
+  void get_location_from_decl(std::shared_ptr<decl_function_tracker>& json_tracker,
+      locationt &location);
+  unsigned get_presumed_location(std::shared_ptr<decl_function_tracker>& json_tracker);
 
   unsigned int current_scope_var_num; // tracking scope while getting declarations
 };
