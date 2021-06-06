@@ -15,7 +15,6 @@ public:
       clear_all();
   }
 
-
   decl_function_tracker(const decl_function_tracker &rhs) = default; // default copy constructor
   // move constructor
   decl_function_tracker(decl_function_tracker &&rhs) = default;
@@ -33,6 +32,10 @@ public:
     isThisDeclarationADefinition = false;
     type_class = SolidityTypes::TypeError;
     decl_class = SolidityTypes::DeclError;
+    builtin_type = SolidityTypes::BuiltInError;
+    isConstQualified = false;
+    isVolatileQualified = false;
+    isRestrictQualified = false;
   }
 
   // for debug print
@@ -45,8 +48,12 @@ public:
   bool get_isImplicit() { return isImplicit; }
   bool get_isDefined() { return isDefined; }
   bool get_isThisDeclarationADefinition() { return isThisDeclarationADefinition; }
+  bool get_isConstQualified() { return isConstQualified; }
+  bool get_isVolatileQualified() { return isVolatileQualified; }
+  bool get_isRestrictQualified() { return isRestrictQualified; }
   SolidityTypes::typeClass getTypeClass() { return type_class; }
   SolidityTypes::declClass getDeclClass() { return decl_class; }
+  SolidityTypes::builInTypes getBuiltInType() { return builtin_type; }
 
 private:
   // TODO: nlohmann_json has explicit copy constructor defined. probably better to just make a copy instead of using a ref member.
@@ -55,8 +62,12 @@ private:
   bool isImplicit;
   bool isDefined;
   bool isThisDeclarationADefinition;
+  bool isConstQualified;
+  bool isVolatileQualified;
+  bool isRestrictQualified;
   SolidityTypes::typeClass type_class;
   SolidityTypes::declClass decl_class;
+  SolidityTypes::builInTypes builtin_type;
 
   // private setters : set the member values based on the corresponding json value. Used by config() only.
   // Setting them outside this class is NOT allowed.
@@ -65,6 +76,10 @@ private:
   void set_isThisDeclarationADefinition();
   void set_type_class();
   void set_decl_class();
+  void set_builtin_type();
+  void set_isConstQualified();
+  void set_isVolatileQualified();
+  void set_isRestrictQualified();
 };
 
 #endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_

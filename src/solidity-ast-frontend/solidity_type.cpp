@@ -42,7 +42,7 @@ namespace SolidityTypes
     }
     else
     {
-      assert(!"Unsupported declClass");
+      assert(!"Unsupported typeClass");
     }
     return TypeError;
   }
@@ -56,6 +56,32 @@ namespace SolidityTypes
       default:
       {
         assert(!"Unknown typeClass");
+        return "UNKNOWN";
+      }
+    }
+  }
+
+  builInTypes get_builtin_type(const std::string& kind)
+  {
+    if (kind == "BuiltInVoid")
+    {
+      return BuiltInVoid;
+    }
+    else
+    {
+      assert(!"Unsupported builtInTypes");
+    }
+    return BuiltInError;
+  }
+  const char* builInTypes_to_str(builInTypes the_blitype)
+  {
+    switch(the_blitype)
+    {
+      ENUM_TO_STR(BuiltInVoid)
+      ENUM_TO_STR(BuiltInError)
+      default:
+      {
+        assert(!"Unknown builtInTypes");
         return "UNKNOWN";
       }
     }

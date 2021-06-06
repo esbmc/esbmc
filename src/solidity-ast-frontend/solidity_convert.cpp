@@ -57,6 +57,7 @@ bool solidity_convertert::get_decl_intrinsics(
   // First we need to get Decl class before making a json tracker
   SolidityTypes::declClass decl_class =
     SolidityTypes::get_decl_class(static_cast<std::string>(decl.at("declClass")));
+  assert(decl_class != SolidityTypes::DeclError);
   switch(decl_class)
   {
     // Declaration of functions
@@ -99,7 +100,6 @@ bool solidity_convertert::get_function(std::shared_ptr<decl_function_tracker>& j
   if(get_type(json_tracker, type.return_type()))
     return true;
 
-
   assert(!"done?");
 
   return false;
@@ -109,21 +109,33 @@ bool solidity_convertert::get_type(
     std::shared_ptr<decl_function_tracker>& json_tracker,
     typet &new_type)
 {
-  if (get_type(json_tracker->getTypeClass(), new_type))
+  if (get_type(json_tracker->getTypeClass(), new_type, json_tracker))
     return true;
 
-  assert(!"continue - q_type");
+  if(json_tracker->get_isConstQualified())
+    new_type.cmt_constant(true);
+
+  if(json_tracker->get_isVolatileQualified())
+    new_type.cmt_volatile(true);
+
+  if(json_tracker->get_isRestrictQualified())
+    new_type.restricted(true);
+
   return false;
 }
 
-bool solidity_convertert::get_type(const SolidityTypes::typeClass the_type, typet &new_type)
+bool solidity_convertert::get_type(
+  const SolidityTypes::typeClass the_type,
+  typet &new_type,
+  std::shared_ptr<decl_function_tracker>& json_tracker)
 {
   assert(the_type != SolidityTypes::TypeError); // must be a valid type class
   switch(the_type)
   {
     case SolidityTypes::TypeBuiltin:
       {
-        assert(!"got type Builtin");
+        if(get_builtin_type(json_tracker->getBuiltInType(), new_type))
+          return true;
         break;
       }
     default:
@@ -132,6 +144,31 @@ bool solidity_convertert::get_type(const SolidityTypes::typeClass the_type, type
       return true;
   }
 
+  return false;
+}
+
+bool solidity_convertert::get_builtin_type(
+  SolidityTypes::builInTypes the_blti_type,
+  typet &new_type)
+{
+  std::string c_type;
+  assert(the_blti_type != SolidityTypes::BuiltInError);
+  switch(the_blti_type)
+  {
+    case SolidityTypes::BuiltInVoid:
+      {
+        new_type = empty_typet();
+        c_type = "void";
+        break;
+      }
+    default:
+      std::cerr << "Unrecognized builtin type "
+                << SolidityTypes::builInTypes_to_str(the_blti_type)
+                << std::endl;
+      return true;
+  }
+
+  new_type.set("#cpp_type", c_type);
   return false;
 }
 
