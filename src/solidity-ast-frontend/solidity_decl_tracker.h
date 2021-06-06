@@ -9,7 +9,7 @@
 class decl_function_tracker
 {
 public:
-  // some invalid values to add additional checks to be more defensive
+  // invalid values to be more defensive
   static constexpr unsigned plocLineInvalid = std::numeric_limits<unsigned>::max();
 
   decl_function_tracker(nlohmann::json& _decl_func) :
@@ -43,6 +43,8 @@ public:
     isInlined = false;
     isFunctionOrMethod = false;
     PLoc_Line = plocLineInvalid;
+    declName = "";
+    id = "";
   }
 
   // for debug print
@@ -65,6 +67,8 @@ public:
   SolidityTypes::declClass getDeclClass() { return decl_class; }
   SolidityTypes::builInTypes getBuiltInType() { return builtin_type; }
   unsigned get_ploc_line() { return PLoc_Line; };
+  std::string get_declName() { return declName; }
+  std::string get_id() { return id; };
 
 private:
   // TODO: nlohmann_json has explicit copy constructor defined. probably better to just make a copy instead of using a ref member.
@@ -83,6 +87,8 @@ private:
   SolidityTypes::declClass decl_class;
   SolidityTypes::builInTypes builtin_type;
   unsigned PLoc_Line;
+  std::string declName;
+  std::string id;
 
   // private setters : set the member values based on the corresponding json value. Used by config() only.
   // Setting them outside this class is NOT allowed.
@@ -99,6 +105,8 @@ private:
   void set_isInlined();
   void set_isFunctionOrMethod();
   void set_ploc_line();
+  void set_declName();
+  void set_id();
 };
 
 #endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_

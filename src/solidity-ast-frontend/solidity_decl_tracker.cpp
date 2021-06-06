@@ -17,6 +17,24 @@ void decl_function_tracker::config()
   set_isInlined();
   set_isFunctionOrMethod();
   set_ploc_line();
+  set_declName();
+  set_id();
+}
+
+void decl_function_tracker::set_id()
+{
+  assert(id == ""); // only allowed to set once during config(). If set twice, something is wrong.
+  if (!decl_func.contains("id"))
+    assert(!"missing \'id\' in DeclFunction");
+  id = decl_func["id"].get<std::string>();
+}
+
+void decl_function_tracker::set_declName()
+{
+  assert(declName == ""); // only allowed to set once during config(). If set twice, something is wrong.
+  if (!decl_func.contains("declName"))
+    assert(!"missing \'declName\' in DeclFunction");
+  declName = decl_func["declName"].get<std::string>();
 }
 
 void decl_function_tracker::set_ploc_line()
