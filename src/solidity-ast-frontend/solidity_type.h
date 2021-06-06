@@ -17,7 +17,7 @@ namespace SolidityTypes
   declClass get_decl_class(const std::string& kind);
   const char* declClass_to_str(declClass the_decl);
 
-  // counterparts of type cases of clang::Type::getTypeClass()
+  // counterparts of clang::Type::getTypeClass() used by get_type during conversion
   enum typeClass
   {
     TypeBuiltin = 0, // corresponds to clang::Type::Builtin
@@ -26,12 +26,14 @@ namespace SolidityTypes
   typeClass get_type_class(const std::string& kind);
   const char* typeClass_to_str(typeClass the_type);
 
-  // counterparts of type cases of clang::BuiltinType::getKind()
+  // counterparts of clang::BuiltinType::getKind() used by get_builtin_type during conversion
   enum builInTypes
   {
     BuiltInVoid = 0,
-    BuiltInBool
+    BuiltInError
   };
+  builInTypes get_builtin_type(const std::string& kind);
+  const char* builInTypes_to_str(builInTypes the_blitype);
 
 
 };

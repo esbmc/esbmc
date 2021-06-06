@@ -9,6 +9,31 @@ void decl_function_tracker::config()
   set_isDefined();
   set_isThisDeclarationADefinition();
   set_type_class();
+  set_builtin_type();
+  set_isConstQualified();
+  set_isVolatileQualified();
+  set_isRestrictQualified();
+}
+
+void decl_function_tracker::set_isConstQualified()
+{
+  if (!decl_func.contains("isConstQualified"))
+    assert(!"missing \'isConstQualified\' in DeclFunction");
+  isConstQualified = (decl_func["isConstQualified"].get<bool>())? true : false;
+}
+
+void decl_function_tracker::set_isVolatileQualified()
+{
+  if (!decl_func.contains("isVolatileQualified"))
+    assert(!"missing \'isVolatileQualified\' in DeclFunction");
+  isVolatileQualified = (decl_func["isVolatileQualified"].get<bool>())? true : false;
+}
+
+void decl_function_tracker::set_isRestrictQualified()
+{
+  if (!decl_func.contains("isRestrictQualified"))
+    assert(!"missing \'isRestrictQualified\' in DeclFunction");
+  isRestrictQualified = (decl_func["isRestrictQualified"].get<bool>())? true : false;
 }
 
 void decl_function_tracker::set_isImplicit()
@@ -47,6 +72,15 @@ void decl_function_tracker::set_decl_class()
     assert(!"missing \'declClass\' in DeclFunction");
   decl_class = SolidityTypes::get_decl_class(
       decl_func["declClass"].get<std::string>()
+      );
+}
+
+void decl_function_tracker::set_builtin_type()
+{
+  if (!decl_func.contains("builtInTypes"))
+    assert(!"missing \'builtInTypes\' in DeclFunction");
+  builtin_type = SolidityTypes::get_builtin_type(
+      decl_func["builtInTypes"].get<std::string>()
       );
 }
 
