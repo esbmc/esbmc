@@ -15,6 +15,23 @@ void decl_function_tracker::config()
   set_isRestrictQualified();
   set_isVariadic();
   set_isInlined();
+  set_isFunctionOrMethod();
+  set_ploc_line();
+}
+
+void decl_function_tracker::set_ploc_line()
+{
+  assert(PLoc_Line == plocLineInvalid); // only allowed to set once during config(). If set twice, something is wrong.
+  if (!decl_func.contains("PLoc_Line"))
+    assert(!"missing \'PLoc_Line\' in DeclFunction");
+  PLoc_Line = decl_func["PLoc_Line"].get<unsigned>();
+}
+
+void decl_function_tracker::set_isFunctionOrMethod()
+{
+  if (!decl_func.contains("isFunctionOrMethod"))
+    assert(!"missing \'isFunctionOrMethod\' in DeclFunction");
+  isFunctionOrMethod = (decl_func["isFunctionOrMethod"].get<bool>())? true : false;
 }
 
 void decl_function_tracker::set_isVariadic()
