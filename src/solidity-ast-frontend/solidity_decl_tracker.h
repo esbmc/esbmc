@@ -36,6 +36,8 @@ public:
     isConstQualified = false;
     isVolatileQualified = false;
     isRestrictQualified = false;
+    isVariadic = false;
+    isInlined = false;
   }
 
   // for debug print
@@ -51,6 +53,8 @@ public:
   bool get_isConstQualified() { return isConstQualified; }
   bool get_isVolatileQualified() { return isVolatileQualified; }
   bool get_isRestrictQualified() { return isRestrictQualified; }
+  bool get_isVariadic() { return isVariadic; }
+  bool get_isInlined() { return isInlined; }
   SolidityTypes::typeClass getTypeClass() { return type_class; }
   SolidityTypes::declClass getDeclClass() { return decl_class; }
   SolidityTypes::builInTypes getBuiltInType() { return builtin_type; }
@@ -65,6 +69,8 @@ private:
   bool isConstQualified;
   bool isVolatileQualified;
   bool isRestrictQualified;
+  bool isVariadic;
+  bool isInlined;
   SolidityTypes::typeClass type_class;
   SolidityTypes::declClass decl_class;
   SolidityTypes::builInTypes builtin_type;
@@ -80,6 +86,8 @@ private:
   void set_isConstQualified();
   void set_isVolatileQualified();
   void set_isRestrictQualified();
+  void set_isVariadic();
+  void set_isInlined();
 };
 
 #endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_
