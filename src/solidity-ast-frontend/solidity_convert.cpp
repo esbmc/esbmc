@@ -112,10 +112,53 @@ bool solidity_convertert::get_function(std::shared_ptr<decl_function_tracker>& j
   std::string id, name;
   get_decl_name(json_tracker, name, id);
 
+  symbolt symbol;
+  std::string debug_modulename = get_modulename_from_path(name, id);
+  get_default_symbol(
+    symbol,
+    debug_modulename,
+    type,
+    name,
+    id,
+    location_begin);
+
+  symbol.lvalue = true;
+
   // TODO: symbol!
   assert(!"done?");
 
   return false;
+}
+
+void solidity_convertert::get_default_symbol(
+  symbolt &symbol,
+  std::string module_name,
+  typet type,
+  std::string name,
+  std::string id,
+  locationt location)
+{
+  symbol.mode = "C";
+  symbol.module = module_name;
+  symbol.location = std::move(location);
+  symbol.type = std::move(type);
+  symbol.name = name;
+  symbol.id = id;
+}
+
+std::string solidity_convertert::get_modulename_from_path(const std::string& name, const std::string& id)
+{
+  // explicitly return module name based on declaration name and id - TODO: move to json???
+  if (name == "__ESBMC_assume" && id == "c:@F@__ESBMC_assume")
+  {
+    return "esbmc_intrinsics";
+  }
+  else
+  {
+    assert(!"should not be here - unidentified symbol");
+  }
+
+  return "";
 }
 
 void solidity_convertert::get_decl_name(
