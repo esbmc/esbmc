@@ -12,8 +12,6 @@
 #include <solidity-ast-frontend/solidity_type.h>
 #include <solidity-ast-frontend/solidity_decl_tracker.h>
 
-typedef std::shared_ptr<decl_function_tracker> DeclTrackerPtr; // to tracker json object when getting declarations
-
 class solidity_convertert
 {
 public:
@@ -29,14 +27,14 @@ protected:
   contextt &context;
   nlohmann::json &ast_json; // json for Solidity AST. Use vector for multiple contracts
   nlohmann::json &intrinsic_json; // json for ESBMC intrinsics.
-  void print_json_element(const nlohmann::json &json_in, const unsigned index,
+  void print_json_element(nlohmann::json &json_in, const unsigned index,
     const std::string &key, const std::string& json_name);
 
   // functions to get declarations of various types
   bool get_decl_intrinsics(
-      const nlohmann::json& decl, exprt &new_expr,
+      nlohmann::json& decl, exprt &new_expr,
       const unsigned index, const std::string &key, const std::string &json_name);
-  bool get_function(DeclTrackerPtr& json_tracker); // process function decl and add symbols
+  bool get_function(std::shared_ptr<decl_function_tracker>& json_tracker); // process function decl and add symbols
 
   unsigned int current_scope_var_num; // tracking scope while getting declarations
 };
