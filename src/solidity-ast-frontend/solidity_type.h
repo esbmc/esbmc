@@ -4,6 +4,8 @@
 #include <map>
 #include <string>
 
+#define ENUM_TO_STR(s) case s: { return #s; }
+
 namespace SolidityTypes
 {
   enum declClass
@@ -13,13 +15,16 @@ namespace SolidityTypes
     DeclError
   };
   declClass get_decl_class(const std::string& kind);
+  const char* declClass_to_str(declClass the_decl);
 
   // counterparts of type cases of clang::Type::getTypeClass()
   enum typeClass
   {
     TypeBuiltin = 0, // corresponds to clang::Type::Builtin
-    TypeParen
+    TypeError
   };
+  typeClass get_type_class(const std::string& kind);
+  const char* typeClass_to_str(typeClass the_type);
 
   // counterparts of type cases of clang::BuiltinType::getKind()
   enum builInTypes

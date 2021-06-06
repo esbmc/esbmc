@@ -35,6 +35,8 @@ protected:
       nlohmann::json& decl, exprt &new_expr,
       const unsigned index, const std::string &key, const std::string &json_name);
   bool get_function(std::shared_ptr<decl_function_tracker>& json_tracker); // process function decl and add symbols
+  bool get_type(std::shared_ptr<decl_function_tracker>& json_tracker, typet &new_type);
+  bool get_type(const SolidityTypes::typeClass the_type, typet &new_type);
 
   unsigned int current_scope_var_num; // tracking scope while getting declarations
 };
