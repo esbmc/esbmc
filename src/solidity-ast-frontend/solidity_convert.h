@@ -42,6 +42,8 @@ protected:
   void get_location_from_decl(std::shared_ptr<decl_function_tracker>& json_tracker,
       locationt &location);
   unsigned get_presumed_location(std::shared_ptr<decl_function_tracker>& json_tracker);
+  void set_location(unsigned PLoc, std::string &function_name, locationt &location);
+  std::string get_filename_from_path();
 
   unsigned int current_scope_var_num; // tracking scope while getting declarations
 };

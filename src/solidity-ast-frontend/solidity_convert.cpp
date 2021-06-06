@@ -129,7 +129,7 @@ void solidity_convertert::get_location_from_decl(
   unsigned PLoc = get_presumed_location(json_tracker); // line number
   printf("@@@ This is Ploc line number: %u\n", PLoc);
 
-  assert(!"CONTINUE FROM HERE");
+  set_location(PLoc, function_name, location); // for __ESBMC_assume, function_name is still empty after this line.
 }
 
 unsigned solidity_convertert::get_presumed_location(
@@ -137,6 +137,27 @@ unsigned solidity_convertert::get_presumed_location(
 {
   // to keep it consistent with clang-c-frontend
   return json_tracker->get_ploc_line();
+}
+
+void solidity_convertert::set_location(unsigned PLoc, std::string &function_name, locationt &location)
+{
+  if (PLoc == decl_function_tracker::plocLineInvalid)
+  {
+    assert(!"found invalid PLoc");
+    location.set_file("<invalid sloc>");
+    return;
+  }
+
+  location.set_line(PLoc); // line number : unsigned signed
+  location.set_file(get_filename_from_path()); // string : path + file name
+
+  if(!function_name.empty())
+    location.set_function(function_name);
+}
+
+std::string solidity_convertert::get_filename_from_path()
+{
+  return "Contract-Under-Test"; // TODO: just give a universal name, to be improved in the future
 }
 
 bool solidity_convertert::get_type(
