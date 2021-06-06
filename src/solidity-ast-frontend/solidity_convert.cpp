@@ -41,7 +41,7 @@ bool solidity_convertert::convert()
 }
 
 bool solidity_convertert::get_decl_intrinsics(
-    const nlohmann::json& decl, exprt &new_expr,
+    nlohmann::json& decl, exprt &new_expr,
     const unsigned index, const std::string &key, const std::string &json_name)
 {
   // This method convert declarations from intrinsics. They are called when those declarations
@@ -63,8 +63,8 @@ bool solidity_convertert::get_decl_intrinsics(
     {
       // make a tracker from the json object to facilitate our symbol conversion
       // avoid using a global tracker as a member within this class for performance reasons
-      DeclTrackerPtr json_tracker = std::make_shared<decl_function_tracker>();
-      ConfigureTracker::configre_decl_function_tracker(decl, json_tracker);
+      auto json_tracker = std::make_shared<decl_function_tracker>(decl);
+      json_tracker->config();
       get_function(json_tracker);
 
       assert(!"processing DeclFunction ...\n");
@@ -80,7 +80,7 @@ bool solidity_convertert::get_decl_intrinsics(
   return false; // 'false' indicates everything is fine
 }
 
-bool solidity_convertert::get_function(DeclTrackerPtr& json_tracker)
+bool solidity_convertert::get_function(std::shared_ptr<decl_function_tracker>& json_tracker)
 {
   if (json_tracker->get_isImplicit())
     return false;
@@ -88,7 +88,7 @@ bool solidity_convertert::get_function(DeclTrackerPtr& json_tracker)
   return false;
 }
 
-void solidity_convertert::print_json_element(const nlohmann::json &json_in, const unsigned index,
+void solidity_convertert::print_json_element(nlohmann::json &json_in, const unsigned index,
     const std::string &key, const std::string& json_name)
 {
   printf("### %s element[%u] content: key=%s, size=%lu ###\n",

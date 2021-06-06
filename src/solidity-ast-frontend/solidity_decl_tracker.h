@@ -3,42 +3,52 @@
 
 #include <nlohmann/json.hpp>
 #include <solidity-ast-frontend/solidity_type.h>
-
-class decl_function_tracker;
-typedef std::shared_ptr<decl_function_tracker> DeclTrackerPtr;
-namespace ConfigureTracker
-{
-  // contains functions to parse the json value and configure the trackers accordingly
-  void configre_decl_function_tracker(const nlohmann::json& decl, DeclTrackerPtr& json_tracker); // configure tracker based on json values
-};
+#include <iostream>
+#include <iomanip>
 
 class decl_function_tracker
 {
 public:
-  decl_function_tracker()
+  decl_function_tracker(nlohmann::json& _decl_func) :
+    decl_func(_decl_func)
   {
       clear_all();
   }
 
+
   decl_function_tracker(const decl_function_tracker &rhs) = default; // default copy constructor
-  decl_function_tracker(decl_function_tracker &&rhs) = default;      // default move constructor
-  decl_function_tracker& operator=(const decl_function_tracker &rhs) = default; // default copy assignment operator
-  decl_function_tracker& operator=(decl_function_tracker &&rhs) = default;      // default move assignment operator
+  // move constructor
+  decl_function_tracker(decl_function_tracker &&rhs) = default;
+  // copy assignment operator - TODO: Since we have a reference member, it can be tricky in this case.
+  //    Let's not do it for the time being. Leave it for future improvement
+  decl_function_tracker& operator=(const decl_function_tracker &rhs) { assert(!"copy assignment is not allowed at the moment"); }
+  // move assignment operator - TODO: Since we have a reference member, it can be tricky in this case.
+  //    Let's not do it for the time being. Leave it for future improvement
+  decl_function_tracker& operator=(decl_function_tracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
 
   void clear_all()
   {
     isImplicit = false;
   }
 
-  // setters
-  void set_isImplicit(bool _isImplicit) { isImplicit = _isImplicit; }
+  // for debug print
+  void print_decl_func_json();
+
+  // config this tracker based on json values
+  void config();
 
   // getters
   bool get_isImplicit() { return isImplicit; }
 
 private:
+  // TODO: nlohmann_json has explicit copy constructor defined. probably better to just make a copy instead of using a ref member.
+  //       makes it easier to set copy assignment operator and move assignment operator for the future.
+  nlohmann::json& decl_func;
   bool isImplicit;
 
+  // private setters : set the member values based on the corresponding json value. Used by config() only.
+  // Setting them outside this class is NOT allowed.
+  void set_isImplicit();
 };
 
 #endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_
