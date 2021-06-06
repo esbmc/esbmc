@@ -133,6 +133,7 @@ std::string solidity_ast_languaget::internal_additions()
         {
            "__ESBMC_assume": {
                "declClass" : "DeclFunction",
+               "declName" : "__ESBMC_assume",
                "isImplicit": false,
                "isDefined": false,
                "isThisDeclarationADefinition": false,
