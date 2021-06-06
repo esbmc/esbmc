@@ -109,10 +109,45 @@ bool solidity_convertert::get_function(std::shared_ptr<decl_function_tracker>& j
   locationt location_begin;
   get_location_from_decl(json_tracker, location_begin);
 
-  // TODO: id, name
+  std::string id, name;
+  get_decl_name(json_tracker, name, id);
+
+  // TODO: symbol!
   assert(!"done?");
 
   return false;
+}
+
+void solidity_convertert::get_decl_name(
+    std::shared_ptr<decl_function_tracker>& json_tracker,
+    std::string &name, std::string &id)
+{
+  id = name = json_tracker->get_declName();
+  assert(name != "");
+
+  switch(json_tracker->getDeclClass())
+  {
+    default:
+      if(name.empty())
+      {
+        std::cerr << "Declaration still has an empty name\n";
+        abort();
+      }
+  }
+
+  id = json_tracker->get_id();
+  if (id != "")
+  {
+    return;
+  }
+  else
+  {
+    assert(!"should not be here - get invalid id");
+  }
+
+  // Otherwise, abort
+  std::cerr << "Unable to complete get_decl_name\n";
+  abort();
 }
 
 void solidity_convertert::get_location_from_decl(
@@ -127,7 +162,7 @@ void solidity_convertert::get_location_from_decl(
   }
 
   unsigned PLoc = get_presumed_location(json_tracker); // line number
-  printf("@@@ This is Ploc line number: %u\n", PLoc);
+  //printf("@@@ This is Ploc line number: %u\n", PLoc);
 
   set_location(PLoc, function_name, location); // for __ESBMC_assume, function_name is still empty after this line.
 }
