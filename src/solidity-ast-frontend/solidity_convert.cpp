@@ -106,10 +106,37 @@ bool solidity_convertert::get_function(std::shared_ptr<decl_function_tracker>& j
   if(json_tracker->get_isInlined())
     type.inlined(true);
 
-  // TODO: locationt
+  locationt location_begin;
+  get_location_from_decl(json_tracker, location_begin);
+
+  // TODO: id, name
   assert(!"done?");
 
   return false;
+}
+
+void solidity_convertert::get_location_from_decl(
+  std::shared_ptr<decl_function_tracker>& json_tracker,
+  locationt &location)
+{
+  std::string function_name;
+
+  if(json_tracker->get_isFunctionOrMethod())
+  {
+    assert(!"come back and continue - isFunctionOrMethod() returns true");
+  }
+
+  unsigned PLoc = get_presumed_location(json_tracker); // line number
+  printf("@@@ This is Ploc line number: %u\n", PLoc);
+
+  assert(!"CONTINUE FROM HERE");
+}
+
+unsigned solidity_convertert::get_presumed_location(
+    std::shared_ptr<decl_function_tracker>& json_tracker)
+{
+  // to keep it consistent with clang-c-frontend
+  return json_tracker->get_ploc_line();
 }
 
 bool solidity_convertert::get_type(

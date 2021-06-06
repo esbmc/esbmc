@@ -9,6 +9,9 @@
 class decl_function_tracker
 {
 public:
+  // some invalid values to add additional checks to be more defensive
+  static constexpr unsigned plocLineInvalid = std::numeric_limits<unsigned>::max();
+
   decl_function_tracker(nlohmann::json& _decl_func) :
     decl_func(_decl_func)
   {
@@ -38,6 +41,8 @@ public:
     isRestrictQualified = false;
     isVariadic = false;
     isInlined = false;
+    isFunctionOrMethod = false;
+    PLoc_Line = plocLineInvalid;
   }
 
   // for debug print
@@ -55,9 +60,11 @@ public:
   bool get_isRestrictQualified() { return isRestrictQualified; }
   bool get_isVariadic() { return isVariadic; }
   bool get_isInlined() { return isInlined; }
+  bool get_isFunctionOrMethod() { return isFunctionOrMethod; }
   SolidityTypes::typeClass getTypeClass() { return type_class; }
   SolidityTypes::declClass getDeclClass() { return decl_class; }
   SolidityTypes::builInTypes getBuiltInType() { return builtin_type; }
+  unsigned get_ploc_line() { return PLoc_Line; };
 
 private:
   // TODO: nlohmann_json has explicit copy constructor defined. probably better to just make a copy instead of using a ref member.
@@ -71,9 +78,11 @@ private:
   bool isRestrictQualified;
   bool isVariadic;
   bool isInlined;
+  bool isFunctionOrMethod;
   SolidityTypes::typeClass type_class;
   SolidityTypes::declClass decl_class;
   SolidityTypes::builInTypes builtin_type;
+  unsigned PLoc_Line;
 
   // private setters : set the member values based on the corresponding json value. Used by config() only.
   // Setting them outside this class is NOT allowed.
@@ -88,6 +97,8 @@ private:
   void set_isRestrictQualified();
   void set_isVariadic();
   void set_isInlined();
+  void set_isFunctionOrMethod();
+  void set_ploc_line();
 };
 
 #endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_
