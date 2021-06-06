@@ -13,6 +13,22 @@ void decl_function_tracker::config()
   set_isConstQualified();
   set_isVolatileQualified();
   set_isRestrictQualified();
+  set_isVariadic();
+  set_isInlined();
+}
+
+void decl_function_tracker::set_isVariadic()
+{
+  if (!decl_func.contains("isVariadic"))
+    assert(!"missing \'isVariadic\' in DeclFunction");
+  isVariadic = (decl_func["isVariadic"].get<bool>())? true : false;
+}
+
+void decl_function_tracker::set_isInlined()
+{
+  if (!decl_func.contains("isInlined"))
+    assert(!"missing \'isInlined\' in DeclFunction");
+  isInlined = (decl_func["isInlined"].get<bool>())? true : false;
 }
 
 void decl_function_tracker::set_isConstQualified()

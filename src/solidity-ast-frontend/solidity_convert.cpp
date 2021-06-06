@@ -100,6 +100,13 @@ bool solidity_convertert::get_function(std::shared_ptr<decl_function_tracker>& j
   if(get_type(json_tracker, type.return_type()))
     return true;
 
+  if(json_tracker->get_isVariadic())
+    type.make_ellipsis();
+
+  if(json_tracker->get_isInlined())
+    type.inlined(true);
+
+  // TODO: locationt
   assert(!"done?");
 
   return false;
