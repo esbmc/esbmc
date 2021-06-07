@@ -36,6 +36,7 @@ public:
     type_class = SolidityTypes::TypeError;
     decl_class = SolidityTypes::DeclError;
     builtin_type = SolidityTypes::BuiltInError;
+    storage_class = SolidityTypes::SCError;
     isConstQualified = false;
     isVolatileQualified = false;
     isRestrictQualified = false;
@@ -67,6 +68,7 @@ public:
   SolidityTypes::typeClass getTypeClass() { return type_class; }
   SolidityTypes::declClass getDeclClass() { return decl_class; }
   SolidityTypes::builInTypes getBuiltInType() { return builtin_type; }
+  SolidityTypes::storageClass get_storage_class() { return storage_class; }
   unsigned get_ploc_line() { return PLoc_Line; };
   std::string get_declName() { return declName; }
   std::string get_id() { return id; };
@@ -85,10 +87,11 @@ private:
   bool isVariadic;
   bool isInlined;
   bool isFunctionOrMethod;
+  unsigned PLoc_Line;
   SolidityTypes::typeClass type_class;
   SolidityTypes::declClass decl_class;
   SolidityTypes::builInTypes builtin_type;
-  unsigned PLoc_Line;
+  SolidityTypes::storageClass storage_class;
   std::string declName;
   std::string id;
   std::string moduleName;
@@ -111,6 +114,7 @@ private:
   void set_declName();
   void set_id();
   void set_moduleName();
+  void set_storageClass();
 };
 
 #endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_

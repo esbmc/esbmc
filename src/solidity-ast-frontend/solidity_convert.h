@@ -50,6 +50,7 @@ protected:
   void get_default_symbol(symbolt &symbol, std::string module_name,
     typet type, std::string name, std::string id, locationt location);
   std::string get_modulename_from_path(jsonTrackerRef json_tracker);
+  symbolt *move_symbol_to_context(symbolt &symbol);
 
   unsigned int current_scope_var_num; // tracking scope while getting declarations
 };

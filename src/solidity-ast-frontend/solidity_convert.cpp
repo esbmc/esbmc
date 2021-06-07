@@ -124,7 +124,13 @@ bool solidity_convertert::get_function(jsonTrackerRef json_tracker)
 
   symbol.lvalue = true;
 
-  // TODO: symbol!
+  symbol.is_extern = json_tracker->get_storage_class() == SolidityTypes::SC_Extern ||
+                     json_tracker->get_storage_class() == SolidityTypes::SC_PrivateExtern;
+  symbol.file_local = (json_tracker->get_storage_class() == SolidityTypes::SC_Static);
+
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
+
+  // TODO: parameters
   assert(!"done?");
 
   return false;
@@ -289,6 +295,37 @@ bool solidity_convertert::get_builtin_type(
 
   new_type.set("#cpp_type", c_type);
   return false;
+}
+
+symbolt *solidity_convertert::move_symbol_to_context(symbolt &symbol)
+{
+  symbolt *s = context.find_symbol(symbol.id);
+  if(s == nullptr)
+  {
+    if(context.move(symbol, s))
+    {
+      std::cerr << "Couldn't add symbol " << symbol.name
+                << " to symbol table\n";
+      symbol.dump();
+      abort();
+    }
+  }
+  else
+  {
+    // types that are code means functions
+    if(s->type.is_code())
+    {
+      if(symbol.value.is_not_nil() && !s->value.is_not_nil())
+        s->swap(symbol);
+    }
+    else if(s->is_type)
+    {
+      if(symbol.type.is_not_nil() && !s->type.is_not_nil())
+        s->swap(symbol);
+    }
+  }
+
+  return s;
 }
 
 void solidity_convertert::print_json_element(nlohmann::json &json_in, const unsigned index,
