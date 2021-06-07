@@ -12,6 +12,8 @@
 #include <solidity-ast-frontend/solidity_type.h>
 #include <solidity-ast-frontend/solidity_decl_tracker.h>
 
+//using jsonTrackerRef = std::shared_ptr<decl_function_tracker>&;
+
 class solidity_convertert
 {
 public:
@@ -47,7 +49,7 @@ protected:
   void get_decl_name(std::shared_ptr<decl_function_tracker>& json_tracker, std::string &name, std::string &id);
   void get_default_symbol(symbolt &symbol, std::string module_name,
     typet type, std::string name, std::string id, locationt location);
-  std::string get_modulename_from_path(const std::string& name, const std::string& id);
+  std::string get_modulename_from_path(std::shared_ptr<decl_function_tracker>& json_tracker);
 
   unsigned int current_scope_var_num; // tracking scope while getting declarations
 };
