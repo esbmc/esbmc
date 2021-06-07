@@ -21,6 +21,10 @@ void decl_function_tracker::config()
   set_id();
   set_moduleName();
   set_storageClass();
+  set_num_param();
+  // deal with params of this function declaration
+  if (num_param)
+    populate_params();
 }
 
 void decl_function_tracker::set_moduleName()
@@ -156,6 +160,32 @@ void decl_function_tracker::set_storageClass()
   storage_class = SolidityTypes::get_storage_class(
       decl_func["storageClass"].get<std::string>()
       );
+}
+
+void decl_function_tracker::set_num_param()
+{
+  assert(num_param == numParamInvalid); // only allowed to set once during config(). If set twice, something is wrong.
+  if (!decl_func.contains("parameters"))
+    assert(!"missing \'parameters\' in DeclFunction");
+  num_param = decl_func["parameters"].size();
+}
+
+void decl_function_tracker::populate_params()
+{
+  assert(params.size() == 0); // only allowed to set once during config(). If set twice, something is wrong.
+  /*
+  funcParam param;
+  params.type_class = rhs.type_class;
+  params.decl_class = rhs.decl_class;
+  params.builtin_type = rhs.builtin_type;
+  params.isConstQualified = rhs.isConstQualified;
+  params.isVolatileQualified = rhs.isVolatileQualified;
+  params.isRestrictQualified = rhs.isRestrictQualified;
+  params.isArray = rhs.isArray;
+  params.nameEmpty = rhs.nameEmpty;
+
+  params.push_back(param); // copy constructor of funcParam is getting called here
+  */
 }
 
 void decl_function_tracker::print_decl_func_json()
