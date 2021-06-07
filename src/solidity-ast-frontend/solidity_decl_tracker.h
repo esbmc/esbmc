@@ -45,6 +45,7 @@ public:
     PLoc_Line = plocLineInvalid;
     declName = "";
     id = "";
+    moduleName = "";
   }
 
   // for debug print
@@ -69,6 +70,7 @@ public:
   unsigned get_ploc_line() { return PLoc_Line; };
   std::string get_declName() { return declName; }
   std::string get_id() { return id; };
+  std::string get_moduleName() { return moduleName; }
 
 private:
   // TODO: nlohmann_json has explicit copy constructor defined. probably better to just make a copy instead of using a ref member.
@@ -89,6 +91,7 @@ private:
   unsigned PLoc_Line;
   std::string declName;
   std::string id;
+  std::string moduleName;
 
   // private setters : set the member values based on the corresponding json value. Used by config() only.
   // Setting them outside this class is NOT allowed.
@@ -107,6 +110,7 @@ private:
   void set_ploc_line();
   void set_declName();
   void set_id();
+  void set_moduleName();
 };
 
 #endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_

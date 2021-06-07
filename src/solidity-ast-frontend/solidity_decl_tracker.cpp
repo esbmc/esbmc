@@ -19,6 +19,15 @@ void decl_function_tracker::config()
   set_ploc_line();
   set_declName();
   set_id();
+  set_moduleName();
+}
+
+void decl_function_tracker::set_moduleName()
+{
+  assert(moduleName == ""); // only allowed to set once during config(). If set twice, something is wrong.
+  if (!decl_func.contains("moduleName"))
+    assert(!"missing \'moduleName\' in DeclFunction");
+  moduleName = decl_func["moduleName"].get<std::string>();
 }
 
 void decl_function_tracker::set_id()

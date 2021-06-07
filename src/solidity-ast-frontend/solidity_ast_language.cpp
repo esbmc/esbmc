@@ -150,7 +150,8 @@ std::string solidity_ast_languaget::internal_additions()
                "id": "c:@F@__ESBMC_assume",
                "is_extern": false,
                "file_local": false,
-               "hasBody": false
+               "hasBody": false,
+               "moduleName" : "esbmc_intrinsics"
            }
      }
     )";
