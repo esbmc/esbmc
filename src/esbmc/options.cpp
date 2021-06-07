@@ -126,7 +126,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"slice-assumes", NULL, ""},
     {"extended-try-analysis", NULL, ""},
     {"skip-bmc", NULL, ""}}},
-  {"IBMC",
+  {"Incremental BMC",
    {{"incremental-bmc", NULL, "incremental loop unwinding verification"},
     {"falsification", NULL, "incremental loop unwinding for bug searching"},
     {"termination",
