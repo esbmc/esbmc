@@ -35,7 +35,16 @@ namespace SolidityTypes
   builInTypes get_builtin_type(const std::string& kind);
   const char* builInTypes_to_str(builInTypes the_blitype);
 
-
+  enum storageClass
+  {
+    SC_None = 0,
+    SC_Extern,
+    SC_PrivateExtern,
+    SC_Static,
+    SCError
+  };
+  storageClass get_storage_class(const std::string& kind);
+  const char* storageClass_to_str(storageClass the_strgClass);
 };
 
 #endif /* SOLIDITY_TYPE_H_ */

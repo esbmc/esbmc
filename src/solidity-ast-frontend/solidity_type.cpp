@@ -86,4 +86,45 @@ namespace SolidityTypes
       }
     }
   }
+
+  storageClass get_storage_class(const std::string& kind)
+  {
+    if (kind == "SC_None")
+    {
+      return SC_None;
+    }
+    else if (kind == "SC_Extern")
+    {
+      return SC_Extern;
+    }
+    else if (kind == "SC_PrivateExtern")
+    {
+      return SC_PrivateExtern;
+    }
+    else if (kind == "SC_Static")
+    {
+      return SC_Static;
+    }
+    else
+    {
+      assert(!"Unsupported storage class");
+    }
+    return SCError;
+  }
+
+  const char* storageClass_to_str(storageClass the_strgClass)
+  {
+    switch(the_strgClass)
+    {
+      ENUM_TO_STR(SC_None)
+      ENUM_TO_STR(SC_Extern)
+      ENUM_TO_STR(SC_PrivateExtern)
+      ENUM_TO_STR(SC_Static)
+      default:
+      {
+        assert(!"Unknown storageClass");
+        return "UNKNOWN";
+      }
+    }
+  }
 };

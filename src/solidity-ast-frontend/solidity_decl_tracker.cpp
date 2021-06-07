@@ -20,6 +20,7 @@ void decl_function_tracker::config()
   set_declName();
   set_id();
   set_moduleName();
+  set_storageClass();
 }
 
 void decl_function_tracker::set_moduleName()
@@ -119,6 +120,7 @@ void decl_function_tracker::set_isThisDeclarationADefinition()
 
 void decl_function_tracker::set_type_class()
 {
+  assert(type_class == SolidityTypes::TypeError); // only allowed to set once during config(). If set twice, something is wrong.
   if (!decl_func.contains("typeClass"))
     assert(!"missing \'typeClass\' in DeclFunction");
   type_class = SolidityTypes::get_type_class(
@@ -128,6 +130,7 @@ void decl_function_tracker::set_type_class()
 
 void decl_function_tracker::set_decl_class()
 {
+  assert(decl_class == SolidityTypes::DeclError); // only allowed to set once during config(). If set twice, something is wrong.
   if (!decl_func.contains("declClass"))
     assert(!"missing \'declClass\' in DeclFunction");
   decl_class = SolidityTypes::get_decl_class(
@@ -137,10 +140,21 @@ void decl_function_tracker::set_decl_class()
 
 void decl_function_tracker::set_builtin_type()
 {
+  assert(builtin_type == SolidityTypes::BuiltInError); // only allowed to set once during config(). If set twice, something is wrong.
   if (!decl_func.contains("builtInTypes"))
     assert(!"missing \'builtInTypes\' in DeclFunction");
   builtin_type = SolidityTypes::get_builtin_type(
       decl_func["builtInTypes"].get<std::string>()
+      );
+}
+
+void decl_function_tracker::set_storageClass()
+{
+  assert(storage_class == SolidityTypes::SCError); // only allowed to set once during config(). If set twice, something is wrong.
+  if (!decl_func.contains("storageClass"))
+    assert(!"missing \'storageClass\' in DeclFunction");
+  storage_class = SolidityTypes::get_storage_class(
+      decl_func["storageClass"].get<std::string>()
       );
 }
 
