@@ -151,7 +151,8 @@ std::string solidity_ast_languaget::internal_additions()
                "is_extern": false,
                "file_local": false,
                "hasBody": false,
-               "moduleName" : "esbmc_intrinsics"
+               "moduleName" : "esbmc_intrinsics",
+               "storageClass" : "SC_None"
            }
      }
     )";
