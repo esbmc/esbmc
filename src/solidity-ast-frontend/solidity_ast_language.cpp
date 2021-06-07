@@ -152,7 +152,20 @@ std::string solidity_ast_languaget::internal_additions()
                "file_local": false,
                "hasBody": false,
                "moduleName" : "esbmc_intrinsics",
-               "storageClass" : "SC_None"
+               "storageClass" : "SC_None",
+               "parameters":
+               [
+                  {
+                    "typeClass" : "TypeBuiltin",
+                    "builtInTypes" : "BuiltInBool",
+                    "isConstQualified" : false,
+                    "isVolatileQualified": false,
+                    "isRestrictQualified": false,
+                    "isArray" : false,
+                    "declClass" : "DeclParmVar",
+                    "nameEmpty" : true
+                  }
+               ]
            }
      }
     )";

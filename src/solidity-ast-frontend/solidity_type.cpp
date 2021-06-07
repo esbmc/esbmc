@@ -12,6 +12,10 @@ namespace SolidityTypes
     {
       return DeclFunction;
     }
+    else if (kind == "DeclParmVar")
+    {
+      return DeclParmVar;
+    }
     else
     {
       assert(!"Unsupported declClass");
@@ -25,6 +29,7 @@ namespace SolidityTypes
     {
       ENUM_TO_STR(DeclLabel)
       ENUM_TO_STR(DeclFunction)
+      ENUM_TO_STR(DeclParmVar)
       ENUM_TO_STR(DeclError)
       default:
       {
@@ -67,6 +72,10 @@ namespace SolidityTypes
     {
       return BuiltInVoid;
     }
+    else if (kind == "BuiltInBool")
+    {
+      return BuiltInBool;
+    }
     else
     {
       assert(!"Unsupported builtInTypes");
@@ -78,6 +87,7 @@ namespace SolidityTypes
     switch(the_blitype)
     {
       ENUM_TO_STR(BuiltInVoid)
+      ENUM_TO_STR(BuiltInBool)
       ENUM_TO_STR(BuiltInError)
       default:
       {

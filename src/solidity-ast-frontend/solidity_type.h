@@ -12,6 +12,7 @@ namespace SolidityTypes
   {
     DeclLabel = 0, // corresponds to clang::Decl::Label
     DeclFunction,  // corresponds to clang::Decl::Function
+    DeclParmVar, // corresponds to clang::Decl::ParmVar
     DeclError
   };
   declClass get_decl_class(const std::string& kind);
@@ -30,6 +31,7 @@ namespace SolidityTypes
   enum builInTypes
   {
     BuiltInVoid = 0,
+    BuiltInBool,
     BuiltInError
   };
   builInTypes get_builtin_type(const std::string& kind);
