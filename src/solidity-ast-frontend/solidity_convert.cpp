@@ -82,7 +82,7 @@ bool solidity_convertert::get_decl_intrinsics(
   return false; // 'false' indicates everything is fine
 }
 
-bool solidity_convertert::get_function(std::shared_ptr<decl_function_tracker>& json_tracker)
+bool solidity_convertert::get_function(jsonTrackerRef json_tracker)
 {
   if (json_tracker->get_isImplicit())
     return false;
@@ -146,7 +146,7 @@ void solidity_convertert::get_default_symbol(
   symbol.id = id;
 }
 
-std::string solidity_convertert::get_modulename_from_path(std::shared_ptr<decl_function_tracker>& json_tracker)
+std::string solidity_convertert::get_modulename_from_path(jsonTrackerRef json_tracker)
 {
   std::string moduleName = json_tracker->get_moduleName();
   assert(moduleName != ""); // just to be defensive
@@ -154,7 +154,7 @@ std::string solidity_convertert::get_modulename_from_path(std::shared_ptr<decl_f
 }
 
 void solidity_convertert::get_decl_name(
-    std::shared_ptr<decl_function_tracker>& json_tracker,
+    jsonTrackerRef json_tracker,
     std::string &name, std::string &id)
 {
   id = name = json_tracker->get_declName();
@@ -185,9 +185,7 @@ void solidity_convertert::get_decl_name(
   abort();
 }
 
-void solidity_convertert::get_location_from_decl(
-  std::shared_ptr<decl_function_tracker>& json_tracker,
-  locationt &location)
+void solidity_convertert::get_location_from_decl(jsonTrackerRef json_tracker, locationt &location)
 {
   std::string function_name;
 
@@ -202,8 +200,7 @@ void solidity_convertert::get_location_from_decl(
   set_location(PLoc, function_name, location); // for __ESBMC_assume, function_name is still empty after this line.
 }
 
-unsigned solidity_convertert::get_presumed_location(
-    std::shared_ptr<decl_function_tracker>& json_tracker)
+unsigned solidity_convertert::get_presumed_location(jsonTrackerRef json_tracker)
 {
   // to keep it consistent with clang-c-frontend
   return json_tracker->get_ploc_line();
@@ -230,9 +227,7 @@ std::string solidity_convertert::get_filename_from_path()
   return "Contract-Under-Test"; // TODO: just give a universal name, to be improved in the future
 }
 
-bool solidity_convertert::get_type(
-    std::shared_ptr<decl_function_tracker>& json_tracker,
-    typet &new_type)
+bool solidity_convertert::get_type(jsonTrackerRef json_tracker, typet &new_type)
 {
   if (get_type(json_tracker->getTypeClass(), new_type, json_tracker))
     return true;
@@ -251,8 +246,7 @@ bool solidity_convertert::get_type(
 
 bool solidity_convertert::get_type(
   const SolidityTypes::typeClass the_type,
-  typet &new_type,
-  std::shared_ptr<decl_function_tracker>& json_tracker)
+  typet &new_type, jsonTrackerRef json_tracker)
 {
   assert(the_type != SolidityTypes::TypeError); // must be a valid type class
   switch(the_type)

@@ -12,7 +12,7 @@
 #include <solidity-ast-frontend/solidity_type.h>
 #include <solidity-ast-frontend/solidity_decl_tracker.h>
 
-//using jsonTrackerRef = std::shared_ptr<decl_function_tracker>&;
+using jsonTrackerRef = std::shared_ptr<decl_function_tracker>&;
 
 class solidity_convertert
 {
@@ -36,20 +36,20 @@ protected:
   bool get_decl_intrinsics(
       nlohmann::json& decl, exprt &new_expr,
       const unsigned index, const std::string &key, const std::string &json_name);
-  bool get_function(std::shared_ptr<decl_function_tracker>& json_tracker); // process function decl and add symbols
-  bool get_type(std::shared_ptr<decl_function_tracker>& json_tracker, typet &new_type);
+  bool get_function(jsonTrackerRef json_tracker); // process function decl and add symbols
+  bool get_type(jsonTrackerRef json_tracker, typet &new_type);
   bool get_type(const SolidityTypes::typeClass the_type,
-      typet &new_type, std::shared_ptr<decl_function_tracker>& json_tracker);
+      typet &new_type, jsonTrackerRef json_tracker);
   bool get_builtin_type(SolidityTypes::builInTypes the_blti_type, typet &new_type);
-  void get_location_from_decl(std::shared_ptr<decl_function_tracker>& json_tracker,
+  void get_location_from_decl(jsonTrackerRef json_tracker,
       locationt &location);
-  unsigned get_presumed_location(std::shared_ptr<decl_function_tracker>& json_tracker);
+  unsigned get_presumed_location(jsonTrackerRef json_tracker);
   void set_location(unsigned PLoc, std::string &function_name, locationt &location);
   std::string get_filename_from_path();
-  void get_decl_name(std::shared_ptr<decl_function_tracker>& json_tracker, std::string &name, std::string &id);
+  void get_decl_name(jsonTrackerRef json_tracker, std::string &name, std::string &id);
   void get_default_symbol(symbolt &symbol, std::string module_name,
     typet type, std::string name, std::string id, locationt location);
-  std::string get_modulename_from_path(std::shared_ptr<decl_function_tracker>& json_tracker);
+  std::string get_modulename_from_path(jsonTrackerRef json_tracker);
 
   unsigned int current_scope_var_num; // tracking scope while getting declarations
 };
