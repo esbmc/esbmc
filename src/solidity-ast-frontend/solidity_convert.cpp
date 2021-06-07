@@ -130,7 +130,16 @@ bool solidity_convertert::get_function(jsonTrackerRef json_tracker)
 
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
-  // TODO: parameters
+  // Parameters: We convert the parameters first so their symbol are added to context
+  // before converting the body, as they may appear on the function body
+  size_t idx = 0;;
+  for (; idx < json_tracker->get_num_param(); ++idx)
+  {
+
+  }
+  printf("@@@ number of param decls: %lu\n", idx);
+
+  // TODO: fd.hasBody()?
   assert(!"done?");
 
   return false;
@@ -166,7 +175,7 @@ void solidity_convertert::get_decl_name(
   id = name = json_tracker->get_declName();
   assert(name != "");
 
-  switch(json_tracker->getDeclClass())
+  switch(json_tracker->getDeclClass()) // for __ESBMC_assume, the call from get_function falls in default. the call from get_function_params falls in case ParmVar.
   {
     default:
       if(name.empty())
@@ -284,6 +293,12 @@ bool solidity_convertert::get_builtin_type(
       {
         new_type = empty_typet();
         c_type = "void";
+        break;
+      }
+    case SolidityTypes::BuiltInBool:
+      {
+        new_type = bool_type();
+        c_type = "bool";
         break;
       }
     default:
