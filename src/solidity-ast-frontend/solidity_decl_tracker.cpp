@@ -189,11 +189,17 @@ void decl_function_tracker::populate_params()
     param.isRestrictQualified = (tmp_param["isRestrictQualified"].get<bool>())? true : false;
     param.isArray = (tmp_param["isArray"].get<bool>())? true : false;
     param.nameEmpty = (tmp_param["nameEmpty"].get<bool>())? true : false;
+    param.paramIndex = i;
 
     params.push_back(param); // copy constructor of funcParam is getting called here
   }
 
   assert(params.size() == num_param); // param size must match
+}
+
+decl_function_tracker::funcParam* decl_function_tracker::get_function_param(unsigned index)
+{
+  return &(params.at(index));
 }
 
 void decl_function_tracker::print_decl_func_json()
@@ -204,3 +210,15 @@ void decl_function_tracker::print_decl_func_json()
   printf("\n");
 }
 
+void decl_function_tracker::funcParam::print_func_param()
+{
+  std::cout << "func_param" << "[" << paramIndex << "]" << ": "
+    << "decl_class=" << SolidityTypes::declClass_to_str(decl_class) << ","
+    << "type_class=" << SolidityTypes::typeClass_to_str(type_class) << ", "
+    << "builtin_type=" << SolidityTypes::builInTypes_to_str(builtin_type) << ","
+    << "isConstQualified=" << isConstQualified << ","
+    << "isVolatileQualified=" << isVolatileQualified << ","
+    << "isRestrictQualified=" << isRestrictQualified << ","
+    << "isArray=" << isArray << ","
+    << "nameEmpty=" << nameEmpty << std::endl;
+}
