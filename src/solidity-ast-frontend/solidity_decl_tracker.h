@@ -13,6 +13,7 @@ public:
   // invalid values to be more defensive
   static constexpr unsigned plocLineInvalid = std::numeric_limits<unsigned>::max();
   static constexpr size_t numParamInvalid = std::numeric_limits<size_t>::max();
+  static constexpr size_t paramIndexInvalid = std::numeric_limits<size_t>::max();
 
   decl_function_tracker(nlohmann::json& _decl_func) :
     decl_func(_decl_func)
@@ -89,8 +90,10 @@ public:
     bool isRestrictQualified;
     bool isArray;
     bool nameEmpty;
+    size_t paramIndex;
 
     funcParam() { clear(); }
+    void print_func_param();
 
     // explicit copy constructor for push_back
     funcParam(const funcParam &rhs)
@@ -104,6 +107,7 @@ public:
       isRestrictQualified = rhs.isRestrictQualified;
       isArray = rhs.isArray;
       nameEmpty = rhs.nameEmpty;
+      paramIndex = rhs.paramIndex;
     }
 
     void clear()
@@ -116,9 +120,11 @@ public:
       isRestrictQualified = false;
       isArray = false;
       nameEmpty = false;
+      paramIndex = paramIndexInvalid;
     }
   } funcParam;
   std::vector<funcParam> params;
+  funcParam* get_function_param(unsigned index);
 
 private:
   // TODO: nlohmann_json has explicit copy constructor defined. probably better to just make a copy instead of using a ref member.
