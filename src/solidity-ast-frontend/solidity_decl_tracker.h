@@ -82,6 +82,7 @@ public:
   // struct to hold parameters
   typedef struct funcParam
   {
+    // members to flatten the clang::ParmVarDecl
     SolidityTypes::typeClass type_class;
     SolidityTypes::declClass decl_class;
     SolidityTypes::builInTypes builtin_type;

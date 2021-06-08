@@ -212,7 +212,7 @@ void decl_function_tracker::print_decl_func_json()
 
 void decl_function_tracker::funcParam::print_func_param()
 {
-  std::cout << "func_param" << "[" << paramIndex << "]" << ": "
+  std::cout << "@@ func_param" << "[" << paramIndex << "]" << ": "
     << "decl_class=" << SolidityTypes::declClass_to_str(decl_class) << ","
     << "type_class=" << SolidityTypes::typeClass_to_str(type_class) << ", "
     << "builtin_type=" << SolidityTypes::builInTypes_to_str(builtin_type) << ","

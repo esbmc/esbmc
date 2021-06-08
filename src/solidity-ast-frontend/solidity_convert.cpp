@@ -135,16 +135,31 @@ bool solidity_convertert::get_function(jsonTrackerRef json_tracker)
   size_t idx = 0;;
   for (; idx < json_tracker->get_num_param(); ++idx)
   {
-    json_tracker->get_function_param(idx)->print_func_param();
+    //json_tracker->get_function_param(idx)->print_func_param();
+    /*
+    code_typet::argumentt param;
+    if(get_function_params(json_tracker->get_function_param(idx), param))
+      return true;
 
+    type.arguments().push_back(param);
+    */
   }
-  printf("@@@ number of param decls: %lu\n", idx);
+  printf("@@@ number of function param decls: %lu\n", idx);
 
   // TODO: fd.hasBody()?
   assert(!"done?");
 
   return false;
 }
+
+/*
+bool solidity_convertert::get_function_params(
+  decl_function_tracker::funcParam* &pd,
+  exprt &param)
+{
+  typet param_type;
+}
+*/
 
 void solidity_convertert::get_default_symbol(
   symbolt &symbol,
