@@ -135,6 +135,7 @@ bool solidity_convertert::get_function(jsonTrackerRef json_tracker)
   size_t idx = 0;;
   for (; idx < json_tracker->get_num_param(); ++idx)
   {
+    json_tracker->get_function_param(idx)->print_func_param();
 
   }
   printf("@@@ number of param decls: %lu\n", idx);
