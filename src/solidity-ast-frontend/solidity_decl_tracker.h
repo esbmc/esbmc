@@ -90,10 +90,12 @@ public:
     bool isArray;
     bool nameEmpty;
 
+    funcParam() { clear(); }
+
     // explicit copy constructor for push_back
     funcParam(const funcParam &rhs)
     {
-      printf("\t @@ funcParam copy constructor is getting called ... \n");
+      //printf("\t @@ funcParam copy constructor is getting called ... \n");
       type_class = rhs.type_class;
       decl_class = rhs.decl_class;
       builtin_type = rhs.builtin_type;

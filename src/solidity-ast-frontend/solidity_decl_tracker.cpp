@@ -172,20 +172,28 @@ void decl_function_tracker::set_num_param()
 
 void decl_function_tracker::populate_params()
 {
+  size_t param_array_size = decl_func["parameters"].size();
   assert(params.size() == 0); // only allowed to set once during config(). If set twice, something is wrong.
-  /*
-  funcParam param;
-  params.type_class = rhs.type_class;
-  params.decl_class = rhs.decl_class;
-  params.builtin_type = rhs.builtin_type;
-  params.isConstQualified = rhs.isConstQualified;
-  params.isVolatileQualified = rhs.isVolatileQualified;
-  params.isRestrictQualified = rhs.isRestrictQualified;
-  params.isArray = rhs.isArray;
-  params.nameEmpty = rhs.nameEmpty;
+  assert(param_array_size == num_param); // to be more defensive
+  for (size_t i = 0; i < param_array_size; ++i)
+  {
+    nlohmann::json& tmp_param = decl_func["parameters"].at(i);
+    //std::cout << std::setw(2) << tmp_param << '\n'; // debug print of tmp_param
 
-  params.push_back(param); // copy constructor of funcParam is getting called here
-  */
+    funcParam param;
+    param.type_class = SolidityTypes::get_type_class(tmp_param["typeClass"].get<std::string>());
+    param.decl_class = SolidityTypes::get_decl_class(tmp_param["declClass"].get<std::string>());
+    param.builtin_type = SolidityTypes::get_builtin_type(tmp_param["builtInTypes"].get<std::string>());
+    param.isConstQualified = (tmp_param["isConstQualified"].get<bool>())? true : false;
+    param.isVolatileQualified = (tmp_param["isVolatileQualified"].get<bool>())? true : false;
+    param.isRestrictQualified = (tmp_param["isRestrictQualified"].get<bool>())? true : false;
+    param.isArray = (tmp_param["isArray"].get<bool>())? true : false;
+    param.nameEmpty = (tmp_param["nameEmpty"].get<bool>())? true : false;
+
+    params.push_back(param); // copy constructor of funcParam is getting called here
+  }
+
+  assert(params.size() == num_param); // param size must match
 }
 
 void decl_function_tracker::print_decl_func_json()
