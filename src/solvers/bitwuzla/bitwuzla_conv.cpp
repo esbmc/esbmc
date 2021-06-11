@@ -541,11 +541,10 @@ smt_astt bitwuzla_convt::mk_smt_real(const std::string &str [[gnu::unused]])
 
 smt_astt bitwuzla_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
-  BitwuzlaSort *bitwsort = bitwuzla_mk_bv_sort(bitw, s->get_data_width());
   return new_ast(
     bitwuzla_mk_bv_value(
       bitw,
-      bitwsort,
+      to_solver_smt_sort<BitwuzlaSort *>(s)->s,
       integer2binary(theint, s->get_data_width()).c_str(),
       BITWUZLA_BV_BASE_BIN),
     s);
