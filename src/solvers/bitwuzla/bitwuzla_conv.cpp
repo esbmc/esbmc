@@ -581,15 +581,7 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   case SMT_SORT_FIXEDBV:
   case SMT_SORT_BVFP:
   case SMT_SORT_BVFP_RM:
-    node = bitwuzla_mk_const(
-      bitw, to_solver_smt_sort<BitwuzlaSort *>(s)->s, name.c_str());
-    break;
-
   case SMT_SORT_BOOL:
-    node = bitwuzla_mk_const(
-      bitw, to_solver_smt_sort<BitwuzlaSort *>(s)->s, name.c_str());
-    break;
-
   case SMT_SORT_ARRAY:
     node = bitwuzla_mk_const(
       bitw, to_solver_smt_sort<BitwuzlaSort *>(s)->s, name.c_str());
