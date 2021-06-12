@@ -16,6 +16,12 @@ Module: Solidity AST module
 #include <libUtils/Utils.hpp>
 #include <nlohmann/json.hpp>
 
+// Forward dec, to avoid bringing in clang headers
+namespace clang
+{
+class ASTUnit;
+} // namespace clang
+
 class solidity_ast_languaget : public languaget
 {
 public:
@@ -60,8 +66,7 @@ public:
 
   languaget * clang_c_module;
 
-private:
-  std::string internal_additions();
+//protected:
 };
 
 languaget *new_solidity_ast_language();

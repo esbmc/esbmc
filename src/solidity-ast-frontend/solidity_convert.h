@@ -19,8 +19,7 @@ class solidity_convertert
 public:
   solidity_convertert(
     contextt &_context,
-    nlohmann::json &_ast_json,
-    nlohmann::json &_intrinsic_json);
+    nlohmann::json &_ast_json);
   virtual ~solidity_convertert() = default;
 
   bool convert();
@@ -28,7 +27,6 @@ public:
 protected:
   contextt &context;
   nlohmann::json &ast_json; // json for Solidity AST. Use vector for multiple contracts
-  nlohmann::json &intrinsic_json; // json for ESBMC intrinsics.
   void print_json_element(nlohmann::json &json_in, const unsigned index,
     const std::string &key, const std::string& json_name);
 

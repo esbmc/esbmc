@@ -9,32 +9,18 @@
 #include <util/std_expr.h>
 #include <iomanip>
 
-solidity_convertert::solidity_convertert(contextt &_context, nlohmann::json &_ast_json, nlohmann::json &_intrinsic_json):
+solidity_convertert::solidity_convertert(contextt &_context, nlohmann::json &_ast_json):
   context(_context),
-  ast_json(_ast_json),
-  intrinsic_json(_intrinsic_json)
+  ast_json(_ast_json)
 {
 }
 
 bool solidity_convertert::convert()
 {
   // This method convert each declarations in ast_json to symbols and add them to the context.
-  // The conversion consists of three parts:
-  //  - PART 1: get declarations from intrinsics include ESBMC and TACAS definitions
-  //  - PART 2: get declarations from AST nodes
 
-  // PART 1: get declarations from intrinsics include ESBMC and TACAS definitions
-  unsigned index = 0;
-  for (auto it = intrinsic_json.begin(); it != intrinsic_json.end(); ++it, ++index)
-  {
-    // iterate over each json object (i.e. ESBMC or TACAS definitions) and add symbols as we go
-    const std::string& top_level_key = it.key();
-    printf("@@ converting %s ... \n", top_level_key.c_str());
-    exprt dummy_decl;
-    get_decl_intrinsics(it.value(), dummy_decl, index, top_level_key, "intrinsic_json");
-  }
-
-  //TODO:  - PART 2: get declarations from AST nodes
+  // By now the context should have the symbols of all ESBMC's intrinsics and the dummy main
+  // We need to convert Solidity AST nodes to the equivalent symbols and add them to the context
   assert(!"come back and continue - PART 2 conversion");
 
   return false;
