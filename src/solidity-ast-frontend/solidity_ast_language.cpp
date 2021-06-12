@@ -14,6 +14,13 @@ languaget *new_solidity_ast_language()
 
 solidity_ast_languaget::solidity_ast_languaget()
 {
+  clang_c_module = new_clang_c_language();
+}
+
+solidity_ast_languaget::~solidity_ast_languaget()
+{
+  if(clang_c_module != nullptr)
+    delete clang_c_module;
 }
 
 bool solidity_ast_languaget::parse(

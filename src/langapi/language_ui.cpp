@@ -58,12 +58,12 @@ bool language_uit::parse(const std::string &filename)
 
   language_filet &lf = result.first->second;
   lf.filename = filename;
-  lf.language = mode_table[mode].new_language(msg);
+  lf.language = mode_table[mode].new_language(msg); // instantiate clang_c_languaget object or other languages' counterpart
   languaget &language = *lf.language;
 
   msg.status("Parsing", filename);
 
-  if(mode == 2)
+  if(mode == 2) // 0 for clang-c, 2 for Solidity
       language.set_is_solidity();
 
   if(language.get_is_solidity())
