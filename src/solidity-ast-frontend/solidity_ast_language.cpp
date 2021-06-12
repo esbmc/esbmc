@@ -27,22 +27,11 @@ bool solidity_ast_languaget::parse(
   const std::string &path,
   message_handlert &message_handler)
 {
-    /* store AST text and json contents in stream objects to facilitate parsing and node visiting */
-
-#if 0
-    std::ifstream ast_text_file_stream(plaintext_ast_path);
-    std::stringstream ast_text_stream;
-    printf("\n### ast_text_file stream processing:... \n");
-    while (getline(ast_text_file_stream, new_line)) {
-        printf("new_line: %s\n", new_line.c_str());
-        ast_text_stream << new_line << "\n"; // store AST text in stream object
-    }
-
-#endif
-
-  // For plain-text AST processing...
-  printf("plaintext ast path: %s\n", sol_main_path.c_str());
+  printf("sol_main_path: %s\n", sol_main_path.c_str());
   assert(sol_main_path != "");
+
+  // get AST nodes of ESBMC intrinsics and the dummy main
+  clang_c_module->parse(sol_main_path, message_handler); // populate clang_c_module's ASTs
 
   // Process AST json file
   std::ifstream ast_json_file_stream(path);
@@ -71,11 +60,7 @@ bool solidity_ast_languaget::parse(
   }
   ast_json = nlohmann::json::parse(ast_json_content); // parse explicitly
 
-  // add internal additions
-  intrinsic_json = nlohmann::json::parse(internal_additions()); // parse explicitly
-
   print_json(ast_json);
-  print_json(intrinsic_json);
 
   return false;
 }
@@ -86,8 +71,9 @@ bool solidity_ast_languaget::typecheck(
   message_handlert &message_handler)
 {
   contextt new_context;
+  clang_c_module->convert_intrinsics(new_context);
 
-  solidity_convertert converter(new_context, ast_json, intrinsic_json);
+  solidity_convertert converter(new_context, ast_json);
 
   if(converter.convert())
     return true;
@@ -132,73 +118,4 @@ void solidity_ast_languaget::print_json(const nlohmann::json &json_in)
   printf("\n### json_content: ###\n");
   std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations
   printf("\n");
-}
-
-std::string solidity_ast_languaget::internal_additions()
-{
-  std::string intrinsics =
-    R"(
-        {
-           "__ESBMC_assume": {
-               "declClass" : "DeclFunction",
-               "declName" : "__ESBMC_assume",
-               "isImplicit": false,
-               "isDefined": false,
-               "isThisDeclarationADefinition": false,
-               "typeClass" : "TypeBuiltin",
-               "builtInTypes" : "BuiltInVoid",
-               "isConstQualified" : false,
-               "isVolatileQualified": false,
-               "isRestrictQualified": false,
-               "isVariadic": false,
-               "isInlined": false,
-               "isFunctionOrMethod": false,
-               "PLoc_Line": 1,
-               "PLoc_Col" : 1,
-               "id": "c:@F@__ESBMC_assume",
-               "is_extern": false,
-               "file_local": false,
-               "hasBody": false,
-               "moduleName" : "esbmc_intrinsics",
-               "storageClass" : "SC_None",
-               "parameters":
-               [
-                  {
-                    "typeClass" : "TypeBuiltin",
-                    "builtInTypes" : "BuiltInBool",
-                    "isConstQualified" : false,
-                    "isVolatileQualified": false,
-                    "isRestrictQualified": false,
-                    "isArray" : false,
-                    "declClass" : "DeclParmVar",
-                    "nameEmpty" : true
-                  }
-               ]
-           }
-     }
-    )";
-
-    return intrinsics;
-
-  /*
-           "__ESBMC_assert": {
-               "declClass" : "DeclFunction",
-               "isImplicit": false,
-               "isDefined": false,
-               "isThisDeclarationADefinition": false,
-               "typeClass" : "TypeBuiltin",
-               "builtInTypes" : "BuiltInVoid",
-               "isConstQualified" : false,
-               "isVolatileQualified": false,
-               "isRestrictQualified": false,
-               "isVariadic": false,
-               "isInlined": false,
-               "isFunctionOrMethod": false,
-               "PLoc_getLine": 1,
-               "id": "c:@F@__ESBMC_assert",
-               "is_extern": false,
-               "file_local": false,
-               "hasBody": false
-           }
-    */
 }
