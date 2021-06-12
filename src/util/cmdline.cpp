@@ -14,6 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/message/format.h>
 
 std::string verification_file;
+std::string sol_main; // file that contains a dummy main for Solidity verification
 
 cmdlinet::~cmdlinet()
 {
