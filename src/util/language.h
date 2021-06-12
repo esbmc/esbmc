@@ -89,8 +89,8 @@ protected:
   bool is_solidity = false;
   inline void set_is_solidity() { is_solidity = true; }
   inline bool get_is_solidity() { return is_solidity; }
-  std::string plaintext_ast_path = "";
-  inline void set_plaintext_ast(const std::string _path) { plaintext_ast_path = _path; };
-  inline std::string get_plaintext_ast() { return plaintext_ast_path; };
+  std::string sol_main_path = "";
+  inline void set_solidity_main(const std::string _path) { sol_main_path = _path; };
+  inline std::string get_solidity_main() { return sol_main_path; };
 };
 #endif
