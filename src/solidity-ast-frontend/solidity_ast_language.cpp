@@ -23,9 +23,6 @@ bool solidity_ast_languaget::parse(
     /* store AST text and json contents in stream objects to facilitate parsing and node visiting */
 
 #if 0
-    // For plain-text AST processing...
-    printf("plaintext ast path: %s\n", plaintext_ast_path.c_str());
-    assert(plaintext_ast_path != "");
     std::ifstream ast_text_file_stream(plaintext_ast_path);
     std::stringstream ast_text_stream;
     printf("\n### ast_text_file stream processing:... \n");
@@ -35,6 +32,10 @@ bool solidity_ast_languaget::parse(
     }
 
 #endif
+
+  // For plain-text AST processing...
+  printf("plaintext ast path: %s\n", sol_main_path.c_str());
+  assert(sol_main_path != "");
 
   // Process AST json file
   std::ifstream ast_json_file_stream(path);
