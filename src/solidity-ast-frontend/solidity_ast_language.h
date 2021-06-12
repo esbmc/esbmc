@@ -7,6 +7,7 @@ Module: Solidity AST module
 #ifndef SOLIDITY_AST_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 #define SOLIDITY_AST_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 
+#include <clang-c-frontend/clang_c_language.h>
 #include <util/language.h>
 #include <fstream>
 #include <iostream>
@@ -49,13 +50,15 @@ public:
   }
 
   // constructor, destructor
-  ~solidity_ast_languaget() override = default;
+  ~solidity_ast_languaget();
   solidity_ast_languaget();
 
   // store AST json in nlohmann::json data structure
   nlohmann::json ast_json;
   nlohmann::json intrinsic_json;
   void print_json(const nlohmann::json &json_in);
+
+  languaget * clang_c_module;
 
 private:
   std::string internal_additions();
