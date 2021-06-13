@@ -8,7 +8,10 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
 
   // Get loop exit goto number
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
-  // TODO: If we want a sound version: loop_exit++ so we have the skip instruction
+  loop_exit->make_skip();
+  
+  
+  /* TODO: If we want a sound version: loop_exit++ so we have the skip instruction
   if(loop_exit != goto_program.instructions.begin())
   {
     goto_programt::targett t_before = loop_exit;
@@ -22,12 +25,13 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
       t_goto->function = loop_exit->function;
       t_goto->guard = gen_true_expr();
     }
-  }
+  } */
   // If there is an inner control flow we need a map for it
   std::map<goto_programt::targett, unsigned> target_map;
   {
     unsigned count = 0;
     goto_programt::targett t = loop.get_original_loop_head();
+    t->make_skip();
     t++; // get first instruction of the loop
     for(; t != loop_exit; t++, count++)
     {
