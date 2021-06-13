@@ -9,8 +9,7 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
   // Get loop exit goto number
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
   loop_exit->make_skip();
-  
-  
+
   /* TODO: If we want a sound version: loop_exit++ so we have the skip instruction
   if(loop_exit != goto_program.instructions.begin())
   {
@@ -74,6 +73,7 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
   }
   // now insert copies before loop_exit
   goto_program.destructive_insert(loop_exit, copies);
+  //loops_to_remove.push_back(loop);
   return true;
 }
 
