@@ -17,6 +17,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
+#include <goto-programs/goto_loops.h>
 #include <util/message.h>
 /**
  * @brief Base interface to run an algorithm in esbmc
@@ -129,6 +130,8 @@ protected:
   virtual bool runOnFunction(std::pair<const dstring, goto_functiont> &F);
   virtual bool runOnLoop(loopst &loop, goto_programt &goto_program);
   goto_functionst &goto_functions;
+  bool remove_last_seen_loop = false;
+  ;
 
 private:
   message_handlert &msg; // This is needed to get the program loop
