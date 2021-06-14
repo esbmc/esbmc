@@ -130,7 +130,6 @@ protected:
   virtual bool runOnFunction(std::pair<const dstring, goto_functiont> &F);
   virtual bool runOnLoop(loopst &loop, goto_programt &goto_program);
   goto_functionst &goto_functions;
-  bool remove_last_seen_loop = false;
   ;
 
 private:
