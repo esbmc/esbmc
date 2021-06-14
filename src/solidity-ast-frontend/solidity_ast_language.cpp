@@ -60,7 +60,7 @@ bool solidity_ast_languaget::parse(
   }
   ast_json = nlohmann::json::parse(ast_json_content); // parse explicitly
 
-  print_json(ast_json);
+  //print_json(ast_json);
 
   return false;
 }
