@@ -29,6 +29,8 @@ protected:
   nlohmann::json &ast_json; // json for Solidity AST. Use vector for multiple contracts
   void print_json_element(nlohmann::json &json_in, const unsigned index,
     const std::string &key, const std::string& json_name);
+  void print_json_array_element(nlohmann::json &json_in,
+      const std::string& node_type, const unsigned index);
 
   // functions to get declarations of various types
   bool get_decl_intrinsics(
@@ -51,6 +53,8 @@ protected:
   symbolt *move_symbol_to_context(symbolt &symbol);
 
   unsigned int current_scope_var_num; // tracking scope while getting declarations
+
+  void convert_ast_nodes(nlohmann::json &contract_def);
 };
 
 #endif /* SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_ */
