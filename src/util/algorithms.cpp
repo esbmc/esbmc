@@ -20,12 +20,7 @@ bool goto_functions_algorithm::run()
         // Foreach loop in the function
         for(auto itt = function_loops.rbegin(); itt != function_loops.rend();
             ++itt)
-        {
-          remove_last_seen_loop = false;
-          runOnLoop(*itt, goto_program);
-          if(remove_last_seen_loop)
-            function_loops.erase(std::next(itt).base());
-        }
+              runOnLoop(*itt, goto_program);
       }
     }
   }
