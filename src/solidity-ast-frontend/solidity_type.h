@@ -8,15 +8,14 @@
 
 namespace SolidityTypes
 {
-  enum declClass
+  enum declKind // decl.getKind()
   {
-    DeclLabel = 0, // corresponds to clang::Decl::Label
-    DeclFunction,  // corresponds to clang::Decl::Function
-    DeclParmVar, // corresponds to clang::Decl::ParmVar
-    DeclError
+    DeclVar = 0,  // clang::Decl::Var
+    DeclFunction, // clang::Decl::Function
+    DeclKindError
   };
-  declClass get_decl_class(const std::string& kind);
-  const char* declClass_to_str(declClass the_decl);
+  declKind get_decl_kind(const std::string& kind);
+  const char* declKind_to_str(declKind the_decl);
 
   // counterparts of clang::Type::getTypeClass() used by get_type during conversion
   enum typeClass
@@ -28,14 +27,13 @@ namespace SolidityTypes
   const char* typeClass_to_str(typeClass the_type);
 
   // counterparts of clang::BuiltinType::getKind() used by get_builtin_type during conversion
-  enum builInTypes
+  enum builInTypesKind
   {
-    BuiltInVoid = 0,
-    BuiltInBool,
+    BuiltInUChar = 0,
     BuiltInError
   };
-  builInTypes get_builtin_type(const std::string& kind);
-  const char* builInTypes_to_str(builInTypes the_blitype);
+  builInTypesKind get_builtin_type(const std::string& kind);
+  const char* builInTypesKind_to_str(builInTypesKind the_blitype);
 
   enum storageClass
   {

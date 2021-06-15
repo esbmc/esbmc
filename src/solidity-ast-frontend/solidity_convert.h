@@ -12,7 +12,7 @@
 #include <solidity-ast-frontend/solidity_type.h>
 #include <solidity-ast-frontend/solidity_decl_tracker.h>
 
-using jsonTrackerRef = std::shared_ptr<decl_function_tracker>&;
+using varDeclTrackerPtr = std::shared_ptr<VarDeclTracker>&;
 
 class solidity_convertert
 {
@@ -34,7 +34,13 @@ protected:
 
   unsigned int current_scope_var_num; // tracking scope while getting declarations
 
-  void convert_ast_nodes(nlohmann::json &contract_def);
+  bool convert_ast_nodes(nlohmann::json &contract_def);
+
+  bool get_decl(nlohmann::json &ast_node, exprt &new_expr);
+  bool get_var(varDeclTrackerPtr vd_tracker, exprt &new_expr);
+  bool get_type(const QualTypeTracker &q_type, typet &new_type); // bool clang_c_convertert::get_type(const clang::QualType &q_type, typet &new_type)
+  bool get_sub_type(const QualTypeTracker &q_type, typet &new_type); // bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
+  bool get_builtin_type(const QualTypeTracker &q_type, typet &new_type);
 };
 
 #endif /* SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_ */
