@@ -7,6 +7,7 @@ void VarDeclTracker::config()
 
   // set QualType tracker. Note: this should be set after set_decl_kind()
   set_qualtype_tracker();
+
   // set subtype based on QualType
   if (qualtype_tracker.get_type_class() == SolidityTypes::TypeBuiltin)
   {
@@ -16,6 +17,10 @@ void VarDeclTracker::config()
   {
     assert(!"should not be here - unsupported qualtype");
   }
+
+  // set NamedDeclTracker
+  set_named_decl_name();
+  set_named_decl_kind();
 }
 
 void VarDeclTracker::set_decl_kind()
@@ -32,6 +37,7 @@ void VarDeclTracker::set_qualtype_tracker()
 {
   if (decl_kind == SolidityTypes::DeclVar)
   {
+    assert(decl_json["typeName"].contains("nodeType"));
     std::string qual_type = decl_json["typeName"]["nodeType"].get<std::string>();
     if (qual_type == "ElementaryTypeName")
     {
@@ -54,6 +60,7 @@ void VarDeclTracker::set_qualtype_bt_kind()
 {
   if (decl_kind == SolidityTypes::DeclVar)
   {
+    assert(decl_json["typeName"]["typeDescriptions"].contains("typeString"));
     std::string qual_type = decl_json["typeName"]["typeDescriptions"]["typeString"].get<std::string>();
     if (qual_type == "uint8")
     {
@@ -69,6 +76,36 @@ void VarDeclTracker::set_qualtype_bt_kind()
   else
   {
     assert(!"should not be here - unsupported decl_kind when setting qualtype's bt_kind");
+  }
+}
+
+void VarDeclTracker::set_named_decl_name()
+{
+  if (decl_kind == SolidityTypes::DeclVar)
+  {
+    assert(decl_json.contains("name"));
+    std::string decl_name = decl_json["name"].get<std::string>();
+    assert(nameddecl_tracker.get_name() == ""); // only allowed to set once during config();
+    nameddecl_tracker.set_name(decl_name);
+  }
+  else
+  {
+    assert(!"should not be here - unsupported decl_kind when setting namedDecl's name");
+  }
+}
+
+void VarDeclTracker::set_named_decl_kind()
+{
+  if (decl_kind == SolidityTypes::DeclVar)
+  {
+    assert(nameddecl_tracker.get_named_decl_kind() == SolidityTypes::DeclKindError); // only allowed to set once during config();
+    nameddecl_tracker.set_named_decl_kind(SolidityTypes::DeclVar);
+    assert(!nameddecl_tracker.get_hasIdentifier()); // only allowed to set once during config();
+    nameddecl_tracker.set_hasIdentifier(true); // to be used in conjunction with the name above
+  }
+  else
+  {
+    assert(!"should not be here - unsupported decl_kind when setting namedDecl's kind");
   }
 }
 
