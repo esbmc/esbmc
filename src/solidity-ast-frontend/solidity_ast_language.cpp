@@ -28,7 +28,7 @@ bool solidity_ast_languaget::parse(
   message_handlert &message_handler)
 {
   printf("sol_main_path: %s\n", sol_main_path.c_str());
-  assert(sol_main_path != "");
+  //assert(sol_main_path != ""); // we don't need a 'main' function if --function is used
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   clang_c_module->parse(sol_main_path, message_handler); // populate clang_c_module's ASTs

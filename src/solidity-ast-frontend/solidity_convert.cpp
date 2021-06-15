@@ -81,7 +81,7 @@ bool solidity_convertert::get_decl(nlohmann::json &ast_node, exprt &new_expr)
 
   switch(decl_kind)
   {
-    case SolidityTypes::DeclVar:
+    case SolidityTypes::declKind::DeclVar:
     {
       auto vd_tracker = std::make_shared<VarDeclTracker>(ast_node); // VariableDeclaration tracker
       vd_tracker->config();
@@ -106,7 +106,83 @@ bool solidity_convertert::get_var(varDeclTrackerPtr vd, exprt &new_expr)
   if(get_type(vd->get_qualtype_tracker(), t))
     return true;
 
+  assert(!vd->get_hasAttrs() && "expecting false hasAttrs but got true"); // to be extended in the future
+
+  std::string id, name;
+  get_decl_name(vd->get_nameddecl_tracker(), name, id);
+
   assert(!"get_var done?");
+  return false;
+}
+
+static std::string get_decl_name(const NamedDeclTracker &nd)
+{
+  if (nd.get_hasIdentifier())
+  {
+    return nd.get_name();
+  }
+  else
+  {
+    assert(!"Unsupported - nd.get_hasIdentifier() returns false");
+    return "Error"; // just to make come old gcc compiler happy
+  }
+  return "Error"; // just to make come old gcc compiler happy
+}
+
+void solidity_convertert::get_decl_name(
+  const NamedDeclTracker &nd,
+  std::string &name,
+  std::string &id)
+{
+  id = name = ::get_decl_name(nd);
+
+  switch(nd.get_named_decl_kind()) // it's our declClass in Solidity! same as being used in get_decl
+  {
+    case SolidityTypes::declKind::DeclVar:
+    {
+      if(name.empty())
+      {
+        assert(!"unsupported - name is empty in get_decl_name for DeclVar");
+      }
+      break;
+    }
+
+    default:
+      if(name.empty()) // print name gives the function name when this is part of get_function back traces
+      {
+        assert(!"Declaration has empty name - unsupported named_decl_kind");;
+      }
+  }
+
+  // get DeclUSR to be used in C context
+  if(!generate_decl_usr(nd, name, id))
+    return;
+
+  // Otherwise, abort
+  assert(!"Unable to generate USR");
+  abort();
+}
+
+// Auxiliary function to mimic clang's clang::index::generateUSRForDecl()
+bool solidity_convertert::generate_decl_usr(
+  const NamedDeclTracker &nd,
+  std::string &name,
+  std::string &id)
+{
+  switch(nd.get_named_decl_kind()) // it's our declClass in Solidity! same as being used in get_decl
+  {
+    case SolidityTypes::declKind::DeclVar:
+    {
+      std::string id_prefix = "c:@";
+      id = id_prefix + name;
+      return false;
+    }
+
+    default:
+      assert(!"unsupported named_decl_kind when generating declUSR");
+  }
+
+  return true;
 }
 
 bool solidity_convertert::get_type(
@@ -116,7 +192,15 @@ bool solidity_convertert::get_type(
   if(get_sub_type(q_type, new_type))
     return true;
 
-  assert(!"get_type_1 done?");
+  if(q_type.get_isConstQualified()) // TODO: what's Solidity's equivalent?
+    new_type.cmt_constant(true);
+
+  if(q_type.get_isVolatileQualified())
+    new_type.cmt_volatile(true);
+
+  if(q_type.get_isRestrictQualified())
+    new_type.restricted(true);
+
   return false;
 }
 
@@ -151,7 +235,6 @@ bool solidity_convertert::get_builtin_type(
     {
       new_type = unsigned_char_type();
       c_type = "unsigned_char";
-      assert(!"cool - got UChar for Solilidity");
       break;
     }
     default:

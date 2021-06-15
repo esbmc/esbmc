@@ -41,6 +41,8 @@ protected:
   bool get_type(const QualTypeTracker &q_type, typet &new_type); // bool clang_c_convertert::get_type(const clang::QualType &q_type, typet &new_type)
   bool get_sub_type(const QualTypeTracker &q_type, typet &new_type); // bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   bool get_builtin_type(const QualTypeTracker &q_type, typet &new_type);
+  void get_decl_name(const NamedDeclTracker &nd, std::string &name, std::string &id);
+  bool generate_decl_usr(const NamedDeclTracker &nd, std::string &name, std::string &id);
 };
 
 #endif /* SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_ */
