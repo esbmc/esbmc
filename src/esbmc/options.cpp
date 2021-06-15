@@ -139,6 +139,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"mathsat", NULL, "use MathSAT"},
     {"cvc", NULL, "use CVC4"},
     {"yices", NULL, "use Yices"},
+    {"bitwuzla", NULL, "use Bitwuzla"},
     {"bv", NULL, "use solver with bit-vector arithmetic"},
     {"ir", NULL, "use solver with integer/real arithmetic"},
     {"smtlib", NULL, "use SMT lib format"},
