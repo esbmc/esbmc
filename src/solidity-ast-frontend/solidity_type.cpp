@@ -2,38 +2,33 @@
 
 namespace SolidityTypes
 {
-  declClass get_decl_class(const std::string& kind)
+  declKind get_decl_kind(const std::string& kind)
   {
-    if (kind == "DeclLabel")
+    if (kind == "VariableDeclaration")
     {
-      return DeclLabel;
+      return DeclVar;
     }
-    else if (kind == "DeclFunction")
+    else if (kind == "FunctionDefinition")
     {
       return DeclFunction;
     }
-    else if (kind == "DeclParmVar")
-    {
-      return DeclParmVar;
-    }
     else
     {
-      assert(!"Unsupported declClass");
+      assert(!"Unsupported declKind");
     }
-    return DeclError;
+    return DeclKindError;
   }
 
-  const char* declClass_to_str(declClass the_decl)
+  const char* declKind_to_str(declKind the_decl)
   {
     switch(the_decl)
     {
-      ENUM_TO_STR(DeclLabel)
+      ENUM_TO_STR(DeclVar)
       ENUM_TO_STR(DeclFunction)
-      ENUM_TO_STR(DeclParmVar)
-      ENUM_TO_STR(DeclError)
+      ENUM_TO_STR(DeclKindError)
       default:
       {
-        assert(!"Unknown declClass");
+        assert(!"Unknown declKind");
         return "UNKNOWN";
       }
     }
@@ -66,15 +61,11 @@ namespace SolidityTypes
     }
   }
 
-  builInTypes get_builtin_type(const std::string& kind)
+  builInTypesKind get_builtin_type(const std::string& kind)
   {
-    if (kind == "BuiltInVoid")
+    if (kind == "uint8")
     {
-      return BuiltInVoid;
-    }
-    else if (kind == "BuiltInBool")
-    {
-      return BuiltInBool;
+      return BuiltInUChar;
     }
     else
     {
@@ -82,12 +73,11 @@ namespace SolidityTypes
     }
     return BuiltInError;
   }
-  const char* builInTypes_to_str(builInTypes the_blitype)
+  const char* builInTypesKind_to_str(builInTypesKind the_blitype)
   {
     switch(the_blitype)
     {
-      ENUM_TO_STR(BuiltInVoid)
-      ENUM_TO_STR(BuiltInBool)
+      ENUM_TO_STR(BuiltInUChar)
       ENUM_TO_STR(BuiltInError)
       default:
       {

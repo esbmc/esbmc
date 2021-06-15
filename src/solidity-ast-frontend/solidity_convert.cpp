@@ -31,15 +31,18 @@ bool solidity_convertert::convert()
   {
     std::string node_type = (*itr)["nodeType"].get<std::string>();
     if (node_type == "ContractDefinition") // contains AST nodes we need
-      convert_ast_nodes(*itr);
+    {
+      if(convert_ast_nodes(*itr))
+        return true; // 'true' indicates something goes wrong.
+    }
   }
 
   assert(!"all symbols done?");
 
-  return false;
+  return false; // 'false' indicates successful completion.
 }
 
-void solidity_convertert::convert_ast_nodes(nlohmann::json &contract_def)
+bool solidity_convertert::convert_ast_nodes(nlohmann::json &contract_def)
 {
   unsigned index = 0;
   nlohmann::json ast_nodes = contract_def["nodes"];
@@ -51,8 +54,115 @@ void solidity_convertert::convert_ast_nodes(nlohmann::json &contract_def)
     std::string node_type = ast_node["nodeType"].get<std::string>();
     printf("@@ Converting node[%u]: name=%s, nodeType=%s ...\n",
         index, node_name.c_str(), node_type.c_str());
-    print_json_array_element(ast_node, node_type, index);
+    //print_json_array_element(ast_node, node_type, index);
+    exprt dummy_decl;
+    if(get_decl(ast_node, dummy_decl))
+      return true;
   }
+
+  return false;
+}
+
+// This method convert declarations. They are called when those declarations
+// are to be added to the context. If a variable or function is being called
+// but then get_decl_expr is called instead
+bool solidity_convertert::get_decl(nlohmann::json &ast_node, exprt &new_expr)
+{
+  new_expr = code_skipt();
+
+  if (!ast_node.contains("nodeType"))
+  {
+    assert(!"Missing \'nodeType\' filed in ast_node");
+  }
+
+  SolidityTypes::declKind decl_kind =
+    SolidityTypes::get_decl_kind(static_cast<std::string>(ast_node.at("nodeType")));
+  assert(decl_kind != SolidityTypes::DeclKindError);
+
+  switch(decl_kind)
+  {
+    case SolidityTypes::DeclVar:
+    {
+      auto vd_tracker = std::make_shared<VarDeclTracker>(ast_node); // VariableDeclaration tracker
+      vd_tracker->config();
+      return get_var(vd_tracker, new_expr);
+    }
+    default:
+      std::cerr << "**** ERROR: ";
+      std::cerr << "Unrecognized / unimplemented declaration in Solidity AST : "
+                << SolidityTypes::declKind_to_str(decl_kind)
+                << std::endl;
+      return true;
+  }
+
+  assert(!"get_decl done?");
+  return false;
+}
+
+bool solidity_convertert::get_var(varDeclTrackerPtr vd, exprt &new_expr)
+{
+  // Get type
+  typet t;
+  if(get_type(vd->get_qualtype_tracker(), t))
+    return true;
+
+  assert(!"get_var done?");
+}
+
+bool solidity_convertert::get_type(
+  const QualTypeTracker &q_type,
+  typet &new_type)
+{
+  if(get_sub_type(q_type, new_type))
+    return true;
+
+  assert(!"get_type_1 done?");
+  return false;
+}
+
+bool solidity_convertert::get_sub_type(const QualTypeTracker &q_type, typet &new_type)
+{
+  switch(q_type.get_type_class())
+  {
+    case SolidityTypes::typeClass::TypeBuiltin:
+    {
+      if(get_builtin_type(q_type, new_type))
+        return true;
+      break;
+    }
+    default:
+      std::cerr << "Conversion of unsupported node qual type: \"";
+      std::cerr << SolidityTypes::typeClass_to_str(q_type.get_type_class()) << std::endl;
+      return true;
+  }
+
+  return false;
+}
+
+bool solidity_convertert::get_builtin_type(
+  const QualTypeTracker &q_type,
+  typet &new_type)
+{
+  std::string c_type;
+
+  switch(q_type.get_bt_kind())
+  {
+    case SolidityTypes::builInTypesKind::BuiltInUChar:
+    {
+      new_type = unsigned_char_type();
+      c_type = "unsigned_char";
+      assert(!"cool - got UChar for Solilidity");
+      break;
+    }
+    default:
+      std::cerr << "Unrecognized clang builtin type "
+                << SolidityTypes::builInTypesKind_to_str(q_type.get_bt_kind())
+                << std::endl;
+      return true;
+  }
+
+  new_type.set("#cpp_type", c_type);
+  return false;
 }
 
 void solidity_convertert::print_json_element(nlohmann::json &json_in, const unsigned index,
