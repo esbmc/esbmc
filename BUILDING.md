@@ -64,7 +64,7 @@ tar xJf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86
 
 ESBMC relies on SMT solvers to reason about formulae in its back-end.
 
-Currently we support the following solvers: __Boolector__, __CVC4__, __MathSAT__, __Yices 2__, and __Z3__.
+Currently we support the following solvers: __Bitwuzla__, __Boolector__, __CVC4__, __MathSAT__, __Yices 2__, and __Z3__.
 
 Since this guide focuses primarily on ESBMC build, we will only cover the steps needed by it.
 
