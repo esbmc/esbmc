@@ -27,6 +27,7 @@ public:
 protected:
   contextt &context;
   nlohmann::json &ast_json; // json for Solidity AST. Use vector for multiple contracts
+  std::string absolute_path;
   void print_json_element(nlohmann::json &json_in, const unsigned index,
     const std::string &key, const std::string& json_name);
   void print_json_array_element(nlohmann::json &json_in,
@@ -43,6 +44,20 @@ protected:
   bool get_builtin_type(const QualTypeTracker &q_type, typet &new_type);
   void get_decl_name(const NamedDeclTracker &nd, std::string &name, std::string &id);
   bool generate_decl_usr(const NamedDeclTracker &nd, std::string &name, std::string &id);
+  void get_location_from_decl(const SourceLocationTracker &decl_slm, locationt &location);
+  void set_location(const SourceLocationTracker &decl_slm, std::string &function_name, locationt &location);
+  std::string get_modulename_from_path(std::string path);
+  std::string get_filename_from_path(std::string path);
+
+  void get_default_symbol(
+    symbolt &symbol,
+    std::string module_name,
+    typet type,
+    std::string name,
+    std::string id,
+    locationt location);
+
+  symbolt *move_symbol_to_context(symbolt &symbol);
 };
 
 #endif /* SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_ */
