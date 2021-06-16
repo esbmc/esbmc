@@ -7,6 +7,42 @@
 #include <iomanip>
 #include <vector>
 
+// declaration's source manager for location settings
+class SourceLocationTracker
+{
+public:
+  static constexpr unsigned lineNumberInvalid = std::numeric_limits<unsigned>::max();
+
+  SourceLocationTracker() { clear_all(); }
+
+  void clear_all()
+  {
+    line_number = lineNumberInvalid;
+    file_name = "";
+    isFunctionOrMethod = false;
+    isValid = false;
+  }
+
+  // setter
+  void set_line_number(unsigned _ln)   { line_number = _ln; }
+  void set_file_name(std::string _fn)  { file_name = _fn; }
+  void set_isFunctionOrMethod(bool _v) { isFunctionOrMethod = _v; };
+  void set_isValid(bool _v)            { isValid = _v; }
+
+  // getter
+  unsigned get_line_number()  const   { return line_number; }
+  std::string get_file_name() const   { return file_name; }
+  bool get_isFunctionOrMethod() const { return isFunctionOrMethod; };
+  bool get_isValid() const            { return isValid; }
+
+private:
+  unsigned line_number;
+  std::string file_name;
+  bool isFunctionOrMethod; // is upstream decl a function
+  bool isValid; // if true, it means a valid sm pointer as in "sm = &ASTContext->getSourceManager();"
+};
+
+// declaration's identifier manager for name and id settings
 class NamedDeclTracker
 {
 public:
@@ -35,6 +71,7 @@ private:
   bool hasIdentifier; // indicate this declaration has a name, == const clang::IdentifierInfo *identifier = nd.getIdentifier()
 };
 
+// declaration's subtype (e.g. builtin_kind) manager for subtype settings
 class QualTypeTracker
 {
 public:
@@ -59,7 +96,7 @@ public:
   // getter
   SolidityTypes::typeClass get_type_class() const    { return type_class; }
   SolidityTypes::builInTypesKind get_bt_kind() const { return bt_kind; };
-  bool get_isConstQualified() const { return isConstQualified; }
+  bool get_isConstQualified() const    { return isConstQualified; }
   bool get_isVolatileQualified() const { return isVolatileQualified; }
   bool get_isRestrictQualified() const { return isRestrictQualified; }
 
@@ -71,6 +108,7 @@ private:
   bool isRestrictQualified;
 };
 
+// variable declaration
 class VarDeclTracker
 {
 public:
@@ -94,26 +132,46 @@ public:
   {
     decl_kind = SolidityTypes::DeclKindError;
     hasAttrs = false;
+    absolute_path = "";
+    storage_class = SolidityTypes::SCError;
+    hasGlobalStorage = false;
+    hasExternalStorage = false;
+    isExternallyVisible = false;
+    hasInit = false;
   }
 
   // for debug print
   void print_decl_json();
 
   // config this tracker based on json values
-  void config();
+  void config(std::string ab_path);
 
   // getters
   SolidityTypes::declKind get_decl_kind()   { return decl_kind; }
-  QualTypeTracker& get_qualtype_tracker()   { return qualtype_tracker; }
-  NamedDeclTracker& get_nameddecl_tracker() { return nameddecl_tracker; }
+  QualTypeTracker& get_qualtype_tracker()   { return qualtype_tracker; }  // for get_type(...)
+  NamedDeclTracker& get_nameddecl_tracker() { return nameddecl_tracker; } // for get_decl_name(...)
+  SourceLocationTracker& get_sl_tracker()   { return sl_tracker; }        // for get_decl_name(...)
   bool get_hasAttrs()                       { return hasAttrs; }
+  bool get_hasGlobalStorage()               { return hasGlobalStorage; }
+  bool get_hasExternalStorage()             { return hasExternalStorage; }
+  bool get_isExternallyVisible()            { return isExternallyVisible; }
+  bool get_hasInit()                        { return hasInit; }
+  std::string get_absolute_path()           { return absolute_path; }
+  SolidityTypes::storageClass get_storage_class() { return storage_class; }
 
 private:
   nlohmann::json decl_json;
   SolidityTypes::declKind decl_kind; // decl.getKind()
   QualTypeTracker qualtype_tracker;
   NamedDeclTracker nameddecl_tracker;
+  SourceLocationTracker sl_tracker;
   bool hasAttrs;
+  bool hasGlobalStorage;
+  bool hasExternalStorage;
+  bool isExternallyVisible; // NOT a direct translation of Solidity's visibility. Visible to other functions in this contract
+  bool hasInit;
+  std::string absolute_path;
+  SolidityTypes::storageClass storage_class;
 
   // private setters : set the member values based on the corresponding json value. Used by config() only.
   // Setting them outside this class is NOT allowed.
@@ -124,6 +182,13 @@ private:
   // NamedDeclTracker setters
   void set_named_decl_name();
   void set_named_decl_kind();
+  // SourceLocationTracker setters
+  void set_sl_tracker_line_number();
+  void set_sl_tracker_file_name();
+  // static lifetime, extern, file_local setters
+  void set_hasGlobalStorage();
+  // init value setters
+  void set_hasInit();
 };
 
 #endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_
