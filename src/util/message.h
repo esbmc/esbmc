@@ -123,9 +123,11 @@ namespace esbmc::global {
 }
 // Magic definitions to help the use of messages during the program
 #define _TO_MSG(X) std::stringstream _convert_ss_to_str; _convert_ss_to_str << X;
-#define _CALL_MSG(MODE,X) _TO_MSG(X); msg.##MODE(_convert_ss_to_str.str());
+#define _CALL_MSG(MODE,X) _TO_MSG(X); esbmc::global::_msg.##MODE(_convert_ss_to_str.str());
 #define DEBUG(X) _CALL_MSG(debug, X)
 #define WARNING(X) _CALL_MSG(warning, X)
 #define ERROR(X) _CALL_MSG(error, X)
+#define STATUS(X) _CALL_MSG(status, X)
+#define PRINT(X) _CALL_MSG(print, X)
 
 #endif
