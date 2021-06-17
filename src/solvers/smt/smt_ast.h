@@ -83,7 +83,7 @@ public:
 
   virtual void dump() const
   {
-    std::cout << "Chosen solver doesn't support printing the AST\n";
+    PRINT("Chosen solver doesn't support printing the AST\n");
   }
 };
 

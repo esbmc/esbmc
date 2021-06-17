@@ -52,7 +52,7 @@ bool goto_symext::get_unwind_recursion(
     if(this_loop_max_unwind != 0)
       msg += " (" + integer2string(this_loop_max_unwind) + " max)";
 
-    std::cout << msg << "\n";
+    PRINT(msg << "\n");
   }
 
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
@@ -198,7 +198,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   {
     if(has_prefix(identifier.as_string(), "symex::invalid_object"))
     {
-      std::cout << "WARNING: function ptr call with no target, ";
+      PRINT("WARNING: function ptr call with no target, ");
       cur_state->source.pc++;
       return;
     }

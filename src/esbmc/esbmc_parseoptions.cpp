@@ -203,14 +203,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("git-hash"))
   {
-    std::cout << esbmc_version_string << "\n";
+    PRINT(esbmc_version_string << "\n");
     exit(0);
   }
 
   if(cmdline.isset("list-solvers"))
   {
     // Generated for us by autoconf,
-    std::cout << "Available solvers: " << ESBMC_AVAILABLE_SOLVERS << "\n";
+    PRINT("Available solvers: " << ESBMC_AVAILABLE_SOLVERS << "\n");
     exit(0);
   }
 
@@ -250,8 +250,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("smt-during-symex"))
   {
-    std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
-    std::cout << "\n";
+    PRINT("Enabling --no-slice due to presence of --smt-during-symex");
+    PRINT("\n");
     options.set_option("no-slice", true);
   }
 
@@ -805,7 +805,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      std::cout << "*** Checking base case, k = " << k_step << '\n';
+      PRINT("*** Checking base case, k = " << k_step << '\n');
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -915,7 +915,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      std::cout << "*** Checking forward condition, k = " << k_step << '\n';
+      PRINT("*** Checking forward condition, k = " << k_step << '\n');
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -986,7 +986,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      std::cout << "*** Checking inductive step, k = " << k_step << '\n';
+      PRINT("*** Checking inductive step, k = " << k_step << '\n');
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -1222,7 +1222,7 @@ int esbmc_parseoptionst::do_base_case(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  std::cout << "*** Checking base case, k = " << k_step << '\n';
+  PRINT("*** Checking base case, k = " << k_step << '\n');
   switch(do_bmc(bmc))
   {
   case smt_convt::P_UNSATISFIABLE:
@@ -1231,11 +1231,11 @@ int esbmc_parseoptionst::do_base_case(
     break;
 
   case smt_convt::P_SATISFIABLE:
-    std::cout << "\nBug found (k = " << k_step << ")\n";
+    PRINT("\nBug found (k = " << k_step << ")\n");
     return true;
 
   default:
-    std::cout << "Unknown BMC result\n";
+    PRINT("Unknown BMC result\n");
     abort();
   }
 
@@ -1269,7 +1269,7 @@ int esbmc_parseoptionst::do_forward_condition(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  std::cout << "*** Checking forward condition, k = " << k_step << '\n';
+  PRINT("*** Checking forward condition, k = " << k_step << '\n');
   auto res = do_bmc(bmc);
 
   // Restore the no assertion flag, before checking the other steps
@@ -1283,12 +1283,13 @@ int esbmc_parseoptionst::do_forward_condition(
     break;
 
   case smt_convt::P_UNSATISFIABLE:
-    std::cout << "\nSolution found by the forward condition; "
-              << "all states are reachable (k = " << k_step << ")\n";
+    PRINT(
+      "\nSolution found by the forward condition; "
+      << "all states are reachable (k = " << k_step << ")\n");
     return false;
 
   default:
-    std::cout << "Unknown BMC result\n";
+    PRINT("Unknown BMC result\n");
     abort();
   }
 
@@ -1324,7 +1325,7 @@ int esbmc_parseoptionst::do_inductive_step(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  std::cout << "*** Checking inductive step, k = " << k_step << '\n';
+  PRINT("*** Checking inductive step, k = " << k_step << '\n');
   switch(do_bmc(bmc))
   {
   case smt_convt::P_SATISFIABLE:
@@ -1338,7 +1339,7 @@ int esbmc_parseoptionst::do_inductive_step(
     return false;
 
   default:
-    std::cout << "Unknown BMC result\n";
+    PRINT("Unknown BMC result\n");
     abort();
   }
 
@@ -1680,6 +1681,6 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 
 void esbmc_parseoptionst::help()
 {
-  std::cout << "\n* * *           ESBMC " ESBMC_VERSION "          * * *\n";
-  std::cout << cmdline.cmdline_options << "\n";
+  PRINT("\n* * *           ESBMC " ESBMC_VERSION "          * * *\n");
+  PRINT(cmdline.cmdline_options << "\n");
 }

@@ -1272,12 +1272,12 @@ void cvc_convt::dump_smt()
   for(auto const &a : assertions)
   {
     a.printAst(std::cout, 0);
-    std::cout << std::flush;
+    PRINT(std::flush);
   }
 }
 
 void cvc_smt_ast::dump() const
 {
   a.printAst(std::cout, 0);
-  std::cout << std::flush;
+  PRINT(std::flush);
 }

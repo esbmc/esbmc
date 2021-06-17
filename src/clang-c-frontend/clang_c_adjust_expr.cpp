@@ -9,6 +9,7 @@
 #include <util/ieee_float.h>
 #include <util/prefix.h>
 #include <util/std_code.h>
+#include <util/message.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
@@ -210,8 +211,8 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
     }
     else
     {
-      std::cout << "unknown side effect: " << statement;
-      std::cout << " at " << expr.location() << "\n";
+      PRINT("unknown side effect: " << statement);
+      PRINT(" at " << expr.location() << "\n");
       abort();
     }
   }
@@ -478,7 +479,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
 
   if(new_expr.is_nil())
   {
-    std::cout << "type has no size, " << type.name() << "\n";
+    PRINT("type has no size, " << type.name() << "\n");
     abort();
   }
 

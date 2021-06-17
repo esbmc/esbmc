@@ -780,7 +780,7 @@ void boolector_convt::dump_smt()
 void btor_smt_ast::dump() const
 {
   boolector_dump_smt2_node(boolector_get_btor(a), stdout, a);
-  std::cout << std::flush;
+  PRINT(std::flush);
 }
 
 void boolector_convt::print_model()

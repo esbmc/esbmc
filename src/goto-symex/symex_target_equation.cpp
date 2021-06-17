@@ -164,7 +164,7 @@ void symex_target_equationt::convert_internal_step(
   if(ssa_trace)
   {
     step.output(ns, std::cout);
-    std::cout << "\n";
+    PRINT("\n");
   }
 
   step.guard_ast = smt_conv.convert_ast(step.guard);
@@ -177,7 +177,7 @@ void symex_target_equationt::convert_internal_step(
     if(ssa_smt_trace)
     {
       step.cond_ast->dump();
-      std::cout << "\n";
+      PRINT("\n");
     }
   }
   else if(step.is_assignment())
@@ -186,7 +186,7 @@ void symex_target_equationt::convert_internal_step(
     if(ssa_smt_trace)
     {
       assign->dump();
-      std::cout << "\n";
+      PRINT("\n");
     }
   }
   else if(step.is_output())

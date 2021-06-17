@@ -1217,14 +1217,14 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
 
 void z3_smt_ast::dump() const
 {
-  std::cout << Z3_ast_to_string(a.ctx(), a) << "\n";
+  PRINT(Z3_ast_to_string(a.ctx(), a) << "\n");
   std::cout << "sort is " << Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a))
             << "\n";
 }
 
 void z3_convt::dump_smt()
 {
-  std::cout << solver << "\n";
+  PRINT(solver << "\n");
 }
 
 smt_astt z3_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
@@ -1282,7 +1282,7 @@ smt_astt z3_convt::mk_smt_fpbv_neg(smt_astt op)
 
 void z3_convt::print_model()
 {
-  std::cout << Z3_model_to_string(z3_ctx, solver.get_model());
+  PRINT(Z3_model_to_string(z3_ctx, solver.get_model()));
 }
 
 smt_sortt z3_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)

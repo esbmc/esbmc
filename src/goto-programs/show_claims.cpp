@@ -46,7 +46,7 @@ void show_claims(
         xml.new_element("expression").data =
           xmlt::escape(from_expr(ns, identifier, instruction.guard));
 
-        std::cout << xml << "\n";
+        PRINT(xml << "\n");
       }
       else if(ui == ui_message_handlert::PLAIN)
       {
@@ -58,7 +58,7 @@ void show_claims(
 
         std::cout << "  " << from_expr(ns, identifier, instruction.guard)
                   << "\n";
-        std::cout << "\n";
+        PRINT("\n");
       }
       else
         assert(false);

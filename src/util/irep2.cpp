@@ -9,6 +9,7 @@
 #include <util/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
+#include <util/message.h>
 
 template <typename T>
 class register_irep_methods;
@@ -122,7 +123,7 @@ std::string type2t::pretty(unsigned int indent) const
 
 void type2t::dump() const
 {
-  std::cout << pretty(0) << "\n";
+  PRINT(pretty(0) << "\n");
 }
 
 size_t type2t::crc() const
@@ -553,7 +554,7 @@ std::string expr2t::pretty(unsigned int indent) const
 
 void expr2t::dump() const
 {
-  std::cout << pretty(0) << "\n";
+  PRINT(pretty(0) << "\n");
 }
 
 // Map a base type to it's list of names

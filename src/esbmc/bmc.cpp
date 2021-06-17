@@ -120,8 +120,8 @@ void bmct::successful_trace()
   {
     xmlt xml("cprover-status");
     xml.data = "SUCCESS";
-    std::cout << xml;
-    std::cout << "\n";
+    PRINT(xml);
+    PRINT("\n");
   }
   break;
 
@@ -169,7 +169,7 @@ void bmct::error_trace(
   {
     xmlt xml;
     convert(ns, goto_trace, xml);
-    std::cout << xml << "\n";
+    PRINT(xml << "\n");
     break;
   }
 
@@ -193,7 +193,7 @@ smt_convt::resultt bmct::run_decision_procedure(
   else
     logic = "integer/real arithmetic";
 
-  std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
+  PRINT("Encoding remaining VCC(s) using " << logic << "\n");
 
   smt_conv->set_message_handler(message_handler);
   smt_conv->set_verbosity(get_verbosity());
@@ -266,8 +266,8 @@ void bmct::report_success()
   {
     xmlt xml("cprover-status");
     xml.data = "SUCCESS";
-    std::cout << xml;
-    std::cout << "\n";
+    PRINT(xml);
+    PRINT("\n");
   }
   break;
 
@@ -292,8 +292,8 @@ void bmct::report_failure()
   {
     xmlt xml("cprover-status");
     xml.data = "FAILURE";
-    std::cout << xml;
-    std::cout << "\n";
+    PRINT(xml);
+    PRINT("\n");
   }
   break;
 
@@ -313,7 +313,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
     ::show_symbol_table_plain(ns, std::cout);
 
   languagest languages(ns, MODE_C);
-  std::cout << "\nProgram constraints: \n";
+  PRINT("\nProgram constraints: \n");
 
   bool sliced = config.options.get_bool_option("ssa-sliced");
 
@@ -325,42 +325,42 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
     if(it.ignore && !sliced)
       continue;
 
-    std::cout << "// " << it.source.pc->location_number << " ";
-    std::cout << it.source.pc->location.as_string();
+    PRINT("// " << it.source.pc->location_number << " ");
+    PRINT(it.source.pc->location.as_string());
     if(!it.comment.empty())
-      std::cout << " (" << it.comment << ")";
-    std::cout << '\n';
+      PRINT(" (" << it.comment << ")");
+    PRINT('\n');
 
-    std::cout << "/* " << count << "*/ ";
+    PRINT("/* " << count << "*/ ");
 
     std::string string_value;
     languages.from_expr(migrate_expr_back(it.cond), string_value);
 
     if(it.is_assignment())
     {
-      std::cout << string_value << "\n";
+      PRINT(string_value << "\n");
     }
     else if(it.is_assert())
     {
-      std::cout << "(assert)" << string_value << "\n";
+      PRINT("(assert)" << string_value << "\n");
     }
     else if(it.is_assume())
     {
-      std::cout << "(assume)" << string_value << "\n";
+      PRINT("(assume)" << string_value << "\n");
     }
     else if(it.is_renumber())
     {
-      std::cout << "renumber: " << from_expr(ns, "", it.lhs) << "\n";
+      PRINT("renumber: " << from_expr(ns, "", it.lhs) << "\n");
     }
 
     if(!migrate_expr_back(it.guard).is_true())
     {
       languages.from_expr(migrate_expr_back(it.guard), string_value);
-      std::cout << std::string(i2string(count).size() + 3, ' ');
-      std::cout << "guard: " << string_value << "\n";
+      PRINT(std::string(i2string(count).size() + 3, ' '));
+      PRINT("guard: " << string_value << "\n");
     }
 
-    std::cout << "\n";
+    PRINT("\n");
 
     count++;
   }

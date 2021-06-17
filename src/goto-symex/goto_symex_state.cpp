@@ -410,10 +410,10 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
     }
     else
     {
-      std::cout << spaces << it->function_identifier.as_string();
-      std::cout << " at " << src.pc->location.get_file();
-      std::cout << " line " << src.pc->location.get_line();
-      std::cout << "\n";
+      PRINT(spaces << it->function_identifier.as_string());
+      PRINT(" at " << src.pc->location.get_file());
+      PRINT(" line " << src.pc->location.get_line());
+      PRINT("\n");
     }
 
     src = it->calling_location;

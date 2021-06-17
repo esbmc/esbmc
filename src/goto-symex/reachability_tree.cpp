@@ -531,7 +531,7 @@ void reachability_treet::print_ileave_trace() const
             << "\n";
   for(it = execution_states.begin(); it != execution_states.end(); it++, i++)
   {
-    std::cout << "Context switch point " << i << "\n";
+    PRINT("Context switch point " << i << "\n");
     (*it)->print_stack_traces(4);
   }
 }
@@ -542,8 +542,9 @@ int reachability_treet::get_ileave_direction_from_user() const
   unsigned int tid;
 
   if(get_cur_state().get_active_state().guard.is_false())
-    std::cout << "This trace's guard is false; it will not be evaulated."
-              << "\n";
+    PRINT(
+      "This trace's guard is false); it will not be evaulated."
+      << "\n");
 
   // First of all, are there actually any valid context switch targets?
   for(tid = 0; tid < get_cur_state().threads_state.size(); tid++)
@@ -556,10 +557,12 @@ int reachability_treet::get_ileave_direction_from_user() const
   if(tid == get_cur_state().threads_state.size())
     return get_cur_state().threads_state.size();
 
-  std::cout << "Context switch point encountered; please select a thread to run"
-            << "\n";
-  std::cout << "Current thread states:"
-            << "\n";
+  PRINT(
+    "Context switch point encountered; please select a thread to run"
+    << "\n");
+  PRINT(
+    "Current thread states:"
+    << "\n");
   execution_states.back()->print_stack_traces(4);
 
   while(std::cout << "Input: ", std::getline(std::cin, input))
@@ -590,7 +593,7 @@ int reachability_treet::get_ileave_direction_from_user() const
       }
       else if(tid >= get_cur_state().threads_state.size())
       {
-        std::cout << "Number out of range";
+        PRINT("Number out of range");
       }
       else
       {
@@ -602,7 +605,7 @@ int reachability_treet::get_ileave_direction_from_user() const
 
   if(std::cin.eof())
   {
-    std::cout << "\n";
+    PRINT("\n");
     exit(1);
   }
 
@@ -619,8 +622,9 @@ int reachability_treet::get_ileave_direction_from_scheduling() const
   // occur. So there's absolutely no reason exploring further.
   if(get_cur_state().get_active_state().guard.is_false())
   {
-    std::cout << "This trace's guard is false; it will not be evaulated."
-              << "\n";
+    PRINT(
+      "This trace's guard is false; it will not be evaulated."
+      << "\n");
     exit(1);
   }
 
@@ -685,7 +689,7 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
 #if 0
   if (por && !ex.is_thread_mpor_schedulable(tid)) {
     if (!quiet)
-      std::cout << "Thread unschedulable due to POR" << "\n";
+      PRINT("Thread unschedulable due to POR" << "\n");
     return false;
   }
 #endif

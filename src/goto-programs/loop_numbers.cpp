@@ -30,15 +30,15 @@ void show_loop_numbers(
         convert(instruction.location, l);
         l.name = "location";
 
-        std::cout << xml << "\n";
+        PRINT(xml << "\n");
       }
       else if(ui == ui_message_handlert::PLAIN)
       {
         std::cout << "Loop " << loop_id << ":"
                   << "\n";
 
-        std::cout << "  " << instruction.location << "\n";
-        std::cout << "\n";
+        PRINT("  " << instruction.location << "\n");
+        PRINT("\n");
       }
       else
         assert(false);

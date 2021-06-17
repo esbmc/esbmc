@@ -9,6 +9,7 @@ Author: Daniel Kroening
 \*******************************************************************/
 
 #include <util/xml_irep.h>
+#include <util/message.h>
 
 void convert(const irept &irep, xmlt &xml)
 {

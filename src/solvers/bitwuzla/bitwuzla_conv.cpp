@@ -813,7 +813,7 @@ void bitwuzla_convt::dump_smt()
 void bitw_smt_ast::dump() const
 {
   bitwuzla_term_dump(a, "smt2", stdout);
-  std::cout << std::flush;
+  PRINT(std::flush);
 }
 
 void bitwuzla_convt::print_model()

@@ -73,7 +73,7 @@ public:
 
   void dump() const override
   {
-    std::cout << "name: " << symname << '\n';
+    PRINT("name: " << symname << '\n');
     for(auto const &e : array_fields)
       e->dump();
   }

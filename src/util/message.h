@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <iostream>
 #include <string>
+#include <sstream>
 #include <util/location.h>
 
 class message_handlert
@@ -126,13 +127,27 @@ extern messaget _msg; // use this if you know what you are doing
 #define _TO_MSG(X)                                                             \
   std::stringstream _convert_ss_to_str;                                        \
   _convert_ss_to_str << X;
-#define _CALL_MSG(MODE, X)                                                     \
-  _TO_MSG(X);                                                                  \
-  esbmc::global::_msg.##MODE(_convert_ss_to_str.str());
-#define DEBUG(X) _CALL_MSG(debug, X)
-#define WARNING(X) _CALL_MSG(warning, X)
-#define ERROR(X) _CALL_MSG(error, X)
-#define STATUS(X) _CALL_MSG(status, X)
-#define PRINT(X) _CALL_MSG(print, X)
+
+#define DEBUG(X)                                                               \
+  {                                                                            \
+    _CALL_MSG(debug, X)                                                        \
+  }
+#define WARNING(X)                                                             \
+  {                                                                            \
+    _CALL_MSG(warning, X)                                                      \
+  }
+#define ERROR(X)                                                               \
+  {                                                                            \
+    _CALL_MSG(error, X)                                                        \
+  }
+#define STATUS(X)                                                              \
+  {                                                                            \
+    _CALL_MSG(status, X)                                                       \
+  }
+#define PRINT(X)                                                               \
+  {                                                                            \
+    _TO_MSG(X);                                                                \
+    esbmc::global::_msg.print(_convert_ss_to_str.str());                       \
+  }
 
 #endif

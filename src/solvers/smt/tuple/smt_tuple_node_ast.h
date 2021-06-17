@@ -57,7 +57,7 @@ public:
 
   void dump() const override
   {
-    std::cout << "name: " << name << '\n';
+    PRINT("name: " << name << '\n');
     for(auto const &e : elements)
       e->dump();
   }
