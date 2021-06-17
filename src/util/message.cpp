@@ -72,3 +72,5 @@ void messaget::set_message_handler(message_handlert *_message_handler)
 {
   message_handler = _message_handler;
 }
+
+messaget esbmc::global::_msg;
