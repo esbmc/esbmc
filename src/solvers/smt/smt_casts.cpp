@@ -183,7 +183,7 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
-  std::cerr << "Unexpected type in typecast to fpbv\n";
+  ERROR("Unexpected type in typecast to fpbv\n");
   abort();
 }
 
@@ -203,7 +203,7 @@ smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
-  std::cerr << "Unexpected type in typecast from fpbv\n";
+  ERROR("Unexpected type in typecast from fpbv\n");
   abort();
 }
 

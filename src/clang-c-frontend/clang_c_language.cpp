@@ -74,7 +74,7 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
     break;
 
   default:
-    std::cerr << "Unknown word size: " << config.ansi_c.word_size << "\n";
+    ERROR("Unknown word size: " << config.ansi_c.word_size << "\n");
     abort();
   }
 

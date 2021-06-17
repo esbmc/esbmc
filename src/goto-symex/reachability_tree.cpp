@@ -240,8 +240,8 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 
   if(interactive_ileaves && tid != user_tid)
   {
-    std::cerr << "Ileave code selected different thread from user choice";
-    std::cerr << "\n";
+    ERROR("Ileave code selected different thread from user choice");
+    ERROR("\n");
   }
 
   return tid;
@@ -860,7 +860,7 @@ void reachability_treet::save_checkpoint(const std::string &&) const
 #if 0
   reachability_treet::dfs_position pos(*this);
   if (pos.write_to_file(fname))
-    std::cerr << "Couldn't save checkpoint; continuing" << "\n";
+    ERROR("Couldn't save checkpoint); continuing" << "\n";
 #endif
 
   abort();

@@ -33,7 +33,7 @@ void ui_message_handlert::print(unsigned level, const std::string &message)
   else
   {
     if(level == 1)
-      std::cerr << message << "\n";
+      ERROR(message << "\n")
     else
       std::cout << message << "\n";
   }

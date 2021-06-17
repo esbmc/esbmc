@@ -86,7 +86,7 @@ void bmct::show_vcc(std::shared_ptr<symex_target_equationt> &eq)
   {
     std::ofstream out(filename.c_str());
     if(!out)
-      std::cerr << "failed to open " << filename << "\n";
+      ERROR("failed to open " << filename << "\n")
     else
       show_vcc(out, eq);
   }

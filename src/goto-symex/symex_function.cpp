@@ -362,8 +362,8 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   // merge.
   if(is_nil_expr(call.function))
   {
-    std::cerr << "Function pointer call with no targets; irep: ";
-    std::cerr << call.pretty(0) << "\n";
+    ERROR("Function pointer call with no targets; irep: ");
+    ERROR(call.pretty(0) << "\n");
     abort();
   }
 
@@ -419,7 +419,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
     if(fit == goto_functions.function_map.end() || !fit->second.body_available)
     {
-      std::cerr << "**** WARNING: no body for function " << pretty_name << '\n';
+      ERROR("**** WARNING: no body for function " << pretty_name << '\n');
 
       continue; // XXX, find out why this fires on SV-COMP 14 benchmark
       // 32_7a_cilled_true_linux-3.8-rc1-drivers--ata--pata_legacy.ko-main.cil.out.c

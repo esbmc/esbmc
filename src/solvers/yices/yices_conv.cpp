@@ -786,7 +786,7 @@ bool yices_convt::get_bool(smt_astt a)
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   if(yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val))
   {
-    std::cerr << "Can't get boolean value from Yices\n";
+    ERROR("Can't get boolean value from Yices\n");
     abort();
   }
   return val ? true : false;

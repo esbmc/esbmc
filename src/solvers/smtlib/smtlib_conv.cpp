@@ -163,7 +163,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
   }
 #ifdef _WIN32
   // TODO: The current implementation uses UNIX Process
-  std::cerr << "smtlib works only in unix systems\n";
+  ERROR("smtlib works only in unix systems\n");
   abort();
 #else
   if(pipe(inpipe) != 0)
@@ -236,7 +236,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
   class sexpr &value = s.sexpr_list.back();
   if(!(keyword.token == TOK_KEYWORD && keyword.data == ":name"))
   {
-    std::cerr << "Bad get-info :name response from solver";
+    ERROR("Bad get-info :name response from solver");
     abort();
   }
 
@@ -261,7 +261,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
   class sexpr &val = v.sexpr_list.back();
   if(!(kw.token == TOK_KEYWORD && kw.data == ":version"))
   {
-    std::cerr << "Bad get-info :version response from solver";
+    ERROR("Bad get-info :version response from solver");
     abort();
   }
   assert(val.token == TOK_STRINGLIT && "Non-string solver version response");
@@ -502,7 +502,7 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
   sexpr &respval = *it++;
   if(!(symname.token == TOK_SIMPLESYM && symname.data == name))
   {
-    std::cerr << "smtlib solver returned different symbol from get-value";
+    ERROR("smtlib solver returned different symbol from get-value");
     abort();
   }
 
@@ -662,8 +662,8 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
         result = gen_true_expr();
       else
       {
-        std::cerr << "Unrecognized boolean-typed binary number format";
-        std::cerr << "\n";
+        ERROR("Unrecognized boolean-typed binary number format");
+        ERROR("\n");
         abort();
       }
     }

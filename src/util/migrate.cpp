@@ -742,7 +742,7 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
   }
   else
   {
-    std::cerr << "Unrecognized type " << get_type_id(*new_expr->type);
+    ERROR("Unrecognized type " << get_type_id(*new_expr->type));
     std::cerr << " when flattening union literal"
               << "\n";
     abort();

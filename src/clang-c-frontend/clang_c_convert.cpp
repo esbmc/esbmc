@@ -22,6 +22,7 @@
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/message.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -240,7 +241,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
 
   default:
-    std::cerr << "**** ERROR: ";
+    ERROR("**** ERROR: ");
     std::cerr << "Unrecognized / unimplemented clang declaration "
               << decl.getDeclKindName() << "\n";
     decl.dumpColor();
@@ -1000,8 +1001,8 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   }
 
   default:
-    std::cerr << "Conversion of unsupported clang type: \"";
-    std::cerr << the_type.getTypeClassName() << "\n";
+    ERROR("Conversion of unsupported clang type: \"");
+    ERROR(the_type.getTypeClassName() << "\n");
     the_type.dump();
     return true;
   }
@@ -2064,7 +2065,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
 
   default:
-    std::cerr << "Conversion of unsupported clang expr: \"";
+    ERROR("Conversion of unsupported clang expr: \"");
     std::cerr << stmt.getStmtClassName() << "\" to expression"
               << "\n";
     stmt.dumpColor();
@@ -2107,7 +2108,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
     return false;
   }
 
-  std::cerr << "Conversion of unsupported clang decl ref: \"";
+  ERROR("Conversion of unsupported clang decl ref: \"");
   std::cerr << d.getDeclKindName() << "\" to expression"
             << "\n";
   d.dumpColor();
@@ -2171,7 +2172,7 @@ bool clang_c_convertert::get_cast_expr(
     break;
 
   default:
-    std::cerr << "Conversion of unsupported clang cast operator: \"";
+    ERROR("Conversion of unsupported clang cast operator: \"");
     std::cerr << cast.getCastKindName() << "\" to expression"
               << "\n";
     cast.dumpColor();
@@ -2241,7 +2242,7 @@ bool clang_c_convertert::get_unary_operator_expr(
     return false;
 
   default:
-    std::cerr << "Conversion of unsupported clang unary operator: \"";
+    ERROR("Conversion of unsupported clang unary operator: \"");
     std::cerr << clang::UnaryOperator::getOpcodeStr(uniop.getOpcode()).str()
               << "\" to expression"
               << "\n";
@@ -2426,7 +2427,7 @@ bool clang_c_convertert::get_compound_assign_expr(
     break;
 
   default:
-    std::cerr << "Conversion of unsupported clang binary operator: \"";
+    ERROR("Conversion of unsupported clang binary operator: \"");
     std::cerr << compop.getOpcodeStr().str() << "\" to expression"
               << "\n";
     compop.dumpColor();
@@ -2765,7 +2766,7 @@ void clang_c_convertert::get_decl_name(
   default:
     if(name.empty())
     {
-      std::cerr << "Declaration has an empty name:\n";
+      ERROR("Declaration has an empty name:\n");
       nd.dumpColor();
       abort();
     }
@@ -2779,7 +2780,7 @@ void clang_c_convertert::get_decl_name(
   }
 
   // Otherwise, abort
-  std::cerr << "Unable to generate the USR for:\n";
+  ERROR("Unable to generate the USR for:\n");
   nd.dumpColor();
   abort();
 }

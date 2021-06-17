@@ -181,8 +181,8 @@ void add_cprover_library(contextt &context, message_handlert &message_handler)
   {
     if(config.ansi_c.word_size == 16)
     {
-      std::cerr << "Warning: this version of ESBMC does not have a C library ";
-      std::cerr << "for 16 bit machines";
+      ERROR("Warning: this version of ESBMC does not have a C library ");
+      ERROR("for 16 bit machines");
       return;
     }
 

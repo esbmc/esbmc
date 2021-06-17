@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdlib>
 #include <iostream>
 #include <util/cmdline.h>
+#include <util/message.h>
 #include <sstream>
 
 std::string verification_file;
@@ -111,7 +112,7 @@ bool cmdlinet::parse(
   }
   catch(std::exception &e)
   {
-    std::cerr << "ESBMC error: " << e.what() << "\n";
+    ERROR("ESBMC error: " << e.what() << "\n");
     return true;
   }
 

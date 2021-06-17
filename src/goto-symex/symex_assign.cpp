@@ -270,7 +270,7 @@ void goto_symext::symex_assign_rec(
   }
   else
   {
-    std::cerr << "assignment to " << get_expr_id(lhs) << " not handled\n";
+    ERROR("assignment to " << get_expr_id(lhs) << " not handled\n");
     abort();
   }
 }

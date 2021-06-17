@@ -60,8 +60,9 @@ execution_statet::execution_statet(
     goto_functions.function_map.find("__ESBMC_main");
   if(it == goto_functions.function_map.end())
   {
-    std::cerr << "main symbol not found; please set an entry point"
-              << "\n";
+    ERROR(
+      "main symbol not found; please set an entry point"
+      << "\n");
     abort();
   }
 
@@ -1095,9 +1096,10 @@ void execution_statet::switch_to_monitor()
   {
     if(!mon_thread_warning)
     {
-      std::cerr << "Switching to ended monitor; you need to increase its "
-                   "context or prefix bound"
-                << "\n";
+      ERROR(
+        "Switching to ended monitor; you need to increase its "
+        "context or prefix bound"
+        << "\n");
       mon_thread_warning = true;
     }
 

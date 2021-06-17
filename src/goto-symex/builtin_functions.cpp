@@ -468,7 +468,7 @@ void goto_symext::intrinsic_switch_to(
   const expr2tc &num = call.operands[0];
   if(!is_constant_int2t(num))
   {
-    std::cerr << "Can't switch to non-constant thread id no";
+    ERROR("Can't switch to non-constant thread id no");
     abort();
   }
 
@@ -520,8 +520,8 @@ void goto_symext::intrinsic_set_thread_data(
 
   if(!is_constant_int2t(threadid))
   {
-    std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
-    std::cerr << "\n";
+    ERROR("__ESBMC_set_start_data received nonconstant thread id");
+    ERROR("\n");
     abort();
   }
 
@@ -543,8 +543,8 @@ void goto_symext::intrinsic_get_thread_data(
 
   if(!is_constant_int2t(threadid))
   {
-    std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
-    std::cerr << "\n";
+    ERROR("__ESBMC_set_start_data received nonconstant thread id");
+    ERROR("\n");
     abort();
   }
 
@@ -583,8 +583,8 @@ void goto_symext::intrinsic_spawn_thread(
     art.goto_functions.function_map.find(symname);
   if(it == art.goto_functions.function_map.end())
   {
-    std::cerr << "Spawning thread \"" << symname << "\": symbol not found";
-    std::cerr << "\n";
+    ERROR("Spawning thread \"" << symname << "\": symbol not found");
+    ERROR("\n");
     abort();
   }
 
@@ -634,8 +634,8 @@ void goto_symext::intrinsic_get_thread_state(
 
   if(!is_constant_int2t(threadid))
   {
-    std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
-    std::cerr << "\n";
+    ERROR("__ESBMC_get_thread_state received nonconstant thread id");
+    ERROR("\n");
     abort();
   }
 
@@ -698,8 +698,8 @@ void goto_symext::intrinsic_register_monitor(
 
   if(!is_constant_int2t(threadid))
   {
-    std::cerr << "__ESBMC_register_monitor received nonconstant thread id";
-    std::cerr << "\n";
+    ERROR("__ESBMC_register_monitor received nonconstant thread id");
+    ERROR("\n");
     abort();
   }
 
@@ -1009,7 +1009,7 @@ void goto_symext::intrinsic_memset(
       }
       else
       {
-        std::cerr << "Logic mismatch in memset intrinsic\n";
+        ERROR("Logic mismatch in memset intrinsic\n");
         abort();
       }
     }

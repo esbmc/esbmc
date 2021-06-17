@@ -187,7 +187,7 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      std::cerr << "Setting thread data for nonexistant thread " << tid << '\n';
+      ERROR("Setting thread data for nonexistant thread " << tid << '\n');
       abort();
     }
 
@@ -199,7 +199,7 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      std::cerr << "Getting thread data for nonexistant thread " << tid << '\n';
+      ERROR("Getting thread data for nonexistant thread " << tid << '\n');
       abort();
     }
 

@@ -2133,7 +2133,7 @@ smt_astt fp_convt::mk_is_rm(smt_astt &rme, ieee_floatt::rounding_modet rm)
     break;
   }
 
-  std::cerr << "Unknown rounding mode\n";
+  ERROR("Unknown rounding mode\n");
   abort();
 }
 

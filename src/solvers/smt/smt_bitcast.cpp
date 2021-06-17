@@ -72,7 +72,7 @@ static expr2tc flatten_to_bitvector_rec(const expr2tc &new_expr)
     return expr;
   }
 
-  std::cerr << "Unrecognized type " << get_type_id(*new_expr->type);
+  ERROR("Unrecognized type " << get_type_id(*new_expr->type));
   std::cerr << " when flattening to bytes"
             << "\n";
   abort();
@@ -108,7 +108,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     if(is_union_type(new_from))
     {
-      std::cerr << "Unions not supported when bitcasting to fp for now\n";
+      ERROR("Unions not supported when bitcasting to fp for now\n");
       expr->dump();
       abort();
     }
@@ -123,7 +123,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     if(is_union_type(from))
     {
-      std::cerr << "Unions not supported when bitcasting to bv for now\n";
+      ERROR("Unions not supported when bitcasting to bv for now\n");
       expr->dump();
       abort();
     }
@@ -166,7 +166,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     if(is_union_type(new_from))
     {
-      std::cerr << "Unions not supported when bitcasting to struct for now\n";
+      ERROR("Unions not supported when bitcasting to struct for now\n");
       expr->dump();
       abort();
     }
@@ -216,7 +216,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     if(is_union_type(new_from))
     {
-      std::cerr << "Unions not supported when bitcasting to struct for now\n";
+      ERROR("Unions not supported when bitcasting to struct for now\n");
       expr->dump();
       abort();
     }

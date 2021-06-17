@@ -375,7 +375,7 @@ void value_sett::get_value_set_rec(
       return;
 
     default:
-      std::cerr << "Unexpected side-effect: " << expr->pretty(0) << "\n";
+      ERROR("Unexpected side-effect: " << expr->pretty(0) << "\n");
       abort();
     }
   }
@@ -579,10 +579,10 @@ void value_sett::get_value_set_rec(
         }
         else
         {
-          std::cerr << "Pointer arithmetic on type where we can't determine ";
+          ERROR("Pointer arithmetic on type where we can't determine ");
           std::cerr << "size:"
                     << "\n";
-          std::cerr << subtype->pretty(0) << "\n";
+          ERROR(subtype->pretty(0) << "\n");
           abort();
         }
       }
@@ -1206,7 +1206,7 @@ void value_sett::assign_rec(
   }
   else
   {
-    std::cerr << "assign NYI: `" + get_expr_id(lhs) + "'\n";
+    ERROR("assign NYI: `" + get_expr_id(lhs) + "'\n");
     abort();
   }
 }
@@ -1353,7 +1353,7 @@ void value_sett::apply_code(const expr2tc &code)
   }
   else
   {
-    std::cerr << code->pretty() << "\n";
+    ERROR(code->pretty() << "\n");
     std::cerr << "value_sett: unexpected statement"
               << "\n";
     abort();

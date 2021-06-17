@@ -314,7 +314,7 @@ void goto_convert_functionst::rename_types(
       else
       {
         // And if we fail
-        std::cerr << "Can't resolve type symbol " << ident;
+        ERROR("Can't resolve type symbol " << ident);
         std::cerr << " at symbol squashing time"
                   << "\n";
         abort();

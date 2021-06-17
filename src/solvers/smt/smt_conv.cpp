@@ -302,7 +302,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   case expr2t::constant_union_id:
-    std::cerr << "Post-parse union literals are deprecated and broken, sorry\n";
+    ERROR("Post-parse union literals are deprecated and broken, sorry\n");
     abort();
   case expr2t::constant_array_id:
   case expr2t::constant_array_of_id:
@@ -1084,7 +1084,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   default:
-    std::cerr << "Couldn't convert expression in unrecognised format\n";
+    ERROR("Couldn't convert expression in unrecognised format\n");
     expr->dump();
     abort();
   }
@@ -1192,8 +1192,8 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     break;
   }
   default:
-    std::cerr << "Unexpected type ID " << get_type_id(type);
-    std::cerr << " reached SMT conversion\n";
+    ERROR("Unexpected type ID " << get_type_id(type));
+    ERROR(" reached SMT conversion\n");
     abort();
   }
 
@@ -1339,7 +1339,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
   }
 
   default:
-    std::cerr << "Converting unrecognized terminal expr to SMT\n";
+    ERROR("Converting unrecognized terminal expr to SMT\n");
     expr->dump();
     abort();
   }
@@ -2262,7 +2262,7 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
 
   if(!is_constant_int2t(arr_type.array_size))
   {
-    std::cerr << "Non-constant sized array of type constant_array_of2t\n";
+    ERROR("Non-constant sized array of type constant_array_of2t\n");
     abort();
   }
 
@@ -2541,13 +2541,13 @@ smt_astt smt_ast::project(
   smt_convt *ctx [[gnu::unused]],
   unsigned int idx [[gnu::unused]]) const
 {
-  std::cerr << "Projecting from non-tuple based AST\n";
+  ERROR("Projecting from non-tuple based AST\n");
   abort();
 }
 
 void smt_convt::dump_smt()
 {
-  std::cerr << "SMT dump not implemented for " << solver_text() << "\n";
+  ERROR("SMT dump not implemented for " << solver_text() << "\n");
 }
 
 void smt_convt::print_model()
@@ -2593,45 +2593,45 @@ expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
   default:;
   }
 
-  std::cerr << "Can't generate one for type " << get_type_id(type) << '\n';
+  ERROR("Can't generate one for type " << get_type_id(type) << '\n');
   abort();
 }
 
 smt_sortt smt_convt::mk_bool_sort()
 {
-  std::cerr << "Chosen solver doesn't support boolean sorts\n";
+  ERROR("Chosen solver doesn't support boolean sorts\n");
   abort();
 }
 
 smt_sortt smt_convt::mk_real_sort()
 {
-  std::cerr << "Chosen solver doesn't support real sorts\n";
+  ERROR("Chosen solver doesn't support real sorts\n");
   abort();
 }
 
 smt_sortt smt_convt::mk_int_sort()
 {
-  std::cerr << "Chosen solver doesn't support integer sorts\n";
+  ERROR("Chosen solver doesn't support integer sorts\n");
   abort();
 }
 
 smt_sortt smt_convt::mk_bv_sort(std::size_t width)
 {
-  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
+  ERROR("Chosen solver doesn't support bit vector sorts\n");
   (void)width;
   abort();
 }
 
 smt_sortt smt_convt::mk_fbv_sort(std::size_t width)
 {
-  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
+  ERROR("Chosen solver doesn't support bit vector sorts\n");
   (void)width;
   abort();
 }
 
 smt_sortt smt_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  std::cerr << "Chosen solver doesn't support array sorts\n";
+  ERROR("Chosen solver doesn't support array sorts\n");
   (void)domain;
   (void)range;
   abort();
@@ -2639,7 +2639,7 @@ smt_sortt smt_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 
 smt_sortt smt_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 {
-  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
+  ERROR("Chosen solver doesn't support bit vector sorts\n");
   (void)ew;
   (void)sw;
   abort();
@@ -2647,7 +2647,7 @@ smt_sortt smt_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 
 smt_sortt smt_convt::mk_bvfp_rm_sort()
 {
-  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
+  ERROR("Chosen solver doesn't support bit vector sorts\n");
   abort();
 }
 

@@ -614,7 +614,7 @@ expr2tc dereferencet::build_reference_to(
 
   if(!is_object_descriptor2t(what))
   {
-    std::cerr << "unknown points-to: " << get_expr_id(what);
+    ERROR("unknown points-to: " << get_expr_id(what));
     abort();
   }
 
@@ -818,9 +818,9 @@ void dereferencet::build_reference_rec(
   {
     std::cerr
       << "Can't construct rvalue reference to array type during dereference";
-    std::cerr << "\n";
-    std::cerr << "(It isn't allowed by C anyway)";
-    std::cerr << "\n";
+    ERROR("\n");
+    ERROR("(It isn't allowed by C anyway)");
+    ERROR("\n");
     abort();
   }
   else
@@ -1486,7 +1486,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
     return;
   }
 
-  std::cerr << "Unexpectedly " << get_type_id(value->type) << " type'd";
+  ERROR("Unexpectedly " << get_type_id(value->type) << " type'd");
   std::cerr << " argument to construct_struct_ref"
             << "\n";
   abort();

@@ -14,7 +14,7 @@ static void error_handler(Z3_context c, Z3_error_code e)
 {
   std::cerr << "Z3 error " << e << " encountered"
             << "\n";
-  std::cerr << Z3_get_error_msg(c, e) << "\n";
+  ERROR(Z3_get_error_msg(c, e) << "\n");
   abort();
 }
 
@@ -90,14 +90,14 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
   z3::sort ty = t.get_sort();
   if(!ty.is_datatype())
   {
-    std::cerr << "argument must be a tuple";
+    ERROR("argument must be a tuple");
     abort();
   }
 
   std::size_t num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
   if(i >= num_fields)
   {
-    std::cerr << "invalid tuple update, index is too big";
+    ERROR("invalid tuple update, index is too big");
     abort();
   }
 
@@ -1144,7 +1144,7 @@ bool z3_convt::get_bool(smt_astt a)
     res = false;
     break;
   default:
-    std::cerr << "Can't get boolean value from Z3\n";
+    ERROR("Can't get boolean value from Z3\n");
     abort();
   }
 

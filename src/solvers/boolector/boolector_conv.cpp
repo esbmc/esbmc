@@ -5,8 +5,8 @@
 
 void error_handler(const char *msg)
 {
-  std::cerr << "Boolector error encountered\n";
-  std::cerr << msg << '\n';
+  ERROR("Boolector error encountered\n");
+  ERROR(msg << '\n');
   abort();
 }
 
@@ -563,7 +563,7 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     break;
 
   default:
-    std::cerr << "Unknown type for symbol\n";
+    ERROR("Unknown type for symbol\n");
     abort();
   }
 
@@ -642,7 +642,7 @@ bool boolector_convt::get_bool(smt_astt a)
     res = false;
     break;
   default:
-    std::cerr << "Can't get boolean value from Boolector\n";
+    ERROR("Can't get boolean value from Boolector\n");
     abort();
   }
 

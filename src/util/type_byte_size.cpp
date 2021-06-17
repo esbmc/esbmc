@@ -168,8 +168,8 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
     }
     else
     {
-      std::cerr << "Unexpected index type in computer_pointer_offset";
-      std::cerr << "\n";
+      ERROR("Unexpected index type in computer_pointer_offset");
+      ERROR("\n");
       abort();
     }
 
@@ -252,7 +252,7 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
 
   std::cerr << "compute_pointer_offset, unexpected irep:"
             << "\n";
-  std::cerr << expr->pretty() << "\n";
+  ERROR(expr->pretty() << "\n");
   abort();
 }
 

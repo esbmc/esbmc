@@ -138,7 +138,8 @@ extern messaget _msg; // use this if you know what you are doing
   }
 #define ERROR(X)                                                               \
   {                                                                            \
-    _CALL_MSG(error, X)                                                        \
+    _TO_MSG(X);                                                                \
+    esbmc::global::_msg.error(_convert_ss_to_str.str());                       \
   }
 #define STATUS(X)                                                              \
   {                                                                            \

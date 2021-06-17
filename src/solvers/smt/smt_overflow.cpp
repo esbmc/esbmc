@@ -146,7 +146,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   }
 
   default:
-    std::cerr << "unexpected overflow_arith operand\n";
+    ERROR("unexpected overflow_arith operand\n");
     abort();
   }
 

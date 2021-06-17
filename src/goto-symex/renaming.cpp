@@ -243,7 +243,7 @@ void renaming::renaming_levelt::get_original_name(
     return;
 
   default:
-    std::cerr << "get_original_nameing to invalid level " << lev << "\n";
+    ERROR("get_original_nameing to invalid level " << lev << "\n");
     abort();
   }
 }

@@ -102,14 +102,14 @@ void minisat_convt::dump_bv(const bvt &bv) const
   for(unsigned int i = 0; i < bv.size(); i++)
   {
     if(bv[i] == const_literal(false))
-      std::cerr << "0";
+      ERROR("0");
     else if(bv[i] == const_literal(true))
-      std::cerr << "1";
+      ERROR("1");
     else
-      std::cerr << "?";
+      ERROR("?");
   }
 
-  std::cerr << " " << bv.size() << "\n";
+  ERROR(" " << bv.size() << "\n");
   return;
 }
 
