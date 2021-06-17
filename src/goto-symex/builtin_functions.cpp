@@ -521,7 +521,7 @@ void goto_symext::intrinsic_set_thread_data(
   if(!is_constant_int2t(threadid))
   {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
-    std::cerr << std::endl;
+    std::cerr << "\n";
     abort();
   }
 
@@ -544,7 +544,7 @@ void goto_symext::intrinsic_get_thread_data(
   if(!is_constant_int2t(threadid))
   {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
-    std::cerr << std::endl;
+    std::cerr << "\n";
     abort();
   }
 
@@ -584,13 +584,14 @@ void goto_symext::intrinsic_spawn_thread(
   if(it == art.goto_functions.function_map.end())
   {
     std::cerr << "Spawning thread \"" << symname << "\": symbol not found";
-    std::cerr << std::endl;
+    std::cerr << "\n";
     abort();
   }
 
   if(!it->second.body_available)
   {
-    std::cerr << "Spawning thread \"" << symname << "\": no body" << std::endl;
+    std::cerr << "Spawning thread \"" << symname << "\": no body"
+              << "\n";
     abort();
   }
 
@@ -634,7 +635,7 @@ void goto_symext::intrinsic_get_thread_state(
   if(!is_constant_int2t(threadid))
   {
     std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
-    std::cerr << std::endl;
+    std::cerr << "\n";
     abort();
   }
 
@@ -698,7 +699,7 @@ void goto_symext::intrinsic_register_monitor(
   if(!is_constant_int2t(threadid))
   {
     std::cerr << "__ESBMC_register_monitor received nonconstant thread id";
-    std::cerr << std::endl;
+    std::cerr << "\n";
     abort();
   }
 

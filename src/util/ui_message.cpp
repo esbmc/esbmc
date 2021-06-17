@@ -33,9 +33,9 @@ void ui_message_handlert::print(unsigned level, const std::string &message)
   else
   {
     if(level == 1)
-      std::cerr << message << std::endl;
+      std::cerr << message << "\n";
     else
-      std::cout << message << std::endl;
+      std::cout << message << "\n";
   }
 }
 
@@ -66,11 +66,11 @@ void ui_message_handlert::old_gui_msg(
   const std::string &msg1,
   const locationt &location)
 {
-  std::cout << type << std::endl
-            << msg1 << std::endl
-            << location.get_file() << std::endl
-            << location.get_line() << std::endl
-            << location.get_column() << std::endl;
+  std::cout << type << "\n"
+            << msg1 << "\n"
+            << location.get_file() << "\n"
+            << location.get_line() << "\n"
+            << location.get_column() << "\n";
 }
 
 void ui_message_handlert::ui_msg(
@@ -103,5 +103,5 @@ void ui_message_handlert::xml_ui_msg(
   xml.set_attribute("type", xmlt::escape_attribute(type));
 
   std::cout << xml;
-  std::cout << std::endl;
+  std::cout << "\n";
 }

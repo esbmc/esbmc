@@ -80,7 +80,8 @@ struct resultt
 #ifndef _WIN32
 void timeout_handler(int)
 {
-  std::cout << "Timed out" << std::endl;
+  std::cout << "Timed out"
+            << "\n";
 
   // Unfortunately some highly useful pieces of code hook themselves into
   // aexit and attempt to free some memory. That doesn't really make sense to
@@ -129,7 +130,8 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
       mult = 86400;
       break;
     default:
-      std::cerr << "Unrecognized timeout suffix" << std::endl;
+      std::cerr << "Unrecognized timeout suffix"
+                << "\n";
       abort();
     }
   }
@@ -164,7 +166,8 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
       mult = 1024 * 1024 * 1024;
       break;
     default:
-      std::cerr << "Unrecognized memlimit suffix" << std::endl;
+      std::cerr << "Unrecognized memlimit suffix"
+                << "\n";
       abort();
     }
   }
@@ -200,14 +203,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("git-hash"))
   {
-    std::cout << esbmc_version_string << std::endl;
+    std::cout << esbmc_version_string << "\n";
     exit(0);
   }
 
   if(cmdline.isset("list-solvers"))
   {
     // Generated for us by autoconf,
-    std::cout << "Available solvers: " << ESBMC_AVAILABLE_SOLVERS << std::endl;
+    std::cout << "Available solvers: " << ESBMC_AVAILABLE_SOLVERS << "\n";
     exit(0);
   }
 
@@ -248,7 +251,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("smt-during-symex"))
   {
     std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
-    std::cout << std::endl;
+    std::cout << "\n";
     options.set_option("no-slice", true);
   }
 
@@ -258,7 +261,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     {
       std::cerr << "Please explicitly specify --smt-during-symex if you want "
                    "to use features that involve encoding SMT during symex"
-                << std::endl;
+                << "\n";
       abort();
     }
   }
@@ -312,7 +315,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("timeout"))
   {
 #ifdef _WIN32
-    std::cerr << "Timeout unimplemented on Windows, sorry" << std::endl;
+    std::cerr << "Timeout unimplemented on Windows, sorry"
+              << "\n";
     abort();
 #else
     const char *time = cmdline.getval("timeout");
@@ -325,7 +329,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("memlimit"))
   {
 #ifdef _WIN32
-    std::cerr << "Can't memlimit on Windows, sorry" << std::endl;
+    std::cerr << "Can't memlimit on Windows, sorry"
+              << "\n";
     abort();
 #else
     uint64_t size = read_mem_spec(cmdline.getval("memlimit"));
@@ -375,7 +380,7 @@ int esbmc_parseoptionst::doit()
   //
   std::cout << "ESBMC version " << ESBMC_VERSION " " << sizeof(void *) * 8
             << "-bit " << config.this_architecture() << " "
-            << config.this_operating_system() << std::endl;
+            << config.this_operating_system() << "\n";
 
   if(cmdline.isset("version"))
     return 0;
@@ -502,7 +507,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
   if(process_type == PARENT && num_p != 3)
   {
-    std::cerr << "Child processes were not created sucessfully." << std::endl;
+    std::cerr << "Child processes were not created sucessfully."
+              << "\n";
     abort();
   }
 
@@ -566,9 +572,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         {
           // Invalid size read.
           std::cerr << "Short read communicating with kinduction children"
-                    << std::endl;
+                    << "\n";
           std::cerr << "Size " << read_size << ", expected " << sizeof(resultt)
-                    << std::endl;
+                    << "\n";
           abort();
         }
       }
@@ -590,7 +596,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
         else
         {
-          std::cout << "**** WARNING: Base case process crashed." << std::endl;
+          std::cout << "**** WARNING: Base case process crashed."
+                    << "\n";
           bc_finished = fc_finished = is_finished = true;
         }
       }
@@ -611,7 +618,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         else
         {
           std::cout << "**** WARNING: Forward condition process crashed."
-                    << std::endl;
+                    << "\n";
 
           fc_finished = bc_finished = is_finished = true;
         }
@@ -633,7 +640,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         else
         {
           std::cout << "**** WARNING: Inductive step process crashed."
-                    << std::endl;
+                    << "\n";
 
           is_finished = bc_finished = fc_finished = true;
         }
@@ -658,7 +665,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       default:
         std::cerr << "Message from unrecognized k-induction child "
-                  << "process" << std::endl;
+                  << "process"
+                  << "\n";
         abort();
       }
 
@@ -721,10 +729,11 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Check if a solution was found by the base case
     if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
     {
-      std::cout << std::endl
+      std::cout << "\n"
                 << "Bug found by the base case (k = " << bc_solution << ")"
-                << std::endl;
-      std::cout << "VERIFICATION FAILED" << std::endl;
+                << "\n";
+      std::cout << "VERIFICATION FAILED"
+                << "\n";
       return true;
     }
 
@@ -735,11 +744,12 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
       if(bc_finished && (bc_solution != max_k_step))
       {
-        std::cout << std::endl
+        std::cout << "\n"
                   << "Solution found by the forward condition; "
                   << "all states are reachable (k = " << fc_solution << ")"
-                  << std::endl;
-        std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+                  << "\n";
+        std::cout << "VERIFICATION SUCCESSFUL"
+                  << "\n";
         return false;
       }
     }
@@ -751,16 +761,20 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
       if(bc_finished && (bc_solution != max_k_step))
       {
-        std::cout << std::endl
+        std::cout << "\n"
                   << "Solution found by the inductive step "
-                  << "(k = " << is_solution << ")" << std::endl;
-        std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+                  << "(k = " << is_solution << ")"
+                  << "\n";
+        std::cout << "VERIFICATION SUCCESSFUL"
+                  << "\n";
         return false;
       }
     }
 
     // Couldn't find a bug or a proof for the current deepth
-    std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
+    std::cout << "\n"
+              << "VERIFICATION UNKNOWN"
+              << "\n";
     return false;
   }
 
@@ -814,7 +828,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
+        std::cout << "BASE CASE PROCESS FINISHED."
+                  << "\n";
 
         return true;
       }
@@ -840,9 +855,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         {
           // Invalid size read.
           std::cerr << "Short read communicating with kinduction parent"
-                    << std::endl;
+                    << "\n";
           std::cerr << "Size " << read_size << ", expected " << sizeof(resultt)
-                    << std::endl;
+                    << "\n";
           abort();
         }
       }
@@ -867,7 +882,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
+    std::cout << "BASE CASE PROCESS FINISHED."
+              << "\n";
     return false;
   }
 
@@ -925,7 +941,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+        std::cout << "FORWARD CONDITION PROCESS FINISHED."
+                  << "\n";
         return false;
       }
     }
@@ -937,7 +954,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+    std::cout << "FORWARD CONDITION PROCESS FINISHED."
+              << "\n";
     return true;
   }
 
@@ -994,7 +1012,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
+        std::cout << "INDUCTIVE STEP PROCESS FINISHED."
+                  << "\n";
         return false;
       }
     }
@@ -1006,7 +1025,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
+    std::cout << "INDUCTIVE STEP PROCESS FINISHED."
+              << "\n";
     return true;
   }
 
@@ -1446,7 +1466,8 @@ bool esbmc_parseoptionst::get_goto_program(
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory" << std::endl;
+    std::cout << "Out of memory"
+              << "\n";
     return true;
   }
 
@@ -1489,7 +1510,8 @@ void esbmc_parseoptionst::preprocessing()
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory" << std::endl;
+    std::cout << "Out of memory"
+              << "\n";
   }
 }
 
@@ -1624,7 +1646,8 @@ bool esbmc_parseoptionst::process_goto_program(
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory" << std::endl;
+    std::cout << "Out of memory"
+              << "\n";
     return true;
   }
 

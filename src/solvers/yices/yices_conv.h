@@ -13,7 +13,8 @@ public:
     // Detect term errors
     if(a == NULL_TERM)
     {
-      std::cerr << "Error creating yices term" << std::endl;
+      std::cerr << "Error creating yices term"
+                << "\n";
       yices_print_error(stderr);
       abort();
     }

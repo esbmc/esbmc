@@ -46,18 +46,19 @@ void show_claims(
         xml.new_element("expression").data =
           xmlt::escape(from_expr(ns, identifier, instruction.guard));
 
-        std::cout << xml << std::endl;
+        std::cout << xml << "\n";
       }
       else if(ui == ui_message_handlert::PLAIN)
       {
-        std::cout << "Claim " << count << ":" << std::endl;
+        std::cout << "Claim " << count << ":"
+                  << "\n";
 
-        std::cout << "  " << instruction.location << std::endl
-                  << "  " << description << std::endl;
+        std::cout << "  " << instruction.location << "\n"
+                  << "  " << description << "\n";
 
         std::cout << "  " << from_expr(ns, identifier, instruction.guard)
-                  << std::endl;
-        std::cout << std::endl;
+                  << "\n";
+        std::cout << "\n";
       }
       else
         assert(false);

@@ -118,12 +118,17 @@ protected:
   message_handlert *message_handler;
 };
 
-namespace esbmc::global {
-  extern messaget _msg; // use this if you know what you are doing
+namespace esbmc::global
+{
+extern messaget _msg; // use this if you know what you are doing
 }
 // Magic definitions to help the use of messages during the program
-#define _TO_MSG(X) std::stringstream _convert_ss_to_str; _convert_ss_to_str << X;
-#define _CALL_MSG(MODE,X) _TO_MSG(X); esbmc::global::_msg.##MODE(_convert_ss_to_str.str());
+#define _TO_MSG(X)                                                             \
+  std::stringstream _convert_ss_to_str;                                        \
+  _convert_ss_to_str << X;
+#define _CALL_MSG(MODE, X)                                                     \
+  _TO_MSG(X);                                                                  \
+  esbmc::global::_msg.##MODE(_convert_ss_to_str.str());
 #define DEBUG(X) _CALL_MSG(debug, X)
 #define WARNING(X) _CALL_MSG(warning, X)
 #define ERROR(X) _CALL_MSG(error, X)

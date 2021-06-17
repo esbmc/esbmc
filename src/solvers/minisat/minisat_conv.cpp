@@ -109,7 +109,7 @@ void minisat_convt::dump_bv(const bvt &bv) const
       std::cerr << "?";
   }
 
-  std::cerr << " " << bv.size() << std::endl;
+  std::cerr << " " << bv.size() << "\n";
   return;
 }
 

@@ -52,7 +52,7 @@ bool goto_symext::get_unwind_recursion(
     if(this_loop_max_unwind != 0)
       msg += " (" + integer2string(this_loop_max_unwind) + " max)";
 
-    std::cout << msg << std::endl;
+    std::cout << msg << "\n";
   }
 
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
@@ -73,7 +73,8 @@ unsigned goto_symext::argument_assignments(
     // if you run out of actual arguments there was a mismatch
     if(it1 == arguments.end())
     {
-      std::cerr << "function call: not enough arguments" << std::endl;
+      std::cerr << "function call: not enough arguments"
+                << "\n";
       abort();
     }
 
@@ -150,7 +151,8 @@ unsigned goto_symext::argument_assignments(
 
       if(new_context.move(symbol))
       {
-        std::cerr << "Couldn't add new va_arg symbol" << std::endl;
+        std::cerr << "Couldn't add new va_arg symbol"
+                  << "\n";
         abort();
       }
 
@@ -285,7 +287,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   {
     std::cerr << "Function call to \"" << identifier << "\": number of "
               << "arguments doesn't match type definition; some inconsistent "
-              << "rewriting occured" << std::endl;
+              << "rewriting occured"
+              << "\n";
     abort();
   }
 
@@ -340,7 +343,8 @@ get_function_list(const expr2tc &expr)
     return get_function_list(to_typecast2t(expr).from);
 
   std::cerr << "Unexpected irep id " << get_expr_id(expr)
-            << " in function ptr dereference" << std::endl;
+            << " in function ptr dereference"
+            << "\n";
   // So, the function may point at something invalid. If that's the case,
   // wait for a solve-time pointer validity assertion to detect that. Return
   // nothing to call right now.
@@ -359,7 +363,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   if(is_nil_expr(call.function))
   {
     std::cerr << "Function pointer call with no targets; irep: ";
-    std::cerr << call.pretty(0) << std::endl;
+    std::cerr << call.pretty(0) << "\n";
     abort();
   }
 
@@ -379,7 +383,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     // Emit warning; perform no function call behaviour. Increment PC
     // XXX jmorse - no location information any more.
     std::cout << "No target candidate for function call "
-              << from_expr(ns, "", call.function) << std::endl;
+              << from_expr(ns, "", call.function) << "\n";
     cur_state->source.pc++;
     return;
   }
@@ -574,7 +578,8 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
   }
   else if(!is_nil_expr(frame.return_value))
   {
-    std::cerr << "return with unexpected value" << std::endl;
+    std::cerr << "return with unexpected value"
+              << "\n";
     abort();
   }
 

@@ -243,7 +243,7 @@ void renaming::renaming_levelt::get_original_name(
     return;
 
   default:
-    std::cerr << "get_original_nameing to invalid level " << lev << std::endl;
+    std::cerr << "get_original_nameing to invalid level " << lev << "\n";
     abort();
   }
 }
@@ -252,8 +252,7 @@ void renaming::level1t::print(std::ostream &out) const
 {
   for(const auto &current_name : current_names)
     out << current_name.first.base_name << " --> "
-        << "thread " << thread_id << " count " << current_name.second
-        << std::endl;
+        << "thread " << thread_id << " count " << current_name.second << "\n";
 }
 
 void renaming::level2t::print(std::ostream &out) const
@@ -272,13 +271,13 @@ void renaming::level2t::print(std::ostream &out) const
     {
       out << from_expr(
                *migrate_namespace_lookup, "", current_name.second.constant)
-          << std::endl;
+          << "\n";
     }
     else
     {
       out << "node " << current_name.second.node_id << " num "
           << current_name.second.count;
-      out << std::endl;
+      out << "\n";
     }
   }
 }

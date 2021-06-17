@@ -106,8 +106,10 @@ void bmct::successful_trace()
   break;
 
   case ui_message_handlert::OLD_GUI:
-    std::cout << "SUCCESS" << std::endl
-              << "Verification successful" << std::endl
+    std::cout << "SUCCESS"
+              << "\n"
+              << "Verification successful"
+              << "\n"
               << "\n\n\n\n";
     break;
 
@@ -119,7 +121,7 @@ void bmct::successful_trace()
     xmlt xml("cprover-status");
     xml.data = "SUCCESS";
     std::cout << xml;
-    std::cout << std::endl;
+    std::cout << "\n";
   }
   break;
 
@@ -153,7 +155,9 @@ void bmct::error_trace(
     /* fallthrough */
 
   case ui_message_handlert::PLAIN:
-    std::cout << std::endl << "Counterexample:" << std::endl;
+    std::cout << "\n"
+              << "Counterexample:"
+              << "\n";
     show_goto_trace(std::cout, ns, goto_trace);
     break;
 
@@ -165,7 +169,7 @@ void bmct::error_trace(
   {
     xmlt xml;
     convert(ns, goto_trace, xml);
-    std::cout << xml << std::endl;
+    std::cout << xml << "\n";
     break;
   }
 
@@ -238,12 +242,18 @@ void bmct::report_success()
   switch(ui)
   {
   case ui_message_handlert::OLD_GUI:
-    std::cout << "SUCCESS" << std::endl
-              << "Verification successful" << std::endl
-              << "" << std::endl
-              << "" << std::endl
-              << "" << std::endl
-              << "" << std::endl;
+    std::cout << "SUCCESS"
+              << "\n"
+              << "Verification successful"
+              << "\n"
+              << ""
+              << "\n"
+              << ""
+              << "\n"
+              << ""
+              << "\n"
+              << ""
+              << "\n";
     break;
 
   case ui_message_handlert::GRAPHML:
@@ -257,7 +267,7 @@ void bmct::report_success()
     xmlt xml("cprover-status");
     xml.data = "SUCCESS";
     std::cout << xml;
-    std::cout << std::endl;
+    std::cout << "\n";
   }
   break;
 
@@ -283,7 +293,7 @@ void bmct::report_failure()
     xmlt xml("cprover-status");
     xml.data = "FAILURE";
     std::cout << xml;
-    std::cout << std::endl;
+    std::cout << "\n";
   }
   break;
 
@@ -478,7 +488,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     if(++interleaving_number > 1)
     {
       std::cout << "*** Thread interleavings " << interleaving_number << " ***"
-                << std::endl;
+                << "\n";
     }
 
     fine_timet bmc_start = current_time();
@@ -681,7 +691,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory" << std::endl;
+    std::cout << "Out of memory"
+              << "\n";
     return smt_convt::P_ERROR;
   }
 
@@ -783,7 +794,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory" << std::endl;
+    std::cout << "Out of memory"
+              << "\n";
     return smt_convt::P_ERROR;
   }
 }

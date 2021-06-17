@@ -19,7 +19,7 @@ const irept::dt empty_d;
 
 void irept::dump() const
 {
-  std::cout << pretty(0) << std::endl;
+  std::cout << pretty(0) << "\n";
 }
 
 const irept &get_nil_irep()
@@ -35,7 +35,7 @@ irept::irept(const irep_idt &_id) : data(new dt)
   id(_id);
 
 #ifdef IREP_DEBUG
-  std::cout << "CREATED " << data << " " << _id << std::endl;
+  std::cout << "CREATED " << data << " " << _id << "\n";
 #endif
 }
 #else
@@ -49,7 +49,7 @@ irept::irept(const irep_idt &_id)
 void irept::detatch()
 {
 #ifdef IREP_DEBUG
-  std::cout << "DETATCH1: " << data << std::endl;
+  std::cout << "DETATCH1: " << data << "\n";
 #endif
 
   if(data == nullptr)
@@ -57,7 +57,7 @@ void irept::detatch()
     data = new dt;
 
 #ifdef IREP_DEBUG
-    std::cout << "ALLOCATED " << data << std::endl;
+    std::cout << "ALLOCATED " << data << "\n";
 #endif
   }
   else if(data->ref_count > 1)
@@ -66,7 +66,7 @@ void irept::detatch()
     data = new dt(*old_data);
 
 #ifdef IREP_DEBUG
-    std::cout << "ALLOCATED " << data << std::endl;
+    std::cout << "ALLOCATED " << data << "\n";
 #endif
 
     data->ref_count = 1;
@@ -76,7 +76,7 @@ void irept::detatch()
   assert(data->ref_count == 1);
 
 #ifdef IREP_DEBUG
-  std::cout << "DETATCH2: " << data << std::endl;
+  std::cout << "DETATCH2: " << data << "\n";
 #endif
 }
 #endif
@@ -85,7 +85,7 @@ void irept::detatch()
 const irept::dt &irept::read() const
 {
 #ifdef IREP_DEBUG
-  std::cout << "READ: " << data << std::endl;
+  std::cout << "READ: " << data << "\n";
 #endif
 
   if(data == nullptr)
@@ -106,15 +106,15 @@ void irept::remove_ref(dt *old_data)
   assert(old_data->ref_count != 0);
 
 #ifdef IREP_DEBUG
-  std::cout << "R: " << old_data << " " << old_data->ref_count << std::endl;
+  std::cout << "R: " << old_data << " " << old_data->ref_count << "\n";
 #endif
 
   old_data->ref_count--;
   if(old_data->ref_count == 0)
   {
 #ifdef IREP_DEBUG
-    std::cout << "D: " << pretty() << std::endl;
-    std::cout << "DELETING " << old_data->data << " " << old_data << std::endl;
+    std::cout << "D: " << pretty() << "\n";
+    std::cout << "DELETING " << old_data->data << " " << old_data << "\n";
     old_data->clear();
     std::cout << "DEALLOCATING " << old_data << "\n";
 #endif

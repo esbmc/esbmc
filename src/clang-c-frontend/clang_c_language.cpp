@@ -36,7 +36,7 @@ clang_c_languaget::clang_c_languaget()
   if(!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
   {
     std::cerr << "Can't find temporary directory (needed to dump clang headers)"
-              << std::endl;
+              << "\n";
     abort();
   }
 
@@ -47,7 +47,7 @@ clang_c_languaget::clang_c_languaget()
   {
     std::cerr
       << "Can't create temporary directory (needed to dump clang headers)"
-      << std::endl;
+      << "\n";
     abort();
   }
 
@@ -74,7 +74,7 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
     break;
 
   default:
-    std::cerr << "Unknown word size: " << config.ansi_c.word_size << std::endl;
+    std::cerr << "Unknown word size: " << config.ansi_c.word_size << "\n";
     abort();
   }
 

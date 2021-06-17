@@ -76,7 +76,7 @@ bool goto_symext::symex_throw()
   std::cout << "*** Exception thrown of type "
             << exceptions_thrown.begin()->as_string() << " at file "
             << instruction.location.file() << " line "
-            << instruction.location.line() << std::endl;
+            << instruction.location.line() << "\n";
 
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
@@ -201,7 +201,7 @@ bool goto_symext::symex_throw()
   // Log
   std::cout << "*** Caught by catch(" << catch_name << ") at file "
             << (*catch_insn)->location.file() << " line "
-            << (*catch_insn)->location.line() << std::endl;
+            << (*catch_insn)->location.line() << "\n";
 
   return true;
 }
