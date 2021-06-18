@@ -67,6 +67,10 @@ namespace SolidityTypes
     {
       return BuiltInUChar;
     }
+    else if (kind == "void")
+    {
+      return BuiltinVoid;
+    }
     else
     {
       assert(!"Unsupported builtInTypes");
@@ -78,6 +82,7 @@ namespace SolidityTypes
     switch(the_blitype)
     {
       ENUM_TO_STR(BuiltInUChar)
+      ENUM_TO_STR(BuiltinVoid)
       ENUM_TO_STR(BuiltInError)
       default:
       {
