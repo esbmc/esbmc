@@ -19,8 +19,7 @@ public:
   {
     PLAIN,
     OLD_GUI,
-    XML_UI,
-    GRAPHML
+    XML_UI
   } uit;
 
   ui_message_handlert(uit __ui) : _ui(__ui)
