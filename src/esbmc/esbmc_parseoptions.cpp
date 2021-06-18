@@ -520,7 +520,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     if(cmdline.isset("show-claims"))
     {
       const namespacet ns(context);
-      show_claims(ns,goto_functions);
+      show_claims(ns, goto_functions);
       return 0;
     }
 
@@ -1595,7 +1595,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // show it?
     if(cmdline.isset("show-loops"))
     {
-      show_loop_numbers( goto_functions);
+      show_loop_numbers(goto_functions);
       return true;
     }
 
@@ -1632,7 +1632,7 @@ bool esbmc_parseoptionst::process_goto_program(
 }
 
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
-{  // do actual BMC
+{ // do actual BMC
 
   status("Starting Bounded Model Checking");
 

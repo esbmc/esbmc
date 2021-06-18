@@ -55,8 +55,9 @@ void message_handlert::print(
   print(level, dest);
 }
 
-void message_handlert::print(unsigned level, const std::string &message) {  
-  fmt::print(level <=1 ? stderr_output : stdout_output, "{}\n", message);
+void message_handlert::print(unsigned level, const std::string &message)
+{
+  fmt::print(level <= 1 ? stderr_output : stdout_output, "{}\n", message);
 }
 
 void messaget::print(unsigned level, const std::string &message)

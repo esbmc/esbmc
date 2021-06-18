@@ -28,30 +28,25 @@ void show_claims(
       const irep_idt &property = instruction.location.property();
       const irep_idt description = (comment == "" ? "assertion" : comment);
 
-        std::cout << "Claim " << count << ":" << std::endl;
+      std::cout << "Claim " << count << ":" << std::endl;
 
-        std::cout << "  " << instruction.location << std::endl
-                  << "  " << description << std::endl;
+      std::cout << "  " << instruction.location << std::endl
+                << "  " << description << std::endl;
 
-        std::cout << "  " << from_expr(ns, identifier, instruction.guard)
-                  << std::endl;
-        std::cout << std::endl;
-
+      std::cout << "  " << from_expr(ns, identifier, instruction.guard)
+                << std::endl;
+      std::cout << std::endl;
     }
   }
 }
 
-void show_claims(
-  const namespacet &ns,
-  const goto_programt &goto_program)
+void show_claims(const namespacet &ns, const goto_programt &goto_program)
 {
   unsigned count = 0;
   show_claims(ns, "", goto_program, count);
 }
 
-void show_claims(
-  const namespacet &ns,
-  const goto_functionst &goto_functions)
+void show_claims(const namespacet &ns, const goto_functionst &goto_functions)
 {
   unsigned count = 0;
 

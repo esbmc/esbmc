@@ -22,7 +22,6 @@ Author: Daniel Kroening, kroening@kroening.com
 class message_handlert
 {
 public:
-
   // Levels:
   //
   //  0 none
@@ -33,7 +32,8 @@ public:
   //  8 + statistical information
   //  9 + progress information
   // 10 + debug info
-  enum VERBOSITY {
+  enum VERBOSITY
+  {
     NONE = 0,
     ERROR = 1,
     WARNING = 2,
@@ -50,12 +50,13 @@ public:
 
   virtual ~message_handlert() = default;
 
-  void set_file_output(FILE* file_out) { 
+  void set_file_output(FILE *file_out)
+  {
     stdout_output = file_out;
     stderr_output = file_out;
   }
 
-  protected:
+protected:
   FILE *stdout_output = stdout;
   FILE *stderr_output = stderr;
 };
@@ -121,7 +122,10 @@ public:
   }
 
   messaget() = default;
-  explicit messaget(message_handlert &_message_handler) : message_handler(_message_handler) {}
+  explicit messaget(message_handlert &_message_handler)
+    : message_handler(_message_handler)
+  {
+  }
 
   virtual ~messaget() = default;
 

@@ -13,8 +13,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/i2string.h>
 #include <util/show_symbol_table.h>
 
-language_uit::language_uit(const cmdlinet &__cmdline)
-  : _cmdline(__cmdline)
+language_uit::language_uit(const cmdlinet &__cmdline) : _cmdline(__cmdline)
 {
   set_message_handler(&ui_message_handler);
 }
@@ -66,7 +65,7 @@ bool language_uit::parse(const std::string &filename)
 
   if(language.parse(filename, *get_message_handler()))
   {
-      std::cerr << "PARSING ERROR" << std::endl;
+    std::cerr << "PARSING ERROR" << std::endl;
 
     return true;
   }
@@ -85,7 +84,7 @@ bool language_uit::typecheck()
 
   if(language_files.typecheck(context))
   {
-      std::cerr << "CONVERSION ERROR" << std::endl;
+    std::cerr << "CONVERSION ERROR" << std::endl;
 
     return true;
   }
@@ -100,8 +99,7 @@ bool language_uit::final()
 
   if(language_files.final(context))
   {
-    
-      std::cerr << "CONVERSION ERROR" << std::endl;
+    std::cerr << "CONVERSION ERROR" << std::endl;
 
     return true;
   }
