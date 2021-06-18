@@ -73,4 +73,17 @@ void messaget::set_message_handler(message_handlert *_message_handler)
   message_handler = _message_handler;
 }
 
-messaget esbmc::global::_msg;
+void stream_message_handlert::print(unsigned level, const std::string &message)
+{
+  if(level == VERBOSITY_ERRORS)
+    error_output << message;
+  else
+    default_output << message;
+}
+
+namespace
+{
+stream_message_handlert default_handler(std::cout, std::cerr);
+}
+
+messaget esbmc::global::_msg(default_handler);

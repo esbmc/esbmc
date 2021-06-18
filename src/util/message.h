@@ -15,6 +15,28 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <sstream>
 #include <util/location.h>
 
+// Levels:
+//
+//  0 none
+//  1 only errors
+//  2 + warnings
+//  4 + results
+//  6 + phase information
+//  8 + statistical information
+//  9 + progress information
+// 10 + debug info
+
+enum message_verbosity_level
+{
+  VERBOSITY_NONE = 0,
+  VERBOSITY_ERRORS = 1,
+  VERBOSITY_WARNINGS = 2,
+  VERBOSITY_RESULTS = 4,
+  VERBOSITY_PHASE = 6,
+  VERBOSITY_STATISTICS = 8,
+  VERBOSITY_PROGRESS = 9,
+  VERBOSITY_DEBUG = 10
+};
 class message_handlert
 {
 public:
@@ -26,46 +48,66 @@ public:
   virtual ~message_handlert() = default;
 };
 
+/**
+ * @brief This class will send print messages into
+ * output streams
+ * 
+ */
+class stream_message_handlert : public message_handlert
+{
+public:
+  virtual void print(unsigned level, const std::string &message);
+  stream_message_handlert() = default;
+  stream_message_handlert(std::ostream &print, std::ostream &error)
+    : default_output(print), error_output(error)
+  {
+  }
+
+protected:
+  std::ostream &default_output;
+  std::ostream &error_output;
+};
+
 class messaget
 {
 public:
   virtual void print(const std::string &message)
   {
-    print(1, message);
+    print(VERBOSITY_ERRORS, message);
   }
 
   void status(const std::string &message)
   {
-    print(6, message);
+    print(VERBOSITY_PHASE, message);
   }
 
   void result(const std::string &message)
   {
-    print(4, message);
+    print(VERBOSITY_RESULTS, message);
   }
 
   void warning(const std::string &message)
   {
-    print(2, message);
+    print(VERBOSITY_WARNINGS, message);
   }
 
   void status(const std::string &message, const std::string &file)
   {
     locationt location;
     location.set_file(file);
-    print(6, message, location);
+    print(VERBOSITY_PHASE, message, location);
   }
 
   void error(const std::string &message)
   {
-    print(1, message);
+    print(VERBOSITY_ERRORS, message);
   }
 
   void error(const std::string &message, const std::string &file)
   {
     locationt location;
     location.set_file(file);
-    print(1, message, location);
+    print(VERBOSITY_ERRORS, message, location);
   }
 
   virtual void print(unsigned level, const std::string &message);
@@ -98,17 +140,6 @@ public:
 
   virtual ~messaget() = default;
 
-  // Levels:
-  //
-  //  0 none
-  //  1 only errors
-  //  2 + warnings
-  //  4 + results
-  //  6 + phase information
-  //  8 + statistical information
-  //  9 + progress information
-  // 10 + debug info
-
   message_handlert *get_message_handler()
   {
     return message_handler;
@@ -124,31 +155,21 @@ namespace esbmc::global
 extern messaget _msg; // use this if you know what you are doing
 }
 // Magic definitions to help the use of messages during the program
+
+/* in time the implementation can be replaced with <format> */
 #define _TO_MSG(X)                                                             \
   std::stringstream _convert_ss_to_str;                                        \
   _convert_ss_to_str << X;
 
-#define DEBUG(X)                                                               \
-  {                                                                            \
-    _CALL_MSG(debug, X)                                                        \
-  }
-#define WARNING(X)                                                             \
-  {                                                                            \
-    _CALL_MSG(warning, X)                                                      \
-  }
 #define ERROR(X)                                                               \
   {                                                                            \
     _TO_MSG(X);                                                                \
     esbmc::global::_msg.error(_convert_ss_to_str.str());                       \
   }
-#define STATUS(X)                                                              \
-  {                                                                            \
-    _CALL_MSG(status, X)                                                       \
-  }
 #define PRINT(X)                                                               \
   {                                                                            \
     _TO_MSG(X);                                                                \
-    esbmc::global::_msg.print(_convert_ss_to_str.str());                       \
+    esbmc::global::_msg.print(VERBOSITY_DEBUG, _convert_ss_to_str.str());      \
   }
 
 #endif
