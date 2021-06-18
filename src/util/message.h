@@ -14,9 +14,35 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string>
 #include <util/location.h>
 
+/**
+ * @brief Message_handler is an interface for low-level print
+ * operations 
+ */
 class message_handlert
 {
 public:
+
+  // Levels:
+  //
+  //  0 none
+  //  1 only errors
+  //  2 + warnings
+  //  4 + results
+  //  6 + phase information
+  //  8 + statistical information
+  //  9 + progress information
+  // 10 + debug info
+  enum VERBOSITY {
+    NONE = 0,
+    ERROR = 1,
+    WARNING = 2,
+    RESULT = 4,
+    PHASE = 6,
+    STATISTICAL = 8,
+    PROGRESS = 9,
+    DEBUG = 10
+  };
+
   virtual void print(unsigned level, const std::string &message) = 0;
 
   virtual void
@@ -30,41 +56,41 @@ class messaget
 public:
   virtual void print(const std::string &message)
   {
-    print(1, message);
+    print(message_handlert::ERROR, message);
   }
 
   void status(const std::string &message)
   {
-    print(6, message);
+    print(message_handlert::PHASE, message);
   }
 
   void result(const std::string &message)
   {
-    print(4, message);
+    print(message_handlert::RESULT, message);
   }
 
   void warning(const std::string &message)
   {
-    print(2, message);
+    print(message_handlert::WARNING, message);
   }
 
   void status(const std::string &message, const std::string &file)
   {
     locationt location;
     location.set_file(file);
-    print(6, message, location);
+    print(message_handlert::PHASE, message, location);
   }
 
   void error(const std::string &message)
   {
-    print(1, message);
+    print(message_handlert::ERROR, message);
   }
 
   void error(const std::string &message, const std::string &file)
   {
     locationt location;
     location.set_file(file);
-    print(1, message, location);
+    print(message_handlert::ERROR, message, location);
   }
 
   virtual void print(unsigned level, const std::string &message);
@@ -96,17 +122,6 @@ public:
   }
 
   virtual ~messaget() = default;
-
-  // Levels:
-  //
-  //  0 none
-  //  1 only errors
-  //  2 + warnings
-  //  4 + results
-  //  6 + phase information
-  //  8 + statistical information
-  //  9 + progress information
-  // 10 + debug info
 
   message_handlert *get_message_handler()
   {
