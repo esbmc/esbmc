@@ -29,7 +29,8 @@ namespace SolidityTypes
   // counterparts of clang::BuiltinType::getKind() used by get_builtin_type during conversion
   enum builInTypesKind
   {
-    BuiltInUChar = 0,
+    BuiltInUChar = 0, // clang::BuiltinType::UChar
+    BuiltinVoid,
     BuiltInError
   };
   builInTypesKind get_builtin_type(const std::string& kind);

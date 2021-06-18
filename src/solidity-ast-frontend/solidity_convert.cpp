@@ -11,7 +11,8 @@
 
 solidity_convertert::solidity_convertert(contextt &_context, nlohmann::json &_ast_json):
   context(_context),
-  ast_json(_ast_json)
+  ast_json(_ast_json),
+  current_functionDecl(nullptr)
 {
 }
 
@@ -90,6 +91,12 @@ bool solidity_convertert::get_decl(nlohmann::json &ast_node, exprt &new_expr)
       vd_tracker->config(absolute_path);
       return get_var(vd_tracker, new_expr);
     }
+    case SolidityTypes::declKind::DeclFunction:
+    {
+      auto fd_tracker = std::make_shared<FunctionDeclTracker>(ast_node); // FunctionDeclaration tracker
+      fd_tracker->config(absolute_path);
+      return get_function(fd_tracker, new_expr);
+    }
     default:
       printf("failed to convert declaration in Solidity AST: %s\n", SolidityTypes::declKind_to_str(decl_kind));
       assert(!"Unimplemented declaration type");
@@ -97,6 +104,68 @@ bool solidity_convertert::get_decl(nlohmann::json &ast_node, exprt &new_expr)
   }
 
   assert(!"get_decl done?");
+  return false;
+}
+
+bool solidity_convertert::get_function(funDeclTrackerPtr &fd, exprt &new_expr)
+{
+  // Don't convert if the function was implicitly converted
+  if(fd->get_isImplicit()) // for func_overflow, it returns false
+    return false;
+
+  // If the function is not defined but this is not the definition, skip it
+  if(fd->get_isDefined() && !fd->get_isADefinition()) // for func_overflow, it's (true && !true).
+    return false;
+
+  // Save old_functionDecl, to be restored at the end of this method
+  std::shared_ptr<FunctionDeclTracker> old_functionDecl = current_functionDecl;
+  current_functionDecl = fd;
+
+  // Set initial variable name, it will be used for variables' name
+  // This will be reset every time a function is parsed
+  current_scope_var_num = 1; // might need to change for Solidity when considering the scopes
+
+  // Restore old functionDecl at the end
+  current_functionDecl = old_functionDecl; // for func_overflow , old_functionDecl == null. (same as __ESBMC_assume)
+
+  // Build function's type
+  code_typet type;
+
+  // Return type
+  if(get_type(fd->get_qualtype_tracker(), type.return_type()))
+    return true;
+
+  if(fd->get_isVariadic()) // for func_overflow, it's false
+    type.make_ellipsis();
+
+  if(fd->get_isInlined()) // for func_overflow, it's false
+    type.inlined(true);
+
+  locationt location_begin;
+  get_location_from_decl(fd->get_sl_tracker(), location_begin);
+
+  std::string id, name; // __ESBMC_assume and c:@F@__ESBMC_assume
+  get_decl_name(fd->get_nameddecl_tracker(), name, id);
+
+  symbolt symbol;
+  std::string debug_modulename = get_modulename_from_path(location_begin.file().as_string()); // for func_overflow, it's just the file name "overflow_2"
+  get_default_symbol(
+    symbol,
+    debug_modulename,
+    type,
+    name,
+    id,
+    location_begin);
+
+  symbol.lvalue = true;
+  symbol.is_extern = fd->get_storage_class() == SolidityTypes::SC_Extern ||
+                     fd->get_storage_class() == SolidityTypes::SC_PrivateExtern;
+  symbol.file_local = (fd->get_storage_class() == SolidityTypes::SC_Static);
+
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
+
+  // TODO: params
+  assert(!"done - get_funciton?");
   return false;
 }
 
@@ -192,7 +261,6 @@ void solidity_convertert::get_decl_name(
       }
       break;
     }
-
     default:
       if(name.empty()) // print name gives the function name when this is part of get_function back traces
       {
@@ -223,7 +291,12 @@ bool solidity_convertert::generate_decl_usr(
       id = id_prefix + name;
       return false;
     }
-
+    case SolidityTypes::declKind::DeclFunction:
+    {
+      std::string id_prefix = "c:@F@";
+      id = id_prefix + name;
+      return false;
+    }
     default:
       assert(!"unsupported named_decl_kind when generating declUSR");
   }
@@ -277,6 +350,12 @@ bool solidity_convertert::get_builtin_type(
 
   switch(q_type.get_bt_kind())
   {
+    case SolidityTypes::builInTypesKind::BuiltinVoid:
+    {
+      new_type = empty_typet();
+      c_type = "void";
+      break;
+    }
     case SolidityTypes::builInTypesKind::BuiltInUChar:
     {
       new_type = unsigned_char_type();
