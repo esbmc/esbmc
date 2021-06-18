@@ -150,10 +150,14 @@ protected:
   message_handlert *message_handler;
 };
 
-namespace esbmc::global
+namespace esbmc
+{
+namespace global
 {
 extern messaget _msg; // use this if you know what you are doing
-}
+} // namespace esbmc::global
+
+} // namespace esbmc
 // Magic definitions to help the use of messages during the program
 
 /* in time the implementation can be replaced with <format> */
