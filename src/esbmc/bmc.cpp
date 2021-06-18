@@ -84,7 +84,7 @@ void bmct::do_cbmc(
   std::shared_ptr<smt_convt> &smt_conv,
   std::shared_ptr<symex_target_equationt> &eq)
 {
-  smt_conv->set_message_handler(message_handler);
+  smt_conv->set_message_handler(&message_handler);
   eq->convert(*smt_conv.get());
 }
 
@@ -145,7 +145,7 @@ smt_convt::resultt bmct::run_decision_procedure(
 
   std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
 
-  smt_conv->set_message_handler(message_handler);
+  smt_conv->set_message_handler(&message_handler);
   smt_conv->set_verbosity(get_verbosity());
 
   fine_timet encode_start = current_time();

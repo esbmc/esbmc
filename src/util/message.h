@@ -16,7 +16,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /**
  * @brief Message_handler is an interface for low-level print
- * operations 
+ * operations, if you need to redirect esbmc output this
+ * is where you should specialize
  */
 class message_handlert
 {
@@ -37,13 +38,12 @@ public:
     ERROR = 1,
     WARNING = 2,
     RESULT = 4,
-    PHASE = 6,
-    STATISTICAL = 8,
-    PROGRESS = 9,
-    DEBUG = 10
+    STATUS = 6,
+    VERBOSE = 8,
+    DEBUG = 9
   };
 
-  virtual void print(unsigned level, const std::string &message) = 0;
+  virtual void print(unsigned level, const std::string &message);
 
   virtual void
   print(unsigned level, const std::string &message, const locationt &location);
@@ -51,17 +51,19 @@ public:
   virtual ~message_handlert() = default;
 };
 
+/**
+ * @brief messaget is used to send messages that
+ * can be implemented by any kind of frontend
+ * 
+ * It may be from colorful output to full GUI modules
+ * 
+ */
 class messaget
 {
 public:
-  virtual void print(const std::string &message)
-  {
-    print(message_handlert::ERROR, message);
-  }
-
   void status(const std::string &message)
   {
-    print(message_handlert::PHASE, message);
+    print(message_handlert::STATUS, message);
   }
 
   void result(const std::string &message)
@@ -78,7 +80,7 @@ public:
   {
     locationt location;
     location.set_file(file);
-    print(message_handlert::PHASE, message, location);
+    print(message_handlert::STATUS, message, location);
   }
 
   void error(const std::string &message)
@@ -109,28 +111,19 @@ public:
     return verbosity;
   }
 
-  messaget()
-  {
-    message_handler = (message_handlert *)nullptr;
-    verbosity = 10;
-  }
-
-  messaget(message_handlert &_message_handler)
-  {
-    message_handler = &_message_handler;
-    verbosity = 10;
-  }
+  messaget() = default;
+  explicit messaget(message_handlert &_message_handler) : message_handler(_message_handler) {}
 
   virtual ~messaget() = default;
 
   message_handlert *get_message_handler()
   {
-    return message_handler;
+    return &message_handler;
   }
 
 protected:
-  unsigned verbosity;
-  message_handlert *message_handler;
+  unsigned verbosity = 10;
+  message_handlert message_handler;
 };
 
 #endif

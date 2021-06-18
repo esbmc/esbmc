@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/goto_functions.h>
 #include <util/namespace.h>
-#include <util/ui_message.h>
+#include <util/message.h>
 
 void show_claims(
   const namespacet &ns,

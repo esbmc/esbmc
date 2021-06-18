@@ -53,10 +53,15 @@ void message_handlert::print(
   print(level, dest);
 }
 
+void message_handlert::print(unsigned level, const std::string &message) {
+    if(level <= 1) std::cerr << message << std::endl;
+    else std::cout << message << std::endl;
+}
+
 void messaget::print(unsigned level, const std::string &message)
 {
-  if(message_handler != nullptr && verbosity >= level)
-    message_handler->print(level, message);
+  if(verbosity >= level)
+    message_handler.print(level, message);
 }
 
 void messaget::print(
@@ -64,11 +69,11 @@ void messaget::print(
   const std::string &message,
   const locationt &location)
 {
-  if(message_handler != nullptr && verbosity >= level)
-    message_handler->print(level, message, location);
+  if(verbosity >= level)
+    message_handler.print(level, message, location);
 }
 
 void messaget::set_message_handler(message_handlert *_message_handler)
 {
-  message_handler = _message_handler;
+  message_handler = *_message_handler;
 }

@@ -80,7 +80,7 @@ bool language_uit::typecheck()
 {
   status("Converting");
 
-  language_files.set_message_handler(message_handler);
+  language_files.set_message_handler(&message_handler);
   language_files.set_verbosity(get_verbosity());
 
   if(language_files.typecheck(context))
@@ -95,7 +95,7 @@ bool language_uit::typecheck()
 
 bool language_uit::final()
 {
-  language_files.set_message_handler(message_handler);
+  language_files.set_message_handler(&message_handler);
   language_files.set_verbosity(get_verbosity());
 
   if(language_files.final(context))

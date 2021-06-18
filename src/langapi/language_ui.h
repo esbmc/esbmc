@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/language_file.h>
 #include <util/message.h>
 #include <util/parseoptions.h>
-#include <util/ui_message.h>
 
 class language_uit : public messaget
 {
@@ -38,7 +37,7 @@ public:
   virtual void show_symbol_table_plain(std::ostream &out);
   virtual void show_symbol_table_xml_ui();
 
-  ui_message_handlert ui_message_handler;
+  message_handlert ui_message_handler;
 
 protected:
   const cmdlinet &_cmdline;

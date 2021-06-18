@@ -7,7 +7,6 @@
 #include <util/config.h>
 #include <util/irep2.h>
 #include <util/parseoptions.h>
-#include <util/ui_message.h>
 
 const struct group_opt_templ c2goto_options[] = {
   {"Basic Usage",
