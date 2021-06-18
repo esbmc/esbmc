@@ -108,12 +108,72 @@ private:
   bool isRestrictQualified;
 };
 
+// variable declaration base
+class DeclTracker
+{
+public:
+  DeclTracker(nlohmann::json _decl_json):
+    decl_json(_decl_json)
+  {
+      reset();
+  }
+
+  void reset()
+  {
+    decl_kind = SolidityTypes::DeclKindError;
+    absolute_path = "";
+    storage_class = SolidityTypes::SCError;
+  }
+
+  /*
+   * base getters
+   */
+  SolidityTypes::declKind get_decl_kind()   { return decl_kind; }
+  std::string get_absolute_path()           { return absolute_path; }
+  QualTypeTracker& get_qualtype_tracker()   { return qualtype_tracker; }  // for get_type(...)
+  SourceLocationTracker& get_sl_tracker()   { return sl_tracker; }        // for get_decl_name(...)
+  NamedDeclTracker& get_nameddecl_tracker() { return nameddecl_tracker; } // for get_decl_name(...)
+  SolidityTypes::storageClass get_storage_class() { return storage_class; }
+
+  /*
+   * base setters
+   */
+  void set_decl_kind();
+  // QualTypeTracker setters
+  void set_qualtype_tracker();
+  void set_qualtype_bt_kind();
+  // SourceLocationTracker setters
+  void set_sl_tracker_line_number();
+  void set_sl_tracker_file_name();
+  // NamedDeclTracker setters
+  void set_named_decl_name();
+  void set_named_decl_kind();
+
+  // for debug print
+  void print_decl_json();
+
+  virtual void clear_all() = 0; // reset to default values
+  virtual void config(std::string ab_path); // config this tracker based on json values
+
+  // essential members for each type of declarations
+  nlohmann::json decl_json;
+  SolidityTypes::declKind decl_kind; // decl.getKind()
+  std::string absolute_path;
+
+  // constituents of such composite tracker
+  QualTypeTracker qualtype_tracker;
+  SourceLocationTracker sl_tracker;
+  NamedDeclTracker nameddecl_tracker;
+
+  SolidityTypes::storageClass storage_class;
+};
+
 // variable declaration
-class VarDeclTracker
+class VarDeclTracker : public DeclTracker
 {
 public:
   VarDeclTracker(nlohmann::json _decl_json):
-    decl_json(_decl_json)
+    DeclTracker(_decl_json)
   {
       clear_all();
   }
@@ -130,65 +190,87 @@ public:
 
   void clear_all() // reset to default values
   {
-    decl_kind = SolidityTypes::DeclKindError;
     hasAttrs = false;
-    absolute_path = "";
-    storage_class = SolidityTypes::SCError;
     hasGlobalStorage = false;
     hasExternalStorage = false;
     isExternallyVisible = false;
     hasInit = false;
   }
 
-  // for debug print
-  void print_decl_json();
-
   // config this tracker based on json values
   void config(std::string ab_path);
 
   // getters
-  SolidityTypes::declKind get_decl_kind()   { return decl_kind; }
-  QualTypeTracker& get_qualtype_tracker()   { return qualtype_tracker; }  // for get_type(...)
-  NamedDeclTracker& get_nameddecl_tracker() { return nameddecl_tracker; } // for get_decl_name(...)
-  SourceLocationTracker& get_sl_tracker()   { return sl_tracker; }        // for get_decl_name(...)
   bool get_hasAttrs()                       { return hasAttrs; }
   bool get_hasGlobalStorage()               { return hasGlobalStorage; }
   bool get_hasExternalStorage()             { return hasExternalStorage; }
   bool get_isExternallyVisible()            { return isExternallyVisible; }
   bool get_hasInit()                        { return hasInit; }
-  std::string get_absolute_path()           { return absolute_path; }
-  SolidityTypes::storageClass get_storage_class() { return storage_class; }
 
 private:
-  nlohmann::json decl_json;
-  SolidityTypes::declKind decl_kind; // decl.getKind()
-  QualTypeTracker qualtype_tracker;
-  NamedDeclTracker nameddecl_tracker;
-  SourceLocationTracker sl_tracker;
   bool hasAttrs;
   bool hasGlobalStorage;
   bool hasExternalStorage;
   bool isExternallyVisible; // NOT a direct translation of Solidity's visibility. Visible to other functions in this contract
   bool hasInit;
-  std::string absolute_path;
-  SolidityTypes::storageClass storage_class;
 
   // private setters : set the member values based on the corresponding json value. Used by config() only.
   // Setting them outside this class is NOT allowed.
-  void set_decl_kind();
-  // QualTypeTracker setters
-  void set_qualtype_tracker();
-  void set_qualtype_bt_kind();
-  // NamedDeclTracker setters
-  void set_named_decl_name();
-  void set_named_decl_kind();
-  // SourceLocationTracker setters
-  void set_sl_tracker_line_number();
-  void set_sl_tracker_file_name();
   // static lifetime, extern, file_local setters
   void set_hasGlobalStorage();
   // init value setters
   void set_hasInit();
+};
+
+// function declaration
+class FunctionDeclTracker : public DeclTracker
+{
+public:
+  FunctionDeclTracker(nlohmann::json _decl_json):
+    DeclTracker(_decl_json)
+  {
+      clear_all();
+  }
+
+  FunctionDeclTracker(const FunctionDeclTracker &rhs) = default; // default copy constructor
+  // move constructor
+  FunctionDeclTracker(FunctionDeclTracker &&rhs) = default;
+  // copy assignment operator - TODO: Since we have a reference member, it can be tricky in this case.
+  //    Let's not do it for the time being. Leave it for future improvement
+  FunctionDeclTracker& operator=(const FunctionDeclTracker &rhs) { assert(!"copy assignment is not allowed at the moment"); }
+  // move assignment operator - TODO: Since we have a reference member, it can be tricky in this case.
+  //    Let's not do it for the time being. Leave it for future improvement
+  FunctionDeclTracker& operator=(FunctionDeclTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
+
+  void clear_all() // reset to default values
+  {
+    isImplicit = false;
+    isDefined = false;
+    isADefinition = false;
+    isVariadic = false;
+    isInlined = false;
+  }
+
+  // config this tracker based on json values
+  void config(std::string ab_path);
+
+  // getters
+  bool get_isImplicit()    { return isImplicit; }
+  bool get_isDefined()     { return isDefined; }
+  bool get_isADefinition() { return isADefinition; }
+  bool get_isVariadic()    { return isVariadic; }
+  bool get_isInlined()     { return isInlined; }
+
+private:
+  bool isImplicit;
+  bool isDefined;
+  bool isADefinition; // means "fd.isThisDeclarationADefinition()"
+  bool isVariadic;    // means "fd.isVariadic()"
+  bool isInlined;     // means "fd.isInlined()"
+
+  // private setters : set the member values based on the corresponding json value. Used by config() only.
+  // Setting them outside this class is NOT allowed.
+  void set_defined(); // set isDefined and isADefinition
 };
 
 #endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_
