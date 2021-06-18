@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_CBMC_LOOP_IDS_H
 
 #include <goto-programs/goto_functions.h>
-#include <util/ui_message.h>
 
 void show_loop_numbers(
   const goto_functionst &goto_functions);
