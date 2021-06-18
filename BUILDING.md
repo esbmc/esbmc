@@ -195,7 +195,7 @@ If you are using macOS, make sure you have Xcode.app in your Applications direct
 ls /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/
 ```
 
-If no such directory, please go to App Store and install Xcode. If you do not have the full version of Xcode, you will need to replace the flag `C2GOYO` with:
+If no such directory, please go to App Store and install Xcode. If you do not have the full version of Xcode, you will need to replace the flag `C2GOTO` with:
 
 ```
 -DC2GOTO_INCLUDE_DIR=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include
