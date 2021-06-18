@@ -8,6 +8,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/i2string.h>
 #include <util/message.h>
+#include <fstream>
+#include <fmt/core.h>
 
 void message_handlert::print(
   unsigned level,
@@ -53,9 +55,8 @@ void message_handlert::print(
   print(level, dest);
 }
 
-void message_handlert::print(unsigned level, const std::string &message) {
-    if(level <= 1) std::cerr << message << std::endl;
-    else std::cout << message << std::endl;
+void message_handlert::print(unsigned level, const std::string &message) {  
+  fmt::print(level <=1 ? stderr_output : stdout_output, "{}\n", message);
 }
 
 void messaget::print(unsigned level, const std::string &message)

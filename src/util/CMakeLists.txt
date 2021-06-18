@@ -21,4 +21,4 @@ target_include_directories(util_esbmc
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(util_esbmc ${Boost_LIBRARIES})
+target_link_libraries(util_esbmc fmt::fmt  ${Boost_LIBRARIES})
