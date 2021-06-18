@@ -18,20 +18,6 @@ void bmct::show_vcc(
   std::ostream &out,
   std::shared_ptr<symex_target_equationt> &eq)
 {
-  switch(ui)
-  {
-  case ui_message_handlert::OLD_GUI:
-  case ui_message_handlert::XML_UI:
-    error("not supported");
-    return;
-
-  case ui_message_handlert::PLAIN:
-    break;
-
-  default:
-    assert(false);
-  }
-
   out << std::endl << "VERIFICATION CONDITIONS:" << std::endl << std::endl;
 
   languagest languages(ns, MODE_C);

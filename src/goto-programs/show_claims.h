@@ -15,12 +15,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void show_claims(
   const namespacet &ns,
-  ui_message_handlert::uit ui,
   const goto_functionst &goto_functions);
 
 void show_claims(
   const namespacet &ns,
-  ui_message_handlert::uit ui,
   const goto_programt &goto_program);
 
 #endif

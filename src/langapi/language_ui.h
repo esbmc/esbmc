@@ -38,13 +38,6 @@ public:
   virtual void show_symbol_table_plain(std::ostream &out);
   virtual void show_symbol_table_xml_ui();
 
-  typedef ui_message_handlert::uit uit;
-
-  uit get_ui()
-  {
-    return ui_message_handler.get_ui();
-  }
-
   ui_message_handlert ui_message_handler;
 
 protected:

@@ -13,11 +13,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/ui_message.h>
 
 void show_loop_numbers(
-  ui_message_handlert::uit ui,
   const goto_functionst &goto_functions);
 
 void show_loop_numbers(
-  ui_message_handlert::uit ui,
   const goto_programt &goto_program);
 
 #endif
