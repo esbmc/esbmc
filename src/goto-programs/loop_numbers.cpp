@@ -11,8 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/xml.h>
 #include <util/xml_irep.h>
 
-void show_loop_numbers(
-  const goto_programt &goto_program)
+void show_loop_numbers(const goto_programt &goto_program)
 {
   for(const auto &instruction : goto_program.instructions)
   {
@@ -20,18 +19,16 @@ void show_loop_numbers(
     {
       unsigned loop_id = instruction.loop_number;
 
-      
-        std::cout << "Loop " << loop_id << ":" << std::endl;
+      std::cout << "Loop " << loop_id << ":" << std::endl;
 
-        std::cout << "  " << instruction.location << std::endl;
-        std::cout << std::endl;
-          }
+      std::cout << "  " << instruction.location << std::endl;
+      std::cout << std::endl;
+    }
   }
 }
 
-void show_loop_numbers(
-  const goto_functionst &goto_functions)
+void show_loop_numbers(const goto_functionst &goto_functions)
 {
   for(const auto &it : goto_functions.function_map)
-    show_loop_numbers( it.second.body);
+    show_loop_numbers(it.second.body);
 }

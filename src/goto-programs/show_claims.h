@@ -13,12 +13,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/namespace.h>
 #include <util/message.h>
 
-void show_claims(
-  const namespacet &ns,
-  const goto_functionst &goto_functions);
+void show_claims(const namespacet &ns, const goto_functionst &goto_functions);
 
-void show_claims(
-  const namespacet &ns,
-  const goto_programt &goto_program);
+void show_claims(const namespacet &ns, const goto_programt &goto_program);
 
 #endif

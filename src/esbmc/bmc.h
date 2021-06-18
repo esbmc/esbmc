@@ -37,7 +37,6 @@ public:
   virtual smt_convt::resultt run(std::shared_ptr<symex_target_equationt> &eq);
   ~bmct() override = default;
 
-
 protected:
   const contextt &context;
   namespacet ns;

@@ -46,10 +46,7 @@ bmct::bmct(
   optionst &opts,
   contextt &_context,
   message_handlert &_message_handler)
-  : messaget(_message_handler),
-    options(opts),
-    context(_context),
-    ns(context)    
+  : messaget(_message_handler), options(opts), context(_context), ns(context)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -94,7 +91,8 @@ void bmct::successful_trace()
     return;
 
   std::string witness_output = options.get_option("witness-output");
-  if(witness_output != "") {
+  if(witness_output != "")
+  {
     goto_tracet goto_trace;
     status("Building successful trace");
     /* build_successful_goto_trace(eq, ns, goto_trace); */
@@ -121,11 +119,12 @@ void bmct::error_trace(
   build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace);
 
   std::string witness_output = options.get_option("witness-output");
-  if(witness_output != "") {
-     violation_graphml_goto_trace(options, ns, goto_trace);
+  if(witness_output != "")
+  {
+    violation_graphml_goto_trace(options, ns, goto_trace);
   }
-   std::cout << std::endl << "Counterexample:" << std::endl;
-    show_goto_trace(std::cout, ns, goto_trace); 
+  std::cout << std::endl << "Counterexample:" << std::endl;
+  show_goto_trace(std::cout, ns, goto_trace);
 }
 
 smt_convt::resultt bmct::run_decision_procedure(
