@@ -17,12 +17,12 @@ Author:
 class clang_cpp_languaget : public clang_c_languaget
 {
 public:
-  bool final(contextt &context, message_handlert &message_handler) override;
+  bool final(contextt &context, const messaget &message_handler) override;
 
   bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler) override;
+    const messaget &message_handler) override;
 
   std::string id() const override
   {

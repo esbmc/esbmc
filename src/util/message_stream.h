@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class message_streamt
 {
 public:
-  message_streamt(message_handlert &_message_handler)
+  message_streamt(const messaget &_message_handler)
     : message_handler(_message_handler),
       error_found(false),
       saved_error_location(static_cast<const locationt &>(get_nil_irep()))
@@ -87,7 +87,7 @@ public:
     return error_found;
   }
 
-  message_handlert &get_message_handler()
+  const messaget &get_message_handler()
   {
     return message_handler;
   }
@@ -105,7 +105,7 @@ public:
   }
 
 protected:
-  message_handlert &message_handler;
+  const messaget &message_handler;
   bool error_found;
   locationt saved_error_location;
 

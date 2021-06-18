@@ -19,7 +19,7 @@ void goto_convert(
   contextt &context,
   optionst &options,
   goto_functionst &functions,
-  message_handlert &message_handler);
+  const messaget &message_handler);
 
 class goto_convert_functionst : public goto_convertt
 {
@@ -48,7 +48,7 @@ public:
     contextt &_context,
     optionst &_options,
     goto_functionst &_functions,
-    message_handlert &_message_handler);
+    const messaget &_message_handler);
 
   ~goto_convert_functionst() override = default;
 

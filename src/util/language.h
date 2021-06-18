@@ -20,8 +20,7 @@ class languaget
 public:
   // parse file
 
-  virtual bool
-  parse(const std::string &path, message_handlert &message_handler) = 0;
+  virtual bool parse(const std::string &path, const messaget &msg) = 0;
 
   // add external dependencies of a given module to set
 
@@ -36,7 +35,7 @@ public:
   }
 
   // final adjustments, e.g., initialization and call to main()
-  virtual bool final(contextt &, message_handlert &)
+  virtual bool final(contextt &, const messaget &)
   {
     return false;
   }
@@ -51,7 +50,7 @@ public:
   virtual bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler) = 0;
+    const messaget &msg) = 0;
 
   // language id / description
   virtual std::string id() const

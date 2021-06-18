@@ -25,7 +25,7 @@ bool read_bin_goto_object(
   const std::string &filename,
   contextt &context,
   goto_functionst &functions,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   message_streamt message_stream(message_handler);
 

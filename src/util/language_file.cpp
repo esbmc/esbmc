@@ -38,7 +38,7 @@ bool language_filest::parse()
 
     if(!infile)
     {
-      error("Failed to open " + it.first);
+      msg.error("Failed to open " + it.first);
       return true;
     }
 
@@ -46,9 +46,9 @@ bool language_filest::parse()
 
     languaget &language = *(it.second.language);
 
-    if(language.parse(it.first, *get_message_handler()))
+    if(language.parse(it.first, msg))
     {
-      error("Parsing of " + it.first + " failed");
+      msg.error("Parsing of " + it.first + " failed");
       return true;
     }
 
@@ -92,7 +92,7 @@ bool language_filest::typecheck(contextt &context)
   for(auto &it : filemap)
   {
     if(it.second.modules.empty())
-      if(it.second.language->typecheck(context, "", *get_message_handler()))
+      if(it.second.language->typecheck(context, "", msg))
         return true;
   }
 
@@ -117,7 +117,7 @@ bool language_filest::final(contextt &context)
   for(auto &it : filemap)
   {
     if(languages.insert(it.second.language->id()).second)
-      if(it.second.language->final(context, *get_message_handler()))
+      if(it.second.language->final(context, msg))
         return true;
   }
 #endif
@@ -148,7 +148,7 @@ bool language_filest::typecheck_module(
 
   if(it == modulemap.end())
   {
-    error("found no file that provides module " + module);
+    msg.error("found no file that provides module " + module);
     return true;
   }
 
@@ -168,7 +168,7 @@ bool language_filest::typecheck_module(
 
   if(module.in_progress)
   {
-    error("circular dependency in " + module.name);
+    msg.error("circular dependency in " + module.name);
     return true;
   }
 
@@ -191,10 +191,9 @@ bool language_filest::typecheck_module(
 
   // type check it
 
-  status("Type-checking " + module.name);
+  msg.status("Type-checking " + module.name);
 
-  if(module.file->language->typecheck(
-       context, module.name, *get_message_handler()))
+  if(module.file->language->typecheck(context, module.name, msg))
   {
     module.in_progress = false;
     return true;
@@ -226,7 +225,7 @@ void language_filest::typecheck_virtual_methods(contextt &context)
 
           if(member_function.value.is_nil())
           {
-            error(
+            msg.error(
               member_function.location.as_string() +
               ": The virtual method isn't pure virtual and hasn't a "
               "method implementation ");

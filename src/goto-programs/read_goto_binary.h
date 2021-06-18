@@ -18,6 +18,6 @@ void read_goto_binary(
   std::istream &in,
   contextt &context,
   goto_functionst &dest,
-  message_handlert &message_handler);
+  const messaget &message_handler);
 
 #endif

@@ -35,7 +35,7 @@ public:
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
     goto_functiont &_goto_function,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : message_streamt(_message_handler),
       function_name(_function_name),
       goto_functions(_goto_functions),

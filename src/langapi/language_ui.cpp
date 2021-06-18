@@ -13,9 +13,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/i2string.h>
 #include <util/show_symbol_table.h>
 
-language_uit::language_uit(const cmdlinet &__cmdline) : _cmdline(__cmdline)
+language_uit::language_uit(const cmdlinet &__cmdline, const messaget &msg)
+  : _cmdline(__cmdline), msg(msg), language_files(msg)
 {
-  set_message_handler(&ui_message_handler);
 }
 
 bool language_uit::parse()
@@ -35,7 +35,7 @@ bool language_uit::parse(const std::string &filename)
 
   if(mode < 0)
   {
-    error("failed to figure out type of file", filename);
+    msg.error("failed to figure out type of file", filename);
     return true;
   }
 
@@ -46,7 +46,7 @@ bool language_uit::parse(const std::string &filename)
   std::ifstream infile(filename.c_str());
   if(!infile)
   {
-    error("failed to open input file", filename);
+    msg.error("failed to open input file", filename);
     return true;
   }
 
@@ -61,9 +61,9 @@ bool language_uit::parse(const std::string &filename)
   lf.language = mode_table[mode].new_language();
   languaget &language = *lf.language;
 
-  status("Parsing", filename);
+  msg.status("Parsing", filename);
 
-  if(language.parse(filename, *get_message_handler()))
+  if(language.parse(filename, msg))
   {
     std::cerr << "PARSING ERROR" << std::endl;
 
@@ -77,10 +77,7 @@ bool language_uit::parse(const std::string &filename)
 
 bool language_uit::typecheck()
 {
-  status("Converting");
-
-  language_files.set_message_handler(&message_handler);
-  language_files.set_verbosity(get_verbosity());
+  msg.status("Converting");
 
   if(language_files.typecheck(context))
   {
@@ -94,9 +91,6 @@ bool language_uit::typecheck()
 
 bool language_uit::final()
 {
-  language_files.set_message_handler(&message_handler);
-  language_files.set_verbosity(get_verbosity());
-
   if(language_files.final(context))
   {
     std::cerr << "CONVERSION ERROR" << std::endl;
@@ -113,7 +107,7 @@ void language_uit::show_symbol_table()
 
 void language_uit::show_symbol_table_xml_ui()
 {
-  error("cannot show symbol table in this format");
+  msg.error("cannot show symbol table in this format");
 }
 
 void language_uit::show_symbol_table_plain(std::ostream &out)

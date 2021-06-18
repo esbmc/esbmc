@@ -26,17 +26,16 @@ public:
   virtual bool preprocess(
     const std::string &path,
     std::ostream &outstream,
-    message_handlert &message_handler);
+    const messaget &msg);
 
-  bool
-  parse(const std::string &path, message_handlert &message_handler) override;
+  bool parse(const std::string &path, const messaget &msg) override;
 
-  bool final(contextt &context, message_handlert &message_handler) override;
+  bool final(contextt &context, const messaget &msg) override;
 
   bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler) override;
+    const messaget &msg) override;
 
   std::string id() const override
   {

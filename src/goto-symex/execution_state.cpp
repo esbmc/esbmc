@@ -35,7 +35,7 @@ execution_statet::execution_statet(
   contextt &context,
   std::shared_ptr<ex_state_level2t> l2init,
   optionst &options,
-  message_handlert &_message_handler)
+  const messaget &_message_handler)
   : goto_symext(ns, context, goto_functions, std::move(_target), options),
     owning_rt(art),
     state_level2(std::move(l2init)),

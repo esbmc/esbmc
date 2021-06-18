@@ -21,6 +21,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <cstdint>
 #include <esbmc/esbmc_parseoptions.h>
 #include <langapi/mode.h>
+#include <util/message.h>
 #include <util/irep2.h>
 
 int main(int argc, const char **argv)
@@ -29,6 +30,8 @@ int main(int argc, const char **argv)
   type_poolt bees(true);
   type_pool = bees;
 
-  esbmc_parseoptionst parseoptions(argc, argv);
+  message_handlert handler;
+  messaget msg(handler);
+  esbmc_parseoptionst parseoptions(argc, argv, msg);
   return parseoptions.main();
 }

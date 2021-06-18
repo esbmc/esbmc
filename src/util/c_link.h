@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 bool c_link(
   contextt &context,
   contextt &new_context,
-  message_handlert &message_handler,
+  const messaget &message_handler,
   const std::string &module);
 
 #endif

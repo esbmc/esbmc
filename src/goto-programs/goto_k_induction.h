@@ -9,11 +9,11 @@
 
 void goto_k_induction(
   goto_functionst &goto_functions,
-  message_handlert &message_handler);
+  const messaget &message_handler);
 
 void goto_termination(
   goto_functionst &goto_functions,
-  message_handlert &message_handler);
+  const messaget &message_handler);
 
 class goto_k_inductiont : public goto_loopst
 {
@@ -22,7 +22,7 @@ public:
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
     goto_functiont &_goto_function,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : goto_loopst(
         _function_name,
         _goto_functions,
