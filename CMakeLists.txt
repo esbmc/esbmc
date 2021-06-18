@@ -47,6 +47,8 @@ if(BUILD_STATIC)
   include(BuildStatic)
 endif()
 
+include(ExternalDependencies)
+
 # Copied from https://stackoverflow.com/questions/53877344/cannot-configure-cmake-to-look-for-homebrew-installed-version-of-bison
 # On macOS, search Homebrew for keg-only versions of Bison and Flex. Xcode does
 # not provide new enough versions for us to use.

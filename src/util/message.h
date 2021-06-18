@@ -49,6 +49,15 @@ public:
   print(unsigned level, const std::string &message, const locationt &location);
 
   virtual ~message_handlert() = default;
+
+  void set_file_output(FILE* file_out) { 
+    stdout_output = file_out;
+    stderr_output = file_out;
+  }
+
+  protected:
+  FILE *stdout_output = stdout;
+  FILE *stderr_output = stderr;
 };
 
 /**
