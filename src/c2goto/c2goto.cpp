@@ -41,8 +41,8 @@ const struct group_opt_templ c2goto_options[] = {
 class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
 public:
-  c2goto_parseopt(int argc, const char **argv)
-    : parseoptions_baset(c2goto_options, argc, argv), language_uit(cmdline)
+  c2goto_parseopt(int argc, const char **argv, const messaget &msg)
+    : parseoptions_baset(c2goto_options, argc, argv), language_uit(cmdline, msg)
   {
   }
 
@@ -82,7 +82,9 @@ int main(int argc, const char **argv)
   type_poolt bees(true);
   type_pool = bees;
 
-  c2goto_parseopt parseopt(argc, argv);
+  message_handlert handler;
+  messaget msg(handler);
+  c2goto_parseopt parseopt(argc, argv, msg);
   return parseopt.main();
 }
 

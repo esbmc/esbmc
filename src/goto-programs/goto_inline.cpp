@@ -420,7 +420,7 @@ void goto_inline(
   optionst &options,
   const namespacet &ns,
   goto_programt &dest,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   goto_inlinet goto_inline(goto_functions, options, ns, message_handler);
 
@@ -474,7 +474,7 @@ void goto_inline(
   goto_functionst &goto_functions,
   optionst &options,
   const namespacet &ns,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   goto_inlinet goto_inline(goto_functions, options, ns, message_handler);
 
@@ -521,7 +521,7 @@ void goto_partial_inline(
   goto_functionst &goto_functions,
   optionst &options,
   const namespacet &ns,
-  message_handlert &message_handler,
+  const messaget &message_handler,
   unsigned _smallfunc_limit)
 {
   goto_inlinet goto_inline(goto_functions, options, ns, message_handler);

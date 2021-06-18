@@ -77,7 +77,7 @@ public:
     optionst &opts,
     std::shared_ptr<symex_targett> target,
     contextt &context,
-    message_handlert &message_handler);
+    const messaget &message_handler);
 
   /**
    *  Default destructor.
@@ -369,7 +369,7 @@ protected:
   /** Set of state hashes we've discovered */
   std::set<crypto_hash> hit_hashes;
   /** Message handler reference. */
-  message_handlert &message_handler;
+  const messaget &message_handler;
   /** Flag as to whether we're picking interleaving directions explicitly.
    *  Corresponds to the --interactive-ileaves option. */
   bool interactive_ileaves;

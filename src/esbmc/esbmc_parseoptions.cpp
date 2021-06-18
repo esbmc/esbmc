@@ -387,7 +387,7 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("module") || cmdline.isset("gen-interface"))
 
   {
-    error(
+    msg.error(
       "This version has no support for "
       " hardware modules.");
     return 1;
@@ -396,8 +396,6 @@ int esbmc_parseoptionst::doit()
   //
   // command line options
   //
-
-  set_verbosity_msg(*this);
 
   if(cmdline.isset("preprocess"))
   {
@@ -440,8 +438,7 @@ int esbmc_parseoptionst::doit()
     return 0;
 
   // do actual BMC
-  bmct bmc(goto_functions, opts, context, ui_message_handler);
-  set_verbosity_msg(bmc);
+  bmct bmc(goto_functions, opts, context, msg);
 
   return do_bmc(bmc);
 }
@@ -460,13 +457,13 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
   if(pipe(forward_pipe))
   {
-    status("\nPipe Creation Failed, giving up.");
+    msg.status("\nPipe Creation Failed, giving up.");
     _exit(1);
   }
 
   if(pipe(backward_pipe))
   {
-    status("\nPipe Creation Failed, giving up.");
+    msg.status("\nPipe Creation Failed, giving up.");
     _exit(1);
   }
 
@@ -484,7 +481,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
     if(pid == -1)
     {
-      status("\nFork Failed, giving up.");
+      msg.status("\nFork Failed, giving up.");
       _exit(1);
     }
 
@@ -786,9 +783,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a bug
     for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, opts, context, ui_message_handler);
-      set_verbosity_msg(bmc);
-
+      bmct bmc(goto_functions, opts, context, msg);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       std::cout << "*** Checking base case, k = " << k_step << '\n';
@@ -894,9 +889,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a proof
     for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, opts, context, ui_message_handler);
-      set_verbosity_msg(bmc);
-
+      bmct bmc(goto_functions, opts, context, msg);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       std::cout << "*** Checking forward condition, k = " << k_step << '\n';
@@ -963,8 +956,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a proof
     for(BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, opts, context, ui_message_handler);
-      set_verbosity_msg(bmc);
+      bmct bmc(goto_functions, opts, context, msg);
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1057,8 +1049,8 @@ int esbmc_parseoptionst::doit_k_induction()
       return false;
   }
 
-  status("Unable to prove or falsify the program, giving up.");
-  status("VERIFICATION UNKNOWN");
+  msg.status("Unable to prove or falsify the program, giving up.");
+  msg.status("VERIFICATION UNKNOWN");
 
   return 0;
 }
@@ -1095,8 +1087,8 @@ int esbmc_parseoptionst::doit_falsification()
       return true;
   }
 
-  status("Unable to prove or falsify the program, giving up.");
-  status("VERIFICATION UNKNOWN");
+  msg.status("Unable to prove or falsify the program, giving up.");
+  msg.status("VERIFICATION UNKNOWN");
 
   return 0;
 }
@@ -1136,8 +1128,8 @@ int esbmc_parseoptionst::doit_incremental()
       return false;
   }
 
-  status("Unable to prove or falsify the program, giving up.");
-  status("VERIFICATION UNKNOWN");
+  msg.status("Unable to prove or falsify the program, giving up.");
+  msg.status("VERIFICATION UNKNOWN");
 
   return 0;
 }
@@ -1179,8 +1171,8 @@ int esbmc_parseoptionst::doit_termination()
     */
   }
 
-  status("Unable to prove or falsify the program, giving up.");
-  status("VERIFICATION UNKNOWN");
+  msg.status("Unable to prove or falsify the program, giving up.");
+  msg.status("VERIFICATION UNKNOWN");
 
   return 0;
 }
@@ -1197,8 +1189,7 @@ int esbmc_parseoptionst::do_base_case(
   opts.set_option("no-unwinding-assertions", true);
   opts.set_option("partial-loops", false);
 
-  bmct bmc(goto_functions, opts, context, ui_message_handler);
-  set_verbosity_msg(bmc);
+  bmct bmc(goto_functions, opts, context, msg);
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1244,8 +1235,7 @@ int esbmc_parseoptionst::do_forward_condition(
   // Turn assertions off
   opts.set_option("no-assertions", true);
 
-  bmct bmc(goto_functions, opts, context, ui_message_handler);
-  set_verbosity_msg(bmc);
+  bmct bmc(goto_functions, opts, context, msg);
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1299,9 +1289,7 @@ int esbmc_parseoptionst::do_inductive_step(
   opts.set_option("no-unwinding-assertions", true);
   opts.set_option("partial-loops", true);
 
-  bmct bmc(goto_functions, opts, context, ui_message_handler);
-  set_verbosity_msg(bmc);
-
+  bmct bmc(goto_functions, opts, context, msg);
   bmc.options.set_option("unwind", integer2string(k_step));
 
   std::cout << "*** Checking inductive step, k = " << k_step << '\n';
@@ -1335,13 +1323,13 @@ bool esbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
 
   catch(const char *e)
   {
-    error(e);
+    msg.error(e);
     return true;
   }
 
   catch(const std::string &e)
   {
-    error(e);
+    msg.error(e);
     return true;
   }
 
@@ -1362,14 +1350,14 @@ bool esbmc_parseoptionst::get_goto_program(
   {
     if(cmdline.args.size() == 0)
     {
-      error("Please provide a program to verify");
+      msg.error("Please provide a program to verify");
       return true;
     }
 
     // If the user is providing the GOTO functions, we don't need to parse
     if(cmdline.isset("binary"))
     {
-      status("Reading GOTO program from file");
+      msg.status("Reading GOTO program from file");
 
       if(read_goto_binary(goto_functions))
         return true;
@@ -1406,12 +1394,12 @@ bool esbmc_parseoptionst::get_goto_program(
           return true;
       }
 
-      status("Generating GOTO Program");
+      msg.status("Generating GOTO Program");
 
       // Ahem
       migrate_namespace_lookup = new namespacet(context);
 
-      goto_convert(context, options, goto_functions, ui_message_handler);
+      goto_convert(context, options, goto_functions, msg);
     }
 
     fine_timet parse_stop = current_time();
@@ -1419,7 +1407,7 @@ bool esbmc_parseoptionst::get_goto_program(
     str << "GOTO program creation time: ";
     output_time(parse_stop - parse_start, str);
     str << "s";
-    status(str.str());
+    msg.status(str.str());
 
     fine_timet process_start = current_time();
     if(process_goto_program(options, goto_functions))
@@ -1429,18 +1417,18 @@ bool esbmc_parseoptionst::get_goto_program(
     str2 << "GOTO program processing time: ";
     output_time(process_stop - process_start, str2);
     str2 << "s";
-    status(str2.str());
+    msg.status(str2.str());
   }
 
   catch(const char *e)
   {
-    error(e);
+    msg.error(e);
     return true;
   }
 
   catch(const std::string &e)
   {
-    error(e);
+    msg.error(e);
     return true;
   }
 
@@ -1459,7 +1447,7 @@ void esbmc_parseoptionst::preprocessing()
   {
     if(cmdline.args.size() != 1)
     {
-      error("Please provide one program to preprocess");
+      msg.error("Please provide one program to preprocess");
       return;
     }
 
@@ -1469,7 +1457,7 @@ void esbmc_parseoptionst::preprocessing()
     std::ifstream infile(filename.c_str());
     if(!infile)
     {
-      error("failed to open input file");
+      msg.error("failed to open input file");
       return;
     }
 #ifdef ENABLE_OLD_FRONTEND
@@ -1479,12 +1467,12 @@ void esbmc_parseoptionst::preprocessing()
   }
   catch(const char *e)
   {
-    error(e);
+    msg.error(e);
   }
 
   catch(const std::string &e)
   {
-    error(e);
+    msg.error(e);
   }
 
   catch(std::bad_alloc &)
@@ -1499,11 +1487,11 @@ bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 
   if(!in)
   {
-    error(std::string("Failed to open `") + cmdline.getval("binary") + "'");
+    msg.error(std::string("Failed to open `") + cmdline.getval("binary") + "'");
     return true;
   }
 
-  ::read_goto_binary(in, context, goto_functions, *get_message_handler());
+  ::read_goto_binary(in, context, goto_functions, msg);
 
   return false;
 }
@@ -1520,9 +1508,9 @@ bool esbmc_parseoptionst::process_goto_program(
     if(!cmdline.isset("no-inlining"))
     {
       if(cmdline.isset("full-inlining"))
-        goto_inline(goto_functions, options, ns, ui_message_handler);
+        goto_inline(goto_functions, options, ns, msg);
       else
-        goto_partial_inline(goto_functions, options, ns, ui_message_handler);
+        goto_partial_inline(goto_functions, options, ns, msg);
     }
 
     if(cmdline.isset("interval-analysis"))
@@ -1532,12 +1520,12 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
       cmdline.isset("k-induction-parallel"))
     {
-      goto_k_induction(goto_functions, ui_message_handler);
+      goto_k_induction(goto_functions, msg);
     }
 
     if(cmdline.isset("termination"))
     {
-      goto_termination(goto_functions, ui_message_handler);
+      goto_termination(goto_functions, msg);
     }
 
     goto_check(ns, options, goto_functions);
@@ -1582,7 +1570,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if(cmdline.isset("data-races-check"))
     {
-      status("Adding Data Race Checks");
+      msg.status("Adding Data Race Checks");
 
       value_set_analysist value_set_analysis(ns);
       value_set_analysis(goto_functions);
@@ -1612,13 +1600,13 @@ bool esbmc_parseoptionst::process_goto_program(
 
   catch(const char *e)
   {
-    error(e);
+    msg.error(e);
     return true;
   }
 
   catch(const std::string &e)
   {
-    error(e);
+    msg.error(e);
     return true;
   }
 
@@ -1634,7 +1622,7 @@ bool esbmc_parseoptionst::process_goto_program(
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
 { // do actual BMC
 
-  status("Starting Bounded Model Checking");
+  msg.status("Starting Bounded Model Checking");
 
   smt_convt::resultt res = bmc.start_bmc();
   if(res == smt_convt::P_ERROR)

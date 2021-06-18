@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 void message_handlert::print(
   unsigned level,
   const std::string &message,
-  const locationt &location)
+  const locationt &location) const
 {
   std::string dest;
 
@@ -55,12 +55,12 @@ void message_handlert::print(
   print(level, dest);
 }
 
-void message_handlert::print(unsigned level, const std::string &message)
+void message_handlert::print(unsigned level, const std::string &message) const
 {
   fmt::print(level <= 1 ? stderr_output : stdout_output, "{}\n", message);
 }
 
-void messaget::print(unsigned level, const std::string &message)
+void messaget::print(unsigned level, const std::string &message) const
 {
   if(verbosity >= level)
     message_handler.print(level, message);
@@ -69,7 +69,7 @@ void messaget::print(unsigned level, const std::string &message)
 void messaget::print(
   unsigned level,
   const std::string &message,
-  const locationt &location)
+  const locationt &location) const
 {
   if(verbosity >= level)
     message_handler.print(level, message, location);

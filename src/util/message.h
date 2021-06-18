@@ -43,10 +43,12 @@ public:
     DEBUG = 9
   };
 
-  virtual void print(unsigned level, const std::string &message);
+  virtual void print(unsigned level, const std::string &message) const;
 
-  virtual void
-  print(unsigned level, const std::string &message, const locationt &location);
+  virtual void print(
+    unsigned level,
+    const std::string &message,
+    const locationt &location) const;
 
   virtual ~message_handlert() = default;
 
@@ -71,44 +73,46 @@ protected:
 class messaget
 {
 public:
-  void status(const std::string &message)
+  void status(const std::string &message) const
   {
     print(message_handlert::STATUS, message);
   }
 
-  void result(const std::string &message)
+  void result(const std::string &message) const
   {
     print(message_handlert::RESULT, message);
   }
 
-  void warning(const std::string &message)
+  void warning(const std::string &message) const
   {
     print(message_handlert::WARNING, message);
   }
 
-  void status(const std::string &message, const std::string &file)
+  void status(const std::string &message, const std::string &file) const
   {
     locationt location;
     location.set_file(file);
     print(message_handlert::STATUS, message, location);
   }
 
-  void error(const std::string &message)
+  void error(const std::string &message) const
   {
     print(message_handlert::ERROR, message);
   }
 
-  void error(const std::string &message, const std::string &file)
+  void error(const std::string &message, const std::string &file) const
   {
     locationt location;
     location.set_file(file);
     print(message_handlert::ERROR, message, location);
   }
 
-  virtual void print(unsigned level, const std::string &message);
+  virtual void print(unsigned level, const std::string &message) const;
 
-  virtual void
-  print(unsigned level, const std::string &message, const locationt &location);
+  virtual void print(
+    unsigned level,
+    const std::string &message,
+    const locationt &location) const;
 
   virtual void set_message_handler(message_handlert *_message_handler);
   virtual void set_verbosity(unsigned _verbosity)
@@ -121,7 +125,7 @@ public:
     return verbosity;
   }
 
-  messaget() = default;
+  //messaget() = default;
   explicit messaget(message_handlert &_message_handler)
     : message_handler(_message_handler)
   {

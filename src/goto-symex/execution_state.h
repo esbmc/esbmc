@@ -81,7 +81,7 @@ public:
     contextt &context,
     std::shared_ptr<ex_state_level2t> l2init,
     optionst &options,
-    message_handlert &message_handler);
+    const messaget &message_handler);
 
   /**
    *  Default copy constructor.
@@ -580,7 +580,7 @@ public:
   /** Have we warned of an ended monitor thread already?. */
   bool mon_thread_warning;
   /** Message handler object */
-  message_handlert &message_handler;
+  const messaget &message_handler;
   /** Minimum number of threads to exist to consider a context switch.
    *  In certain special cases, such as LTL checking, various pieces of
    *  code and information are bunged into seperate threads which aren't
@@ -649,7 +649,7 @@ public:
     std::shared_ptr<symex_targett> _target,
     contextt &context,
     optionst &options,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : execution_statet(
         goto_functions,
         ns,
@@ -686,7 +686,7 @@ public:
     optionst &options,
     unsigned int *ptotal_claims,
     unsigned int *premaining_claims,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : execution_statet(
         goto_functions,
         ns,

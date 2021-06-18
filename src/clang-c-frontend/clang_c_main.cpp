@@ -47,7 +47,7 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-bool clang_main(contextt &context, message_handlert &message_handler)
+bool clang_main(contextt &context, const messaget &message_handler)
 {
   irep_idt main_symbol;
 
@@ -277,9 +277,7 @@ bool clang_main(contextt &context, message_handlert &message_handler)
 
   if(context.move(new_symbol))
   {
-    messaget message;
-    message.set_message_handler(&message_handler);
-    message.error("main already defined by another language module");
+    message_handler.error("main already defined by another language module");
     return true;
   }
 

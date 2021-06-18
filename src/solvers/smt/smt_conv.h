@@ -128,7 +128,7 @@ class smt_convt;
  *
  *  @see smt_conv.h
  *  @see smt_func_kind */
-class smt_convt : public messaget
+class smt_convt
 {
 public:
   /** Shorthand for a vector of smt_ast's */
@@ -144,10 +144,10 @@ public:
   /** Primary constructor. After construction, smt_post_init must be called
    *  before the object is used as a solver converter.
    *
-   *  @param _ns Namespace for looking up the type of certain symbols.
+   *  @param _ns Namespace for looking up the type of certain symbols. 
    *  @param _options Provide all the needed parameters to configure the solver. */
-  smt_convt(const namespacet &_ns, const optionst &_options);
-  ~smt_convt() override = default;
+  smt_convt(bool int_encoding, const namespacet &_ns, const optionst &_options);
+  virtual ~smt_convt() = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
    *  model data for tracking, however can't do it from the constructor because

@@ -23,7 +23,7 @@ void goto_convert(
   contextt &context,
   optionst &options,
   goto_programt &dest,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   goto_convertt goto_convert(context, options, message_handler);
 
@@ -55,7 +55,7 @@ void goto_convert(
   contextt &context,
   optionst &options,
   goto_programt &dest,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   // find main symbol
   const symbolt *s = context.find_symbol("__ESBMC_main");

@@ -19,14 +19,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/solve.h>
 #include <util/options.h>
 
-class bmct : public messaget
+class bmct
 {
 public:
   bmct(
     goto_functionst &funcs,
     optionst &opts,
     contextt &_context,
-    message_handlert &_message_handler);
+    const messaget &_message_handler);
 
   optionst &options;
 
@@ -35,9 +35,10 @@ public:
 
   virtual smt_convt::resultt start_bmc();
   virtual smt_convt::resultt run(std::shared_ptr<symex_target_equationt> &eq);
-  ~bmct() override = default;
+  virtual ~bmct() = default;
 
 protected:
+  const messaget &msg;
   const contextt &context;
   namespacet ns;
   std::shared_ptr<smt_convt> runtime_solver;

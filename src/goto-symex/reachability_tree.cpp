@@ -30,7 +30,7 @@ reachability_treet::reachability_treet(
   optionst &opts,
   std::shared_ptr<symex_targett> target,
   contextt &context,
-  message_handlert &_message_handler)
+  const messaget &_message_handler)
   : goto_functions(goto_functions),
     permanent_context(context),
     ns(ns),

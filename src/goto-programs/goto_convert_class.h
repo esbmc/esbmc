@@ -28,7 +28,7 @@ public:
   goto_convertt(
     contextt &_context,
     optionst &_options,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : message_streamt(_message_handler),
       context(_context),
       options(_options),

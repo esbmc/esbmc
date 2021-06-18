@@ -54,7 +54,7 @@ std::string clang_cpp_languaget::internal_additions()
 bool clang_cpp_languaget::typecheck(
   contextt &context,
   const std::string &module,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   contextt new_context;
 
@@ -74,7 +74,7 @@ bool clang_cpp_languaget::typecheck(
 
 bool clang_cpp_languaget::final(
   contextt &context,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   add_cprover_library(context, message_handler);
   return clang_main(context, message_handler);

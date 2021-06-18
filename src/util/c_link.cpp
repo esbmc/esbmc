@@ -23,7 +23,7 @@ public:
     contextt &_context,
     contextt &_new_context,
     std::string _module,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : typecheckt(_message_handler),
       context(_context),
       new_context(_new_context),
@@ -330,7 +330,7 @@ void c_linkt::move(symbolt &new_symbol)
 bool c_link(
   contextt &context,
   contextt &new_context,
-  message_handlert &message_handler,
+  const messaget &message_handler,
   const std::string &module)
 {
   c_linkt c_link(context, new_context, module, message_handler);

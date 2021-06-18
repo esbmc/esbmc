@@ -20,6 +20,6 @@ bool read_bin_goto_object(
   const std::string &filename,
   contextt &context,
   goto_functionst &functions,
-  message_handlert &msg_hndlr);
+  const messaget &msg_hndlr);
 
 #endif /*READ_BIN_GOTO_OBJECT_H_*/

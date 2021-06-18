@@ -17,7 +17,7 @@ bool typecheckt::typecheck_main()
 
   catch(int e)
   {
-    error();
+    error("" + e);
   }
 
   catch(const char *e)

@@ -14,14 +14,14 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/message.h>
 #include <util/parseoptions.h>
 
-class language_uit : public messaget
+class language_uit
 {
 public:
   language_filest language_files;
   contextt context;
 
-  language_uit(const cmdlinet &__cmdline);
-  ~language_uit() override = default;
+  language_uit(const cmdlinet &__cmdline, const messaget &msg);
+  virtual ~language_uit() = default;
 
   virtual bool parse();
   virtual bool parse(const std::string &filename);
@@ -37,7 +37,7 @@ public:
   virtual void show_symbol_table_plain(std::ostream &out);
   virtual void show_symbol_table_xml_ui();
 
-  message_handlert ui_message_handler;
+  const messaget &msg;
 
 protected:
   const cmdlinet &_cmdline;
