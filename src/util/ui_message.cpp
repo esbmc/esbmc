@@ -22,13 +22,10 @@ const char *ui_message_handlert::level_string(unsigned level)
     return "STATUS-MESSAGE";
 }
 
-void ui_message_handlert::print(unsigned level, const std::string &message)
-{
-  
-    if(level == 1)
-      std::cerr << message << std::endl;
-    else
-      std::cout << message << std::endl;
+
+void ui_message_handlert::print(unsigned level, const std::string &message) {
+    if(level <= 1) std::cerr << message << std::endl;
+    else std::cout << message << std::endl;
 }
 
 void ui_message_handlert::print(

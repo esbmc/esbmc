@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/i2string.h>
 #include <util/show_symbol_table.h>
 
-
 language_uit::language_uit(const cmdlinet &__cmdline)
   : _cmdline(__cmdline)
 {
@@ -100,7 +99,8 @@ bool language_uit::final()
   language_files.set_verbosity(get_verbosity());
 
   if(language_files.final(context))
-  {    
+  {
+    
       std::cerr << "CONVERSION ERROR" << std::endl;
 
     return true;
@@ -111,7 +111,6 @@ bool language_uit::final()
 
 void language_uit::show_symbol_table()
 {
-  show_symbol_table_plain(std::cout);  
 }
 
 void language_uit::show_symbol_table_xml_ui()
