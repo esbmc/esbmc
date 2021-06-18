@@ -105,8 +105,9 @@ bool configt::set(const cmdlinet &cmdline)
 
   if(cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
   {
-    ERROR("Can't set both floatbv and fixedbv modes"
-              << "\n");
+    ERROR(
+      "Can't set both floatbv and fixedbv modes"
+      << "\n");
     return true;
   }
 
