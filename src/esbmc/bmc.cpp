@@ -106,11 +106,12 @@ void bmct::successful_trace()
   break;
 
   case ui_message_handlert::OLD_GUI:
-    std::cout << "SUCCESS"
-              << "\n"
-              << "Verification successful"
-              << "\n"
-              << "\n\n\n\n";
+    PRINT(
+      "SUCCESS"
+      << "\n"
+      << "Verification successful"
+      << "\n"
+      << "\n\n\n\n");
     break;
 
   case ui_message_handlert::PLAIN:
@@ -155,15 +156,24 @@ void bmct::error_trace(
     /* fallthrough */
 
   case ui_message_handlert::PLAIN:
-    std::cout << "\n"
-              << "Counterexample:"
-              << "\n";
-    show_goto_trace(std::cout, ns, goto_trace);
+    PRINT(
+      "\n"
+      << "Counterexample:"
+      << "\n");
+    {
+      std::stringstream output;
+      show_goto_trace(output, ns, goto_trace);
+      esbmc::global::_msg.print(output.str());
+    }
     break;
 
   case ui_message_handlert::OLD_GUI:
-    show_goto_trace_gui(std::cout, ns, goto_trace);
-    break;
+  {
+    std::stringstream output;
+    show_goto_trace_gui(output, ns, goto_trace);
+    esbmc::global::_msg.print(output.str());
+  }
+  break;
 
   case ui_message_handlert::XML_UI:
   {
@@ -242,18 +252,19 @@ void bmct::report_success()
   switch(ui)
   {
   case ui_message_handlert::OLD_GUI:
-    std::cout << "SUCCESS"
-              << "\n"
-              << "Verification successful"
-              << "\n"
-              << ""
-              << "\n"
-              << ""
-              << "\n"
-              << ""
-              << "\n"
-              << ""
-              << "\n";
+    PRINT(
+      "SUCCESS"
+      << "\n"
+      << "Verification successful"
+      << "\n"
+      << ""
+      << "\n"
+      << ""
+      << "\n"
+      << ""
+      << "\n"
+      << ""
+      << "\n");
     break;
 
   case ui_message_handlert::GRAPHML:
@@ -310,7 +321,11 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
   unsigned int count = 1;
 
   if(config.options.get_bool_option("ssa-symbol-table"))
-    ::show_symbol_table_plain(ns, std::cout);
+  {
+    std::stringstream output;
+    ::show_symbol_table_plain(ns, output);
+    esbmc::global::_msg.print(output.str());
+  }
 
   languagest languages(ns, MODE_C);
   PRINT("\nProgram constraints: \n");
@@ -487,8 +502,9 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
   {
     if(++interleaving_number > 1)
     {
-      std::cout << "*** Thread interleavings " << interleaving_number << " ***"
-                << "\n";
+      PRINT(
+        "*** Thread interleavings " << interleaving_number << " ***"
+                                    << "\n");
     }
 
     fine_timet bmc_start = current_time();
@@ -691,8 +707,9 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory"
-              << "\n";
+    PRINT(
+      "Out of memory"
+      << "\n");
     return smt_convt::P_ERROR;
   }
 
@@ -749,7 +766,9 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if(options.get_bool_option("document-subgoals"))
     {
-      document_subgoals(*eq.get(), std::cout);
+      std::stringstream output;
+      document_subgoals(*eq.get(), output);
+      esbmc::global::_msg.print(output.str());
       return smt_convt::P_SMTLIB;
     }
 
@@ -763,8 +782,9 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     {
       if(options.get_bool_option("smt-formula-only"))
       {
-        std::cout << "No VCC remaining, no SMT formula will be generated for"
-                  << " the program\n";
+        PRINT(
+          "No VCC remaining, no SMT formula will be generated for"
+          << " the program\n");
         return smt_convt::P_SMTLIB;
       }
 
@@ -794,8 +814,9 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory"
-              << "\n";
+    PRINT(
+      "Out of memory"
+      << "\n");
     return smt_convt::P_ERROR;
   }
 }

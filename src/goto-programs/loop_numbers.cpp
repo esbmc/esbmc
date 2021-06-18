@@ -34,8 +34,9 @@ void show_loop_numbers(
       }
       else if(ui == ui_message_handlert::PLAIN)
       {
-        std::cout << "Loop " << loop_id << ":"
-                  << "\n";
+        PRINT(
+          "Loop " << loop_id << ":"
+                  << "\n");
 
         PRINT("  " << instruction.location << "\n");
         PRINT("\n");

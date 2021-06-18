@@ -55,8 +55,9 @@ void loopst::dump() const
     PRINT((*l_it).location_number << ", ");
   PRINT(get_original_loop_exit()->location_number);
 
-  std::cout << " }"
-            << "\n";
+  PRINT(
+    " }"
+    << "\n");
 
   dump_loop_vars();
 }

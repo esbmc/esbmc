@@ -174,7 +174,9 @@ void goto_convertt::do_function_call_dereference(
 
 void goto_functionst::dump() const
 {
-  output(*migrate_namespace_lookup, std::cout);
+  std::stringstream str;
+  output(*migrate_namespace_lookup, str);
+  PRINT(str.str());
 }
 
 void goto_functionst::output(const namespacet &ns, std::ostream &out) const

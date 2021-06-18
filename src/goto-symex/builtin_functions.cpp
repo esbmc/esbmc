@@ -565,8 +565,9 @@ void goto_symext::intrinsic_spawn_thread(
     (k_induction || inductive_step) &&
     !options.get_bool_option("disable-inductive-step"))
   {
-    std::cout << "**** WARNING: k-induction does not support concurrency yet. "
-              << "Disabling inductive step\n";
+    PRINT(
+      "**** WARNING: k-induction does not support concurrency yet. "
+      << "Disabling inductive step\n");
 
     // Disable inductive step on multi threaded code
     options.set_option("disable-inductive-step", true);

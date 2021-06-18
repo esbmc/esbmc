@@ -284,7 +284,9 @@ void renaming::level2t::print(std::ostream &out) const
 
 void renaming::level2t::dump() const
 {
-  print(std::cout);
+  std::stringstream output;
+  print(output);
+  PRINT(output.str());
 }
 
 void renaming::level2t::make_assignment(

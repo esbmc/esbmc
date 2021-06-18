@@ -405,8 +405,9 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
   {
     if(it->function_identifier == "")
     { // Top level call
-      std::cout << spaces << "init"
-                << "\n";
+      PRINT(
+        spaces << "init"
+               << "\n");
     }
     else
     {
@@ -421,9 +422,12 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
 
   if(!thread_ended)
   {
-    std::cout << spaces << "Next instruction to be executed:"
-              << "\n";
-    source.pc->output_instruction(ns, "", std::cout);
+    PRINT(
+      spaces << "Next instruction to be executed:"
+             << "\n");
+    std::stringstream out;
+    source.pc->output_instruction(ns, "", out);
+    PRINT(out.str());
   }
 }
 

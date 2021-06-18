@@ -37,8 +37,9 @@ bool goto_symext::get_unwind_recursion(
       (k_induction || inductive_step) &&
       !options.get_bool_option("disable-inductive-step"))
     {
-      std::cout << "**** WARNING: k-induction does not support recursion yet. "
-                << "Disabling inductive step\n";
+      PRINT(
+        "**** WARNING: k-induction does not support recursion yet. "
+        << "Disabling inductive step\n");
 
       // Disable inductive step on recursion
       options.set_option("disable-inductive-step", true);
@@ -382,8 +383,9 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   {
     // Emit warning; perform no function call behaviour. Increment PC
     // XXX jmorse - no location information any more.
-    std::cout << "No target candidate for function call "
-              << from_expr(ns, "", call.function) << "\n";
+    PRINT(
+      "No target candidate for function call "
+      << from_expr(ns, "", call.function) << "\n");
     cur_state->source.pc++;
     return;
   }

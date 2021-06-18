@@ -527,8 +527,9 @@ void reachability_treet::print_ileave_trace() const
   std::list<std::shared_ptr<execution_statet>>::const_iterator it;
   int i = 0;
 
-  std::cout << "Context switch trace for interleaving:"
-            << "\n";
+  PRINT(
+    "Context switch trace for interleaving:"
+    << "\n");
   for(it = execution_states.begin(); it != execution_states.end(); it++, i++)
   {
     PRINT("Context switch point " << i << "\n");
@@ -565,12 +566,14 @@ int reachability_treet::get_ileave_direction_from_user() const
     << "\n");
   execution_states.back()->print_stack_traces(4);
 
-  while(std::cout << "Input: ", std::getline(std::cin, input))
+  while(std::getline(std::cin, input))
   {
+    PRINT("Input: ");
     if(input == "b")
     {
-      std::cout << "Back unimplemented"
-                << "\n";
+      PRINT(
+        "Back unimplemented"
+        << "\n");
     }
     else if(input == "q")
     {
@@ -588,8 +591,9 @@ int reachability_treet::get_ileave_direction_from_user() const
       tid = strtol(start, &end, 10);
       if(start == end)
       {
-        std::cout << "Not a valid input"
-                  << "\n";
+        PRINT(
+          "Not a valid input"
+          << "\n");
       }
       else if(tid >= get_cur_state().threads_state.size())
       {
@@ -665,24 +669,27 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   if(ex.DFS_traversed.at(tid) == true)
   {
     if(!quiet)
-      std::cout << "Thread unschedulable as it's already been explored"
-                << "\n";
+      PRINT(
+        "Thread unschedulable as it's already been explored"
+        << "\n");
     return false;
   }
 
   if(ex.threads_state.at(tid).call_stack.empty())
   {
     if(!quiet)
-      std::cout << "Thread unschedulable due to empty call stack"
-                << "\n";
+      PRINT(
+        "Thread unschedulable due to empty call stack"
+        << "\n");
     return false;
   }
 
   if(ex.threads_state.at(tid).thread_ended)
   {
     if(!quiet)
-      std::cout << "That thread has ended"
-                << "\n";
+      PRINT(
+        "That thread has ended"
+        << "\n");
     return false;
   }
 
@@ -697,8 +704,9 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   if(ex.tid_is_set && ex.monitor_tid == tid)
   {
     if(!quiet)
-      std::cout << "Can't context switch to a monitor thread"
-                << "\n";
+      PRINT(
+        "Can't context switch to a monitor thread"
+        << "\n");
     return false;
   }
 

@@ -80,8 +80,9 @@ struct resultt
 #ifndef _WIN32
 void timeout_handler(int)
 {
-  std::cout << "Timed out"
-            << "\n";
+  PRINT(
+    "Timed out"
+    << "\n");
 
   // Unfortunately some highly useful pieces of code hook themselves into
   // aexit and attempt to free some memory. That doesn't really make sense to
@@ -378,9 +379,10 @@ int esbmc_parseoptionst::doit()
   //
   // Print a banner
   //
-  std::cout << "ESBMC version " << ESBMC_VERSION " " << sizeof(void *) * 8
-            << "-bit " << config.this_architecture() << " "
-            << config.this_operating_system() << "\n";
+  PRINT(
+    "ESBMC version " << ESBMC_VERSION " " << sizeof(void *) * 8 << "-bit "
+                     << config.this_architecture() << " "
+                     << config.this_operating_system() << "\n");
 
   if(cmdline.isset("version"))
     return 0;
@@ -596,8 +598,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
         else
         {
-          std::cout << "**** WARNING: Base case process crashed."
-                    << "\n";
+          PRINT(
+            "**** WARNING: Base case process crashed."
+            << "\n");
           bc_finished = fc_finished = is_finished = true;
         }
       }
@@ -617,8 +620,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
         else
         {
-          std::cout << "**** WARNING: Forward condition process crashed."
-                    << "\n";
+          PRINT(
+            "**** WARNING: Forward condition process crashed."
+            << "\n");
 
           fc_finished = bc_finished = is_finished = true;
         }
@@ -639,8 +643,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
         else
         {
-          std::cout << "**** WARNING: Inductive step process crashed."
-                    << "\n";
+          PRINT(
+            "**** WARNING: Inductive step process crashed."
+            << "\n");
 
           is_finished = bc_finished = fc_finished = true;
         }
@@ -729,11 +734,13 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Check if a solution was found by the base case
     if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
     {
-      std::cout << "\n"
-                << "Bug found by the base case (k = " << bc_solution << ")"
-                << "\n";
-      std::cout << "VERIFICATION FAILED"
-                << "\n";
+      PRINT(
+        "\n"
+        << "Bug found by the base case (k = " << bc_solution << ")"
+        << "\n");
+      PRINT(
+        "VERIFICATION FAILED"
+        << "\n");
       return true;
     }
 
@@ -744,12 +751,14 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
       if(bc_finished && (bc_solution != max_k_step))
       {
-        std::cout << "\n"
-                  << "Solution found by the forward condition; "
-                  << "all states are reachable (k = " << fc_solution << ")"
-                  << "\n";
-        std::cout << "VERIFICATION SUCCESSFUL"
-                  << "\n";
+        PRINT(
+          "\n"
+          << "Solution found by the forward condition; "
+          << "all states are reachable (k = " << fc_solution << ")"
+          << "\n");
+        PRINT(
+          "VERIFICATION SUCCESSFUL"
+          << "\n");
         return false;
       }
     }
@@ -761,20 +770,23 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
       if(bc_finished && (bc_solution != max_k_step))
       {
-        std::cout << "\n"
-                  << "Solution found by the inductive step "
-                  << "(k = " << is_solution << ")"
-                  << "\n";
-        std::cout << "VERIFICATION SUCCESSFUL"
-                  << "\n";
+        PRINT(
+          "\n"
+          << "Solution found by the inductive step "
+          << "(k = " << is_solution << ")"
+          << "\n");
+        PRINT(
+          "VERIFICATION SUCCESSFUL"
+          << "\n");
         return false;
       }
     }
 
     // Couldn't find a bug or a proof for the current deepth
-    std::cout << "\n"
-              << "VERIFICATION UNKNOWN"
-              << "\n";
+    PRINT(
+      "\n"
+      << "VERIFICATION UNKNOWN"
+      << "\n");
     return false;
   }
 
@@ -828,8 +840,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        std::cout << "BASE CASE PROCESS FINISHED."
-                  << "\n";
+        PRINT(
+          "BASE CASE PROCESS FINISHED."
+          << "\n");
 
         return true;
       }
@@ -882,8 +895,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    std::cout << "BASE CASE PROCESS FINISHED."
-              << "\n";
+    PRINT(
+      "BASE CASE PROCESS FINISHED."
+      << "\n");
     return false;
   }
 
@@ -941,8 +955,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        std::cout << "FORWARD CONDITION PROCESS FINISHED."
-                  << "\n";
+        PRINT(
+          "FORWARD CONDITION PROCESS FINISHED."
+          << "\n");
         return false;
       }
     }
@@ -954,8 +969,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    std::cout << "FORWARD CONDITION PROCESS FINISHED."
-              << "\n";
+    PRINT(
+      "FORWARD CONDITION PROCESS FINISHED."
+      << "\n");
     return true;
   }
 
@@ -1012,8 +1028,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         assert(len == sizeof(r) && "short write");
         (void)len; //ndebug
 
-        std::cout << "INDUCTIVE STEP PROCESS FINISHED."
-                  << "\n";
+        PRINT(
+          "INDUCTIVE STEP PROCESS FINISHED."
+          << "\n");
         return false;
       }
     }
@@ -1025,8 +1042,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     assert(len == sizeof(r) && "short write");
     (void)len; //ndebug
 
-    std::cout << "INDUCTIVE STEP PROCESS FINISHED."
-              << "\n";
+    PRINT(
+      "INDUCTIVE STEP PROCESS FINISHED."
+      << "\n");
     return true;
   }
 
@@ -1334,8 +1352,9 @@ int esbmc_parseoptionst::do_inductive_step(
     break;
 
   case smt_convt::P_UNSATISFIABLE:
-    std::cout << "\nSolution found by the inductive step "
-              << "(k = " << k_step << ")\n";
+    PRINT(
+      "\nSolution found by the inductive step "
+      << "(k = " << k_step << ")\n");
     return false;
 
   default:
@@ -1404,7 +1423,9 @@ bool esbmc_parseoptionst::get_goto_program(
       {
         assert(language_files.filemap.size());
         languaget &language = *language_files.filemap.begin()->second.language;
-        language.show_parse(std::cout);
+        std::stringstream output;
+        language.show_parse(output);
+        esbmc::global::_msg.print(output.str());
 
         if(cmdline.isset("parse-tree-only"))
           return true;
@@ -1467,8 +1488,9 @@ bool esbmc_parseoptionst::get_goto_program(
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory"
-              << "\n";
+    PRINT(
+      "Out of memory"
+      << "\n");
     return true;
   }
 
@@ -1511,8 +1533,9 @@ void esbmc_parseoptionst::preprocessing()
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory"
-              << "\n";
+    PRINT(
+      "Out of memory"
+      << "\n");
   }
 }
 
@@ -1627,7 +1650,9 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("goto-functions-too") ||
       cmdline.isset("goto-functions-only"))
     {
-      goto_functions.output(ns, std::cout);
+      std::stringstream output;
+      goto_functions.output(ns, output);
+      PRINT(output.str());
       if(cmdline.isset("goto-functions-only"))
         return true;
     }
@@ -1647,8 +1672,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory"
-              << "\n";
+    PRINT(
+      "Out of memory"
+      << "\n");
     return true;
   }
 

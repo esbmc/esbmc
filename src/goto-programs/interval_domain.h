@@ -41,7 +41,9 @@ public:
 
   void dump() const
   {
-    output(std::cout);
+    std::stringstream str;
+    output(str);
+    PRINT(str.str());
   }
 
 protected:

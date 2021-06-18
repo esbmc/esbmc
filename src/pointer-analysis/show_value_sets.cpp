@@ -24,8 +24,12 @@ void show_value_sets(
   break;
 
   case ui_message_handlert::PLAIN:
-    value_set_analysis.output(goto_functions, std::cout);
-    break;
+  {
+    std::stringstream out;
+    value_set_analysis.output(goto_functions, out);
+    PRINT(out.str());
+  }
+  break;
 
   default:;
   }
@@ -47,8 +51,12 @@ void show_value_sets(
   break;
 
   case ui_message_handlert::PLAIN:
-    value_set_analysis.output(goto_program, std::cout);
-    break;
+  {
+    std::stringstream out;
+    value_set_analysis.output(goto_program, out);
+    PRINT(out.str());
+  }
+  break;
 
   default:;
   }

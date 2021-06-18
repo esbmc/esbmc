@@ -12,7 +12,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void goto_programt::instructiont::dump() const
 {
-  output_instruction(*migrate_namespace_lookup, "", std::cout);
+  std::stringstream str;
+  output_instruction(*migrate_namespace_lookup, "", str);
+  PRINT(str.str());
 }
 
 void goto_programt::instructiont::output_instruction(
@@ -492,7 +494,9 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
 
 void goto_programt::dump() const
 {
-  output(*migrate_namespace_lookup, "", std::cout);
+  std::stringstream str;
+  output(*migrate_namespace_lookup, "", str);
+  PRINT(str.str());
 }
 
 void goto_programt::get_decl_identifiers(

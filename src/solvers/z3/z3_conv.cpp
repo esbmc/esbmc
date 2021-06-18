@@ -1218,8 +1218,8 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
 void z3_smt_ast::dump() const
 {
   PRINT(Z3_ast_to_string(a.ctx(), a) << "\n");
-  std::cout << "sort is " << Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a))
-            << "\n";
+  PRINT(
+    "sort is " << Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a)) << "\n");
 }
 
 void z3_convt::dump_smt()

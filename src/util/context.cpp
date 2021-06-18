@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/context.h>
+#include <util/message.h>
 
 bool contextt::add(const symbolt &symbol)
 {
@@ -45,9 +46,10 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 
 void contextt::dump() const
 {
-  std::cout << "\n"
-            << "Symbols:"
-            << "\n";
+  PRINT(
+    "\n"
+    << "Symbols:"
+    << "\n");
 
   // Do assignments based on "value".
   foreach_operand([](const symbolt &s) { s.dump(); });

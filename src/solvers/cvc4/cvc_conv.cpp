@@ -1271,13 +1271,17 @@ void cvc_convt::dump_smt()
   auto const &assertions = smt.getAssertions();
   for(auto const &a : assertions)
   {
-    a.printAst(std::cout, 0);
+    std::stringstream out;
+    a.printAst(out, 0);
+    PRINT(out.str());
     PRINT(std::flush);
   }
 }
 
 void cvc_smt_ast::dump() const
 {
-  a.printAst(std::cout, 0);
+  std::stringstream out;
+  a.printAst(out, 0);
+  PRINT(out.str());
   PRINT(std::flush);
 }

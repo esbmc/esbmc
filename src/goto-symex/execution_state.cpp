@@ -243,7 +243,11 @@ void execution_statet::symex_step(reachability_treet &art)
   }
 
   if(symex_trace || options.get_bool_option("show-symex-value-sets"))
-    state.source.pc->output_instruction(ns, "", std::cout, false);
+  {
+    std::stringstream out;
+    state.source.pc->output_instruction(ns, "", out, false);
+    PRINT(out.str());
+  }
 
   switch(instruction.type)
   {
@@ -1083,8 +1087,9 @@ void execution_statet::print_stack_traces(unsigned int indent) const
   i = 0;
   for(it = threads_state.begin(); it != threads_state.end(); it++)
   {
-    std::cout << spaces << "Thread " << i++ << ":"
-              << "\n";
+    PRINT(
+      spaces << "Thread " << i++ << ":"
+             << "\n");
     it->print_stack_trace(indent + 2);
     PRINT("\n");
   }

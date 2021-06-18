@@ -50,14 +50,15 @@ void show_claims(
       }
       else if(ui == ui_message_handlert::PLAIN)
       {
-        std::cout << "Claim " << count << ":"
-                  << "\n";
+        PRINT(
+          "Claim " << count << ":"
+                   << "\n");
 
-        std::cout << "  " << instruction.location << "\n"
-                  << "  " << description << "\n";
+        PRINT(
+          "  " << instruction.location << "\n"
+               << "  " << description << "\n");
 
-        std::cout << "  " << from_expr(ns, identifier, instruction.guard)
-                  << "\n";
+        PRINT("  " << from_expr(ns, identifier, instruction.guard) << "\n");
         PRINT("\n");
       }
       else

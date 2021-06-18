@@ -31,9 +31,10 @@ public:
       break;
 
     case XML_UI:
-      std::cout << "<cprover>"
-                << "\n"
-                << "\n";
+      PRINT(
+        "<cprover>"
+        << "\n"
+        << "\n");
       break;
 
     case PLAIN:
@@ -46,8 +47,9 @@ public:
   ~ui_message_handlert() override
   {
     if(get_ui() == XML_UI)
-      std::cout << "</cprover>"
-                << "\n";
+      PRINT(
+        "</cprover>"
+        << "\n");
   }
 
   uit get_ui() const

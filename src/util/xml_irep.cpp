@@ -70,8 +70,7 @@ void convert(const xmlt &xml, irept &irep)
     else
     {
       // Should not happen
-      std::cout << "Unknown sub found (" << it->name << "); malformed xml?";
-      std::cout << "\n";
+      PRINT("Unknown sub found (" << it->name << "); malformed xml?\n");
     }
   }
 }

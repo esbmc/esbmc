@@ -46,7 +46,11 @@ void symex_target_equationt::assignment(
   SSA_step.loop_number = loop_number;
 
   if(debug_print)
-    SSA_step.output(ns, std::cout);
+  {
+    std::stringstream output;
+    SSA_step.output(ns, output);
+    PRINT(output.str());
+  }
 }
 
 void symex_target_equationt::output(
@@ -65,7 +69,11 @@ void symex_target_equationt::output(
   SSA_step.format_string = fmt;
 
   if(debug_print)
-    SSA_step.output(ns, std::cout);
+  {
+    std::stringstream output;
+    SSA_step.output(ns, output);
+    PRINT(output.str());
+  }
 }
 
 void symex_target_equationt::assumption(
@@ -84,7 +92,11 @@ void symex_target_equationt::assumption(
   SSA_step.loop_number = loop_number;
 
   if(debug_print)
-    SSA_step.output(ns, std::cout);
+  {
+    std::stringstream output;
+    SSA_step.output(ns, output);
+    PRINT(output.str());
+  }
 }
 
 void symex_target_equationt::assertion(
@@ -107,7 +119,11 @@ void symex_target_equationt::assertion(
   SSA_step.loop_number = loop_number;
 
   if(debug_print)
-    SSA_step.output(ns, std::cout);
+  {
+    std::stringstream output;
+    SSA_step.output(ns, output);
+    PRINT(output.str());
+  }
 }
 
 void symex_target_equationt::renumber(
@@ -128,7 +144,11 @@ void symex_target_equationt::renumber(
   SSA_step.source = source;
 
   if(debug_print)
-    SSA_step.output(ns, std::cout);
+  {
+    std::stringstream output;
+    SSA_step.output(ns, output);
+    PRINT(output.str());
+  }
 }
 
 void symex_target_equationt::convert(smt_convt &smt_conv)
@@ -163,7 +183,9 @@ void symex_target_equationt::convert_internal_step(
 
   if(ssa_trace)
   {
-    step.output(ns, std::cout);
+    std::stringstream output;
+    step.output(ns, output);
+    PRINT(output.str());
     PRINT("\n");
   }
 
@@ -251,7 +273,9 @@ void symex_target_equationt::short_output(std::ostream &out, bool show_ignored)
 
 void symex_target_equationt::SSA_stept::dump() const
 {
-  output(*migrate_namespace_lookup, std::cout);
+  std::stringstream out;
+  output(*migrate_namespace_lookup, out);
+  PRINT(out.str());
 }
 
 void symex_target_equationt::SSA_stept::output(

@@ -81,7 +81,11 @@ void bmct::show_vcc(std::shared_ptr<symex_target_equationt> &eq)
   const std::string &filename = options.get_option("output");
 
   if(filename.empty() || filename == "-")
-    show_vcc(std::cout, eq);
+  {
+    std::stringstream output;
+    show_vcc(output, eq);
+    PRINT(output.str());
+  }
   else
   {
     std::ofstream out(filename.c_str());

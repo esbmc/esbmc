@@ -1406,7 +1406,9 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
 
 void value_sett::dump() const
 {
-  output(std::cout);
+  std::stringstream out;
+  output(out);
+  PRINT(out.str());
 }
 
 void value_sett::obj_numbering_ref(unsigned int num)

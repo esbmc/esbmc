@@ -470,8 +470,9 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
   }
   else
   {
-    std::cout << "sizeof operator expects zero or one operand, "
-              << "but got" << expr.operands().size() << "\n";
+    PRINT(
+      "sizeof operator expects zero or one operand, "
+      << "but got" << expr.operands().size() << "\n");
     abort();
   }
 
@@ -498,8 +499,9 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(s == nullptr)
     {
-      std::cout << "type symbol `" << identifier << "' not found"
-                << "\n";
+      PRINT(
+        "type symbol `" << identifier << "' not found"
+                        << "\n");
       abort();
     }
 
@@ -507,8 +509,9 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(!symbol.is_type)
     {
-      std::cout << "expected type symbol, but got "
-                << "\n";
+      PRINT(
+        "expected type symbol, but got "
+        << "\n");
       symbol.dump();
       abort();
     }
@@ -711,8 +714,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     {
       if(expr.arguments().size() != 2)
       {
-        std::cout << "same_object expects two operands"
-                  << "\n";
+        PRINT(
+          "same_object expects two operands"
+          << "\n");
         expr.dump();
         abort();
       }
@@ -725,8 +729,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     {
       if(expr.arguments().size() != 1)
       {
-        std::cout << "pointer_offset expects one argument"
-                  << "\n";
+        PRINT(
+          "pointer_offset expects one argument"
+          << "\n");
         expr.dump();
         abort();
       }
@@ -739,8 +744,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     {
       if(expr.arguments().size() != 1)
       {
-        std::cout << "pointer_object expects one argument"
-                  << "\n";
+        PRINT(
+          "pointer_object expects one argument"
+          << "\n");
         expr.dump();
         abort();
       }

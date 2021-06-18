@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/location.h>
 #include <util/symbol.h>
+#include <util/message.h>
 
 symbolt::symbolt()
 {
@@ -48,7 +49,9 @@ void symbolt::swap(symbolt &b)
 
 void symbolt::dump() const
 {
-  show(std::cout);
+  std::stringstream out;
+  show(out);
+  PRINT(out.str());
 }
 
 void symbolt::show(std::ostream &out) const
