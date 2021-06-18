@@ -37,20 +37,12 @@ public:
   virtual smt_convt::resultt run(std::shared_ptr<symex_target_equationt> &eq);
   ~bmct() override = default;
 
-  void set_ui(language_uit::uit _ui)
-  {
-    ui = _ui;
-  }
 
 protected:
   const contextt &context;
   namespacet ns;
   std::shared_ptr<smt_convt> runtime_solver;
   std::shared_ptr<reachability_treet> symex;
-
-  // use gui format
-  language_uit::uit ui;
-
   virtual smt_convt::resultt run_decision_procedure(
     std::shared_ptr<smt_convt> &smt_conv,
     std::shared_ptr<symex_target_equationt> &eq);

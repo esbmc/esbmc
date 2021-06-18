@@ -429,7 +429,7 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, get_ui(), goto_functions);
+    show_claims(ns, goto_functions);
     return 0;
   }
 
@@ -520,7 +520,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     if(cmdline.isset("show-claims"))
     {
       const namespacet ns(context);
-      show_claims(ns, get_ui(), goto_functions);
+      show_claims(ns,goto_functions);
       return 0;
     }
 
@@ -1030,7 +1030,7 @@ int esbmc_parseoptionst::doit_k_induction()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, get_ui(), goto_functions);
+    show_claims(ns, goto_functions);
     return 0;
   }
 
@@ -1074,7 +1074,7 @@ int esbmc_parseoptionst::doit_falsification()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, get_ui(), goto_functions);
+    show_claims(ns, goto_functions);
     return 0;
   }
 
@@ -1112,7 +1112,7 @@ int esbmc_parseoptionst::doit_incremental()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, get_ui(), goto_functions);
+    show_claims(ns, goto_functions);
     return 0;
   }
 
@@ -1153,7 +1153,7 @@ int esbmc_parseoptionst::doit_termination()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, get_ui(), goto_functions);
+    show_claims(ns, goto_functions);
     return 0;
   }
 
@@ -1547,7 +1547,7 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       value_set_analysist value_set_analysis(ns);
       value_set_analysis(goto_functions);
-      show_value_sets(get_ui(), goto_functions, value_set_analysis);
+      show_value_sets(goto_functions, value_set_analysis);
       return true;
     }
 
@@ -1595,7 +1595,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // show it?
     if(cmdline.isset("show-loops"))
     {
-      show_loop_numbers(get_ui(), goto_functions);
+      show_loop_numbers( goto_functions);
       return true;
     }
 
@@ -1632,10 +1632,7 @@ bool esbmc_parseoptionst::process_goto_program(
 }
 
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
-{
-  bmc.set_ui(get_ui());
-
-  // do actual BMC
+{  // do actual BMC
 
   status("Starting Bounded Model Checking");
 

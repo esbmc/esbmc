@@ -13,18 +13,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/i2string.h>
 #include <util/show_symbol_table.h>
 
-static ui_message_handlert::uit get_ui_cmdline(const cmdlinet &cmdline)
-{
-  if(cmdline.isset("gui"))
-    return ui_message_handlert::OLD_GUI;
-  if(cmdline.isset("xml-ui"))
-    return ui_message_handlert::XML_UI;
-
-  return ui_message_handlert::PLAIN;
-}
 
 language_uit::language_uit(const cmdlinet &__cmdline)
-  : ui_message_handler(get_ui_cmdline(__cmdline)), _cmdline(__cmdline)
+  : _cmdline(__cmdline)
 {
   set_message_handler(&ui_message_handler);
 }
@@ -76,7 +67,6 @@ bool language_uit::parse(const std::string &filename)
 
   if(language.parse(filename, *get_message_handler()))
   {
-    if(get_ui() == ui_message_handlert::PLAIN)
       std::cerr << "PARSING ERROR" << std::endl;
 
     return true;
@@ -96,7 +86,6 @@ bool language_uit::typecheck()
 
   if(language_files.typecheck(context))
   {
-    if(get_ui() == ui_message_handlert::PLAIN)
       std::cerr << "CONVERSION ERROR" << std::endl;
 
     return true;
@@ -111,8 +100,7 @@ bool language_uit::final()
   language_files.set_verbosity(get_verbosity());
 
   if(language_files.final(context))
-  {
-    if(get_ui() == ui_message_handlert::PLAIN)
+  {    
       std::cerr << "CONVERSION ERROR" << std::endl;
 
     return true;
@@ -123,19 +111,7 @@ bool language_uit::final()
 
 void language_uit::show_symbol_table()
 {
-  switch(get_ui())
-  {
-  case ui_message_handlert::PLAIN:
-    show_symbol_table_plain(std::cout);
-    break;
-
-  case ui_message_handlert::XML_UI:
-    show_symbol_table_xml_ui();
-    break;
-
-  default:
-    error("cannot show symbol table in this format");
-  }
+  show_symbol_table_plain(std::cout);  
 }
 
 void language_uit::show_symbol_table_xml_ui()

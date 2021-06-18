@@ -49,8 +49,7 @@ bmct::bmct(
   : messaget(_message_handler),
     options(opts),
     context(_context),
-    ns(context),
-    ui(ui_message_handlert::PLAIN)
+    ns(context)    
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -101,32 +100,6 @@ void bmct::successful_trace()
     /* build_successful_goto_trace(eq, ns, goto_trace); */
     correctness_graphml_goto_trace(options, ns, goto_trace);
   }
-
-  switch(ui)
-  {
-  break;
-
-  case ui_message_handlert::OLD_GUI:
-    std::cout << "SUCCESS" << std::endl
-              << "Verification successful" << std::endl
-              << "\n\n\n\n";
-    break;
-
-  case ui_message_handlert::PLAIN:
-    break;
-
-  case ui_message_handlert::XML_UI:
-  {
-    xmlt xml("cprover-status");
-    xml.data = "SUCCESS";
-    std::cout << xml;
-    std::cout << std::endl;
-  }
-  break;
-
-  default:
-    assert(false);
-  }
 }
 
 void bmct::error_trace(
@@ -151,27 +124,8 @@ void bmct::error_trace(
   if(witness_output != "") {
      violation_graphml_goto_trace(options, ns, goto_trace);
   }
-  switch(ui)
-  {case ui_message_handlert::PLAIN:
-    std::cout << std::endl << "Counterexample:" << std::endl;
-    show_goto_trace(std::cout, ns, goto_trace);
-    break;
-
-  case ui_message_handlert::OLD_GUI:
-    show_goto_trace_gui(std::cout, ns, goto_trace);
-    break;
-
-  case ui_message_handlert::XML_UI:
-  {
-    xmlt xml;
-    convert(ns, goto_trace, xml);
-    std::cout << xml << std::endl;
-    break;
-  }
-
-  default:
-    assert(false);
-  }
+   std::cout << std::endl << "Counterexample:" << std::endl;
+    show_goto_trace(std::cout, ns, goto_trace); 
 }
 
 smt_convt::resultt bmct::run_decision_procedure(
@@ -234,58 +188,11 @@ smt_convt::resultt bmct::run_decision_procedure(
 void bmct::report_success()
 {
   status("\nVERIFICATION SUCCESSFUL");
-
-  switch(ui)
-  {
-  case ui_message_handlert::OLD_GUI:
-    std::cout << "SUCCESS" << std::endl
-              << "Verification successful" << std::endl
-              << "" << std::endl
-              << "" << std::endl
-              << "" << std::endl
-              << "" << std::endl;
-    break;
-
-  case ui_message_handlert::PLAIN:
-    break;
-
-  case ui_message_handlert::XML_UI:
-  {
-    xmlt xml("cprover-status");
-    xml.data = "SUCCESS";
-    std::cout << xml;
-    std::cout << std::endl;
-  }
-  break;
-
-  default:
-    assert(false);
-  }
 }
 
 void bmct::report_failure()
 {
   status("\nVERIFICATION FAILED");
-
-  switch(ui)
-  {
-  case ui_message_handlert::OLD_GUI:
-    break;
-
-  case ui_message_handlert::PLAIN:
-    break;
-
-  case ui_message_handlert::XML_UI:
-  {
-    xmlt xml("cprover-status");
-    xml.data = "FAILURE";
-    std::cout << xml;
-    std::cout << std::endl;
-  }
-  break;
-  default:
-    assert(false);
-  }
 }
 
 void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
