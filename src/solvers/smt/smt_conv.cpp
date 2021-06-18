@@ -2098,9 +2098,10 @@ expr2tc smt_convt::get(const expr2tc &expr)
   {
     if(is_array_type(expr))
     {
-      std::cerr << "Fetching array elements inside tuples currently "
-                   "unimplemented, sorry"
-                << "\n";
+      ERROR(
+        "Fetching array elements inside tuples currently "
+        "unimplemented, sorry"
+        << "\n");
       return expr2tc();
     }
     simplify(res);
@@ -2178,8 +2179,8 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
     return constant_floatbv2tc(fp_api->get_fpbv(a));
 
   default:
-    std::cerr << "Unimplemented type'd expression (" << type->type_id
-              << ") in smt get\n";
+    ERROR(
+      "Unimplemented type'd expression (" << type->type_id << ") in smt get\n");
     abort();
   }
 }
@@ -2203,8 +2204,9 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
     return tuple_api->tuple_get(expr);
 
   default:
-    std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
-              << ") in smt get\n";
+    ERROR(
+      "Unimplemented type'd expression (" << expr->type->type_id
+                                          << ") in smt get\n");
     abort();
   }
 }
@@ -2552,8 +2554,7 @@ void smt_convt::dump_smt()
 
 void smt_convt::print_model()
 {
-  std::cerr << "SMT model printing not implemented for " << solver_text()
-            << "\n";
+  ERROR("SMT model printing not implemented for " << solver_text() << "\n");
 }
 
 tvt smt_convt::l_get(smt_astt a)

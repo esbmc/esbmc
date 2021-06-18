@@ -74,8 +74,9 @@ unsigned goto_symext::argument_assignments(
     // if you run out of actual arguments there was a mismatch
     if(it1 == arguments.end())
     {
-      std::cerr << "function call: not enough arguments"
-                << "\n";
+      ERROR(
+        "function call: not enough arguments"
+        << "\n");
       abort();
     }
 
@@ -109,9 +110,11 @@ unsigned goto_symext::argument_assignments(
         }
         else
         {
-          std::cerr << "function call: argument \"" << id2string(identifier)
-                    << "\" type mismatch: got " << get_type_id((*it1)->type)
-                    << ", expected " << get_type_id(arg_type) << '\n';
+          ERROR(
+            "function call: argument \""
+            << id2string(identifier) << "\" type mismatch: got "
+            << get_type_id((*it1)->type) << ", expected "
+            << get_type_id(arg_type) << '\n');
           abort();
         }
       }
@@ -152,8 +155,9 @@ unsigned goto_symext::argument_assignments(
 
       if(new_context.move(symbol))
       {
-        std::cerr << "Couldn't add new va_arg symbol"
-                  << "\n";
+        ERROR(
+          "Couldn't add new va_arg symbol"
+          << "\n");
         abort();
       }
 
@@ -204,8 +208,9 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
       return;
     }
 
-    std::cerr << "failed to find `" + get_pretty_name(identifier.as_string()) +
-                   "' in function_map";
+    ERROR(
+      "failed to find `" + get_pretty_name(identifier.as_string()) +
+      "' in function_map");
     abort();
   }
 
@@ -234,8 +239,9 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 
   if(!goto_function.body_available)
   {
-    std::cerr << "**** WARNING: no body for function "
-              << get_pretty_name(identifier.as_string()) << '\n';
+    ERROR(
+      "**** WARNING: no body for function "
+      << get_pretty_name(identifier.as_string()) << '\n');
 
     if(!is_nil_expr(call.ret))
     {
@@ -286,10 +292,12 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     to_code_type(tmp_type).arguments.size() != arguments.size() &&
     !to_code_type(tmp_type).ellipsis)
   {
-    std::cerr << "Function call to \"" << identifier << "\": number of "
-              << "arguments doesn't match type definition; some inconsistent "
-              << "rewriting occured"
-              << "\n";
+    ERROR(
+      "Function call to \""
+      << identifier << "\": number of "
+      << "arguments doesn't match type definition; some inconsistent "
+      << "rewriting occured"
+      << "\n");
     abort();
   }
 
@@ -343,9 +351,9 @@ get_function_list(const expr2tc &expr)
   if(is_typecast2t(expr))
     return get_function_list(to_typecast2t(expr).from);
 
-  std::cerr << "Unexpected irep id " << get_expr_id(expr)
-            << " in function ptr dereference"
-            << "\n";
+  ERROR(
+    "Unexpected irep id " << get_expr_id(expr) << " in function ptr dereference"
+                          << "\n");
   // So, the function may point at something invalid. If that's the case,
   // wait for a solve-time pointer validity assertion to detect that. Return
   // nothing to call right now.
@@ -580,8 +588,9 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
   }
   else if(!is_nil_expr(frame.return_value))
   {
-    std::cerr << "return with unexpected value"
-              << "\n";
+    ERROR(
+      "return with unexpected value"
+      << "\n");
     abort();
   }
 

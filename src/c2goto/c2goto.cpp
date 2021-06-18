@@ -55,8 +55,9 @@ public:
 
     if(!cmdline.isset("output"))
     {
-      std::cerr << "Must set output file"
-                << "\n";
+      ERROR(
+        "Must set output file"
+        << "\n");
       return 1;
     }
 
@@ -70,8 +71,9 @@ public:
 
     if(write_goto_binary(out, context, goto_functions))
     {
-      std::cerr << "Failed to write C library to binary obj"
-                << "\n";
+      ERROR(
+        "Failed to write C library to binary obj"
+        << "\n");
       return 1;
     }
 

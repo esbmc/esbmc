@@ -416,8 +416,9 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     }
     else
     {
-      std::cerr << "Unexpected expression in dereference_expr_nonscalar"
-                << "\n";
+      ERROR(
+        "Unexpected expression in dereference_expr_nonscalar"
+        << "\n");
       expr->dump();
       abort();
     }
@@ -816,8 +817,7 @@ void dereferencet::build_reference_rec(
     flags |= flag_dst_scalar;
   else if(is_array_type(type) || is_string_type(type))
   {
-    std::cerr
-      << "Can't construct rvalue reference to array type during dereference";
+    ERROR("Can't construct rvalue reference to array type during dereference");
     ERROR("\n");
     ERROR("(It isn't allowed by C anyway)");
     ERROR("\n");
@@ -825,8 +825,9 @@ void dereferencet::build_reference_rec(
   }
   else
   {
-    std::cerr << "Unrecognized dest type during dereference"
-              << "\n";
+    ERROR(
+      "Unrecognized dest type during dereference"
+      << "\n");
     type->dump();
     abort();
   }
@@ -835,8 +836,9 @@ void dereferencet::build_reference_rec(
     flags |= flag_src_struct;
   else if(is_union_type(value))
   {
-    std::cerr << "Dereference target of type union is now illegal"
-              << "\n";
+    ERROR(
+      "Dereference target of type union is now illegal"
+      << "\n");
     abort();
   }
   else if(is_scalar_type(value))
@@ -845,8 +847,9 @@ void dereferencet::build_reference_rec(
     flags |= flag_src_array;
   else
   {
-    std::cerr << "Unrecognized src type during dereference"
-              << "\n";
+    ERROR(
+      "Unrecognized src type during dereference"
+      << "\n");
     value->type->dump();
     abort();
   }
@@ -941,8 +944,9 @@ void dereferencet::build_reference_rec(
 
   // No scope for constructing references to arrays
   default:
-    std::cerr << "Unrecognized input to build_reference_rec"
-              << "\n";
+    ERROR(
+      "Unrecognized input to build_reference_rec"
+      << "\n");
     abort();
   }
 }
@@ -1487,8 +1491,9 @@ void dereferencet::construct_struct_ref_from_const_offset(
   }
 
   ERROR("Unexpectedly " << get_type_id(value->type) << " type'd");
-  std::cerr << " argument to construct_struct_ref"
-            << "\n";
+  ERROR(
+    " argument to construct_struct_ref"
+    << "\n");
   abort();
 }
 

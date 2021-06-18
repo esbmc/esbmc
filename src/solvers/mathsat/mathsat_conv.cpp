@@ -30,10 +30,12 @@ void mathsat_convt::check_msat_error(msat_term &r) const
 {
   if(MSAT_ERROR_TERM(r))
   {
-    std::cerr << "Error creating SMT "
-              << "\n";
-    std::cerr << "Error text: \"" << msat_last_error_message(env) << "\""
-              << "\n";
+    ERROR(
+      "Error creating SMT "
+      << "\n");
+    ERROR(
+      "Error text: \"" << msat_last_error_message(env) << "\""
+                       << "\n");
     abort();
   }
 }
@@ -112,8 +114,9 @@ bool mathsat_convt::get_bool(smt_astt a)
     res = false;
   else
   {
-    std::cerr << "Boolean model value is neither true or false"
-              << "\n";
+    ERROR(
+      "Boolean model value is neither true or false"
+      << "\n");
     abort();
   }
 
@@ -169,8 +172,9 @@ ieee_floatt mathsat_convt::get_fpbv(smt_astt a)
   size_t ew, sw;
   if(!msat_is_fp_type(env, to_solver_smt_sort<msat_type>(a->sort)->s, &ew, &sw))
   {
-    std::cerr << "Non FP type passed to mathsat_convt::get_exp_width"
-              << "\n";
+    ERROR(
+      "Non FP type passed to mathsat_convt::get_exp_width"
+      << "\n");
     abort();
   }
 

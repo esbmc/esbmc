@@ -71,8 +71,7 @@ void goto_convertt::do_function_call(
   else
   {
     err_location(function);
-    std::cerr << "unexpected function argument: " + new_function.id_string()
-              << "\n";
+    ERROR("unexpected function argument: " + new_function.id_string() << "\n");
     abort();
   }
 }

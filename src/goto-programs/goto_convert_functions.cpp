@@ -315,8 +315,9 @@ void goto_convert_functionst::rename_types(
       {
         // And if we fail
         ERROR("Can't resolve type symbol " << ident);
-        std::cerr << " at symbol squashing time"
-                  << "\n";
+        ERROR(
+          " at symbol squashing time"
+          << "\n");
         abort();
       }
     }

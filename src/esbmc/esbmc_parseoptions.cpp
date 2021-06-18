@@ -131,8 +131,9 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
       mult = 86400;
       break;
     default:
-      std::cerr << "Unrecognized timeout suffix"
-                << "\n";
+      ERROR(
+        "Unrecognized timeout suffix"
+        << "\n");
       abort();
     }
   }
@@ -167,8 +168,9 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
       mult = 1024 * 1024 * 1024;
       break;
     default:
-      std::cerr << "Unrecognized memlimit suffix"
-                << "\n";
+      ERROR(
+        "Unrecognized memlimit suffix"
+        << "\n");
       abort();
     }
   }
@@ -260,9 +262,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     if(!cmdline.isset("smt-during-symex"))
     {
-      std::cerr << "Please explicitly specify --smt-during-symex if you want "
-                   "to use features that involve encoding SMT during symex"
-                << "\n";
+      ERROR(
+        "Please explicitly specify --smt-during-symex if you want "
+        "to use features that involve encoding SMT during symex"
+        << "\n");
       abort();
     }
   }
@@ -279,9 +282,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     // check whether k-step is greater than max-k-step
     if(k_step_inc >= max_k_step)
     {
-      std::cerr
-        << "Please specify --k-step smaller than max-k-step if you want "
-           "to use incremental verification.\n";
+      ERROR(
+        "Please specify --k-step smaller than max-k-step if you want "
+        "to use incremental verification.\n");
       abort();
     }
   }
@@ -316,8 +319,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("timeout"))
   {
 #ifdef _WIN32
-    std::cerr << "Timeout unimplemented on Windows, sorry"
-              << "\n";
+    ERROR(
+      "Timeout unimplemented on Windows, sorry"
+      << "\n");
     abort();
 #else
     const char *time = cmdline.getval("timeout");
@@ -330,8 +334,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("memlimit"))
   {
 #ifdef _WIN32
-    std::cerr << "Can't memlimit on Windows, sorry"
-              << "\n";
+    ERROR(
+      "Can't memlimit on Windows, sorry"
+      << "\n");
     abort();
 #else
     uint64_t size = read_mem_spec(cmdline.getval("memlimit"));
@@ -509,8 +514,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
   if(process_type == PARENT && num_p != 3)
   {
-    std::cerr << "Child processes were not created sucessfully."
-              << "\n";
+    ERROR(
+      "Child processes were not created sucessfully."
+      << "\n");
     abort();
   }
 
@@ -573,10 +579,11 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         else
         {
           // Invalid size read.
-          std::cerr << "Short read communicating with kinduction children"
-                    << "\n";
-          std::cerr << "Size " << read_size << ", expected " << sizeof(resultt)
-                    << "\n";
+          ERROR(
+            "Short read communicating with kinduction children"
+            << "\n");
+          ERROR(
+            "Size " << read_size << ", expected " << sizeof(resultt) << "\n");
           abort();
         }
       }
@@ -669,9 +676,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         break;
 
       default:
-        std::cerr << "Message from unrecognized k-induction child "
-                  << "process"
-                  << "\n";
+        ERROR(
+          "Message from unrecognized k-induction child "
+          << "process"
+          << "\n");
         abort();
       }
 
@@ -867,10 +875,11 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         else
         {
           // Invalid size read.
-          std::cerr << "Short read communicating with kinduction parent"
-                    << "\n";
-          std::cerr << "Size " << read_size << ", expected " << sizeof(resultt)
-                    << "\n";
+          ERROR(
+            "Short read communicating with kinduction parent"
+            << "\n");
+          ERROR(
+            "Size " << read_size << ", expected " << sizeof(resultt) << "\n");
           abort();
         }
       }

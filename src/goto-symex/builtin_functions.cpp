@@ -591,8 +591,9 @@ void goto_symext::intrinsic_spawn_thread(
 
   if(!it->second.body_available)
   {
-    std::cerr << "Spawning thread \"" << symname << "\": no body"
-              << "\n";
+    ERROR(
+      "Spawning thread \"" << symname << "\": no body"
+                           << "\n");
     abort();
   }
 

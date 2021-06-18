@@ -580,8 +580,9 @@ void value_sett::get_value_set_rec(
         else
         {
           ERROR("Pointer arithmetic on type where we can't determine ");
-          std::cerr << "size:"
-                    << "\n";
+          ERROR(
+            "size:"
+            << "\n");
           ERROR(subtype->pretty(0) << "\n");
           abort();
         }
@@ -1354,8 +1355,9 @@ void value_sett::apply_code(const expr2tc &code)
   else
   {
     ERROR(code->pretty() << "\n");
-    std::cerr << "value_sett: unexpected statement"
-              << "\n";
+    ERROR(
+      "value_sett: unexpected statement"
+      << "\n");
     abort();
   }
 }

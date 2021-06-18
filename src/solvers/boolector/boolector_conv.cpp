@@ -28,8 +28,9 @@ boolector_convt::boolector_convt(bool int_encoding, const namespacet &ns)
 {
   if(int_encoding)
   {
-    std::cerr << "Boolector does not support integer encoding mode"
-              << "\n";
+    ERROR(
+      "Boolector does not support integer encoding mode"
+      << "\n");
     abort();
   }
 
@@ -499,15 +500,17 @@ smt_astt boolector_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt boolector_convt::mk_smt_int(const BigInt &theint [[gnu::unused]])
 {
-  std::cerr << "Boolector can't create integer sorts"
-            << "\n";
+  ERROR(
+    "Boolector can't create integer sorts"
+    << "\n");
   abort();
 }
 
 smt_astt boolector_convt::mk_smt_real(const std::string &str [[gnu::unused]])
 {
-  std::cerr << "Boolector can't create Real sorts"
-            << "\n";
+  ERROR(
+    "Boolector can't create Real sorts"
+    << "\n");
   abort();
 }
 

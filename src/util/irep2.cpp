@@ -189,15 +189,17 @@ unsigned int empty_type2t::get_width() const
 
 unsigned int symbol_type2t::get_width() const
 {
-  std::cerr << "Fetching width of symbol type - invalid operation"
-            << "\n";
+  ERROR(
+    "Fetching width of symbol type - invalid operation"
+    << "\n");
   abort();
 }
 
 unsigned int cpp_name_type2t::get_width() const
 {
-  std::cerr << "Fetching width of cpp_name type - invalid operation"
-            << "\n";
+  ERROR(
+    "Fetching width of cpp_name type - invalid operation"
+    << "\n");
   abort();
 }
 
@@ -282,15 +284,17 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
 
   if(!count)
   {
-    std::cerr << "Looking up index of nonexistant member \"" << comp
-              << "\" in struct/union \"" << name << "\""
-              << "\n";
+    ERROR(
+      "Looking up index of nonexistant member \""
+      << comp << "\" in struct/union \"" << name << "\""
+      << "\n");
   }
   else if(count > 1)
   {
-    std::cerr << "Name \"" << comp << "\" matches more than one member"
-              << "\" in struct/union \"" << name << "\""
-              << "\n";
+    ERROR(
+      "Name \"" << comp << "\" matches more than one member"
+                << "\" in struct/union \"" << name << "\""
+                << "\n");
   }
 
   abort();
@@ -650,8 +654,9 @@ std::string symbol_data::get_symbol_name() const
     return thename.as_string() + "&" + i2string(node_num) + "#" +
            i2string(level2_num);
   default:
-    std::cerr << "Unrecognized renaming level enum"
-              << "\n";
+    ERROR(
+      "Unrecognized renaming level enum"
+      << "\n");
     abort();
   }
 }
@@ -926,8 +931,9 @@ type_to_string(const symbol_data::renaming_level &theval, int)
   case symbol_data::level2_global:
     return "Level 2 (global)";
   default:
-    std::cerr << "Unrecognized renaming level enum"
-              << "\n";
+    ERROR(
+      "Unrecognized renaming level enum"
+      << "\n");
     abort();
   }
 }

@@ -396,8 +396,9 @@ bool reachability_treet::dfs_position::write_to_file(
   f = fopen(filename.c_str(), "wb");
   if(f == nullptr)
   {
-    std::cerr << "Couldn't open checkpoint output file"
-              << "\n";
+    ERROR(
+      "Couldn't open checkpoint output file"
+      << "\n");
     return true;
   }
 
@@ -445,8 +446,9 @@ bool reachability_treet::dfs_position::write_to_file(
   return false;
 
 fail:
-  std::cerr << "Write error writing checkpoint file"
-            << "\n";
+  ERROR(
+    "Write error writing checkpoint file"
+    << "\n");
   fclose(f);
   return true;
 }
@@ -463,8 +465,9 @@ bool reachability_treet::dfs_position::read_from_file(
   f = fopen(filename.c_str(), "rb");
   if(f == nullptr)
   {
-    std::cerr << "Couldn't open checkpoint input file"
-              << "\n";
+    ERROR(
+      "Couldn't open checkpoint input file"
+      << "\n");
     return true;
   }
 
@@ -473,8 +476,9 @@ bool reachability_treet::dfs_position::read_from_file(
 
   if(hdr.magic != htonl(file_magic))
   {
-    std::cerr << "Magic number indicates that this isn't a checkpoint file"
-              << "\n";
+    ERROR(
+      "Magic number indicates that this isn't a checkpoint file"
+      << "\n");
     fclose(f);
     return true;
   }
@@ -492,8 +496,9 @@ bool reachability_treet::dfs_position::read_from_file(
     assert(state.num_threads < 65536);
     if(state.cur_thread >= state.num_threads)
     {
-      std::cerr << "Inconsistent checkpoint data"
-                << "\n";
+      ERROR(
+        "Inconsistent checkpoint data"
+        << "\n");
       fclose(f);
       return true;
     }
@@ -516,8 +521,9 @@ bool reachability_treet::dfs_position::read_from_file(
   return false;
 
 fail:
-  std::cerr << "Read error on checkpoint file"
-            << "\n";
+  ERROR(
+    "Read error on checkpoint file"
+    << "\n");
   fclose(f);
   return true;
 }

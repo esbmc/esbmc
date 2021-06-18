@@ -294,8 +294,9 @@ void goto_symext::symex_step(reachability_treet &art)
 
   default:
     ERROR("GOTO instruction type " << instruction.type);
-    std::cerr << " not handled in goto_symext::symex_step"
-              << "\n";
+    ERROR(
+      " not handled in goto_symext::symex_step"
+      << "\n");
     abort();
   }
 }
@@ -495,8 +496,9 @@ void goto_symext::run_intrinsic(
   {
     ERROR("Function call to non-intrinsic prefixed with __ESBMC");
     ERROR(" (fatal)\nThe name in question: " << symname);
-    std::cerr << "\n(NB: the C spec reserves the __ prefix for the compiler"
-                 " and environment)\n";
+    ERROR(
+      "\n(NB: the C spec reserves the __ prefix for the compiler"
+      " and environment)\n");
     abort();
   }
 }

@@ -12,8 +12,9 @@
 
 static void error_handler(Z3_context c, Z3_error_code e)
 {
-  std::cerr << "Z3 error " << e << " encountered"
-            << "\n";
+  ERROR(
+    "Z3 error " << e << " encountered"
+                << "\n");
   ERROR(Z3_get_error_msg(c, e) << "\n");
   abort();
 }
@@ -126,16 +127,18 @@ z3::expr z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
   z3::sort ty = t.get_sort();
   if(!ty.is_datatype())
   {
-    std::cerr << "Z3 conversion: argument must be a tuple"
-              << "\n";
+    ERROR(
+      "Z3 conversion: argument must be a tuple"
+      << "\n");
     abort();
   }
 
   size_t num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
   if(i >= num_fields)
   {
-    std::cerr << "Z3 conversion: invalid tuple select, index is too large"
-              << "\n";
+    ERROR(
+      "Z3 conversion: invalid tuple select, index is too large"
+      << "\n");
     abort();
   }
 

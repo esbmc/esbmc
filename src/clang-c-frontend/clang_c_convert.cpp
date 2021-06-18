@@ -242,8 +242,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
   default:
     ERROR("**** ERROR: ");
-    std::cerr << "Unrecognized / unimplemented clang declaration "
-              << decl.getDeclKindName() << "\n";
+    ERROR(
+      "Unrecognized / unimplemented clang declaration "
+      << decl.getDeclKindName() << "\n");
     decl.dumpColor();
     return true;
   }
@@ -255,8 +256,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
   if(rd.isInterface())
   {
-    std::cerr << "Interface is not supported"
-              << "\n";
+    ERROR(
+      "Interface is not supported"
+      << "\n");
     return true;
   }
 
@@ -378,8 +380,9 @@ bool clang_c_convertert::get_struct_union_class_fields(
           else
           {
             // I was not able to find an example to test this, so abort for now
-            std::cerr << "ESBMC currently does not support type alignments"
-                      << "\n";
+            ERROR(
+              "ESBMC currently does not support type alignments"
+              << "\n");
             aattr.getAlignmentType()->getType()->dump();
             return true;
           }
@@ -731,9 +734,10 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     llvm::APInt val = arr.getSize();
     if(val.getBitWidth() > 64)
     {
-      std::cerr << "ESBMC currently does not support integers bigger "
-                   "than 64 bits"
-                << "\n";
+      ERROR(
+        "ESBMC currently does not support integers bigger "
+        "than 64 bits"
+        << "\n");
       return true;
     }
 
@@ -1124,16 +1128,17 @@ bool clang_c_convertert::get_builtin_type(
   case clang::BuiltinType::Int128:
   case clang::BuiltinType::UInt128:
     // Various simplification / big-int related things use uint64_t's...
-    std::cerr << "ESBMC currently does not support integers bigger "
-              << "than 64 bits"
-              << "\n";
+    ERROR(
+      "ESBMC currently does not support integers bigger "
+      << "than 64 bits"
+      << "\n");
     bt.dump();
     return true;
 
   default:
-    std::cerr << "Unrecognized clang builtin type "
-              << bt.getName(clang::PrintingPolicy(clang::LangOptions())).str()
-              << "\n";
+    ERROR(
+      "Unrecognized clang builtin type "
+      << bt.getName(clang::PrintingPolicy(clang::LangOptions())).str() << "\n");
     bt.dump();
     return true;
   }
@@ -1301,8 +1306,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     bool res = offset.EvaluateAsInt(result, *ASTContext);
     if(!res)
     {
-      std::cerr << "Clang could not calculate offset"
-                << "\n";
+      ERROR(
+        "Clang could not calculate offset"
+        << "\n");
       offset.dumpColor();
       return true;
     }
@@ -1980,8 +1986,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
     else
     {
-      std::cerr << "ESBMC currently does not support indirect gotos"
-                << "\n";
+      ERROR(
+        "ESBMC currently does not support indirect gotos"
+        << "\n");
       stmt.dumpColor();
       return true;
 
@@ -2015,9 +2022,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if(!current_functionDecl)
     {
-      std::cerr << "ESBMC could not find the parent scope for "
-                << "the following return statement:"
-                << "\n";
+      ERROR(
+        "ESBMC could not find the parent scope for "
+        << "the following return statement:"
+        << "\n");
       ret.dumpColor();
       return true;
     }
@@ -2066,8 +2074,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   default:
     ERROR("Conversion of unsupported clang expr: \"");
-    std::cerr << stmt.getStmtClassName() << "\" to expression"
-              << "\n";
+    ERROR(
+      stmt.getStmtClassName() << "\" to expression"
+                              << "\n");
     stmt.dumpColor();
     return true;
   }
@@ -2109,8 +2118,9 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   }
 
   ERROR("Conversion of unsupported clang decl ref: \"");
-  std::cerr << d.getDeclKindName() << "\" to expression"
-            << "\n";
+  ERROR(
+    d.getDeclKindName() << "\" to expression"
+                        << "\n");
   d.dumpColor();
   return true;
 }
@@ -2173,8 +2183,9 @@ bool clang_c_convertert::get_cast_expr(
 
   default:
     ERROR("Conversion of unsupported clang cast operator: \"");
-    std::cerr << cast.getCastKindName() << "\" to expression"
-              << "\n";
+    ERROR(
+      cast.getCastKindName() << "\" to expression"
+                             << "\n");
     cast.dumpColor();
     return true;
   }
@@ -2243,9 +2254,10 @@ bool clang_c_convertert::get_unary_operator_expr(
 
   default:
     ERROR("Conversion of unsupported clang unary operator: \"");
-    std::cerr << clang::UnaryOperator::getOpcodeStr(uniop.getOpcode()).str()
-              << "\" to expression"
-              << "\n";
+    ERROR(
+      clang::UnaryOperator::getOpcodeStr(uniop.getOpcode()).str()
+      << "\" to expression"
+      << "\n");
     uniop.dumpColor();
     return true;
   }
@@ -2428,8 +2440,9 @@ bool clang_c_convertert::get_compound_assign_expr(
 
   default:
     ERROR("Conversion of unsupported clang binary operator: \"");
-    std::cerr << compop.getOpcodeStr().str() << "\" to expression"
-              << "\n";
+    ERROR(
+      compop.getOpcodeStr().str() << "\" to expression"
+                                  << "\n");
     compop.dumpColor();
     return true;
   }
@@ -2590,8 +2603,9 @@ bool clang_c_convertert::get_atomic_expr(
     break;
 
   default:
-    std::cerr << "Unknown Atomic expression"
-              << "\n";
+    ERROR(
+      "Unknown Atomic expression"
+      << "\n");
     atm.dumpColor();
     return true;
   }
@@ -2895,8 +2909,7 @@ symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
   {
     if(context.move(symbol, s))
     {
-      std::cerr << "Couldn't add symbol " << symbol.name
-                << " to symbol table\n";
+      ERROR("Couldn't add symbol " << symbol.name << " to symbol table\n");
       symbol.dump();
       abort();
     }

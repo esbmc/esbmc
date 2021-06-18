@@ -186,16 +186,16 @@ void add_cprover_library(contextt &context, message_handlert &message_handler)
       return;
     }
 
-    std::cerr << "No c library for bitwidth " << config.ansi_c.int_width
-              << "\n";
+    ERROR("No c library for bitwidth " << config.ansi_c.int_width << "\n");
     abort();
   }
 
   size = this_clib_ptrs[1] - this_clib_ptrs[0];
   if(size == 0)
   {
-    std::cerr << "error: Zero-lengthed internal C library"
-              << "\n";
+    ERROR(
+      "error: Zero-lengthed internal C library"
+      << "\n");
     abort();
   }
 
@@ -211,8 +211,9 @@ void add_cprover_library(contextt &context, message_handlert &message_handler)
   f = fopen(symname_buffer, "wb");
   if(fwrite(this_clib_ptrs[0], size, 1, f) != 1)
   {
-    std::cerr << "Couldn't manipulate internal C library"
-              << "\n";
+    ERROR(
+      "Couldn't manipulate internal C library"
+      << "\n");
     abort();
   }
   fclose(f);
@@ -275,8 +276,9 @@ void add_cprover_library(contextt &context, message_handlert &message_handler)
   if(c_link(context, store_ctx, message_handler, "<built-in-library>"))
   {
     // Merging failed
-    std::cerr << "Failed to merge C library"
-              << "\n";
+    ERROR(
+      "Failed to merge C library"
+      << "\n");
     abort();
   }
 }

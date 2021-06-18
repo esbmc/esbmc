@@ -222,8 +222,9 @@ void execution_statet::symex_step(reachability_treet &art)
 #ifndef _WIN32
     __asm__("int $3");
 #else
-    std::cerr << "Can't trap on windows, sorry"
-              << "\n";
+    ERROR(
+      "Can't trap on windows, sorry"
+      << "\n");
     abort();
 #endif
   }

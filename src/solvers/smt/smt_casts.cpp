@@ -23,8 +23,9 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
 
   if(is_pointer_type(cast.from))
   {
-    std::cerr << "Converting pointer to a float is unsupported"
-              << "\n";
+    ERROR(
+      "Converting pointer to a float is unsupported"
+      << "\n");
     abort();
   }
 
@@ -35,8 +36,9 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
   else if(is_fixedbv_type(cast.from))
     return convert_typecast_to_fixedbv_nonint_from_fixedbv(expr);
 
-  std::cerr << "unexpected typecast to fixedbv"
-            << "\n";
+  ERROR(
+    "unexpected typecast to fixedbv"
+    << "\n");
   abort();
 }
 
@@ -224,8 +226,9 @@ smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
   if(is_bool_type(cast.from))
     return convert_typecast_to_ints_from_bool(cast);
 
-  std::cerr << "Unexpected type in int/ptr typecast"
-            << "\n";
+  ERROR(
+    "Unexpected type in int/ptr typecast"
+    << "\n");
   abort();
 }
 
@@ -299,8 +302,9 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
       // Operands have differing signs (and same width). Just return.
       return convert_ast(cast.from);
 
-    std::cerr << "Unrecognized equal-width int typecast format"
-              << "\n";
+    ERROR(
+      "Unrecognized equal-width int typecast format"
+      << "\n");
     abort();
   }
 
@@ -310,8 +314,9 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
   if(from_width > to_width)
     return mk_extract(a, to_width - 1, 0);
 
-  std::cerr << "Malformed cast from signedbv/fixedbv"
-            << "\n";
+  ERROR(
+    "Malformed cast from signedbv/fixedbv"
+    << "\n");
   abort();
 }
 
@@ -514,8 +519,9 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
     {
       if(!base_type_eq(struct_type_from.members[i], it, ns))
       {
-        std::cerr << "Incompatible struct in cast-to-struct"
-                  << "\n";
+        ERROR(
+          "Incompatible struct in cast-to-struct"
+          << "\n");
         abort();
       }
 
@@ -610,13 +616,15 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     if(base_type_eq(cast.type, cast.from->type, ns))
       return convert_ast(cast.from); // No additional conversion required
 
-    std::cerr << "Can't typecast between unions"
-              << "\n";
+    ERROR(
+      "Can't typecast between unions"
+      << "\n");
     abort();
   }
 
-  std::cerr << "Typecast for unexpected type"
-            << "\n";
+  ERROR(
+    "Typecast for unexpected type"
+    << "\n");
   expr->dump();
   abort();
 }

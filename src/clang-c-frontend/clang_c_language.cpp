@@ -35,8 +35,9 @@ clang_c_languaget::clang_c_languaget()
   auto p = boost::filesystem::temp_directory_path();
   if(!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
   {
-    std::cerr << "Can't find temporary directory (needed to dump clang headers)"
-              << "\n";
+    ERROR(
+      "Can't find temporary directory (needed to dump clang headers)"
+      << "\n");
     abort();
   }
 
@@ -45,9 +46,9 @@ clang_c_languaget::clang_c_languaget()
   boost::filesystem::create_directory(p);
   if(!boost::filesystem::is_directory(p))
   {
-    std::cerr
-      << "Can't create temporary directory (needed to dump clang headers)"
-      << "\n";
+    ERROR(
+      "Can't create temporary directory (needed to dump clang headers)"
+      << "\n");
     abort();
   }
 

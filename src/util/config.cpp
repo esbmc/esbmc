@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <algorithm>
 #include <iostream>
 #include <util/config.h>
+#include <util/message.h>
 
 configt config;
 
@@ -104,8 +105,8 @@ bool configt::set(const cmdlinet &cmdline)
 
   if(cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
   {
-    std::cerr << "Can't set both floatbv and fixedbv modes"
-              << "\n";
+    ERROR("Can't set both floatbv and fixedbv modes"
+              << "\n");
     return true;
   }
 
@@ -180,8 +181,9 @@ bool configt::set(const cmdlinet &cmdline)
 
   if(cmdline.isset("little-endian") && cmdline.isset("big-endian"))
   {
-    std::cerr << "Can't set both little and big endian modes"
-              << "\n";
+    ERROR(
+      "Can't set both little and big endian modes"
+      << "\n");
     return true;
   }
 

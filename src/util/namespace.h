@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/context.h>
 #include <util/irep2.h>
 #include <util/migrate.h>
+#include <util/message.h>
 
 // second: true <=> not found
 
@@ -23,8 +24,9 @@ public:
     const symbolt *symbol;
     if(lookup(name, symbol))
     {
-      std::cerr << "Failed to find symbol " + id2string(name) + " not found"
-                << "\n";
+      ERROR(
+        "Failed to find symbol " + id2string(name) + " not found"
+        << "\n");
       abort();
     }
     return *symbol;

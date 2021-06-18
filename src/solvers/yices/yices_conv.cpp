@@ -63,8 +63,9 @@ void yices_convt::push_ctx()
 
   if(res != 0)
   {
-    std::cerr << "Error pushing yices context"
-              << "\n";
+    ERROR(
+      "Error pushing yices context"
+      << "\n");
     yices_print_error(stderr);
     abort();
   }
@@ -76,8 +77,9 @@ void yices_convt::pop_ctx()
 
   if(res != 0)
   {
-    std::cerr << "Error poping yices context"
-              << "\n";
+    ERROR(
+      "Error poping yices context"
+      << "\n");
     yices_print_error(stderr);
     abort();
   }
@@ -659,8 +661,9 @@ smt_astt yices_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt yices_convt::mk_isint(smt_astt)
 {
-  std::cerr << "Yices does not support an is-integer operation on reals, "
-            << "therefore certain casts and operations don't work, sorry\n";
+  ERROR(
+    "Yices does not support an is-integer operation on reals, "
+    << "therefore certain casts and operations don't work, sorry\n");
   abort();
 }
 

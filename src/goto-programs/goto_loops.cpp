@@ -135,8 +135,7 @@ void goto_loopst::get_modified_variables(
 
     if(it == goto_functions.function_map.end())
     {
-      std::cerr << "failed to find `" + id2string(identifier) +
-                     "' in function_map";
+      ERROR("failed to find `" + id2string(identifier) + "' in function_map");
       abort();
     }
 

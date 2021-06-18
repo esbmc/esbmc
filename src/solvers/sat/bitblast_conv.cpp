@@ -273,9 +273,10 @@ smt_astt bitblast_convt::mk_func_app(
     break;
   }
   default:
-    std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[f]
-              << "\" in bitblast convt"
-              << "\n";
+    ERROR(
+      "Unimplemented SMT function \"" << smt_func_name_table[f]
+                                      << "\" in bitblast convt"
+                                      << "\n");
     abort();
   }
 
@@ -293,12 +294,14 @@ smt_sort *bitblast_convt::mk_sort(smt_sort_kind k, ...)
   switch(k)
   {
   case SMT_SORT_INT:
-    std::cerr << "Can't make Int sorts in bitblaster"
-              << "\n";
+    ERROR(
+      "Can't make Int sorts in bitblaster"
+      << "\n");
     abort();
   case SMT_SORT_REAL:
-    std::cerr << "Can't make Real sorts in bitblaster"
-              << "\n";
+    ERROR(
+      "Can't make Real sorts in bitblaster"
+      << "\n");
     abort();
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
@@ -314,8 +317,9 @@ smt_sort *bitblast_convt::mk_sort(smt_sort_kind k, ...)
     s = new bitblast_smt_sort(k);
     break;
   default:
-    std::cerr << "Unimplemented SMT sort " << k << " in bitblaster conversion"
-              << "\n";
+    ERROR(
+      "Unimplemented SMT sort " << k << " in bitblaster conversion"
+                                << "\n");
     abort();
   }
 
@@ -324,15 +328,17 @@ smt_sort *bitblast_convt::mk_sort(smt_sort_kind k, ...)
 
 smt_ast *bitblast_convt::mk_smt_int(const BigInt &intval [[gnu::unused]])
 {
-  std::cerr << "Can't create integers in bitblast solver"
-            << "\n";
+  ERROR(
+    "Can't create integers in bitblast solver"
+    << "\n");
   abort();
 }
 
 smt_ast *bitblast_convt::mk_smt_real(const std::string &value [[gnu::unused]])
 {
-  std::cerr << "Can't create reals in bitblast solver"
-            << "\n";
+  ERROR(
+    "Can't create reals in bitblast solver"
+    << "\n");
   abort();
 }
 
@@ -385,9 +391,9 @@ smt_astt bitblast_convt::mk_smt_symbol(const std::string &name, smt_sortt sort)
     break;
   }
   default:
-    std::cerr << "Unimplemented symbol type " << sort->id
-              << " in bitblast symbol creation"
-              << "\n";
+    ERROR(
+      "Unimplemented symbol type " << sort->id << " in bitblast symbol creation"
+                                   << "\n");
     abort();
   }
 
@@ -438,13 +444,15 @@ bitblast_convt::mk_ast_equality(smt_astt _a, smt_astt _b, smt_sortt ressort)
   {
     // XXX - so, if we have different array encodings in the future then this
     // might get quite funky. Leave it until then, though.
-    std::cerr << "No direct array equality support in bitblast converter"
-              << "\n";
+    ERROR(
+      "No direct array equality support in bitblast converter"
+      << "\n");
     abort();
   }
   default:
-    std::cerr << "Invalid sort " << a->sort->id << " for equality in bitblast"
-              << "\n";
+    ERROR(
+      "Invalid sort " << a->sort->id << " for equality in bitblast"
+                      << "\n");
     abort();
   }
 }

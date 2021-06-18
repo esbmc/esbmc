@@ -10,6 +10,7 @@ Date: May 2007
 
 #include <sstream>
 #include <util/irep_serialization.h>
+#include <util/message.h>
 
 void irep_serializationt::write_irep(std::ostream &out, const irept &irep)
 {
@@ -82,8 +83,9 @@ void irep_serializationt::read_irep(std::istream &in, irept &irep)
 
   if(in.get() != 0)
   {
-    std::cerr << "irep not terminated. "
-              << "\n";
+    ERROR(
+      "irep not terminated. "
+      << "\n");
     throw 0;
   }
 }

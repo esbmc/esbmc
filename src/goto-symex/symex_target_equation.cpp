@@ -378,14 +378,15 @@ void symex_target_equationt::check_for_duplicate_assigns() const
   {
     if(it->second != 1)
     {
-      std::cerr << "Symbol \"" << it->first << "\" appears " << it->second
-                << " times"
-                << "\n";
+      ERROR(
+        "Symbol \"" << it->first << "\" appears " << it->second << " times"
+                    << "\n");
     }
   }
 
-  std::cerr << "Checked " << i << " insns"
-            << "\n";
+  ERROR(
+    "Checked " << i << " insns"
+               << "\n");
 }
 
 unsigned int symex_target_equationt::clear_assertions()
@@ -545,8 +546,9 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
     res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB ||
     res2 == smt_convt::P_ERROR || res2 == smt_convt::P_SMTLIB)
   {
-    std::cerr << "Solver returned error while asking question"
-              << "\n";
+    ERROR(
+      "Solver returned error while asking question"
+      << "\n");
     abort();
   }
   else if(res1 == smt_convt::P_SATISFIABLE && res2 == smt_convt::P_SATISFIABLE)

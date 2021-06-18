@@ -79,8 +79,9 @@ bool language_uit::parse(const std::string &filename)
   if(language.parse(filename, *get_message_handler()))
   {
     if(get_ui() == ui_message_handlert::PLAIN)
-      std::cerr << "PARSING ERROR"
-                << "\n";
+      ERROR(
+        "PARSING ERROR"
+        << "\n");
 
     return true;
   }
@@ -100,8 +101,9 @@ bool language_uit::typecheck()
   if(language_files.typecheck(context))
   {
     if(get_ui() == ui_message_handlert::PLAIN)
-      std::cerr << "CONVERSION ERROR"
-                << "\n";
+      ERROR(
+        "CONVERSION ERROR"
+        << "\n");
 
     return true;
   }
@@ -117,8 +119,9 @@ bool language_uit::final()
   if(language_files.final(context))
   {
     if(get_ui() == ui_message_handlert::PLAIN)
-      std::cerr << "CONVERSION ERROR"
-                << "\n";
+      ERROR(
+        "CONVERSION ERROR"
+        << "\n");
 
     return true;
   }

@@ -73,9 +73,10 @@ static smt_convt *create_solver(
     }
   }
 
-  std::cerr << "The " << the_solver
-            << " solver has not been built into this version of ESBMC, sorry"
-            << "\n";
+  ERROR(
+    "The " << the_solver
+           << " solver has not been built into this version of ESBMC, sorry"
+           << "\n");
   abort();
 }
 
@@ -121,8 +122,9 @@ static smt_convt *pick_solver(
     {
       if(the_solver != "")
       {
-        std::cerr << "Please only specify one solver"
-                  << "\n";
+        ERROR(
+          "Please only specify one solver"
+          << "\n");
         abort();
       }
 
