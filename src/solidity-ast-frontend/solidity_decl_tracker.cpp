@@ -170,6 +170,12 @@ void DeclTracker::set_decl_kind()
  * VarDeclTracker
  * =======================================================
  */
+
+VarDeclTracker::~VarDeclTracker()
+{
+  printf("@@ deleting VarDeclTracker %s...\n", nameddecl_tracker.get_name().c_str());
+}
+
 void VarDeclTracker::config(std::string ab_path)
 {
   // config order matters! Do NOT change.
@@ -233,16 +239,51 @@ void FunctionDeclTracker::config(std::string ab_path)
   // set static lifetime
   assert(storage_class == SolidityTypes::SCError);
   storage_class = SolidityTypes::SC_None; // hard coded, may need to change in the future
+
+  // set number of parameters
+  set_num_params();
+
+  // set function body
+  set_has_body();
 }
 
 // set isDefined and isADefinition
 void FunctionDeclTracker::set_defined()
 {
-  assert(decl_json.contains("body")); // expect Solidity contract has a function body
+  assert(decl_json.contains("body")); // expect Solidity function has a function body
   unsigned num_stmt = decl_json["body"]["statements"].size();
   assert(num_stmt > 0); // expect the function body is non-empty
 
   // because decl_json has an non-empty "body" as asserted above
   isDefined = true;
   isADefinition = true;
+}
+
+void FunctionDeclTracker::set_num_params()
+{
+  assert(decl_json["parameters"].contains("parameters")); // expect Solidity function json has parameter array
+  assert(num_args == numParamsInvalid); // only allowed to set once
+  num_args = decl_json["parameters"]["parameters"].size();
+  if (num_args != 0)
+    assert(!"unsupported - function with arguments");
+}
+
+void FunctionDeclTracker::set_has_body()
+{
+  // set function body existence flag
+  assert(decl_json.contains("body")); // expect Solidity function has a "body" field
+  hasBody = decl_json["body"]["statements"].size() > 0 ? true : false;
+
+  // set function body statements
+  assert(hasBody);
+  assert(stmt == nullptr); // only allowed to set once during config stage
+  stmt = new CompoundStmtTracker();
+  // Everything is considered as compound statement class, even with one statement
+  stmt->set_stmt_class(SolidityTypes::CompoundStmtClass);
+}
+
+FunctionDeclTracker::~FunctionDeclTracker()
+{
+  printf("@@ Deleting function decl tracker %s...\n", nameddecl_tracker.get_name().c_str());
+  delete stmt;
 }

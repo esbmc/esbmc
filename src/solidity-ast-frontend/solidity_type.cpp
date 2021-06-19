@@ -132,4 +132,17 @@ namespace SolidityTypes
       }
     }
   }
+
+  const char* stmtClass_to_str(stmtClass the_stmtClass)
+  {
+    switch(the_stmtClass)
+    {
+      ENUM_TO_STR(CompoundStmtClass)
+      default:
+      {
+        assert(!"Unknown stmtClass");
+        return "UNKNOWN";
+      }
+    }
+  }
 };
