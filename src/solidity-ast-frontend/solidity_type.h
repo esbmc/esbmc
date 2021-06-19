@@ -46,6 +46,13 @@ namespace SolidityTypes
   };
   storageClass get_storage_class(const std::string& kind);
   const char* storageClass_to_str(storageClass the_strgClass);
+
+  enum stmtClass
+  {
+    CompoundStmtClass = 0, // clang::Stmt::CompoundStmtClass
+    StmtClassError
+  };
+  const char* stmtClass_to_str(stmtClass the_stmtClass);
 };
 
 #endif /* SOLIDITY_TYPE_H_ */

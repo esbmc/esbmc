@@ -49,9 +49,12 @@ protected:
   void get_decl_name(const NamedDeclTracker &nd, std::string &name, std::string &id);
   bool generate_decl_usr(const NamedDeclTracker &nd, std::string &name, std::string &id);
   void get_location_from_decl(const SourceLocationTracker &decl_slm, locationt &location);
+  void get_start_location_from_stmt(const StmtTracker* stmt, locationt &location);
   void set_location(const SourceLocationTracker &decl_slm, std::string &function_name, locationt &location);
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
+
+  bool get_expr(const StmtTracker* stmt, exprt &new_expr);
 
   void get_default_symbol(
     symbolt &symbol,
