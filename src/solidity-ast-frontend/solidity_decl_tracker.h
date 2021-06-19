@@ -108,7 +108,96 @@ private:
   bool isRestrictQualified;
 };
 
-// variable declaration base
+// statement tracker base
+class StmtTracker
+{
+public:
+  StmtTracker() { reset(); }
+
+  virtual ~StmtTracker() { }
+
+  void reset()
+  {
+    function_body_json = nullptr;
+  }
+
+  // setters
+  void set_function_body_json(nlohmann::json* _json)   { function_body_json = _json; }
+  void set_stmt_class(SolidityTypes::stmtClass _class) { stmt_class = _class; }
+
+  // getters
+  SolidityTypes::stmtClass get_stmt_class() const { return stmt_class; }
+
+  // essential members for each type of statements
+  nlohmann::json* function_body_json;
+  SolidityTypes::stmtClass stmt_class;
+};
+
+class DeclRefExprTracker : public StmtTracker
+{
+public:
+  DeclRefExprTracker() { clear_all(); }
+
+  DeclRefExprTracker(const DeclRefExprTracker &rhs) = default;
+  DeclRefExprTracker(DeclRefExprTracker &&rhs) = default;
+  DeclRefExprTracker& operator=(const DeclRefExprTracker &rhs) { assert(!"copy assignment is not allowed at the moment"); }
+  DeclRefExprTracker& operator=(DeclRefExprTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
+  virtual ~DeclRefExprTracker() = default;
+
+  void clear_all()
+  {
+  }
+};
+
+class ImplicitCastExprTracker : public StmtTracker
+{
+public:
+  ImplicitCastExprTracker() { clear_all(); }
+
+  ImplicitCastExprTracker(const ImplicitCastExprTracker &rhs) = default;
+  ImplicitCastExprTracker(ImplicitCastExprTracker &&rhs) = default;
+  ImplicitCastExprTracker& operator=(const ImplicitCastExprTracker &rhs) { assert(!"copy assignment is not allowed at the moment"); }
+  ImplicitCastExprTracker& operator=(ImplicitCastExprTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
+  virtual ~ImplicitCastExprTracker() = default;
+
+  void clear_all()
+  {
+  }
+};
+
+class IntegerLiteralTracker : public StmtTracker
+{
+public:
+  IntegerLiteralTracker() { clear_all(); }
+
+  IntegerLiteralTracker(const IntegerLiteralTracker &rhs) = default;
+  IntegerLiteralTracker(IntegerLiteralTracker &&rhs) = default;
+  IntegerLiteralTracker& operator=(const IntegerLiteralTracker &rhs) { assert(!"copy assignment is not allowed at the moment"); }
+  IntegerLiteralTracker& operator=(IntegerLiteralTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
+  virtual ~IntegerLiteralTracker() = default;
+
+  void clear_all()
+  {
+  }
+};
+
+class CompoundStmtTracker : public StmtTracker
+{
+public:
+  CompoundStmtTracker() { clear_all(); }
+
+  CompoundStmtTracker(const CompoundStmtTracker &rhs) = default;
+  CompoundStmtTracker(CompoundStmtTracker &&rhs) = default;
+  CompoundStmtTracker& operator=(const CompoundStmtTracker &rhs) { assert(!"copy assignment is not allowed at the moment"); }
+  CompoundStmtTracker& operator=(CompoundStmtTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
+  ~CompoundStmtTracker() { }
+
+  void clear_all()
+  {
+  }
+};
+
+// declaration tracker base
 class DeclTracker
 {
 public:
@@ -187,6 +276,7 @@ public:
   // move assignment operator - TODO: Since we have a reference member, it can be tricky in this case.
   //    Let's not do it for the time being. Leave it for future improvement
   VarDeclTracker& operator=(VarDeclTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
+  ~VarDeclTracker();
 
   void clear_all() // reset to default values
   {
@@ -226,6 +316,8 @@ private:
 class FunctionDeclTracker : public DeclTracker
 {
 public:
+  static constexpr unsigned numParamsInvalid = std::numeric_limits<unsigned>::max();
+
   FunctionDeclTracker(nlohmann::json _decl_json):
     DeclTracker(_decl_json)
   {
@@ -241,6 +333,7 @@ public:
   // move assignment operator - TODO: Since we have a reference member, it can be tricky in this case.
   //    Let's not do it for the time being. Leave it for future improvement
   FunctionDeclTracker& operator=(FunctionDeclTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
+  ~FunctionDeclTracker();
 
   void clear_all() // reset to default values
   {
@@ -249,6 +342,9 @@ public:
     isADefinition = false;
     isVariadic = false;
     isInlined = false;
+    num_args = numParamsInvalid;
+    hasBody = false;
+    stmt = nullptr;
   }
 
   // config this tracker based on json values
@@ -260,6 +356,9 @@ public:
   bool get_isADefinition() { return isADefinition; }
   bool get_isVariadic()    { return isVariadic; }
   bool get_isInlined()     { return isInlined; }
+  unsigned get_num_args()  { return num_args; }
+  bool get_hasBody()       { return hasBody; }
+  StmtTracker* get_body()  { return stmt; }
 
 private:
   bool isImplicit;
@@ -267,10 +366,15 @@ private:
   bool isADefinition; // means "fd.isThisDeclarationADefinition()"
   bool isVariadic;    // means "fd.isVariadic()"
   bool isInlined;     // means "fd.isInlined()"
+  unsigned num_args;  // number of arguments of this function
+  bool hasBody;
+  StmtTracker* stmt;  // function body statements
 
   // private setters : set the member values based on the corresponding json value. Used by config() only.
   // Setting them outside this class is NOT allowed.
   void set_defined(); // set isDefined and isADefinition
+  void set_num_params();
+  void set_has_body();
 };
 
 #endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_

@@ -16,6 +16,20 @@ solidity_convertert::solidity_convertert(contextt &_context, nlohmann::json &_as
 {
 }
 
+static std::string get_decl_name(const NamedDeclTracker &nd)
+{
+  if (nd.get_hasIdentifier())
+  {
+    return nd.get_name();
+  }
+  else
+  {
+    assert(!"Unsupported - nd.get_hasIdentifier() returns false");
+    return "Error"; // just to make come old gcc compiler happy
+  }
+  return "Error"; // just to make come old gcc compiler happy
+}
+
 bool solidity_convertert::convert()
 {
   // This method convert each declarations in ast_json to symbols and add them to the context.
@@ -125,9 +139,6 @@ bool solidity_convertert::get_function(funDeclTrackerPtr &fd, exprt &new_expr)
   // This will be reset every time a function is parsed
   current_scope_var_num = 1; // might need to change for Solidity when considering the scopes
 
-  // Restore old functionDecl at the end
-  current_functionDecl = old_functionDecl; // for func_overflow , old_functionDecl == null. (same as __ESBMC_assume)
-
   // Build function's type
   code_typet type;
 
@@ -164,9 +175,76 @@ bool solidity_convertert::get_function(funDeclTrackerPtr &fd, exprt &new_expr)
 
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
-  // TODO: params
+  // We convert the parameters first so their symbol are added to context
+  // before converting the body, as they may appear on the function body
+  if (fd->get_num_args())
+    assert(!"come back and continue - add support for function arguments");
+
+  // Apparently, if the type has no arguments, we assume ellipsis
+  if(!type.arguments().size())
+    type.make_ellipsis();
+
+  added_symbol.type = type;
+
+  // We need: a type, a name, and an optional body
+  if(fd->get_hasBody()) // for func_overflow, this returns true. for __ESBMC_assume, fd.hasBody() return false
+  {
+    exprt body_exprt;
+    get_expr(fd->get_body(), body_exprt);
+
+    added_symbol.value = body_exprt;
+  }
+
+  // Restore old functionDecl
+  current_functionDecl = old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
+
   assert(!"done - get_funciton?");
   return false;
+}
+
+bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
+{
+  static int call_expr_times = 0; // TODO: remove debug
+  locationt location;
+  get_start_location_from_stmt(stmt, location);
+  assert(stmt);
+
+  switch(stmt->get_stmt_class())
+  {
+    case SolidityTypes::stmtClass::CompoundStmtClass:
+    {
+      printf("	@@@ got Expr: SolidityTypes::stmtClass::CompoundStmtClass, ");
+      printf("  call_expr_times=%d\n", call_expr_times++);
+      assert(!"cool");
+
+      break;
+    }
+
+    default:
+      std::cerr << "Conversion of unsupported Solidity expr: \"";
+      printf("failed to convert Solidity expr: %s\n", SolidityTypes::stmtClass_to_str(stmt->get_stmt_class()));
+      assert(!"Unimplemented expr type");
+      return true;
+  }
+
+  new_expr.location() = location;
+  return false;
+}
+
+void solidity_convertert::get_start_location_from_stmt(
+  const StmtTracker* stmt,
+  locationt &location)
+{
+  std::string function_name;
+
+  if (current_functionDecl)
+    function_name = ::get_decl_name(current_functionDecl->get_nameddecl_tracker()); // for func_overflow, name is "func_overflow"
+
+  // In clang, we need to get PLoc first.
+  // For Solidity, we've already extracted the information during decl tracker config phase.
+  // TODO: we should use the slm (source location manager) of the StmtTracker, instead of the fucntion decl tracker.
+
+  set_location(current_functionDecl->get_sl_tracker(), function_name, location); // for __ESBMC_assume, function_name is still empty after this line.
 }
 
 bool solidity_convertert::get_var(varDeclTrackerPtr vd, exprt &new_expr)
@@ -228,20 +306,6 @@ bool solidity_convertert::get_var(varDeclTrackerPtr vd, exprt &new_expr)
   new_expr = decl;
 
   return false;
-}
-
-static std::string get_decl_name(const NamedDeclTracker &nd)
-{
-  if (nd.get_hasIdentifier())
-  {
-    return nd.get_name();
-  }
-  else
-  {
-    assert(!"Unsupported - nd.get_hasIdentifier() returns false");
-    return "Error"; // just to make come old gcc compiler happy
-  }
-  return "Error"; // just to make come old gcc compiler happy
 }
 
 void solidity_convertert::get_decl_name(
@@ -408,7 +472,6 @@ void solidity_convertert::set_location(
 
   if(!function_name.empty()) // for _x, this statement returns false
   {
-    assert(!"function_name is non-empty - please check");
     location.set_function(function_name);
   }
 }
