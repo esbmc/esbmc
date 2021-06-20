@@ -215,8 +215,16 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
     {
       printf("	@@@ got Expr: SolidityTypes::stmtClass::CompoundStmtClass, ");
       printf("  call_expr_times=%d\n", call_expr_times++);
-      assert(!"cool");
+      const CompoundStmtTracker* compound_stmt =
+        static_cast<const CompoundStmtTracker*>(stmt); // pointer to const CompoundStmtTracker: can modify ptr but not the object content
 
+      code_blockt block;
+      unsigned ctr = 0;
+
+      printf(" \t @@@ CompoundStmt has %u statements\n", ctr);
+
+      // TODO: get_final_location_from_stmt
+      assert(!"cool");
       break;
     }
 
