@@ -25,7 +25,6 @@ void show_claims(
       count++;
 
       const irep_idt &comment = instruction.location.comment();
-      const irep_idt &property = instruction.location.property();
       const irep_idt description = (comment == "" ? "assertion" : comment);
 
       std::cout << "Claim " << count << ":" << std::endl;
