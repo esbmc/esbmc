@@ -7,6 +7,14 @@
 #include <iomanip>
 #include <vector>
 
+// for debug print
+static void print_decl_json(const nlohmann::json& the_json)
+{
+  printf("### the_json: ###\n");
+  std::cout << std::setw(2) << the_json << '\n'; // '2' means 2x indentations in front of each line
+  printf("\n");
+}
+
 // declaration's source manager for location settings
 class SourceLocationTracker
 {
@@ -112,31 +120,40 @@ private:
 class StmtTracker
 {
 public:
-  StmtTracker() { reset(); }
+  StmtTracker(nlohmann::json& _json) :
+    stmt_json(_json)
+  {
+    reset();
+  }
 
   virtual ~StmtTracker() { }
+  virtual void config() = 0;
 
   void reset()
   {
-    function_body_json = nullptr;
   }
 
   // setters
-  void set_function_body_json(nlohmann::json* _json)   { function_body_json = _json; }
   void set_stmt_class(SolidityTypes::stmtClass _class) { stmt_class = _class; }
 
   // getters
   SolidityTypes::stmtClass get_stmt_class() const { return stmt_class; }
 
   // essential members for each type of statements
-  nlohmann::json* function_body_json;
+  nlohmann::json& stmt_json;
   SolidityTypes::stmtClass stmt_class;
 };
 
 class DeclRefExprTracker : public StmtTracker
 {
 public:
-  DeclRefExprTracker() { clear_all(); }
+  DeclRefExprTracker(nlohmann::json& _json) :
+    StmtTracker(_json)
+  {
+    clear_all();
+  }
+
+  virtual void config() {}
 
   DeclRefExprTracker(const DeclRefExprTracker &rhs) = default;
   DeclRefExprTracker(DeclRefExprTracker &&rhs) = default;
@@ -152,7 +169,13 @@ public:
 class ImplicitCastExprTracker : public StmtTracker
 {
 public:
-  ImplicitCastExprTracker() { clear_all(); }
+  ImplicitCastExprTracker(nlohmann::json& _json) :
+    StmtTracker(_json)
+  {
+    clear_all();
+  }
+
+  virtual void config() {}
 
   ImplicitCastExprTracker(const ImplicitCastExprTracker &rhs) = default;
   ImplicitCastExprTracker(ImplicitCastExprTracker &&rhs) = default;
@@ -168,7 +191,13 @@ public:
 class IntegerLiteralTracker : public StmtTracker
 {
 public:
-  IntegerLiteralTracker() { clear_all(); }
+  IntegerLiteralTracker(nlohmann::json& _json) :
+    StmtTracker(_json)
+  {
+    clear_all();
+  }
+
+  void config() {}
 
   IntegerLiteralTracker(const IntegerLiteralTracker &rhs) = default;
   IntegerLiteralTracker(IntegerLiteralTracker &&rhs) = default;
@@ -181,10 +210,38 @@ public:
   }
 };
 
+class BinaryOperatorTracker : public StmtTracker
+{
+public:
+  BinaryOperatorTracker(nlohmann::json& _json) :
+    StmtTracker(_json)
+  {
+    clear_all();
+  }
+
+  void config() {}
+
+  BinaryOperatorTracker(const BinaryOperatorTracker &rhs) = default;
+  BinaryOperatorTracker(BinaryOperatorTracker &&rhs) = default;
+  BinaryOperatorTracker& operator=(const BinaryOperatorTracker &rhs) { assert(!"copy assignment is not allowed at the moment"); }
+  BinaryOperatorTracker& operator=(BinaryOperatorTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
+  ~BinaryOperatorTracker() { }
+
+  void clear_all()
+  {
+  }
+};
+
 class CompoundStmtTracker : public StmtTracker
 {
 public:
-  CompoundStmtTracker() { clear_all(); }
+  static constexpr unsigned numStmtInvalid = std::numeric_limits<unsigned>::max();
+
+  CompoundStmtTracker(nlohmann::json& _json) :
+    StmtTracker(_json)
+  {
+    clear_all();
+  }
 
   CompoundStmtTracker(const CompoundStmtTracker &rhs) = default;
   CompoundStmtTracker(CompoundStmtTracker &&rhs) = default;
@@ -192,9 +249,26 @@ public:
   CompoundStmtTracker& operator=(CompoundStmtTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
   ~CompoundStmtTracker() { }
 
+  void config();
+
   void clear_all()
   {
+    num_stmt = numStmtInvalid;
   }
+
+  // setters
+  void set_num_stmt(unsigned _num) { num_stmt = _num; }
+
+  // getters
+  unsigned get_num_stmt() { return num_stmt; }
+
+private:
+  // A compound statement can have multiple of various types,
+  // such as BinaryOperatorTracker, CompoundAssignOperator or CallExprClass
+  std::vector<StmtTracker*> statements;
+  unsigned num_stmt;
+
+  void add_statement(const nlohmann::json& expr);
 };
 
 // declaration tracker base
@@ -237,9 +311,6 @@ public:
   // NamedDeclTracker setters
   void set_named_decl_name();
   void set_named_decl_kind();
-
-  // for debug print
-  void print_decl_json();
 
   virtual void clear_all() = 0; // reset to default values
   virtual void config(std::string ab_path); // config this tracker based on json values

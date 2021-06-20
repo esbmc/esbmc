@@ -4,13 +4,6 @@
  * DeclTracker
  * =======================================================
  */
-void DeclTracker::print_decl_json()
-{
-  printf("### decl_json: ###\n");
-  std::cout << std::setw(2) << decl_json << '\n'; // '2' means 2x indentations in front of each line
-  printf("\n");
-}
-
 // config this tracker based on json values
 void DeclTracker::config(std::string ab_path)
 {
@@ -272,18 +265,43 @@ void FunctionDeclTracker::set_has_body()
 {
   // set function body existence flag
   assert(decl_json.contains("body")); // expect Solidity function has a "body" field
-  hasBody = decl_json["body"]["statements"].size() > 0 ? true : false;
+  unsigned num_stmt = decl_json["body"]["statements"].size();
+  hasBody = num_stmt > 0 ? true : false;
 
   // set function body statements
   assert(hasBody);
   assert(stmt == nullptr); // only allowed to set once during config stage
-  stmt = new CompoundStmtTracker();
-  // Everything is considered as compound statement class, even with one statement
+
+  // Everything is considered as compound statement class, even with just one statement
+  stmt = new CompoundStmtTracker(decl_json["body"]["statements"]);
   stmt->set_stmt_class(SolidityTypes::CompoundStmtClass);
+  stmt->config();
 }
 
 FunctionDeclTracker::~FunctionDeclTracker()
 {
   printf("@@ Deleting function decl tracker %s...\n", nameddecl_tracker.get_name().c_str());
   delete stmt;
+}
+/* =======================================================
+ * CompoundStmtTracker
+ * =======================================================
+ */
+void CompoundStmtTracker::config()
+{
+  // item is like { "0" : { the_expr }}
+  for (const auto& item : stmt_json.items())
+  {
+    // populate statement vector based on each statement json object
+    const auto& stmt = item.value();
+    assert(stmt["nodeType"] == "ExpressionStatement"); // expect all statement to be "ExpressionStatement"
+    assert(stmt.contains("expression")); // expect ExpressionStatement has an "expression" key
+    add_statement(stmt);
+  }
+  assert(!"cst config");
+}
+
+void CompoundStmtTracker::add_statement(const nlohmann::json& expr)
+{
+  ::print_decl_json(expr);
 }
