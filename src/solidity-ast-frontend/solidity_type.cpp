@@ -167,10 +167,23 @@ namespace SolidityTypes
     switch(the_boClass)
     {
       ENUM_TO_STR(BO_Assign)
-      ENUM_TO_STR(BOError)
       default:
       {
         assert(!"Unknown binaryOpClass");
+        return "UNKNOWN";
+      }
+    }
+  }
+
+  const char* declRefKind_to_str(binaryOpClass the_declRefKind)
+  {
+    switch(the_declRefKind)
+    {
+      ENUM_TO_STR(EnumConstantDecl)
+      ENUM_TO_STR(ValueDecl)
+      default:
+      {
+        assert(!"Unknown declRefKind");
         return "UNKNOWN";
       }
     }

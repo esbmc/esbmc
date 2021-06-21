@@ -183,9 +183,24 @@ void VarDeclTracker::config(std::string ab_path)
   hasExternalStorage = false; // hard coded, may need to change in the future
   isExternallyVisible = true; // hard coded, may need to change in the future
   set_hasGlobalStorage();
-
   // set init value
   set_hasInit();
+  // set id
+  set_id();
+}
+
+void VarDeclTracker::set_id()
+{
+  if (decl_kind == SolidityTypes::DeclVar)
+  {
+    assert(decl_json.contains("id"));
+    assert(id == idInvalid); // only allowed to set once
+    id = decl_json["id"].get<unsigned>();
+  }
+  else
+  {
+    assert(!"should not be here - unsupported decl_kind when setting id for var decl");
+  }
 }
 
 void VarDeclTracker::set_hasGlobalStorage()
@@ -386,6 +401,24 @@ void BinaryOperatorTracker::set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string
     //    clang::Stmt::DeclRefExprClass
     expr_ptr = new DeclRefExprTracker(expr_json);
     expr_ptr->set_stmt_class(SolidityTypes::DeclRefExprClass);
+    // set DeclRef ID and kind
+    StmtTrackerPtr decl_ptr = expr_ptr;
+    auto decl_ref_tracker = static_cast<DeclRefExprTracker*>(decl_ptr);
+
+    // set DeclRef id
+    assert(decl_ref_tracker->get_decl_ref_id() == DeclRefExprTracker::declRefIdInvalid); // only allowed to set ONCE
+    decl_ref_tracker->set_decl_ref_id(expr_json["referencedDeclaration"].get<unsigned>());
+
+    // set DeclRef kind
+    if (expr_json["typeDescriptions"]["typeString"].get<std::string>() == "uint8")
+    {
+      assert(decl_ref_tracker->get_decl_ref_kind() == SolidityTypes::declRefError); // only allowed to set ONCE
+      decl_ref_tracker->set_decl_ref_kind(SolidityTypes::ValueDecl);
+    }
+    else
+    {
+      assert(!"Unsupported data type for ValDecl");
+    }
   }
   else if (node_type == "Literal")
   {
@@ -401,3 +434,7 @@ void BinaryOperatorTracker::set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string
   }
 }
 
+/* =======================================================
+ * DeclRefExprTracker
+ * =======================================================
+ */
