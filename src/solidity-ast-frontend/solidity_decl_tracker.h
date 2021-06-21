@@ -148,6 +148,8 @@ using StmtTrackerPtr = StmtTracker*;
 class DeclRefExprTracker : public StmtTracker
 {
 public:
+  static constexpr unsigned declRefIdInvalid = std::numeric_limits<unsigned>::max();
+
   DeclRefExprTracker(const nlohmann::json& _json) :
     StmtTracker(_json)
   {
@@ -164,7 +166,31 @@ public:
 
   void clear_all()
   {
+    decl_ref_id = declRefIdInvalid;
+    decl_ref_kind = SolidityTypes::declRefError;
   }
+
+  // getters
+  NamedDeclTracker& get_nameddecl_tracker() { return nameddecl_tracker; } // for get_decl_name(...)
+  QualTypeTracker& get_qualtype_tracker()   { return qualtype_tracker; }  // for get_type(...)
+  unsigned get_decl_ref_id() const { return decl_ref_id; }
+  SolidityTypes::declRefKind get_decl_ref_kind() const { return decl_ref_kind; }
+
+  // setters
+  void set_decl_ref_id(unsigned _id) { decl_ref_id = _id; }
+  void set_decl_ref_kind(SolidityTypes::declRefKind _kind) { decl_ref_kind = _kind; }
+  // NamedDeclTracker setters
+  //void set_named_decl_name();
+  //void set_named_decl_kind();
+  // QualTypeTracker setters
+  //void set_qualtype_tracker();
+  //void set_qualtype_bt_kind();
+
+private:
+  NamedDeclTracker nameddecl_tracker;
+  QualTypeTracker qualtype_tracker;
+  unsigned decl_ref_id;
+  SolidityTypes::declRefKind decl_ref_kind;
 };
 
 class ImplicitCastExprTracker : public StmtTracker
@@ -353,6 +379,8 @@ public:
 class VarDeclTracker : public DeclTracker
 {
 public:
+  static constexpr unsigned idInvalid = std::numeric_limits<unsigned>::max();
+
   VarDeclTracker(nlohmann::json _decl_json):
     DeclTracker(_decl_json)
   {
@@ -377,17 +405,19 @@ public:
     hasExternalStorage = false;
     isExternallyVisible = false;
     hasInit = false;
+    id = idInvalid;
   }
 
   // config this tracker based on json values
   void config(std::string ab_path);
 
   // getters
-  bool get_hasAttrs()                       { return hasAttrs; }
-  bool get_hasGlobalStorage()               { return hasGlobalStorage; }
-  bool get_hasExternalStorage()             { return hasExternalStorage; }
-  bool get_isExternallyVisible()            { return isExternallyVisible; }
-  bool get_hasInit()                        { return hasInit; }
+  bool get_hasAttrs()            { return hasAttrs; }
+  bool get_hasGlobalStorage()    { return hasGlobalStorage; }
+  bool get_hasExternalStorage()  { return hasExternalStorage; }
+  bool get_isExternallyVisible() { return isExternallyVisible; }
+  bool get_hasInit()             { return hasInit; }
+  unsigned get_id() const        { return id; }
 
 private:
   bool hasAttrs;
@@ -395,6 +425,7 @@ private:
   bool hasExternalStorage;
   bool isExternallyVisible; // NOT a direct translation of Solidity's visibility. Visible to other functions in this contract
   bool hasInit;
+  unsigned id;
 
   // private setters : set the member values based on the corresponding json value. Used by config() only.
   // Setting them outside this class is NOT allowed.
@@ -402,6 +433,8 @@ private:
   void set_hasGlobalStorage();
   // init value setters
   void set_hasInit();
+  // id for future DeclRefExpr uses
+  void set_id();
 };
 
 // function declaration

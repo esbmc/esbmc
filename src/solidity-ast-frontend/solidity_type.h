@@ -64,6 +64,14 @@ namespace SolidityTypes
   };
   binaryOpClass get_binary_op_class(const std::string& kind);
   const char* binaryOpClass_to_str(binaryOpClass the_boClass);
+
+  enum declRefKind
+  {
+    EnumConstantDecl = 0,
+    ValueDecl,
+    declRefError
+  };
+  const char* declRefKind_to_str(declRefKind the_declRefKind);
 };
 
 #endif /* SOLIDITY_TYPE_H_ */
