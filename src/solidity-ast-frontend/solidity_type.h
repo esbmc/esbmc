@@ -50,9 +50,20 @@ namespace SolidityTypes
   enum stmtClass
   {
     CompoundStmtClass = 0, // clang::Stmt::CompoundStmtClass
+    BinaryOperatorClass,
+    DeclRefExprClass,
+    ImplicitCastExprClass,
     StmtClassError
   };
   const char* stmtClass_to_str(stmtClass the_stmtClass);
+
+  enum binaryOpClass
+  {
+    BO_Assign = 0,
+    BOError
+  };
+  binaryOpClass get_binary_op_class(const std::string& kind);
+  const char* binaryOpClass_to_str(binaryOpClass the_boClass);
 };
 
 #endif /* SOLIDITY_TYPE_H_ */

@@ -220,11 +220,62 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
 
       code_blockt block;
       unsigned ctr = 0;
+      for (const auto &stmt : compound_stmt->get_statements())
+      {
+        exprt statement;
+        if(get_expr(stmt, statement))
+          return true;
+
+        convert_expression_to_code(statement);
+        block.operands().push_back(statement);
+        ++ctr;
+      }
 
       printf(" \t @@@ CompoundStmt has %u statements\n", ctr);
 
-      // TODO: get_final_location_from_stmt
-      assert(!"cool");
+      // Set the end location for blocks
+      locationt location_end;
+      //get_final_location_from_stmt(stmt, location_end);
+
+      block.end_location(location_end);
+
+      new_expr = block;
+      assert(!"done - all CompoundStmtClass?");
+      break;
+    }
+
+    // Binary expression such as a+1, a-1 and assignments
+    case SolidityTypes::stmtClass::BinaryOperatorClass:
+    {
+      printf("	@@@ got Expr: SolidityTypes::stmtClass::BinaryOperatorClass, ");
+      printf("  call_expr_times=%d\n", call_expr_times++);
+      const BinaryOperatorTracker* binop =
+        static_cast<const BinaryOperatorTracker*>(stmt); // pointer to const CompoundStmtTracker: can modify ptr but not the object content
+
+      if(get_binary_operator_expr(binop, new_expr))
+        return true;
+
+      break;
+    }
+
+    // Reference to a declared object, such as functions or variables
+    case SolidityTypes::stmtClass::DeclRefExprClass:
+    {
+      printf("	@@@ got Expr: SolidityTypes::stmtClass::DeclRefExprClass, ");
+      printf("  call_expr_times=%d\n", call_expr_times++);
+
+      const DeclRefExprTracker* decl =
+        static_cast<const DeclRefExprTracker*>(stmt);
+
+      // TODO: associate previous VarDecl AST node with this DeclRefExpr
+      /*
+      const clang::Decl &dcl = static_cast<const clang::Decl &>(*decl.getDecl());
+
+      if(get_decl_ref(dcl, new_expr))
+        return true;
+      */
+      assert(!"DeclRefExpr continue ...");
+
       break;
     }
 
@@ -236,6 +287,21 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
   }
 
   new_expr.location() = location;
+  return false;
+}
+
+bool solidity_convertert::get_binary_operator_expr(
+  const BinaryOperatorTracker* binop,
+  exprt &new_expr)
+{
+  exprt lhs;
+  if(get_expr(binop->get_LHS(), lhs))
+    return true;
+
+  // TODO: getRHS, get_type, getOpcode
+  assert(!"done - get_binary_operator_expr?");
+
+  //new_expr.copy_to_operands(lhs, rhs);
   return false;
 }
 
@@ -547,6 +613,18 @@ symbolt *solidity_convertert::move_symbol_to_context(symbolt &symbol)
   }
 
   return s;
+}
+
+void solidity_convertert::convert_expression_to_code(exprt &expr)
+{
+  if(expr.is_code())
+    return;
+
+  codet code("expression");
+  code.location() = expr.location();
+  code.move_to_operands(expr);
+
+  expr.swap(code);
 }
 
 void solidity_convertert::print_json_element(nlohmann::json &json_in, const unsigned index,
