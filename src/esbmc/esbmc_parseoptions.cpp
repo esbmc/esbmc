@@ -103,7 +103,7 @@ void esbmc_parseoptionst::set_verbosity_msg(messaget &message)
       v = 9;
   }
 
-  message.set_verbosity(v);
+  message.set_verbosity((message_handlert::VERBOSITY)v);
 }
 
 extern "C" uint8_t *esbmc_version_string;

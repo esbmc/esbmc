@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/goto_functions.h>
 #include <unordered_set>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 #include <util/std_types.h>
 
 // do a full inlining

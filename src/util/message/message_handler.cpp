@@ -1,18 +1,20 @@
 /*******************************************************************\
 
-Module:
+Module: Message Handler System. This system is responsible for all IO
+  operations regarding the message system of ESBMC
 
 Author: Daniel Kroening, kroening@kroening.com
+
+Maintainers:
+- @2021: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
 
 \*******************************************************************/
 
 #include <util/i2string.h>
-#include <util/message.h>
-#include <fstream>
-#include <fmt/core.h>
+#include <util/message/message_handler.h>
 
 void message_handlert::print(
-  unsigned level,
+  message_handlert::VERBOSITY level,
   const std::string &message,
   const locationt &location) const
 {
@@ -53,29 +55,4 @@ void message_handlert::print(
   dest += message;
 
   print(level, dest);
-}
-
-void message_handlert::print(unsigned level, const std::string &message) const
-{
-  fmt::print(level <= 1 ? stderr_output : stdout_output, "{}\n", message);
-}
-
-void messaget::print(unsigned level, const std::string &message) const
-{
-  if(verbosity >= level)
-    message_handler.print(level, message);
-}
-
-void messaget::print(
-  unsigned level,
-  const std::string &message,
-  const locationt &location) const
-{
-  if(verbosity >= level)
-    message_handler.print(level, message, location);
-}
-
-void messaget::set_message_handler(message_handlert *_message_handler)
-{
-  message_handler = *_message_handler;
 }

@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 #include <util/std_types.h>
 
 class goto_loopst : public message_streamt

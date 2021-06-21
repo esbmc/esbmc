@@ -3,7 +3,7 @@
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>

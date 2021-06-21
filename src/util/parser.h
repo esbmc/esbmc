@@ -4,7 +4,7 @@
 #include <iostream>
 #include <string>
 #include <util/expr.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <vector>
 
 class parsert

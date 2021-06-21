@@ -14,7 +14,7 @@ Date: June 2006
 #include <langapi/mode.h>
 #include <util/base_type.h>
 #include <util/irep_serialization.h>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 #include <util/namespace.h>
 #include <util/symbol_serialization.h>
 

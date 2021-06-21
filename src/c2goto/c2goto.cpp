@@ -1,4 +1,5 @@
 #include <fstream>
+#include <memory>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/write_goto_binary.h>
 #include <langapi/language_ui.h>
@@ -7,6 +8,7 @@
 #include <util/config.h>
 #include <util/irep2.h>
 #include <util/parseoptions.h>
+#include <util/message/fmt_message_handler.h>
 
 const struct group_opt_templ c2goto_options[] = {
   {"Basic Usage",
@@ -82,8 +84,10 @@ int main(int argc, const char **argv)
   type_poolt bees(true);
   type_pool = bees;
 
-  message_handlert handler;
-  messaget msg(handler);
+  std::shared_ptr<message_handlert> handler;
+  handler = std::make_shared<fmt_message_handler>();
+  messaget msg;
+  msg.add_message_handler(handler);
   c2goto_parseopt parseopt(argc, argv, msg);
   return parseopt.main();
 }

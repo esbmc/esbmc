@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <iostream>
 #include <string>
-#include <util/message.h>
+#include <util/message/message.h>
 
 bool c_preprocess(
   const std::string &path,

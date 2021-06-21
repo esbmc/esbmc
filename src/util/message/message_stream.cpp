@@ -7,9 +7,11 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cstring>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 
-void message_streamt::error_parse_line(unsigned level, const std::string &line)
+void message_streamt::error_parse_line(
+  message_handlert::VERBOSITY level,
+  const std::string &line)
 {
   std::string error_msg = line;
 
@@ -120,7 +122,9 @@ void message_streamt::error_parse_line(unsigned level, const std::string &line)
   message_handler.print(level, error_msg, saved_error_location);
 }
 
-void message_streamt::error_parse(unsigned level, const std::string &error)
+void message_streamt::error_parse(
+  message_handlert::VERBOSITY level,
+  const std::string &error)
 {
   const char *tptr = error.c_str();
 
