@@ -399,10 +399,29 @@ bool solidity_convertert::get_binary_operator_expr(
   if(get_expr(binop->get_RHS(), rhs))
     return true;
 
-  // TODO: get_type, getOpcode
-  assert(!"done - get_binary_operator_expr?");
+  typet t;
+  if(get_type(binop->get_qualtype_tracker(), t))
+    return true;
 
-  //new_expr.copy_to_operands(lhs, rhs);
+  switch(binop->get_binary_opcode()) // for "_x=100;", it returns "BO_Assign"
+  {
+    case SolidityTypes::BO_Assign:
+    {
+      printf("  @@@ got binop.getOpcode: clang::BO_Assign\n");
+      // If we use code_assignt, it will reserve two operands,
+      // and the copy_to_operands method call at the end of
+      // this method will put lhs and rhs in positions 2 and 3,
+      // instead of 0 and 1 :/
+      new_expr = side_effect_exprt("assign", t);
+      break;
+    }
+      default:
+      {
+        assert(!"Unimplemented opcode in BinaryOperatorExpr");
+      }
+  }
+
+  new_expr.copy_to_operands(lhs, rhs);
   return false;
 }
 

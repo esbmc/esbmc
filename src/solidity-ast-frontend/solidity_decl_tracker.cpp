@@ -363,6 +363,7 @@ void BinaryOperatorTracker::config()
   set_binary_opcode();
   set_lhs();
   set_rhs();
+  set_qualtype_tracker();
 }
 
 void BinaryOperatorTracker::set_binary_opcode()
@@ -440,13 +441,30 @@ void BinaryOperatorTracker::set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string
     }
     else
     {
-      assert(!"unimplemented - other data types");
+      assert(!"unimplemented - other data types in set_lhs_rhs when setting BinaryOperatorTracker");
     }
   }
   else
   {
     printf("Unimplemented %s nodeType in BinaryOperatorTracker\n", lor.c_str());
     assert(0);
+  }
+}
+
+void BinaryOperatorTracker::set_qualtype_tracker()
+{
+  std::string type = stmt_json["typeDescriptions"]["typeString"].get<std::string>();
+  if (type == "uint8")
+  {
+    assert(qualtype_tracker.get_type_class() == SolidityTypes::TypeError); // only allowed to set once during config();
+    assert(qualtype_tracker.get_bt_kind() == SolidityTypes::BuiltInError); // only allowed to set once during config();
+    // Solidity's uint8 == Clang's clang::BuiltinType::UChar
+    qualtype_tracker.set_type_class(SolidityTypes::TypeBuiltin);
+    qualtype_tracker.set_bt_kind(SolidityTypes::BuiltInUChar);
+  }
+  else
+  {
+    assert(!"unimplemented - other data types when setting qualtype_tracker in BinaryOperatorTracker");
   }
 }
 
