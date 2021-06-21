@@ -75,9 +75,6 @@ public:
     {
       assert(data->ref_count != 0);
       data->ref_count++;
-#ifdef IREP_DEBUG
-      std::cout << "COPY " << data << " " << data->ref_count << "\n";
-#endif
     }
   }
 
@@ -85,11 +82,6 @@ public:
   {
     dt *tmp;
     assert(&irep != this); // check if we assign to ourselves
-
-#ifdef IREP_DEBUG
-    std::cout << "ASSIGN\n";
-#endif
-
     tmp = data;
     data = irep.data;
     if(data != nullptr)
