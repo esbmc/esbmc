@@ -66,13 +66,27 @@ public:
    * @param message string to be printed
    * @param progress: float from 0-1 that represents the current progress of the latest task. (-1 means infinite)
    * @param location location where the message happened
+   * @return an index representing this progress
    */
-  virtual void progress(
+  virtual unsigned progress(
     const std::string &message,
-    double progress = -1,
+    double progress [[gnu::unused]] = -1,
     const std::string location = "") const
   {
     print(message_handlert::PROGRESS, message, location);
+    return 0;
+  }
+
+  /**
+   * @brief Updates progress of specific task
+   * 
+   * @param index of task
+   * @param progress new progress status
+   */
+  virtual void update_progress(
+    unsigned index [[gnu::unused]],
+    double progress [[gnu::unused]]) const
+  {
   }
   /**
    * @brief Prints a status message

@@ -48,7 +48,7 @@ bmct::bmct(
   optionst &opts,
   contextt &_context,
   const messaget &_message_handler)
-  : msg(_message_handler), options(opts), context(_context), ns(context)
+  : options(opts), context(_context), ns(context), msg(_message_handler)
 {
   interleaving_number = 0;
   interleaving_failed = 0;

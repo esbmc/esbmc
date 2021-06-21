@@ -37,10 +37,9 @@ public:
   virtual void show_symbol_table_plain(std::ostream &out);
   virtual void show_symbol_table_xml_ui();
 
-  const messaget &msg;
-
 protected:
   const cmdlinet &_cmdline;
+  const messaget &msg;
 };
 
 #endif
