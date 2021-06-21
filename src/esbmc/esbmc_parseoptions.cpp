@@ -54,7 +54,6 @@ extern "C"
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/symbol.h>
 #include <util/time_stopping.h>
-#include <fmt/format.h>
 #include <util/message/format.h>
 
 #ifndef _WIN32
@@ -565,9 +564,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         {
           // Invalid size read.
           msg.error("Short read communicating with kinduction children");
-          msg.error(
-            fmt::format("Size {}, expected {}", read, sizeof(resultt))
-          );
+          msg.error(fmt::format("Size {}, expected {}", read, sizeof(resultt)));
           abort();
         }
       }
@@ -732,7 +729,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       {
         msg.result(fmt::format(
           "\nSolution found by the forward condition; "
-          "all states are reachable (k = {d})\n"
+          "all states are reachable (k = {:d})\n"
           "VERIFICATION SUCCESSFUL",
           fc_solution));
         return false;
@@ -748,7 +745,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       {
         msg.result(fmt::format(
           "\nSolution found by the inductive step "
-          "(k = {d})\n"
+          "(k = {:d})\n"
           "VERIFICATION SUCCESSFUL",
           is_solution));
         return false;
@@ -785,7 +782,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmct bmc(goto_functions, opts, context, msg);
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      msg.status(fmt::format("*** Checking base case, k = {d}\n", k_step));
+      msg.status(fmt::format("*** Checking base case, k = {:d}\n", k_step));
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -891,7 +888,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmc.options.set_option("unwind", integer2string(k_step));
 
       msg.status(
-        fmt::format("*** Checking forward condition, k = {d}", k_step));
+        fmt::format("*** Checking forward condition, k = {:d}", k_step));
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -959,7 +956,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      msg.status(fmt::format("*** Checking inductive step, k = {d}", k_step));
+      msg.status(fmt::format("*** Checking inductive step, k = {:d}", k_step));
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -1192,7 +1189,7 @@ int esbmc_parseoptionst::do_base_case(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  msg.status(fmt::format("*** Checking base case, k = {d}", k_step));
+  msg.status(fmt::format("*** Checking base case, k = {:d}", k_step));
   switch(do_bmc(bmc))
   {
   case smt_convt::P_UNSATISFIABLE:
@@ -1201,7 +1198,7 @@ int esbmc_parseoptionst::do_base_case(
     break;
 
   case smt_convt::P_SATISFIABLE:
-    msg.result(fmt::format("\nBug found (k = {d}", k_step));
+    msg.result(fmt::format("\nBug found (k = {:d}", k_step));
     return true;
 
   default:
@@ -1238,7 +1235,7 @@ int esbmc_parseoptionst::do_forward_condition(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  msg.status(fmt::format("*** Checking forward condition, k = {d}", k_step));
+  msg.status(fmt::format("*** Checking forward condition, k = {:d}", k_step));
   auto res = do_bmc(bmc);
 
   // Restore the no assertion flag, before checking the other steps
@@ -1254,7 +1251,7 @@ int esbmc_parseoptionst::do_forward_condition(
   case smt_convt::P_UNSATISFIABLE:
     msg.result(fmt::format(
       "\nSolution found by the forward condition; "
-      "all states are reachable (k = {d}",
+      "all states are reachable (k = {:d}",
       k_step));
     return false;
 
@@ -1293,7 +1290,7 @@ int esbmc_parseoptionst::do_inductive_step(
   bmct bmc(goto_functions, opts, context, msg);
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  msg.status(fmt::format("*** Checking inductive step, k = {d}", k_step));
+  msg.status(fmt::format("*** Checking inductive step, k = {:d}", k_step));
   switch(do_bmc(bmc))
   {
   case smt_convt::P_SATISFIABLE:
@@ -1304,7 +1301,7 @@ int esbmc_parseoptionst::do_inductive_step(
   case smt_convt::P_UNSATISFIABLE:
     msg.result(fmt::format(
       "\nSolution found by the inductive step "
-      "(k = {d})",
+      "(k = {:d})",
       k_step));
     return false;
 

@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/show_symbol_table.h>
 
 language_uit::language_uit(const cmdlinet &__cmdline, const messaget &msg)
-  : _cmdline(__cmdline), msg(msg), language_files(msg)
+  : language_files(msg), _cmdline(__cmdline), msg(msg)
 {
 }
 

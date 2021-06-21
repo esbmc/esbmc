@@ -18,7 +18,10 @@ Maintainers:
 \*******************************************************************/
 
 #pragma once
+#pragma GCC diagnostic ignored "-Wnonnull-compare"
+#pragma GCC diagnostic ignored "-Waddress"
 #include <fmt/format.h>
+#pragma GCC diagnostic pop
 #include <big-int/bigint.hh>
 
 // For more in-depth for how this specialization work look at
@@ -51,6 +54,7 @@ struct fmt::formatter<BigInt>
     {
     case 'd':
       base = 10;
+      break;
     default:
       throw format_error("unsupported presentation for bigint");
     }
