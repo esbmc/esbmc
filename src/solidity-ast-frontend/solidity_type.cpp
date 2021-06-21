@@ -138,9 +138,39 @@ namespace SolidityTypes
     switch(the_stmtClass)
     {
       ENUM_TO_STR(CompoundStmtClass)
+      ENUM_TO_STR(BinaryOperatorClass)
+      ENUM_TO_STR(DeclRefExprClass)
+      ENUM_TO_STR(ImplicitCastExprClass)
       default:
       {
         assert(!"Unknown stmtClass");
+        return "UNKNOWN";
+      }
+    }
+  }
+
+  binaryOpClass get_binary_op_class(const std::string& kind)
+  {
+    if (kind == "=")
+    {
+      return BO_Assign;
+    }
+    else
+    {
+      assert(!"Unsupported binary operator class");
+    }
+    return BOError;
+  }
+
+  const char* binaryOpClass_to_str(binaryOpClass the_boClass)
+  {
+    switch(the_boClass)
+    {
+      ENUM_TO_STR(BO_Assign)
+      ENUM_TO_STR(BOError)
+      default:
+      {
+        assert(!"Unknown binaryOpClass");
         return "UNKNOWN";
       }
     }

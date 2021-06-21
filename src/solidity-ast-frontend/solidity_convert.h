@@ -51,6 +51,7 @@ protected:
   void get_location_from_decl(const SourceLocationTracker &decl_slm, locationt &location);
   void get_start_location_from_stmt(const StmtTracker* stmt, locationt &location);
   void set_location(const SourceLocationTracker &decl_slm, std::string &function_name, locationt &location);
+  bool get_binary_operator_expr(const BinaryOperatorTracker* binop, exprt &new_expr);
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
 
@@ -65,6 +66,7 @@ protected:
     locationt location);
 
   symbolt *move_symbol_to_context(symbolt &symbol);
+  void convert_expression_to_code(exprt &expr);
 };
 
 #endif /* SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_ */

@@ -274,34 +274,130 @@ void FunctionDeclTracker::set_has_body()
 
   // Everything is considered as compound statement class, even with just one statement
   stmt = new CompoundStmtTracker(decl_json["body"]["statements"]);
-  stmt->set_stmt_class(SolidityTypes::CompoundStmtClass);
   stmt->config();
 }
 
 FunctionDeclTracker::~FunctionDeclTracker()
 {
   printf("@@ Deleting function decl tracker %s...\n", nameddecl_tracker.get_name().c_str());
+  assert(stmt);
   delete stmt;
 }
+
 /* =======================================================
  * CompoundStmtTracker
  * =======================================================
  */
+CompoundStmtTracker::~CompoundStmtTracker()
+{
+  for (auto stmt : statements)
+  {
+    assert(stmt);
+    delete stmt;
+  }
+}
+
 void CompoundStmtTracker::config()
 {
+  set_stmt_class(SolidityTypes::CompoundStmtClass);
+
   // item is like { "0" : { the_expr }}
   for (const auto& item : stmt_json.items())
   {
+    if (std::stoi(item.key()) >= 2) // TODO: remove debug when proceeding with Part III and IV!
+      continue;
     // populate statement vector based on each statement json object
     const auto& stmt = item.value();
     assert(stmt["nodeType"] == "ExpressionStatement"); // expect all statement to be "ExpressionStatement"
     assert(stmt.contains("expression")); // expect ExpressionStatement has an "expression" key
-    add_statement(stmt);
+    add_statement(stmt["expression"]);
   }
-  assert(!"cst config");
 }
 
 void CompoundStmtTracker::add_statement(const nlohmann::json& expr)
 {
-  ::print_decl_json(expr);
+  // Construct the statemnt object based on the information in expr json object
+  if (expr["nodeType"] == "Assignment")
+  {
+    StmtTracker* stmt = new BinaryOperatorTracker(expr);
+    stmt->config();
+    statements.push_back(stmt);
+  }
+  else
+  {
+    assert(!"Unimplemented expression nodeType");
+  }
 }
+
+/* =======================================================
+ * BinaryOperatorTracker
+ * =======================================================
+ */
+BinaryOperatorTracker::~BinaryOperatorTracker()
+{
+  assert(lhs);
+  delete lhs;
+  assert(rhs);
+  delete rhs;
+}
+
+void BinaryOperatorTracker::config()
+{
+  // order is important. Do NOT change!
+  set_stmt_class(SolidityTypes::BinaryOperatorClass);
+  set_binary_opcode();
+  set_lhs();
+  set_rhs();
+}
+
+void BinaryOperatorTracker::set_binary_opcode()
+{
+  assert(binary_opcode == SolidityTypes::BOError); // only allowed to set once during config() stage
+  binary_opcode = SolidityTypes::get_binary_op_class(
+      stmt_json["operator"].get<std::string>()
+      );
+}
+
+void BinaryOperatorTracker::set_lhs()
+{
+  set_lhs_or_rhs(lhs, "LHS");
+}
+
+void BinaryOperatorTracker::set_rhs()
+{
+  set_lhs_or_rhs(rhs, "RHS");
+}
+
+void BinaryOperatorTracker::set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string lor)
+{
+  assert(!expr_ptr); // only allowed to set once during config() stage
+
+  assert((lor == "LHS") || (lor == "RHS"));
+  std::string hs_key = (lor == "LHS") ? "leftHandSide" : "rightHandSide";
+  printf("@@ populating BinaryOperatorTracker's %s ...\n", lor.c_str());
+
+  assert(stmt_json.contains(hs_key)); // expect such json object to have a LHS key
+  const nlohmann::json& expr_json = stmt_json[hs_key];
+  std::string node_type = expr_json["nodeType"].get<std::string>();
+
+  if (node_type == "Identifier" && expr_json.contains("referencedDeclaration"))
+  {
+    // Solidity expr's "Identifier" /\ has "referencedDeclaration" --->
+    //    clang::Stmt::DeclRefExprClass
+    expr_ptr = new DeclRefExprTracker(expr_json);
+    expr_ptr->set_stmt_class(SolidityTypes::DeclRefExprClass);
+  }
+  else if (node_type == "Literal")
+  {
+    // Solidity expr's "Literal" /\ "typeString" has "int_" --->
+    //      clang::Stmt::IntegerLiteralClass wrapped in clang::Stmt::ImplicitCastExprClass
+    expr_ptr = new ImplicitCastExprTracker(expr_json);
+    expr_ptr->set_stmt_class(SolidityTypes::ImplicitCastExprClass);
+  }
+  else
+  {
+    printf("Unimplemented %s nodeType in BinaryOperatorTracker\n", lor.c_str());
+    assert(0);
+  }
+}
+
