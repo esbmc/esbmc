@@ -129,7 +129,7 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
       mult = 86400;
       break;
     default:
-      msg.err("Unrecognized timeout suffix");
+      msg.error("Unrecognized timeout suffix");
       abort();
     }
   }
@@ -566,8 +566,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
           // Invalid size read.
           msg.error("Short read communicating with kinduction children");
           msg.error(
-            fmt::format("Size {}, expected {}", read) size, sizeof(resultt));
-          )
+            fmt::format("Size {}, expected {}", read, sizeof(resultt))
+          );
           abort();
         }
       }
