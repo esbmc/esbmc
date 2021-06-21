@@ -19,6 +19,7 @@
 #include <langapi/languages.h>
 #include <util/arith_tools.h>
 #include <util/std_types.h>
+#include <ostream>
 
 extern std::string verification_file;
 

@@ -19,7 +19,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <unordered_map>
 #include <unordered_set>
 #include <util/crypto_hash.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/options.h>
 
 /**

@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iostream>
 #include <set>
 #include <util/context.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 class language_modulet
 {

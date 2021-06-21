@@ -11,8 +11,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <sstream>
 #include <util/expr.h>
-#include <util/message.h>
-
+#include <util/message/message_handler.h>
+#include <util/message/message.h>
 class message_streamt
 {
 public:
@@ -54,29 +54,29 @@ public:
 
   void error(const std::string &message)
   {
-    send_msg(1, message);
+    send_msg(message_handlert::ERROR, message);
   }
 
   void warning(const std::string &message)
   {
-    send_msg(2, message);
+    send_msg(message_handlert::WARNING, message);
   }
 
   void error()
   {
-    send_msg(1, str.str());
+    send_msg(message_handlert::ERROR, str.str());
     clear_err();
   }
 
   void warning()
   {
-    send_msg(2, str.str());
+    send_msg(message_handlert::WARNING, str.str());
     clear_err();
   }
 
   void status()
   {
-    send_msg(6, str.str());
+    send_msg(message_handlert::STATUS, str.str());
     clear_err();
   }
 
@@ -92,7 +92,7 @@ public:
     return message_handler;
   }
 
-  void error_parse(unsigned level)
+  void error_parse(message_handlert::VERBOSITY level)
   {
     error_parse(level, str.str());
     clear_err();
@@ -109,19 +109,20 @@ protected:
   bool error_found;
   locationt saved_error_location;
 
-  void send_msg(unsigned level, const std::string &message)
+  void send_msg(message_handlert::VERBOSITY level, const std::string &message)
   {
     if(message == "")
       return;
-    if(level <= 1)
+    if(level <= message_handlert::ERROR)
       error_found = true;
     message_handler.print(level, message, saved_error_location);
     saved_error_location.make_nil();
   }
 
-  void error_parse_line(unsigned level, const std::string &line);
+  void
+  error_parse_line(message_handlert::VERBOSITY level, const std::string &line);
 
-  void error_parse(unsigned level, const std::string &error);
+  void error_parse(message_handlert::VERBOSITY level, const std::string &error);
 };
 
 #endif

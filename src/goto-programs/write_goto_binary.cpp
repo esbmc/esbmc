@@ -10,7 +10,7 @@ Author: CM Wintersteiger
 #include <goto-programs/goto_function_serialization.h>
 #include <goto-programs/write_goto_binary.h>
 #include <util/irep_serialization.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/symbol_serialization.h>
 
 bool write_goto_binary(

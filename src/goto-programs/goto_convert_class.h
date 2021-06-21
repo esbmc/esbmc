@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <stack>
 #include <util/expr_util.h>
 #include <util/guard.h>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 #include <util/namespace.h>
 #include <util/options.h>
 #include <util/std_code.h>

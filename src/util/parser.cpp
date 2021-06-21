@@ -35,5 +35,5 @@ void parsert::parse_error(const std::string &message, const std::string &before)
   std::string tmp = message;
   if(before != "")
     tmp += " before `" + before + "'";
-  msg.print(1, tmp, location);
+  msg.print(message_handlert::ERROR, tmp, location);
 }

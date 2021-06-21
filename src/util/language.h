@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdio>
 #include <set>
 #include <util/context.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/namespace.h>
 
 class languaget

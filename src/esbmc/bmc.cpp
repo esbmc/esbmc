@@ -36,7 +36,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/irep2.h>
 #include <util/location.h>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 #include <util/migrate.h>
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>

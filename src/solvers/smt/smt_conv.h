@@ -9,7 +9,7 @@
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
 #include <util/irep2_utils.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/namespace.h>
 #include <util/threeval.h>
 
