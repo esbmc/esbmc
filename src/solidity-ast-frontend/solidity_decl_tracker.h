@@ -120,7 +120,7 @@ private:
 class StmtTracker
 {
 public:
-  StmtTracker(nlohmann::json& _json) :
+  StmtTracker(const nlohmann::json& _json) :
     stmt_json(_json)
   {
     reset();
@@ -140,14 +140,15 @@ public:
   SolidityTypes::stmtClass get_stmt_class() const { return stmt_class; }
 
   // essential members for each type of statements
-  nlohmann::json& stmt_json;
+  const nlohmann::json& stmt_json;
   SolidityTypes::stmtClass stmt_class;
 };
+using StmtTrackerPtr = StmtTracker*;
 
 class DeclRefExprTracker : public StmtTracker
 {
 public:
-  DeclRefExprTracker(nlohmann::json& _json) :
+  DeclRefExprTracker(const nlohmann::json& _json) :
     StmtTracker(_json)
   {
     clear_all();
@@ -169,7 +170,7 @@ public:
 class ImplicitCastExprTracker : public StmtTracker
 {
 public:
-  ImplicitCastExprTracker(nlohmann::json& _json) :
+  ImplicitCastExprTracker(const nlohmann::json& _json) :
     StmtTracker(_json)
   {
     clear_all();
@@ -191,7 +192,7 @@ public:
 class IntegerLiteralTracker : public StmtTracker
 {
 public:
-  IntegerLiteralTracker(nlohmann::json& _json) :
+  IntegerLiteralTracker(const nlohmann::json& _json) :
     StmtTracker(_json)
   {
     clear_all();
@@ -213,23 +214,42 @@ public:
 class BinaryOperatorTracker : public StmtTracker
 {
 public:
-  BinaryOperatorTracker(nlohmann::json& _json) :
+  BinaryOperatorTracker(const nlohmann::json& _json) :
     StmtTracker(_json)
   {
     clear_all();
   }
 
-  void config() {}
+  void config();
 
   BinaryOperatorTracker(const BinaryOperatorTracker &rhs) = default;
   BinaryOperatorTracker(BinaryOperatorTracker &&rhs) = default;
   BinaryOperatorTracker& operator=(const BinaryOperatorTracker &rhs) { assert(!"copy assignment is not allowed at the moment"); }
   BinaryOperatorTracker& operator=(BinaryOperatorTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
-  ~BinaryOperatorTracker() { }
+  ~BinaryOperatorTracker();
 
   void clear_all()
   {
+    binary_opcode = SolidityTypes::BOError;
+    lhs = nullptr;
+    rhs = nullptr;
   }
+
+  // getters
+  SolidityTypes::binaryOpClass get_binary_opcode() const { return binary_opcode; }
+  const StmtTracker* get_LHS() const { return lhs; }
+  const StmtTracker* get_RHS() const { return rhs; }
+
+private:
+  SolidityTypes::binaryOpClass binary_opcode;
+  StmtTracker* lhs; // LHS of this BinaryOperator
+  StmtTracker* rhs; // RHS of this BinaryOperator
+
+  // private setters : only allowed to set key fields ONCE during config() stage
+  void set_binary_opcode();
+  void set_lhs();
+  void set_rhs();
+  void set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string lor);
 };
 
 class CompoundStmtTracker : public StmtTracker
@@ -237,7 +257,7 @@ class CompoundStmtTracker : public StmtTracker
 public:
   static constexpr unsigned numStmtInvalid = std::numeric_limits<unsigned>::max();
 
-  CompoundStmtTracker(nlohmann::json& _json) :
+  CompoundStmtTracker(const nlohmann::json& _json) :
     StmtTracker(_json)
   {
     clear_all();
@@ -247,7 +267,7 @@ public:
   CompoundStmtTracker(CompoundStmtTracker &&rhs) = default;
   CompoundStmtTracker& operator=(const CompoundStmtTracker &rhs) { assert(!"copy assignment is not allowed at the moment"); }
   CompoundStmtTracker& operator=(CompoundStmtTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
-  ~CompoundStmtTracker() { }
+  ~CompoundStmtTracker();
 
   void config();
 
@@ -261,6 +281,7 @@ public:
 
   // getters
   unsigned get_num_stmt() { return num_stmt; }
+  const std::vector<StmtTracker*>& get_statements() const { return statements; }
 
 private:
   // A compound statement can have multiple of various types,
