@@ -31,6 +31,7 @@ namespace SolidityTypes
   {
     BuiltInUChar = 0, // clang::BuiltinType::UChar
     BuiltinVoid,
+    BuiltinInt,
     BuiltInError
   };
   builInTypesKind get_builtin_type(const std::string& kind);
@@ -53,6 +54,7 @@ namespace SolidityTypes
     BinaryOperatorClass,
     DeclRefExprClass,
     ImplicitCastExprClass,
+    IntegerLiteralClass,
     StmtClassError
   };
   const char* stmtClass_to_str(stmtClass the_stmtClass);
@@ -72,6 +74,13 @@ namespace SolidityTypes
     declRefError
   };
   const char* declRefKind_to_str(declRefKind the_declRefKind);
+
+  enum castKind
+  {
+    CK_IntegralCast = 0,
+    castKindError
+  };
+  const char* castKind_to_str(castKind the_castKind);
 };
 
 #endif /* SOLIDITY_TYPE_H_ */

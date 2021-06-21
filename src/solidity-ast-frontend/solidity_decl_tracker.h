@@ -171,24 +171,14 @@ public:
   }
 
   // getters
-  NamedDeclTracker& get_nameddecl_tracker() { return nameddecl_tracker; } // for get_decl_name(...)
-  QualTypeTracker& get_qualtype_tracker()   { return qualtype_tracker; }  // for get_type(...)
   unsigned get_decl_ref_id() const { return decl_ref_id; }
   SolidityTypes::declRefKind get_decl_ref_kind() const { return decl_ref_kind; }
 
   // setters
   void set_decl_ref_id(unsigned _id) { decl_ref_id = _id; }
   void set_decl_ref_kind(SolidityTypes::declRefKind _kind) { decl_ref_kind = _kind; }
-  // NamedDeclTracker setters
-  //void set_named_decl_name();
-  //void set_named_decl_kind();
-  // QualTypeTracker setters
-  //void set_qualtype_tracker();
-  //void set_qualtype_bt_kind();
 
 private:
-  NamedDeclTracker nameddecl_tracker;
-  QualTypeTracker qualtype_tracker;
   unsigned decl_ref_id;
   SolidityTypes::declRefKind decl_ref_kind;
 };
@@ -202,29 +192,51 @@ public:
     clear_all();
   }
 
-  virtual void config() {}
+  void config();
 
   ImplicitCastExprTracker(const ImplicitCastExprTracker &rhs) = default;
   ImplicitCastExprTracker(ImplicitCastExprTracker &&rhs) = default;
   ImplicitCastExprTracker& operator=(const ImplicitCastExprTracker &rhs) { assert(!"copy assignment is not allowed at the moment"); }
   ImplicitCastExprTracker& operator=(ImplicitCastExprTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
-  virtual ~ImplicitCastExprTracker() = default;
+  ~ImplicitCastExprTracker();
 
   void clear_all()
   {
+    sub_expr = nullptr;
+    implicit_cast_kind = SolidityTypes::castKindError;
   }
+
+  // getters
+  const StmtTracker* get_sub_expr() const { return sub_expr; }
+  const QualTypeTracker& get_qualtype_tracker() const { return qualtype_tracker; }  // for get_type(...)
+  std::string get_expr_type_str() const { return expr_type_str; }
+  SolidityTypes::castKind get_implicit_cast_kind() const { return implicit_cast_kind; }
+
+  // setters
+  void set_sub_expr_kind(SolidityTypes::stmtClass _kind);
+  void set_expr_type_str(std::string _type) { expr_type_str = _type; }
+  void set_qualtype_tracker(); // QualTypeTracker setters
+  void set_implicit_cast_kind();
+
+private:
+  StmtTracker* sub_expr;
+  QualTypeTracker qualtype_tracker;  // to run get_type in convert_integer_literal
+  std::string expr_type_str; // stmt_json["typeDescriptions"]["typeString"] of the upstream BinaryOperatorExpr
+  SolidityTypes::castKind implicit_cast_kind;
 };
 
 class IntegerLiteralTracker : public StmtTracker
 {
 public:
+  static constexpr int64_t sgnExtValInvalid = std::numeric_limits<int64_t>::max();
+
   IntegerLiteralTracker(const nlohmann::json& _json) :
     StmtTracker(_json)
   {
     clear_all();
   }
 
-  void config() {}
+  void config();
 
   IntegerLiteralTracker(const IntegerLiteralTracker &rhs) = default;
   IntegerLiteralTracker(IntegerLiteralTracker &&rhs) = default;
@@ -234,7 +246,19 @@ public:
 
   void clear_all()
   {
+    sgn_ext_value = sgnExtValInvalid;
   }
+
+  // getters
+  const QualTypeTracker& get_qualtype_tracker() const { return qualtype_tracker; }  // for get_type(...)
+  int64_t get_sgn_ext_value() const { return sgn_ext_value; }
+
+  // setters
+  void set_qualtype_tracker(); // QualTypeTracker setters
+
+private:
+  QualTypeTracker qualtype_tracker; // to run get_type in convert_integer_literal
+  int64_t sgn_ext_value;
 };
 
 class BinaryOperatorTracker : public StmtTracker
