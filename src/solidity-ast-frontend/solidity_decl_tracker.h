@@ -220,7 +220,7 @@ public:
 
 private:
   StmtTracker* sub_expr;
-  QualTypeTracker qualtype_tracker;  // to run get_type in convert_integer_literal
+  QualTypeTracker qualtype_tracker;  // to run get_type in get_cast_expr
   std::string expr_type_str; // stmt_json["typeDescriptions"]["typeString"] of the upstream BinaryOperatorExpr
   SolidityTypes::castKind implicit_cast_kind;
 };
@@ -289,11 +289,16 @@ public:
   SolidityTypes::binaryOpClass get_binary_opcode() const { return binary_opcode; }
   const StmtTracker* get_LHS() const { return lhs; }
   const StmtTracker* get_RHS() const { return rhs; }
+  const QualTypeTracker& get_qualtype_tracker() const { return qualtype_tracker; }  // for get_type(...)
+
+  // setters
+  void set_qualtype_tracker(); // QualTypeTracker setters
 
 private:
   SolidityTypes::binaryOpClass binary_opcode;
   StmtTracker* lhs; // LHS of this BinaryOperator
   StmtTracker* rhs; // RHS of this BinaryOperator
+  QualTypeTracker qualtype_tracker;  // to run get_type in
 
   // private setters : only allowed to set key fields ONCE during config() stage
   void set_binary_opcode();
