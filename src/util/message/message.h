@@ -108,27 +108,6 @@ public:
   }
 
   /**
-     * @brief Converts all parameter into a string of the specified method
-     *  this should be used in order to replace stream calls. Similar of how
-     * printf is used
-     * 
-     * This format is specified through the formatter class specification(C++20)
-     * https://en.cppreference.com/w/cpp/utility/format/formatter
-     * 
-     * NOTE: The implementation for this must support C++14.
-     * 
-     * Example: format_to_string("{} {} {}!", "Hello", "World", 3);
-     *        > "Hello World 3!"
-     * 
-     * @tparam TS any kind of object that can be converted into a string
-     * @param format string with the format example "{} {} {.3d}"
-     * @param ts list of strings that are going to be put inside the format
-     * @return std::string with the formated string
-     */
-  template <typename... TS>
-  std::string format_to_string(const std::string &format, const TS &...ts);
-
-  /**
    * @brief Get the verbosity level
    * 
    * @return message_handlert::VERBOSITY level
@@ -139,13 +118,6 @@ public:
   }
 
   virtual ~messaget() = default;
-
-  // REVAMP THIS
-  message_handlert *get_message_handler(unsigned index)
-  {
-    return handlers.at(index).get();
-  }
-
   virtual void print(
     message_handlert::VERBOSITY level,
     const std::string &message,
@@ -183,16 +155,13 @@ public:
   }
 
   /**
-   * @brief Appends a message_handler to be used in this message
+   * @brief Append a message_handler to be used
    * 
    * @param handler to be appended
-   * @return index of the vector where the handler was appended
    */
-  // TODO: REVAMP THIS
-  unsigned add_message_handler(std::shared_ptr<message_handlert> &handler)
+  void add_message_handler(std::shared_ptr<message_handlert> &handler)
   {
     handlers.push_back(handler);
-    return handlers.size() - 1;
   }
 
 protected:
