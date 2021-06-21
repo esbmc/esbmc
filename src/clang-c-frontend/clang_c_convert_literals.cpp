@@ -51,7 +51,7 @@ bool clang_c_convertert::convert_integer_literal(
   if(get_type(integer_literal.getType(), type))
     return true;
 
-  assert(type.is_unsignedbv() || type.is_signedbv());
+  assert(type.is_unsignedbv() || type.is_signedbv()); // for "_x=100", false || true
 
   llvm::APInt val = integer_literal.getValue();
 
@@ -63,10 +63,10 @@ bool clang_c_convertert::convert_integer_literal(
       integer2string(val.getZExtValue()),
       type);
   }
-  else
+  else // "_x=100" uses this. "100" is considered as signed by default
   {
     the_val = constant_exprt(
-      integer2binary(val.getSExtValue(), bv_width(type)),
+      integer2binary(val.getSExtValue(), bv_width(type)), // val.getSExtValue()=100, bv_width(type)=32
       integer2string(val.getSExtValue()),
       type);
   }

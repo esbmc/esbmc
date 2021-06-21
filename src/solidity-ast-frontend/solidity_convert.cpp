@@ -1,4 +1,5 @@
 #include <solidity-ast-frontend/solidity_convert.h>
+#include <solidity-ast-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
 #include <util/c_types.h>
@@ -11,6 +12,7 @@
 
 solidity_convertert::solidity_convertert(contextt &_context, nlohmann::json &_ast_json):
   context(_context),
+  ns(context),
   ast_json(_ast_json),
   current_functionDecl(nullptr)
 {
@@ -288,9 +290,28 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
     // CStyle: int a = (int) 3.0;
     case SolidityTypes::stmtClass::ImplicitCastExprClass:
     {
-      printf("	@@@ got Expr: SolidityTypes::stmtClass::ImplicitCastExprClass or CStyleCastExprClass, ");
+      printf("	@@@ got Expr: SolidityTypes::stmtClass::ImplicitCastExprClass, ");
       printf("  call_expr_times=%d\n", call_expr_times++);
-      assert(!"great");
+      const ImplicitCastExprTracker* cast =
+        static_cast<const ImplicitCastExprTracker*>(stmt);
+
+      if(get_cast_expr(cast, new_expr))
+        return true;
+
+      break;
+    }
+
+    // An integer value
+    case SolidityTypes::stmtClass::IntegerLiteralClass:
+    {
+      printf("	@@@ got Expr: SolidityTypes::stmtClass::IntegerLiteralClass, ");
+      printf("  call_expr_times=%d\n", call_expr_times++);
+      const IntegerLiteralTracker* integer_literal =
+        static_cast<const IntegerLiteralTracker*>(stmt);
+
+      if(convert_integer_literal(integer_literal, new_expr))
+        return true;
+
       break;
     }
 
@@ -302,6 +323,33 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
   }
 
   new_expr.location() = location;
+  return false;
+}
+
+bool solidity_convertert::get_cast_expr(
+  const ImplicitCastExprTracker* cast,
+  exprt &new_expr)
+{
+  exprt expr;
+  if(get_expr(cast->get_sub_expr(), expr))
+    return true;
+
+  typet type;
+  if(get_type(cast->get_qualtype_tracker(), type))
+    return true;
+
+  switch(cast->get_implicit_cast_kind()) // "_x=100;" it returns CK_IntegralCast
+  {
+    case SolidityTypes::CK_IntegralCast:
+      solidity_gen_typecast(ns, expr, type);
+      break;
+
+    default:
+      assert(!"Conversion of unsupported clang cast operator");
+      return true;
+  }
+
+  new_expr = expr;
   return false;
 }
 
@@ -551,6 +599,12 @@ bool solidity_convertert::get_builtin_type(
     {
       new_type = unsigned_char_type();
       c_type = "unsigned_char";
+      break;
+    }
+    case SolidityTypes::builInTypesKind::BuiltinInt:
+    {
+      new_type = int_type();
+      c_type = "signed_int";
       break;
     }
     default:
