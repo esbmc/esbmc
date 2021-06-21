@@ -29,6 +29,8 @@ protected:
   contextt &context;
   nlohmann::json &ast_json; // json for Solidity AST. Use vector for multiple contracts
   std::string absolute_path;
+  std::vector< std::shared_ptr<VarDeclTracker> > global_vars; // vector to hold global variable declarations
+
   void print_json_element(nlohmann::json &json_in, const unsigned index,
     const std::string &key, const std::string& json_name);
   void print_json_array_element(nlohmann::json &json_in,
@@ -67,6 +69,8 @@ protected:
 
   symbolt *move_symbol_to_context(symbolt &symbol);
   void convert_expression_to_code(exprt &expr);
+  std::shared_ptr<VarDeclTracker> get_matched_decl_ref(unsigned ref_id); // function to get matched decl ref for DeclRefExpr
+  bool get_decl_ref(const DeclRefExprTracker* dcl, exprt &new_expr);
 };
 
 #endif /* SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_ */

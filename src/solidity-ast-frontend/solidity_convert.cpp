@@ -103,6 +103,7 @@ bool solidity_convertert::get_decl(nlohmann::json &ast_node, exprt &new_expr)
     {
       auto vd_tracker = std::make_shared<VarDeclTracker>(ast_node); // VariableDeclaration tracker
       vd_tracker->config(absolute_path);
+      global_vars.push_back(vd_tracker); // remember this var in case future DeclRefExprTacker uses it
       return get_var(vd_tracker, new_expr);
     }
     case SolidityTypes::declKind::DeclFunction:
@@ -267,15 +268,29 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
       const DeclRefExprTracker* decl =
         static_cast<const DeclRefExprTracker*>(stmt);
 
-      // TODO: associate previous VarDecl AST node with this DeclRefExpr
-      /*
-      const clang::Decl &dcl = static_cast<const clang::Decl &>(*decl.getDecl());
+      // associate previous VarDecl AST node with this DeclRefExpr
+      // In order to get the referenced declaration, we want two key information: name and type.
+      // We need to do the followings to achieve this goal:
+      //  1. find the associated AST node json object
+      //  2. use that json object to populate NamedDeclTracker and QualTypeTracker
+      //     of this DeclRefExprTracker
+      assert(decl->get_decl_ref_id() != DeclRefExprTracker::declRefIdInvalid);
+      assert(decl->get_decl_ref_kind() != SolidityTypes::declRefError);
 
-      if(get_decl_ref(dcl, new_expr))
+      if(get_decl_ref(decl, new_expr))
         return true;
-      */
-      assert(!"DeclRefExpr continue ...");
 
+      break;
+    }
+
+    // Casts expression:
+    // Implicit: float f = 1; equivalent to float f = (float) 1;
+    // CStyle: int a = (int) 3.0;
+    case SolidityTypes::stmtClass::ImplicitCastExprClass:
+    {
+      printf("	@@@ got Expr: SolidityTypes::stmtClass::ImplicitCastExprClass or CStyleCastExprClass, ");
+      printf("  call_expr_times=%d\n", call_expr_times++);
+      assert(!"great");
       break;
     }
 
@@ -290,6 +305,40 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
   return false;
 }
 
+bool solidity_convertert::get_decl_ref(const DeclRefExprTracker* dcl, exprt &new_expr)
+{
+  auto matched_dcl = get_matched_decl_ref(dcl->get_decl_ref_id());
+  assert(matched_dcl); // must be a valid decl ref pointer
+
+  // TODO: enum
+  if (dcl->get_decl_ref_kind() == SolidityTypes::EnumConstantDecl)
+  {
+    assert(!"unsupported enum decl ref types");
+    return false;
+  }
+
+  // Everything else should be a value decl
+  if (dcl->get_decl_ref_kind() == SolidityTypes::ValueDecl)
+  {
+    // Everything else should be a value decl
+    std::string name, id; // for "_x = 100;", id="c:@_x" and name="_x".
+    get_decl_name(matched_dcl->get_nameddecl_tracker(), name, id);
+
+    typet type;
+    if(get_type(matched_dcl->get_qualtype_tracker(), type))
+      return true;
+
+    new_expr = exprt("symbol", type);
+    new_expr.identifier(id);
+    new_expr.cmt_lvalue(true);
+    new_expr.name(name);
+    return false;
+  }
+
+  assert(!"Conversion of unsupported Solidity decl ref");
+  return true;
+}
+
 bool solidity_convertert::get_binary_operator_expr(
   const BinaryOperatorTracker* binop,
   exprt &new_expr)
@@ -298,7 +347,11 @@ bool solidity_convertert::get_binary_operator_expr(
   if(get_expr(binop->get_LHS(), lhs))
     return true;
 
-  // TODO: getRHS, get_type, getOpcode
+  exprt rhs;
+  if(get_expr(binop->get_RHS(), rhs))
+    return true;
+
+  // TODO: get_type, getOpcode
   assert(!"done - get_binary_operator_expr?");
 
   //new_expr.copy_to_operands(lhs, rhs);
@@ -625,6 +678,17 @@ void solidity_convertert::convert_expression_to_code(exprt &expr)
   code.move_to_operands(expr);
 
   expr.swap(code);
+}
+
+std::shared_ptr<VarDeclTracker> solidity_convertert::get_matched_decl_ref(unsigned ref_id)
+{
+  for(auto var_decl : global_vars)
+  {
+    if (var_decl->get_id() == ref_id)
+      return var_decl;
+  }
+
+  assert(!"should not be here - no matching decl ref id");
 }
 
 void solidity_convertert::print_json_element(nlohmann::json &json_in, const unsigned index,
