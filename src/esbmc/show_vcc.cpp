@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <esbmc/bmc.h>
+#include <fmt/format.h>
 #include <fstream>
 #include <iostream>
 #include <langapi/language_util.h>
@@ -66,13 +67,18 @@ void bmct::show_vcc(std::shared_ptr<symex_target_equationt> &eq)
 {
   const std::string &filename = options.get_option("output");
 
-  if(filename.empty() || filename == "-")
-    show_vcc(std::cout, eq);
+  if(filename.empty() || filename == "-") {
+    std::ostringstream oss;
+    show_vcc(oss, eq);
+    msg.status(oss.str());
+  }
+
   else
   {
     std::ofstream out(filename.c_str());
     if(!out)
-      std::cerr << "failed to open " << filename << "\n";
+      msg.error(
+        fmt::format("failed to open {}", filename);
     else
       show_vcc(out, eq);
   }
