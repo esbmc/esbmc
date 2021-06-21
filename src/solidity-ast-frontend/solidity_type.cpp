@@ -83,6 +83,7 @@ namespace SolidityTypes
     {
       ENUM_TO_STR(BuiltInUChar)
       ENUM_TO_STR(BuiltinVoid)
+      ENUM_TO_STR(BuiltinInt)
       ENUM_TO_STR(BuiltInError)
       default:
       {
@@ -125,6 +126,7 @@ namespace SolidityTypes
       ENUM_TO_STR(SC_Extern)
       ENUM_TO_STR(SC_PrivateExtern)
       ENUM_TO_STR(SC_Static)
+      ENUM_TO_STR(SCError)
       default:
       {
         assert(!"Unknown storageClass");
@@ -141,6 +143,8 @@ namespace SolidityTypes
       ENUM_TO_STR(BinaryOperatorClass)
       ENUM_TO_STR(DeclRefExprClass)
       ENUM_TO_STR(ImplicitCastExprClass)
+      ENUM_TO_STR(IntegerLiteralClass)
+      ENUM_TO_STR(StmtClassError)
       default:
       {
         assert(!"Unknown stmtClass");
@@ -167,6 +171,7 @@ namespace SolidityTypes
     switch(the_boClass)
     {
       ENUM_TO_STR(BO_Assign)
+      ENUM_TO_STR(BOError)
       default:
       {
         assert(!"Unknown binaryOpClass");
@@ -175,15 +180,30 @@ namespace SolidityTypes
     }
   }
 
-  const char* declRefKind_to_str(binaryOpClass the_declRefKind)
+  const char* declRefKind_to_str(declRefKind the_declRefKind)
   {
     switch(the_declRefKind)
     {
       ENUM_TO_STR(EnumConstantDecl)
       ENUM_TO_STR(ValueDecl)
+      ENUM_TO_STR(declRefError)
       default:
       {
         assert(!"Unknown declRefKind");
+        return "UNKNOWN";
+      }
+    }
+  }
+
+  const char* castKind_to_str(castKind the_castKind)
+  {
+    switch(the_castKind)
+    {
+      ENUM_TO_STR(CK_IntegralCast)
+      ENUM_TO_STR(castKindError)
+      default:
+      {
+        assert(!"Unknown castKind");
         return "UNKNOWN";
       }
     }

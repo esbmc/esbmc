@@ -27,6 +27,7 @@ public:
 
 protected:
   contextt &context;
+  namespacet ns;
   nlohmann::json &ast_json; // json for Solidity AST. Use vector for multiple contracts
   std::string absolute_path;
   std::vector< std::shared_ptr<VarDeclTracker> > global_vars; // vector to hold global variable declarations
@@ -58,6 +59,7 @@ protected:
   std::string get_filename_from_path(std::string path);
 
   bool get_expr(const StmtTracker* stmt, exprt &new_expr);
+  bool get_cast_expr(const ImplicitCastExprTracker* cast, exprt &new_expr);
 
   void get_default_symbol(
     symbolt &symbol,
@@ -71,6 +73,10 @@ protected:
   void convert_expression_to_code(exprt &expr);
   std::shared_ptr<VarDeclTracker> get_matched_decl_ref(unsigned ref_id); // function to get matched decl ref for DeclRefExpr
   bool get_decl_ref(const DeclRefExprTracker* dcl, exprt &new_expr);
+
+  bool convert_integer_literal(
+    const IntegerLiteralTracker* integer_literal,
+    exprt &dest);
 };
 
 #endif /* SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_ */
