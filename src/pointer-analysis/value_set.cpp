@@ -107,7 +107,8 @@ void value_sett::output(std::ostream &out) const
       }
     }
 
-    out << " } " << std::endl;
+    out << " } "
+        << "\n";
   }
 }
 
@@ -374,7 +375,7 @@ void value_sett::get_value_set_rec(
       return;
 
     default:
-      std::cerr << "Unexpected side-effect: " << expr->pretty(0) << std::endl;
+      std::cerr << "Unexpected side-effect: " << expr->pretty(0) << "\n";
       abort();
     }
   }
@@ -579,8 +580,9 @@ void value_sett::get_value_set_rec(
         else
         {
           std::cerr << "Pointer arithmetic on type where we can't determine ";
-          std::cerr << "size:" << std::endl;
-          std::cerr << subtype->pretty(0) << std::endl;
+          std::cerr << "size:"
+                    << "\n";
+          std::cerr << subtype->pretty(0) << "\n";
           abort();
         }
       }
@@ -1351,8 +1353,9 @@ void value_sett::apply_code(const expr2tc &code)
   }
   else
   {
-    std::cerr << code->pretty() << std::endl;
-    std::cerr << "value_sett: unexpected statement" << std::endl;
+    std::cerr << code->pretty() << "\n";
+    std::cerr << "value_sett: unexpected statement"
+              << "\n";
     abort();
   }
 }

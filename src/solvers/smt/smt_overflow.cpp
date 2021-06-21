@@ -166,7 +166,7 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   if(ocast.bits >= width || ocast.bits == 0)
   {
     std::cerr << "SMT conversion: overflow-typecast got wrong number of bits"
-              << std::endl;
+              << "\n";
     abort();
   }
 

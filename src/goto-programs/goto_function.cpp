@@ -72,7 +72,7 @@ void goto_convertt::do_function_call(
   {
     err_location(function);
     std::cerr << "unexpected function argument: " + new_function.id_string()
-              << std::endl;
+              << "\n";
     abort();
   }
 }
@@ -183,11 +183,13 @@ void goto_functionst::output(const namespacet &ns, std::ostream &out) const
   {
     if(it.second.body_available)
     {
-      out << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
-      out << std::endl;
+      out << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+          << "\n";
+      out << "\n";
 
       const symbolt &symbol = ns.lookup(it.first);
-      out << symbol.name << " (" << symbol.id << "):" << std::endl;
+      out << symbol.name << " (" << symbol.id << "):"
+          << "\n";
       it.second.body.output(ns, symbol.id, out);
     }
   }

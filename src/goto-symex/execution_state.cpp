@@ -61,7 +61,7 @@ execution_statet::execution_statet(
   if(it == goto_functions.function_map.end())
   {
     std::cerr << "main symbol not found; please set an entry point"
-              << std::endl;
+              << "\n";
     abort();
   }
 
@@ -221,7 +221,8 @@ void execution_statet::symex_step(reachability_treet &art)
 #ifndef _WIN32
     __asm__("int $3");
 #else
-    std::cerr << "Can't trap on windows, sorry" << std::endl;
+    std::cerr << "Can't trap on windows, sorry"
+              << "\n";
     abort();
 #endif
   }
@@ -1081,9 +1082,10 @@ void execution_statet::print_stack_traces(unsigned int indent) const
   i = 0;
   for(it = threads_state.begin(); it != threads_state.end(); it++)
   {
-    std::cout << spaces << "Thread " << i++ << ":" << std::endl;
+    std::cout << spaces << "Thread " << i++ << ":"
+              << "\n";
     it->print_stack_trace(indent + 2);
-    std::cout << std::endl;
+    std::cout << "\n";
   }
 }
 
@@ -1095,7 +1097,7 @@ void execution_statet::switch_to_monitor()
     {
       std::cerr << "Switching to ended monitor; you need to increase its "
                    "context or prefix bound"
-                << std::endl;
+                << "\n";
       mon_thread_warning = true;
     }
 

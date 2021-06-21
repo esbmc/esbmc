@@ -49,7 +49,7 @@ bool read_bin_goto_object(
       }
       else
         message_stream.str << "`" << filename << "' is not a goto-binary."
-                           << std::endl;
+                           << "\n";
 
       message_stream.error();
 

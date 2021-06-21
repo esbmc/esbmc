@@ -211,7 +211,7 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
     else
     {
       std::cout << "unknown side effect: " << statement;
-      std::cout << " at " << expr.location() << std::endl;
+      std::cout << " at " << expr.location() << "\n";
       abort();
     }
   }
@@ -470,7 +470,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
   else
   {
     std::cout << "sizeof operator expects zero or one operand, "
-              << "but got" << expr.operands().size() << std::endl;
+              << "but got" << expr.operands().size() << "\n";
     abort();
   }
 
@@ -478,7 +478,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
 
   if(new_expr.is_nil())
   {
-    std::cout << "type has no size, " << type.name() << std::endl;
+    std::cout << "type has no size, " << type.name() << "\n";
     abort();
   }
 
@@ -497,7 +497,8 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(s == nullptr)
     {
-      std::cout << "type symbol `" << identifier << "' not found" << std::endl;
+      std::cout << "type symbol `" << identifier << "' not found"
+                << "\n";
       abort();
     }
 
@@ -505,7 +506,8 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(!symbol.is_type)
     {
-      std::cout << "expected type symbol, but got " << std::endl;
+      std::cout << "expected type symbol, but got "
+                << "\n";
       symbol.dump();
       abort();
     }
@@ -708,7 +710,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     {
       if(expr.arguments().size() != 2)
       {
-        std::cout << "same_object expects two operands" << std::endl;
+        std::cout << "same_object expects two operands"
+                  << "\n";
         expr.dump();
         abort();
       }
@@ -721,7 +724,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     {
       if(expr.arguments().size() != 1)
       {
-        std::cout << "pointer_offset expects one argument" << std::endl;
+        std::cout << "pointer_offset expects one argument"
+                  << "\n";
         expr.dump();
         abort();
       }
@@ -734,7 +738,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     {
       if(expr.arguments().size() != 1)
       {
-        std::cout << "pointer_object expects one argument" << std::endl;
+        std::cout << "pointer_object expects one argument"
+                  << "\n";
         expr.dump();
         abort();
       }

@@ -52,6 +52,6 @@ void gen_typecast_to_union(exprt &e, const typet &t)
    * however... we should prevent any funny things to happen */
   std::ostringstream msg;
   msg << "Couldn't map type " << e.type().pretty_name() << " into the union"
-      << std::endl;
+      << "\n";
   throw std::domain_error(msg.str());
 }

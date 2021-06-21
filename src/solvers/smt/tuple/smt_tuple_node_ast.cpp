@@ -154,7 +154,8 @@ smt_astt tuple_node_smt_ast::select(
   smt_convt *ctx [[gnu::unused]],
   const expr2tc &idx [[gnu::unused]]) const
 {
-  std::cerr << "Select operation applied to tuple" << std::endl;
+  std::cerr << "Select operation applied to tuple"
+            << "\n";
   abort();
 }
 

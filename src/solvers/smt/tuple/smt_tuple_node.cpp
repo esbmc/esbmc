@@ -109,7 +109,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   if(!is_constant_int2t(arr_type.array_size))
   {
     std::cerr << "Non-constant sized array of type constant_array_of2t"
-              << std::endl;
+              << "\n";
     abort();
   }
 
@@ -179,12 +179,13 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     {
       std::cerr << "Fetching array elements inside tuples currently "
                    "unimplemented, sorry"
-                << std::endl;
+                << "\n";
       res = expr2tc();
     }
     else
     {
-      std::cerr << "Unexpected type in tuple_get_rec" << std::endl;
+      std::cerr << "Unexpected type in tuple_get_rec"
+                << "\n";
       abort();
     }
 

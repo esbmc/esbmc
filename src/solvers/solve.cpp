@@ -74,14 +74,15 @@ static smt_convt *create_solver(
 
   std::cerr << "The " << the_solver
             << " solver has not been built into this version of ESBMC, sorry"
-            << std::endl;
+            << "\n";
   abort();
 }
 
 static const std::string pick_default_solver()
 {
 #ifdef BOOLECTOR
-  std::cerr << "No solver specified; defaulting to Boolector" << std::endl;
+  std::cerr << "No solver specified; defaulting to Boolector"
+            << "\n";
   return "boolector";
 #else
   // Pick whatever's first in the list.
@@ -89,13 +90,13 @@ static const std::string pick_default_solver()
   {
     std::cerr << "No solver backends built into ESBMC; please either build ";
     std::cerr << "some in, or explicitly configure the smtlib backend";
-    std::cerr << std::endl;
+    std::cerr << "\n";
     abort();
   }
   else
   {
     std::cerr << "No solver specified; defaulting to " << esbmc_solvers[1].name;
-    std::cerr << std::endl;
+    std::cerr << "\n";
     return esbmc_solvers[1].name;
   }
 #endif
@@ -117,7 +118,8 @@ static smt_convt *pick_solver(
     {
       if(the_solver != "")
       {
-        std::cerr << "Please only specify one solver" << std::endl;
+        std::cerr << "Please only specify one solver"
+                  << "\n";
         abort();
       }
 

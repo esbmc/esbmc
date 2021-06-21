@@ -164,7 +164,7 @@ void symex_target_equationt::convert_internal_step(
   if(ssa_trace)
   {
     step.output(ns, std::cout);
-    std::cout << std::endl;
+    std::cout << "\n";
   }
 
   step.guard_ast = smt_conv.convert_ast(step.guard);
@@ -177,7 +177,7 @@ void symex_target_equationt::convert_internal_step(
     if(ssa_smt_trace)
     {
       step.cond_ast->dump();
-      std::cout << std::endl;
+      std::cout << "\n";
     }
   }
   else if(step.is_assignment())
@@ -186,7 +186,7 @@ void symex_target_equationt::convert_internal_step(
     if(ssa_smt_trace)
     {
       assign->dump();
-      std::cout << std::endl;
+      std::cout << "\n";
     }
   }
   else if(step.is_output())
@@ -235,7 +235,8 @@ void symex_target_equationt::output(std::ostream &out) const
   for(const auto &SSA_step : SSA_steps)
   {
     SSA_step.output(ns, out);
-    out << "--------------" << std::endl;
+    out << "--------------"
+        << "\n";
   }
 }
 
@@ -262,21 +263,24 @@ void symex_target_equationt::SSA_stept::output(
     out << "Thread " << source.thread_nr;
 
     if(source.pc->location.is_not_nil())
-      out << " " << source.pc->location << std::endl;
+      out << " " << source.pc->location << "\n";
     else
-      out << std::endl;
+      out << "\n";
   }
 
   switch(type)
   {
   case goto_trace_stept::ASSERT:
-    out << "ASSERT" << std::endl;
+    out << "ASSERT"
+        << "\n";
     break;
   case goto_trace_stept::ASSUME:
-    out << "ASSUME" << std::endl;
+    out << "ASSUME"
+        << "\n";
     break;
   case goto_trace_stept::OUTPUT:
-    out << "OUTPUT" << std::endl;
+    out << "OUTPUT"
+        << "\n";
     break;
 
   case goto_trace_stept::ASSIGNMENT:
@@ -289,14 +293,13 @@ void symex_target_equationt::SSA_stept::output(
   }
 
   if(is_assert() || is_assume() || is_assignment())
-    out << from_expr(ns, "", migrate_expr_back(cond)) << std::endl;
+    out << from_expr(ns, "", migrate_expr_back(cond)) << "\n";
 
   if(is_assert())
-    out << comment << std::endl;
+    out << comment << "\n";
 
   if(config.options.get_bool_option("ssa-guards"))
-    out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard))
-        << std::endl;
+    out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << "\n";
 }
 
 void symex_target_equationt::SSA_stept::short_output(
@@ -306,11 +309,11 @@ void symex_target_equationt::SSA_stept::short_output(
 {
   if((is_assignment() || is_assert() || is_assume()) && show_ignored == ignore)
   {
-    out << from_expr(ns, "", cond) << std::endl;
+    out << from_expr(ns, "", cond) << "\n";
   }
   else if(is_renumber())
   {
-    out << "renumber: " << from_expr(ns, "", lhs) << std::endl;
+    out << "renumber: " << from_expr(ns, "", lhs) << "\n";
   }
 }
 
@@ -352,11 +355,13 @@ void symex_target_equationt::check_for_duplicate_assigns() const
     if(it->second != 1)
     {
       std::cerr << "Symbol \"" << it->first << "\" appears " << it->second
-                << " times" << std::endl;
+                << " times"
+                << "\n";
     }
   }
 
-  std::cerr << "Checked " << i << " insns" << std::endl;
+  std::cerr << "Checked " << i << " insns"
+            << "\n";
 }
 
 unsigned int symex_target_equationt::clear_assertions()
@@ -516,7 +521,8 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
     res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB ||
     res2 == smt_convt::P_ERROR || res2 == smt_convt::P_SMTLIB)
   {
-    std::cerr << "Solver returned error while asking question" << std::endl;
+    std::cerr << "Solver returned error while asking question"
+              << "\n";
     abort();
   }
   else if(res1 == smt_convt::P_SATISFIABLE && res2 == smt_convt::P_SATISFIABLE)

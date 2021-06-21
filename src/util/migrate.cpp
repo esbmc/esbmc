@@ -743,7 +743,8 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
   else
   {
     std::cerr << "Unrecognized type " << get_type_id(*new_expr->type);
-    std::cerr << " when flattening union literal" << std::endl;
+    std::cerr << " when flattening union literal"
+              << "\n";
     abort();
   }
 }
@@ -1842,7 +1843,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     else
     {
       std::cerr << "Unexpected side-effect statement: " << expr.statement()
-                << std::endl;
+                << "\n";
       abort();
     }
 
@@ -2254,7 +2255,8 @@ typet migrate_type_back(const type2tc &ref)
     return ret;
   }
   default:
-    std::cerr << "Unrecognized type in migrate_type_back" << std::endl;
+    std::cerr << "Unrecognized type in migrate_type_back"
+              << "\n";
     abort();
   }
 }
@@ -3268,7 +3270,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     return back;
   }
   default:
-    std::cerr << "Unrecognized expr in migrate_expr_back" << std::endl;
+    std::cerr << "Unrecognized expr in migrate_expr_back"
+              << "\n";
     abort();
   }
 }

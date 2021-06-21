@@ -27,14 +27,14 @@ void show_claims(
       const irep_idt &comment = instruction.location.comment();
       const irep_idt description = (comment == "" ? "assertion" : comment);
 
-      std::cout << "Claim " << count << ":" << std::endl;
+      std::cout << "Claim " << count << ":"
+                << "\n";
 
-      std::cout << "  " << instruction.location << std::endl
-                << "  " << description << std::endl;
+      std::cout << "  " << instruction.location << "\n"
+                << "  " << description << "\n";
 
-      std::cout << "  " << from_expr(ns, identifier, instruction.guard)
-                << std::endl;
-      std::cout << std::endl;
+      std::cout << "  " << from_expr(ns, identifier, instruction.guard) << "\n";
+      std::cout << "\n";
     }
   }
 }

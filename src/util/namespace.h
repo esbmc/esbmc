@@ -24,7 +24,7 @@ public:
     if(lookup(name, symbol))
     {
       std::cerr << "Failed to find symbol " + id2string(name) + " not found"
-                << std::endl;
+                << "\n";
       abort();
     }
     return *symbol;

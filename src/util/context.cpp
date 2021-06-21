@@ -45,7 +45,9 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 
 void contextt::dump() const
 {
-  std::cout << std::endl << "Symbols:" << std::endl;
+  std::cout << "\n"
+            << "Symbols:"
+            << "\n";
 
   // Do assignments based on "value".
   foreach_operand([](const symbolt &s) { s.dump(); });
@@ -72,7 +74,8 @@ void contextt::erase_symbol(irep_idt name)
   symbolst::iterator it = symbols.find(name);
   if(it == symbols.end())
   {
-    std::cerr << "Couldn't find symbol to erase" << std::endl;
+    std::cerr << "Couldn't find symbol to erase"
+              << "\n";
     abort();
   }
 

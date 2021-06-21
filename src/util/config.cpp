@@ -104,7 +104,8 @@ bool configt::set(const cmdlinet &cmdline)
 
   if(cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
   {
-    std::cerr << "Can't set both floatbv and fixedbv modes" << std::endl;
+    std::cerr << "Can't set both floatbv and fixedbv modes"
+              << "\n";
     return true;
   }
 
@@ -179,7 +180,8 @@ bool configt::set(const cmdlinet &cmdline)
 
   if(cmdline.isset("little-endian") && cmdline.isset("big-endian"))
   {
-    std::cerr << "Can't set both little and big endian modes" << std::endl;
+    std::cerr << "Can't set both little and big endian modes"
+              << "\n";
     return true;
   }
 

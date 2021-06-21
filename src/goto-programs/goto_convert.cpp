@@ -24,7 +24,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #ifdef DEBUG
 #define DEBUGLOC                                                               \
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
+  std::cout << "\n"                                                            \
+            << __FUNCTION__ << "[" << __LINE__ << "]"                          \
+            << "\n";
 #else
 #define DEBUGLOC
 #endif
