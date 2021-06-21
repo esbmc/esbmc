@@ -71,12 +71,14 @@ BigInt type_byte_size_bits(const type2tc &type)
     return 0;
 
   case type2t::symbol_id:
-    std::cerr << "Symbolic type id in type_byte_size" << std::endl;
+    std::cerr << "Symbolic type id in type_byte_size"
+              << "\n";
     type->dump();
     abort();
 
   case type2t::cpp_name_id:
-    std::cerr << "C++ symbolic type id in type_byte_size" << std::endl;
+    std::cerr << "C++ symbolic type id in type_byte_size"
+              << "\n";
     type->dump();
     abort();
 
@@ -138,7 +140,8 @@ BigInt type_byte_size_bits(const type2tc &type)
   }
 
   default:
-    std::cerr << "Unrecognised type in type_byte_size_bits:" << std::endl;
+    std::cerr << "Unrecognised type in type_byte_size_bits:"
+              << "\n";
     type->dump();
     abort();
   }
@@ -166,7 +169,7 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
     else
     {
       std::cerr << "Unexpected index type in computer_pointer_offset";
-      std::cerr << std::endl;
+      std::cerr << "\n";
       abort();
     }
 
@@ -247,8 +250,9 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
     return gen_ulong(0);
   }
 
-  std::cerr << "compute_pointer_offset, unexpected irep:" << std::endl;
-  std::cerr << expr->pretty() << std::endl;
+  std::cerr << "compute_pointer_offset, unexpected irep:"
+            << "\n";
+  std::cerr << expr->pretty() << "\n";
   abort();
 }
 

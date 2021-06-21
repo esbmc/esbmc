@@ -245,8 +245,8 @@ bool base_type_eqt::base_type_eq_rec(const typet &type1, const typet &type2)
     return true;
 
 #if 0
-  std::cout << "T1: " << type1.pretty() << std::endl;
-  std::cout << "T2: " << type2.pretty() << std::endl;
+  std::cout << "T1: " << type1.pretty() << "\n";
+  std::cout << "T2: " << type2.pretty() << "\n";
 #endif
 
   // loop avoidance

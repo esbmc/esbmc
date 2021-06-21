@@ -41,7 +41,7 @@ void goto_programt::instructiont::output_instruction(
       out << " " << label;
     }
 
-    out << std::endl;
+    out << "\n";
   }
 
   if(is_target())
@@ -52,7 +52,8 @@ void goto_programt::instructiont::output_instruction(
   switch(type)
   {
   case NO_INSTRUCTION_TYPE:
-    out << "NO INSTRUCTION TYPE SET" << std::endl;
+    out << "NO INSTRUCTION TYPE SET"
+        << "\n";
     break;
 
   case GOTO:
@@ -72,12 +73,12 @@ void goto_programt::instructiont::output_instruction(
       out << (*gt_it)->target_number;
     }
 
-    out << std::endl;
+    out << "\n";
     break;
 
   case FUNCTION_CALL:
     out << "FUNCTION_CALL:  " << from_expr(ns, "", migrate_expr_back(code))
-        << std::endl;
+        << "\n";
     break;
 
   case RETURN:
@@ -86,7 +87,7 @@ void goto_programt::instructiont::output_instruction(
     const code_return2t &ref = to_code_return2t(code);
     if(!is_nil_expr(ref.operand))
       arg = from_expr(ns, "", ref.operand);
-    out << "RETURN: " << arg << std::endl;
+    out << "RETURN: " << arg << "\n";
   }
   break;
 
@@ -94,7 +95,7 @@ void goto_programt::instructiont::output_instruction(
   case DEAD:
   case OTHER:
   case ASSIGN:
-    out << from_expr(ns, identifier, code) << std::endl;
+    out << from_expr(ns, identifier, code) << "\n";
     break;
 
   case ASSUME:
@@ -112,11 +113,12 @@ void goto_programt::instructiont::output_instruction(
         out << " // " << comment;
     }
 
-    out << std::endl;
+    out << "\n";
     break;
 
   case SKIP:
-    out << "SKIP" << std::endl;
+    out << "SKIP"
+        << "\n";
     break;
 
   case END_FUNCTION:
@@ -126,11 +128,12 @@ void goto_programt::instructiont::output_instruction(
       if(function != "")
         out << " // " << function;
     }
-    out << std::endl;
+    out << "\n";
     break;
 
   case LOCATION:
-    out << "LOCATION" << std::endl;
+    out << "LOCATION"
+        << "\n";
     break;
 
   case THROW:
@@ -149,7 +152,7 @@ void goto_programt::instructiont::output_instruction(
         out << ": " << from_expr(ns, identifier, throw_ref.operand);
     }
 
-    out << std::endl;
+    out << "\n";
     break;
 
   case CATCH:
@@ -170,15 +173,17 @@ void goto_programt::instructiont::output_instruction(
       }
     }
 
-    out << std::endl;
+    out << "\n";
     break;
 
   case ATOMIC_BEGIN:
-    out << "ATOMIC_BEGIN" << std::endl;
+    out << "ATOMIC_BEGIN"
+        << "\n";
     break;
 
   case ATOMIC_END:
-    out << "ATOMIC_END" << std::endl;
+    out << "ATOMIC_END"
+        << "\n";
     break;
 
   case THROW_DECL:
@@ -196,7 +201,7 @@ void goto_programt::instructiont::output_instruction(
       out << ")";
     }
 
-    out << std::endl;
+    out << "\n";
     break;
 
   case THROW_DECL_END:
@@ -217,7 +222,7 @@ void goto_programt::instructiont::output_instruction(
 
     out << ")";
 
-    out << std::endl;
+    out << "\n";
     break;
 
   default:

@@ -294,7 +294,8 @@ void goto_symext::symex_step(reachability_treet &art)
 
   default:
     std::cerr << "GOTO instruction type " << instruction.type;
-    std::cerr << " not handled in goto_symext::symex_step" << std::endl;
+    std::cerr << " not handled in goto_symext::symex_step"
+              << "\n";
     abort();
   }
 }

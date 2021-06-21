@@ -41,7 +41,7 @@ void xmlt::output(std::ostream &out, unsigned indent) const
     out << data;
   else
   {
-    out << std::endl;
+    out << "\n";
 
     for(const auto &element : elements)
       element.output(out, indent + 2);
@@ -49,7 +49,7 @@ void xmlt::output(std::ostream &out, unsigned indent) const
     do_indent(out, indent);
   }
 
-  out << '<' << '/' << name << '>' << std::endl;
+  out << '<' << '/' << name << '>' << "\n";
 }
 
 std::string xmlt::escape(const std::string &s)

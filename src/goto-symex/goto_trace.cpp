@@ -59,10 +59,10 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
   if(type == ASSERT || type == ASSUME)
     out << " (" << guard << ")";
 
-  out << std::endl;
+  out << "\n";
 
   if(!pc->location.is_nil())
-    out << pc->location << std::endl;
+    out << pc->location << "\n";
 
   if(pc->is_goto())
     out << "GOTO   ";
@@ -79,7 +79,7 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
   else
     out << "(?)    ";
 
-  out << std::endl;
+  out << "\n";
 
   if(pc->is_other() || pc->is_assign())
   {
@@ -91,24 +91,25 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
       identifier = to_symbol2t(lhs).get_symbol_name();
 
     out << "  " << identifier << " = " << from_expr(ns, identifier, value)
-        << std::endl;
+        << "\n";
   }
   else if(pc->is_assert())
   {
     if(!guard)
     {
-      out << "Violated property:" << std::endl;
+      out << "Violated property:"
+          << "\n";
       if(pc->location.is_nil())
-        out << "  " << pc->location << std::endl;
+        out << "  " << pc->location << "\n";
 
       if(!comment.empty())
-        out << "  " << comment << std::endl;
-      out << "  " << from_expr(ns, "", pc->guard) << std::endl;
-      out << std::endl;
+        out << "  " << comment << "\n";
+      out << "  " << from_expr(ns, "", pc->guard) << "\n";
+      out << "\n";
     }
   }
 
-  out << std::endl;
+  out << "\n";
 }
 
 void counterexample_value(
@@ -160,7 +161,7 @@ void counterexample_value(
       }
     }
 
-    out << std::endl;
+    out << "\n";
   }
 }
 
@@ -177,12 +178,13 @@ void show_goto_trace_gui(
 
     if((step.type == goto_trace_stept::ASSERT) && !step.guard)
     {
-      out << "FAILED" << std::endl
-          << step.comment << std::endl // value
-          << std::endl                 // PC
-          << location.file() << std::endl
-          << location.line() << std::endl
-          << location.column() << std::endl;
+      out << "FAILED"
+          << "\n"
+          << step.comment << "\n" // value
+          << "\n"                 // PC
+          << location.file() << "\n"
+          << location.line() << "\n"
+          << location.column() << "\n";
     }
     else if(step.type == goto_trace_stept::ASSIGNMENT)
     {
@@ -200,14 +202,15 @@ void show_goto_trace_gui(
       if(!ns.lookup(identifier, symbol))
         base_name = symbol->name;
 
-      out << "TRACE" << std::endl;
+      out << "TRACE"
+          << "\n";
 
       out << identifier << "," << base_name << ","
-          << get_type_id(step.value->type) << "," << value_string << std::endl
-          << step.step_nr << std::endl
-          << step.pc->location.file() << std::endl
-          << step.pc->location.line() << std::endl
-          << step.pc->location.column() << std::endl;
+          << get_type_id(step.value->type) << "," << value_string << "\n"
+          << step.step_nr << "\n"
+          << step.pc->location.file() << "\n"
+          << step.pc->location.line() << "\n"
+          << step.pc->location.column() << "\n";
     }
     else if(location != previous_location)
     {
@@ -215,16 +218,18 @@ void show_goto_trace_gui(
 
       if(!location.file().empty())
       {
-        out << "TRACE" << std::endl;
+        out << "TRACE"
+            << "\n";
 
-        out << ","             // identifier
-            << ","             // base_name
-            << ","             // type
-            << "" << std::endl // value
-            << step.step_nr << std::endl
-            << location.file() << std::endl
-            << location.line() << std::endl
-            << location.column() << std::endl;
+        out << "," // identifier
+            << "," // base_name
+            << "," // type
+            << ""
+            << "\n" // value
+            << step.step_nr << "\n"
+            << location.file() << "\n"
+            << location.line() << "\n"
+            << location.column() << "\n";
       }
     }
 
@@ -238,10 +243,11 @@ void show_state_header(
   const locationt &location,
   unsigned step_nr)
 {
-  out << std::endl;
+  out << "\n";
   out << "State " << step_nr;
-  out << " " << location << " thread " << state.thread_nr << std::endl;
-  out << "----------------------------------------------------" << std::endl;
+  out << " " << location << " thread " << state.thread_nr << "\n";
+  out << "----------------------------------------------------"
+      << "\n";
 }
 
 void violation_graphml_goto_trace(
@@ -378,13 +384,14 @@ void show_goto_trace(
       if(!step.guard)
       {
         show_state_header(out, step, step.pc->location, step.step_nr);
-        out << "Violated property:" << std::endl;
+        out << "Violated property:"
+            << "\n";
         if(!step.pc->location.is_nil())
-          out << "  " << step.pc->location << std::endl;
-        out << "  " << step.comment << std::endl;
+          out << "  " << step.pc->location << "\n";
+        out << "  " << step.comment << "\n";
 
         if(step.pc->is_assert())
-          out << "  " << from_expr(ns, "", step.pc->guard) << std::endl;
+          out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
 
         // Having printed a property violation, don't print more steps.
         return;
@@ -411,7 +418,7 @@ void show_goto_trace(
       printf_formattert printf_formatter;
       printf_formatter(step.format_string, step.output_args);
       printf_formatter.print(out);
-      out << std::endl;
+      out << "\n";
       break;
     }
 

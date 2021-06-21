@@ -417,7 +417,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     else
     {
       std::cerr << "Unexpected expression in dereference_expr_nonscalar"
-                << std::endl;
+                << "\n";
       expr->dump();
       abort();
     }
@@ -818,14 +818,15 @@ void dereferencet::build_reference_rec(
   {
     std::cerr
       << "Can't construct rvalue reference to array type during dereference";
-    std::cerr << std::endl;
+    std::cerr << "\n";
     std::cerr << "(It isn't allowed by C anyway)";
-    std::cerr << std::endl;
+    std::cerr << "\n";
     abort();
   }
   else
   {
-    std::cerr << "Unrecognized dest type during dereference" << std::endl;
+    std::cerr << "Unrecognized dest type during dereference"
+              << "\n";
     type->dump();
     abort();
   }
@@ -834,7 +835,8 @@ void dereferencet::build_reference_rec(
     flags |= flag_src_struct;
   else if(is_union_type(value))
   {
-    std::cerr << "Dereference target of type union is now illegal" << std::endl;
+    std::cerr << "Dereference target of type union is now illegal"
+              << "\n";
     abort();
   }
   else if(is_scalar_type(value))
@@ -843,7 +845,8 @@ void dereferencet::build_reference_rec(
     flags |= flag_src_array;
   else
   {
-    std::cerr << "Unrecognized src type during dereference" << std::endl;
+    std::cerr << "Unrecognized src type during dereference"
+              << "\n";
     value->type->dump();
     abort();
   }
@@ -938,7 +941,8 @@ void dereferencet::build_reference_rec(
 
   // No scope for constructing references to arrays
   default:
-    std::cerr << "Unrecognized input to build_reference_rec" << std::endl;
+    std::cerr << "Unrecognized input to build_reference_rec"
+              << "\n";
     abort();
   }
 }
@@ -1483,7 +1487,8 @@ void dereferencet::construct_struct_ref_from_const_offset(
   }
 
   std::cerr << "Unexpectedly " << get_type_id(value->type) << " type'd";
-  std::cerr << " argument to construct_struct_ref" << std::endl;
+  std::cerr << " argument to construct_struct_ref"
+            << "\n";
   abort();
 }
 

@@ -544,13 +544,14 @@ smt_astt bitwuzla_convt::mk_select(smt_astt a, smt_astt b)
 smt_astt bitwuzla_convt::mk_smt_int(const BigInt &theint [[gnu::unused]])
 {
   std::cerr << "ESBMC can't create integer sorts with Bitwuzla yet"
-            << std::endl;
+            << "\n";
   abort();
 }
 
 smt_astt bitwuzla_convt::mk_smt_real(const std::string &str [[gnu::unused]])
 {
-  std::cerr << "ESBMC can't create real sorts with Bitwuzla yet" << std::endl;
+  std::cerr << "ESBMC can't create real sorts with Bitwuzla yet"
+            << "\n";
   abort();
 }
 

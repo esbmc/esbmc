@@ -12,8 +12,9 @@
 
 static void error_handler(Z3_context c, Z3_error_code e)
 {
-  std::cerr << "Z3 error " << e << " encountered" << std::endl;
-  std::cerr << Z3_get_error_msg(c, e) << std::endl;
+  std::cerr << "Z3 error " << e << " encountered"
+            << "\n";
+  std::cerr << Z3_get_error_msg(c, e) << "\n";
   abort();
 }
 
@@ -125,7 +126,8 @@ z3::expr z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
   z3::sort ty = t.get_sort();
   if(!ty.is_datatype())
   {
-    std::cerr << "Z3 conversion: argument must be a tuple" << std::endl;
+    std::cerr << "Z3 conversion: argument must be a tuple"
+              << "\n";
     abort();
   }
 
@@ -133,7 +135,7 @@ z3::expr z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
   if(i >= num_fields)
   {
     std::cerr << "Z3 conversion: invalid tuple select, index is too large"
-              << std::endl;
+              << "\n";
     abort();
   }
 
@@ -1215,14 +1217,14 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
 
 void z3_smt_ast::dump() const
 {
-  std::cout << Z3_ast_to_string(a.ctx(), a) << std::endl;
+  std::cout << Z3_ast_to_string(a.ctx(), a) << "\n";
   std::cout << "sort is " << Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a))
-            << std::endl;
+            << "\n";
 }
 
 void z3_convt::dump_smt()
 {
-  std::cout << solver << std::endl;
+  std::cout << solver << "\n";
 }
 
 smt_astt z3_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)

@@ -73,7 +73,8 @@ static expr2tc flatten_to_bitvector_rec(const expr2tc &new_expr)
   }
 
   std::cerr << "Unrecognized type " << get_type_id(*new_expr->type);
-  std::cerr << " when flattening to bytes" << std::endl;
+  std::cerr << " when flattening to bytes"
+            << "\n";
   abort();
 }
 

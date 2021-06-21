@@ -232,18 +232,19 @@ void document_subgoals(
     out << "\\claimlocation{File "
         << escape_latex(location.file().as_string(), false) << " function "
         << escape_latex(location.function().as_string(), false) << "}"
-        << std::endl;
+        << "\n";
 
-    out << std::endl;
+    out << "\n";
 
     for(const auto &s_it : it->second.comment_set)
-      out << "\\claim{" << escape_latex(s_it, false) << "}" << std::endl;
+      out << "\\claim{" << escape_latex(s_it, false) << "}"
+          << "\n";
 
-    out << std::endl;
+    out << "\n";
 
     out << "\\begin{alltt}\\claimcode\n" << code << "\\end{alltt}\n";
 
-    out << std::endl;
-    out << std::endl;
+    out << "\n";
+    out << "\n";
   }
 }

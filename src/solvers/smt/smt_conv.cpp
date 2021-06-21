@@ -2101,7 +2101,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
     {
       std::cerr << "Fetching array elements inside tuples currently "
                    "unimplemented, sorry"
-                << std::endl;
+                << "\n";
       return expr2tc();
     }
     simplify(res);

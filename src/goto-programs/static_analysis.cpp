@@ -66,10 +66,12 @@ void static_analysis_baset::output(
 {
   for(const auto &f_it : goto_functions.function_map)
   {
-    out << "////" << std::endl;
-    out << "//// Function: " << f_it.first << std::endl;
-    out << "////" << std::endl;
-    out << std::endl;
+    out << "////"
+        << "\n";
+    out << "//// Function: " << f_it.first << "\n";
+    out << "////"
+        << "\n";
+    out << "\n";
 
     output(f_it.second.body, f_it.first, out);
   }
@@ -82,12 +84,12 @@ void static_analysis_baset::output(
 {
   forall_goto_program_instructions(i_it, goto_program)
   {
-    out << "**** " << i_it->location << std::endl;
+    out << "**** " << i_it->location << "\n";
 
     get_state(i_it).output(ns, out);
-    out << std::endl;
+    out << "\n";
     i_it->output_instruction(ns, identifier, out);
-    out << std::endl;
+    out << "\n";
   }
 }
 
@@ -371,7 +373,7 @@ void static_analysis_baset::do_function_call_rec(
   else
   {
     std::cerr << "unexpected function_call argument: " << get_expr_id(function)
-              << std::endl;
+              << "\n";
     abort();
   }
 }

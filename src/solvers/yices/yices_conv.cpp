@@ -63,7 +63,8 @@ void yices_convt::push_ctx()
 
   if(res != 0)
   {
-    std::cerr << "Error pushing yices context" << std::endl;
+    std::cerr << "Error pushing yices context"
+              << "\n";
     yices_print_error(stderr);
     abort();
   }
@@ -75,7 +76,8 @@ void yices_convt::pop_ctx()
 
   if(res != 0)
   {
-    std::cerr << "Error poping yices context" << std::endl;
+    std::cerr << "Error poping yices context"
+              << "\n";
     yices_print_error(stderr);
     abort();
   }

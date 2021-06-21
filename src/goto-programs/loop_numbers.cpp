@@ -19,10 +19,11 @@ void show_loop_numbers(const goto_programt &goto_program)
     {
       unsigned loop_id = instruction.loop_number;
 
-      std::cout << "Loop " << loop_id << ":" << std::endl;
+      std::cout << "Loop " << loop_id << ":"
+                << "\n";
 
-      std::cout << "  " << instruction.location << std::endl;
-      std::cout << std::endl;
+      std::cout << "  " << instruction.location << "\n";
+      std::cout << "\n";
     }
   }
 }

@@ -126,7 +126,7 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     if(config.options.get_option("smtlib-solver-prog") != "")
     {
       std::cerr << "Can't solve SMTLIB output and write to a file, sorry"
-                << std::endl;
+                << "\n";
       abort();
     }
 
@@ -134,7 +134,8 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     out_stream = fopen(cmd.c_str(), "w");
     if(!out_stream)
     {
-      std::cerr << "Failed to open \"" << cmd << "\"" << std::endl;
+      std::cerr << "Failed to open \"" << cmd << "\""
+                << "\n";
       abort();
     }
 
@@ -158,7 +159,7 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   if(cmd == "")
   {
     std::cerr << "Must specify an smtlib solver program in smtlib mode"
-              << std::endl;
+              << "\n";
     abort();
   }
 #ifdef _WIN32
@@ -168,13 +169,15 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
 #else
   if(pipe(inpipe) != 0)
   {
-    std::cerr << "Couldn't open a pipe for smtlib solver" << std::endl;
+    std::cerr << "Couldn't open a pipe for smtlib solver"
+              << "\n";
     abort();
   }
 
   if(pipe(outpipe) != 0)
   {
-    std::cerr << "Couldn't open a pipe for smtlib solver" << std::endl;
+    std::cerr << "Couldn't open a pipe for smtlib solver"
+              << "\n";
     abort();
   }
 
@@ -192,7 +195,8 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
 
     // Voila
     execlp(cmd.c_str(), cmd.c_str(), NULL);
-    std::cerr << "Exec of smtlib solver failed" << std::endl;
+    std::cerr << "Exec of smtlib solver failed"
+              << "\n";
     abort();
   }
   else
@@ -293,7 +297,8 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
   case SMT_SORT_BOOL:
     return "Bool";
   default:
-    std::cerr << "Unexpected sort in smtlib_convt" << std::endl;
+    std::cerr << "Unexpected sort in smtlib_convt"
+              << "\n";
     abort();
   }
 }
@@ -347,7 +352,8 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
     output = ss.str();
     return 0;
   default:
-    std::cerr << "Invalid terminal AST kind" << std::endl;
+    std::cerr << "Invalid terminal AST kind"
+              << "\n";
     abort();
   }
 }
@@ -444,13 +450,14 @@ smt_convt::resultt smtlib_convt::dec_solve()
   else if(smtlib_output->token == TOK_KW_ERROR)
   {
     std::cerr << "SMTLIB solver returned error: \"" << smtlib_output->data
-              << "\"" << std::endl;
+              << "\""
+              << "\n";
     return smt_convt::P_ERROR;
   }
   else
   {
     std::cerr << "Unrecognized check-sat output from smtlib solver"
-              << std::endl;
+              << "\n";
     abort();
   }
 }
@@ -470,13 +477,14 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
   if(smtlib_output->token == TOK_KW_ERROR)
   {
     std::cerr << "Error from smtlib solver when fetching literal value: \""
-              << smtlib_output->data << "\"" << std::endl;
+              << smtlib_output->data << "\""
+              << "\n";
     abort();
   }
   else if(smtlib_output->token != 0)
   {
     std::cerr << "Unrecognized response to get-value from smtlib solver"
-              << std::endl;
+              << "\n";
   }
 
   // Unpack our value from response list.
@@ -508,7 +516,7 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
   else if(respval.token == TOK_NUMERAL)
   {
     std::cerr << "Numeral value for integer symbol from smtlib solver"
-              << std::endl;
+              << "\n";
     abort();
   }
   else if(respval.token == TOK_HEXNUM)
@@ -549,13 +557,14 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
   if(smtlib_output->token == TOK_KW_ERROR)
   {
     std::cerr << "Error from smtlib solver when fetching literal value: \""
-              << smtlib_output->data << "\"" << std::endl;
+              << smtlib_output->data << "\""
+              << "\n";
     abort();
   }
   else if(smtlib_output->token != 0)
   {
     std::cerr << "Unrecognized response to get-value from smtlib solver"
-              << std::endl;
+              << "\n";
   }
 
   // Unpack our value from response list.
@@ -583,7 +592,7 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
   else if(respval.token == TOK_NUMERAL)
   {
     std::cerr << "Numeral value for integer symbol from smtlib solver"
-              << std::endl;
+              << "\n";
     abort();
   }
   else if(respval.token == TOK_HEXNUM)
@@ -655,7 +664,7 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
       else
       {
         std::cerr << "Unrecognized boolean-typed binary number format";
-        std::cerr << std::endl;
+        std::cerr << "\n";
         abort();
       }
     }
@@ -663,7 +672,7 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
     {
       std::cerr << "Unexpected token reading value of boolean symbol from "
                    "smtlib solver"
-                << std::endl;
+                << "\n";
     }
   }
   else
@@ -697,13 +706,14 @@ bool smtlib_convt::get_bool(smt_astt a)
   if(smtlib_output->token == TOK_KW_ERROR)
   {
     std::cerr << "Error from smtlib solver when fetching literal value: \""
-              << smtlib_output->data << "\"" << std::endl;
+              << smtlib_output->data << "\""
+              << "\n";
     abort();
   }
   else if(smtlib_output->token != 0)
   {
     std::cerr << "Unrecognized response to get-value from smtlib solver"
-              << std::endl;
+              << "\n";
   }
 
   // First layer: valuation pair list. Should have one item.
@@ -842,7 +852,7 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type [[gnu::unused]])
 {
   std::cerr << "Attempted to make struct type in smtlib conversion"
-            << std::endl;
+            << "\n";
   abort();
 }
 
@@ -907,7 +917,7 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 int smtliberror(int startsym [[gnu::unused]], const std::string &error)
 {
   std::cerr << "SMTLIB response parsing error: \"" << error << "\""
-            << std::endl;
+            << "\n";
   abort();
 }
 

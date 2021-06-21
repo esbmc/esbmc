@@ -122,7 +122,9 @@ void bmct::error_trace(
   {
     violation_graphml_goto_trace(options, ns, goto_trace);
   }
-  std::cout << std::endl << "Counterexample:" << std::endl;
+  std::cout << "\n"
+            << "Counterexample:"
+            << "\n";
   show_goto_trace(std::cout, ns, goto_trace);
 }
 
@@ -373,7 +375,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     if(++interleaving_number > 1)
     {
       std::cout << "*** Thread interleavings " << interleaving_number << " ***"
-                << std::endl;
+                << "\n";
     }
 
     fine_timet bmc_start = current_time();
@@ -573,7 +575,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory" << std::endl;
+    std::cout << "Out of memory"
+              << "\n";
     return smt_convt::P_ERROR;
   }
 
@@ -675,7 +678,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
   catch(std::bad_alloc &)
   {
-    std::cout << "Out of memory" << std::endl;
+    std::cout << "Out of memory"
+              << "\n";
     return smt_convt::P_ERROR;
   }
 }

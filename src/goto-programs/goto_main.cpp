@@ -63,6 +63,6 @@ void goto_convert(
     throw "failed to find main symbol";
 
   std::cout << "goto_convert : start converting symbol table to goto functions "
-            << std::endl;
+            << "\n";
   ::goto_convert(to_code(s->value), context, options, dest, message_handler);
 }
