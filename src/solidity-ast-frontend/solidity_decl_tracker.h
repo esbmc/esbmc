@@ -237,6 +237,7 @@ public:
   void set_expr_type_str(std::string _type) { expr_type_str = _type; }
   void set_qualtype_tracker(); // QualTypeTracker setters
   void set_implicit_cast_kind();
+  void set_pointer_qualtype_tracker(); // hard coded for pointer
 
 private:
   StmtTracker* sub_expr;
