@@ -319,8 +319,10 @@ void CompoundStmtTracker::config()
   // item is like { "0" : { the_expr }}
   for (const auto& item : stmt_json.items())
   {
-    if (std::stoi(item.key()) >= 2) // TODO: remove debug when proceeding with Part III and IV!
+    if (std::stoi(item.key()) >= 3) // TODO: remove debug when proceeding with Part IV!
       continue;
+    //printf("### statement json: ");
+    //::print_decl_json(item.value());
     // populate statement vector based on each statement json object
     const auto& stmt = item.value();
     assert(stmt["nodeType"] == "ExpressionStatement"); // expect all statement to be "ExpressionStatement"
@@ -369,9 +371,8 @@ void BinaryOperatorTracker::config()
 void BinaryOperatorTracker::set_binary_opcode()
 {
   assert(binary_opcode == SolidityTypes::BOError); // only allowed to set once during config() stage
-  binary_opcode = SolidityTypes::get_binary_op_class(
-      stmt_json["operator"].get<std::string>()
-      );
+  std::string _operator = stmt_json["operator"].get<std::string>();
+  binary_opcode = SolidityTypes::get_binary_op_class(_operator);
 }
 
 void BinaryOperatorTracker::set_lhs()
@@ -389,50 +390,77 @@ void BinaryOperatorTracker::set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string
   assert(!expr_ptr); // only allowed to set once during config() stage
 
   assert((lor == "LHS") || (lor == "RHS"));
+  // can be "leftHandSide" or "leftExpression" depending on the type of RHS
   std::string hs_key = (lor == "LHS") ? "leftHandSide" : "rightHandSide";
-  printf("@@ populating BinaryOperatorTracker's %s ...\n", lor.c_str());
 
-  assert(stmt_json.contains(hs_key)); // expect such json object to have a LHS key
-  const nlohmann::json& expr_json = stmt_json[hs_key];
-  std::string node_type = expr_json["nodeType"].get<std::string>();
+  //printf("@@DEBUG-: "); ::print_decl_json(stmt_json);
 
-  if (node_type == "Identifier" && expr_json.contains("referencedDeclaration"))
+  // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+  // "sum = (int) ( (int)(int)_x + (int)(int)_y );"
+  if (stmt_json.contains(hs_key)) // for "leftHandSide"
   {
-    // Solidity expr's "Identifier" /\ has "referencedDeclaration" --->
-    //    clang::Stmt::DeclRefExprClass
-    expr_ptr = new DeclRefExprTracker(expr_json);
-    expr_ptr->set_stmt_class(SolidityTypes::DeclRefExprClass);
-    // set DeclRef ID and kind
-    StmtTrackerPtr decl_ptr = expr_ptr;
-    auto decl_ref_tracker = static_cast<DeclRefExprTracker*>(decl_ptr);
+    assert(stmt_json.contains(hs_key));
+    printf("@@ populating BinaryOperatorTracker's %s ...\n", lor.c_str());
+    const nlohmann::json& expr_json = stmt_json[hs_key];
+    std::string node_type = expr_json["nodeType"].get<std::string>();
 
-    // set DeclRef id
-    assert(decl_ref_tracker->get_decl_ref_id() == DeclRefExprTracker::declRefIdInvalid); // only allowed to set ONCE
-    decl_ref_tracker->set_decl_ref_id(expr_json["referencedDeclaration"].get<unsigned>());
+    if (node_type == "Identifier" && expr_json.contains("referencedDeclaration"))
+    {
+      // Solidity expr's "Identifier" /\ has "referencedDeclaration" --->
+      //    clang::Stmt::DeclRefExprClass
+      expr_ptr = new DeclRefExprTracker(expr_json);
+      expr_ptr->set_stmt_class(SolidityTypes::DeclRefExprClass);
+      // set DeclRef ID and kind
+      StmtTrackerPtr decl_ptr = expr_ptr;
+      auto decl_ref_tracker = static_cast<DeclRefExprTracker*>(decl_ptr);
 
-    // set DeclRef kind
-    if (expr_json["typeDescriptions"]["typeString"].get<std::string>() == "uint8")
-    {
-      assert(decl_ref_tracker->get_decl_ref_kind() == SolidityTypes::declRefError); // only allowed to set ONCE
-      decl_ref_tracker->set_decl_ref_kind(SolidityTypes::ValueDecl);
+      // set DeclRef id
+      assert(decl_ref_tracker->get_decl_ref_id() == DeclRefExprTracker::declRefIdInvalid); // only allowed to set ONCE
+      decl_ref_tracker->set_decl_ref_id(expr_json["referencedDeclaration"].get<unsigned>());
+
+      // set DeclRef kind
+      if (expr_json["typeDescriptions"]["typeString"].get<std::string>() == "uint8")
+      {
+        assert(decl_ref_tracker->get_decl_ref_kind() == SolidityTypes::declRefError); // only allowed to set ONCE
+        decl_ref_tracker->set_decl_ref_kind(SolidityTypes::ValueDecl);
+      }
+      else
+      {
+        assert(!"Unsupported data type for ValDecl");
+      }
     }
-    else
+    else if (node_type == "Literal")
     {
-      assert(!"Unsupported data type for ValDecl");
+      std::string type_str = expr_json["typeDescriptions"]["typeString"].get<std::string>();
+      if (type_str.find("int_const") != std::string::npos)
+      {
+        // Solidity expr's "Literal" /\ "typeString" has "int_" --->
+        //      clang::Stmt::IntegerLiteralClass wrapped in clang::Stmt::ImplicitCastExprClass
+        expr_ptr = new ImplicitCastExprTracker(expr_json);
+        expr_ptr->set_stmt_class(SolidityTypes::ImplicitCastExprClass);
+        StmtTrackerPtr implicit_cast_ptr = expr_ptr;
+        auto implicit_cast_tracker = static_cast<ImplicitCastExprTracker*>(implicit_cast_ptr);
+        implicit_cast_tracker->set_sub_expr_kind(SolidityTypes::IntegerLiteralClass);
+        // we rely on the upstream BinaryOperator type info to set implicit cast type info
+        // as part of the implicit Literal conversion
+        implicit_cast_tracker->set_expr_type_str(stmt_json["typeDescriptions"]["typeString"]);
+        assert(implicit_cast_tracker->get_expr_type_str() == "uint8");
+        implicit_cast_tracker->config();
+      }
+      else
+      {
+        assert(!"unimplemented - other data types in set_lhs_rhs when setting BinaryOperatorTracker");
+      }
     }
-  }
-  else if (node_type == "Literal")
-  {
-    std::string type_str = expr_json["typeDescriptions"]["typeString"].get<std::string>();
-    if (type_str.find("int_const") != std::string::npos)
+    else if (node_type == "BinaryOperation")
     {
-      // Solidity expr's "Literal" /\ "typeString" has "int_" --->
-      //      clang::Stmt::IntegerLiteralClass wrapped in clang::Stmt::ImplicitCastExprClass
+      // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+      // "(int) ( (int)(int)_x + (int)(int)_y )" as in "sum = (int) ( (int)(int)_x + (int)(int)_y );"
       expr_ptr = new ImplicitCastExprTracker(expr_json);
       expr_ptr->set_stmt_class(SolidityTypes::ImplicitCastExprClass);
       StmtTrackerPtr implicit_cast_ptr = expr_ptr;
       auto implicit_cast_tracker = static_cast<ImplicitCastExprTracker*>(implicit_cast_ptr);
-      implicit_cast_tracker->set_sub_expr_kind(SolidityTypes::IntegerLiteralClass);
+      implicit_cast_tracker->set_sub_expr_kind(SolidityTypes::BinaryOperatorClass);
       // we rely on the upstream BinaryOperator type info to set implicit cast type info
       // as part of the implicit Literal conversion
       implicit_cast_tracker->set_expr_type_str(stmt_json["typeDescriptions"]["typeString"]);
@@ -441,13 +469,37 @@ void BinaryOperatorTracker::set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string
     }
     else
     {
-      assert(!"unimplemented - other data types in set_lhs_rhs when setting BinaryOperatorTracker");
+      printf("Unimplemented %s nodeType in BinaryOperatorTracker\n", lor.c_str());
+      assert(0);
     }
   }
-  else
+  else // for "leftExpression"
   {
-    printf("Unimplemented %s nodeType in BinaryOperatorTracker\n", lor.c_str());
-    assert(0);
+    hs_key = (lor == "LHS") ? "leftExpression" : "rightExpression";
+    assert(stmt_json.contains(hs_key));
+    printf("@@ populating BinaryOperatorTracker's %s (%s) ...\n", lor.c_str(), hs_key.c_str());
+    const nlohmann::json& expr_json = stmt_json[hs_key];
+    std::string node_type = expr_json["nodeType"].get<std::string>();
+
+    if (node_type == "Identifier" && expr_json.contains("referencedDeclaration"))
+    {
+      // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+      // "(int)(int)_x" or "(int)(int)_y" with unnecessary (int) removed
+      expr_ptr = new ImplicitCastExprTracker(expr_json);
+      expr_ptr->set_stmt_class(SolidityTypes::ImplicitCastExprClass);
+      StmtTrackerPtr implicit_cast_ptr = expr_ptr;
+      auto implicit_cast_tracker = static_cast<ImplicitCastExprTracker*>(implicit_cast_ptr);
+      implicit_cast_tracker->set_sub_expr_kind(SolidityTypes::ImplicitCastExprClass);
+      // we rely on the upstream BinaryOperator type info to set implicit cast type info
+      // as part of the implicit Literal conversion
+      implicit_cast_tracker->set_expr_type_str(stmt_json["typeDescriptions"]["typeString"]);
+      assert(implicit_cast_tracker->get_expr_type_str() == "uint8");
+      implicit_cast_tracker->config();
+    }
+    else
+    {
+      assert(!"Unimplemented - leftExpression or rightExpression");
+    }
   }
 }
 
@@ -487,6 +539,47 @@ void ImplicitCastExprTracker::set_sub_expr_kind(SolidityTypes::stmtClass _kind)
     StmtTrackerPtr sub_expr_ptr = sub_expr;
     auto sub_expr_tracker = static_cast<IntegerLiteralTracker*>(sub_expr_ptr);
     sub_expr_tracker->config();
+  }
+  else if (_kind == SolidityTypes::BinaryOperatorClass)
+  {
+    // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+    // "sum = (int) ( (int)(int)_x + (int)(int)_y );"
+    //printf("@@DEBUG: "); ::print_decl_json(stmt_json);
+    sub_expr = new BinaryOperatorTracker(stmt_json); // we also need the same json object to the sub expr
+    sub_expr->set_stmt_class(_kind);
+    StmtTrackerPtr sub_expr_ptr = sub_expr;
+    auto sub_expr_tracker = static_cast<BinaryOperatorTracker*>(sub_expr_ptr);
+    sub_expr_tracker->config();
+  }
+  else if (_kind == SolidityTypes::ImplicitCastExprClass)
+  {
+    // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+    // "(int)(int)_x" or "(int)(int)_y" with unnecessary (int) removed
+    //printf("@@DEBUG--: "); ::print_decl_json(stmt_json); // gives the "(int)(int)_x" decl ref
+    assert(stmt_json.contains("referencedDeclaration")); // hard coded: expect an "identifier"
+
+    // Solidity expr's "Identifier" /\ has "referencedDeclaration" --->
+    //    clang::Stmt::DeclRefExprClass
+    sub_expr = new DeclRefExprTracker(stmt_json);
+    sub_expr->set_stmt_class(SolidityTypes::DeclRefExprClass);
+    // set DeclRef ID and kind
+    StmtTrackerPtr decl_ptr = sub_expr;
+    auto decl_ref_tracker = static_cast<DeclRefExprTracker*>(decl_ptr);
+
+    // set DeclRef id
+    assert(decl_ref_tracker->get_decl_ref_id() == DeclRefExprTracker::declRefIdInvalid); // only allowed to set ONCE
+    decl_ref_tracker->set_decl_ref_id(stmt_json["referencedDeclaration"].get<unsigned>());
+
+    // set DeclRef kind
+    if (stmt_json["typeDescriptions"]["typeString"].get<std::string>() == "uint8")
+    {
+      assert(decl_ref_tracker->get_decl_ref_kind() == SolidityTypes::declRefError); // only allowed to set ONCE
+      decl_ref_tracker->set_decl_ref_kind(SolidityTypes::ValueDecl);
+    }
+    else
+    {
+      assert(!"Unsupported data type for ValDecl");
+    }
   }
   else
   {

@@ -159,6 +159,10 @@ namespace SolidityTypes
     {
       return BO_Assign;
     }
+    else if (kind == "+")
+    {
+      return BO_Add;
+    }
     else
     {
       assert(!"Unsupported binary operator class");

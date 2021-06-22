@@ -415,10 +415,19 @@ bool solidity_convertert::get_binary_operator_expr(
       new_expr = side_effect_exprt("assign", t);
       break;
     }
-      default:
-      {
-        assert(!"Unimplemented opcode in BinaryOperatorExpr");
-      }
+    case SolidityTypes::BO_Add:
+    {
+      printf("  @@@ got binop.getOpcode: clang::BO_Add\n");
+      if(t.is_floatbv())
+        new_expr = exprt("ieee_add", t);
+      else
+        new_expr = exprt("+", t);
+      break;
+    }
+    default:
+    {
+      assert(!"Unimplemented opcode in BinaryOperatorExpr");
+    }
   }
 
   new_expr.copy_to_operands(lhs, rhs);
