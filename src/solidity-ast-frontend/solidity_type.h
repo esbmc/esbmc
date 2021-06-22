@@ -22,6 +22,7 @@ namespace SolidityTypes
   {
     TypeBuiltin = 0, // corresponds to clang::Type::Builtin
     FunctionNoProto,
+    Pointer,         // not Solidity's type, just to be consistent with clang conversion flow
     TypeError
   };
   typeClass get_type_class(const std::string& kind);
@@ -81,6 +82,7 @@ namespace SolidityTypes
   enum castKind
   {
     CK_IntegralCast = 0,
+    CK_FunctionToPointerDecay,
     castKindError
   };
   const char* castKind_to_str(castKind the_castKind);

@@ -380,11 +380,10 @@ void CallExprTracker::config()
   //printf("@@DEBUG - Callee's Implicit: "); ::print_decl_json(implicit_cast_ptr->stmt_json);
   implicit_cast_tracker->set_sub_expr_kind(SolidityTypes::DeclRefExprClass);
 
-  /*
-  implicit_cast_tracker->set_expr_type_str(stmt_json["typeDescriptions"]["typeString"]); // hard
-  assert(implicit_cast_tracker->get_expr_type_str() == "uint8");
-  implicit_cast_tracker->config();
-  */
+  // set QualTypeTracker:
+  // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+  // "assert( (int) ((int)(unsigned)sum > (int)100));"
+  implicit_cast_tracker->set_pointer_qualtype_tracker();
 }
 
 /* =======================================================
@@ -666,7 +665,7 @@ void ImplicitCastExprTracker::set_sub_expr_kind(SolidityTypes::stmtClass _kind)
       assert(decl_ref_tracker->get_decl_ref_kind() == SolidityTypes::declRefError); // only allowed to set ONCE
       decl_ref_tracker->set_decl_ref_kind(SolidityTypes::ValueDecl);
 
-      // set QualTypeTracker:
+      // set QualTypeTracker of the embedded decl_ref_tracker:
       decl_ref_tracker->set_qualtype_tracker();
     }
     else
@@ -715,6 +714,18 @@ void ImplicitCastExprTracker::set_qualtype_tracker()
   {
     assert(!"Unimplemented data types when setting qualtype_tracker in ImplicitCastExprTracker");
   }
+}
+
+void ImplicitCastExprTracker::set_pointer_qualtype_tracker()
+{
+  // set QualTypeTracker:
+  // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+  // "assert( (int) ((int)(unsigned)sum > (int)100));"
+  assert(qualtype_tracker.get_type_class() == SolidityTypes::TypeError); // only allowed to set once during config();
+  assert(qualtype_tracker.get_bt_kind() == SolidityTypes::BuiltInError); // only allowed to set once during config();
+  qualtype_tracker.set_type_class(SolidityTypes::Pointer);
+
+  implicit_cast_kind = SolidityTypes::CK_IntegralCast;
 }
 
 /* =======================================================

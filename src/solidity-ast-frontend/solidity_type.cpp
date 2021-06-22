@@ -53,6 +53,7 @@ namespace SolidityTypes
     {
       ENUM_TO_STR(TypeBuiltin)
       ENUM_TO_STR(FunctionNoProto)
+      ENUM_TO_STR(Pointer)
       ENUM_TO_STR(TypeError)
       default:
       {
@@ -206,6 +207,7 @@ namespace SolidityTypes
     switch(the_castKind)
     {
       ENUM_TO_STR(CK_IntegralCast)
+      ENUM_TO_STR(CK_FunctionToPointerDecay)
       ENUM_TO_STR(castKindError)
       default:
       {
