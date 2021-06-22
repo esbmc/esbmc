@@ -11,6 +11,7 @@ add_subdirectory(smt)
 add_subdirectory(smtlib)
 
 add_library(solve solve.cpp)
+target_link_libraries(solve fmt::fmt)
 target_include_directories(solve
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}

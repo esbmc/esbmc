@@ -65,9 +65,7 @@ bool language_uit::parse(const std::string &filename)
 
   if(language.parse(filename, msg))
   {
-    std::cerr << "PARSING ERROR"
-              << "\n";
-
+    msg.error("PARSING ERROR");
     return true;
   }
 
@@ -82,9 +80,7 @@ bool language_uit::typecheck()
 
   if(language_files.typecheck(context))
   {
-    std::cerr << "CONVERSION ERROR"
-              << "\n";
-
+    msg.error("CONVERSION ERROR");
     return true;
   }
 
@@ -95,9 +91,7 @@ bool language_uit::final()
 {
   if(language_files.final(context))
   {
-    std::cerr << "CONVERSION ERROR"
-              << "\n";
-
+    msg.error("CONVERSION ERROR");
     return true;
   }
 

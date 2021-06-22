@@ -15,7 +15,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_target_equation.h>
-#include <iostream>
+
 #include <unordered_map>
 #include <unordered_set>
 #include <util/crypto_hash.h>

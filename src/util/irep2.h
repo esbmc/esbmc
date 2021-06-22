@@ -330,6 +330,10 @@ public:
    */
   class symbolic_type_excp
   {
+    virtual const char *what() const throw()
+    {
+      return "Sizeof symbolic type encountered";
+    }
   };
 
   typedef std::function<void(const type2tc &t)> const_subtype_delegate;
@@ -389,7 +393,7 @@ public:
    *  used for debugging and when single stepping in gdb.
    *  @see pretty
    */
-  DUMP_METHOD void dump() const;
+  DUMP_METHOD void dump(const messaget &msg) const;
 
   /** Produce a checksum/hash of the current object.
    *  Takes current object and produces a lossy digest of it. Originally used
@@ -606,7 +610,7 @@ public:
    *  For use in debugging - dumps the output of the pretty method to stdout.
    *  Can either be used in portion of code, or more commonly called from gdb.
    */
-  DUMP_METHOD void dump() const;
+  DUMP_METHOD void dump(const messaget &msg) const;
 
   /** Calculate a hash/digest of the current expr.
    *  For use in hash data structures; used to be a crc32, but is now a 16 bit

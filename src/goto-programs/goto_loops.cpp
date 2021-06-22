@@ -135,9 +135,8 @@ void goto_loopst::get_modified_variables(
 
     if(it == goto_functions.function_map.end())
     {
-      std::cerr << "failed to find `" + id2string(identifier) +
-                     "' in function_map";
-      abort();
+      throw std::runtime_error(fmt::format(
+        "failed to find `{}' in function_map", id2string(identifier)));
     }
 
     // Avoid iterating over functions that don't have a body
@@ -185,8 +184,8 @@ void goto_loopst::add_loop_var(
   }
 }
 
-void goto_loopst::dump() const
+void goto_loopst::dump(const messaget &msg) const
 {
   for(auto &function_loop : function_loops)
-    function_loop.dump();
+    function_loop.dump(msg);
 }

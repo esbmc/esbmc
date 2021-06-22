@@ -30,9 +30,8 @@ static const std::string &get_string_constant(const exprt &expr)
     !expr.is_address_of() || expr.operands().size() != 1 ||
     !expr.op0().is_index() || expr.op0().operands().size() != 2)
   {
-    std::cerr << "expected string constant, but got:\n";
-    expr.dump();
-    abort();
+    throw std::runtime_error(
+      fmt::format("expected string constant, but got:\n{}", expr));
   }
 
   return expr.op0().op0().value().as_string();

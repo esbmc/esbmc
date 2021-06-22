@@ -6,6 +6,7 @@
 #include <util/prefix.h>
 #include <util/simplify_expr.h>
 #include <util/type_byte_size.h>
+#include <util/message/format.h>
 
 // File for old irep -> new irep conversions.
 
@@ -333,8 +334,7 @@ void real_migrate_type(
   }
   else
   {
-    type.dump();
-    assert(0);
+    throw std::runtime_error(fmt::format("{}", type));
   }
 }
 
@@ -444,8 +444,7 @@ void migrate_type(
   }
   else
   {
-    type.dump();
-    assert(0);
+    throw std::runtime_error(fmt::format("{}", type));
   }
 }
 
@@ -742,10 +741,9 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
   }
   else
   {
-    std::cerr << "Unrecognized type " << get_type_id(*new_expr->type);
-    std::cerr << " when flattening union literal"
-              << "\n";
-    abort();
+    throw std::runtime_error(fmt::format(
+      "Unrecognized type {}  when flattening union literal",
+      get_type_id(*new_expr->type)));
   }
 }
 
@@ -1842,9 +1840,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else
     {
-      std::cerr << "Unexpected side-effect statement: " << expr.statement()
-                << "\n";
-      abort();
+      throw std::runtime_error(
+        fmt::format("Unexpected side-effect statement: ", expr.statement()));
     }
 
     new_expr_ref =
@@ -2075,8 +2072,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else
   {
-    expr.dump();
-    throw new std::string("migrate expr failed");
+    throw std::runtime_error(fmt::format("{}\nmigrate expr failed", expr));
   }
 }
 
@@ -2255,9 +2251,7 @@ typet migrate_type_back(const type2tc &ref)
     return ret;
   }
   default:
-    std::cerr << "Unrecognized type in migrate_type_back"
-              << "\n";
-    abort();
+    throw std::runtime_error("Unrecognized type in migrate_type_back");
   }
 }
 
@@ -3270,8 +3264,6 @@ exprt migrate_expr_back(const expr2tc &ref)
     return back;
   }
   default:
-    std::cerr << "Unrecognized expr in migrate_expr_back"
-              << "\n";
-    abort();
+    throw std::runtime_error("Unrecognized expr in migrate_expr_back");
   }
 }

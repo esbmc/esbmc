@@ -54,9 +54,8 @@ void goto_convertt::finish_gotos(goto_programt &dest)
 
       if(l_it == targets.labels.end())
       {
-        std::cerr << "goto label " << goto_label << " not found";
-        i.code->dump();
-        abort();
+        throw std::runtime_error(
+          fmt::format("goto label {} not found\n{}", goto_label, *i.code));
       }
 
       i.targets.clear();
@@ -434,8 +433,7 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   if(code.operands().size() != 1)
   {
     err_location(code);
-    std::cerr << "expression statement takes one operand\n";
-    abort();
+    throw std::runtime_error("expression statement takes one operand\n");
   }
 
   exprt expr = code.op0();

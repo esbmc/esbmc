@@ -32,6 +32,7 @@ extern const unsigned int esbmc_num_solvers;
 smt_convt *create_solver_factory(
   const std::string &solver_name,
   const namespacet &ns,
-  const optionst &options);
+  const optionst &options,
+  const messaget &msg);
 
 #endif

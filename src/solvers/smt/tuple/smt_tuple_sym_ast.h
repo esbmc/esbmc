@@ -35,7 +35,7 @@ public:
   smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
   smt_astt project(smt_convt *ctx, unsigned int elem) const override;
 
-  void dump() const override
+  void dump(const messaget &) const override
   {
   }
 };

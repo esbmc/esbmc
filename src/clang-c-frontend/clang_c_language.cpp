@@ -229,7 +229,7 @@ bool clang_c_languaget::typecheck(
 {
   contextt new_context;
 
-  clang_c_convertert converter(new_context, ASTs);
+  clang_c_convertert converter(new_context, ASTs, msg);
   if(converter.convert())
     return true;
 

@@ -1,11 +1,11 @@
 #ifndef CPROVER_PARSER_H
 #define CPROVER_PARSER_H
 
-#include <iostream>
 #include <string>
 #include <util/expr.h>
 #include <util/message/message.h>
 #include <vector>
+#include <istream>
 
 class parsert
 {

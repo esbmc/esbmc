@@ -108,7 +108,7 @@ public:
 
   std::string main;
 
-  bool set(const cmdlinet &cmdline);
+  bool set(const cmdlinet &cmdline, const messaget &msg);
 
   optionst options;
 

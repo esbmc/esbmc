@@ -206,10 +206,10 @@ guardt &operator|=(guardt &g1, const guardt &g2)
   return g1;
 }
 
-void guardt::dump() const
+void guardt::dump(const messaget &msg) const
 {
   for(auto const &it : guard_list)
-    it->dump();
+    it->dump(msg);
 }
 
 bool operator==(const guardt &g1, const guardt &g2)

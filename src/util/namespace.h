@@ -18,17 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class namespacet
 {
 public:
-  const symbolt &lookup(const irep_idt &name) const
-  {
-    const symbolt *symbol;
-    if(lookup(name, symbol))
-    {
-      std::cerr << "Failed to find symbol " + id2string(name) + " not found"
-                << "\n";
-      abort();
-    }
-    return *symbol;
-  }
+  const symbolt &lookup(const irep_idt &name) const;
 
   const symbolt &lookup(const irept &irep) const
   {

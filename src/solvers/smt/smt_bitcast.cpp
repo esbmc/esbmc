@@ -216,9 +216,8 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     if(is_union_type(new_from))
     {
-      std::cerr << "Unions not supported when bitcasting to struct for now\n";
-      expr->dump();
-      abort();
+      throw std::runtime_error(fmt::format(
+        "Unions not supported when bitcasting to struct for now\n{}", *expr));
     }
   }
 

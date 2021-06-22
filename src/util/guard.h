@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GUARD_H
 #define CPROVER_GUARD_H
 
-#include <iostream>
 #include <util/expr.h>
 #include <util/irep2.h>
 #include <util/migrate.h>
@@ -41,7 +40,7 @@ public:
   friend guardt &operator|=(guardt &g1, const guardt &g2);
   friend bool operator==(const guardt &g1, const guardt &g2);
 
-  void dump() const;
+  void dump(const messaget &msg) const;
 
 protected:
   guard_listt guard_list;

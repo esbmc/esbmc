@@ -37,7 +37,7 @@ void ai_baset::output(const goto_functionst &goto_functions, std::ostream &out)
 
         abstract_state_before(i_it)->output(out);
         out << "\n";
-        i_it->dump();
+        i_it->output_instruction(*migrate_namespace_lookup, "", out);
         out << "\n";
       }
     }

@@ -303,8 +303,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   case expr2t::constant_union_id:
-    std::cerr << "Post-parse union literals are deprecated and broken, sorry\n";
-    abort();
+    throw std::runtime_error(
+      "Post-parse union literals are deprecated and broken, sorry");
   case expr2t::constant_array_id:
   case expr2t::constant_array_of_id:
   {
@@ -1085,9 +1085,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   default:
-    std::cerr << "Couldn't convert expression in unrecognised format\n";
-    expr->dump();
-    abort();
+    throw std::runtime_error(fmt::format(
+      "Couldn't convert expression in unrecognised format\n{}", *expr));
   }
 
   struct smt_cache_entryt entry = {expr, a, ctx_level};
@@ -1193,9 +1192,8 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     break;
   }
   default:
-    std::cerr << "Unexpected type ID " << get_type_id(type);
-    std::cerr << " reached SMT conversion\n";
-    abort();
+    throw std::runtime_error(fmt::format(
+      "Unexpected type ID {} reached SMT conversion", get_type_id(type)));
   }
 
   sort_cache.insert(smt_sort_cachet::value_type(type, result));
@@ -1340,9 +1338,8 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
   }
 
   default:
-    std::cerr << "Converting unrecognized terminal expr to SMT\n";
-    expr->dump();
-    abort();
+    throw std::runtime_error(
+      fmt::format("Converting unrecognized terminal expr to SMT\n{}", *expr));
   }
 }
 
@@ -2099,10 +2096,13 @@ expr2tc smt_convt::get(const expr2tc &expr)
   {
     if(is_array_type(expr))
     {
-      std::cerr << "Fetching array elements inside tuples currently "
-                   "unimplemented, sorry"
-                << "\n";
-      return expr2tc();
+      if(extracting_from_array_tuple_is_error)
+      {
+        std::runtime_error(
+          "Fetching array elements inside tuples currently "
+          "unimplemented, sorry");
+      }
+      return expr2tc(); // TODO: ??? This is horrible
     }
     simplify(res);
     return res;
@@ -2179,9 +2179,8 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
     return constant_floatbv2tc(fp_api->get_fpbv(a));
 
   default:
-    std::cerr << "Unimplemented type'd expression (" << type->type_id
-              << ") in smt get\n";
-    abort();
+    throw std::runtime_error(fmt::format(
+      "Unimplemented type'd expression ({}) in smt get", type->type_id));
   }
 }
 
@@ -2204,9 +2203,8 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
     return tuple_api->tuple_get(expr);
 
   default:
-    std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
-              << ") in smt get\n";
-    abort();
+    throw std::runtime_error(fmt::format(
+      "Unimplemented type'd expression ({}) in smt get", expr->type->type_id));
   }
 }
 
@@ -2263,8 +2261,8 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
 
   if(!is_constant_int2t(arr_type.array_size))
   {
-    std::cerr << "Non-constant sized array of type constant_array_of2t\n";
-    abort();
+    throw std::runtime_error(
+      "Non-constant sized array of type constant_array_of2t");
   }
 
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
@@ -2542,19 +2540,19 @@ smt_astt smt_ast::project(
   smt_convt *ctx [[gnu::unused]],
   unsigned int idx [[gnu::unused]]) const
 {
-  std::cerr << "Projecting from non-tuple based AST\n";
-  abort();
+  throw std::runtime_error("Projecting from non-tuple based AST");
 }
 
 void smt_convt::dump_smt()
 {
-  std::cerr << "SMT dump not implemented for " << solver_text() << "\n";
+  throw std::runtime_error(
+    fmt::format("SMT dump not implemented for {}", solver_text()));
 }
 
 void smt_convt::print_model()
 {
-  std::cerr << "SMT model printing not implemented for " << solver_text()
-            << "\n";
+  throw std::runtime_error(
+    fmt::format("SMT model printing not implemented for {}", solver_text()));
 }
 
 tvt smt_convt::l_get(smt_astt a)
@@ -2594,62 +2592,48 @@ expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
   default:;
   }
 
-  std::cerr << "Can't generate one for type " << get_type_id(type) << '\n';
-  abort();
+  throw std::runtime_error(
+    fmt::format("Can't generate one for type {}", get_type_id(type)));
 }
 
 smt_sortt smt_convt::mk_bool_sort()
 {
-  std::cerr << "Chosen solver doesn't support boolean sorts\n";
-  abort();
+  throw std::runtime_error("Chosen solver doesn't support boolean sorts");
 }
 
 smt_sortt smt_convt::mk_real_sort()
 {
-  std::cerr << "Chosen solver doesn't support real sorts\n";
-  abort();
+  throw std::runtime_error("Chosen solver doesn't support real sorts");
 }
 
 smt_sortt smt_convt::mk_int_sort()
 {
-  std::cerr << "Chosen solver doesn't support integer sorts\n";
-  abort();
+  throw std::runtime_error("Chosen solver doesn't support integer sorts");
 }
 
-smt_sortt smt_convt::mk_bv_sort(std::size_t width)
+smt_sortt smt_convt::mk_bv_sort(std::size_t)
 {
-  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
-  (void)width;
-  abort();
+  throw std::runtime_error("Chosen solver doesn't support bit vector sorts");
 }
 
-smt_sortt smt_convt::mk_fbv_sort(std::size_t width)
+smt_sortt smt_convt::mk_fbv_sort(std::size_t)
 {
-  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
-  (void)width;
-  abort();
+  throw std::runtime_error("Chosen solver doesn't support bit vector sorts");
 }
 
-smt_sortt smt_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
+smt_sortt smt_convt::mk_array_sort(smt_sortt, smt_sortt)
 {
-  std::cerr << "Chosen solver doesn't support array sorts\n";
-  (void)domain;
-  (void)range;
-  abort();
+  throw std::runtime_error("Chosen solver doesn't support array sorts");
 }
 
-smt_sortt smt_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
+smt_sortt smt_convt::mk_bvfp_sort(std::size_t, std::size_t)
 {
-  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
-  (void)ew;
-  (void)sw;
-  abort();
+  throw std::runtime_error("Chosen solver doesn't support bit vector sorts");
 }
 
 smt_sortt smt_convt::mk_bvfp_rm_sort()
 {
-  std::cerr << "Chosen solver doesn't support bit vector sorts\n";
-  abort();
+  throw std::runtime_error("Chosen solver doesn't support bit vector sorts");
 }
 
 smt_astt smt_convt::mk_bvredor(smt_astt op)

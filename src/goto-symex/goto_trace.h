@@ -14,7 +14,7 @@ Date: July 2005
 #include <fstream>
 #include <goto-programs/goto_program.h>
 #include <goto-symex/symex_target.h>
-#include <iostream>
+
 #include <map>
 #include <util/irep2.h>
 #include <util/migrate.h>

@@ -44,7 +44,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
 public:
   c2goto_parseopt(int argc, const char **argv, const messaget &msg)
-    : parseoptions_baset(c2goto_options, argc, argv), language_uit(cmdline, msg)
+    : parseoptions_baset(c2goto_options, argc, argv, msg), language_uit(cmdline, msg)
   {
   }
 
@@ -52,12 +52,11 @@ public:
   {
     goto_functionst goto_functions;
 
-    config.set(cmdline);
+    config.set(cmdline, msg);
 
     if(!cmdline.isset("output"))
     {
-      std::cerr << "Must set output file"
-                << "\n";
+      msg.error("Must set output file");
       return 1;
     }
 
@@ -71,8 +70,7 @@ public:
 
     if(write_goto_binary(out, context, goto_functions))
     {
-      std::cerr << "Failed to write C library to binary obj"
-                << "\n";
+      msg.error("Failed to write C library to binary obj");
       return 1;
     }
 

@@ -27,5 +27,5 @@ enum class VerbosityLevel : char
   Result,   // results of the analysis (including CE)
   Progress, // progress notifications
   Status,   // all kinds of esbmc is doing that may be useful to the user
-  Debug // messages that are only useful if you need to debug.
+  Debug     // messages that are only useful if you need to debug.
 };

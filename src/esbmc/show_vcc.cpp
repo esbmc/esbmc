@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <esbmc/bmc.h>
 #include <fmt/format.h>
 #include <fstream>
-#include <iostream>
+
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>

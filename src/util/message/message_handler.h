@@ -27,15 +27,14 @@ Maintainers:
 class message_handlert
 {
 public:
-
-
   /**
    * @brief print the messsage
    * 
    * @param level verbosity level of message
    * @param message string with the mensage to be printed
    */
-  virtual void print(VerbosityLevel level, const std::string &message) const = 0;
+  virtual void
+  print(VerbosityLevel level, const std::string &message) const = 0;
 
   /**
    * @brief print the message alongisde its location

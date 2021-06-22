@@ -71,9 +71,8 @@ void goto_convertt::do_function_call(
   else
   {
     err_location(function);
-    std::cerr << "unexpected function argument: " + new_function.id_string()
-              << "\n";
-    abort();
+    throw std::runtime_error(fmt::format(
+      "unexpected function argument: {}", new_function.id_string()));
   }
 }
 
@@ -172,9 +171,11 @@ void goto_convertt::do_function_call_dereference(
   migrate_expr(function_call, t->code);
 }
 
-void goto_functionst::dump() const
+void goto_functionst::dump(const messaget &msg) const
 {
-  output(*migrate_namespace_lookup, std::cout);
+  std::ostringstream oss;
+  output(*migrate_namespace_lookup, oss);
+  msg.debug(oss.str());
 }
 
 void goto_functionst::output(const namespacet &ns, std::ostream &out) const

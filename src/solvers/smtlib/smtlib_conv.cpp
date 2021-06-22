@@ -916,9 +916,8 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 
 int smtliberror(int startsym [[gnu::unused]], const std::string &error)
 {
-  std::cerr << "SMTLIB response parsing error: \"" << error << "\""
-            << "\n";
-  abort();
+  std::runtime_error(
+    fmt::format("SMTLIB response parsing error: \"{}\"", error));  
 }
 
 void smtlib_convt::push_ctx()

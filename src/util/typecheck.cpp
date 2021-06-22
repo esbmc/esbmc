@@ -18,8 +18,7 @@ bool typecheckt::typecheck_main()
 
   catch(int e)
   {
-    error(
-      fmt::format("{}",e));
+    error(fmt::format("{}", e));
   }
 
   catch(const char *e)

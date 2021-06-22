@@ -45,7 +45,7 @@ public:
   }
 
   void find_function_loops();
-  void dump() const;
+  void dump(const messaget &msg) const;
 
   const function_loopst &get_loops() const
   {

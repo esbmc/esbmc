@@ -13,7 +13,7 @@
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/printf_formatter.h>
 #include <goto-symex/witnesses.h>
-#include <iostream>
+
 #include <regex>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>

@@ -13,7 +13,7 @@
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
-#include <iostream>
+
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
