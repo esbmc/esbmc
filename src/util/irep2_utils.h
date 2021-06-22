@@ -3,7 +3,7 @@
 
 #include <util/irep2_expr.h>
 #include <util/c_types.h>
-
+#include <util/message/format.h>
 /** Test whether type is an integer. */
 inline bool is_bv_type(const type2tc &t)
 {
@@ -403,8 +403,8 @@ inline expr2tc gen_one(const type2tc &type)
     break;
   }
 
-  std::cerr << "Can't generate one for type " << get_type_id(type) << '\n';
-  abort();
+  throw std::runtime_error(
+    fmt::format("Can't generate one for type {}", get_type_id(type)));
 }
 
 #endif /* UTIL_IREP2_UTILS_H_ */

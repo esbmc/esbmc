@@ -79,8 +79,7 @@ bool clang_main(contextt &context, const messaget &message_handler)
   {
     messaget message(message_handler);
     if(matches.size() == 2)
-      std::cerr << "warning: main symbol `" << main << "' is ambiguous"
-                << "\n";
+      message.error("warning: main symbol `" + main + "' is ambiguous");
     else
     {
       message.error("main symbol `" + main + "' is ambiguous");

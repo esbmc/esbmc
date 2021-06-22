@@ -71,11 +71,11 @@ public:
 
   smt_astt eq_fixedsize(smt_convt *ctx, const array_ast *other) const;
 
-  void dump() const override
+  void dump(const messaget &msg) const override
   {
-    std::cout << "name: " << symname << '\n';
+    msg.debug(fmt::format("name: {}", symname));
     for(auto const &e : array_fields)
-      e->dump();
+      e->dump(msg);
   }
 
   std::string symname; // Only if this was produced from mk_smt_symbol.

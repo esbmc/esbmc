@@ -4,7 +4,8 @@ target_include_directories(symex
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
+target_link_libraries(symex fmt::fmt)
 # Note: This is needed only by windows
 if(WIN32)
-target_link_libraries(symex wsock32 ws2_32)
+target_link_libraries(symex fmt::fmt wsock32 ws2_32)
 endif()

@@ -17,9 +17,9 @@ irept nil_rep_storage;
 const irept::dt empty_d;
 #endif
 
-void irept::dump() const
+void irept::dump(const messaget &msg) const
 {
-  std::cout << pretty(0) << "\n";
+  msg.debug(pretty(0));
 }
 
 const irept &get_nil_irep()
@@ -94,8 +94,6 @@ const irept::dt &irept::read() const
   return *data;
 }
 #endif
-
-#include <iostream>
 
 #ifdef SHARING
 void irept::remove_ref(dt *old_data)

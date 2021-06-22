@@ -23,9 +23,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
 
   if(is_pointer_type(cast.from))
   {
-    std::cerr << "Converting pointer to a float is unsupported"
-              << "\n";
-    abort();
+    throw std::runtime_error("Converting pointer to a float is unsupported");
   }
 
   if(is_bv_type(cast.from))
@@ -35,9 +33,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
   else if(is_fixedbv_type(cast.from))
     return convert_typecast_to_fixedbv_nonint_from_fixedbv(expr);
 
-  std::cerr << "unexpected typecast to fixedbv"
-            << "\n";
-  abort();
+  throw std::runtime_error("unexpected typecast to fixedbv");
 }
 
 smt_astt
@@ -183,8 +179,7 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
-  std::cerr << "Unexpected type in typecast to fpbv\n";
-  abort();
+  throw std::runtime_error("Unexpected type in typecast to fpbv");
 }
 
 smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
@@ -203,8 +198,7 @@ smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
-  std::cerr << "Unexpected type in typecast from fpbv\n";
-  abort();
+  throw std::runtime_error("Unexpected type in typecast from fpbv");
 }
 
 smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
@@ -224,9 +218,7 @@ smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
   if(is_bool_type(cast.from))
     return convert_typecast_to_ints_from_bool(cast);
 
-  std::cerr << "Unexpected type in int/ptr typecast"
-            << "\n";
-  abort();
+  throw std::runtime_error("Unexpected type in int/ptr typecast");
 }
 
 smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
@@ -299,9 +291,7 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
       // Operands have differing signs (and same width). Just return.
       return convert_ast(cast.from);
 
-    std::cerr << "Unrecognized equal-width int typecast format"
-              << "\n";
-    abort();
+    std::runtime_error("Unrecognized equal-width int typecast format");
   }
 
   if(from_width < to_width)
@@ -310,9 +300,7 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
   if(from_width > to_width)
     return mk_extract(a, to_width - 1, 0);
 
-  std::cerr << "Malformed cast from signedbv/fixedbv"
-            << "\n";
-  abort();
+  throw std::runtime_error("Malformed cast from signedbv/fixedbv");
 }
 
 smt_astt
@@ -514,9 +502,7 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
     {
       if(!base_type_eq(struct_type_from.members[i], it, ns))
       {
-        std::cerr << "Incompatible struct in cast-to-struct"
-                  << "\n";
-        abort();
+        throw std::runtime_error("Incompatible struct in cast-to-struct");
       }
 
       i++;
@@ -610,13 +596,9 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     if(base_type_eq(cast.type, cast.from->type, ns))
       return convert_ast(cast.from); // No additional conversion required
 
-    std::cerr << "Can't typecast between unions"
-              << "\n";
-    abort();
+    throw std::runtime_error("Can't typecast between unions\n{}");
   }
 
-  std::cerr << "Typecast for unexpected type"
-            << "\n";
-  expr->dump();
-  abort();
+  throw std::runtime_error(
+    fmt::format("Typecast for unexpected type\n{}", *expr));
 }

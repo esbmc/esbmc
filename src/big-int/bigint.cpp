@@ -12,7 +12,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <iostream>
 
 #define error(x)                                                               \
   fprintf(stderr, "%s\n", x);                                                  \

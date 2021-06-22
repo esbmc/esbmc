@@ -62,7 +62,7 @@ void goto_convert(
   if(s == nullptr)
     throw "failed to find main symbol";
 
-  std::cout << "goto_convert : start converting symbol table to goto functions "
-            << "\n";
+  message_handler.status(
+    "goto_convert : start converting symbol table to goto functions ");
   ::goto_convert(to_code(s->value), context, options, dest, message_handler);
 }

@@ -22,7 +22,9 @@ Author: Daniel Kroening, kroening@kroening.com
 parseoptions_baset::parseoptions_baset(
   const struct group_opt_templ *opts,
   int argc,
-  const char **argv)
+  const char **argv,
+  const messaget &msg)
+  : cmdline(msg)
 {
   exception_occured = cmdline.parse(argc, argv, opts);
 }

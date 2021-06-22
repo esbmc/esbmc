@@ -307,6 +307,12 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
   }
 }
 
+void interval_domaint::dump(const messaget &msg) const
+{
+  std::ostringstream oss;
+  output(oss);
+  msg.debug(oss.str());
+}
 expr2tc interval_domaint::make_expression(const expr2tc &expr) const
 {
   assert(is_symbol2t(expr));

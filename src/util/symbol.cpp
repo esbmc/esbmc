@@ -46,9 +46,11 @@ void symbolt::swap(symbolt &b)
   SYM_SWAP2(is_extern);
 }
 
-void symbolt::dump() const
+void symbolt::dump(const messaget &msg) const
 {
-  show(std::cout);
+  std::ostringstream oss;
+  show(oss);
+  msg.debug(oss.str());
 }
 
 void symbolt::show(std::ostream &out) const

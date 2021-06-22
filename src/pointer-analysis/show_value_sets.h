@@ -15,10 +15,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void show_value_sets(
   const goto_functionst &goto_functions,
-  const value_set_analysist &value_set_analysis);
+  const value_set_analysist &value_set_analysis,
+  std::ostream &os);
 
 void show_value_sets(
   const goto_programt &goto_program,
-  const value_set_analysist &value_set_analysis);
+  const value_set_analysist &value_set_analysis,
+  std::ostream &os);
 
 #endif

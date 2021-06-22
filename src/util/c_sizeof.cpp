@@ -24,29 +24,8 @@ exprt c_sizeof(const typet &src, const namespacet &ns)
   // migration, but we might still run into a nondeterministically sized
   // array.
   BigInt size;
-  try
-  {
-    size = type_byte_size(t);
-  }
-  catch(array_type2t::dyn_sized_array_excp *e)
-  { // Nondet'ly sized.
-    std::cerr << "Sizeof nondeterministically sized array encountered"
-              << "\n";
-    abort();
-  }
-  catch(array_type2t::inf_sized_array_excp *e)
-  {
-    std::cerr << "Sizeof infinite sized array encountered"
-              << "\n";
-    abort();
-  }
-  catch(type2t::symbolic_type_excp *e)
-  {
-    std::cerr << "Sizeof symbolic type encountered"
-              << "\n";
-    abort();
-  }
 
+  size = type_byte_size(t); // let the exception propagate
   constant_int2tc theval(get_uint32_type(), size);
   return migrate_expr_back(theval);
 }

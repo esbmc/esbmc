@@ -16,7 +16,7 @@
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_target.h>
-#include <iostream>
+
 #include <list>
 #include <map>
 #include <set>
@@ -187,8 +187,8 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      std::cerr << "Setting thread data for nonexistant thread " << tid << '\n';
-      abort();
+      throw std::runtime_error(
+        fmt::format("Setting thread data for nonexistant thread {}", tid));
     }
 
     thread_start_data[tid] = argdata;
@@ -199,8 +199,8 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      std::cerr << "Getting thread data for nonexistant thread " << tid << '\n';
-      abort();
+      throw std::runtime_error(
+        fmt::format("Setting thread data for nonexistant thread {}", tid));
     }
 
     return thread_start_data[tid];

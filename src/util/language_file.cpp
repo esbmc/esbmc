@@ -229,9 +229,7 @@ void language_filest::typecheck_virtual_methods(contextt &context)
               member_function.location.as_string() +
               ": The virtual method isn't pure virtual and hasn't a "
               "method implementation ");
-            std::cerr << "CONVERSION ERROR"
-                      << "\n";
-            throw 0;
+            throw std::runtime_error("CONVERSION ERROR");
           }
         }
       }

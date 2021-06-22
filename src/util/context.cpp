@@ -43,14 +43,12 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
   return false;
 }
 
-void contextt::dump() const
+void contextt::dump(const messaget &msg) const
 {
-  std::cout << "\n"
-            << "Symbols:"
-            << "\n";
+  msg.debug("\nSymbols:");
 
   // Do assignments based on "value".
-  foreach_operand([](const symbolt &s) { s.dump(); });
+  foreach_operand([&msg](const symbolt &s) { s.dump(msg); });
 }
 
 symbolt *contextt::find_symbol(irep_idt name)
@@ -74,9 +72,7 @@ void contextt::erase_symbol(irep_idt name)
   symbolst::iterator it = symbols.find(name);
   if(it == symbols.end())
   {
-    std::cerr << "Couldn't find symbol to erase"
-              << "\n";
-    abort();
+    throw std::runtime_error("Couldn't find symbol to erase");
   }
 
   symbols.erase(name);

@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cassert>
 #include <cstring>
 #include <util/namespace.h>
+#include <util/message/format.h>
 
 unsigned get_max(const std::string &prefix, const contextt *context)
 {
@@ -57,6 +58,17 @@ bool namespacet::lookup(const irep_idt &name, const symbolt *&symbol) const
   }
 
   return true;
+}
+
+const symbolt &namespacet::lookup(const irep_idt &name) const
+{
+  const symbolt *symbol;
+  if(lookup(name, symbol))
+  {
+    throw std::runtime_error(
+      fmt::format("Failed to find symbol {} not found", id2string(name)));
+  }
+  return *symbol;
 }
 
 void namespacet::follow_symbol(irept &irep) const

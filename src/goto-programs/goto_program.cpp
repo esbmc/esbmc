@@ -10,9 +10,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iomanip>
 #include <langapi/language_util.h>
 
-void goto_programt::instructiont::dump() const
+void goto_programt::instructiont::dump(const messaget &msg) const
 {
-  output_instruction(*migrate_namespace_lookup, "", std::cout);
+  std::ostringstream oss;
+  output_instruction(*migrate_namespace_lookup, "", oss);
+  msg.debug(oss.str());
 }
 
 void goto_programt::instructiont::output_instruction(
@@ -490,9 +492,11 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   return out;
 }
 
-void goto_programt::dump() const
+void goto_programt::dump(const messaget &msg) const
 {
-  output(*migrate_namespace_lookup, "", std::cout);
+  std::ostringstream oss;
+  output(*migrate_namespace_lookup, "", oss);
+  msg.debug(oss.str());
 }
 
 void goto_programt::get_decl_identifiers(

@@ -372,9 +372,8 @@ void static_analysis_baset::do_function_call_rec(
   }
   else
   {
-    std::cerr << "unexpected function_call argument: " << get_expr_id(function)
-              << "\n";
-    abort();
+    throw std::runtime_error(fmt::format(
+      "unexpected function_call argument: ", get_expr_id(function)));
   }
 }
 

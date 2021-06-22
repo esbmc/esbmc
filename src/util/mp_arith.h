@@ -10,7 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_MP_ARITH_H
 
 #include <big-int/bigint.hh>
-#include <iostream>
+#include <ostream>
+#include <string>
 
 std::ostream &operator<<(std::ostream &, const BigInt &);
 BigInt operator>>(const BigInt &, const BigInt &);

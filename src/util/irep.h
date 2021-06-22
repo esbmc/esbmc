@@ -38,9 +38,9 @@ typedef dstring_hash irep_id_hash;
 #define Forall_named_irep(it, irep)                                            \
   for(irept::named_subt::iterator it = (irep).begin(); it != (irep).end(); it++)
 
-#include <iostream>
-
 class typet;
+class
+  messaget; // This forward decl is needed because locationt (which is an irep) is used inside messaget
 
 class irept
 {
@@ -51,7 +51,7 @@ public:
   typedef std::map<irep_namet, irept> named_subt;
 
   // Dump contents of irep to stdout. Debugging only.
-  void dump() const;
+  void dump(const messaget &msg) const;
 
   bool is_nil() const
   {

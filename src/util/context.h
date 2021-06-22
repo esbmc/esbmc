@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_CONTEXT_H
 
 #include <functional>
-#include <iostream>
+
 #include <map>
 #include <util/config.h>
 #include <util/symbol.h>
@@ -54,7 +54,7 @@ public:
     ordered_symbols.clear();
   }
 
-  DUMP_METHOD void dump() const;
+  DUMP_METHOD void dump(const messaget &msg) const;
 
   void swap(contextt &other)
   {

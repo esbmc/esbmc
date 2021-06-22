@@ -9,6 +9,7 @@
 #include <util/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
+#include <util/message/format.h>
 
 template <typename T>
 class register_irep_methods;
@@ -120,9 +121,9 @@ std::string type2t::pretty(unsigned int indent) const
   return pretty_print_func<const type2t &>(indent, type_names[type_id], *this);
 }
 
-void type2t::dump() const
+void type2t::dump(const messaget &msg) const
 {
-  std::cout << pretty(0) << "\n";
+  msg.debug(pretty(0));
 }
 
 size_t type2t::crc() const
@@ -188,16 +189,13 @@ unsigned int empty_type2t::get_width() const
 
 unsigned int symbol_type2t::get_width() const
 {
-  std::cerr << "Fetching width of symbol type - invalid operation"
-            << "\n";
-  abort();
+  throw std::runtime_error("Fetching width of symbol type - invalid operation");
 }
 
 unsigned int cpp_name_type2t::get_width() const
 {
-  std::cerr << "Fetching width of cpp_name type - invalid operation"
-            << "\n";
-  abort();
+  throw std::runtime_error(
+    "Fetching width of cpp_name type - invalid operation");
 }
 
 unsigned int struct_type2t::get_width() const
@@ -281,15 +279,17 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
 
   if(!count)
   {
-    std::cerr << "Looking up index of nonexistant member \"" << comp
-              << "\" in struct/union \"" << name << "\""
-              << "\n";
+    throw std::runtime_error(fmt::format(
+      "Looking up index of nonexistant member \"{}\" in struct/union \"{}\"",
+      comp,
+      name));
   }
   else if(count > 1)
   {
-    std::cerr << "Name \"" << comp << "\" matches more than one member"
-              << "\" in struct/union \"" << name << "\""
-              << "\n";
+    throw std::runtime_error(fmt::format(
+      "Name \"{}\" matches more than one member\" in struct/union \"{}\"",
+      comp,
+      name));
   }
 
   abort();
@@ -551,9 +551,9 @@ std::string expr2t::pretty(unsigned int indent) const
   return ret;
 }
 
-void expr2t::dump() const
+void expr2t::dump(const messaget &msg) const
 {
-  std::cout << pretty(0) << "\n";
+  msg.debug((0));
 }
 
 // Map a base type to it's list of names
@@ -649,9 +649,7 @@ std::string symbol_data::get_symbol_name() const
     return thename.as_string() + "&" + i2string(node_num) + "#" +
            i2string(level2_num);
   default:
-    std::cerr << "Unrecognized renaming level enum"
-              << "\n";
-    abort();
+    throw std::runtime_error("Unrecognized renaming level enum");
   }
 }
 
@@ -925,9 +923,7 @@ type_to_string(const symbol_data::renaming_level &theval, int)
   case symbol_data::level2_global:
     return "Level 2 (global)";
   default:
-    std::cerr << "Unrecognized renaming level enum"
-              << "\n";
-    abort();
+    throw std::runtime_error("Unrecognized renaming level enum");
   }
 }
 

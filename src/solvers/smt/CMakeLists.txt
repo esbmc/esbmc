@@ -5,3 +5,4 @@ add_library(smt array_conv.cpp smt_byteops.cpp smt_casts.cpp smt_conv.cpp smt_me
 target_include_directories(smt
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
+target_link_libraries(smt fmt::fmt)

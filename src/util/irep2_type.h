@@ -542,12 +542,18 @@ public:
   }
   array_type2t(const array_type2t &ref) = default;
 
+  virtual ~array_type2t() = default;
+
   unsigned int get_width() const override;
 
   /** Exception for invalid manipulations of an infinitely sized array. No
    *  actual data stored. */
   class inf_sized_array_excp
   {
+    virtual const char *what() const throw()
+    {
+      return "Sizeof infinite sized array encountered";
+    }
   };
 
   /** Exception for invalid manipultions of dynamically sized arrays.
@@ -559,6 +565,14 @@ public:
     dyn_sized_array_excp(const expr2tc &_size) : size(_size)
     {
     }
+
+    virtual const char *what() const throw()
+    {
+      return "Sizeof nondeterministically sized array encountered";
+    }
+
+    virtual ~dyn_sized_array_excp() = default;
+
     expr2tc size;
   };
 

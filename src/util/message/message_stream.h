@@ -119,8 +119,7 @@ protected:
     saved_error_location.make_nil();
   }
 
-  void
-  error_parse_line(VerbosityLevel level, const std::string &line);
+  void error_parse_line(VerbosityLevel level, const std::string &line);
 
   void error_parse(VerbosityLevel level, const std::string &error);
 };
