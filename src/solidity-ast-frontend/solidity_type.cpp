@@ -52,6 +52,7 @@ namespace SolidityTypes
     switch(the_type)
     {
       ENUM_TO_STR(TypeBuiltin)
+      ENUM_TO_STR(FunctionNoProto)
       ENUM_TO_STR(TypeError)
       default:
       {
@@ -144,6 +145,7 @@ namespace SolidityTypes
       ENUM_TO_STR(DeclRefExprClass)
       ENUM_TO_STR(ImplicitCastExprClass)
       ENUM_TO_STR(IntegerLiteralClass)
+      ENUM_TO_STR(CallExprClass)
       ENUM_TO_STR(StmtClassError)
       default:
       {

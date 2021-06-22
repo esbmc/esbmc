@@ -319,8 +319,10 @@ void CompoundStmtTracker::config()
   // item is like { "0" : { the_expr }}
   for (const auto& item : stmt_json.items())
   {
+    /*
     if (std::stoi(item.key()) >= 3) // TODO: remove debug when proceeding with Part IV!
       continue;
+    */
     //printf("### statement json: ");
     //::print_decl_json(item.value());
     // populate statement vector based on each statement json object
@@ -333,6 +335,7 @@ void CompoundStmtTracker::config()
 
 void CompoundStmtTracker::add_statement(const nlohmann::json& expr)
 {
+  //std::string _type =  expr["nodeType"].get<std::string>();
   // Construct the statemnt object based on the information in expr json object
   if (expr["nodeType"] == "Assignment")
   {
@@ -340,10 +343,48 @@ void CompoundStmtTracker::add_statement(const nlohmann::json& expr)
     stmt->config();
     statements.push_back(stmt);
   }
+  else if (expr["nodeType"] == "FunctionCall")
+  {
+    //printf("@@DEBUG FunctionCall: "); ::print_decl_json(expr);
+    StmtTracker* stmt = new CallExprTracker(expr);
+    stmt->config();
+    statements.push_back(stmt);
+  }
   else
   {
     assert(!"Unimplemented expression nodeType");
   }
+}
+
+/* =======================================================
+ * CallExprTracker
+ * =======================================================
+ */
+CallExprTracker::~CallExprTracker()
+{
+  assert(callee);
+  delete callee;
+}
+
+void CallExprTracker::config()
+{
+  // order is important. Do NOT change!
+  set_stmt_class(SolidityTypes::CallExprClass);
+
+  // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+  // "assert( (int) ((int)(unsigned)sum > (int)100));"
+  callee = new ImplicitCastExprTracker(stmt_json);
+  callee->set_stmt_class(SolidityTypes::ImplicitCastExprClass);
+  StmtTrackerPtr implicit_cast_ptr = callee;
+  auto implicit_cast_tracker = static_cast<ImplicitCastExprTracker*>(implicit_cast_ptr);
+  //printf("@@DEBUG - Callee's Implicit: "); ::print_decl_json(implicit_cast_ptr->stmt_json);
+  implicit_cast_tracker->set_sub_expr_kind(SolidityTypes::DeclRefExprClass);
+
+  /*
+  implicit_cast_tracker->set_expr_type_str(stmt_json["typeDescriptions"]["typeString"]); // hard
+  assert(implicit_cast_tracker->get_expr_type_str() == "uint8");
+  implicit_cast_tracker->config();
+  */
 }
 
 /* =======================================================
@@ -581,6 +622,58 @@ void ImplicitCastExprTracker::set_sub_expr_kind(SolidityTypes::stmtClass _kind)
       assert(!"Unsupported data type for ValDecl");
     }
   }
+  else if (_kind == SolidityTypes::DeclRefExprClass)
+  {
+    // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+    // "assert( (int) ((int)(unsigned)sum > (int)100));"
+    sub_expr = new DeclRefExprTracker(stmt_json["expression"]); // function name .etc is inside "expression" object
+    sub_expr->set_stmt_class(SolidityTypes::DeclRefExprClass);
+    // set DeclRef ID and kind
+    StmtTrackerPtr decl_ptr = sub_expr;
+    auto decl_ref_tracker = static_cast<DeclRefExprTracker*>(decl_ptr);
+
+    // set DeclRef id
+    assert(decl_ref_tracker->get_decl_ref_id() == DeclRefExprTracker::declRefIdInvalid); // only allowed to set ONCE
+    int _id = stmt_json["expression"]["referencedDeclaration"].get<int>();
+    if (_id < 0) // to cope with "-3"
+    {
+      decl_ref_tracker->set_decl_ref_id(DeclRefExprTracker::declRefIdInvalid - 1);
+    }
+    else
+    {
+      assert(!"Unexpected positive id");
+    }
+
+    // set DeclRef kind
+    std::string _type = stmt_json["expression"]["typeDescriptions"]["typeString"].get<std::string>();
+    if (_type == "function (bool) pure") // There is a mismatch between Solidity and C here. We want a function pointer
+    {
+      // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+      // "assert( (int) ((int)(unsigned)sum > (int)100));"
+
+      // set NamedDeclTracker:
+      // 1. set_named_decl_name
+      assert(stmt_json["expression"].contains("name"));
+      std::string decl_name = stmt_json["expression"]["name"].get<std::string>();
+      assert(decl_ref_tracker->get_nameddecl_tracker().get_name() == ""); // only allowed to set once during config();
+      decl_ref_tracker->set_named_decl_name(decl_name);
+      assert(!(decl_ref_tracker->get_nameddecl_tracker().get_hasIdentifier())); // only allowed to set once during config();
+      decl_ref_tracker->set_named_decl_has_id(true); // to be used in conjunction with the name above in converter's static std::string get_decl_name()
+      // 2. set_named_decl_kind
+      assert(decl_ref_tracker->get_nameddecl_tracker().get_named_decl_kind() == SolidityTypes::DeclKindError); // only allowed to set once during config()
+      decl_ref_tracker->set_named_decl_kind(SolidityTypes::DeclFunction);
+      // 3. set decl_ref_kind
+      assert(decl_ref_tracker->get_decl_ref_kind() == SolidityTypes::declRefError); // only allowed to set ONCE
+      decl_ref_tracker->set_decl_ref_kind(SolidityTypes::ValueDecl);
+
+      // set QualTypeTracker:
+      decl_ref_tracker->set_qualtype_tracker();
+    }
+    else
+    {
+      assert(!"Unsupported data type for ValDecl");
+    }
+  }
   else
   {
     assert(!"Unimplemented - other data types of sub expr in implicit cast tracker");
@@ -667,4 +760,36 @@ void IntegerLiteralTracker::set_qualtype_tracker()
   {
     assert(!"Unimplemented data types in IntegerLiteralTracker");
   }
+}
+
+/* =======================================================
+ * DeclRefExprTracker
+ * =======================================================
+ */
+void DeclRefExprTracker::set_named_decl_name(std::string _name)
+{
+  nameddecl_tracker.set_name(_name);
+}
+
+void DeclRefExprTracker::set_named_decl_kind(SolidityTypes::declKind _kind)
+{
+  nameddecl_tracker.set_named_decl_kind(_kind);
+}
+
+void DeclRefExprTracker::set_named_decl_has_id(bool _v)
+{
+  nameddecl_tracker.set_hasIdentifier(_v);
+}
+
+void DeclRefExprTracker::set_qualtype_tracker()
+{
+  // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+  // "assert( (int) ((int)(unsigned)sum > (int)100));"
+  assert(qualtype_tracker.get_type_class() == SolidityTypes::TypeError); // only allowed to set once during config();
+  assert(qualtype_tracker.get_bt_kind() == SolidityTypes::BuiltInError); // only allowed to set once during config();
+  qualtype_tracker.set_type_class(SolidityTypes::FunctionNoProto);
+
+  // set sub_qualtype type and bt_kind
+  qualtype_tracker.set_sub_qualtype_class(SolidityTypes::TypeBuiltin);
+  qualtype_tracker.set_sub_qualtype_bt_kind(SolidityTypes::BuiltinInt);
 }
