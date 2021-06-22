@@ -21,6 +21,7 @@ namespace SolidityTypes
   enum typeClass
   {
     TypeBuiltin = 0, // corresponds to clang::Type::Builtin
+    FunctionNoProto,
     TypeError
   };
   typeClass get_type_class(const std::string& kind);
@@ -55,6 +56,7 @@ namespace SolidityTypes
     DeclRefExprClass,
     ImplicitCastExprClass,
     IntegerLiteralClass,
+    CallExprClass,
     StmtClassError
   };
   const char* stmtClass_to_str(stmtClass the_stmtClass);

@@ -100,6 +100,8 @@ public:
   void set_isConstQualified(bool _v)    { isConstQualified = _v; }
   void set_isVolatileQualified(bool _v) { isVolatileQualified = _v; }
   void set_isRestrictQualified(bool _v) { isRestrictQualified = _v; }
+  void set_sub_qualtype_class(SolidityTypes::typeClass _class)        { sub_qualtype_class = _class; }
+  void set_sub_qualtype_bt_kind(SolidityTypes::builInTypesKind _kind) { sub_qualtype_bt_kind = _kind; }
 
   // getter
   SolidityTypes::typeClass get_type_class() const    { return type_class; }
@@ -107,6 +109,8 @@ public:
   bool get_isConstQualified() const    { return isConstQualified; }
   bool get_isVolatileQualified() const { return isVolatileQualified; }
   bool get_isRestrictQualified() const { return isRestrictQualified; }
+  SolidityTypes::typeClass get_sub_qualtype_class() const { return sub_qualtype_class; }
+  SolidityTypes::builInTypesKind get_sub_qualtype_bt_kind() const { return sub_qualtype_bt_kind; }
 
 private:
   SolidityTypes::typeClass type_class;
@@ -114,6 +118,11 @@ private:
   bool isConstQualified;
   bool isVolatileQualified;
   bool isRestrictQualified;
+  // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+  // "assert( (int) ((int)(unsigned)sum > (int)100));"
+  // a pointer to child class of QualTypeTracker might be better?
+  SolidityTypes::typeClass sub_qualtype_class;
+  SolidityTypes::builInTypesKind sub_qualtype_bt_kind; // builtinType::getKind();
 };
 
 // statement tracker base
@@ -131,6 +140,7 @@ public:
 
   void reset()
   {
+    stmt_class = SolidityTypes::StmtClassError;
   }
 
   // setters
@@ -173,6 +183,14 @@ public:
   // getters
   unsigned get_decl_ref_id() const { return decl_ref_id; }
   SolidityTypes::declRefKind get_decl_ref_kind() const { return decl_ref_kind; }
+  const NamedDeclTracker& get_nameddecl_tracker() const { return nameddecl_tracker; } // for get_decl_name(...)
+  const QualTypeTracker& get_qualtype_tracker() const { return qualtype_tracker; }  // for get_type(...)
+  // NamedDeclTracker setters
+  void set_named_decl_name(std::string _name);
+  void set_named_decl_kind(SolidityTypes::declKind _kind);
+  void set_named_decl_has_id(bool _v);
+  // QualTypeTracker setters
+  void set_qualtype_tracker(); // hard coded
 
   // setters
   void set_decl_ref_id(unsigned _id) { decl_ref_id = _id; }
@@ -181,6 +199,8 @@ public:
 private:
   unsigned decl_ref_id;
   SolidityTypes::declRefKind decl_ref_kind;
+  QualTypeTracker qualtype_tracker;
+  NamedDeclTracker nameddecl_tracker;
 };
 
 class ImplicitCastExprTracker : public StmtTracker
@@ -305,6 +325,35 @@ private:
   void set_lhs();
   void set_rhs();
   void set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string lor);
+};
+
+class CallExprTracker : public StmtTracker
+{
+public:
+  CallExprTracker(const nlohmann::json& _json) :
+    StmtTracker(_json)
+  {
+    clear_all();
+  }
+
+  void config();
+
+  CallExprTracker(const CallExprTracker &rhs) = default;
+  CallExprTracker(CallExprTracker &&rhs) = default;
+  CallExprTracker& operator=(const CallExprTracker &rhs) { assert(!"copy assignment is not allowed at the moment"); }
+  CallExprTracker& operator=(CallExprTracker &&rhs) { assert(!"move assignment is not allowed at the moment"); }
+  ~CallExprTracker();
+
+  void clear_all()
+  {
+    callee = nullptr;
+  }
+
+  // getters
+  const StmtTracker* get_callee() const { return callee; }
+
+private:
+  StmtTracker* callee;
 };
 
 class CompoundStmtTracker : public StmtTracker

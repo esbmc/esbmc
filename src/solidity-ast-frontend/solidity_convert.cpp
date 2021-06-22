@@ -238,6 +238,7 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
 
       // Set the end location for blocks
       locationt location_end;
+      // TODO: get_final_location_from_stmt
       //get_final_location_from_stmt(stmt, location_end);
 
       block.end_location(location_end);
@@ -315,6 +316,25 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
       break;
     }
 
+    // adjust_expr::adjust_side_effect_function_call
+    case SolidityTypes::stmtClass::CallExprClass:
+    {
+      printf("	@@@ got Expr: clang::Stmt::CallExprClass, ");
+      printf("  call_expr_times=%d\n", call_expr_times++);
+      const CallExprTracker* function_call =
+        static_cast<const CallExprTracker*>(stmt);
+
+      exprt callee_expr;
+      if(get_expr(function_call->get_callee(), callee_expr))
+        return true;
+
+      // TODO: get_type, side_effect_expr_function_callt, args
+
+      assert(!"done - CallExprClass case?");
+      //new_expr = call;
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported Solidity expr: \"";
       printf("failed to convert Solidity expr: %s\n", SolidityTypes::stmtClass_to_str(stmt->get_stmt_class()));
@@ -355,32 +375,60 @@ bool solidity_convertert::get_cast_expr(
 
 bool solidity_convertert::get_decl_ref(const DeclRefExprTracker* dcl, exprt &new_expr)
 {
-  auto matched_dcl = get_matched_decl_ref(dcl->get_decl_ref_id());
-  assert(matched_dcl); // must be a valid decl ref pointer
-
-  // TODO: enum
-  if (dcl->get_decl_ref_kind() == SolidityTypes::EnumConstantDecl)
+  if (dcl->get_decl_ref_id() != (DeclRefExprTracker::declRefIdInvalid - 1))
   {
-    assert(!"unsupported enum decl ref types");
-    return false;
-  }
+    auto matched_dcl = get_matched_decl_ref(dcl->get_decl_ref_id());
+    assert(matched_dcl); // must be a valid decl ref pointer
 
-  // Everything else should be a value decl
-  if (dcl->get_decl_ref_kind() == SolidityTypes::ValueDecl)
-  {
+    // TODO: enum
+    if (dcl->get_decl_ref_kind() == SolidityTypes::EnumConstantDecl)
+    {
+      assert(!"unsupported enum decl ref types");
+      return false;
+    }
+
     // Everything else should be a value decl
-    std::string name, id; // for "_x = 100;", id="c:@_x" and name="_x".
-    get_decl_name(matched_dcl->get_nameddecl_tracker(), name, id);
+    if (dcl->get_decl_ref_kind() == SolidityTypes::ValueDecl)
+    {
+      // Everything else should be a value decl
+      std::string name, id; // for "_x = 100;", id="c:@_x" and name="_x".
+      get_decl_name(matched_dcl->get_nameddecl_tracker(), name, id);
 
-    typet type;
-    if(get_type(matched_dcl->get_qualtype_tracker(), type))
-      return true;
+      typet type;
+      if(get_type(matched_dcl->get_qualtype_tracker(), type))
+        return true;
 
-    new_expr = exprt("symbol", type);
-    new_expr.identifier(id);
-    new_expr.cmt_lvalue(true);
-    new_expr.name(name);
-    return false;
+      new_expr = exprt("symbol", type);
+      new_expr.identifier(id);
+      new_expr.cmt_lvalue(true);
+      new_expr.name(name);
+      return false;
+    }
+  }
+  else
+  {
+    // for decl with -ve ref id in Solidity (e.g. built-in "assert")
+    // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+    // "assert( (int) ((int)(unsigned)sum > (int)100));"
+
+    // Everything else should be a value decl
+    if (dcl->get_decl_ref_kind() == SolidityTypes::ValueDecl)
+    {
+      // Everything else should be a value decl
+      std::string name, id; // for "_x = 100;", id="c:@_x" and name="_x".
+      get_decl_name(dcl->get_nameddecl_tracker(), name, id);
+
+      typet type;
+      if(get_type(dcl->get_qualtype_tracker(), type))
+        return true;
+
+      new_expr = exprt("symbol", type);
+      new_expr.identifier(id);
+      new_expr.cmt_lvalue(true);
+      new_expr.name(name);
+      assert(!"check id, name and type info");
+      return false;
+    }
   }
 
   assert(!"Conversion of unsupported Solidity decl ref");
@@ -598,6 +646,32 @@ bool solidity_convertert::get_sub_type(const QualTypeTracker &q_type, typet &new
     {
       if(get_builtin_type(q_type, new_type))
         return true;
+      break;
+    }
+    case SolidityTypes::typeClass::FunctionNoProto:
+    {
+      // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+      // "assert( (int) ((int)(unsigned)sum > (int)100));"
+      code_typet type;
+
+      typet return_type;
+
+      assert(q_type.get_sub_qualtype_class() == SolidityTypes::TypeBuiltin);
+      assert(q_type.get_sub_qualtype_bt_kind() == SolidityTypes::BuiltinInt);
+      // type config for Builtin && Int
+      return_type = int_type();
+      std::string c_type = "signed_int";
+      return_type.set("#cpp_type", c_type);
+
+      type.return_type() = return_type;
+
+      // Apparently, if the type has no arguments, we assume ellipsis
+      if(!type.arguments().size())
+        type.make_ellipsis();
+
+      new_type = type;
+
+      assert(!"nice");
       break;
     }
     default:
