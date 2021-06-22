@@ -328,10 +328,20 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
       if(get_expr(function_call->get_callee(), callee_expr))
         return true;
 
-      // TODO: get_type, side_effect_expr_function_callt, args
+      // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+      // "assert( (int) ((int)(unsigned)sum > (int)100));"
+      // manually unroll the program here
+      typet type;
+      type = int_type();
+      std::string c_type = "signed_int";
+      type.set("#cpp_type", c_type);
 
-      assert(!"done - CallExprClass case?");
-      //new_expr = call;
+      side_effect_expr_function_callt call;
+      call.function() = callee_expr;
+      call.type() = type;
+
+      assert(!"args for - CallExprClass case?");
+      new_expr = call;
       break;
     }
 
@@ -360,12 +370,15 @@ bool solidity_convertert::get_cast_expr(
 
   switch(cast->get_implicit_cast_kind()) // "_x=100;" it returns CK_IntegralCast
   {
+    case SolidityTypes::CK_FunctionToPointerDecay:
+      break;
+
     case SolidityTypes::CK_IntegralCast:
       solidity_gen_typecast(ns, expr, type);
       break;
 
     default:
-      assert(!"Conversion of unsupported clang cast operator");
+      assert(!"Conversion of unsupported cast operator");
       return true;
   }
 
@@ -426,7 +439,6 @@ bool solidity_convertert::get_decl_ref(const DeclRefExprTracker* dcl, exprt &new
       new_expr.identifier(id);
       new_expr.cmt_lvalue(true);
       new_expr.name(name);
-      assert(!"check id, name and type info");
       return false;
     }
   }
@@ -654,10 +666,12 @@ bool solidity_convertert::get_sub_type(const QualTypeTracker &q_type, typet &new
       // "assert( (int) ((int)(unsigned)sum > (int)100));"
       code_typet type;
 
+      // Return type
       typet return_type;
 
       assert(q_type.get_sub_qualtype_class() == SolidityTypes::TypeBuiltin);
       assert(q_type.get_sub_qualtype_bt_kind() == SolidityTypes::BuiltinInt);
+      // manually unrolled recursion here
       // type config for Builtin && Int
       return_type = int_type();
       std::string c_type = "signed_int";
@@ -671,12 +685,31 @@ bool solidity_convertert::get_sub_type(const QualTypeTracker &q_type, typet &new
 
       new_type = type;
 
-      assert(!"nice");
+      break;
+    }
+    case SolidityTypes::typeClass::Pointer:
+    {
+      // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
+      // "assert( (int) ((int)(unsigned)sum > (int)100));"
+      typet sub_type;
+
+      // manually unrolled recursion here
+      // FunctionNoProto: first embedded QualType object
+      code_typet type;
+      typet return_type;
+      return_type = int_type();
+      std::string c_type = "signed_int"; // BuiltIn && Int: second embedded QualType object
+      return_type.set("#cpp_type", c_type);
+      type.return_type() = return_type;
+      if(!type.arguments().size())
+        type.make_ellipsis();
+      sub_type = type;
+
+      new_type = gen_pointer_type(sub_type);
       break;
     }
     default:
-      std::cerr << "Conversion of unsupported node qual type: \"";
-      std::cerr << SolidityTypes::typeClass_to_str(q_type.get_type_class()) << std::endl;
+      assert(!"Conversion of unsupported node qual type");
       return true;
   }
 
