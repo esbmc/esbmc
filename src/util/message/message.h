@@ -36,7 +36,7 @@ public:
   virtual void
   error(const std::string &message, const std::string location = "") const
   {
-    print(message_handlert::ERROR, message, location);
+    print(VerbosityLevel::Error, message, location);
   }
   /**
    * @brief Prints a warning message
@@ -47,7 +47,7 @@ public:
   virtual void
   warning(const std::string &message, const std::string location = "") const
   {
-    print(message_handlert::WARNING, message, location);
+    print(VerbosityLevel::Warning, message, location);
   }
   /**
    * @brief Prints a result message
@@ -58,7 +58,7 @@ public:
   virtual void
   result(const std::string &message, const std::string location = "") const
   {
-    print(message_handlert::RESULT, message, location);
+    print(VerbosityLevel::Result, message, location);
   }
   /**
    * @brief Prints a progress message
@@ -73,7 +73,7 @@ public:
     double progress [[gnu::unused]] = -1,
     const std::string location = "") const
   {
-    print(message_handlert::PROGRESS, message, location);
+    print(VerbosityLevel::Progress, message, location);
     return 0;
   }
 
@@ -97,7 +97,7 @@ public:
   virtual void
   status(const std::string &message, const std::string location = "") const
   {
-    print(message_handlert::STATUS, message, location);
+    print(VerbosityLevel::Status, message, location);
   }
   /**
    * @brief Prints a debug message
@@ -108,7 +108,7 @@ public:
   virtual void
   debug(const std::string &message, const std::string location = "") const
   {
-    print(message_handlert::DEBUG, message, location);
+    print(VerbosityLevel::Debug, message, location);
   }
 
   /**
@@ -116,7 +116,7 @@ public:
    * 
    * @param _verbosity new verbosity leveel
    */
-  virtual void set_verbosity(message_handlert::VERBOSITY _verbosity)
+  virtual void set_verbosity(VerbosityLevel _verbosity)
   {
     verbosity = _verbosity;
   }
@@ -124,21 +124,21 @@ public:
   /**
    * @brief Get the verbosity level
    * 
-   * @return message_handlert::VERBOSITY level
+   * @return VerbosityLevel level
    */
-  virtual message_handlert::VERBOSITY get_verbosity() const
+  virtual VerbosityLevel get_verbosity() const
   {
     return verbosity;
   }
 
   virtual ~messaget() = default;
   virtual void print(
-    message_handlert::VERBOSITY level,
+    VerbosityLevel level,
     const std::string &message,
     const std::string file = "") const
   {
     // Check if the message should be printed
-    if(level > verbosity)
+    if((int)level > (int)verbosity)
       return;
 
     // Send the message to all handlers
@@ -156,7 +156,7 @@ public:
   }
 
   virtual void print(
-    message_handlert::VERBOSITY level,
+    VerbosityLevel level,
     const std::string &message,
     const locationt l) const
   {
@@ -180,7 +180,7 @@ public:
 
 protected:
   // Current verbosity level
-  message_handlert::VERBOSITY verbosity = message_handlert::DEBUG;
+  VerbosityLevel verbosity = VerbosityLevel::Debug;
   // All message_handlers used
   std::vector<std::shared_ptr<message_handlert>> handlers;
 };

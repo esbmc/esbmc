@@ -54,29 +54,29 @@ public:
 
   void error(const std::string &message)
   {
-    send_msg(message_handlert::ERROR, message);
+    send_msg(VerbosityLevel::Error, message);
   }
 
   void warning(const std::string &message)
   {
-    send_msg(message_handlert::WARNING, message);
+    send_msg(VerbosityLevel::Warning, message);
   }
 
   void error()
   {
-    send_msg(message_handlert::ERROR, str.str());
+    send_msg(VerbosityLevel::Error, str.str());
     clear_err();
   }
 
   void warning()
   {
-    send_msg(message_handlert::WARNING, str.str());
+    send_msg(VerbosityLevel::Warning, str.str());
     clear_err();
   }
 
   void status()
   {
-    send_msg(message_handlert::STATUS, str.str());
+    send_msg(VerbosityLevel::Status, str.str());
     clear_err();
   }
 
@@ -92,7 +92,7 @@ public:
     return message_handler;
   }
 
-  void error_parse(message_handlert::VERBOSITY level)
+  void error_parse(VerbosityLevel level)
   {
     error_parse(level, str.str());
     clear_err();
@@ -109,20 +109,20 @@ protected:
   bool error_found;
   locationt saved_error_location;
 
-  void send_msg(message_handlert::VERBOSITY level, const std::string &message)
+  void send_msg(VerbosityLevel level, const std::string &message)
   {
     if(message == "")
       return;
-    if(level <= message_handlert::ERROR)
+    if((char)level <= (char)VerbosityLevel::Error)
       error_found = true;
     message_handler.print(level, message, saved_error_location);
     saved_error_location.make_nil();
   }
 
   void
-  error_parse_line(message_handlert::VERBOSITY level, const std::string &line);
+  error_parse_line(VerbosityLevel level, const std::string &line);
 
-  void error_parse(message_handlert::VERBOSITY level, const std::string &error);
+  void error_parse(VerbosityLevel level, const std::string &error);
 };
 
 #endif

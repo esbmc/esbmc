@@ -14,7 +14,7 @@ Maintainers:
 #include <util/message/message_handler.h>
 
 void message_handlert::print(
-  message_handlert::VERBOSITY level,
+  VerbosityLevel level,
   const std::string &message,
   const locationt &location) const
 {
