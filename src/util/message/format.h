@@ -18,7 +18,16 @@ Maintainers:
 \*******************************************************************/
 
 #pragma once
+
+#pragma GCC diagnostic push
+
+// Clang has no support for nonnull-compare warning
+#ifdef __GNUC__
+#ifndef __clang__ // For some reason clang also defines GNUC :)
 #pragma GCC diagnostic ignored "-Wnonnull-compare"
+#endif
+#endif
+
 #pragma GCC diagnostic ignored "-Waddress"
 #include <fmt/format.h>
 #pragma GCC diagnostic pop
@@ -32,7 +41,7 @@ template <>
 struct fmt::formatter<BigInt>
 {
   // Presentation format: 'd' - decimal (default). (Add on demand)
-  char presentation = 'd';
+  char presentation = 'd'; // default
 
   // This will parse and look for the expected presentation mode
   constexpr auto parse(format_parse_context &ctx)

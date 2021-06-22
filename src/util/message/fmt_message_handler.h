@@ -17,6 +17,6 @@ class fmt_message_handler : public file_message_handler
 public:
   fmt_message_handler();
   virtual void print(
-    message_handlert::VERBOSITY level,
+    VerbosityLevel level,
     const std::string &message) const override;
 };

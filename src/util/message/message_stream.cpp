@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/message/message_stream.h>
 
 void message_streamt::error_parse_line(
-  message_handlert::VERBOSITY level,
+  VerbosityLevel level,
   const std::string &line)
 {
   std::string error_msg = line;
@@ -123,7 +123,7 @@ void message_streamt::error_parse_line(
 }
 
 void message_streamt::error_parse(
-  message_handlert::VERBOSITY level,
+  VerbosityLevel level,
   const std::string &error)
 {
   const char *tptr = error.c_str();
