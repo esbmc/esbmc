@@ -2252,7 +2252,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 {
   // Special case for Enums, we return the constant instead of a reference
   // to the name
-  if(const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d)) // "_x = 100;" does not use this block
+  if(const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d)) // "_x = 100;" and "sum = _x + _y", it does not use this block
   {
     // For enum constants, we get their value directly
     new_expr = constant_exprt(
