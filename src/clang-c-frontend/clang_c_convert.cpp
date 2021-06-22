@@ -755,7 +755,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     // Special case, pointers to structs/unions/classes must not
     // have a copy of it, but a reference to the type
     // TODO: classes
-    if(sub_type.is_struct() || sub_type.is_union())
+    if(sub_type.is_struct() || sub_type.is_union()) // for "assert(sum > 100)", false || false
     {
       struct_union_typet t = to_struct_union_type(sub_type);
       sub_type = symbol_typet("tag-" + t.tag().as_string());
@@ -2252,7 +2252,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 {
   // Special case for Enums, we return the constant instead of a reference
   // to the name
-  if(const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d)) // "_x = 100;" and "sum = _x + _y", it does not use this block
+  if(const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d)) // "_x = 100;" and "sum = _x + _y", it does not use this block. Same for "assert(sum > 100);"
   {
     // For enum constants, we get their value directly
     new_expr = constant_exprt(
@@ -2302,7 +2302,7 @@ bool clang_c_convertert::get_cast_expr(
   if(get_type(cast.getType(), type))
     return true;
 
-  switch(cast.getCastKind()) // "_x=100;" it returns CK_IntegralCast
+  switch(cast.getCastKind()) // "_x=100;" it returns CK_IntegralCast. For "assert(sum > 100)", it returns "CK_IntegralCast"
   {
   case clang::CK_ArrayToPointerDecay:
   case clang::CK_FunctionToPointerDecay:
