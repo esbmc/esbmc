@@ -318,6 +318,7 @@ public:
 
   // setters
   void set_qualtype_tracker(); // QualTypeTracker setters
+  void set_binary_op_gt();     // hard coded for opcode ">"
 
 private:
   SolidityTypes::binaryOpClass binary_opcode;
@@ -335,6 +336,8 @@ private:
 class CallExprTracker : public StmtTracker
 {
 public:
+  static constexpr unsigned numArgsInvalid = std::numeric_limits<unsigned>::max();
+
   CallExprTracker(const nlohmann::json& _json) :
     StmtTracker(_json)
   {
@@ -352,6 +355,7 @@ public:
   void clear_all()
   {
     callee = nullptr;
+    num_args = numArgsInvalid;
   }
 
   // getters
@@ -359,6 +363,10 @@ public:
 
 private:
   StmtTracker* callee;
+  std::vector<StmtTracker*> call_args;
+  unsigned num_args;
+
+  void add_argument(const nlohmann::json& expr);
 };
 
 class CompoundStmtTracker : public StmtTracker
