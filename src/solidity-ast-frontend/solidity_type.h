@@ -66,6 +66,7 @@ namespace SolidityTypes
   {
     BO_Assign = 0,
     BO_Add,
+    BO_GT,
     BOError
   };
   binaryOpClass get_binary_op_class(const std::string& kind);

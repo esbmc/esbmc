@@ -365,8 +365,16 @@ void CompoundStmtTracker::add_statement(const nlohmann::json& expr)
  */
 CallExprTracker::~CallExprTracker()
 {
+  // delete callee
   assert(callee);
   delete callee;
+
+  // delete args
+  for (auto arg : call_args)
+  {
+    assert(arg);
+    delete arg;
+  }
 }
 
 void CallExprTracker::config()
@@ -387,6 +395,42 @@ void CallExprTracker::config()
   // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
   // "assert( (int) ((int)(unsigned)sum > (int)100));"
   implicit_cast_tracker->set_pointer_qualtype_tracker();
+
+  // populate args
+  if (stmt_json["arguments"].size() > 0)
+  {
+    unsigned num_args = 0;
+    for (const auto& item : stmt_json["arguments"].items())
+    {
+      //printf("@@DEBUG - arg: "); ::print_decl_json(stmt_json);
+      printf("@@ ### Adding args[%u] in CallRefExpr ...\n", num_args);
+      add_argument(item.value());
+      ++num_args;
+    }
+  }
+  else
+  {
+    // TODO: Need to construct CallRefExpr that has no args. This can be another reason why
+    assert(!"Unsupported - CallRefExpr has no arguments");
+  }
+}
+
+void CallExprTracker::add_argument(const nlohmann::json& expr)
+{
+  printf("@@DEBUG - args: "); ::print_decl_json(expr);
+  std::string node_type = expr["nodeType"].get<std::string>();
+  if (node_type == "BinaryOperation")
+  {
+    StmtTracker* stmt = new BinaryOperatorTracker(expr);
+    StmtTrackerPtr bin_op_tracker_ptr = stmt;
+    auto bin_op_tracker = static_cast<BinaryOperatorTracker*>(bin_op_tracker_ptr);
+    bin_op_tracker->set_binary_op_gt();
+    call_args.push_back(stmt);
+  }
+  else
+  {
+    assert(!"Unsupported node_type when creating argument tracker");
+  }
 }
 
 /* =======================================================
@@ -564,6 +608,32 @@ void BinaryOperatorTracker::set_qualtype_tracker()
   {
     assert(!"unimplemented - other data types when setting qualtype_tracker in BinaryOperatorTracker");
   }
+}
+
+void BinaryOperatorTracker::set_binary_op_gt()
+{
+  // TODO: in order to do the concept proof, note this part is hard coded for
+  // "((int)(unsigned)sum > (int)100));" in the "assert" function call
+  // Function hard coded for Opcode ">"
+  // We need LHS = (int)(unsigned)_sum, RHS = IntegerLiteral
+
+  // Set statement class
+  assert(stmt_class == SolidityTypes::StmtClassError); // only allowed to set once when populating the args
+  stmt_class = SolidityTypes::BinaryOperatorClass;
+
+  // Set binary opcode
+  assert(binary_opcode == SolidityTypes::BOError); // only allowed to set once when populating the args
+  std::string _operator = stmt_json["operator"].get<std::string>();
+  binary_opcode = SolidityTypes::get_binary_op_class(_operator);
+
+  // Set LHS = (int)(unsigned)_sum
+  assert(!"cool");
+
+  // Set RHS = IntegerLiteral
+
+  // TODO: Set qualtype tracker
+
+  // TODO: Set CastKind
 }
 
 /* =======================================================
