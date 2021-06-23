@@ -316,6 +316,7 @@ void CompoundStmtTracker::config()
 {
   set_stmt_class(SolidityTypes::CompoundStmtClass);
 
+  unsigned num_stmt = 0;
   // item is like { "0" : { the_expr }}
   for (const auto& item : stmt_json.items())
   {
@@ -329,7 +330,9 @@ void CompoundStmtTracker::config()
     const auto& stmt = item.value();
     assert(stmt["nodeType"] == "ExpressionStatement"); // expect all statement to be "ExpressionStatement"
     assert(stmt.contains("expression")); // expect ExpressionStatement has an "expression" key
+    printf("@@ ### This is stmt[%u] in CompoundStmtTracker ...\n", num_stmt);
     add_statement(stmt["expression"]);
+    ++num_stmt;
   }
 }
 
@@ -435,6 +438,7 @@ void BinaryOperatorTracker::set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string
 
   //printf("@@DEBUG-: "); ::print_decl_json(stmt_json);
 
+  // Split "leftHandSide" and "leftExpression"
   // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
   // "sum = (int) ( (int)(int)_x + (int)(int)_y );"
   if (stmt_json.contains(hs_key)) // for "leftHandSide"
@@ -492,10 +496,12 @@ void BinaryOperatorTracker::set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string
         assert(!"unimplemented - other data types in set_lhs_rhs when setting BinaryOperatorTracker");
       }
     }
-    else if (node_type == "BinaryOperation")
+    else if (node_type == "BinaryOperation") // referring to BO_Add as in _x + _ y
     {
-      // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
-      // "(int) ( (int)(int)_x + (int)(int)_y )" as in "sum = (int) ( (int)(int)_x + (int)(int)_y );"
+      // Conversion of sum = _x + _y : RHS ;
+      // TODO SumBinOp: in order to do the concept proof, note this part is hard coded based on the RSH as in
+      // "BinaryOpExpr = (unsigned) ( (int)(unsigned)_x + (int)(unsigned)_y )" as in "sum = BinaryOpExpr;"
+      // This is the first "(unsigned)" cast in BinaryOpExpr above
       expr_ptr = new ImplicitCastExprTracker(expr_json);
       expr_ptr->set_stmt_class(SolidityTypes::ImplicitCastExprClass);
       StmtTrackerPtr implicit_cast_ptr = expr_ptr;
@@ -523,8 +529,8 @@ void BinaryOperatorTracker::set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string
 
     if (node_type == "Identifier" && expr_json.contains("referencedDeclaration"))
     {
-      // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
-      // "(int)(int)_x" or "(int)(int)_y" with unnecessary (int) removed
+      // TODO SumBinOp: in order to do the concept proof, note this part is hard coded based on the RSH as in
+      // "BinaryOpExpr = (unsigned) ( (int)(unsigned)_x + (int)(unsigned)_y )" as in "sum = BinaryOpExpr;"
       expr_ptr = new ImplicitCastExprTracker(expr_json);
       expr_ptr->set_stmt_class(SolidityTypes::ImplicitCastExprClass);
       StmtTrackerPtr implicit_cast_ptr = expr_ptr;
@@ -533,7 +539,7 @@ void BinaryOperatorTracker::set_lhs_or_rhs(StmtTrackerPtr& expr_ptr, std::string
       // we rely on the upstream BinaryOperator type info to set implicit cast type info
       // as part of the implicit Literal conversion
       implicit_cast_tracker->set_expr_type_str(stmt_json["typeDescriptions"]["typeString"]);
-      assert(implicit_cast_tracker->get_expr_type_str() == "uint8");
+      assert(implicit_cast_tracker->get_expr_type_str() == "uint8"); // TODO Fix: NOT UChar, should be Int!
       implicit_cast_tracker->config();
     }
     else
@@ -582,8 +588,8 @@ void ImplicitCastExprTracker::set_sub_expr_kind(SolidityTypes::stmtClass _kind)
   }
   else if (_kind == SolidityTypes::BinaryOperatorClass)
   {
-    // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
-    // "sum = (int) ( (int)(int)_x + (int)(int)_y );"
+    // TODO SumBinOp: in order to do the concept proof, note this part is hard coded based on the RSH as in
+    // "sum = (int) ( (int)(unsigned)_x + (int)(unsigned)_y );"
     //printf("@@DEBUG: "); ::print_decl_json(stmt_json);
     sub_expr = new BinaryOperatorTracker(stmt_json); // we also need the same json object to the sub expr
     sub_expr->set_stmt_class(_kind);
@@ -593,33 +599,22 @@ void ImplicitCastExprTracker::set_sub_expr_kind(SolidityTypes::stmtClass _kind)
   }
   else if (_kind == SolidityTypes::ImplicitCastExprClass)
   {
-    // TODO: in order to do the concept proof, note this part is hard coded based on the RSH as in
-    // "(int)(int)_x" or "(int)(int)_y" with unnecessary (int) removed
+    // TODO SumBinOp: in order to do the concept proof, note this part is hard coded based on the RSH as in
+    // "(int)(unsigned)_x" or "(int)(unsigned)_y" with unnecessary (int) removed
     //printf("@@DEBUG--: "); ::print_decl_json(stmt_json); // gives the "(int)(int)_x" decl ref
-    assert(stmt_json.contains("referencedDeclaration")); // hard coded: expect an "identifier"
 
-    // Solidity expr's "Identifier" /\ has "referencedDeclaration" --->
-    //    clang::Stmt::DeclRefExprClass
-    sub_expr = new DeclRefExprTracker(stmt_json);
-    sub_expr->set_stmt_class(SolidityTypes::DeclRefExprClass);
-    // set DeclRef ID and kind
-    StmtTrackerPtr decl_ptr = sub_expr;
-    auto decl_ref_tracker = static_cast<DeclRefExprTracker*>(decl_ptr);
+    // We need a DeclRefExprTracker wrapped in a ImplicitCastTracker
+    sub_expr = new ImplicitCastExprTracker(stmt_json);
+    sub_expr->set_stmt_class(SolidityTypes::ImplicitCastExprClass);
+    StmtTrackerPtr implicit_cast_ptr = sub_expr;
+    auto implicit_cast_tracker = static_cast<ImplicitCastExprTracker*>(implicit_cast_ptr);
+    implicit_cast_tracker->set_cast_decl_ref_expr(); // to build the DeclRefExpr "_x" as in (int)(unsigned)_x
+    implicit_cast_tracker->set_implicit_cast_kind_LR();
+    QualTypeTracker& double_implicit_cast_qual = implicit_cast_tracker->get_qualtype_tracker_ref();
+    double_implicit_cast_qual.set_type_class(SolidityTypes::TypeBuiltin);
+    double_implicit_cast_qual.set_bt_kind(SolidityTypes::BuiltinInt); // TODO Fix: NOT Int, should be UChar?
 
-    // set DeclRef id
-    assert(decl_ref_tracker->get_decl_ref_id() == DeclRefExprTracker::declRefIdInvalid); // only allowed to set ONCE
-    decl_ref_tracker->set_decl_ref_id(stmt_json["referencedDeclaration"].get<unsigned>());
-
-    // set DeclRef kind
-    if (stmt_json["typeDescriptions"]["typeString"].get<std::string>() == "uint8")
-    {
-      assert(decl_ref_tracker->get_decl_ref_kind() == SolidityTypes::declRefError); // only allowed to set ONCE
-      decl_ref_tracker->set_decl_ref_kind(SolidityTypes::ValueDecl);
-    }
-    else
-    {
-      assert(!"Unsupported data type for ValDecl");
-    }
+    //assert(!"nice --");
   }
   else if (_kind == SolidityTypes::DeclRefExprClass)
   {
@@ -676,6 +671,44 @@ void ImplicitCastExprTracker::set_sub_expr_kind(SolidityTypes::stmtClass _kind)
   else
   {
     assert(!"Unimplemented - other data types of sub expr in implicit cast tracker");
+  }
+}
+
+void ImplicitCastExprTracker::set_implicit_cast_kind_LR()
+{
+  assert(implicit_cast_kind == SolidityTypes::castKindError); // only allowed to set once during config() stage
+  implicit_cast_kind = SolidityTypes::CK_LValueToRValue; // LValueToRValue cast for C symbols: Solidity does NOT have this!
+}
+
+void ImplicitCastExprTracker::set_cast_decl_ref_expr()
+{
+  // Set conversion tracker for casted decl ref expr:
+  // TODO SumBinOp: in order to do the concept proof, note this part is hard coded based on the RSH as in
+  // "(int)(unsigned)_x" or "(int)(unsigned)_y" with unnecessary (int) removed
+  assert(stmt_json.contains("referencedDeclaration")); // hard coded: expect an "identifier"
+  sub_expr = new DeclRefExprTracker(stmt_json);
+  sub_expr->set_stmt_class(SolidityTypes::DeclRefExprClass);
+  // set DeclRef ID and kind
+  StmtTrackerPtr decl_ptr = sub_expr;
+  auto decl_ref_tracker = static_cast<DeclRefExprTracker*>(decl_ptr);
+
+  // set DeclRef id
+  assert(decl_ref_tracker->get_decl_ref_id() == DeclRefExprTracker::declRefIdInvalid); // only allowed to set ONCE
+  decl_ref_tracker->set_decl_ref_id(stmt_json["referencedDeclaration"].get<unsigned>());
+
+  // set DeclRef kind
+  if (stmt_json["typeDescriptions"]["typeString"].get<std::string>() == "uint8")
+  {
+    assert(decl_ref_tracker->get_decl_ref_kind() == SolidityTypes::declRefError); // only allowed to set ONCE
+    decl_ref_tracker->set_decl_ref_kind(SolidityTypes::ValueDecl);
+
+    // Set qualtupe_tracker in this decl_ref_tracker
+    // Solidity's uint8 == Clang's clang::BuiltinType::UChar
+    decl_ref_tracker->set_qualtype_tracker_for_casted_declref();
+  }
+  else
+  {
+    assert(!"Unsupported data type for ValDecl");
   }
 }
 
@@ -804,3 +837,16 @@ void DeclRefExprTracker::set_qualtype_tracker()
   qualtype_tracker.set_sub_qualtype_class(SolidityTypes::TypeBuiltin);
   qualtype_tracker.set_sub_qualtype_bt_kind(SolidityTypes::BuiltinInt);
 }
+
+void DeclRefExprTracker::set_qualtype_tracker_for_casted_declref()
+{
+  // Set decl_ref tracker for casted decl ref expr: "_x" as in "(int)(unsigned)_x"
+  // TODO SumBinOp: in order to do the concept proof, note this part is hard coded based on the RSH as in
+  // "(int)(unsigned)_x" or "(int)(unsigned)_y" with unnecessary (int) removed
+  assert(qualtype_tracker.get_type_class() == SolidityTypes::TypeError); // only allowed to set once during config();
+  assert(qualtype_tracker.get_bt_kind() == SolidityTypes::BuiltInError); // only allowed to set once during config();
+  qualtype_tracker.set_type_class(SolidityTypes::TypeBuiltin);
+  qualtype_tracker.set_bt_kind(SolidityTypes::BuiltInUChar);
+}
+
+

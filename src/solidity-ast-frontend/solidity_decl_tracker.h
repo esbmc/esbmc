@@ -190,7 +190,8 @@ public:
   void set_named_decl_kind(SolidityTypes::declKind _kind);
   void set_named_decl_has_id(bool _v);
   // QualTypeTracker setters
-  void set_qualtype_tracker(); // hard coded
+  void set_qualtype_tracker(); // hard coded for pointer
+  void set_qualtype_tracker_for_casted_declref(); // hard coded for double casted DeclRefExpr
 
   // setters
   void set_decl_ref_id(unsigned _id) { decl_ref_id = _id; }
@@ -229,6 +230,7 @@ public:
   // getters
   const StmtTracker* get_sub_expr() const { return sub_expr; }
   const QualTypeTracker& get_qualtype_tracker() const { return qualtype_tracker; }  // for get_type(...)
+  QualTypeTracker& get_qualtype_tracker_ref() { return qualtype_tracker; }  // hard coded: to set double casted DeclRefExpr
   std::string get_expr_type_str() const { return expr_type_str; }
   SolidityTypes::castKind get_implicit_cast_kind() const { return implicit_cast_kind; }
 
@@ -236,8 +238,10 @@ public:
   void set_sub_expr_kind(SolidityTypes::stmtClass _kind);
   void set_expr_type_str(std::string _type) { expr_type_str = _type; }
   void set_qualtype_tracker(); // QualTypeTracker setters
-  void set_implicit_cast_kind();
+  void set_implicit_cast_kind(); // for Solidity built-in type, e.g. 'uint8'
+  void set_implicit_cast_kind_LR(); // hard coded for LvalueToRvalue cast kind which does NOT exist in Solidity!
   void set_pointer_qualtype_tracker(); // hard coded for pointer
+  void set_cast_decl_ref_expr();       // hard coded for casted decl ref expr
 
 private:
   StmtTracker* sub_expr;

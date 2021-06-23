@@ -83,6 +83,7 @@ namespace SolidityTypes
   {
     CK_IntegralCast = 0,
     CK_FunctionToPointerDecay,
+    CK_LValueToRValue,
     castKindError
   };
   const char* castKind_to_str(castKind the_castKind);
