@@ -208,6 +208,7 @@ namespace SolidityTypes
     {
       ENUM_TO_STR(CK_IntegralCast)
       ENUM_TO_STR(CK_FunctionToPointerDecay)
+      ENUM_TO_STR(CK_LValueToRValue)
       ENUM_TO_STR(castKindError)
       default:
       {

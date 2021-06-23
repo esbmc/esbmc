@@ -374,6 +374,7 @@ bool solidity_convertert::get_cast_expr(
       break;
 
     case SolidityTypes::CK_IntegralCast:
+    case SolidityTypes::CK_LValueToRValue:
       solidity_gen_typecast(ns, expr, type);
       break;
 
