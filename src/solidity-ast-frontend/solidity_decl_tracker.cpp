@@ -417,7 +417,7 @@ void CallExprTracker::config()
 
 void CallExprTracker::add_argument(const nlohmann::json& expr)
 {
-  printf("@@DEBUG - args: "); ::print_decl_json(expr);
+  //printf("@@DEBUG - args: "); ::print_decl_json(expr);
   std::string node_type = expr["nodeType"].get<std::string>();
   if (node_type == "BinaryOperation")
   {
@@ -627,19 +627,146 @@ void BinaryOperatorTracker::set_binary_op_gt()
   binary_opcode = SolidityTypes::get_binary_op_class(_operator);
 
   // Set LHS = (int)(unsigned)_sum
-  assert(!"cool");
+  set_double_cast_lhs_assert();
 
   // Set RHS = IntegerLiteral
+  set_double_cast_rhs_assert();
 
   // TODO: Set qualtype tracker
+  assert(qualtype_tracker.get_type_class() == SolidityTypes::TypeError);
+  assert(qualtype_tracker.get_bt_kind() == SolidityTypes::BuiltInError);
+  qualtype_tracker.set_type_class(SolidityTypes::TypeBuiltin);
+  qualtype_tracker.set_bt_kind(SolidityTypes::BuiltInUChar);
+}
 
-  // TODO: Set CastKind
+
+void BinaryOperatorTracker::set_double_cast_lhs_assert()
+{
+  // TODO: in order to do the concept proof, note this part is hard coded for
+  // (int)(unsigned)sum as in assert(sum > 100)
+
+  // We need an ImplicitCastExpr wrapped in another ImplicitCastExpr
+  // that also contains a DeclRefExpr
+  assert(!lhs); // Only allowed to set once!
+  lhs = new ImplicitCastExprTracker(stmt_json);
+  lhs->set_stmt_class(SolidityTypes::ImplicitCastExprClass);
+  StmtTrackerPtr implicit_cast_ptr = lhs;
+  auto implicit_cast_int = static_cast<ImplicitCastExprTracker*>(implicit_cast_ptr);
+
+  // Set qualtype tracker
+  QualTypeTracker& double_implicit_cast_qual = implicit_cast_int->get_qualtype_tracker_ref();
+  double_implicit_cast_qual.set_type_class(SolidityTypes::TypeBuiltin);
+  double_implicit_cast_qual.set_bt_kind(SolidityTypes::BuiltinInt); // First ImplicitCast of LHS is "int"
+
+  // Set CastKind
+  implicit_cast_int->set_cast_kind_top_lhs_assert();
+
+  // Set the embedded ImplicitCastExpr subexpr that also contains a DeclRefExpr referring to "sum"
+  implicit_cast_int->set_embedded_implicit_cast_subexpr();
+}
+
+void BinaryOperatorTracker::set_double_cast_rhs_assert()
+{
+  // TODO: in order to do the concept proof, note this part is hard coded for
+  // "100" as in assert(sum > 100)
+
+  // We need a tracker for integer literal
+  // that also contains a DeclRefExpr
+  assert(!rhs); // Only allowed to set once!
+  rhs = new IntegerLiteralTracker(stmt_json["rightExpression"]);
+  rhs->set_stmt_class(SolidityTypes::IntegerLiteralClass);
+  //printf("@@DEBUG: "); ::print_decl_json(stmt_json);
+  StmtTrackerPtr sub_expr_ptr = rhs;
+  auto int_literal_tracker = static_cast<IntegerLiteralTracker*>(sub_expr_ptr);
+  int_literal_tracker->set_qualtype_tracker_assert();
+
+  // Don't know what to set
+  //assert(!"cool");
 }
 
 /* =======================================================
  * ImplicitCastExprTracker
  * =======================================================
  */
+void ImplicitCastExprTracker::set_embedded_implicit_cast_subexpr()
+{
+  // hard coded for unsigned LValueToRValue conversion of (int)(unsigned)sum
+  // TODO: in order to do the concept proof, note this part is hard coded for
+  // (int)(unsigned)sum as in assert(sum > 100)
+  assert(!sub_expr); // only allowed to set once!
+  sub_expr = new ImplicitCastExprTracker(stmt_json);
+  sub_expr->set_stmt_class(SolidityTypes::ImplicitCastExprClass);
+  StmtTrackerPtr implicit_cast_ptr = sub_expr;
+  auto implicit_cast_int = static_cast<ImplicitCastExprTracker*>(implicit_cast_ptr);
+
+  // Set qualtype tracker
+  QualTypeTracker& double_implicit_cast_qual = implicit_cast_int->get_qualtype_tracker_ref();
+  double_implicit_cast_qual.set_type_class(SolidityTypes::TypeBuiltin);
+  double_implicit_cast_qual.set_bt_kind(SolidityTypes::BuiltInUChar); // Second ImplicitCast of LHS is "unsigned"
+
+  // Set CastKind
+  implicit_cast_int->set_cast_kind_bottom_lhs_assert();
+
+  // Set embedded DeclRefExpr subexpr that refers to "sum"
+  implicit_cast_int->set_decl_ref_sum();
+}
+
+void ImplicitCastExprTracker::set_decl_ref_sum()
+{
+  // hard coded for DeclRefExpr to sum inside (int)(unsigned)sum
+  // TODO: in order to do the concept proof, note this part is hard coded for
+  // (int)(unsigned)sum as in assert(sum > 100)
+  assert(!sub_expr); // only allowed to set once!
+  sub_expr = new DeclRefExprTracker(stmt_json["leftExpression"]);
+  sub_expr->set_stmt_class(SolidityTypes::DeclRefExprClass);
+
+  // set DeclRef ID and kind
+  StmtTrackerPtr decl_ptr = sub_expr;
+  auto decl_ref_tracker = static_cast<DeclRefExprTracker*>(decl_ptr);
+  //printf("@@DEBUG FunctionCall: "); ::print_decl_json(stmt_json);
+  assert(decl_ref_tracker->get_decl_ref_id() == DeclRefExprTracker::declRefIdInvalid); // only allowed to set ONCE
+
+  // set id
+  unsigned _id = stmt_json["leftExpression"]["referencedDeclaration"].get<unsigned>();
+  assert(_id == 7); // hard coded for the id of VarDecl "sum"
+  decl_ref_tracker->set_decl_ref_id(_id);
+  decl_ref_tracker->set_named_decl_has_id(true); // to be used in conjunction with the name above in converter's static std::string get_decl_name()
+
+  // set name
+  std::string decl_name = stmt_json["leftExpression"]["name"].get<std::string>();
+  assert(decl_ref_tracker->get_nameddecl_tracker().get_name() == ""); // only allowed to set once during config();
+  decl_ref_tracker->set_named_decl_name(decl_name);
+
+  // set named decl kind
+  assert(decl_ref_tracker->get_nameddecl_tracker().get_named_decl_kind() == SolidityTypes::DeclKindError); // only allowed to set once during config()
+  decl_ref_tracker->set_named_decl_kind(SolidityTypes::DeclVar); // ifor generate_decl_usr()
+  assert(decl_ref_tracker->get_decl_ref_kind() == SolidityTypes::declRefError); // only allowed to set ONCE
+  decl_ref_tracker->set_decl_ref_kind(SolidityTypes::ValueDecl); // for get_decl_ref()
+
+  // set qualtype type
+  std::string _type = stmt_json["leftExpression"]["typeDescriptions"]["typeString"].get<std::string>();
+  assert(_type == "uint8");
+  decl_ref_tracker->set_qualtype_tracker_for_casted_declref(); // should be BuiltIn + UChar
+}
+
+void ImplicitCastExprTracker::set_cast_kind_bottom_lhs_assert()
+{
+  // hard coded for unsigned LValueToRValue conversion of (int)(unsigned)sum
+  // TODO: in order to do the concept proof, note this part is hard coded for
+  // (int)(unsigned)sum as in assert(sum > 100)
+  assert(implicit_cast_kind == SolidityTypes::castKindError); // only allowed to set once during config() stage
+  implicit_cast_kind = SolidityTypes::CK_LValueToRValue; // hard coded
+}
+
+void ImplicitCastExprTracker::set_cast_kind_top_lhs_assert()
+{
+  // hard coded for int conversion of (int)(unsigned)sum
+  // TODO: in order to do the concept proof, note this part is hard coded for
+  // (int)(unsigned)sum as in assert(sum > 100)
+  assert(implicit_cast_kind == SolidityTypes::castKindError); // only allowed to set once during config() stage
+  implicit_cast_kind = SolidityTypes::CK_IntegralCast; // hard coded
+}
+
 ImplicitCastExprTracker::~ImplicitCastExprTracker()
 {
   assert(sub_expr);
@@ -874,6 +1001,14 @@ void IntegerLiteralTracker::set_qualtype_tracker()
   {
     assert(!"Unimplemented data types in IntegerLiteralTracker");
   }
+}
+
+void IntegerLiteralTracker::set_qualtype_tracker_assert()
+{
+  // hard coded for "100" as in assert(sum > );
+  // TODO: in order to do the concept proof, note this part is hard coded for
+  // "100" as in assert(sum > 100)
+  set_qualtype_tracker();
 }
 
 /* =======================================================

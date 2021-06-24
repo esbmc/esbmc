@@ -53,6 +53,7 @@ protected:
   bool generate_decl_usr(const NamedDeclTracker &nd, std::string &name, std::string &id);
   void get_location_from_decl(const SourceLocationTracker &decl_slm, locationt &location);
   void get_start_location_from_stmt(const StmtTracker* stmt, locationt &location);
+  void get_final_location_from_stmt(const StmtTracker* stmt, locationt &location);
   void set_location(const SourceLocationTracker &decl_slm, std::string &function_name, locationt &location);
   bool get_binary_operator_expr(const BinaryOperatorTracker* binop, exprt &new_expr);
   std::string get_modulename_from_path(std::string path);
