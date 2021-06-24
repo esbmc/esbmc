@@ -71,14 +71,20 @@ bool solidity_ast_languaget::typecheck(
   message_handlert &message_handler)
 {
   contextt new_context;
-  clang_c_module->convert_intrinsics(new_context);
+  clang_c_module->convert_intrinsics(new_context); // Add ESBMC and TACAS intrinsic symbols to the context
 
   solidity_convertert converter(new_context, ast_json);
-
-  if(converter.convert())
+  if(converter.convert()) // Add Solidity symbols to the context
     return true;
 
-  assert(!"come back and continue - solidity_ast_languaget::typecheck");
+  clang_c_adjust adjuster(new_context);
+  if(adjuster.adjust())
+    return true;
+
+  if(c_link(context, new_context, message_handler, module)) // also populates language_uit::context
+    return true;
+
+  //assert(!"come back and continue - TODO: adjust and c_link");
   return false;
 }
 
@@ -91,7 +97,9 @@ bool solidity_ast_languaget::final(
   contextt &context,
   message_handlert &message_handler)
 {
-  assert(!"come back and continue - solidity_ast_languaget::final");
+  add_cprover_library(context, message_handler);
+  return clang_main(context, message_handler);
+  //assert(!"come back and continue - solidity_ast_languaget::final");
   return false;
 }
 
