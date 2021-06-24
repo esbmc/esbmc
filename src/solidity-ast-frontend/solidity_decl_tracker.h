@@ -242,6 +242,10 @@ public:
   void set_implicit_cast_kind_LR(); // hard coded for LvalueToRvalue cast kind which does NOT exist in Solidity!
   void set_pointer_qualtype_tracker(); // hard coded for pointer
   void set_cast_decl_ref_expr();       // hard coded for casted decl ref expr
+  void set_cast_kind_top_lhs_assert(); // hard coded for int conversion of (int)(unsigned)sum
+  void set_cast_kind_bottom_lhs_assert(); // hard coded for unsigned LValueToRValue conversion of (int)(unsigned)sum
+  void set_embedded_implicit_cast_subexpr(); // hard coded for LValueToRValue conversion of (int)(unsigned)sum
+  void set_decl_ref_sum(); // harded coded for embedded DeclRef
 
 private:
   StmtTracker* sub_expr;
@@ -280,6 +284,7 @@ public:
 
   // setters
   void set_qualtype_tracker(); // QualTypeTracker setters
+  void set_qualtype_tracker_assert(); // hard coded for "100" as in assert(sum > 100);
 
 private:
   QualTypeTracker qualtype_tracker; // to run get_type in convert_integer_literal
@@ -319,6 +324,8 @@ public:
   // setters
   void set_qualtype_tracker(); // QualTypeTracker setters
   void set_binary_op_gt();     // hard coded for opcode ">"
+  void set_double_cast_lhs_assert();  // hard coded for LValueToRValue conversion of (int)(unsigned)sum
+  void set_double_cast_rhs_assert();  // hard coded for integer literal of (int)(unsigned)sum > 100
 
 private:
   SolidityTypes::binaryOpClass binary_opcode;
@@ -360,6 +367,7 @@ public:
 
   // getters
   const StmtTracker* get_callee() const { return callee; }
+  const std::vector<StmtTracker*>& get_args() const { return call_args; }
 
 private:
   StmtTracker* callee;

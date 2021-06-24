@@ -59,7 +59,7 @@ bool solidity_convertert::convert()
     }
   }
 
-  assert(!"all symbols done?");
+  //assert(!"all symbols done?");
 
   return false; // 'false' indicates successful completion.
 }
@@ -198,10 +198,10 @@ bool solidity_convertert::get_function(funDeclTrackerPtr &fd, exprt &new_expr)
     added_symbol.value = body_exprt;
   }
 
+  //assert(!"done - get_funciton?");
+
   // Restore old functionDecl
   current_functionDecl = old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
-
-  assert(!"done - get_funciton?");
   return false;
 }
 
@@ -238,13 +238,12 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
 
       // Set the end location for blocks
       locationt location_end;
-      // TODO: get_final_location_from_stmt
-      //get_final_location_from_stmt(stmt, location_end);
+      get_final_location_from_stmt(stmt, location_end);
+      //assert(!"done - all CompoundStmtClass?");
 
       block.end_location(location_end);
 
       new_expr = block;
-      assert(!"done - all CompoundStmtClass?");
       break;
     }
 
@@ -340,7 +339,18 @@ bool solidity_convertert::get_expr(const StmtTracker* stmt, exprt &new_expr)
       call.function() = callee_expr;
       call.type() = type;
 
-      assert(!"args for - CallExprClass case?");
+      unsigned num_args = 0;
+      for (const auto &arg : function_call->get_args())
+      {
+        exprt single_arg;
+        if(get_expr(arg, single_arg))
+          return true;
+
+        call.arguments().push_back(single_arg);
+        ++num_args;
+      }
+      printf("  @@ num_args=%u\n", num_args);
+
       new_expr = call;
       break;
     }
@@ -485,6 +495,12 @@ bool solidity_convertert::get_binary_operator_expr(
         new_expr = exprt("+", t);
       break;
     }
+    case SolidityTypes::BO_GT:
+    {
+      printf("  @@@ got binop.getOpcode: clang::BO_GT\n");
+      new_expr = exprt(">", t);
+      break;
+    }
     default:
     {
       assert(!"Unimplemented opcode in BinaryOperatorExpr");
@@ -496,6 +512,22 @@ bool solidity_convertert::get_binary_operator_expr(
 }
 
 void solidity_convertert::get_start_location_from_stmt(
+  const StmtTracker* stmt,
+  locationt &location)
+{
+  std::string function_name;
+
+  if (current_functionDecl)
+    function_name = ::get_decl_name(current_functionDecl->get_nameddecl_tracker()); // for func_overflow, name is "func_overflow"
+
+  // In clang, we need to get PLoc first.
+  // For Solidity, we've already extracted the information during decl tracker config phase.
+  // TODO: we should use the slm (source location manager) of the StmtTracker, instead of the fucntion decl tracker.
+
+  set_location(current_functionDecl->get_sl_tracker(), function_name, location); // for __ESBMC_assume, function_name is still empty after this line.
+}
+
+void solidity_convertert::get_final_location_from_stmt(
   const StmtTracker* stmt,
   locationt &location)
 {

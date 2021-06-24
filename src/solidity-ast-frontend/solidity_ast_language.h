@@ -7,7 +7,11 @@ Module: Solidity AST module
 #ifndef SOLIDITY_AST_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 #define SOLIDITY_AST_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 
+#include <c2goto/cprover_library.h>
 #include <clang-c-frontend/clang_c_language.h>
+#include <clang-c-frontend/clang_c_adjust.h> // for context adjust in typecheck
+#include <clang-c-frontend/clang_c_main.h>
+#include <util/c_link.h> // for c_link
 #include <util/language.h>
 #include <fstream>
 #include <iostream>
