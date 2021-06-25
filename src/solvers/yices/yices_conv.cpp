@@ -19,28 +19,28 @@
 #define new_ast new_solver_ast<yices_smt_ast>
 
 smt_convt *create_new_yices_solver(
-  bool int_encoding,
+  const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  yices_convt *conv = new yices_convt(int_encoding, ns);
+  yices_convt *conv = new yices_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   *tuple_api = static_cast<tuple_iface *>(conv);
   return conv;
 }
 
-yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
+yices_convt::yices_convt(const namespacet &ns, const optionst &options)
+  : smt_convt(ns, options), array_iface(false, false), fp_convt(this)
 {
   yices_init();
 
   yices_clear_error();
 
   ctx_config_t *config = yices_new_config();
-  if(int_encoding)
+  if(options.get_bool_option("int-encoding"))
     yices_default_config_for_logic(config, "QF_AUFLIRA");
   else
     yices_default_config_for_logic(config, "QF_AUFBV");

@@ -98,25 +98,26 @@ extern int smtlib_send_start_code;
 extern sexpr *smtlib_output;
 
 smt_convt *create_new_smtlib_solver(
-  bool int_encoding,
+  const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  smtlib_convt *conv = new smtlib_convt(int_encoding, ns);
+  smtlib_convt *conv = new smtlib_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns)
-  : smt_convt(int_encoding, _ns), array_iface(false, false), fp_convt(this)
+smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
+  : smt_convt(_ns, _options), array_iface(false, false), fp_convt(this)
 {
   temp_sym_count.push_back(1);
   std::string cmd;
 
-  std::string logic = (int_encoding) ? "QF_AUFLIRA" : "QF_AUFBV";
+  std::string logic =
+    (options.get_bool_option("int-encoding")) ? "QF_AUFLIRA" : "QF_AUFBV";
 
   // We may be being instructed to just output to a file.
   cmd = config.options.get_option("output");

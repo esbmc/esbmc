@@ -144,9 +144,9 @@ public:
   /** Primary constructor. After construction, smt_post_init must be called
    *  before the object is used as a solver converter.
    *
-   *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
-   *  @param _ns Namespace for looking up the type of certain symbols. */
-  smt_convt(bool int_encoding, const namespacet &_ns);
+   *  @param _ns Namespace for looking up the type of certain symbols.
+   *  @param _options Provide all the needed parameters to configure the solver. */
+  smt_convt(const namespacet &_ns, const optionst &_options);
   ~smt_convt() override = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
@@ -816,6 +816,9 @@ public:
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
   const namespacet &ns;
+
+  /* Options contain all the parameters set by the user to run ESBMC */
+  const optionst &options;
 
   bool ptr_foo_inited;
   /** Full name of the '__ESBMC_is_dynamic' modelling array. The memory space
