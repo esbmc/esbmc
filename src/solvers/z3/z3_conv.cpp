@@ -18,21 +18,21 @@ static void error_handler(Z3_context c, Z3_error_code e)
 }
 
 smt_convt *create_new_z3_solver(
-  bool int_encoding,
+  const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  z3_convt *conv = new z3_convt(int_encoding, ns);
+  z3_convt *conv = new z3_convt(ns, options);
   *tuple_api = static_cast<tuple_iface *>(conv);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
-  : smt_convt(int_encoding, _ns),
+z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
+  : smt_convt(_ns, _options),
     array_iface(true, true),
     fp_convt(this),
     z3_ctx(),

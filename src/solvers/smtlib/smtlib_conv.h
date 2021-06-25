@@ -174,7 +174,7 @@ public:
 class smtlib_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  smtlib_convt(bool int_encoding, const namespacet &_ns);
+  smtlib_convt(const namespacet &_ns, const optionst &options);
   ~smtlib_convt() override;
 
   resultt dec_solve() override;

@@ -4,20 +4,20 @@
 #define new_ast new_solver_ast<cvc_smt_ast>
 
 smt_convt *create_new_cvc_solver(
-  bool int_encoding,
+  const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  cvc_convt *conv = new cvc_convt(int_encoding, ns);
+  cvc_convt *conv = new cvc_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns),
+cvc_convt::cvc_convt(const namespacet &ns, const optionst &options)
+  : smt_convt(ns, options),
     array_iface(false, false),
     fp_convt(this),
     to_bv_counter(0),

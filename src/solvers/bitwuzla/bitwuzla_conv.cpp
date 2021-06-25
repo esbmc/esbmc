@@ -11,20 +11,20 @@ void bitwuzla_error_handler(const char *msg)
 }
 
 smt_convt *create_new_bitwuzla_solver(
-  bool int_encoding,
+  const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  bitwuzla_convt *conv = new bitwuzla_convt(int_encoding, ns);
+  bitwuzla_convt *conv = new bitwuzla_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-bitwuzla_convt::bitwuzla_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(true, true), fp_convt(this)
+bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
+  : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
 {
   bitw = bitwuzla_new();
   bitwuzla_set_option(bitw, BITWUZLA_OPT_PRODUCE_MODELS, 1);

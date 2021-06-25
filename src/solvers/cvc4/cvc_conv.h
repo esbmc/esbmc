@@ -15,7 +15,7 @@ public:
 class cvc_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  cvc_convt(bool int_encoding, const namespacet &ns);
+  cvc_convt(const namespacet &ns, const optionst &options);
   ~cvc_convt() override = default;
 
   smt_convt::resultt dec_solve() override;

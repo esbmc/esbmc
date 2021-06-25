@@ -23,7 +23,7 @@ public:
 class bitwuzla_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  bitwuzla_convt(bool int_encoding, const namespacet &ns);
+  bitwuzla_convt(const namespacet &ns, const optionst &options);
   ~bitwuzla_convt() override;
 
   resultt dec_solve() override;

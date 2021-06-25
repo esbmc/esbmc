@@ -11,22 +11,22 @@ void error_handler(const char *msg)
 }
 
 smt_convt *create_new_boolector_solver(
-  bool int_encoding,
+  const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  boolector_convt *conv = new boolector_convt(int_encoding, ns);
+  boolector_convt *conv = new boolector_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-boolector_convt::boolector_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(true, true), fp_convt(this)
+boolector_convt::boolector_convt(const namespacet &ns, const optionst &options)
+  : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
 {
-  if(int_encoding)
+  if(options.get_bool_option("int-encoding"))
   {
     std::cerr << "Boolector does not support integer encoding mode"
               << std::endl;
@@ -36,6 +36,8 @@ boolector_convt::boolector_convt(bool int_encoding, const namespacet &ns)
   btor = boolector_new();
   boolector_set_opt(btor, BTOR_OPT_MODEL_GEN, 1);
   boolector_set_opt(btor, BTOR_OPT_AUTO_CLEANUP, 1);
+  if(options.get_bool_option("smt-during-symex"))
+    boolector_set_opt(btor, BTOR_OPT_INCREMENTAL, 1);
   boolector_set_abort(error_handler);
 }
 

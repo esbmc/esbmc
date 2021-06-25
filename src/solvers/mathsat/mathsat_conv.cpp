@@ -38,20 +38,20 @@ void mathsat_convt::check_msat_error(msat_term &r) const
 }
 
 smt_convt *create_new_mathsat_solver(
-  bool int_encoding,
+  const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  mathsat_convt *conv = new mathsat_convt(int_encoding, ns);
+  mathsat_convt *conv = new mathsat_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-mathsat_convt::mathsat_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns),
+mathsat_convt::mathsat_convt(const namespacet &ns, const optionst &options)
+  : smt_convt(ns, options),
     array_iface(false, false),
     fp_convt(this),
     use_fp_api(false)
