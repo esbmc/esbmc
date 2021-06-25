@@ -63,6 +63,7 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   : ctx_level(0), boolean_sort(nullptr), ns(_ns), options(_options)
 {
+  int_encoding = options.get_bool_option("int-encoding");
   tuple_api = nullptr;
   array_api = nullptr;
   fp_api = nullptr;
