@@ -21,8 +21,9 @@
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
-  std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs)
-  : clang_c_convertert(_context, _ASTs)
+  std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
+  const messaget &msg)
+  : clang_c_convertert(_context, _ASTs, msg)
 {
 }
 

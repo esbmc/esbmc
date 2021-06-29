@@ -402,12 +402,13 @@ public:
   void get_original_name(expr2tc &expr) const;
 
   /**
-   *  Print stack trace of state to stdout.
+   *  Print stack trace of state to osstream.
    *  Takes all the current function calls and produces an indented stack
    *  trace, then prints it to stdout.
    *  @param indent Number of spaces to indent contents by.
+   *  @param oss output stream to output
    */
-  void print_stack_trace(unsigned int indent) const;
+  void print_stack_trace(unsigned int indent, std::ostream &os) const;
 
   /**
    *  Generate set of strings making up a stack trace.

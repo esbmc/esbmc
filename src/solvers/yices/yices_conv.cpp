@@ -23,17 +23,18 @@ smt_convt *create_new_yices_solver(
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
-  fp_convt **fp_api)
+  fp_convt **fp_api,
+  const messaget &msg)
 {
-  yices_convt *conv = new yices_convt(ns, options);
+  yices_convt *conv = new yices_convt(ns, options, msg);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   *tuple_api = static_cast<tuple_iface *>(conv);
   return conv;
 }
 
-yices_convt::yices_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options), array_iface(false, false), fp_convt(this)
+yices_convt::yices_convt(const namespacet &ns, const optionst &options, const messaget &msg)
+  : smt_convt(ns, options, msg), array_iface(false, false), fp_convt(this)
 {
   yices_init();
 
@@ -63,10 +64,10 @@ void yices_convt::push_ctx()
 
   if(res != 0)
   {
-    std::cerr << "Error pushing yices context"
-              << "\n";
-    yices_print_error(stderr);
-    abort();
+    FILE *f = msg.get_temp_file();
+    yices_print_error(f);
+    msg.insert_and_close_file_contents(VerbosityLevel::Error, f);
+    throw std::runtime_error("Error pushing yices context");
   }
 }
 
@@ -76,10 +77,10 @@ void yices_convt::pop_ctx()
 
   if(res != 0)
   {
-    std::cerr << "Error poping yices context"
-              << "\n";
-    yices_print_error(stderr);
-    abort();
+    FILE *f = msg.get_temp_file();
+    yices_print_error(f);
+    msg.insert_and_close_file_contents(VerbosityLevel::Error, f);
+    throw std::runtime_error("Error poping yices context");
   }
 
   smt_convt::pop_ctx();
@@ -659,9 +660,8 @@ smt_astt yices_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt yices_convt::mk_isint(smt_astt)
 {
-  std::cerr << "Yices does not support an is-integer operation on reals, "
-            << "therefore certain casts and operations don't work, sorry\n";
-  abort();
+  throw std::runtime_error("Yices does not support an is-integer operation on reals, "
+    "therefore certain casts and operations don't work, sorry");
 }
 
 smt_astt yices_convt::mk_smt_int(const BigInt &theint)
@@ -785,10 +785,7 @@ bool yices_convt::get_bool(smt_astt a)
   int32_t val;
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   if(yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val))
-  {
-    std::cerr << "Can't get boolean value from Yices\n";
-    abort();
-  }
+    throw std::runtime_error("Can't get boolean value from Yices");
   return val ? true : false;
 }
 
@@ -1057,7 +1054,9 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
 
 void yices_convt::print_model()
 {
-  yices_print_model(stdout, yices_get_model(yices_ctx, 1));
+  FILE *f = msg.get_temp_file();
+  yices_print_model(f, yices_get_model(yices_ctx, 1));
+  msg.insert_and_close_file_contents(VerbosityLevel::Status, f);
 }
 
 smt_sortt yices_convt::mk_bool_sort()
@@ -1107,8 +1106,10 @@ smt_sortt yices_convt::mk_bvfp_rm_sort()
   return new solver_smt_sort<type_t>(SMT_SORT_BVFP_RM, yices_bv_type(3), 3);
 }
 
-void yices_smt_ast::dump() const
+void yices_smt_ast::dump(const messaget &msg) const
 {
-  yices_pp_term(stdout, a, 80, 10, 0);
-  yices_pp_type(stdout, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
+  FILE *f = msg.get_temp_file();
+  yices_pp_term(f, a, 80, 10, 0);
+  yices_pp_type(f, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
+  msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);
 }

@@ -261,11 +261,11 @@ public:
   {
   public:
     dfs_position(const reachability_treet &rt);
-    dfs_position(const std::string &&filename);
-    bool write_to_file(const std::string &&filename) const;
+    dfs_position(const std::string &&filename, const messaget &msg);
+    bool write_to_file(const std::string &&filename, const messaget &msg) const;
 
   protected:
-    bool read_from_file(const std::string &&filename);
+    bool read_from_file(const std::string &&filename, const messaget &msg);
 
   public:
     struct dfs_state

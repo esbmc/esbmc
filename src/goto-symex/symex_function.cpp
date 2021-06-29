@@ -37,8 +37,9 @@ bool goto_symext::get_unwind_recursion(
       (k_induction || inductive_step) &&
       !options.get_bool_option("disable-inductive-step"))
     {
-      std::cout << "**** WARNING: k-induction does not support recursion yet. "
-                << "Disabling inductive step\n";
+      this->msg.warning(
+        "**** WARNING: k-induction does not support recursion yet. "
+        "Disabling inductive step");
 
       // Disable inductive step on recursion
       options.set_option("disable-inductive-step", true);
@@ -52,7 +53,7 @@ bool goto_symext::get_unwind_recursion(
     if(this_loop_max_unwind != 0)
       msg += " (" + integer2string(this_loop_max_unwind) + " max)";
 
-    std::cout << msg << "\n";
+    this->msg.status(msg);
   }
 
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
@@ -72,11 +73,7 @@ unsigned goto_symext::argument_assignments(
   {
     // if you run out of actual arguments there was a mismatch
     if(it1 == arguments.end())
-    {
-      std::cerr << "function call: not enough arguments"
-                << "\n";
-      abort();
-    }
+      throw std::runtime_error("function call: not enough arguments");
 
     const irep_idt &identifier = function_type.argument_names[name_idx];
 
@@ -108,10 +105,11 @@ unsigned goto_symext::argument_assignments(
         }
         else
         {
-          std::cerr << "function call: argument \"" << id2string(identifier)
-                    << "\" type mismatch: got " << get_type_id((*it1)->type)
-                    << ", expected " << get_type_id(arg_type) << '\n';
-          abort();
+          std::ostringstream oss;
+          oss << "function call: argument \"" << id2string(identifier)
+              << "\" type mismatch: got " << get_type_id((*it1)->type)
+              << ", expected " << get_type_id(arg_type) << '\n';
+          throw std::runtime_error(oss.str());
         }
       }
 
@@ -150,11 +148,7 @@ unsigned goto_symext::argument_assignments(
       symbol.type = migrate_type_back((*it1)->type);
 
       if(new_context.move(symbol))
-      {
-        std::cerr << "Couldn't add new va_arg symbol"
-                  << "\n";
-        abort();
-      }
+        throw std::runtime_error("Couldn't add new va_arg symbol");
 
       // 'Declare' the argument before assigning a value to it
       symex_decl(code_decl2tc((*it1)->type, identifier));
@@ -198,14 +192,14 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   {
     if(has_prefix(identifier.as_string(), "symex::invalid_object"))
     {
-      std::cout << "WARNING: function ptr call with no target, ";
+      msg.warning("WARNING: function ptr call with no target, ");
       cur_state->source.pc++;
       return;
     }
 
-    std::cerr << "failed to find `" + get_pretty_name(identifier.as_string()) +
-                   "' in function_map";
-    abort();
+    throw std::runtime_error(
+      "failed to find `" + get_pretty_name(identifier.as_string()) +
+      "' in function_map");
   }
 
   const goto_functiont &goto_function = it->second;
@@ -233,8 +227,9 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 
   if(!goto_function.body_available)
   {
-    std::cerr << "**** WARNING: no body for function "
-              << get_pretty_name(identifier.as_string()) << '\n';
+    msg.warning(fmt::format(
+      "**** WARNING: no body for function {}",
+      get_pretty_name(identifier.as_string())));
 
     if(!is_nil_expr(call.ret))
     {
@@ -285,11 +280,12 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     to_code_type(tmp_type).arguments.size() != arguments.size() &&
     !to_code_type(tmp_type).ellipsis)
   {
-    std::cerr << "Function call to \"" << identifier << "\": number of "
-              << "arguments doesn't match type definition; some inconsistent "
-              << "rewriting occured"
-              << "\n";
-    abort();
+    std::ostringstream oss;
+    oss << "Function call to \"" << identifier << "\": number of "
+        << "arguments doesn't match type definition; some inconsistent "
+        << "rewriting occured"
+        << "\n";
+    throw std::runtime_error(oss.str());
   }
 
   frame.va_index =
@@ -306,7 +302,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 }
 
 static std::list<std::pair<guardt, symbol2tc>>
-get_function_list(const expr2tc &expr)
+get_function_list(const expr2tc &expr, const messaget &msg)
 {
   std::list<std::pair<guardt, symbol2tc>> l;
 
@@ -318,11 +314,11 @@ get_function_list(const expr2tc &expr)
     not2tc notguardexpr(guardexpr);
 
     // Get sub items, them iterate over adding the relevant guard
-    l1 = get_function_list(ifexpr.true_value);
+    l1 = get_function_list(ifexpr.true_value, msg);
     for(auto &it : l1)
       it.first.add(guardexpr);
 
-    l2 = get_function_list(ifexpr.false_value);
+    l2 = get_function_list(ifexpr.false_value, msg);
     for(auto &it : l2)
       it.first.add(notguardexpr);
 
@@ -340,11 +336,12 @@ get_function_list(const expr2tc &expr)
   }
 
   if(is_typecast2t(expr))
-    return get_function_list(to_typecast2t(expr).from);
+    return get_function_list(to_typecast2t(expr).from, msg);
 
-  std::cerr << "Unexpected irep id " << get_expr_id(expr)
-            << " in function ptr dereference"
-            << "\n";
+  msg.error(fmt::format(
+    "Unexpected irep id {} {}",
+    get_expr_id(expr),
+    " in function ptr dereference"));
   // So, the function may point at something invalid. If that's the case,
   // wait for a solve-time pointer validity assertion to detect that. Return
   // nothing to call right now.
@@ -362,9 +359,10 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   // merge.
   if(is_nil_expr(call.function))
   {
-    std::cerr << "Function pointer call with no targets; irep: ";
-    std::cerr << call.pretty(0) << "\n";
-    abort();
+    std::ostringstream oss;
+    oss << "Function pointer call with no targets; irep: ";
+    oss << call.pretty(0) << "\n";
+    throw std::runtime_error(oss.str());
   }
 
   // Generate a list of functions to call. We'll then proceed to call them,
@@ -382,13 +380,14 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   {
     // Emit warning; perform no function call behaviour. Increment PC
     // XXX jmorse - no location information any more.
-    std::cout << "No target candidate for function call "
-              << from_expr(ns, "", call.function) << "\n";
+    msg.status(fmt::format(
+      "No target candidate for function call {}",
+      from_expr(ns, "", call.function)));
     cur_state->source.pc++;
     return;
   }
 
-  std::list<std::pair<guardt, symbol2tc>> l = get_function_list(func_ptr);
+  std::list<std::pair<guardt, symbol2tc>> l = get_function_list(func_ptr, msg);
 
   // Filter out illegal calls
   auto illegal_filter = [&call](const decltype(l)::value_type &it) -> bool {
@@ -419,7 +418,8 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
     if(fit == goto_functions.function_map.end() || !fit->second.body_available)
     {
-      std::cerr << "**** WARNING: no body for function " << pretty_name << '\n';
+      msg.warning(
+        fmt::format("**** WARNING: no body for function {}", pretty_name));
 
       continue; // XXX, find out why this fires on SV-COMP 14 benchmark
       // 32_7a_cilled_true_linux-3.8-rc1-drivers--ata--pata_legacy.ko-main.cil.out.c
@@ -577,11 +577,7 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
     }
   }
   else if(!is_nil_expr(frame.return_value))
-  {
-    std::cerr << "return with unexpected value"
-              << "\n";
-    abort();
-  }
+    throw std::runtime_error("return with unexpected value");
 
   return false;
 }

@@ -15,6 +15,7 @@ Maintainers:
 #define CPROVER_MESSAGE_H
 
 #include <string>
+#include <sstream>
 #include <util/location.h>
 #include <util/message/verbosity.h>
 

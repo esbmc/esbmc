@@ -8,16 +8,17 @@ smt_convt *create_new_cvc_solver(
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
-  fp_convt **fp_api)
+  fp_convt **fp_api,
+  const messaget &msg)
 {
-  cvc_convt *conv = new cvc_convt(ns, options);
+  cvc_convt *conv = new cvc_convt(ns, options, msg);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-cvc_convt::cvc_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options),
+cvc_convt::cvc_convt(const namespacet &ns, const optionst &options, const messaget &msg)
+  : smt_convt(ns, options, msg),
     array_iface(false, false),
     fp_convt(this),
     to_bv_counter(0),
@@ -1276,8 +1277,9 @@ void cvc_convt::dump_smt()
   }
 }
 
-void cvc_smt_ast::dump() const
+void cvc_smt_ast::dump(const messaget &msg) const
 {
-  a.printAst(std::cout, 0);
-  std::cout << std::flush;
+  std::ostringstream  oss;
+  a.printAst(oss, 0);
+  msg.debug(oss.str());
 }

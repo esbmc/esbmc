@@ -17,13 +17,13 @@ public:
   using solver_smt_ast<BitwuzlaTerm *>::solver_smt_ast;
   ~bitw_smt_ast() override = default;
 
-  void dump() const override;
+  void dump(const messaget &msg) const override;
 };
 
 class bitwuzla_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  bitwuzla_convt(const namespacet &ns, const optionst &options);
+  bitwuzla_convt(const namespacet &ns, const optionst &options, const messaget &msg);
   ~bitwuzla_convt() override;
 
   void push_ctx() override;

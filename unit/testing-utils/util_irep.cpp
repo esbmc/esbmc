@@ -110,7 +110,6 @@ void gen_builtin_type(typet &new_type, Builtin_Type bt)
     break;
 
   default:
-    std::cerr << "Unrecognized builtin type " << (unsigned)bt << std::endl;
     return;
   }
 

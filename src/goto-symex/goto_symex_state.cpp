@@ -389,7 +389,8 @@ void goto_symex_statet::get_original_name(expr2tc &expr) const
   }
 }
 
-void goto_symex_statet::print_stack_trace(unsigned int indent) const
+void goto_symex_statet::print_stack_trace(unsigned int indent, std::ostream &os)
+  const
 {
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
@@ -405,15 +406,15 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
   {
     if(it->function_identifier == "")
     { // Top level call
-      std::cout << spaces << "init"
-                << "\n";
+      os << spaces << "init"
+         << "\n";
     }
     else
     {
-      std::cout << spaces << it->function_identifier.as_string();
-      std::cout << " at " << src.pc->location.get_file();
-      std::cout << " line " << src.pc->location.get_line();
-      std::cout << "\n";
+      os << spaces << it->function_identifier.as_string();
+      os << " at " << src.pc->location.get_file();
+      os << " line " << src.pc->location.get_line();
+      os << "\n";
     }
 
     src = it->calling_location;
@@ -421,9 +422,9 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
 
   if(!thread_ended)
   {
-    std::cout << spaces << "Next instruction to be executed:"
-              << "\n";
-    source.pc->output_instruction(ns, "", std::cout);
+    os << spaces << "Next instruction to be executed:"
+       << "\n";
+    source.pc->output_instruction(ns, "", os);
   }
 }
 

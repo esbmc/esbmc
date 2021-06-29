@@ -47,9 +47,9 @@ if(ENABLE_Z3)
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
     if (BUILD_STATIC)
-        target_link_libraries(solverz3 "${Z3_LIB}" -pthread "${LIBGOMP_LIB}" -ldl)
+        target_link_libraries(solverz3 fmt::fmt "${Z3_LIB}" -pthread "${LIBGOMP_LIB}" -ldl)
     else ()
-        target_link_libraries(solverz3 "${Z3_LIB}")
+        target_link_libraries(solverz3 fmt::fmt "${Z3_LIB}")
     endif ()
     # Add to solver link
     target_link_libraries(solvers INTERFACE solverz3)

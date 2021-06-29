@@ -69,3 +69,4 @@ add_library(clibs ${mangled_files} cprover_library.cpp)
 target_include_directories(clibs
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
+target_link_libraries(clibs fmt::fmt)

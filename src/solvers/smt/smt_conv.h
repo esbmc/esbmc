@@ -150,7 +150,8 @@ public:
    *
    *  @param _ns Namespace for looking up the type of certain symbols. 
    *  @param _options Provide all the needed parameters to configure the solver. */
-  smt_convt(bool int_encoding, const namespacet &_ns, const optionst &_options);
+  smt_convt(bool int_encoding, const namespacet &_ns, const optionst &_options, const messaget &msg);
+
   virtual ~smt_convt() = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
@@ -820,6 +821,7 @@ public:
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
   const namespacet &ns;
+  const messaget &msg;
 
   /* Options contain all the parameters set by the user to run ESBMC */
   const optionst &options;

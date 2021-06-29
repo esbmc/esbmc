@@ -146,7 +146,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   }
 
   default:
-    throw std::runtime_eror("unexpected overflow_arith operand");
+    throw std::runtime_error("unexpected overflow_arith operand");
   }
 
   return nullptr;

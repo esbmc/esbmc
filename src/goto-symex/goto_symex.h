@@ -49,7 +49,8 @@ public:
     contextt &_new_context,
     const goto_functionst &goto_functions,
     std::shared_ptr<symex_targett> _target,
-    optionst &opts);
+    optionst &opts,
+    const messaget &msg);
   goto_symext(const goto_symext &sym);
   goto_symext &operator=(const goto_symext &sym);
 
@@ -840,6 +841,8 @@ protected:
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
+
+  const messaget &msg;
 
   friend void build_goto_symex_classes();
 };

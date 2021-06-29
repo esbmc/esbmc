@@ -179,7 +179,7 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
 
 void esbmc_parseoptionst::get_command_line_options(optionst &options)
 {
-  if(config.set(cmdline))
+  if(config.set(cmdline, msg))
   {
     exit(1);
   }
@@ -428,7 +428,7 @@ int esbmc_parseoptionst::doit()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, goto_functions);
+    show_claims(ns, goto_functions, msg);
     return 0;
   }
 
@@ -518,7 +518,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     if(cmdline.isset("show-claims"))
     {
       const namespacet ns(context);
-      show_claims(ns, goto_functions);
+      show_claims(ns, goto_functions, msg);
       return 0;
     }
 
@@ -1018,7 +1018,7 @@ int esbmc_parseoptionst::doit_k_induction()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, goto_functions);
+    show_claims(ns, goto_functions, msg);
     return 0;
   }
 
@@ -1062,7 +1062,7 @@ int esbmc_parseoptionst::doit_falsification()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, goto_functions);
+    show_claims(ns, goto_functions, msg);
     return 0;
   }
 
@@ -1100,7 +1100,8 @@ int esbmc_parseoptionst::doit_incremental()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, goto_functions);
+    std::ostringstream oss;
+    show_claims(ns, goto_functions, msg);
     return 0;
   }
 
@@ -1141,7 +1142,7 @@ int esbmc_parseoptionst::doit_termination()
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, goto_functions);
+    show_claims(ns, goto_functions, msg);
     return 0;
   }
 
@@ -1462,8 +1463,10 @@ void esbmc_parseoptionst::preprocessing()
       return;
     }
 #ifdef ENABLE_OLD_FRONTEND
-    if(c_preprocess(filename, std::cout, false, *get_message_handler()))
+    std::ostringstream oss;
+    if(c_preprocess(filename, oss, false, *get_message_handler()))
       error("PREPROCESSING ERROR");
+    msg.status(oss.str());
 #endif
   }
   catch(const char *e)
@@ -1536,7 +1539,9 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       value_set_analysist value_set_analysis(ns);
       value_set_analysis(goto_functions);
-      show_value_sets(goto_functions, value_set_analysis);
+      std::ostringstream oss;
+      show_value_sets(goto_functions, value_set_analysis, oss);
+      msg.result(oss.str());
       return true;
     }
 
@@ -1584,7 +1589,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // show it?
     if(cmdline.isset("show-loops"))
     {
-      show_loop_numbers(goto_functions);
+      show_loop_numbers(goto_functions, msg);
       return true;
     }
 

@@ -63,18 +63,19 @@ static smt_convt *create_solver(
   tuple_iface **tuple_api,
   array_iface **array_api,
   fp_convt **fp_api,
-  const messaget &msg)
+  const messaget &msg [[gnu::unused]])
 {
   for(const auto &esbmc_solver : esbmc_solvers)
   {
     if(the_solver == esbmc_solver.name)
     {
-      return esbmc_solver.create(options, ns, tuple_api, array_api, fp_api);
+      return esbmc_solver.create(options, ns, tuple_api, array_api, fp_api, msg);
     }
   }
 
- throw std::runtime_error(
-   fmt::format("The {} solver has not been built into this version of ESBMC, sorry", the_solver));  
+  throw std::runtime_error(fmt::format(
+    "The {} solver has not been built into this version of ESBMC, sorry",
+    the_solver));
 }
 
 static const std::string pick_default_solver(const messaget &msg)
@@ -93,7 +94,7 @@ static const std::string pick_default_solver(const messaget &msg)
   else
   {
     msg.status(
-      fmt::format("No solver specified; defaulting to {}"), esbmc_solvers[1].name)
+      fmt::format("No solver specified; defaulting to {}", esbmc_solvers[1].name)
     );
     return esbmc_solvers[1].name;
   }
@@ -128,7 +129,7 @@ static smt_convt *pick_solver(
     the_solver = pick_default_solver(msg);
 
   return create_solver(
-    std::move(the_solver), options, ns, tuple_api, array_api, fp_api);
+    std::move(the_solver), options, ns, tuple_api, array_api, fp_api, msg);
 }
 
 smt_convt *create_solver_factory1(

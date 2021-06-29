@@ -58,7 +58,7 @@ bool clang_cpp_languaget::typecheck(
 {
   contextt new_context;
 
-  clang_cpp_convertert converter(new_context, ASTs);
+  clang_cpp_convertert converter(new_context, ASTs, message_handler);
   if(converter.convert())
     return true;
 

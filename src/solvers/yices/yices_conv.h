@@ -13,10 +13,8 @@ public:
     // Detect term errors
     if(a == NULL_TERM)
     {
-      std::cerr << "Error creating yices term"
-                << "\n";
       yices_print_error(stderr);
-      abort();
+      throw std::runtime_error("Error creating yices term");
     }
   }
   ~yices_smt_ast() override = default;
@@ -33,7 +31,7 @@ public:
     unsigned int idx,
     expr2tc idx_expr = expr2tc()) const override;
 
-  void dump() const override;
+  void dump(const messaget &msg) const override;
 
   std::string symname;
 };
@@ -44,7 +42,7 @@ class yices_convt : public smt_convt,
                     public fp_convt
 {
 public:
-  yices_convt(const namespacet &ns, const optionst &options);
+  yices_convt(const namespacet &ns, const optionst &options, const messaget &msg);
   ~yices_convt() override;
 
   resultt dec_solve() override;
