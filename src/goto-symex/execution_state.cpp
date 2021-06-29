@@ -35,12 +35,18 @@ execution_statet::execution_statet(
   contextt &context,
   std::shared_ptr<ex_state_level2t> l2init,
   optionst &options,
-  const messaget &_message_handler)
-  : goto_symext(ns, context, goto_functions, std::move(_target), options),
+  const messaget &message_handler)
+  : goto_symext(
+      ns,
+      context,
+      goto_functions,
+      std::move(_target),
+      options,
+      message_handler),
     owning_rt(art),
     state_level2(std::move(l2init)),
     global_value_set(ns),
-    message_handler(_message_handler)
+    message_handler(message_handler)
 {
   art1 = owning_rt;
   CS_number = 0;
@@ -59,11 +65,8 @@ execution_statet::execution_statet(
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("__ESBMC_main");
   if(it == goto_functions.function_map.end())
-  {
-    std::cerr << "main symbol not found; please set an entry point"
-              << "\n";
-    abort();
-  }
+    throw std::runtime_error(
+      "main symbol not found; please set an entry point");
 
   const goto_programt *goto_program = &(it->second.body);
 
@@ -221,9 +224,7 @@ void execution_statet::symex_step(reachability_treet &art)
 #ifndef _WIN32
     __asm__("int $3");
 #else
-    std::cerr << "Can't trap on windows, sorry"
-              << "\n";
-    abort();
+    throw std::runtime_error("Can't trap on windows, sorry");
 #endif
   }
 
@@ -237,12 +238,16 @@ void execution_statet::symex_step(reachability_treet &art)
 
   if(options.get_bool_option("show-symex-value-sets"))
   {
-    std::cout << '\n';
-    state.value_set.dump();
+    msg.status("");
+    state.value_set.dump(msg);
   }
 
   if(symex_trace || options.get_bool_option("show-symex-value-sets"))
-    state.source.pc->output_instruction(ns, "", std::cout, false);
+  {
+    std::ostringstream oss;
+    state.source.pc->output_instruction(ns, "", oss, false);
+    msg.result(oss.str());
+  }
 
   switch(instruction.type)
   {
@@ -1082,10 +1087,12 @@ void execution_statet::print_stack_traces(unsigned int indent) const
   i = 0;
   for(it = threads_state.begin(); it != threads_state.end(); it++)
   {
-    std::cout << spaces << "Thread " << i++ << ":"
-              << "\n";
-    it->print_stack_trace(indent + 2);
-    std::cout << "\n";
+    std::ostringstream oss;
+    oss << spaces << "Thread " << i++ << ":"
+        << "\n";
+    it->print_stack_trace(indent + 2, oss);
+    oss << "\n";
+    msg.status(oss.str());
   }
 }
 
@@ -1095,9 +1102,10 @@ void execution_statet::switch_to_monitor()
   {
     if(!mon_thread_warning)
     {
-      std::cerr << "Switching to ended monitor; you need to increase its "
-                   "context or prefix bound"
-                << "\n";
+      msg.error(
+        "Switching to ended monitor; you need to increase its "
+        "context or prefix bound");
+
       mon_thread_warning = true;
     }
 

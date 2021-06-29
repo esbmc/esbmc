@@ -5,20 +5,23 @@
 #include <string>
 #include <util/config.h>
 #include <util/namespace.h>
+#include <util/message/message.h>
 
 typedef smt_convt *(solver_creator)(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
-  fp_convt **fp_api);
+  fp_convt **fp_api,
+  const messaget &msg);
 
 typedef smt_convt *(*solver_creator_ptr)(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
-  fp_convt **fp_api);
+  fp_convt **fp_api,
+  const messaget &msg);
 
 struct esbmc_solver_config
 {

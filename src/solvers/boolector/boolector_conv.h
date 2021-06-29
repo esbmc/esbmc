@@ -17,13 +17,13 @@ public:
   using solver_smt_ast<BoolectorNode *>::solver_smt_ast;
   ~btor_smt_ast() override = default;
 
-  void dump() const override;
+  void dump(const messaget &msg) const override;
 };
 
 class boolector_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  boolector_convt(const namespacet &ns, const optionst &options);
+  boolector_convt(const namespacet &ns, const optionst &options, const messaget &msg);
   ~boolector_convt() override;
 
   void push_ctx() override;

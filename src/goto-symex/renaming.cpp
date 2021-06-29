@@ -3,6 +3,7 @@
 #include <util/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
+#include <util/message/format.h>
 
 unsigned renaming::level2t::current_number(const expr2tc &symbol) const
 {
@@ -243,8 +244,8 @@ void renaming::renaming_levelt::get_original_name(
     return;
 
   default:
-    std::cerr << "get_original_nameing to invalid level " << lev << "\n";
-    abort();
+    throw std::runtime_error(
+      fmt::format("get_original_nameing to invalid level {}", lev));
   }
 }
 
@@ -282,9 +283,11 @@ void renaming::level2t::print(std::ostream &out) const
   }
 }
 
-void renaming::level2t::dump() const
+void renaming::level2t::dump(const messaget &msg) const
 {
-  print(std::cout);
+  std::ostringstream oss;
+  print(oss);
+  msg.debug(oss.str());
 }
 
 void renaming::level2t::make_assignment(

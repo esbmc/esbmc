@@ -29,9 +29,11 @@ void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
     step.output(ns, out);
 }
 
-void goto_trace_stept::dump() const
+void goto_trace_stept::dump(const messaget &msg) const
 {
-  output(*migrate_namespace_lookup, std::cout);
+  std::ostringstream oss;
+  output(*migrate_namespace_lookup, oss);
+  msg.debug(oss.str());
 }
 
 void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const

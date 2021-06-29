@@ -178,6 +178,24 @@ public:
     handlers.push_back(handler);
   }
 
+  /**
+   * @brief Returns a temporary FILE* descriptor for message outputs.
+   *
+   * @return
+   */
+  static FILE* get_temp_file();
+
+  /**
+   * @brief Insert all contents of the file into all message handlers
+   * and then closes the file.
+   *
+   * @param l verbosity level of the file
+   * @param f file pointer with the file contents.
+   */
+  void insert_and_close_file_contents(VerbosityLevel l, FILE* f) const;
+
+
+
 protected:
   // Current verbosity level
   VerbosityLevel verbosity = VerbosityLevel::Debug;

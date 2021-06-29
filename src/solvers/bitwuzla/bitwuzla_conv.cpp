@@ -5,9 +5,10 @@
 
 void bitwuzla_error_handler(const char *msg)
 {
-  std::cerr << "Bitwuzla error encountered\n";
-  std::cerr << msg << '\n';
-  abort();
+  std::ostringstream oss;
+  oss << "Bitwuzla error encountered\n";
+  oss << msg;
+  throw std::runtime_error(oss.str());
 }
 
 smt_convt *create_new_bitwuzla_solver(
@@ -15,16 +16,17 @@ smt_convt *create_new_bitwuzla_solver(
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
-  fp_convt **fp_api)
+  fp_convt **fp_api,
+  const messaget &msg)
 {
-  bitwuzla_convt *conv = new bitwuzla_convt(ns, options);
+  bitwuzla_convt *conv = new bitwuzla_convt(ns, options, msg);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
+bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options, const messaget &msg)
+  : smt_convt(ns, options, msg), array_iface(true, true), fp_convt(this)
 {
   bitw = bitwuzla_new();
   bitwuzla_set_option(bitw, BITWUZLA_OPT_PRODUCE_MODELS, 1);
@@ -543,16 +545,12 @@ smt_astt bitwuzla_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt bitwuzla_convt::mk_smt_int(const BigInt &theint [[gnu::unused]])
 {
-  std::cerr << "ESBMC can't create integer sorts with Bitwuzla yet"
-            << "\n";
-  abort();
+  throw std::runtime_error("ESBMC can't create integer sorts with Bitwuzla yet");
 }
 
 smt_astt bitwuzla_convt::mk_smt_real(const std::string &str [[gnu::unused]])
 {
-  std::cerr << "ESBMC can't create real sorts with Bitwuzla yet"
-            << "\n";
-  abort();
+  throw std::runtime_error("ESBMC can't create real sorts with Bitwuzla yet");
 }
 
 smt_astt bitwuzla_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
@@ -603,8 +601,7 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     break;
 
   default:
-    std::cerr << "Unknown type for symbol\n";
-    abort();
+    throw std::runtime_error("Unknown type for symbol");
   }
 
   smt_astt ast = new_ast(node, s);
@@ -688,8 +685,7 @@ bool bitwuzla_convt::get_bool(smt_astt a)
     res = false;
     break;
   default:
-    std::cerr << "Can't get boolean value from Bitwuzla\n";
-    abort();
+    throw std::runtime_error("Can't get boolean value from Bitwuzla");
   }
   return res;
 }
@@ -821,18 +817,23 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 void bitwuzla_convt::dump_smt()
 {
-  bitwuzla_dump_formula(bitw, "smt2", stdout);
+  FILE *f = msg.get_temp_file();
+  bitwuzla_dump_formula(bitw, "smt2", f);
+  msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);
 }
 
-void bitw_smt_ast::dump() const
+void bitw_smt_ast::dump(const messaget &msg) const
 {
-  bitwuzla_term_dump(a, "smt2", stdout);
-  std::cout << std::flush;
+  FILE *f = msg.get_temp_file();
+  bitwuzla_term_dump(a, "smt2", f);
+  msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);
 }
 
 void bitwuzla_convt::print_model()
 {
-  bitwuzla_print_model(bitw, "smt2", stdout);
+  FILE *f = msg.get_temp_file();
+  bitwuzla_print_model(bitw, "smt2", f);
+  msg.insert_and_close_file_contents(VerbosityLevel::Status, f);
 }
 
 smt_sortt bitwuzla_convt::mk_bool_sort()

@@ -181,23 +181,19 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   {
     if(config.ansi_c.word_size == 16)
     {
-      std::cerr << "Warning: this version of ESBMC does not have a C library ";
-      std::cerr << "for 16 bit machines";
+      message_handler.warning(
+        "Warning: this version of ESBMC does not have a C library "
+        "for 16 bit machines");
       return;
     }
 
-    std::cerr << "No c library for bitwidth " << config.ansi_c.int_width
-              << "\n";
-    abort();
+    throw std::runtime_error(
+      fmt::format("No c library for bitwidth {}", config.ansi_c.int_width));
   }
 
   size = this_clib_ptrs[1] - this_clib_ptrs[0];
   if(size == 0)
-  {
-    std::cerr << "error: Zero-lengthed internal C library"
-              << "\n";
-    abort();
-  }
+    throw std::runtime_error("error: Zero-lengthed internal C library");
 
 #ifndef _WIN32
   sprintf(symname_buffer, "/tmp/ESBMC_XXXXXX");
@@ -210,11 +206,8 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
 #endif
   f = fopen(symname_buffer, "wb");
   if(fwrite(this_clib_ptrs[0], size, 1, f) != 1)
-  {
-    std::cerr << "Couldn't manipulate internal C library"
-              << "\n";
-    abort();
-  }
+    throw std::runtime_error("Couldn't manipulate internal C library");
+
   fclose(f);
 
   std::ifstream infile(symname_buffer, std::ios::in | std::ios::binary);
@@ -273,11 +266,7 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   }
 
   if(c_link(context, store_ctx, message_handler, "<built-in-library>"))
-  {
     // Merging failed
-    std::cerr << "Failed to merge C library"
-              << "\n";
-    abort();
-  }
+    throw std::runtime_error("Failed to merge C library");
 }
 #endif

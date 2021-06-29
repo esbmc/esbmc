@@ -455,10 +455,15 @@ bool goto_symext::get_unwind(
     this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
   if(!options.get_bool_option("quiet"))
   {
-    std::cout << (stop_unwind ? "Not unwinding " : "Unwinding ")
-              << "loop " + i2string(cur_state->source.pc->loop_number)
-              << " iteration " + integer2string(unwind) + " "
-              << cur_state->source.pc->location.as_string() << '\n';
+    msg.status(fmt::format(
+      stop_unwind ? "Not unwinding "
+                  : "Unwinding "
+                    "loop {} {} {} {} {}",
+      i2string(cur_state->source.pc->loop_number),
+      " iteration ",
+      integer2string(unwind),
+      " ",
+      cur_state->source.pc->location.as_string()));
   }
 
   return stop_unwind;

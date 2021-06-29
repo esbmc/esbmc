@@ -1,7 +1,4 @@
-add_library(xml xml_irep.cpp xml.cpp)
-target_link_libraries(xml fmt::fmt)
-
-add_library(util_esbmc irep2.cpp
+add_library(util_esbmc irep2.cpp xml_irep.cpp xml.cpp
     arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp
     expr_util.cpp i2string.cpp location.cpp 
     language_file.cpp mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp
@@ -24,6 +21,6 @@ target_include_directories(util_esbmc
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(util_esbmc xml fmt::fmt ${Boost_LIBRARIES})
+target_link_libraries(util_esbmc fmt::fmt ${Boost_LIBRARIES})
 
 add_subdirectory(message)

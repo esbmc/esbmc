@@ -9,13 +9,13 @@ class cvc_smt_ast : public solver_smt_ast<CVC4::Expr>
 public:
   using solver_smt_ast<CVC4::Expr>::solver_smt_ast;
   ~cvc_smt_ast() override = default;
-  void dump() const override;
+  void dump(const messaget &msg) const override;
 };
 
 class cvc_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  cvc_convt(const namespacet &ns, const optionst &options);
+  cvc_convt(const namespacet &ns, const optionst &options, const messaget &msg);
   ~cvc_convt() override = default;
 
   smt_convt::resultt dec_solve() override;

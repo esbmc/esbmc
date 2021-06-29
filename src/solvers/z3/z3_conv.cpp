@@ -23,17 +23,18 @@ smt_convt *create_new_z3_solver(
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
-  fp_convt **fp_api)
+  fp_convt **fp_api,
+  const messaget &msg)
 {
-  z3_convt *conv = new z3_convt(ns, options);
+  z3_convt *conv = new z3_convt(ns, options, msg);
   *tuple_api = static_cast<tuple_iface *>(conv);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
-  : smt_convt(_ns, _options),
+z3_convt::z3_convt(const namespacet &_ns, const optionst &_options, const messaget &msg)
+  : smt_convt(_ns, _options, msg),
     array_iface(true, true),
     fp_convt(this),
     z3_ctx(),
@@ -1215,11 +1216,13 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
   return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }
 
-void z3_smt_ast::dump() const
+void z3_smt_ast::dump(const messaget &msg) const
 {
-  std::cout << Z3_ast_to_string(a.ctx(), a) << "\n";
-  std::cout << "sort is " << Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a))
+  std::ostringstream oss;
+  oss << Z3_ast_to_string(a.ctx(), a) << "\n";
+  oss << "sort is " << Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a))
             << "\n";
+  msg.debug(oss.str());
 }
 
 void z3_convt::dump_smt()

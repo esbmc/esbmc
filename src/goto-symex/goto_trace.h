@@ -89,7 +89,7 @@ public:
   std::list<expr2tc> output_args;
 
   void output(const class namespacet &ns, std::ostream &out) const;
-  void dump() const;
+  void dump(const messaget &msg) const;
 
   goto_trace_stept() : step_nr(0), thread_nr(0), guard(false)
   {

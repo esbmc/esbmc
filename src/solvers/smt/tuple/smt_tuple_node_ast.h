@@ -57,9 +57,7 @@ public:
 
   void dump(const messaget &msg) const override
   {
-    msg.debug(
-      fmt::format("name {}", name)
-    );
+    msg.debug(fmt::format("name {}", name));
     for(auto const &e : elements)
       e->dump(msg);
   }

@@ -239,11 +239,8 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
   }
 
   if(interactive_ileaves && tid != user_tid)
-  {
-    std::cerr << "Ileave code selected different thread from user choice";
-    std::cerr << "\n";
-  }
-
+    message_handler.error(
+      "Ileave code selected different thread from user choice");
   return tid;
 }
 
@@ -374,16 +371,19 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
   ileaves = 0;  // Can use this depending on a future refactor.
 }
 
-reachability_treet::dfs_position::dfs_position(const std::string &&filename)
+reachability_treet::dfs_position::dfs_position(
+  const std::string &&filename,
+  const messaget &msg)
 {
-  read_from_file(std::move(filename));
+  read_from_file(std::move(filename), msg);
 }
 
 const uint32_t reachability_treet::dfs_position::file_magic =
   0x4543484B; //'ECHK'
 
 bool reachability_treet::dfs_position::write_to_file(
-  const std::string &&filename) const
+  const std::string &&filename,
+  const messaget &msg) const
 {
   uint8_t buffer[8192];
   reachability_treet::dfs_position::file_hdr hdr;
@@ -396,8 +396,7 @@ bool reachability_treet::dfs_position::write_to_file(
   f = fopen(filename.c_str(), "wb");
   if(f == nullptr)
   {
-    std::cerr << "Couldn't open checkpoint output file"
-              << "\n";
+    msg.error("Couldn't open checkpoint output file");
     return true;
   }
 
@@ -445,14 +444,14 @@ bool reachability_treet::dfs_position::write_to_file(
   return false;
 
 fail:
-  std::cerr << "Write error writing checkpoint file"
-            << "\n";
+  msg.error("Write error writing checkpoint file");
   fclose(f);
   return true;
 }
 
 bool reachability_treet::dfs_position::read_from_file(
-  const std::string &&filename)
+  const std::string &&filename,
+  const messaget &msg)
 {
   reachability_treet::dfs_position::file_hdr hdr;
   reachability_treet::dfs_position::file_entry entry;
@@ -463,8 +462,7 @@ bool reachability_treet::dfs_position::read_from_file(
   f = fopen(filename.c_str(), "rb");
   if(f == nullptr)
   {
-    std::cerr << "Couldn't open checkpoint input file"
-              << "\n";
+    msg.error("Couldn't open checkpoint input file");
     return true;
   }
 
@@ -473,8 +471,7 @@ bool reachability_treet::dfs_position::read_from_file(
 
   if(hdr.magic != htonl(file_magic))
   {
-    std::cerr << "Magic number indicates that this isn't a checkpoint file"
-              << "\n";
+    msg.error("Magic number indicates that this isn't a checkpoint file");
     fclose(f);
     return true;
   }
@@ -492,8 +489,7 @@ bool reachability_treet::dfs_position::read_from_file(
     assert(state.num_threads < 65536);
     if(state.cur_thread >= state.num_threads)
     {
-      std::cerr << "Inconsistent checkpoint data"
-                << "\n";
+      msg.error("Inconsistent checkpoint data");
       fclose(f);
       return true;
     }
@@ -516,8 +512,7 @@ bool reachability_treet::dfs_position::read_from_file(
   return false;
 
 fail:
-  std::cerr << "Read error on checkpoint file"
-            << "\n";
+  msg.error("Read error on checkpoint file");
   fclose(f);
   return true;
 }
@@ -527,86 +522,12 @@ void reachability_treet::print_ileave_trace() const
   std::list<std::shared_ptr<execution_statet>>::const_iterator it;
   int i = 0;
 
-  std::cout << "Context switch trace for interleaving:"
-            << "\n";
+  message_handler.status("Context switch trace for interleaving:");
   for(it = execution_states.begin(); it != execution_states.end(); it++, i++)
   {
-    std::cout << "Context switch point " << i << "\n";
+    message_handler.status(fmt::format("Context switch point {}", i));
     (*it)->print_stack_traces(4);
   }
-}
-
-int reachability_treet::get_ileave_direction_from_user() const
-{
-  std::string input;
-  unsigned int tid;
-
-  if(get_cur_state().get_active_state().guard.is_false())
-    std::cout << "This trace's guard is false; it will not be evaulated."
-              << "\n";
-
-  // First of all, are there actually any valid context switch targets?
-  for(tid = 0; tid < get_cur_state().threads_state.size(); tid++)
-  {
-    if(check_thread_viable(tid, true))
-      break;
-  }
-
-  // If no threads were viable, don't present a choice.
-  if(tid == get_cur_state().threads_state.size())
-    return get_cur_state().threads_state.size();
-
-  std::cout << "Context switch point encountered; please select a thread to run"
-            << "\n";
-  std::cout << "Current thread states:"
-            << "\n";
-  execution_states.back()->print_stack_traces(4);
-
-  while(std::cout << "Input: ", std::getline(std::cin, input))
-  {
-    if(input == "b")
-    {
-      std::cout << "Back unimplemented"
-                << "\n";
-    }
-    else if(input == "q")
-    {
-      exit(1);
-    }
-    else if(input.size() <= 0)
-    {
-      ;
-    }
-    else
-    {
-      const char *start;
-      char *end;
-      start = input.c_str();
-      tid = strtol(start, &end, 10);
-      if(start == end)
-      {
-        std::cout << "Not a valid input"
-                  << "\n";
-      }
-      else if(tid >= get_cur_state().threads_state.size())
-      {
-        std::cout << "Number out of range";
-      }
-      else
-      {
-        if(check_thread_viable(tid, false))
-          break;
-      }
-    }
-  }
-
-  if(std::cin.eof())
-  {
-    std::cout << "\n";
-    exit(1);
-  }
-
-  return tid;
 }
 
 //begin - H.Savino
@@ -619,8 +540,8 @@ int reachability_treet::get_ileave_direction_from_scheduling() const
   // occur. So there's absolutely no reason exploring further.
   if(get_cur_state().get_active_state().guard.is_false())
   {
-    std::cout << "This trace's guard is false; it will not be evaulated."
-              << "\n";
+    message_handler.status(
+      "This trace's guard is false; it will not be evaulated.");
     exit(1);
   }
 
@@ -661,31 +582,29 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   if(ex.DFS_traversed.at(tid) == true)
   {
     if(!quiet)
-      std::cout << "Thread unschedulable as it's already been explored"
-                << "\n";
+      message_handler.status(
+        "Thread unschedulable as it's already been explored");
     return false;
   }
 
   if(ex.threads_state.at(tid).call_stack.empty())
   {
     if(!quiet)
-      std::cout << "Thread unschedulable due to empty call stack"
-                << "\n";
+      message_handler.status("Thread unschedulable due to empty call stack");
     return false;
   }
 
   if(ex.threads_state.at(tid).thread_ended)
   {
     if(!quiet)
-      std::cout << "That thread has ended"
-                << "\n";
+      message_handler.status("That thread has ended");
     return false;
   }
 
 #if 0
   if (por && !ex.is_thread_mpor_schedulable(tid)) {
     if (!quiet)
-      std::cout << "Thread unschedulable due to POR" << "\n";
+      message_handler.status("Thread unschedulable due to POR");
     return false;
   }
 #endif
@@ -693,8 +612,7 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   if(ex.tid_is_set && ex.monitor_tid == tid)
   {
     if(!quiet)
-      std::cout << "Can't context switch to a monitor thread"
-                << "\n";
+      message_handler.status("Can't context switch to a monitor thread");
     return false;
   }
 
@@ -825,11 +743,8 @@ bool reachability_treet::restore_from_dfs_state(void *)
 
     get_cur_state().DFS_traversed = it->explored;
 
-    if (get_cur_state().threads_state.size() != it->num_threads) {
-      std::cerr << "Unexpected number of threads when reexploring checkpoint"
-                << "\n";
-      abort();
-    }
+    if (get_cur_state().threads_state.size() != it->num_threads) 
+      throw std::runtime_error("Unexpected number of threads when reexploring checkpoint");
 
     switch_to_next_execution_state();
 
@@ -840,11 +755,9 @@ bool reachability_treet::restore_from_dfs_state(void *)
 
 #if 0
     if (get_cur_state().get_active_state().source.pc->location_number !=
-        it->location_number) {
-      std::cerr << "Interleave at unexpected location when restoring checkpoint"
-                << "\n";
-      abort();
-    }
+        it->location_number) 
+      throw std::runtime_error("Interleave at unexpected location when restoring checkpoint");
+
 #endif
   }
 #endif
@@ -856,7 +769,7 @@ void reachability_treet::save_checkpoint(const std::string &&) const
 #if 0
   reachability_treet::dfs_position pos(*this);
   if (pos.write_to_file(fname))
-    std::cerr << "Couldn't save checkpoint; continuing" << "\n";
+    message_handler.error("Couldn't save checkpoint; continuing" << "\n");
 #endif
 
   abort();

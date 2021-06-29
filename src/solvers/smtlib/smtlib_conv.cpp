@@ -102,16 +102,18 @@ smt_convt *create_new_smtlib_solver(
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
-  fp_convt **fp_api)
+  fp_convt **fp_api,
+  const messaget &msg)
 {
-  smtlib_convt *conv = new smtlib_convt(ns, options);
+  smtlib_convt *conv = new smtlib_convt(ns, options, msg);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
-  : smt_convt(_ns, _options), array_iface(false, false), fp_convt(this)
+smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options, const messaget &msg)
+  : smt_convt(_ns, _options, msg), array_iface(false, false), fp_convt(this)
+
 {
   temp_sym_count.push_back(1);
   std::string cmd;
@@ -125,18 +127,15 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   {
     if(config.options.get_option("smtlib-solver-prog") != "")
     {
-      std::cerr << "Can't solve SMTLIB output and write to a file, sorry"
-                << "\n";
-      abort();
+      throw std::runtime_error(
+        "Can't solve SMTLIB output and write to a file, sorry");
     }
 
     // Open a file, do nothing else.
     out_stream = fopen(cmd.c_str(), "w");
     if(!out_stream)
     {
-      std::cerr << "Failed to open \"" << cmd << "\""
-                << "\n";
-      abort();
+      throw std::runtime_error(fmt::format("Failed to open \"{}\"", cmd));
     }
 
     in_stream = nullptr;
@@ -157,28 +156,19 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
 
   cmd = config.options.get_option("smtlib-solver-prog");
   if(cmd == "")
-  {
-    std::cerr << "Must specify an smtlib solver program in smtlib mode"
-              << "\n";
-    abort();
-  }
+    throw std::runtime_error(
+      "Must specify an smtlib solver program in smtlib mode");
+
 #ifdef _WIN32
   // TODO: The current implementation uses UNIX Process
-  std::cerr << "smtlib works only in unix systems\n";
-  abort();
+  throw std::runtime_error("smtlib works only in unix systems");
 #else
   if(pipe(inpipe) != 0)
-  {
-    std::cerr << "Couldn't open a pipe for smtlib solver"
-              << "\n";
-    abort();
-  }
+    throw std::runtime_error("Couldn't open a pipe for smtlib solver");
 
   if(pipe(outpipe) != 0)
   {
-    std::cerr << "Couldn't open a pipe for smtlib solver"
-              << "\n";
-    abort();
+    throw std::runtime_error("Couldn't open a pipe for smtlib solver");
   }
 
   pid_t solver_proc_pid = fork();
@@ -195,9 +185,7 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
 
     // Voila
     execlp(cmd.c_str(), cmd.c_str(), NULL);
-    std::cerr << "Exec of smtlib solver failed"
-              << "\n";
-    abort();
+    throw std::runtime_error("Exec of smtlib solver failed");
   }
   else
   {
@@ -236,10 +224,7 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   class sexpr &keyword = s.sexpr_list.front();
   class sexpr &value = s.sexpr_list.back();
   if(!(keyword.token == TOK_KEYWORD && keyword.data == ":name"))
-  {
-    std::cerr << "Bad get-info :name response from solver";
-    abort();
-  }
+    std::runtime_error("Bad get-info :name response from solver");
 
   assert(value.token == TOK_STRINGLIT && "Non-string solver name response");
   solver_name = value.data;
@@ -261,10 +246,8 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
   class sexpr &kw = v.sexpr_list.front();
   class sexpr &val = v.sexpr_list.back();
   if(!(kw.token == TOK_KEYWORD && kw.data == ":version"))
-  {
-    std::cerr << "Bad get-info :version response from solver";
-    abort();
-  }
+    std::runtime_error("Bad get-info :version response from solver");
+
   assert(val.token == TOK_STRINGLIT && "Non-string solver version response");
   solver_version = val.data;
   delete smtlib_output;
@@ -297,9 +280,7 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
   case SMT_SORT_BOOL:
     return "Bool";
   default:
-    std::cerr << "Unexpected sort in smtlib_convt"
-              << "\n";
-    abort();
+    throw std::runtime_error("Unexpected sort in smtlib_convt");
   }
 }
 
@@ -352,9 +333,7 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
     output = ss.str();
     return 0;
   default:
-    std::cerr << "Invalid terminal AST kind"
-              << "\n";
-    abort();
+    throw std::runtime_error("Invalid terminal AST kind");
   }
 }
 
@@ -449,15 +428,16 @@ smt_convt::resultt smtlib_convt::dec_solve()
   }
   else if(smtlib_output->token == TOK_KW_ERROR)
   {
-    std::cerr << "SMTLIB solver returned error: \"" << smtlib_output->data
-              << "\""
-              << "\n";
+    std::ostringstream oss;
+    oss << "SMTLIB solver returned error: \"" << smtlib_output->data << "\""
+        << "\n";
+    msg.error(oss.str());
     return smt_convt::P_ERROR;
   }
   else
   {
-    std::cerr << "Unrecognized check-sat output from smtlib solver"
-              << "\n";
+    throw std::runtime_error(
+      "Unrecognized check-sat output from smtlib solver");
     abort();
   }
 }
@@ -475,17 +455,13 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
   smtlibparse(TOK_START_VALUE);
 
   if(smtlib_output->token == TOK_KW_ERROR)
-  {
-    std::cerr << "Error from smtlib solver when fetching literal value: \""
-              << smtlib_output->data << "\""
-              << "\n";
-    abort();
-  }
+    throw std::runtime_error(fmt::format(
+      "Error from smtlib solver when fetching literal value: \"{}\"",
+      smtlib_output->data));
+
   else if(smtlib_output->token != 0)
-  {
-    std::cerr << "Unrecognized response to get-value from smtlib solver"
-              << "\n";
-  }
+    throw std::runtime_error(
+      "Unrecognized response to get-value from smtlib solver");
 
   // Unpack our value from response list.
   assert(
@@ -502,10 +478,8 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
   sexpr &symname = *it++;
   sexpr &respval = *it++;
   if(!(symname.token == TOK_SIMPLESYM && symname.data == name))
-  {
-    std::cerr << "smtlib solver returned different symbol from get-value";
-    abort();
-  }
+    throw std::runtime_error(
+      "smtlib solver returned different symbol from get-value");
 
   // Attempt to read an integer.
   BigInt m;
@@ -514,11 +488,9 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
     m = string2integer(respval.data);
   }
   else if(respval.token == TOK_NUMERAL)
-  {
-    std::cerr << "Numeral value for integer symbol from smtlib solver"
-              << "\n";
-    abort();
-  }
+    throw std::runtime_error(
+      "Numeral value for integer symbol from smtlib solver");
+
   else if(respval.token == TOK_HEXNUM)
   {
     std::string data = respval.data.substr(2);
@@ -556,15 +528,14 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
 
   if(smtlib_output->token == TOK_KW_ERROR)
   {
-    std::cerr << "Error from smtlib solver when fetching literal value: \""
-              << smtlib_output->data << "\""
-              << "\n";
-    abort();
+    throw std::runtime_error(fmt::format(
+      "Error from smtlib solver when fetching literal value: \"{}\"",
+      smtlib_output->data));
   }
   else if(smtlib_output->token != 0)
   {
-    std::cerr << "Unrecognized response to get-value from smtlib solver"
-              << "\n";
+    throw std::runtime_error(
+      "Unrecognized response to get-value from smtlib solver");
   }
 
   // Unpack our value from response list.
@@ -590,11 +561,10 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
     m = string2integer(respval.data);
   }
   else if(respval.token == TOK_NUMERAL)
-  {
-    std::cerr << "Numeral value for integer symbol from smtlib solver"
-              << "\n";
-    abort();
-  }
+
+    throw std::runtime_error(
+      "Numeral value for integer symbol from smtlib solver");
+
   else if(respval.token == TOK_HEXNUM)
   {
     std::string data = respval.data.substr(2);
@@ -615,11 +585,9 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
   if(is_bv_type(t))
   {
     if(!was_integer)
-    {
-      std::cerr
-        << "smtlib solver didn't provide integer response to integer get-value";
-      abort();
-    }
+      throw std::runtime_error(
+        "smtlib solver didn't provide integer response to integer get-value");
+
     result = constant_int2tc(t, m);
   }
   else if(is_fixedbv_type(t))
@@ -663,16 +631,15 @@ smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
         result = gen_true_expr();
       else
       {
-        std::cerr << "Unrecognized boolean-typed binary number format";
-        std::cerr << "\n";
-        abort();
+        throw std::runtime_error(
+          "Unrecognized boolean-typed binary number format");
       }
     }
     else
     {
-      std::cerr << "Unexpected token reading value of boolean symbol from "
-                   "smtlib solver"
-                << "\n";
+      throw std::runtime_error(
+        "Unexpected token reading value of boolean symbol from "
+        "smtlib solver");
     }
   }
   else
@@ -705,16 +672,14 @@ bool smtlib_convt::get_bool(smt_astt a)
 
   if(smtlib_output->token == TOK_KW_ERROR)
   {
-    std::cerr << "Error from smtlib solver when fetching literal value: \""
-              << smtlib_output->data << "\""
-              << "\n";
+    std::runtime_error(fmt::format(
+      "Error from smtlib solver when fetching literal value: \"{}\"",
+      smtlib_output->data));
     abort();
   }
   else if(smtlib_output->token != 0)
-  {
-    std::cerr << "Unrecognized response to get-value from smtlib solver"
-              << "\n";
-  }
+    throw std::runtime_error(
+      "Unrecognized response to get-value from smtlib solver");
 
   // First layer: valuation pair list. Should have one item.
   assert(
@@ -851,9 +816,8 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 
 smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type [[gnu::unused]])
 {
-  std::cerr << "Attempted to make struct type in smtlib conversion"
-            << "\n";
-  abort();
+  throw std::runtime_error(
+    "Attempted to make struct type in smtlib conversion");
 }
 
 smt_astt
@@ -916,8 +880,8 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 
 int smtliberror(int startsym [[gnu::unused]], const std::string &error)
 {
-  std::runtime_error(
-    fmt::format("SMTLIB response parsing error: \"{}\"", error));  
+  throw std::runtime_error(
+    fmt::format("SMTLIB response parsing error: \"{}\"", error));
 }
 
 void smtlib_convt::push_ctx()
