@@ -32,11 +32,6 @@ boolector_convt::boolector_convt(const namespacet &ns, const optionst &options)
               << std::endl;
     abort();
   }
-  else if(options.get_bool_option("parallel"))
-  {
-    std::cerr << "Boolector does not support parallel solving yet" << std::endl;
-    abort();
-  }
 
   btor = boolector_new();
   boolector_set_opt(btor, BTOR_OPT_MODEL_GEN, 1);
