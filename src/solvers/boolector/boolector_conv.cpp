@@ -47,6 +47,18 @@ boolector_convt::~boolector_convt()
   btor = nullptr;
 }
 
+void boolector_convt::push_ctx()
+{
+  smt_convt::push_ctx();
+  boolector_push(btor, 1);
+}
+
+void boolector_convt::pop_ctx()
+{
+  boolector_pop(btor, 1);
+  smt_convt::pop_ctx();
+}
+
 smt_convt::resultt boolector_convt::dec_solve()
 {
   pre_solve();

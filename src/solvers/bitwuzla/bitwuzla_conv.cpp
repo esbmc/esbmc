@@ -37,6 +37,18 @@ bitwuzla_convt::~bitwuzla_convt()
   bitw = nullptr;
 }
 
+void bitwuzla_convt::push_ctx()
+{
+  smt_convt::push_ctx();
+  bitwuzla_push(bitw, 1);
+}
+
+void bitwuzla_convt::pop_ctx()
+{
+  bitwuzla_pop(bitw, 1);
+  smt_convt::pop_ctx();
+}
+
 smt_convt::resultt bitwuzla_convt::dec_solve()
 {
   pre_solve();
