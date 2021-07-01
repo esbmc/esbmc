@@ -25,6 +25,11 @@ cvc_convt::cvc_convt(const namespacet &ns, const optionst &options)
     smt(&em),
     sym_tab()
 {
+  if(options.get_bool_option("parallel"))
+  {
+    std::cerr << "CVC4 does not support parallel solving yet" << std::endl;
+    abort();
+  }
   // Already initialized stuff in the constructor list,
   smt.setOption("produce-models", true);
   smt.setOption("produce-assertions", true);

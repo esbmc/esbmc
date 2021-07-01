@@ -36,12 +36,15 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
     array_iface(true, true),
     fp_convt(this),
     z3_ctx(),
-    solver((z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "solve-eqs") &
-            z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "smt"))
-             .mk_solver())
+    solver(
+      (z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "solve-eqs") &
+       z3::tactic(z3_ctx, "simplify") &
+       z3::tactic(z3_ctx, options.get_bool_option("parallel") ? "psmt" : "smt"))
+        .mk_solver())
 {
   z3::params p(z3_ctx);
-  p.set("relevancy", 0U);
+  if(!options.get_bool_option("parallel"))
+    p.set("relevancy", 0U);
   p.set("model", true);
   p.set("proof", false);
   solver.set(p);

@@ -56,6 +56,11 @@ mathsat_convt::mathsat_convt(const namespacet &ns, const optionst &options)
     fp_convt(this),
     use_fp_api(false)
 {
+  if(options.get_bool_option("parallel"))
+  {
+    std::cerr << "MathSAT does not support parallel solving yet" << std::endl;
+    abort();
+  }
   cfg = msat_parse_config(mathsat_config);
   msat_set_option(cfg, "model_generation", "true");
   env = msat_create_env(cfg);

@@ -45,6 +45,12 @@ yices_convt::yices_convt(const namespacet &ns, const optionst &options)
   else
     yices_default_config_for_logic(config, "QF_AUFBV");
 
+  if(options.get_bool_option("parallel"))
+  {
+    std::cerr << "Yices does not support parallel solving yet" << std::endl;
+    abort();
+  }
+
   yices_set_config(config, "mode", "push-pop");
 
   yices_ctx = yices_new_context(config);
