@@ -15,6 +15,6 @@ int main()
   f = ((3 * x) + y);
   if(f < 0)
     f = 0;
-  assert(a <= 2 && b <= 5 && f <= 4);
+  assert(a <= 1 && b <= 5 && f <= 4);
   return 0;
 }
