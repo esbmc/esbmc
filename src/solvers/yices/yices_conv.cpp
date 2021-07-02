@@ -33,7 +33,10 @@ smt_convt *create_new_yices_solver(
   return conv;
 }
 
-yices_convt::yices_convt(const namespacet &ns, const optionst &options, const messaget &msg)
+yices_convt::yices_convt(
+  const namespacet &ns,
+  const optionst &options,
+  const messaget &msg)
   : smt_convt(ns, options, msg), array_iface(false, false), fp_convt(this)
 {
   yices_init();
@@ -660,7 +663,8 @@ smt_astt yices_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt yices_convt::mk_isint(smt_astt)
 {
-  throw std::runtime_error("Yices does not support an is-integer operation on reals, "
+  throw std::runtime_error(
+    "Yices does not support an is-integer operation on reals, "
     "therefore certain casts and operations don't work, sorry");
 }
 

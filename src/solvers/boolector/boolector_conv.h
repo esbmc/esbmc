@@ -23,7 +23,10 @@ public:
 class boolector_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  boolector_convt(const namespacet &ns, const optionst &options, const messaget &msg);
+  boolector_convt(
+    const namespacet &ns,
+    const optionst &options,
+    const messaget &msg);
   ~boolector_convt() override;
 
   void push_ctx() override;

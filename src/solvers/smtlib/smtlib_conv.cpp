@@ -111,7 +111,10 @@ smt_convt *create_new_smtlib_solver(
   return conv;
 }
 
-smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options, const messaget &msg)
+smtlib_convt::smtlib_convt(
+  const namespacet &_ns,
+  const optionst &_options,
+  const messaget &msg)
   : smt_convt(_ns, _options, msg), array_iface(false, false), fp_convt(this)
 
 {

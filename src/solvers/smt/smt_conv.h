@@ -150,7 +150,10 @@ public:
    *
    *  @param _ns Namespace for looking up the type of certain symbols. 
    *  @param _options Provide all the needed parameters to configure the solver. */
-  smt_convt(const namespacet &_ns, const optionst &_options, const messaget &msg);
+  smt_convt(
+    const namespacet &_ns,
+    const optionst &_options,
+    const messaget &msg);
 
   virtual ~smt_convt() = default;
 

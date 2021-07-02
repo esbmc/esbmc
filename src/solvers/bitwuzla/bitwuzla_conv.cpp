@@ -25,7 +25,10 @@ smt_convt *create_new_bitwuzla_solver(
   return conv;
 }
 
-bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options, const messaget &msg)
+bitwuzla_convt::bitwuzla_convt(
+  const namespacet &ns,
+  const optionst &options,
+  const messaget &msg)
   : smt_convt(ns, options, msg), array_iface(true, true), fp_convt(this)
 {
   bitw = bitwuzla_new();
@@ -545,7 +548,8 @@ smt_astt bitwuzla_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt bitwuzla_convt::mk_smt_int(const BigInt &theint [[gnu::unused]])
 {
-  throw std::runtime_error("ESBMC can't create integer sorts with Bitwuzla yet");
+  throw std::runtime_error(
+    "ESBMC can't create integer sorts with Bitwuzla yet");
 }
 
 smt_astt bitwuzla_convt::mk_smt_real(const std::string &str [[gnu::unused]])

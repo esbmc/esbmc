@@ -42,7 +42,10 @@ class yices_convt : public smt_convt,
                     public fp_convt
 {
 public:
-  yices_convt(const namespacet &ns, const optionst &options, const messaget &msg);
+  yices_convt(
+    const namespacet &ns,
+    const optionst &options,
+    const messaget &msg);
   ~yices_convt() override;
 
   resultt dec_solve() override;
