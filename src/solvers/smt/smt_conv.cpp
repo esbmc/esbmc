@@ -60,7 +60,10 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(const namespacet &_ns, const optionst &_options, const messaget &msg)
+smt_convt::smt_convt(
+  const namespacet &_ns,
+  const optionst &_options,
+  const messaget &msg)
   : ctx_level(0), boolean_sort(nullptr), ns(_ns), options(_options), msg(msg)
 {
   int_encoding = options.get_bool_option("int-encoding");

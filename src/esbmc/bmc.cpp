@@ -55,8 +55,8 @@ bmct::bmct(
 
   if(options.get_bool_option("smt-during-symex"))
   {
-    runtime_solver = std::shared_ptr<smt_convt>(create_solver_factory(
-      "", ns, options, msg));
+    runtime_solver =
+      std::shared_ptr<smt_convt>(create_solver_factory("", ns, options, msg));
 
     symex = std::make_shared<reachability_treet>(
       funcs,
@@ -660,8 +660,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if(!options.get_bool_option("smt-during-symex"))
     {
-      runtime_solver = std::shared_ptr<smt_convt>(create_solver_factory(
-        "", ns, options, msg));
+      runtime_solver =
+        std::shared_ptr<smt_convt>(create_solver_factory("", ns, options, msg));
     }
 
     return run_decision_procedure(runtime_solver, eq);

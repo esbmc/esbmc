@@ -69,7 +69,8 @@ static smt_convt *create_solver(
   {
     if(the_solver == esbmc_solver.name)
     {
-      return esbmc_solver.create(options, ns, tuple_api, array_api, fp_api, msg);
+      return esbmc_solver.create(
+        options, ns, tuple_api, array_api, fp_api, msg);
     }
   }
 
@@ -93,9 +94,8 @@ static const std::string pick_default_solver(const messaget &msg)
   }
   else
   {
-    msg.status(
-      fmt::format("No solver specified; defaulting to {}", esbmc_solvers[1].name)
-    );
+    msg.status(fmt::format(
+      "No solver specified; defaulting to {}", esbmc_solvers[1].name));
     return esbmc_solvers[1].name;
   }
 #endif
@@ -143,12 +143,10 @@ smt_convt *create_solver_factory1(
 {
   if(solver_name == "")
     // Pick one based on options.
-    return pick_solver(
-      ns, options, tuple_api, array_api, fp_api, msg);
+    return pick_solver(ns, options, tuple_api, array_api, fp_api, msg);
 
   return create_solver(
     std::move(solver_name), options, ns, tuple_api, array_api, fp_api, msg);
-
 }
 
 smt_convt *create_solver_factory(
@@ -161,8 +159,7 @@ smt_convt *create_solver_factory(
   array_iface *array_api = nullptr;
   fp_convt *fp_api = nullptr;
   smt_convt *ctx = create_solver_factory1(
-  solver_name, ns, options, &tuple_api, &array_api, &fp_api, msg);
-
+    solver_name, ns, options, &tuple_api, &array_api, &fp_api, msg);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");

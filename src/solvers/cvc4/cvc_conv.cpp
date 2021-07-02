@@ -17,7 +17,10 @@ smt_convt *create_new_cvc_solver(
   return conv;
 }
 
-cvc_convt::cvc_convt(const namespacet &ns, const optionst &options, const messaget &msg)
+cvc_convt::cvc_convt(
+  const namespacet &ns,
+  const optionst &options,
+  const messaget &msg)
   : smt_convt(ns, options, msg),
     array_iface(false, false),
     fp_convt(this),
@@ -1279,7 +1282,7 @@ void cvc_convt::dump_smt()
 
 void cvc_smt_ast::dump(const messaget &msg) const
 {
-  std::ostringstream  oss;
+  std::ostringstream oss;
   a.printAst(oss, 0);
   msg.debug(oss.str());
 }
