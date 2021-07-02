@@ -24,6 +24,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 #include <util/message/format.h>
+#include <util/message/default_message.h>
 
 object_numberingt value_sett::object_numbering;
 object_number_numberingt value_sett::obj_numbering_refset;
@@ -1400,8 +1401,9 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   return memb;
 }
 
-void value_sett::dump(const messaget &msg) const
+void value_sett::dump() const
 {
+  default_message msg;
   std::ostringstream oss;
   output(oss);
   msg.debug(oss.str());

@@ -17,7 +17,7 @@ public:
   using solver_smt_ast<BitwuzlaTerm *>::solver_smt_ast;
   ~bitw_smt_ast() override = default;
 
-  void dump(const messaget &msg) const override;
+  void dump() const override;
 };
 
 class bitwuzla_convt : public smt_convt, public array_iface, public fp_convt

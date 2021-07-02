@@ -1,5 +1,6 @@
 #include <boolector_conv.h>
 #include <cstring>
+#include <util/message/default_message.h>
 
 #define new_ast new_solver_ast<btor_smt_ast>
 
@@ -789,8 +790,9 @@ void boolector_convt::dump_smt()
   msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);
 }
 
-void btor_smt_ast::dump(const messaget &msg) const
+void btor_smt_ast::dump() const
 {
+  default_message msg;
   FILE *f = msg.get_temp_file();
   boolector_dump_smt2_node(boolector_get_btor(a), f, a);
   msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);

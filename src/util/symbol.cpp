@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/location.h>
 #include <util/symbol.h>
+#include <util/message/default_message.h>
 
 symbolt::symbolt()
 {
@@ -46,8 +47,9 @@ void symbolt::swap(symbolt &b)
   SYM_SWAP2(is_extern);
 }
 
-void symbolt::dump(const messaget &msg) const
+void symbolt::dump() const
 {
+  default_message msg;
   std::ostringstream oss;
   show(oss);
   msg.debug(oss.str());

@@ -4,6 +4,7 @@
 #include <sstream>
 #include <yices_conv.h>
 #include <assert.h>
+#include <util/message/default_message.h>
 // From yices 2.3 (I think) various API calls have had new non-binary
 // operand versions added. The maintainers have chosen to break backwards
 // compatibility in the process by moving the old functions to new names, and
@@ -1110,8 +1111,9 @@ smt_sortt yices_convt::mk_bvfp_rm_sort()
   return new solver_smt_sort<type_t>(SMT_SORT_BVFP_RM, yices_bv_type(3), 3);
 }
 
-void yices_smt_ast::dump(const messaget &msg) const
+void yices_smt_ast::dump() const
 {
+  default_message msg;
   FILE *f = msg.get_temp_file();
   yices_pp_term(f, a, 80, 10, 0);
   yices_pp_type(f, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);

@@ -39,7 +39,7 @@ public:
 
   void output(std::ostream &out) const override;
 
-  void dump(const messaget &msg) const;
+  void dump() const;
 
 protected:
   bool join(const interval_domaint &b);

@@ -393,7 +393,7 @@ public:
    *  used for debugging and when single stepping in gdb.
    *  @see pretty
    */
-  DUMP_METHOD void dump(const messaget &msg) const;
+  DUMP_METHOD void dump() const;
 
   /** Produce a checksum/hash of the current object.
    *  Takes current object and produces a lossy digest of it. Originally used
@@ -610,7 +610,7 @@ public:
    *  For use in debugging - dumps the output of the pretty method to stdout.
    *  Can either be used in portion of code, or more commonly called from gdb.
    */
-  DUMP_METHOD void dump(const messaget &msg) const;
+  DUMP_METHOD void dump() const;
 
   /** Calculate a hash/digest of the current expr.
    *  For use in hash data structures; used to be a crc32, but is now a 16 bit

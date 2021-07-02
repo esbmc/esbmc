@@ -7,6 +7,7 @@
 
 #include <cassert>
 #include <z3_conv.h>
+#include <util/message/default_message.h>
 
 #define new_ast new_solver_ast<z3_smt_ast>
 
@@ -1219,8 +1220,9 @@ z3_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
   return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }
 
-void z3_smt_ast::dump(const messaget &msg) const
+void z3_smt_ast::dump() const
 {
+  default_message msg;
   std::ostringstream oss;
   oss << Z3_ast_to_string(a.ctx(), a) << "\n";
   oss << "sort is " << Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a))

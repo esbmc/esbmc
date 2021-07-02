@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/context.h>
+#include <util/message/default_message.h>
 
 bool contextt::add(const symbolt &symbol)
 {
@@ -43,12 +44,12 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
   return false;
 }
 
-void contextt::dump(const messaget &msg) const
+void contextt::dump() const
 {
+  default_message msg;
   msg.debug("\nSymbols:");
-
   // Do assignments based on "value".
-  foreach_operand([&msg](const symbolt &s) { s.dump(msg); });
+  foreach_operand([](const symbolt &s) { s.dump(); });
 }
 
 symbolt *contextt::find_symbol(irep_idt name)

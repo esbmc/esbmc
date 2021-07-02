@@ -184,8 +184,8 @@ void goto_loopst::add_loop_var(
   }
 }
 
-void goto_loopst::dump(const messaget &msg) const
+void goto_loopst::dump() const
 {
   for(auto &function_loop : function_loops)
-    function_loop.dump(msg);
+    function_loop.dump();
 }

@@ -19,6 +19,7 @@
 #include <set>
 #include <solvers/smt/smt_conv.h>
 #include <util/irep2.h>
+#include <util/message/default_message.h>
 
 static inline bool is_unbounded_array(const smt_sort *s)
 {
@@ -71,11 +72,12 @@ public:
 
   smt_astt eq_fixedsize(smt_convt *ctx, const array_ast *other) const;
 
-  void dump(const messaget &msg) const override
+  void dump() const override
   {
+    default_message msg;
     msg.debug(fmt::format("name: {}", symname));
     for(auto const &e : array_fields)
-      e->dump(msg);
+      e->dump();
   }
 
   std::string symname; // Only if this was produced from mk_smt_symbol.

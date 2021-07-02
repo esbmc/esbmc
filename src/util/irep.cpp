@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdlib>
 #include <util/i2string.h>
 #include <util/irep.h>
+#include <util/message/default_message.h>
 
 irept nil_rep_storage;
 
@@ -17,8 +18,9 @@ irept nil_rep_storage;
 const irept::dt empty_d;
 #endif
 
-void irept::dump(const messaget &msg) const
+void irept::dump() const
 {
+  default_message msg;
   msg.debug(pretty(0));
 }
 

@@ -51,7 +51,7 @@ public:
   typedef std::map<irep_namet, irept> named_subt;
 
   // Dump contents of irep to stdout. Debugging only.
-  void dump(const messaget &msg) const;
+  void dump() const;
 
   bool is_nil() const
   {

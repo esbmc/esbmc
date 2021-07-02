@@ -2,6 +2,7 @@
 #define SOLVERS_SMT_SMT_AST_H_
 
 #include <solvers/smt/smt_sort.h>
+#include <util/message/default_message.h>
 #include <util/irep2_expr.h>
 
 class smt_convt;
@@ -81,9 +82,10 @@ public:
    *  @return AST representing the chosen element / element-array */
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 
-  virtual void dump(const messaget &msg) const
+  virtual void dump() const
   {
-    msg.error("Chosen solver doesn't support printing the AST\n");
+    default_message msg;
+    msg.debug("Chosen solver doesn't support printing the AST\n");
   }
 };
 

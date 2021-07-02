@@ -239,7 +239,7 @@ void execution_statet::symex_step(reachability_treet &art)
   if(options.get_bool_option("show-symex-value-sets"))
   {
     msg.status("");
-    state.value_set.dump(msg);
+    state.value_set.dump();
   }
 
   if(symex_trace || options.get_bool_option("show-symex-value-sets"))

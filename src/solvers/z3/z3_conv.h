@@ -24,7 +24,7 @@ public:
 
   smt_astt project(smt_convt *ctx, unsigned int elem) const override;
 
-  void dump(const messaget &msg) const override;
+  void dump() const override;
 };
 
 class z3_convt : public smt_convt,

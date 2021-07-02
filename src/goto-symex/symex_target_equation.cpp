@@ -16,6 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/irep2.h>
 #include <util/migrate.h>
 #include <util/std_expr.h>
+#include <util/message/default_message.h>
 
 void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 {
@@ -184,7 +185,7 @@ void symex_target_equationt::convert_internal_step(
 
     if(ssa_smt_trace)
     {
-      step.cond_ast->dump(msg);
+      step.cond_ast->dump();
     }
   }
   else if(step.is_assignment())
@@ -192,7 +193,7 @@ void symex_target_equationt::convert_internal_step(
     smt_astt assign = smt_conv.convert_assign(step.cond);
     if(ssa_smt_trace)
     {
-      assign->dump(msg);
+      assign->dump();
     }
   }
   else if(step.is_output())
@@ -255,8 +256,9 @@ void symex_target_equationt::short_output(std::ostream &out, bool show_ignored)
   }
 }
 
-void symex_target_equationt::SSA_stept::dump(const messaget &msg) const
+void symex_target_equationt::SSA_stept::dump() const
 {
+  default_message msg;
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
   msg.debug(oss.str());

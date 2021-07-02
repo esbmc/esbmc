@@ -9,7 +9,7 @@ class cvc_smt_ast : public solver_smt_ast<CVC4::Expr>
 public:
   using solver_smt_ast<CVC4::Expr>::solver_smt_ast;
   ~cvc_smt_ast() override = default;
-  void dump(const messaget &msg) const override;
+  void dump() const override;
 };
 
 class cvc_convt : public smt_convt, public array_iface, public fp_convt

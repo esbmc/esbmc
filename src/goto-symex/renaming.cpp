@@ -4,6 +4,7 @@
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/message/format.h>
+#include <util/message/default_message.h>
 
 unsigned renaming::level2t::current_number(const expr2tc &symbol) const
 {
@@ -283,8 +284,9 @@ void renaming::level2t::print(std::ostream &out) const
   }
 }
 
-void renaming::level2t::dump(const messaget &msg) const
+void renaming::level2t::dump() const
 {
+  default_message msg;
   std::ostringstream oss;
   print(oss);
   msg.debug(oss.str());
