@@ -27,6 +27,6 @@ target_include_directories(esbmc
 )
 target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} clangcfrontend 
   clangcppfrontend symex pointeranalysis langapi util_esbmc bigint 
-  solvers clibs fmt_message_handler ${Boost_LIBRARIES})
+  solvers clibs default_message ${Boost_LIBRARIES})
 
 install(TARGETS esbmc DESTINATION bin)

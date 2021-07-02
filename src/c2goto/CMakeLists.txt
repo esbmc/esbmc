@@ -4,7 +4,7 @@ target_include_directories(c2goto
 )
 target_link_libraries(c2goto 
   clangcfrontend gotoprograms langapi util_esbmc 
-  fmt_message_handler ${Boost_LIBRARIES})
+  default_message ${Boost_LIBRARIES})
 add_subdirectory (headers)
 
 if(DEFINED C2GOTO_INCLUDE_DIR)
