@@ -20,6 +20,7 @@
 #include <util/arith_tools.h>
 #include <util/std_types.h>
 #include <ostream>
+#include <util/message/default_message.h>
 
 extern std::string verification_file;
 
@@ -29,8 +30,9 @@ void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
     step.output(ns, out);
 }
 
-void goto_trace_stept::dump(const messaget &msg) const
+void goto_trace_stept::dump() const
 {
+  default_message msg;
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
   msg.debug(oss.str());

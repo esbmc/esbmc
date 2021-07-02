@@ -10,6 +10,7 @@
 #include <util/migrate.h>
 #include <util/std_types.h>
 #include <util/message/format.h>
+#include <util/message/default_message.h>
 
 template <typename T>
 class register_irep_methods;
@@ -121,8 +122,9 @@ std::string type2t::pretty(unsigned int indent) const
   return pretty_print_func<const type2t &>(indent, type_names[type_id], *this);
 }
 
-void type2t::dump(const messaget &msg) const
+void type2t::dump() const
 {
+  default_message msg;
   msg.debug(pretty(0));
 }
 
@@ -551,8 +553,9 @@ std::string expr2t::pretty(unsigned int indent) const
   return ret;
 }
 
-void expr2t::dump(const messaget &msg) const
+void expr2t::dump() const
 {
+  default_message msg;
   msg.debug((0));
 }
 

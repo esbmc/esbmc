@@ -31,7 +31,7 @@ public:
     unsigned int idx,
     expr2tc idx_expr = expr2tc()) const override;
 
-  void dump(const messaget &msg) const override;
+  void dump() const override;
 
   std::string symname;
 };

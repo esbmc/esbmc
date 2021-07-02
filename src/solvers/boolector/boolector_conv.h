@@ -17,7 +17,7 @@ public:
   using solver_smt_ast<BoolectorNode *>::solver_smt_ast;
   ~btor_smt_ast() override = default;
 
-  void dump(const messaget &msg) const override;
+  void dump() const override;
 };
 
 class boolector_convt : public smt_convt, public array_iface, public fp_convt

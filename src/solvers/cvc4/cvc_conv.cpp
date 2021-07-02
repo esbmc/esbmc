@@ -1,5 +1,6 @@
 #include <util/c_types.h>
 #include <cvc_conv.h>
+#include <util/message/default_message.h>
 
 #define new_ast new_solver_ast<cvc_smt_ast>
 
@@ -1280,8 +1281,9 @@ void cvc_convt::dump_smt()
   }
 }
 
-void cvc_smt_ast::dump(const messaget &msg) const
+void cvc_smt_ast::dump() const
 {
+  default_message msg;
   std::ostringstream oss;
   a.printAst(oss, 0);
   msg.debug(oss.str());

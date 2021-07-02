@@ -40,7 +40,7 @@ public:
   void swap(symbolt &b);
 
   void show(std::ostream &out) const;
-  DUMP_METHOD void dump(const messaget &msg) const;
+  DUMP_METHOD void dump() const;
 
   void to_irep(irept &dest) const;
   void from_irep(const irept &src);

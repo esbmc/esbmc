@@ -40,7 +40,7 @@ public:
   friend guardt &operator|=(guardt &g1, const guardt &g2);
   friend bool operator==(const guardt &g1, const guardt &g2);
 
-  void dump(const messaget &msg) const;
+  void dump() const;
 
 protected:
   guard_listt guard_list;

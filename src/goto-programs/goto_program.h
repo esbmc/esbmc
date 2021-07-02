@@ -415,7 +415,7 @@ public:
       return false;
     }
 
-    void dump(const messaget &msg) const;
+    void dump() const;
 
     void output_instruction(
       const class namespacet &ns,
@@ -515,7 +515,7 @@ public:
   }
 
   //! Output goto program to given stream
-  void dump(const messaget &msg) const;
+  void dump() const;
 
   //! Output goto-program to given stream
   std::ostream &output(

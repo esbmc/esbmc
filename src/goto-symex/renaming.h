@@ -280,7 +280,7 @@ public:
   virtual std::shared_ptr<level2t> clone() const = 0;
 
   virtual void print(std::ostream &out) const;
-  virtual void dump(const messaget &msg) const;
+  virtual void dump() const;
 
   friend void build_goto_symex_classes();
   // Repeat of the above ignored friend directive.

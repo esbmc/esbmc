@@ -1,4 +1,5 @@
 #include <goto-programs/loopst.h>
+#include <util/message/default_message.h>
 
 const loopst::loop_varst &loopst::get_modified_loop_vars() const
 {
@@ -66,8 +67,9 @@ void loopst::output_loop_vars_to(std::ostream &oss) const
   oss << '\n';
 }
 
-void loopst::dump(const messaget &msg) const
+void loopst::dump() const
 {
+  default_message msg;
   std::ostringstream oss;
   output_to(oss);
   msg.debug(oss.str());

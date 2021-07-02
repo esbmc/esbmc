@@ -54,7 +54,7 @@ public:
     ordered_symbols.clear();
   }
 
-  DUMP_METHOD void dump(const messaget &msg) const;
+  DUMP_METHOD void dump() const;
 
   void swap(contextt &other)
   {

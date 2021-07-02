@@ -1,5 +1,6 @@
 #include <bitwuzla_conv.h>
 #include <cstring>
+#include <util/message/default_message.h>
 
 #define new_ast new_solver_ast<bitw_smt_ast>
 
@@ -826,8 +827,9 @@ void bitwuzla_convt::dump_smt()
   msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);
 }
 
-void bitw_smt_ast::dump(const messaget &msg) const
+void bitw_smt_ast::dump() const
 {
+  default_message msg;
   FILE *f = msg.get_temp_file();
   bitwuzla_term_dump(a, "smt2", f);
   msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);
