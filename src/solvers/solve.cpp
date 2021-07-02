@@ -144,7 +144,7 @@ smt_convt *create_solver_factory1(
   if(solver_name == "")
     // Pick one based on options.
     return pick_solver(
-      int_encoding, ns, options, tuple_api, array_api, fp_api, msg);
+      ns, options, tuple_api, array_api, fp_api, msg);
 
   return create_solver(
     std::move(solver_name), options, ns, tuple_api, array_api, fp_api, msg);
