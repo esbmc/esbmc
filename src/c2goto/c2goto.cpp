@@ -8,7 +8,7 @@
 #include <util/config.h>
 #include <util/irep2.h>
 #include <util/parseoptions.h>
-#include <util/message/fmt_message_handler.h>
+#include <util/message/default_message.h>
 
 const struct group_opt_templ c2goto_options[] = {
   {"Basic Usage",
@@ -85,10 +85,7 @@ int main(int argc, const char **argv)
   type_poolt bees(true);
   type_pool = bees;
 
-  std::shared_ptr<message_handlert> handler;
-  handler = std::make_shared<fmt_message_handler>();
-  messaget msg;
-  msg.add_message_handler(handler);
+  default_message msg;
   c2goto_parseopt parseopt(argc, argv, msg);
   return parseopt.main();
 }
