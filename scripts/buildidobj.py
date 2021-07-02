@@ -26,7 +26,6 @@ class BuildObj:
     def get_last_hash() -> str:
         """Return the hash of the latest commit"""
         git = shutil.which("git")
-        return ""
         if git is None:
             return BuildObj.STR_NOT_GIT
 
@@ -48,7 +47,6 @@ class BuildObj:
 
     @staticmethod
     def is_dirty_tree() -> bool:
-        return False
         git = shutil.which("git")
         if git is None:
             return True
