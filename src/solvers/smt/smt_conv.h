@@ -150,7 +150,7 @@ public:
    *
    *  @param _ns Namespace for looking up the type of certain symbols. 
    *  @param _options Provide all the needed parameters to configure the solver. */
-  smt_convt(bool int_encoding, const namespacet &_ns, const optionst &_options, const messaget &msg);
+  smt_convt(const namespacet &_ns, const optionst &_options, const messaget &msg);
 
   virtual ~smt_convt() = default;
 
@@ -821,10 +821,9 @@ public:
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
   const namespacet &ns;
-  const messaget &msg;
-
   /* Options contain all the parameters set by the user to run ESBMC */
   const optionst &options;
+  const messaget &msg;
 
   bool ptr_foo_inited;
   /** Full name of the '__ESBMC_is_dynamic' modelling array. The memory space
