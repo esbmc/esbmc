@@ -340,7 +340,7 @@ void bmct::report_result(smt_convt::resultt &res)
     return;
 
   default:
-    msg.error("decision procedure failed");
+    msg.error("SMT solver failed");
     break;
   }
 
@@ -652,7 +652,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       {
         msg.status(
           "No VCC remaining, no SMT formula will be generated for"
-          " the program\n");
+          " this program\n");
         return smt_convt::P_SMTLIB;
       }
 
