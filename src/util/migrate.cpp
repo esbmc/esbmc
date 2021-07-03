@@ -2256,6 +2256,7 @@ typet migrate_type_back(const type2tc &ref)
   }
   default:
     assert(0 && "Unrecognized type in migrate_type_back");
+    abort();
   }
 }
 
@@ -3269,5 +3270,6 @@ exprt migrate_expr_back(const expr2tc &ref)
   }
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");
+    abort();
   }
 }

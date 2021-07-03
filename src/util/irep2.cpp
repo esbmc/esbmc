@@ -190,13 +190,15 @@ unsigned int empty_type2t::get_width() const
 }
 
 unsigned int symbol_type2t::get_width() const
-{  
-  assert(0 && "Fetching width of symbol type - invalid operation");  
+{
+  assert(0 && "Fetching width of symbol type - invalid operation");
+  abort();
 }
 
 unsigned int cpp_name_type2t::get_width() const
-{  
-  assert(0 && "Fetching width of cpp_name type - invalid operation");  
+{
+  assert(0 && "Fetching width of cpp_name type - invalid operation");
+  abort();
 }
 
 unsigned int struct_type2t::get_width() const
@@ -280,17 +282,23 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
 
   if(!count)
   {
-    assert(0 && fmt::format(
-      "Looking up index of nonexistant member \"{}\" in struct/union \"{}\"",
-      comp,
-      name).c_str());
+    assert(
+      0 &&
+      fmt::format(
+        "Looking up index of nonexistant member \"{}\" in struct/union \"{}\"",
+        comp,
+        name)
+        .c_str());
   }
   else if(count > 1)
-  {    
-    assert(0 && fmt::format(
-      "Name \"{}\" matches more than one member\" in struct/union \"{}\"",
-      comp,
-      name).c_str());    
+  {
+    assert(
+      0 &&
+      fmt::format(
+        "Name \"{}\" matches more than one member\" in struct/union \"{}\"",
+        comp,
+        name)
+        .c_str());
   }
 
   abort();
@@ -650,8 +658,9 @@ std::string symbol_data::get_symbol_name() const
     // Global name with l2 details
     return thename.as_string() + "&" + i2string(node_num) + "#" +
            i2string(level2_num);
-  default:    
-    assert(0 && "Unrecognized renaming level enum");    
+  default:
+    assert(0 && "Unrecognized renaming level enum");
+    abort();
   }
 }
 
@@ -924,8 +933,9 @@ type_to_string(const symbol_data::renaming_level &theval, int)
     return "Level 1 (global)";
   case symbol_data::level2_global:
     return "Level 2 (global)";
-  default:    
-    assert(0 && "Unrecognized renaming level enum");    
+  default:
+    assert(0 && "Unrecognized renaming level enum");
+    abort();
   }
 }
 
