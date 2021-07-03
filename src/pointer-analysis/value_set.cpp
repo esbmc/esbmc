@@ -309,8 +309,23 @@ void value_sett::get_value_set_rec(
 
   if(is_constant_expr(expr))
   {
-    // Constant numbers aren't pointers. Null check is in the value set code
-    // for symbols.
+    if(is_constant_int2t(expr))
+    {
+      constant_int2t ci = to_constant_int2t(expr);
+      if(ci.value.is_zero())
+      {
+        expr2tc tmp = null_object2tc(expr->type);
+        insert(dest, tmp, BigInt(0));
+        return;
+      }
+      else if(is_signedbv_type(expr->type) || is_unsignedbv_type(expr->type))
+      {
+        // TODO: an integer constant got turned into a pointer
+      }
+      else
+        insert(dest, unknown2tc(original_type), BigInt(0));
+    }
+
     return;
   }
 
