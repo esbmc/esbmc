@@ -24,21 +24,27 @@
 
 extern std::string verification_file;
 
-void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
+void goto_tracet::output(
+  const class namespacet &ns,
+  std::ostream &out,
+  const messaget &msg) const
 {
   for(const auto &step : steps)
-    step.output(ns, out);
+    step.output(ns, out, msg);
 }
 
 void goto_trace_stept::dump() const
 {
   default_message msg;
   std::ostringstream oss;
-  output(*migrate_namespace_lookup, oss);
+  output(*migrate_namespace_lookup, oss, msg);
   msg.debug(oss.str());
 }
 
-void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
+void goto_trace_stept::output(
+  const namespacet &ns,
+  std::ostream &out,
+  const messaget &msg) const
 {
   out << "*** ";
 
@@ -94,7 +100,7 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
     else
       identifier = to_symbol2t(lhs).get_symbol_name();
 
-    out << "  " << identifier << " = " << from_expr(ns, identifier, value)
+    out << "  " << identifier << " = " << from_expr(ns, identifier, value, msg)
         << "\n";
   }
   else if(pc->is_assert())
@@ -108,7 +114,7 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
 
       if(!comment.empty())
         out << "  " << comment << "\n";
-      out << "  " << from_expr(ns, "", pc->guard) << "\n";
+      out << "  " << from_expr(ns, "", pc->guard, msg) << "\n";
       out << "\n";
     }
   }
@@ -120,14 +126,15 @@ void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
   const expr2tc &lhs,
-  const expr2tc &value)
+  const expr2tc &value,
+  const messaget &msg)
 {
-  out << "  " << from_expr(ns, "", lhs);
+  out << "  " << from_expr(ns, "", lhs, msg);
   if(is_nil_expr(value))
     out << "(assignment removed)";
   else
   {
-    out << " = " << from_expr(ns, "", value);
+    out << " = " << from_expr(ns, "", value, msg);
 
     // Don't print the bit-vector if we're running on integer/real mode
     if(is_constant_expr(value) && !config.options.get_bool_option("ir"))
@@ -172,7 +179,8 @@ void counterexample_value(
 void show_goto_trace_gui(
   std::ostream &out,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const messaget &msg)
 {
   locationt previous_location;
 
@@ -199,7 +207,7 @@ void show_goto_trace_gui(
       else
         identifier = to_symbol2t(step.lhs).get_symbol_name();
 
-      std::string value_string = from_expr(ns, identifier, step.value);
+      std::string value_string = from_expr(ns, identifier, step.value, msg);
 
       const symbolt *symbol;
       irep_idt base_name;
@@ -257,7 +265,8 @@ void show_state_header(
 void violation_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const messaget &msg)
 {
   grapht graph(grapht::VIOLATION);
   graph.verified_file = verification_file;
@@ -299,7 +308,7 @@ void violation_graphml_goto_trace(
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)))
       {
-        std::string assignment = get_formated_assignment(ns, step);
+        std::string assignment = get_formated_assignment(ns, step, msg);
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
@@ -375,7 +384,8 @@ void correctness_graphml_goto_trace(
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const messaget &msg)
 {
   unsigned prev_step_nr = 0;
   bool first_step = true;
@@ -395,7 +405,7 @@ void show_goto_trace(
         out << "  " << step.comment << "\n";
 
         if(step.pc->is_assert())
-          out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
+          out << "  " << from_expr(ns, "", step.pc->guard, msg) << "\n";
 
         // Having printed a property violation, don't print more steps.
         return;
@@ -413,7 +423,7 @@ void show_goto_trace(
           prev_step_nr = step.step_nr;
           show_state_header(out, step, step.pc->location, step.step_nr);
         }
-        counterexample_value(out, ns, step.lhs, step.value);
+        counterexample_value(out, ns, step.lhs, step.value, msg);
       }
       break;
 
@@ -428,7 +438,7 @@ void show_goto_trace(
 
     case goto_trace_stept::RENUMBER:
       out << "Renumbered pointer to ";
-      counterexample_value(out, ns, step.lhs, step.value);
+      counterexample_value(out, ns, step.lhs, step.value, msg);
       break;
 
     case goto_trace_stept::ASSUME:

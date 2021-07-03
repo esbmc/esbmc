@@ -72,7 +72,7 @@ void goto_convertt::do_function_call(
   else
   {
     err_location(function);
-    throw std::runtime_error(fmt::format(
+    message_handler.error(fmt::format(
       "unexpected function argument: {}", new_function.id_string()));
   }
 }
@@ -100,20 +100,20 @@ void goto_convertt::do_function_call_if(
   // z: ;
 
   // do the v label
-  goto_programt tmp_v;
+  goto_programt tmp_v(get_message_handler());
   goto_programt::targett v = tmp_v.add_instruction();
 
   // do the x label
-  goto_programt tmp_x;
+  goto_programt tmp_x(get_message_handler());
   goto_programt::targett x = tmp_x.add_instruction();
 
   // do the z label
-  goto_programt tmp_z;
+  goto_programt tmp_z(get_message_handler());
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
 
   // y: g();
-  goto_programt tmp_y;
+  goto_programt tmp_y(get_message_handler());
   goto_programt::targett y;
 
   do_function_call(lhs, function.op2(), arguments, tmp_y);
@@ -137,7 +137,7 @@ void goto_convertt::do_function_call_if(
   }
 
   // w: f();
-  goto_programt tmp_w;
+  goto_programt tmp_w(get_message_handler());
 
   do_function_call(lhs, function.op1(), arguments, tmp_w);
 

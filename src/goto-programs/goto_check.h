@@ -17,6 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 void goto_check(
   const namespacet &ns,
   optionst &options,
-  goto_functionst &goto_functions);
+  goto_functionst &goto_functions,
+  const messaget &msg);
 
 #endif

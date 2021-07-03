@@ -38,7 +38,7 @@ yices_convt::yices_convt(
   const namespacet &ns,
   const optionst &options,
   const messaget &msg)
-  : smt_convt(ns, options, msg), array_iface(false, false), fp_convt(this)
+  : smt_convt(ns, options, msg), array_iface(false, false), fp_convt(this, msg)
 {
   yices_init();
 
@@ -71,7 +71,8 @@ void yices_convt::push_ctx()
     FILE *f = msg.get_temp_file();
     yices_print_error(f);
     msg.insert_and_close_file_contents(VerbosityLevel::Error, f);
-    throw std::runtime_error("Error pushing yices context");
+    msg.error("Error pushing yices context");
+    abort();
   }
 }
 
@@ -84,7 +85,8 @@ void yices_convt::pop_ctx()
     FILE *f = msg.get_temp_file();
     yices_print_error(f);
     msg.insert_and_close_file_contents(VerbosityLevel::Error, f);
-    throw std::runtime_error("Error poping yices context");
+    msg.error("Error poping yices context");
+    abort();
   }
 
   smt_convt::pop_ctx();
@@ -664,9 +666,10 @@ smt_astt yices_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt yices_convt::mk_isint(smt_astt)
 {
-  throw std::runtime_error(
+  msg.error(
     "Yices does not support an is-integer operation on reals, "
     "therefore certain casts and operations don't work, sorry");
+  abort();
 }
 
 smt_astt yices_convt::mk_smt_int(const BigInt &theint)
@@ -790,7 +793,11 @@ bool yices_convt::get_bool(smt_astt a)
   int32_t val;
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   if(yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val))
-    throw std::runtime_error("Can't get boolean value from Yices");
+  {
+    msg.error("Can't get boolean value from Yices");
+    abort();
+  }
+
   return val ? true : false;
 }
 

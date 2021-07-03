@@ -7,14 +7,19 @@
 class yices_smt_ast : public solver_smt_ast<term_t>
 {
 public:
-  yices_smt_ast(smt_convt *ctx, term_t _t, const smt_sort *_s)
-    : solver_smt_ast<term_t>(ctx, _t, _s)
+  yices_smt_ast(
+    smt_convt *ctx,
+    term_t _t,
+    const smt_sort *_s,
+    const messaget &msg)
+    : solver_smt_ast<term_t>(ctx, _t, _s, msg)
   {
     // Detect term errors
     if(a == NULL_TERM)
     {
       yices_print_error(stderr);
-      throw std::runtime_error("Error creating yices term");
+      msg.error("Error creating yices term");
+      abort();
     }
   }
   ~yices_smt_ast() override = default;

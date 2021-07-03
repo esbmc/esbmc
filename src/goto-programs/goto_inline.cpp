@@ -98,8 +98,9 @@ void goto_inlinet::parameter_assignments(
 
           str << "function call: argument `" << identifier
               << "' type mismatch: got "
-              << from_type(ns, identifier, it1->type()) << ", expected "
-              << from_type(ns, identifier, arg_type);
+              << from_type(ns, identifier, it1->type(), message_handler)
+              << ", expected "
+              << from_type(ns, identifier, arg_type, message_handler);
           throw 0;
         }
       }
@@ -136,7 +137,7 @@ void goto_inlinet::replace_return(
     {
       if(lhs.is_not_nil())
       {
-        goto_programt tmp;
+        goto_programt tmp(message_handler);
         goto_programt::targett assignment = tmp.add_instruction(ASSIGN);
 
         const code_return2t &ret = to_code_return2t(it->code);
@@ -161,7 +162,7 @@ void goto_inlinet::replace_return(
         // Encode evaluation of return expr, so that returns with pointer
         // derefs in them still get dereferenced, even when the result is
         // discarded.
-        goto_programt tmp;
+        goto_programt tmp(message_handler);
         goto_programt::targett expression = tmp.add_instruction(OTHER);
 
         expression->make_other();
@@ -249,7 +250,7 @@ void goto_inlinet::expand_function_call(
     recursion_sett::iterator recursion_it =
       recursion_set.insert(identifier).first;
 
-    goto_programt tmp2;
+    goto_programt tmp2(message_handler);
     tmp2.copy_from(f.body);
 
     assert(tmp2.instructions.back().is_end_function());
@@ -257,7 +258,7 @@ void goto_inlinet::expand_function_call(
 
     replace_return(tmp2, lhs, constrain);
 
-    goto_programt tmp;
+    goto_programt tmp(message_handler);
     parameter_assignments(
       tmp2.instructions.front().location, f.type, arguments, tmp);
     tmp.destructive_append(tmp2);
@@ -304,7 +305,7 @@ void goto_inlinet::expand_function_call(
       warning();
     }
 
-    goto_programt tmp;
+    goto_programt tmp(message_handler);
 
     // evaluate function arguments -- they might have
     // pointer dereferencing or the like

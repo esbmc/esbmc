@@ -15,7 +15,7 @@ namespace renaming
 struct renaming_levelt
 {
 public:
-  virtual void get_original_name(expr2tc &expr) const = 0;
+  virtual void get_original_name(expr2tc &expr, const messaget &msg) const = 0;
   virtual void rename(expr2tc &expr) = 0;
   virtual void remove(const expr2tc &symbol) = 0;
 
@@ -25,7 +25,10 @@ public:
   //  protected:
   //  XXX: should leave protected enabled, but g++ 5.4 on ubuntu 16.04 does not
   //  appear to honour the following friend directive?
-  static void get_original_name(expr2tc &expr, symbol2t::renaming_level lev);
+  static void get_original_name(
+    expr2tc &expr,
+    symbol2t::renaming_level lev,
+    const messaget &msg);
   friend void build_goto_symex_classes();
 };
 
@@ -113,9 +116,9 @@ public:
     frameno = frame;
   }
 
-  void get_original_name(expr2tc &expr) const override
+  void get_original_name(expr2tc &expr, const messaget &msg) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level0);
+    renaming_levelt::get_original_name(expr, symbol2t::level0, msg);
   }
 
   unsigned int current_number(const irep_idt &name) const;
@@ -123,7 +126,7 @@ public:
   level1t() = default;
   ~level1t() override = default;
 
-  virtual void print(std::ostream &out) const;
+  virtual void print(std::ostream &out, const messaget &msg) const;
 };
 
 // level 2 -- SSA
@@ -241,9 +244,9 @@ public:
     current_names.erase(rec);
   }
 
-  void get_original_name(expr2tc &expr) const override
+  void get_original_name(expr2tc &expr, const messaget &msg) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level1);
+    renaming_levelt::get_original_name(expr, symbol2t::level1, msg);
   }
 
   struct valuet
@@ -279,7 +282,7 @@ public:
   ~level2t() override = default;
   virtual std::shared_ptr<level2t> clone() const = 0;
 
-  virtual void print(std::ostream &out) const;
+  virtual void print(std::ostream &out, const messaget &msg) const;
   virtual void dump() const;
 
   friend void build_goto_symex_classes();

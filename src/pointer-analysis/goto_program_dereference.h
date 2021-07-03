@@ -21,11 +21,13 @@ public:
     const namespacet &_ns,
     contextt &_new_context,
     const optionst &_options,
-    value_setst &_value_sets)
+    value_setst &_value_sets,
+    const messaget &msg)
     : options(_options),
       ns(_ns),
       value_sets(_value_sets),
-      dereference(_ns, _new_context, _options, *this)
+      dereference(_ns, _new_context, _options, *this, msg),
+      new_code(msg)
   {
   }
 
@@ -86,13 +88,15 @@ void dereference(
   goto_programt::const_targett target,
   expr2tc &expr,
   const namespacet &ns,
-  value_setst &value_sets);
+  value_setst &value_sets,
+  const messaget &msg);
 
 void remove_pointers(
   goto_programt &goto_program,
   contextt &context,
   const optionst &options,
-  value_setst &value_sets);
+  value_setst &value_sets,
+  const messaget &msg);
 
 void remove_pointers(
   goto_functionst &goto_functions,

@@ -7,7 +7,7 @@
 class fp_convt
 {
 public:
-  fp_convt(smt_convt *_ctx);
+  fp_convt(smt_convt *_ctx, const messaget &msg);
   virtual ~fp_convt() = default;
 
   /** Create a floating point bitvector
@@ -221,6 +221,7 @@ public:
 
 private:
   smt_convt *ctx;
+  const messaget &_msg;
 
   void unpack(
     smt_astt &src,

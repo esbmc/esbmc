@@ -37,7 +37,7 @@ public:
   /** The solver context */
   const smt_convt *context;
 
-  smt_ast(smt_convt *ctx, smt_sortt s);
+  smt_ast(smt_convt *ctx, smt_sortt s, const messaget &msg);
   virtual ~smt_ast() = default;
 
   // "this" is the true operand.
@@ -84,17 +84,24 @@ public:
 
   virtual void dump() const
   {
-    default_message msg;
-    msg.debug("Chosen solver doesn't support printing the AST\n");
+    default_message lmsg;
+    lmsg.debug("Chosen solver doesn't support printing the AST\n");
   }
+
+protected:
+  const messaget &_msg;
 };
 
 template <typename solver_ast>
 class solver_smt_ast : public smt_ast
 {
 public:
-  solver_smt_ast(smt_convt *ctx, solver_ast _a, smt_sortt s)
-    : smt_ast(ctx, s), a(_a)
+  solver_smt_ast(
+    smt_convt *ctx,
+    solver_ast _a,
+    smt_sortt s,
+    const messaget &msg)
+    : smt_ast(ctx, s, msg), a(_a)
   {
   }
 

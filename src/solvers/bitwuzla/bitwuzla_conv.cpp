@@ -9,7 +9,9 @@ void bitwuzla_error_handler(const char *msg)
   std::ostringstream oss;
   oss << "Bitwuzla error encountered\n";
   oss << msg;
-  throw std::runtime_error(oss.str());
+  default_message defaultMessage;
+  defaultMessage.error(oss.str());
+  abort();
 }
 
 smt_convt *create_new_bitwuzla_solver(
@@ -30,7 +32,7 @@ bitwuzla_convt::bitwuzla_convt(
   const namespacet &ns,
   const optionst &options,
   const messaget &msg)
-  : smt_convt(ns, options, msg), array_iface(true, true), fp_convt(this)
+  : smt_convt(ns, options, msg), array_iface(true, true), fp_convt(this, msg)
 {
   bitw = bitwuzla_new();
   bitwuzla_set_option(bitw, BITWUZLA_OPT_PRODUCE_MODELS, 1);
@@ -549,13 +551,14 @@ smt_astt bitwuzla_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt bitwuzla_convt::mk_smt_int(const BigInt &theint [[gnu::unused]])
 {
-  throw std::runtime_error(
-    "ESBMC can't create integer sorts with Bitwuzla yet");
+  msg.error("ESBMC can't create integer sorts with Bitwuzla yet");
+  abort();
 }
 
 smt_astt bitwuzla_convt::mk_smt_real(const std::string &str [[gnu::unused]])
 {
-  throw std::runtime_error("ESBMC can't create real sorts with Bitwuzla yet");
+  msg.error("ESBMC can't create real sorts with Bitwuzla yet");
+  abort();
 }
 
 smt_astt bitwuzla_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
@@ -606,7 +609,8 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     break;
 
   default:
-    throw std::runtime_error("Unknown type for symbol");
+    msg.error("Unknown type for symbol");
+    abort();
   }
 
   smt_astt ast = new_ast(node, s);
@@ -690,7 +694,8 @@ bool bitwuzla_convt::get_bool(smt_astt a)
     res = false;
     break;
   default:
-    throw std::runtime_error("Can't get boolean value from Bitwuzla");
+    msg.error("Can't get boolean value from Bitwuzla");
+    abort();
   }
   return res;
 }

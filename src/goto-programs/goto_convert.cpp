@@ -66,7 +66,7 @@ void goto_convertt::finish_gotos(goto_programt &dest)
       auto unwind_to_size = label_stack.size();
       if(unwind_to_size < goto_stack.size())
       {
-        goto_programt destructor_code;
+        goto_programt destructor_code(dest.msg);
         unwind_destructor_stack(
           i.location, unwind_to_size, destructor_code, goto_stack);
         dest.destructive_insert(it.first, destructor_code);
@@ -162,8 +162,7 @@ void goto_convertt::convert_label(const code_labelt &code, goto_programt &dest)
 
   // grab the label
   const irep_idt &label = code.get_label();
-
-  goto_programt tmp;
+  goto_programt tmp(get_message_handler());
 
   convert(to_code(code.op0()), tmp);
 
@@ -205,7 +204,7 @@ void goto_convertt::convert_switch_case(
     throw "switch-case statement expected to have two operands";
   }
 
-  goto_programt tmp;
+  goto_programt tmp(get_message_handler());
   convert(code.code(), tmp);
 
   goto_programt::targett target = tmp.instructions.begin();
@@ -355,12 +354,12 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
   std::vector<irep_idt> exception_list;
 
   // add a SKIP target for the end of everything
-  goto_programt end;
+  goto_programt end(get_message_handler());
   goto_programt::targett end_target = end.add_instruction();
   end_target->make_skip();
 
   // the first operand is the 'try' block
-  goto_programt tmp;
+  goto_programt tmp(get_message_handler());
   convert(to_code(code.op0()), tmp);
   dest.destructive_append(tmp);
 
@@ -469,7 +468,7 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
   // Remove side effect
   if(has_sideeffect(size))
   {
-    goto_programt sideeffects;
+    goto_programt sideeffects(get_message_handler());
     remove_sideeffects(size, sideeffects);
     dest.destructive_append(sideeffects);
     return true;
@@ -629,7 +628,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   if(!initializer.is_nil())
   {
-    goto_programt sideeffects;
+    goto_programt sideeffects(get_message_handler());
     remove_sideeffects(initializer, sideeffects);
     dest.destructive_append(sideeffects);
 
@@ -979,9 +978,8 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
 
   unsigned int globals = 0;
 
-  expr->foreach_operand([this, &globals](const expr2tc &e) {
-    globals += get_expr_number_globals(e);
-  });
+  expr->foreach_operand([this, &globals](const expr2tc &e)
+                        { globals += get_expr_number_globals(e); });
 
   return globals;
 }
@@ -1156,7 +1154,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   exprt tmp = code.op1();
 
   exprt cond = tmp;
-  goto_programt sideeffects;
+  goto_programt sideeffects(get_message_handler());
 
   remove_sideeffects(cond, sideeffects);
 
@@ -1167,16 +1165,16 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   goto_programt::targett u = sideeffects.instructions.begin();
 
   // do the v label
-  goto_programt tmp_v;
+  goto_programt tmp_v(get_message_handler());
   goto_programt::targett v = tmp_v.add_instruction();
 
   // do the z label
-  goto_programt tmp_z;
+  goto_programt tmp_z(get_message_handler());
   goto_programt::targett z = tmp_z.add_instruction(SKIP);
   z->location = code.location();
 
   // do the x label
-  goto_programt tmp_x;
+  goto_programt tmp_x(get_message_handler());
   if(code.op2().is_nil())
   {
     tmp_x.add_instruction(SKIP);
@@ -1205,11 +1203,11 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   v->location = cond.location();
 
   // do the w label
-  goto_programt tmp_w;
+  goto_programt tmp_w(get_message_handler());
   convert(to_code(code.op3()), tmp_w);
 
   // y: goto u;
-  goto_programt tmp_y;
+  goto_programt tmp_y(get_message_handler());
   goto_programt::targett y = tmp_y.add_instruction();
   y->make_goto(u);
   y->guard = gen_true_expr();
@@ -1249,19 +1247,19 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   break_continue_targetst old_targets(targets);
 
   // do the z label
-  goto_programt tmp_z;
+  goto_programt tmp_z(get_message_handler());
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
   z->location = location;
 
-  goto_programt tmp_branch;
+  goto_programt tmp_branch(get_message_handler());
   generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
 
   // do the v label
   goto_programt::targett v = tmp_branch.instructions.begin();
 
   // do the y label
-  goto_programt tmp_y;
+  goto_programt tmp_y(get_message_handler());
   goto_programt::targett y = tmp_y.add_instruction();
 
   // set the targets
@@ -1269,7 +1267,7 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   targets.set_continue(y);
 
   // do the x label
-  goto_programt tmp_x;
+  goto_programt tmp_x(get_message_handler());
   convert(to_code(code.op1()), tmp_x);
 
   // y: if(c) goto v;
@@ -1299,7 +1297,7 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
 
   exprt cond = code.op0();
 
-  goto_programt sideeffects;
+  goto_programt sideeffects(get_message_handler());
   remove_sideeffects(cond, sideeffects);
 
   //    do P while(c);
@@ -1313,11 +1311,11 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   break_continue_targetst old_targets(targets);
 
   // do the y label
-  goto_programt tmp_y;
+  goto_programt tmp_y(get_message_handler());
   goto_programt::targett y = tmp_y.add_instruction();
 
   // do the z label
-  goto_programt tmp_z;
+  goto_programt tmp_z(get_message_handler());
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
   z->location = code.location();
@@ -1334,7 +1332,7 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   targets.set_continue(x);
 
   // do the w label
-  goto_programt tmp_w;
+  goto_programt tmp_w(get_message_handler());
   convert(to_code(code.op1()), tmp_w);
   goto_programt::targett w = tmp_w.instructions.begin();
 
@@ -1409,14 +1407,14 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
 
   exprt argument = code.op0();
 
-  goto_programt sideeffects;
+  goto_programt sideeffects(get_message_handler());
   remove_sideeffects(argument, sideeffects);
 
   // save break/default/cases targets
   break_switch_targetst old_targets(targets);
 
   // do the z label
-  goto_programt tmp_z;
+  goto_programt tmp_z(get_message_handler());
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
   z->location = code.location();
@@ -1426,10 +1424,10 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
   targets.set_default(z);
   targets.cases.clear();
 
-  goto_programt tmp;
+  goto_programt tmp(get_message_handler());
   convert(to_code_switch(code).body(), tmp);
 
-  goto_programt tmp_cases;
+  goto_programt tmp_cases(get_message_handler());
 
   for(auto &it : targets.cases)
   {
@@ -1497,7 +1495,7 @@ void goto_convertt::convert_return(
   code_returnt new_code(code);
   if(new_code.has_return_value())
   {
-    goto_programt sideeffects;
+    goto_programt sideeffects(get_message_handler());
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
 
@@ -1510,7 +1508,7 @@ void goto_convertt::convert_return(
     }
   }
 
-  goto_programt dummy;
+  goto_programt dummy(get_message_handler());
   unwind_destructor_stack(code.location(), 0, dummy);
 
   if(targets.has_return_value)
@@ -1614,7 +1612,7 @@ void goto_convertt::generate_ifthenelse(
   if(true_case.instructions.empty() && false_case.instructions.empty())
   {
     // hmpf. Useless branch.
-    goto_programt tmp_z;
+    goto_programt tmp_z(get_message_handler());
     goto_programt::targett z = tmp_z.add_instruction();
     z->make_skip();
     goto_programt::targett v = dest.add_instruction();
@@ -1708,16 +1706,16 @@ void goto_convertt::generate_ifthenelse(
   // z: ;
 
   // do the x label
-  goto_programt tmp_x;
+  goto_programt tmp_x(get_message_handler());
   goto_programt::targett x = tmp_x.add_instruction();
 
   // do the z label
-  goto_programt tmp_z;
+  goto_programt tmp_z(get_message_handler());
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
 
   // y: Q;
-  goto_programt tmp_y;
+  goto_programt tmp_y(get_message_handler());
   goto_programt::targett y;
   if(has_else)
   {
@@ -1726,12 +1724,12 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // v: if(!c) goto z/y;
-  goto_programt tmp_v;
+  goto_programt tmp_v(get_message_handler());
   generate_conditional_branch(
     gen_not(guard), has_else ? y : z, location, tmp_v);
 
   // w: P;
-  goto_programt tmp_w;
+  goto_programt tmp_w(get_message_handler());
   tmp_w.swap(true_case);
 
   // x: goto z;
@@ -1784,10 +1782,10 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
   }
 
   // convert 'then'-branch
-  goto_programt tmp_op1;
+  goto_programt tmp_op1(get_message_handler());
   convert(to_code(code.op1()), tmp_op1);
 
-  goto_programt tmp_op2;
+  goto_programt tmp_op2(get_message_handler());
 
   if(has_else)
     convert(to_code(code.op2()), tmp_op2);
@@ -1843,7 +1841,7 @@ void goto_convertt::generate_conditional_branch(
   // if(guard) goto target; else goto next;
   // next: skip;
 
-  goto_programt tmp;
+  goto_programt tmp(get_message_handler());
   goto_programt::targett target_false = tmp.add_instruction();
   target_false->make_skip();
 

@@ -10,15 +10,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstring>
 #include <util/namespace.h>
 #include <util/message/format.h>
+#include <util/message/default_message.h>
 
 unsigned get_max(const std::string &prefix, const contextt *context)
 {
   unsigned max_nr = 0;
 
-  context->foreach_operand([&prefix, &max_nr](const symbolt &s) {
-    if(!strncmp(s.id.c_str(), prefix.c_str(), prefix.size()))
-      max_nr = std::max(unsigned(atoi(s.id.c_str() + prefix.size())), max_nr);
-  });
+  context->foreach_operand(
+    [&prefix, &max_nr](const symbolt &s)
+    {
+      if(!strncmp(s.id.c_str(), prefix.c_str(), prefix.size()))
+        max_nr = std::max(unsigned(atoi(s.id.c_str() + prefix.size())), max_nr);
+    });
 
   return max_nr;
 }
@@ -65,8 +68,10 @@ const symbolt &namespacet::lookup(const irep_idt &name) const
   const symbolt *symbol;
   if(lookup(name, symbol))
   {
-    throw std::runtime_error(
+    default_message msg;
+    msg.error(
       fmt::format("Failed to find symbol {} not found", id2string(name)));
+    abort();
   }
   return *symbol;
 }

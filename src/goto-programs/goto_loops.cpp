@@ -135,8 +135,11 @@ void goto_loopst::get_modified_variables(
 
     if(it == goto_functions.function_map.end())
     {
-      throw std::runtime_error(fmt::format(
-        "failed to find `{}' in function_map", id2string(identifier)));
+      message_handler.error(
+        fmt::format(
+          "failed to find `{}' in function_map", id2string(identifier))
+        );
+      abort();
     }
 
     // Avoid iterating over functions that don't have a body

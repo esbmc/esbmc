@@ -10,11 +10,21 @@ void fmt_message_handler::print(
 
 fmt_message_handler::fmt_message_handler()
 {
-  files[VerbosityLevel::None] = NULL;
-  files[VerbosityLevel::Error] = stderr;
-  files[VerbosityLevel::Warning] = stdout;
-  files[VerbosityLevel::Result] = stdout;
-  files[VerbosityLevel::Progress] = stdout;
-  files[VerbosityLevel::Status] = stdout;
-  files[VerbosityLevel::Debug] = stdout;
+  initialize(stdout, stderr);
+}
+
+fmt_message_handler::fmt_message_handler(FILE *out, FILE *err)
+{
+  initialize(out, err);
+}
+
+void fmt_message_handler::initialize(FILE *out, FILE *err)
+{
+  files[VerbosityLevel::None] = nullptr;
+  files[VerbosityLevel::Error] = err;
+  files[VerbosityLevel::Warning] = out;
+  files[VerbosityLevel::Result] = out;
+  files[VerbosityLevel::Progress] = out;
+  files[VerbosityLevel::Status] = out;
+  files[VerbosityLevel::Debug] = out;
 }

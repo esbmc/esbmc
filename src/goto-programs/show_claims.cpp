@@ -34,7 +34,7 @@ void show_claims(
         count,
         instruction.location,
         description,
-        from_expr(ns, identifier, instruction.guard)));
+        from_expr(ns, identifier, instruction.guard, msg)));
     }
   }
 }

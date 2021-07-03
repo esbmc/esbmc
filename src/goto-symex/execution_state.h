@@ -187,8 +187,10 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      throw std::runtime_error(
-        fmt::format("Setting thread data for nonexistant thread {}", tid));
+      msg.error(
+        fmt::format("Setting thread data for nonexistant thread {}", tid)
+        );
+      abort();
     }
 
     thread_start_data[tid] = argdata;
@@ -199,8 +201,9 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      throw std::runtime_error(
+      msg.error(
         fmt::format("Setting thread data for nonexistant thread {}", tid));
+      abort();
     }
 
     return thread_start_data[tid];

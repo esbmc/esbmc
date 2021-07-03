@@ -13,9 +13,12 @@
 
 static void error_handler(Z3_context c, Z3_error_code e)
 {
-  std::cerr << "Z3 error " << e << " encountered"
-            << "\n";
-  std::cerr << Z3_get_error_msg(c, e) << "\n";
+  default_message msg;
+  std::ostringstream oss;
+  oss << "Z3 error " << e << " encountered"
+      << "\n";
+  oss << Z3_get_error_msg(c, e);
+  msg.error(oss.str());
   abort();
 }
 
@@ -40,7 +43,7 @@ z3_convt::z3_convt(
   const messaget &msg)
   : smt_convt(_ns, _options, msg),
     array_iface(true, true),
-    fp_convt(this),
+    fp_convt(this, msg),
     z3_ctx(),
     solver((z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "solve-eqs") &
             z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "smt"))
@@ -95,14 +98,14 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
   z3::sort ty = t.get_sort();
   if(!ty.is_datatype())
   {
-    std::cerr << "argument must be a tuple";
+    msg.error("argument must be a tuple");
     abort();
   }
 
   std::size_t num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
   if(i >= num_fields)
   {
-    std::cerr << "invalid tuple update, index is too big";
+    msg.error("invalid tuple update, index is too big");
     abort();
   }
 
@@ -131,16 +134,14 @@ z3::expr z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
   z3::sort ty = t.get_sort();
   if(!ty.is_datatype())
   {
-    std::cerr << "Z3 conversion: argument must be a tuple"
-              << "\n";
+    msg.error("Z3 conversion: argument must be a tuple");
     abort();
   }
 
   size_t num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
   if(i >= num_fields)
   {
-    std::cerr << "Z3 conversion: invalid tuple select, index is too large"
-              << "\n";
+    msg.error("Z3 conversion: invalid tuple select, index is too large");
     abort();
   }
 
@@ -1149,7 +1150,7 @@ bool z3_convt::get_bool(smt_astt a)
     res = false;
     break;
   default:
-    std::cerr << "Can't get boolean value from Z3\n";
+    msg.error("Can't get boolean value from Z3");
     abort();
   }
 

@@ -50,9 +50,10 @@ public:
     value_set->output(out);
   }
 
-  void initialize(const namespacet &ns, locationt l) override
+  void
+  initialize(const namespacet &ns, locationt l, const messaget &msg) override
   {
-    value_set = new value_sett(ns);
+    value_set = new value_sett(ns, msg);
     value_set->clear();
     value_set->location_number = l->location_number;
   }

@@ -73,7 +73,8 @@ void contextt::erase_symbol(irep_idt name)
   symbolst::iterator it = symbols.find(name);
   if(it == symbols.end())
   {
-    throw std::runtime_error("Couldn't find symbol to erase");
+    msg.error("Couldn't find symbol to erase");
+    abort();
   }
 
   symbols.erase(name);

@@ -42,7 +42,7 @@ void goto_termination(
   assert(it != function->second.body.instructions.end());
 
   // Create an assert(0)
-  goto_programt dest;
+  goto_programt dest(message_handler);
   goto_programt::targett t = dest.add_instruction(ASSERT);
   t->guard = gen_false_expr();
   t->inductive_step_instruction = true;
@@ -198,7 +198,7 @@ void goto_k_inductiont::make_nondet_assign(
 {
   auto const &loop_vars = loop.get_modified_loop_vars();
 
-  goto_programt dest;
+  goto_programt dest(message_handler);
   for(auto const &lhs : loop_vars)
   {
     expr2tc rhs = sideeffect2tc(
@@ -227,11 +227,13 @@ void goto_k_inductiont::make_nondet_assign(
 static bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
 {
   bool res = false;
-  expr->foreach_operand([&vars, &res](const expr2tc &e) {
-    if(!is_nil_expr(e))
-      res = contains_rec(e, vars) || res;
-    return res;
-  });
+  expr->foreach_operand(
+    [&vars, &res](const expr2tc &e)
+    {
+      if(!is_nil_expr(e))
+        res = contains_rec(e, vars) || res;
+      return res;
+    });
 
   if(!is_symbol2t(expr))
     return res;
@@ -282,7 +284,7 @@ void goto_k_inductiont::assume_loop_entry_cond_before_loop(
     if(is_true(loop_cond) || is_false(loop_cond))
       return;
 
-    goto_programt dest;
+    goto_programt dest(message_handler);
     assume_cond(loop_cond, dest, tmp_head->location);
 
     goto_function.body.insert_swap(tmp_head, dest);
@@ -316,7 +318,7 @@ void goto_k_inductiont::assume_cond(
   goto_programt &dest,
   const locationt &loc)
 {
-  goto_programt tmp_e;
+  goto_programt tmp_e(message_handler);
   goto_programt::targett e = tmp_e.add_instruction(ASSUME);
   e->inductive_step_instruction = true;
   e->guard = cond;

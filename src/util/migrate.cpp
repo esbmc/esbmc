@@ -7,6 +7,7 @@
 #include <util/simplify_expr.h>
 #include <util/type_byte_size.h>
 #include <util/message/format.h>
+#include <message/default_message.h>
 
 // File for old irep -> new irep conversions.
 
@@ -334,7 +335,9 @@ void real_migrate_type(
   }
   else
   {
-    throw std::runtime_error(fmt::format("{}", type));
+    default_message msg;
+    msg.error(fmt::format("{}", type));
+    abort();
   }
 }
 
@@ -444,7 +447,9 @@ void migrate_type(
   }
   else
   {
-    throw std::runtime_error(fmt::format("{}", type));
+    default_message msg;
+    msg.error(fmt::format("{}", type));
+    abort();
   }
 }
 
@@ -741,9 +746,11 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
   }
   else
   {
-    throw std::runtime_error(fmt::format(
+    default_message msg;
+    msg.error(fmt::format(
       "Unrecognized type {}  when flattening union literal",
       get_type_id(*new_expr->type)));
+    abort();
   }
 }
 
@@ -1840,8 +1847,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else
     {
-      throw std::runtime_error(
+      default_message msg;
+      msg.error(
         fmt::format("Unexpected side-effect statement: ", expr.statement()));
+      abort();
     }
 
     new_expr_ref =
@@ -2072,7 +2081,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else
   {
-    throw std::runtime_error(fmt::format("{}\nmigrate expr failed", expr));
+    default_message msg;
+    msg.error(fmt::format("{}\nmigrate expr failed", expr));
+    abort();
   }
 }
 
@@ -2251,7 +2262,9 @@ typet migrate_type_back(const type2tc &ref)
     return ret;
   }
   default:
-    throw std::runtime_error("Unrecognized type in migrate_type_back");
+    default_message msg;
+    msg.error("Unrecognized type in migrate_type_back");
+    abort();
   }
 }
 
@@ -3264,6 +3277,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     return back;
   }
   default:
-    throw std::runtime_error("Unrecognized expr in migrate_expr_back");
+    default_message msg;
+    msg.error("Unrecognized expr in migrate_expr_back");
+    abort();
   }
 }

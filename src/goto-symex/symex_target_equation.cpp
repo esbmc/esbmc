@@ -20,8 +20,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 {
+  default_message msg;
   std::ostringstream oss;
-  step.output(ns, oss);
+  step.output(ns, oss, msg);
   msg.debug(oss.str());
 }
 
@@ -172,7 +173,7 @@ void symex_target_equationt::convert_internal_step(
   if(ssa_trace)
   {
     std::ostringstream oss;
-    step.output(ns, oss);
+    step.output(ns, oss, msg);
     msg.status(oss.str());
   }
 
@@ -241,7 +242,7 @@ void symex_target_equationt::output(std::ostream &out) const
 {
   for(const auto &SSA_step : SSA_steps)
   {
-    SSA_step.output(ns, out);
+    SSA_step.output(ns, out, msg);
     out << "--------------"
         << "\n";
   }
@@ -252,7 +253,7 @@ void symex_target_equationt::short_output(std::ostream &out, bool show_ignored)
 {
   for(const auto &SSA_step : SSA_steps)
   {
-    SSA_step.short_output(ns, out, show_ignored);
+    SSA_step.short_output(ns, out, msg, show_ignored);
   }
 }
 
@@ -260,13 +261,14 @@ void symex_target_equationt::SSA_stept::dump() const
 {
   default_message msg;
   std::ostringstream oss;
-  output(*migrate_namespace_lookup, oss);
+  output(*migrate_namespace_lookup, oss, msg);
   msg.debug(oss.str());
 }
 
 void symex_target_equationt::SSA_stept::output(
   const namespacet &ns,
-  std::ostream &out) const
+  std::ostream &out,
+  const messaget &msg) const
 {
   if(source.is_set)
   {
@@ -303,27 +305,29 @@ void symex_target_equationt::SSA_stept::output(
   }
 
   if(is_assert() || is_assume() || is_assignment())
-    out << from_expr(ns, "", migrate_expr_back(cond)) << "\n";
+    out << from_expr(ns, "", migrate_expr_back(cond), msg) << "\n";
 
   if(is_assert())
     out << comment << "\n";
 
   if(config.options.get_bool_option("ssa-guards"))
-    out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << "\n";
+    out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard), msg)
+        << "\n";
 }
 
 void symex_target_equationt::SSA_stept::short_output(
   const namespacet &ns,
   std::ostream &out,
+  const messaget &msg,
   bool show_ignored) const
 {
   if((is_assignment() || is_assert() || is_assume()) && show_ignored == ignore)
   {
-    out << from_expr(ns, "", cond) << "\n";
+    out << from_expr(ns, "", cond, msg) << "\n";
   }
   else if(is_renumber())
   {
-    out << "renumber: " << from_expr(ns, "", lhs) << "\n";
+    out << "renumber: " << from_expr(ns, "", lhs, msg) << "\n";
   }
 }
 
@@ -531,7 +535,8 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
     res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB ||
     res2 == smt_convt::P_ERROR || res2 == smt_convt::P_SMTLIB)
   {
-    throw std::runtime_error("Solver returned error while asking question");
+    msg.error("Solver returned error while asking question");
+    abort();
   }
   else if(res1 == smt_convt::P_SATISFIABLE && res2 == smt_convt::P_SATISFIABLE)
   {

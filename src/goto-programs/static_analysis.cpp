@@ -88,7 +88,7 @@ void static_analysis_baset::output(
 
     get_state(i_it).output(ns, out);
     out << "\n";
-    i_it->output_instruction(ns, identifier, out);
+    i_it->output_instruction(ns, identifier, out, msg);
     out << "\n";
   }
 }
@@ -372,8 +372,9 @@ void static_analysis_baset::do_function_call_rec(
   }
   else
   {
-    throw std::runtime_error(fmt::format(
+    msg.error(fmt::format(
       "unexpected function_call argument: ", get_expr_id(function)));
+    abort();
   }
 }
 

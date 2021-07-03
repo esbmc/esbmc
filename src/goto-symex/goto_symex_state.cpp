@@ -22,8 +22,9 @@ Author: Daniel Kroening, kroening@kroening.com
 goto_symex_statet::goto_symex_statet(
   renaming::level2t &l2,
   value_sett &vs,
-  const namespacet &_ns)
-  : level2(l2), value_set(vs), ns(_ns)
+  const namespacet &_ns,
+  const messaget &msg)
+  : level2(l2), value_set(vs), ns(_ns), msg(msg)
 {
   use_value_set = true;
   num_instructions = 0;
@@ -34,8 +35,9 @@ goto_symex_statet::goto_symex_statet(
 goto_symex_statet::goto_symex_statet(
   const goto_symex_statet &state,
   renaming::level2t &l2,
-  value_sett &vs)
-  : level2(l2), value_set(vs), ns(state.ns)
+  value_sett &vs,
+  const messaget &msg)
+  : level2(l2), value_set(vs), ns(state.ns), msg(msg)
 {
   *this = state;
 }
@@ -118,10 +120,12 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
     // Use noconst as a flag to indicate (and short-circuit) when a non
     // constant propagatable expr is found.
-    expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      if(noconst && !constant_propagation(e))
-        noconst = false;
-    });
+    expr->foreach_operand(
+      [this, &noconst](const expr2tc &e)
+      {
+        if(noconst && !constant_propagation(e))
+          noconst = false;
+      });
 
     return noconst;
   }
@@ -146,10 +150,12 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   {
     bool noconst = true;
 
-    expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      if(noconst && !constant_propagation(e))
-        noconst = false;
-    });
+    expr->foreach_operand(
+      [this, &noconst](const expr2tc &e)
+      {
+        if(noconst && !constant_propagation(e))
+          noconst = false;
+      });
 
     return noconst;
   }
@@ -204,7 +210,7 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
   {
     // update value sets
     expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
-    level2.get_original_name(l1_rhs);
+    level2.get_original_name(l1_rhs, msg);
 
     value_set.assign(l1_lhs, l1_rhs);
   }
@@ -221,14 +227,16 @@ void goto_symex_statet::rename_type(expr2tc &expr)
     if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       rename(arr_size);
 
-    expr->type->Foreach_subtype([this](type2tc &t) {
-      if(!is_array_type(t))
-        return;
+    expr->type->Foreach_subtype(
+      [this](type2tc &t)
+      {
+        if(!is_array_type(t))
+          return;
 
-      expr2tc &arr_size = to_array_type(t).array_size;
-      if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-        rename(arr_size);
-    });
+        expr2tc &arr_size = to_array_type(t).array_size;
+        if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+          rename(arr_size);
+      });
   }
 }
 
@@ -384,8 +392,8 @@ void goto_symex_statet::get_original_name(expr2tc &expr) const
 
   if(is_symbol2t(expr))
   {
-    level2.get_original_name(expr);
-    top().level1.get_original_name(expr);
+    level2.get_original_name(expr, msg);
+    top().level1.get_original_name(expr, msg);
   }
 }
 
@@ -424,7 +432,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent, std::ostream &os)
   {
     os << spaces << "Next instruction to be executed:"
        << "\n";
-    source.pc->output_instruction(ns, "", os);
+    source.pc->output_instruction(ns, "", os, msg);
   }
 }
 

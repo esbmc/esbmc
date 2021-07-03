@@ -17,6 +17,9 @@ class default_message : public messaget
 {
 public:
   default_message();
+
+  static FILE *out;
+  static FILE *err;
 };
 
 #endif //ESBMC_DEFAULT_MESSAGE_H

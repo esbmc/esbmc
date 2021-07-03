@@ -743,8 +743,11 @@ bool reachability_treet::restore_from_dfs_state(void *)
 
     get_cur_state().DFS_traversed = it->explored;
 
-    if (get_cur_state().threads_state.size() != it->num_threads) 
-      throw std::runtime_error("Unexpected number of threads when reexploring checkpoint");
+    if (get_cur_state().threads_state.size() != it->num_threads)
+{
+msg.error("Unexpected number of threads when reexploring checkpoint");
+abort();
+}
 
     switch_to_next_execution_state();
 
@@ -755,9 +758,10 @@ bool reachability_treet::restore_from_dfs_state(void *)
 
 #if 0
     if (get_cur_state().get_active_state().source.pc->location_number !=
-        it->location_number) 
-      throw std::runtime_error("Interleave at unexpected location when restoring checkpoint");
-
+        it->location_number) {
+msg.error("Interleave at unexpected location when restoring checkpoint").
+abort();
+}
 #endif
   }
 #endif

@@ -273,8 +273,8 @@ void goto_symext::symex_assign_rec(
   }
   else
   {
-    throw std::runtime_error(
-      fmt::format("assignment to {} not handled", get_expr_id(lhs)));
+    msg.error(fmt::format("assignment to {} not handled", get_expr_id(lhs)));
+    abort();
   }
 }
 

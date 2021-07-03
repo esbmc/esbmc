@@ -10,8 +10,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <langapi/mode.h>
 #include <memory>
 
-std::string
-from_expr(const namespacet &ns, const irep_idt &identifier, const exprt &expr)
+std::string from_expr(
+  const namespacet &ns,
+  const irep_idt &identifier,
+  const exprt &expr,
+  const messaget &)
 {
   int mode;
 
@@ -40,8 +43,11 @@ from_expr(const namespacet &ns, const irep_idt &identifier, const exprt &expr)
   return result;
 }
 
-std::string
-from_type(const namespacet &ns, const irep_idt &identifier, const typet &type)
+std::string from_type(
+  const namespacet &ns,
+  const irep_idt &identifier,
+  const typet &type,
+  const messaget &)
 {
   int mode;
 
@@ -70,14 +76,14 @@ from_type(const namespacet &ns, const irep_idt &identifier, const typet &type)
   return result;
 }
 
-std::string from_expr(const exprt &expr)
+std::string from_expr(const exprt &expr, const messaget &msg)
 {
-  contextt context;
-  return from_expr(namespacet(context), "", expr);
+  contextt context(msg);
+  return from_expr(namespacet(context), "", expr, msg);
 }
 
-std::string from_type(const typet &type)
+std::string from_type(const typet &type, const messaget &msg)
 {
-  contextt context;
-  return from_type(namespacet(context), "", type);
+  contextt context(msg);
+  return from_type(namespacet(context), "", type, msg);
 }

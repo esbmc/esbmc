@@ -63,10 +63,11 @@ std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
 class goto_programt
 {
 public:
+  const messaget &msg;
   /*! \brief copy constructor
       \param[in] src an empty goto program
   */
-  inline goto_programt(const goto_programt &src)
+  inline goto_programt(const goto_programt &src) : msg(src.msg)
   {
     // CBMC didn't permit copy-construction, instead requiring calling
     // copy_from instead. While explicit is better than implicit though,
@@ -421,6 +422,7 @@ public:
       const class namespacet &ns,
       const irep_idt &identifier,
       std::ostream &out,
+      const messaget &msg,
       bool show_location = true) const;
   };
 
@@ -569,10 +571,9 @@ public:
   }
 
   //! Constructor
-  goto_programt() : hide(false)
+  explicit goto_programt(const messaget &msg) : msg(msg), hide(false)
   {
   }
-
   virtual ~goto_programt() = default;
 
   //! Swap the goto program

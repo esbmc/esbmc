@@ -88,7 +88,10 @@ public:
   std::string format_string;
   std::list<expr2tc> output_args;
 
-  void output(const class namespacet &ns, std::ostream &out) const;
+  void output(
+    const class namespacet &ns,
+    std::ostream &out,
+    const messaget &msg) const;
   void dump() const;
 
   goto_trace_stept() : step_nr(0), thread_nr(0), guard(false)
@@ -110,23 +113,29 @@ public:
     steps.clear();
   }
 
-  void output(const class namespacet &ns, std::ostream &out) const;
+  void output(
+    const class namespacet &ns,
+    std::ostream &out,
+    const messaget &msg) const;
 };
 
 void show_goto_trace_gui(
   std::ostream &out,
   const namespacet &ns,
-  const goto_tracet &goto_trace);
+  const goto_tracet &goto_trace,
+  const messaget &msg);
 
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
-  const goto_tracet &goto_trace);
+  const goto_tracet &goto_trace,
+  const messaget &msg);
 
 void violation_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace);
+  const goto_tracet &goto_trace,
+  const messaget &msg);
 
 void correctness_graphml_goto_trace(
   optionst &options,
@@ -144,6 +153,7 @@ void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
   const expr2tc &identifier,
-  const expr2tc &value);
+  const expr2tc &value,
+  const messaget &msg);
 
 #endif
