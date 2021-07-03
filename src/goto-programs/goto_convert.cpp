@@ -20,16 +20,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-//#define DEBUG
-
-#ifdef DEBUG
-#define DEBUGLOC                                                               \
-  std::cout << "\n"                                                            \
-            << __FUNCTION__ << "[" << __LINE__ << "]"                          \
-            << "\n";
-#else
-#define DEBUGLOC
-#endif
 
 static bool is_empty(const goto_programt &goto_program)
 {

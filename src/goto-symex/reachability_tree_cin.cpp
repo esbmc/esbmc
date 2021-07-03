@@ -27,7 +27,7 @@ int reachability_treet::get_ileave_direction_from_user() const
   message_handler.status("Current thread states:");
   execution_states.back()->print_stack_traces(4);
 
-  while(std::cout << "Input: ", std::getline(std::cin, input))
+  while(message_handler.status("Input: "), std::getline(std::cin, input))
   {
     if(input == "b")
     {

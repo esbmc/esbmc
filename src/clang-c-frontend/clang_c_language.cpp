@@ -23,6 +23,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <clang-c-frontend/expr2c.h>
 #include <sstream>
 #include <util/c_link.h>
+#include <util/message/format.h>
 
 languaget *new_clang_c_language()
 {
@@ -35,8 +36,8 @@ clang_c_languaget::clang_c_languaget()
   auto p = boost::filesystem::temp_directory_path();
   if(!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
   {
-    std::cerr << "Can't find temporary directory (needed to dump clang headers)"
-              << "\n";
+    assert(
+      0 && "Can't find temporary directory (needed to dump clang headers)");
     abort();
   }
 
@@ -45,9 +46,8 @@ clang_c_languaget::clang_c_languaget()
   boost::filesystem::create_directory(p);
   if(!boost::filesystem::is_directory(p))
   {
-    std::cerr
-      << "Can't create temporary directory (needed to dump clang headers)"
-      << "\n";
+    assert(
+      0 && "Can't create temporary directory (needed to dump clang headers)");
     abort();
   }
 
@@ -74,7 +74,9 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
     break;
 
   default:
-    std::cerr << "Unknown word size: " << config.ansi_c.word_size << "\n";
+    assert(
+      0 &&
+      fmt::format("Unknown word size: {}\n", config.ansi_c.word_size).c_str());
     abort();
   }
 
