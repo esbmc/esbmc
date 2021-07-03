@@ -177,17 +177,15 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     }
     else if(is_array_type(it))
     {
-      std::cerr << "Fetching array elements inside tuples currently "
-                   "unimplemented, sorry"
-                << std::endl;
-      res = expr2tc();
+      const array_type2t &arr_type = to_array_type(it);
+      res =
+        ctx->array_api->get_array_elem(tuple->elements[i], 0, arr_type.subtype);
     }
     else
     {
       std::cerr << "Unexpected type in tuple_get_rec" << std::endl;
       abort();
     }
-
     outstruct->datatype_members.push_back(res);
     i++;
   }
