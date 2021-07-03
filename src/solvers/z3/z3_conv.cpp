@@ -12,12 +12,12 @@
 #define new_ast new_solver_ast<z3_smt_ast>
 
 static void error_handler(Z3_context c, Z3_error_code e)
-{  
+{
   std::ostringstream oss;
   oss << "Z3 error " << e << " encountered"
       << "\n";
   oss << Z3_get_error_msg(c, e);
-  assert(0 && oss.str().c_str());  
+  assert(0 && oss.str().c_str());
 }
 
 smt_convt *create_new_z3_solver(
@@ -1231,7 +1231,10 @@ void z3_smt_ast::dump() const
 
 void z3_convt::dump_smt()
 {
-  std::cout << solver << "\n";
+  default_message msg;
+  std::ostringstream oss;
+  oss << solver;
+  msg.debug(oss.str());
 }
 
 smt_astt z3_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
@@ -1289,7 +1292,7 @@ smt_astt z3_convt::mk_smt_fpbv_neg(smt_astt op)
 
 void z3_convt::print_model()
 {
-  std::cout << Z3_model_to_string(z3_ctx, solver.get_model());
+  msg.status(Z3_model_to_string(z3_ctx, solver.get_model()));
 }
 
 smt_sortt z3_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)

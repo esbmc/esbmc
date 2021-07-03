@@ -1273,12 +1273,12 @@ smt_sortt cvc_convt::mk_fpbv_rm_sort()
 
 void cvc_convt::dump_smt()
 {
+  default_message msg;
+  std::ostringstream oss;
   auto const &assertions = smt.getAssertions();
   for(auto const &a : assertions)
-  {
-    a.printAst(std::cout, 0);
-    std::cout << std::flush;
-  }
+    a.printAst(oss, 0);
+  msg.debug(oss.str());
 }
 
 void cvc_smt_ast::dump() const
