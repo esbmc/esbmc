@@ -4,7 +4,6 @@
 #include <util/irep2_expr.h>
 #include <util/c_types.h>
 #include <util/message/format.h>
-#include <util/message/default_message.h>
 /** Test whether type is an integer. */
 inline bool is_bv_type(const type2tc &t)
 {
@@ -404,9 +403,7 @@ inline expr2tc gen_one(const type2tc &type)
     break;
   }
 
-  default_message msg;
-  msg.error(fmt::format("Can't generate one for type {}", get_type_id(type)));
-  abort();
+  assert(0 && fmt::format("Can't generate one for type {}", get_type_id(type)).c_str());
 }
 
 #endif /* UTIL_IREP2_UTILS_H_ */

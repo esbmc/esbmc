@@ -765,7 +765,7 @@ expr2tc member2t::do_simplify() const
     if(is_constant_struct2t(source_value))
     {
       s = to_constant_struct2t(source_value).datatype_members[no];
-      default_message msg;
+      default_message msg; // This can be the default, because base_type will not print anything
       assert(
         is_pointer_type(type) ||
         base_type_eq(type, s->type, namespacet(contextt(msg))));
@@ -784,7 +784,7 @@ expr2tc member2t::do_simplify() const
       // If the type we just selected isn't compatible, it means that whatever
       // field is in the constant union /isn't/ the field we're selecting from
       // it. So don't simplify it, because we can't.
-      default_message msg;
+      default_message msg; // This can be the default, because base_type will not print anything
       if(
         !is_pointer_type(type) &&
         !base_type_eq(type, s->type, namespacet(contextt(msg))))

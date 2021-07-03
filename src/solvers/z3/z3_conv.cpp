@@ -12,14 +12,12 @@
 #define new_ast new_solver_ast<z3_smt_ast>
 
 static void error_handler(Z3_context c, Z3_error_code e)
-{
-  default_message msg;
+{  
   std::ostringstream oss;
   oss << "Z3 error " << e << " encountered"
       << "\n";
   oss << Z3_get_error_msg(c, e);
-  msg.error(oss.str());
-  abort();
+  assert(0 && oss.str().c_str());  
 }
 
 smt_convt *create_new_z3_solver(

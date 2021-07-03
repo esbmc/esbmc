@@ -1,14 +1,12 @@
 #include <boolector_conv.h>
 #include <cstring>
-#include <util/message/default_message.h>
+#include <util/message/format.h>
 
 #define new_ast new_solver_ast<btor_smt_ast>
 
 void error_handler(const char *msg)
 {
-  default_message defaultMessage;
-  defaultMessage.error(fmt::format("Boolector error encountered\n{}", msg));
-  abort();
+  assert(0 && fmt::format("Boolector error encountered\n{}", msg).c_str());
 }
 
 smt_convt *create_new_boolector_solver(

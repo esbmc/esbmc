@@ -1,17 +1,12 @@
 #include <bitwuzla_conv.h>
 #include <cstring>
-#include <util/message/default_message.h>
+#include <util/message/format.h>
 
 #define new_ast new_solver_ast<bitw_smt_ast>
 
 void bitwuzla_error_handler(const char *msg)
 {
-  std::ostringstream oss;
-  oss << "Bitwuzla error encountered\n";
-  oss << msg;
-  default_message defaultMessage;
-  defaultMessage.error(oss.str());
-  abort();
+  assert(0 && fmt::format("Bitwuzla error encountered\n{}", msg).c_str());
 }
 
 smt_convt *create_new_bitwuzla_solver(
