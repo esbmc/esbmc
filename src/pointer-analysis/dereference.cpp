@@ -816,12 +816,12 @@ void dereferencet::build_reference_rec(
     flags |= flag_dst_scalar;
   else if(is_array_type(type) || is_string_type(type))
   {
-    std::cerr
-      << "Can't construct rvalue reference to array type during dereference";
-    std::cerr << std::endl;
-    std::cerr << "(It isn't allowed by C anyway)";
-    std::cerr << std::endl;
-    abort();
+    // Check size
+    const array_type2t &arr_type = to_array_type(type);
+    const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
+    if(!thesize.value.to_uint64())
+      return;
+    flags |= flag_dst_union; // Hack because unions are arrays
   }
   else
   {
@@ -1482,6 +1482,22 @@ void dereferencet::construct_struct_ref_from_const_offset(
     return;
   }
 
+  else if(is_array_type(value) || is_string_type(value))
+  {
+    const array_type2t arr_type = get_arr_type(value);
+    type2tc arr_subtype = arr_type.subtype;
+
+    unsigned int subtype_size = type_byte_size(arr_subtype).to_uint64();
+    constant_int2tc subtype_sz_expr(offs->type, BigInt(subtype_size));
+    div2tc div(pointer_type2(), offs, subtype_sz_expr);
+    simplify(div);
+
+    expr2tc *bytes =
+      extract_bytes_from_array(value, type->get_width() / 8, div);
+    stitch_together_from_byte_array(value, type, bytes);
+    return;
+  }
+
   std::cerr << "Unexpectedly " << get_type_id(value->type) << " type'd";
   std::cerr << " argument to construct_struct_ref" << std::endl;
   abort();
@@ -1812,6 +1828,8 @@ void dereferencet::stitch_together_from_byte_array(
   if(type != accuml->type)
   {
     //assert(type->get_width() == accuml->type->get_width());
+    if(is_array_type(type))
+      return;
     accuml = bitcast2tc(type, accuml);
   }
 
