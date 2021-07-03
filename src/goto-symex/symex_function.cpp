@@ -399,8 +399,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   std::list<std::pair<guardt, symbol2tc>> l = get_function_list(func_ptr, msg);
 
   // Filter out illegal calls
-  auto illegal_filter = [&call](const decltype(l)::value_type &it) -> bool
-  {
+  auto illegal_filter = [&call](const decltype(l)::value_type &it) -> bool {
     expr2tc sym = it.second;
     assert(is_symbol2t(sym));
     if(!is_code_type(sym))
@@ -610,14 +609,12 @@ void goto_symext::symex_return(const expr2tc &code)
   // value optimization have been activated.
   if(stack_limit > 0 && no_return_value_opt)
   {
-    code->foreach_operand(
-      [this](const expr2tc &e)
-      {
-        // check whether the stack size has been reached.
-        claim(
-          (cur_state->top().process_stack_size(e, stack_limit)),
-          "Stack limit property was violated");
-      });
+    code->foreach_operand([this](const expr2tc &e) {
+      // check whether the stack size has been reached.
+      claim(
+        (cur_state->top().process_stack_size(e, stack_limit)),
+        "Stack limit property was violated");
+    });
   }
 
   // kill this one

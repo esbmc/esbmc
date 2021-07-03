@@ -211,10 +211,8 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
     }
     else
     {
-      msg.error(
-        fmt::format(
-          "unknown side effect: {} at {}", statement, expr.location())
-        );
+      msg.error(fmt::format(
+        "unknown side effect: {} at {}", statement, expr.location()));
       abort();
     }
   }
@@ -472,12 +470,10 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
   }
   else
   {
-    msg.error(
-      fmt::format(
-        "sizeof operator expects zero or one operand, "
-        "but got{}",
-        expr.operands().size())
-      );
+    msg.error(fmt::format(
+      "sizeof operator expects zero or one operand, "
+      "but got{}",
+      expr.operands().size()));
     abort();
   }
 
@@ -485,9 +481,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
 
   if(new_expr.is_nil())
   {
-    msg.error(
-      fmt::format("type has no size, {}", type.name())
-      );
+    msg.error(fmt::format("type has no size, {}", type.name()));
     abort();
   }
 
@@ -506,9 +500,7 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(s == nullptr)
     {
-      msg.error(
-        fmt::format("type symbol `{}' not found", identifier)
-        );
+      msg.error(fmt::format("type symbol `{}' not found", identifier));
       abort();
     }
 

@@ -2822,9 +2822,7 @@ void clang_c_convertert::get_decl_name(
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
       nd.dump(ross);
-      msg.error(
-        fmt::format("Declaration has an empty name:\n{}", oss.str())
-        );
+      msg.error(fmt::format("Declaration has an empty name:\n{}", oss.str()));
       abort();
     }
   }
@@ -2955,10 +2953,8 @@ symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
   {
     if(context.move(symbol, s))
     {
-      msg.error(
-        fmt::format(
-          "Couldn't add symbol {} to symbol table\n{}", symbol.name, symbol)
-        );
+      msg.error(fmt::format(
+        "Couldn't add symbol {} to symbol table\n{}", symbol.name, symbol));
       abort();
     }
   }

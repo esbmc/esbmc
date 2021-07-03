@@ -20,7 +20,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-
 static bool is_empty(const goto_programt &goto_program)
 {
   forall_goto_program_instructions(it, goto_program)
@@ -968,8 +967,9 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
 
   unsigned int globals = 0;
 
-  expr->foreach_operand([this, &globals](const expr2tc &e)
-                        { globals += get_expr_number_globals(e); });
+  expr->foreach_operand([this, &globals](const expr2tc &e) {
+    globals += get_expr_number_globals(e);
+  });
 
   return globals;
 }

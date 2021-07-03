@@ -223,12 +223,10 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   DeleteFile(symname_buffer);
 #endif
 
-  new_ctx.foreach_operand(
-    [&symbol_deps](const symbolt &s)
-    {
-      generate_symbol_deps(s.id, s.value, symbol_deps);
-      generate_symbol_deps(s.id, s.type, symbol_deps);
-    });
+  new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
+    generate_symbol_deps(s.id, s.value, symbol_deps);
+    generate_symbol_deps(s.id, s.type, symbol_deps);
+  });
 
   // Add two hacks; we migth use either pthread_mutex_lock or the checked
   // variety; so if one version is used, pull in the other too.
@@ -250,8 +248,7 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
    * that adds no new symbols. */
 
   new_ctx.foreach_operand(
-    [&context, &store_ctx, &symbol_deps, &to_include](const symbolt &s)
-    {
+    [&context, &store_ctx, &symbol_deps, &to_include](const symbolt &s) {
       const symbolt *symbol = context.find_symbol(s.id);
       if(symbol != nullptr && symbol->value.is_nil())
       {

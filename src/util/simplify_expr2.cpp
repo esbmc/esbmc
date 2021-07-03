@@ -74,15 +74,13 @@ expr2tc expr2t::simplify() const
     // An operand has been changed; clone ourselves and update.
     expr2tc new_us = clone();
     std::list<expr2tc>::iterator it2 = newoperands.begin();
-    new_us->Foreach_operand(
-      [&it2](expr2tc &e)
-      {
-        if((*it2) == nullptr)
-          ; // No change in operand;
-        else
-          e = *it2; // Operand changed; overwrite with new one.
-        it2++;
-      });
+    new_us->Foreach_operand([&it2](expr2tc &e) {
+      if((*it2) == nullptr)
+        ; // No change in operand;
+      else
+        e = *it2; // Operand changed; overwrite with new one.
+      it2++;
+    });
 
     // Finally, attempt simplification again.
     expr2tc tmp = new_us->do_simplify();
@@ -135,8 +133,8 @@ static void fetch_ops_from_this_type(
 {
   if(expr->expr_id == id)
   {
-    expr->foreach_operand([&ops, id](const expr2tc &e)
-                          { fetch_ops_from_this_type(ops, id, e); });
+    expr->foreach_operand(
+      [&ops, id](const expr2tc &e) { fetch_ops_from_this_type(ops, id, e); });
   }
   else
   {
@@ -165,8 +163,9 @@ static bool rebalance_associative_tree(
   // faster than stringly stuff.
 
   // Extract immediate operands
-  expr.foreach_operand([&ops, &expr](const expr2tc &e)
-                       { fetch_ops_from_this_type(ops, expr.expr_id, e); });
+  expr.foreach_operand([&ops, &expr](const expr2tc &e) {
+    fetch_ops_from_this_type(ops, expr.expr_id, e);
+  });
 
   // Are there enough constant values in there?
   unsigned int const_values = 0;
@@ -387,8 +386,9 @@ expr2tc add2t::do_simplify() const
 
   // Attempt associative simplification
   std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
-    [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc
-  { return add2tc(this->type, arg1, arg2); };
+    [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
+    return add2tc(this->type, arg1, arg2);
+  };
 
   return attempt_associative_simplify(*this, add_wrapper);
 }
@@ -765,7 +765,8 @@ expr2tc member2t::do_simplify() const
     if(is_constant_struct2t(source_value))
     {
       s = to_constant_struct2t(source_value).datatype_members[no];
-      default_message msg; // This can be the default, because base_type will not print anything
+      default_message
+        msg; // This can be the default, because base_type will not print anything
       assert(
         is_pointer_type(type) ||
         base_type_eq(type, s->type, namespacet(contextt(msg))));
@@ -784,7 +785,8 @@ expr2tc member2t::do_simplify() const
       // If the type we just selected isn't compatible, it means that whatever
       // field is in the constant union /isn't/ the field we're selecting from
       // it. So don't simplify it, because we can't.
-      default_message msg; // This can be the default, because base_type will not print anything
+      default_message
+        msg; // This can be the default, because base_type will not print anything
       if(
         !is_pointer_type(type) &&
         !base_type_eq(type, s->type, namespacet(contextt(msg))))
@@ -1294,80 +1296,90 @@ static expr2tc do_bit_munge_operation(
 
 expr2tc bitand2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
-  { return (op1 & op2); };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
+    return (op1 & op2);
+  };
 
   return do_bit_munge_operation<bitand2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
-  { return (op1 | op2); };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
+    return (op1 | op2);
+  };
 
   return do_bit_munge_operation<bitor2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitxor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
-  { return (op1 ^ op2); };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
+    return (op1 ^ op2);
+  };
 
   return do_bit_munge_operation<bitxor2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitnand2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
-  { return ~(op1 & op2); };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
+    return ~(op1 & op2);
+  };
 
   return do_bit_munge_operation<bitnand2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitnor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
-  { return ~(op1 | op2); };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
+    return ~(op1 | op2);
+  };
 
   return do_bit_munge_operation<bitnor2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitnxor2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
-  { return ~(op1 ^ op2); };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
+    return ~(op1 ^ op2);
+  };
 
   return do_bit_munge_operation<bitnxor2t>(op, type, side_1, side_2);
 }
 
 expr2tc bitnot2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t)
-  { return ~(op1); };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t) {
+    return ~(op1);
+  };
 
   return do_bit_munge_operation<bitnot2t>(op, type, value, value);
 }
 
 expr2tc shl2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
-  { return (op1 << op2); };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
+    return (op1 << op2);
+  };
 
   return do_bit_munge_operation<shl2t>(op, type, side_1, side_2);
 }
 
 expr2tc lshr2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
-  { return ((uint64_t)op1) >> ((uint64_t)op2); };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
+    return ((uint64_t)op1) >> ((uint64_t)op2);
+  };
 
   return do_bit_munge_operation<lshr2t>(op, type, side_1, side_2);
 }
 
 expr2tc ashr2t::do_simplify() const
 {
-  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2)
-  { return (op1 >> op2); };
+  std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
+    return (op1 >> op2);
+  };
 
   return do_bit_munge_operation<ashr2t>(op, type, side_1, side_2);
 }

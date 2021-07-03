@@ -207,8 +207,9 @@ void renaming::renaming_levelt::get_original_name(
   if(is_nil_expr(expr))
     return;
 
-  expr->Foreach_operand([&lev, &msg](expr2tc &e)
-                        { renaming_levelt::get_original_name(e, lev, msg); });
+  expr->Foreach_operand([&lev, &msg](expr2tc &e) {
+    renaming_levelt::get_original_name(e, lev, msg);
+  });
 
   if(!is_symbol2t(expr))
     return;

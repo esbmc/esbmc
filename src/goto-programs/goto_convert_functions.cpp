@@ -34,12 +34,10 @@ void goto_convert_functionst::goto_convert()
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
-  context.Foreach_operand_in_order(
-    [&symbol_list](symbolt &s)
-    {
-      if(!s.is_type && s.type.is_code())
-        symbol_list.push_back(&s);
-    });
+  context.Foreach_operand_in_order([&symbol_list](symbolt &s) {
+    if(!s.is_type && s.type.is_code())
+      symbol_list.push_back(&s);
+  });
 
   for(auto &it : symbol_list)
   {
@@ -391,27 +389,23 @@ void goto_convert_functionst::thrash_type_symbols()
   // thing has no types, and there's no way (in C++ converted code at least)
   // to decide what name is a type or not.
   typename_sett names;
-  context.foreach_operand(
-    [this, &names](const symbolt &s)
-    {
-      collect_expr(s.value, names);
-      collect_type(s.type, names);
-    });
+  context.foreach_operand([this, &names](const symbolt &s) {
+    collect_expr(s.value, names);
+    collect_type(s.type, names);
+  });
 
   // Try to compute their dependencies.
 
   typename_mapt typenames;
-  context.foreach_operand(
-    [this, &names, &typenames](const symbolt &s)
+  context.foreach_operand([this, &names, &typenames](const symbolt &s) {
+    if(names.find(s.id) != names.end())
     {
-      if(names.find(s.id) != names.end())
-      {
-        typename_sett list;
-        collect_expr(s.value, list);
-        collect_type(s.type, list);
-        typenames[s.id] = list;
-      }
-    });
+      typename_sett list;
+      collect_expr(s.value, list);
+      collect_type(s.type, list);
+      typenames[s.id] = list;
+    }
+  });
 
   for(auto &it : typenames)
     it.second.erase(it.first);
@@ -425,12 +419,10 @@ void goto_convert_functionst::thrash_type_symbols()
     wallop_type(it->first, typenames, it->first);
 
   // And now all the types have a fixed form, rename types in all existing code.
-  context.Foreach_operand(
-    [this](symbolt &s)
-    {
-      rename_types(s.type, s, s.id);
-      rename_exprs(s.value, s, s.id);
-    });
+  context.Foreach_operand([this](symbolt &s) {
+    rename_types(s.type, s, s.id);
+    rename_exprs(s.value, s, s.id);
+  });
 }
 
 void goto_convert_functionst::fixup_unions()
@@ -443,12 +435,10 @@ void goto_convert_functionst::fixup_unions()
   // them _as_ unions get converted into byte array accesses at the pointer
   // dereference layer.
 
-  context.Foreach_operand(
-    [this](symbolt &s)
-    {
-      fix_union_type(s.type, false);
-      fix_union_expr(s.value);
-    });
+  context.Foreach_operand([this](symbolt &s) {
+    fix_union_type(s.type, false);
+    fix_union_expr(s.value);
+  });
 }
 
 void goto_convert_functionst::fix_union_type(typet &type, bool is_pointer)
