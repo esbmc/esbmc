@@ -68,10 +68,8 @@ const symbolt &namespacet::lookup(const irep_idt &name) const
   const symbolt *symbol;
   if(lookup(name, symbol))
   {
-    default_message msg;
-    msg.error(
-      fmt::format("Failed to find symbol {} not found", id2string(name)));
-    abort();
+    assert(0 &&
+      fmt::format("Failed to find symbol {} not found", id2string(name)).c_str());    
   }
   return *symbol;
 }

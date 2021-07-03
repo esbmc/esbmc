@@ -335,9 +335,7 @@ void real_migrate_type(
   }
   else
   {
-    default_message msg;
-    msg.error(fmt::format("{}", type));
-    abort();
+    assert(0 && fmt::format("{}", type).c_str());
   }
 }
 
@@ -447,9 +445,7 @@ void migrate_type(
   }
   else
   {
-    default_message msg;
-    msg.error(fmt::format("{}", type));
-    abort();
+    assert(0 && fmt::format("{}", type).c_str());
   }
 }
 
@@ -746,11 +742,11 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
   }
   else
   {
-    default_message msg;
-    msg.error(fmt::format(
-      "Unrecognized type {}  when flattening union literal",
-      get_type_id(*new_expr->type)));
-    abort();
+    assert(
+      0 && fmt::format(
+             "Unrecognized type {}  when flattening union literal",
+             get_type_id(*new_expr->type))
+             .c_str());
   }
 }
 
@@ -1847,10 +1843,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else
     {
-      default_message msg;
-      msg.error(
-        fmt::format("Unexpected side-effect statement: ", expr.statement()));
-      abort();
+      assert(
+        0 && fmt::format("Unexpected side-effect statement: ", expr.statement())
+               .c_str());
     }
 
     new_expr_ref =
@@ -2081,9 +2076,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else
   {
-    default_message msg;
-    msg.error(fmt::format("{}\nmigrate expr failed", expr));
-    abort();
+    assert(0 && fmt::format("{}\nmigrate expr failed", expr).c_str());
   }
 }
 
@@ -2262,9 +2255,7 @@ typet migrate_type_back(const type2tc &ref)
     return ret;
   }
   default:
-    default_message msg;
-    msg.error("Unrecognized type in migrate_type_back");
-    abort();
+    assert(0 && "Unrecognized type in migrate_type_back");
   }
 }
 
@@ -3277,8 +3268,6 @@ exprt migrate_expr_back(const expr2tc &ref)
     return back;
   }
   default:
-    default_message msg;
-    msg.error("Unrecognized expr in migrate_expr_back");
-    abort();
+    assert(0 && "Unrecognized expr in migrate_expr_back");
   }
 }
