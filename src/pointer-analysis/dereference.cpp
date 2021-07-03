@@ -613,8 +613,7 @@ expr2tc dereferencet::build_reference_to(
 
   if(!is_object_descriptor2t(what))
   {
-    msg.error(
-      fmt::format("unknown points-to: {}", get_expr_id(what)));
+    msg.error(fmt::format("unknown points-to: {}", get_expr_id(what)));
     abort();
   }
 

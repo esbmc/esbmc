@@ -25,7 +25,8 @@ public:
 
   typedef goto_programt::const_targett locationt;
 
-  virtual void initialize(const namespacet &ns, locationt l, const messaget &msg) = 0;
+  virtual void
+  initialize(const namespacet &ns, locationt l, const messaget &msg) = 0;
 
   // how function calls are treated:
   // a) there is an edge from each call site to the function head
@@ -79,7 +80,8 @@ public:
   typedef abstract_domain_baset statet;
   typedef goto_programt::const_targett locationt;
 
-  static_analysis_baset(const namespacet &_ns, const messaget &msg) : ns(_ns), msg(msg), initialized(false)
+  static_analysis_baset(const namespacet &_ns, const messaget &msg)
+    : ns(_ns), msg(msg), initialized(false)
   {
   }
 
@@ -220,7 +222,8 @@ class static_analysist : public static_analysis_baset
 {
 public:
   // constructor
-  static_analysist(const namespacet &_ns, const messaget &msg) : static_analysis_baset(_ns, msg)
+  static_analysist(const namespacet &_ns, const messaget &msg)
+    : static_analysis_baset(_ns, msg)
   {
   }
 

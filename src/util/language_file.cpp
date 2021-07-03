@@ -208,34 +208,32 @@ bool language_filest::typecheck_module(
 void language_filest::typecheck_virtual_methods(contextt &context)
 {
   // XXX: This should go away somewhere in the future
-  context.foreach_operand(
-    [this, &context](const symbolt &s)
+  context.foreach_operand([this, &context](const symbolt &s) {
+    if(s.type.id() == "struct")
     {
-      if(s.type.id() == "struct")
+      const struct_typet &struct_type = to_struct_type(s.type);
+      const struct_typet::componentst &components = struct_type.methods();
+
+      for(const auto &component : components)
       {
-        const struct_typet &struct_type = to_struct_type(s.type);
-        const struct_typet::componentst &components = struct_type.methods();
-
-        for(const auto &component : components)
+        if(
+          component.get_bool("is_virtual") &&
+          !(component.get_bool("is_pure_virtual")))
         {
-          if(
-            component.get_bool("is_virtual") &&
-            !(component.get_bool("is_pure_virtual")))
-          {
-            const symbolt &member_function =
-              namespacet(context).lookup(component.get_name());
+          const symbolt &member_function =
+            namespacet(context).lookup(component.get_name());
 
-            if(member_function.value.is_nil())
-            {
-              msg.error(
-                member_function.location.as_string() +
-                ": The virtual method isn't pure virtual and hasn't a "
-                "method implementation ");
-              msg.error("CONVERSION ERROR");
-              throw 0;
-            }
+          if(member_function.value.is_nil())
+          {
+            msg.error(
+              member_function.location.as_string() +
+              ": The virtual method isn't pure virtual and hasn't a "
+              "method implementation ");
+            msg.error("CONVERSION ERROR");
+            throw 0;
           }
         }
       }
-    });
+    }
+  });
 }

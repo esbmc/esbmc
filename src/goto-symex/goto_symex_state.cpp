@@ -120,12 +120,10 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
     // Use noconst as a flag to indicate (and short-circuit) when a non
     // constant propagatable expr is found.
-    expr->foreach_operand(
-      [this, &noconst](const expr2tc &e)
-      {
-        if(noconst && !constant_propagation(e))
-          noconst = false;
-      });
+    expr->foreach_operand([this, &noconst](const expr2tc &e) {
+      if(noconst && !constant_propagation(e))
+        noconst = false;
+    });
 
     return noconst;
   }
@@ -150,12 +148,10 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   {
     bool noconst = true;
 
-    expr->foreach_operand(
-      [this, &noconst](const expr2tc &e)
-      {
-        if(noconst && !constant_propagation(e))
-          noconst = false;
-      });
+    expr->foreach_operand([this, &noconst](const expr2tc &e) {
+      if(noconst && !constant_propagation(e))
+        noconst = false;
+    });
 
     return noconst;
   }
@@ -227,16 +223,14 @@ void goto_symex_statet::rename_type(expr2tc &expr)
     if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       rename(arr_size);
 
-    expr->type->Foreach_subtype(
-      [this](type2tc &t)
-      {
-        if(!is_array_type(t))
-          return;
+    expr->type->Foreach_subtype([this](type2tc &t) {
+      if(!is_array_type(t))
+        return;
 
-        expr2tc &arr_size = to_array_type(t).array_size;
-        if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-          rename(arr_size);
-      });
+      expr2tc &arr_size = to_array_type(t).array_size;
+      if(!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+        rename(arr_size);
+    });
   }
 }
 

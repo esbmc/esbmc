@@ -188,8 +188,7 @@ public:
     if(tid >= thread_start_data.size())
     {
       msg.error(
-        fmt::format("Setting thread data for nonexistant thread {}", tid)
-        );
+        fmt::format("Setting thread data for nonexistant thread {}", tid));
       abort();
     }
 

@@ -46,7 +46,6 @@ irept::irept(const irep_idt &_id)
 #ifdef SHARING
 void irept::detatch()
 {
-
   if(data == nullptr)
   {
     data = new dt;
@@ -67,7 +66,6 @@ void irept::detatch()
 #ifdef SHARING
 const irept::dt &irept::read() const
 {
-
   if(data == nullptr)
     return empty_d;
 

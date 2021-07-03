@@ -469,8 +469,7 @@ void goto_symext::intrinsic_switch_to(
   if(!is_constant_int2t(num))
   {
     msg.error(
-      fmt::format("Can't switch to non-constant thread id no\n{}", *num)
-      );
+      fmt::format("Can't switch to non-constant thread id no\n{}", *num));
     abort();
   }
 
@@ -583,7 +582,8 @@ void goto_symext::intrinsic_spawn_thread(
     art.goto_functions.function_map.find(symname);
   if(it == art.goto_functions.function_map.end())
   {
-    msg.error(fmt::format("Spawning thread \"{}{}", symname, "\": symbol not found"));
+    msg.error(
+      fmt::format("Spawning thread \"{}{}", symname, "\": symbol not found"));
     abort();
   }
 
@@ -632,9 +632,7 @@ void goto_symext::intrinsic_get_thread_state(
 
   if(!is_constant_int2t(threadid))
   {
-    msg.error(
-      "__ESBMC_get_thread_state received nonconstant thread id"
-      );
+    msg.error("__ESBMC_get_thread_state received nonconstant thread id");
     abort();
   }
 
@@ -1005,7 +1003,8 @@ void goto_symext::intrinsic_memset(
           symex_assign(code_assign2tc(target, zero), false, newguard);
         }
       }
-      else {
+      else
+      {
         msg.error("Logic mismatch in memset intrinsic");
         abort();
       }

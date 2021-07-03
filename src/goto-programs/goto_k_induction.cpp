@@ -227,13 +227,11 @@ void goto_k_inductiont::make_nondet_assign(
 static bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
 {
   bool res = false;
-  expr->foreach_operand(
-    [&vars, &res](const expr2tc &e)
-    {
-      if(!is_nil_expr(e))
-        res = contains_rec(e, vars) || res;
-      return res;
-    });
+  expr->foreach_operand([&vars, &res](const expr2tc &e) {
+    if(!is_nil_expr(e))
+      res = contains_rec(e, vars) || res;
+    return res;
+  });
 
   if(!is_symbol2t(expr))
     return res;

@@ -191,9 +191,9 @@ void goto_program_dereferencet::dereference_instruction(
     }
     else if(is_code_printf2t(i.code))
     {
-      i.code->Foreach_operand(
-        [this, &checks_only](expr2tc &e)
-        { dereference_expr(e, checks_only, dereferencet::READ); });
+      i.code->Foreach_operand([this, &checks_only](expr2tc &e) {
+        dereference_expr(e, checks_only, dereferencet::READ);
+      });
     }
     else if(is_code_free2t(i.code))
     {
