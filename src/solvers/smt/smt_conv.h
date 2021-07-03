@@ -142,7 +142,7 @@ public:
   smt_astt
   new_solver_ast(typename the_solver_ast::solver_ast_type ast, smt_sortt sort)
   {
-    return new the_solver_ast(this, ast, sort);
+    return new the_solver_ast(this, ast, sort, msg);
   }
 
   /** Primary constructor. After construction, smt_post_init must be called
@@ -882,7 +882,8 @@ public:
 };
 
 // Define here to enable inlining
-inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)
+inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s, const messaget &msg)
+  : sort(s), context(ctx), _msg(msg)
 {
   assert(sort != nullptr);
   ctx->live_asts.push_back(this);

@@ -64,6 +64,8 @@ extern "C"
 #include <ansi-c/c_preprocess.h>
 #endif
 
+#include <util/message/default_message.h>
+
 enum PROCESS_TYPE
 {
   BASE_CASE,
@@ -81,11 +83,13 @@ struct resultt
 #ifndef _WIN32
 void timeout_handler(int)
 {
+  default_message msg;
+  msg.error("Timed out");
   // Unfortunately some highly useful pieces of code hook themselves into
   // aexit and attempt to free some memory. That doesn't really make sense to
   // occur on exit, but more importantly doesn't mix well with signal handlers,
   // and results in the allocator locking against itself. So use _exit instead
-  throw std::runtime_error("Timed out");
+  _exit(1);
 }
 #endif
 
@@ -1532,12 +1536,12 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_termination(goto_functions, msg);
     }
 
-    goto_check(ns, options, goto_functions);
+    goto_check(ns, options, goto_functions, msg);
 
     // show it?
     if(cmdline.isset("show-goto-value-sets"))
     {
-      value_set_analysist value_set_analysis(ns);
+      value_set_analysist value_set_analysis(ns, msg);
       value_set_analysis(goto_functions);
       std::ostringstream oss;
       show_value_sets(goto_functions, value_set_analysis, oss);
@@ -1578,10 +1582,10 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       msg.status("Adding Data Race Checks");
 
-      value_set_analysist value_set_analysis(ns);
+      value_set_analysist value_set_analysis(ns, msg);
       value_set_analysis(goto_functions);
 
-      add_race_assertions(value_set_analysis, context, goto_functions);
+      add_race_assertions(value_set_analysis, context, goto_functions, msg);
 
       value_set_analysis.update(goto_functions);
     }

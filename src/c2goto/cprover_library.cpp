@@ -145,7 +145,7 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   if(config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
     return;
 
-  contextt new_ctx, store_ctx;
+  contextt new_ctx(message_handler), store_ctx(message_handler);
   goto_functionst goto_functions;
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
@@ -186,14 +186,17 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
         "for 16 bit machines");
       return;
     }
-
-    throw std::runtime_error(
+    message_handler.error(
       fmt::format("No c library for bitwidth {}", config.ansi_c.int_width));
+    abort();
   }
 
   size = this_clib_ptrs[1] - this_clib_ptrs[0];
   if(size == 0)
-    throw std::runtime_error("error: Zero-lengthed internal C library");
+  {
+    message_handler.error("error: Zero-lengthed internal C library");
+    abort();
+  }
 
 #ifndef _WIN32
   sprintf(symname_buffer, "/tmp/ESBMC_XXXXXX");
@@ -206,10 +209,11 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
 #endif
   f = fopen(symname_buffer, "wb");
   if(fwrite(this_clib_ptrs[0], size, 1, f) != 1)
-    throw std::runtime_error("Couldn't manipulate internal C library");
-
+  {
+    message_handler.error("Couldn't manipulate internal C library");
+    abort();
+  }
   fclose(f);
-
   std::ifstream infile(symname_buffer, std::ios::in | std::ios::binary);
   read_goto_binary(infile, new_ctx, goto_functions, message_handler);
   infile.close();
@@ -219,10 +223,12 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   DeleteFile(symname_buffer);
 #endif
 
-  new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
-    generate_symbol_deps(s.id, s.value, symbol_deps);
-    generate_symbol_deps(s.id, s.type, symbol_deps);
-  });
+  new_ctx.foreach_operand(
+    [&symbol_deps](const symbolt &s)
+    {
+      generate_symbol_deps(s.id, s.value, symbol_deps);
+      generate_symbol_deps(s.id, s.type, symbol_deps);
+    });
 
   // Add two hacks; we migth use either pthread_mutex_lock or the checked
   // variety; so if one version is used, pull in the other too.
@@ -244,7 +250,8 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
    * that adds no new symbols. */
 
   new_ctx.foreach_operand(
-    [&context, &store_ctx, &symbol_deps, &to_include](const symbolt &s) {
+    [&context, &store_ctx, &symbol_deps, &to_include](const symbolt &s)
+    {
       const symbolt *symbol = context.find_symbol(s.id);
       if(symbol != nullptr && symbol->value.is_nil())
       {
@@ -266,7 +273,10 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   }
 
   if(c_link(context, store_ctx, message_handler, "<built-in-library>"))
+  {
     // Merging failed
-    throw std::runtime_error("Failed to merge C library");
+    message_handler.error("Failed to merge C library");
+    abort();
+  }
 }
 #endif

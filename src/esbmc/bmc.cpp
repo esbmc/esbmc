@@ -118,17 +118,17 @@ void bmct::error_trace(
     is_compact_trace = false;
 
   goto_tracet goto_trace;
-  build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace);
+  build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace, msg);
 
   std::string witness_output = options.get_option("witness-output");
   if(witness_output != "")
-    violation_graphml_goto_trace(options, ns, goto_trace);
+    violation_graphml_goto_trace(options, ns, goto_trace, msg);
 
   std::ostringstream oss;
   oss << "\n"
       << "Counterexample:"
       << "\n";
-  show_goto_trace(oss, ns, goto_trace);
+  show_goto_trace(oss, ns, goto_trace, msg);
   msg.result(oss.str());
 }
 
@@ -241,7 +241,7 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
     }
     else if(it.is_renumber())
     {
-      oss << "renumber: " << from_expr(ns, "", it.lhs) << "\n";
+      oss << "renumber: " << from_expr(ns, "", it.lhs, msg) << "\n";
     }
 
     if(!migrate_expr_back(it.guard).is_true())
@@ -495,7 +495,8 @@ void bmct::bidirectional_search(
         continue;
 
       expr2tc new_lhs = ssait.original_lhs;
-      renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
+      renaming::renaming_levelt::get_original_name(
+        new_lhs, symbol2t::level0, msg);
 
       if(all_loop_vars.find(new_lhs) == all_loop_vars.end())
         continue;
@@ -515,8 +516,8 @@ void bmct::bidirectional_search(
       if(is_array_type(it.second.first) || is_pointer_type(it.second.first))
         return;
 
-      auto lhs = build_lhs(smt_conv, it.second.first);
-      auto value = build_rhs(smt_conv, it.second.second);
+      auto lhs = build_lhs(smt_conv, it.second.first, msg);
+      auto value = build_rhs(smt_conv, it.second.second, msg);
 
       // Add lhs and rhs to the list of new constraints
       equalities.push_back(equality2tc(lhs, value));

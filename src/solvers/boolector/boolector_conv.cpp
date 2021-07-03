@@ -6,7 +6,9 @@
 
 void error_handler(const char *msg)
 {
-  throw std::runtime_error(fmt::format("Boolector error encountered\n{}", msg));
+  default_message defaultMessage;
+  defaultMessage.error(fmt::format("Boolector error encountered\n{}", msg));
+  abort();
 }
 
 smt_convt *create_new_boolector_solver(
@@ -27,13 +29,13 @@ boolector_convt::boolector_convt(
   const namespacet &ns,
   const optionst &options,
   const messaget &msg)
-  : smt_convt(ns, options, msg), array_iface(true, true), fp_convt(this)
+  : smt_convt(ns, options, msg), array_iface(true, true), fp_convt(this, msg)
 
 {
   if(options.get_bool_option("int-encoding"))
   {
-    throw std::runtime_error(
-      "Boolector does not support integer encoding mode");
+    msg.error("Boolector does not support integer encoding mode");
+    abort();
   }
 
   btor = boolector_new();
@@ -516,12 +518,14 @@ smt_astt boolector_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt boolector_convt::mk_smt_int(const BigInt &theint [[gnu::unused]])
 {
-  throw std::runtime_error("Boolector can't create integer sorts");
+  ::boolector_convt::msg.error("Boolector can't create integer sorts");
+  abort();
 }
 
 smt_astt boolector_convt::mk_smt_real(const std::string &str [[gnu::unused]])
 {
-  throw std::runtime_error("Boolector can't create Real sorts");
+  msg.error("Boolector can't create Real sorts");
+  abort();
 }
 
 smt_astt boolector_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
@@ -576,7 +580,8 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     break;
 
   default:
-    throw std::runtime_error("Unknown type for symbol");
+    msg.error("Unknown type for symbol");
+    abort();
   }
 
   smt_astt ast = new_ast(node, s);
@@ -654,7 +659,8 @@ bool boolector_convt::get_bool(smt_astt a)
     res = false;
     break;
   default:
-    throw std::runtime_error("Can't get boolean value from Boolector");
+    msg.error("Can't get boolean value from Boolector");
+    abort();
   }
 
   boolector_free_bv_assignment(btor, result);

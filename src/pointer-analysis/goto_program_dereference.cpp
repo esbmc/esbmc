@@ -191,9 +191,9 @@ void goto_program_dereferencet::dereference_instruction(
     }
     else if(is_code_printf2t(i.code))
     {
-      i.code->Foreach_operand([this, &checks_only](expr2tc &e) {
-        dereference_expr(e, checks_only, dereferencet::READ);
-      });
+      i.code->Foreach_operand(
+        [this, &checks_only](expr2tc &e)
+        { dereference_expr(e, checks_only, dereferencet::READ); });
     }
     else if(is_code_free2t(i.code))
     {
@@ -230,12 +230,13 @@ void remove_pointers(
   goto_programt &goto_program,
   contextt &context,
   const optionst &options,
-  value_setst &value_sets)
+  value_setst &value_sets,
+  const messaget &msg)
 {
   namespacet ns(context);
 
   goto_program_dereferencet goto_program_dereference(
-    ns, context, options, value_sets);
+    ns, context, options, value_sets, msg);
 
   goto_program_dereference.dereference_program(goto_program);
 }
@@ -244,12 +245,13 @@ void remove_pointers(
   goto_functionst &goto_functions,
   contextt &context,
   const optionst &options,
-  value_setst &value_sets)
+  value_setst &value_sets,
+  const messaget &msg)
 {
   namespacet ns(context);
 
   goto_program_dereferencet goto_program_dereference(
-    ns, context, options, value_sets);
+    ns, context, options, value_sets, msg);
 
   Forall_goto_functions(it, goto_functions)
     goto_program_dereference.dereference_program(it->second.body);
@@ -259,11 +261,12 @@ void pointer_checks(
   goto_programt &goto_program,
   const namespacet &ns,
   const optionst &options,
-  value_setst &value_sets)
+  value_setst &value_sets,
+  const messaget &msg)
 {
-  contextt new_context;
+  contextt new_context(msg);
   goto_program_dereferencet goto_program_dereference(
-    ns, new_context, options, value_sets);
+    ns, new_context, options, value_sets, msg);
   goto_program_dereference.pointer_checks(goto_program);
 }
 
@@ -272,10 +275,11 @@ void pointer_checks(
   const namespacet &ns,
   contextt &context,
   const optionst &options,
-  value_setst &value_sets)
+  value_setst &value_sets,
+  const messaget &msg)
 {
   goto_program_dereferencet goto_program_dereference(
-    ns, context, options, value_sets);
+    ns, context, options, value_sets, msg);
   goto_program_dereference.pointer_checks(goto_functions);
 }
 
@@ -283,12 +287,13 @@ void dereference(
   goto_programt::const_targett target,
   expr2tc &expr,
   const namespacet &ns,
-  value_setst &value_sets)
+  value_setst &value_sets,
+  const messaget &msg)
 {
   optionst options;
-  contextt new_context;
+  contextt new_context(msg);
   goto_program_dereferencet goto_program_dereference(
-    ns, new_context, options, value_sets);
+    ns, new_context, options, value_sets, msg);
 
   goto_program_dereference.dereference_expression(target, expr);
 }

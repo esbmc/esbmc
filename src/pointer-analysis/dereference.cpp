@@ -416,8 +416,9 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     }
     else
     {
-      throw std::runtime_error(fmt::format(
+      msg.error(fmt::format(
         "Unexpected expression in dereference_expr_nonscalar\n{}", *expr));
+      abort();
     }
 
     return res;
@@ -612,8 +613,9 @@ expr2tc dereferencet::build_reference_to(
 
   if(!is_object_descriptor2t(what))
   {
-    throw std::runtime_error(
+    msg.error(
       fmt::format("unknown points-to: {}", get_expr_id(what)));
+    abort();
   }
 
   const object_descriptor2t &o = to_object_descriptor2t(what);
@@ -819,19 +821,22 @@ void dereferencet::build_reference_rec(
     oss << "\n";
     oss << "(It isn't allowed by C anyway)";
     oss << "\n";
-    throw std::runtime_error(oss.str());
+    msg.error(oss.str());
+    abort();
   }
   else
   {
-    std::runtime_error(
+    msg.error(
       fmt::format("Unrecognized dest type during dereference\n{}", *type));
+    abort();
   }
 
   if(is_struct_type(value))
     flags |= flag_src_struct;
   else if(is_union_type(value))
   {
-    throw std::runtime_error("Dereference target of type union is now illegal");
+    msg.error("Dereference target of type union is now illegal");
+    abort();
   }
   else if(is_scalar_type(value))
     flags |= flag_src_scalar;
@@ -839,8 +844,9 @@ void dereferencet::build_reference_rec(
     flags |= flag_src_array;
   else
   {
-    throw std::runtime_error(fmt::format(
+    msg.error(fmt::format(
       "Unrecognized src type during dereference\n{}", *value->type));
+    abort();
   }
 
   // Consider the myriad of reference construction cases here
@@ -933,7 +939,8 @@ void dereferencet::build_reference_rec(
 
   // No scope for constructing references to arrays
   default:
-    throw std::runtime_error("Unrecognized input to build_reference_rec");
+    msg.error("Unrecognized input to build_reference_rec");
+    abort();
   }
 }
 
@@ -1479,7 +1486,8 @@ void dereferencet::construct_struct_ref_from_const_offset(
   oss << "Unexpectedly " << get_type_id(value->type) << " type'd";
   oss << " argument to construct_struct_ref"
       << "\n";
-  throw std::runtime_error(oss.str());
+  msg.error(oss.str());
+  abort();
 }
 
 void dereferencet::construct_struct_ref_from_dyn_offset(

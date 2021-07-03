@@ -15,6 +15,7 @@ Maintainers:
 
 default_message::default_message()
 {
-  std::shared_ptr<message_handlert> handler = std::make_shared<fmt_message_handler>();
+  std::shared_ptr<message_handlert> handler =
+    std::make_shared<fmt_message_handler>();
   this->add_message_handler(handler);
 }

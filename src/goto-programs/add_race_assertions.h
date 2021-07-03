@@ -18,11 +18,13 @@ Date: February 2006
 void add_race_assertions(
   value_setst &value_sets,
   contextt &context,
-  goto_programt &goto_program);
+  goto_programt &goto_program,
+  const messaget &msg);
 
 void add_race_assertions(
   value_setst &value_sets,
   contextt &context,
-  goto_functionst &goto_functions);
+  goto_functionst &goto_functions,
+  const messaget &msg);
 
 #endif

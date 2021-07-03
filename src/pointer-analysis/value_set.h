@@ -58,18 +58,20 @@ class value_sett
 {
 public:
   /** Primary constructor. Does approximately nothing non-standard. */
-  value_sett(const namespacet &_ns)
+  value_sett(const namespacet &_ns, const messaget &msg)
     : location_number(0),
       ns(_ns),
+      msg(msg),
       xchg_name("value_sett::__ESBMC_xchg_ptr"),
       xchg_num(0)
   {
   }
 
-  value_sett(const value_sett &ref)
+  explicit value_sett(const value_sett &ref)
     : location_number(ref.location_number),
       values(ref.values),
       ns(ref.ns),
+      msg(ref.msg),
       xchg_name("value_sett::__ESBMC_xchg_ptr"),
       xchg_num(0)
   {
@@ -82,6 +84,7 @@ public:
     xchg_name = ref.xchg_name;
     xchg_num = ref.xchg_num;
     // No need to copy ns, it should be the same in all contexts.
+    // Msg will not change as well
     return *this;
   }
 
@@ -662,6 +665,7 @@ public:
 
   /** Namespace for looking up types against. */
   const namespacet &ns;
+  const messaget &msg;
 
   irep_idt xchg_name;
   unsigned long xchg_num;

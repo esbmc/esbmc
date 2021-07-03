@@ -467,7 +467,12 @@ void goto_symext::intrinsic_switch_to(
   // Switch to other thread.
   const expr2tc &num = call.operands[0];
   if(!is_constant_int2t(num))
-    throw std::runtime_error("Can't switch to non-constant thread id no");
+  {
+    msg.error(
+      fmt::format("Can't switch to non-constant thread id no\n{}", *num)
+      );
+    abort();
+  }
 
   const constant_int2t &thread_num = to_constant_int2t(num);
 
@@ -516,9 +521,10 @@ void goto_symext::intrinsic_set_thread_data(
     threadid = to_typecast2t(threadid).from;
 
   if(!is_constant_int2t(threadid))
-    throw std::runtime_error(
-      "__ESBMC_set_start_data received nonconstant thread id");
-
+  {
+    msg.error("__ESBMC_set_start_data received nonconstant thread id");
+    abort();
+  }
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
   art.get_cur_state().set_thread_start_data(tid, startdata);
 }
@@ -536,8 +542,10 @@ void goto_symext::intrinsic_get_thread_data(
     threadid = to_typecast2t(threadid).from;
 
   if(!is_constant_int2t(threadid))
-    throw std::runtime_error(
-      "__ESBMC_get_start_data received nonconstant thread id");
+  {
+    msg.error("__ESBMC_get_start_data received nonconstant thread id");
+    abort();
+  }
 
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
   const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
@@ -574,12 +582,16 @@ void goto_symext::intrinsic_spawn_thread(
   goto_functionst::function_mapt::const_iterator it =
     art.goto_functions.function_map.find(symname);
   if(it == art.goto_functions.function_map.end())
-    throw std::runtime_error(
-      fmt::format("Spawning thread \"{}{}", symname, "\": symbol not found"));
+  {
+    msg.error(fmt::format("Spawning thread \"{}{}", symname, "\": symbol not found"));
+    abort();
+  }
 
   if(!it->second.body_available)
-    throw std::runtime_error(
-      fmt::format("Spawning thread \"{}{}", symname, "\": no body"));
+  {
+    msg.error(fmt::format("Spawning thread \"{}{}", symname, "\": no body"));
+    abort();
+  }
 
   const goto_programt &prog = it->second.body;
 
@@ -620,8 +632,10 @@ void goto_symext::intrinsic_get_thread_state(
 
   if(!is_constant_int2t(threadid))
   {
-    throw std::runtime_error(
-      "__ESBMC_get_thread_state received nonconstant thread id");
+    msg.error(
+      "__ESBMC_get_thread_state received nonconstant thread id"
+      );
+    abort();
   }
 
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
@@ -682,8 +696,10 @@ void goto_symext::intrinsic_register_monitor(
     threadid = to_typecast2t(threadid).from;
 
   if(!is_constant_int2t(threadid))
-    throw std::runtime_error(
-      "__ESBMC_register_monitor received nonconstant thread id");
+  {
+    msg.error("__ESBMC_register_monitor received nonconstant thread id");
+    abort();
+  }
 
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
   assert(art.get_cur_state().threads_state.size() >= tid);
@@ -929,7 +945,7 @@ void goto_symext::intrinsic_memset(
 
         // We now have a list of types and offsets we might resolve to.
         symex_dereference_statet sds(*this, *cur_state);
-        dereferencet dereference(ns, new_context, options, sds);
+        dereferencet dereference(ns, new_context, options, sds, msg);
         dereference.set_block_assertions();
         for(const auto &cur_type : in_list)
         {
@@ -989,8 +1005,10 @@ void goto_symext::intrinsic_memset(
           symex_assign(code_assign2tc(target, zero), false, newguard);
         }
       }
-      else
-        throw std::runtime_error("Logic mismatch in memset intrinsic");
+      else {
+        msg.error("Logic mismatch in memset intrinsic");
+        abort();
+      }
     }
 
     // Construct assignment to return value

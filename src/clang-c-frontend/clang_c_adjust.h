@@ -9,7 +9,7 @@
 class clang_c_adjust
 {
 public:
-  clang_c_adjust(contextt &_context);
+  clang_c_adjust(contextt &_context, const messaget &msg);
   virtual ~clang_c_adjust() = default;
 
   bool adjust();
@@ -17,6 +17,7 @@ public:
 protected:
   contextt &context;
   namespacet ns;
+  const messaget &msg;
 
   void adjust_symbol(symbolt &symbol);
   void adjust_type(typet &type);

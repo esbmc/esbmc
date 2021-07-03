@@ -15,7 +15,7 @@ void goto_programt::instructiont::dump() const
 {
   default_message msg;
   std::ostringstream oss;
-  output_instruction(*migrate_namespace_lookup, "", oss);
+  output_instruction(*migrate_namespace_lookup, "", oss, msg);
   msg.debug(oss.str());
 }
 
@@ -23,6 +23,7 @@ void goto_programt::instructiont::output_instruction(
   const class namespacet &ns,
   const irep_idt &identifier,
   std::ostream &out,
+  const messaget &msg,
   bool show_location) const
 {
   if(show_location)
@@ -63,7 +64,7 @@ void goto_programt::instructiont::output_instruction(
   case GOTO:
     if(!is_true(guard))
     {
-      out << "IF " << from_expr(ns, identifier, guard) << " THEN ";
+      out << "IF " << from_expr(ns, identifier, guard, msg) << " THEN ";
     }
 
     out << "GOTO ";
@@ -81,7 +82,7 @@ void goto_programt::instructiont::output_instruction(
     break;
 
   case FUNCTION_CALL:
-    out << "FUNCTION_CALL:  " << from_expr(ns, "", migrate_expr_back(code))
+    out << "FUNCTION_CALL:  " << from_expr(ns, "", migrate_expr_back(code), msg)
         << "\n";
     break;
 
@@ -90,7 +91,7 @@ void goto_programt::instructiont::output_instruction(
     std::string arg;
     const code_return2t &ref = to_code_return2t(code);
     if(!is_nil_expr(ref.operand))
-      arg = from_expr(ns, "", ref.operand);
+      arg = from_expr(ns, "", ref.operand, msg);
     out << "RETURN: " << arg << "\n";
   }
   break;
@@ -99,7 +100,7 @@ void goto_programt::instructiont::output_instruction(
   case DEAD:
   case OTHER:
   case ASSIGN:
-    out << from_expr(ns, identifier, code) << "\n";
+    out << from_expr(ns, identifier, code, msg) << "\n";
     break;
 
   case ASSUME:
@@ -110,7 +111,7 @@ void goto_programt::instructiont::output_instruction(
       out << "ASSERT ";
 
     {
-      out << from_expr(ns, identifier, guard);
+      out << from_expr(ns, identifier, guard, msg);
 
       const irep_idt &comment = location.comment();
       if(comment != "")
@@ -153,7 +154,7 @@ void goto_programt::instructiont::output_instruction(
       }
 
       if(!is_nil_expr(throw_ref.operand))
-        out << ": " << from_expr(ns, identifier, throw_ref.operand);
+        out << ": " << from_expr(ns, identifier, throw_ref.operand, msg);
     }
 
     out << "\n";
@@ -338,7 +339,7 @@ std::ostream &goto_programt::output(
   // output program
 
   for(const auto &instruction : instructions)
-    instruction.output_instruction(ns, identifier, out);
+    instruction.output_instruction(ns, identifier, out, msg);
 
   return out;
 }

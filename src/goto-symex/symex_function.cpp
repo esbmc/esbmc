@@ -73,7 +73,10 @@ unsigned goto_symext::argument_assignments(
   {
     // if you run out of actual arguments there was a mismatch
     if(it1 == arguments.end())
-      throw std::runtime_error("function call: not enough arguments");
+    {
+      msg.error("function call: not enough arguments");
+      abort();
+    }
 
     const irep_idt &identifier = function_type.argument_names[name_idx];
 
@@ -109,7 +112,8 @@ unsigned goto_symext::argument_assignments(
           oss << "function call: argument \"" << id2string(identifier)
               << "\" type mismatch: got " << get_type_id((*it1)->type)
               << ", expected " << get_type_id(arg_type) << '\n';
-          throw std::runtime_error(oss.str());
+          msg.error(oss.str());
+          abort();
         }
       }
 
@@ -148,8 +152,10 @@ unsigned goto_symext::argument_assignments(
       symbol.type = migrate_type_back((*it1)->type);
 
       if(new_context.move(symbol))
-        throw std::runtime_error("Couldn't add new va_arg symbol");
-
+      {
+        msg.error("Couldn't add new va_arg symbol");
+        abort();
+      }
       // 'Declare' the argument before assigning a value to it
       symex_decl(code_decl2tc((*it1)->type, identifier));
 
@@ -197,9 +203,10 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
       return;
     }
 
-    throw std::runtime_error(
+    msg.error(
       "failed to find `" + get_pretty_name(identifier.as_string()) +
       "' in function_map");
+    abort();
   }
 
   const goto_functiont &goto_function = it->second;
@@ -285,7 +292,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
         << "arguments doesn't match type definition; some inconsistent "
         << "rewriting occured"
         << "\n";
-    throw std::runtime_error(oss.str());
+    msg.error(oss.str());
+    abort();
   }
 
   frame.va_index =
@@ -362,7 +370,8 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     std::ostringstream oss;
     oss << "Function pointer call with no targets; irep: ";
     oss << call.pretty(0) << "\n";
-    throw std::runtime_error(oss.str());
+    msg.error(oss.str());
+    abort();
   }
 
   // Generate a list of functions to call. We'll then proceed to call them,
@@ -382,7 +391,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     // XXX jmorse - no location information any more.
     msg.status(fmt::format(
       "No target candidate for function call {}",
-      from_expr(ns, "", call.function)));
+      from_expr(ns, "", call.function, msg)));
     cur_state->source.pc++;
     return;
   }
@@ -390,7 +399,8 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   std::list<std::pair<guardt, symbol2tc>> l = get_function_list(func_ptr, msg);
 
   // Filter out illegal calls
-  auto illegal_filter = [&call](const decltype(l)::value_type &it) -> bool {
+  auto illegal_filter = [&call](const decltype(l)::value_type &it) -> bool
+  {
     expr2tc sym = it.second;
     assert(is_symbol2t(sym));
     if(!is_code_type(sym))
@@ -434,7 +444,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     cur_state->top().cur_function_ptr_targets.emplace_back(
       fit->second.body.instructions.begin(), it.second);
 
-    goto_state_list.emplace_back(*cur_state);
+    goto_state_list.emplace_back(*cur_state, msg);
     statet::goto_statet &new_state = goto_state_list.back();
     expr2tc guardexpr = it.first.as_expr();
     cur_state->rename(guardexpr);
@@ -467,7 +477,7 @@ bool goto_symext::run_next_function_ptr_target(bool first)
     statet::goto_state_listt &goto_state_list =
       cur_state->top()
         .goto_state_map[cur_state->top().function_ptr_combine_target];
-    goto_state_list.emplace_back(*cur_state);
+    goto_state_list.emplace_back(*cur_state, msg);
   }
 
   // Take one function ptr target out of the list and jump to it. A previously
@@ -577,7 +587,10 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
     }
   }
   else if(!is_nil_expr(frame.return_value))
-    throw std::runtime_error("return with unexpected value");
+  {
+    msg.error("return with unexpected value");
+    abort();
+  }
 
   return false;
 }
@@ -591,18 +604,20 @@ void goto_symext::symex_return(const expr2tc &code)
   statet::goto_state_listt &goto_state_list =
     cur_state->top().goto_state_map[cur_state->top().end_of_function];
 
-  goto_state_list.emplace_back(*cur_state);
+  goto_state_list.emplace_back(*cur_state, msg);
 
   // check whether the stack limit and return
   // value optimization have been activated.
   if(stack_limit > 0 && no_return_value_opt)
   {
-    code->foreach_operand([this](const expr2tc &e) {
-      // check whether the stack size has been reached.
-      claim(
-        (cur_state->top().process_stack_size(e, stack_limit)),
-        "Stack limit property was violated");
-    });
+    code->foreach_operand(
+      [this](const expr2tc &e)
+      {
+        // check whether the stack size has been reached.
+        claim(
+          (cur_state->top().process_stack_size(e, stack_limit)),
+          "Stack limit property was violated");
+      });
   }
 
   // kill this one

@@ -21,17 +21,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-static const std::string &get_string_constant(const exprt &expr)
+static const std::string &
+get_string_constant(const exprt &expr, const messaget &msg)
 {
   if(expr.id() == "typecast" && expr.operands().size() == 1)
-    return get_string_constant(expr.op0());
+    return get_string_constant(expr.op0(), msg);
 
   if(
     !expr.is_address_of() || expr.operands().size() != 1 ||
     !expr.op0().is_index() || expr.op0().operands().size() != 2)
   {
-    throw std::runtime_error(
-      fmt::format("expected string constant, but got:\n{}", expr));
+    msg.error(fmt::format("expected string constant, but got:\n{}", expr));
+    abort();
   }
 
   return expr.op0().op0().value().as_string();
@@ -263,7 +264,7 @@ void goto_convertt::do_cpp_new(
   }
 
   // grab initializer
-  goto_programt tmp_initializer;
+  goto_programt tmp_initializer(get_message_handler());
   cpp_new_initializer(lhs, rhs, tmp_initializer);
 
   exprt alloc_size;
@@ -591,7 +592,8 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t = dest.add_instruction(ASSERT);
     migrate_expr(arguments[0], t->guard);
 
-    const std::string &description = get_string_constant(arguments[1]);
+    const std::string &description =
+      get_string_constant(arguments[1], message_handler);
     t->location = function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
@@ -706,7 +708,8 @@ void goto_convertt::do_function_call_symbol(
     }
 
     const irep_idt description =
-      "assertion " + id2string(get_string_constant(arguments[0]));
+      "assertion " +
+      id2string(get_string_constant(arguments[0], message_handler));
 
     if(options.get_bool_option("no-assertions"))
       return;
@@ -730,7 +733,7 @@ void goto_convertt::do_function_call_symbol(
     }
 
     const std::string description =
-      "assertion " + get_string_constant(arguments[0]);
+      "assertion " + get_string_constant(arguments[0], message_handler);
 
     if(options.get_bool_option("no-assertions"))
       return;

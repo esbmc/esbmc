@@ -77,18 +77,18 @@ void value_sett::output(std::ostream &out) const
 
       // Display invalid / unknown objects as just that,
       if(is_invalid2t(o) || is_unknown2t(o))
-        result = from_expr(ns, identifier, o);
+        result = from_expr(ns, identifier, o, msg);
       else
       {
         // Everything else, display as a triple of <object, offset, type>.
-        result = "<" + from_expr(ns, identifier, o) + ", ";
+        result = "<" + from_expr(ns, identifier, o, msg) + ", ";
 
         if(o_it->second.offset_is_set)
           result += integer2string(o_it->second.offset) + "";
         else
           result += "*";
 
-        result += ", " + from_type(ns, identifier, o->type);
+        result += ", " + from_type(ns, identifier, o->type, msg);
 
         result += ">";
       }
@@ -377,8 +377,8 @@ void value_sett::get_value_set_rec(
       return;
 
     default:
-      throw std::runtime_error(
-        fmt::format("Unexpected side-effect: {}", *expr));
+      msg.error(fmt::format("Unexpected side-effect: {}", *expr));
+      abort();
     }
   }
 
@@ -581,9 +581,10 @@ void value_sett::get_value_set_rec(
         }
         else
         {
-          throw std::runtime_error(fmt::format(
+          msg.error(fmt::format(
             "Pointer arithmetic on type where we can't determine size\n{}",
             *subtype));
+          abort();
         }
       }
 
@@ -1013,7 +1014,8 @@ void value_sett::assign(
       else if(is_constant_array2t(rhs) || is_constant_expr(rhs))
       {
         rhs->foreach_operand(
-          [this, &add_to_sets, &lhs_index](const expr2tc &e) {
+          [this, &add_to_sets, &lhs_index](const expr2tc &e)
+          {
             assign(lhs_index, e, add_to_sets);
             add_to_sets = true;
           });

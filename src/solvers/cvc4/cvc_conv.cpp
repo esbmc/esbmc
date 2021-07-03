@@ -24,7 +24,7 @@ cvc_convt::cvc_convt(
   const messaget &msg)
   : smt_convt(ns, options, msg),
     array_iface(false, false),
-    fp_convt(this),
+    fp_convt(this, msg),
     to_bv_counter(0),
     em(),
     smt(&em),

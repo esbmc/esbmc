@@ -37,7 +37,7 @@ public:
   // make symex renaming work.
   std::set<std::string> inlined_funcs;
 
-  goto_functiont() : body_available(false)
+  goto_functiont(const messaget &msg) : body(msg), body_available(false)
   {
   }
 

@@ -6,6 +6,7 @@
 #include <string>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/smtlib/smtlib_tok.hpp>
+#include <util/message/default_message.h>
 
 #undef yylex
 #define yylex smtliblex
@@ -364,15 +365,21 @@ term: spec_constant
          }
        | TOK_LPAREN TOK_KW_FORALL TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
          {
-           throw std::runtime_error("Not handling forall in smtlib output");           
+           default_message msg;
+           msg.error("Not handling forall in smtlib output");
+           abort();
          }
        | TOK_LPAREN TOK_KW_EXISTS TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
          {
-           throw std::runtime_error("Not handling exists in smtlib output");           
+           default_message msg;
+           msg.error("Not handling exists in smtlib output");
+           abort();
          }
        | TOK_LPAREN TOK_KW_EXCL term attr_list TOK_RPAREN
          {
-           throw std::runtime_error("Not handling '!' in smtlib output");
+           default_message msg;
+           msg.error("Not handling '!' in smtlib output");
+           abort();
          }
 
 gen_response: TOK_KW_UNSUPPORTED

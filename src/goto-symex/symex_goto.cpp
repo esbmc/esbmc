@@ -154,7 +154,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   statet::goto_state_listt &goto_state_list =
     cur_state->top().goto_state_map[new_state_pc];
 
-  goto_state_list.emplace_back(*cur_state);
+  goto_state_list.emplace_back(*cur_state, msg);
 
   // adjust guards
   if(new_guard_true)

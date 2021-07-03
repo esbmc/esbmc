@@ -5,9 +5,10 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 {
   if(int_encoding)
   {
-    throw std::runtime_error(
+    msg.error(
       "Refusing to byte extract in integer mode; re-run in "
       "bitvector mode");
+    abort();
   }
 
   const byte_extract2t &data = to_byte_extract2t(expr);
@@ -78,8 +79,8 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
 {
   if(int_encoding)
   {
-    throw std::runtime_error(
-      "Can't byte update in integer mode; rerun in bitvector mode");
+    msg.error("Can't byte update in integer mode; rerun in bitvector mode");
+    abort();
   }
 
   const byte_update2t &data = to_byte_update2t(expr);

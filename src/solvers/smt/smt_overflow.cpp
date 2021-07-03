@@ -146,7 +146,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   }
 
   default:
-    throw std::runtime_error("unexpected overflow_arith operand");
+    msg.error("unexpected overflow_arith operand");
+    abort();
   }
 
   return nullptr;
@@ -164,8 +165,8 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
 
   if(ocast.bits >= width || ocast.bits == 0)
   {
-    throw std::runtime_error(
-      "SMT conversion: overflow-typecast got wrong number of bits");
+    msg.error("SMT conversion: overflow-typecast got wrong number of bits");
+    abort();
   }
 
   // Basically: if it's positive in the first place, ensure all the top bits

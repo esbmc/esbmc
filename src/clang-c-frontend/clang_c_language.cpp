@@ -227,13 +227,13 @@ bool clang_c_languaget::typecheck(
   const std::string &module,
   const messaget &msg)
 {
-  contextt new_context;
+  contextt new_context(msg);
 
   clang_c_convertert converter(new_context, ASTs, msg);
   if(converter.convert())
     return true;
 
-  clang_c_adjust adjuster(new_context);
+  clang_c_adjust adjuster(new_context, msg);
   if(adjuster.adjust())
     return true;
 

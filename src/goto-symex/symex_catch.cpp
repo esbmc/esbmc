@@ -321,7 +321,7 @@ void goto_symext::update_throw_target(
       {
         statet::goto_state_listt &goto_state_list = i->goto_state_map[target];
 
-        goto_state_list.emplace_back(*cur_state);
+        goto_state_list.emplace_back(*cur_state, msg);
         cur_state->guard.make_false();
         break;
       }

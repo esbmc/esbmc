@@ -201,13 +201,14 @@ void renaming::level2t::coveredinbees(
 
 void renaming::renaming_levelt::get_original_name(
   expr2tc &expr,
-  symbol2t::renaming_level lev)
+  symbol2t::renaming_level lev,
+  const messaget &msg)
 {
   if(is_nil_expr(expr))
     return;
 
-  expr->Foreach_operand(
-    [&lev](expr2tc &e) { renaming_levelt::get_original_name(e, lev); });
+  expr->Foreach_operand([&lev, &msg](expr2tc &e)
+                        { renaming_levelt::get_original_name(e, lev, msg); });
 
   if(!is_symbol2t(expr))
     return;
@@ -245,19 +246,19 @@ void renaming::renaming_levelt::get_original_name(
     return;
 
   default:
-    throw std::runtime_error(
-      fmt::format("get_original_nameing to invalid level {}", lev));
+    msg.error(fmt::format("get_original_nameing to invalid level {}", lev));
+    abort();
   }
 }
 
-void renaming::level1t::print(std::ostream &out) const
+void renaming::level1t::print(std::ostream &out, const messaget &) const
 {
   for(const auto &current_name : current_names)
     out << current_name.first.base_name << " --> "
         << "thread " << thread_id << " count " << current_name.second << "\n";
 }
 
-void renaming::level2t::print(std::ostream &out) const
+void renaming::level2t::print(std::ostream &out, const messaget &msg) const
 {
   for(const auto &current_name : current_names)
   {
@@ -272,7 +273,7 @@ void renaming::level2t::print(std::ostream &out) const
     if(!is_nil_expr(current_name.second.constant))
     {
       out << from_expr(
-               *migrate_namespace_lookup, "", current_name.second.constant)
+               *migrate_namespace_lookup, "", current_name.second.constant, msg)
           << "\n";
     }
     else
@@ -288,7 +289,7 @@ void renaming::level2t::dump() const
 {
   default_message msg;
   std::ostringstream oss;
-  print(oss);
+  print(oss, msg);
   msg.debug(oss.str());
 }
 

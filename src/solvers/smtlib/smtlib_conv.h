@@ -155,8 +155,12 @@ public:
 class smtlib_smt_ast : public smt_ast
 {
 public:
-  smtlib_smt_ast(smt_convt *ctx, const smt_sort *s, smt_func_kind k)
-    : smt_ast(ctx, s), kind(k)
+  smtlib_smt_ast(
+    smt_convt *ctx,
+    const smt_sort *s,
+    smt_func_kind k,
+    const messaget &msg)
+    : smt_ast(ctx, s, msg), kind(k)
   {
   }
   ~smtlib_smt_ast() override = default;

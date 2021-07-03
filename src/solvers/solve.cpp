@@ -74,9 +74,10 @@ static smt_convt *create_solver(
     }
   }
 
-  throw std::runtime_error(fmt::format(
+  msg.error(fmt::format(
     "The {} solver has not been built into this version of ESBMC, sorry",
     the_solver));
+  abort();
 }
 
 static const std::string pick_default_solver(const messaget &msg)
@@ -88,9 +89,10 @@ static const std::string pick_default_solver(const messaget &msg)
   // Pick whatever's first in the list.
   if(esbmc_num_solvers == 1)
   {
-    throw std::runtime_error(
+    msg.error(
       "No solver backends built into ESBMC; please either build "
       "some in, or explicitly configure the smtlib backend");
+    abort();
   }
   else
   {
@@ -118,7 +120,8 @@ static smt_convt *pick_solver(
     {
       if(the_solver != "")
       {
-        throw std::runtime_error("Please only specify one solver");
+        msg.error("Please only specify one solver");
+        abort();
       }
 
       the_solver = list_of_all_solvers[i];
@@ -172,13 +175,13 @@ smt_convt *create_solver_factory(
     ctx->set_tuple_iface(tuple_api);
   // Use the node flattener if specified
   else if(node_flat)
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
+    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns, msg));
   // Use the symbol flattener if specified
   else if(sym_flat)
-    ctx->set_tuple_iface(new smt_tuple_sym_flattener(ctx, ns));
+    ctx->set_tuple_iface(new smt_tuple_sym_flattener(ctx, ns, msg));
   // Default: node flattener
   else
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
+    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns, msg));
 
   // Pick an array flattener to use. Again, pick the solver native one by
   // default, or the one specified, or if none of the above then use the built
@@ -191,7 +194,7 @@ smt_convt *create_solver_factory(
     ctx->set_array_iface(new array_convt(ctx));
 
   if(fp_api == nullptr || fp_to_bv)
-    ctx->set_fp_conv(new fp_convt(ctx));
+    ctx->set_fp_conv(new fp_convt(ctx, msg));
   else
     ctx->set_fp_conv(fp_api);
 

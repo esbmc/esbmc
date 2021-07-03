@@ -2822,8 +2822,10 @@ void clang_c_convertert::get_decl_name(
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
       nd.dump(ross);
-      throw std::runtime_error(
-        fmt::format("Declaration has an empty name:\n{}", oss.str()));
+      msg.error(
+        fmt::format("Declaration has an empty name:\n{}", oss.str())
+        );
+      abort();
     }
   }
 
@@ -2839,7 +2841,8 @@ void clang_c_convertert::get_decl_name(
   llvm::raw_os_ostream ross(oss);
   ross << "Unable to generate the USR for:\n";
   nd.dump(ross);
-  throw std::runtime_error(oss.str());
+  msg.error(oss.str());
+  abort();
 }
 
 void clang_c_convertert::get_start_location_from_stmt(
@@ -2952,8 +2955,11 @@ symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
   {
     if(context.move(symbol, s))
     {
-      throw std::runtime_error(fmt::format(
-        "Couldn't add symbol {} to symbol table\n{}", symbol.name, symbol));
+      msg.error(
+        fmt::format(
+          "Couldn't add symbol {} to symbol table\n{}", symbol.name, symbol)
+        );
+      abort();
     }
   }
   else

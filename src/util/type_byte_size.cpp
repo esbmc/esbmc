@@ -72,12 +72,14 @@ BigInt type_byte_size_bits(const type2tc &type)
     return 0;
 
   case type2t::symbol_id:
-    throw std::runtime_error(
-      fmt::format("Symbolic type id in type_byte_size\n{}", *type));
+    assert(
+      0 &&
+      fmt::format("Symbolic type id in type_byte_size\n{}", *type).c_str());
 
   case type2t::cpp_name_id:
-    throw std::runtime_error(
-      fmt::format("C++ symbolic type id in type_byte_size\n{}", *type));
+    assert(
+      0 &&
+      fmt::format("C++ symbolic type id in type_byte_size\n{}", *type).c_str());
 
   case type2t::bool_id:
   case type2t::unsignedbv_id:
@@ -137,8 +139,9 @@ BigInt type_byte_size_bits(const type2tc &type)
   }
 
   default:
-    throw std::runtime_error(
-      "Unrecognised type in type_byte_size_bits:\n{}, type");
+    assert(
+      0 && fmt::format("Unrecognised type in type_byte_size_bits:\n{}", *type)
+             .c_str());
   }
 }
 
