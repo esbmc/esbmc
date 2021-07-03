@@ -403,7 +403,10 @@ inline expr2tc gen_one(const type2tc &type)
     break;
   }
 
-  assert(0 && fmt::format("Can't generate one for type {}", get_type_id(type)).c_str());
+  assert(
+    0 &&
+    fmt::format("Can't generate one for type {}", get_type_id(type)).c_str());
+  abort();
 }
 
 #endif /* UTIL_IREP2_UTILS_H_ */

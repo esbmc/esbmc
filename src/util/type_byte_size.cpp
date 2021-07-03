@@ -142,6 +142,7 @@ BigInt type_byte_size_bits(const type2tc &type)
     assert(
       0 && fmt::format("Unrecognised type in type_byte_size_bits:\n{}", *type)
              .c_str());
+    abort();
   }
 }
 
