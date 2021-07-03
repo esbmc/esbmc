@@ -783,11 +783,9 @@ bool yices_convt::get_bool(smt_astt a)
   int32_t val;
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   if(yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val))
-  {
-    std::cerr << "Can't get boolean value from Yices\n";
-    abort();
-  }
-  return val ? true : false;
+    return false;
+  else
+    return val ? true : false;
 }
 
 BigInt yices_convt::get_bv(smt_astt a, bool is_signed)
@@ -835,6 +833,12 @@ expr2tc yices_convt::get_array_elem(
   term_t app = yices_application(ast->a, 1, &idx);
   smt_sortt subsort = convert_sort(subtype);
   smt_astt container = new_ast(app, subsort);
+  if(is_pointer_type(subtype))
+  {
+    const pointer_type2t &ptr_type = to_pointer_type(subtype);
+    if(is_empty_type(ptr_type.subtype))
+      return expr2tc();
+  }
   return get_by_ast(subtype, container);
 }
 
