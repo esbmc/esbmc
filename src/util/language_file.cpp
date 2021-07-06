@@ -230,7 +230,7 @@ void language_filest::typecheck_virtual_methods(contextt &context)
               ": The virtual method isn't pure virtual and hasn't a "
               "method implementation ");
             msg.error("CONVERSION ERROR");
-            throw 0;
+            abort();
           }
         }
       }

@@ -190,7 +190,7 @@ public:
   void output(std::ostream &out) const;
   void short_output(std::ostream &out, bool show_ignored = false) const;
 
-  void check_for_duplicate_assigns(const messaget &msg) const;
+  void check_for_duplicate_assigns() const;
 
   void clear()
   {

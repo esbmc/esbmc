@@ -14,7 +14,7 @@ std::string from_expr(
   const namespacet &ns,
   const irep_idt &identifier,
   const exprt &expr,
-  const messaget &)
+  const messaget &msg)
 {
   int mode;
 
@@ -37,7 +37,7 @@ std::string from_expr(
     }
   }
 
-  std::unique_ptr<languaget> p(mode_table[mode].new_language());
+  std::unique_ptr<languaget> p(mode_table[mode].new_language(msg));
   std::string result;
   p->from_expr(expr, result, ns);
   return result;
@@ -47,7 +47,7 @@ std::string from_type(
   const namespacet &ns,
   const irep_idt &identifier,
   const typet &type,
-  const messaget &)
+  const messaget &msg)
 {
   int mode;
 
@@ -70,7 +70,7 @@ std::string from_type(
     }
   }
 
-  std::unique_ptr<languaget> p(mode_table[mode].new_language());
+  std::unique_ptr<languaget> p(mode_table[mode].new_language(msg));
   std::string result;
   p->from_type(type, result, ns);
   return result;

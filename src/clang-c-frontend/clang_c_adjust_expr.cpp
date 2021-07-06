@@ -508,8 +508,9 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(!symbol.is_type)
     {
-      throw std::runtime_error(
+      msg.error(
         fmt::format("expected type symbol, but got\n{}", symbol));
+      abort();
     }
 
     if(symbol.is_macro)

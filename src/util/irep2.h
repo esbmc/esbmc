@@ -332,7 +332,7 @@ public:
   {
     virtual const char *what() const throw()
     {
-      return "Sizeof symbolic type encountered";
+      return "symbolic type encountered";
     }
   };
 

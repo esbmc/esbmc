@@ -124,7 +124,8 @@ void build_goto_trace(
 void build_successful_goto_trace(
   const std::shared_ptr<symex_target_equationt> &target,
   const namespacet &ns,
-  goto_tracet &goto_trace)
+  goto_tracet &goto_trace,
+  const messaget &msg)
 {
   unsigned step_nr = 0;
   for(symex_target_equationt::SSA_stepst::const_iterator it =
@@ -134,7 +135,7 @@ void build_successful_goto_trace(
   {
     if(
       (it->is_assert() || it->is_assume()) &&
-      (is_valid_witness_expr(ns, it->lhs)))
+      (is_valid_witness_expr(ns, it->lhs, msg)))
     {
       // When building the correctness witness, we only care about
       // asserts and assumes

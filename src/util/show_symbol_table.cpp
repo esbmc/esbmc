@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/language.h>
 #include <langapi/mode.h>
+#include <message/default_message.h>
 
 #include "show_symbol_table.h"
 
@@ -17,7 +18,7 @@ void show_symbol_table_xml_ui()
 {
 }
 
-void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
+void show_symbol_table_plain(const namespacet &ns, std::ostream &out, const messaget &msg)
 {
   out << "\n"
       << "Symbols:"
@@ -25,7 +26,7 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
   out << "Number of symbols: " << ns.get_context().size() << "\n";
   out << "\n";
 
-  ns.get_context().foreach_operand_in_order([&out, &ns](const symbolt &s) {
+  ns.get_context().foreach_operand_in_order([&out, &ns, &msg](const symbolt &s) {
     int mode;
 
     if(s.mode == "")
@@ -37,7 +38,7 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
         throw "symbol " + id2string(s.name) + " has unknown mode";
     }
 
-    std::unique_ptr<languaget> p(mode_table[mode].new_language());
+    std::unique_ptr<languaget> p(mode_table[mode].new_language(msg));
     std::string type_str, value_str;
 
     if(s.type.is_not_nil())

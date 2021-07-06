@@ -122,9 +122,10 @@ void convert(const irept &irep, goto_programt &program)
 
       if(fit == program.instructions.end())
       {
-        throw std::runtime_error(
+        program.msg.error(
           "Warning: could not resolve target link "
           "during irep->goto_program translation.");
+        abort();
       }
     }
   }

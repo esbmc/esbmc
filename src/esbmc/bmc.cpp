@@ -98,7 +98,7 @@ void bmct::successful_trace()
     goto_tracet goto_trace;
     msg.status("Building successful trace");
     /* build_successful_goto_trace(eq, ns, goto_trace); */
-    correctness_graphml_goto_trace(options, ns, goto_trace);
+    correctness_graphml_goto_trace(options, ns, goto_trace, msg);
   }
 }
 
@@ -125,9 +125,7 @@ void bmct::error_trace(
     violation_graphml_goto_trace(options, ns, goto_trace, msg);
 
   std::ostringstream oss;
-  oss << "\n"
-      << "Counterexample:"
-      << "\n";
+  oss << "\nCounterexample:\n";
   show_goto_trace(oss, ns, goto_trace, msg);
   msg.result(oss.str());
 }
@@ -201,9 +199,9 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
   unsigned int count = 1;
   std::ostringstream oss;
   if(config.options.get_bool_option("ssa-symbol-table"))
-    ::show_symbol_table_plain(ns, oss);
+    ::show_symbol_table_plain(ns, oss, msg);
 
-  languagest languages(ns, MODE_C);
+  languagest languages(ns, MODE_C, msg);
 
   oss << "\nProgram constraints: \n";
 
@@ -595,7 +593,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   }
 
   if(options.get_bool_option("double-assign-check"))
-    eq->check_for_duplicate_assigns(msg);
+    eq->check_for_duplicate_assigns();
 
   try
   {

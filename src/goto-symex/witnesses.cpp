@@ -715,7 +715,7 @@ std::string get_formated_assignment(
   std::string assignment = "";
   if(
     !is_nil_expr(step.value) && is_constant_expr(step.value) &&
-    is_valid_witness_step(ns, step))
+    is_valid_witness_step(ns, step, msg))
   {
     assignment += from_expr(ns, "", step.lhs, msg);
     assignment += " = ";
@@ -733,9 +733,9 @@ std::string get_formated_assignment(
 }
 
 /* */
-bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
+bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step, const messaget &msg)
 {
-  languagest languages(ns, "C");
+  languagest languages(ns, "C", msg);
   std::string lhsexpr;
   languages.from_expr(migrate_expr_back(step.lhs), lhsexpr);
   std::string location = step.pc->location.to_string();
@@ -748,9 +748,10 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
 /* */
 bool is_valid_witness_expr(
   const namespacet &ns,
-  const irep_container<expr2t> &exp)
+  const irep_container<expr2t> &exp,
+  const messaget &msg)
 {
-  languagest languages(ns, "C");
+  languagest languages(ns, "C", msg);
   std::string value;
   languages.from_expr(migrate_expr_back(exp), value);
   return (value.find("__ESBMC") & value.find("stdin") & value.find("stdout") &
