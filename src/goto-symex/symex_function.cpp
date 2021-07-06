@@ -37,7 +37,7 @@ bool goto_symext::get_unwind_recursion(
       (k_induction || inductive_step) &&
       !options.get_bool_option("disable-inductive-step"))
     {
-      this->msg.warning(
+      msg.warning(
         "**** WARNING: k-induction does not support recursion yet. "
         "Disabling inductive step");
 

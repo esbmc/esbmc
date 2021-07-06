@@ -239,8 +239,12 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
   }
 
   if(interactive_ileaves && tid != user_tid)
+  {
     message_handler.error(
       "Ileave code selected different thread from user choice");
+    abort();
+  }
+
   return tid;
 }
 

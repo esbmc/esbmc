@@ -4,6 +4,7 @@
 #include <util/simplify_expr_class.h>
 #include <stdexcept>
 #include <sstream>
+#include <clang-c-frontend/clang_c_convert.h>
 
 void gen_typecast(const namespacet &ns, exprt &dest, const typet &type)
 {
@@ -28,7 +29,7 @@ void gen_typecast_arithmetic(const namespacet &ns, exprt &expr)
   c_typecast.implicit_typecast_arithmetic(expr);
 }
 
-void gen_typecast_to_union(exprt &e, const typet &t)
+void clang_c_convertert::gen_typecast_to_union(exprt &e, const typet &t)
 {
   // If RHS is already of same union type, don't do anything
   if(e.type() == t.type())
@@ -50,8 +51,8 @@ void gen_typecast_to_union(exprt &e, const typet &t)
 
   /* We should never reach here since clang frontend already checks for this
    * however... we should prevent any funny things to happen */
-  std::ostringstream msg;
-  msg << "Couldn't map type " << e.type().pretty_name() << " into the union"
-      << "\n";
-  throw std::domain_error(msg.str());
+  std::ostringstream oss;
+  oss << "Couldn't map type " << e.type().pretty_name() << " into the union";
+  msg.error(oss.str());
+  abort();
 }

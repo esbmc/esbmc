@@ -7,6 +7,7 @@
 void error_handler(const char *msg)
 {
   assert(0 && fmt::format("Boolector error encountered\n{}", msg).c_str());
+  abort();
 }
 
 smt_convt *create_new_boolector_solver(

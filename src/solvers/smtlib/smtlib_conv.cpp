@@ -238,7 +238,11 @@ smtlib_convt::smtlib_convt(
   class sexpr &keyword = s.sexpr_list.front();
   class sexpr &value = s.sexpr_list.back();
   if(!(keyword.token == TOK_KEYWORD && keyword.data == ":name"))
-    std::runtime_error("Bad get-info :name response from solver");
+  {
+    msg.error("Bad get-info :name response from solver");
+    abort();
+  }
+
 
   assert(value.token == TOK_STRINGLIT && "Non-string solver name response");
   solver_name = value.data;
@@ -256,7 +260,10 @@ smtlib_convt::smtlib_convt(
     "More than one sexpr response to get-info version");
   class sexpr &v = sexpr->sexpr_list.front();
 
-  assert(v.token == 0 && v.sexpr_list.size() == 2 && "Bad solver version fmt");
+  if(v.token == 0 && v.sexpr_list.size() == 2) {
+    msg.error("Bad solver version fmt");
+    abort();
+  }
   class sexpr &kw = v.sexpr_list.front();
   class sexpr &val = v.sexpr_list.back();
   if(!(kw.token == TOK_KEYWORD && kw.data == ":version"))
@@ -701,7 +708,7 @@ bool smtlib_convt::get_bool(smt_astt a)
 
   if(smtlib_output->token == TOK_KW_ERROR)
   {
-    std::runtime_error(fmt::format(
+    msg.error(fmt::format(
       "Error from smtlib solver when fetching literal value: \"{}\"",
       smtlib_output->data));
     abort();

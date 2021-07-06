@@ -25,19 +25,18 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/c_link.h>
 #include <util/message/format.h>
 
-languaget *new_clang_c_language()
+languaget *new_clang_c_language(const messaget &msg)
 {
-  return new clang_c_languaget;
+  return new clang_c_languaget(msg);
 }
 
-clang_c_languaget::clang_c_languaget()
+clang_c_languaget::clang_c_languaget(const messaget &msg) : languaget(msg)
 {
   // Create a temporary directory, to dump clang's headers
   auto p = boost::filesystem::temp_directory_path();
   if(!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
   {
-    assert(
-      0 && "Can't find temporary directory (needed to dump clang headers)");
+    msg.error("Can't find temporary directory (needed to dump clang headers)");
     abort();
   }
 
@@ -46,8 +45,7 @@ clang_c_languaget::clang_c_languaget()
   boost::filesystem::create_directory(p);
   if(!boost::filesystem::is_directory(p))
   {
-    assert(
-      0 && "Can't create temporary directory (needed to dump clang headers)");
+    msg.error("Can't create temporary directory (needed to dump clang headers)");
     abort();
   }
 
@@ -74,8 +72,7 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
     break;
 
   default:
-    assert(
-      0 &&
+    msg.error(
       fmt::format("Unknown word size: {}\n", config.ansi_c.word_size).c_str());
     abort();
   }

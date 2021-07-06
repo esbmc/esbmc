@@ -58,7 +58,7 @@ bool language_uit::parse(const std::string &filename)
 
   language_filet &lf = result.first->second;
   lf.filename = filename;
-  lf.language = mode_table[mode].new_language();
+  lf.language = mode_table[mode].new_language(msg);
   languaget &language = *lf.language;
 
   msg.status("Parsing", filename);
@@ -109,5 +109,5 @@ void language_uit::show_symbol_table_xml_ui()
 
 void language_uit::show_symbol_table_plain(std::ostream &out)
 {
-  ::show_symbol_table_plain(namespacet(context), out);
+  ::show_symbol_table_plain(namespacet(context), out, msg);
 }

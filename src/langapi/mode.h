@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 struct mode_table_et
 {
   const char *name;
-  languaget *(*new_language)();
+  languaget *(*new_language)(const messaget &msg);
   const char **extensions;
 };
 
@@ -28,8 +28,8 @@ extern const mode_table_et mode_table[];
 extern const char *extensions_ansi_c[];
 extern const char *extensions_cpp[];
 
-languaget *new_clang_c_language();
-languaget *new_clang_cpp_language();
+languaget *new_clang_c_language(const messaget &msg);
+languaget *new_clang_cpp_language(const messaget &msg);
 languaget *new_ansi_c_language();
 languaget *new_cpp_language();
 
@@ -58,7 +58,7 @@ languaget *new_cpp_language();
 int get_mode(const std::string &str);
 int get_mode_filename(const std::string &filename);
 
-languaget *new_language(const char *mode);
+languaget *new_language(const char *mode, const messaget &msg);
 
 #define MODE_C "C"
 #define MODE_CPP "C++"

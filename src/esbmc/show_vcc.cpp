@@ -19,12 +19,9 @@ void bmct::show_vcc(
   std::ostream &out,
   std::shared_ptr<symex_target_equationt> &eq)
 {
-  out << "\n"
-      << "VERIFICATION CONDITIONS:"
-      << "\n"
-      << "\n";
+  out << "\nVERIFICATION CONDITIONS:\n\n";
 
-  languagest languages(ns, MODE_C);
+  languagest languages(ns, MODE_C, msg);
 
   for(symex_target_equationt::SSA_stepst::iterator it = eq->SSA_steps.begin();
       it != eq->SSA_steps.end();

@@ -25,7 +25,8 @@ void build_goto_trace(
 void build_successful_goto_trace(
   const std::shared_ptr<symex_target_equationt> &target,
   const namespacet &ns,
-  goto_tracet &goto_trace);
+  goto_tracet &goto_trace,
+  const messaget &msg);
 
 expr2tc build_lhs(
   std::shared_ptr<smt_convt> &smt_conv,

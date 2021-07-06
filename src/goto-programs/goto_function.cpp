@@ -74,6 +74,7 @@ void goto_convertt::do_function_call(
     err_location(function);
     message_handler.error(fmt::format(
       "unexpected function argument: {}", new_function.id_string()));
+    abort();
   }
 }
 

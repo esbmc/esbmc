@@ -52,14 +52,14 @@ public:
   bool from_type(const typet &type, std::string &code, const namespacet &ns)
     override;
 
-  languaget *new_language() override
+  languaget *new_language(const messaget &msg) override
   {
-    return new clang_c_languaget;
+    return new clang_c_languaget(msg);
   }
 
   // constructor, destructor
   ~clang_c_languaget() override = default;
-  clang_c_languaget();
+  explicit clang_c_languaget(const messaget &msg);
 
 protected:
   virtual std::string internal_additions();
@@ -72,6 +72,7 @@ protected:
   std::vector<std::unique_ptr<clang::ASTUnit>> ASTs;
 };
 
-languaget *new_clang_c_language();
+languaget *new_clang_c_language(const messaget &msg);
+
 
 #endif

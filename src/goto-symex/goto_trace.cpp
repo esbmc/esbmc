@@ -338,7 +338,8 @@ void violation_graphml_goto_trace(
 void correctness_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const messaget &msg)
 {
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = verification_file;
@@ -350,7 +351,7 @@ void correctness_graphml_goto_trace(
   {
     /* checking restrictions for correctness GraphML */
     if(
-      (!(is_valid_witness_step(ns, step))) ||
+      (!(is_valid_witness_step(ns, step, msg))) ||
       (!(step.is_assume() || step.is_assert())))
       continue;
 

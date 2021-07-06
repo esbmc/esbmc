@@ -73,11 +73,13 @@ public:
   virtual bool
   from_type(const typet &type, std::string &code, const namespacet &ns) = 0;
 
-  virtual languaget *new_language() = 0;
+  virtual languaget *new_language(const messaget &msg) = 0;
 
   // constructor / destructor
 
-  languaget() = default;
+  explicit languaget(const messaget &msg) : msg(msg) {}
   virtual ~languaget() = default;
+protected:
+  const messaget &msg;
 };
 #endif

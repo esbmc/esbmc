@@ -161,6 +161,17 @@ protected:
   const clang::Decl *get_DeclContext_from_Stmt(const clang::Stmt &stmt);
 
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
+
+  /**
+ * @brief Perform the typecast by creating a tmp variable on RHS
+ *
+ * The idea is to look for all components of the union and match
+ * the type. If not found, throws an error
+ *
+ * @param dest RHS dest
+ * @param type Union type
+ */
+  void gen_typecast_to_union(exprt &dest, const typet &type);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
