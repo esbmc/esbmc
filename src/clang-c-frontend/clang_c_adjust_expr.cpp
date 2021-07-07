@@ -508,8 +508,7 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if(!symbol.is_type)
     {
-      msg.error(
-        fmt::format("expected type symbol, but got\n{}", symbol));
+      msg.error(fmt::format("expected type symbol, but got\n{}", symbol));
       abort();
     }
 

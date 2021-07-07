@@ -138,7 +138,10 @@ void create_node_node(nodet &node, xmlnodet &nodenode);
  * from the original program (i.e., internals and built-in
  * are excluded).
  */
-bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step, const messaget &msg);
+bool is_valid_witness_step(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  const messaget &msg);
 
 /**
  * If the current step is an assignment, this function

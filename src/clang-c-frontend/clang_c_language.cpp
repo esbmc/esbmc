@@ -45,7 +45,8 @@ clang_c_languaget::clang_c_languaget(const messaget &msg) : languaget(msg)
   boost::filesystem::create_directory(p);
   if(!boost::filesystem::is_directory(p))
   {
-    msg.error("Can't create temporary directory (needed to dump clang headers)");
+    msg.error(
+      "Can't create temporary directory (needed to dump clang headers)");
     abort();
   }
 
