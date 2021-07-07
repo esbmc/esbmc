@@ -13,6 +13,4 @@ gen_typecast_arithmetic(const namespacet &ns, exprt &expr1, exprt &expr2);
 
 extern void gen_typecast_arithmetic(const namespacet &ns, exprt &expr);
 
-
-
 #endif /* TYPECAST_H_ */

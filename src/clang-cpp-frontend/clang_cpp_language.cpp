@@ -27,7 +27,8 @@ languaget *new_clang_cpp_language(const messaget &msg)
   return new clang_cpp_languaget(msg);
 }
 
-clang_cpp_languaget::clang_cpp_languaget(const messaget &msg) : clang_c_languaget(msg)
+clang_cpp_languaget::clang_cpp_languaget(const messaget &msg)
+  : clang_c_languaget(msg)
 {
 }
 

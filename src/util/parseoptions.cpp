@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <sysexits.h>
 #endif
 
-#include <iostream>
 #include <util/cmdline.h>
 #include <util/parseoptions.h>
 #include <util/signal_catcher.h>

@@ -99,7 +99,7 @@ void esbmc_parseoptionst::set_verbosity_msg(messaget &message)
 
   if(cmdline.isset("verbosity"))
   {
-    v = (VerbosityLevel) atoi(cmdline.getval("verbosity"));
+    v = (VerbosityLevel)atoi(cmdline.getval("verbosity"));
     if(v < VerbosityLevel::None)
       v = VerbosityLevel::None;
     else if(v > VerbosityLevel::Debug)

@@ -74,5 +74,4 @@ protected:
 
 languaget *new_clang_c_language(const messaget &msg);
 
-
 #endif

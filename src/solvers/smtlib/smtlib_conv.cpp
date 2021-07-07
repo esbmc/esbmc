@@ -243,7 +243,6 @@ smtlib_convt::smtlib_convt(
     abort();
   }
 
-
   assert(value.token == TOK_STRINGLIT && "Non-string solver name response");
   solver_name = value.data;
   delete smtlib_output;
@@ -260,7 +259,8 @@ smtlib_convt::smtlib_convt(
     "More than one sexpr response to get-info version");
   class sexpr &v = sexpr->sexpr_list.front();
 
-  if(v.token == 0 && v.sexpr_list.size() == 2) {
+  if(v.token == 0 && v.sexpr_list.size() == 2)
+  {
     msg.error("Bad solver version fmt");
     abort();
   }

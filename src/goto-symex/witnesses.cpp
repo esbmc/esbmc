@@ -733,7 +733,10 @@ std::string get_formated_assignment(
 }
 
 /* */
-bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step, const messaget &msg)
+bool is_valid_witness_step(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  const messaget &msg)
 {
   languagest languages(ns, "C", msg);
   std::string lhsexpr;

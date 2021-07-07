@@ -77,8 +77,11 @@ public:
 
   // constructor / destructor
 
-  explicit languaget(const messaget &msg) : msg(msg) {}
+  explicit languaget(const messaget &msg) : msg(msg)
+  {
+  }
   virtual ~languaget() = default;
+
 protected:
   const messaget &msg;
 };
