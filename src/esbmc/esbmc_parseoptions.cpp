@@ -1203,7 +1203,7 @@ int esbmc_parseoptionst::do_base_case(
     break;
 
   case smt_convt::P_SATISFIABLE:
-    msg.result(fmt::format("\nBug found (k = {:d}", k_step));
+    msg.result(fmt::format("\nBug found (k = {:d})", k_step));
     return true;
 
   default:
