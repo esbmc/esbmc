@@ -45,6 +45,7 @@ extern "C"
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
+#include <goto-programs/loop_unroll.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -1589,6 +1590,12 @@ bool esbmc_parseoptionst::process_goto_program(
 
       value_set_analysis.update(goto_functions);
     }
+
+    // unwind loops
+    optionst opts;
+    get_command_line_options(opts);
+    bounded_loop_unroller unwind_loops(goto_functions, ui_message_handler);
+    unwind_loops.check_and_run(opts);
 
     // show it?
     if(cmdline.isset("show-loops"))
