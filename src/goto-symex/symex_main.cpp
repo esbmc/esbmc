@@ -54,6 +54,30 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   if(is_true(new_expr))
     return;
 
+  if(options.get_bool_option("smt-symex-assert"))
+  {
+    auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
+    equality2tc question(gen_true_expr(), new_expr);
+    try
+    {
+      // check whether the assertion holds
+      tvt res = rte->ask_solver_question(question);
+      if(res.is_true())
+        // we don't add this assertion to the resulting VCs
+        return;
+      else if(res.is_false())
+      {
+        // negate the claim and add it as an assumption
+        not2tc not_new_expr(new_expr);
+        assume(not_new_expr);
+      }
+    }
+    catch(runtime_encoded_equationt::dual_unsat_exception &e)
+    {
+      assert(0 && "Can't check this assertion, sorry");
+    }
+  }
+
   cur_state->guard.guard_expr(new_expr);
   cur_state->global_guard.guard_expr(new_expr);
   remaining_claims++;
