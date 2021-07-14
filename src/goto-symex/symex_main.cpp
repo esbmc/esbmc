@@ -65,12 +65,9 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
       if(res.is_true())
         // we don't add this assertion to the resulting VCs
         return;
-      else if(res.is_false())
-      {
-        // negate the claim and add it as an assumption
-        not2tc not_new_expr(new_expr);
-        assume(not_new_expr);
-      }
+      // negate the claim and add it as an assumption
+      not2tc not_new_expr(new_expr);
+      assume(not_new_expr);
     }
     catch(runtime_encoded_equationt::dual_unsat_exception &e)
     {
