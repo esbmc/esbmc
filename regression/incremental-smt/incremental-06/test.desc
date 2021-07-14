@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow-check --smt-during-symex --smt-symex-assert
+^VERIFICATION FAILED$
