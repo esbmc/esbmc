@@ -25,6 +25,54 @@
 #include <util/std_expr.h>
 #include <vector>
 
+bool goto_symext::check_incremental(
+  expr2tc &expr,
+  const bool is_assert,
+  const std::string &msg)
+{
+  auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
+  equality2tc question(gen_true_expr(), expr);
+  try
+  {
+    // check whether the assertion or assume holds
+    tvt res = rte->ask_solver_question(question);
+    // we don't add this assertion or assume to the resulting logical formula
+    if(res.is_true())
+      // incremental verification succeeded
+      return true;
+    // this assertion or assume evaluates to false via incremental SMT solving
+    if(res.is_false())
+    {
+      expr = gen_false_expr();
+      // check assertion to produce a counterexample
+      if(is_assert)
+      {
+        remaining_claims++;
+        target->assertion(
+          cur_state->guard.as_expr(),
+          expr,
+          msg,
+          cur_state->gen_stack_trace(),
+          cur_state->source,
+          first_loop);
+      }
+      // eliminate subsequent execution paths
+      assume(expr);
+      // incremental verification succeeded
+      return true;
+    }
+    this->msg.status("Incremental verification returned unknown");
+    // incremental verification returned unknown
+    return false;
+  }
+  catch(runtime_encoded_equationt::dual_unsat_exception &e)
+  {
+    this->msg.error(
+      "This solver was unable to check this expression. Please try it with "
+      "another solver");
+  }
+  return false;
+}
 void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
   // Convert asserts in assumes, if it's not the last loop iteration
@@ -54,32 +102,11 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   if(is_true(new_expr))
     return;
 
-  bool is_violated = false;
-
   if(options.get_bool_option("smt-symex-assert"))
   {
-    auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
-    equality2tc question(gen_true_expr(), new_expr);
-    try
-    {
-      // check whether the assertion holds
-      tvt res = rte->ask_solver_question(question);
-      if(res.is_true())
-        // we don't add this assertion to the resulting VCs
-        return;
-      else if(res.is_false())
-        // this assertion is violated
-        is_violated = true;
-      else
-        this->msg.status("Incremental verification returned unknown");
-    }
-    catch(runtime_encoded_equationt::dual_unsat_exception &e)
-    {
-      this->msg.error(
-        "This solver was unable to check this assertion. Please try it with "
-        "another solver");
-      abort();
-    }
+    if(check_incremental(new_expr, true, msg))
+      // incremental verification has succeeded
+      return;
   }
 
   cur_state->guard.guard_expr(new_expr);
@@ -92,17 +119,6 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     cur_state->gen_stack_trace(),
     cur_state->source,
     first_loop);
-
-  if(is_violated)
-  {
-    // we know this assertion evaluates to false via incremental SMT solving
-    new_expr = gen_false_expr();
-    // eliminate the subsequent execution paths by adding an assume(false)
-    target->assumption(
-      cur_state->guard.as_expr(), new_expr, cur_state->source, first_loop);
-    // add to state guard to prevent further assignments
-    cur_state->guard.add(new_expr);
-  }
 }
 
 void goto_symext::assume(const expr2tc &the_assumption)
