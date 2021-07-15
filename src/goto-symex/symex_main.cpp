@@ -71,7 +71,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
         // this assertion is violated
         is_violated = true;
       else
-        assert(0 && "Can't check this assertion, sorry");
+        this->msg.status("Incremental verification returned unknown");
     }
     catch(runtime_encoded_equationt::dual_unsat_exception &e)
     {
