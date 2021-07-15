@@ -54,6 +54,8 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   if(is_true(new_expr))
     return;
 
+  bool is_violated = false;
+
   if(options.get_bool_option("smt-symex-assert"))
   {
     auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
@@ -65,9 +67,11 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
       if(res.is_true())
         // we don't add this assertion to the resulting VCs
         return;
-      // negate the claim and add it as an assumption
-      not2tc not_new_expr(new_expr);
-      assume(not_new_expr);
+      else if(res.is_false())
+        // this assertion is violated
+        is_violated = true;
+      else
+        assert(0 && "Can't check this assertion, sorry");
     }
     catch(runtime_encoded_equationt::dual_unsat_exception &e)
     {
@@ -85,6 +89,17 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     cur_state->gen_stack_trace(),
     cur_state->source,
     first_loop);
+
+  if(is_violated)
+  {
+    // we know this assertion evaluates to false via incremental SMT solving
+    new_expr = gen_false_expr();
+    // eliminate the subsequent execution paths by adding an assume(false)
+    target->assumption(
+      cur_state->guard.as_expr(), new_expr, cur_state->source, first_loop);
+    // add to state guard to prevent further assignments
+    cur_state->guard.add(new_expr);
+  }
 }
 
 void goto_symext::assume(const expr2tc &the_assumption)
