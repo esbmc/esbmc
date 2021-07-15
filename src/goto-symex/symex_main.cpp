@@ -75,7 +75,10 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     }
     catch(runtime_encoded_equationt::dual_unsat_exception &e)
     {
-      assert(0 && "Can't check this assertion, sorry");
+      this->msg.error(
+        "This solver was unable to check this assertion. Please try it with "
+        "another solver");
+      abort();
     }
   }
 
