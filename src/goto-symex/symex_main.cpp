@@ -103,13 +103,8 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   cur_state->guard.guard_expr(new_expr);
   cur_state->global_guard.guard_expr(new_expr);
   remaining_claims++;
-  target->assertion(
-    cur_state->guard.as_expr(),
-    new_expr,
-    msg,
-    cur_state->gen_stack_trace(),
-    cur_state->source,
-    first_loop);
+  // add assertion to the target equation
+  assertion(new_expr, msg);
 }
 
 void goto_symext::assertion(
