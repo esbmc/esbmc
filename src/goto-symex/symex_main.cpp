@@ -25,10 +25,7 @@
 #include <util/std_expr.h>
 #include <vector>
 
-bool goto_symext::check_incremental(
-  const expr2tc &expr,
-  const bool &is_assert,
-  const std::string &msg)
+bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 {
   auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
   equality2tc question(gen_true_expr(), expr);
@@ -44,10 +41,7 @@ bool goto_symext::check_incremental(
     if(res.is_false())
     {
       // check assertion to produce a counterexample
-      if(is_assert)
-      {
-        assertion(gen_false_expr(), msg);
-      }
+      assertion(gen_false_expr(), msg);
       // eliminate subsequent execution paths
       assume(gen_false_expr());
       // incremental verification succeeded
@@ -97,7 +91,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   if(options.get_bool_option("smt-symex-assert"))
   {
-    if(check_incremental(new_expr, true, msg))
+    if(check_incremental(new_expr, msg))
       // incremental verification has succeeded
       return;
   }
@@ -370,12 +364,6 @@ void goto_symext::symex_assume()
   dereference(cond, dereferencet::READ);
   replace_dynamic_allocation(cond);
 
-  if(options.get_bool_option("smt-symex-assume"))
-  {
-    if(check_incremental(cond, false, std::string()))
-      // incremental verification has succeeded
-      return;
-  }
   assume(cond);
 }
 

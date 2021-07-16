@@ -1,4 +1,4 @@
 CORE
 main.c
---smt-during-symex --smt-symex-assume --incremental-bmc --unlimited-k-steps --z3
+--smt-during-symex --smt-symex-assert --incremental-bmc --unlimited-k-steps --z3
 ^VERIFICATION FAILED$
