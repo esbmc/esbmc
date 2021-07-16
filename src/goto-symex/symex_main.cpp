@@ -27,7 +27,7 @@
 
 bool goto_symext::check_incremental(
   expr2tc &expr,
-  const bool is_assert,
+  const bool &is_assert,
   const std::string &msg)
 {
   auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
@@ -368,6 +368,12 @@ void goto_symext::symex_assume()
   dereference(cond, dereferencet::READ);
   replace_dynamic_allocation(cond);
 
+  if(options.get_bool_option("smt-symex-assume"))
+  {
+    if(check_incremental(cond, false, std::string()))
+      // incremental verification has succeeded
+      return;
+  }
   assume(cond);
 }
 
