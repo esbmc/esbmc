@@ -64,6 +64,7 @@ bool goto_symext::check_incremental(
   }
   return false;
 }
+
 void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
   // Convert asserts in assumes, if it's not the last loop iteration
