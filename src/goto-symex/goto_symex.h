@@ -246,6 +246,14 @@ protected:
   virtual void claim(const expr2tc &expr, const std::string &msg);
 
   /**
+   *  Perform an assertion.
+   *  Adds to target an assertion that must be checked.
+   *  @param assertion Assertion that must be checked.
+   *  @param msg Textual message explaining assertion.
+   */
+  virtual void assertion(const expr2tc &assertion, const std::string &msg);
+
+  /**
    *  Perform an assumption.
    *  Adds to target an assumption that must always be true.
    *  @param assumption Assumption that must always be true.
