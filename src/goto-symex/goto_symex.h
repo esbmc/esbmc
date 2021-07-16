@@ -232,7 +232,7 @@ protected:
    *  @return Return whether verification succeeded.
    */
   bool check_incremental(
-    expr2tc &expr,
+    const expr2tc &expr,
     const bool &is_assert,
     const std::string &msg);
 

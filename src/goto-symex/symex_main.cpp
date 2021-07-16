@@ -45,7 +45,9 @@ bool goto_symext::check_incremental(
     {
       // check assertion to produce a counterexample
       if(is_assert)
+      {
         assertion(gen_false_expr(), msg);
+      }
       // eliminate subsequent execution paths
       assume(gen_false_expr());
       // incremental verification succeeded
@@ -100,9 +102,6 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
       return;
   }
 
-  cur_state->guard.guard_expr(new_expr);
-  cur_state->global_guard.guard_expr(new_expr);
-  remaining_claims++;
   // add assertion to the target equation
   assertion(new_expr, msg);
 }
@@ -111,6 +110,9 @@ void goto_symext::assertion(
   const expr2tc &the_assertion,
   const std::string &msg)
 {
+  expr2tc expr = the_assertion;
+  cur_state->guard.guard_expr(expr);
+  cur_state->global_guard.guard_expr(expr);
   remaining_claims++;
   target->assertion(
     cur_state->guard.as_expr(),
