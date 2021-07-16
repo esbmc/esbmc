@@ -227,14 +227,10 @@ protected:
   /**
    *  Perform incremental SMT solving for assert and assume statements.
    *  @param expr Expression that must be checked.
-   *  @param is_assert Indicate whether the expression is an assert or assume.
    *  @param msg Textual message explaining assertion.
    *  @return Return whether verification succeeded.
    */
-  bool check_incremental(
-    const expr2tc &expr,
-    const bool &is_assert,
-    const std::string &msg);
+  bool check_incremental(const expr2tc &expr, const std::string &msg);
 
   /**
    *  Perform an assertion.

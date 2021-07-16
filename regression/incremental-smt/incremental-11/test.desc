@@ -1,4 +1,4 @@
 CORE
 main.c
---smt-during-symex --smt-symex-assume --incremental-bmc
+--smt-during-symex --smt-symex-assert --incremental-bmc
 ^VERIFICATION FAILED$
