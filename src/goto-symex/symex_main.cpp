@@ -110,7 +110,7 @@ void goto_symext::assertion(
   remaining_claims++;
   target->assertion(
     cur_state->guard.as_expr(),
-    the_assertion,
+    expr,
     msg,
     cur_state->gen_stack_trace(),
     cur_state->source,
