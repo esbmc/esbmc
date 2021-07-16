@@ -26,7 +26,7 @@
 #include <vector>
 
 bool goto_symext::check_incremental(
-  expr2tc &expr,
+  const expr2tc &expr,
   const bool &is_assert,
   const std::string &msg)
 {
@@ -43,12 +43,11 @@ bool goto_symext::check_incremental(
     // this assertion or assume evaluates to false via incremental SMT solving
     if(res.is_false())
     {
-      expr = gen_false_expr();
       // check assertion to produce a counterexample
       if(is_assert)
-        assertion(expr, msg);
+        assertion(gen_false_expr(), msg);
       // eliminate subsequent execution paths
-      assume(expr);
+      assume(gen_false_expr());
       // incremental verification succeeded
       return true;
     }
