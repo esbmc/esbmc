@@ -633,7 +633,7 @@ bool execution_statet::is_cur_state_guard_false()
 
     try
     {
-      tvt res = rte->ask_solver_question(the_question);
+      tvt res = rte->check_partial_question(the_question);
       if(res.is_false())
         return true;
     }

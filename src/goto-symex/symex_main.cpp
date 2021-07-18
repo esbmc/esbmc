@@ -32,7 +32,7 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
   try
   {
     // check whether the assertion or assume holds
-    tvt res = rte->ask_solver_question(question);
+    tvt res = rte->check_full_question(question);
     // we don't add this assertion or assume to the resulting logical formula
     if(res.is_true())
       // incremental verification succeeded
