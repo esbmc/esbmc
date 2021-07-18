@@ -497,7 +497,7 @@ std::shared_ptr<symex_targett> runtime_encoded_equationt::clone() const
   return nthis;
 }
 
-tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
+tvt runtime_encoded_equationt::check_full_question(const expr2tc &question)
 {
   tvt final_res;
 
@@ -562,6 +562,47 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
 
   // We have our result; pop off the questions / formula we've asked.
   pop_ctx();
+
+  return final_res;
+}
+
+tvt runtime_encoded_equationt::check_partial_question(const expr2tc &question)
+{
+  tvt final_res;
+
+  // So - we have a formula, we want to work out whether it's true, false, or
+  // unknown. Before doing anything, first push a context, as we'll need to
+  // wipe some state afterwards.
+  push_ctx();
+
+  // Convert the question (must be a bool).
+  assert(is_bool_type(question));
+  smt_astt q = conv.convert_ast(question);
+
+  // The proposition also needs to be guarded with the in-program assumptions,
+  // which are not necessarily going to be part of the state guard.
+  conv.assert_ast(assumpt_chain.back());
+
+  // Now, how to ask the question?
+  // So, we have to make an assertion, push, check, and pop it.
+  push_ctx();
+  conv.assert_ast(q);
+  smt_convt::resultt res1 = conv.dec_solve();
+  // We have our result; pop off the questions / formula we've asked.
+  pop_ctx();
+
+  // So; which result?
+  if(res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB)
+  {
+    msg.error("Solver returned error while asking question");
+    abort();
+  }
+  else if(res1 == smt_convt::P_SATISFIABLE)
+    final_res = tvt(tvt::TV_TRUE);
+  else if(res1 == smt_convt::P_UNSATISFIABLE)
+    final_res = tvt(tvt::TV_FALSE);
+  else
+    this->msg.status("Incremental verification failed");
 
   return final_res;
 }
