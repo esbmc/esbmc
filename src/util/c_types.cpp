@@ -142,6 +142,26 @@ type2tc long_long_int_type2()
   return get_int_type(config.ansi_c.long_long_int_width);
 }
 
+typet int128_type()
+{
+  return signedbv_typet(128);
+}
+
+type2tc int128_type2()
+{
+  return get_int_type(128);
+}
+
+typet uint128_type()
+{
+  return unsignedbv_typet(128);
+}
+
+type2tc uint128_type2()
+{
+  return get_uint_type(128);
+}
+
 typet long_uint_type()
 {
   return unsignedbv_typet(config.ansi_c.long_int_width);

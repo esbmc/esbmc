@@ -73,8 +73,23 @@ inline bool is_constant_number(const expr2tc &t)
          t->expr_id == expr2t::constant_bool_id;
 }
 
+bool is_constant_expr(const expr2tc &t); // Forward decl
+
+inline bool is_byte_extract_constant(const expr2tc &t)
+{
+  if(t->expr_id != expr2t::byte_extract_id)
+    return false;
+
+  std::shared_ptr<byte_extract_data> data =
+    std::dynamic_pointer_cast<byte_extract_data>(t);
+  return is_constant_expr(data->source_value) &&
+         is_constant_expr(data->source_offset);
+}
+
 inline bool is_constant_expr(const expr2tc &t)
 {
+  if(is_byte_extract_constant(t))
+    return true;
   return t->expr_id == expr2t::constant_int_id ||
          t->expr_id == expr2t::constant_fixedbv_id ||
          t->expr_id == expr2t::constant_floatbv_id ||
@@ -83,7 +98,8 @@ inline bool is_constant_expr(const expr2tc &t)
          t->expr_id == expr2t::constant_struct_id ||
          t->expr_id == expr2t::constant_union_id ||
          t->expr_id == expr2t::constant_array_id ||
-         t->expr_id == expr2t::constant_array_of_id;
+         t->expr_id == expr2t::constant_array_of_id ||
+         t->expr_id == expr2t::constant_vector_id;
 }
 
 inline bool is_structure_type(const type2tc &t)
@@ -250,6 +266,11 @@ inline const type2tc &get_array_subtype(const type2tc &type)
   return to_array_type(type).subtype;
 }
 
+inline const type2tc &get_vector_subtype(const type2tc &type)
+{
+  return to_vector_type(type).subtype;
+}
+
 inline const type2tc &get_base_array_subtype(const type2tc &type)
 {
   const auto &subtype = to_array_type(type).subtype;
@@ -324,6 +345,19 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
     return constant_floatbv2tc(
       ieee_floatt(ieee_float_spect(to_floatbv_type(type))));
 
+  case type2t::vector_id:
+  {
+    auto vec_type = to_vector_type(type);
+    assert(is_constant_int2t(vec_type.array_size));
+    auto s = to_constant_int2t(vec_type.array_size);
+
+    std::vector<expr2tc> members;
+    for(long int i = 0; i < s.as_long(); i++)
+      members.push_back(
+        gen_zero(to_vector_type(type).subtype, array_as_array_of));
+
+    return constant_vector2tc(type, members);
+  }
   case type2t::array_id:
   {
     if(array_as_array_of)

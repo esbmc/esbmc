@@ -361,7 +361,9 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
     signedbv_type2tc signed_type = type;
     unsigned width = signed_type->width;
 
-    if(width <= config.ansi_c.char_width)
+    if(width == 128)
+      return INT128;
+    else if(width <= config.ansi_c.char_width)
       return CHAR;
     else if(width <= config.ansi_c.int_width)
       return INT;
@@ -375,7 +377,9 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
     unsignedbv_type2tc unsigned_type = type;
     unsigned width = unsigned_type->width;
 
-    if(width <= config.ansi_c.char_width)
+    if(width == 128)
+      return UINT128;
+    else if(width <= config.ansi_c.char_width)
       return UCHAR;
     else if(width <= config.ansi_c.int_width)
       return UINT;
@@ -442,6 +446,12 @@ void c_typecastt::implicit_typecast_arithmetic(exprt &expr, c_typet c_type)
   case INT:
     new_type = int_type();
     break;
+  case INT128:
+    new_type = int128_type();
+    break;
+  case UINT128:
+    new_type = uint128_type();
+    break;
   case UINT:
     new_type = uint_type();
     break;
@@ -501,6 +511,12 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr, c_typet c_type)
     abort();
   case INT:
     new_type = int_type2();
+    break;
+  case INT128:
+    new_type = int128_type2();
+    break;
+  case UINT128:
+    new_type = uint128_type2();
     break;
   case UINT:
     new_type = uint_type2();

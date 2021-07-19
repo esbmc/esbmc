@@ -157,6 +157,9 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
 
+  // Ignore ctype defined by the system
+  compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
+
 #ifdef __APPLE__
   compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
   compiler_args.push_back("-D_SECURE__STRING_H_");
@@ -277,6 +280,7 @@ void __ESBMC_assert(_Bool, const char *);
 _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_atomic_begin();
 void __ESBMC_atomic_end();
+void __ESBMC_init_var(void*);
 
 int __ESBMC_abs(int);
 long int __ESBMC_labs(long int);

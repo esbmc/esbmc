@@ -119,7 +119,11 @@ void bmct::error_trace(
 
   goto_tracet goto_trace;
   build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace, msg);
-
+  std::string output_file = options.get_option("cex-output");
+  if(output_file != "") {
+    std::ofstream out(output_file);
+    show_goto_trace(out, ns, goto_trace, msg);
+  }
   std::string witness_output = options.get_option("witness-output");
   if(witness_output != "")
     violation_graphml_goto_trace(options, ns, goto_trace, msg);
@@ -593,7 +597,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   }
 
   if(options.get_bool_option("double-assign-check"))
-    eq->check_for_duplicate_assigns();
+    eq->check_for_duplicate_assigns(msg);
 
   try
   {

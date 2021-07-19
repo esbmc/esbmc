@@ -176,17 +176,9 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     }
     else if(is_array_type(it))
     {
-      if(is_fetching_from_array_an_error)
-      {
-        msg.error(
-          "Fetching array elements inside tuples currently unimplemented, "
-          "sorry");
-        abort();
-      }
-      msg.warning(
-        "Fetching array elements inside tuples currently unimplemented, "
-        "returning empty expression...");
-      res = expr2tc();
+            const array_type2t &arr_type = to_array_type(it);
+      res =
+        ctx->array_api->get_array_elem(tuple->elements[i], 0, arr_type.subtype);
     }
     else
     {

@@ -229,6 +229,16 @@ std::string expr2ct::convert_rec(
       convert(static_cast<const exprt &>(src.size_irep()));
     return convert(src.subtype()) + " [" + size_string + "]" + d;
   }
+  /** int vector [3]
+   *   /          |
+   * type        size
+   */
+  else if(src.is_vector())
+  {
+    std::string size_string =
+      convert(static_cast<const exprt &>(src.size_irep()));
+    return convert(src.subtype()) + " vector [" + size_string + "]" + d;
+  }
   else if(src.id() == "incomplete_array")
   {
     return convert(src.subtype()) + " []";
@@ -1045,7 +1055,7 @@ std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
         dest += "l";
     }
   }
-  else if(type.is_array() || type.id() == "incomplete_array")
+  else if(is_array_like(type))
   {
     dest = "{ ";
 

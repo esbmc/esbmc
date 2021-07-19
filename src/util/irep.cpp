@@ -590,3 +590,4 @@ const irep_idt irept::id_symbol = dstring("symbol");
 const irep_idt irept::id_typecast = dstring("typecast");
 const irep_idt irept::id_union = dstring("union");
 const irep_idt irept::id_unsignedbv = dstring("unsignedbv");
+const irep_idt irept::id_vector = dstring("vector");

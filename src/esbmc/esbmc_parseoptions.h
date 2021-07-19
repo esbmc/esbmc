@@ -24,10 +24,16 @@ public:
   int doit() override;
   void help() override;
 
-  esbmc_parseoptionst(int argc, const char **argv, const messaget &msg)
+  esbmc_parseoptionst(int argc, const char **argv, messaget &msg)
     : parseoptions_baset(all_cmd_options, argc, argv, msg),
       language_uit(cmdline, msg)
   {
+  }
+
+  ~esbmc_parseoptionst() {
+    close_file(out);
+    if(out != err)
+      close_file(err);
   }
 
 protected:
@@ -74,6 +80,16 @@ protected:
   void preprocessing();
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
+
+  FILE *out = stdout;
+  FILE *err = stderr;
+
+private:
+  void close_file(FILE* f) {
+    if(f != stdout && f != stderr) {
+      fclose(f);
+    }
+  }
 
 public:
   goto_functionst goto_functions;

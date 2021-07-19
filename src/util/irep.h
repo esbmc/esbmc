@@ -1142,7 +1142,10 @@ public:
   {
     return id() == id_unsignedbv;
   }
-
+  inline bool is_vector() const
+  {
+    return id() == id_vector;
+  }
   friend bool operator==(const irept &i1, const irept &i2);
 
   friend inline bool operator!=(const irept &i1, const irept &i2)
@@ -1246,7 +1249,7 @@ public:
   static const irep_idt id_floatbv, id_incomplete_array, id_index, id_member;
   static const irep_idt id_not, id_notequal, id_pointer, id_signedbv;
   static const irep_idt id_struct, id_symbol, id_typecast, id_union;
-  static const irep_idt id_unsignedbv;
+  static const irep_idt id_unsignedbv, id_vector;
 
   class dt
   {

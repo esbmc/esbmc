@@ -20,7 +20,7 @@ public:
   language_filest language_files;
   contextt context;
 
-  language_uit(const cmdlinet &__cmdline, const messaget &msg);
+  language_uit(const cmdlinet &__cmdline, messaget &msg);
   virtual ~language_uit() = default;
 
   virtual bool parse();
@@ -39,7 +39,7 @@ public:
 
 protected:
   const cmdlinet &_cmdline;
-  const messaget &msg;
+  messaget &msg;
 };
 
 #endif

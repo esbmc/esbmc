@@ -30,7 +30,7 @@ int main(int argc, const char **argv)
   type_poolt bees(true);
   type_pool = bees;
 
-  default_message msg;
+  messaget msg;
   esbmc_parseoptionst parseoptions(argc, argv, msg);
   return parseoptions.main();
 }

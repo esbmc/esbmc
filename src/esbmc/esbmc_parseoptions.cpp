@@ -45,6 +45,7 @@ extern "C"
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
+#include <goto-programs/loop_unroll.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -54,6 +55,7 @@ extern "C"
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/symbol.h>
 #include <util/time_stopping.h>
+#include <algorithms/goto_algorithms.h>
 #include <util/message/format.h>
 
 #ifndef _WIN32
@@ -65,6 +67,7 @@ extern "C"
 #endif
 
 #include <util/message/default_message.h>
+#include <util/message/fmt_message_handler.h>
 
 enum PROCESS_TYPE
 {
@@ -106,7 +109,7 @@ void esbmc_parseoptionst::set_verbosity_msg(messaget &message)
       v = VerbosityLevel::Debug;
   }
 
-  message.set_verbosity(v);
+  message.set_verbosity((VerbosityLevel)v);
 }
 
 extern "C" uint8_t *esbmc_version_string;
@@ -188,7 +191,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     exit(1);
   }
 
-  options.cmdline(cmdline);
+  /* graphML generation options check */
+  if(cmdline.isset("cex-output"))
+    options.set_option("cex-output", cmdline.getval("cex-output"));
 
   /* graphML generation options check */
   if(cmdline.isset("witness-output"))
@@ -288,14 +293,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     options.set_option("base-case", true);
     options.set_option("no-unwinding-assertions", true);
-    options.set_option("partial-loops", false);
+    //options.set_option("partial-loops", false);
   }
 
   if(cmdline.isset("forward-condition"))
   {
     options.set_option("forward-condition", true);
     options.set_option("no-unwinding-assertions", false);
-    options.set_option("partial-loops", false);
+    //options.set_option("partial-loops", false);
     options.set_option("no-assertions", true);
   }
 
@@ -303,7 +308,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     options.set_option("inductive-step", true);
     options.set_option("no-unwinding-assertions", true);
-    options.set_option("partial-loops", false);
+    //options.set_option("partial-loops", false);
   }
 
   if(cmdline.isset("overflow-check"))
@@ -372,6 +377,17 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
 int esbmc_parseoptionst::doit()
 {
+  // Configure msg output
+
+  if(cmdline.isset("file-output"))
+  {
+    FILE *f = fopen(cmdline.getval("file-output"), "w+");
+    out = f;
+    err = f;
+  }
+  std::shared_ptr<message_handlert> handler = std::make_shared<fmt_message_handler>(out,err);
+  msg.add_message_handler(handler);
+
   //
   // Print a banner
   //
@@ -1188,7 +1204,7 @@ int esbmc_parseoptionst::do_base_case(
   opts.set_option("inductive-step", false);
 
   opts.set_option("no-unwinding-assertions", true);
-  opts.set_option("partial-loops", false);
+  //opts.set_option("partial-loops", false);
 
   bmct bmc(goto_functions, opts, context, msg);
 
@@ -1290,7 +1306,7 @@ int esbmc_parseoptionst::do_inductive_step(
   opts.set_option("inductive-step", true);
 
   opts.set_option("no-unwinding-assertions", true);
-  opts.set_option("partial-loops", true);
+  //opts.set_option("partial-loops", true);
 
   bmct bmc(goto_functions, opts, context, msg);
   bmc.options.set_option("unwind", integer2string(k_step));
@@ -1508,6 +1524,12 @@ bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
 {
+    // unwind loops
+    if(!cmdline.isset("no-unroll"))
+    {
+    bounded_loop_unroller unwind_loops(goto_functions, msg);
+    unwind_loops.check_and_run(options);
+    }
   try
   {
     namespacet ns(context);
@@ -1590,6 +1612,7 @@ bool esbmc_parseoptionst::process_goto_program(
       value_set_analysis.update(goto_functions);
     }
 
+
     // show it?
     if(cmdline.isset("show-loops"))
     {
@@ -1653,10 +1676,11 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 }
 
 void esbmc_parseoptionst::help()
-{
-  msg.status(
+{  
+  default_message dmsg;
+  dmsg.status(
     fmt::format("\n* * *           ESBMC {}          * * *", ESBMC_VERSION));
   std::ostringstream oss;
   oss << cmdline.cmdline_options;
-  msg.status(oss.str());
+  dmsg.status(oss.str());
 }

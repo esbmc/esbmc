@@ -200,7 +200,7 @@ public:
      * @return Constrain the stack limit.
      */
     lessthanequal2tc
-    process_stack_size(const expr2tc &expr, unsigned long stack_limit);
+    process_stack_size(const expr2tc &expr, unsigned long stack_limit, unsigned long stack_total);
 
     /**
      * Decrease the stack frame size when the variables go out of scope

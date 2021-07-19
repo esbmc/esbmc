@@ -500,6 +500,11 @@ expr2tc dereferencet::dereference(
     // the line. To make this a valid formula though, return a failed symbol,
     // so that this assignment gets a well typed free value.
     value = make_failed_symbol(type);
+    /*
+    HACK for intel
+    // Produce assertions to check for invalid objects
+    valid_check(value, guard, mode);
+    */
   }
   else if(mode == INTERNAL)
   {
@@ -814,15 +819,7 @@ void dereferencet::build_reference_rec(
   else if(is_scalar_type(type))
     flags |= flag_dst_scalar;
   else if(is_array_type(type) || is_string_type(type))
-  {
-    std::ostringstream oss;
-    oss << "Can't construct rvalue reference to array type during dereference";
-    oss << "\n";
-    oss << "(It isn't allowed by C anyway)";
-    oss << "\n";
-    msg.error(oss.str());
-    abort();
-  }
+    flags |= flag_dst_union; // Hack because unions are arrays
   else
   {
     msg.error(
@@ -1481,6 +1478,22 @@ void dereferencet::construct_struct_ref_from_const_offset(
       "Memory model", "Object accessed with illegal offset", guard);
     return;
   }
+  else if(is_array_type(value) || is_string_type(value))
+  {
+    const array_type2t arr_type = get_arr_type(value);
+    type2tc arr_subtype = arr_type.subtype;
+
+    unsigned int subtype_size = type_byte_size(arr_subtype).to_uint64();
+    constant_int2tc subtype_sz_expr(offs->type, BigInt(subtype_size));
+    div2tc div(pointer_type2(), offs, subtype_sz_expr);
+    simplify(div);
+
+    expr2tc *bytes =
+      extract_bytes_from_array(value, type->get_width() / 8, div);
+    stitch_together_from_byte_array(value, type, bytes);
+    return;
+  }
+
   std::ostringstream oss;
   oss << "Unexpectedly " << get_type_id(value->type) << " type'd";
   oss << " argument to construct_struct_ref"
@@ -1813,8 +1826,10 @@ void dereferencet::stitch_together_from_byte_array(
   // That's going to come out as a bitvector; cast by bit-representation
   if(type != accuml->type)
   {
-    //assert(type->get_width() == accuml->type->get_width());
-    accuml = bitcast2tc(type, accuml);
+    if(!is_array_type(type))
+      accuml = bitcast2tc(type, accuml);
+    else
+      return;
   }
 
   value = accuml;
@@ -1848,7 +1863,12 @@ void dereferencet::valid_check(
     // making dereferencet persistent.
     if(has_prefix(
          to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
+    {
+      // This is an invalid object; if we're in read or write mode, that's an error.
+      if(mode == READ || mode == WRITE)
+        dereference_failure("pointer dereference", "invalid pointer", guard);
       return;
+    }
 
     const symbolt &sym = ns.lookup(to_symbol2t(symbol).thename);
     if(has_prefix(sym.id.as_string(), "symex_dynamic::"))

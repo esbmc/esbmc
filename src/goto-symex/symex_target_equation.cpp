@@ -346,7 +346,8 @@ operator<<(std::ostream &out, const symex_target_equationt &equation)
   return out;
 }
 
-void symex_target_equationt::check_for_duplicate_assigns() const
+void symex_target_equationt::check_for_duplicate_assigns(
+  const messaget &msg) const
 {
   std::map<std::string, unsigned int> countmap;
   unsigned int i = 0;
