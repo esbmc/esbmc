@@ -31,13 +31,13 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
   equality2tc question(gen_true_expr(), expr);
   try
   {
-    // check whether the assertion or assume holds
+    // check whether the assertion holds
     tvt res = rte->ask_solver_question(question);
-    // we don't add this assertion or assume to the resulting logical formula
+    // we don't add this assertion to the resulting logical formula
     if(res.is_true())
       // incremental verification succeeded
       return true;
-    // this assertion or assume evaluates to false via incremental SMT solving
+    // this assertion evaluates to false via incremental SMT solving
     if(res.is_false())
     {
       // check assertion to produce a counterexample
