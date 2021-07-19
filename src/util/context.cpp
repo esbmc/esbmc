@@ -76,13 +76,13 @@ void contextt::erase_symbol(irep_idt name)
     abort();
   }
 
-  symbols.erase(name);
   ordered_symbols.erase(
     std::remove_if(
       ordered_symbols.begin(),
       ordered_symbols.end(),
       [&name](const symbolt *s) { return s->id == name; }),
     ordered_symbols.end());
+  symbols.erase(it);
 }
 
 void contextt::foreach_operand_impl_const(const_symbol_delegate &expr) const

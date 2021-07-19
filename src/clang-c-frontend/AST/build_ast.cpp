@@ -114,5 +114,9 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
       action));
   assert(unit);
 
+  // The action is only used locally, we can delete it now
+  // See: https://clang.llvm.org/doxygen/ASTUnit_8cpp_source.html#l01510
+  delete(action);
+
   return unit;
 }
