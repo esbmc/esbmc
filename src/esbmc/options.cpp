@@ -45,7 +45,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "show value-set analysis for the goto functions"},
     {"show-symex-value-sets",
      NULL,
-     "show value-set analysis during symbolic execution"}}},
+     "show value-set analysis during symbolic execution"},
+    {"add-symex-value-sets",
+     NULL,
+     "add value-set objects during symbolic execution"}}},
   {"Frontend",
    {{"include,I",
      boost::program_options::value<std::vector<std::string>>()->value_name(

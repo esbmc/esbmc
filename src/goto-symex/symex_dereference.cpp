@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
 #include <util/irep2.h>
+#include <util/irep2_expr.h>
 #include <util/migrate.h>
 
 void symex_dereference_statet::dereference_failure(
@@ -52,7 +53,47 @@ void symex_dereference_statet::get_value_set(
   const expr2tc &expr,
   value_setst::valuest &value_set)
 {
+  // Here we obtain the set of objects via value set analysis
   state.value_set.get_value_set(expr, value_set);
+
+  // add value set objects during the symbolic execution
+  if(goto_symex.options.get_bool_option("add-symex-value-sets"))
+  {
+    // check whether we have a set of objects
+    if(value_set.empty())
+      return;
+    if(is_pointer_type(expr))
+    {
+      // we will accumulate the objects that the pointer points to
+      expr2tc or_accuml = gen_false_expr();
+      same_object2tc eq;
+
+      // add each object to the resulting assume statement
+      for(auto const &i : value_set)
+      {
+        // note that the set of objects are encoded as object_descriptor
+        if(i->expr_id != expr2t::object_descriptor_id)
+          continue;
+
+        // convert the object descriptor to extract its address later for comparison
+        const object_descriptor2t &obj = to_object_descriptor2t(i);
+
+        // Don't build a reference to this. We can't actually access NULL, and the
+        // solver will only get confused.
+        if(is_null_object2t(obj.object))
+          return;
+
+        // obtain the object address for comparison
+        address_of2tc obj_ptr(expr->type, obj.object);
+        // check whether they are the same object
+        eq = same_object2tc(expr, obj_ptr);
+        // the pointer could point to any of the accumulated objects
+        or_accuml = or2tc(or_accuml, eq);
+      }
+      // add the set of objects that the pointer can point to as an assume statement
+      goto_symex.assume(or_accuml);
+    }
+  }
 }
 
 void symex_dereference_statet::rename(expr2tc &expr)
