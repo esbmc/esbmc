@@ -222,6 +222,7 @@ bool clang_c_languaget::parse(const std::string &path, const messaget &msg)
   return false;
 }
 
+#if 0
 bool clang_c_languaget::convert_intrinsics(contextt &context)
 {
   clang_c_convertert converter(context, ASTs);
@@ -230,6 +231,7 @@ bool clang_c_languaget::convert_intrinsics(contextt &context)
 
   return false;
 }
+#endif
 
 bool clang_c_languaget::typecheck(
   contextt &context,

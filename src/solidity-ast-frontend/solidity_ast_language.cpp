@@ -7,14 +7,15 @@ Module: Solidity AST module
 #include <solidity-ast-frontend/solidity_ast_language.h>
 #include <solidity-ast-frontend/solidity_convert.h>
 
-languaget *new_solidity_ast_language()
+languaget *new_solidity_ast_language(const messaget &msg)
 {
-  return new solidity_ast_languaget;
+  return new solidity_ast_languaget(msg);
 }
 
-solidity_ast_languaget::solidity_ast_languaget()
+solidity_ast_languaget::solidity_ast_languaget(const messaget &msg) : languaget(msg)
 {
-  clang_c_module = new_clang_c_language();
+  clang_c_module = new_clang_c_language(msg);
+  assert(!"do a thorough review of this file, and compare it with clang_c_language counterpart");
 }
 
 solidity_ast_languaget::~solidity_ast_languaget()
@@ -25,13 +26,13 @@ solidity_ast_languaget::~solidity_ast_languaget()
 
 bool solidity_ast_languaget::parse(
   const std::string &path,
-  message_handlert &message_handler)
+  const messaget &msg)
 {
   printf("sol_main_path: %s\n", sol_main_path.c_str());
-  //assert(sol_main_path != ""); // we don't need a 'main' function if --function is used
+  assert(sol_main_path != ""); // we don't need a 'main' function if --function is used
 
   // get AST nodes of ESBMC intrinsics and the dummy main
-  clang_c_module->parse(sol_main_path, message_handler); // populate clang_c_module's ASTs
+  clang_c_module->parse(sol_main_path, msg); // populate clang_c_module's ASTs
 
   // Process AST json file
   std::ifstream ast_json_file_stream(path);
@@ -68,11 +69,13 @@ bool solidity_ast_languaget::parse(
 bool solidity_ast_languaget::typecheck(
   contextt &context,
   const std::string &module,
-  message_handlert &message_handler)
+  const messaget &msg)
 {
-  contextt new_context;
+  contextt new_context(msg);
   clang_c_module->convert_intrinsics(new_context); // Add ESBMC and TACAS intrinsic symbols to the context
 
+  assert(!"Continue with Solidity typecheck");
+#if 0
   solidity_convertert converter(new_context, ast_json);
   if(converter.convert()) // Add Solidity symbols to the context
     return true;
@@ -81,11 +84,12 @@ bool solidity_ast_languaget::typecheck(
   if(adjuster.adjust())
     return true;
 
-  if(c_link(context, new_context, message_handler, module)) // also populates language_uit::context
+  if(c_link(context, new_context, msg, module)) // also populates language_uit::context
     return true;
 
   //assert(!"come back and continue - TODO: adjust and c_link");
   return false;
+#endif
 }
 
 void solidity_ast_languaget::show_parse(std::ostream &)
@@ -95,10 +99,10 @@ void solidity_ast_languaget::show_parse(std::ostream &)
 
 bool solidity_ast_languaget::final(
   contextt &context,
-  message_handlert &message_handler)
+  const messaget &msg)
 {
-  add_cprover_library(context, message_handler);
-  return clang_main(context, message_handler);
+  add_cprover_library(context, msg);
+  return clang_main(context, msg);
   //assert(!"come back and continue - solidity_ast_languaget::final");
   return false;
 }
