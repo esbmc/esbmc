@@ -62,7 +62,7 @@ public:
   explicit clang_c_languaget(const messaget &msg);
 
   // for external symbol conversion
-  bool convert_intrinsics(contextt &context) override;
+  //bool convert_intrinsics(contextt &context) override;
 
 protected:
   virtual std::string internal_additions();

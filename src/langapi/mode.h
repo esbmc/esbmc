@@ -33,7 +33,7 @@ languaget *new_clang_c_language(const messaget &msg);
 languaget *new_clang_cpp_language(const messaget &msg);
 languaget *new_ansi_c_language();
 languaget *new_cpp_language();
-languaget *new_solidity_ast_language();
+languaget *new_solidity_ast_language(const messaget &msg);
 
 // List of language entries, one can put in the mode table:
 #define LANGAPI_HAVE_MODE_CLANG_C                                              \
