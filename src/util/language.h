@@ -88,9 +88,6 @@ public:
   }
   virtual ~languaget() = default;
 
-protected:
-  const messaget &msg;
-
   // Solidity's plaintext AST path
   bool is_solidity = false;
   inline void set_is_solidity() { is_solidity = true; }
@@ -98,5 +95,8 @@ protected:
   std::string sol_main_path = "";
   inline void set_solidity_main(const std::string _path) { sol_main_path = _path; };
   inline std::string get_solidity_main() { return sol_main_path; };
+
+protected:
+  const messaget &msg;
 };
 #endif

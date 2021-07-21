@@ -29,15 +29,14 @@ class ASTUnit;
 class solidity_ast_languaget : public languaget
 {
 public:
-  bool
-  parse(const std::string &path, message_handlert &message_handler) override;
+  bool parse(const std::string &path, const messaget &msg) override;
 
-  bool final(contextt &context, message_handlert &message_handler) override;
+  bool final(contextt &context, const messaget &msg) override;
 
   bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler) override;
+    const messaget &msg) override;
 
   std::string id() const override
   {
@@ -54,14 +53,14 @@ public:
   bool from_type(const typet &type, std::string &code, const namespacet &ns)
     override;
 
-  languaget *new_language() override
+  languaget *new_language(const messaget &msg) override
   {
-    return new solidity_ast_languaget;
+    return new solidity_ast_languaget(msg);
   }
 
   // constructor, destructor
   ~solidity_ast_languaget();
-  solidity_ast_languaget();
+  explicit solidity_ast_languaget(const messaget &msg);
 
   // store AST json in nlohmann::json data structure
   nlohmann::json ast_json;
