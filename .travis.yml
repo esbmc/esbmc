@@ -10,7 +10,5 @@ addons:
   artifacts: 
     paths:
     -  release
-
 script: 
   - ./scripts/build.sh
-
