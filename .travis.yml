@@ -1,0 +1,16 @@
+language: cpp
+compiler: gcc
+arch: arm64
+os: linux
+sudo: true
+env:
+    - BUILD_TYPE=Debug
+
+addons:
+  artifacts: 
+    paths:
+    -  release
+
+script: 
+  - ./scripts/build.sh
+
