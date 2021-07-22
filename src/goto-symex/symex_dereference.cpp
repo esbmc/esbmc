@@ -6,6 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <util/message/format.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
 #include <langapi/language_util.h>
@@ -56,6 +57,8 @@ void symex_dereference_statet::get_value_set(
   // Here we obtain the set of objects via value set analysis
   state.value_set.get_value_set(expr, value_set);
 
+  default_message msg;
+
   // add value set objects during the symbolic execution
   if(goto_symex.options.get_bool_option("add-symex-value-sets"))
   {
@@ -85,11 +88,18 @@ void symex_dereference_statet::get_value_set(
 
         // obtain the object address for comparison
         address_of2tc obj_ptr(expr->type, obj.object);
+
         // check whether they are the same object
         eq = same_object2tc(expr, obj_ptr);
+
         // the pointer could point to any of the accumulated objects
         or_accuml = or2tc(or_accuml, eq);
       }
+
+      // if they are not the same object, then just return
+      if(is_false(or_accuml))
+        return;
+
       // add the set of objects that the pointer can point to as an assume statement
       goto_symex.assume(or_accuml);
     }
