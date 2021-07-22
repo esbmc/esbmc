@@ -6,11 +6,6 @@ os: linux
 sudo: true
 env:
     - BUILD_TYPE=Debug
-addons:
-  artifacts: 
-    paths:
-    - ./scripst/build.sh
-    - release
 
 script:
   - ./scripts/build.sh
