@@ -8,6 +8,8 @@ env:
 addons:
   artifacts: 
     paths:
-    -  release
-script: 
+    - ./scripst/build.sh
+    - release
+
+script:
   - ./scripts/build.sh
