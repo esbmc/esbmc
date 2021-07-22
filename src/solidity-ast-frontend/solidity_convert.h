@@ -20,7 +20,8 @@ class solidity_convertert
 public:
   solidity_convertert(
     contextt &_context,
-    nlohmann::json &_ast_json);
+    nlohmann::json &_ast_json,
+    const messaget &msg);
   virtual ~solidity_convertert() = default;
 
   bool convert();
@@ -29,6 +30,7 @@ protected:
   contextt &context;
   namespacet ns;
   nlohmann::json &ast_json; // json for Solidity AST. Use vector for multiple contracts
+  const messaget &msg;
   std::string absolute_path;
   std::vector< std::shared_ptr<VarDeclTracker> > global_vars; // vector to hold global variable declarations
 
