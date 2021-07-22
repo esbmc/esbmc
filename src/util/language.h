@@ -52,7 +52,7 @@ public:
     const std::string &module,
     const messaget &msg) = 0;
 
-  virtual bool convert_intrinsics(contextt &context)
+  virtual bool convert_intrinsics(contextt &context, const messaget &msg)
   {
     assert(!"please implement your own convert intrinsics");
     return false;

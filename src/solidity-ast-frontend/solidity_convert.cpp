@@ -10,11 +10,13 @@
 #include <util/std_expr.h>
 #include <iomanip>
 
-solidity_convertert::solidity_convertert(contextt &_context, nlohmann::json &_ast_json):
-  context(_context),
-  ns(context),
-  ast_json(_ast_json),
-  current_functionDecl(nullptr)
+solidity_convertert::solidity_convertert(
+  contextt &_context, nlohmann::json &_ast_json, const messaget &msg):
+    context(_context),
+    ns(context),
+    ast_json(_ast_json),
+    msg(msg),
+    current_functionDecl(nullptr)
 {
 }
 

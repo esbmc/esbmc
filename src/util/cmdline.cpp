@@ -122,6 +122,10 @@ bool cmdlinet::parse(
     args = vm["input-file"].as<std::vector<std::string>>();
     verification_file = args.back();
   }
+  if (vm.count("dummymain")) // dummy main for Solidity frontend
+  {
+    sol_main = vm["dummymain"].as<std::vector<std::string>>().back();
+  }
   for(auto &it : vm)
   {
     std::list<std::string> res;
