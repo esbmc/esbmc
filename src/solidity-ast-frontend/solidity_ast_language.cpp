@@ -15,7 +15,6 @@ languaget *new_solidity_ast_language(const messaget &msg)
 solidity_ast_languaget::solidity_ast_languaget(const messaget &msg) : languaget(msg)
 {
   clang_c_module = new_clang_c_language(msg);
-  assert(!"do a thorough review of this file, and compare it with clang_c_language counterpart");
 }
 
 solidity_ast_languaget::~solidity_ast_languaget()
@@ -28,8 +27,9 @@ bool solidity_ast_languaget::parse(
   const std::string &path,
   const messaget &msg)
 {
+  //sol_main_path = "main.c";
   printf("sol_main_path: %s\n", sol_main_path.c_str());
-  assert(sol_main_path != ""); // we don't need a 'main' function if --function is used
+  assert(sol_main_path != ""); // We still need a 'main' function although --function is provided.
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   clang_c_module->parse(sol_main_path, msg); // populate clang_c_module's ASTs
@@ -61,7 +61,8 @@ bool solidity_ast_languaget::parse(
   }
   ast_json = nlohmann::json::parse(ast_json_content); // parse explicitly
 
-  //print_json(ast_json);
+  printf("@@ This is ast_json: \n");
+  print_json(ast_json);
 
   return false;
 }
@@ -72,24 +73,20 @@ bool solidity_ast_languaget::typecheck(
   const messaget &msg)
 {
   contextt new_context(msg);
-  clang_c_module->convert_intrinsics(new_context); // Add ESBMC and TACAS intrinsic symbols to the context
+  clang_c_module->convert_intrinsics(new_context, msg); // Add ESBMC and TACAS intrinsic symbols to the context
 
-  assert(!"Continue with Solidity typecheck");
-#if 0
-  solidity_convertert converter(new_context, ast_json);
+  solidity_convertert converter(new_context, ast_json, msg);
   if(converter.convert()) // Add Solidity symbols to the context
     return true;
 
-  clang_c_adjust adjuster(new_context);
+  clang_c_adjust adjuster(new_context, msg);
   if(adjuster.adjust())
     return true;
 
   if(c_link(context, new_context, msg, module)) // also populates language_uit::context
     return true;
 
-  //assert(!"come back and continue - TODO: adjust and c_link");
   return false;
-#endif
 }
 
 void solidity_ast_languaget::show_parse(std::ostream &)
@@ -112,7 +109,7 @@ bool solidity_ast_languaget::from_expr(
   std::string &code,
   const namespacet &ns)
 {
-  assert(!"come back and continue - solidity_ast_languaget::from_expr");
+  assert(!"should not be here - Solidity frontend does not need this funciton");
   return false;
 }
 
@@ -121,7 +118,7 @@ bool solidity_ast_languaget::from_type(
   std::string &code,
   const namespacet &ns)
 {
-  assert(!"come back and continue - solidity_ast_languaget::from_type");
+  assert(!"should not be here - Solidity frontend does not need this funciton");
   return false;
 }
 
