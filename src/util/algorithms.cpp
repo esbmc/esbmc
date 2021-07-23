@@ -27,8 +27,6 @@ bool goto_functions_algorithm::run()
     }
   }
   goto_functions.update();
-  if(has_sideeffect())
-    remove_skip(goto_functions);
   return true;
 }
 
