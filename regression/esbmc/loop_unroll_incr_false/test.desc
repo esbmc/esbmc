@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc --no-unroll
+--incremental-bmc --no-goto-unwind
 ^VERIFICATION UNKNOWN$

@@ -2,7 +2,7 @@
 #define ESBMC_GOTO_ALGORITHMS_H
 
 #include <util/algorithms.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 /**
  * @brief This is the base class that unroll
@@ -18,10 +18,8 @@ class unsound_loop_unroller : public goto_functions_algorithm
 {
 public:
   unsound_loop_unroller(
-    goto_functionst &goto_functions,
-    message_handlert &msg,
-    std::string disable_cmd)
-    : goto_functions_algorithm(goto_functions, msg, disable_cmd, true)
+    goto_functionst &goto_functions)
+    : goto_functions_algorithm(goto_functions, true)
   {
   }
 
@@ -62,11 +60,9 @@ protected:
 class bounded_loop_unroller : public unsound_loop_unroller
 {
 public:
-  bounded_loop_unroller(goto_functionst &goto_functions, message_handlert &msg)
-    : unsound_loop_unroller(goto_functions, msg, "no-unroll")
+  bounded_loop_unroller(goto_functionst &goto_functions)
+    : unsound_loop_unroller(goto_functions)
   {
-    unsupported_options = {"unwind"};
-    valued_options = {std::make_pair("context-bound", "-1")};
   }
 
   /**
