@@ -1515,6 +1515,11 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
+    if(!options.get_bool_option("no-goto-unwind"))
+    {
+      bounded_loop_unroller unwind_loops(goto_functions);
+      unwind_loops.run();
+    }
     // do partial inlining
     if(!cmdline.isset("no-inlining"))
     {
@@ -1592,13 +1597,6 @@ bool esbmc_parseoptionst::process_goto_program(
 
       value_set_analysis.update(goto_functions);
     }
-
-    // unwind loops
-    optionst opts;
-    get_command_line_options(opts);
-    bounded_loop_unroller unwind_loops(goto_functions, ui_message_handler);
-    unwind_loops.check_and_run(opts);
-
     // show it?
     if(cmdline.isset("show-loops"))
     {
