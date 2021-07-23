@@ -17,8 +17,7 @@
 class unsound_loop_unroller : public goto_functions_algorithm
 {
 public:
-  unsound_loop_unroller(
-    goto_functionst &goto_functions)
+  unsound_loop_unroller(goto_functionst &goto_functions)
     : goto_functions_algorithm(goto_functions, true)
   {
   }
