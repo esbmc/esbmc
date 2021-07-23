@@ -9,6 +9,7 @@
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_skip.h>
 #include <util/cmdline.h>
+#include <util/message/message.h>
 
 const mode_table_et mode_table[] = {
   LANGAPI_HAVE_MODE_CLANG_C,
@@ -103,17 +104,10 @@ goto_functionst goto_factory::get_goto_functions(
   return goto_factory::get_goto_functions(cmd, opts);
 }
 
-ui_message_handlert goto_factory::get_message_handlert()
-{
-  cmdlinet cmdline;
-  language_uit lui(cmdline);
-  lui.set_verbosity(8);
-  return lui.ui_message_handler;
-}
-
 cmdlinet goto_factory::get_default_cmdline(const std::string filename)
 {
-  cmdlinet cmdline;
+  const messaget msg;
+  cmdlinet cmdline(msg);
   cmdline.args.push_back(filename);
   return cmdline;
 }
@@ -131,7 +125,6 @@ optionst goto_factory::get_default_options(cmdlinet cmd)
 bool goto_factory::parse(language_uit &l)
 {
   l.context.clear();
-  l.set_verbosity(8);
   if(l.parse())
     return false; // TODO: This can be used to add testcases for frontend
   if(l.typecheck())
@@ -144,17 +137,18 @@ bool goto_factory::parse(language_uit &l)
 
 goto_functionst goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
 {
+  const messaget msg;
   goto_functionst goto_functions;
-  language_uit lui(cmd);
+  language_uit lui(cmd, msg);
   if(!goto_factory::parse(lui))
     return goto_functions;
 
   migrate_namespace_lookup = new namespacet(lui.context);
 
-  goto_convert(lui.context, opts, goto_functions, lui.ui_message_handler);
+  goto_convert(lui.context, opts, goto_functions, msg);
 
   namespacet ns(lui.context);
-  goto_check(ns, opts, goto_functions);
+  goto_check(ns, opts, goto_functions, msg);
   // remove skips
   remove_skip(goto_functions);
 

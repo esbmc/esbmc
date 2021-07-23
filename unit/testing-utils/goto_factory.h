@@ -3,7 +3,6 @@
 #include <istream>
 #include <goto-programs/goto_functions.h>
 #include <langapi/language_ui.h>
-#include <util/ui_message.h>
 
 /**
  * @brief This class parses C inputs
@@ -35,13 +34,6 @@ public:
     cmdlinet &cmd,
     optionst &opts,
     goto_factory::Architecture arch = goto_factory::Architecture::BIT_16);
-
-  /**
-   * @brief Get a default message handlert object
-   * 
-   * @return ui_message_handlert 
-   */
-  static ui_message_handlert get_message_handlert();
 
   static cmdlinet get_default_cmdline(const std::string filename);
   static optionst get_default_options(cmdlinet cmd);
