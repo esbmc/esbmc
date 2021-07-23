@@ -1,4 +1,4 @@
 CORE
 main.c
 --incremental-bmc --compact-trace
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$
