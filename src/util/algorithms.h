@@ -25,8 +25,7 @@
 class algorithm
 {
 public:
-  algorithm(bool sideeffect)
-    :  sideeffect(sideeffect)
+  algorithm(bool sideeffect) : sideeffect(sideeffect)
   {
   }
 
@@ -40,7 +39,7 @@ public:
    * @return success of the algorithm
    */
   virtual bool run() = 0;
- 
+
   /**
    * @brief Says wether the algorithm is a plain analysis
    * or if it also changes the structure
@@ -65,8 +64,7 @@ public:
   explicit goto_functions_algorithm(
     goto_functionst &goto_functions,
     bool sideffect)
-    : algorithm(sideffect),
-      goto_functions(goto_functions)
+    : algorithm(sideffect), goto_functions(goto_functions)
   {
   }
 
