@@ -572,11 +572,12 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
 smt_astt smt_convt::convert_typecast(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
+
   if(cast.type == cast.from->type)
     return convert_ast(cast.from);
 
   // Casts to and from pointers need to be addressed all as one
-  if(is_pointer_type(cast.type))
+  if(is_pointer_type(cast.type) || is_array_type(cast.type))
     return convert_typecast_to_ptr(cast);
 
   if(is_pointer_type(cast.from))
