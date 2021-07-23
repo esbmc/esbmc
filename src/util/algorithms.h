@@ -29,10 +29,6 @@ public:
   {
   }
 
-  virtual ~algorithm()
-  {
-  }
-
   /**
    * @brief Executes the algorithm
    * 
