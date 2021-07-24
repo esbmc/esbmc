@@ -6,13 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <util/message/format.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
 #include <util/irep2.h>
-#include <util/irep2_expr.h>
 #include <util/migrate.h>
 
 void symex_dereference_statet::dereference_failure(
@@ -56,8 +54,6 @@ void symex_dereference_statet::get_value_set(
 {
   // Here we obtain the set of objects via value set analysis
   state.value_set.get_value_set(expr, value_set);
-
-  default_message msg;
 
   // add value set objects during the symbolic execution
   if(goto_symex.options.get_bool_option("add-symex-value-sets"))
