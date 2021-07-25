@@ -577,8 +577,16 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     return convert_ast(cast.from);
 
   // Casts to and from pointers need to be addressed all as one
-  if(is_pointer_type(cast.type) || is_array_type(cast.type))
+  if(is_pointer_type(cast.type))
     return convert_typecast_to_ptr(cast);
+
+  // FAM Initialization?
+  if(cast.from->expr_id == expr2t::expr_ids::add_id && is_array_type(cast.type))
+  {    
+    // Should be an empty array;
+    const expr2tc &zero = gen_zero(cast.type);
+    return convert_ast(zero);
+  }
 
   if(is_pointer_type(cast.from))
     return convert_typecast_from_ptr(cast);
