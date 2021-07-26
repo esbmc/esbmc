@@ -95,10 +95,6 @@ void symex_dereference_statet::get_value_set(
         or_accuml = or2tc(or_accuml, eq);
       }
 
-      // if they are not the same object, then just return
-      if(is_false(or_accuml))
-        return;
-
       // add the set of objects that the pointer can point to as an assume statement
       goto_symex.assume(or_accuml);
     }
