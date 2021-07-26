@@ -16,7 +16,7 @@ jobs:
     steps:
      - uses: actions/checkout@v1
      - name: Install Dependencies
-       run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo5
+       run: apt-get update && apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo5
      - name: Build ESBMC
        run: ./scripts/build.sh
 
