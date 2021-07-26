@@ -9,6 +9,14 @@ on:
       - master
 jobs:
 
+  build-arm:
+    name: Build ESBMC with all Solvers (Linux)
+    runs-on: ['self-hosted', 'Linux', 'ARM64']
+    container: ubuntu-20.04
+    steps:
+     - name: echo
+       run: uname -a
+
   build-linux:
     name: Build ESBMC with all Solvers (Linux)
     runs-on: ubuntu-20.04
