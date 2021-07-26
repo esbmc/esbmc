@@ -28,9 +28,9 @@ jobs:
      - name: Get current folder and files
        run: pwd && ls
      - name: Configure CMake
-       run: mkdir build && cd build && cmake .. -GNinja -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DCMAKE_BUILD_TYPE=Debug
+       run: mkdir build && cd build && cmake .. -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DCMAKE_BUILD_TYPE=Debug
      - name: Build ESBMC
-       run: cd build && cmake --build .
+       run: cd build && make -j3
 
   build-linux:
     name: Build ESBMC with all Solvers (Linux)
