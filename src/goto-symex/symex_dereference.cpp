@@ -71,7 +71,7 @@ void symex_dereference_statet::get_value_set(
       for(auto const &i : value_set)
       {
         // note that the set of objects are encoded as object_descriptor
-        if(i->expr_id != expr2t::object_descriptor_id)
+        if(!is_object_descriptor2t(i))
           continue;
 
         // convert the object descriptor to extract its address later for comparison
