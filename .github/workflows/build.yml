@@ -10,7 +10,7 @@ on:
 jobs:
 
   build-arm:
-    name: Build ESBMC with all Solvers (Linux)
+    name: Build ESBMC with all Solvers (ARM64)
     runs-on: ['self-hosted', 'Linux', 'ARM64']
     container: ubuntu:20.04
     steps:

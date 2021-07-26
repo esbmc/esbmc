@@ -34,6 +34,19 @@ jobs:
           name: release-linux
           path: ./build/ESBMC-Linux.sh
 
+  build-arm:
+    name: Build aarch64 Release
+    runs-on: ['self-hosted', 'Linux', 'ARM64']
+    container: ubuntu:20.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@master
+      - name: Build ESBMC
+        run: ./scripts/build.sh && mv ESBMC-*.sh ESBMC-aarch64.sh
+      - uses: actions/upload-artifact@v1
+        with:
+          name: release-arm
+          path: ./build/ESBMC-aarch64.sh
 
   build-macos:
     name: Build Darwin Release
@@ -125,6 +138,11 @@ jobs:
         with:
           name: release-linux
           path: ./
+      - name: Download Linux (arm64) Build
+        uses: actions/download-artifact@v1
+        with:
+          name: release-arm
+          path: ./        
       - name: Download Macos Build
         uses: actions/download-artifact@v1
         with:
@@ -156,6 +174,16 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./ESBMC-Linux.sh
           asset_name: ESBMC-Linux.sh
+          asset_content_type: text/x-shellscript
+      - name: Upload Release Asset (ARM64/Linux)
+        id: upload-release-asset-arm64
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./ESBMC-aarch64.sh
+          asset_name: ESBMC-aarch64.sh
           asset_content_type: text/x-shellscript
       - name: Upload Release Asset (Darwin)
         id: upload-release-asset-macos
