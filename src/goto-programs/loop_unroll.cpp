@@ -15,8 +15,7 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
   {
     goto_programt::targett t_before = loop_exit;
 
-    if(!t_before->is_goto() || !is_true(t_before->guard))
-    {
+    if(!t_before->is_goto() || !is_true(t_before->guard))|
       goto_programt::targett t_goto = goto_program.insert(loop_exit);
 
       t_goto->make_goto(loop_exit);
@@ -74,7 +73,6 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
   }
   // now insert copies before loop_exit
   goto_program.destructive_insert(loop_exit, copies);
-  //loops_to_remove.push_back(loop);
   return true;
 }
 
