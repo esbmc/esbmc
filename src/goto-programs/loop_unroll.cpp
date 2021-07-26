@@ -10,30 +10,22 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
   loop_exit->make_skip();
 
-  /* TODO: If we want a sound version: loop_exit++ so we have the skip instruction
-  if(loop_exit != goto_program.instructions.begin())
-  {
-    goto_programt::targett t_before = loop_exit;
+  /* Here the Loop goto iteraction should be added if needed
+   * this is only needed if this class is combined with another
+   * unsound approach. Since this class is only used for bounded
+   * loops we do not need to worry. */
 
-    if(!t_before->is_goto() || !is_true(t_before->guard))|
-      goto_programt::targett t_goto = goto_program.insert(loop_exit);
-
-      t_goto->make_goto(loop_exit);
-      t_goto->location = loop_exit->location;
-      t_goto->function = loop_exit->function;
-      t_goto->guard = gen_true_expr();
-    }
-  } */
   // If there is an inner control flow we need a map for it
   std::map<goto_programt::targett, unsigned> target_map;
   {
-    unsigned count = 0;
+    size_t count = 0;
     goto_programt::targett t = loop.get_original_loop_head();
     t->make_skip();
     t++; // get first instruction of the loop
     for(; t != loop_exit; t++, count++)
     {
-      assert(t != goto_program.instructions.end());
+      assert(
+        t != goto_program.instructions.end() && "Error, got invalid loop exit");
       target_map[t] = count;
     }
   }
