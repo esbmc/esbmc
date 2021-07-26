@@ -14,7 +14,7 @@ jobs:
     runs-on: ['self-hosted', 'Linux', 'ARM64']
     container: ubuntu:20.04
     steps:
-     - uses: cleanup old files
+     - name: cleanup old files
        run: pwd && rm -rf ./*
      - uses: actions/checkout@v1
      - name: Install Dependencies
