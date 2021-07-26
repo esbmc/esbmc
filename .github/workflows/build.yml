@@ -14,6 +14,8 @@ jobs:
     runs-on: ['self-hosted', 'Linux', 'ARM64']
     container: ubuntu:20.04
     steps:
+     - uses: cleanup old files
+       run: pwd && rm -rf ./*
      - uses: actions/checkout@v1
      - name: Install Dependencies
        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y gperf libgmp-dev cmake bison flex linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev libtinfo5 git curl
