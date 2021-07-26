@@ -82,10 +82,13 @@ void symex_dereference_statet::get_value_set(
         if(is_null_object2t(obj.object))
           return;
 
-        // obtain the object address for comparison
-        address_of2tc obj_ptr(expr->type, obj.object);
+        // obtain the object address + offset for comparison
+        // this will produce expressions like &x + offset
+        expr2tc obj_ptr(add2tc(
+          expr->type, address_of2tc(expr->type, obj.object), obj.offset));
 
         // check whether they are the same object
+        // this will produce expression like SAME-OBJECT(ptr, &x + offset)
         eq = same_object2tc(expr, obj_ptr);
 
         // the pointer could point to any of the accumulated objects
