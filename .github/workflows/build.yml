@@ -21,7 +21,8 @@ jobs:
        run: git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j4 && make install
      - name: Download Clang 11
        run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-aarch64-linux-gnu.tar.xz
-       tar xf clang+llvm-11.0.0-aarch64-linux-gnu.tar.xz && mv clang+llvm-11.0.0-aarch64-linux-gnu clang     
+     - name: Extract Clang 11
+       run: tar xf clang+llvm-11.0.0-aarch64-linux-gnu.tar.xz && mv clang+llvm-11.0.0-aarch64-linux-gnu clang     
      - name: Get current folder and files
        run: pwd && ls
      - name: Configure CMake
