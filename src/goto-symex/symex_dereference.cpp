@@ -52,51 +52,58 @@ void symex_dereference_statet::get_value_set(
   const expr2tc &expr,
   value_setst::valuest &value_set)
 {
-  // Here we obtain the set of objects via value set analysis
+  // Here we obtain the set of objects via value set analysis.
   state.value_set.get_value_set(expr, value_set);
 
-  // add value set objects during the symbolic execution
+  // add value set objects during the symbolic execution.
   if(goto_symex.options.get_bool_option("add-symex-value-sets"))
   {
-    // check whether we have a set of objects
+    // check whether we have a set of objects.
     if(value_set.empty())
       return;
 
     if(is_pointer_type(expr))
     {
-      // we will accumulate the objects that the pointer points to
-      expr2tc or_accuml = gen_false_expr();
+      // we will accumulate the objects that the pointer points to.
+      expr2tc or_accuml;
       same_object2tc eq;
 
-      // add each object to the resulting assume statement
-      for(auto const &i : value_set)
+      // add each object to the resulting assume statement.
+      for(value_setst::valuest::iterator it = value_set.begin();
+          it != value_set.end();
+          ++it)
       {
-        // note that the set of objects are encoded as object_descriptor
-        if(!is_object_descriptor2t(i))
+        // note that the set of objects are always encoded as object_descriptor.
+        if(!is_object_descriptor2t(*it))
           return;
 
-        // convert the object descriptor to extract its address later for comparison
-        const object_descriptor2t &obj = to_object_descriptor2t(i);
+        // convert the object descriptor to extract its address later for comparison.
+        const object_descriptor2t &obj = to_object_descriptor2t(*it);
 
-        // Don't build a reference to this. We can't actually access NULL, and the
-        // solver will only get confused.
+        // don't build a reference to this.
+        // we can't actually access NULL, and the solver will only get confused.
         if(is_null_object2t(obj.object))
           return;
 
-        // obtain the object address + offset for comparison
-        // this will produce expressions like &x + offset
+        // obtain the object address + offset for comparison.
+        // this will produce expressions like &x + offset.
         expr2tc obj_ptr(add2tc(
           expr->type, address_of2tc(expr->type, obj.object), obj.offset));
 
-        // check whether they are the same object
-        // this will produce expression like SAME-OBJECT(ptr, &x + offset)
+        // check whether they are the same object.
+        // this will produce expression like SAME-OBJECT(ptr, &x + offset).
         eq = same_object2tc(expr, obj_ptr);
 
-        // the pointer could point to any of the accumulated objects
-        or_accuml = or2tc(or_accuml, eq);
+        // note that the pointer could point to any of the accumulated objects.
+        // However, if we have just one element, our or_accuml should store just that single element.
+        // Otherwise, we will accumulate the expression.
+        if(it == value_set.begin())
+          or_accuml = eq;
+        else
+          or_accuml = or2tc(or_accuml, eq);
       }
 
-      // add the set of objects that the pointer can point to as an assume statement
+      // add the set of objects that the pointer can point to as an assume statement.
       goto_symex.assume(or_accuml);
     }
   }
