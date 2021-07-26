@@ -563,7 +563,7 @@ std::string expr2t::pretty(unsigned int indent) const
 void expr2t::dump() const
 {
   default_message msg;
-  msg.debug((0));
+  msg.debug(pretty(0));
 }
 
 // Map a base type to it's list of names
