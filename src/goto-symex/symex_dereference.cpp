@@ -61,6 +61,7 @@ void symex_dereference_statet::get_value_set(
     // check whether we have a set of objects
     if(value_set.empty())
       return;
+
     if(is_pointer_type(expr))
     {
       // we will accumulate the objects that the pointer points to
