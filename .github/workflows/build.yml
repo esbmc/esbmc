@@ -28,9 +28,15 @@ jobs:
      - name: Get current folder and files
        run: pwd && ls
      - name: Configure CMake
-       run: mkdir build && cd build && cmake .. -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DCMAKE_BUILD_TYPE=Debug
+       run: mkdir build && cd build && cmake .. -G Ninja -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
      - name: Build ESBMC
-       run: cd build && make -j3
+       run: cd build && cmake --build . && cmake --install .
+     - uses: actions/upload-artifact@v1
+       with:
+         name: release-linux
+         path: ./release
+     - name: Run tests
+       run: cd build/ && ctest -j4 --output-on-failure --progress .
 
   build-linux:
     name: Build ESBMC with all Solvers (Linux)
