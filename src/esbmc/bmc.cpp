@@ -218,9 +218,8 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
     oss << "// " << it.source.pc->location_number << " ";
     oss << it.source.pc->location.as_string();
     if(!it.comment.empty())
-      oss << " (" << it.comment << ")\n";
-
-    oss << "/* " << count << "*/ ";
+      oss << " (" << it.comment << ")";
+    oss << "\n/* " << count << " */ ";
 
     std::string string_value;
     languages.from_expr(migrate_expr_back(it.cond), string_value);
@@ -249,9 +248,10 @@ void bmct::show_program(std::shared_ptr<symex_target_equationt> &eq)
       oss << "guard: " << string_value << "\n";
     }
 
-    msg.status(oss.str());
+    oss << '\n';
     count++;
   }
+  msg.status(oss.str());
 }
 
 void bmct::report_trace(
