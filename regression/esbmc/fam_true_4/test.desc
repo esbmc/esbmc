@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--compact-trace --force-malloc-success
+^VERIFICATION SUCCESSFUL$
