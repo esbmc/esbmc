@@ -581,8 +581,8 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     return convert_typecast_to_ptr(cast);
 
   // FAM Initialization?
-  if(cast.from->expr_id == expr2t::expr_ids::add_id && is_array_type(cast.type))
-  {    
+  if(is_add2t(cast.from) && is_array_type(cast.type))
+  {
     // Should be an empty array;
     const expr2tc &zero = gen_zero(cast.type);
     return convert_ast(zero);
