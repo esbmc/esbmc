@@ -80,6 +80,10 @@ void symex_dereference_statet::get_value_set(
         // convert the object descriptor to extract its address later for comparison.
         const object_descriptor2t &obj = to_object_descriptor2t(*it);
 
+        // if the object offset is unknown, we should not guess its offset.
+        if(is_unknown2t(obj.offset))
+          return;
+
         // obtain the object address + offset for comparison.
         // this will produce expressions like &x + offset.
         expr2tc obj_ptr(add2tc(
