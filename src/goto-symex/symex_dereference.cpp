@@ -80,19 +80,23 @@ void symex_dereference_statet::get_value_set(
         // convert the object descriptor to extract its address later for comparison.
         const object_descriptor2t &obj = to_object_descriptor2t(*it);
 
-        // don't build a reference to this.
-        // we can't actually access NULL, and the solver will only get confused.
-        if(is_null_object2t(obj.object))
-          return;
-
         // obtain the object address + offset for comparison.
         // this will produce expressions like &x + offset.
         expr2tc obj_ptr(add2tc(
           expr->type, address_of2tc(expr->type, obj.object), obj.offset));
 
         // check whether they are the same object.
-        // this will produce expression like SAME-OBJECT(ptr, &x + offset).
-        eq = same_object2tc(expr, obj_ptr);
+        // this will produce expression like SAME-OBJECT(ptr, NULL)
+        // or SAME-OBJECT(ptr, &x + offset).
+        if(is_null_object2t(obj.object))
+        {
+          // create NULL pointer type in case the object is a NULL-object
+          type2tc nullptrtype = type2tc(new pointer_type2t(expr->type));
+          symbol2tc null_ptr(nullptrtype, "NULL");
+          eq = same_object2tc(expr, null_ptr);
+        }
+        else
+          eq = same_object2tc(expr, obj_ptr);
 
         // note that the pointer could point to any of the accumulated objects.
         // However, if we have just one element, our or_accuml should store just that single element.
