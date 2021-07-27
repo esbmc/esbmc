@@ -66,12 +66,9 @@ void symex_dereference_statet::get_value_set(
     {
       // we will accumulate the objects that the pointer points to.
       expr2tc or_accuml;
-      same_object2tc eq;
 
       // add each object to the resulting assume statement.
-      for(value_setst::valuest::iterator it = value_set.begin();
-          it != value_set.end();
-          ++it)
+      for(auto it = value_set.begin(); it != value_set.end(); ++it)
       {
         // note that the set of objects are always encoded as object_descriptor.
         if(!is_object_descriptor2t(*it))
@@ -84,23 +81,21 @@ void symex_dereference_statet::get_value_set(
         if(is_unknown2t(obj.offset))
           return;
 
-        // obtain the object address + offset for comparison.
-        // this will produce expressions like &x + offset.
-        expr2tc obj_ptr(add2tc(
-          expr->type, address_of2tc(expr->type, obj.object), obj.offset));
-
         // check whether they are the same object.
         // this will produce expression like SAME-OBJECT(ptr, NULL)
         // or SAME-OBJECT(ptr, &x + offset).
+        expr2tc obj_ptr;
         if(is_null_object2t(obj.object))
         {
           // create NULL pointer type in case the object is a NULL-object
           type2tc nullptrtype = type2tc(new pointer_type2t(expr->type));
-          symbol2tc null_ptr(nullptrtype, "NULL");
-          eq = same_object2tc(expr, null_ptr);
+          obj_ptr = symbol2tc(nullptrtype, "NULL");
         }
         else
-          eq = same_object2tc(expr, obj_ptr);
+          obj_ptr = add2tc(
+            expr->type, address_of2tc(expr->type, obj.object), obj.offset);
+
+        same_object2tc eq = same_object2tc(expr, obj_ptr);
 
         // note that the pointer could point to any of the accumulated objects.
         // However, if we have just one element, our or_accuml should store just that single element.
