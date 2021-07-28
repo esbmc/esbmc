@@ -1,4 +1,4 @@
-#include <solidity-ast-frontend/typecast.h>
+#include <solidity-frontend/typecast.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/simplify_expr_class.h>
