@@ -27,7 +27,6 @@ bool solidity_languaget::parse(
   const std::string &path,
   const messaget &msg)
 {
-  //sol_main_path = "main.c";
   printf("sol_main_path: %s\n", sol_main_path.c_str());
   assert(sol_main_path != ""); // We still need a 'main' function although --function is provided.
 
@@ -61,8 +60,8 @@ bool solidity_languaget::parse(
   }
   ast_json = nlohmann::json::parse(ast_json_content); // parse explicitly
 
-  printf("@@ This is ast_json: \n");
-  print_json(ast_json);
+  //printf("@@ This is ast_json: \n");
+  //print_json(ast_json);
 
   return false;
 }
@@ -74,11 +73,13 @@ bool solidity_languaget::typecheck(
 {
   contextt new_context(msg);
   clang_c_module->convert_intrinsics(new_context, msg); // Add ESBMC and TACAS intrinsic symbols to the context
+  msg.progress("Done conversion of intrinsics...");
 
-  solidity_convertert converter(new_context, ast_json, msg);
+  solidity_convertert converter(new_context, ast_json, sol_func_path, msg);
   if(converter.convert()) // Add Solidity symbols to the context
     return true;
 
+  assert(!"continue with adjuster ...");
   clang_c_adjust adjuster(new_context, msg);
   if(adjuster.adjust())
     return true;
