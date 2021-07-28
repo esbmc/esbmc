@@ -581,6 +581,13 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     return convert_typecast_to_ptr(cast);
 
   // FAM Initialization?
+  /*
+   * The frontend does not handle 0-sized arrays
+   * properly, making that FAM static direct initialization
+   * such as: FAM f = {1, {}}
+   * creates a typecast from an ADD into an ARRAY.
+   * In future we should properly handle this case in the
+   * frontend */
   if(is_add2t(cast.from) && is_array_type(cast.type))
   {
     // Should be an empty array;
