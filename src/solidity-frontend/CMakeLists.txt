@@ -1,7 +1,7 @@
 add_subdirectory(libUtils)
 add_subdirectory(libSif)
 
-add_library(solidityfrontend_stuff solidity_ast_language.cpp typecast.cpp solidity_convert.cpp solidity_type.cpp
+add_library(solidityfrontend_stuff solidity_language.cpp typecast.cpp solidity_convert.cpp solidity_type.cpp
   solidity_decl_tracker.cpp solidity_convert_literals.cpp)
 target_include_directories(solidityfrontend_stuff
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}

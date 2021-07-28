@@ -1,8 +1,8 @@
-#ifndef SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_
-#define SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_
+#ifndef SOLIDITY_FRONTEND_SOLIDITY_DECL_TRACKER
+#define SOLIDITY_FRONTEND_SOLIDITY_DECL_TRACKER
 
 #include <nlohmann/json.hpp>
-#include <solidity-ast-frontend/solidity_type.h>
+#include <solidity-frontend/solidity_type.h>
 #include <iostream>
 #include <iomanip>
 #include <vector>
@@ -601,4 +601,4 @@ private:
   void set_has_body();
 };
 
-#endif // END of SOLIDITY_AST_FRONTEND_SOLIDITY_DECL_TRACKER_H_
+#endif // END of SOLIDITY_FRONTEND_SOLIDITY_DECL_TRACKER

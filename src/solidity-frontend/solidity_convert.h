@@ -1,5 +1,5 @@
-#ifndef SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_
-#define SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_
+#ifndef SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_
+#define SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_
 
 //#define __STDC_LIMIT_MACROS
 //#define __STDC_FORMAT_MACROS
@@ -9,8 +9,8 @@
 #include <util/namespace.h>
 #include <util/std_types.h>
 #include <nlohmann/json.hpp>
-#include <solidity-ast-frontend/solidity_type.h>
-#include <solidity-ast-frontend/solidity_decl_tracker.h>
+#include <solidity-frontend/solidity_type.h>
+#include <solidity-frontend/solidity_decl_tracker.h>
 
 using varDeclTrackerPtr = std::shared_ptr<VarDeclTracker>&;
 using funDeclTrackerPtr = std::shared_ptr<FunctionDeclTracker>&;
@@ -82,4 +82,4 @@ protected:
     exprt &dest);
 };
 
-#endif /* SOLIDITY_AST_FRONTEND_SOLIDITY_CONVERT_H_ */
+#endif /* SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_ */

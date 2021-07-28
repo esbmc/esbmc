@@ -1,4 +1,4 @@
-#include <solidity-ast-frontend/solidity_type.h>
+#include <solidity-frontend/solidity_type.h>
 
 namespace SolidityTypes
 {

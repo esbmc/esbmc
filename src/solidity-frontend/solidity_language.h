@@ -4,8 +4,8 @@ Module: Solidity AST module
 
 \*******************************************************************/
 
-#ifndef SOLIDITY_AST_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
-#define SOLIDITY_AST_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
+#ifndef SOLIDITY_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
+#define SOLIDITY_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 
 #include <c2goto/cprover_library.h>
 #include <clang-c-frontend/clang_c_language.h>
@@ -26,7 +26,7 @@ namespace clang
 class ASTUnit;
 } // namespace clang
 
-class solidity_ast_languaget : public languaget
+class solidity_languaget : public languaget
 {
 public:
   bool parse(const std::string &path, const messaget &msg) override;
@@ -55,12 +55,12 @@ public:
 
   languaget *new_language(const messaget &msg) override
   {
-    return new solidity_ast_languaget(msg);
+    return new solidity_languaget(msg);
   }
 
   // constructor, destructor
-  ~solidity_ast_languaget();
-  explicit solidity_ast_languaget(const messaget &msg);
+  ~solidity_languaget();
+  explicit solidity_languaget(const messaget &msg);
 
   // store AST json in nlohmann::json data structure
   nlohmann::json ast_json;
@@ -72,6 +72,6 @@ public:
 //protected:
 };
 
-languaget *new_solidity_ast_language();
+languaget *new_solidity_language();
 
-#endif
+#endif /* SOLIDITY_FRONTEND_SOLIDITY_AST_LANGUAGE_H_ */
