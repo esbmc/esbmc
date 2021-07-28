@@ -1,5 +1,5 @@
-#include <solidity-ast-frontend/solidity_convert.h>
-#include <solidity-ast-frontend/typecast.h>
+#include <solidity-frontend/solidity_convert.h>
+#include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
 #include <util/c_types.h>

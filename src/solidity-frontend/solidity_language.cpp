@@ -4,26 +4,26 @@ Module: Solidity AST module
 
 \*******************************************************************/
 
-#include <solidity-ast-frontend/solidity_ast_language.h>
-#include <solidity-ast-frontend/solidity_convert.h>
+#include <solidity-frontend/solidity_language.h>
+#include <solidity-frontend/solidity_convert.h>
 
-languaget *new_solidity_ast_language(const messaget &msg)
+languaget *new_solidity_language(const messaget &msg)
 {
-  return new solidity_ast_languaget(msg);
+  return new solidity_languaget(msg);
 }
 
-solidity_ast_languaget::solidity_ast_languaget(const messaget &msg) : languaget(msg)
+solidity_languaget::solidity_languaget(const messaget &msg) : languaget(msg)
 {
   clang_c_module = new_clang_c_language(msg);
 }
 
-solidity_ast_languaget::~solidity_ast_languaget()
+solidity_languaget::~solidity_languaget()
 {
   if(clang_c_module != nullptr)
     delete clang_c_module;
 }
 
-bool solidity_ast_languaget::parse(
+bool solidity_languaget::parse(
   const std::string &path,
   const messaget &msg)
 {
@@ -67,7 +67,7 @@ bool solidity_ast_languaget::parse(
   return false;
 }
 
-bool solidity_ast_languaget::typecheck(
+bool solidity_languaget::typecheck(
   contextt &context,
   const std::string &module,
   const messaget &msg)
@@ -89,22 +89,22 @@ bool solidity_ast_languaget::typecheck(
   return false;
 }
 
-void solidity_ast_languaget::show_parse(std::ostream &)
+void solidity_languaget::show_parse(std::ostream &)
 {
-  assert(!"come back and continue - solidity_ast_languaget::show_parse");
+  assert(!"come back and continue - solidity_languaget::show_parse");
 }
 
-bool solidity_ast_languaget::final(
+bool solidity_languaget::final(
   contextt &context,
   const messaget &msg)
 {
   add_cprover_library(context, msg);
   return clang_main(context, msg);
-  //assert(!"come back and continue - solidity_ast_languaget::final");
+  //assert(!"come back and continue - solidity_languaget::final");
   return false;
 }
 
-bool solidity_ast_languaget::from_expr(
+bool solidity_languaget::from_expr(
   const exprt &expr,
   std::string &code,
   const namespacet &ns)
@@ -113,7 +113,7 @@ bool solidity_ast_languaget::from_expr(
   return false;
 }
 
-bool solidity_ast_languaget::from_type(
+bool solidity_languaget::from_type(
   const typet &type,
   std::string &code,
   const namespacet &ns)
@@ -122,7 +122,7 @@ bool solidity_ast_languaget::from_type(
   return false;
 }
 
-void solidity_ast_languaget::print_json(const nlohmann::json &json_in)
+void solidity_languaget::print_json(const nlohmann::json &json_in)
 {
   printf("\n### json_content: ###\n");
   std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations

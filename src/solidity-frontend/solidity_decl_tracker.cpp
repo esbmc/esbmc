@@ -1,4 +1,4 @@
-#include <solidity-ast-frontend/solidity_decl_tracker.h>
+#include <solidity-frontend/solidity_decl_tracker.h>
 
 /* =======================================================
  * DeclTracker
