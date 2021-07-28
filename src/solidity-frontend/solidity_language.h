@@ -16,7 +16,6 @@ Module: Solidity AST module
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include <libSif/ASTAnalyser.hpp>
 #include <libUtils/Utils.hpp>
 #include <nlohmann/json.hpp>
 
