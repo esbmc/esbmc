@@ -10,11 +10,12 @@
 #include <util/std_expr.h>
 #include <iomanip>
 
-solidity_convertert::solidity_convertert(
-  contextt &_context, nlohmann::json &_ast_json, const messaget &msg):
+solidity_convertert::solidity_convertert(contextt &_context,
+    nlohmann::json &_ast_json, const std::string &_sol_func, const messaget &msg):
     context(_context),
     ns(context),
     ast_json(_ast_json),
+    sol_func(_sol_func),
     msg(msg),
     current_functionDecl(nullptr)
 {
@@ -36,7 +37,9 @@ static std::string get_decl_name(const NamedDeclTracker &nd)
 
 bool solidity_convertert::convert()
 {
-  // This method convert each declarations in ast_json to symbols and add them to the context.
+  // This function consists of two parts:
+  //  1. First, we perform pattern-based verificaiton
+  //  2. Then we populate the context with symbols annotated based on the each AST node, and hence prepare for the GOTO conversion.
 
   if (!ast_json.contains("nodes")) // check json file contains AST nodes as Solidity might change
     assert(!"JSON file does not contain any AST nodes");
@@ -49,8 +52,30 @@ bool solidity_convertert::convert()
   // By now the context should have the symbols of all ESBMC's intrinsics and the dummy main
   // We need to convert Solidity AST nodes to the equivalent symbols and add them to the context
   nlohmann::json nodes = ast_json["nodes"];
+
+  bool found_contract_def = false;
   unsigned index = 0;
   nlohmann::json::iterator itr = nodes.begin();
+  for (; itr != nodes.end(); ++itr, ++index)
+  {
+    // ignore the meta information and locate nodes in ContractDefinition
+    std::string node_type = (*itr)["nodeType"].get<std::string>();
+    if (node_type == "ContractDefinition") // contains AST nodes we need
+    {
+      found_contract_def = true;
+      // pattern-based verification
+      assert(itr->contains("nodes"));
+      auto pattern_check = std::make_unique<pattern_checker>((*itr)["nodes"], sol_func, msg);
+      if(pattern_check->do_pattern_check())
+        return true; // 'true' indicates something goes wrong.
+    }
+  }
+  assert(found_contract_def);
+
+  // reasoning-based verification
+  //assert(!"Continue with symbol annotations");
+  index = 0;
+  itr = nodes.begin();
   for (; itr != nodes.end(); ++itr, ++index)
   {
     std::string node_type = (*itr)["nodeType"].get<std::string>();
@@ -60,8 +85,6 @@ bool solidity_convertert::convert()
         return true; // 'true' indicates something goes wrong.
     }
   }
-
-  //assert(!"all symbols done?");
 
   return false; // 'false' indicates successful completion.
 }

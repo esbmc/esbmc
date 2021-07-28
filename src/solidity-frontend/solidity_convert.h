@@ -10,6 +10,7 @@
 #include <util/std_types.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_type.h>
+#include <solidity-frontend/pattern_check.h>
 #include <solidity-frontend/solidity_decl_tracker.h>
 
 using varDeclTrackerPtr = std::shared_ptr<VarDeclTracker>&;
@@ -21,6 +22,7 @@ public:
   solidity_convertert(
     contextt &_context,
     nlohmann::json &_ast_json,
+    const std::string &_sol_func,
     const messaget &msg);
   virtual ~solidity_convertert() = default;
 
@@ -29,7 +31,8 @@ public:
 protected:
   contextt &context;
   namespacet ns;
-  nlohmann::json &ast_json; // json for Solidity AST. Use vector for multiple contracts
+  nlohmann::json &ast_json;    // json for Solidity AST. Use vector for multiple contracts
+  const std::string &sol_func; // Solidity function to be verified
   const messaget &msg;
   std::string absolute_path;
   std::vector< std::shared_ptr<VarDeclTracker> > global_vars; // vector to hold global variable declarations
