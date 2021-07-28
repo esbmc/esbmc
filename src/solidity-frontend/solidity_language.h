@@ -66,7 +66,7 @@ public:
   nlohmann::json intrinsic_json;
   void print_json(const nlohmann::json &json_in);
 
-  languaget * clang_c_module;
+  languaget *clang_c_module;
 
 //protected:
 };

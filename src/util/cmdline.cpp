@@ -14,7 +14,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/message/format.h>
 
 std::string verification_file;
-std::string sol_main; // file that contains a dummy main for Solidity verification
+std::string sol_main;     // file that contains a dummy main for Solidity verification
+std::string sol_function; // solidity function to be verified
 
 cmdlinet::~cmdlinet()
 {
@@ -125,6 +126,10 @@ bool cmdlinet::parse(
   if (vm.count("dummymain")) // dummy main for Solidity frontend
   {
     sol_main = vm["dummymain"].as<std::vector<std::string>>().back();
+  }
+  if (vm.count("function")) // We need Solidity function name for pattern-based verification
+  {
+    sol_function = vm["function"].as<std::string>();
   }
   for(auto &it : vm)
   {
