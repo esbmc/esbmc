@@ -45,10 +45,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "show value-set analysis for the goto functions"},
     {"show-symex-value-sets",
      NULL,
-     "show value-set analysis during symbolic execution"},
-    {"add-symex-value-sets",
-     NULL,
-     "add value-set objects during symbolic execution"}}},
+     "show value-set analysis during symbolic execution"}}},
   {"Frontend",
    {{"include,I",
      boost::program_options::value<std::vector<std::string>>()->value_name(
@@ -260,7 +257,11 @@ const struct group_opt_templ all_cmd_options[] = {
      {"no-propagation", NULL, "disable constant propagation"},
      {"interval-analysis",
       NULL,
-      "enable interval analysis and add assumes to the program"}}},
+      "enable interval analysis and add assumes to the program"},
+     {"add-symex-value-sets",
+      NULL,
+      "enable value-set analysis and add assumes to the program during "
+      "symbolic execution"}}},
 
   {"DEBUG options",
    {// Print commit hash for current binary
