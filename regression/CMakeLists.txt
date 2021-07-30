@@ -31,7 +31,7 @@ elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
     set(REGRESSIONS esbmc cbmc cstd llvm floats  k-induction )
 else()
-    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc cbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp csmith k-induction-parallel nonz3 bitwuzla incremental-smt)
+    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc cbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith k-induction-parallel nonz3 bitwuzla incremental-smt)
 endif()
 
 foreach(regression IN LISTS REGRESSIONS)
