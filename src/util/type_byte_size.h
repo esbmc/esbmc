@@ -23,6 +23,7 @@ BigInt type_byte_size(const type2tc &type);
 BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval);
 
 expr2tc compute_pointer_offset(const expr2tc &expr);
+expr2tc compute_pointer_offset_bits(const expr2tc &expr);
 
 const expr2tc &get_base_object(const expr2tc &expr);
 const irep_idt get_string_argument(const expr2tc &expr);
