@@ -6,6 +6,8 @@
 #include <util/ieee_float.h>
 #include <util/string_constant.h>
 
+
+#if 0
 bool solidity_convertert::convert_integer_literal(
   const IntegerLiteralTracker* integer_literal,
   exprt &dest)
@@ -32,3 +34,5 @@ bool solidity_convertert::convert_integer_literal(
   dest.swap(the_val);
   return false;
 }
+
+#endif

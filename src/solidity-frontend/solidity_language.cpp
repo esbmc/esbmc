@@ -79,7 +79,7 @@ bool solidity_languaget::typecheck(
   if(converter.convert()) // Add Solidity symbols to the context
     return true;
 
-  assert(!"continue with adjuster ...");
+  //assert(!"continue with adjuster ...");
   clang_c_adjust adjuster(new_context, msg);
   if(adjuster.adjust())
     return true;
