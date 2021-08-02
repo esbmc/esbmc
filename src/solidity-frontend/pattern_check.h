@@ -5,15 +5,13 @@
 //#define __STDC_FORMAT_MACROS
 
 #include <memory>
+#include <iostream>
+#include <iomanip>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_types.h>
 #include <nlohmann/json.hpp>
-#include <solidity-frontend/solidity_type.h>
-#include <solidity-frontend/solidity_decl_tracker.h>
-
-using varDeclTrackerPtr = std::shared_ptr<VarDeclTracker>&;
-using funDeclTrackerPtr = std::shared_ptr<FunctionDeclTracker>&;
+#include <solidity-frontend/solidity_grammar.h>
 
 class pattern_checker
 {
