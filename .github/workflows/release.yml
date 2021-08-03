@@ -57,9 +57,9 @@ jobs:
      - name: Build ESBMC
        run: cd build && make -j3 && cpack  && mv ESBMC-*.sh ESBMC-aarch64.sh
      - uses: actions/upload-artifact@v1
-        with:
-          name: release-arm
-          path: ./build/ESBMC-aarch64.sh
+       with:
+         name: release-arm
+         path: ./build/ESBMC-aarch64.sh
 
   build-macos:
     name: Build Darwin Release
