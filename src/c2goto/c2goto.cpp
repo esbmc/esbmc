@@ -81,10 +81,6 @@ public:
 
 int main(int argc, const char **argv)
 {
-  // To avoid the static initialization fiasco,
-  type_poolt bees(true);
-  type_pool = bees;
-
   default_message msg;
   c2goto_parseopt parseopt(argc, argv, msg);
   return parseopt.main();

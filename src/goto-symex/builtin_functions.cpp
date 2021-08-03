@@ -169,24 +169,22 @@ expr2tc goto_symext::symex_mem(
 
   new_context.add(symbol);
 
-  type2tc new_type;
-  migrate_type(symbol.type, new_type);
+  type2tc new_type = migrate_type(symbol.type);
 
   address_of2tc rhs_addrof(get_empty_type(), expr2tc());
 
   if(size_is_one)
   {
-    rhs_addrof->type = get_pointer_type(pointer_typet(symbol.type));
+    rhs_addrof->type = migrate_type(pointer_typet(symbol.type));
     rhs_addrof->ptr_obj = symbol2tc(new_type, symbol.id);
   }
   else
   {
-    type2tc subtype;
-    migrate_type(symbol.type.subtype(), subtype);
+    type2tc subtype = migrate_type(symbol.type.subtype());
     expr2tc sym = symbol2tc(new_type, symbol.id);
     expr2tc idx_val = gen_ulong(0);
     expr2tc idx = index2tc(subtype, sym, idx_val);
-    rhs_addrof->type = get_pointer_type(pointer_typet(symbol.type.subtype()));
+    rhs_addrof->type = migrate_type(pointer_typet(symbol.type.subtype()));
     rhs_addrof->ptr_obj = idx;
   }
 
@@ -399,16 +397,12 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   symbol.mode = "C++";
 
   const pointer_type2t &ptr_ref = to_pointer_type(code.type);
-  typet renamedtype = ns.follow(migrate_type_back(ptr_ref.subtype));
-  type2tc newtype, renamedtype2;
-  migrate_type(renamedtype, renamedtype2);
+  type2tc renamedtype2 =
+    migrate_type(ns.follow(migrate_type_back(ptr_ref.subtype)));
 
-  if(do_array)
-  {
-    newtype = type2tc(new array_type2t(renamedtype2, code.size, false));
-  }
-  else
-    newtype = renamedtype2;
+  type2tc newtype =
+    do_array ? type2tc(new array_type2t(renamedtype2, code.size, false))
+             : renamedtype2;
 
   symbol.type = migrate_type_back(newtype);
 
@@ -740,8 +734,7 @@ void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
   const symbolt *s = new_context.find_symbol(id);
   if(s != nullptr)
   {
-    type2tc symbol_type;
-    migrate_type(s->type, symbol_type);
+    type2tc symbol_type = migrate_type(s->type);
 
     va_rhs = symbol2tc(symbol_type, s->id);
     cur_state->top().level1.get_ident_name(va_rhs);
