@@ -72,13 +72,13 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
 {
   /**
    * This looks for the following template
-   * 
+   *
    * z: symbol = k0
-   * 
+   *
    * a: IF !(symbol < k)
    * b: ... // code that only reads symbol
    * b: symbol++
-   * 
+   *
    * If this is matched properly then set
    * bound as k - k0 and return true
    */
@@ -156,6 +156,11 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
       if(x.target == symbol)
         return -1;
     }
+
+  int bound = k - k0;
+  if(bound <= 0 || bound > unroll_limit)
+    return 0;
+
   number_of_bounded_loops++;
-  return k - k0;
+  return bound;
 }
