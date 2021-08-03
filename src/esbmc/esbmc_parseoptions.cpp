@@ -1514,10 +1514,13 @@ bool esbmc_parseoptionst::process_goto_program(
   try
   {
     namespacet ns(context);
-
-    if(!options.get_bool_option("no-goto-unwind"))
+    if(
+      !options.get_bool_option("no-goto-unwind") &&
+      !options.get_bool_option("unwind"))
     {
-      bounded_loop_unroller unwind_loops(goto_functions);
+      size_t unroll_limit =
+        options.get_bool_option("unlimited-goto-unwind") ? -1 : 1000;
+      bounded_loop_unroller unwind_loops(goto_functions, unroll_limit);
       unwind_loops.run();
     }
 
