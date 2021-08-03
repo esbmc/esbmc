@@ -3086,7 +3086,7 @@ void clang_c_convertert::set_location(
   location.set_line(PLoc.getLine()); // line number : unsigned signed. For _x, Ploc.getLine() returns 1
   location.set_file(get_filename_from_path(PLoc.getFilename())); // string : path + file name. For _x, PLoc.getFilename() returns "overflow_2.c"
 
-  if(!function_name.empty()) // for _x, this statement returns false
+  if(!function_name.empty()) // for _x, this statement returns false. For func_overflow, it's not empty
     location.set_function(function_name);
 }
 

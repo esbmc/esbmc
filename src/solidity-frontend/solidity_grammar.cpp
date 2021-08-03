@@ -2,12 +2,18 @@
 
 namespace SolidityGrammar
 {
-  ContractBodyElementT get_contract_body_element_t(const nlohmann::json element)
+  // rule contract-body-element
+  ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   {
     if (element["nodeType"] == "VariableDeclaration" &&
         element["stateVariable"] == true)
     {
       return StateVarDecl;
+    }
+    else if (element["nodeType"] == "FunctionDefinition" &&
+             element["kind"] == "function")
+    {
+      return FunctionDef;
     }
     else
     {
@@ -21,6 +27,7 @@ namespace SolidityGrammar
     switch(type)
     {
       ENUM_TO_STR(StateVarDecl)
+      ENUM_TO_STR(FunctionDef)
       ENUM_TO_STR(ContractBodyElementTError)
       default:
       {
@@ -30,11 +37,16 @@ namespace SolidityGrammar
     }
   }
 
-  TypeNameT get_type_name_t(const nlohmann::json type_name)
+  // rule type-name
+  TypeNameT get_type_name_t(const nlohmann::json &type_name)
   {
     if (type_name["nodeType"] == "ElementaryTypeName")
     {
       return ElementaryTypeName;
+    }
+    else if (type_name["nodeType"] == "ParameterList")
+    {
+      return ParameterList;
     }
     else
     {
@@ -57,7 +69,8 @@ namespace SolidityGrammar
     }
   }
 
-  ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json type_name)
+  // rule elementary-type-name
+  ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   {
     // rule unsigned-integer-type
     if (type_name["name"] == "uint8")
@@ -80,6 +93,65 @@ namespace SolidityGrammar
       default:
       {
         assert(!"Unknown elementary-type-name type");
+        return "UNKNOWN";
+      }
+    }
+  }
+
+  // rule parameter-list
+  ParameterListT get_parameter_list_t(const nlohmann::json &type_name)
+  {
+    if (type_name["parameters"].size() == 0)
+    {
+      return EMPTY;
+    }
+    else
+    {
+      return NONEMPTY;
+    }
+
+    return ParameterListTError; // to make some old gcc compilers happy
+  }
+
+  const char* parameter_list_to_str(ParameterListT type)
+  {
+    switch(type)
+    {
+      ENUM_TO_STR(EMPTY)
+      ENUM_TO_STR(NONEMPTY)
+      ENUM_TO_STR(ParameterListTError)
+      default:
+      {
+        assert(!"Unknown parameter-list type");
+        return "UNKNOWN";
+      }
+    }
+  }
+
+  // rule block
+  BlockT get_block_t(const nlohmann::json &block)
+  {
+    if (block["nodeType"] == "Block" && block.contains("statements"))
+    {
+      return Statement;
+    }
+    else
+    {
+      assert(!"Unsupported block type");
+    }
+    return BlockTError;
+  }
+
+  const char* block_to_str(BlockT type)
+  {
+    switch(type)
+    {
+      ENUM_TO_STR(Statement)
+      ENUM_TO_STR(UncheckedBlock)
+      ENUM_TO_STR(BlockTError)
+      default:
+      {
+        assert(!"Unknown block type");
         return "UNKNOWN";
       }
     }

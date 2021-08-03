@@ -33,16 +33,27 @@ protected:
   const messaget &msg;
   std::string absolute_path;
 
+  unsigned int current_scope_var_num;
+  const nlohmann::json *current_functionDecl;
+  std::string current_functionName;
+
   bool convert_ast_nodes(const nlohmann::json &contract_def);
 
+  // conversion functions
   bool get_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_state_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_function_definition(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_block(const nlohmann::json &expr, exprt &new_expr); // For Solidity's mutually inclusive: rule block and rule statement
   bool get_type_name(const nlohmann::json &type_name, typet &new_type);
   bool get_elementary_type_name(const nlohmann::json &type_name, typet &new_type);
+  bool get_parameter_list(const nlohmann::json &type_name, typet &new_type);
   void get_state_var_decl_name(const nlohmann::json &ast_node, std::string &name, std::string &id);
+  void get_function_definition_name(const nlohmann::json &ast_node, std::string &name, std::string &id);
   void get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
+  void get_start_location_from_stmt(const nlohmann::json &stmt_node, locationt &location);
   symbolt *move_symbol_to_context(symbolt &symbol);
 
+  // auxiliary functions
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
 
@@ -54,9 +65,12 @@ protected:
     std::string id,
     locationt location);
 
-  void print_json_element(nlohmann::json &json_in, const unsigned index,
+  // debugging functions
+  void print_json_element(const nlohmann::json &json_in, const unsigned index,
     const std::string &key, const std::string& json_name);
-  void print_json_array_element(nlohmann::json &json_in,
+  void print_json_array_element(const nlohmann::json &json_in,
+      const std::string& node_type, const unsigned index);
+  void print_json_stmt_element(const nlohmann::json &json_in,
       const std::string& node_type, const unsigned index);
 };
 

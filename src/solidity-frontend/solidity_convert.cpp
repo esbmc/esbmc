@@ -11,13 +11,15 @@
 #include <iomanip>
 
 solidity_convertert::solidity_convertert(contextt &_context,
-    nlohmann::json &_ast_json, const std::string &_sol_func, const messaget &msg):
-    context(_context),
-    ns(context),
-    ast_json(_ast_json),
-    sol_func(_sol_func),
-    msg(msg)
-    //current_functionDecl(nullptr)
+  nlohmann::json &_ast_json, const std::string &_sol_func, const messaget &msg):
+  context(_context),
+  ns(context),
+  ast_json(_ast_json),
+  sol_func(_sol_func),
+  msg(msg),
+  current_scope_var_num(1),
+  current_functionDecl(nullptr),
+  current_functionName("")
 {
 }
 
@@ -93,6 +95,8 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
       return true;
   }
 
+  assert(current_functionDecl == nullptr);
+
   return false;
 }
 
@@ -111,6 +115,10 @@ bool solidity_convertert::get_decl(const nlohmann::json &ast_node, exprt &new_ex
     case SolidityGrammar::ContractBodyElementT::StateVarDecl:
     {
       return get_state_var_decl(ast_node, new_expr); // rule state-variable-declaration
+    }
+    case SolidityGrammar::ContractBodyElementT::FunctionDef:
+    {
+      return get_function_definition(ast_node, new_expr); // rule function-definition
     }
     default:
     {
@@ -141,7 +149,7 @@ bool solidity_convertert::get_state_var_decl(const nlohmann::json &ast_node, exp
   get_location_from_decl(ast_node, location_begin);
 
   // 4. populate debug module name
-  std::string debug_modulename = get_modulename_from_path(absolute_path);
+  std::string debug_modulename = get_modulename_from_path(location_begin.file().as_string());
 
   // 5. set symbol attributes
   symbolt symbol;
@@ -154,7 +162,7 @@ bool solidity_convertert::get_state_var_decl(const nlohmann::json &ast_node, exp
     location_begin);
 
   symbol.lvalue = true;
-  symbol.static_lifetime = true; // hard coded for now, may need to change later
+  symbol.static_lifetime = true; // TODO: hard coded for now, may need to change later
   symbol.is_extern = false;
   symbol.file_local = false;
 
@@ -184,6 +192,136 @@ bool solidity_convertert::get_state_var_decl(const nlohmann::json &ast_node, exp
   return false;
 }
 
+bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node, exprt &new_expr)
+{
+  // For Solidity rule function-definition:
+  // 1. Check fd.isImplicit() --- skipped since it's not applicable to Solidity
+  // 2. Check fd.isDefined() and fd.isThisDeclarationADefinition()
+  if (!ast_node["implemented"]) // TODO: for interface function, it's just a definition. Add something like "&& isInterface_JustDefinition()"
+    return false;
+
+  // 3. Set current_scope_var_num, current_functionDecl and old_functionDecl
+  current_scope_var_num = 1;
+  const nlohmann::json *old_functionDecl = current_functionDecl;
+  current_functionDecl = &ast_node;
+  current_functionName = ast_node["name"];
+
+  // 4. Return type
+  code_typet type;
+  if (get_type_name(ast_node["returnParameters"], type.return_type()))
+    return true;
+
+  // 5. Check fd.isVariadic(), fd.isInlined()
+  //  Skipped since Solidity does not support variadic (optional args) or inline function.
+  //  Actually "inline" doesn not make sense in Solidity
+
+  // 6. Populate "locationt location_begin"
+  locationt location_begin;
+  get_location_from_decl(ast_node, location_begin);
+
+  // 7. Populate "std::string id, name"
+  std::string name, id;
+  get_function_definition_name(ast_node, name, id);
+
+  // 8. populate "std::string debug_modulename"
+  std::string debug_modulename = get_modulename_from_path(location_begin.file().as_string());
+
+  // 9. Populate "symbol.static_lifetime", "symbol.is_extern" and "symbol.file_local"
+  symbolt symbol;
+  get_default_symbol(
+    symbol,
+    debug_modulename,
+    type,
+    name,
+    id,
+    location_begin);
+
+  symbol.lvalue = true;
+  symbol.is_extern = false; // TODO: hard coded for now, may need to change later
+  symbol.file_local = false;
+
+  // 10. Add symbol into the context
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
+
+  // 11. Convert parameters, if no parameter, assume ellipis
+  //  - Convert params before body as they may get referred by the statement in the body
+  SolidityGrammar::ParameterListT params =
+    SolidityGrammar::get_parameter_list_t(ast_node["parameters"]);
+  if ( params == SolidityGrammar::ParameterListT::EMPTY )
+    type.make_ellipsis();
+  else
+    assert(!"come back and continue - conversion of function arguments");
+
+  added_symbol.type = type;
+
+  // 12. Convert body and embed the body into the same symbol
+  if (ast_node.contains("body"))
+  {
+    exprt body_exprt;
+    get_block(ast_node["body"], body_exprt);
+
+    added_symbol.value = body_exprt;
+  }
+
+  assert(!"done - finished all expr stmt in function?");
+
+  // 13. Restore current_functionDecl
+  current_functionDecl = old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
+
+  return false;
+}
+
+bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr)
+{
+  static int call_stmt_times = 0; // TODO: remove debug
+  locationt location;
+  get_start_location_from_stmt(block, location);
+
+  SolidityGrammar::BlockT type = SolidityGrammar::get_block_t(block);
+
+  switch(type)
+  {
+    // equivalent to clang::Stmt::CompoundStmtClass
+    // deal with a block of statements
+    case SolidityGrammar::BlockT::Statement:
+    {
+      printf("	@@@ got Expr: SolidityGrammar::BlockT::Statement, ");
+      printf("  call_stmt_times=%d\n", call_stmt_times++);
+      const nlohmann::json &stmts = block["statements"];
+
+      code_blockt block;
+      unsigned ctr = 0;
+      // items() returns a key-value pair with key being the index
+      for(auto const &stmt_kv : stmts.items())
+      {
+        exprt statement;
+        print_json_stmt_element(stmt_kv.value(), stmt_kv.value()["nodeType"], ctr);
+        ++ctr;
+      }
+      printf(" \t @@@ CompoundStmt has %u statements\n", ctr);
+      assert(!"done conversion all statements?");
+
+      // TODO: Set the end location for blocks
+#if 0
+      locationt location_end;
+      get_final_location_from_stmt(stmt, location_end);
+
+      block.end_location(location_end);
+#endif
+      new_expr = block;
+      break;
+    }
+    default:
+    {
+      assert(!"Unimplemented type in rule block");
+      return true;
+    }
+  }
+
+  new_expr.location() = location;
+  return false;
+}
+
 bool solidity_convertert::get_type_name(const nlohmann::json &type_name, typet &new_type)
 {
   // For Solidity rule type-name:
@@ -193,7 +331,13 @@ bool solidity_convertert::get_type_name(const nlohmann::json &type_name, typet &
   {
     case SolidityGrammar::TypeNameT::ElementaryTypeName:
     {
-      return get_elementary_type_name(type_name, new_type); // rule state-variable-declaration
+      // rule state-variable-declaration
+      return get_elementary_type_name(type_name, new_type);
+    }
+    case SolidityGrammar::TypeNameT::ParameterList:
+    {
+      // rule parameter-list
+      return get_parameter_list(type_name, new_type);
     }
     default:
     {
@@ -237,6 +381,38 @@ bool solidity_convertert::get_elementary_type_name(const nlohmann::json &type_na
   return false;
 }
 
+bool solidity_convertert::get_parameter_list(const nlohmann::json &type_name, typet &new_type)
+{
+  // For Solidity rule parameter-list:
+  //  - For non-empty param list, it may need to call get_elementary_type_name, since parameter-list is just a list of types
+  std::string c_type;
+  SolidityGrammar::ParameterListT type = SolidityGrammar::get_parameter_list_t(type_name);
+
+  switch(type)
+  {
+    case SolidityGrammar::ParameterListT::EMPTY:
+    {
+      // equivalent to clang's "void"
+      new_type = empty_typet();
+      c_type = "void";
+      new_type.set("#cpp_type", c_type);
+      break;
+    }
+    case SolidityGrammar::ParameterListT::NONEMPTY:
+    {
+      assert(!"come back and continue - Loop through non-empty param list and process them using get_elementary_type_name");
+      break;
+    }
+    default:
+    {
+      assert(!"Unimplemented type in rule parameter-list");
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void solidity_convertert::get_state_var_decl_name(
     const nlohmann::json &ast_node,
     std::string &name, std::string &id)
@@ -248,12 +424,39 @@ void solidity_convertert::get_state_var_decl_name(
   id = "c:@" + name;
 }
 
+void solidity_convertert::get_function_definition_name(
+    const nlohmann::json &ast_node,
+    std::string &name, std::string &id)
+{
+  // Follow the way in clang:
+  //  - For function name, just use the ast_node["name"]
+  //  - For function id, add prefix "c:@F@"
+  name = ast_node["name"].get<std::string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
+  id = "c:@F@" + name;
+}
+
 void solidity_convertert::get_location_from_decl(const nlohmann::json &ast_node, locationt &location)
 {
   // The src manager of Solidity AST JSON is too encryptic.
   // For the time being we are setting it to "1".
   location.set_line(1);
   location.set_file(absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+}
+
+void solidity_convertert::get_start_location_from_stmt(const nlohmann::json &stmt_node, locationt &location)
+{
+  std::string function_name;
+
+  if (current_functionDecl)
+    function_name = current_functionName;
+
+  // The src manager of Solidity AST JSON is too encryptic.
+  // For the time being we are setting it to "1".
+  location.set_line(1);
+  location.set_file(absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+
+  if (!function_name.empty())
+    location.set_function(function_name);
 }
 
 std::string solidity_convertert::get_modulename_from_path(std::string path)
@@ -321,7 +524,7 @@ symbolt *solidity_convertert::move_symbol_to_context(symbolt &symbol)
   return s;
 }
 
-void solidity_convertert::print_json_element(nlohmann::json &json_in, const unsigned index,
+void solidity_convertert::print_json_element(const nlohmann::json &json_in, const unsigned index,
     const std::string &key, const std::string& json_name)
 {
   printf("### %s element[%u] content: key=%s, size=%lu ###\n",
@@ -330,10 +533,18 @@ void solidity_convertert::print_json_element(nlohmann::json &json_in, const unsi
   printf("\n");
 }
 
-void solidity_convertert::print_json_array_element(nlohmann::json &json_in,
+void solidity_convertert::print_json_array_element(const nlohmann::json &json_in,
     const std::string& node_type, const unsigned index)
 {
   printf("### node[%u]: nodeType=%s ###\n", index, node_type.c_str());
+  std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
+  printf("\n");
+}
+
+void solidity_convertert::print_json_stmt_element(const nlohmann::json &json_in,
+    const std::string& node_type, const unsigned index)
+{
+  printf("\t### stmt[%u]: nodeType=%s ###\n", index, node_type.c_str());
   std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
   printf("\n");
 }
