@@ -156,4 +156,61 @@ namespace SolidityGrammar
       }
     }
   }
+
+  // rule statement
+  StatementT get_statement_t(const nlohmann::json &stmt)
+  {
+    if (stmt["nodeType"] == "ExpressionStatement")
+    {
+      return ExpressionStatement;
+    }
+    else
+    {
+      assert(!"Unsupported statement type");
+    }
+    return StatementTError;
+  }
+
+  const char* statement_to_str(StatementT type)
+  {
+    switch(type)
+    {
+      ENUM_TO_STR(Block)
+      ENUM_TO_STR(ExpressionStatement)
+      ENUM_TO_STR(StatementTError)
+      default:
+      {
+        assert(!"Unknown statement type");
+        return "UNKNOWN";
+      }
+    }
+  }
+
+  // rule expression
+  ExpressionT get_expression_t(const nlohmann::json &expr)
+  {
+    if (expr["nodeType"] == "Assignment")
+    {
+      return BinaryOperator;
+    }
+    else
+    {
+      assert(!"Unsupported expression type");
+    }
+    return ExpressionTError;
+  }
+
+  const char* expression_to_str(ExpressionT type)
+  {
+    switch(type)
+    {
+      ENUM_TO_STR(BinaryOperator)
+      ENUM_TO_STR(ExpressionTError)
+      default:
+      {
+        assert(!"Unknown expression type");
+        return "UNKNOWN";
+      }
+    }
+  }
 };
