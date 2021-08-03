@@ -1,0 +1,21 @@
+name: Run Benchexec (SV-Comp)
+on: [workflow_dispatch]
+
+jobs:
+  run_benchexec:
+    runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
+    steps:
+      - name: Run Benchexec
+        env:
+          USER_PASS: ${{ secrets.USER_PASSWORD }}
+        run: |
+          mkdir $HOME/current-run
+          cd $HOME/current-run
+          cp $HOME/esbmc-wrapper.py .
+          cp $HOME/esbmc-kind.xml .
+          cp $HOME/esbmc .
+          echo $USER_PASS | sudo -S docker exec -it benchexec-rafael /bin/bash -c "cd /tool/current-run; benchexec --no-container --numOfThreads 23 ./esbmc-kind.xml"
+      - uses: actions/upload-artifact@v1
+        with:
+          name: benchexec-result
+          path: ./current-run
