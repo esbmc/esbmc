@@ -2,78 +2,64 @@
 
 import sys, copy, random
 
-import cPickle as pickle
 import gzip
 
-def read_strats(data_file_names):
+def read_strats(file_name):
 
-  solvers = {}   # maps solvers to expers where each exper is a {solved_problems:status} dict
-  
+  print(file_name)
+
+  solved_by_solver = set()   # maps solvers to expers where each exper is a {solved_problems:status} dict
+  number_solved_positive = 0;
+  number_solved_negative = 0;
+
   # loading
-  for name in data_file_names:
-    with open(name,"r") as f:
-      for line in f:
-        _,prob,_,solver,_,config,_,_,time,_,memory,stat = line.split(",")[:12]
+  with open(file_name,"r") as f:
+    count = 0;
+    for line in f:
+      if count > 2:
+        benchmark, category, expected_status, status, _, _, _ = line.split("\t")[:12]
+        if status.startswith(expected_status) :
+          if expected_status == "true" :
+            number_solved_positive = number_solved_positive + 1 
+          else :
+            number_solved_negative = number_solved_negative + 1       
+          solved_by_solver.add(benchmark + "_" + category)      
+      count = count + 1
 
-        if ".rm" in prob:
-          pass
-
-        solver_name = solver+"_"+config
-
-	if "SMT" in prob:
-		logic = prob.split("/")[1]
-		solver_name = logic+"_"+solver_name
-
-        if solver_name in solvers:
-          exper = solvers[solver_name]
-        else:
-          exper = {}
-          solvers[solver_name] = exper
-            
-        if prob in exper: # if there were multiple runs of the same strategy, conut
-          pass
-        else:
-          exper[prob] = stat.strip() 
-
-  return solvers
+  return solved_by_solver
 
 if __name__ == "__main__":
   
-  solvers = read_strats(["Job42771_info.csv"])
+  solved1 = read_strats(sys.argv[1])
+  solved2 = read_strats(sys.argv[2])
   #del solvers["solver_configuration"]
   
-  m = max({len(k) for k in solvers.keys()}) 
+  print("total number solved by solver1 " + str(len(solved1)))
+  print("total number solved by solver2 " + str(len(solved2)))
 
-  # map from problem to solvers that solve it
-  solved = {}
+  uniques_1 = set()
+  uniques_2 = set()
 
-  for (solver,exper) in sorted(solvers.items()):
-    count = 0
-    for (prob,stat) in exper.items(): 
-      if stat=="Refutation" or stat=="Theorem" or stat=="Unsatisfiable" or stat=="unsat":
-        count +=1
-        if prob not in solved:
-          solved[prob] = set()
-        solved[prob].add(solver)
-    print solver,"\t:",count
-             
-  #sys.exit(0)
+  for benchmark in solved1:
+    if benchmark not in solved2:
+      uniques_1.add(benchmark)
 
-  uniques = {}
-  for (prob,solutions) in solved.items():    
-    if len(solutions)==1:
-      s = solutions.pop()
-      if s not in uniques:
-        uniques[s] = set()
-      uniques[s].add(prob)
 
-  print "Uniques numbers:"
-  for (solver,u) in sorted(uniques.items()):
-    print "\t",solver,"\t:",len(u) 
+  for benchmark in solved2:
+    if benchmark not in solved1:
+      uniques_2.add(benchmark)    
 
-  sys.exit(0)
-  print "Unique problems:"
-  for (solver,u) in sorted(uniques.items()):
-    print "\t",solver,":"
-    for prob in u:
-      print "\t\t",prob
+  print("total number of uniques solved by solver1 " + str(len(uniques_1)))
+  print("total number of uniques solved by solver2 " + str(len(uniques_2)))
+
+  print("\n\nUniques 1:\n")
+  for b in uniques_1:
+    print("  " + b)
+
+  print("\n\nUniques 2:\n")
+  for b in uniques_2:
+    print("  " + b)
+
+#  print uniques_1
+#  print "\n\n\n"
+#  print uniques_2
