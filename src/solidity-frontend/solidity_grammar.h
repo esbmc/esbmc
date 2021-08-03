@@ -1,5 +1,5 @@
-#ifndef SOLIDITY_TYPE_H_
-#define SOLIDITY_TYPE_H_
+#ifndef SOLIDITY_GRAMMAR_H_
+#define SOLIDITY_GRAMMAR_H_
 
 #include <map>
 #include <string>
@@ -13,18 +13,20 @@ namespace SolidityGrammar
   enum ContractBodyElementT
   {
     StateVarDecl = 0, // rule state-variable-declaration
+    FunctionDef,      // rule function-definition
     ContractBodyElementTError
   };
-  ContractBodyElementT get_contract_body_element_t(const nlohmann::json element);
+  ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
   const char* contract_body_element_to_str(ContractBodyElementT type);
 
   // rule type-name
   enum TypeNameT
   {
     ElementaryTypeName = 0, // rule elementary-type-name
+    ParameterList,          // rule parameter-list. Strictly, this should not be here. Just a workaround
     TypeNameTError
   };
-  TypeNameT get_type_name_t(const nlohmann::json type_name);
+  TypeNameT get_type_name_t(const nlohmann::json &type_name);
   const char* type_name_to_str(TypeNameT type);
 
   // rule elementary-type-name
@@ -45,8 +47,28 @@ namespace SolidityGrammar
     // TODO: ufixed
     ElementaryTypeNameTError
   };
-  ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json type_name);
+  ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name);
   const char* elementary_type_name_to_str(ElementaryTypeNameT type);
-};
 
-#endif /* SOLIDITY_TYPE_H_ */
+  // rule parameter-list
+  enum ParameterListT
+  {
+    EMPTY = 0, // In Solidity, "void" means an empty parameter list
+    NONEMPTY,
+    ParameterListTError
+  };
+  ParameterListT get_parameter_list_t(const nlohmann::json &type_name);
+  const char* parameter_list_to_str(ParameterListT type);
+
+  // rule block
+  enum BlockT
+  {
+    Statement = 0,
+    UncheckedBlock,
+    BlockTError
+  };
+  BlockT get_block_t(const nlohmann::json &block);
+  const char* block_to_str(BlockT type);
+}; // end of SolidityGrammar
+
+#endif /* SOLIDITY_GRAMMAR_H_ */
