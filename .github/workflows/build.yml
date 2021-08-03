@@ -36,7 +36,8 @@ jobs:
          name: release-linux
          path: ./release
      - name: Run tests
-       run: cd build/ && ctest -j3 --output-on-failure --progress .
+       continue-on-error: true
+       run: cd build/ && ctest -j3 --output-on-failure --progress . 
 
   build-linux:
     name: Build ESBMC with all Solvers (Linux)
