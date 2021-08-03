@@ -273,7 +273,8 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
 
 bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr)
 {
-  static int call_stmt_times = 0; // TODO: remove debug
+  // For rule block
+  static int call_block_times = 0; // TODO: remove debug
   locationt location;
   get_start_location_from_stmt(block, location);
 
@@ -285,8 +286,8 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
     // deal with a block of statements
     case SolidityGrammar::BlockT::Statement:
     {
-      printf("	@@@ got Expr: SolidityGrammar::BlockT::Statement, ");
-      printf("  call_stmt_times=%d\n", call_stmt_times++);
+      printf("	@@@ got Block: SolidityGrammar::BlockT::Statement, ");
+      printf("  call_block_times=%d\n", call_block_times++);
       const nlohmann::json &stmts = block["statements"];
 
       code_blockt block;
@@ -295,7 +296,12 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
       for(auto const &stmt_kv : stmts.items())
       {
         exprt statement;
-        print_json_stmt_element(stmt_kv.value(), stmt_kv.value()["nodeType"], ctr);
+        //print_json_stmt_element(stmt_kv.value(), stmt_kv.value()["nodeType"], ctr);
+        if(get_statement(stmt_kv.value(), statement))
+          return true;
+
+        //convert_expression_to_code(statement);
+        //block.operands().push_back(statement);
         ++ctr;
       }
       printf(" \t @@@ CompoundStmt has %u statements\n", ctr);
@@ -314,6 +320,63 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
     default:
     {
       assert(!"Unimplemented type in rule block");
+      return true;
+    }
+  }
+
+  new_expr.location() = location;
+  return false;
+}
+
+bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_expr)
+{
+  // For rule statement
+  // Since this is an additional layer of grammar rules compared to clang C, we do NOT set location here.
+  // Just pass the new_expr reference to the next layer.
+  static int call_stmt_times = 0; // TODO: remove debug
+
+  SolidityGrammar::StatementT type = SolidityGrammar::get_statement_t(stmt);
+
+  switch(type)
+  {
+    case SolidityGrammar::StatementT::ExpressionStatement:
+    {
+      printf("	@@@ got Stmt: SolidityGrammar::StatementT::ExpressionStatement, ");
+      printf("  call_stmt_times=%d\n", call_stmt_times++);
+      get_expr(stmt["expression"], new_expr);
+      break;
+    }
+    default:
+    {
+      assert(!"Unimplemented type in rule statement");
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
+{
+  // For rule expression
+  // We need to do location settings to match clang C's number of times to set the locations when recurring
+  static int call_expr_times = 0; // TODO: remove debug
+  locationt location;
+  get_start_location_from_stmt(expr, location);
+
+  SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
+  switch(type)
+  {
+    case SolidityGrammar::ExpressionT::BinaryOperator:
+    {
+      printf("	@@@ got Expr: SolidityGrammar::ExpressionT::BinaryOperator, ");
+      printf("  call_expr_times=%d\n", call_expr_times++);
+      assert(!"cool - continue with BinaryOperator");
+      break;
+    }
+    default:
+    {
+      assert(!"Unimplemented type in rule expression");
       return true;
     }
   }
