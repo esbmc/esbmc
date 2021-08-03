@@ -8,11 +8,10 @@ def read_strats(file_name):
 
   print(file_name)
 
-  solved_by_solver = set()   # maps solvers to expers where each exper is a {solved_problems:status} dict
+  solved_by_solver = set()  
   number_solved_positive = 0;
   number_solved_negative = 0;
 
-  # loading
   with open(file_name,"r") as f:
     count = 0;
     for line in f:
@@ -32,7 +31,6 @@ if __name__ == "__main__":
   
   solved1 = read_strats(sys.argv[1])
   solved2 = read_strats(sys.argv[2])
-  #del solvers["solver_configuration"]
   
   print("total number solved by solver1 " + str(len(solved1)))
   print("total number solved by solver2 " + str(len(solved2)))
@@ -59,7 +57,3 @@ if __name__ == "__main__":
   print("\n\nUniques 2:\n")
   for b in uniques_2:
     print("  " + b)
-
-#  print uniques_1
-#  print "\n\n\n"
-#  print uniques_2
