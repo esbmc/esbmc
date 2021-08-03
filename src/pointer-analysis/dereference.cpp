@@ -29,6 +29,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
+#include <iostream>
+
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
@@ -345,6 +347,74 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     dereference_expr(deref.value, guard, dereferencet::READ);
 
     const type2tc &to_type = scalar_step_list.back()->type;
+    
+     // Checking if are dealing with bitfields here
+    if(is_struct_type(expr))
+    {
+      // Claculating the pointer offset in bits in case we are dealing with bitfields
+      expr2tc offset_to_scalar_bits = compute_pointer_offset_bits(size_check_expr);
+      simplify(offset_to_scalar_bits);
+      BigInt m_size = type_byte_size_bits(to_type);
+      unsigned int offs_bits = to_constant_int2t(offset_to_scalar_bits).value.to_uint64();
+      // We are dealing with bitfields
+      if(offs_bits % 8 != 0 || m_size % 8 != 0)
+      {
+	expr2tc deref_expr = deref.value;
+        if(!is_pointer_type(deref_expr))
+          deref_expr = typecast2tc(type2tc(new pointer_type2t(get_empty_type())), deref_expr);
+        
+        value_setst::valuest points_to_set;
+        dereference_callback.get_value_set(deref.value, points_to_set);
+	for(value_setst::valuest::const_iterator it = points_to_set.begin();
+          it != points_to_set.end(); it++)
+        {
+          const object_descriptor2t &o = to_object_descriptor2t(*it);
+          expr2tc value = o.object;
+	  if(is_struct_type(value->type))
+	  {
+            construct_from_bit_struct_offset(value, offset_to_scalar_bits, to_type, guard, mode);
+	    return value;
+          }
+	  else if(is_array_type(value->type))
+	  {
+            const array_type2t arr_type = get_arr_type(value);
+            type2tc arr_subtype = arr_type.subtype;
+            // Checking if the array subtype is scalar
+	    assert(is_scalar_type(arr_subtype));
+            // Checking if we need to extract more than one byte
+	    unsigned int bits_from_first_byte = 0;
+	    if(offs_bits % 8 != 0)
+              bits_from_first_byte = 8 - (offs_bits % 8);
+	    
+	    unsigned int bits_from_last_byte = (offs_bits + m_size.to_uint64()) % 8;
+            unsigned int num_bytes = (m_size.to_uint64() + bits_from_first_byte + bits_from_last_byte) / 8;
+	    //std::cerr << ">>>>> bits_from_first_byte = " << bits_from_first_byte << "\n";
+	    //std::cerr << ">>>>> bits_from_last_byte = " << bits_from_last_byte << "\n";
+	    //std::cerr << ">>>>> num_bytes = " << num_bytes << "\n";
+	    //std::cerr << ">>>>>>>>>>\n";
+            
+	    assert(num_bytes != 0);
+
+            expr2tc *exprs = new expr2tc[num_bytes];
+            assert(arr_subtype->get_width() == 8 &&
+              "Can only extract bytes for stitching from byte array");
+
+            expr2tc accuml_offs = offset_to_scalar;
+            for(unsigned int i = 0; i < num_bytes; i++)
+            {
+              exprs[i] = index2tc(arr_subtype, value, accuml_offs);
+              //std::cerr << ">>>>> exprs[i] = \n" << exprs[i] << "\n";
+              accuml_offs = add2tc(offset_to_scalar->type, accuml_offs, gen_ulong(1));
+            }
+            //std::cerr << ">>>>> exprs = \n" << *exprs << "\n";
+            delete[] exprs;
+	    
+	    return value;
+	  }
+        }
+      }
+    }
+    
     expr2tc result =
       dereference(deref.value, to_type, guard, mode, offset_to_scalar);
     return result;
@@ -1174,6 +1244,118 @@ void dereferencet::construct_from_const_struct_offset(
   // Fell out of that struct -- means we've accessed out of bounds. Code at
   // a higher level will encode an assertion to this effect.
   value = expr2tc();
+}
+
+void dereferencet::construct_from_bit_struct_offset(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guardt &guard,
+  modet mode)
+{
+  assert(is_struct_type(value->type));
+  const struct_type2t &struct_type = to_struct_type(value->type);
+  const BigInt int_offset = to_constant_int2t(offset).value;
+  BigInt access_size = type_byte_size_bits(type);
+
+  unsigned int i = 0;
+  for(auto const &it : struct_type.members)
+  {
+    BigInt m_offs =
+      member_offset_bits(value->type, struct_type.member_names[i]);
+    BigInt m_size = type_byte_size_bits(it);
+      
+    if(m_size == 0)
+    {
+      // This field has no size: it's most likely a struct that has no members.
+      // Just skip over it: we can never correctly build a reference to a field
+      // in that struct, because there are no fields. The next field in the
+      // current struct lies at the same offset and is probably what the pointer
+      // is supposed to point at.
+      // If user is seeking a reference to this substruct, a different method
+      // should have been called (construct_struct_ref_from_const_offset).
+      assert(is_struct_type(it));
+      assert(!is_struct_type(type));
+      i++;
+      continue;
+    }
+
+    if(int_offset < m_offs)
+    {
+      // The offset is behind this field, but wasn't accepted by the previous
+      // member. That means that the offset falls in the undefined gap in the
+      // middle. Which might be an error -- reading from it definitely is,
+      // but we might write to it in the course of memset.
+      value = expr2tc();
+      if(mode == WRITE)
+      {
+        // This write goes to an invalid symbol, but no assertion is encoded,
+        // so it's entirely safe.
+      }
+      else
+      {
+        assert(mode == READ);
+        // Oh dear. Encode a failure assertion.
+        dereference_failure(
+          "pointer dereference",
+          "Dereference reads between struct fields",
+          guard);
+      }
+      return;
+    }
+
+    if(int_offset == m_offs)
+    {
+      // Does this over-read?
+      if(access_size > m_size)
+      {
+        dereference_failure(
+          "pointer dereference", "Over-sized read of struct field", guard);
+        value = expr2tc();
+        return;
+      }
+      // This is a valid access to this field. Extract it, recurse.
+      expr2tc field = member2tc(it, value, struct_type.member_names[i]);
+      
+      value = field;
+
+      return;
+    }
+
+    /*
+    // Fedor: probably cannot happen when dealing with bitfields
+    if(int_offset > m_offs && (int_offset - m_offs + access_size <= m_size))
+    {
+      // This access is in the bounds of this member, but isn't at the start.
+      // XXX that might be an alignment error.
+      expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
+      constant_int2tc new_offs(
+        pointer_type2(), (int_offset - m_offs) / config.ansi_c.char_width);
+
+      // Extract.
+      //build_reference_rec(memb, new_offs, type, guard, mode);
+      value = memb;
+      return;
+    }
+    */
+
+    if(int_offset < (m_offs + m_size))
+    {
+      // This access starts in this field, but by process of elimination,
+      // doesn't end in it. Which means reading padding data (or an alignment
+      // error), which are both bad.
+      alignment_failure("Misaligned access to struct field", guard);
+      value = expr2tc();
+      return;
+    }
+
+    // Wasn't that field.
+    i++;
+  }
+  // Fell out of that struct -- means we've accessed out of bounds. Code at
+  // a higher level will encode an assertion to this effect.
+  value = expr2tc();
+
 }
 
 void dereferencet::construct_from_dyn_struct_offset(

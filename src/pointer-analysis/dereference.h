@@ -379,6 +379,11 @@ private:
     const expr2tc &object,
     unsigned int bytes,
     const expr2tc &offset);
+  expr2tc dereference_bitfield(
+    expr2tc &dest,
+    guardt &guard,
+    modet mode,
+    std::list<expr2tc> &scalar_step_list);
   void stitch_together_from_byte_array(
     expr2tc &value,
     const type2tc &type,
@@ -433,6 +438,12 @@ private:
     const expr2tc &offset,
     const type2tc &type);
   void construct_from_const_struct_offset(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guardt &guard,
+    modet mode);
+  void construct_from_bit_struct_offset(
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
