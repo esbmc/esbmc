@@ -88,7 +88,7 @@ typet index_type()
 
 type2tc index_type2()
 {
-  return type_pool.get_int(config.ansi_c.int_width);
+  return get_int_type(config.ansi_c.int_width);
 }
 
 typet enum_type()
@@ -103,7 +103,7 @@ typet int_type()
 
 type2tc int_type2()
 {
-  return type_pool.get_int(config.ansi_c.int_width);
+  return get_int_type(config.ansi_c.int_width);
 }
 
 typet uint_type()
@@ -113,7 +113,7 @@ typet uint_type()
 
 type2tc uint_type2()
 {
-  return type_pool.get_uint(config.ansi_c.int_width);
+  return get_uint_type(config.ansi_c.int_width);
 }
 
 typet bool_type()
@@ -213,9 +213,8 @@ typet unsigned_wchar_type()
 type2tc char_type2()
 {
   if(config.ansi_c.char_is_unsigned)
-    return type_pool.get_uint(config.ansi_c.char_width);
-
-  return type_pool.get_int(config.ansi_c.char_width);
+    return get_uint_type(config.ansi_c.char_width);
+  return get_int_type(config.ansi_c.char_width);
 }
 
 typet half_float_type()
@@ -271,4 +270,98 @@ typet pointer_type()
 type2tc pointer_type2()
 {
   return type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
+}
+
+type2tc get_uint8_type()
+{
+  static type2tc ubv8(new unsignedbv_type2t(8));
+  return ubv8;
+}
+
+type2tc get_uint16_type()
+{
+  static type2tc ubv16(new unsignedbv_type2t(16));
+  return ubv16;
+}
+
+type2tc get_uint32_type()
+{
+  static type2tc ubv32(new unsignedbv_type2t(32));
+  return ubv32;
+}
+
+type2tc get_uint64_type()
+{
+  static type2tc ubv64(new unsignedbv_type2t(64));
+  return ubv64;
+}
+
+type2tc get_int8_type()
+{
+  static type2tc sbv8(new signedbv_type2t(8));
+  return sbv8;
+}
+
+type2tc get_int16_type()
+{
+  static type2tc sbv16(new signedbv_type2t(16));
+  return sbv16;
+}
+
+type2tc get_int32_type()
+{
+  static type2tc sbv32(new signedbv_type2t(32));
+  return sbv32;
+}
+
+type2tc get_int64_type()
+{
+  static type2tc sbv64(new signedbv_type2t(64));
+  return sbv64;
+}
+
+type2tc get_uint_type(unsigned int sz)
+{
+  switch(sz)
+  {
+  case 8:
+    return get_uint8_type();
+  case 16:
+    return get_uint16_type();
+  case 32:
+    return get_uint32_type();
+  case 64:
+    return get_uint64_type();
+  default:;
+  }
+  return type2tc(new unsignedbv_type2t(sz));
+}
+
+type2tc get_int_type(unsigned int sz)
+{
+  switch(sz)
+  {
+  case 8:
+    return get_int8_type();
+  case 16:
+    return get_int16_type();
+  case 32:
+    return get_int32_type();
+  case 64:
+    return get_int64_type();
+  default:;
+  }
+  return type2tc(new signedbv_type2t(sz));
+}
+
+type2tc get_bool_type()
+{
+  static type2tc bool_type = type2tc(new bool_type2t());
+  return bool_type;
+}
+
+type2tc get_empty_type()
+{
+  static type2tc empty_type = type2tc(new empty_type2t());
+  return empty_type;
 }

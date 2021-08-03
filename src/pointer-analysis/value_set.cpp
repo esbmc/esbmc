@@ -1217,8 +1217,7 @@ void value_sett::do_function_call(
 {
   const code_typet &type = to_code_type(symbol.type);
 
-  type2tc tmp_migrated_type;
-  migrate_type(type, tmp_migrated_type);
+  type2tc tmp_migrated_type = migrate_type(type);
   const code_type2t &migrated_type =
     dynamic_cast<const code_type2t &>(*tmp_migrated_type.get());
 

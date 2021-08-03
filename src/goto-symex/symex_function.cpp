@@ -280,8 +280,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.entry_guard = cur_state->guard;
 
   // assign arguments
-  type2tc tmp_type;
-  migrate_type(goto_function.type, tmp_type);
+  type2tc tmp_type = migrate_type(goto_function.type);
 
   if(
     to_code_type(tmp_type).arguments.size() != arguments.size() &&

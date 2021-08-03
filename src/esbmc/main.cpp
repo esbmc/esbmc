@@ -26,10 +26,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 int main(int argc, const char **argv)
 {
-  // To avoid the static initialization order fiasco:
-  type_poolt bees(true);
-  type_pool = bees;
-
   default_message msg;
   esbmc_parseoptionst parseoptions(argc, argv, msg);
   return parseoptions.main();

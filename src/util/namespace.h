@@ -35,8 +35,7 @@ public:
   {
     typet back = migrate_type_back(src);
     typet followed = follow(back);
-    type2tc tmp;
-    migrate_type(followed, tmp);
+    type2tc tmp = migrate_type(followed);
     return tmp;
   }
 

@@ -1,9 +1,11 @@
 #ifndef UTIL_IREP2_UTILS_H_
 #define UTIL_IREP2_UTILS_H_
 
-#include <util/irep2_expr.h>
 #include <util/c_types.h>
 #include <util/message/format.h>
+#include <util/irep2_expr.h>
+#include <util/migrate.h>
+
 /** Test whether type is an integer. */
 inline bool is_bv_type(const type2tc &t)
 {
@@ -176,73 +178,8 @@ inline expr2tc gen_false_expr()
 
 inline expr2tc gen_ulong(unsigned long val)
 {
-  constant_int2tc v(type_pool.get_uint(config.ansi_c.word_size), BigInt(val));
+  constant_int2tc v(get_uint_type(config.ansi_c.word_size), BigInt(val));
   return v;
-}
-
-inline const type2tc &get_uint8_type()
-{
-  return type_pool.get_uint8();
-}
-
-inline const type2tc &get_uint16_type()
-{
-  return type_pool.get_uint16();
-}
-
-inline const type2tc &get_uint32_type()
-{
-  return type_pool.get_uint32();
-}
-
-inline const type2tc &get_uint64_type()
-{
-  return type_pool.get_uint64();
-}
-
-inline const type2tc &get_int8_type()
-{
-  return type_pool.get_int8();
-}
-
-inline const type2tc &get_int16_type()
-{
-  return type_pool.get_int16();
-}
-
-inline const type2tc &get_int32_type()
-{
-  return type_pool.get_int32();
-}
-
-inline const type2tc &get_int64_type()
-{
-  return type_pool.get_int64();
-}
-
-inline const type2tc &get_uint_type(unsigned int sz)
-{
-  return type_pool.get_uint(sz);
-}
-
-inline const type2tc &get_int_type(unsigned int sz)
-{
-  return type_pool.get_int(sz);
-}
-
-inline const type2tc &get_bool_type()
-{
-  return type_pool.get_bool();
-}
-
-inline const type2tc &get_empty_type()
-{
-  return type_pool.get_empty();
-}
-
-inline const type2tc &get_pointer_type(const typet &val)
-{
-  return type_pool.get_pointer(val);
 }
 
 inline const type2tc &get_array_subtype(const type2tc &type)

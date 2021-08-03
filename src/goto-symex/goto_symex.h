@@ -118,7 +118,7 @@ public:
   symbol2tc guard_identifier()
   {
     return symbol2tc(
-      type_pool.get_bool(),
+      get_bool_type(),
       id2string(guard_identifier_s),
       symbol2t::level1,
       0,

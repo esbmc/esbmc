@@ -153,8 +153,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     // Actually perform some pointer arith
     const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
     typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
-    type2tc followed_type;
-    migrate_type(followed_type_old, followed_type);
+    type2tc followed_type = migrate_type(followed_type_old);
     BigInt type_size = type_byte_size(followed_type);
 
     // Generate nonptr * constant.
@@ -395,8 +394,7 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   // is initialized for this ptr to false. That way, only pointers created
   // through malloc will be marked dynamic.
 
-  type2tc arrtype(new array_type2t(
-    type2tc(new bool_type2t()), expr2tc((expr2t *)nullptr), true));
+  type2tc arrtype(new array_type2t(get_bool_type(), expr2tc(), true));
   symbol2tc allocarr(arrtype, dyn_info_arr_name);
   constant_int2tc objid(machine_uint, BigInt(obj_num));
   index2tc idx(get_bool_type(), allocarr, objid);
