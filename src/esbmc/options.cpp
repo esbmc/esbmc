@@ -257,11 +257,12 @@ const struct group_opt_templ all_cmd_options[] = {
      {"no-propagation", NULL, "disable constant propagation"},
      {"interval-analysis",
       NULL,
-      "enable interval analysis and add assumes to the program"},
+      "enable interval analysis for integer variables and add assumes to the "
+      "program"},
      {"add-symex-value-sets",
       NULL,
-      "enable value-set analysis and add assumes to the program during "
-      "symbolic execution"}}},
+      "enable value-set analysis for pointers and add assumes to the "
+      "program"}}},
 
   {"DEBUG options",
    {// Print commit hash for current binary
