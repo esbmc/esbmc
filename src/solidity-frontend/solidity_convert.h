@@ -44,6 +44,8 @@ protected:
   bool get_state_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_block(const nlohmann::json &expr, exprt &new_expr); // For Solidity's mutually inclusive: rule block and rule statement
+  bool get_statement(const nlohmann::json &block, exprt &new_expr);
+  bool get_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_type_name(const nlohmann::json &type_name, typet &new_type);
   bool get_elementary_type_name(const nlohmann::json &type_name, typet &new_type);
   bool get_parameter_list(const nlohmann::json &type_name, typet &new_type);

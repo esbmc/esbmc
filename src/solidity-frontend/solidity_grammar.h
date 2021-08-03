@@ -69,6 +69,28 @@ namespace SolidityGrammar
   };
   BlockT get_block_t(const nlohmann::json &block);
   const char* block_to_str(BlockT type);
+
+  // rule statement
+  enum StatementT
+  {
+    Block = 0, // corresponds to rule block
+    ExpressionStatement, // corresponds to rule expression-statement
+    StatementTError
+  };
+  StatementT get_statement_t(const nlohmann::json &stmt);
+  const char* statement_to_str(StatementT type);
+
+  // rule expression-statement
+  //  - Skipped since it just contains 1 type: "expression + ;"
+
+  // rule expression
+  enum ExpressionT
+  {
+    BinaryOperator = 0, // This type covers all binary operators in Solidity, such as =, +, - .etc
+    ExpressionTError
+  };
+  ExpressionT get_expression_t(const nlohmann::json &expr);
+  const char* expression_to_str(ExpressionT type);
 }; // end of SolidityGrammar
 
 #endif /* SOLIDITY_GRAMMAR_H_ */
