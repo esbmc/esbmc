@@ -538,10 +538,25 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
         new_expr = exprt("+", t);
       break;
     }
+    case SolidityGrammar::ExpressionT::BO_Sub:
+    {
+      printf("  @@@ got binop.getOpcode: SolidityGrammar::BO_Sub\n");
+      if(t.is_floatbv())
+        assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
+      else
+        new_expr = exprt("-", t);
+      break;
+    }
     case SolidityGrammar::ExpressionT::BO_GT:
     {
       printf("  @@@ got binop.getOpcode: SolidityGrammar::BO_GT\n");
       new_expr = exprt(">", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_LT:
+    {
+      printf("  @@@ got binop.getOpcode: SolidityGrammar::BO_LT\n");
+      new_expr = exprt("<", t);
       break;
     }
     default:
