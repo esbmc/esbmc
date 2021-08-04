@@ -230,12 +230,21 @@ namespace SolidityGrammar
     {
       return BO_Add;
     }
+    else if (expr["operator"] == "-")
+    {
+      return BO_Sub;
+    }
     else if (expr["operator"] == ">")
     {
       return BO_GT;
     }
+    else if (expr["operator"] == "<")
+    {
+      return BO_LT;
+    }
     else
     {
+      printf("Got expression operator=%s\n", expr["operator"].get<std::string>().c_str());
       assert(!"Unsupported expression operator");
     }
   }
@@ -247,7 +256,9 @@ namespace SolidityGrammar
       ENUM_TO_STR(BinaryOperatorClass)
       ENUM_TO_STR(BO_Assign)
       ENUM_TO_STR(BO_Add)
+      ENUM_TO_STR(BO_Sub)
       ENUM_TO_STR(BO_GT)
+      ENUM_TO_STR(BO_LT)
       ENUM_TO_STR(DeclRefExprClass)
       ENUM_TO_STR(Literal)
       ENUM_TO_STR(CallExprClass)

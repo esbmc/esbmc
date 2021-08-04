@@ -90,7 +90,9 @@ namespace SolidityGrammar
     BinaryOperatorClass = 0, // This type covers all binary operators in Solidity, such as =, +, - .etc
     BO_Assign, // =
     BO_Add,    // +
+    BO_Sub,    // -
     BO_GT,     // >
+    BO_LT,     // <
 
     // rule identifier
     DeclRefExprClass,
