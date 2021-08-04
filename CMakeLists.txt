@@ -89,6 +89,8 @@ include(FindLocalLLVM)
 
 # Optimization
 include(OptimizationCCache)
+# Enable LTO
+include(LtoOptimization)
 include(WError)
 
 if(ENABLE_OLD_FRONTEND)
@@ -110,9 +112,6 @@ add_subdirectory(src)
 
 # Precompile irep2 headers
 include(Irep2Optimization)
-# Enable LTO
-include(LtoOptimization)
-
 
 # Generate ac_config.h. This must be generated after solvers
 configure_file (
