@@ -111,14 +111,7 @@ add_subdirectory(src)
 # Precompile irep2 headers
 include(Irep2Optimization)
 # Enable LTO
-include(CheckIPOSupported)
-check_ipo_supported(RESULT supported OUTPUT error)
-if( supported )
-    message(STATUS "IPO / LTO enabled")
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
-else()
-    message(STATUS "IPO / LTO not supported: <${error}>")
-endif()
+include(LtoOptimization)
 
 
 # Generate ac_config.h. This must be generated after solvers
