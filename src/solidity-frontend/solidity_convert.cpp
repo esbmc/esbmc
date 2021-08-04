@@ -367,11 +367,46 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
   switch(type)
   {
-    case SolidityGrammar::ExpressionT::BinaryOperator:
+    case SolidityGrammar::ExpressionT::BinaryOperatorClass:
     {
-      printf("	@@@ got Expr: SolidityGrammar::ExpressionT::BinaryOperator, ");
+      printf("	@@@ got Expr: SolidityGrammar::ExpressionT::BinaryOperatorClass, ");
       printf("  call_expr_times=%d\n", call_expr_times++);
-      assert(!"cool - continue with BinaryOperator");
+      if (get_binary_operator_expr(expr, new_expr))
+        return true;
+
+      break;
+    }
+    case SolidityGrammar::ExpressionT::DeclRefExprClass:
+    {
+      printf("	@@@ got Expr: SolidityGrammar::ExpressionT::DeclRefExprClass, ");
+      printf("  call_expr_times=%d\n", call_expr_times++);
+      const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
+      //print_json(decl);
+
+      if (get_decl_ref(decl, new_expr))
+        return true;
+
+      break;
+    }
+    case SolidityGrammar::ExpressionT::Literal:
+    {
+      printf("	@@@ got Expr: SolidityGrammar::ExpressionT::Literal, ");
+      printf("  call_expr_times=%d\n", call_expr_times++);
+
+      // TODO: Fix me! Assuming the context of BinaryOperator
+      assert(current_BinOp_type.size());
+      const nlohmann::json &binop_type = *(current_BinOp_type.top());
+      assert(binop_type["typeString"] == "uint8");
+      // make a type-name json for integer literal conversion
+      std::string the_value = expr["value"].get<std::string>();
+      std::map<std::string, std::string> m = {{"name", "uint8"},
+                                              {"nodeType", "ElementaryTypeName"},
+                                              {"value", the_value}};
+      nlohmann::json integer_literal = m;
+
+      if(convert_integer_literal(integer_literal, new_expr))
+        return true;
+
       break;
     }
     default:
@@ -382,6 +417,54 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
   }
 
   new_expr.location() = location;
+  return false;
+}
+
+bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr)
+{
+  // preliminary step:
+  current_BinOp_type.push(&(expr["typeDescriptions"]));
+
+  // 1. Convert LHS
+  exprt lhs;
+  if(get_expr(expr["leftHandSide"], lhs))
+    return true;
+
+  // 2. Convert RHS
+  exprt rhs;
+  if(get_expr(expr["rightHandSide"], rhs))
+    return true;
+
+  // 3. Get type
+  typet t;
+
+  // 4. Convert opcode
+
+  // 5. Copy to operands
+
+  // Pop current_BinOp_type.push as we've finished this conversion
+  current_BinOp_type.pop();
+
+  assert(!"done - BO?");
+  //new_expr.copy_to_operands(lhs, rhs);
+  return false;
+}
+
+bool solidity_convertert::get_decl_ref(const nlohmann::json &decl, exprt &new_expr)
+{
+  assert(decl["stateVariable"] == true); // assume referring to state variable. If not, use switch-case or if-else block.
+
+  std::string name, id;
+  get_state_var_decl_name(decl, name, id);
+
+  typet type;
+  if (get_type_name(decl["typeName"], type)) // "type-name" as in state-variable-declaration
+    return true;
+
+  new_expr = exprt("symbol", type);
+  new_expr.identifier(id);
+  new_expr.cmt_lvalue(true);
+  new_expr.name(name);
   return false;
 }
 
@@ -540,6 +623,33 @@ std::string solidity_convertert::get_filename_from_path(std::string path)
   return path; // for _x, it just returns "overflow_2.c" because the test program is in the same dir as esbmc binary
 }
 
+const nlohmann::json& solidity_convertert::find_decl_ref(int ref_decl_id)
+{
+  nlohmann::json& nodes = ast_json["nodes"];
+  nlohmann::json::iterator itr = nodes.begin();
+  unsigned index = 0;
+  for (; itr != nodes.end(); ++itr, ++index)
+  {
+    if ( (*itr)["nodeType"] == "ContractDefinition" ) // contains AST nodes we need
+      break;
+  }
+
+  nlohmann::json& ast_nodes = nodes.at(index)["nodes"];
+  nlohmann::json::iterator itrr = ast_nodes.begin();
+  index = 0;
+  for (; itrr != ast_nodes.end(); ++itrr, ++index)
+  {
+    if ( (*itrr)["id"] == ref_decl_id)
+    {
+      //print_json(ast_nodes.at(index));
+      return ast_nodes.at(index);
+    }
+  }
+
+  assert(!"should not be here - no matching ref decl id found");
+  return ast_json;
+}
+
 void solidity_convertert::get_default_symbol(
   symbolt &symbol,
   std::string module_name,
@@ -585,6 +695,14 @@ symbolt *solidity_convertert::move_symbol_to_context(symbolt &symbol)
   }
 
   return s;
+}
+
+// debug functions
+void solidity_convertert::print_json(const nlohmann::json &json_in)
+{
+  printf("### JSON: ###\n");
+  std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
+  printf("\n");
 }
 
 void solidity_convertert::print_json_element(const nlohmann::json &json_in, const unsigned index,
