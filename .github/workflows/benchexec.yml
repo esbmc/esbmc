@@ -1,5 +1,10 @@
 name: Run Benchexec (SV-Comp)
-on: [workflow_dispatch]
+on: workflow_dispatch:
+    inputs:
+      strategy:
+        description: 'Which Strategy to use? (incr, kinduction, falsi). THIS IS BEING IGNORED!'     
+        required: true
+        default: 'incr'
 
 jobs:
 
