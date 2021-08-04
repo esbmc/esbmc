@@ -55,6 +55,7 @@ protected:
   bool get_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_decl_ref(const nlohmann::json &decl, exprt &new_expr);
+  bool get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_name(const nlohmann::json &type_name, typet &new_type);
   bool get_elementary_type_name(const nlohmann::json &type_name, typet &new_type);
   bool get_parameter_list(const nlohmann::json &type_name, typet &new_type);
@@ -68,6 +69,7 @@ protected:
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
   const nlohmann::json& find_decl_ref(int ref_decl_id);
+  void convert_expression_to_code(exprt &expr);
 
   void get_default_symbol(
     symbolt &symbol,

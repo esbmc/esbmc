@@ -194,7 +194,8 @@ namespace SolidityGrammar
   // rule expression
   ExpressionT get_expression_t(const nlohmann::json &expr)
   {
-    if (expr["nodeType"] == "Assignment")
+    if (expr["nodeType"] == "Assignment" ||
+        expr["nodeType"] == "BinaryOperation")
     {
       return BinaryOperatorClass;
     }
@@ -207,6 +208,10 @@ namespace SolidityGrammar
     {
       return Literal;
     }
+    else if (expr["nodeType"] == "FunctionCall")
+    {
+      return CallExprClass;
+    }
     else
     {
       printf("Got expression nodeType=%s\n", expr["nodeType"].get<std::string>().c_str());
@@ -215,13 +220,37 @@ namespace SolidityGrammar
     return ExpressionTError;
   }
 
+  ExpressionT get_expr_operator_t(const nlohmann::json &expr)
+  {
+    if (expr["operator"] == "=")
+    {
+      return BO_Assign;
+    }
+    else if (expr["operator"] == "+")
+    {
+      return BO_Add;
+    }
+    else if (expr["operator"] == ">")
+    {
+      return BO_GT;
+    }
+    else
+    {
+      assert(!"Unsupported expression operator");
+    }
+  }
+
   const char* expression_to_str(ExpressionT type)
   {
     switch(type)
     {
       ENUM_TO_STR(BinaryOperatorClass)
+      ENUM_TO_STR(BO_Assign)
+      ENUM_TO_STR(BO_Add)
+      ENUM_TO_STR(BO_GT)
       ENUM_TO_STR(DeclRefExprClass)
       ENUM_TO_STR(Literal)
+      ENUM_TO_STR(CallExprClass)
       ENUM_TO_STR(ExpressionTError)
       default:
       {
