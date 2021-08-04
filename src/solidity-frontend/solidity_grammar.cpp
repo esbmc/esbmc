@@ -17,6 +17,7 @@ namespace SolidityGrammar
     }
     else
     {
+      printf("Got contract-body-element nodeType=%s\n", element["nodeType"].get<std::string>().c_str());
       assert(!"Unsupported contract-body-element type");
     }
     return ContractBodyElementTError;
@@ -50,6 +51,7 @@ namespace SolidityGrammar
     }
     else
     {
+      printf("Got type-name nodeType=%s\n", type_name["nodeType"].get<std::string>().c_str());
       assert(!"Unsupported type-name type");
     }
     return TypeNameTError;
@@ -79,6 +81,7 @@ namespace SolidityGrammar
     }
     else
     {
+      printf("Got elementary-type-name nodeType=%s\n", type_name["name"].get<std::string>().c_str());
       assert(!"Unsupported elementary-type-name type");
     }
     return ElementaryTypeNameTError;
@@ -137,6 +140,7 @@ namespace SolidityGrammar
     }
     else
     {
+      printf("Got block nodeType=%s\n", block["nodeType"].get<std::string>().c_str());
       assert(!"Unsupported block type");
     }
     return BlockTError;
@@ -166,6 +170,7 @@ namespace SolidityGrammar
     }
     else
     {
+      printf("Got statement nodeType=%s\n", stmt["nodeType"].get<std::string>().c_str());
       assert(!"Unsupported statement type");
     }
     return StatementTError;
@@ -191,10 +196,20 @@ namespace SolidityGrammar
   {
     if (expr["nodeType"] == "Assignment")
     {
-      return BinaryOperator;
+      return BinaryOperatorClass;
+    }
+    else if (expr["nodeType"] == "Identifier" &&
+             expr.contains("referencedDeclaration"))
+    {
+      return DeclRefExprClass;
+    }
+    else if (expr["nodeType"] == "Literal")
+    {
+      return Literal;
     }
     else
     {
+      printf("Got expression nodeType=%s\n", expr["nodeType"].get<std::string>().c_str());
       assert(!"Unsupported expression type");
     }
     return ExpressionTError;
@@ -204,7 +219,9 @@ namespace SolidityGrammar
   {
     switch(type)
     {
-      ENUM_TO_STR(BinaryOperator)
+      ENUM_TO_STR(BinaryOperatorClass)
+      ENUM_TO_STR(DeclRefExprClass)
+      ENUM_TO_STR(Literal)
       ENUM_TO_STR(ExpressionTError)
       default:
       {

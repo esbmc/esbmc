@@ -86,7 +86,12 @@ namespace SolidityGrammar
   // rule expression
   enum ExpressionT
   {
-    BinaryOperator = 0, // This type covers all binary operators in Solidity, such as =, +, - .etc
+    BinaryOperatorClass = 0, // This type covers all binary operators in Solidity, such as =, +, - .etc
+    DeclRefExprClass,        // This type covers rule identifier
+
+    // rule literal
+    Literal,
+
     ExpressionTError
   };
   ExpressionT get_expression_t(const nlohmann::json &expr);
