@@ -55,6 +55,7 @@ jobs:
           cd $HOME/current-run
           cp $HOME/esbmc-wrapper.py .
           cp $HOME/esbmc-kind.xml .
+          chmod +x ./esbmc
           echo $USER_PASS | sudo -S docker exec -i benchexec-rafael /bin/bash -c "cd /tool/current-run; benchexec --no-container --numOfThreads 23 ./esbmc-kind.xml"
       - uses: actions/upload-artifact@v1
         with:
