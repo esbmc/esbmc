@@ -9,6 +9,7 @@ jobs:
         env:
           USER_PASS: ${{ secrets.USER_PASSWORD }}
         run: |
+          echo $USER_PASS | sudo -S rm -rf $HOME/current-run
           mkdir $HOME/current-run
           cd $HOME/current-run
           cp $HOME/esbmc-wrapper.py .
@@ -18,4 +19,4 @@ jobs:
       - uses: actions/upload-artifact@v1
         with:
           name: benchexec-result
-          path: ./current-run
+          path: /home/rafaelsa/current-run
