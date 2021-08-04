@@ -89,7 +89,7 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
     std::string node_type = ast_node["nodeType"].get<std::string>();
     printf("@@ Converting node[%u]: name=%s, nodeType=%s ...\n",
         index, node_name.c_str(), node_type.c_str());
-    print_json_array_element(ast_node, node_type, index);
+    //print_json_array_element(ast_node, node_type, index);
     exprt dummy_decl;
     if(get_decl(ast_node, dummy_decl))
       return true;
@@ -263,7 +263,7 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
     added_symbol.value = body_exprt;
   }
 
-  assert(!"done - finished all expr stmt in function?");
+  //assert(!"done - finished all expr stmt in function?");
 
   // 13. Restore current_functionDecl
   current_functionDecl = old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
@@ -290,7 +290,7 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
       printf("  call_block_times=%d\n", call_block_times++);
       const nlohmann::json &stmts = block["statements"];
 
-      code_blockt block;
+      code_blockt _block;
       unsigned ctr = 0;
       // items() returns a key-value pair with key being the index
       for(auto const &stmt_kv : stmts.items())
@@ -300,21 +300,23 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
         if(get_statement(stmt_kv.value(), statement))
           return true;
 
-        //convert_expression_to_code(statement);
-        //block.operands().push_back(statement);
+        convert_expression_to_code(statement);
+        _block.operands().push_back(statement);
         ++ctr;
       }
       printf(" \t @@@ CompoundStmt has %u statements\n", ctr);
-      assert(!"done conversion all statements?");
 
-      // TODO: Set the end location for blocks
-#if 0
+      // TODO: Fix me when figuring out the source location manager of Solidity AST JSON
+      // It's too encryptic. Currently we are using get_start_location_from_stmt.
+      // However, it should be get_final_location_from_stmt.
       locationt location_end;
-      get_final_location_from_stmt(stmt, location_end);
+      get_start_location_from_stmt(block, location_end);
 
-      block.end_location(location_end);
-#endif
-      new_expr = block;
+      //assert(!"done - all CompoundStmtClass?");
+
+      _block.end_location(location_end);
+
+      new_expr = _block;
       break;
     }
     default:
@@ -380,11 +382,24 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
     {
       printf("	@@@ got Expr: SolidityGrammar::ExpressionT::DeclRefExprClass, ");
       printf("  call_expr_times=%d\n", call_expr_times++);
-      const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
-      //print_json(decl);
 
-      if (get_decl_ref(decl, new_expr))
-        return true;
+      if (expr["referencedDeclaration"] > 0)
+      {
+        // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
+        const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
+        //print_json(decl);
+
+        if (get_decl_ref(decl, new_expr))
+          return true;
+      }
+      else
+      {
+        // Soldity uses -ve odd numbers to refer to built-in var or functions that
+        // are NOT declared in the contract
+
+        if (get_decl_ref_builtin(expr, new_expr))
+          return true;
+      }
 
       break;
     }
@@ -396,7 +411,8 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
       // TODO: Fix me! Assuming the context of BinaryOperator
       assert(current_BinOp_type.size());
       const nlohmann::json &binop_type = *(current_BinOp_type.top());
-      assert(binop_type["typeString"] == "uint8");
+      assert(binop_type["typeString"] == "uint8" ||
+             binop_type["typeString"] == "bool");
       // make a type-name json for integer literal conversion
       std::string the_value = expr["value"].get<std::string>();
       std::map<std::string, std::string> m = {{"name", "uint8"},
@@ -407,6 +423,46 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
       if(convert_integer_literal(integer_literal, new_expr))
         return true;
 
+      break;
+    }
+    case SolidityGrammar::ExpressionT::CallExprClass:
+    {
+      printf("	@@@ got Expr: SolidityGrammar::ExpressionT::CallExprClass, ");
+      printf("  call_expr_times=%d\n", call_expr_times++);
+
+      // 1. Get callee expr
+      const nlohmann::json &callee_expr_json = expr["expression"];
+      exprt callee_expr;
+      if(get_expr(callee_expr_json, callee_expr))
+        return true;
+
+      // 2. Get type
+      // TODO: Fix me! Assuming the function is assert. Harded-coded for assert.
+      // matching the type in function get_decl_ref_builtin
+      typet type;
+      type = bool_type();
+      std::string c_type = "bool";
+      type.set("#cpp_type", c_type);
+
+      side_effect_expr_function_callt call;
+      call.function() = callee_expr;
+      call.type() = type;
+
+      // 3. Set side_effect_expr_function_callt
+      unsigned num_args = 0;
+      for (const auto &arg : expr["arguments"].items())
+      {
+        exprt single_arg;
+        if(get_expr(arg.value(), single_arg))
+          return true;
+
+        call.arguments().push_back(single_arg);
+        ++num_args;
+      }
+      printf("  @@ num_args=%u\n", num_args);
+
+      // 4. Convert call arguments
+      new_expr = call;
       break;
     }
     default:
@@ -425,33 +481,88 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
   // preliminary step:
   current_BinOp_type.push(&(expr["typeDescriptions"]));
 
-  // 1. Convert LHS
-  exprt lhs;
-  if(get_expr(expr["leftHandSide"], lhs))
-    return true;
+  // 1. Convert LHS and RHS
+  // For "Assignment" expression, it's called "leftHandSide" or "rightHandSide".
+  // For "BinaryOperation" expression, it's called "leftExpression" or "leftExpression"
+  exprt lhs, rhs;
+  if (expr.contains("leftHandSide"))
+  {
+    if(get_expr(expr["leftHandSide"], lhs))
+      return true;
 
-  // 2. Convert RHS
-  exprt rhs;
-  if(get_expr(expr["rightHandSide"], rhs))
-    return true;
+    if(get_expr(expr["rightHandSide"], rhs))
+      return true;
+  }
+  else if (expr.contains("leftExpression"))
+  {
+    if(get_expr(expr["leftExpression"], lhs))
+      return true;
 
-  // 3. Get type
+    if(get_expr(expr["rightExpression"], rhs))
+      return true;
+  }
+  else
+  {
+    assert(!"should not be here - unrecognized LHS and RHS keywords in expression JSON");
+  }
+
+  // 2. Get type
   typet t;
+  // TODO: Fix me! Assuming the context of BinaryOperator
+  assert(current_BinOp_type.size());
+  const nlohmann::json &binop_type = *(current_BinOp_type.top());
+  assert(binop_type["typeString"] == "uint8" ||
+         binop_type["typeString"] == "bool");
+  std::map<std::string, std::string> m = {{"name", "uint8"},
+                                          {"nodeType", "ElementaryTypeName"}};
+  nlohmann::json the_type = m;
+  if(get_type_name(the_type, t))
+    return true;
 
-  // 4. Convert opcode
+  // 3. Convert opcode
+  SolidityGrammar::ExpressionT opcode = SolidityGrammar::get_expr_operator_t(expr);
+  switch(opcode)
+  {
+    case SolidityGrammar::ExpressionT::BO_Assign:
+    {
+      printf("  @@@ got binop.getOpcode: SolidityGrammar::BO_Assign\n");
+      new_expr = side_effect_exprt("assign", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_Add:
+    {
+      printf("  @@@ got binop.getOpcode: SolidityGrammar::BO_Add\n");
+      if(t.is_floatbv())
+        assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
+      else
+        new_expr = exprt("+", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_GT:
+    {
+      printf("  @@@ got binop.getOpcode: SolidityGrammar::BO_GT\n");
+      new_expr = exprt(">", t);
+      break;
+    }
+    default:
+    {
+      assert(!"Unimplemented operator");
+    }
+  }
 
-  // 5. Copy to operands
+  // 4. Copy to operands
+  new_expr.copy_to_operands(lhs, rhs);
 
   // Pop current_BinOp_type.push as we've finished this conversion
   current_BinOp_type.pop();
 
-  assert(!"done - BO?");
-  //new_expr.copy_to_operands(lhs, rhs);
   return false;
 }
 
 bool solidity_convertert::get_decl_ref(const nlohmann::json &decl, exprt &new_expr)
 {
+  // Function to configure new_expr that has a +ve referenced id
+  // TODO: Fix me! Assuming the context to be state variable
   assert(decl["stateVariable"] == true); // assume referring to state variable. If not, use switch-case or if-else block.
 
   std::string name, id;
@@ -460,6 +571,42 @@ bool solidity_convertert::get_decl_ref(const nlohmann::json &decl, exprt &new_ex
   typet type;
   if (get_type_name(decl["typeName"], type)) // "type-name" as in state-variable-declaration
     return true;
+
+  new_expr = exprt("symbol", type);
+  new_expr.identifier(id);
+  new_expr.cmt_lvalue(true);
+  new_expr.name(name);
+  return false;
+}
+
+bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr)
+{
+  // Function to configure new_expr that has a -ve referenced id
+  // -ve ref id means built-in functions or variables.
+  // TODO: Fix me! Assuming the function is assert. Harded-coded for assert.
+  assert(decl["name"] == "assert");
+
+  std::string name, id;
+  name = decl["name"].get<std::string>();
+  id = "c:@F@" + name;
+
+  // manually unrolled recursion here
+  // type config for Builtin && Int
+  typet type;
+  // Creat a new code_typet, parse the return_type and copy the code_typet to typet
+  code_typet convert_type;
+  typet return_type;
+  assert(decl["typeDescriptions"]["typeString"] == "function (bool) pure");
+  // TODO: Fix me if not working. Replace with signed_int
+  return_type = bool_type();
+  std::string c_type = "bool";
+  return_type.set("#cpp_type", c_type);
+  convert_type.return_type() = return_type;
+
+  if(!convert_type.arguments().size())
+    convert_type.make_ellipsis();
+
+  type = convert_type;
 
   new_expr = exprt("symbol", type);
   new_expr.identifier(id);
@@ -695,6 +842,18 @@ symbolt *solidity_convertert::move_symbol_to_context(symbolt &symbol)
   }
 
   return s;
+}
+
+void solidity_convertert::convert_expression_to_code(exprt &expr)
+{
+  if(expr.is_code())
+    return;
+
+  codet code("expression");
+  code.location() = expr.location();
+  code.move_to_operands(expr);
+
+  expr.swap(code);
 }
 
 // debug functions
