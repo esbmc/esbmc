@@ -191,8 +191,8 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
     }
 
     // Also accumulate any pointer offset in the source object.
-    result =
-      add2tc(result->type, result, compute_pointer_offset_bits(index.source_value));
+    result = add2tc(
+      result->type, result, compute_pointer_offset_bits(index.source_value));
 
     return result;
   }
@@ -255,7 +255,8 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
 expr2tc compute_pointer_offset(const expr2tc &expr)
 {
   expr2tc pointer_offset_bits = compute_pointer_offset_bits(expr);
-  expr2tc result = div2tc(pointer_offset_bits->type, pointer_offset_bits, gen_ulong(8));
+  expr2tc result =
+    div2tc(pointer_offset_bits->type, pointer_offset_bits, gen_ulong(8));
   return result;
 }
 
