@@ -41,20 +41,41 @@ namespace SolidityGrammar
   // rule type-name
   TypeNameT get_type_name_t(const nlohmann::json &type_name)
   {
-    if (type_name["nodeType"] == "ElementaryTypeName")
+    if (type_name.contains("typeString"))
     {
-      return ElementaryTypeName;
-    }
-    else if (type_name["nodeType"] == "ParameterList")
-    {
-      return ParameterList;
+      // for AST node that contains ["typeName"]["typeDescriptions"]
+      if (type_name["typeString"] == "uint8" ||
+          type_name["typeString"] == "bool")
+      {
+        // For state var declaration,
+        return ElementaryTypeName;
+      }
+      else if (type_name["typeString"].get<std::string>().find("int_const") != std::string::npos)
+      {
+        // For Literal, their typeString is like "int_const 100".
+        return ElementaryTypeName;
+      }
+      else
+      {
+        printf("Got type-name typeString=%s\n", type_name["typeString"].get<std::string>().c_str());
+        assert(!"Unsupported type-name type");
+      }
     }
     else
     {
-      printf("Got type-name nodeType=%s\n", type_name["nodeType"].get<std::string>().c_str());
-      assert(!"Unsupported type-name type");
+      // for AST node that contains ["typeDescriptions"] only
+      if (type_name["nodeType"] == "ParameterList")
+      {
+        return ParameterList;
+      }
+      else
+      {
+        printf("Got type-name nodeType=%s\n", type_name["nodeType"].get<std::string>().c_str());
+        assert(!"Unsupported type-name type");
+      }
     }
-    return TypeNameTError;
+
+    return TypeNameTError; // to make some old compiler happy
   }
 
   const char* type_name_to_str(TypeNameT type)
@@ -75,13 +96,23 @@ namespace SolidityGrammar
   ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   {
     // rule unsigned-integer-type
-    if (type_name["name"] == "uint8")
+    if (type_name["typeString"] == "uint8")
     {
+      return UINT8;
+    }
+    else if (type_name["typeString"] == "bool")
+    {
+      return BOOL;
+    }
+    else if (type_name["typeString"].get<std::string>().find("int_const") != std::string::npos)
+    {
+      // For Literal, their typeString is like "int_const 100".
+      // TODO: Fix me! For simplicity, we assume everything is unsigned int.
       return UINT8;
     }
     else
     {
-      printf("Got elementary-type-name nodeType=%s\n", type_name["name"].get<std::string>().c_str());
+      printf("Got elementary-type-name typeString=%s\n", type_name["typeString"].get<std::string>().c_str());
       assert(!"Unsupported elementary-type-name type");
     }
     return ElementaryTypeNameTError;
@@ -92,6 +123,7 @@ namespace SolidityGrammar
     switch(type)
     {
       ENUM_TO_STR(UINT8)
+      ENUM_TO_STR(BOOL)
       ENUM_TO_STR(ElementaryTypeNameTError)
       default:
       {
