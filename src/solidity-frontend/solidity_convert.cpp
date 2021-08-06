@@ -306,7 +306,7 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
       }
       printf(" \t @@@ CompoundStmt has %u statements\n", ctr);
 
-      // TODO: Fix me when figuring out the source location manager of Solidity AST JSON
+      // TODO: Figure out the source location manager of Solidity AST JSON
       // It's too encryptic. Currently we are using get_start_location_from_stmt.
       // However, it should be get_final_location_from_stmt.
       locationt location_end;
@@ -437,7 +437,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
         return true;
 
       // 2. Get type
-      // TODO: Fix me! Assuming the function is assert. Harded-coded for assert.
+      // TODO: Fix me. Assuming the function is assert. Harded-coded for assert.
       // matching the type in function get_decl_ref_builtin
       typet type;
       type = bool_type();
@@ -577,7 +577,7 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
 bool solidity_convertert::get_decl_ref(const nlohmann::json &decl, exprt &new_expr)
 {
   // Function to configure new_expr that has a +ve referenced id
-  // TODO: Fix me! Assuming the context to be state variable
+  // TODO: Assuming the context to be state variable
   assert(decl["stateVariable"] == true); // assume referring to state variable. If not, use switch-case or if-else block.
 
   std::string name, id;
@@ -612,7 +612,8 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
   code_typet convert_type;
   typet return_type;
   assert(decl["typeDescriptions"]["typeString"] == "function (bool) pure");
-  // TODO: Fix me if not working. Replace with signed_int
+  // clang's assert(.) uses "signed_int" as argument type,
+  // while Solidity's assert uses "bool" as argument type.
   return_type = bool_type();
   std::string c_type = "bool";
   return_type.set("#cpp_type", c_type);
