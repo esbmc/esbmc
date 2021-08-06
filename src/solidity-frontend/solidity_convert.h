@@ -56,7 +56,7 @@ protected:
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr);
-  bool get_type_name(const nlohmann::json &type_name, typet &new_type);
+  bool get_type_description(const nlohmann::json &type_name, typet &new_type);
   bool get_elementary_type_name(const nlohmann::json &type_name, typet &new_type);
   bool get_parameter_list(const nlohmann::json &type_name, typet &new_type);
   void get_state_var_decl_name(const nlohmann::json &ast_node, std::string &name, std::string &id);
@@ -82,7 +82,7 @@ protected:
   // literal conversion functions
   bool convert_integer_literal(
     const nlohmann::json &integer_literal,
-    exprt &dest);
+    std::string the_value, exprt &dest);
 
   // debug functions
   void print_json(const nlohmann::json &json_in);
