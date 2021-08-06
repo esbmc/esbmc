@@ -35,9 +35,11 @@ namespace SolidityGrammar
     // rule unsigned-integer-type
     UINT8 = 0,
 
+    // rule bool
+    BOOL,
+
     // TODO: rule address
     // TODO: rule address payable
-    // TODO: rule bool
     // TODO: rule string
     // TODO: rule bytes
     // TODO: rule signed-integer-type

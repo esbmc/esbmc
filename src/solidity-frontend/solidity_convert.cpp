@@ -137,7 +137,11 @@ bool solidity_convertert::get_state_var_decl(const nlohmann::json &ast_node, exp
   // For Solidity rule state-variable-declaration:
   // 1. populate typet
   typet t;
-  if (get_type_name(ast_node["typeName"], t)) // "type-name" as in state-variable-declaration
+  // VariableDeclaration node contains both "typeName" and "typeDescriptions".
+  // However, ExpressionStatement node just contains "typeDescriptions".
+  // For consistensy, we use ["typeName"]["typeDescriptions"] as in state-variable-declaration
+  // to improve the re-usability of get_type* function.
+  if (get_type_description(ast_node["typeName"]["typeDescriptions"], t))
     return true;
 
   // 2. populate id and name
@@ -208,7 +212,7 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
 
   // 4. Return type
   code_typet type;
-  if (get_type_name(ast_node["returnParameters"], type.return_type()))
+  if (get_type_description(ast_node["returnParameters"], type.return_type()))
     return true;
 
   // 5. Check fd.isVariadic(), fd.isInlined()
@@ -411,16 +415,11 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
       // TODO: Fix me! Assuming the context of BinaryOperator
       assert(current_BinOp_type.size());
       const nlohmann::json &binop_type = *(current_BinOp_type.top());
-      assert(binop_type["typeString"] == "uint8" ||
-             binop_type["typeString"] == "bool");
       // make a type-name json for integer literal conversion
       std::string the_value = expr["value"].get<std::string>();
-      std::map<std::string, std::string> m = {{"name", "uint8"},
-                                              {"nodeType", "ElementaryTypeName"},
-                                              {"value", the_value}};
-      nlohmann::json integer_literal = m;
+      const nlohmann::json &integer_literal = expr["typeDescriptions"];
 
-      if(convert_integer_literal(integer_literal, new_expr))
+      if(convert_integer_literal(integer_literal, the_value, new_expr))
         return true;
 
       break;
@@ -511,12 +510,7 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
   // TODO: Fix me! Assuming the context of BinaryOperator
   assert(current_BinOp_type.size());
   const nlohmann::json &binop_type = *(current_BinOp_type.top());
-  assert(binop_type["typeString"] == "uint8" ||
-         binop_type["typeString"] == "bool");
-  std::map<std::string, std::string> m = {{"name", "uint8"},
-                                          {"nodeType", "ElementaryTypeName"}};
-  nlohmann::json the_type = m;
-  if(get_type_name(the_type, t))
+  if(get_type_description(binop_type, t))
     return true;
 
   // 3. Convert opcode
@@ -584,7 +578,7 @@ bool solidity_convertert::get_decl_ref(const nlohmann::json &decl, exprt &new_ex
   get_state_var_decl_name(decl, name, id);
 
   typet type;
-  if (get_type_name(decl["typeName"], type)) // "type-name" as in state-variable-declaration
+  if (get_type_description(decl["typeName"]["typeDescriptions"], type)) // "type-name" as in state-variable-declaration
     return true;
 
   new_expr = exprt("symbol", type);
@@ -631,7 +625,7 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
   return false;
 }
 
-bool solidity_convertert::get_type_name(const nlohmann::json &type_name, typet &new_type)
+bool solidity_convertert::get_type_description(const nlohmann::json &type_name, typet &new_type)
 {
   // For Solidity rule type-name:
   SolidityGrammar::TypeNameT type = SolidityGrammar::get_type_name_t(type_name);
@@ -680,8 +674,16 @@ bool solidity_convertert::get_elementary_type_name(const nlohmann::json &type_na
       new_type.set("#cpp_type", c_type);
       break;
     }
+    case SolidityGrammar::ElementaryTypeNameT::BOOL:
+    {
+      new_type = bool_type();
+      c_type = "bool";
+      new_type.set("#cpp_type", c_type);
+      break;
+    }
     default:
     {
+      printf(" Got elementary-type-name=%s ...\n", SolidityGrammar::elementary_type_name_to_str(type));
       assert(!"Unimplemented type in rule elementary-type-name");
       return true;
     }

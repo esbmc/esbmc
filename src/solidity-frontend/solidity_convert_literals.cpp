@@ -9,10 +9,10 @@
 // Integer literal
 bool solidity_convertert::convert_integer_literal(
   const nlohmann::json &integer_literal,
-  exprt &dest)
+  std::string the_value, exprt &dest)
 {
   typet type;
-  if(get_type_name(integer_literal, type))
+  if(get_type_description(integer_literal, type))
     return true;
 
   assert(type.is_unsignedbv() || type.is_signedbv()); // for "_x=100", false || true
@@ -21,7 +21,7 @@ bool solidity_convertert::convert_integer_literal(
   if(type.is_unsignedbv())
   {
     // extract the value
-    unsigned z_ext_value = std::stoul(integer_literal["value"].get<std::string>(), nullptr);
+    unsigned z_ext_value = std::stoul(the_value, nullptr);
     the_val = constant_exprt(
       integer2binary(z_ext_value, bv_width(type)),
       integer2string(z_ext_value),
