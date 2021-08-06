@@ -75,8 +75,10 @@ namespace SolidityGrammar
   // rule statement
   enum StatementT
   {
-    Block = 0, // corresponds to rule block
-    ExpressionStatement, // corresponds to rule expression-statement
+    Block = 0,             // rule block (mutual inclusion)
+    ExpressionStatement,   // rule expression-statement
+    VariableDeclStatement, // rule variable-declaration-statement
+    ReturnStatement,       // rule return-statement
     StatementTError
   };
   StatementT get_statement_t(const nlohmann::json &stmt);
@@ -110,6 +112,28 @@ namespace SolidityGrammar
   ExpressionT get_expression_t(const nlohmann::json &expr);
   ExpressionT get_expr_operator_t(const nlohmann::json &expr);
   const char* expression_to_str(ExpressionT type);
+
+  // rule variable-declaration-statement
+  enum VarDeclStmtT
+  {
+    VariableDecl,      // rule variable-declaration
+    VariableDeclTuple, // rule variable-declaration-tuple
+    VarDeclStmtTError
+  };
+  VarDeclStmtT get_var_decl_stmt_t(const nlohmann::json &stmt);
+  const char* var_decl_statement_to_str(VarDeclStmtT type);
+
+  // auxiliary type to convert function call
+  // No corresponding Solidity rules
+  enum FunctionDeclRefT
+  {
+    FunctionProto = 0,
+    FunctionNoProto,
+    FunctionDeclRefTError
+  };
+  FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl);
+  const char* func_decl_ref_to_str(FunctionDeclRefT type);
+
 }; // end of SolidityGrammar
 
 #endif /* SOLIDITY_GRAMMAR_H_ */
