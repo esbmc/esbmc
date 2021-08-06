@@ -92,6 +92,7 @@ void pattern_checker::check_authorization_through_tx_origin(const nlohmann::json
                             if (left_expr["expression"]["name"].get<std::string>() == "tx")
                             {
                               msg.progress("\t- Found vulnerability SWC-115 Authorization through tx.origin");
+                              assert(0);
                             }
                           }
                         }
