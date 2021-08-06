@@ -200,6 +200,14 @@ namespace SolidityGrammar
     {
       return ExpressionStatement;
     }
+    else if (stmt["nodeType"] == "VariableDeclarationStatement")
+    {
+      return VariableDeclStatement;
+    }
+    else if (stmt["nodeType"] == "Return")
+    {
+      return ReturnStatement;
+    }
     else
     {
       printf("Got statement nodeType=%s\n", stmt["nodeType"].get<std::string>().c_str());
@@ -214,6 +222,8 @@ namespace SolidityGrammar
     {
       ENUM_TO_STR(Block)
       ENUM_TO_STR(ExpressionStatement)
+      ENUM_TO_STR(VariableDeclStatement)
+      ENUM_TO_STR(ReturnStatement)
       ENUM_TO_STR(StatementTError)
       default:
       {
@@ -279,6 +289,8 @@ namespace SolidityGrammar
       printf("Got expression operator=%s\n", expr["operator"].get<std::string>().c_str());
       assert(!"Unsupported expression operator");
     }
+
+    return ExpressionTError; // make some old compilers happy
   }
 
   const char* expression_to_str(ExpressionT type)
@@ -298,6 +310,67 @@ namespace SolidityGrammar
       default:
       {
         assert(!"Unknown expression type");
+        return "UNKNOWN";
+      }
+    }
+  }
+
+  // rule variable-declaration-statement
+  VarDeclStmtT get_var_decl_stmt_t(const nlohmann::json &stmt)
+  {
+    if (stmt["nodeType"] == "VariableDeclaration" &&
+        stmt["stateVariable"] == false)
+    {
+      return VariableDecl;
+    }
+    else
+    {
+      printf("Got expression nodeType=%s\n", stmt["nodeType"].get<std::string>().c_str());
+      assert(!"Unsupported variable-declaration-statement operator");
+    }
+    return VarDeclStmtTError; // make some old compilers happy
+  }
+
+  const char* var_decl_statement_to_str(VarDeclStmtT type)
+  {
+    switch(type)
+    {
+      ENUM_TO_STR(VariableDecl)
+      ENUM_TO_STR(VariableDeclTuple)
+      ENUM_TO_STR(VarDeclStmtTError)
+      default:
+      {
+        assert(!"Unknown variable-declaration-statement type");
+        return "UNKNOWN";
+      }
+    }
+  }
+
+  // auxiliary type to convert function call
+  FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
+  {
+    assert(decl["nodeType"] == "FunctionDefinition");
+    if (decl["parameters"]["parameters"].size() == 0)
+    {
+      return FunctionNoProto;
+    }
+    else
+    {
+      return FunctionProto;
+    }
+    return FunctionDeclRefTError; // to make some old compilers happy
+  }
+
+  const char* func_decl_ref_to_str(FunctionDeclRefT type)
+  {
+    switch(type)
+    {
+      ENUM_TO_STR(FunctionProto)
+      ENUM_TO_STR(FunctionNoProto)
+      ENUM_TO_STR(FunctionDeclRefTError)
+      default:
+      {
+        assert(!"Unknown auxiliary type to convert function call");
         return "UNKNOWN";
       }
     }

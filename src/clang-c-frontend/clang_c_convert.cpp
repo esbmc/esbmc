@@ -464,7 +464,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     return true;
 
   // Check if we annotated it to be have an infinity size
-  if(vd.hasAttrs()) // false for _x, _y and sum
+  if(vd.hasAttrs()) // false for _x, _y and sum. Same for local i
   {
     for(auto const &attr : vd.getAttrs())
     {
@@ -479,7 +479,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     }
   }
 
-  std::string id, name;
+  std::string id, name; // For global _x, id=c:@_x. For i, id=c:overflow_2_nondet.c@55@F@nondet@i
   get_decl_name(vd, name, id);
 
   locationt location_begin;
@@ -537,8 +537,11 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
 bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 {
+  static int num_func_decl = 0; // TODO: remove debug
+  printf("\t @ num_func_decl=%d\n", num_func_decl++);
+
   // Don't convert if clang thinks that the functions was implicitly converted
-  if(fd.isImplicit()) // for func_overflow, it returns false
+  if(fd.isImplicit()) // for func_overflow/func_nondet, it returns false
     return false;
 
   // If the function is not defined but this is not the definition, skip it
@@ -2193,7 +2196,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     code_returnt ret_expr;
-    if(ret.getRetValue())
+    if(ret.getRetValue()) // for local "i" in nondet(), it returns a valid pointer (or ref?)
     {
       const clang::Expr &retval = *ret.getRetValue();
 
