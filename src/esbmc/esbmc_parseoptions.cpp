@@ -1395,7 +1395,9 @@ bool esbmc_parseoptionst::get_goto_program(
       if(
         cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
       {
-        show_symbol_table();
+        std::ostringstream oss;
+        show_symbol_table_plain(oss);
+        msg.status(oss.str());
         if(cmdline.isset("symbol-table-only"))
           return true;
       }
