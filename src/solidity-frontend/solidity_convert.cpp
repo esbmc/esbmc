@@ -494,7 +494,6 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
     }
     case SolidityGrammar::ExpressionT::Literal:
     {
-      // TODO: Fix me! Assuming the context of BinaryOperator
       assert(current_BinOp_type.size());
       const nlohmann::json &binop_type = *(current_BinOp_type.top());
       // make a type-name json for integer literal conversion
@@ -519,7 +518,8 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
       // matching the type in function get_decl_ref_builtin
       typet type;
       type = bool_type();
-      std::string c_type = "bool";
+      //std::string c_type = "bool";
+      std::string c_type = "unsigned_char";
       type.set("#cpp_type", c_type);
 
       side_effect_expr_function_callt call;
@@ -586,7 +586,6 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
 
   // 2. Get type
   typet t;
-  // TODO: Fix me! Assuming the context of BinaryOperator
   assert(current_BinOp_type.size());
   const nlohmann::json &binop_type = *(current_BinOp_type.top());
   if(get_type_description(binop_type, t))
@@ -881,7 +880,7 @@ void solidity_convertert::get_var_decl_name(
   // For non-state functions, we give it different id.
   // E.g. for local variable i in function nondet(), it's "c:overflow_2_nondet.c@55@F@nondet@i".
   name = ast_node["name"].get<std::string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-  id = "c:@" + std::to_string(ast_node["scope"].get<int>()) + name;
+  id = "c:@" + std::to_string(ast_node["scope"].get<int>()) + "@" + name;
 }
 
 void solidity_convertert::get_function_definition_name(

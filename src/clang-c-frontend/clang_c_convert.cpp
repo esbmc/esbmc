@@ -1468,7 +1468,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if(get_expr(*callee, callee_expr))
       return true;
 
-    typet type;
+    typet type; // argument type or return type???
     if(get_type(function_call.getType(), type))
       return true;
 
