@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow-check --symbol-table-too
+^VERIFICATION FAILED$
