@@ -1173,7 +1173,21 @@ nlohmann::json solidity_convertert::make_pointee_type(const nlohmann::json& sub_
       {
         // e.g. for typeString like:
         // "typeString": "function () returns (uint8)"
-        assert(!"Unsupported - detected function call with return value");
+        // TODO: currently we only assume one parameters
+        if (sub_expr["typeString"].get<std::string>().find("returns (uint8)") != std::string::npos)
+        {
+          auto j2 = R"(
+            {
+              "typeIdentifier": "t_uint8",
+              "typeString": "uint8"
+            }
+          )"_json;
+          adjusted_expr["returnParameters"] = j2;
+        }
+        else
+        {
+          assert(!"Unsupported return types in pointee");
+        }
       }
       else
       {
@@ -1210,7 +1224,20 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(const nlohmann::js
       {
         // e.g. for typeString like:
         // "typeString": "function () returns (uint8)"
-        assert(!"Unsupported - detected function call with return value");
+        if (type_descrpt["typeString"].get<std::string>().find("returns (uint8)") != std::string::npos)
+        {
+          auto j2 = R"(
+            {
+              "typeIdentifier": "t_uint8",
+              "typeString": "uint8"
+            }
+          )"_json;
+          adjusted_expr = j2;
+        }
+        else
+        {
+          assert(!"Unsupported types in callee's return in CallExpr");
+        }
       }
       else
       {
