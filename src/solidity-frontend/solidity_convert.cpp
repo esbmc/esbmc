@@ -870,11 +870,6 @@ void solidity_convertert::get_state_var_decl_name(
   //  - For state variable name, just use the ast_node["name"]
   //  - For state variable id, add prefix "c:@"
   name = ast_node["name"].get<std::string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-  if (name == "increment_x")
-  {
-    printf("Found increment_x in get_state_var_decl_name\n");
-    assert(1);
-  }
   id = "c:@" + name;
 }
 
@@ -885,11 +880,6 @@ void solidity_convertert::get_var_decl_name(
   // For non-state functions, we give it different id.
   // E.g. for local variable i in function nondet(), it's "c:overflow_2_nondet.c@55@F@nondet@i".
   name = ast_node["name"].get<std::string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-  if (name == "increment_x")
-  {
-    printf("Found increment_x in get_var_decl_name\n");
-    assert(1);
-  }
   id = "c:@" + std::to_string(ast_node["scope"].get<int>()) + "@" + name;
 }
 
@@ -901,11 +891,6 @@ void solidity_convertert::get_function_definition_name(
   //  - For function name, just use the ast_node["name"]
   //  - For function id, add prefix "c:@F@"
   name = ast_node["name"].get<std::string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-  if (name == "increment_x")
-  {
-    printf("Found increment_x in get_function_definition_name\n");
-    assert(1);
-  }
   id = "c:@F@" + name;
 }
 
