@@ -57,6 +57,7 @@ protected:
   bool get_statement(const nlohmann::json &block, exprt &new_expr);
   bool get_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_cast_expr(const nlohmann::json &cast_expr, exprt &new_expr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr);
@@ -76,6 +77,9 @@ protected:
   std::string get_filename_from_path(std::string path);
   const nlohmann::json& find_decl_ref(int ref_decl_id);
   void convert_expression_to_code(exprt &expr);
+  nlohmann::json make_implicit_cast_expr(const nlohmann::json& sub_expr, std::string cast_type);
+  nlohmann::json make_pointee_type(const nlohmann::json& sub_expr);
+  nlohmann::json make_callexpr_return_type(const nlohmann::json& type_descrpt);
 
   void get_default_symbol(
     symbolt &symbol,

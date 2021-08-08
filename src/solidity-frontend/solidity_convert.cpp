@@ -408,7 +408,13 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
       }
 
       // 1. get return type
-      assert(stmt.contains("expression")); // TODO: Fix me! Assuming it's "return <expr>;" not "return;"
+      // TODO: Fix me! Assumptions:
+      //  a). It's "return <expr>;" not "return;"
+      //  b). <expr> is pointing to a DeclRefExpr, we need to wrap it in an ImplicitCastExpr as a subexpr
+      assert(stmt.contains("expression"));
+      assert(stmt["expression"].contains("referencedDeclaration"));
+
+      //print_json(stmt);
       typet return_type;
       if (get_type_description(stmt["expression"]["typeDescriptions"], return_type))
         return true;
@@ -416,12 +422,14 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
       // 2. get return value
       code_returnt ret_expr;
       const nlohmann::json &rtn_expr = stmt["expression"];
+      // wrap it in an ImplicitCastExpr to convert LValue to RValue
+      nlohmann::json implicit_cast_expr = make_implicit_cast_expr(rtn_expr, "LValueToRValue");
 
       exprt val;
-      if(get_expr(rtn_expr, val))
+      if(get_expr(implicit_cast_expr, val))
         return true;
 
-      //solidity_gen_typecast(ns, val, return_type); // TODO: Experiment! Try to remove it see if it still works!
+      solidity_gen_typecast(ns, val, return_type);
       ret_expr.return_value() = val;
 
       new_expr = ret_expr;
@@ -509,18 +517,19 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
     {
       // 1. Get callee expr
       const nlohmann::json &callee_expr_json = expr["expression"];
+
+      // wrap it in an ImplicitCastExpr to convert LValue to RValue
+      nlohmann::json implicit_cast_expr = make_implicit_cast_expr(callee_expr_json, "FunctionToPointerDecay");
       exprt callee_expr;
-      if(get_expr(callee_expr_json, callee_expr))
+      if(get_expr(implicit_cast_expr, callee_expr))
         return true;
 
       // 2. Get type
-      // TODO: Fix me! Assuming the function is assert. Harded-coded for assert.
-      // matching the type in function get_decl_ref_builtin
+      // Need to "decrypt" the typeDescriptions and manually make a typeDescription
+      nlohmann::json callee_rtn_type = make_callexpr_return_type(callee_expr_json["typeDescriptions"]);
       typet type;
-      type = bool_type();
-      //std::string c_type = "bool";
-      std::string c_type = "unsigned_char";
-      type.set("#cpp_type", c_type);
+      if (get_type_description(callee_rtn_type, type))
+        return true;
 
       side_effect_expr_function_callt call;
       call.function() = callee_expr;
@@ -541,6 +550,12 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 
       // 4. Convert call arguments
       new_expr = call;
+      break;
+    }
+    case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
+    {
+      if(get_cast_expr(expr, new_expr))
+        return true;
       break;
     }
     default:
@@ -642,12 +657,48 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
   return false;
 }
 
+bool solidity_convertert::get_cast_expr(const nlohmann::json &cast_expr, exprt &new_expr)
+{
+  // 1. convert subexpr
+  exprt expr;
+  if (get_expr(cast_expr["subExpr"], expr))
+    return true;
+
+  // 2. get type
+  typet type;
+  if (get_type_description(cast_expr["subExpr"]["typeDescriptions"], type))
+    return true;
+
+  // 3. get cast type and generate typecast
+  SolidityGrammar::ImplicitCastTypeT cast_type =
+    SolidityGrammar::get_implicit_cast_type_t(cast_expr["castType"].get<std::string>());
+  switch(cast_type)
+  {
+    case SolidityGrammar::ImplicitCastTypeT::LValueToRValue:
+    {
+      solidity_gen_typecast(ns, expr, type);
+      break;
+    }
+    case SolidityGrammar::ImplicitCastTypeT::FunctionToPointerDecay:
+    {
+      break;
+    }
+    default:
+    {
+      assert(!"Unimplemented implicit cast type");
+    }
+  }
+
+  new_expr = expr;
+  return false;
+}
+
 bool solidity_convertert::get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr)
 {
   // Function to configure new_expr that has a +ve referenced id, referring to a variable declaration
   assert(decl["nodeType"] == "VariableDeclaration");
   std::string name, id;
-  get_state_var_decl_name(decl, name, id);
+  get_state_var_decl_name(decl, name, id); // if (decl["stateVariable"] == true)
 
   typet type;
   if (get_type_description(decl["typeName"]["typeDescriptions"], type)) // "type-name" as in state-variable-declaration
@@ -682,7 +733,7 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
 {
   // Function to configure new_expr that has a -ve referenced id
   // -ve ref id means built-in functions or variables.
-  // TODO: Fix me! Assuming the function is assert. Harded-coded for assert.
+  // TODO: Fix me! Currently we just support "assert". Add more built in funcrions if needed
   assert(decl["name"] == "assert");
 
   std::string name, id;
@@ -696,8 +747,8 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
   code_typet convert_type;
   typet return_type;
   assert(decl["typeDescriptions"]["typeString"] == "function (bool) pure");
-  // clang's assert(.) uses "signed_int" as argument type,
-  // while Solidity's assert uses "bool" as argument type.
+  // clang's assert(.) uses "signed_int" as assert(.) type (NOT the argument type),
+  // while Solidity's assert uses "bool" as assert(.) type (NOT the argument type).
   return_type = bool_type();
   std::string c_type = "bool";
   return_type.set("#cpp_type", c_type);
@@ -730,7 +781,29 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
     case SolidityGrammar::TypeNameT::ParameterList:
     {
       // rule parameter-list
+      // Used for Solidity function parameter or return list
       return get_parameter_list(type_name, new_type);
+    }
+    case SolidityGrammar::TypeNameT::Pointer:
+    {
+      // auxiliary type: pointer
+      // TODO: Fix me! Assuming it's a function call
+      assert(type_name["typeString"].get<std::string>().find("function") != std::string::npos);
+
+      // Since Solidity does not have this, first make a pointee
+      nlohmann::json pointee = make_pointee_type(type_name);
+      typet sub_type;
+      if(get_func_decl_ref_type(pointee, sub_type))
+        return true;
+
+      // TODO: classes
+      if(sub_type.is_struct() || sub_type.is_union()) // for "assert(sum > 100)", false || false
+      {
+        assert(!"struct or union is NOT supported");
+      }
+
+      new_type = gen_pointer_type(sub_type);
+      break;
     }
     default:
     {
@@ -1049,6 +1122,116 @@ void solidity_convertert::convert_expression_to_code(exprt &expr)
   code.move_to_operands(expr);
 
   expr.swap(code);
+}
+
+nlohmann::json solidity_convertert::make_implicit_cast_expr(const nlohmann::json& sub_expr, std::string cast_type)
+{
+  // Since Solidity AST does not have type cast information about return values,
+  // we need to manually make a JSON object and wrap the return expression in it.
+  std::map<std::string, std::string> m = {
+    {"nodeType", "ImplicitCastExprClass"},
+    {"castType", cast_type},
+    {"subExpr", {}}
+  };
+  nlohmann::json implicit_cast_expr = m;
+  implicit_cast_expr["subExpr"] = sub_expr;
+
+  return implicit_cast_expr;
+}
+
+nlohmann::json solidity_convertert::make_pointee_type(const nlohmann::json& sub_expr)
+{
+  // Since Solidity function call node does not have enough information, we need to make a JSON object
+  // manually create a JSON object to complete the conversions of function to pointer decay
+
+  // make a mapping for JSON object creation latter
+  // based on the usage of get_func_decl_ref_t() in get_func_decl_ref_type()
+  nlohmann::json adjusted_expr;
+
+  if (sub_expr["typeString"].get<std::string>().find("function") != std::string::npos)
+  {
+    if (sub_expr["typeString"].get<std::string>().find("function ()") != std::string::npos ||
+        sub_expr["typeIdentifier"].get<std::string>().find("t_function_assert_pure$") != std::string::npos)
+    {
+      // e.g. FunctionNoProto: "typeString": "function () returns (uint8)" with () empty after keyword 'function'
+      // "function ()" contains the function args in the parentheses.
+      // make a type to behave like SolidityGrammar::FunctionDeclRefT::FunctionNoProto
+      // Note that when calling "assert(.)", it's like "typeIdentifier": "t_function_assert_pure$......",
+      //  it's also treated as "FunctionNoProto".
+      auto j2 = R"(
+        {
+          "nodeType": "FunctionDefinition",
+          "parameters":
+            {
+              "parameters" : []
+            }
+        }
+      )"_json;
+      adjusted_expr = j2;
+
+      if (sub_expr["typeString"].get<std::string>().find("returns") != std::string::npos)
+      {
+        // e.g. for typeString like:
+        // "typeString": "function () returns (uint8)"
+        assert(!"Unsupported - detected function call with return value");
+      }
+      else
+      {
+        // e.g. for typeString like:
+        // "typeString": "function (bool) pure"
+        auto j2 = R"(
+          {
+            "nodeType": "ParameterList",
+            "parameters": []
+          }
+        )"_json;
+        adjusted_expr["returnParameters"] = j2;
+      }
+    }
+    else
+    {
+      assert(!"Unsupported - detected function call with parameters");
+    }
+  }
+  else
+  {
+    assert(!"Unsupported pointee - currently we only support the semantics of function to pointer decay");
+  }
+
+  return adjusted_expr;
+}
+
+nlohmann::json solidity_convertert::make_callexpr_return_type(const nlohmann::json& type_descrpt)
+{
+  nlohmann::json adjusted_expr;
+  if (type_descrpt["typeString"].get<std::string>().find("function") != std::string::npos)
+  {
+      if (type_descrpt["typeString"].get<std::string>().find("returns") != std::string::npos)
+      {
+        // e.g. for typeString like:
+        // "typeString": "function () returns (uint8)"
+        assert(!"Unsupported - detected function call with return value");
+      }
+      else
+      {
+        // Since Solidity allows multiple parameters and multiple returns for functions,
+        // we need to use "parameters" in conjunction with "returnParameters" to convert.
+        // the following configuration will lead to "void".
+        auto j2 = R"(
+          {
+            "nodeType": "ParameterList",
+            "parameters": []
+          }
+        )"_json;
+        adjusted_expr = j2;
+      }
+  }
+  else
+  {
+    assert(!"Unsupported pointee - currently we only support the semantics of function to pointer decay");
+  }
+
+  return adjusted_expr;
 }
 
 // debug functions

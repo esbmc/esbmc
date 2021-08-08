@@ -55,6 +55,11 @@ namespace SolidityGrammar
         // For Literal, their typeString is like "int_const 100".
         return ElementaryTypeName;
       }
+      else if (type_name["typeString"].get<std::string>().find("function") != std::string::npos)
+      {
+        // FunctionToPointer decay in CallExpr when making a function call
+        return Pointer;
+      }
       else
       {
         printf("Got type-name typeString=%s\n", type_name["typeString"].get<std::string>().c_str());
@@ -83,6 +88,8 @@ namespace SolidityGrammar
     switch(type)
     {
       ENUM_TO_STR(ElementaryTypeName)
+      ENUM_TO_STR(ParameterList)
+      ENUM_TO_STR(Pointer)
       ENUM_TO_STR(TypeNameTError)
       default:
       {
@@ -254,6 +261,10 @@ namespace SolidityGrammar
     {
       return CallExprClass;
     }
+    else if (expr["nodeType"] == "ImplicitCastExprClass")
+    {
+      return ImplicitCastExprClass;
+    }
     else
     {
       printf("Got expression nodeType=%s\n", expr["nodeType"].get<std::string>().c_str());
@@ -306,6 +317,7 @@ namespace SolidityGrammar
       ENUM_TO_STR(DeclRefExprClass)
       ENUM_TO_STR(Literal)
       ENUM_TO_STR(CallExprClass)
+      ENUM_TO_STR(ImplicitCastExprClass)
       ENUM_TO_STR(ExpressionTError)
       default:
       {
@@ -371,6 +383,41 @@ namespace SolidityGrammar
       default:
       {
         assert(!"Unknown auxiliary type to convert function call");
+        return "UNKNOWN";
+      }
+    }
+  }
+
+  // auxiliary type for implicit casting
+  ImplicitCastTypeT get_implicit_cast_type_t(std::string cast)
+  {
+    if (cast == "LValueToRValue")
+    {
+      return LValueToRValue;
+    }
+    else if (cast == "FunctionToPointerDecay")
+    {
+      return FunctionToPointerDecay;
+    }
+    else
+    {
+      printf("Got implicit cast type=%s\n", cast.c_str());
+      assert(!"Unsupported expression type");
+    }
+
+      return ImplicitCastTypeTError; // to make some old compilers happy
+  }
+
+  const char* implicit_cast_type_to_str(ImplicitCastTypeT type)
+  {
+    switch(type)
+    {
+      ENUM_TO_STR(LValueToRValue)
+      ENUM_TO_STR(FunctionToPointerDecay)
+      ENUM_TO_STR(ImplicitCastTypeTError)
+      default:
+      {
+        assert(!"Unknown auxiliary type for implicit casting");
         return "UNKNOWN";
       }
     }
