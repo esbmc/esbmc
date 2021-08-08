@@ -7,6 +7,8 @@
 
 #define ENUM_TO_STR(s) case s: { return #s; }
 
+// Anything auxiliary means it's not in Solidity grammar, but we need it to work with
+// ESBMC's irept
 namespace SolidityGrammar
 {
   // rule contract-body-element
@@ -22,8 +24,15 @@ namespace SolidityGrammar
   // rule type-name
   enum TypeNameT
   {
-    ElementaryTypeName = 0, // rule elementary-type-name
-    ParameterList,          // rule parameter-list. Strictly, this should not be here. Just a workaround
+    // rule elementary-type-name
+    ElementaryTypeName = 0,
+
+    // rule parameter-list. Strictly, this should not be here. Just a workaround
+    ParameterList,
+
+    // auxiliary type for pointers, e.g. FunctionToPointer decay in CallExpr when making a function call
+    Pointer,
+
     TypeNameTError
   };
   TypeNameT get_type_name_t(const nlohmann::json &type_name);
@@ -107,6 +116,10 @@ namespace SolidityGrammar
     // FunctionCall
     CallExprClass,
 
+    // auxiliary type for implicit casting in Solidity, e.g. function return value
+    // Solidity does NOT provide such information.
+    ImplicitCastExprClass,
+
     ExpressionTError
   };
   ExpressionT get_expression_t(const nlohmann::json &expr);
@@ -133,6 +146,20 @@ namespace SolidityGrammar
   };
   FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl);
   const char* func_decl_ref_to_str(FunctionDeclRefT type);
+
+  // auxiliary type for implicit casting
+  enum ImplicitCastTypeT
+  {
+    // for return value casting
+    LValueToRValue = 0,
+
+    // for ImplicitCastExpr<FunctionToPointerDecay> as in CallExpr when making a function call
+    FunctionToPointerDecay,
+
+    ImplicitCastTypeTError
+  };
+  ImplicitCastTypeT get_implicit_cast_type_t(std::string cast);
+  const char* implicit_cast_type_to_str(ImplicitCastTypeT type);
 
 }; // end of SolidityGrammar
 
