@@ -485,7 +485,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   locationt location_begin;
   get_location_from_decl(vd, location_begin);
 
-  std::string debug_modulename = get_modulename_from_path(location_begin.file().as_string());
+  std::string debug_modulename = get_modulename_from_path(location_begin.file().as_string()); // For local declaration, it's overflow_2_nondet
   symbolt symbol;
   get_default_symbol(
     symbol,
@@ -502,7 +502,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
-  if(symbol.static_lifetime && !symbol.is_extern && !vd.hasInit())
+  if(symbol.static_lifetime && !symbol.is_extern && !vd.hasInit()) // for local decl i, it's false && true && true
   {
     // Initialize with zero value, if the symbol has initial value,
     // it will be add later on this method
@@ -1810,6 +1810,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const auto &declgroup = decl.getDeclGroup();
 
     codet decls("decl-block");
+    unsigned ctr = 0;
     for(auto it : declgroup)
     {
       exprt single_decl;
@@ -1817,7 +1818,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         return true;
 
       decls.operands().push_back(single_decl);
+      ++ctr;
     }
+    printf(" \t @@@ DeclStmt group has %u decls\n", ctr);
 
     new_expr = decls;
     break;
@@ -2970,7 +2973,7 @@ void clang_c_convertert::get_decl_name(
   }
 
   case clang::Decl::Var:
-    if(name.empty()) // for _x, it returns false. The name is populated at the beginning of this function
+    if(name.empty()) // for _x and local decl i, it returns false. The name is populated at the beginning of this function
     {
       // Anonymous variable, generate a name based on the type,
       // see regression union1
@@ -3050,7 +3053,7 @@ void clang_c_convertert::get_location_from_decl(
 
   std::string function_name;
 
-  if(decl.getDeclContext()->isFunctionOrMethod()) // for _x, it returns false. Same for func_overflow decl
+  if(decl.getDeclContext()->isFunctionOrMethod()) // for _x, it returns false. Same for func_overflow decl. NOTE: for local decl i, it returns true!
   {
     const clang::FunctionDecl &funcd =
       static_cast<const clang::FunctionDecl &>(*decl.getDeclContext());

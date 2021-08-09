@@ -34,6 +34,8 @@ protected:
   const std::string &sol_func; // Solidity function to be verified
   const messaget &msg;
   std::string absolute_path;
+  std::string current_function_name;
+  int global_scope_id; // scope id of "ContractDefinition"
 
   unsigned int current_scope_var_num;
   const nlohmann::json *current_functionDecl;
