@@ -19,7 +19,8 @@ solidity_convertert::solidity_convertert(contextt &_context,
   msg(msg),
   current_scope_var_num(1),
   current_functionDecl(nullptr),
-  current_functionName("")
+  current_functionName(""),
+  global_scope_id(0)
 {
 }
 
@@ -50,6 +51,7 @@ bool solidity_convertert::convert()
     std::string node_type = (*itr)["nodeType"].get<std::string>();
     if (node_type == "ContractDefinition") // contains AST nodes we need
     {
+      global_scope_id = (*itr)["id"];
       found_contract_def = true;
       // pattern-based verification
       assert(itr->contains("nodes"));
@@ -127,8 +129,6 @@ bool solidity_convertert::get_decl(const nlohmann::json &ast_node, exprt &new_ex
     }
   }
 
-  assert(!"all AST node done?");
-
   return false;
 }
 
@@ -177,7 +177,17 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
   if (ast_node["stateVariable"] == true)
     get_state_var_decl_name(ast_node, name, id);
   else
-    get_var_decl_name(ast_node, name, id);
+  {
+    if(!current_functionDecl)
+    {
+      assert(!"Error: ESBMC could not find the parent scope for this local variable");
+    }
+    else
+    {
+      current_function_name = (*current_functionDecl)["name"];
+      get_var_decl_name(ast_node, name, id);
+    }
+  }
 
   // 3. populate location
   locationt location_begin;
@@ -197,9 +207,19 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
     location_begin);
 
   symbol.lvalue = true;
-  symbol.static_lifetime = true; // TODO: hard coded for now, may need to change later
+  if (ast_node["stateVariable"] == true)
+  {
+    // for global variables
+    symbol.static_lifetime = true;
+    symbol.file_local = false;
+  }
+  else
+  {
+    // for local variables
+    symbol.static_lifetime = false;
+    symbol.file_local = true;
+  }
   symbol.is_extern = false;
-  symbol.file_local = false;
 
   bool has_init = ast_node.contains("value");
   if(symbol.static_lifetime && !symbol.is_extern && !has_init)
@@ -230,6 +250,7 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
 bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node, exprt &new_expr)
 {
   // For Solidity rule function-definition:
+  // Order matters! do not change!
   // 1. Check fd.isImplicit() --- skipped since it's not applicable to Solidity
   // 2. Check fd.isDefined() and fd.isThisDeclarationADefinition()
   if (!ast_node["implemented"]) // TODO: for interface function, it's just a definition. Add something like "&& isInterface_JustDefinition()"
@@ -388,6 +409,7 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
       const nlohmann::json &declgroup = stmt["declarations"];
 
       codet decls("decl-block");
+      unsigned ctr = 0;
       for(const auto &it : declgroup.items())
       {
         exprt single_decl;
@@ -395,7 +417,9 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
           return true;
 
         decls.operands().push_back(single_decl);
+        ++ctr;
       }
+      printf(" \t @@@ DeclStmt group has %u decls\n", ctr);
 
       new_expr = decls;
       break;
@@ -698,7 +722,14 @@ bool solidity_convertert::get_var_decl_ref(const nlohmann::json &decl, exprt &ne
   // Function to configure new_expr that has a +ve referenced id, referring to a variable declaration
   assert(decl["nodeType"] == "VariableDeclaration");
   std::string name, id;
-  get_state_var_decl_name(decl, name, id); // if (decl["stateVariable"] == true)
+  if (decl["stateVariable"])
+  {
+    get_state_var_decl_name(decl, name, id);
+  }
+  else
+  {
+    get_var_decl_name(decl, name, id);
+  }
 
   typet type;
   if (get_type_description(decl["typeName"]["typeDescriptions"], type)) // "type-name" as in state-variable-declaration
@@ -950,10 +981,16 @@ void solidity_convertert::get_var_decl_name(
     const nlohmann::json &ast_node,
     std::string &name, std::string &id)
 {
+  assert(current_functionDecl); // TODO: Fix me! assuming converting local variable inside a function
   // For non-state functions, we give it different id.
   // E.g. for local variable i in function nondet(), it's "c:overflow_2_nondet.c@55@F@nondet@i".
   name = ast_node["name"].get<std::string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-  id = "c:@" + std::to_string(ast_node["scope"].get<int>()) + "@" + name;
+  id = "c:" + get_modulename_from_path(absolute_path) + ".solast" +
+       //"@"  + std::to_string(ast_node["scope"].get<int>()) +
+       "@"  + std::to_string(445) +
+       "@"  + "F" +
+       "@"  + current_function_name +
+       "@"  + name;
 }
 
 void solidity_convertert::get_function_definition_name(
@@ -973,6 +1010,15 @@ void solidity_convertert::get_location_from_decl(const nlohmann::json &ast_node,
   // For the time being we are setting it to "1".
   location.set_line(1);
   location.set_file(absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+
+  // To annotate local declaration within a function
+  if (ast_node["nodeType"] == "VariableDeclaration" &&
+      ast_node["stateVariable"] == false &&
+      ast_node["scope"] != global_scope_id)
+  {
+    assert(current_functionDecl); // must have a valid current function declaration
+    location.set_function(current_functionName); // set the function where this local variable belongs to
+  }
 }
 
 void solidity_convertert::get_start_location_from_stmt(const nlohmann::json &stmt_node, locationt &location)
