@@ -79,6 +79,7 @@ protected:
   std::string get_filename_from_path(std::string path);
   const nlohmann::json& find_decl_ref(int ref_decl_id);
   void convert_expression_to_code(exprt &expr);
+  bool check_intrinsic_function(const nlohmann::json &ast_node);
   nlohmann::json make_implicit_cast_expr(const nlohmann::json& sub_expr, std::string cast_type);
   nlohmann::json make_pointee_type(const nlohmann::json& sub_expr);
   nlohmann::json make_callexpr_return_type(const nlohmann::json& type_descrpt);
