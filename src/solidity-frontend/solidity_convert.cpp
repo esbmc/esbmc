@@ -704,6 +704,11 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
       new_expr = exprt("notequal", t);
       break;
     }
+    case SolidityGrammar::ExpressionT::BO_Rem:
+    {
+      new_expr = exprt("mod", t);
+      break;
+    }
     default:
     {
       assert(!"Unimplemented operator");

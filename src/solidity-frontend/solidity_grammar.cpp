@@ -299,6 +299,10 @@ namespace SolidityGrammar
     {
       return BO_NE;
     }
+    else if (expr["operator"] == "%")
+    {
+      return BO_Rem;
+    }
     else
     {
       printf("Got expression operator=\"%s\"\n", expr["operator"].get<std::string>().c_str());
@@ -319,6 +323,7 @@ namespace SolidityGrammar
       ENUM_TO_STR(BO_GT)
       ENUM_TO_STR(BO_LT)
       ENUM_TO_STR(BO_NE)
+      ENUM_TO_STR(BO_Rem)
       ENUM_TO_STR(DeclRefExprClass)
       ENUM_TO_STR(Literal)
       ENUM_TO_STR(CallExprClass)

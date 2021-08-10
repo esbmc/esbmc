@@ -107,6 +107,7 @@ namespace SolidityGrammar
     BO_GT,     // >
     BO_LT,     // <
     BO_NE,     // !=
+    BO_Rem,    // %
 
     // rule identifier
     DeclRefExprClass,
