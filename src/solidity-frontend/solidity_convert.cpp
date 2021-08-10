@@ -265,6 +265,10 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
   if (!ast_node["implemented"]) // TODO: for interface function, it's just a definition. Add something like "&& isInterface_JustDefinition()"
     return false;
 
+  // Check intrinsic functions
+  if (check_intrinsic_function(ast_node))
+    return false;
+
   // 3. Set current_scope_var_num, current_functionDecl and old_functionDecl
   current_scope_var_num = 1;
   const nlohmann::json *old_functionDecl = current_functionDecl;
@@ -519,19 +523,28 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
         //printf("\t @@ Debug: this is the matching DeclRef JSON: \n");
         //print_json(decl);
 
-        if (decl["nodeType"] == "VariableDeclaration")
+        if (!check_intrinsic_function(decl))
         {
-          if (get_var_decl_ref(decl, new_expr))
-            return true;
-        }
-        else if (decl["nodeType"] == "FunctionDefinition")
-        {
-          if (get_func_decl_ref(decl, new_expr))
-            return true;
+          if (decl["nodeType"] == "VariableDeclaration")
+          {
+            if (get_var_decl_ref(decl, new_expr))
+              return true;
+          }
+          else if (decl["nodeType"] == "FunctionDefinition")
+          {
+            if (get_func_decl_ref(decl, new_expr))
+              return true;
+          }
+          else
+          {
+            assert(!"Unsupported DeclRefExprClass type");
+          }
         }
         else
         {
-          assert(!"Unsupported DeclRefExprClass type");
+          // for special functions, we need to deal with it separately
+          if (get_decl_ref_builtin(expr, new_expr))
+            return true;
         }
       }
       else
@@ -686,6 +699,11 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
       new_expr = exprt("<", t);
       break;
     }
+    case SolidityGrammar::ExpressionT::BO_NE:
+    {
+      new_expr = exprt("notequal", t);
+      break;
+    }
     default:
     {
       assert(!"Unimplemented operator");
@@ -784,8 +802,9 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
 {
   // Function to configure new_expr that has a -ve referenced id
   // -ve ref id means built-in functions or variables.
-  // TODO: Fix me! Currently we just support "assert". Add more built in funcrions if needed
-  assert(decl["name"] == "assert");
+  // Add more special function names here
+  assert(decl["name"] == "assert" ||
+         decl["name"] == "__ESBMC_assume");
 
   std::string name, id;
   name = decl["name"].get<std::string>();
@@ -797,16 +816,25 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
   // Creat a new code_typet, parse the return_type and copy the code_typet to typet
   code_typet convert_type;
   typet return_type;
-  assert(decl["typeDescriptions"]["typeString"] == "function (bool) pure");
-  // clang's assert(.) uses "signed_int" as assert(.) type (NOT the argument type),
-  // while Solidity's assert uses "bool" as assert(.) type (NOT the argument type).
-  return_type = bool_type();
-  std::string c_type = "bool";
-  return_type.set("#cpp_type", c_type);
-  convert_type.return_type() = return_type;
+  if (decl["name"] == "assert" ||
+      decl["name"] == "__ESBMC_assume")
+  {
+    assert(decl["typeDescriptions"]["typeString"] == "function (bool) pure");
+    // clang's assert(.) uses "signed_int" as assert(.) type (NOT the argument type),
+    // while Solidity's assert uses "bool" as assert(.) type (NOT the argument type).
+    return_type = bool_type();
+    std::string c_type = "bool";
+    return_type.set("#cpp_type", c_type);
+    convert_type.return_type() = return_type;
 
-  if(!convert_type.arguments().size())
-    convert_type.make_ellipsis();
+    if(!convert_type.arguments().size())
+      convert_type.make_ellipsis();
+  }
+  else
+  {
+    assert(!"Unsupported special functions");
+  }
+
 
   type = convert_type;
 
@@ -1190,6 +1218,21 @@ void solidity_convertert::convert_expression_to_code(exprt &expr)
   expr.swap(code);
 }
 
+bool solidity_convertert::check_intrinsic_function(const nlohmann::json &ast_node)
+{
+  // function to detect special intrinsic functions, e.g. __ESBMC_assume
+  if (ast_node["name"] == "__ESBMC_assume")
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+
+  return false; // make old compiler happy, e.g. pre-GCC4.9
+}
+
 nlohmann::json solidity_convertert::make_implicit_cast_expr(const nlohmann::json& sub_expr, std::string cast_type)
 {
   // Since Solidity AST does not have type cast information about return values,
@@ -1216,8 +1259,10 @@ nlohmann::json solidity_convertert::make_pointee_type(const nlohmann::json& sub_
 
   if (sub_expr["typeString"].get<std::string>().find("function") != std::string::npos)
   {
+    // Add more special functions here
     if (sub_expr["typeString"].get<std::string>().find("function ()") != std::string::npos ||
-        sub_expr["typeIdentifier"].get<std::string>().find("t_function_assert_pure$") != std::string::npos)
+        sub_expr["typeIdentifier"].get<std::string>().find("t_function_assert_pure$") != std::string::npos ||
+        sub_expr["typeIdentifier"].get<std::string>().find("t_function_internal_pure$") != std::string::npos)
     {
       // e.g. FunctionNoProto: "typeString": "function () returns (uint8)" with () empty after keyword 'function'
       // "function ()" contains the function args in the parentheses.
