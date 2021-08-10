@@ -221,7 +221,9 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
   }
   symbol.is_extern = false;
 
-  bool has_init = ast_node.contains("value");
+  // For state var decl, we look for "value".
+  // For local var decl, we look for "initialValue"
+  bool has_init = ast_node.contains("value") || ast_node.contains("initialValue");
   if(symbol.static_lifetime && !symbol.is_extern && !has_init)
   {
     symbol.value = gen_zero(t, true);
@@ -237,7 +239,14 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
 
   if (has_init)
   {
-    assert(!"unimplemented - state var decl has init value");
+    exprt val;
+    if(get_expr(ast_node["initialValue"], val))
+      return true;
+
+    solidity_gen_typecast(ns, val, t);
+
+    added_symbol.value = val;
+    decl.operands().push_back(val);
   }
 
   decl.location() = location_begin;
@@ -410,10 +419,21 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
 
       codet decls("decl-block");
       unsigned ctr = 0;
+      // N.B. Although Solidity AST JSON uses "declarations": [],
+      // there will ALWAYS be 1 declaration!
+      // A second declaration will become another stmt in "statements"
       for(const auto &it : declgroup.items())
       {
+        // deal with local var decl with init value
+        nlohmann::json decl = it.value();
+        if (stmt.contains("initialValue"))
+        {
+          // Need to combine init value with the decl JSON object
+          decl["initialValue"] = stmt["initialValue"];
+        }
+
         exprt single_decl;
-        if(get_var_decl_stmt(it.value(), single_decl))
+        if(get_var_decl_stmt(decl, single_decl))
           return true;
 
         decls.operands().push_back(single_decl);
@@ -542,7 +562,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
       // 1. Get callee expr
       const nlohmann::json &callee_expr_json = expr["expression"];
 
-      // wrap it in an ImplicitCastExpr to convert LValue to RValue
+      // wrap it in an ImplicitCastExpr to perform conversion of FunctionToPointerDecay
       nlohmann::json implicit_cast_expr = make_implicit_cast_expr(callee_expr_json, "FunctionToPointerDecay");
       exprt callee_expr;
       if(get_expr(implicit_cast_expr, callee_expr))
