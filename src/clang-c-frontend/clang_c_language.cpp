@@ -278,6 +278,8 @@ _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_atomic_begin();
 void __ESBMC_atomic_end();
 
+#define __builtin_assume(x) __ESBMC_assert(x, "Failing builtin_assume is UB")
+
 int __ESBMC_abs(int);
 long int __ESBMC_labs(long int);
 long long int __ESBMC_llabs(long long int);
