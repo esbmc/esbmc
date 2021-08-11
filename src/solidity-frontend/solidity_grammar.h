@@ -88,6 +88,7 @@ namespace SolidityGrammar
     ExpressionStatement,   // rule expression-statement
     VariableDeclStatement, // rule variable-declaration-statement
     ReturnStatement,       // rule return-statement
+    ForStatement,          // rule for-statement
     StatementTError
   };
   StatementT get_statement_t(const nlohmann::json &stmt);
@@ -112,6 +113,7 @@ namespace SolidityGrammar
     // UnaryOperator
     UnaryOperatorClass,
     UO_PreDec,
+    UO_PreInc,
 
     // rule identifier
     DeclRefExprClass,
