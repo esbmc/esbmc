@@ -109,6 +109,10 @@ namespace SolidityGrammar
     BO_NE,     // !=
     BO_Rem,    // %
 
+    // UnaryOperator
+    UnaryOperatorClass,
+    UO_PreDec,
+
     // rule identifier
     DeclRefExprClass,
 
@@ -125,7 +129,7 @@ namespace SolidityGrammar
     ExpressionTError
   };
   ExpressionT get_expression_t(const nlohmann::json &expr);
-  ExpressionT get_expr_operator_t(const nlohmann::json &expr);
+  ExpressionT get_expr_operator_t(const nlohmann::json &expr, bool uo_pre=true);
   const char* expression_to_str(ExpressionT type);
 
   // rule variable-declaration-statement
