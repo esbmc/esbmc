@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc --unlimited-goto-unwind
+--incremental-bmc --goto-unwind --unlimited-goto-unwind
 ^VERIFICATION FAILED$

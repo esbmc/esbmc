@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc
+--incremental-bmc --goto-unwind
 ^VERIFICATION FAILED$
