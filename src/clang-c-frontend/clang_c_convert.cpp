@@ -2067,7 +2067,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::ForStmt &for_stmt = static_cast<const clang::ForStmt &>(stmt);
 
-    codet init = code_skipt();
+    codet init = code_skipt(); // code_skipt() means no init in for-stmt, e.g. for (; i< 10; ++i)
     const clang::Stmt *init_stmt = for_stmt.getInit();
     if(init_stmt)
       if(get_expr(*init_stmt, init))
