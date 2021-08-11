@@ -809,7 +809,8 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
   // -ve ref id means built-in functions or variables.
   // Add more special function names here
   assert(decl["name"] == "assert" ||
-         decl["name"] == "__ESBMC_assume");
+         decl["name"] == "__ESBMC_assume" ||
+         decl["name"] == "__VERIFIER_assume");
 
   std::string name, id;
   name = decl["name"].get<std::string>();
@@ -822,7 +823,8 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
   code_typet convert_type;
   typet return_type;
   if (decl["name"] == "assert" ||
-      decl["name"] == "__ESBMC_assume")
+      decl["name"] == "__ESBMC_assume" ||
+      decl["name"] == "__VERIFIER_assume")
   {
     assert(decl["typeDescriptions"]["typeString"] == "function (bool) pure");
     // clang's assert(.) uses "signed_int" as assert(.) type (NOT the argument type),
@@ -1226,7 +1228,8 @@ void solidity_convertert::convert_expression_to_code(exprt &expr)
 bool solidity_convertert::check_intrinsic_function(const nlohmann::json &ast_node)
 {
   // function to detect special intrinsic functions, e.g. __ESBMC_assume
-  if (ast_node["name"] == "__ESBMC_assume")
+  if (ast_node["name"] == "__ESBMC_assume" ||
+     ast_node["name"] == "__VERIFIER_assume")
   {
     return true;
   }
