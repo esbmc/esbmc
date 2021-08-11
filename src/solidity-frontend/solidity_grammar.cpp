@@ -248,6 +248,10 @@ namespace SolidityGrammar
     {
       return BinaryOperatorClass;
     }
+    else if (expr["nodeType"] == "UnaryOperation")
+    {
+      return UnaryOperatorClass;
+    }
     else if (expr["nodeType"] == "Identifier" &&
              expr.contains("referencedDeclaration"))
     {
@@ -273,7 +277,7 @@ namespace SolidityGrammar
     return ExpressionTError;
   }
 
-  ExpressionT get_expr_operator_t(const nlohmann::json &expr)
+  ExpressionT get_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
   {
     if (expr["operator"] == "=")
     {
@@ -303,6 +307,17 @@ namespace SolidityGrammar
     {
       return BO_Rem;
     }
+    else if (expr["operator"] == "--")
+    {
+      if (uo_pre)
+      {
+        return UO_PreDec;
+      }
+      else
+      {
+        assert(!"Unsupported - UO_PostDec");
+      }
+    }
     else
     {
       printf("Got expression operator=\"%s\"\n", expr["operator"].get<std::string>().c_str());
@@ -324,6 +339,8 @@ namespace SolidityGrammar
       ENUM_TO_STR(BO_LT)
       ENUM_TO_STR(BO_NE)
       ENUM_TO_STR(BO_Rem)
+      ENUM_TO_STR(UnaryOperatorClass)
+      ENUM_TO_STR(UO_PreDec)
       ENUM_TO_STR(DeclRefExprClass)
       ENUM_TO_STR(Literal)
       ENUM_TO_STR(CallExprClass)

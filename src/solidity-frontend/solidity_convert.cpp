@@ -514,6 +514,12 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 
       break;
     }
+    case SolidityGrammar::ExpressionT::UnaryOperatorClass:
+    {
+      if(get_unary_operator_expr(expr, new_expr))
+        return true;
+      break;
+    }
     case SolidityGrammar::ExpressionT::DeclRefExprClass:
     {
       if (expr["referencedDeclaration"] > 0)
@@ -628,7 +634,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 
 bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr)
 {
-  // preliminary step:
+  // preliminary step for recursive BinaryOperation
   current_BinOp_type.push(&(expr["typeDescriptions"]));
 
   // 1. Convert LHS and RHS
@@ -711,7 +717,7 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
     }
     default:
     {
-      assert(!"Unimplemented operator");
+      assert(!"Unimplemented binary operator");
     }
   }
 
@@ -721,6 +727,38 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
   // Pop current_BinOp_type.push as we've finished this conversion
   current_BinOp_type.pop();
 
+  return false;
+}
+
+bool solidity_convertert::get_unary_operator_expr(const nlohmann::json &expr, exprt &new_expr)
+{
+  // 1. get type
+  typet uniop_type;
+  assert(expr["prefix"]); // TODO: Fix me! Currently just support prefix == true,e.g. pre-increment
+  if(get_type_description(expr["typeDescriptions"], uniop_type))
+    return true;
+
+  // 2. get subexpr
+  exprt unary_sub;
+  if(get_expr(expr["subExpression"], unary_sub))
+    return true;
+  // 3. get UnaryOperation opcode
+  SolidityGrammar::ExpressionT opcode = SolidityGrammar::get_expr_operator_t(expr, expr["prefix"]);
+  printf("  @@@ got uniop.getOpcode: SolidityGrammar::%s\n", SolidityGrammar::expression_to_str(opcode));
+  switch(opcode)
+  {
+    case SolidityGrammar::ExpressionT::UO_PreDec:
+    {
+      new_expr = side_effect_exprt("predecrement", uniop_type);
+      break;
+    }
+    default:
+    {
+      assert(!"Unimplemented unary operator");
+    }
+  }
+
+  new_expr.operands().push_back(unary_sub);
   return false;
 }
 
