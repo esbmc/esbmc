@@ -19,6 +19,7 @@ solidity_convertert::solidity_convertert(contextt &_context,
   msg(msg),
   current_scope_var_num(1),
   current_functionDecl(nullptr),
+  current_forStmt(nullptr),
   current_functionName(""),
   global_scope_id(0)
 {
@@ -412,6 +413,11 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
 
   switch(type)
   {
+    case SolidityGrammar::StatementT::Block:
+    {
+      get_block(stmt, new_expr);
+      break;
+    }
     case SolidityGrammar::StatementT::ExpressionStatement:
     {
       get_expr(stmt["expression"], new_expr);
@@ -481,6 +487,54 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
       ret_expr.return_value() = val;
 
       new_expr = ret_expr;
+      break;
+    }
+    case SolidityGrammar::StatementT::ForStatement:
+    {
+      // TODO: Fix me. Assuming for loop contains everything
+      assert(stmt.contains("initializationExpression") &&
+             stmt.contains("condition") &&
+             stmt.contains("loopExpression") &&
+             stmt.contains("body"));
+      // TODO: Fix me. Currently we don't support nested for loop
+      assert(current_forStmt == nullptr);
+      current_forStmt = &stmt;
+
+      // 1. annotate init
+      codet init = code_skipt(); // code_skipt() means no init in for-stmt, e.g. for (; i< 10; ++i)
+      if (get_statement(stmt["initializationExpression"], init))
+        return true;
+
+      convert_expression_to_code(init);
+
+      // 2. annotate condition
+      exprt cond = true_exprt();
+      if (get_expr(stmt["condition"], cond))
+        return true;
+
+      // 3. annotate increment
+      codet inc = code_skipt();
+      if (get_statement(stmt["loopExpression"], inc))
+        return true;
+
+      convert_expression_to_code(inc);
+
+      // 4. annotate body
+      codet body = code_skipt();
+      if (get_statement(stmt["body"], body))
+        return true;
+
+      convert_expression_to_code(body);
+
+      assert(!"cool");
+
+      code_fort code_for;
+      code_for.init() = init;
+      code_for.cond() = cond;
+      code_for.iter() = inc;
+      code_for.body() = body;
+
+      new_expr = code_for;
       break;
     }
     default:
@@ -565,8 +619,6 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
     }
     case SolidityGrammar::ExpressionT::Literal:
     {
-      assert(current_BinOp_type.size());
-      const nlohmann::json &binop_type = *(current_BinOp_type.top());
       // make a type-name json for integer literal conversion
       std::string the_value = expr["value"].get<std::string>();
       const nlohmann::json &integer_literal = expr["typeDescriptions"];
@@ -750,6 +802,11 @@ bool solidity_convertert::get_unary_operator_expr(const nlohmann::json &expr, ex
     case SolidityGrammar::ExpressionT::UO_PreDec:
     {
       new_expr = side_effect_exprt("predecrement", uniop_type);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::UO_PreInc:
+    {
+      new_expr = side_effect_exprt("preincrement", uniop_type);
       break;
     }
     default:
@@ -1198,7 +1255,36 @@ const nlohmann::json& solidity_convertert::find_decl_ref(int ref_decl_id)
       assert(!"Unable to find the corresponding local variable decl. Function body  does not have statements.");
   }
   else
+  {
     assert(!"Unable to find the corresponding local variable decl. Current function does not have a function body.");
+  }
+
+  // if no matching state or local var decl, search decl in current_forStmt
+  const nlohmann::json &current_for = *current_forStmt;
+  if (current_for.contains("initializationExpression"))
+  {
+    if (current_for["initializationExpression"].contains("declarations"))
+    {
+      assert(current_for["initializationExpression"]["declarations"].size()); // Assuming a non-empty declaration array
+      const nlohmann::json &decls = current_for["initializationExpression"]["declarations"];
+      for (const auto &init_decl : decls.items())
+      {
+        const nlohmann::json &the_decl = init_decl.value();
+        if (the_decl["id"] == ref_decl_id)
+        {
+          return the_decl;
+        }
+      }
+    }
+    else
+    {
+      assert(!"Unable to find the corresponding local variable decl. No local declarations found in current For-Statement");
+    }
+  }
+  else
+  {
+    assert(!"Unable to find the corresponding local variable decl. Current For-Statement does not have any init.");
+  }
 
   assert(!"should not be here - no matching ref decl id found");
   return ast_json;
