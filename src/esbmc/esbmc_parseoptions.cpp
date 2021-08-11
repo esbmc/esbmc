@@ -1515,7 +1515,7 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
     if(
-      !options.get_bool_option("no-goto-unwind") &&
+      options.get_bool_option("goto-unwind") &&
       !options.get_bool_option("unwind"))
     {
       size_t unroll_limit =
