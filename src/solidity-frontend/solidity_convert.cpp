@@ -526,8 +526,6 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
 
       convert_expression_to_code(body);
 
-      assert(!"cool");
-
       code_fort code_for;
       code_for.init() = init;
       code_for.cond() = cond;
