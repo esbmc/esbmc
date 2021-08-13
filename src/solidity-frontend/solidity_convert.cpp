@@ -185,7 +185,8 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
     }
     else
     {
-      current_function_name = (*current_functionDecl)["name"];
+      // location variable in function body
+      assert(current_functionName != "");
       get_var_decl_name(ast_node, name, id);
     }
   }
@@ -274,7 +275,7 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
   current_scope_var_num = 1;
   const nlohmann::json *old_functionDecl = current_functionDecl;
   current_functionDecl = &ast_node;
-  current_functionName = ast_node["name"];
+  current_functionName = (*current_functionDecl)["name"];
 
   // 4. Return type
   code_typet type;
@@ -318,9 +319,28 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
   SolidityGrammar::ParameterListT params =
     SolidityGrammar::get_parameter_list_t(ast_node["parameters"]);
   if ( params == SolidityGrammar::ParameterListT::EMPTY )
+  {
+    // assume ellipsis if the function has no parameters
     type.make_ellipsis();
+  }
   else
-    assert(!"come back and continue - conversion of function arguments");
+  {
+    // convert parameters if the function has them
+    // update the typet, since typet contains parameter annotations
+    unsigned num_param_decl = 0;
+    for (const auto &decl : ast_node["parameters"]["parameters"].items())
+    {
+      const nlohmann::json &func_param_decl = decl.value();
+
+      code_typet::argumentt param;
+      if(get_function_params(func_param_decl, param))
+        return true;
+
+      type.arguments().push_back(param);
+      ++num_param_decl;
+    }
+    printf("  @@@ number of param decls: %u\n", num_param_decl);
+  }
 
   added_symbol.type = type;
 
@@ -338,6 +358,68 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
   // 13. Restore current_functionDecl
   current_functionDecl = old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
 
+  return false;
+}
+
+bool solidity_convertert::get_function_params(const nlohmann::json &pd, exprt &param)
+{
+  // 1. get parameter type
+  typet param_type;
+  if (get_type_description(pd["typeDescriptions"], param_type))
+    return true;
+
+  // 2. check array: array-to-pointer decay
+  bool is_array = SolidityGrammar::get_type_name_t(pd["typeDescriptions"]);
+  if (is_array)
+  {
+    assert(!"Unimplemented - funciton parameter is array type");
+    //param_type.id("pointer");
+    //param_type.remove("size");
+    //param_type.remove("#constant");
+  }
+
+  // 3a. get id and name
+  std::string id, name;
+  assert(current_functionName != ""); // we are converting a function param now
+  assert(current_functionDecl);
+  get_var_decl_name(pd, name, id);
+
+  param = code_typet::argumentt();
+  param.type() = param_type;
+  param.cmt_base_name(name);
+
+  // 3b. check name empty: Not applicable to Solidity.
+  // In Solidity, a function definition should also have parameters names
+  assert(name != "");
+
+  // 4. get location
+  locationt location_begin;
+  get_location_from_decl(pd, location_begin);
+
+  param.cmt_identifier(id);
+  param.location() = location_begin;
+
+  // 5. get symbol
+  std::string debug_modulename = get_modulename_from_path(location_begin.file().as_string());
+  symbolt param_symbol;
+  get_default_symbol(
+    param_symbol,
+    debug_modulename,
+    param_type,
+    name,
+    id,
+    location_begin);
+
+  // 6. set symbol's lvalue, is_parameter and file local
+  param_symbol.lvalue = true;
+  param_symbol.is_parameter = true;
+  param_symbol.file_local = true;
+
+  // 7. check if function is defined: Not applicable to Solidity.
+  assert((*current_functionDecl).contains("body"));
+
+  // 8. add symbol to the context
+  move_symbol_to_context(param_symbol);
   return false;
 }
 
@@ -986,6 +1068,8 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
     }
     default:
     {
+      printf("	@@@ got type name=SolidityGrammar::TypeNameT::%s\n",
+          SolidityGrammar::type_name_to_str(type));
       assert(!"Unimplemented type in rule type-name");
       return true;
     }
@@ -1137,7 +1221,7 @@ void solidity_convertert::get_var_decl_name(
        //"@"  + std::to_string(ast_node["scope"].get<int>()) +
        "@"  + std::to_string(445) +
        "@"  + "F" +
-       "@"  + current_function_name +
+       "@"  + current_functionName +
        "@"  + name;
 }
 

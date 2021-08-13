@@ -41,6 +41,7 @@ namespace SolidityGrammar
   // rule type-name
   TypeNameT get_type_name_t(const nlohmann::json &type_name)
   {
+    // Solidity AST node has duplicate descrptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
     if (type_name.contains("typeString"))
     {
       // for AST node that contains ["typeName"]["typeDescriptions"]
@@ -59,6 +60,10 @@ namespace SolidityGrammar
       {
         // FunctionToPointer decay in CallExpr when making a function call
         return Pointer;
+      }
+      else if (type_name["typeString"].get<std::string>().find("[]") != std::string::npos)
+      {
+        return Array;
       }
       else
       {
@@ -90,6 +95,7 @@ namespace SolidityGrammar
       ENUM_TO_STR(ElementaryTypeName)
       ENUM_TO_STR(ParameterList)
       ENUM_TO_STR(Pointer)
+      ENUM_TO_STR(Array)
       ENUM_TO_STR(TypeNameTError)
       default:
       {
