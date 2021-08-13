@@ -33,6 +33,9 @@ namespace SolidityGrammar
     // auxiliary type for pointers, e.g. FunctionToPointer decay in CallExpr when making a function call
     Pointer,
 
+    // array type
+    Array,
+
     TypeNameTError
   };
   TypeNameT get_type_name_t(const nlohmann::json &type_name);

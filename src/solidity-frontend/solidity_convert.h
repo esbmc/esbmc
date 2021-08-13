@@ -34,7 +34,6 @@ protected:
   const std::string &sol_func; // Solidity function to be verified
   const messaget &msg;
   std::string absolute_path;
-  std::string current_function_name;
   int global_scope_id; // scope id of "ContractDefinition"
 
   unsigned int current_scope_var_num;
@@ -56,6 +55,7 @@ protected:
   bool get_var_decl_stmt(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_function_params(const nlohmann::json &pd, exprt &param);
   bool get_block(const nlohmann::json &expr, exprt &new_expr); // For Solidity's mutually inclusive: rule block and rule statement
   bool get_statement(const nlohmann::json &block, exprt &new_expr);
   bool get_expr(const nlohmann::json &expr, exprt &new_expr);
