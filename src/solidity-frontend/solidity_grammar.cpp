@@ -61,10 +61,6 @@ namespace SolidityGrammar
         // FunctionToPointer decay in CallExpr when making a function call
         return Pointer;
       }
-      else if (type_name["typeString"].get<std::string>().find("[]") != std::string::npos)
-      {
-        return Array;
-      }
       else
       {
         printf("Got type-name typeString=%s\n", type_name["typeString"].get<std::string>().c_str());
@@ -73,10 +69,16 @@ namespace SolidityGrammar
     }
     else
     {
-      // for AST node that contains ["typeDescriptions"] only
+      // TODO: Fix me later. This block is mixing return type's ParameterList and ArrayTypeName.
       if (type_name["nodeType"] == "ParameterList")
       {
+        // for AST node that contains ["typeDescriptions"] only
         return ParameterList;
+      }
+      else if (type_name["nodeType"] == "ArrayTypeName")
+      {
+        // for AST node that contains array var declarations
+        return ArrayTypeName;
       }
       else
       {
@@ -95,7 +97,7 @@ namespace SolidityGrammar
       ENUM_TO_STR(ElementaryTypeName)
       ENUM_TO_STR(ParameterList)
       ENUM_TO_STR(Pointer)
-      ENUM_TO_STR(Array)
+      ENUM_TO_STR(ArrayTypeName)
       ENUM_TO_STR(TypeNameTError)
       default:
       {
