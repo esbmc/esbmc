@@ -34,7 +34,7 @@ namespace SolidityGrammar
     Pointer,
 
     // array type
-    Array,
+    ArrayTypeName,
 
     TypeNameTError
   };

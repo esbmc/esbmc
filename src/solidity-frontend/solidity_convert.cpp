@@ -169,9 +169,19 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
   // VariableDeclaration node contains both "typeName" and "typeDescriptions".
   // However, ExpressionStatement node just contains "typeDescriptions".
   // For consistensy, we use ["typeName"]["typeDescriptions"] as in state-variable-declaration
-  // to improve the re-usability of get_type* function.
-  if (get_type_description(ast_node["typeName"]["typeDescriptions"], t))
-    return true;
+  // to improve the re-usability of get_type* function, when dealing with non-array var decls.
+  // For array, ["typeName"]["typeDescriptions"] does not have enough information,
+  // when dealing with array var decls. We need to use ["typeName"] instead.
+  if (ast_node["typeName"]["nodeType"].get<std::string>() == "ArrayTypeName")
+  {
+    if (get_type_description(ast_node["typeName"], t))
+      return true;
+  }
+  else
+  {
+    if (get_type_description(ast_node["typeName"]["typeDescriptions"], t))
+      return true;
+  }
 
   // 2. populate id and name
   std::string name, id;
@@ -1066,9 +1076,22 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
       new_type = gen_pointer_type(sub_type);
       break;
     }
-    case SolidityGrammar::TypeNameT::Array:
+    case SolidityGrammar::TypeNameT::ArrayTypeName:
     {
-      assert(!"cool");
+      // Array with constant size, e.g., int a[2]; Similar to clang::Type::ConstantArray
+      typet the_type;
+      if(get_type_description(type_name["baseType"]["typeDescriptions"], the_type))
+        return true;
+
+      assert(the_type.is_unsignedbv()); // assuming array size is unsigned bv
+      unsigned z_ext_value = std::stoul(type_name["length"]["value"].get<std::string>(), nullptr);
+      new_type = array_typet(
+        the_type,
+        constant_exprt(
+          integer2binary(z_ext_value, bv_width(int_type())),
+          integer2string(z_ext_value),
+          int_type()));
+
       break;
     }
     default:
