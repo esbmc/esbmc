@@ -1066,6 +1066,11 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
       new_type = gen_pointer_type(sub_type);
       break;
     }
+    case SolidityGrammar::TypeNameT::Array:
+    {
+      assert(!"cool");
+      break;
+    }
     default:
     {
       printf("	@@@ got type name=SolidityGrammar::TypeNameT::%s\n",
