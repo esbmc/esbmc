@@ -61,6 +61,19 @@ namespace SolidityGrammar
         // FunctionToPointer decay in CallExpr when making a function call
         return Pointer;
       }
+      else if (type_name["typeIdentifier"].get<std::string>().find("ArrayToPtr") != std::string::npos)
+      {
+        // ArrayToPointer decay in DeclRefExpr when dereferencing an array, e.g. a[0]
+        return PointerArrayToPtr;
+      }
+      else if (type_name["typeIdentifier"].get<std::string>().find("array") != std::string::npos)
+      {
+        // Solidity's array type description is like:
+        //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
+        //  "typeString": "uint8[2] memory"
+        // Need to search for the substring "array" as in "typeIdentifier"
+        return ArrayTypeName;
+      }
       else
       {
         printf("Got type-name typeString=%s\n", type_name["typeString"].get<std::string>().c_str());
@@ -69,16 +82,10 @@ namespace SolidityGrammar
     }
     else
     {
-      // TODO: Fix me later. This block is mixing return type's ParameterList and ArrayTypeName.
+      // for AST node that contains ["typeDescriptions"] only
       if (type_name["nodeType"] == "ParameterList")
       {
-        // for AST node that contains ["typeDescriptions"] only
         return ParameterList;
-      }
-      else if (type_name["nodeType"] == "ArrayTypeName")
-      {
-        // for AST node that contains array var declarations
-        return ArrayTypeName;
       }
       else
       {
@@ -97,6 +104,7 @@ namespace SolidityGrammar
       ENUM_TO_STR(ElementaryTypeName)
       ENUM_TO_STR(ParameterList)
       ENUM_TO_STR(Pointer)
+      ENUM_TO_STR(PointerArrayToPtr)
       ENUM_TO_STR(ArrayTypeName)
       ENUM_TO_STR(TypeNameTError)
       default:
@@ -231,6 +239,10 @@ namespace SolidityGrammar
     {
       return Block;
     }
+    else if (stmt["nodeType"] == "IfStatement")
+    {
+      return IfStatement;
+    }
     else
     {
       printf("Got statement nodeType=%s\n", stmt["nodeType"].get<std::string>().c_str());
@@ -248,6 +260,7 @@ namespace SolidityGrammar
       ENUM_TO_STR(VariableDeclStatement)
       ENUM_TO_STR(ReturnStatement)
       ENUM_TO_STR(ForStatement)
+      ENUM_TO_STR(IfStatement)
       ENUM_TO_STR(StatementTError)
       default:
       {
@@ -286,6 +299,10 @@ namespace SolidityGrammar
     {
       return ImplicitCastExprClass;
     }
+    else if (expr["nodeType"] == "IndexAccess")
+    {
+      return IndexAccess;
+    }
     else
     {
       printf("Got expression nodeType=%s\n", expr["nodeType"].get<std::string>().c_str());
@@ -319,6 +336,10 @@ namespace SolidityGrammar
     else if (expr["operator"] == "!=")
     {
       return BO_NE;
+    }
+    else if (expr["operator"] == "==")
+    {
+      return BO_EQ;
     }
     else if (expr["operator"] == "%")
     {
@@ -366,6 +387,7 @@ namespace SolidityGrammar
       ENUM_TO_STR(BO_GT)
       ENUM_TO_STR(BO_LT)
       ENUM_TO_STR(BO_NE)
+      ENUM_TO_STR(BO_EQ)
       ENUM_TO_STR(BO_Rem)
       ENUM_TO_STR(UnaryOperatorClass)
       ENUM_TO_STR(UO_PreDec)
@@ -374,6 +396,7 @@ namespace SolidityGrammar
       ENUM_TO_STR(Literal)
       ENUM_TO_STR(CallExprClass)
       ENUM_TO_STR(ImplicitCastExprClass)
+      ENUM_TO_STR(IndexAccess)
       ENUM_TO_STR(ExpressionTError)
       default:
       {
@@ -455,6 +478,10 @@ namespace SolidityGrammar
     {
       return FunctionToPointerDecay;
     }
+    else if (cast == "ArrayToPointerDecay")
+    {
+      return ArrayToPointerDecay;
+    }
     else
     {
       printf("Got implicit cast type=%s\n", cast.c_str());
@@ -470,6 +497,7 @@ namespace SolidityGrammar
     {
       ENUM_TO_STR(LValueToRValue)
       ENUM_TO_STR(FunctionToPointerDecay)
+      ENUM_TO_STR(ArrayToPointerDecay)
       ENUM_TO_STR(ImplicitCastTypeTError)
       default:
       {
