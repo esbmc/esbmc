@@ -9,6 +9,7 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <iomanip>
+#include <regex>
 
 solidity_convertert::solidity_convertert(contextt &_context,
   nlohmann::json &_ast_json, const std::string &_sol_func, const messaget &msg):
@@ -170,18 +171,10 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
   // However, ExpressionStatement node just contains "typeDescriptions".
   // For consistensy, we use ["typeName"]["typeDescriptions"] as in state-variable-declaration
   // to improve the re-usability of get_type* function, when dealing with non-array var decls.
-  // For array, ["typeName"]["typeDescriptions"] does not have enough information,
-  // when dealing with array var decls. We need to use ["typeName"] instead.
-  if (ast_node["typeName"]["nodeType"].get<std::string>() == "ArrayTypeName")
-  {
-    if (get_type_description(ast_node["typeName"], t))
-      return true;
-  }
-  else
-  {
-    if (get_type_description(ast_node["typeName"]["typeDescriptions"], t))
-      return true;
-  }
+  // For array, do NOT use ["typeName"]. Otherwise, it will cause problem
+  // when populating typet in get_cast
+  if (get_type_description(ast_node["typeName"]["typeDescriptions"], t))
+    return true;
 
   // 2. populate id and name
   std::string name, id;
@@ -583,6 +576,7 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
     }
     case SolidityGrammar::StatementT::ForStatement:
     {
+      // Based on rule for-statement
       // TODO: Fix me. Assuming for loop contains everything
       assert(stmt.contains("initializationExpression") &&
              stmt.contains("condition") &&
@@ -625,6 +619,38 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
       code_for.body() = body;
 
       new_expr = code_for;
+      break;
+    }
+    case SolidityGrammar::StatementT::IfStatement:
+    {
+      // Based on rule if-statement
+      // 1. Condition: make a exprt for condition
+      exprt cond;
+      if(get_expr(stmt["condition"], cond))
+        return true;
+
+      // 2. Then: make a exprt for trueBody
+      exprt then;
+      if(get_statement(stmt["trueBody"], then))
+        return true;
+
+      convert_expression_to_code(then);
+
+      codet if_expr("ifthenelse");
+      if_expr.copy_to_operands(cond, then);
+
+      // 3. Else: make a exprt for "falseBody" if the if-statement node contains an "else" block
+      if (stmt.contains("falseBody"))
+      {
+        exprt else_expr;
+        if(get_statement(stmt["falseBody"], else_expr))
+          return true;
+
+        convert_expression_to_code(else_expr);
+        if_expr.copy_to_operands(else_expr);
+      }
+
+      new_expr = if_expr;
       break;
     }
     default:
@@ -763,6 +789,28 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
         return true;
       break;
     }
+    case SolidityGrammar::ExpressionT::IndexAccess:
+    {
+      // 1. get type, this is the base type of array
+      typet t;
+      if (get_type_description(expr["typeDescriptions"], t))
+        return true;
+
+      // 2. get the decl ref of the array
+      // wrap it in an ImplicitCastExpr to perform conversion of ArrayToPointerDecay
+      nlohmann::json implicit_cast_expr = make_implicit_cast_expr(expr["baseExpression"], "ArrayToPointerDecay");
+      exprt array;
+      if(get_expr(implicit_cast_expr, array))
+        return true;
+
+      // 3. get the position index
+      exprt pos;
+      if(get_expr(expr["indexExpression"], pos))
+        return true;
+
+      new_expr = index_exprt(array, pos, t);
+      break;
+    }
     default:
     {
       assert(!"Unimplemented type in rule expression");
@@ -852,6 +900,11 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
       new_expr = exprt("notequal", t);
       break;
     }
+    case SolidityGrammar::ExpressionT::BO_EQ:
+    {
+      new_expr = exprt("=", t);
+      break;
+    }
     case SolidityGrammar::ExpressionT::BO_Rem:
     {
       new_expr = exprt("mod", t);
@@ -918,8 +971,24 @@ bool solidity_convertert::get_cast_expr(const nlohmann::json &cast_expr, exprt &
 
   // 2. get type
   typet type;
-  if (get_type_description(cast_expr["subExpr"]["typeDescriptions"], type))
-    return true;
+  if (cast_expr["castType"].get<std::string>() == "ArrayToPointerDecay")
+  {
+    // Array's cast_expr will have cast_expr["subExpr"]["typeDescriptions"]:
+    //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr"
+    //  "typeString": "uint8[2] memory"
+    // For the data above, SolidityGrammar::get_type_name_t will return ArrayTypeName.
+    // But we want Pointer type. Hence, adjusting the type manually to make it like:
+    //   "typeIdentifier": "ArrayToPtr",
+    //   "typeString": "uint8[2] memory"
+    nlohmann::json adjusted_type = make_array_to_pointer_type(cast_expr["subExpr"]["typeDescriptions"]);
+    if (get_type_description(adjusted_type, type))
+      return true;
+  }
+  else
+  {
+    if (get_type_description(cast_expr["subExpr"]["typeDescriptions"], type))
+      return true;
+  }
 
   // 3. get cast type and generate typecast
   SolidityGrammar::ImplicitCastTypeT cast_type =
@@ -932,6 +1001,7 @@ bool solidity_convertert::get_cast_expr(const nlohmann::json &cast_expr, exprt &
       break;
     }
     case SolidityGrammar::ImplicitCastTypeT::FunctionToPointerDecay:
+    case SolidityGrammar::ImplicitCastTypeT::ArrayToPointerDecay:
     {
       break;
     }
@@ -1057,8 +1127,8 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
     }
     case SolidityGrammar::TypeNameT::Pointer:
     {
-      // auxiliary type: pointer
-      // TODO: Fix me! Assuming it's a function call
+      // auxiliary type: pointer (FuncToPtr decay)
+      // This part is for FunctionToPointer decay only
       assert(type_name["typeString"].get<std::string>().find("function") != std::string::npos);
 
       // Since Solidity does not have this, first make a pointee
@@ -1067,7 +1137,29 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
       if(get_func_decl_ref_type(pointee, sub_type))
         return true;
 
-      // TODO: classes
+      if(sub_type.is_struct() || sub_type.is_union()) // for "assert(sum > 100)", false || false
+      {
+        assert(!"struct or union is NOT supported");
+      }
+
+      new_type = gen_pointer_type(sub_type);
+      break;
+    }
+    case SolidityGrammar::TypeNameT::PointerArrayToPtr:
+    {
+      // auxiliary type: pointer (FuncToPtr decay)
+      // This part is for FunctionToPointer decay only
+      assert(type_name["typeIdentifier"].get<std::string>().find("ArrayToPtr") != std::string::npos);
+
+      // Array type descriptor is like:
+      //  "typeIdentifier": "ArrayToPtr",
+      //  "typeString": "uint8[2] memory"
+
+      // Since Solidity does not have this, first make a pointee
+      typet sub_type;
+      if(get_array_to_pointer_type(type_name, sub_type)) // TODO: Fix me! Inconsistency. Better to use Solidity compiler library?
+        return true;
+
       if(sub_type.is_struct() || sub_type.is_union()) // for "assert(sum > 100)", false || false
       {
         assert(!"struct or union is NOT supported");
@@ -1078,13 +1170,20 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
     }
     case SolidityGrammar::TypeNameT::ArrayTypeName:
     {
-      // Array with constant size, e.g., int a[2]; Similar to clang::Type::ConstantArray
+      // Deal with array with constant size, e.g., int a[2]; Similar to clang::Type::ConstantArray
+      // array's typeDescription is in a compact form, e.g.:
+      //    "typeIdentifier": "t_array$_t_uint8_$2_storage_ptr",
+      //    "typeString": "uint8[2]"
+      // We need to extract the elementary type of array from the information provided above
+      // We want to make it like ["baseType"]["typeDescriptions"]
+      nlohmann::json array_elementary_type = make_array_elementary_type(type_name);
       typet the_type;
-      if(get_type_description(type_name["baseType"]["typeDescriptions"], the_type))
+      if(get_type_description(array_elementary_type, the_type))
         return true;
 
       assert(the_type.is_unsignedbv()); // assuming array size is unsigned bv
-      unsigned z_ext_value = std::stoul(type_name["length"]["value"].get<std::string>(), nullptr);
+      std::string the_size = get_array_size(type_name);
+      unsigned z_ext_value = std::stoul(the_size, nullptr);
       new_type = array_typet(
         the_type,
         constant_exprt(
@@ -1113,6 +1212,7 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
 
 bool solidity_convertert::get_func_decl_ref_type(const nlohmann::json &decl, typet &new_type)
 {
+  // For FunctionToPointer decay:
   // Get type when we make a function call:
   //  - FunnctionNoProto: x = nondet()
   //  - FunctionProto:    z = add(x, y)
@@ -1146,6 +1246,27 @@ bool solidity_convertert::get_func_decl_ref_type(const nlohmann::json &decl, typ
       assert(!"Unimplemented type in auxiliary type to convert function call");
       return true;
     }
+  }
+
+  // TODO: More var decl attributes checks:
+  //    - Constant
+  //    - Volatile
+  //    - isRestrict
+  return false;
+}
+
+bool solidity_convertert::get_array_to_pointer_type(const nlohmann::json &type_descriptor, typet &new_type)
+{
+  // Function to get the base type in ArrayToPointer decay
+  //  - unrolled the get_type...
+  if (type_descriptor["typeString"].get<std::string>().find("uint8") != std::string::npos)
+  {
+    new_type = unsigned_char_type();
+    new_type.set("#cpp_type", "unsigned_char");
+  }
+  else
+  {
+    assert(!"Unsupported types in ArrayToPinter decay");
   }
 
   // TODO: More var decl attributes checks:
@@ -1612,6 +1733,68 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(const nlohmann::js
   }
 
   return adjusted_expr;
+}
+
+nlohmann::json solidity_convertert::make_array_elementary_type(const nlohmann::json& type_descrpt)
+{
+  // Function used to extract the elementary type of array
+  // In order to keep the consistency and maximum the reuse of get_type_description function,
+  // we used ["typeDescriptions"] instead of ["typeName"], despite the fact that the latter contains more information.
+  // Although ["typeDescriptions"] also contains all the information needed, we have to do some
+  // pre-processing, e.g. extract the
+  nlohmann::json elementary_type;
+  if (type_descrpt["typeString"].get<std::string>().find("uint8") != std::string::npos)
+  {
+    auto j = R"(
+      {
+        "typeIdentifier": "t_uint8",
+        "typeString": "uint8"
+      }
+    )"_json;
+    elementary_type = j;
+  }
+  else
+  {
+    assert(!"Unsupported array elementary type");
+  }
+
+  return elementary_type;
+}
+
+nlohmann::json solidity_convertert::make_array_to_pointer_type(const nlohmann::json& type_descrpt)
+{
+  // Function to replace the content of ["typeIdentifier"] with "ArrayToPtr"
+  // All the information in ["typeIdentifier"] should also be available in ["typeString"]
+  std::string type_identifier = "ArrayToPtr";
+  std::string type_string = type_descrpt["typeString"].get<std::string>();
+
+  std::map<std::string, std::string> m = {
+    {"typeIdentifier", type_identifier},
+    {"typeString", type_string}
+  };
+  nlohmann::json adjusted_type = m;
+
+  return adjusted_type;
+}
+
+std::string solidity_convertert::get_array_size(const nlohmann::json& type_descrpt)
+{
+  const std::string s = type_descrpt["typeString"].get<std::string>();
+  std::regex rgx(".*\\[([0-9]+)\\]");
+  std::string the_size;
+
+  std::smatch match;
+  if (std::regex_search(s.begin(), s.end(), match, rgx))
+  {
+    std::ssub_match sub_match = match[1];
+    the_size = sub_match.str();
+  }
+  else
+  {
+    assert(!"Unsupported - Missing array size in type descriptor. Detected dynamic array?");
+  }
+
+  return the_size;
 }
 
 // debug functions

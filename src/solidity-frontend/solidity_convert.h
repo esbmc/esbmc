@@ -67,6 +67,7 @@ protected:
   bool get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
   bool get_func_decl_ref_type(const nlohmann::json &decl, typet &new_type);
+  bool get_array_to_pointer_type(const nlohmann::json &decl, typet &new_type);
   bool get_elementary_type_name(const nlohmann::json &type_name, typet &new_type);
   bool get_parameter_list(const nlohmann::json &type_name, typet &new_type);
   void get_state_var_decl_name(const nlohmann::json &ast_node, std::string &name, std::string &id);
@@ -85,6 +86,9 @@ protected:
   nlohmann::json make_implicit_cast_expr(const nlohmann::json& sub_expr, std::string cast_type);
   nlohmann::json make_pointee_type(const nlohmann::json& sub_expr);
   nlohmann::json make_callexpr_return_type(const nlohmann::json& type_descrpt);
+  nlohmann::json make_array_elementary_type(const nlohmann::json& type_descrpt);
+  nlohmann::json make_array_to_pointer_type(const nlohmann::json& type_descrpt);
+  std::string get_array_size(const nlohmann::json& type_descrpt);
 
   void get_default_symbol(
     symbolt &symbol,

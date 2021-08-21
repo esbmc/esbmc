@@ -464,7 +464,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     return true;
 
   // Check if we annotated it to be have an infinity size
-  if(vd.hasAttrs()) // false for _x, _y and sum. Same for local i
+  if(vd.hasAttrs()) // false for _x, _y and sum. Same for local i, and array a
   {
     for(auto const &attr : vd.getAttrs())
     {
@@ -1371,7 +1371,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     exprt array;
-    if(get_expr(*arr.getBase(), array))
+    if(get_expr(*arr.getBase(), array)) // For array a, it's wrapped in a ImplicitCastExprClass of the type ArrayToPointerDecay
       return true;
 
     exprt pos;
@@ -1940,7 +1940,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::IfStmt &ifstmt = static_cast<const clang::IfStmt &>(stmt);
 
     const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
-    if(cond_expr == nullptr)
+    if(cond_expr == nullptr) // for array_bound example, this is true
       cond_expr = ifstmt.getCond();
 
     exprt cond;
@@ -2308,7 +2308,7 @@ bool clang_c_convertert::get_cast_expr(
     return true;
 
   typet type;
-  if(get_type(cast.getType(), type))
+  if(get_type(cast.getType(), type)) // For array a, this is a Pointer type!
     return true;
 
   switch(cast.getCastKind()) // "_x=100;" it returns CK_IntegralCast. For "assert(sum > 100)", it returns "CK_IntegralCast"
