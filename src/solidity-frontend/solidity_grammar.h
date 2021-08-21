@@ -30,8 +30,11 @@ namespace SolidityGrammar
     // rule parameter-list. Strictly, this should not be here. Just a workaround
     ParameterList,
 
-    // auxiliary type for pointers, e.g. FunctionToPointer decay in CallExpr when making a function call
-    Pointer,
+    // auxiliary type for FunctionToPointer decay in CallExpr when making a function call
+    Pointer, // TODO: Fix me. Rename it to PointerFuncToPtr
+
+    // auxiliary type for ArrayToPointer when dereferencing array, e.g. a[0]
+    PointerArrayToPtr,
 
     // array type
     ArrayTypeName,
@@ -92,6 +95,7 @@ namespace SolidityGrammar
     VariableDeclStatement, // rule variable-declaration-statement
     ReturnStatement,       // rule return-statement
     ForStatement,          // rule for-statement
+    IfStatement,           // rule if-statement
     StatementTError
   };
   StatementT get_statement_t(const nlohmann::json &stmt);
@@ -111,6 +115,7 @@ namespace SolidityGrammar
     BO_GT,     // >
     BO_LT,     // <
     BO_NE,     // !=
+    BO_EQ,     // ==
     BO_Rem,    // %
 
     // UnaryOperator
@@ -130,6 +135,11 @@ namespace SolidityGrammar
     // auxiliary type for implicit casting in Solidity, e.g. function return value
     // Solidity does NOT provide such information.
     ImplicitCastExprClass,
+
+    // auxiliary type for array's "[]" operator
+    // equivalent to clang::Stmt::ArraySubscriptExprClass
+    // Solidity does NOT provide such rule
+    IndexAccess,
 
     ExpressionTError
   };
@@ -166,6 +176,9 @@ namespace SolidityGrammar
 
     // for ImplicitCastExpr<FunctionToPointerDecay> as in CallExpr when making a function call
     FunctionToPointerDecay,
+
+    // for ImplicitCastExpr<ArrayToPointerDecay> as in IndexAccess
+    ArrayToPointerDecay,
 
     ImplicitCastTypeTError
   };
