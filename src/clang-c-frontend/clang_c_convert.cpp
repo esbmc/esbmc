@@ -467,6 +467,9 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     symbol.value.zero_initializer(true);
   }
 
+  // Extern shouldn't be added to symbol table
+  if(symbol.is_extern) return false;
+
   // We have to add the symbol before converting the initial assignment
   // because we might have something like 'int x = x + 1;' which is
   // completely wrong but allowed by the language
