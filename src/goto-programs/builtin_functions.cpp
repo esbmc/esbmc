@@ -278,10 +278,10 @@ void goto_convertt::do_cpp_new(
     remove_sideeffects(alloc_size, dest);
 
     // jmorse: multiply alloc size by size of subtype.
-    type2tc subtype;
+    type2tc subtype = migrate_type(rhs.type());
     expr2tc alloc_units;
     migrate_expr(alloc_size, alloc_units);
-    migrate_type(rhs.type(), subtype);
+
     BigInt sz = type_byte_size(subtype);
     constant_int2tc sz_expr(uint_type2(), sz);
     mul2tc byte_size(uint_type2(), alloc_units, sz_expr);

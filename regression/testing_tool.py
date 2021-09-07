@@ -152,7 +152,7 @@ class XMLTestCase(BaseTest):
                 result.pop(index-1)
                 result.pop(index-1)
             else:
-                result[index] = CPP_INCLUDE_DIR
+                result[index] = XMLTestCase.CPP_INCLUDE_DIR
         except ValueError:
             pass
 

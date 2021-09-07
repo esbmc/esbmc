@@ -34,6 +34,32 @@ jobs:
           name: release-linux
           path: ./build/ESBMC-Linux.sh
 
+  build-arm:
+    name: Build ESBMC with Boolector (ARM64)
+    runs-on: ['self-hosted', 'Linux', 'ARM64']
+    container: ubuntu:20.04
+    steps:
+     - name: cleanup old files
+       run: pwd && rm -rf ./*
+     - uses: actions/checkout@v1
+     - name: Install Dependencies
+       run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y gperf libgmp-dev cmake bison flex linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev libtinfo5 git curl build-essential gcc wget
+     - name: Configure Boolector
+       run: git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j4 && make install
+     - name: Download Clang 11
+       run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-aarch64-linux-gnu.tar.xz
+     - name: Extract Clang 11
+       run: tar xf clang+llvm-11.0.0-aarch64-linux-gnu.tar.xz && mv clang+llvm-11.0.0-aarch64-linux-gnu clang
+     - name: Get current folder and files
+       run: pwd && ls
+     - name: Configure CMake
+       run: mkdir build && cd build && cmake .. -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DCMAKE_BUILD_TYPE=RelWithDebInfo
+     - name: Build ESBMC
+       run: cd build && make -j3 && cpack  && mv ESBMC-*.sh ESBMC-aarch64.sh
+     - uses: actions/upload-artifact@v1
+       with:
+         name: release-arm
+         path: ./build/ESBMC-aarch64.sh
 
   build-macos:
     name: Build Darwin Release
@@ -118,12 +144,17 @@ jobs:
   create-release:
     name: Upload Release Asset
     runs-on: ubuntu-20.04
-    needs: [build-linux, build-macos, build-windows]
+    needs: [build-linux, build-macos, build-windows, build-arm]
     steps:
       - name: Download Linux Build
         uses: actions/download-artifact@v1
         with:
           name: release-linux
+          path: ./
+      - name: Download Linux (arm64) Build
+        uses: actions/download-artifact@v1
+        with:
+          name: release-arm
           path: ./
       - name: Download Macos Build
         uses: actions/download-artifact@v1
@@ -156,6 +187,16 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./ESBMC-Linux.sh
           asset_name: ESBMC-Linux.sh
+          asset_content_type: text/x-shellscript
+      - name: Upload Release Asset (ARM64/Linux)
+        id: upload-release-asset-arm64
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./ESBMC-aarch64.sh
+          asset_name: ESBMC-aarch64.sh
           asset_content_type: text/x-shellscript
       - name: Upload Release Asset (Darwin)
         id: upload-release-asset-macos

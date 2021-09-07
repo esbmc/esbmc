@@ -1,0 +1,4 @@
+CORE
+main.c
+--smt-during-symex --smt-symex-assert --smt-symex-guard --add-symex-value-sets
+^VERIFICATION SUCCESSFUL$

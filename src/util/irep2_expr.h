@@ -1,6 +1,7 @@
 #ifndef IREP2_EXPR_H_
 #define IREP2_EXPR_H_
 
+#include <util/c_types.h>
 #include <util/fixedbv.h>
 #include <util/ieee_float.h>
 #include <util/irep2_type.h>
@@ -1619,7 +1620,7 @@ class constant_bool2t : public constant_bool_expr_methods
 public:
   /** Primary constructor. @param value True or false */
   constant_bool2t(bool value)
-    : constant_bool_expr_methods(type_pool.get_bool(), constant_bool_id, value)
+    : constant_bool_expr_methods(get_bool_type(), constant_bool_id, value)
   {
   }
   constant_bool2t(const constant_bool2t &ref) = default;
@@ -1807,7 +1808,7 @@ public:
         type,
         nearbyint_id,
         from,
-        symbol2tc(type_pool.get_int32(), "c:@__ESBMC_rounding_mode"))
+        symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"))
   {
   }
 
@@ -1849,7 +1850,7 @@ public:
         type,
         typecast_id,
         from,
-        symbol2tc(type_pool.get_int32(), "c:@__ESBMC_rounding_mode"))
+        symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"))
   {
   }
 
@@ -1922,7 +1923,7 @@ class equality2t : public equality_expr_methods
 {
 public:
   equality2t(const expr2tc &v1, const expr2tc &v2)
-    : equality_expr_methods(type_pool.get_bool(), equality_id, v1, v2)
+    : equality_expr_methods(get_bool_type(), equality_id, v1, v2)
   {
   }
   equality2t(const equality2t &ref) = default;
@@ -1938,7 +1939,7 @@ class notequal2t : public notequal_expr_methods
 {
 public:
   notequal2t(const expr2tc &v1, const expr2tc &v2)
-    : notequal_expr_methods(type_pool.get_bool(), notequal_id, v1, v2)
+    : notequal_expr_methods(get_bool_type(), notequal_id, v1, v2)
   {
   }
   notequal2t(const notequal2t &ref) = default;
@@ -1954,7 +1955,7 @@ class lessthan2t : public lessthan_expr_methods
 {
 public:
   lessthan2t(const expr2tc &v1, const expr2tc &v2)
-    : lessthan_expr_methods(type_pool.get_bool(), lessthan_id, v1, v2)
+    : lessthan_expr_methods(get_bool_type(), lessthan_id, v1, v2)
   {
   }
   lessthan2t(const lessthan2t &ref) = default;
@@ -1970,7 +1971,7 @@ class greaterthan2t : public greaterthan_expr_methods
 {
 public:
   greaterthan2t(const expr2tc &v1, const expr2tc &v2)
-    : greaterthan_expr_methods(type_pool.get_bool(), greaterthan_id, v1, v2)
+    : greaterthan_expr_methods(get_bool_type(), greaterthan_id, v1, v2)
   {
   }
   greaterthan2t(const greaterthan2t &ref) = default;
@@ -1986,7 +1987,7 @@ class lessthanequal2t : public lessthanequal_expr_methods
 {
 public:
   lessthanequal2t(const expr2tc &v1, const expr2tc &v2)
-    : lessthanequal_expr_methods(type_pool.get_bool(), lessthanequal_id, v1, v2)
+    : lessthanequal_expr_methods(get_bool_type(), lessthanequal_id, v1, v2)
   {
   }
   lessthanequal2t(const lessthanequal2t &ref) = default;
@@ -2003,7 +2004,7 @@ class greaterthanequal2t : public greaterthanequal_expr_methods
 public:
   greaterthanequal2t(const expr2tc &v1, const expr2tc &v2)
     : greaterthanequal_expr_methods(
-        type_pool.get_bool(),
+        get_bool_type(),
         greaterthanequal_id,
         v1,
         v2)
@@ -2022,8 +2023,7 @@ class not2t : public not_expr_methods
 {
 public:
   /** Primary constructor. @param val Boolean typed operand to invert. */
-  not2t(const expr2tc &val)
-    : not_expr_methods(type_pool.get_bool(), not_id, val)
+  not2t(const expr2tc &val) : not_expr_methods(get_bool_type(), not_id, val)
   {
   }
   not2t(const not2t &ref) = default;
@@ -2040,7 +2040,7 @@ class and2t : public and_expr_methods
 public:
   /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   and2t(const expr2tc &s1, const expr2tc &s2)
-    : and_expr_methods(type_pool.get_bool(), and_id, s1, s2)
+    : and_expr_methods(get_bool_type(), and_id, s1, s2)
   {
   }
   and2t(const and2t &ref) = default;
@@ -2057,7 +2057,7 @@ class or2t : public or_expr_methods
 public:
   /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   or2t(const expr2tc &s1, const expr2tc &s2)
-    : or_expr_methods(type_pool.get_bool(), or_id, s1, s2)
+    : or_expr_methods(get_bool_type(), or_id, s1, s2)
   {
   }
   or2t(const or2t &ref) = default;
@@ -2074,7 +2074,7 @@ class xor2t : public xor_expr_methods
 public:
   /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   xor2t(const expr2tc &s1, const expr2tc &s2)
-    : xor_expr_methods(type_pool.get_bool(), xor_id, s1, s2)
+    : xor_expr_methods(get_bool_type(), xor_id, s1, s2)
   {
   }
   xor2t(const xor2t &ref) = default;
@@ -2091,7 +2091,7 @@ class implies2t : public implies_expr_methods
 public:
   /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   implies2t(const expr2tc &s1, const expr2tc &s2)
-    : implies_expr_methods(type_pool.get_bool(), implies_id, s1, s2)
+    : implies_expr_methods(get_bool_type(), implies_id, s1, s2)
   {
   }
   implies2t(const implies2t &ref) = default;
@@ -2613,7 +2613,7 @@ class same_object2t : public same_object_expr_methods
 public:
   /** Primary constructor. @param v1 First object. @param v2 Second object. */
   same_object2t(const expr2tc &v1, const expr2tc &v2)
-    : same_object_expr_methods(type_pool.get_bool(), same_object_id, v1, v2)
+    : same_object_expr_methods(get_bool_type(), same_object_id, v1, v2)
   {
   }
   same_object2t(const same_object2t &ref) = default;
@@ -2825,7 +2825,7 @@ class isnan2t : public isnan_expr_methods
 public:
   /** Primary constructor. @param value Number value to test for nan */
   isnan2t(const expr2tc &value)
-    : isnan_expr_methods(type_pool.get_bool(), isnan_id, value)
+    : isnan_expr_methods(get_bool_type(), isnan_id, value)
   {
   }
   isnan2t(const isnan2t &ref) = default;
@@ -2849,7 +2849,7 @@ public:
    *  @param operand Operation to test overflow on; either an add, subtract, or
    *         multiply. */
   overflow2t(const expr2tc &operand)
-    : overflow_expr_methods(type_pool.get_bool(), overflow_id, operand)
+    : overflow_expr_methods(get_bool_type(), overflow_id, operand)
   {
   }
   overflow2t(const overflow2t &ref) = default;
@@ -2870,7 +2870,7 @@ public:
    *  @param bits Number of integer bits to cast operand to.  */
   overflow_cast2t(const expr2tc &operand, unsigned int bits)
     : overflow_cast_expr_methods(
-        type_pool.get_bool(),
+        get_bool_type(),
         overflow_cast_id,
         operand,
         bits)
@@ -2891,7 +2891,7 @@ class overflow_neg2t : public overflow_neg_expr_methods
 public:
   /** Primary constructor. @param operand Integer to test negation of. */
   overflow_neg2t(const expr2tc &operand)
-    : overflow_neg_expr_methods(type_pool.get_bool(), overflow_neg_id, operand)
+    : overflow_neg_expr_methods(get_bool_type(), overflow_neg_id, operand)
   {
   }
   overflow_neg2t(const overflow_neg2t &ref) = default;
@@ -2987,7 +2987,7 @@ class valid_object2t : public valid_object_expr_methods
 public:
   /** Primary constructor. @param operand Pointer value to examine for validity*/
   valid_object2t(const expr2tc &operand)
-    : valid_object_expr_methods(type_pool.get_bool(), valid_object_id, operand)
+    : valid_object_expr_methods(get_bool_type(), valid_object_id, operand)
   {
   }
   valid_object2t(const valid_object2t &ref) = default;
@@ -3004,10 +3004,7 @@ class deallocated_obj2t : public deallocated_obj_expr_methods
 public:
   /** Primary constructor. @param operand Pointer to check for deallocation */
   deallocated_obj2t(const expr2tc &operand)
-    : deallocated_obj_expr_methods(
-        type_pool.get_bool(),
-        deallocated_obj_id,
-        operand)
+    : deallocated_obj_expr_methods(get_bool_type(), deallocated_obj_id, operand)
   {
   }
   deallocated_obj2t(const deallocated_obj2t &ref) = default;
@@ -3025,10 +3022,7 @@ class dynamic_size2t : public dynamic_size_expr_methods
 public:
   /** Primary constructor. @param operand Pointer object to fetch size for. */
   dynamic_size2t(const expr2tc &operand)
-    : dynamic_size_expr_methods(
-        type_pool.get_uint32(),
-        dynamic_size_id,
-        operand)
+    : dynamic_size_expr_methods(get_uint32_type(), dynamic_size_id, operand)
   {
   }
   dynamic_size2t(const dynamic_size2t &ref) = default;
@@ -3075,7 +3069,7 @@ class code_block2t : public code_block_expr_methods
 {
 public:
   code_block2t(const std::vector<expr2tc> &operands)
-    : code_block_expr_methods(type_pool.get_empty(), code_block_id, operands)
+    : code_block_expr_methods(get_empty_type(), code_block_id, operands)
   {
   }
   code_block2t(const code_block2t &ref) = default;
@@ -3087,11 +3081,7 @@ class code_assign2t : public code_assign_expr_methods
 {
 public:
   code_assign2t(const expr2tc &target, const expr2tc &source)
-    : code_assign_expr_methods(
-        type_pool.get_empty(),
-        code_assign_id,
-        target,
-        source)
+    : code_assign_expr_methods(get_empty_type(), code_assign_id, target, source)
   {
   }
   code_assign2t(const code_assign2t &ref) = default;
@@ -3104,11 +3094,7 @@ class code_init2t : public code_init_expr_methods
 {
 public:
   code_init2t(const expr2tc &target, const expr2tc &source)
-    : code_init_expr_methods(
-        type_pool.get_empty(),
-        code_init_id,
-        target,
-        source)
+    : code_init_expr_methods(get_empty_type(), code_init_id, target, source)
   {
   }
   code_init2t(const code_init2t &ref) = default;
@@ -3144,7 +3130,7 @@ class code_printf2t : public code_printf_expr_methods
 {
 public:
   code_printf2t(const std::vector<expr2tc> &opers)
-    : code_printf_expr_methods(type_pool.get_empty(), code_printf_id, opers)
+    : code_printf_expr_methods(get_empty_type(), code_printf_id, opers)
   {
   }
   code_printf2t(const code_printf2t &ref) = default;
@@ -3156,10 +3142,7 @@ class code_expression2t : public code_expression_expr_methods
 {
 public:
   code_expression2t(const expr2tc &oper)
-    : code_expression_expr_methods(
-        type_pool.get_empty(),
-        code_expression_id,
-        oper)
+    : code_expression_expr_methods(get_empty_type(), code_expression_id, oper)
   {
   }
   code_expression2t(const code_expression2t &ref) = default;
@@ -3171,7 +3154,7 @@ class code_return2t : public code_return_expr_methods
 {
 public:
   code_return2t(const expr2tc &oper)
-    : code_return_expr_methods(type_pool.get_empty(), code_return_id, oper)
+    : code_return_expr_methods(get_empty_type(), code_return_id, oper)
   {
   }
   code_return2t(const code_return2t &ref) = default;
@@ -3194,7 +3177,7 @@ class code_free2t : public code_free_expr_methods
 {
 public:
   code_free2t(const expr2tc &oper)
-    : code_free_expr_methods(type_pool.get_empty(), code_free_id, oper)
+    : code_free_expr_methods(get_empty_type(), code_free_id, oper)
   {
   }
   code_free2t(const code_free2t &ref) = default;
@@ -3206,7 +3189,7 @@ class code_goto2t : public code_goto_expr_methods
 {
 public:
   code_goto2t(const irep_idt &targ)
-    : code_goto_expr_methods(type_pool.get_empty(), code_goto_id, targ)
+    : code_goto_expr_methods(get_empty_type(), code_goto_id, targ)
   {
   }
   code_goto2t(const code_goto2t &ref) = default;
@@ -3245,7 +3228,7 @@ public:
     const expr2tc &func,
     const std::vector<expr2tc> &args)
     : code_function_call_expr_methods(
-        type_pool.get_empty(),
+        get_empty_type(),
         code_function_call_id,
         r,
         func,
@@ -3273,10 +3256,7 @@ class invalid_pointer2t : public invalid_pointer_expr_methods
 {
 public:
   invalid_pointer2t(const expr2tc &obj)
-    : invalid_pointer_expr_methods(
-        type_pool.get_bool(),
-        invalid_pointer_id,
-        obj)
+    : invalid_pointer_expr_methods(get_bool_type(), invalid_pointer_id, obj)
   {
   }
   invalid_pointer2t(const invalid_pointer2t &ref) = default;
@@ -3301,7 +3281,7 @@ class code_cpp_del_array2t : public code_cpp_del_array_expr_methods
 public:
   code_cpp_del_array2t(const expr2tc &v)
     : code_cpp_del_array_expr_methods(
-        type_pool.get_empty(),
+        get_empty_type(),
         code_cpp_del_array_id,
         v)
   {
@@ -3315,7 +3295,7 @@ class code_cpp_delete2t : public code_cpp_delete_expr_methods
 {
 public:
   code_cpp_delete2t(const expr2tc &v)
-    : code_cpp_delete_expr_methods(type_pool.get_empty(), code_cpp_delete_id, v)
+    : code_cpp_delete_expr_methods(get_empty_type(), code_cpp_delete_id, v)
   {
   }
   code_cpp_delete2t(const code_cpp_delete2t &ref) = default;
@@ -3327,7 +3307,7 @@ class code_cpp_catch2t : public code_cpp_catch_expr_methods
 {
 public:
   code_cpp_catch2t(const std::vector<irep_idt> &el)
-    : code_cpp_catch_expr_methods(type_pool.get_empty(), code_cpp_catch_id, el)
+    : code_cpp_catch_expr_methods(get_empty_type(), code_cpp_catch_id, el)
   {
   }
   code_cpp_catch2t(const code_cpp_catch2t &ref) = default;
@@ -3339,11 +3319,7 @@ class code_cpp_throw2t : public code_cpp_throw_expr_methods
 {
 public:
   code_cpp_throw2t(const expr2tc &o, const std::vector<irep_idt> &l)
-    : code_cpp_throw_expr_methods(
-        type_pool.get_empty(),
-        code_cpp_throw_id,
-        o,
-        l)
+    : code_cpp_throw_expr_methods(get_empty_type(), code_cpp_throw_id, o, l)
   {
   }
   code_cpp_throw2t(const code_cpp_throw2t &ref) = default;
@@ -3356,7 +3332,7 @@ class code_cpp_throw_decl2t : public code_cpp_throw_decl_expr_methods
 public:
   code_cpp_throw_decl2t(const std::vector<irep_idt> &l)
     : code_cpp_throw_decl_expr_methods(
-        type_pool.get_empty(),
+        get_empty_type(),
         code_cpp_throw_decl_id,
         l)
   {
@@ -3371,7 +3347,7 @@ class code_cpp_throw_decl_end2t : public code_cpp_throw_decl_end_expr_methods
 public:
   code_cpp_throw_decl_end2t(const std::vector<irep_idt> &exl)
     : code_cpp_throw_decl_end_expr_methods(
-        type_pool.get_empty(),
+        get_empty_type(),
         code_cpp_throw_decl_end_id,
         exl)
   {
@@ -3385,7 +3361,7 @@ class isinf2t : public isinf_expr_methods
 {
 public:
   isinf2t(const expr2tc &val)
-    : isinf_expr_methods(type_pool.get_bool(), isinf_id, val)
+    : isinf_expr_methods(get_bool_type(), isinf_id, val)
   {
   }
   isinf2t(const isinf2t &ref) = default;
@@ -3399,7 +3375,7 @@ class isnormal2t : public isnormal_expr_methods
 {
 public:
   isnormal2t(const expr2tc &val)
-    : isnormal_expr_methods(type_pool.get_bool(), isnormal_id, val)
+    : isnormal_expr_methods(get_bool_type(), isnormal_id, val)
   {
   }
   isnormal2t(const isnormal2t &ref) = default;
@@ -3413,7 +3389,7 @@ class isfinite2t : public isfinite_expr_methods
 {
 public:
   isfinite2t(const expr2tc &val)
-    : isfinite_expr_methods(type_pool.get_bool(), isfinite_id, val)
+    : isfinite_expr_methods(get_bool_type(), isfinite_id, val)
   {
   }
   isfinite2t(const isfinite2t &ref) = default;
@@ -3427,7 +3403,7 @@ class signbit2t : public signbit_expr_methods
 {
 public:
   signbit2t(const expr2tc &val)
-    : signbit_expr_methods(type_pool.get_int32(), signbit_id, val)
+    : signbit_expr_methods(get_int32_type(), signbit_id, val)
   {
   }
   signbit2t(const signbit2t &ref) = default;
@@ -3455,7 +3431,7 @@ class popcount2t : public popcount_expr_methods
 {
 public:
   popcount2t(const expr2tc &val)
-    : popcount_expr_methods(type_pool.get_int32(), popcount_id, val)
+    : popcount_expr_methods(get_int32_type(), popcount_id, val)
   {
   }
   popcount2t(const popcount2t &ref) = default;

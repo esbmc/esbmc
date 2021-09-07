@@ -62,7 +62,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 
     // Catch free pointers: don't allow anything to be pointer object 1, the
     // invalid pointer.
-    type2tc ptr_type = type2tc(new pointer_type2t(type2tc(new empty_type2t())));
+    type2tc ptr_type = type2tc(new pointer_type2t(get_empty_type()));
     symbol2tc invalid_object(ptr_type, "INVALID");
     equality2tc isinvalid(ptr.ptr_obj, invalid_object);
     not2tc notinvalid(isinvalid);

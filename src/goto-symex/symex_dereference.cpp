@@ -52,7 +52,66 @@ void symex_dereference_statet::get_value_set(
   const expr2tc &expr,
   value_setst::valuest &value_set)
 {
+  // Here we obtain the set of objects via value set analysis.
   state.value_set.get_value_set(expr, value_set);
+
+  // add value set objects during the symbolic execution.
+  if(
+    goto_symex.options.get_bool_option("add-symex-value-sets") &&
+    goto_symex.options.get_bool_option("inductive-step"))
+  {
+    // check whether we have a set of objects.
+    if(value_set.empty())
+      return;
+
+    if(is_pointer_type(expr))
+    {
+      // we will accumulate the objects that the pointer points to.
+      expr2tc or_accuml;
+
+      // add each object to the resulting assume statement.
+      for(auto it = value_set.begin(); it != value_set.end(); ++it)
+      {
+        // note that the set of objects are always encoded as object_descriptor.
+        if(!is_object_descriptor2t(*it))
+          return;
+
+        // convert the object descriptor to extract its address later for comparison.
+        const object_descriptor2t &obj = to_object_descriptor2t(*it);
+
+        // if the object offset is unknown, we should not guess its offset.
+        if(is_unknown2t(obj.offset))
+          return;
+
+        // check whether they are the same object.
+        // this will produce expression like SAME-OBJECT(ptr, NULL)
+        // or SAME-OBJECT(ptr, &x + offset).
+        expr2tc obj_ptr;
+        if(is_null_object2t(obj.object))
+        {
+          // create NULL pointer type in case the object is a NULL-object
+          type2tc nullptrtype = type2tc(new pointer_type2t(expr->type));
+          obj_ptr = symbol2tc(nullptrtype, "NULL");
+        }
+        else
+          obj_ptr = add2tc(
+            expr->type, address_of2tc(expr->type, obj.object), obj.offset);
+
+        same_object2tc eq = same_object2tc(expr, obj_ptr);
+
+        // note that the pointer could point to any of the accumulated objects.
+        // However, if we have just one element, our or_accuml should store just that single element.
+        // Otherwise, we will accumulate the expression.
+        if(it == value_set.begin())
+          or_accuml = eq;
+        else
+          or_accuml = or2tc(or_accuml, eq);
+      }
+
+      // add the set of objects that the pointer can point to as an assume statement.
+      goto_symex.assume(or_accuml);
+    }
+  }
 }
 
 void symex_dereference_statet::rename(expr2tc &expr)

@@ -72,8 +72,7 @@ BigInt alignment(const typet &type, const namespacet &ns)
     type.id() == typet::t_fixedbv || type.id() == typet::t_floatbv ||
     type.id() == typet::t_bool || type.id() == typet::t_pointer)
   {
-    type2tc thetype;
-    migrate_type(type, thetype);
+    type2tc thetype = migrate_type(type);
     result = type_byte_size(thetype);
   }
   else if(type.id() == typet::t_symbol)
@@ -231,8 +230,7 @@ void add_padding(struct_typet &type, const namespacet &ns)
       }
     }
 
-    type2tc thetype;
-    migrate_type(it_type, thetype);
+    type2tc thetype = migrate_type(it_type);
     offset += type_byte_size(thetype);
   }
 
@@ -271,8 +269,7 @@ void add_padding(union_typet &type, const namespacet &ns)
   // check per component, and ignore those without fixed size
   for(const auto &c : type.components())
   {
-    type2tc thetype;
-    migrate_type(c.type(), thetype);
+    type2tc thetype = migrate_type(c.type());
     size_bits = std::max(size_bits, type_byte_size(thetype));
   }
 

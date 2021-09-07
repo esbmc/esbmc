@@ -1,0 +1,22 @@
+name: Run clang sanitizers
+
+on: [push, pull_request]
+jobs:
+
+  asan:
+    name: Compile esbmc with ASAN
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev
+    - name: Download Clang 11
+      run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+    - name: Extract Clang 11
+      run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
+    - name: Get current folder and files
+      run: pwd && ls
+    - name: Configure CMake
+      run: mkdir build && cd build && CC=../clang/bin/clang CXX=../clang/bin/clang++ cmake .. -GNinja  -DCMAKE_BUILD_TYPE=Sanitizer -DSANITIZER_TYPE=ASAN -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang
+    - name: Build ESBMC
+      run: cd build && ninja

@@ -572,12 +572,28 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
 smt_astt smt_convt::convert_typecast(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
+
   if(cast.type == cast.from->type)
     return convert_ast(cast.from);
 
   // Casts to and from pointers need to be addressed all as one
   if(is_pointer_type(cast.type))
     return convert_typecast_to_ptr(cast);
+
+  // FAM Initialization?
+  /*
+   * The frontend does not handle 0-sized arrays
+   * properly, making that FAM static direct initialization
+   * such as: FAM f = {1, {}}
+   * creates a typecast from an ADD into an ARRAY.
+   * In future we should properly handle this case in the
+   * frontend */
+  if(is_add2t(cast.from) && is_array_type(cast.type))
+  {
+    // Should be an empty array;
+    const expr2tc &zero = gen_zero(cast.type);
+    return convert_ast(zero);
+  }
 
   if(is_pointer_type(cast.from))
     return convert_typecast_from_ptr(cast);

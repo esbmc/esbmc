@@ -74,8 +74,8 @@ smt_convt::smt_convt(
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 
-  members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
-  members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
+  members.push_back(get_uint_type(config.ansi_c.pointer_width));
+  members.push_back(get_uint_type(config.ansi_c.pointer_width));
   names.emplace_back("pointer_object");
   names.emplace_back("pointer_offset");
 
@@ -92,8 +92,8 @@ smt_convt::smt_convt(
 
   members.clear();
   names.clear();
-  members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
-  members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
+  members.push_back(get_uint_type(config.ansi_c.pointer_width));
+  members.push_back(get_uint_type(config.ansi_c.pointer_width));
   names.emplace_back("start");
   names.emplace_back("end");
   tmp = new struct_type2t(members, names, names, "addr_space_type");

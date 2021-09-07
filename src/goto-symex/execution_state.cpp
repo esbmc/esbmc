@@ -223,7 +223,12 @@ void execution_statet::symex_step(reachability_treet &art)
   if(break_insn != 0 && break_insn == instruction.location_number)
   {
 #ifndef _WIN32
+#ifndef __aarch64__
     __asm__("int $3");
+#else
+    msg.error("Can't trap on ARM, sorry");
+    abort();
+#endif
 #else
     msg.error("Can't trap on windows, sorry");
     abort();

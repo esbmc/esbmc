@@ -563,7 +563,7 @@ std::string expr2t::pretty(unsigned int indent) const
 void expr2t::dump() const
 {
   default_message msg;
-  msg.debug((0));
+  msg.debug(pretty(0));
 }
 
 // Map a base type to it's list of names
@@ -669,7 +669,7 @@ expr2tc constant_string2t::to_array() const
   std::vector<expr2tc> contents;
   unsigned int length = value.as_string().size(), i;
 
-  type2tc type = type_pool.get_uint8();
+  type2tc type = get_uint8_type();
 
   for(i = 0; i < length; i++)
   {
@@ -708,183 +708,6 @@ const expr2tc &object_descriptor2t::get_root_object() const
       return *tmp;
   } while(1);
 }
-
-type_poolt::type_poolt()
-{
-  // This space is deliberately left blank
-}
-
-type_poolt::type_poolt(bool)
-{
-  bool_type = type2tc(new bool_type2t());
-  empty_type = type2tc(new empty_type2t());
-
-  // Create some int types.
-  type2tc ubv8(new unsignedbv_type2t(8));
-  type2tc ubv16(new unsignedbv_type2t(16));
-  type2tc ubv32(new unsignedbv_type2t(32));
-  type2tc ubv64(new unsignedbv_type2t(64));
-  type2tc sbv8(new signedbv_type2t(8));
-  type2tc sbv16(new signedbv_type2t(16));
-  type2tc sbv32(new signedbv_type2t(32));
-  type2tc sbv64(new signedbv_type2t(64));
-
-  unsignedbv_map[unsignedbv_typet(8)] = ubv8;
-  unsignedbv_map[unsignedbv_typet(16)] = ubv16;
-  unsignedbv_map[unsignedbv_typet(32)] = ubv32;
-  unsignedbv_map[unsignedbv_typet(64)] = ubv64;
-  signedbv_map[signedbv_typet(8)] = sbv8;
-  signedbv_map[signedbv_typet(16)] = sbv16;
-  signedbv_map[signedbv_typet(32)] = sbv32;
-  signedbv_map[signedbv_typet(64)] = sbv64;
-
-  uint8 = &unsignedbv_map[unsignedbv_typet(8)];
-  uint16 = &unsignedbv_map[unsignedbv_typet(16)];
-  uint32 = &unsignedbv_map[unsignedbv_typet(32)];
-  uint64 = &unsignedbv_map[unsignedbv_typet(64)];
-  int8 = &signedbv_map[signedbv_typet(8)];
-  int16 = &signedbv_map[signedbv_typet(16)];
-  int32 = &signedbv_map[signedbv_typet(32)];
-  int64 = &signedbv_map[signedbv_typet(64)];
-}
-
-type_poolt &type_poolt::operator=(type_poolt const &ref)
-{
-  bool_type = ref.bool_type;
-  empty_type = ref.empty_type;
-  struct_map = ref.struct_map;
-  union_map = ref.union_map;
-  array_map = ref.array_map;
-  pointer_map = ref.pointer_map;
-  unsignedbv_map = ref.unsignedbv_map;
-  signedbv_map = ref.signedbv_map;
-  fixedbv_map = ref.fixedbv_map;
-  floatbv_map = ref.floatbv_map;
-  string_map = ref.string_map;
-  code_map = ref.code_map;
-
-  // Re-establish some pointers
-  uint8 = &unsignedbv_map[unsignedbv_typet(8)];
-  uint16 = &unsignedbv_map[unsignedbv_typet(16)];
-  uint32 = &unsignedbv_map[unsignedbv_typet(32)];
-  uint64 = &unsignedbv_map[unsignedbv_typet(64)];
-  int8 = &signedbv_map[signedbv_typet(8)];
-  int16 = &signedbv_map[signedbv_typet(16)];
-  int32 = &signedbv_map[signedbv_typet(32)];
-  int64 = &signedbv_map[signedbv_typet(64)];
-
-  return *this;
-}
-
-// XXX investigate performance implications of this cache
-static const type2tc &
-get_type_from_pool(const typet &val, std::map<typet, type2tc> &)
-{
-#if 0
-  std::map<const typet, type2tc>::const_iterator it = map.find(val);
-  if (it != map.end())
-    return it->second;
-#endif
-
-  type2tc new_type;
-  real_migrate_type(val, new_type);
-#if 0
-  map[val] = new_type;
-  return map[val];
-#endif
-  return *(new type2tc(new_type));
-}
-
-const type2tc &type_poolt::get_struct(const typet &val)
-{
-  return get_type_from_pool(val, struct_map);
-}
-
-const type2tc &type_poolt::get_union(const typet &val)
-{
-  return get_type_from_pool(val, union_map);
-}
-
-const type2tc &type_poolt::get_array(const typet &val)
-{
-  return get_type_from_pool(val, array_map);
-}
-
-const type2tc &type_poolt::get_pointer(const typet &val)
-{
-  return get_type_from_pool(val, pointer_map);
-}
-
-const type2tc &type_poolt::get_unsignedbv(const typet &val)
-{
-  return get_type_from_pool(val, unsignedbv_map);
-}
-
-const type2tc &type_poolt::get_signedbv(const typet &val)
-{
-  return get_type_from_pool(val, signedbv_map);
-}
-
-const type2tc &type_poolt::get_fixedbv(const typet &val)
-{
-  return get_type_from_pool(val, fixedbv_map);
-}
-
-const type2tc &type_poolt::get_floatbv(const typet &val)
-{
-  return get_type_from_pool(val, floatbv_map);
-}
-
-const type2tc &type_poolt::get_string(const typet &val)
-{
-  return get_type_from_pool(val, string_map);
-}
-
-const type2tc &type_poolt::get_symbol(const typet &val)
-{
-  return get_type_from_pool(val, symbol_map);
-}
-
-const type2tc &type_poolt::get_code(const typet &val)
-{
-  return get_type_from_pool(val, code_map);
-}
-
-const type2tc &type_poolt::get_uint(unsigned int size)
-{
-  switch(size)
-  {
-  case 8:
-    return get_uint8();
-  case 16:
-    return get_uint16();
-  case 32:
-    return get_uint32();
-  case 64:
-    return get_uint64();
-  default:
-    return get_unsignedbv(unsignedbv_typet(size));
-  }
-}
-
-const type2tc &type_poolt::get_int(unsigned int size)
-{
-  switch(size)
-  {
-  case 8:
-    return get_int8();
-  case 16:
-    return get_int16();
-  case 32:
-    return get_int32();
-  case 64:
-    return get_int64();
-  default:
-    return get_signedbv(signedbv_typet(size));
-  }
-}
-
-type_poolt type_pool;
 
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr
