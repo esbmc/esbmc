@@ -33,7 +33,7 @@ jobs:
        run: cd build && make -j3 && cmake --install .
      - uses: actions/upload-artifact@v1
        with:
-         name: release-linux
+         name: release-arm
          path: ./release
      - name: Run tests
        continue-on-error: true
