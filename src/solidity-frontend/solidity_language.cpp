@@ -35,17 +35,19 @@ bool solidity_languaget::parse(
 
   // Process AST json file
   std::ifstream ast_json_file_stream(path);
-  std::string new_line, sol_name, ast_json_content;
+  std::string new_line, ast_json_content;
 
   printf("\n### ast_json_file_stream processing:... \n");
-  while (getline(ast_json_file_stream, new_line)) {
+  while (getline(ast_json_file_stream, new_line))
+  {
     if (new_line.find(".sol =======") != std::string::npos) {
       printf("found .sol ====== , breaking ...\n");
-      sol_name = Sif::Utils::substr_by_edge(new_line, "======= ", " =======");
       break;
     }
   }
-  while (getline(ast_json_file_stream, new_line)) { // file pointer continues from "=== *.sol ==="
+  while (getline(ast_json_file_stream, new_line))
+  {
+    // file pointer continues from "=== *.sol ==="
     //printf("new_line: %s\n", new_line.c_str());
     if (new_line.find(".sol =======") == std::string::npos)
     {

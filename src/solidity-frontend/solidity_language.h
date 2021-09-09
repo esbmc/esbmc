@@ -16,7 +16,6 @@ Module: Solidity AST module
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include <libUtils/Utils.hpp>
 #include <nlohmann/json.hpp>
 
 // Forward dec, to avoid bringing in clang headers
