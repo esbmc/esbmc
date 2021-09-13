@@ -92,8 +92,6 @@ bool clang_c_convertert::convert_top_level_decl()
 // but then get_decl_expr is called instead
 bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 {
-  static int call_times = 0; // TODO: remove debug
-
   new_expr = code_skipt();
 
   switch(decl.getKind())
@@ -101,8 +99,6 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // Label declaration
   case clang::Decl::Label:
   {
-    printf("	@@got Decl: clang::Decl::Label, ");
-    printf("call_times=%d\n", call_times++);
     const clang::LabelDecl &ld = static_cast<const clang::LabelDecl &>(decl);
 
     exprt label("label", empty_typet());
@@ -116,8 +112,6 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // Declaration of variables
   case clang::Decl::Var:
   {
-    printf("	@@got Decl: clang::Decl::Var\n");
-    printf("call_times=%d\n", call_times++);
     const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(decl);
     return get_var(vd, new_expr);
   }
@@ -125,8 +119,6 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // Declaration of function's parameter
   case clang::Decl::ParmVar:
   {
-    printf("	@@got Decl: clang::Decl::ParmVar\n");
-    printf("call_times=%d\n", call_times++);
     const clang::ParmVarDecl &param =
       static_cast<const clang::ParmVarDecl &>(decl);
     return get_function_params(param, new_expr);
@@ -135,8 +127,6 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // Declaration of functions
   case clang::Decl::Function:
   {
-    printf("	@@got Decl: clang::Decl::Function\n");
-    printf("call_times=%d\n", call_times++);
     const clang::FunctionDecl &fd =
       static_cast<const clang::FunctionDecl &>(decl);
 
@@ -150,8 +140,6 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // Field inside a struct/union
   case clang::Decl::Field:
   {
-    printf("	@@got Decl: clang::Decl::Field\n");
-    printf("call_times=%d\n", call_times++);
     const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(decl);
 
     typet t;
@@ -179,8 +167,6 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
   case clang::Decl::IndirectField:
   {
-    printf("	@@got Decl: clang::Decl::IndirectField\n");
-    printf("call_times=%d\n", call_times++);
     const clang::IndirectFieldDecl &fd =
       static_cast<const clang::IndirectFieldDecl &>(decl);
 
@@ -210,8 +196,6 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // A record is a struct/union/class/enum
   case clang::Decl::Record:
   {
-    printf("	@@got Decl: clang::Decl::Record\n");
-    printf("call_times=%d\n", call_times++);
     const clang::RecordDecl &record =
       static_cast<const clang::RecordDecl &>(decl);
 
@@ -223,8 +207,6 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
   case clang::Decl::TranslationUnit:
   {
-    printf("	@@got Decl: clang::Decl::TranslationUnit\n");
-    printf("call_times=%d\n", call_times++);
     const clang::TranslationUnitDecl &tu =
       static_cast<const clang::TranslationUnitDecl &>(decl);
 
@@ -244,46 +226,22 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // This is an empty declaration. An lost semicolon on the
   // code is an empty declaration
   case clang::Decl::Empty:
-  {
-    printf("	@@got Decl: clang::Decl::Empty\n");
-    printf("call_times=%d\n", call_times++);
-    break;
-  }
 
   // If this fails, clang will not generate the ASTs, we can
   // safely skip it
   case clang::Decl::StaticAssert:
-  {
-    printf("	@@got Decl: clang::Decl::StaticAssert\n");
-    printf("call_times=%d\n", call_times++);
-    break;
-  }
 
   // Enum declaration and values, we can safely skip them as
   // any occurrence of those will be converted to int type (enum)
   // or integer value (enum constant)
   case clang::Decl::Enum:
-  {
-    printf("	@@got Decl: clang::Decl::Enum\n");
-    printf("call_times=%d\n", call_times++);
-    break;
-  }
   case clang::Decl::EnumConstant:
-  {
-    printf("	@@got Decl: clang::Decl::EnumConstant\n");
-    printf("call_times=%d\n", call_times++);
-    break;
-  }
 
   // Typedef declaration, we can ignore this; clang will give us
   // the underlying type defined by the typedef, so we don't need
   // to add them to the context
   case clang::Decl::Typedef:
-  {
-    printf("	@@got Decl: clang::Decl::Typedef\n");
-    printf("call_times=%d\n", call_times++);
     break;
-  }
 
   default:
     std::ostringstream oss;
@@ -464,7 +422,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     return true;
 
   // Check if we annotated it to be have an infinity size
-  if(vd.hasAttrs()) // false for _x, _y and sum. Same for local i, and array a
+  if(vd.hasAttrs())
   {
     for(auto const &attr : vd.getAttrs())
     {
@@ -479,17 +437,16 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     }
   }
 
-  std::string id, name; // For global _x, id=c:@_x. For i, id=c:overflow_2_nondet.c@55@F@nondet@i
+  std::string id, name;
   get_decl_name(vd, name, id);
 
   locationt location_begin;
   get_location_from_decl(vd, location_begin);
 
-  std::string debug_modulename = get_modulename_from_path(location_begin.file().as_string()); // For local declaration, it's overflow_2_nondet
   symbolt symbol;
   get_default_symbol(
     symbol,
-    debug_modulename,
+    get_modulename_from_path(location_begin.file().as_string()),
     t,
     name,
     id,
@@ -502,7 +459,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
-  if(symbol.static_lifetime && !symbol.is_extern && !vd.hasInit()) // for local decl i, it's false && true && true
+  if(symbol.static_lifetime && !symbol.is_extern && !vd.hasInit())
   {
     // Initialize with zero value, if the symbol has initial value,
     // it will be add later on this method
@@ -537,19 +494,16 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
 bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 {
-  static int num_func_decl = 0; // TODO: remove debug
-  printf("\t @ num_func_decl=%d\n", num_func_decl++);
-
   // Don't convert if clang thinks that the functions was implicitly converted
-  if(fd.isImplicit()) // for func_overflow/func_nondet, it returns false
+  if(fd.isImplicit())
     return false;
 
   // If the function is not defined but this is not the definition, skip it
-  if(fd.isDefined() && !fd.isThisDeclarationADefinition()) // for func_overflow, it's (true && !true).
+  if(fd.isDefined() && !fd.isThisDeclarationADefinition())
     return false;
 
   // Save old_functionDecl, to be restored at the end of this method
-  const clang::FunctionDecl *old_functionDecl = current_functionDecl; // for func_overflow, current_functionDecl == nullptr; old_functionDecl == nullptr
+  const clang::FunctionDecl *old_functionDecl = current_functionDecl;
   current_functionDecl = &fd;
 
   // TODO: use fd.isMain to flag and check the flag on clang_c_adjust_expr
@@ -566,23 +520,22 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
   if(get_type(fd.getReturnType(), type.return_type()))
     return true;
 
-  if(fd.isVariadic()) // for func_overflow, it's false
+  if(fd.isVariadic())
     type.make_ellipsis();
 
-  if(fd.isInlined()) // for func_overflow, it's false
+  if(fd.isInlined())
     type.inlined(true);
 
   locationt location_begin;
   get_location_from_decl(fd, location_begin);
 
-  std::string id, name; // __ESBMC_assume and c:@F@__ESBMC_assume
+  std::string id, name;
   get_decl_name(fd, name, id);
 
   symbolt symbol;
-  std::string debug_modulename = get_modulename_from_path(location_begin.file().as_string()); // for func_overflow, it's just the file name "overflow_2"
   get_default_symbol(
     symbol,
-    debug_modulename,
+    get_modulename_from_path(location_begin.file().as_string()),
     type,
     name,
     id,
@@ -597,36 +550,33 @@ bool clang_c_convertert::get_function(const clang::FunctionDecl &fd, exprt &)
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
-  unsigned num_param_decl = 0;
-  for(auto const &pdecl : fd.parameters()) // for func_overflow, it does NOT have any args
+  for(auto const &pdecl : fd.parameters())
   {
     code_typet::argumentt param;
     if(get_function_params(*pdecl, param))
       return true;
 
     type.arguments().push_back(param);
-    ++num_param_decl;
   }
-  printf("  @@@ number of param decls: %u\n", num_param_decl);
 
   // Apparently, if the type has no arguments, we assume ellipsis
-  if(!type.arguments().size()) // for func_overflow, size is 0. for __ESBMC_assume, type.arguments().size() == 1
+  if(!type.arguments().size())
     type.make_ellipsis();
 
   added_symbol.type = type;
 
   // We need: a type, a name, and an optional body
-  if(fd.hasBody()) // for func_overflow, this returns true. for __ESBMC_assume, fd.hasBody() return false
+  if(fd.hasBody())
   {
     exprt body_exprt;
-    if(get_expr(*fd.getBody(), body_exprt)) // Stmt* clang::FunctionDecl::getBody ( 		) const; For Solidity, it's fd_tracker's decl_json["body"]["statement"]
+    if(get_expr(*fd.getBody(), body_exprt))
       return true;
 
     added_symbol.value = body_exprt;
   }
 
   // Restore old functionDecl
-  current_functionDecl = old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
+  current_functionDecl = old_functionDecl;
 
   return false;
 }
@@ -646,12 +596,12 @@ bool clang_c_convertert::get_function_params(
     param_type.remove("#constant");
   }
 
-  std::string id, name; // for __ESBMC_assume, both id and name will be empty because its decl does not have a parameter name!
+  std::string id, name;
   get_decl_name(pd, name, id);
 
   param = code_typet::argumentt();
   param.type() = param_type;
-  param.cmt_base_name(name); // for __ESBMC_assume, this name refers to the param name. Name is still "".
+  param.cmt_base_name(name);
 
   // If the name is empty, this is an function definition that we don't
   // need to worry about as the function params name's will be defined
@@ -758,7 +708,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     // Special case, pointers to structs/unions/classes must not
     // have a copy of it, but a reference to the type
     // TODO: classes
-    if(sub_type.is_struct() || sub_type.is_union()) // for "assert(sum > 100)", false || false
+    if(sub_type.is_struct() || sub_type.is_union())
     {
       struct_union_typet t = to_struct_union_type(sub_type);
       sub_type = symbol_typet("tag-" + t.tag().as_string());
@@ -1215,7 +1165,6 @@ bool clang_c_convertert::get_builtin_type(
 
 bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
-  static int call_expr_times = 0; // TODO: remove debug
   locationt location;
   get_start_location_from_stmt(stmt, location);
 
@@ -1233,8 +1182,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // condition
   case clang::Stmt::OpaqueValueExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::OpaqueValueExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::OpaqueValueExpr &opaque_expr =
       static_cast<const clang::OpaqueValueExpr &>(stmt);
 
@@ -1247,8 +1194,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // Reference to a declared object, such as functions or variables
   case clang::Stmt::DeclRefExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::DeclRefExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::DeclRefExpr &decl =
       static_cast<const clang::DeclRefExpr &>(stmt);
 
@@ -1263,8 +1208,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // Predefined MACROS as __func__ or __PRETTY_FUNCTION__
   case clang::Stmt::PredefinedExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::PredefinedExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::PredefinedExpr &pred_expr =
       static_cast<const clang::PredefinedExpr &>(stmt);
 
@@ -1277,8 +1220,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // An integer value
   case clang::Stmt::IntegerLiteralClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::IntegerLiteralClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::IntegerLiteral &integer_literal =
       static_cast<const clang::IntegerLiteral &>(stmt);
 
@@ -1291,8 +1232,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // A character such 'a'
   case clang::Stmt::CharacterLiteralClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::CharacterLiteralClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::CharacterLiteral &char_literal =
       static_cast<const clang::CharacterLiteral &>(stmt);
 
@@ -1305,8 +1244,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // A float value
   case clang::Stmt::FloatingLiteralClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::FloatingLiteralClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::FloatingLiteral &floating_literal =
       static_cast<const clang::FloatingLiteral &>(stmt);
 
@@ -1319,8 +1256,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // A string
   case clang::Stmt::StringLiteralClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::StringLiteralClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::StringLiteral &string_literal =
       static_cast<const clang::StringLiteral &>(stmt);
 
@@ -1334,8 +1269,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // now, and check its subexpression
   case clang::Stmt::ParenExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::ParenExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::ParenExpr &p = static_cast<const clang::ParenExpr &>(stmt);
 
     if(get_expr(*p.getSubExpr(), new_expr))
@@ -1347,8 +1280,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // An unary operator such as +a, -a, *a or &a
   case clang::Stmt::UnaryOperatorClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::UnaryOperatorClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::UnaryOperator &uniop =
       static_cast<const clang::UnaryOperator &>(stmt);
 
@@ -1361,8 +1292,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // An array subscript operation, such as a[1]
   case clang::Stmt::ArraySubscriptExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::ArraySubscriptExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::ArraySubscriptExpr &arr =
       static_cast<const clang::ArraySubscriptExpr &>(stmt);
 
@@ -1371,7 +1300,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     exprt array;
-    if(get_expr(*arr.getBase(), array)) // For array a, it's wrapped in a ImplicitCastExprClass of the type ArrayToPointerDecay
+    if(get_expr(*arr.getBase(), array))
       return true;
 
     exprt pos;
@@ -1385,8 +1314,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // Support for __builtin_offsetof();
   case clang::Stmt::OffsetOfExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::OffsetOfExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::OffsetOfExpr &offset =
       static_cast<const clang::OffsetOfExpr &>(stmt);
 
@@ -1412,8 +1339,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::UnaryExprOrTypeTraitExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::UnaryExprOrTypeTraitExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::UnaryExprOrTypeTraitExpr &unary =
       static_cast<const clang::UnaryExprOrTypeTraitExpr &>(stmt);
 
@@ -1457,8 +1382,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // adjust_expr::adjust_side_effect_function_call
   case clang::Stmt::CallExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::CallExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::CallExpr &function_call =
       static_cast<const clang::CallExpr &>(stmt);
 
@@ -1468,7 +1391,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if(get_expr(*callee, callee_expr))
       return true;
 
-    typet type; // callee's return type as in -CallExpr 0x7fa7c30602b8 <line:45:3, col:19> 'int'
+    typet type;
     if(get_type(function_call.getType(), type))
       return true;
 
@@ -1476,7 +1399,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     call.function() = callee_expr;
     call.type() = type;
 
-    unsigned num_args = 0;
     for(const clang::Expr *arg : function_call.arguments())
     {
       exprt single_arg;
@@ -1484,9 +1406,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         return true;
 
       call.arguments().push_back(single_arg);
-      ++num_args;
     }
-    printf("  @@ num_args=%u\n", num_args);
 
     new_expr = call;
     break;
@@ -1494,8 +1414,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::MemberExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::MemberExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::MemberExpr &member =
       static_cast<const clang::MemberExpr &>(stmt);
 
@@ -1513,8 +1431,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::CompoundLiteralExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::CompoundLiteralExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::CompoundLiteralExpr &compound =
       static_cast<const clang::CompoundLiteralExpr &>(stmt);
 
@@ -1528,8 +1444,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::AddrLabelExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::AddrLabelExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::AddrLabelExpr &addrlabelExpr =
       static_cast<const clang::AddrLabelExpr &>(stmt);
 
@@ -1543,8 +1457,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::StmtExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::StmtExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::StmtExpr &stmtExpr =
       static_cast<const clang::StmtExpr &>(stmt);
 
@@ -1565,8 +1477,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::GNUNullExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::GNUNullExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::GNUNullExpr &gnun =
       static_cast<const clang::GNUNullExpr &>(stmt);
 
@@ -1583,8 +1493,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   case clang::Stmt::ImplicitCastExprClass:
   case clang::Stmt::CStyleCastExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::ImplicitCastExprClass or CStyleCastExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::CastExpr &cast = static_cast<const clang::CastExpr &>(stmt);
 
     if(get_cast_expr(cast, new_expr))
@@ -1597,8 +1505,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   case clang::Stmt::BinaryOperatorClass:
   case clang::Stmt::CompoundAssignOperatorClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::BinaryOperatorClass or CompoundAssignOperatorClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::BinaryOperator &binop =
       static_cast<const clang::BinaryOperator &>(stmt);
 
@@ -1611,8 +1517,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // This is the ternary if
   case clang::Stmt::ConditionalOperatorClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::ConditionalOperatorClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::ConditionalOperator &ternary_if =
       static_cast<const clang::ConditionalOperator &>(stmt);
 
@@ -1642,8 +1546,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // This is the gcc's ternary if extension
   case clang::Stmt::BinaryConditionalOperatorClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::BinaryConditionalOperatorClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::BinaryConditionalOperator &ternary_if =
       static_cast<const clang::BinaryConditionalOperator &>(stmt);
 
@@ -1669,8 +1571,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // An initialize statement, such as int a[3] = {1, 2, 3}
   case clang::Stmt::InitListExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::CompoundAssignOperatorClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::InitListExpr &init_stmt =
       static_cast<const clang::InitListExpr &>(stmt);
 
@@ -1734,8 +1634,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::ImplicitValueInitExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::ImplicitValueInitExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::ImplicitValueInitExpr &init_stmt =
       static_cast<const clang::ImplicitValueInitExpr &>(stmt);
 
@@ -1749,8 +1647,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::GenericSelectionExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::GenericSelectionExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::GenericSelectionExpr &gen =
       static_cast<const clang::GenericSelectionExpr &>(stmt);
 
@@ -1762,8 +1658,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::VAArgExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::VAArgExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::VAArgExpr &vaa = static_cast<const clang::VAArgExpr &>(stmt);
 
     exprt expr;
@@ -1783,8 +1677,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::ConstantExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::ConstantExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::ConstantExpr &c =
       static_cast<const clang::ConstantExpr &>(stmt);
 
@@ -1803,14 +1695,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // allow declarations like int a,b;
   case clang::Stmt::DeclStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::DeclStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::DeclStmt &decl = static_cast<const clang::DeclStmt &>(stmt);
 
     const auto &declgroup = decl.getDeclGroup();
 
     codet decls("decl-block");
-    unsigned ctr = 0;
     for(auto it : declgroup)
     {
       exprt single_decl;
@@ -1818,9 +1707,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         return true;
 
       decls.operands().push_back(single_decl);
-      ++ctr;
     }
-    printf(" \t @@@ DeclStmt group has %u decls\n", ctr);
 
     new_expr = decls;
     break;
@@ -1829,13 +1716,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // A compound statement is a scope/block
   case clang::Stmt::CompoundStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::CompoundStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::CompoundStmt &compound_stmt =
       static_cast<const clang::CompoundStmt &>(stmt);
 
     code_blockt block;
-    unsigned ctr = 0;
     for(auto const &stmt : compound_stmt.body())
     {
       exprt statement;
@@ -1844,9 +1728,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
       convert_expression_to_code(statement);
       block.operands().push_back(statement);
-      ++ctr;
     }
-    printf(" \t @@@ CompoundStmt has %u statements\n", ctr);
 
     // Set the end location for blocks
     locationt location_end;
@@ -1862,8 +1744,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // construct it as a label
   case clang::Stmt::CaseStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::CaseStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::CaseStmt &case_stmt =
       static_cast<const clang::CaseStmt &>(stmt);
 
@@ -1889,8 +1769,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // as a label, the difference is that we set default to true
   case clang::Stmt::DefaultStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::DefaultStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::DefaultStmt &default_stmt =
       static_cast<const clang::DefaultStmt &>(stmt);
 
@@ -1911,8 +1789,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // A label on the program
   case clang::Stmt::LabelStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::LabelStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::LabelStmt &label_stmt =
       static_cast<const clang::LabelStmt &>(stmt);
 
@@ -1935,12 +1811,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // We always to try to cast its condition to bool
   case clang::Stmt::IfStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::IfStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::IfStmt &ifstmt = static_cast<const clang::IfStmt &>(stmt);
 
     const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
-    if(cond_expr == nullptr) // for array_bound example, this is true
+    if(cond_expr == nullptr)
       cond_expr = ifstmt.getCond();
 
     exprt cond;
@@ -1975,8 +1849,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // A switch statement.
   case clang::Stmt::SwitchStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::SwitchStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::SwitchStmt &switch_stmt =
       static_cast<const clang::SwitchStmt &>(stmt);
 
@@ -2004,8 +1876,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // is generated for it. We always try to cast its condition to bool
   case clang::Stmt::WhileStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::WhileStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::WhileStmt &while_stmt =
       static_cast<const clang::WhileStmt &>(stmt);
 
@@ -2035,8 +1905,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // is generated for it. We always try to cast its condition to bool
   case clang::Stmt::DoStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::DoStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::DoStmt &do_stmt = static_cast<const clang::DoStmt &>(stmt);
 
     exprt cond;
@@ -2063,11 +1931,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // converting
   case clang::Stmt::ForStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::ForStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::ForStmt &for_stmt = static_cast<const clang::ForStmt &>(stmt);
 
-    codet init = code_skipt(); // code_skipt() means no init in for-stmt, e.g. for (; i< 10; ++i)
+    codet init = code_skipt();
     const clang::Stmt *init_stmt = for_stmt.getInit();
     if(init_stmt)
       if(get_expr(*init_stmt, init))
@@ -2111,8 +1977,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // a goto instruction to a label
   case clang::Stmt::GotoStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::GotoStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::GotoStmt &goto_stmt =
       static_cast<const clang::GotoStmt &>(stmt);
 
@@ -2125,8 +1989,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::IndirectGotoStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::IndirectGotoStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::IndirectGotoStmt &goto_stmt =
       static_cast<const clang::IndirectGotoStmt &>(stmt);
 
@@ -2163,23 +2025,17 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   // A continue statement
   case clang::Stmt::ContinueStmtClass:
-    printf("	@@@ got Expr: clang::Stmt::ContinueStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     new_expr = code_continuet();
     break;
 
   // A break statement
   case clang::Stmt::BreakStmtClass:
-    printf("	@@@ got Expr: clang::Stmt::BreakStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     new_expr = code_breakt();
     break;
 
   // A return statement
   case clang::Stmt::ReturnStmtClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::ReturnStmtClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::ReturnStmt &ret = static_cast<const clang::ReturnStmt &>(stmt);
 
     if(!current_functionDecl)
@@ -2199,7 +2055,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     code_returnt ret_expr;
-    if(ret.getRetValue()) // for local "i" in nondet(), it returns a valid pointer (or ref?)
+    if(ret.getRetValue())
     {
       const clang::Expr &retval = *ret.getRetValue();
 
@@ -2218,8 +2074,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // Atomic instructions
   case clang::Stmt::AtomicExprClass:
   {
-    printf("	@@@ got Expr: clang::Stmt::AtomicExprClass, ");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     const clang::AtomicExpr &atm = static_cast<const clang::AtomicExpr &>(stmt);
 
     if(get_atomic_expr(atm, new_expr))
@@ -2235,8 +2089,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // GCC or MS Assembly instruction. We ignore them
   case clang::Stmt::GCCAsmStmtClass:
   case clang::Stmt::MSAsmStmtClass:
-    printf("	@@@ got Expr: clang::Stmt::NullStmtClass, GCCAsmStmtClass or MSAsmStmtClass");
-    printf("  call_expr_times=%d\n", call_expr_times++);
     new_expr = code_skipt();
     break;
 
@@ -2261,7 +2113,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 {
   // Special case for Enums, we return the constant instead of a reference
   // to the name
-  if(const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d)) // "_x = 100;" and "sum = _x + _y", it does not use this block. Same for "assert(sum > 100);"
+  if(const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d))
   {
     // For enum constants, we get their value directly
     new_expr = constant_exprt(
@@ -2275,7 +2127,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   if(const auto *nd = llvm::dyn_cast<clang::ValueDecl>(&d))
   {
     // Everything else should be a value decl
-    std::string name, id; // for "_x = 100;", id="c:@_x" and name="_x".
+    std::string name, id;
     get_decl_name(*nd, name, id);
 
     typet type;
@@ -2308,10 +2160,10 @@ bool clang_c_convertert::get_cast_expr(
     return true;
 
   typet type;
-  if(get_type(cast.getType(), type)) // For array a, this is a Pointer type!
+  if(get_type(cast.getType(), type))
     return true;
 
-  switch(cast.getCastKind()) // "_x=100;" it returns CK_IntegralCast. For "assert(sum > 100)", it returns "CK_IntegralCast"
+  switch(cast.getCastKind())
   {
   case clang::CK_ArrayToPointerDecay:
   case clang::CK_FunctionToPointerDecay:
@@ -2464,10 +2316,9 @@ bool clang_c_convertert::get_binary_operator_expr(
   if(get_type(binop.getType(), t))
     return true;
 
-  switch(binop.getOpcode()) // for "_x=100;", it returns "BO_Assign"
+  switch(binop.getOpcode())
   {
   case clang::BO_Add:
-    printf("  @@@ got binop.getOpcode: clang::BO_Add\n");
     if(t.is_floatbv())
       new_expr = exprt("ieee_add", t);
     else
@@ -2475,7 +2326,6 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_Sub:
-    printf("  @@@ got binop.getOpcode: clang::BO_Sub\n");
     if(t.is_floatbv())
       new_expr = exprt("ieee_sub", t);
     else
@@ -2483,7 +2333,6 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_Mul:
-    printf("  @@@ got binop.getOpcode: clang::BO_Mul\n");
     if(t.is_floatbv())
       new_expr = exprt("ieee_mul", t);
     else
@@ -2491,7 +2340,6 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_Div:
-    printf("  @@@ got binop.getOpcode: clang::BO_Div\n");
     if(t.is_floatbv())
       new_expr = exprt("ieee_div", t);
     else
@@ -2499,77 +2347,62 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_Shl:
-    printf("  @@@ got binop.getOpcode: clang::BO_Shl\n");
     new_expr = exprt("shl", t);
     break;
 
   case clang::BO_Shr:
-    printf("  @@@ got binop.getOpcode: clang::BO_Shr\n");
     new_expr = exprt("shr", t);
     break;
 
   case clang::BO_Rem:
-    printf("  @@@ got binop.getOpcode: clang::BO_Rem\n");
     new_expr = exprt("mod", t);
     break;
 
   case clang::BO_And:
-    printf("  @@@ got binop.getOpcode: clang::BO_And\n");
     new_expr = exprt("bitand", t);
     break;
 
   case clang::BO_Xor:
-    printf("  @@@ got binop.getOpcode: clang::BO_Xor\n");
     new_expr = exprt("bitxor", t);
     break;
 
   case clang::BO_Or:
-    printf("  @@@ got binop.getOpcode: clang::BO_Or\n");
     new_expr = exprt("bitor", t);
     break;
 
   case clang::BO_LT:
-    printf("  @@@ got binop.getOpcode: clang::BO_LT\n");
     new_expr = exprt("<", t);
     break;
 
   case clang::BO_GT:
-    printf("  @@@ got binop.getOpcode: clang::BO_GT\n");
     new_expr = exprt(">", t);
     break;
 
   case clang::BO_LE:
-    printf("  @@@ got binop.getOpcode: clang::BO_LE\n");
     new_expr = exprt("<=", t);
     break;
 
   case clang::BO_GE:
-    printf("  @@@ got binop.getOpcode: clang::BO_GE\n");
     new_expr = exprt(">=", t);
     break;
 
   case clang::BO_EQ:
-    printf("  @@@ got binop.getOpcode: clang::BO_EQ\n");
     new_expr = exprt("=", t);
     break;
 
   case clang::BO_NE:
-    printf("  @@@ got binop.getOpcode: clang::BO_NE\n");
     new_expr = exprt("notequal", t);
     break;
 
   case clang::BO_LAnd:
-    printf("  @@@ got binop.getOpcode: clang::BO_LAnd\n");
     new_expr = exprt("and", t);
     break;
 
   case clang::BO_LOr:
-    printf("  @@@ got binop.getOpcode: clang::BO_LOr\n");
     new_expr = exprt("or", t);
     break;
 
   case clang::BO_Assign:
-    printf("  @@@ got binop.getOpcode: clang::BO_Assign\n");
     // If we use code_assignt, it will reserve two operands,
     // and the copy_to_operands method call at the end of
     // this method will put lhs and rhs in positions 2 and 3,
@@ -2578,7 +2411,6 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_Comma:
-    printf("  @@@ got binop.getOpcode: clang::BO_Comma\n");
     new_expr = exprt("comma", t);
     break;
 
@@ -2907,8 +2739,8 @@ void clang_c_convertert::get_default_symbol(
 static std::string get_decl_name(const clang::NamedDecl &nd)
 {
   if(const clang::IdentifierInfo *identifier = nd.getIdentifier())
-    return identifier->getName().str(); // for __ESBMC_assume, it just return "__ESBMC_assume"
-                                        // for _x, it just return "_x". For func_overflow, it's just "func_overflow"
+    return identifier->getName().str();
+
   std::string name;
   llvm::raw_string_ostream rso(name);
   nd.printName(rso);
@@ -2933,7 +2765,7 @@ void clang_c_convertert::get_decl_name(
 {
   id = name = ::get_decl_name(nd);
 
-  switch(nd.getKind()) // it's our declClass in Solidity! same as being used in get_decl
+  switch(nd.getKind())
   {
   // ParamVarDecl, we can safely ignore them
   case clang::Decl::ParmVar:
@@ -2973,7 +2805,7 @@ void clang_c_convertert::get_decl_name(
   }
 
   case clang::Decl::Var:
-    if(name.empty()) // for _x and local decl i, it returns false. The name is populated at the beginning of this function
+    if(name.empty())
     {
       // Anonymous variable, generate a name based on the type,
       // see regression union1
@@ -2985,7 +2817,7 @@ void clang_c_convertert::get_decl_name(
     break;
 
   default:
-    if(name.empty()) // for func_overflow, it's false. name is "func_overflow"
+    if(name.empty())
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
@@ -2998,7 +2830,7 @@ void clang_c_convertert::get_decl_name(
   clang::SmallString<128> DeclUSR;
   if(!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    id = DeclUSR.str().str(); // for __ESBMC_assume, it returns "c:@F@__ESBMC_assume"
+    id = DeclUSR.str().str();
     return;
   }
 
@@ -3019,8 +2851,8 @@ void clang_c_convertert::get_start_location_from_stmt(
 
   std::string function_name;
 
-  if(current_functionDecl) // this points to func_overflow
-    function_name = ::get_decl_name(*current_functionDecl); // for func_overflow, name is "func_overflow"
+  if(current_functionDecl)
+    function_name = ::get_decl_name(*current_functionDecl);
 
   clang::PresumedLoc PLoc;
   get_presumed_location(stmt.getSourceRange().getBegin(), PLoc);
@@ -3053,7 +2885,7 @@ void clang_c_convertert::get_location_from_decl(
 
   std::string function_name;
 
-  if(decl.getDeclContext()->isFunctionOrMethod()) // for _x, it returns false. Same for func_overflow decl. NOTE: for local decl i, it returns true!
+  if(decl.getDeclContext()->isFunctionOrMethod())
   {
     const clang::FunctionDecl &funcd =
       static_cast<const clang::FunctionDecl &>(*decl.getDeclContext());
@@ -3062,20 +2894,20 @@ void clang_c_convertert::get_location_from_decl(
   }
 
   clang::PresumedLoc PLoc;
-  get_presumed_location(decl.getSourceRange().getBegin(), PLoc); // populate PLoc. In Solidity, tracker->config() handles it
+  get_presumed_location(decl.getSourceRange().getBegin(), PLoc);
 
-  set_location(PLoc, function_name, location); // for __ESBMC_assume, function_name is still empty after this line.
+  set_location(PLoc, function_name, location);
 }
 
 void clang_c_convertert::get_presumed_location(
   const clang::SourceLocation &loc,
   clang::PresumedLoc &PLoc)
 {
-  if(!sm) // for _x, this statement returns false
+  if(!sm)
     return;
 
   clang::SourceLocation SpellingLoc = sm->getSpellingLoc(loc);
-  PLoc = sm->getPresumedLoc(SpellingLoc); // function to get PLoc
+  PLoc = sm->getPresumedLoc(SpellingLoc);
 }
 
 void clang_c_convertert::set_location(
@@ -3083,16 +2915,16 @@ void clang_c_convertert::set_location(
   std::string &function_name,
   locationt &location)
 {
-  if(PLoc.isInvalid()) // for _x, it returns false
+  if(PLoc.isInvalid())
   {
     location.set_file("<invalid sloc>");
     return;
   }
 
-  location.set_line(PLoc.getLine()); // line number : unsigned signed. For _x, Ploc.getLine() returns 1
-  location.set_file(get_filename_from_path(PLoc.getFilename())); // string : path + file name. For _x, PLoc.getFilename() returns "overflow_2.c"
+  location.set_line(PLoc.getLine());
+  location.set_file(get_filename_from_path(PLoc.getFilename()));
 
-  if(!function_name.empty()) // for _x, this statement returns false. For func_overflow, it's not empty
+  if(!function_name.empty())
     location.set_function(function_name);
 }
 
@@ -3111,7 +2943,7 @@ std::string clang_c_convertert::get_filename_from_path(std::string path)
   if(path.find_last_of('/') != std::string::npos)
     return path.substr(path.find_last_of('/') + 1);
 
-  return path; // for _x, it just returns "overflow_2.c" because the test program is in the same dir as esbmc binary
+  return path;
 }
 
 symbolt *clang_c_convertert::move_symbol_to_context(symbolt &symbol)
