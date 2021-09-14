@@ -10,6 +10,8 @@
 #include <z3_conv.h>
 #include <fmt/format.h>
 #include <fstream>
+#include <stdio.h>
+#include <stdlib.h>
 #include <util/message/default_message.h>
 
 #define new_ast new_solver_ast<z3_smt_ast>
@@ -1244,16 +1246,36 @@ void z3_convt::dump_smt()
     {
       // Add whatever logic is needed.
       // Add sovler specific declarations as well.
-      out << "(set-info :smt-lib-version 2.0) \n";
+      out << "(set-info :smt-lib-version 2.6) \n";
       out << "(set-option :print-success true) \n";
       out << "(set-option :produce-models true) \n";
+      out << "(set-option :opt.priority lex) \n";
+      out << "(set-option :pp-decimal true) \n";
+      out << "; Asserts from ESMBC starts \n";
       out << solver; // All VCC conditions in SMTLIB format.
-      out << "(check-sat) \n";
+      out << "\n\n;;\n\n";
+      out << "; put optimization expression here.\n";
+      out << "; Eg : (maximize (ite c 1 0))\n";
+      out << "; Eg : (minimize obj)\n";
+      out << "(apply (then simplify solve-eqs bit-blast sat)) \n";
+      out << "(check-sat)\n";
+      out << "(get-objectives)\n";
+      out << "(get-model)\n";
+      out << "(exit)\n\n";
     }
   }
+
+  // Z3_ast_vector __z3_assertions = Z3_solver_get_assertions(z3_ctx, solver);
+  // for(unsigned index = 0; index < Z3_ast_vector_size(z3_ctx, __z3_assertions);
+  //     index++)
+  // {
+  //   auto ast = Z3_ast_vector_get(z3_ctx, __z3_assertions, index);
+  //   fprintf(stdout, "Assert : %s\n", Z3_get_string(z3_ctx, ast));
+  // }
+
   // default_message msg;
   // std::ostringstream oss;
-  // oss << solver;
+  // oss << sovler;
   // msg.debug(oss.str());
 }
 
