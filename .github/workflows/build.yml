@@ -18,7 +18,7 @@ jobs:
        run: pwd && rm -rf ./*
      - uses: actions/checkout@v1
      - name: Install Dependencies
-       run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y gperf libgmp-dev cmake bison flex linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev libtinfo5 git curl build-essential gcc wget
+       run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y gperf libgmp-dev cmake bison flex linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev libtinfo5 git curl build-essential gcc wget libz3-dev
      - name: Configure Boolector
        run: git clone --depth=1 --branch=3.2.1 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j4 && make install
      - name: Download Clang 11
@@ -28,7 +28,7 @@ jobs:
      - name: Get current folder and files
        run: pwd && ls
      - name: Configure CMake
-       run: mkdir build && cd build && cmake .. -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
+       run: mkdir build && cd build && cmake .. -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DENABLE_Z3=On -DBoolector_DIR=$PWD/../boolector-release -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
      - name: Build ESBMC
        run: cd build && make -j3 && cmake --install .
      - uses: actions/upload-artifact@v1
@@ -37,7 +37,7 @@ jobs:
          path: ./release
      - name: Run tests
        continue-on-error: true
-       run: cd build/ && ctest -j3 --output-on-failure --progress . 
+       run: cd build/ && ctest -j3 --output-on-failure --progress .
 
   build-linux:
     name: Build ESBMC with all Solvers (Linux)
