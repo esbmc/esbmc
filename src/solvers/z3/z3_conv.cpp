@@ -6,7 +6,10 @@
  \*******************************************************************/
 
 #include <cassert>
+#include <esbmc/bmc.h>
 #include <z3_conv.h>
+#include <fmt/format.h>
+#include <fstream>
 #include <util/message/default_message.h>
 
 #define new_ast new_solver_ast<z3_smt_ast>
@@ -1231,10 +1234,27 @@ void z3_smt_ast::dump() const
 
 void z3_convt::dump_smt()
 {
-  default_message msg;
-  std::ostringstream oss;
-  oss << solver;
-  msg.debug(oss.str());
+  // #include <esbmc/bmc.h>
+  // #include <fstream>
+  const std::string &filename = options.get_option("output");
+  if(!filename.empty())
+  {
+    std::ofstream out(filename.c_str());
+    if(out)
+    {
+      // Add whatever logic is needed.
+      // Add sovler specific declarations as well.
+      out << "(set-info :smt-lib-version 2.0) \n";
+      out << "(set-option :print-success true) \n";
+      out << "(set-option :produce-models true) \n";
+      out << solver; // All VCC conditions in SMTLIB format.
+      out << "(check-sat) \n";
+    }
+  }
+  // default_message msg;
+  // std::ostringstream oss;
+  // oss << solver;
+  // msg.debug(oss.str());
 }
 
 smt_astt z3_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
