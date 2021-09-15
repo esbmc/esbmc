@@ -17,7 +17,7 @@ if(ENABLE_BOOLECTOR)
     if(Boolector_VERSION VERSION_LESS Boolector_MIN_VERSION)
         message(FATAL_ERROR "Expected version ${Boolector_MIN_VERSION} or greater")
     endif()
-    
+
     add_library(solverbtor boolector_conv.cpp)
     target_include_directories(solverbtor
             PRIVATE ${Boost_INCLUDE_DIRS}

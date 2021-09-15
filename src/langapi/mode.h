@@ -21,6 +21,7 @@ enum class language_idt : int
   C,
   CPP,
   SOLIDITY,
+  JIMPLE
 };
 
 struct language_desct
@@ -49,8 +50,9 @@ extern const mode_table_et mode_table[];
 
 languaget *new_clang_c_language(const messaget &msg);
 languaget *new_clang_cpp_language(const messaget &msg);
-languaget *new_ansi_c_language(const messaget &msg);
-languaget *new_cpp_language(const messaget &msg);
+languaget *new_jimple_language(const messaget &msg);
+languaget *new_ansi_c_language();
+languaget *new_cpp_language();
 languaget *new_solidity_language(const messaget &msg);
 
 // List of language entries, one can put in the mode table:
@@ -74,7 +76,12 @@ languaget *new_solidity_language(const messaget &msg);
   {                                                                            \
     language_idt::CPP, &new_cpp_language                                       \
   }
-#define LANGAPI_MODE_END                                                       \
+#define LANGAPI_HAVE_MODE_JIMPLE                                               \
+  {                                                                            \
+    language_idt::JIMPLE, &new_jimple_language                                 \
+  }
+
+#define LANGAPI_MODE_END                                                  \
   {                                                                            \
     language_idt::NONE, NULL                                                   \
   }

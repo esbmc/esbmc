@@ -8,6 +8,10 @@ const mode_table_et mode_table[] = {
 #ifdef ENABLE_SOLIDITY_FRONTEND
   LANGAPI_MODE_SOLAST,
 #endif
+
+#ifdef ENABLE_JIMPLE_FRONTEND
+  LANGAPI_HAVE_MODE_JIMPLE,
+#endif
 #ifdef ENABLE_OLD_FRONTEND
   LANGAPI_MODE_C,
   LANGAPI_MODE_CPP,
