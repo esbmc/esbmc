@@ -13,8 +13,14 @@ add_subdirectory (ansi-c)
 add_subdirectory (cpp)
 endif()
 
+
 if(ENABLE_SOLIDITY_FRONTEND)
 add_subdirectory (solidity-frontend)
+endif()
+
+
+if(ENABLE_JIMPLE_FRONTEND)
+add_subdirectory (jimple-frontend)
 endif()
 
 add_subdirectory (clang-c-frontend)

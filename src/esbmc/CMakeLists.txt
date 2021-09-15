@@ -9,6 +9,9 @@ endif()
 if(ENABLE_GOTO_CONTRACTOR)
   set(GOTO_CONTRACTOR_TARGETS gotocontractor)
 endif()
+if(ENABLE_JIMPLE_FRONTEND)
+  set(JIMPLE_FRONTEND_TARGETS jimple)
+endif()
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
   COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/buildidobj.py ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
@@ -32,7 +35,7 @@ target_include_directories(esbmc
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${GOTO_CONTRACTOR_TARGETS} clangcfrontend
+target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS} clangcfrontend
   clangcppfrontend symex pointeranalysis langapi util_esbmc bigint
   solvers clibs default_message gotoalgorithms ${Boost_LIBRARIES})
 

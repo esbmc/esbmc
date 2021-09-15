@@ -20,12 +20,15 @@ static const char *const extensions_cpp[] =
 #endif
 
 static const char *const extensions_sol_ast[] = {"solast", nullptr};
-
+static const char *extensions_jimple[] = {"jimple", nullptr};
 static const language_desct language_desc_C = {"C", extensions_ansi_c};
 static const language_desct language_desc_CPP = {"C++", extensions_cpp};
 static const language_desct language_desc_Solidity = {
   "Solidity",
   extensions_sol_ast};
+static const language_desct language_desc_Jimple = {
+  "Jimple",
+  extensions_jimple};
 
 const struct language_desct *language_desc(language_idt id)
 {
@@ -39,6 +42,8 @@ const struct language_desct *language_desc(language_idt id)
     return &language_desc_CPP;
   case language_idt::SOLIDITY:
     return &language_desc_Solidity;
+  case language_idt::JIMPLE:
+    return &language_desc_Jimple;
   }
   return nullptr;
 }
