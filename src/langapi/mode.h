@@ -28,11 +28,13 @@ extern const mode_table_et mode_table[];
 extern const char *extensions_ansi_c[];
 extern const char *extensions_cpp[];
 extern const char *extensions_sol_ast[];
+extern const char *extensions_jimple[];
 
 languaget *new_clang_c_language(const messaget &msg);
 languaget *new_clang_cpp_language(const messaget &msg);
-languaget *new_ansi_c_language(const messaget &msg);
-languaget *new_cpp_language(const messaget &msg);
+languaget *new_jimple_language(const messaget &msg);
+languaget *new_ansi_c_language();
+languaget *new_cpp_language();
 languaget *new_solidity_language(const messaget &msg);
 
 // List of language entries, one can put in the mode table:
@@ -56,6 +58,11 @@ languaget *new_solidity_language(const messaget &msg);
   {                                                                            \
     "C++", &new_cpp_language, extensions_cpp                                   \
   }
+#define LANGAPI_HAVE_MODE_JIMPLE                                               \
+  {                                                                            \
+    "Jimple", &new_jimple_language, extensions_jimple                          \
+  }
+
 #define LANGAPI_HAVE_MODE_END                                                  \
   {                                                                            \
     NULL, NULL, NULL                                                           \

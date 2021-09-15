@@ -18,6 +18,7 @@ const char *extensions_cpp[] = {"cpp", "cc", "ipp", "C", "cxx", nullptr};
 #endif
 
 const char *extensions_sol_ast[] = {"solast", nullptr};
+const char *extensions_jimple[] = {"jimple", nullptr};
 
 int get_mode(const std::string &str)
 {
