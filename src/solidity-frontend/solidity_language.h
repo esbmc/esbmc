@@ -14,7 +14,6 @@ Module: Solidity AST module
 #include <util/c_link.h> // for c_link
 #include <util/language.h>
 #include <fstream>
-#include <iostream>
 #include <sstream>
 #include <nlohmann/json.hpp>
 
