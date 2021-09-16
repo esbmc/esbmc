@@ -1,8 +1,11 @@
 #include <solvers/smt/smt_conv.h>
 #include <util/type_byte_size.h>
 
+#include <iostream>
+
 smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 {
+  std::cerr << ">>>>> convert_byte_extract. expr = \n" << expr << "\n";
   if(int_encoding)
   {
     msg.error(
@@ -14,6 +17,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
   const byte_extract2t &data = to_byte_extract2t(expr);
   expr2tc source = data.source_value;
   unsigned int src_width = source->type->get_width();
+  std::cerr << ">>>>> convert_byte_extract. src_width = " << src_width << "\n";
 
   if(!is_bv_type(source->type) && !is_fixedbv_type(source->type))
     source = bitcast2tc(get_uint_type(src_width), source);
@@ -49,6 +53,8 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   unsigned width;
   width = data.source_value->type->get_width();
+  std::cerr << ">>>>> convert_byte_extract. width = " << width << "\n";
+  std::cerr << ">>>>> convert_byte_extract. offset = " << intref.value.to_uint64() << "\n";
 
   unsigned int upper, lower;
   if(!data.big_endian)
