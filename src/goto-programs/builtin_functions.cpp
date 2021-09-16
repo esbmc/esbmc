@@ -43,6 +43,7 @@ static void get_alloc_type_rec(const exprt &src, typet &type, exprt &size)
   static bool is_mul = false;
 
   const irept &sizeof_type = src.c_sizeof_type();
+
   //nec: ex33.c
   if(!sizeof_type.is_nil() && !is_mul)
   {
@@ -186,6 +187,15 @@ void goto_convertt::do_mem(
 
   if(alloc_type.id() == "symbol")
     alloc_type = ns.follow(alloc_type);
+
+  // changing alloc_size from bytes to bits.
+  // will probably need to change alloc_type from signed 8 to 1
+  if(config.options.get_bool_option("use-bit-precision"))
+  {
+    expr2tc alloc_size_new;
+    migrate_expr(alloc_size, alloc_size_new);
+    alloc_size = migrate_expr_back(mul2tc(alloc_size_new->type, alloc_size_new, gen_ulong(8)));
+  }
 
   if(alloc_size.type() != uint_type())
   {
