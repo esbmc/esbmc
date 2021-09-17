@@ -7,7 +7,7 @@ languaget *new_jimple_language()
   return NULL;
 }
 
-languaget *new_jimple_language(const messaget &msg)
+languaget *new_jimple_language(const messaget &)
 {
   assert(!"This is not implemented yet");
   return NULL;
