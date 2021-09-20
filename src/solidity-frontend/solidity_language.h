@@ -14,9 +14,7 @@ Module: Solidity AST module
 #include <util/c_link.h> // for c_link
 #include <util/language.h>
 #include <fstream>
-#include <iostream>
 #include <sstream>
-#include <libUtils/Utils.hpp>
 #include <nlohmann/json.hpp>
 
 // Forward dec, to avoid bringing in clang headers
