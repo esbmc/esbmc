@@ -98,6 +98,9 @@ endif()
 if(ENABLE_SOLIDITY_FRONTEND)
   add_definitions(-DENABLE_SOLIDITY_FRONTEND)
 endif()
+if(ENABLE_JIMPLE_FRONTEND)
+    add_definitions(-DENABLE_JIMPLE_FRONTEND)
+endif()
 
 add_subdirectory(src)
 

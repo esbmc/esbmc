@@ -11,9 +11,10 @@ Author: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
 #include <langapi/mode.h>
 #include <util/language.h>
 
-class jimple_language : public languaget
+class jimple_languaget : public languaget
 {
 public:
+  jimple_languaget(const messaget &msg) : languaget(msg) {}
   bool parse(const std::string &path, const messaget &msg) override;
 
   bool final(contextt &context, const messaget &msg) override;
@@ -40,10 +41,10 @@ public:
 
   languaget *new_language(const messaget &msg) override
   {
-    return new jimple_language(msg);
+    return new jimple_languaget(msg);
   }
 
-  explicit jimple_language(const messaget &msg);
+
 
   // store AST json in nlohmann::json data structure
   //nlohmann::json ast_json;
