@@ -91,9 +91,8 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
     nlohmann::json ast_node = *itr;
     std::string node_name = ast_node["name"].get<std::string>();
     std::string node_type = ast_node["nodeType"].get<std::string>();
-    printf("@@ Converting node[%u]: name=%s, nodeType=%s ...\n",
-        index, node_name.c_str(), node_type.c_str());
-    //print_json_array_element(ast_node, node_type, index);
+    msg.status(fmt::format("@@ Converting node[{}]: name={}, nodeType={} ...",
+          index, node_name.c_str(), node_type.c_str()));
     exprt dummy_decl;
     if(get_decl(ast_node, dummy_decl))
       return true;
@@ -143,8 +142,8 @@ bool solidity_convertert::get_var_decl_stmt(const nlohmann::json &ast_node, expr
     assert(!"Missing \'nodeType\' filed in ast_node");
 
   SolidityGrammar::VarDeclStmtT type = SolidityGrammar::get_var_decl_stmt_t(ast_node);
-  printf("	@@@ got Variable-declaration-statement: SolidityGrammar::VarDeclStmtT::%s\n",
-      SolidityGrammar::var_decl_statement_to_str(type));
+  msg.status(fmt::format("	@@@ got Variable-declaration-statement: SolidityGrammar::VarDeclStmtT::{}",
+        SolidityGrammar::var_decl_statement_to_str(type)));
 
   switch(type)
   {
@@ -342,7 +341,7 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
       type.arguments().push_back(param);
       ++num_param_decl;
     }
-    printf("  @@@ number of param decls: %u\n", num_param_decl);
+    msg.status(fmt::format("  @@@ number of param decls: {}", num_param_decl));
   }
 
   added_symbol.type = type;
@@ -434,8 +433,8 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
   get_start_location_from_stmt(block, location);
 
   SolidityGrammar::BlockT type = SolidityGrammar::get_block_t(block);
-  printf("	@@@ got Block: SolidityGrammar::BlockT::%s, ", SolidityGrammar::block_to_str(type));
-  printf("  call_block_times=%d\n", call_block_times++);
+  msg.status(fmt::format("	@@@ got Block: SolidityGrammar::BlockT::{}, call_block_times={}",
+        SolidityGrammar::block_to_str(type), call_block_times++));
 
   switch(type)
   {
@@ -459,7 +458,7 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
         _block.operands().push_back(statement);
         ++ctr;
       }
-      printf(" \t @@@ CompoundStmt has %u statements\n", ctr);
+      msg.status(fmt::format(" \t@@@ CompoundStmt has {} statements", ctr));
 
       // TODO: Figure out the source location manager of Solidity AST JSON
       // It's too encryptic. Currently we are using get_start_location_from_stmt.
@@ -493,8 +492,8 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
   static int call_stmt_times = 0; // TODO: remove debug
 
   SolidityGrammar::StatementT type = SolidityGrammar::get_statement_t(stmt);
-  printf("	@@@ got Stmt: SolidityGrammar::StatementT::%s, ", SolidityGrammar::statement_to_str(type));
-  printf("  call_stmt_times=%d\n", call_stmt_times++);
+  msg.status(fmt::format("	@@@ got Stmt: SolidityGrammar::StatementT::{}, call_stmt_times={}",
+        SolidityGrammar::statement_to_str(type), call_stmt_times++));
 
   switch(type)
   {
@@ -534,7 +533,7 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
         decls.operands().push_back(single_decl);
         ++ctr;
       }
-      printf(" \t @@@ DeclStmt group has %u decls\n", ctr);
+      msg.status(fmt::format(" \t@@@ DeclStmt group has {} decls", ctr));
 
       new_expr = decls;
       break;
@@ -672,8 +671,8 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
   get_start_location_from_stmt(expr, location);
 
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
-  printf("	@@@ got Expr: SolidityGrammar::ExpressionT::%s, ", SolidityGrammar::expression_to_str(type));
-  printf("  call_expr_times=%d\n", call_expr_times++);
+  msg.status(fmt::format("	@@@ got Expr: SolidityGrammar::ExpressionT::{}, call_expr_times={}",
+        SolidityGrammar::expression_to_str(type), call_expr_times++));
 
   switch(type)
   {
@@ -696,8 +695,6 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
       {
         // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
         const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
-        //printf("\t @@ Debug: this is the matching DeclRef JSON: \n");
-        //print_json(decl);
 
         if (!check_intrinsic_function(decl))
         {
@@ -777,7 +774,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
         call.arguments().push_back(single_arg);
         ++num_args;
       }
-      printf("  @@ num_args=%u\n", num_args);
+      msg.status(fmt::format("  @@ num_args={}", num_args));
 
       // 4. Convert call arguments
       new_expr = call;
@@ -861,7 +858,8 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
 
   // 3. Convert opcode
   SolidityGrammar::ExpressionT opcode = SolidityGrammar::get_expr_operator_t(expr);
-  printf("  @@@ got binop.getOpcode: SolidityGrammar::%s\n", SolidityGrammar::expression_to_str(opcode));
+  msg.status(fmt::format("	@@@ got binop.getOpcode: SolidityGrammar::{}",
+        SolidityGrammar::expression_to_str(opcode)));
   switch(opcode)
   {
     case SolidityGrammar::ExpressionT::BO_Assign:
@@ -939,7 +937,9 @@ bool solidity_convertert::get_unary_operator_expr(const nlohmann::json &expr, ex
     return true;
   // 3. get UnaryOperation opcode
   SolidityGrammar::ExpressionT opcode = SolidityGrammar::get_expr_operator_t(expr, expr["prefix"]);
-  printf("  @@@ got uniop.getOpcode: SolidityGrammar::%s\n", SolidityGrammar::expression_to_str(opcode));
+  msg.status(fmt::format("	@@@ got uniop.getOpcode: SolidityGrammar::{}",
+        SolidityGrammar::expression_to_str(opcode)));
+
   switch(opcode)
   {
     case SolidityGrammar::ExpressionT::UO_PreDec:
@@ -1195,8 +1195,8 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
     }
     default:
     {
-      printf("	@@@ got type name=SolidityGrammar::TypeNameT::%s\n",
-          SolidityGrammar::type_name_to_str(type));
+      msg.status(fmt::format("	@@@ got type name=SolidityGrammar::TypeNameT::{}",
+            SolidityGrammar::type_name_to_str(type)));
       assert(!"Unimplemented type in rule type-name");
       return true;
     }
@@ -1242,7 +1242,7 @@ bool solidity_convertert::get_func_decl_ref_type(const nlohmann::json &decl, typ
     }
     default:
     {
-      printf("Got type=%s ...\n", SolidityGrammar::func_decl_ref_to_str(type));
+      msg.status(fmt::format("	@@@ Got type={}", SolidityGrammar::func_decl_ref_to_str(type)));
       assert(!"Unimplemented type in auxiliary type to convert function call");
       return true;
     }
@@ -1302,7 +1302,7 @@ bool solidity_convertert::get_elementary_type_name(const nlohmann::json &type_na
     }
     default:
     {
-      printf(" Got elementary-type-name=%s ...\n", SolidityGrammar::elementary_type_name_to_str(type));
+      msg.status(fmt::format("	@@@ Got elementary-type-name={}", SolidityGrammar::elementary_type_name_to_str(type)));
       assert(!"Unimplemented type in rule elementary-type-name");
       return true;
     }

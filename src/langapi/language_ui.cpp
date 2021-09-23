@@ -61,7 +61,7 @@ bool language_uit::parse(const std::string &filename)
 
   language_filet &lf = result.first->second;
   lf.filename = filename;
-  lf.language = mode_table[mode].new_language(msg); // instantiate clang_c_languaget object or other languages' counterpart
+  lf.language = mode_table[mode].new_language(msg);
   languaget &language = *lf.language;
 
   msg.status("Parsing", filename);

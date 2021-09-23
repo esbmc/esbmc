@@ -1,15 +1,13 @@
 #ifndef SOLIDITY_FRONTEND_PATTERN_CHECK_H_
 #define SOLIDITY_FRONTEND_PATTERN_CHECK_H_
 
-//#define __STDC_LIMIT_MACROS
-//#define __STDC_FORMAT_MACROS
-
 #include <memory>
 #include <iostream>
 #include <iomanip>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_types.h>
+#include <fmt/core.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 
@@ -24,7 +22,12 @@ public:
 
   bool do_pattern_check();
   bool start_pattern_based_check(const nlohmann::json &func);
+
+  // Authorization through Tx origin
   void check_authorization_through_tx_origin(const nlohmann::json &func);
+  void check_require_call(const nlohmann::json &expr);
+  void check_require_argument(const nlohmann::json &call_args);
+  void check_tx_origin(const nlohmann::json &left_expr);
 
 protected:
   const nlohmann::json &ast_nodes;

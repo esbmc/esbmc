@@ -161,7 +161,7 @@ bool ansi_c_languaget::parse(
 
   ansi_c_scanner_init();
 
-  bool result = ansi_c_parser.parse(); // uses yyansi_cparse()
+  bool result = ansi_c_parser.parse();
 
   if(!result)
   {
@@ -169,7 +169,7 @@ bool ansi_c_languaget::parse(
     ansi_c_parser.filename = path;
     ansi_c_parser.in = &i_preprocessed;
     ansi_c_scanner_init();
-    result = ansi_c_parser.parse(); // uses yyansi_cparse()
+    result = ansi_c_parser.parse();
   }
 
   // save result
