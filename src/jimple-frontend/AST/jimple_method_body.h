@@ -13,7 +13,7 @@ class jimple_empty_method_body : public jimple_method_body {};
 
 class jimple_full_method_body : public jimple_method_body {
   virtual void from_json(const json& j) override;
-  virtual std::string to_string() override;
+  virtual std::string to_string() const override;
 
 protected:
   std::vector<std::shared_ptr<jimple_method_field>> members;

@@ -23,8 +23,8 @@ public:
     Annotation
   };
   virtual modifier from_string(const std::string &name);
-  virtual std::string to_string(const modifier &ft);
-  virtual std::string to_string() override;
+  virtual std::string to_string(const modifier &ft) const;
+  virtual std::string to_string() const override;
 
 protected:
   std::vector<modifier> m;

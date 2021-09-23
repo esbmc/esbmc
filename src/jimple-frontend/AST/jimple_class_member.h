@@ -16,13 +16,13 @@ class jimple_class_member : public jimple_ast {
 class jimple_class_method : public jimple_class_member {
 public:
   virtual void from_json(const json& j) override;
-  virtual std::string to_string() override;
+  virtual std::string to_string() const override;
 
 protected:
   std::string name;
   jimple_modifiers m;
   std::string throws;
-  std::shared_ptr<jimple_type> t;
+  jimple_type t;
   std::shared_ptr<jimple_method_body> body;
   std::string parameters;
 };

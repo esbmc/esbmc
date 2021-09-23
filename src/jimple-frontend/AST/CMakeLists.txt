@@ -4,6 +4,7 @@ add_library(jimple_ast
         jimple_class_method.cpp
         jimple_type.cpp
         jimple_method_body.cpp
-        jimple_declaration.cpp)
+        jimple_declaration.cpp
+        jimple_statement.cpp)
 
 target_link_libraries(jimple_ast nlohmann_json::nlohmann_json)
