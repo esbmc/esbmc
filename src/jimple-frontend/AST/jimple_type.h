@@ -7,17 +7,15 @@
 
 #include <jimple-frontend/AST/jimple_ast.h>
 
+// TODO: Specialize this class
 class jimple_type : public jimple_ast {
-};
-
-class jimple_void_type : public jimple_type {
 public:
   virtual void from_json(const json& j) override;
-  virtual std::string to_string() override;
-};
-class jimple_nonvoid_type : public jimple_type {
+  virtual std::string to_string() const override;
+protected:
+  std::string name; // e.g. int[][][][][] => name = int
+  short dimensions; // e.g. int[][][][][] => dimensions = 5
+
 };
 
-class jimple_base_type : public jimple_nonvoid_type {};
-class jimple_object_type : public jimple_nonvoid_type {};
 #endif //ESBMC_JIMPLE_TYPE_H

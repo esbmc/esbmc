@@ -10,6 +10,8 @@ Description: This interface will define every method that needs to
 #define ESBMC_JIMPLE_AST_H
 
 #include <util/message/default_message.h>
+#include <util/expr.h>
+#include <util/context.h>
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -19,18 +21,24 @@ public:
    * Prints the contents into the
    * the stdout.
    */
-  void dump() {
+  void dump() const
+  {
     default_message msg;
     msg.debug(this->to_string());
   }
 
   virtual void from_json(const json&) = 0;
-
+  virtual exprt to_exprt(const messaget &msg, contextt &ctx) const
+  {
+    msg.debug("Converting Jimple AST");
+    exprt x;
+    return x;
+  };
   /**
    * Converts the object into a string
    * @return a human readable string of the object
    */
-  virtual std::string to_string() = 0;
+  virtual std::string to_string() const = 0;
 };
 
 void from_json(const json& j, jimple_ast& p);

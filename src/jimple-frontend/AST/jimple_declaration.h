@@ -10,10 +10,10 @@
 
 class jimple_declaration : public jimple_method_field {
   virtual void from_json(const json& j) override;
-  virtual std::string to_string() override;
+  virtual std::string to_string() const override;
 
 protected:
-  std::shared_ptr<jimple_type> t;
+  jimple_type t;
   std::vector<std::string> names;
 };
 

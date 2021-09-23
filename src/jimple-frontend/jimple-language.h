@@ -10,6 +10,7 @@ Author: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
 
 #include <langapi/mode.h>
 #include <util/language.h>
+#include <jimple-frontend/AST/jimple_file.h>
 
 class jimple_languaget : public languaget
 {
@@ -19,6 +20,7 @@ public:
 
   bool final(contextt &context, const messaget &msg) override;
 
+  // AST -> GOTO
   bool typecheck(
     contextt &context,
     const std::string &module,
@@ -44,6 +46,8 @@ public:
     return new jimple_languaget(msg);
   }
 
+  // TODO: this should be a list
+  jimple_file root;
 
 
   // store AST json in nlohmann::json data structure
