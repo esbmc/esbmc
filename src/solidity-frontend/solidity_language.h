@@ -1,6 +1,8 @@
 /*******************************************************************\
 
-Module: Solidity AST module
+Module: Solidity Language module
+
+Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
 
 \*******************************************************************/
 
