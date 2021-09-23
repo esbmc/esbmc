@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/context.h>
 #include <util/message/default_message.h>
+#include <util/message/format.h>
 
 bool contextt::add(const symbolt &symbol)
 {
@@ -116,4 +117,32 @@ void contextt::foreach_operand_impl_in_order(symbol_delegate &expr)
   {
     expr(*ordered_symbol);
   }
+}
+symbolt* contextt::move_symbol_to_context(symbolt &symbol)
+{
+  symbolt *s = find_symbol(symbol.id);
+  if(s == nullptr)
+  {
+    if(move(symbol, s))
+    {
+      msg.error(fmt::format(
+        "Couldn't add symbol {} to symbol table\n{}", symbol.name, symbol));
+      abort();
+    }
+  }
+  else
+  {
+    // types that are code means functions
+    if(s->type.is_code())
+    {
+      if(symbol.value.is_not_nil() && !s->value.is_not_nil())
+        s->swap(symbol);
+    }
+    else if(s->is_type)
+    {
+      if(symbol.type.is_not_nil() && !s->type.is_not_nil())
+        s->swap(symbol);
+    }
+  }
+  return s;
 }

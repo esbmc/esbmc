@@ -1486,7 +1486,7 @@ bool esbmc_parseoptionst::get_goto_program(
     str2 << "GOTO program processing time: ";
     output_time(process_stop - process_start, str2);
     str2 << "s";
-    msg.status(str2.str());
+    msg.status(str2.str()); 
   }
 
   catch(const char *e)

@@ -51,11 +51,11 @@ jimple_modifiers::from_string(const std::string &name)
 {
   return from_map.at(name);
 }
-std::string jimple_modifiers::to_string(const jimple_modifiers::modifier &ft)
+std::string jimple_modifiers::to_string(const jimple_modifiers::modifier &ft) const
 {
   return to_map.at(ft);
 }
-std::string jimple_modifiers::to_string()
+std::string jimple_modifiers::to_string() const
 {
   std::ostringstream oss;
 

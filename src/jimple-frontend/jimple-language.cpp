@@ -28,15 +28,5 @@ bool jimple_languaget::from_expr(
   msg.debug(fmt::format("From Expr: {}",code));
   return false;
 }
-void jimple_languaget::show_parse(std::ostream &out)
-{
-}
-bool jimple_languaget::typecheck(
-  contextt &context,
-  const std::string &module,
-  const messaget &msg)
-{
-  msg.debug(fmt::format("Typechecking: {}",module));
-  return false;
-}
+
 

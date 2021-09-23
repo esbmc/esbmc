@@ -1,5 +1,9 @@
 add_subdirectory(AST)
-add_library(jimple jimple-language.cpp jimple-parser.cpp)
+add_library(jimple
+        jimple-language.cpp
+        jimple-parser.cpp
+        jimple-typecheck.cpp
+        jimple-converter.cpp)
 
 # Boost is needed by anything that touches irep2
 target_include_directories(jimple

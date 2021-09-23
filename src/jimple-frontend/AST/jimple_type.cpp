@@ -4,13 +4,18 @@
 
 #include <jimple-frontend/AST/jimple_type.h>
 
-void jimple_void_type::from_json(const json &j)
+void jimple_type::from_json(const json &j)
 {
-  // This doesn't need a parse, just an assertion
-  auto type = j.get<std::string>();
-  assert(type == "void");
+  // Non-void type
+  // TODO: j.at_to("mode")
+  j.at("identifier").get_to(name);
+  j.at("dimensions").get_to(dimensions);
+
 }
-std::string jimple_void_type::to_string()
+std::string jimple_type::to_string() const
 {
-  return "Type: void";
+  std::ostringstream oss;
+  oss << "Type: " << name
+      << " [" << dimensions << "]";
+  return oss.str();
 }
