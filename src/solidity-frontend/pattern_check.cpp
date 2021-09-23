@@ -121,10 +121,3 @@ void pattern_checker::check_tx_origin(const nlohmann::json &left_expr)
     }
   }
 }
-
-void pattern_checker::print_json_element(const nlohmann::json &json_in)
-{
-  printf("@@ ast_nodes in pattern_checker: \n");
-  std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
-  printf("\n");
-}

@@ -46,6 +46,12 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-symex-value-sets",
      NULL,
      "show value-set analysis during symbolic execution"}}},
+  {"Solidity frontend",
+   {
+    {"emptymain,M",
+      boost::program_options::value<std::vector<std::string>>(),
+      "empty main function for clang c module in Solidity frontend"},
+    }},
   {"Frontend",
    {{"include,I",
      boost::program_options::value<std::vector<std::string>>()->value_name(
@@ -58,9 +64,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"warning,W",
      boost::program_options::value<std::vector<std::string>>(),
      ""},
-    {"dummymain,M",
-         boost::program_options::value<std::vector<std::string>>(),
-         ""},
     {"force,f", boost::program_options::value<std::vector<std::string>>(), ""},
     {"preprocess", NULL, "stop after preprocessing"},
     {"no-inlining", NULL, "disable inlining function calls"},

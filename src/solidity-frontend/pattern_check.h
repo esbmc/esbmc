@@ -2,7 +2,6 @@
 #define SOLIDITY_FRONTEND_PATTERN_CHECK_H_
 
 #include <memory>
-#include <iostream>
 #include <iomanip>
 #include <util/context.h>
 #include <util/namespace.h>
@@ -33,7 +32,6 @@ protected:
   const nlohmann::json &ast_nodes;
   const std::string target_func; // function to be verified
   const messaget &msg;
-  void print_json_element(const nlohmann::json &json_in);
 };
 
 #endif /* SOLIDITY_FRONTEND_PATTERN_CHECK_H_ */

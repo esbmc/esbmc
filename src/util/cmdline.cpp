@@ -123,9 +123,9 @@ bool cmdlinet::parse(
     args = vm["input-file"].as<std::vector<std::string>>();
     verification_file = args.back();
   }
-  if (vm.count("dummymain")) // dummy main for Solidity frontend
+  if (vm.count("emptymain")) // dummy main for Solidity frontend
   {
-    sol_main = vm["dummymain"].as<std::vector<std::string>>().back();
+    sol_main = vm["emptymain"].as<std::vector<std::string>>().back();
   }
   if (vm.count("function")) // We need Solidity function name for pattern-based verification
   {
