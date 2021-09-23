@@ -1,9 +1,6 @@
 #ifndef SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_
 #define SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_
 
-//#define __STDC_LIMIT_MACROS
-//#define __STDC_FORMAT_MACROS
-
 #include <memory>
 #include <iostream>
 #include <stack>

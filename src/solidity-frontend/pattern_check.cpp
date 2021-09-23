@@ -10,9 +10,8 @@ pattern_checker::pattern_checker(const nlohmann::json &_ast_nodes,
 
 bool pattern_checker::pattern_checker::do_pattern_check()
 {
-  // add more functions here to perform more pattern-based checks
-  //print_json_element(ast_nodes);
-  printf("Checking function %s ...\n", target_func.c_str());
+  // TODO: add more functions here to perform more pattern-based checks
+  msg.status(fmt::format("Checking function {} ...", target_func.c_str()));
 
   unsigned index = 0;
   nlohmann::json::const_iterator itr = ast_nodes.begin();
@@ -24,9 +23,7 @@ bool pattern_checker::pattern_checker::do_pattern_check()
       if ((*itr)["kind"].get<std::string>() == "function" &&
           (*itr)["nodeType"].get<std::string>() == "FunctionDefinition" &&
           (*itr)["name"].get<std::string>() == target_func)
-      {
         return start_pattern_based_check(*itr);
-      }
     }
   }
 
@@ -52,58 +49,74 @@ void pattern_checker::check_authorization_through_tx_origin(const nlohmann::json
   nlohmann::json::const_iterator itr = body_stmt.begin();
   for (; itr != body_stmt.end(); ++itr, ++index)
   {
-    printf("@@ checking body stmt %u\n", index);
+    msg.status(fmt::format("@@ checking function body stmt {}", index));
     if (itr->contains("nodeType"))
     {
       if ((*itr)["nodeType"].get<std::string>() == "ExpressionStatement")
       {
         const nlohmann::json &expr = (*itr)["expression"];
-        //print_json_element(expr);
         if (expr["nodeType"] == "FunctionCall")
         {
           if (expr["kind"] == "functionCall")
           {
-            // require(.) authorization
-            if (expr["expression"]["nodeType"].get<std::string>() == "Identifier")
-            {
-              if (expr["expression"]["name"].get<std::string>() == "require")
-              {
-                const nlohmann::json &call_args = expr["arguments"];
-                // Search for tx.origin in BinaryOperation (==) as used in require(tx.origin == <VarDeclReference>)
-                // There should be just one argument, the BinaryOpration expression
-                if (call_args.size() == 1)
-                {
-                  const nlohmann::json &arg_expr = call_args[0];
-                  // look for BinaryOperation "=="
-                  if (arg_expr["nodeType"].get<std::string>() == "BinaryOperation")
-                  {
-                    if (arg_expr["operator"].get<std::string>() == "==")
-                    {
-                      const nlohmann::json &left_expr = arg_expr["leftExpression"];
-                      // search for "tx", "." and "origin"
-                      if (left_expr["nodeType"].get<std::string>() == "MemberAccess") // tx.origin is of the type MemberAccess expression
-                      {
-                        // do NOT conbine this predicate with the one above. If the nodeType was NOT MemberAccess,
-                        // accessing "memberName" would throw an exception !
-                        if (left_expr["memberName"].get<std::string>() == "origin")
-                        {
-                          if (left_expr["expression"]["nodeType"].get<std::string>() == "Identifier")
-                          {
-                            if (left_expr["expression"]["name"].get<std::string>() == "tx")
-                            {
-                              msg.progress("\t- Found vulnerability SWC-115 Authorization through tx.origin");
-                              assert(0);
-                            }
-                          }
-                        }
-                      } // end of MemberAccess as in tx.origin
-                    } // end of "=="
-                  } // end of "BinaryOperation"
-                } // end of checking 1 argument as in require(<leftExpr> == <rightExpr>);
-              } // end of checking "require(.)"
-            } // end of checking Identifier "require"
-          } // end of "kind" == "functionCall"
-        } // end of top-level expr["nodeType"] == "FunctionCall"
+            check_require_call(expr);
+          }
+        }
+      }
+    }
+  }
+}
+
+void pattern_checker::check_require_call(const nlohmann::json &expr)
+{
+  // Checking the authorization argument of require() function
+  if (expr["expression"]["nodeType"].get<std::string>() == "Identifier")
+  {
+    if (expr["expression"]["name"].get<std::string>() == "require")
+    {
+      const nlohmann::json &call_args = expr["arguments"];
+      // Search for tx.origin in BinaryOperation (==) as used in require(tx.origin == <VarDeclReference>)
+      // There should be just one argument, the BinaryOpration expression.
+      // Checking 1 argument as in require(<leftExpr> == <rightExpr>)
+      if (call_args.size() == 1)
+      {
+        check_require_argument(call_args);
+      }
+    }
+  }
+}
+
+void pattern_checker::check_require_argument(const nlohmann::json &call_args)
+{
+  // This function is used to check the authorization argument of require() funciton
+  const nlohmann::json &arg_expr = call_args[0];
+
+  // look for BinaryOperation "=="
+  if (arg_expr["nodeType"].get<std::string>() == "BinaryOperation")
+  {
+    if (arg_expr["operator"].get<std::string>() == "==")
+    {
+      const nlohmann::json &left_expr = arg_expr["leftExpression"];
+      // Search for "tx", "." and "origin". First, confirm the nodeType is MemeberAccess
+      // If the nodeType was NOT MemberAccess, accessing "memberName" would throw an exception !
+      if (left_expr["nodeType"].get<std::string>() == "MemberAccess") // tx.origin is of the type MemberAccess expression
+      {
+        check_tx_origin(left_expr);
+      } // end of MemberAccess as in tx.origin
+    } // end of "=="
+  } // end of "BinaryOperation"
+}
+
+void pattern_checker::check_tx_origin(const nlohmann::json &left_expr)
+{
+  // This function is used to check the Tx.origin pattern used in BinOp expr
+  if (left_expr["memberName"].get<std::string>() == "origin")
+  {
+    if (left_expr["expression"]["nodeType"].get<std::string>() == "Identifier")
+    {
+      if (left_expr["expression"]["name"].get<std::string>() == "tx")
+      {
+        assert(!"Found vulnerability SWC-115 Authorization through tx.origin");
       }
     }
   }
@@ -111,8 +124,6 @@ void pattern_checker::check_authorization_through_tx_origin(const nlohmann::json
 
 void pattern_checker::print_json_element(const nlohmann::json &json_in)
 {
-  //printf("### %s element[%u] content: key=%s, size=%lu ###\n",
-  //    json_name.c_str(), index, key.c_str(), json_in.size());
   printf("@@ ast_nodes in pattern_checker: \n");
   std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
   printf("\n");

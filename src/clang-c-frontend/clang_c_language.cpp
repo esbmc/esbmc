@@ -227,7 +227,6 @@ bool clang_c_languaget::convert_intrinsics(contextt &context, const messaget &ms
   clang_c_convertert converter(context, ASTs, msg);
   if(converter.convert())
     return true;
-
   return false;
 }
 
