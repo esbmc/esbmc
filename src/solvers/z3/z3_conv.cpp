@@ -1236,8 +1236,6 @@ void z3_smt_ast::dump() const
 
 void z3_convt::dump_smt()
 {
-  // #include <esbmc/bmc.h>
-  // #include <fstream>
   const std::string &filename = options.get_option("output");
   if(!filename.empty())
   {
@@ -1249,31 +1247,19 @@ void z3_convt::dump_smt()
       out << "(set-info :smt-lib-version 2.6)\n";
       out << "(set-option :print-success true)\n";
       out << "(set-option :produce-models true)\n";
-      out << "(set-option :opt.priority pareto)\n";
       out << "; Asserts from ESMBC starts\n";
       out << solver; // All VCC conditions in SMTLIB format.
       out << "; Asserts from ESMBC ends\n";
-      out << "; put optimization expression here.\n";
-      out << "; Eg : (maximize (ite c 1 0))\n";
-      out << "; Eg : (minimize obj)\n";
       out << "(apply (then simplify solve-eqs))\n";
       out << "(check-sat)\n";
-      out << "(get-objectives)\n";
       out << "(get-model)\n";
       out << "(exit)\n";
     }
   }
 
-  Z3_ast_vector __z3_assertions = Z3_solver_get_assertions(z3_ctx, solver);
-  // for(unsigned index = 0; index < Z3_ast_vector_size(z3_ctx, __z3_assertions);
-  //     index++)
-  // {
-  //   auto ast = Z3_ast_vector_get(z3_ctx, __z3_assertions, index);
-  //   fprintf(stdout, "Assert : %s\n", Z3_get_string(z3_ctx, ast));
-  // }
   default_message msg;
   std::ostringstream oss;
-  oss << Z3_ast_vector_size(z3_ctx, __z3_assertions);
+  oss << "Assertions Size : " << Z3_ast_vector_size(z3_ctx, __z3_assertions);
   msg.debug(oss.str());
 }
 
