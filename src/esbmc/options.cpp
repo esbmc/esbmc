@@ -46,6 +46,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-symex-value-sets",
      NULL,
      "show value-set analysis during symbolic execution"}}},
+  {"Caching", {
+                {"generate-caching", NULL, "generate proof cache for the file"},
+                {"enable-caching", NULL, "enable proof cache usage"}
+              }},
   {"Frontend",
    {{"include,I",
      boost::program_options::value<std::vector<std::string>>()->value_name(

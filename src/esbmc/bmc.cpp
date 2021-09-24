@@ -319,7 +319,7 @@ void bmct::report_result(smt_convt::resultt &res)
     {
       if(options.get_bool_option("generate-caching") && (total_solving_time > 1000))
       {
-        status("Storing formulae as UNSAT");
+        msg.status("Storing formulae as UNSAT");
         std::shared_ptr<green_cache> result_cache;
         result_cache = std::dynamic_pointer_cast<green_cache>(cache);
         result_cache->mark_ssa_as_unsat();
@@ -655,7 +655,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if(options.get_bool_option("enable-caching"))
     {
-      status("Checking SSA over cache\n");
+      msg.status("Checking SSA over cache\n");
       std::string filename = options.get_option("caching-file");
       std::ifstream inputFile(filename);
       if(inputFile.good() || options.get_bool_option("generate-caching"))
