@@ -6,7 +6,6 @@
  \*******************************************************************/
 
 #include <cassert>
-#include <esbmc/bmc.h>
 #include <z3_conv.h>
 #include <fstream>
 #include <util/message/default_message.h>
