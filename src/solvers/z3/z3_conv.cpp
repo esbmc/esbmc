@@ -8,10 +8,7 @@
 #include <cassert>
 #include <esbmc/bmc.h>
 #include <z3_conv.h>
-#include <fmt/format.h>
 #include <fstream>
-#include <stdio.h>
-#include <stdlib.h>
 #include <util/message/default_message.h>
 
 #define new_ast new_solver_ast<z3_smt_ast>
