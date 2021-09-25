@@ -1,0 +1,4 @@
+CORE
+MyContract_overflow_nested.solast
+-M main.c --function func_overflow
+^VERIFICATION FAILED$
