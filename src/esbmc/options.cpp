@@ -48,7 +48,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "show value-set analysis during symbolic execution"}}},
   {"Caching", {
                 {"generate-caching", NULL, "generate proof cache for the file"},
-                {"enable-caching", NULL, "enable proof cache usage"}
+                {"enable-caching", NULL, "enable proof cache usage"},
+                {"caching-file", boost::program_options::value<std::string>(), "destiny file for witness"},
               }},
   {"Frontend",
    {{"include,I",

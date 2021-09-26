@@ -317,7 +317,7 @@ void bmct::report_result(smt_convt::resultt &res)
     }
     else if(!bs)
     {
-      if(options.get_bool_option("generate-caching") && (total_solving_time > 1000))
+      if(options.get_bool_option("generate-caching"))
       {
         msg.status("Storing formulae as UNSAT");
         std::shared_ptr<green_cache> result_cache;
@@ -329,7 +329,7 @@ void bmct::report_result(smt_convt::resultt &res)
     else
     {
       msg.status("No bug has been found in the base case");
-      if(options.get_bool_option("generate-caching") && (total_solving_time > 1000))
+      if(options.get_bool_option("generate-caching"))
       {
         msg.status("Storing formulae as UNSAT");
         std::shared_ptr<green_cache> result_cache;
