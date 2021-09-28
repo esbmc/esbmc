@@ -9,6 +9,8 @@ Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
 #include <solidity-frontend/solidity_grammar.h>
 #include <fmt/core.h>
 
+#define ENUM_TO_STR(s) case s: { return #s; }
+
 namespace SolidityGrammar
 {
   // rule contract-body-element

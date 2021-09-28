@@ -1,13 +1,9 @@
 if(ENABLE_OLD_FRONTEND)
   set(OLD_FRONTEND_TARGETS ansicfrontend cppfrontend)
-else()
-  set(OLD_FRONTEND_TARGETS "")
 endif()
 
 if(ENABLE_SOLIDITY_FRONTEND)
   set(SOLIDITY_FRONTEND_TARGETS solidityfrontend)
-else()
-  set(SOLIDITY_FRONTEND_TARGETS "")
 endif()
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt

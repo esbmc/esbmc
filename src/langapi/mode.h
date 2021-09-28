@@ -46,7 +46,7 @@ languaget *new_solidity_language(const messaget &msg);
   }
 #define LANGAPI_HAVE_MODE_SOLAST                                               \
   {                                                                            \
-    "Solidity AST", &new_solidity_language, extensions_sol_ast             \
+    "Solidity AST", &new_solidity_language, extensions_sol_ast                 \
   }
 #define LANGAPI_HAVE_MODE_C                                                    \
   {                                                                            \

@@ -19,8 +19,8 @@ solidity_languaget::solidity_languaget(const messaget &msg) : languaget(msg)
 
 solidity_languaget::~solidity_languaget()
 {
-  if(clang_c_module != nullptr)
-    delete clang_c_module;
+  assert(clang_c_module != nullptr);
+  delete clang_c_module;
 }
 
 bool solidity_languaget::parse(

@@ -28,36 +28,3 @@ contract MyContract {
       assert(sum % 16 != 0);
     }
 }
-
-
-      //__ESBMC_assume(y < 255);
-      //__ESBMC_assume(y > 220);
-      //__ESBMC_assume(y != 224); // 224 = 16 * 14;
-      //__ESBMC_assume(y != 240); // 240 = 16 * 15;
-/*
-C  = [
-       y=0             /\
-       z=nondet()      /\
-       sum = y+z       /\
-       sum1 = sum % 16 /\
-       _z != 224      /\
-       _z != 240      /\
-       z < 255 /\ z > 220
-     ]
-
-P = [ sum1 != 0 ]
-~P = [ sum1 == 0 ]
-
-Find a counterexample that satisfies C /\ ~P
-
-satisfiable?
-
-*/
-
-/*
-  __ESBMC_assume(_z < 255);
-  __ESBMC_assume(_z > 220);
-  __ESBMC_assume(_z != 240); // 240 = 16 * 15;
-  __ESBMC_assume(_z != 224); // 224 = 16 * 14;
-  assert(sum % 16 != 0);
-*/
