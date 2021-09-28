@@ -27,8 +27,8 @@ bool solidity_languaget::parse(
   const std::string &path,
   const messaget &msg)
 {
-  printf("sol_main_path: %s\n", sol_main_path.c_str());
-  assert(sol_main_path != ""); // We still need a 'main' function although --function is provided.
+  // We still need a 'main' function although --function is provided.
+  assert(sol_main_path != "");
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   clang_c_module->parse(sol_main_path, msg); // populate clang_c_module's ASTs
@@ -37,22 +37,20 @@ bool solidity_languaget::parse(
   std::ifstream ast_json_file_stream(path);
   std::string new_line, ast_json_content;
 
-  printf("\n### ast_json_file_stream processing:... \n");
+  msg.debug("### ast_json_file_stream processing:... \n");
   while (getline(ast_json_file_stream, new_line))
   {
-    if (new_line.find(".sol =======") != std::string::npos) {
-      printf("found .sol ====== , breaking ...\n");
+    if (new_line.find(".sol =======") != std::string::npos)
+    {
+      msg.debug("found .sol ====== , breaking ...\n");
       break;
     }
   }
   while (getline(ast_json_file_stream, new_line))
   {
     // file pointer continues from "=== *.sol ==="
-    //printf("new_line: %s\n", new_line.c_str());
     if (new_line.find(".sol =======") == std::string::npos)
     {
-      //printf("  new_line: ");
-      //printf("%s\n", new_line.c_str());
       ast_json_content = ast_json_content + new_line + "\n";
     }
     else
@@ -60,10 +58,9 @@ bool solidity_languaget::parse(
       assert(!"Unsupported feature: found multiple contracts defined in a single .sol file");
     }
   }
-  ast_json = nlohmann::json::parse(ast_json_content); // parse explicitly
 
-  //printf("@@ This is ast_json: \n");
-  //print_json(ast_json);
+  // parse explicitly
+  ast_json = nlohmann::json::parse(ast_json_content);
 
   return false;
 }
@@ -123,11 +120,4 @@ bool solidity_languaget::from_type(
 {
   assert(!"should not be here - Solidity frontend does not need this funciton");
   return false;
-}
-
-void solidity_languaget::print_json(const nlohmann::json &json_in)
-{
-  printf("\n### json_content: ###\n");
-  std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations
-  printf("\n");
 }

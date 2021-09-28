@@ -64,7 +64,6 @@ public:
   // store AST json in nlohmann::json data structure
   nlohmann::json ast_json;
   nlohmann::json intrinsic_json;
-  void print_json(const nlohmann::json &json_in);
 
   languaget *clang_c_module;
 

@@ -99,15 +99,6 @@ protected:
   bool convert_integer_literal(
     const nlohmann::json &integer_literal,
     std::string the_value, exprt &dest);
-
-  // debug functions
-  void print_json(const nlohmann::json &json_in);
-  void print_json_element(const nlohmann::json &json_in, const unsigned index,
-    const std::string &key, const std::string& json_name);
-  void print_json_array_element(const nlohmann::json &json_in,
-      const std::string& node_type, const unsigned index);
-  void print_json_stmt_element(const nlohmann::json &json_in,
-      const std::string& node_type, const unsigned index);
 };
 
 #endif /* SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_ */

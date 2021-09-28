@@ -7,6 +7,7 @@ Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
 \*******************************************************************/
 
 #include <solidity-frontend/solidity_grammar.h>
+#include <fmt/core.h>
 
 namespace SolidityGrammar
 {
@@ -25,8 +26,10 @@ namespace SolidityGrammar
     }
     else
     {
-      printf("Got contract-body-element nodeType=%s\n", element["nodeType"].get<std::string>().c_str());
-      assert(!"Unsupported contract-body-element type");
+      assert(!(
+            (fmt::format("Got contract-body-element nodeType={}. Unsupported contract-body-element type",
+              element["nodeType"].get<std::string>())).c_str()
+            ));
     }
     return ContractBodyElementTError;
   }
@@ -84,8 +87,10 @@ namespace SolidityGrammar
       }
       else
       {
-        printf("Got type-name typeString=%s\n", type_name["typeString"].get<std::string>().c_str());
-        assert(!"Unsupported type-name type");
+        assert(!(
+              (fmt::format("Got type-name typeString={}. Unsupported type-name type",
+                type_name["typeString"].get<std::string>())).c_str()
+              ));
       }
     }
     else
@@ -97,8 +102,10 @@ namespace SolidityGrammar
       }
       else
       {
-        printf("Got type-name nodeType=%s\n", type_name["nodeType"].get<std::string>().c_str());
-        assert(!"Unsupported type-name type");
+        assert(!(
+              (fmt::format("Got type-name nodeType={}. Unsupported type-name type",
+                type_name["nodeType"].get<std::string>())).c_str()
+              ));
       }
     }
 
@@ -143,8 +150,10 @@ namespace SolidityGrammar
     }
     else
     {
-      printf("Got elementary-type-name typeString=%s\n", type_name["typeString"].get<std::string>().c_str());
-      assert(!"Unsupported elementary-type-name type");
+      assert(!(
+            (fmt::format("Got elementary-type-name typeString={}. Unsupported elementary-type-name type",
+              type_name["typeString"].get<std::string>())).c_str()
+            ));
     }
     return ElementaryTypeNameTError;
   }
@@ -203,8 +212,10 @@ namespace SolidityGrammar
     }
     else
     {
-      printf("Got block nodeType=%s\n", block["nodeType"].get<std::string>().c_str());
-      assert(!"Unsupported block type");
+      assert(!(
+            (fmt::format("Got block nodeType={}. Unsupported block type",
+              block["nodeType"].get<std::string>())).c_str()
+            ));
     }
     return BlockTError;
   }
@@ -253,8 +264,10 @@ namespace SolidityGrammar
     }
     else
     {
-      printf("Got statement nodeType=%s\n", stmt["nodeType"].get<std::string>().c_str());
-      assert(!"Unsupported statement type");
+      assert(!(
+            (fmt::format("Got statement nodeType={}. Unsupported statement type",
+              stmt["nodeType"].get<std::string>())).c_str()
+            ));
     }
     return StatementTError;
   }
@@ -313,8 +326,10 @@ namespace SolidityGrammar
     }
     else
     {
-      printf("Got expression nodeType=%s\n", expr["nodeType"].get<std::string>().c_str());
-      assert(!"Unsupported expression type");
+      assert(!(
+            (fmt::format("Got expression nodeType={}. Unsupported expression type",
+              expr["nodeType"].get<std::string>())).c_str()
+            ));
     }
     return ExpressionTError;
   }
@@ -377,8 +392,10 @@ namespace SolidityGrammar
     }
     else
     {
-      printf("Got expression operator=\"%s\"\n", expr["operator"].get<std::string>().c_str());
-      assert(!"Unsupported expression operator");
+      assert(!(
+            (fmt::format("Got expression operator={}. Unsupported expression operator",
+              expr["operator"].get<std::string>())).c_str()
+            ));
     }
 
     return ExpressionTError; // make some old compilers happy
@@ -424,8 +441,10 @@ namespace SolidityGrammar
     }
     else
     {
-      printf("Got expression nodeType=%s\n", stmt["nodeType"].get<std::string>().c_str());
-      assert(!"Unsupported variable-declaration-statement operator");
+      assert(!(
+            (fmt::format("Got expression nodeType={}. Unsupported variable-declaration-statement operator",
+              stmt["nodeType"].get<std::string>())).c_str()
+            ));
     }
     return VarDeclStmtTError; // make some old compilers happy
   }
@@ -492,8 +511,10 @@ namespace SolidityGrammar
     }
     else
     {
-      printf("Got implicit cast type=%s\n", cast.c_str());
-      assert(!"Unsupported expression type");
+      assert(!(
+            (fmt::format("Got implicit cast type={}. Unsupported case type",
+              cast.c_str())).c_str()
+            ));
     }
 
       return ImplicitCastTypeTError; // to make some old compilers happy

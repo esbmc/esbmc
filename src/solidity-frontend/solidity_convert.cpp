@@ -10,6 +10,7 @@
 #include <util/std_expr.h>
 #include <iomanip>
 #include <regex>
+#include <util/message/format.h>
 
 solidity_convertert::solidity_convertert(contextt &_context,
   nlohmann::json &_ast_json, const std::string &_sol_func, const messaget &msg):
@@ -46,8 +47,7 @@ bool solidity_convertert::convert()
 
   bool found_contract_def = false;
   unsigned index = 0;
-  nlohmann::json::iterator itr = nodes.begin();
-  for (; itr != nodes.end(); ++itr, ++index)
+  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr, ++index)
   {
     // ignore the meta information and locate nodes in ContractDefinition
     std::string node_type = (*itr)["nodeType"].get<std::string>();
@@ -67,8 +67,7 @@ bool solidity_convertert::convert()
   // reasoning-based verification
   //assert(!"Continue with symbol annotations");
   index = 0;
-  itr = nodes.begin();
-  for (; itr != nodes.end(); ++itr, ++index)
+  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr, ++index)
   {
     std::string node_type = (*itr)["nodeType"].get<std::string>();
     if (node_type == "ContractDefinition") // rule source-unit
@@ -85,8 +84,7 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
 {
   unsigned index = 0;
   nlohmann::json ast_nodes = contract_def["nodes"];
-  nlohmann::json::iterator itr = ast_nodes.begin();
-  for (; itr != ast_nodes.end(); ++itr, ++index)
+  for (nlohmann::json::iterator itr = ast_nodes.begin(); itr != ast_nodes.end(); ++itr, ++index)
   {
     nlohmann::json ast_node = *itr;
     std::string node_name = ast_node["name"].get<std::string>();
@@ -375,9 +373,6 @@ bool solidity_convertert::get_function_params(const nlohmann::json &pd, exprt &p
   if (is_array)
   {
     assert(!"Unimplemented - funciton parameter is array type");
-    //param_type.id("pointer");
-    //param_type.remove("size");
-    //param_type.remove("#constant");
   }
 
   // 3a. get id and name
@@ -428,13 +423,12 @@ bool solidity_convertert::get_function_params(const nlohmann::json &pd, exprt &p
 bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr)
 {
   // For rule block
-  static int call_block_times = 0; // TODO: remove debug
   locationt location;
   get_start_location_from_stmt(block, location);
 
   SolidityGrammar::BlockT type = SolidityGrammar::get_block_t(block);
-  msg.status(fmt::format("	@@@ got Block: SolidityGrammar::BlockT::{}, call_block_times={}",
-        SolidityGrammar::block_to_str(type), call_block_times++));
+  msg.status(fmt::format("	@@@ got Block: SolidityGrammar::BlockT::{}",
+        SolidityGrammar::block_to_str(type)));
 
   switch(type)
   {
@@ -450,7 +444,6 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
       for(auto const &stmt_kv : stmts.items())
       {
         exprt statement;
-        //print_json_stmt_element(stmt_kv.value(), stmt_kv.value()["nodeType"], ctr);
         if(get_statement(stmt_kv.value(), statement))
           return true;
 
@@ -489,11 +482,10 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
   // For rule statement
   // Since this is an additional layer of grammar rules compared to clang C, we do NOT set location here.
   // Just pass the new_expr reference to the next layer.
-  static int call_stmt_times = 0; // TODO: remove debug
 
   SolidityGrammar::StatementT type = SolidityGrammar::get_statement_t(stmt);
-  msg.status(fmt::format("	@@@ got Stmt: SolidityGrammar::StatementT::{}, call_stmt_times={}",
-        SolidityGrammar::statement_to_str(type), call_stmt_times++));
+  msg.status(fmt::format("	@@@ got Stmt: SolidityGrammar::StatementT::{}",
+        SolidityGrammar::statement_to_str(type)));
 
   switch(type)
   {
@@ -541,9 +533,7 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
     case SolidityGrammar::StatementT::ReturnStatement:
     {
       if(!current_functionDecl)
-      {
         assert(!"Error: ESBMC could not find the parent scope for this ReturnStatement");
-      }
 
       // 1. get return type
       // TODO: Fix me! Assumptions:
@@ -552,7 +542,6 @@ bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_e
       assert(stmt.contains("expression"));
       assert(stmt["expression"].contains("referencedDeclaration"));
 
-      //print_json(stmt);
       typet return_type;
       if (get_type_description(stmt["expression"]["typeDescriptions"], return_type))
         return true;
@@ -666,13 +655,12 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 {
   // For rule expression
   // We need to do location settings to match clang C's number of times to set the locations when recurring
-  static int call_expr_times = 0; // TODO: remove debug
   locationt location;
   get_start_location_from_stmt(expr, location);
 
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
-  msg.status(fmt::format("	@@@ got Expr: SolidityGrammar::ExpressionT::{}, call_expr_times={}",
-        SolidityGrammar::expression_to_str(type), call_expr_times++));
+  msg.status(fmt::format("	@@@ got Expr: SolidityGrammar::ExpressionT::{}",
+        SolidityGrammar::expression_to_str(type)));
 
   switch(type)
   {
@@ -1021,13 +1009,9 @@ bool solidity_convertert::get_var_decl_ref(const nlohmann::json &decl, exprt &ne
   assert(decl["nodeType"] == "VariableDeclaration");
   std::string name, id;
   if (decl["stateVariable"])
-  {
     get_state_var_decl_name(decl, name, id);
-  }
   else
-  {
     get_var_decl_name(decl, name, id);
-  }
 
   typet type;
   if (get_type_description(decl["typeName"]["typeDescriptions"], type)) // "type-name" as in state-variable-declaration
@@ -1138,9 +1122,7 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
         return true;
 
       if(sub_type.is_struct() || sub_type.is_union()) // for "assert(sum > 100)", false || false
-      {
         assert(!"struct or union is NOT supported");
-      }
 
       new_type = gen_pointer_type(sub_type);
       break;
@@ -1161,9 +1143,7 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
         return true;
 
       if(sub_type.is_struct() || sub_type.is_union()) // for "assert(sum > 100)", false || false
-      {
         assert(!"struct or union is NOT supported");
-      }
 
       new_type = gen_pointer_type(sub_type);
       break;
@@ -1330,7 +1310,6 @@ bool solidity_convertert::get_parameter_list(const nlohmann::json &type_name, ty
     }
     case SolidityGrammar::ParameterListT::NONEMPTY:
     {
-      //print_json(type_name);
       assert(type_name["parameters"].size() == 1); // TODO: Fix me! assuming one return parameter
       const nlohmann::json &rtn_type = type_name["parameters"].at(0)["typeName"]["typeDescriptions"];
       return get_elementary_type_name(rtn_type, new_type);
@@ -1440,24 +1419,20 @@ const nlohmann::json& solidity_convertert::find_decl_ref(int ref_decl_id)
 {
   // First, search state variable nodes
   nlohmann::json& nodes = ast_json["nodes"];
-  nlohmann::json::iterator itr = nodes.begin();
   unsigned index = 0;
-  for (; itr != nodes.end(); ++itr, ++index)
+  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr, ++index)
   {
     if ( (*itr)["nodeType"] == "ContractDefinition" ) // contains AST nodes we need
       break;
   }
 
   nlohmann::json& ast_nodes = nodes.at(index)["nodes"];
-  nlohmann::json::iterator itrr = ast_nodes.begin();
+
   index = 0;
-  for (; itrr != ast_nodes.end(); ++itrr, ++index)
+  for (nlohmann::json::iterator itrr = ast_nodes.begin(); itrr != ast_nodes.end(); ++itrr, ++index)
   {
     if ( (*itrr)["id"] == ref_decl_id)
-    {
-      //print_json(ast_nodes.at(index));
       return ast_nodes.at(index);
-    }
   }
 
   // Then search "declarations" in current function scope
@@ -1475,9 +1450,7 @@ const nlohmann::json& solidity_convertert::find_decl_ref(int ref_decl_id)
           {
             const nlohmann::json &the_decl = local_decl.value();
             if (the_decl["id"] == ref_decl_id)
-            {
               return the_decl;
-            }
           }
         }
       }
@@ -1502,9 +1475,7 @@ const nlohmann::json& solidity_convertert::find_decl_ref(int ref_decl_id)
       {
         const nlohmann::json &the_decl = init_decl.value();
         if (the_decl["id"] == ref_decl_id)
-        {
           return the_decl;
-        }
       }
     }
     else
@@ -1544,9 +1515,8 @@ symbolt *solidity_convertert::move_symbol_to_context(symbolt &symbol)
   {
     if(context.move(symbol, s))
     {
-      std::cerr << "Couldn't add symbol " << symbol.name
-                << " to symbol table\n";
-      symbol.dump();
+      msg.error(fmt::format(
+        "Couldn't add symbol {} to symbol table\n{}", symbol.name, symbol));
       abort();
     }
   }
@@ -1795,37 +1765,4 @@ std::string solidity_convertert::get_array_size(const nlohmann::json& type_descr
   }
 
   return the_size;
-}
-
-// debug functions
-void solidity_convertert::print_json(const nlohmann::json &json_in)
-{
-  printf("### JSON: ###\n");
-  std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
-  printf("\n");
-}
-
-void solidity_convertert::print_json_element(const nlohmann::json &json_in, const unsigned index,
-    const std::string &key, const std::string& json_name)
-{
-  printf("### %s element[%u] content: key=%s, size=%lu ###\n",
-      json_name.c_str(), index, key.c_str(), json_in.size());
-  std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
-  printf("\n");
-}
-
-void solidity_convertert::print_json_array_element(const nlohmann::json &json_in,
-    const std::string& node_type, const unsigned index)
-{
-  printf("### node[%u]: nodeType=%s ###\n", index, node_type.c_str());
-  std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
-  printf("\n");
-}
-
-void solidity_convertert::print_json_stmt_element(const nlohmann::json &json_in,
-    const std::string& node_type, const unsigned index)
-{
-  printf("\t### stmt[%u]: nodeType=%s ###\n", index, node_type.c_str());
-  std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
-  printf("\n");
 }
