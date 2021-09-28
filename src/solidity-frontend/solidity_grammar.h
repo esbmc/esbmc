@@ -5,8 +5,6 @@
 #include <string>
 #include <nlohmann/json.hpp>
 
-#define ENUM_TO_STR(s) case s: { return #s; }
-
 // Anything auxiliary means it's not in Solidity grammar, but we need it to work with
 // ESBMC's irept
 namespace SolidityGrammar

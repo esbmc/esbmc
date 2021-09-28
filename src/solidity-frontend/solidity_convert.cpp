@@ -8,7 +8,6 @@
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
-#include <iomanip>
 #include <regex>
 #include <util/message/format.h>
 
@@ -458,8 +457,6 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
       // However, it should be get_final_location_from_stmt.
       locationt location_end;
       get_start_location_from_stmt(block, location_end);
-
-      //assert(!"done - all CompoundStmtClass?");
 
       _block.end_location(location_end);
 
@@ -1053,7 +1050,7 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
 
   std::string name, id;
   name = decl["name"].get<std::string>();
-  id = "c:@F@" + name;
+  id = name;
 
   // manually unrolled recursion here
   // type config for Builtin && Int
@@ -1359,9 +1356,8 @@ void solidity_convertert::get_function_definition_name(
 {
   // Follow the way in clang:
   //  - For function name, just use the ast_node["name"]
-  //  - For function id, add prefix "c:@F@"
   name = ast_node["name"].get<std::string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-  id = "c:@F@" + name;
+  id = name;
 }
 
 void solidity_convertert::get_location_from_decl(const nlohmann::json &ast_node, locationt &location)

@@ -2,7 +2,6 @@
 #define SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_
 
 #include <memory>
-#include <iostream>
 #include <stack>
 #include <map>
 #include <util/context.h>

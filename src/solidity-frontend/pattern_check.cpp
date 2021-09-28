@@ -49,7 +49,7 @@ void pattern_checker::check_authorization_through_tx_origin(const nlohmann::json
   for (nlohmann::json::const_iterator itr = body_stmt.begin();
        itr != body_stmt.end(); ++itr, ++index)
   {
-    msg.status(fmt::format("@@ checking function body stmt {}", index));
+    msg.status(fmt::format(" checking function body stmt {}", index));
     if (itr->contains("nodeType"))
     {
       if ((*itr)["nodeType"].get<std::string>() == "ExpressionStatement")
