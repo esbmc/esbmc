@@ -1,4 +1,4 @@
 CORE
 MyContract_TxOrigin.solast
 -M main.c --function transferTo
-^VERIFICATION FAILED$
+.*Found vulnerability SWC-115.*
