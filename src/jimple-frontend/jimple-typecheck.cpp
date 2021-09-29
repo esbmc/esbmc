@@ -18,5 +18,5 @@ bool jimple_languaget::typecheck(contextt &context, const std::string &, const m
     return true;
   }
 
-  return true;
+  return false;
 }

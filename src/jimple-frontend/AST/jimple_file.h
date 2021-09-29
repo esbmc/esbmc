@@ -22,14 +22,12 @@ public:
     Class,
     Interface
   };
-  virtual exprt to_exprt(const messaget &msg, contextt &ctx) const override;
+  virtual exprt to_exprt(contextt &ctx) const;
   file_type from_string(const std::string &name);
   std::string to_string(const file_type &ft) const;
   virtual void from_json(const json& j) override;
   virtual std::string to_string() const override;
 
-protected:
-public:
   file_type getMode() const
   {
     return mode;
@@ -54,6 +52,8 @@ public:
   {
     return body;
   }
+
+  const bool is_interface() const { return getMode() == file_type::Interface; }
 
 protected:
   file_type mode;

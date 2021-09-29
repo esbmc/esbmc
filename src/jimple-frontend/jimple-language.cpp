@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <jimple-frontend/jimple-language.h>
 #include <util/message/format.h>
-
+#include <c2goto/cprover_library.h>
 languaget *new_jimple_language(const messaget &msg)
 {
   return new jimple_languaget(msg);
@@ -9,15 +9,15 @@ languaget *new_jimple_language(const messaget &msg)
 }
 bool jimple_languaget::final(contextt &context, const messaget &msg)
 {
-  msg.debug("I don't know what final does");
-  return languaget::final(context, msg);
+  add_cprover_library(context, msg);
+  return false;
 }
 bool jimple_languaget::from_type(
   const typet &type,
   std::string &code,
   const namespacet &ns)
 {
-  msg.debug(fmt::format("From Type: {}",code));
+  //code = expr2c(expr, ns);
   return false;
 }
 bool jimple_languaget::from_expr(
@@ -25,7 +25,7 @@ bool jimple_languaget::from_expr(
   std::string &code,
   const namespacet &ns)
 {
-  msg.debug(fmt::format("From Expr: {}",code));
+  //code = expr2c(expr, ns);
   return false;
 }
 

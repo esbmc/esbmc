@@ -16,6 +16,7 @@ class jimple_identity : public jimple_statement
 public:
   virtual void from_json(const json& j) override;
   virtual std::string to_string() const override;
+  virtual exprt to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const override;
 protected:
   std::string local_name;
   std::string at_identifier;
@@ -32,6 +33,7 @@ class jimple_invoke : public jimple_statement
 // TODO: Add return statement
 class jimple_return : public jimple_statement
 {
+  virtual exprt to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const override;
   virtual std::string to_string() const override;
   virtual void from_json(const json& j) override;
 };
@@ -40,6 +42,7 @@ class jimple_label : public jimple_statement
 {
   virtual std::string to_string() const override;
   virtual void from_json(const json& j) override;
+  virtual exprt to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const override;
 protected:
   std::string label;
 };
