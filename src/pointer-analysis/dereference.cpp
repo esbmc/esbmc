@@ -409,8 +409,8 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
             // This solution works only for unsigned and positive
             // signed bitfields
-            type2tc new_type(new unsignedbv_type2t(num_bytes * 8));
-            //type2tc new_type(new signedbv_type2t(num_bytes * 8));
+            //type2tc new_type(new unsignedbv_type2t(num_bytes * 8));
+            type2tc new_type(new signedbv_type2t(num_bytes * 8));
             stitch_together_from_byte_array(value, new_type, bytes);
             delete[] bytes;
 
@@ -1091,6 +1091,9 @@ void dereferencet::construct_from_array(
 
   // Additional complexity occurs if it's aligned but overflows boundaries
   unsigned int deref_size = type->get_width() / 8;
+  if(config.options.get_bool_option("use-bit-precision"))
+    deref_size = type->get_width();
+
   bool overflows_boundaries = (deref_size > subtype_size);
 
   // No alignment guarantee: assert that it's correct.
@@ -1997,7 +2000,15 @@ void dereferencet::stitch_together_from_byte_array(
     accuml = bytes[0];
     for(unsigned int i = 1; i < num_bytes; i++)
     {
-      type2tc res_type = get_uint_type(accuml->type->get_width() + 8);
+      type2tc res_type;
+      if(config.options.get_bool_option("use-bit-precision"))
+      {
+        res_type = get_uint_type(accuml->type->get_width() + 1);
+      }
+      else
+      {
+        res_type = get_uint_type(accuml->type->get_width() + 8);
+      }
       accuml = concat2tc(res_type, accuml, bytes[i]);
     }
   }
@@ -2007,7 +2018,15 @@ void dereferencet::stitch_together_from_byte_array(
     accuml = bytes[num_bytes - 1];
     for(int i = num_bytes - 2; i >= 0; i--)
     {
-      type2tc res_type = get_uint_type(accuml->type->get_width() + 8);
+      type2tc res_type;
+      if(config.options.get_bool_option("use-bit-precision"))
+      {
+        res_type = get_uint_type(accuml->type->get_width() + 1);
+      }
+      else
+      {
+        res_type = get_uint_type(accuml->type->get_width() + 8);
+      }
       accuml = concat2tc(res_type, accuml, bytes[i]);
     }
   }

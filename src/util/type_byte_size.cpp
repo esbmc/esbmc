@@ -16,6 +16,9 @@
 
 BigInt member_offset(const type2tc &type, const irep_idt &member)
 {
+  if(config.options.get_bool_option("use-bit-precision"))
+    return member_offset_bits(type, member);
+
   return member_offset_bits(type, member) / 8;
 }
 
@@ -56,6 +59,10 @@ BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval)
 BigInt type_byte_size(const type2tc &type)
 {
   BigInt bits = type_byte_size_bits(type);
+  
+  if(config.options.get_bool_option("use-bit-precision"))
+    return bits;
+  
   return (bits + 7) / 8;
 }
 
@@ -255,6 +262,10 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
 expr2tc compute_pointer_offset(const expr2tc &expr)
 {
   expr2tc pointer_offset_bits = compute_pointer_offset_bits(expr);
+  
+  if(config.options.get_bool_option("use-bit-precision"))
+    return pointer_offset_bits;
+  
   expr2tc result =
     div2tc(pointer_offset_bits->type, pointer_offset_bits, gen_ulong(8));
   return result;
