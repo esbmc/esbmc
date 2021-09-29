@@ -5,6 +5,17 @@
 #include <jimple-frontend/AST/jimple_method_body.h>
 #include <jimple-frontend/AST/jimple_declaration.h>
 #include <jimple-frontend/AST/jimple_statement.h>
+#include <util/std_code.h>
+#include <util/expr_util.h>
+
+exprt jimple_full_method_body::to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const
+{
+  code_blockt block;
+  for(auto const &stmt : this->members)
+      block.operands().push_back(stmt->to_exprt(ctx,class_name, function_name));
+
+  return block;
+}
 
 void jimple_full_method_body::from_json(const json &j)
 {

@@ -5,7 +5,6 @@
 
 bool jimple_converter::convert()
 {
-  exprt dummy_decl = AST.to_exprt(msg, context);
-  dummy_decl.dump();
-  return true;
+  AST.to_exprt(context);
+  return false;
 }

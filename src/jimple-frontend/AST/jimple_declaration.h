@@ -11,6 +11,7 @@
 class jimple_declaration : public jimple_method_field {
   virtual void from_json(const json& j) override;
   virtual std::string to_string() const override;
+  virtual exprt to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const override ;
 
 protected:
   jimple_type t;

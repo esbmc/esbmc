@@ -48,10 +48,4 @@ public:
 
   // TODO: this should be a list
   jimple_file root;
-
-
-  // store AST json in nlohmann::json data structure
-  //nlohmann::json ast_json;
-  //nlohmann::json intrinsic_json;
-  //void print_json(const nlohmann::json &json_in);
 };
