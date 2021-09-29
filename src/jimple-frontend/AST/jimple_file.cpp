@@ -99,55 +99,48 @@ void jimple_file::load_file(const std::string &path)
 
   from_json(j);
 }
-exprt jimple_file::to_exprt(const messaget &msg, contextt &ctx) const
+
+exprt jimple_file::to_exprt(contextt &ctx) const
 {
-  msg.debug("Generating File");
   exprt e = code_skipt();
+
+  if(is_interface())
+  {
+    throw "Interface is not supported";
+  }
+
   std::string id, name;
   id = this->getClassName();
   name = this->getClassName();
 
-  // Check if the symbol is already added to the context, do nothing if it is
-  // already in the context. See next comment
   if(ctx.find_symbol(id) != nullptr)
     throw "Duplicated symbol";
 
-  struct_union_typet t;
-  t = struct_typet();
+  struct_typet t;
   t.tag(name);
 
-  // TODO: Localization
-  //locationt location_begin;
-  //get_location_from_decl(rd, location_begin);
 
-  symbolt symbol;
-  symbol.mode = "Jimple";
-  symbol.module = "Test";
-  //symbol.location = std::move(location_begin);
-  symbol.type = std::move(t);
-  symbol.name = name;
-  symbol.id = id;
+  auto symbol = create_jimple_symbolt(t, name, name, id);
+
   std::string symbol_name = symbol.id.as_string();
+
+  // A class/interface is a type
   symbol.is_type = true;
 
-
-  // We have to add the struct/union/class to the context before converting its
-  // fields because there might be recursive struct/union/class (pointers) and
-  // the code at get_type, case clang::Type::Record, needs to find the correct
-  // type (itself). Note that the type is incomplete at this stage, it doesn't
-  // contain the fields, which are added to the symbol later on this method.
+  // Add symbol into the context
   ctx.move_symbol_to_context(symbol);
-  symbolt &added_symbol = *ctx.find_symbol(symbol_name);
-  added_symbol.dump();
+  symbolt *added_symbol = ctx.find_symbol(symbol_name);
 
-  // First, parse the fields
+  // Add class/interface members
   for(auto const &field : body)
   {
-    field.dump();
+    struct_typet::componentt comp;
+    exprt &tmp = comp;
+    tmp = field.to_exprt(ctx, name, name);
+    // TODO: only add declarations
+    t.components().push_back(comp);
   }
 
-  //f(get_struct_union_class_fields(*rd_def, t))
-//    return true;
-
+  added_symbol->type = t;
   return e;
 }

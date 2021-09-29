@@ -28,17 +28,34 @@ public:
   }
 
   virtual void from_json(const json&) = 0;
-  virtual exprt to_exprt(const messaget &msg, contextt &ctx) const
-  {
-    msg.debug("Converting Jimple AST");
-    exprt x;
-    return x;
-  };
+
   /**
    * Converts the object into a string
    * @return a human readable string of the object
    */
   virtual std::string to_string() const = 0;
+
+  protected:
+  static symbolt create_jimple_symbolt(const typet &t, const std::string &module, const std::string &name, const std::string &id, const std::string function_name = "") {
+    symbolt symbol;
+    symbol.mode = "C";
+    symbol.module = module;
+    symbol.location = std::move(get_location(module, function_name));
+    symbol.type = std::move(t);
+    symbol.name = name;
+    symbol.id = id;
+    return symbol;
+  }
+
+  static locationt get_location(const std::string &module, const std::string function_name = "")
+  {
+    locationt l;
+    //l.set_line(-1);
+    l.set_file(module+ ".jimple");
+    if(!function_name.empty())
+      l.set_function(function_name);
+    return l;
+  }
 };
 
 void from_json(const json& j, jimple_ast& p);

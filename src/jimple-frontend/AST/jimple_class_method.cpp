@@ -1,4 +1,44 @@
 #include <jimple-frontend/AST/jimple_class_member.h>
+#include <util/std_code.h>
+#include <util/expr_util.h>
+#include <util/message/format.h>
+
+exprt jimple_class_method::to_exprt(contextt &ctx, const std::string &class_name, const std::string &file_name) const {
+
+  exprt dummy;
+  code_typet method_type;
+  typet &inner_type = method_type;
+  inner_type = t.to_typet();
+
+  std::string id, name;
+  id = this->name;
+  name = this->name;
+
+
+  auto symbol = create_jimple_symbolt(method_type, class_name, name, id);
+
+
+  std::string symbol_name = symbol.id.as_string();
+
+  symbol.lvalue = true;
+  symbol.is_extern = false;
+  symbol.file_local = true;
+
+  ctx.move_symbol_to_context(symbol);
+  symbolt &added_symbol = *ctx.find_symbol(symbol_name);
+
+  //TODO: parameters
+
+
+   // Apparently, if the type has no arguments, we assume ellipsis
+  if(!method_type.arguments().size())
+    method_type.make_ellipsis();
+
+  added_symbol.type = method_type;
+  added_symbol.value = body->to_exprt(ctx, class_name, this->name);
+
+  return dummy;
+}
 
 void jimple_class_method::from_json(const json &j)
 {

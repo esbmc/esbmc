@@ -16,7 +16,7 @@ public:
 
 protected:
   contextt &context;
-  const jimple_ast &AST;
+  const jimple_file &AST;
   const messaget &msg;
 
 };
