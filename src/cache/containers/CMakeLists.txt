@@ -3,4 +3,5 @@ add_library(cache_containers
 
 # Boost is needed by anything that touches irep2
 target_include_directories(cache_containers
-        PRIVATE ${Boost_INCLUDE_DIRS})
+        PRIVATE ${Boost_INCLUDE_DIRS}
+        fmt::fmt)
