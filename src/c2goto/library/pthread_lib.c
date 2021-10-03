@@ -578,7 +578,7 @@ __ESBMC_HIDE:;
   _Bool signalled = __ESBMC_cond_lock_field(*cond) == 0;
 #endif
 
-/**
+  /**
  * NOTE:
  *
  * When using condition variables there is always a boolean predicate
@@ -591,8 +591,8 @@ __ESBMC_HIDE:;
  * upon such return.
  *
  */
- _Bool spourious_wakeup = nondet_bool();
- signalled |= spourious_wakeup;
+  _Bool spourious_wakeup = nondet_bool();
+  signalled |= spourious_wakeup;
 
   // Don't consider any other interleavings aside from the ones where we've
   // been signalled. As with mutexes, we should discard this trace and look
