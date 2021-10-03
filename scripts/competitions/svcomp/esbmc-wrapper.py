@@ -64,16 +64,16 @@ class Property:
 
 # Function to run esbmc
 def run(cmd_line):
-  print "Verifying with ESBMC"
-  print "Command: " + cmd_line
+  print("Verifying with ESBMC")
+  print("Command: " + cmd_line)
 
   the_args = shlex.split(cmd_line)
 
   p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   (stdout, stderr) = p.communicate()
 
-  print stdout
-  print stderr
+  print(stdout.decode())
+  print(stderr.decode())
 
   return stdout
 
@@ -219,10 +219,10 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   else:
     command_line += "--64 "
 
-  if concurrency:  
+  if concurrency:
     esbmc_dargs += "--unwind 8 --no-por "
     esbmc_dargs += "--no-slice " # TODO: Witness validation is only working without slicing
-  
+
   # Add witness arg
   command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
 
@@ -243,7 +243,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   elif prop == Property.reach:
     command_line += "--no-pointer-check --no-bounds-check --interval-analysis "
   else:
-    print "Unknown property"
+    print("Unknown property")
     exit(1)
 
   # Add strategy
@@ -256,7 +256,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   elif strat == "incr":
     command_line += "--incremental-bmc "
   else:
-    print "Unknown strategy"
+    print("Unknown strategy")
     exit(1)
 
   return command_line
@@ -268,7 +268,7 @@ def verify(strat, prop, concurrency, dargs):
   # Call ESBMC
   output = run(esbmc_command_line)
 
-  res = parse_result(output, category_property)
+  res = parse_result(output.decode(), category_property)
   # Parse output
   return res
 
@@ -291,15 +291,15 @@ strategy = args.strategy
 concurrency = args.concurrency
 
 if version:
-  print os.popen(esbmc_path + "--version").read()[6:] + SVCOMP_EXTRA_VERSION,
+  print(os.popen(esbmc_path + "--version").read()[6:] + SVCOMP_EXTRA_VERSION),
   exit(0)
 
 if property_file is None:
-  print "Please, specify a property file"
+  print("Please, specify a property file")
   exit(1)
 
 if benchmark is None:
-  print "Please, specify a benchmark to verify"
+  print("Please, specify a benchmark to verify")
   exit(1)
 
 # Parse property files
@@ -316,8 +316,8 @@ elif "CHECK( init(main()), LTL(G ! call(reach_error())) )" in property_file_cont
 elif "CHECK( init(main()), LTL(F end) )" in property_file_content:
   category_property = Property.termination
 else:
-  print "Unsupported Property"
+  print("Unsupported Property")
   exit(1)
 
 result = verify(strategy, category_property, concurrency, esbmc_dargs)
-print get_result_string(result)
+print(get_result_string(result))
