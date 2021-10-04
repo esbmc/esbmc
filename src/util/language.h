@@ -52,12 +52,6 @@ public:
     const std::string &module,
     const messaget &msg) = 0;
 
-  virtual bool convert_intrinsics(contextt &context, const messaget &msg)
-  {
-    assert(!"please implement your own convert intrinsics");
-    return false;
-  }
-
   // language id / description
   virtual std::string id() const
   {
