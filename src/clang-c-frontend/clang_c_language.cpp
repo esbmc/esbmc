@@ -222,14 +222,6 @@ bool clang_c_languaget::parse(const std::string &path, const messaget &msg)
   return false;
 }
 
-bool clang_c_languaget::convert_intrinsics(contextt &context, const messaget &msg)
-{
-  clang_c_convertert converter(context, ASTs, msg);
-  if(converter.convert())
-    return true;
-  return false;
-}
-
 bool clang_c_languaget::typecheck(
   contextt &context,
   const std::string &module,

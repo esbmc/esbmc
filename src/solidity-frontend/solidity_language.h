@@ -9,23 +9,13 @@ Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
 #ifndef SOLIDITY_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 #define SOLIDITY_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 
-#include <c2goto/cprover_library.h>
 #include <clang-c-frontend/clang_c_language.h>
-#include <clang-c-frontend/clang_c_adjust.h> // for context adjust in typecheck
-#include <clang-c-frontend/clang_c_main.h>
-#include <util/c_link.h> // for c_link
 #include <util/language.h>
 #include <fstream>
 #include <sstream>
 #include <nlohmann/json.hpp>
 
-// Forward dec, to avoid bringing in clang headers
-namespace clang
-{
-class ASTUnit;
-} // namespace clang
-
-class solidity_languaget : public languaget
+class solidity_languaget : public clang_c_languaget
 {
 public:
   bool parse(const std::string &path, const messaget &msg) override;
@@ -58,8 +48,10 @@ public:
   }
 
   // constructor, destructor
-  ~solidity_languaget();
+  ~solidity_languaget() override = default;
   explicit solidity_languaget(const messaget &msg);
+
+  bool convert_intrinsics(contextt &context, const messaget &msg);
 
   // store AST json in nlohmann::json data structure
   nlohmann::json ast_json;
@@ -70,6 +62,6 @@ public:
 //protected:
 };
 
-languaget *new_solidity_language();
+languaget *new_solidity_language(const messaget &msg);
 
 #endif /* SOLIDITY_FRONTEND_SOLIDITY_AST_LANGUAGE_H_ */

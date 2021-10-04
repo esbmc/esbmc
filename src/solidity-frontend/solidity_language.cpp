@@ -4,23 +4,30 @@ Module: Solidity AST module
 
 \*******************************************************************/
 
+// Remove warnings from Clang headers
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <clang/Frontend/ASTUnit.h>
+#pragma GCC diagnostic pop
+
 #include <solidity-frontend/solidity_language.h>
 #include <solidity-frontend/solidity_convert.h>
+#include <clang-c-frontend/clang_c_main.h>
+#include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/clang_c_convert.h>
+#include <c2goto/cprover_library.h>
+#include <clang-c-frontend/expr2c.h>
+#include <util/c_link.h>
 
 languaget *new_solidity_language(const messaget &msg)
 {
   return new solidity_languaget(msg);
 }
 
-solidity_languaget::solidity_languaget(const messaget &msg) : languaget(msg)
+solidity_languaget::solidity_languaget(const messaget &msg)
+  : clang_c_languaget(msg)
 {
-  clang_c_module = new_clang_c_language(msg);
-}
-
-solidity_languaget::~solidity_languaget()
-{
-  assert(clang_c_module != nullptr);
-  delete clang_c_module;
 }
 
 bool solidity_languaget::parse(
@@ -31,7 +38,8 @@ bool solidity_languaget::parse(
   assert(sol_main_path != "");
 
   // get AST nodes of ESBMC intrinsics and the dummy main
-  clang_c_module->parse(sol_main_path, msg); // populate clang_c_module's ASTs
+  // populate ASTs inherited from parent class
+  clang_c_languaget::parse(sol_main_path, msg);
 
   // Process AST json file
   std::ifstream ast_json_file_stream(path);
@@ -65,20 +73,27 @@ bool solidity_languaget::parse(
   return false;
 }
 
+bool solidity_languaget::convert_intrinsics(contextt &context, const messaget &msg)
+{
+  clang_c_convertert converter(context, ASTs, msg);
+  if(converter.convert())
+    return true;
+  return false;
+}
+
 bool solidity_languaget::typecheck(
   contextt &context,
   const std::string &module,
   const messaget &msg)
 {
   contextt new_context(msg);
-  clang_c_module->convert_intrinsics(new_context, msg); // Add ESBMC and TACAS intrinsic symbols to the context
+  convert_intrinsics(new_context, msg); // Add ESBMC and TACAS intrinsic symbols to the context
   msg.progress("Done conversion of intrinsics...");
 
   solidity_convertert converter(new_context, ast_json, sol_func_path, msg);
   if(converter.convert()) // Add Solidity symbols to the context
     return true;
 
-  //assert(!"continue with adjuster ...");
   clang_c_adjust adjuster(new_context, msg);
   if(adjuster.adjust())
     return true;
