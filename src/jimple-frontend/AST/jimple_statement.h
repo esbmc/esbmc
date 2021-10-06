@@ -7,8 +7,11 @@
 
 #include <jimple-frontend/AST/jimple_method_body.h>
 #include <jimple-frontend/AST/jimple_type.h>
+#include <jimple-frontend/AST/jimple_expr.h>
 
 class jimple_statement : public jimple_method_field {
+  protected:
+  std::shared_ptr<jimple_expr> get_expression(const json &j);
 };
 
 class jimple_identity : public jimple_statement
@@ -49,10 +52,12 @@ protected:
 
 class jimple_assignment : public jimple_statement
 {
+  virtual exprt to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const override;
   virtual std::string to_string() const override;
   virtual void from_json(const json& j) override;
 protected:
   std::string variable;
+  std::shared_ptr<jimple_expr> expr;
 };
 
 #endif //ESBMC_JIMPLE_STATEMENT_H
