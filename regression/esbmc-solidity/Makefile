@@ -1,5 +1,3 @@
-default: tests.log
-
 test:
 	@../test.pl -p -c esbmc
 
