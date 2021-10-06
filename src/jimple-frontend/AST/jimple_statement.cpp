@@ -66,9 +66,13 @@ std::string jimple_label::to_string() const
 
 exprt jimple_label::to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const
 {
+  /*
   code_labelt label;
   label.set_label(this->label);
   return label;
+  */
+  code_skipt skip;
+  return skip;
 }
 
 void jimple_label::from_json(const json &j)
@@ -79,11 +83,38 @@ std::string jimple_assignment::to_string() const
 {
   std::ostringstream oss;
   oss << "Assignment: " << variable
-      << " = (Not implemented)";
+      << " = " << expr->to_string();
   return oss.str();
 }
 
 void jimple_assignment::from_json(const json &j)
 {
   j.at("name").get_to(variable);
+  expr = get_expression(j.at("expression"));
+}
+
+exprt jimple_assignment::to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const
+{
+  symbolt &added_symbol = *ctx.find_symbol(variable);
+  code_assignt assign(symbol_expr(added_symbol), expr->to_exprt());
+  return assign;
+}
+
+std::shared_ptr<jimple_expr> jimple_statement::get_expression(const json &j)
+{
+  std::string expr_type;
+  j.at("expr_type").get_to(expr_type);
+
+  // TODO: hashmap
+  if(expr_type == "constant")
+  {
+    jimple_constant c;
+    c.from_json(j);
+    return std::make_shared<jimple_constant>(c);
+
+  }
+
+  jimple_constant d;
+  return std::make_shared<jimple_constant>(d);
+
 }

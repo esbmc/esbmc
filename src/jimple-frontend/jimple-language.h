@@ -31,6 +31,8 @@ public:
     return "jimple_lang";
   }
 
+  void setup_main(contextt &context);
+
   void show_parse(std::ostream &out) override;
 
   // conversion from expression into string

@@ -307,7 +307,6 @@ type2tc migrate_type(const typet &type)
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
     return type2tc(new string_type2t(iwidth));
   }
-
   default_message msg;
   msg.error(fmt::format("{}", type));
   abort();
