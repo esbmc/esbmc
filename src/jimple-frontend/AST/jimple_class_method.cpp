@@ -7,8 +7,9 @@ exprt jimple_class_method::to_exprt(contextt &ctx, const std::string &class_name
 
   exprt dummy;
   code_typet method_type;
-  typet &inner_type = method_type;
+  typet inner_type;
   inner_type = t.to_typet();
+  method_type.return_type() = inner_type;
 
   std::string id, name;
   id = this->name;

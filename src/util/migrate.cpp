@@ -311,7 +311,7 @@ type2tc migrate_type(const typet &type)
     return type2tc(new string_type2t(iwidth));
   }
 
-  assert(0 && fmt::format("{}", type).c_str());
+  throw fmt::format("{}", type).c_str();
   abort();
 }
 
