@@ -14,6 +14,7 @@ Author: Kunjian Song, kunjian.song@postgrad.manchester.ac.uk
 #include <fstream>
 #include <sstream>
 #include <nlohmann/json.hpp>
+#include <boost/filesystem.hpp>
 
 class solidity_languaget : public clang_c_languaget
 {
@@ -41,6 +42,13 @@ public:
   // conversion from type into string
   bool from_type(const typet &type, std::string &code, const namespacet &ns)
     override;
+
+  // temp file used by clang-c-frontend
+  std::string temp_path;
+
+  // Functions to handle temp C file used by clang-c-frontend
+  std::string get_temp_file(const messaget &msg);
+  std::string temp_c_file();
 
   languaget *new_language(const messaget &msg) override
   {

@@ -25,6 +25,37 @@ languaget *new_solidity_language(const messaget &msg)
   return new solidity_languaget(msg);
 }
 
+std::string solidity_languaget::get_temp_file(const messaget &msg)
+{
+  // Create a temp file for clang-tool
+  // needed to convert intrinsics
+  auto p = boost::filesystem::temp_directory_path();
+  if(!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
+  {
+    msg.error("Can't find temporary directory (needed to dump clang headers)");
+    abort();
+  }
+
+  // Create temporary directory
+  p += "esbmc_solidity_tmp.c";
+  boost::filesystem::ofstream(p.string());
+
+  if(!boost::filesystem::is_regular_file(p))
+  {
+    msg.error(
+      "Can't create temporary C file for clang-tool to complete the compilation job for intrinsics");
+    abort();
+  }
+
+  // populate temp file
+  std::ofstream f;
+  f.open (p.string());
+  f << temp_c_file();
+  f.close();
+
+  return p.string();
+}
+
 solidity_languaget::solidity_languaget(const messaget &msg)
   : clang_c_languaget(msg)
 {
@@ -34,12 +65,16 @@ bool solidity_languaget::parse(
   const std::string &path,
   const messaget &msg)
 {
-  // We still need a 'main' function although --function is provided.
-  assert(sol_main_path != "");
+  // prepare temp file
+  temp_path = get_temp_file(msg);
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   // populate ASTs inherited from parent class
-  clang_c_languaget::parse(sol_main_path, msg);
+  clang_c_languaget::parse(temp_path, msg);
+
+  // delete after use
+  boost::filesystem::remove(temp_path);
+  assert(!boost::filesystem::is_regular_file(temp_path));
 
   // Process AST json file
   std::ifstream ast_json_file_stream(path);
@@ -135,4 +170,11 @@ bool solidity_languaget::from_type(
 {
   assert(!"should not be here - Solidity frontend does not need this funciton");
   return false;
+}
+
+std::string solidity_languaget::temp_c_file()
+{
+  std::string content =
+    R"(int main() { return 0; } )";
+  return content;
 }

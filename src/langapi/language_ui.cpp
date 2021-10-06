@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/i2string.h>
 #include <util/show_symbol_table.h>
 
-extern std::string sol_main;
 extern std::string sol_function;
 
 language_uit::language_uit(const cmdlinet &__cmdline, const messaget &msg)
@@ -71,7 +70,6 @@ bool language_uit::parse(const std::string &filename)
 
   if(language.get_is_solidity())
   {
-    language.set_solidity_main(sol_main);
     language.set_sol_func(sol_function);
   }
 

@@ -1,4 +1,4 @@
 CORE
 MyContract_array.solast
--M main.c --function func_array --falsification
+--function func_array --falsification
 ^VERIFICATION FAILED$

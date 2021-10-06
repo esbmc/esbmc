@@ -1,4 +1,4 @@
 CORE
 MyContract_underflow_UnaryOp.solast
--M main.c --function func_underflow
+--function func_underflow
 ^VERIFICATION FAILED$

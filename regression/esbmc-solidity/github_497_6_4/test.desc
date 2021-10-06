@@ -1,4 +1,4 @@
 CORE
 MyContract_satisfiability_4.solast
--M main.c --function func_sat
+--function func_sat
 ^VERIFICATION SUCCESSFUL$
