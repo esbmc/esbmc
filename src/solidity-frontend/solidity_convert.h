@@ -50,7 +50,7 @@ protected:
   // get decl in rule variable-declaration-statement, e.g. function local declaration
   bool get_var_decl_stmt(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
-  bool get_function_definition(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_function_definition(const nlohmann::json &ast_node);
   bool get_function_params(const nlohmann::json &pd, exprt &param);
   bool get_block(const nlohmann::json &expr, exprt &new_expr); // For Solidity's mutually inclusive: rule block and rule statement
   bool get_statement(const nlohmann::json &block, exprt &new_expr);
@@ -70,7 +70,7 @@ protected:
   void get_var_decl_name(const nlohmann::json &ast_node, std::string &name, std::string &id);
   void get_function_definition_name(const nlohmann::json &ast_node, std::string &name, std::string &id);
   void get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
-  void get_start_location_from_stmt(const nlohmann::json &stmt_node, locationt &location);
+  void get_start_location_from_stmt(locationt &location);
   symbolt *move_symbol_to_context(symbolt &symbol);
 
   // auxiliary functions

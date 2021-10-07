@@ -18,11 +18,11 @@ solidity_convertert::solidity_convertert(contextt &_context,
   ast_json(_ast_json),
   sol_func(_sol_func),
   msg(msg),
+  global_scope_id(0),
   current_scope_var_num(1),
   current_functionDecl(nullptr),
   current_forStmt(nullptr),
-  current_functionName(""),
-  global_scope_id(0)
+  current_functionName("")
 {
 }
 
@@ -118,7 +118,7 @@ bool solidity_convertert::get_decl(const nlohmann::json &ast_node, exprt &new_ex
     }
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
-      return get_function_definition(ast_node, new_expr); // rule function-definition
+      return get_function_definition(ast_node); // rule function-definition
     }
     default:
     {
@@ -257,7 +257,7 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
   return false;
 }
 
-bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node, exprt &new_expr)
+bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node)
 {
   // For Solidity rule function-definition:
   // Order matters! do not change!
@@ -423,7 +423,7 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
 {
   // For rule block
   locationt location;
-  get_start_location_from_stmt(block, location);
+  get_start_location_from_stmt(location);
 
   SolidityGrammar::BlockT type = SolidityGrammar::get_block_t(block);
   msg.status(fmt::format("	@@@ got Block: SolidityGrammar::BlockT::{}",
@@ -453,10 +453,10 @@ bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr
       msg.status(fmt::format(" \t@@@ CompoundStmt has {} statements", ctr));
 
       // TODO: Figure out the source location manager of Solidity AST JSON
-      // It's too encryptic. Currently we are using get_start_location_from_stmt.
+      // It's too cryptic. Currently we are using get_start_location_from_stmt.
       // However, it should be get_final_location_from_stmt.
       locationt location_end;
-      get_start_location_from_stmt(block, location_end);
+      get_start_location_from_stmt(location_end);
 
       _block.end_location(location_end);
 
@@ -653,7 +653,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
   // For rule expression
   // We need to do location settings to match clang C's number of times to set the locations when recurring
   locationt location;
-  get_start_location_from_stmt(expr, location);
+  get_start_location_from_stmt(location);
 
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
   msg.status(fmt::format("	@@@ got Expr: SolidityGrammar::ExpressionT::{}",
@@ -1377,7 +1377,7 @@ void solidity_convertert::get_location_from_decl(const nlohmann::json &ast_node,
   }
 }
 
-void solidity_convertert::get_start_location_from_stmt(const nlohmann::json &stmt_node, locationt &location)
+void solidity_convertert::get_start_location_from_stmt(locationt &location)
 {
   std::string function_name;
 
