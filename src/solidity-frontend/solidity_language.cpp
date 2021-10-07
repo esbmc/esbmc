@@ -154,24 +154,6 @@ bool solidity_languaget::final(
   return false;
 }
 
-bool solidity_languaget::from_expr(
-  const exprt &expr,
-  std::string &code,
-  const namespacet &ns)
-{
-  assert(!"should not be here - Solidity frontend does not need this funciton");
-  return false;
-}
-
-bool solidity_languaget::from_type(
-  const typet &type,
-  std::string &code,
-  const namespacet &ns)
-{
-  assert(!"should not be here - Solidity frontend does not need this funciton");
-  return false;
-}
-
 std::string solidity_languaget::temp_c_file()
 {
   std::string content =

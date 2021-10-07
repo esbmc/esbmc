@@ -35,14 +35,6 @@ public:
 
   void show_parse(std::ostream &out) override;
 
-  // conversion from expression into string
-  bool from_expr(const exprt &expr, std::string &code, const namespacet &ns)
-    override;
-
-  // conversion from type into string
-  bool from_type(const typet &type, std::string &code, const namespacet &ns)
-    override;
-
   // temp file used by clang-c-frontend
   std::string temp_path;
 
