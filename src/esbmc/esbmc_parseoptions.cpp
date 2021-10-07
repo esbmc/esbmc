@@ -45,6 +45,7 @@ extern "C"
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
+#include <goto-programs/loop_unroll.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -1513,6 +1514,15 @@ bool esbmc_parseoptionst::process_goto_program(
   try
   {
     namespacet ns(context);
+    if(
+      options.get_bool_option("goto-unwind") &&
+      !options.get_bool_option("unwind"))
+    {
+      size_t unroll_limit =
+        options.get_bool_option("unlimited-goto-unwind") ? -1 : 1000;
+      bounded_loop_unroller unwind_loops(goto_functions, unroll_limit);
+      unwind_loops.run();
+    }
 
     // do partial inlining
     if(!cmdline.isset("no-inlining"))

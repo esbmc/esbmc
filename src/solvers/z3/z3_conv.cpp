@@ -7,6 +7,7 @@
 
 #include <cassert>
 #include <z3_conv.h>
+#include <fstream>
 #include <util/message/default_message.h>
 
 #define new_ast new_solver_ast<z3_smt_ast>
@@ -1231,9 +1232,31 @@ void z3_smt_ast::dump() const
 
 void z3_convt::dump_smt()
 {
+  const std::string &filename = options.get_option("output");
+  if(!filename.empty())
+  {
+    std::ofstream out(filename.c_str());
+    if(out)
+    {
+      // Add whatever logic is needed.
+      // Add sovler specific declarations as well.
+      out << "(set-info :smt-lib-version 2.6)\n";
+      out << "(set-option :print-success true)\n";
+      out << "(set-option :produce-models true)\n";
+      out << "; Asserts from ESMBC starts\n";
+      out << solver; // All VCC conditions in SMTLIB format.
+      out << "; Asserts from ESMBC ends\n";
+      out << "(apply (then simplify solve-eqs))\n";
+      out << "(check-sat)\n";
+      out << "(get-model)\n";
+      out << "(exit)\n";
+    }
+  }
+
+  Z3_ast_vector __z3_assertions = Z3_solver_get_assertions(z3_ctx, solver);
   default_message msg;
   std::ostringstream oss;
-  oss << solver;
+  oss << "Assertions Size : " << Z3_ast_vector_size(z3_ctx, __z3_assertions);
   msg.debug(oss.str());
 }
 
