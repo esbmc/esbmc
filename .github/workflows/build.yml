@@ -1,12 +1,7 @@
 name: Build All Solvers
 
-on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
+on: [push, pull_request]
+
 jobs:
 
   build-arm:
@@ -37,7 +32,7 @@ jobs:
          path: ./release
      - name: Run tests
        continue-on-error: true
-       run: cd build/ && ctest -j3 --output-on-failure --progress . 
+       run: cd build/ && ctest -j3 --output-on-failure --progress .
 
   build-linux:
     name: Build ESBMC with all Solvers (Linux)
