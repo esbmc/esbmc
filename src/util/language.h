@@ -84,11 +84,23 @@ public:
 
   // Solidity verification
   bool is_solidity = false;
-  inline void set_is_solidity() { is_solidity = true; }
-  inline bool get_is_solidity() { return is_solidity; }
+  inline void set_is_solidity()
+  {
+    is_solidity = true;
+  }
+  inline bool get_is_solidity()
+  {
+    return is_solidity;
+  }
   std::string sol_func_path = "";
-  inline void set_sol_func(const std::string _path) { sol_func_path = _path; };
-  inline std::string get_sol_func() { return sol_func_path; };
+  inline void set_sol_func(const std::string _path)
+  {
+    sol_func_path = _path;
+  };
+  inline std::string get_sol_func()
+  {
+    return sol_func_path;
+  };
 
 protected:
   const messaget &msg;

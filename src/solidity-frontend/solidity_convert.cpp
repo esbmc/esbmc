@@ -11,18 +11,21 @@
 #include <regex>
 #include <util/message/format.h>
 
-solidity_convertert::solidity_convertert(contextt &_context,
-  nlohmann::json &_ast_json, const std::string &_sol_func, const messaget &msg):
-  context(_context),
-  ns(context),
-  ast_json(_ast_json),
-  sol_func(_sol_func),
-  msg(msg),
-  global_scope_id(0),
-  current_scope_var_num(1),
-  current_functionDecl(nullptr),
-  current_forStmt(nullptr),
-  current_functionName("")
+solidity_convertert::solidity_convertert(
+  contextt &_context,
+  nlohmann::json &_ast_json,
+  const std::string &_sol_func,
+  const messaget &msg)
+  : context(_context),
+    ns(context),
+    ast_json(_ast_json),
+    sol_func(_sol_func),
+    msg(msg),
+    global_scope_id(0),
+    current_scope_var_num(1),
+    current_functionDecl(nullptr),
+    current_forStmt(nullptr),
+    current_functionName("")
 {
 }
 
@@ -32,10 +35,13 @@ bool solidity_convertert::convert()
   //  1. First, we perform pattern-based verificaiton
   //  2. Then we populate the context with symbols annotated based on the each AST node, and hence prepare for the GOTO conversion.
 
-  if (!ast_json.contains("nodes")) // check json file contains AST nodes as Solidity might change
+  if(!ast_json.contains(
+       "nodes")) // check json file contains AST nodes as Solidity might change
     assert(!"JSON file does not contain any AST nodes");
 
-  if (!ast_json.contains("absolutePath")) // check json file contains AST nodes as Solidity might change
+  if(
+    !ast_json.contains(
+      "absolutePath")) // check json file contains AST nodes as Solidity might change
     assert(!"JSON file does not contain absolutePath");
 
   absolute_path = ast_json["absolutePath"].get<std::string>();
@@ -46,17 +52,19 @@ bool solidity_convertert::convert()
 
   bool found_contract_def = false;
   unsigned index = 0;
-  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr, ++index)
+  for(nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
+      ++itr, ++index)
   {
     // ignore the meta information and locate nodes in ContractDefinition
     std::string node_type = (*itr)["nodeType"].get<std::string>();
-    if (node_type == "ContractDefinition") // contains AST nodes we need
+    if(node_type == "ContractDefinition") // contains AST nodes we need
     {
       global_scope_id = (*itr)["id"];
       found_contract_def = true;
       // pattern-based verification
       assert(itr->contains("nodes"));
-      auto pattern_check = std::make_unique<pattern_checker>((*itr)["nodes"], sol_func, msg);
+      auto pattern_check =
+        std::make_unique<pattern_checker>((*itr)["nodes"], sol_func, msg);
       if(pattern_check->do_pattern_check())
         return true; // 'true' indicates something goes wrong.
     }
@@ -66,10 +74,11 @@ bool solidity_convertert::convert()
   // reasoning-based verification
   //assert(!"Continue with symbol annotations");
   index = 0;
-  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr, ++index)
+  for(nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
+      ++itr, ++index)
   {
     std::string node_type = (*itr)["nodeType"].get<std::string>();
-    if (node_type == "ContractDefinition") // rule source-unit
+    if(node_type == "ContractDefinition") // rule source-unit
     {
       if(convert_ast_nodes(*itr))
         return true; // 'true' indicates something goes wrong.
@@ -83,13 +92,17 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
 {
   unsigned index = 0;
   nlohmann::json ast_nodes = contract_def["nodes"];
-  for (nlohmann::json::iterator itr = ast_nodes.begin(); itr != ast_nodes.end(); ++itr, ++index)
+  for(nlohmann::json::iterator itr = ast_nodes.begin(); itr != ast_nodes.end();
+      ++itr, ++index)
   {
     nlohmann::json ast_node = *itr;
     std::string node_name = ast_node["name"].get<std::string>();
     std::string node_type = ast_node["nodeType"].get<std::string>();
-    msg.status(fmt::format("@@ Converting node[{}]: name={}, nodeType={} ...",
-          index, node_name.c_str(), node_type.c_str()));
+    msg.status(fmt::format(
+      "@@ Converting node[{}]: name={}, nodeType={} ...",
+      index,
+      node_name.c_str(),
+      node_type.c_str()));
     exprt dummy_decl;
     if(get_decl(ast_node, dummy_decl))
       return true;
@@ -100,65 +113,75 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
   return false;
 }
 
-bool solidity_convertert::get_decl(const nlohmann::json &ast_node, exprt &new_expr)
+bool solidity_convertert::get_decl(
+  const nlohmann::json &ast_node,
+  exprt &new_expr)
 {
   new_expr = code_skipt();
 
-  if (!ast_node.contains("nodeType"))
+  if(!ast_node.contains("nodeType"))
     assert(!"Missing \'nodeType\' filed in ast_node");
 
-  SolidityGrammar::ContractBodyElementT type = SolidityGrammar::get_contract_body_element_t(ast_node);
+  SolidityGrammar::ContractBodyElementT type =
+    SolidityGrammar::get_contract_body_element_t(ast_node);
 
   // based on each element as in Solidty grammar "rule contract-body-element"
   switch(type)
   {
-    case SolidityGrammar::ContractBodyElementT::StateVarDecl:
-    {
-      return get_var_decl(ast_node, new_expr); // rule state-variable-declaration
-    }
-    case SolidityGrammar::ContractBodyElementT::FunctionDef:
-    {
-      return get_function_definition(ast_node); // rule function-definition
-    }
-    default:
-    {
-      assert(!"Unimplemented type in rule contract-body-element");
-      return true;
-    }
+  case SolidityGrammar::ContractBodyElementT::StateVarDecl:
+  {
+    return get_var_decl(ast_node, new_expr); // rule state-variable-declaration
+  }
+  case SolidityGrammar::ContractBodyElementT::FunctionDef:
+  {
+    return get_function_definition(ast_node); // rule function-definition
+  }
+  default:
+  {
+    assert(!"Unimplemented type in rule contract-body-element");
+    return true;
+  }
   }
 
   return false;
 }
 
-bool solidity_convertert::get_var_decl_stmt(const nlohmann::json &ast_node, exprt &new_expr)
+bool solidity_convertert::get_var_decl_stmt(
+  const nlohmann::json &ast_node,
+  exprt &new_expr)
 {
   // For rule variable-declaration-statement
   new_expr = code_skipt();
 
-  if (!ast_node.contains("nodeType"))
+  if(!ast_node.contains("nodeType"))
     assert(!"Missing \'nodeType\' filed in ast_node");
 
-  SolidityGrammar::VarDeclStmtT type = SolidityGrammar::get_var_decl_stmt_t(ast_node);
-  msg.status(fmt::format("	@@@ got Variable-declaration-statement: SolidityGrammar::VarDeclStmtT::{}",
-        SolidityGrammar::var_decl_statement_to_str(type)));
+  SolidityGrammar::VarDeclStmtT type =
+    SolidityGrammar::get_var_decl_stmt_t(ast_node);
+  msg.status(fmt::format(
+    "	@@@ got Variable-declaration-statement: "
+    "SolidityGrammar::VarDeclStmtT::{}",
+    SolidityGrammar::var_decl_statement_to_str(type)));
 
   switch(type)
   {
-    case SolidityGrammar::VarDeclStmtT::VariableDecl:
-    {
-      return get_var_decl(ast_node, new_expr); // rule variable-declaration
-    }
-    default:
-    {
-      assert(!"Unimplemented type in rule variable-declaration-statement");
-      return true;
-    }
+  case SolidityGrammar::VarDeclStmtT::VariableDecl:
+  {
+    return get_var_decl(ast_node, new_expr); // rule variable-declaration
+  }
+  default:
+  {
+    assert(!"Unimplemented type in rule variable-declaration-statement");
+    return true;
+  }
   }
 
   return false;
 }
 
-bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &new_expr)
+bool solidity_convertert::get_var_decl(
+  const nlohmann::json &ast_node,
+  exprt &new_expr)
 {
   // For Solidity rule state-variable-declaration:
   // 1. populate typet
@@ -169,12 +192,12 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
   // to improve the re-usability of get_type* function, when dealing with non-array var decls.
   // For array, do NOT use ["typeName"]. Otherwise, it will cause problem
   // when populating typet in get_cast
-  if (get_type_description(ast_node["typeName"]["typeDescriptions"], t))
+  if(get_type_description(ast_node["typeName"]["typeDescriptions"], t))
     return true;
 
   // 2. populate id and name
   std::string name, id;
-  if (ast_node["stateVariable"] == true)
+  if(ast_node["stateVariable"] == true)
     get_state_var_decl_name(ast_node, name, id);
   else
   {
@@ -195,20 +218,15 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
   get_location_from_decl(ast_node, location_begin);
 
   // 4. populate debug module name
-  std::string debug_modulename = get_modulename_from_path(location_begin.file().as_string());
+  std::string debug_modulename =
+    get_modulename_from_path(location_begin.file().as_string());
 
   // 5. set symbol attributes
   symbolt symbol;
-  get_default_symbol(
-    symbol,
-    debug_modulename,
-    t,
-    name,
-    id,
-    location_begin);
+  get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
 
   symbol.lvalue = true;
-  if (ast_node["stateVariable"] == true)
+  if(ast_node["stateVariable"] == true)
   {
     // for global variables
     symbol.static_lifetime = true;
@@ -224,7 +242,8 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
 
   // For state var decl, we look for "value".
   // For local var decl, we look for "initialValue"
-  bool has_init = ast_node.contains("value") || ast_node.contains("initialValue");
+  bool has_init =
+    ast_node.contains("value") || ast_node.contains("initialValue");
   if(symbol.static_lifetime && !symbol.is_extern && !has_init)
   {
     symbol.value = gen_zero(t, true);
@@ -238,7 +257,7 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
   // 7. populate init value if there is any
   code_declt decl(symbol_expr(added_symbol));
 
-  if (has_init)
+  if(has_init)
   {
     exprt val;
     if(get_expr(ast_node["initialValue"], val))
@@ -257,28 +276,31 @@ bool solidity_convertert::get_var_decl(const nlohmann::json &ast_node, exprt &ne
   return false;
 }
 
-bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node)
+bool solidity_convertert::get_function_definition(
+  const nlohmann::json &ast_node)
 {
   // For Solidity rule function-definition:
   // Order matters! do not change!
   // 1. Check fd.isImplicit() --- skipped since it's not applicable to Solidity
   // 2. Check fd.isDefined() and fd.isThisDeclarationADefinition()
-  if (!ast_node["implemented"]) // TODO: for interface function, it's just a definition. Add something like "&& isInterface_JustDefinition()"
+  if(
+    !ast_node
+      ["implemented"]) // TODO: for interface function, it's just a definition. Add something like "&& isInterface_JustDefinition()"
     return false;
 
   // Check intrinsic functions
-  if (check_intrinsic_function(ast_node))
+  if(check_intrinsic_function(ast_node))
     return false;
 
   // 3. Set current_scope_var_num, current_functionDecl and old_functionDecl
   current_scope_var_num = 1;
   const nlohmann::json *old_functionDecl = current_functionDecl;
   current_functionDecl = &ast_node;
-  current_functionName = (*current_functionDecl)["name"];
+  current_functionName = (*current_functionDecl)["name"].get<std::string>();
 
   // 4. Return type
   code_typet type;
-  if (get_type_description(ast_node["returnParameters"], type.return_type()))
+  if(get_type_description(ast_node["returnParameters"], type.return_type()))
     return true;
 
   // 5. Check fd.isVariadic(), fd.isInlined()
@@ -294,20 +316,16 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
   get_function_definition_name(ast_node, name, id);
 
   // 8. populate "std::string debug_modulename"
-  std::string debug_modulename = get_modulename_from_path(location_begin.file().as_string());
+  std::string debug_modulename =
+    get_modulename_from_path(location_begin.file().as_string());
 
   // 9. Populate "symbol.static_lifetime", "symbol.is_extern" and "symbol.file_local"
   symbolt symbol;
-  get_default_symbol(
-    symbol,
-    debug_modulename,
-    type,
-    name,
-    id,
-    location_begin);
+  get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
 
   symbol.lvalue = true;
-  symbol.is_extern = false; // TODO: hard coded for now, may need to change later
+  symbol.is_extern =
+    false; // TODO: hard coded for now, may need to change later
   symbol.file_local = false;
 
   // 10. Add symbol into the context
@@ -317,7 +335,7 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
   //  - Convert params before body as they may get referred by the statement in the body
   SolidityGrammar::ParameterListT params =
     SolidityGrammar::get_parameter_list_t(ast_node["parameters"]);
-  if ( params == SolidityGrammar::ParameterListT::EMPTY )
+  if(params == SolidityGrammar::ParameterListT::EMPTY)
   {
     // assume ellipsis if the function has no parameters
     type.make_ellipsis();
@@ -327,7 +345,7 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
     // convert parameters if the function has them
     // update the typet, since typet contains parameter annotations
     unsigned num_param_decl = 0;
-    for (const auto &decl : ast_node["parameters"]["parameters"].items())
+    for(const auto &decl : ast_node["parameters"]["parameters"].items())
     {
       const nlohmann::json &func_param_decl = decl.value();
 
@@ -344,7 +362,7 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
   added_symbol.type = type;
 
   // 12. Convert body and embed the body into the same symbol
-  if (ast_node.contains("body"))
+  if(ast_node.contains("body"))
   {
     exprt body_exprt;
     get_block(ast_node["body"], body_exprt);
@@ -355,21 +373,24 @@ bool solidity_convertert::get_function_definition(const nlohmann::json &ast_node
   //assert(!"done - finished all expr stmt in function?");
 
   // 13. Restore current_functionDecl
-  current_functionDecl = old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
+  current_functionDecl =
+    old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
 
   return false;
 }
 
-bool solidity_convertert::get_function_params(const nlohmann::json &pd, exprt &param)
+bool solidity_convertert::get_function_params(
+  const nlohmann::json &pd,
+  exprt &param)
 {
   // 1. get parameter type
   typet param_type;
-  if (get_type_description(pd["typeDescriptions"], param_type))
+  if(get_type_description(pd["typeDescriptions"], param_type))
     return true;
 
   // 2. check array: array-to-pointer decay
   bool is_array = SolidityGrammar::get_type_name_t(pd["typeDescriptions"]);
-  if (is_array)
+  if(is_array)
   {
     assert(!"Unimplemented - funciton parameter is array type");
   }
@@ -396,15 +417,11 @@ bool solidity_convertert::get_function_params(const nlohmann::json &pd, exprt &p
   param.location() = location_begin;
 
   // 5. get symbol
-  std::string debug_modulename = get_modulename_from_path(location_begin.file().as_string());
+  std::string debug_modulename =
+    get_modulename_from_path(location_begin.file().as_string());
   symbolt param_symbol;
   get_default_symbol(
-    param_symbol,
-    debug_modulename,
-    param_type,
-    name,
-    id,
-    location_begin);
+    param_symbol, debug_modulename, param_type, name, id, location_begin);
 
   // 6. set symbol's lvalue, is_parameter and file local
   param_symbol.lvalue = true;
@@ -419,230 +436,238 @@ bool solidity_convertert::get_function_params(const nlohmann::json &pd, exprt &p
   return false;
 }
 
-bool solidity_convertert::get_block(const nlohmann::json &block, exprt &new_expr)
+bool solidity_convertert::get_block(
+  const nlohmann::json &block,
+  exprt &new_expr)
 {
   // For rule block
   locationt location;
   get_start_location_from_stmt(location);
 
   SolidityGrammar::BlockT type = SolidityGrammar::get_block_t(block);
-  msg.status(fmt::format("	@@@ got Block: SolidityGrammar::BlockT::{}",
-        SolidityGrammar::block_to_str(type)));
+  msg.status(fmt::format(
+    "	@@@ got Block: SolidityGrammar::BlockT::{}",
+    SolidityGrammar::block_to_str(type)));
 
   switch(type)
   {
-    // equivalent to clang::Stmt::CompoundStmtClass
-    // deal with a block of statements
-    case SolidityGrammar::BlockT::Statement:
+  // equivalent to clang::Stmt::CompoundStmtClass
+  // deal with a block of statements
+  case SolidityGrammar::BlockT::Statement:
+  {
+    const nlohmann::json &stmts = block["statements"];
+
+    code_blockt _block;
+    unsigned ctr = 0;
+    // items() returns a key-value pair with key being the index
+    for(auto const &stmt_kv : stmts.items())
     {
-      const nlohmann::json &stmts = block["statements"];
+      exprt statement;
+      if(get_statement(stmt_kv.value(), statement))
+        return true;
 
-      code_blockt _block;
-      unsigned ctr = 0;
-      // items() returns a key-value pair with key being the index
-      for(auto const &stmt_kv : stmts.items())
-      {
-        exprt statement;
-        if(get_statement(stmt_kv.value(), statement))
-          return true;
-
-        convert_expression_to_code(statement);
-        _block.operands().push_back(statement);
-        ++ctr;
-      }
-      msg.status(fmt::format(" \t@@@ CompoundStmt has {} statements", ctr));
-
-      // TODO: Figure out the source location manager of Solidity AST JSON
-      // It's too cryptic. Currently we are using get_start_location_from_stmt.
-      // However, it should be get_final_location_from_stmt.
-      locationt location_end;
-      get_start_location_from_stmt(location_end);
-
-      _block.end_location(location_end);
-
-      new_expr = _block;
-      break;
+      convert_expression_to_code(statement);
+      _block.operands().push_back(statement);
+      ++ctr;
     }
-    default:
-    {
-      assert(!"Unimplemented type in rule block");
-      return true;
-    }
+    msg.status(fmt::format(" \t@@@ CompoundStmt has {} statements", ctr));
+
+    // TODO: Figure out the source location manager of Solidity AST JSON
+    // It's too cryptic. Currently we are using get_start_location_from_stmt.
+    // However, it should be get_final_location_from_stmt.
+    locationt location_end;
+    get_start_location_from_stmt(location_end);
+
+    _block.end_location(location_end);
+
+    new_expr = _block;
+    break;
+  }
+  default:
+  {
+    assert(!"Unimplemented type in rule block");
+    return true;
+  }
   }
 
   new_expr.location() = location;
   return false;
 }
 
-bool solidity_convertert::get_statement(const nlohmann::json &stmt, exprt &new_expr)
+bool solidity_convertert::get_statement(
+  const nlohmann::json &stmt,
+  exprt &new_expr)
 {
   // For rule statement
   // Since this is an additional layer of grammar rules compared to clang C, we do NOT set location here.
   // Just pass the new_expr reference to the next layer.
 
   SolidityGrammar::StatementT type = SolidityGrammar::get_statement_t(stmt);
-  msg.status(fmt::format("	@@@ got Stmt: SolidityGrammar::StatementT::{}",
-        SolidityGrammar::statement_to_str(type)));
+  msg.status(fmt::format(
+    "	@@@ got Stmt: SolidityGrammar::StatementT::{}",
+    SolidityGrammar::statement_to_str(type)));
 
   switch(type)
   {
-    case SolidityGrammar::StatementT::Block:
-    {
-      get_block(stmt, new_expr);
-      break;
-    }
-    case SolidityGrammar::StatementT::ExpressionStatement:
-    {
-      get_expr(stmt["expression"], new_expr);
-      break;
-    }
-    case SolidityGrammar::StatementT::VariableDeclStatement:
-    {
-      const nlohmann::json &declgroup = stmt["declarations"];
+  case SolidityGrammar::StatementT::Block:
+  {
+    get_block(stmt, new_expr);
+    break;
+  }
+  case SolidityGrammar::StatementT::ExpressionStatement:
+  {
+    get_expr(stmt["expression"], new_expr);
+    break;
+  }
+  case SolidityGrammar::StatementT::VariableDeclStatement:
+  {
+    const nlohmann::json &declgroup = stmt["declarations"];
 
-      codet decls("decl-block");
-      unsigned ctr = 0;
-      // N.B. Although Solidity AST JSON uses "declarations": [],
-      // there will ALWAYS be 1 declaration!
-      // A second declaration will become another stmt in "statements"
-      for(const auto &it : declgroup.items())
+    codet decls("decl-block");
+    unsigned ctr = 0;
+    // N.B. Although Solidity AST JSON uses "declarations": [],
+    // there will ALWAYS be 1 declaration!
+    // A second declaration will become another stmt in "statements"
+    for(const auto &it : declgroup.items())
+    {
+      // deal with local var decl with init value
+      nlohmann::json decl = it.value();
+      if(stmt.contains("initialValue"))
       {
-        // deal with local var decl with init value
-        nlohmann::json decl = it.value();
-        if (stmt.contains("initialValue"))
-        {
-          // Need to combine init value with the decl JSON object
-          decl["initialValue"] = stmt["initialValue"];
-        }
-
-        exprt single_decl;
-        if(get_var_decl_stmt(decl, single_decl))
-          return true;
-
-        decls.operands().push_back(single_decl);
-        ++ctr;
-      }
-      msg.status(fmt::format(" \t@@@ DeclStmt group has {} decls", ctr));
-
-      new_expr = decls;
-      break;
-    }
-    case SolidityGrammar::StatementT::ReturnStatement:
-    {
-      if(!current_functionDecl)
-        assert(!"Error: ESBMC could not find the parent scope for this ReturnStatement");
-
-      // 1. get return type
-      // TODO: Fix me! Assumptions:
-      //  a). It's "return <expr>;" not "return;"
-      //  b). <expr> is pointing to a DeclRefExpr, we need to wrap it in an ImplicitCastExpr as a subexpr
-      assert(stmt.contains("expression"));
-      assert(stmt["expression"].contains("referencedDeclaration"));
-
-      typet return_type;
-      if (get_type_description(stmt["expression"]["typeDescriptions"], return_type))
-        return true;
-
-      // 2. get return value
-      code_returnt ret_expr;
-      const nlohmann::json &rtn_expr = stmt["expression"];
-      // wrap it in an ImplicitCastExpr to convert LValue to RValue
-      nlohmann::json implicit_cast_expr = make_implicit_cast_expr(rtn_expr, "LValueToRValue");
-
-      exprt val;
-      if(get_expr(implicit_cast_expr, val))
-        return true;
-
-      solidity_gen_typecast(ns, val, return_type);
-      ret_expr.return_value() = val;
-
-      new_expr = ret_expr;
-      break;
-    }
-    case SolidityGrammar::StatementT::ForStatement:
-    {
-      // Based on rule for-statement
-      // TODO: Fix me. Assuming for loop contains everything
-      assert(stmt.contains("initializationExpression") &&
-             stmt.contains("condition") &&
-             stmt.contains("loopExpression") &&
-             stmt.contains("body"));
-      // TODO: Fix me. Currently we don't support nested for loop
-      assert(current_forStmt == nullptr);
-      current_forStmt = &stmt;
-
-      // 1. annotate init
-      codet init = code_skipt(); // code_skipt() means no init in for-stmt, e.g. for (; i< 10; ++i)
-      if (get_statement(stmt["initializationExpression"], init))
-        return true;
-
-      convert_expression_to_code(init);
-
-      // 2. annotate condition
-      exprt cond = true_exprt();
-      if (get_expr(stmt["condition"], cond))
-        return true;
-
-      // 3. annotate increment
-      codet inc = code_skipt();
-      if (get_statement(stmt["loopExpression"], inc))
-        return true;
-
-      convert_expression_to_code(inc);
-
-      // 4. annotate body
-      codet body = code_skipt();
-      if (get_statement(stmt["body"], body))
-        return true;
-
-      convert_expression_to_code(body);
-
-      code_fort code_for;
-      code_for.init() = init;
-      code_for.cond() = cond;
-      code_for.iter() = inc;
-      code_for.body() = body;
-
-      new_expr = code_for;
-      break;
-    }
-    case SolidityGrammar::StatementT::IfStatement:
-    {
-      // Based on rule if-statement
-      // 1. Condition: make a exprt for condition
-      exprt cond;
-      if(get_expr(stmt["condition"], cond))
-        return true;
-
-      // 2. Then: make a exprt for trueBody
-      exprt then;
-      if(get_statement(stmt["trueBody"], then))
-        return true;
-
-      convert_expression_to_code(then);
-
-      codet if_expr("ifthenelse");
-      if_expr.copy_to_operands(cond, then);
-
-      // 3. Else: make a exprt for "falseBody" if the if-statement node contains an "else" block
-      if (stmt.contains("falseBody"))
-      {
-        exprt else_expr;
-        if(get_statement(stmt["falseBody"], else_expr))
-          return true;
-
-        convert_expression_to_code(else_expr);
-        if_expr.copy_to_operands(else_expr);
+        // Need to combine init value with the decl JSON object
+        decl["initialValue"] = stmt["initialValue"];
       }
 
-      new_expr = if_expr;
-      break;
+      exprt single_decl;
+      if(get_var_decl_stmt(decl, single_decl))
+        return true;
+
+      decls.operands().push_back(single_decl);
+      ++ctr;
     }
-    default:
-    {
-      assert(!"Unimplemented type in rule statement");
+    msg.status(fmt::format(" \t@@@ DeclStmt group has {} decls", ctr));
+
+    new_expr = decls;
+    break;
+  }
+  case SolidityGrammar::StatementT::ReturnStatement:
+  {
+    if(!current_functionDecl)
+      assert(!"Error: ESBMC could not find the parent scope for this ReturnStatement");
+
+    // 1. get return type
+    // TODO: Fix me! Assumptions:
+    //  a). It's "return <expr>;" not "return;"
+    //  b). <expr> is pointing to a DeclRefExpr, we need to wrap it in an ImplicitCastExpr as a subexpr
+    assert(stmt.contains("expression"));
+    assert(stmt["expression"].contains("referencedDeclaration"));
+
+    typet return_type;
+    if(get_type_description(
+         stmt["expression"]["typeDescriptions"], return_type))
       return true;
+
+    // 2. get return value
+    code_returnt ret_expr;
+    const nlohmann::json &rtn_expr = stmt["expression"];
+    // wrap it in an ImplicitCastExpr to convert LValue to RValue
+    nlohmann::json implicit_cast_expr =
+      make_implicit_cast_expr(rtn_expr, "LValueToRValue");
+
+    exprt val;
+    if(get_expr(implicit_cast_expr, val))
+      return true;
+
+    solidity_gen_typecast(ns, val, return_type);
+    ret_expr.return_value() = val;
+
+    new_expr = ret_expr;
+    break;
+  }
+  case SolidityGrammar::StatementT::ForStatement:
+  {
+    // Based on rule for-statement
+    // TODO: Fix me. Assuming for loop contains everything
+    assert(
+      stmt.contains("initializationExpression") && stmt.contains("condition") &&
+      stmt.contains("loopExpression") && stmt.contains("body"));
+    // TODO: Fix me. Currently we don't support nested for loop
+    assert(current_forStmt == nullptr);
+    current_forStmt = &stmt;
+
+    // 1. annotate init
+    codet init =
+      code_skipt(); // code_skipt() means no init in for-stmt, e.g. for (; i< 10; ++i)
+    if(get_statement(stmt["initializationExpression"], init))
+      return true;
+
+    convert_expression_to_code(init);
+
+    // 2. annotate condition
+    exprt cond = true_exprt();
+    if(get_expr(stmt["condition"], cond))
+      return true;
+
+    // 3. annotate increment
+    codet inc = code_skipt();
+    if(get_statement(stmt["loopExpression"], inc))
+      return true;
+
+    convert_expression_to_code(inc);
+
+    // 4. annotate body
+    codet body = code_skipt();
+    if(get_statement(stmt["body"], body))
+      return true;
+
+    convert_expression_to_code(body);
+
+    code_fort code_for;
+    code_for.init() = init;
+    code_for.cond() = cond;
+    code_for.iter() = inc;
+    code_for.body() = body;
+
+    new_expr = code_for;
+    break;
+  }
+  case SolidityGrammar::StatementT::IfStatement:
+  {
+    // Based on rule if-statement
+    // 1. Condition: make a exprt for condition
+    exprt cond;
+    if(get_expr(stmt["condition"], cond))
+      return true;
+
+    // 2. Then: make a exprt for trueBody
+    exprt then;
+    if(get_statement(stmt["trueBody"], then))
+      return true;
+
+    convert_expression_to_code(then);
+
+    codet if_expr("ifthenelse");
+    if_expr.copy_to_operands(cond, then);
+
+    // 3. Else: make a exprt for "falseBody" if the if-statement node contains an "else" block
+    if(stmt.contains("falseBody"))
+    {
+      exprt else_expr;
+      if(get_statement(stmt["falseBody"], else_expr))
+        return true;
+
+      convert_expression_to_code(else_expr);
+      if_expr.copy_to_operands(else_expr);
     }
+
+    new_expr = if_expr;
+    break;
+  }
+  default:
+  {
+    assert(!"Unimplemented type in rule statement");
+    return true;
+  }
   }
 
   return false;
@@ -656,155 +681,161 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
   get_start_location_from_stmt(location);
 
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
-  msg.status(fmt::format("	@@@ got Expr: SolidityGrammar::ExpressionT::{}",
-        SolidityGrammar::expression_to_str(type)));
+  msg.status(fmt::format(
+    "	@@@ got Expr: SolidityGrammar::ExpressionT::{}",
+    SolidityGrammar::expression_to_str(type)));
 
   switch(type)
   {
-    case SolidityGrammar::ExpressionT::BinaryOperatorClass:
-    {
-      if (get_binary_operator_expr(expr, new_expr))
-        return true;
+  case SolidityGrammar::ExpressionT::BinaryOperatorClass:
+  {
+    if(get_binary_operator_expr(expr, new_expr))
+      return true;
 
-      break;
-    }
-    case SolidityGrammar::ExpressionT::UnaryOperatorClass:
+    break;
+  }
+  case SolidityGrammar::ExpressionT::UnaryOperatorClass:
+  {
+    if(get_unary_operator_expr(expr, new_expr))
+      return true;
+    break;
+  }
+  case SolidityGrammar::ExpressionT::DeclRefExprClass:
+  {
+    if(expr["referencedDeclaration"] > 0)
     {
-      if(get_unary_operator_expr(expr, new_expr))
-        return true;
-      break;
-    }
-    case SolidityGrammar::ExpressionT::DeclRefExprClass:
-    {
-      if (expr["referencedDeclaration"] > 0)
+      // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
+      const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
+
+      if(!check_intrinsic_function(decl))
       {
-        // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
-        const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
-
-        if (!check_intrinsic_function(decl))
+        if(decl["nodeType"] == "VariableDeclaration")
         {
-          if (decl["nodeType"] == "VariableDeclaration")
-          {
-            if (get_var_decl_ref(decl, new_expr))
-              return true;
-          }
-          else if (decl["nodeType"] == "FunctionDefinition")
-          {
-            if (get_func_decl_ref(decl, new_expr))
-              return true;
-          }
-          else
-          {
-            assert(!"Unsupported DeclRefExprClass type");
-          }
+          if(get_var_decl_ref(decl, new_expr))
+            return true;
+        }
+        else if(decl["nodeType"] == "FunctionDefinition")
+        {
+          if(get_func_decl_ref(decl, new_expr))
+            return true;
         }
         else
         {
-          // for special functions, we need to deal with it separately
-          if (get_decl_ref_builtin(expr, new_expr))
-            return true;
+          assert(!"Unsupported DeclRefExprClass type");
         }
       }
       else
       {
-        // Soldity uses -ve odd numbers to refer to built-in var or functions that
-        // are NOT declared in the contract
-        if (get_decl_ref_builtin(expr, new_expr))
+        // for special functions, we need to deal with it separately
+        if(get_decl_ref_builtin(expr, new_expr))
           return true;
       }
-
-      break;
     }
-    case SolidityGrammar::ExpressionT::Literal:
+    else
     {
-      // make a type-name json for integer literal conversion
-      std::string the_value = expr["value"].get<std::string>();
-      const nlohmann::json &integer_literal = expr["typeDescriptions"];
-
-      if(convert_integer_literal(integer_literal, the_value, new_expr))
+      // Soldity uses -ve odd numbers to refer to built-in var or functions that
+      // are NOT declared in the contract
+      if(get_decl_ref_builtin(expr, new_expr))
         return true;
-
-      break;
     }
-    case SolidityGrammar::ExpressionT::CallExprClass:
-    {
-      // 1. Get callee expr
-      const nlohmann::json &callee_expr_json = expr["expression"];
 
-      // wrap it in an ImplicitCastExpr to perform conversion of FunctionToPointerDecay
-      nlohmann::json implicit_cast_expr = make_implicit_cast_expr(callee_expr_json, "FunctionToPointerDecay");
-      exprt callee_expr;
-      if(get_expr(implicit_cast_expr, callee_expr))
-        return true;
+    break;
+  }
+  case SolidityGrammar::ExpressionT::Literal:
+  {
+    // make a type-name json for integer literal conversion
+    std::string the_value = expr["value"].get<std::string>();
+    const nlohmann::json &integer_literal = expr["typeDescriptions"];
 
-      // 2. Get type
-      // Need to "decrypt" the typeDescriptions and manually make a typeDescription
-      nlohmann::json callee_rtn_type = make_callexpr_return_type(callee_expr_json["typeDescriptions"]);
-      typet type;
-      if (get_type_description(callee_rtn_type, type))
-        return true;
-
-      side_effect_expr_function_callt call;
-      call.function() = callee_expr;
-      call.type() = type;
-
-      // 3. Set side_effect_expr_function_callt
-      unsigned num_args = 0;
-      for (const auto &arg : expr["arguments"].items())
-      {
-        exprt single_arg;
-        if(get_expr(arg.value(), single_arg))
-          return true;
-
-        call.arguments().push_back(single_arg);
-        ++num_args;
-      }
-      msg.status(fmt::format("  @@ num_args={}", num_args));
-
-      // 4. Convert call arguments
-      new_expr = call;
-      break;
-    }
-    case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
-    {
-      if(get_cast_expr(expr, new_expr))
-        return true;
-      break;
-    }
-    case SolidityGrammar::ExpressionT::IndexAccess:
-    {
-      // 1. get type, this is the base type of array
-      typet t;
-      if (get_type_description(expr["typeDescriptions"], t))
-        return true;
-
-      // 2. get the decl ref of the array
-      // wrap it in an ImplicitCastExpr to perform conversion of ArrayToPointerDecay
-      nlohmann::json implicit_cast_expr = make_implicit_cast_expr(expr["baseExpression"], "ArrayToPointerDecay");
-      exprt array;
-      if(get_expr(implicit_cast_expr, array))
-        return true;
-
-      // 3. get the position index
-      exprt pos;
-      if(get_expr(expr["indexExpression"], pos))
-        return true;
-
-      new_expr = index_exprt(array, pos, t);
-      break;
-    }
-    default:
-    {
-      assert(!"Unimplemented type in rule expression");
+    if(convert_integer_literal(integer_literal, the_value, new_expr))
       return true;
+
+    break;
+  }
+  case SolidityGrammar::ExpressionT::CallExprClass:
+  {
+    // 1. Get callee expr
+    const nlohmann::json &callee_expr_json = expr["expression"];
+
+    // wrap it in an ImplicitCastExpr to perform conversion of FunctionToPointerDecay
+    nlohmann::json implicit_cast_expr =
+      make_implicit_cast_expr(callee_expr_json, "FunctionToPointerDecay");
+    exprt callee_expr;
+    if(get_expr(implicit_cast_expr, callee_expr))
+      return true;
+
+    // 2. Get type
+    // Need to "decrypt" the typeDescriptions and manually make a typeDescription
+    nlohmann::json callee_rtn_type =
+      make_callexpr_return_type(callee_expr_json["typeDescriptions"]);
+    typet type;
+    if(get_type_description(callee_rtn_type, type))
+      return true;
+
+    side_effect_expr_function_callt call;
+    call.function() = callee_expr;
+    call.type() = type;
+
+    // 3. Set side_effect_expr_function_callt
+    unsigned num_args = 0;
+    for(const auto &arg : expr["arguments"].items())
+    {
+      exprt single_arg;
+      if(get_expr(arg.value(), single_arg))
+        return true;
+
+      call.arguments().push_back(single_arg);
+      ++num_args;
     }
+    msg.status(fmt::format("  @@ num_args={}", num_args));
+
+    // 4. Convert call arguments
+    new_expr = call;
+    break;
+  }
+  case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
+  {
+    if(get_cast_expr(expr, new_expr))
+      return true;
+    break;
+  }
+  case SolidityGrammar::ExpressionT::IndexAccess:
+  {
+    // 1. get type, this is the base type of array
+    typet t;
+    if(get_type_description(expr["typeDescriptions"], t))
+      return true;
+
+    // 2. get the decl ref of the array
+    // wrap it in an ImplicitCastExpr to perform conversion of ArrayToPointerDecay
+    nlohmann::json implicit_cast_expr =
+      make_implicit_cast_expr(expr["baseExpression"], "ArrayToPointerDecay");
+    exprt array;
+    if(get_expr(implicit_cast_expr, array))
+      return true;
+
+    // 3. get the position index
+    exprt pos;
+    if(get_expr(expr["indexExpression"], pos))
+      return true;
+
+    new_expr = index_exprt(array, pos, t);
+    break;
+  }
+  default:
+  {
+    assert(!"Unimplemented type in rule expression");
+    return true;
+  }
   }
 
   new_expr.location() = location;
   return false;
 }
 
-bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr)
+bool solidity_convertert::get_binary_operator_expr(
+  const nlohmann::json &expr,
+  exprt &new_expr)
 {
   // preliminary step for recursive BinaryOperation
   current_BinOp_type.push(&(expr["typeDescriptions"]));
@@ -813,7 +844,7 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
   // For "Assignment" expression, it's called "leftHandSide" or "rightHandSide".
   // For "BinaryOperation" expression, it's called "leftExpression" or "leftExpression"
   exprt lhs, rhs;
-  if (expr.contains("leftHandSide"))
+  if(expr.contains("leftHandSide"))
   {
     if(get_expr(expr["leftHandSide"], lhs))
       return true;
@@ -821,7 +852,7 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
     if(get_expr(expr["rightHandSide"], rhs))
       return true;
   }
-  else if (expr.contains("leftExpression"))
+  else if(expr.contains("leftExpression"))
   {
     if(get_expr(expr["leftExpression"], lhs))
       return true;
@@ -842,61 +873,63 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
     return true;
 
   // 3. Convert opcode
-  SolidityGrammar::ExpressionT opcode = SolidityGrammar::get_expr_operator_t(expr);
-  msg.status(fmt::format("	@@@ got binop.getOpcode: SolidityGrammar::{}",
-        SolidityGrammar::expression_to_str(opcode)));
+  SolidityGrammar::ExpressionT opcode =
+    SolidityGrammar::get_expr_operator_t(expr);
+  msg.status(fmt::format(
+    "	@@@ got binop.getOpcode: SolidityGrammar::{}",
+    SolidityGrammar::expression_to_str(opcode)));
   switch(opcode)
   {
-    case SolidityGrammar::ExpressionT::BO_Assign:
-    {
-      new_expr = side_effect_exprt("assign", t);
-      break;
-    }
-    case SolidityGrammar::ExpressionT::BO_Add:
-    {
-      if(t.is_floatbv())
-        assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
-      else
-        new_expr = exprt("+", t);
-      break;
-    }
-    case SolidityGrammar::ExpressionT::BO_Sub:
-    {
-      if(t.is_floatbv())
-        assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
-      else
-        new_expr = exprt("-", t);
-      break;
-    }
-    case SolidityGrammar::ExpressionT::BO_GT:
-    {
-      new_expr = exprt(">", t);
-      break;
-    }
-    case SolidityGrammar::ExpressionT::BO_LT:
-    {
-      new_expr = exprt("<", t);
-      break;
-    }
-    case SolidityGrammar::ExpressionT::BO_NE:
-    {
-      new_expr = exprt("notequal", t);
-      break;
-    }
-    case SolidityGrammar::ExpressionT::BO_EQ:
-    {
-      new_expr = exprt("=", t);
-      break;
-    }
-    case SolidityGrammar::ExpressionT::BO_Rem:
-    {
-      new_expr = exprt("mod", t);
-      break;
-    }
-    default:
-    {
-      assert(!"Unimplemented binary operator");
-    }
+  case SolidityGrammar::ExpressionT::BO_Assign:
+  {
+    new_expr = side_effect_exprt("assign", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_Add:
+  {
+    if(t.is_floatbv())
+      assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
+    else
+      new_expr = exprt("+", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_Sub:
+  {
+    if(t.is_floatbv())
+      assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
+    else
+      new_expr = exprt("-", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_GT:
+  {
+    new_expr = exprt(">", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_LT:
+  {
+    new_expr = exprt("<", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_NE:
+  {
+    new_expr = exprt("notequal", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_EQ:
+  {
+    new_expr = exprt("=", t);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::BO_Rem:
+  {
+    new_expr = exprt("mod", t);
+    break;
+  }
+  default:
+  {
+    assert(!"Unimplemented binary operator");
+  }
   }
 
   // 4. Copy to operands
@@ -908,11 +941,15 @@ bool solidity_convertert::get_binary_operator_expr(const nlohmann::json &expr, e
   return false;
 }
 
-bool solidity_convertert::get_unary_operator_expr(const nlohmann::json &expr, exprt &new_expr)
+bool solidity_convertert::get_unary_operator_expr(
+  const nlohmann::json &expr,
+  exprt &new_expr)
 {
   // 1. get type
   typet uniop_type;
-  assert(expr["prefix"]); // TODO: Fix me! Currently just support prefix == true,e.g. pre-increment
+  assert(
+    expr
+      ["prefix"]); // TODO: Fix me! Currently just support prefix == true,e.g. pre-increment
   if(get_type_description(expr["typeDescriptions"], uniop_type))
     return true;
 
@@ -921,42 +958,46 @@ bool solidity_convertert::get_unary_operator_expr(const nlohmann::json &expr, ex
   if(get_expr(expr["subExpression"], unary_sub))
     return true;
   // 3. get UnaryOperation opcode
-  SolidityGrammar::ExpressionT opcode = SolidityGrammar::get_expr_operator_t(expr, expr["prefix"]);
-  msg.status(fmt::format("	@@@ got uniop.getOpcode: SolidityGrammar::{}",
-        SolidityGrammar::expression_to_str(opcode)));
+  SolidityGrammar::ExpressionT opcode =
+    SolidityGrammar::get_expr_operator_t(expr, expr["prefix"]);
+  msg.status(fmt::format(
+    "	@@@ got uniop.getOpcode: SolidityGrammar::{}",
+    SolidityGrammar::expression_to_str(opcode)));
 
   switch(opcode)
   {
-    case SolidityGrammar::ExpressionT::UO_PreDec:
-    {
-      new_expr = side_effect_exprt("predecrement", uniop_type);
-      break;
-    }
-    case SolidityGrammar::ExpressionT::UO_PreInc:
-    {
-      new_expr = side_effect_exprt("preincrement", uniop_type);
-      break;
-    }
-    default:
-    {
-      assert(!"Unimplemented unary operator");
-    }
+  case SolidityGrammar::ExpressionT::UO_PreDec:
+  {
+    new_expr = side_effect_exprt("predecrement", uniop_type);
+    break;
+  }
+  case SolidityGrammar::ExpressionT::UO_PreInc:
+  {
+    new_expr = side_effect_exprt("preincrement", uniop_type);
+    break;
+  }
+  default:
+  {
+    assert(!"Unimplemented unary operator");
+  }
   }
 
   new_expr.operands().push_back(unary_sub);
   return false;
 }
 
-bool solidity_convertert::get_cast_expr(const nlohmann::json &cast_expr, exprt &new_expr)
+bool solidity_convertert::get_cast_expr(
+  const nlohmann::json &cast_expr,
+  exprt &new_expr)
 {
   // 1. convert subexpr
   exprt expr;
-  if (get_expr(cast_expr["subExpr"], expr))
+  if(get_expr(cast_expr["subExpr"], expr))
     return true;
 
   // 2. get type
   typet type;
-  if (cast_expr["castType"].get<std::string>() == "ArrayToPointerDecay")
+  if(cast_expr["castType"].get<std::string>() == "ArrayToPointerDecay")
   {
     // Array's cast_expr will have cast_expr["subExpr"]["typeDescriptions"]:
     //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr"
@@ -965,53 +1006,59 @@ bool solidity_convertert::get_cast_expr(const nlohmann::json &cast_expr, exprt &
     // But we want Pointer type. Hence, adjusting the type manually to make it like:
     //   "typeIdentifier": "ArrayToPtr",
     //   "typeString": "uint8[2] memory"
-    nlohmann::json adjusted_type = make_array_to_pointer_type(cast_expr["subExpr"]["typeDescriptions"]);
-    if (get_type_description(adjusted_type, type))
+    nlohmann::json adjusted_type =
+      make_array_to_pointer_type(cast_expr["subExpr"]["typeDescriptions"]);
+    if(get_type_description(adjusted_type, type))
       return true;
   }
   else
   {
-    if (get_type_description(cast_expr["subExpr"]["typeDescriptions"], type))
+    if(get_type_description(cast_expr["subExpr"]["typeDescriptions"], type))
       return true;
   }
 
   // 3. get cast type and generate typecast
   SolidityGrammar::ImplicitCastTypeT cast_type =
-    SolidityGrammar::get_implicit_cast_type_t(cast_expr["castType"].get<std::string>());
+    SolidityGrammar::get_implicit_cast_type_t(
+      cast_expr["castType"].get<std::string>());
   switch(cast_type)
   {
-    case SolidityGrammar::ImplicitCastTypeT::LValueToRValue:
-    {
-      solidity_gen_typecast(ns, expr, type);
-      break;
-    }
-    case SolidityGrammar::ImplicitCastTypeT::FunctionToPointerDecay:
-    case SolidityGrammar::ImplicitCastTypeT::ArrayToPointerDecay:
-    {
-      break;
-    }
-    default:
-    {
-      assert(!"Unimplemented implicit cast type");
-    }
+  case SolidityGrammar::ImplicitCastTypeT::LValueToRValue:
+  {
+    solidity_gen_typecast(ns, expr, type);
+    break;
+  }
+  case SolidityGrammar::ImplicitCastTypeT::FunctionToPointerDecay:
+  case SolidityGrammar::ImplicitCastTypeT::ArrayToPointerDecay:
+  {
+    break;
+  }
+  default:
+  {
+    assert(!"Unimplemented implicit cast type");
+  }
   }
 
   new_expr = expr;
   return false;
 }
 
-bool solidity_convertert::get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr)
+bool solidity_convertert::get_var_decl_ref(
+  const nlohmann::json &decl,
+  exprt &new_expr)
 {
   // Function to configure new_expr that has a +ve referenced id, referring to a variable declaration
   assert(decl["nodeType"] == "VariableDeclaration");
   std::string name, id;
-  if (decl["stateVariable"])
+  if(decl["stateVariable"])
     get_state_var_decl_name(decl, name, id);
   else
     get_var_decl_name(decl, name, id);
 
   typet type;
-  if (get_type_description(decl["typeName"]["typeDescriptions"], type)) // "type-name" as in state-variable-declaration
+  if(get_type_description(
+       decl["typeName"]["typeDescriptions"],
+       type)) // "type-name" as in state-variable-declaration
     return true;
 
   new_expr = exprt("symbol", type);
@@ -1021,7 +1068,9 @@ bool solidity_convertert::get_var_decl_ref(const nlohmann::json &decl, exprt &ne
   return false;
 }
 
-bool solidity_convertert::get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr)
+bool solidity_convertert::get_func_decl_ref(
+  const nlohmann::json &decl,
+  exprt &new_expr)
 {
   // Function to configure new_expr that has a +ve referenced id, referring to a function declaration
   assert(decl["nodeType"] == "FunctionDefinition");
@@ -1029,7 +1078,8 @@ bool solidity_convertert::get_func_decl_ref(const nlohmann::json &decl, exprt &n
   get_function_definition_name(decl, name, id);
 
   typet type;
-  if (get_func_decl_ref_type(decl, type)) // "type-name" as in state-variable-declaration
+  if(get_func_decl_ref_type(
+       decl, type)) // "type-name" as in state-variable-declaration
     return true;
 
   new_expr = exprt("symbol", type);
@@ -1039,14 +1089,16 @@ bool solidity_convertert::get_func_decl_ref(const nlohmann::json &decl, exprt &n
   return false;
 }
 
-bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr)
+bool solidity_convertert::get_decl_ref_builtin(
+  const nlohmann::json &decl,
+  exprt &new_expr)
 {
   // Function to configure new_expr that has a -ve referenced id
   // -ve ref id means built-in functions or variables.
   // Add more special function names here
-  assert(decl["name"] == "assert" ||
-         decl["name"] == "__ESBMC_assume" ||
-         decl["name"] == "__VERIFIER_assume");
+  assert(
+    decl["name"] == "assert" || decl["name"] == "__ESBMC_assume" ||
+    decl["name"] == "__VERIFIER_assume");
 
   std::string name, id;
   name = decl["name"].get<std::string>();
@@ -1058,9 +1110,9 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
   // Creat a new code_typet, parse the return_type and copy the code_typet to typet
   code_typet convert_type;
   typet return_type;
-  if (decl["name"] == "assert" ||
-      decl["name"] == "__ESBMC_assume" ||
-      decl["name"] == "__VERIFIER_assume")
+  if(
+    decl["name"] == "assert" || decl["name"] == "__ESBMC_assume" ||
+    decl["name"] == "__VERIFIER_assume")
   {
     assert(decl["typeDescriptions"]["typeString"] == "function (bool) pure");
     // clang's assert(.) uses "signed_int" as assert(.) type (NOT the argument type),
@@ -1078,7 +1130,6 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
     assert(!"Unsupported special functions");
   }
 
-
   type = convert_type;
 
   new_expr = exprt("symbol", type);
@@ -1088,95 +1139,110 @@ bool solidity_convertert::get_decl_ref_builtin(const nlohmann::json &decl, exprt
   return false;
 }
 
-bool solidity_convertert::get_type_description(const nlohmann::json &type_name, typet &new_type)
+bool solidity_convertert::get_type_description(
+  const nlohmann::json &type_name,
+  typet &new_type)
 {
   // For Solidity rule type-name:
   SolidityGrammar::TypeNameT type = SolidityGrammar::get_type_name_t(type_name);
 
   switch(type)
   {
-    case SolidityGrammar::TypeNameT::ElementaryTypeName:
-    {
-      // rule state-variable-declaration
-      return get_elementary_type_name(type_name, new_type);
-    }
-    case SolidityGrammar::TypeNameT::ParameterList:
-    {
-      // rule parameter-list
-      // Used for Solidity function parameter or return list
-      return get_parameter_list(type_name, new_type);
-    }
-    case SolidityGrammar::TypeNameT::Pointer:
-    {
-      // auxiliary type: pointer (FuncToPtr decay)
-      // This part is for FunctionToPointer decay only
-      assert(type_name["typeString"].get<std::string>().find("function") != std::string::npos);
+  case SolidityGrammar::TypeNameT::ElementaryTypeName:
+  {
+    // rule state-variable-declaration
+    return get_elementary_type_name(type_name, new_type);
+  }
+  case SolidityGrammar::TypeNameT::ParameterList:
+  {
+    // rule parameter-list
+    // Used for Solidity function parameter or return list
+    return get_parameter_list(type_name, new_type);
+  }
+  case SolidityGrammar::TypeNameT::Pointer:
+  {
+    // auxiliary type: pointer (FuncToPtr decay)
+    // This part is for FunctionToPointer decay only
+    assert(
+      type_name["typeString"].get<std::string>().find("function") !=
+      std::string::npos);
 
-      // Since Solidity does not have this, first make a pointee
-      nlohmann::json pointee = make_pointee_type(type_name);
-      typet sub_type;
-      if(get_func_decl_ref_type(pointee, sub_type))
-        return true;
-
-      if(sub_type.is_struct() || sub_type.is_union()) // for "assert(sum > 100)", false || false
-        assert(!"struct or union is NOT supported");
-
-      new_type = gen_pointer_type(sub_type);
-      break;
-    }
-    case SolidityGrammar::TypeNameT::PointerArrayToPtr:
-    {
-      // auxiliary type: pointer (FuncToPtr decay)
-      // This part is for FunctionToPointer decay only
-      assert(type_name["typeIdentifier"].get<std::string>().find("ArrayToPtr") != std::string::npos);
-
-      // Array type descriptor is like:
-      //  "typeIdentifier": "ArrayToPtr",
-      //  "typeString": "uint8[2] memory"
-
-      // Since Solidity does not have this, first make a pointee
-      typet sub_type;
-      if(get_array_to_pointer_type(type_name, sub_type)) // TODO: Fix me! Inconsistency. Better to use Solidity compiler library?
-        return true;
-
-      if(sub_type.is_struct() || sub_type.is_union()) // for "assert(sum > 100)", false || false
-        assert(!"struct or union is NOT supported");
-
-      new_type = gen_pointer_type(sub_type);
-      break;
-    }
-    case SolidityGrammar::TypeNameT::ArrayTypeName:
-    {
-      // Deal with array with constant size, e.g., int a[2]; Similar to clang::Type::ConstantArray
-      // array's typeDescription is in a compact form, e.g.:
-      //    "typeIdentifier": "t_array$_t_uint8_$2_storage_ptr",
-      //    "typeString": "uint8[2]"
-      // We need to extract the elementary type of array from the information provided above
-      // We want to make it like ["baseType"]["typeDescriptions"]
-      nlohmann::json array_elementary_type = make_array_elementary_type(type_name);
-      typet the_type;
-      if(get_type_description(array_elementary_type, the_type))
-        return true;
-
-      assert(the_type.is_unsignedbv()); // assuming array size is unsigned bv
-      std::string the_size = get_array_size(type_name);
-      unsigned z_ext_value = std::stoul(the_size, nullptr);
-      new_type = array_typet(
-        the_type,
-        constant_exprt(
-          integer2binary(z_ext_value, bv_width(int_type())),
-          integer2string(z_ext_value),
-          int_type()));
-
-      break;
-    }
-    default:
-    {
-      msg.status(fmt::format("	@@@ got type name=SolidityGrammar::TypeNameT::{}",
-            SolidityGrammar::type_name_to_str(type)));
-      assert(!"Unimplemented type in rule type-name");
+    // Since Solidity does not have this, first make a pointee
+    nlohmann::json pointee = make_pointee_type(type_name);
+    typet sub_type;
+    if(get_func_decl_ref_type(pointee, sub_type))
       return true;
-    }
+
+    if(
+      sub_type.is_struct() ||
+      sub_type.is_union()) // for "assert(sum > 100)", false || false
+      assert(!"struct or union is NOT supported");
+
+    new_type = gen_pointer_type(sub_type);
+    break;
+  }
+  case SolidityGrammar::TypeNameT::PointerArrayToPtr:
+  {
+    // auxiliary type: pointer (FuncToPtr decay)
+    // This part is for FunctionToPointer decay only
+    assert(
+      type_name["typeIdentifier"].get<std::string>().find("ArrayToPtr") !=
+      std::string::npos);
+
+    // Array type descriptor is like:
+    //  "typeIdentifier": "ArrayToPtr",
+    //  "typeString": "uint8[2] memory"
+
+    // Since Solidity does not have this, first make a pointee
+    typet sub_type;
+    if(
+      get_array_to_pointer_type(
+        type_name,
+        sub_type)) // TODO: Fix me! Inconsistency. Better to use Solidity compiler library?
+      return true;
+
+    if(
+      sub_type.is_struct() ||
+      sub_type.is_union()) // for "assert(sum > 100)", false || false
+      assert(!"struct or union is NOT supported");
+
+    new_type = gen_pointer_type(sub_type);
+    break;
+  }
+  case SolidityGrammar::TypeNameT::ArrayTypeName:
+  {
+    // Deal with array with constant size, e.g., int a[2]; Similar to clang::Type::ConstantArray
+    // array's typeDescription is in a compact form, e.g.:
+    //    "typeIdentifier": "t_array$_t_uint8_$2_storage_ptr",
+    //    "typeString": "uint8[2]"
+    // We need to extract the elementary type of array from the information provided above
+    // We want to make it like ["baseType"]["typeDescriptions"]
+    nlohmann::json array_elementary_type =
+      make_array_elementary_type(type_name);
+    typet the_type;
+    if(get_type_description(array_elementary_type, the_type))
+      return true;
+
+    assert(the_type.is_unsignedbv()); // assuming array size is unsigned bv
+    std::string the_size = get_array_size(type_name);
+    unsigned z_ext_value = std::stoul(the_size, nullptr);
+    new_type = array_typet(
+      the_type,
+      constant_exprt(
+        integer2binary(z_ext_value, bv_width(int_type())),
+        integer2string(z_ext_value),
+        int_type()));
+
+    break;
+  }
+  default:
+  {
+    msg.status(fmt::format(
+      "	@@@ got type name=SolidityGrammar::TypeNameT::{}",
+      SolidityGrammar::type_name_to_str(type)));
+    assert(!"Unimplemented type in rule type-name");
+    return true;
+  }
   }
 
   // TODO: More var decl attributes checks:
@@ -1187,42 +1253,46 @@ bool solidity_convertert::get_type_description(const nlohmann::json &type_name, 
   return false;
 }
 
-bool solidity_convertert::get_func_decl_ref_type(const nlohmann::json &decl, typet &new_type)
+bool solidity_convertert::get_func_decl_ref_type(
+  const nlohmann::json &decl,
+  typet &new_type)
 {
   // For FunctionToPointer decay:
   // Get type when we make a function call:
   //  - FunnctionNoProto: x = nondet()
   //  - FunctionProto:    z = add(x, y)
   // Similar to the function get_type_description()
-  SolidityGrammar::FunctionDeclRefT type = SolidityGrammar::get_func_decl_ref_t(decl);
+  SolidityGrammar::FunctionDeclRefT type =
+    SolidityGrammar::get_func_decl_ref_t(decl);
 
   switch(type)
   {
-    case SolidityGrammar::FunctionDeclRefT::FunctionNoProto:
-    {
-      code_typet type;
+  case SolidityGrammar::FunctionDeclRefT::FunctionNoProto:
+  {
+    code_typet type;
 
-      // Return type
-      const nlohmann::json &rtn_type = decl["returnParameters"];
+    // Return type
+    const nlohmann::json &rtn_type = decl["returnParameters"];
 
-      typet return_type;
-      if (get_type_description(rtn_type, return_type))
-        return true;
-
-      type.return_type() = return_type;
-
-      if(!type.arguments().size())
-        type.make_ellipsis();
-
-      new_type = type;
-      break;
-    }
-    default:
-    {
-      msg.status(fmt::format("	@@@ Got type={}", SolidityGrammar::func_decl_ref_to_str(type)));
-      assert(!"Unimplemented type in auxiliary type to convert function call");
+    typet return_type;
+    if(get_type_description(rtn_type, return_type))
       return true;
-    }
+
+    type.return_type() = return_type;
+
+    if(!type.arguments().size())
+      type.make_ellipsis();
+
+    new_type = type;
+    break;
+  }
+  default:
+  {
+    msg.status(fmt::format(
+      "	@@@ Got type={}", SolidityGrammar::func_decl_ref_to_str(type)));
+    assert(!"Unimplemented type in auxiliary type to convert function call");
+    return true;
+  }
   }
 
   // TODO: More var decl attributes checks:
@@ -1232,11 +1302,15 @@ bool solidity_convertert::get_func_decl_ref_type(const nlohmann::json &decl, typ
   return false;
 }
 
-bool solidity_convertert::get_array_to_pointer_type(const nlohmann::json &type_descriptor, typet &new_type)
+bool solidity_convertert::get_array_to_pointer_type(
+  const nlohmann::json &type_descriptor,
+  typet &new_type)
 {
   // Function to get the base type in ArrayToPointer decay
   //  - unrolled the get_type...
-  if (type_descriptor["typeString"].get<std::string>().find("uint8") != std::string::npos)
+  if(
+    type_descriptor["typeString"].get<std::string>().find("uint8") !=
+    std::string::npos)
   {
     new_type = unsigned_char_type();
     new_type.set("#cpp_type", "unsigned_char");
@@ -1253,127 +1327,157 @@ bool solidity_convertert::get_array_to_pointer_type(const nlohmann::json &type_d
   return false;
 }
 
-bool solidity_convertert::get_elementary_type_name(const nlohmann::json &type_name, typet &new_type)
+bool solidity_convertert::get_elementary_type_name(
+  const nlohmann::json &type_name,
+  typet &new_type)
 {
   // For Solidity rule elementary-type-name:
   // equivalent to clang's get_builtin_type()
   std::string c_type;
-  SolidityGrammar::ElementaryTypeNameT type = SolidityGrammar::get_elementary_type_name_t(type_name);
+  SolidityGrammar::ElementaryTypeNameT type =
+    SolidityGrammar::get_elementary_type_name_t(type_name);
 
   switch(type)
   {
-    // rule unsigned-integer-type
-    case SolidityGrammar::ElementaryTypeNameT::UINT8:
-    {
-      new_type = unsigned_char_type();
-      c_type = "unsigned_char";
-      new_type.set("#cpp_type", c_type);
-      break;
-    }
-    case SolidityGrammar::ElementaryTypeNameT::BOOL:
-    {
-      new_type = bool_type();
-      c_type = "bool";
-      new_type.set("#cpp_type", c_type);
-      break;
-    }
-    default:
-    {
-      msg.status(fmt::format("	@@@ Got elementary-type-name={}", SolidityGrammar::elementary_type_name_to_str(type)));
-      assert(!"Unimplemented type in rule elementary-type-name");
-      return true;
-    }
+  // rule unsigned-integer-type
+  case SolidityGrammar::ElementaryTypeNameT::UINT8:
+  {
+    new_type = unsigned_char_type();
+    c_type = "unsigned_char";
+    new_type.set("#cpp_type", c_type);
+    break;
+  }
+  case SolidityGrammar::ElementaryTypeNameT::BOOL:
+  {
+    new_type = bool_type();
+    c_type = "bool";
+    new_type.set("#cpp_type", c_type);
+    break;
+  }
+  default:
+  {
+    msg.status(fmt::format(
+      "	@@@ Got elementary-type-name={}",
+      SolidityGrammar::elementary_type_name_to_str(type)));
+    assert(!"Unimplemented type in rule elementary-type-name");
+    return true;
+  }
   }
 
   return false;
 }
 
-bool solidity_convertert::get_parameter_list(const nlohmann::json &type_name, typet &new_type)
+bool solidity_convertert::get_parameter_list(
+  const nlohmann::json &type_name,
+  typet &new_type)
 {
   // For Solidity rule parameter-list:
   //  - For non-empty param list, it may need to call get_elementary_type_name, since parameter-list is just a list of types
   std::string c_type;
-  SolidityGrammar::ParameterListT type = SolidityGrammar::get_parameter_list_t(type_name);
+  SolidityGrammar::ParameterListT type =
+    SolidityGrammar::get_parameter_list_t(type_name);
 
   switch(type)
   {
-    case SolidityGrammar::ParameterListT::EMPTY:
-    {
-      // equivalent to clang's "void"
-      new_type = empty_typet();
-      c_type = "void";
-      new_type.set("#cpp_type", c_type);
-      break;
-    }
-    case SolidityGrammar::ParameterListT::NONEMPTY:
-    {
-      assert(type_name["parameters"].size() == 1); // TODO: Fix me! assuming one return parameter
-      const nlohmann::json &rtn_type = type_name["parameters"].at(0)["typeName"]["typeDescriptions"];
-      return get_elementary_type_name(rtn_type, new_type);
+  case SolidityGrammar::ParameterListT::EMPTY:
+  {
+    // equivalent to clang's "void"
+    new_type = empty_typet();
+    c_type = "void";
+    new_type.set("#cpp_type", c_type);
+    break;
+  }
+  case SolidityGrammar::ParameterListT::NONEMPTY:
+  {
+    assert(
+      type_name["parameters"].size() ==
+      1); // TODO: Fix me! assuming one return parameter
+    const nlohmann::json &rtn_type =
+      type_name["parameters"].at(0)["typeName"]["typeDescriptions"];
+    return get_elementary_type_name(rtn_type, new_type);
 
-      break;
-    }
-    default:
-    {
-      assert(!"Unimplemented type in rule parameter-list");
-      return true;
-    }
+    break;
+  }
+  default:
+  {
+    assert(!"Unimplemented type in rule parameter-list");
+    return true;
+  }
   }
 
   return false;
 }
 
 void solidity_convertert::get_state_var_decl_name(
-    const nlohmann::json &ast_node,
-    std::string &name, std::string &id)
+  const nlohmann::json &ast_node,
+  std::string &name,
+  std::string &id)
 {
   // Follow the way in clang:
   //  - For state variable name, just use the ast_node["name"]
   //  - For state variable id, add prefix "c:@"
-  name = ast_node["name"].get<std::string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
+  name =
+    ast_node["name"]
+      .get<
+        std::
+          string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
   id = "c:@" + name;
 }
 
 void solidity_convertert::get_var_decl_name(
-    const nlohmann::json &ast_node,
-    std::string &name, std::string &id)
+  const nlohmann::json &ast_node,
+  std::string &name,
+  std::string &id)
 {
-  assert(current_functionDecl); // TODO: Fix me! assuming converting local variable inside a function
+  assert(
+    current_functionDecl); // TODO: Fix me! assuming converting local variable inside a function
   // For non-state functions, we give it different id.
   // E.g. for local variable i in function nondet(), it's "c:overflow_2_nondet.c@55@F@nondet@i".
-  name = ast_node["name"].get<std::string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
+  name =
+    ast_node["name"]
+      .get<
+        std::
+          string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
   id = "c:" + get_modulename_from_path(absolute_path) + ".solast" +
        //"@"  + std::to_string(ast_node["scope"].get<int>()) +
-       "@"  + std::to_string(445) +
-       "@"  + "F" +
-       "@"  + current_functionName +
-       "@"  + name;
+       "@" + std::to_string(445) + "@" + "F" + "@" + current_functionName +
+       "@" + name;
 }
 
 void solidity_convertert::get_function_definition_name(
-    const nlohmann::json &ast_node,
-    std::string &name, std::string &id)
+  const nlohmann::json &ast_node,
+  std::string &name,
+  std::string &id)
 {
   // Follow the way in clang:
   //  - For function name, just use the ast_node["name"]
-  name = ast_node["name"].get<std::string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
+  name =
+    ast_node["name"]
+      .get<
+        std::
+          string>(); // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
   id = name;
 }
 
-void solidity_convertert::get_location_from_decl(const nlohmann::json &ast_node, locationt &location)
+void solidity_convertert::get_location_from_decl(
+  const nlohmann::json &ast_node,
+  locationt &location)
 {
   // The src manager of Solidity AST JSON is too encryptic.
   // For the time being we are setting it to "1".
   location.set_line(1);
-  location.set_file(absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+  location.set_file(
+    absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
 
   // To annotate local declaration within a function
-  if (ast_node["nodeType"] == "VariableDeclaration" &&
-      ast_node["stateVariable"] == false &&
-      ast_node["scope"] != global_scope_id)
+  if(
+    ast_node["nodeType"] == "VariableDeclaration" &&
+    ast_node["stateVariable"] == false && ast_node["scope"] != global_scope_id)
   {
-    assert(current_functionDecl); // must have a valid current function declaration
-    location.set_function(current_functionName); // set the function where this local variable belongs to
+    assert(
+      current_functionDecl); // must have a valid current function declaration
+    location.set_function(
+      current_functionName); // set the function where this local variable belongs to
   }
 }
 
@@ -1381,15 +1485,16 @@ void solidity_convertert::get_start_location_from_stmt(locationt &location)
 {
   std::string function_name;
 
-  if (current_functionDecl)
+  if(current_functionDecl)
     function_name = current_functionName;
 
   // The src manager of Solidity AST JSON is too encryptic.
   // For the time being we are setting it to "1".
   location.set_line(1);
-  location.set_file(absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+  location.set_file(
+    absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
 
-  if (!function_name.empty())
+  if(!function_name.empty())
     location.set_function(function_name);
 }
 
@@ -1411,41 +1516,44 @@ std::string solidity_convertert::get_filename_from_path(std::string path)
   return path; // for _x, it just returns "overflow_2.c" because the test program is in the same dir as esbmc binary
 }
 
-const nlohmann::json& solidity_convertert::find_decl_ref(int ref_decl_id)
+const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
 {
   // First, search state variable nodes
-  nlohmann::json& nodes = ast_json["nodes"];
+  nlohmann::json &nodes = ast_json["nodes"];
   unsigned index = 0;
-  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr, ++index)
+  for(nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
+      ++itr, ++index)
   {
-    if ( (*itr)["nodeType"] == "ContractDefinition" ) // contains AST nodes we need
+    if((*itr)["nodeType"] == "ContractDefinition") // contains AST nodes we need
       break;
   }
 
-  nlohmann::json& ast_nodes = nodes.at(index)["nodes"];
+  nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
 
   index = 0;
-  for (nlohmann::json::iterator itrr = ast_nodes.begin(); itrr != ast_nodes.end(); ++itrr, ++index)
+  for(nlohmann::json::iterator itrr = ast_nodes.begin();
+      itrr != ast_nodes.end();
+      ++itrr, ++index)
   {
-    if ( (*itrr)["id"] == ref_decl_id)
+    if((*itrr)["id"] == ref_decl_id)
       return ast_nodes.at(index);
   }
 
   // Then search "declarations" in current function scope
   const nlohmann::json &current_func = *current_functionDecl;
-  if (current_func.contains("body"))
+  if(current_func.contains("body"))
   {
-    if (current_func["body"].contains("statements"))
+    if(current_func["body"].contains("statements"))
     {
-      for (const auto &body_stmt : current_func["body"]["statements"].items())
+      for(const auto &body_stmt : current_func["body"]["statements"].items())
       {
         const nlohmann::json &stmt = body_stmt.value();
-        if (stmt["nodeType"] == "VariableDeclarationStatement")
+        if(stmt["nodeType"] == "VariableDeclarationStatement")
         {
-          for (const auto &local_decl : stmt["declarations"].items())
+          for(const auto &local_decl : stmt["declarations"].items())
           {
             const nlohmann::json &the_decl = local_decl.value();
-            if (the_decl["id"] == ref_decl_id)
+            if(the_decl["id"] == ref_decl_id)
               return the_decl;
           }
         }
@@ -1461,16 +1569,18 @@ const nlohmann::json& solidity_convertert::find_decl_ref(int ref_decl_id)
 
   // if no matching state or local var decl, search decl in current_forStmt
   const nlohmann::json &current_for = *current_forStmt;
-  if (current_for.contains("initializationExpression"))
+  if(current_for.contains("initializationExpression"))
   {
-    if (current_for["initializationExpression"].contains("declarations"))
+    if(current_for["initializationExpression"].contains("declarations"))
     {
-      assert(current_for["initializationExpression"]["declarations"].size()); // Assuming a non-empty declaration array
-      const nlohmann::json &decls = current_for["initializationExpression"]["declarations"];
-      for (const auto &init_decl : decls.items())
+      assert(current_for["initializationExpression"]["declarations"]
+               .size()); // Assuming a non-empty declaration array
+      const nlohmann::json &decls =
+        current_for["initializationExpression"]["declarations"];
+      for(const auto &init_decl : decls.items())
       {
         const nlohmann::json &the_decl = init_decl.value();
-        if (the_decl["id"] == ref_decl_id)
+        if(the_decl["id"] == ref_decl_id)
           return the_decl;
       }
     }
@@ -1546,11 +1656,13 @@ void solidity_convertert::convert_expression_to_code(exprt &expr)
   expr.swap(code);
 }
 
-bool solidity_convertert::check_intrinsic_function(const nlohmann::json &ast_node)
+bool solidity_convertert::check_intrinsic_function(
+  const nlohmann::json &ast_node)
 {
   // function to detect special intrinsic functions, e.g. __ESBMC_assume
-  if (ast_node["name"] == "__ESBMC_assume" ||
-     ast_node["name"] == "__VERIFIER_assume")
+  if(
+    ast_node["name"] == "__ESBMC_assume" ||
+    ast_node["name"] == "__VERIFIER_assume")
   {
     return true;
   }
@@ -1562,22 +1674,24 @@ bool solidity_convertert::check_intrinsic_function(const nlohmann::json &ast_nod
   return false; // make old compiler happy, e.g. pre-GCC4.9
 }
 
-nlohmann::json solidity_convertert::make_implicit_cast_expr(const nlohmann::json& sub_expr, std::string cast_type)
+nlohmann::json solidity_convertert::make_implicit_cast_expr(
+  const nlohmann::json &sub_expr,
+  std::string cast_type)
 {
   // Since Solidity AST does not have type cast information about return values,
   // we need to manually make a JSON object and wrap the return expression in it.
   std::map<std::string, std::string> m = {
     {"nodeType", "ImplicitCastExprClass"},
     {"castType", cast_type},
-    {"subExpr", {}}
-  };
+    {"subExpr", {}}};
   nlohmann::json implicit_cast_expr = m;
   implicit_cast_expr["subExpr"] = sub_expr;
 
   return implicit_cast_expr;
 }
 
-nlohmann::json solidity_convertert::make_pointee_type(const nlohmann::json& sub_expr)
+nlohmann::json
+solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
 {
   // Since Solidity function call node does not have enough information, we need to make a JSON object
   // manually create a JSON object to complete the conversions of function to pointer decay
@@ -1586,12 +1700,18 @@ nlohmann::json solidity_convertert::make_pointee_type(const nlohmann::json& sub_
   // based on the usage of get_func_decl_ref_t() in get_func_decl_ref_type()
   nlohmann::json adjusted_expr;
 
-  if (sub_expr["typeString"].get<std::string>().find("function") != std::string::npos)
+  if(
+    sub_expr["typeString"].get<std::string>().find("function") !=
+    std::string::npos)
   {
     // Add more special functions here
-    if (sub_expr["typeString"].get<std::string>().find("function ()") != std::string::npos ||
-        sub_expr["typeIdentifier"].get<std::string>().find("t_function_assert_pure$") != std::string::npos ||
-        sub_expr["typeIdentifier"].get<std::string>().find("t_function_internal_pure$") != std::string::npos)
+    if(
+      sub_expr["typeString"].get<std::string>().find("function ()") !=
+        std::string::npos ||
+      sub_expr["typeIdentifier"].get<std::string>().find(
+        "t_function_assert_pure$") != std::string::npos ||
+      sub_expr["typeIdentifier"].get<std::string>().find(
+        "t_function_internal_pure$") != std::string::npos)
     {
       // e.g. FunctionNoProto: "typeString": "function () returns (uint8)" with () empty after keyword 'function'
       // "function ()" contains the function args in the parentheses.
@@ -1609,12 +1729,16 @@ nlohmann::json solidity_convertert::make_pointee_type(const nlohmann::json& sub_
       )"_json;
       adjusted_expr = j2;
 
-      if (sub_expr["typeString"].get<std::string>().find("returns") != std::string::npos)
+      if(
+        sub_expr["typeString"].get<std::string>().find("returns") !=
+        std::string::npos)
       {
         // e.g. for typeString like:
         // "typeString": "function () returns (uint8)"
         // TODO: currently we only assume one parameters
-        if (sub_expr["typeString"].get<std::string>().find("returns (uint8)") != std::string::npos)
+        if(
+          sub_expr["typeString"].get<std::string>().find("returns (uint8)") !=
+          std::string::npos)
         {
           auto j2 = R"(
             {
@@ -1655,43 +1779,50 @@ nlohmann::json solidity_convertert::make_pointee_type(const nlohmann::json& sub_
   return adjusted_expr;
 }
 
-nlohmann::json solidity_convertert::make_callexpr_return_type(const nlohmann::json& type_descrpt)
+nlohmann::json solidity_convertert::make_callexpr_return_type(
+  const nlohmann::json &type_descrpt)
 {
   nlohmann::json adjusted_expr;
-  if (type_descrpt["typeString"].get<std::string>().find("function") != std::string::npos)
+  if(
+    type_descrpt["typeString"].get<std::string>().find("function") !=
+    std::string::npos)
   {
-      if (type_descrpt["typeString"].get<std::string>().find("returns") != std::string::npos)
+    if(
+      type_descrpt["typeString"].get<std::string>().find("returns") !=
+      std::string::npos)
+    {
+      // e.g. for typeString like:
+      // "typeString": "function () returns (uint8)"
+      if(
+        type_descrpt["typeString"].get<std::string>().find("returns (uint8)") !=
+        std::string::npos)
       {
-        // e.g. for typeString like:
-        // "typeString": "function () returns (uint8)"
-        if (type_descrpt["typeString"].get<std::string>().find("returns (uint8)") != std::string::npos)
-        {
-          auto j2 = R"(
+        auto j2 = R"(
             {
               "typeIdentifier": "t_uint8",
               "typeString": "uint8"
             }
           )"_json;
-          adjusted_expr = j2;
-        }
-        else
-        {
-          assert(!"Unsupported types in callee's return in CallExpr");
-        }
+        adjusted_expr = j2;
       }
       else
       {
-        // Since Solidity allows multiple parameters and multiple returns for functions,
-        // we need to use "parameters" in conjunction with "returnParameters" to convert.
-        // the following configuration will lead to "void".
-        auto j2 = R"(
+        assert(!"Unsupported types in callee's return in CallExpr");
+      }
+    }
+    else
+    {
+      // Since Solidity allows multiple parameters and multiple returns for functions,
+      // we need to use "parameters" in conjunction with "returnParameters" to convert.
+      // the following configuration will lead to "void".
+      auto j2 = R"(
           {
             "nodeType": "ParameterList",
             "parameters": []
           }
         )"_json;
-        adjusted_expr = j2;
-      }
+      adjusted_expr = j2;
+    }
   }
   else
   {
@@ -1701,7 +1832,8 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(const nlohmann::js
   return adjusted_expr;
 }
 
-nlohmann::json solidity_convertert::make_array_elementary_type(const nlohmann::json& type_descrpt)
+nlohmann::json solidity_convertert::make_array_elementary_type(
+  const nlohmann::json &type_descrpt)
 {
   // Function used to extract the elementary type of array
   // In order to keep the consistency and maximum the reuse of get_type_description function,
@@ -1709,7 +1841,9 @@ nlohmann::json solidity_convertert::make_array_elementary_type(const nlohmann::j
   // Although ["typeDescriptions"] also contains all the information needed, we have to do some
   // pre-processing, e.g. extract the
   nlohmann::json elementary_type;
-  if (type_descrpt["typeString"].get<std::string>().find("uint8") != std::string::npos)
+  if(
+    type_descrpt["typeString"].get<std::string>().find("uint8") !=
+    std::string::npos)
   {
     auto j = R"(
       {
@@ -1727,7 +1861,8 @@ nlohmann::json solidity_convertert::make_array_elementary_type(const nlohmann::j
   return elementary_type;
 }
 
-nlohmann::json solidity_convertert::make_array_to_pointer_type(const nlohmann::json& type_descrpt)
+nlohmann::json solidity_convertert::make_array_to_pointer_type(
+  const nlohmann::json &type_descrpt)
 {
   // Function to replace the content of ["typeIdentifier"] with "ArrayToPtr"
   // All the information in ["typeIdentifier"] should also be available in ["typeString"]
@@ -1735,22 +1870,21 @@ nlohmann::json solidity_convertert::make_array_to_pointer_type(const nlohmann::j
   std::string type_string = type_descrpt["typeString"].get<std::string>();
 
   std::map<std::string, std::string> m = {
-    {"typeIdentifier", type_identifier},
-    {"typeString", type_string}
-  };
+    {"typeIdentifier", type_identifier}, {"typeString", type_string}};
   nlohmann::json adjusted_type = m;
 
   return adjusted_type;
 }
 
-std::string solidity_convertert::get_array_size(const nlohmann::json& type_descrpt)
+std::string
+solidity_convertert::get_array_size(const nlohmann::json &type_descrpt)
 {
   const std::string s = type_descrpt["typeString"].get<std::string>();
   std::regex rgx(".*\\[([0-9]+)\\]");
   std::string the_size;
 
   std::smatch match;
-  if (std::regex_search(s.begin(), s.end(), match, rgx))
+  if(std::regex_search(s.begin(), s.end(), match, rgx))
   {
     std::ssub_match sub_match = match[1];
     the_size = sub_match.str();

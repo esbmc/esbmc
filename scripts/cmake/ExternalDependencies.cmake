@@ -10,8 +10,8 @@ FetchContent_MakeAvailable(fmt)
 
 #nlohmann json
 FetchContent_Declare(json
-  GIT_REPOSITORY https://github.com/nlohmann/json
-  GIT_TAG v3.7.3)
+  GIT_REPOSITORY https://github.com/ArthurSonzogni/nlohmann_json_cmake_fetchcontent
+  GIT_TAG v3.10.3)
 
 FetchContent_GetProperties(json)
 if(NOT json_POPULATED)

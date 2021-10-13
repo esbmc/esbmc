@@ -9,13 +9,15 @@
 // Integer literal
 bool solidity_convertert::convert_integer_literal(
   const nlohmann::json &integer_literal,
-  std::string the_value, exprt &dest)
+  std::string the_value,
+  exprt &dest)
 {
   typet type;
   if(get_type_description(integer_literal, type))
     return true;
 
-  assert(type.is_unsignedbv() || type.is_signedbv()); // for "_x=100", false || true
+  assert(
+    type.is_unsignedbv() || type.is_signedbv()); // for "_x=100", false || true
 
   exprt the_val;
   if(type.is_unsignedbv())
@@ -41,4 +43,3 @@ bool solidity_convertert::convert_integer_literal(
 // TODO: Float literal.
 //    - Note: Currently Solidity does NOT support floating point data types or fp arithmetic.
 //      Everything is done in fixed-point arithmetic as of Solidity compiler v0.8.6.
-
