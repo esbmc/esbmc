@@ -26,7 +26,8 @@ public:
 protected:
   contextt &context;
   namespacet ns;
-  nlohmann::json &ast_json;    // json for Solidity AST. Use vector for multiple contracts
+  nlohmann::json
+    &ast_json; // json for Solidity AST. Use vector for multiple contracts
   const std::string &sol_func; // Solidity function to be verified
   const messaget &msg;
   std::string absolute_path;
@@ -52,7 +53,10 @@ protected:
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
   bool get_function_params(const nlohmann::json &pd, exprt &param);
-  bool get_block(const nlohmann::json &expr, exprt &new_expr); // For Solidity's mutually inclusive: rule block and rule statement
+  bool get_block(
+    const nlohmann::json &expr,
+    exprt &
+      new_expr); // For Solidity's mutually inclusive: rule block and rule statement
   bool get_statement(const nlohmann::json &block, exprt &new_expr);
   bool get_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
@@ -64,27 +68,40 @@ protected:
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
   bool get_func_decl_ref_type(const nlohmann::json &decl, typet &new_type);
   bool get_array_to_pointer_type(const nlohmann::json &decl, typet &new_type);
-  bool get_elementary_type_name(const nlohmann::json &type_name, typet &new_type);
+  bool
+  get_elementary_type_name(const nlohmann::json &type_name, typet &new_type);
   bool get_parameter_list(const nlohmann::json &type_name, typet &new_type);
-  void get_state_var_decl_name(const nlohmann::json &ast_node, std::string &name, std::string &id);
-  void get_var_decl_name(const nlohmann::json &ast_node, std::string &name, std::string &id);
-  void get_function_definition_name(const nlohmann::json &ast_node, std::string &name, std::string &id);
-  void get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
+  void get_state_var_decl_name(
+    const nlohmann::json &ast_node,
+    std::string &name,
+    std::string &id);
+  void get_var_decl_name(
+    const nlohmann::json &ast_node,
+    std::string &name,
+    std::string &id);
+  void get_function_definition_name(
+    const nlohmann::json &ast_node,
+    std::string &name,
+    std::string &id);
+  void
+  get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
   void get_start_location_from_stmt(locationt &location);
   symbolt *move_symbol_to_context(symbolt &symbol);
 
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
-  const nlohmann::json& find_decl_ref(int ref_decl_id);
+  const nlohmann::json &find_decl_ref(int ref_decl_id);
   void convert_expression_to_code(exprt &expr);
   bool check_intrinsic_function(const nlohmann::json &ast_node);
-  nlohmann::json make_implicit_cast_expr(const nlohmann::json& sub_expr, std::string cast_type);
-  nlohmann::json make_pointee_type(const nlohmann::json& sub_expr);
-  nlohmann::json make_callexpr_return_type(const nlohmann::json& type_descrpt);
-  nlohmann::json make_array_elementary_type(const nlohmann::json& type_descrpt);
-  nlohmann::json make_array_to_pointer_type(const nlohmann::json& type_descrpt);
-  std::string get_array_size(const nlohmann::json& type_descrpt);
+  nlohmann::json make_implicit_cast_expr(
+    const nlohmann::json &sub_expr,
+    std::string cast_type);
+  nlohmann::json make_pointee_type(const nlohmann::json &sub_expr);
+  nlohmann::json make_callexpr_return_type(const nlohmann::json &type_descrpt);
+  nlohmann::json make_array_elementary_type(const nlohmann::json &type_descrpt);
+  nlohmann::json make_array_to_pointer_type(const nlohmann::json &type_descrpt);
+  std::string get_array_size(const nlohmann::json &type_descrpt);
 
   void get_default_symbol(
     symbolt &symbol,
@@ -97,7 +114,8 @@ protected:
   // literal conversion functions
   bool convert_integer_literal(
     const nlohmann::json &integer_literal,
-    std::string the_value, exprt &dest);
+    std::string the_value,
+    exprt &dest);
 };
 
 #endif /* SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_ */

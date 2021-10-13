@@ -59,7 +59,7 @@ public:
 
   languaget *clang_c_module;
 
-//protected:
+  //protected:
 };
 
 languaget *new_solidity_language(const messaget &msg);

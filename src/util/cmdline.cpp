@@ -14,7 +14,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/message/format.h>
 
 std::string verification_file;
-std::string sol_main;     // file that contains a dummy main for Solidity verification
+std::string
+  sol_main; // file that contains a dummy main for Solidity verification
 std::string sol_function; // solidity function to be verified
 
 cmdlinet::~cmdlinet()
@@ -123,7 +124,7 @@ bool cmdlinet::parse(
     args = vm["input-file"].as<std::vector<std::string>>();
     verification_file = args.back();
   }
-  if (vm.count("function"))
+  if(vm.count("function"))
   {
     sol_function = vm["function"].as<std::string>();
   }
