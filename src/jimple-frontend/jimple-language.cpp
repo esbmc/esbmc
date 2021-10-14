@@ -9,7 +9,9 @@ languaget *new_jimple_language(const messaget &msg)
 }
 bool jimple_languaget::final(contextt &context, const messaget &msg)
 {
+  msg.status("Adding cprover library");
   add_cprover_library(context, msg);
+  msg.status("Adding __ESBMC_main");
   setup_main(context);
   return false;
 }
@@ -28,6 +30,45 @@ bool jimple_languaget::from_expr(
 {
   //code = expr2c(expr, ns);
   return false;
+}
+
+static inline void init_variable(codet &dest, const symbolt &sym)
+{
+  const exprt &value = sym.value;
+
+  if(value.is_nil())
+    return;
+
+  assert(!value.type().is_code());
+
+  exprt symbol("symbol", sym.type);
+  symbol.identifier(sym.id);
+
+  code_assignt code(symbol, sym.value);
+  code.location() = sym.location;
+
+  dest.move_to_operands(code);
+}
+
+static inline void static_lifetime_init(const contextt &context, codet &dest)
+{
+  dest = code_blockt();
+
+  // Do assignments based on "value".
+  context.foreach_operand_in_order([&dest](const symbolt &s) {
+    if(s.static_lifetime)
+      init_variable(dest, s);
+  });
+
+  // call designated "initialization" functions
+  context.foreach_operand_in_order([&dest](const symbolt &s) {
+    if(s.type.initialization() && s.type.is_code())
+    {
+      code_function_callt function_call;
+      function_call.function() = symbol_expr(s);
+      dest.move_to_operands(function_call);
+    }
+  });
 }
 
 void jimple_languaget::setup_main(contextt &context) {
@@ -62,7 +103,6 @@ void jimple_languaget::setup_main(contextt &context) {
     return ; // give up, no main
   }
 
-
   const symbolt &symbol = *s;
   // check if it has a body
   if(symbol.value.is_nil())
@@ -71,10 +111,8 @@ void jimple_languaget::setup_main(contextt &context) {
     abort();
   }
 
-
   codet init_code;
-
-  //static_lifetime_init(context, init_code);
+  static_lifetime_init(context, init_code);
 
   init_code.make_block();
   //init_code.end_location(symbol.value.end_location());

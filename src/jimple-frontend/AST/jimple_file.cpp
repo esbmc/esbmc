@@ -110,7 +110,7 @@ exprt jimple_file::to_exprt(contextt &ctx) const
   }
 
   std::string id, name;
-  id = this->getClassName();
+  id = "tag-" + this->getClassName();
   name = this->getClassName();
 
   if(ctx.find_symbol(id) != nullptr)
@@ -138,9 +138,10 @@ exprt jimple_file::to_exprt(contextt &ctx) const
     exprt &tmp = comp;
     tmp = field.to_exprt(ctx, name, name);
     // TODO: only add declarations
-    t.components().push_back(comp);
+    //t.components().push_back(comp);
   }
 
   added_symbol->type = t;
+  added_symbol->dump();
   return e;
 }
