@@ -82,27 +82,14 @@ public:
   }
   virtual ~languaget() = default;
 
-  // Solidity verification
-  bool is_solidity = false;
-  inline void set_is_solidity()
+  inline void set_func_name(const std::string _path)
   {
-    is_solidity = true;
-  }
-  inline bool get_is_solidity()
-  {
-    return is_solidity;
-  }
-  std::string sol_func_path = "";
-  inline void set_sol_func(const std::string _path)
-  {
-    sol_func_path = _path;
-  };
-  inline std::string get_sol_func()
-  {
-    return sol_func_path;
+    func_name = _path;
   };
 
 protected:
   const messaget &msg;
+  // function name for verification that requires this information before GOTO conversion phase.
+  std::string func_name = "";
 };
 #endif

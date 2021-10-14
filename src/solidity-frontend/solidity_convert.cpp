@@ -72,7 +72,6 @@ bool solidity_convertert::convert()
   assert(found_contract_def);
 
   // reasoning-based verification
-  //assert(!"Continue with symbol annotations");
   index = 0;
   for(nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
       ++itr, ++index)
@@ -108,6 +107,7 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
       return true;
   }
 
+  // After converting all AST nodes, current_functionDecl should be restored to nullptr.
   assert(current_functionDecl == nullptr);
 
   return false;
@@ -445,7 +445,7 @@ bool solidity_convertert::get_block(
   get_start_location_from_stmt(location);
 
   SolidityGrammar::BlockT type = SolidityGrammar::get_block_t(block);
-  msg.status(fmt::format(
+  msg.debug(fmt::format(
     "	@@@ got Block: SolidityGrammar::BlockT::{}",
     SolidityGrammar::block_to_str(type)));
 
@@ -470,7 +470,7 @@ bool solidity_convertert::get_block(
       _block.operands().push_back(statement);
       ++ctr;
     }
-    msg.status(fmt::format(" \t@@@ CompoundStmt has {} statements", ctr));
+    msg.debug(fmt::format(" \t@@@ CompoundStmt has {} statements", ctr));
 
     // TODO: Figure out the source location manager of Solidity AST JSON
     // It's too cryptic. Currently we are using get_start_location_from_stmt.
@@ -526,8 +526,13 @@ bool solidity_convertert::get_statement(
     codet decls("decl-block");
     unsigned ctr = 0;
     // N.B. Although Solidity AST JSON uses "declarations": [],
-    // there will ALWAYS be 1 declaration!
-    // A second declaration will become another stmt in "statements"
+    // the size of this array is alway 1!
+    // A second declaration will become another stmt in "statements" array
+    // e.g. "statements" : [
+    //  {"declarations": [], "id": 1}
+    //  {"declarations": [], "id": 2}
+    //  {"declarations": [], "id": 3}
+    // ]
     for(const auto &it : declgroup.items())
     {
       // deal with local var decl with init value
@@ -545,7 +550,7 @@ bool solidity_convertert::get_statement(
       decls.operands().push_back(single_decl);
       ++ctr;
     }
-    msg.status(fmt::format(" \t@@@ DeclStmt group has {} decls", ctr));
+    msg.debug(fmt::format(" \t@@@ DeclStmt group has {} decls", ctr));
 
     new_expr = decls;
     break;
@@ -681,7 +686,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
   get_start_location_from_stmt(location);
 
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
-  msg.status(fmt::format(
+  msg.debug(fmt::format(
     "	@@@ got Expr: SolidityGrammar::ExpressionT::{}",
     SolidityGrammar::expression_to_str(type)));
 
@@ -787,7 +792,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
       call.arguments().push_back(single_arg);
       ++num_args;
     }
-    msg.status(fmt::format("  @@ num_args={}", num_args));
+    msg.debug(fmt::format("  @@ num_args={}", num_args));
 
     // 4. Convert call arguments
     new_expr = call;
@@ -861,9 +866,7 @@ bool solidity_convertert::get_binary_operator_expr(
       return true;
   }
   else
-  {
     assert(!"should not be here - unrecognized LHS and RHS keywords in expression JSON");
-  }
 
   // 2. Get type
   typet t;
@@ -875,7 +878,7 @@ bool solidity_convertert::get_binary_operator_expr(
   // 3. Convert opcode
   SolidityGrammar::ExpressionT opcode =
     SolidityGrammar::get_expr_operator_t(expr);
-  msg.status(fmt::format(
+  msg.debug(fmt::format(
     "	@@@ got binop.getOpcode: SolidityGrammar::{}",
     SolidityGrammar::expression_to_str(opcode)));
   switch(opcode)
@@ -960,7 +963,7 @@ bool solidity_convertert::get_unary_operator_expr(
   // 3. get UnaryOperation opcode
   SolidityGrammar::ExpressionT opcode =
     SolidityGrammar::get_expr_operator_t(expr, expr["prefix"]);
-  msg.status(fmt::format(
+  msg.debug(fmt::format(
     "	@@@ got uniop.getOpcode: SolidityGrammar::{}",
     SolidityGrammar::expression_to_str(opcode)));
 
@@ -1173,9 +1176,7 @@ bool solidity_convertert::get_type_description(
     if(get_func_decl_ref_type(pointee, sub_type))
       return true;
 
-    if(
-      sub_type.is_struct() ||
-      sub_type.is_union()) // for "assert(sum > 100)", false || false
+    if(sub_type.is_struct() || sub_type.is_union())
       assert(!"struct or union is NOT supported");
 
     new_type = gen_pointer_type(sub_type);
@@ -1195,10 +1196,7 @@ bool solidity_convertert::get_type_description(
 
     // Since Solidity does not have this, first make a pointee
     typet sub_type;
-    if(
-      get_array_to_pointer_type(
-        type_name,
-        sub_type)) // TODO: Fix me! Inconsistency. Better to use Solidity compiler library?
+    if(get_array_to_pointer_type(type_name, sub_type))
       return true;
 
     if(
@@ -1237,7 +1235,7 @@ bool solidity_convertert::get_type_description(
   }
   default:
   {
-    msg.status(fmt::format(
+    msg.debug(fmt::format(
       "	@@@ got type name=SolidityGrammar::TypeNameT::{}",
       SolidityGrammar::type_name_to_str(type)));
     assert(!"Unimplemented type in rule type-name");
@@ -1316,9 +1314,7 @@ bool solidity_convertert::get_array_to_pointer_type(
     new_type.set("#cpp_type", "unsigned_char");
   }
   else
-  {
     assert(!"Unsupported types in ArrayToPinter decay");
-  }
 
   // TODO: More var decl attributes checks:
   //    - Constant
@@ -1356,7 +1352,7 @@ bool solidity_convertert::get_elementary_type_name(
   }
   default:
   {
-    msg.status(fmt::format(
+    msg.debug(fmt::format(
       "	@@@ Got elementary-type-name={}",
       SolidityGrammar::elementary_type_name_to_str(type)));
     assert(!"Unimplemented type in rule elementary-type-name");
@@ -1563,9 +1559,7 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
       assert(!"Unable to find the corresponding local variable decl. Function body  does not have statements.");
   }
   else
-  {
     assert(!"Unable to find the corresponding local variable decl. Current function does not have a function body.");
-  }
 
   // if no matching state or local var decl, search decl in current_forStmt
   const nlohmann::json &current_for = *current_forStmt;
@@ -1585,14 +1579,10 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
       }
     }
     else
-    {
       assert(!"Unable to find the corresponding local variable decl. No local declarations found in current For-Statement");
-    }
   }
   else
-  {
     assert(!"Unable to find the corresponding local variable decl. Current For-Statement does not have any init.");
-  }
 
   assert(!"should not be here - no matching ref decl id found");
   return ast_json;
@@ -1660,18 +1650,9 @@ bool solidity_convertert::check_intrinsic_function(
   const nlohmann::json &ast_node)
 {
   // function to detect special intrinsic functions, e.g. __ESBMC_assume
-  if(
+  return (
     ast_node["name"] == "__ESBMC_assume" ||
-    ast_node["name"] == "__VERIFIER_assume")
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
-
-  return false; // make old compiler happy, e.g. pre-GCC4.9
+    ast_node["name"] == "__VERIFIER_assume");
 }
 
 nlohmann::json solidity_convertert::make_implicit_cast_expr(
@@ -1749,9 +1730,7 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
           adjusted_expr["returnParameters"] = j2;
         }
         else
-        {
           assert(!"Unsupported return types in pointee");
-        }
       }
       else
       {
@@ -1767,14 +1746,10 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
       }
     }
     else
-    {
       assert(!"Unsupported - detected function call with parameters");
-    }
   }
   else
-  {
     assert(!"Unsupported pointee - currently we only support the semantics of function to pointer decay");
-  }
 
   return adjusted_expr;
 }
@@ -1806,9 +1781,7 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
         adjusted_expr = j2;
       }
       else
-      {
         assert(!"Unsupported types in callee's return in CallExpr");
-      }
     }
     else
     {
@@ -1825,9 +1798,7 @@ nlohmann::json solidity_convertert::make_callexpr_return_type(
     }
   }
   else
-  {
     assert(!"Unsupported pointee - currently we only support the semantics of function to pointer decay");
-  }
 
   return adjusted_expr;
 }
@@ -1854,9 +1825,7 @@ nlohmann::json solidity_convertert::make_array_elementary_type(
     elementary_type = j;
   }
   else
-  {
     assert(!"Unsupported array elementary type");
-  }
 
   return elementary_type;
 }
@@ -1890,9 +1859,7 @@ solidity_convertert::get_array_size(const nlohmann::json &type_descrpt)
     the_size = sub_match.str();
   }
   else
-  {
     assert(!"Unsupported - Missing array size in type descriptor. Detected dynamic array?");
-  }
 
   return the_size;
 }

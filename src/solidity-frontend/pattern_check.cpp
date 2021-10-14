@@ -8,7 +8,7 @@ pattern_checker::pattern_checker(
 {
 }
 
-bool pattern_checker::pattern_checker::do_pattern_check()
+bool pattern_checker::do_pattern_check()
 {
   // TODO: add more functions here to perform more pattern-based checks
   msg.status(fmt::format("Checking function {} ...", target_func.c_str()));
