@@ -2,9 +2,9 @@
 // Created by rafaelsamenezes on 22/09/2021.
 //
 
-#include "util/std_code.h"
-#include "util/std_expr.h"
-#include "util/std_types.h"
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
 #include <jimple-frontend/AST/jimple_statement.h>
 #include <util/arith_tools.h>
 void jimple_identity::from_json(const json &j)
@@ -70,11 +70,6 @@ std::string jimple_label::to_string() const
 
 exprt jimple_label::to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const
 {
-  /*
-  code_labelt label;
-  label.set_label(this->label);
-  return label;
-  */
   code_skipt skip;
   return skip;
 }
@@ -169,5 +164,4 @@ std::shared_ptr<jimple_expr> jimple_statement::get_expression(const json &j)
 
   jimple_constant d;
   return std::make_shared<jimple_constant>(d);
-
 }

@@ -13,20 +13,48 @@ Description: Jimple File AST parser and holder
 #include <jimple-frontend/AST/jimple_class_member.h>
 #include <util/expr.h>
 
+/**
+ * @brief Main AST for Class/Interface
+ * 
+ * Every Jimple file contains at most one Class/Interface, this class
+ * will represent this.
+ *
+ * The file can:
+ * - extend (or implement) another Class/Interface
+ * - contain modifiers: public/private/static/etc... 
+ *   (see jimple_modifiers.hpp)
+ * - contain methods and attributes.
+ */
 class jimple_file : public jimple_ast {
 public:
-  jimple_file() = default;
+
+  // overrides
+  virtual void from_json(const json& j) override;
+  virtual std::string to_string() const override;
+
+  /**
+   * @brief initializes the object with a file
+   *
+   * @param path A path to a .jimple file
+   */
   void load_file(const std::string& path);
 
+  // A file can be a class or interface
   enum class file_type {
     Class,
     Interface
   };
-  virtual exprt to_exprt(contextt &ctx) const;
-  file_type from_string(const std::string &name);
+
+  // Get the file_type using a string
+  file_type from_string(const std::string &name) const;
+
+  // Convert file_type into a string
   std::string to_string(const file_type &ft) const;
-  virtual void from_json(const json& j) override;
-  virtual std::string to_string() const override;
+
+  /**
+   * @brief convert the object into a exprt
+   */
+  virtual exprt to_exprt(contextt &ctx) const;
 
   file_type getMode() const
   {
@@ -62,7 +90,14 @@ protected:
   std::string implements;
   jimple_modifiers m;
   std::vector<jimple_class_method> body;
+
+private:
+  std::map<std::string, file_type> from_map = {
+    {"Class", file_type::Class},
+    {"Interface", file_type::Interface}};
+
+  std::map<file_type, std::string> to_map = {
+    {file_type::Class, "Class"},
+    {file_type::Interface, "Interface"}};
 };
-
-
 #endif //ESBMC_JIMPLE_FILE_H
