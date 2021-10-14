@@ -1,12 +1,7 @@
 name: Build All Solvers
 
-on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
+on: [push, pull_request]
+
 jobs:
 
   build-linux:
@@ -35,4 +30,3 @@ jobs:
         name: release-linux
         path: ./release
    
-
