@@ -120,7 +120,7 @@ bool solidity_languaget::typecheck(
     new_context, msg); // Add ESBMC and TACAS intrinsic symbols to the context
   msg.progress("Done conversion of intrinsics...");
 
-  solidity_convertert converter(new_context, ast_json, sol_func_path, msg);
+  solidity_convertert converter(new_context, ast_json, func_name, msg);
   if(converter.convert()) // Add Solidity symbols to the context
     return true;
 
@@ -147,12 +147,12 @@ bool solidity_languaget::final(contextt &context, const messaget &msg)
 {
   add_cprover_library(context, msg);
   return clang_main(context, msg);
-  //assert(!"come back and continue - solidity_languaget::final");
-  return false;
 }
 
 std::string solidity_languaget::temp_c_file()
 {
+  // This function populates the temp file so that Clang has a compilation job.
+  // Clang needs a job to convert the intrinsics.
   std::string content = R"(int main() { return 0; } )";
   return content;
 }

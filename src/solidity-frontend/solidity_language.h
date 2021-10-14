@@ -58,8 +58,6 @@ public:
   nlohmann::json intrinsic_json;
 
   languaget *clang_c_module;
-
-  //protected:
 };
 
 languaget *new_solidity_language(const messaget &msg);
