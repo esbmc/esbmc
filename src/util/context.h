@@ -71,7 +71,7 @@ public:
     symbolt *new_symbol;
     return move(symbol, new_symbol);
   }
-  symbolt* move_symbol_to_context(symbolt &symbol);
+  symbolt *move_symbol_to_context(symbolt &symbol);
 
   void clear()
   {

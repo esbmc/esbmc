@@ -15,17 +15,22 @@
  *
  * This can be any attributes or methods that are inside the file
  */
-class jimple_class_member : public jimple_ast {
+class jimple_class_member : public jimple_ast
+{
 };
 
 /**
  * @brief A class (or interface) method of a Jimple file
  */
-class jimple_class_method : public jimple_class_member {
+class jimple_class_method : public jimple_class_member
+{
 public:
-  virtual void from_json(const json& j) override;
+  virtual void from_json(const json &j) override;
   virtual std::string to_string() const override;
-  virtual exprt to_exprt(contextt &ctx, const std::string &class_name, const std::string &file_name) const;
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &file_name) const;
 
 protected:
   std::string name;
