@@ -25,11 +25,11 @@ Description: Jimple File AST parser and holder
  *   (see jimple_modifiers.hpp)
  * - contain methods and attributes.
  */
-class jimple_file : public jimple_ast {
+class jimple_file : public jimple_ast
+{
 public:
-
   // overrides
-  virtual void from_json(const json& j) override;
+  virtual void from_json(const json &j) override;
   virtual std::string to_string() const override;
 
   /**
@@ -37,10 +37,11 @@ public:
    *
    * @param path A path to a .jimple file
    */
-  void load_file(const std::string& path);
+  void load_file(const std::string &path);
 
   // A file can be a class or interface
-  enum class file_type {
+  enum class file_type
+  {
     Class,
     Interface
   };
@@ -81,7 +82,10 @@ public:
     return body;
   }
 
-  const bool is_interface() const { return getMode() == file_type::Interface; }
+  const bool is_interface() const
+  {
+    return getMode() == file_type::Interface;
+  }
 
 protected:
   file_type mode;

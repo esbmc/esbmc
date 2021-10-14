@@ -20,7 +20,8 @@ using json = nlohmann::json;
 /**
  * @brief Base interface for Jimple AST
  */
-class jimple_ast {
+class jimple_ast
+{
 public:
   /**
    * @brief Prints the contents into the
@@ -37,8 +38,8 @@ public:
    * a JSON
    *
    * @param json The json object relative to the structure
-   */  
-  virtual void from_json(const json&) = 0;
+   */
+  virtual void from_json(const json &) = 0;
 
   /**
    * @brief Converts the object into a string
@@ -47,13 +48,19 @@ public:
    */
   virtual std::string to_string() const = 0;
 
-  protected:
-    /**
+protected:
+  /**
    * @brief creates a symbol with the default characteristics
    *
    * @return an initialized symbolt
    */
-  static symbolt create_jimple_symbolt(const typet &t, const std::string &module, const std::string &name, const std::string &id, const std::string function_name = "") {
+  static symbolt create_jimple_symbolt(
+    const typet &t,
+    const std::string &module,
+    const std::string &name,
+    const std::string &id,
+    const std::string function_name = "")
+  {
     symbolt symbol;
     symbol.mode = "C";
     symbol.module = module;
@@ -69,10 +76,11 @@ public:
    *
    * @return the location of a symbol (file, class, function)
    */
-  static locationt get_location(const std::string &module, const std::string function_name = "")
+  static locationt
+  get_location(const std::string &module, const std::string function_name = "")
   {
     locationt l;
-    l.set_file(module+ ".jimple");
+    l.set_file(module + ".jimple");
     if(!function_name.empty())
       l.set_function(function_name);
     return l;
@@ -81,6 +89,6 @@ public:
 
 // These functions are used by nlohmann::json. Making it easier to
 // parse the JSON file. You shouldn't use them directly.
-void from_json(const json& j, jimple_ast& p);
-void to_json(json&, const jimple_ast&);
+void from_json(const json &j, jimple_ast &p);
+void to_json(json &, const jimple_ast &);
 #endif //ESBMC_JIMPLE_AST_H
