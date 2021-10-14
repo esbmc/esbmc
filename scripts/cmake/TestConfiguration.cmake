@@ -22,6 +22,7 @@ set(UNIT_TEST_LIB Catch2::Catch2)
 # Adds a new Unit based test
 function (new_unit_test TARGET SRC LIBS)
   add_executable(${TARGET} ${SRC})
+  target_include_directories(${TARGET} PRIVATE ${Boost_INCLUDE_DIRS})
   target_link_libraries(${TARGET} PRIVATE ${LIBS} ${UNIT_TEST_LIB})
   catch_discover_tests(${TARGET})
 endfunction()
