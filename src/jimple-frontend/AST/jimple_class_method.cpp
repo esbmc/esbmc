@@ -30,7 +30,6 @@ exprt jimple_class_method::to_exprt(contextt &ctx, const std::string &class_name
 
   //TODO: parameters
 
-
    // Apparently, if the type has no arguments, we assume ellipsis
   if(!method_type.arguments().size())
     method_type.make_ellipsis();

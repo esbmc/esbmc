@@ -9,10 +9,19 @@
 #include <jimple-frontend/AST/jimple_type.h>
 #include <jimple-frontend/AST/jimple_expr.h>
 
+/**
+ * @brief Base class for Jimple Statements
+ *
+ * They can represent a range of operations such as:
+ * if/goto/assignments/etc...
+ */
 class jimple_statement : public jimple_method_field {
   protected:
   std::shared_ptr<jimple_expr> get_expression(const json &j);
 };
+
+
+// THIS IS STILL A TODO FROM THE STANDARD
 
 class jimple_identity : public jimple_statement
 {

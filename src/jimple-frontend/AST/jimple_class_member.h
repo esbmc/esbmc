@@ -10,9 +10,17 @@
 #include <jimple-frontend/AST/jimple_type.h>
 #include <jimple-frontend/AST/jimple_method_body.h>
 
+/**
+ * @brief This class will hold any member of a Jimple File
+ *
+ * This can be any attributes or methods that are inside the file
+ */
 class jimple_class_member : public jimple_ast {
 };
 
+/**
+ * @brief A class (or interface) method of a Jimple file
+ */
 class jimple_class_method : public jimple_class_member {
 public:
   virtual void from_json(const json& j) override;
@@ -29,5 +37,4 @@ protected:
 };
 
 // TODO: Class Field
-
 #endif //ESBMC_JIMPLE_CLASS_MEMBER_H
