@@ -11,43 +11,8 @@ void jimple_modifiers::from_json(const json &j)
   }
 }
 
-namespace {
-typedef jimple_modifiers::modifier modifier;
-std::map<std::string, modifier> from_map = {
-  {"Abstract", modifier::Abstract},
-  {"Final", modifier::Final},
-  {"Native", modifier::Native},
-  {"Public", modifier::Public},
-  {"Protected", modifier::Protected},
-  {"Private", modifier::Private},
-  {"Static", modifier::Static},
-  {"Synchronized", modifier::Synchronized},
-  {"Transient", modifier::Transient},
-  {"Volatile", modifier::Volatile},
-  {"StrictFp", modifier::StrictFp},
-  {"Enum", modifier::Enum},
-  {"Annotation", modifier::Annotation}
-};
-
-std::map<modifier, std::string> to_map = {
-  {modifier::Abstract, "Abstract"},
-  {modifier::Final, "Final"},
-  {modifier::Native, "Native"},
-  {modifier::Public, "Public"},
-  {modifier::Protected, "Protected"},
-  {modifier::Private, "Private"},
-  {modifier::Static, "Static"},
-  {modifier::Synchronized, "Synchronized"},
-  {modifier::Transient, "Transient"},
-  {modifier::Volatile, "Volatile"},
-  {modifier::StrictFp, "StrictFp"},
-  {modifier::Enum, "Enum"},
-  {modifier::Annotation, "Annotation"}
-};
-}
-
 jimple_modifiers::modifier
-jimple_modifiers::from_string(const std::string &name)
+jimple_modifiers::from_string(const std::string &name) const
 {
   return from_map.at(name);
 }

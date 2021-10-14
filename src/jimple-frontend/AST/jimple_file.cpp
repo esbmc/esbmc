@@ -4,7 +4,7 @@
 #include <util/std_code.h>
 #include <util/expr_util.h>
 
-// Deserialization helpers
+// (De)-Serialization helpers (from jimple_ast.h)
 void to_json(json&, const jimple_ast&) {
   // Don't care
 }
@@ -73,21 +73,12 @@ void jimple_file::from_json(const json &j)
   }
 }
 
-namespace {
-typedef jimple_file::file_type file_type;
-std::map<std::string, file_type> from_map = {
-  {"Class", file_type::Class},
-  {"Interface", file_type::Interface}};
-
-std::map<file_type, std::string> to_map = {
-  {file_type::Class, "Class"},
-  {file_type::Interface, "Interface"}};
-}
-jimple_file::file_type jimple_file::from_string(const std::string &name)
-{
+inline jimple_file::file_type jimple_file::from_string(const std::string &name) const
+{ 
   return from_map.at(name);
 }
-std::string jimple_file::to_string(const jimple_file::file_type &ft) const
+
+inline std::string jimple_file::to_string(const jimple_file::file_type &ft) const
 {
   return to_map.at(ft);
 }
@@ -102,8 +93,16 @@ void jimple_file::load_file(const std::string &path)
 
 exprt jimple_file::to_exprt(contextt &ctx) const
 {
+  /*
+   * A class is just a type, this method will just register
+   * its type and return a code_skipt.
+   *
+   * However, the list of symbols are going to be updated with
+   * the static functions and variables, and constructor */
+  
   exprt e = code_skipt();
 
+  // TODO: support interface
   if(is_interface())
   {
     throw "Interface is not supported";
@@ -113,15 +112,14 @@ exprt jimple_file::to_exprt(contextt &ctx) const
   id = "tag-" + this->getClassName();
   name = this->getClassName();
 
+  // Check if class already exists
   if(ctx.find_symbol(id) != nullptr)
-    throw "Duplicated symbol";
+    throw "Duplicated class name";
 
   struct_typet t;
   t.tag(name);
 
-
   auto symbol = create_jimple_symbolt(t, name, name, id);
-
   std::string symbol_name = symbol.id.as_string();
 
   // A class/interface is a type
@@ -142,6 +140,5 @@ exprt jimple_file::to_exprt(contextt &ctx) const
   }
 
   added_symbol->type = t;
-  added_symbol->dump();
   return e;
 }
