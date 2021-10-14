@@ -9,8 +9,9 @@ void jimple_constant::from_json(const json &j)
 
 exprt jimple_constant::to_exprt() const
 {
+  auto as_number = std::stoi(value);
   return constant_exprt(
-        integer2binary(0,10),
-        integer2string(0),
+        integer2binary(as_number,10),
+        integer2string(as_number),
         int_type());
 };

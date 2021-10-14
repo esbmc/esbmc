@@ -9,7 +9,9 @@ exprt jimple_declaration::to_exprt(contextt &ctx, const std::string &class_name,
   typet t = this->t.to_typet();
 
   std::string id, name;
-  id = this->names[0];
+  std::ostringstream oss;
+  oss << class_name << ":" << function_name << "@" << this->names[0];
+  id = oss.str();
   name = this->names[0];
 
   auto symbol = create_jimple_symbolt(t, class_name, name, id, function_name);

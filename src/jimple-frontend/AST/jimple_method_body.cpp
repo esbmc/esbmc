@@ -65,6 +65,12 @@ void jimple_full_method_body::from_json(const json &j)
         x.at("statement").at("assignment").get_to(s);
         members.push_back(std::make_shared<jimple_assignment>(s));
       }
+      else if(stmt == "assertion")
+      {
+        jimple_assertion s;
+        x.at("statement").at("assertion").get_to(s);
+        members.push_back(std::make_shared<jimple_assertion>(s));
+      }
     }
   }
 }
