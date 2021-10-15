@@ -1,7 +1,14 @@
 add_library(algorithms algorithms.cpp)
 target_include_directories(algorithms
     PRIVATE ${Boost_INCLUDE_DIRS}
-)
+    )
+
+add_library(filesystem filesystem.cpp)
+target_include_directories(filesystem
+    PRIVATE ${Boost_INCLUDE_DIRS}
+    )
+target_link_libraries(filesystem PUBLIC ${Boost_LIBRARIES})
+
 add_library(util_esbmc irep2.cpp xml_irep.cpp xml.cpp
         arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp
         expr_util.cpp i2string.cpp location.cpp
