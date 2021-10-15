@@ -23,7 +23,7 @@ public:
    * In Linux, running this function with "esbmc-%%%%" will
    * return a string such as "/tmp/esbmc-0001" or "/tmp/esbmc-8787".
    *
-   * This function does not have garantee that will finish
+   * This function does not have guarantee that will finish
    * and can be run forever until it sees an available spot.
    *
    * @param format A string in the file specification
