@@ -7,30 +7,12 @@ Author: Rafael Menezes, rafael.sa.menezes@outlook.com
 Maintainers:
 \*******************************************************************/
 
-#include <boost/filesystem.hpp>
 #include <util/message/message.h>
+#include <util/filesystem.h>
 
 FILE *messaget::get_temp_file()
-{
-  // Get the temp file dir
-  const boost::filesystem::path tmp_path =
-    boost::filesystem::temp_directory_path();
-
-  // Define the pattern for the name
-  const std::string pattern = (tmp_path / "esbmc.%%%%-%%%%").string();
-  boost::filesystem::path path;
-
-  // Try to get a name that is not used already e.g. esbmc.0000-0000
-  do
-  {
-    path = boost::filesystem::unique_path(pattern);
-  } while(
-    boost::filesystem::exists(path)); // TODO: This may cause infinite recursion
-
-  // If path folders doesn't exist, create then
-  boost::filesystem::create_directories(path);
-  // Open File
-  FILE *f = fopen(path.string().c_str(), "w+");
+{  
+  FILE *f = fopen(file_operations::get_unique_tmp_path("esbmc-%%%%-%%%%").c_str(), "w+");
   return f;
 }
 
