@@ -9,10 +9,11 @@ Author: Rafael Sá Menezes
 #include <util/filesystem.h>
 
 TEST_CASE(
-          "tmp folder should be unique between two runs", "[core][util][filesystem]")     
+  "tmp folder should be unique between two runs",
+  "[core][util][filesystem]")
 {
   const char *format = "esbmc-test-%%%%";
-auto first = file_operations::get_unique_tmp_path(format);
-auto second = file_operations::get_unique_tmp_path(format);
-REQUIRE(first != second);
+  auto first = file_operations::get_unique_tmp_path(format);
+  auto second = file_operations::get_unique_tmp_path(format);
+  REQUIRE(first != second);
 }
