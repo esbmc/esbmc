@@ -14,8 +14,11 @@ void jimple_identity::from_json(const json &j)
   j.at("type").get_to(t);
 }
 
-exprt jimple_identity::to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const {
-
+exprt jimple_identity::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
   // TODO: Symbol-table / Typecast
   exprt val("at_identifier");
   symbolt &added_symbol = *ctx.find_symbol(local_name);
@@ -24,14 +27,11 @@ exprt jimple_identity::to_exprt(contextt &ctx, const std::string &class_name, co
   rhs.id = "@" + at_identifier;
   code_assignt assign(symbol_expr(added_symbol), symbol_expr(rhs));
   return assign;
-
 }
 std::string jimple_identity::to_string() const
 {
   std::ostringstream oss;
-  oss << "Identity:  " << this->local_name
-      << " = @"<< at_identifier
-      <<  " | "
+  oss << "Identity:  " << this->local_name << " = @" << at_identifier << " | "
       << t.to_string();
   return oss.str();
 }
@@ -44,7 +44,10 @@ void jimple_invoke::from_json(const json &j)
   // TODO
 }
 
-exprt jimple_return::to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const
+exprt jimple_return::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
 {
   // TODO: jimple return with support to other returns
   typet return_type = empty_typet();
@@ -68,7 +71,10 @@ std::string jimple_label::to_string() const
   return oss.str();
 }
 
-exprt jimple_label::to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const
+exprt jimple_label::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
 {
   code_skipt skip;
   return skip;
@@ -81,8 +87,7 @@ void jimple_label::from_json(const json &j)
 std::string jimple_assignment::to_string() const
 {
   std::ostringstream oss;
-  oss << "Assignment: " << variable
-      << " = " << expr->to_string();
+  oss << "Assignment: " << variable << " = " << expr->to_string();
   return oss.str();
 }
 
@@ -92,7 +97,10 @@ void jimple_assignment::from_json(const json &j)
   expr = get_expression(j.at("expression"));
 }
 
-exprt jimple_assignment::to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const
+exprt jimple_assignment::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
 {
   std::ostringstream oss;
   oss << class_name << ":" << function_name << "@" << variable;
@@ -105,21 +113,23 @@ exprt jimple_assignment::to_exprt(contextt &ctx, const std::string &class_name, 
 std::string jimple_assertion::to_string() const
 {
   std::ostringstream oss;
-  oss << "Assertion: " << variable
-      << " = " << value;
+  oss << "Assertion: " << variable << " = " << value;
   return oss.str();
 }
 
 void jimple_assertion::from_json(const json &j)
 {
   j.at("equals").at("symbol").get_to(variable);
-  j.at("equals").at("value").get_to(value);  
+  j.at("equals").at("value").get_to(value);
 }
 
-exprt jimple_assertion::to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const
+exprt jimple_assertion::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
 {
   code_function_callt call;
-  
+
   std::ostringstream oss;
   oss << class_name << ":" << function_name << "@" << variable;
 
@@ -128,7 +138,8 @@ exprt jimple_assertion::to_exprt(contextt &ctx, const std::string &class_name, c
   id = "__ESBMC_assert";
   name = "__ESBMC_assert";
 
-  auto symbol = create_jimple_symbolt(code_typet(), class_name, name, id, function_name);
+  auto symbol =
+    create_jimple_symbolt(code_typet(), class_name, name, id, function_name);
 
   symbolt &added_symbol = *ctx.move_symbol_to_context(symbol);
 
@@ -147,7 +158,6 @@ exprt jimple_assertion::to_exprt(contextt &ctx, const std::string &class_name, c
   return call;
 }
 
-
 std::shared_ptr<jimple_expr> jimple_statement::get_expression(const json &j)
 {
   std::string expr_type;
@@ -159,7 +169,6 @@ std::shared_ptr<jimple_expr> jimple_statement::get_expression(const json &j)
     jimple_constant c;
     c.from_json(j);
     return std::make_shared<jimple_constant>(c);
-
   }
 
   jimple_constant d;

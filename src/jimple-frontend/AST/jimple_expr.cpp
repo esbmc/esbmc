@@ -11,7 +11,5 @@ exprt jimple_constant::to_exprt() const
 {
   auto as_number = std::stoi(value);
   return constant_exprt(
-        integer2binary(as_number,10),
-        integer2string(as_number),
-        int_type());
+    integer2binary(as_number, 10), integer2string(as_number), int_type());
 };
