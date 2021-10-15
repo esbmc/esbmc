@@ -5,7 +5,6 @@
 languaget *new_jimple_language(const messaget &msg)
 {
   return new jimple_languaget(msg);
-
 }
 bool jimple_languaget::final(contextt &context, const messaget &msg)
 {
@@ -71,7 +70,8 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-void jimple_languaget::setup_main(contextt &context) {
+void jimple_languaget::setup_main(contextt &context)
+{
   irep_idt main_symbol;
 
   std::string main = (config.main != "") ? config.main : "main";
@@ -90,7 +90,8 @@ void jimple_languaget::setup_main(contextt &context) {
     if(s->type.is_code())
       matches.push_back(it->second);
   }
-  if(matches.empty()) abort();
+  if(matches.empty())
+    abort();
 
   main_symbol = matches.front();
 
@@ -100,7 +101,7 @@ void jimple_languaget::setup_main(contextt &context) {
   {
     msg.error("No main asdf");
     abort();
-    return ; // give up, no main
+    return; // give up, no main
   }
 
   const symbolt &symbol = *s;
@@ -124,8 +125,7 @@ void jimple_languaget::setup_main(contextt &context) {
   call.function() = symbol_expr(symbol);
 
   //const code_typet::argumentst &arguments =
-   // to_code_type(symbol.type).arguments();
-
+  // to_code_type(symbol.type).arguments();
 
   // Call to main symbol is now in "call"; construct calls to thread library
   // hooks for main thread start and main thread end.
@@ -155,9 +155,8 @@ void jimple_languaget::setup_main(contextt &context) {
   if(context.move(new_symbol))
   {
     msg.error("main already defined by another language module");
-    return ;
+    return;
   }
 
-  return ;
+  return;
 }
-

@@ -6,7 +6,8 @@
 void jimple_modifiers::from_json(const json &j)
 {
   auto p = j.get<std::vector<std::string>>();
-  for(auto &x : p) {
+  for(auto &x : p)
+  {
     this->m.push_back(from_string(x));
   }
 }
@@ -16,7 +17,8 @@ jimple_modifiers::from_string(const std::string &name) const
 {
   return from_map.at(name);
 }
-std::string jimple_modifiers::to_string(const jimple_modifiers::modifier &ft) const
+std::string
+jimple_modifiers::to_string(const jimple_modifiers::modifier &ft) const
 {
   return to_map.at(ft);
 }

@@ -4,7 +4,10 @@
 
 #include <jimple-frontend/AST/jimple_declaration.h>
 
-exprt jimple_declaration::to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const
+exprt jimple_declaration::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
 {
   typet t = this->t.to_typet();
 

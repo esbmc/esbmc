@@ -5,11 +5,13 @@
 #include <util/expr_util.h>
 
 // (De)-Serialization helpers (from jimple_ast.h)
-void to_json(json&, const jimple_ast&) {
+void to_json(json &, const jimple_ast &)
+{
   // Don't care
 }
 
-void from_json(const json& j, jimple_ast& p) {
+void from_json(const json &j, jimple_ast &p)
+{
   p.from_json(j);
 }
 
@@ -17,11 +19,11 @@ std::string jimple_file::to_string() const
 {
   std::ostringstream oss;
   oss << "Jimple File:\n"
-      << "\t" << "Name: " << this->class_name
-      << "\n\t" << "Mode: " << to_string(this->mode)
-      << "\n\t" << "Extends: " << this->extends
-      << "\n\t" << "Implements: " << this->implements
-      << "\n\t" << this->m.to_string();
+      << "\t"
+      << "Name: " << this->class_name << "\n\t"
+      << "Mode: " << to_string(this->mode) << "\n\t"
+      << "Extends: " << this->extends << "\n\t"
+      << "Implements: " << this->implements << "\n\t" << this->m.to_string();
 
   oss << "\n\n";
   for(auto &x : body)
@@ -42,7 +44,8 @@ void jimple_file::from_json(const json &j)
   j.at("filetype").get_to(t);
   this->mode = from_string(t);
 
-  try {
+  try
+  {
     j.at("implements").get_to(this->implements);
   }
   catch(std::exception &e)
@@ -50,7 +53,8 @@ void jimple_file::from_json(const json &j)
     this->implements = "(No implements)";
   }
 
-  try {
+  try
+  {
     j.at("extends").get_to(this->extends);
   }
   catch(std::exception &e)
@@ -73,12 +77,14 @@ void jimple_file::from_json(const json &j)
   }
 }
 
-inline jimple_file::file_type jimple_file::from_string(const std::string &name) const
-{ 
+inline jimple_file::file_type
+jimple_file::from_string(const std::string &name) const
+{
   return from_map.at(name);
 }
 
-inline std::string jimple_file::to_string(const jimple_file::file_type &ft) const
+inline std::string
+jimple_file::to_string(const jimple_file::file_type &ft) const
 {
   return to_map.at(ft);
 }
@@ -99,7 +105,7 @@ exprt jimple_file::to_exprt(contextt &ctx) const
    *
    * However, the list of symbols are going to be updated with
    * the static functions and variables, and constructor */
-  
+
   exprt e = code_skipt();
 
   // TODO: support interface
