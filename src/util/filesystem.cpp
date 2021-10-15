@@ -22,10 +22,9 @@ std::string file_operations::get_unique_tmp_path(const char *format)
   boost::filesystem::create_directories(path);
   if(!boost::filesystem::is_directory(path))
   {
-    assert(!"Can't create temporary directory (needed to dump clang headers)");
+    assert(!"Can't create temporary directory");
     abort();
   }
 
-  // TODO: add check for folder creation
   return path.string();
 }
