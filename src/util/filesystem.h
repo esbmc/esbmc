@@ -16,7 +16,7 @@ Author: Rafael Menezes, rafael.sa.menezes@outlook.com
 
 class file_operations
 {
- public:
+public:
   /**
    * @brief Generates a unique path based on the format
    *

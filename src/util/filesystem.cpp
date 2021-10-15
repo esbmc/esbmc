@@ -26,7 +26,6 @@ std::string file_operations::get_unique_tmp_path(const char *format)
     abort();
   }
 
-
   // TODO: add check for folder creation
   return path.string();
 }

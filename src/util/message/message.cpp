@@ -11,8 +11,9 @@ Maintainers:
 #include <util/filesystem.h>
 
 FILE *messaget::get_temp_file()
-{  
-  FILE *f = fopen(file_operations::get_unique_tmp_path("esbmc-%%%%-%%%%").c_str(), "w+");
+{
+  FILE *f = fopen(
+    file_operations::get_unique_tmp_path("esbmc-%%%%-%%%%").c_str(), "w+");
   return f;
 }
 
