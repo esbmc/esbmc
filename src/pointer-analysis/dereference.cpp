@@ -351,7 +351,6 @@ expr2tc dereferencet::dereference_struct_bitfield(
     if(is_unknown2t(*it) || is_invalid2t(*it))
     {
       value = make_failed_symbol(to_type);
-      //deref_invalid_ptr(deref_expr, guard, mode);
       return value;
     }
 
@@ -382,8 +381,6 @@ expr2tc dereferencet::dereference_struct_bitfield(
       for(auto const &it2 : structtype.members)
       {
         const type2tc &target_type = it2;
-        // This will only work for scalar target types. So will need to check
-        // the target type and choose the appropriate dereference method
         if(struct_offset == offs_bits)
         {
           expr2tc *bytes = extract_bytes_from_array(
@@ -407,6 +404,7 @@ expr2tc dereferencet::dereference_struct_bitfield(
       return value;
     }
   }
+  return expr2tc();
 }
 
 expr2tc dereferencet::dereference_expr_nonscalar(
@@ -448,8 +446,8 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     // (For now only cosntant offset)
     if(has_bitfields && is_constant_int2t(offset_to_scalar))
     {
-      //if(to_constant_int2t(offset_to_scalar).value.to_uint64() % 8 != 0 &&
-      //  type_byte_size_bits(to_type).to_uint64() % 8 != 0)
+      if(to_constant_int2t(offset_to_scalar).value.to_uint64() % 8 != 0 &&
+        type_byte_size_bits(to_type).to_uint64() % 8 != 0)
       {
         return dereference_struct_bitfield(
           expr, to_type, guard, mode, offset_to_scalar);
