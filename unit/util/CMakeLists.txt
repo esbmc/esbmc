@@ -9,4 +9,5 @@ if(UNIX AND NOT APPLE)
 endif()
 
 new_unit_test(filesystemtest "filesystem.test.cpp" "filesystem")
-new_fuzz_test(filesystemfuzz "filesystem.fuzz.cpp" "filesystem")
+# Running the fuzzer normally would overflow the /tmp with files.
+new_fast_fuzz_test(filesystemfuzz "filesystem.fuzz.cpp" "filesystem")

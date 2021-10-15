@@ -25,11 +25,12 @@ void test_tmp_folder(const unsigned int *Data, size_t Size)
 {
   if(Size != 1) return;
 
-  const unsigned int MAX_LENGTH = 100;
+  const unsigned int MAX_LENGTH = 10;
   const char *format = "esbmc-fuzz-%%%%-%%%%-%%%%";
 
   unsigned test_length = Data[0] % MAX_LENGTH;
-
+  if(test_length > MAX_LENGTH) // to prevent some cast issue
+    return;
   std::set<std::string> names;
 
   for(int i = 0; i < test_length; i++)
@@ -41,7 +42,6 @@ void test_tmp_folder(const unsigned int *Data, size_t Size)
 
   assert(names.size() == test_length);
 }
-
 
 extern "C" int LLVMFuzzerTestOneInput(const unsigned int *Data, size_t Size)
 {
