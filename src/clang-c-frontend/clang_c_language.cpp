@@ -35,7 +35,7 @@ clang_c_languaget::clang_c_languaget(const messaget &msg) : languaget(msg)
 {
   /* About the path being static:
    * the function dump_clang_headers has a static member checking if it was
-   * ever extracted before. This will garantee that the same path will be used
+   * ever extracted before. This will guarantee that the same path will be used
    * during a run. And no more than one is required anyway */
   static auto p =
     file_operations::get_unique_tmp_path("esbmc-headers-%%%%-%%%%-%%%%");
