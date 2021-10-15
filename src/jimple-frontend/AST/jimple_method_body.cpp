@@ -8,11 +8,14 @@
 #include <util/std_code.h>
 #include <util/expr_util.h>
 
-exprt jimple_full_method_body::to_exprt(contextt &ctx, const std::string &class_name, const std::string &function_name) const
+exprt jimple_full_method_body::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
 {
   code_blockt block;
   for(auto const &stmt : this->members)
-      block.operands().push_back(stmt->to_exprt(ctx,class_name, function_name));
+    block.operands().push_back(stmt->to_exprt(ctx, class_name, function_name));
 
   return block;
 }
@@ -32,7 +35,8 @@ void jimple_full_method_body::from_json(const json &j)
       members.push_back(std::make_shared<jimple_declaration>(d));
     }
     // Statement Parsing
-    else {
+    else
+    {
       // TODO: Remove this and add a HashMap
       auto stmt = x.at("statement").at("stmt").get<std::string>();
       if(stmt == "identity")

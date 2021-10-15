@@ -118,7 +118,7 @@ void contextt::foreach_operand_impl_in_order(symbol_delegate &expr)
     expr(*ordered_symbol);
   }
 }
-symbolt* contextt::move_symbol_to_context(symbolt &symbol)
+symbolt *contextt::move_symbol_to_context(symbolt &symbol)
 {
   symbolt *s = find_symbol(symbol.id);
   if(s == nullptr)
