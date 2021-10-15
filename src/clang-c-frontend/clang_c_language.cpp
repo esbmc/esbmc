@@ -24,6 +24,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <sstream>
 #include <util/c_link.h>
 #include <util/message/format.h>
+#include <util/filesystem.h>
 
 languaget *new_clang_c_language(const messaget &msg)
 {
@@ -32,29 +33,15 @@ languaget *new_clang_c_language(const messaget &msg)
 
 clang_c_languaget::clang_c_languaget(const messaget &msg) : languaget(msg)
 {
-  // Create a temporary directory, to dump clang's headers
-  auto p = boost::filesystem::temp_directory_path();
-  if(!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
-  {
-    msg.error("Can't find temporary directory (needed to dump clang headers)");
-    abort();
-  }
-
-  // Create temporary directory
-  p += "/esbmc_clang_headers";
-  boost::filesystem::create_directory(p);
-  if(!boost::filesystem::is_directory(p))
-  {
-    msg.error(
-      "Can't create temporary directory (needed to dump clang headers)");
-    abort();
-  }
-
+  /* About the path being static:
+   * the function dump_clang_headers has a static member checking if it was
+   * ever extracted before. This will garantee that the same path will be used
+   * during a run. And no more than one is required anyway */
+  static auto p = file_operations::get_unique_tmp_path("esbmc-headers-%%%%-%%%%-%%%%");  
   // Build the compile arguments
-  build_compiler_args(std::move(p.string()));
-
+  build_compiler_args(std::move(p));
   // Dump clang headers on the temporary folder
-  dump_clang_headers(p.string());
+  dump_clang_headers(p);
 }
 
 void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
