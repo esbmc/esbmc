@@ -49,6 +49,19 @@ public:
 
   bool convert();
 
+  /**
+ * @brief Perform the typecast by creating a tmp variable on RHS
+ *
+ * The idea is to look for all components of the union and match
+ * the type. If not found, throws an error
+ *
+ * @param dest RHS dest
+ * @param type Union type
+ * @param msg  Message object
+ */
+  static void
+  gen_typecast_to_union(exprt &dest, const typet &type, const messaget &msg);
+
 protected:
   clang::ASTContext *ASTContext;
   contextt &context;
@@ -162,15 +175,6 @@ protected:
 
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
 
-  /**
- * @brief Perform the typecast by creating a tmp variable on RHS
- *
- * The idea is to look for all components of the union and match
- * the type. If not found, throws an error
- *
- * @param dest RHS dest
- * @param type Union type
- */
   void gen_typecast_to_union(exprt &dest, const typet &type);
 };
 

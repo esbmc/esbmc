@@ -13,11 +13,21 @@
 
 #define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
+#include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/type.h>
 #include <util/expr_util.h>
-
+#include <util/message/default_message.h>
 // ******************** TESTS ********************
+
+namespace
+{
+void gen_typecast_to_union(exprt &dest, const typet &type)
+{
+  default_message msg;
+  clang_c_convertert::gen_typecast_to_union(dest, type, msg);
+}
+} // namespace
 
 SCENARIO("ToUnion typecast construction", "[core][clang-c-frontend][typecast]")
 {
