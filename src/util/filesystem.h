@@ -28,5 +28,5 @@ public:
    *
    * @param format A string in the file specification
    */
-  static std::string get_unique_tmp_path(const char *format);
+  static const std::string get_unique_tmp_path(const std::string &format);
 };

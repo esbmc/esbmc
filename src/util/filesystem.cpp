@@ -1,14 +1,15 @@
 #include <util/filesystem.h>
 #include <boost/filesystem.hpp>
 
-std::string file_operations::get_unique_tmp_path(const char *format)
+const std::string
+file_operations::get_unique_tmp_path(const std::string &format)
 {
   // Get the temp file dir
   const boost::filesystem::path tmp_path =
     boost::filesystem::temp_directory_path();
 
   // Define the pattern for the name
-  const std::string pattern = (tmp_path / format).string();
+  const std::string pattern = (tmp_path / format.c_str()).string();
   boost::filesystem::path path;
 
   // Try to get a name that is not used already e.g. esbmc.0000-0000
@@ -16,7 +17,7 @@ std::string file_operations::get_unique_tmp_path(const char *format)
   {
     path = boost::filesystem::unique_path(pattern);
   } while(
-    boost::filesystem::exists(path)); // TODO: This may cause infinite recursion
+    boost::filesystem::exists(path)); // TODO: This may cause infinite loop
 
   // If path folders doesn't exist, create then
   boost::filesystem::create_directories(path);
