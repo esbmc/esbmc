@@ -52,7 +52,6 @@ SCENARIO("ToUnion typecast construction", "[core][clang-c-frontend][typecast]")
         CHECK(to_union_expr(e).get_component_name() == "var_1");
         CHECK(to_union_expr(e).op0().type() == component1.type());
       }
-
     }
 
     AND_GIVEN("An union type {int;uint;}")
