@@ -53,12 +53,6 @@ SCENARIO("ToUnion typecast construction", "[core][clang-c-frontend][typecast]")
         CHECK(to_union_expr(e).op0().type() == component1.type());
       }
 
-      THEN("t shouldn't contain an Uint")
-      {
-        gen_builtin_type(builtin, Builtin_Type::UInt);
-        exprt e = gen_zero(builtin);
-        CHECK_THROWS_AS(gen_typecast_to_union(e, t), std::domain_error);
-      }
     }
 
     AND_GIVEN("An union type {int;uint;}")
