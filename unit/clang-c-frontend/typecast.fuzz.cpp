@@ -97,9 +97,9 @@ void test_to_union(const int *Data, size_t Size)
   }
 }
 
-extern "C" int LLVMFuzzerTestOneInput(const unsigned int *Data, size_t Size)
+extern "C" int LLVMFuzzerTestOneInput(const int *Data, size_t Size)
 {
-  if(Size < 5 && (Data[0] == Data[1]))
+  if(Size < 5 || Size > 100 || (Data[0] == Data[1]))
     return 0;
   for(size_t i = 0; i < Size; i++)
   {
