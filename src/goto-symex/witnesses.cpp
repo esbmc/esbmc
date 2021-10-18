@@ -108,26 +108,27 @@ int generate_sha1_hash_for_file(const char *path, std::string &output)
   return 0;
 }
 
-inline std::string
-SHA256(const char* const path)
+inline std::string SHA256(const char *const path)
 {
   std::ifstream fp(path, std::ios::in | std::ios::binary);
 
-  if (not fp.good()) {
+  if(not fp.good())
+  {
     std::ostringstream os;
     os << "Cannot open \"" << path << "\": " << std::strerror(errno) << ".";
     throw std::runtime_error(os.str());
   }
 
-  constexpr const std::size_t buffer_size { 1 << 12 };
+  constexpr const std::size_t buffer_size{1 << 12};
   char buffer[buffer_size];
 
-  unsigned char hash[SHA256_DIGEST_LENGTH] = { 0 };
+  unsigned char hash[SHA256_DIGEST_LENGTH] = {0};
 
   SHA256_CTX ctx;
   SHA256_Init(&ctx);
 
-  while (fp.good()) {
+  while(fp.good())
+  {
     fp.read(buffer, buffer_size);
     SHA256_Update(&ctx, buffer, fp.gcount());
   }
@@ -138,14 +139,13 @@ SHA256(const char* const path)
   std::ostringstream os;
   os << std::hex << std::setfill('0');
 
-  for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
+  for(int i = 0; i < SHA256_DIGEST_LENGTH; ++i)
+  {
     os << std::setw(2) << static_cast<unsigned int>(hash[i]);
   }
 
   return os.str();
 }
-
-
 
 /* */
 std::string read_file(const std::string &path)
@@ -642,7 +642,7 @@ void _create_graph_node(
   // source: https://github.com/sosy-lab/sv-witnesses
   std::string new_creation_time = tmp.substr(0, tmp.find(".", 0));
   // We are creating using UTC time, so add a "Z" at the end
-  new_creation_time += "Z";  
+  new_creation_time += "Z";
   p_creationTime.put_value(new_creation_time);
   graphnode.add_child("data", p_creationTime);
 }
