@@ -5,7 +5,7 @@
 #include <langapi/languages.h>
 #include <util/irep2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
-
+#include <openssl/sha.h>
 #include <boost/version.hpp>
 
 typedef boost::property_tree::ptree xmlnodet;
@@ -107,6 +107,45 @@ int generate_sha1_hash_for_file(const char *path, std::string &output)
   fclose(file);
   return 0;
 }
+
+inline std::string
+SHA256(const char* const path)
+{
+  std::ifstream fp(path, std::ios::in | std::ios::binary);
+
+  if (not fp.good()) {
+    std::ostringstream os;
+    os << "Cannot open \"" << path << "\": " << std::strerror(errno) << ".";
+    throw std::runtime_error(os.str());
+  }
+
+  constexpr const std::size_t buffer_size { 1 << 12 };
+  char buffer[buffer_size];
+
+  unsigned char hash[SHA256_DIGEST_LENGTH] = { 0 };
+
+  SHA256_CTX ctx;
+  SHA256_Init(&ctx);
+
+  while (fp.good()) {
+    fp.read(buffer, buffer_size);
+    SHA256_Update(&ctx, buffer, fp.gcount());
+  }
+
+  SHA256_Final(hash, &ctx);
+  fp.close();
+
+  std::ostringstream os;
+  os << std::hex << std::setfill('0');
+
+  for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
+    os << std::setw(2) << static_cast<unsigned int>(hash[i]);
+  }
+
+  return os.str();
+}
+
+
 
 /* */
 std::string read_file(const std::string &path)
@@ -569,9 +608,9 @@ void _create_graph_node(
 
   std::string programFileHash;
   if(program_file.empty())
-    generate_sha1_hash_for_file(verifiedfile.c_str(), programFileHash);
+    programFileHash = SHA256(verifiedfile.c_str());
   else
-    generate_sha1_hash_for_file(program_file.c_str(), programFileHash);
+    programFileHash = SHA256(program_file.c_str());
   xmlnodet pProgramHash;
   pProgramHash.add("<xmlattr>.key", "programhash");
   pProgramHash.put_value(programFileHash);
@@ -586,7 +625,7 @@ void _create_graph_node(
       "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
   else
     pDataSpecification.put_value(
-      "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
+      "CHECK( init(main()), LTL(G ! call(reach_error())) )");
   graphnode.add_child("data", pDataSpecification);
 
   boost::posix_time::ptime creation_time =
@@ -602,6 +641,8 @@ void _create_graph_node(
   // Here we want to make the witness validators happy.
   // source: https://github.com/sosy-lab/sv-witnesses
   std::string new_creation_time = tmp.substr(0, tmp.find(".", 0));
+  // We are creating using UTC time, so add a "Z" at the end
+  new_creation_time += "Z";  
   p_creationTime.put_value(new_creation_time);
   graphnode.add_child("data", p_creationTime);
 }
