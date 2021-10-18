@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import os
 import argparse
@@ -220,8 +220,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
     command_line += "--64 "
 
   if concurrency:
-    esbmc_dargs += "--unwind 8 --no-por "
-    esbmc_dargs += "--no-slice " # TODO: Witness validation is only working without slicing
+    command_line += "--unwind 8 --no-por "
+    command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
   command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
