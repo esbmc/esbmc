@@ -453,13 +453,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
           expr, to_type, guard, mode, offset_to_scalar);
       }
     }
-
-    // At this point we've dealt with bitfields, so
-    // it's safe to convert the accumulated offset to bytes
-    offset_to_scalar =
-      div2tc(offset_to_scalar->type, offset_to_scalar, gen_ulong(8));
-    simplify(offset_to_scalar);
-
+    
     expr2tc result =
       dereference(deref.value, to_type, guard, mode, offset_to_scalar);
     return result;
@@ -472,7 +466,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     // Determine offset accumulated to this point (computed in bytes)
     expr2tc size_check_expr = expr;
     wrap_in_scalar_step_list(size_check_expr, &scalar_step_list, guard);
-    expr2tc offset_to_scalar = compute_pointer_offset(size_check_expr);
+    expr2tc offset_to_scalar = compute_pointer_offset_bits(size_check_expr);
     simplify(offset_to_scalar);
 
     // first make sure there are no dereferences in there
@@ -801,11 +795,14 @@ expr2tc dereferencet::build_reference_to(
       // it as future work.
       alignment = 1;
     }
-
     final_offset = pointer_offset2tc(pointer_type2(), deref_expr);
     simplify(final_offset);
   }
 
+  // Converting final_offset from bytes to bits!
+  final_offset = mul2tc(final_offset->type, final_offset, gen_ulong(8));
+  simplify(final_offset);
+  
   // Add any offset introduced lexically at the dereference site, i.e. member
   // or index exprs, like foo->bar[3]. If bar is of integer type, we translate
   // that to be a dereference of foo + extra_offset, resulting in an integer.
@@ -814,7 +811,7 @@ expr2tc dereferencet::build_reference_to(
     final_offset = add2tc(final_offset->type, final_offset, lexical_offset);
     simplify(final_offset);
   }
-
+  
   // If we're in internal mode, collect all of our data into one struct, insert
   // it into the list of internal data, and then bail. The caller does not want
   // to have a reference built at all.
@@ -822,12 +819,13 @@ expr2tc dereferencet::build_reference_to(
   {
     dereference_callbackt::internal_item internal;
     internal.object = value;
-    internal.offset = final_offset;
+    // Converting offset to bytes
+    internal.offset = div2tc(final_offset->type, final_offset, gen_ulong(8));
     internal.guard = pointer_guard;
     internal_items.push_back(internal);
     return expr2tc();
   }
-
+ 
   // Encode some access bounds checks.
   if(is_array_type(value))
   {
@@ -842,6 +840,10 @@ expr2tc dereferencet::build_reference_to(
     check_data_obj_access(value, final_offset, type, tmp_guard);
   }
 
+  // Converting final_offset to bytes
+  final_offset = div2tc(final_offset->type, final_offset, gen_ulong(8));
+  simplify(final_offset);
+  
   // Call reference building methods. For the given data object in value,
   // an expression of type type will be constructed that reads from it.
   build_reference_rec(value, final_offset, type, tmp_guard, mode, alignment);
@@ -1443,7 +1445,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   // A list of guards, and outcomes. The result should be a gigantic
   // if-then-else chain based on those guards.
   std::list<std::pair<expr2tc, expr2tc>> extract_list;
-
+  
   unsigned int i = 0;
   for(auto const &it : struct_type.members)
   {
@@ -1559,7 +1561,7 @@ void dereferencet::construct_from_dyn_offset(
   // Ensure we're dealing with a BV. A floatbv is not a bv!
   if(!is_bv_type(value->type) && !is_fixedbv_type(value->type))
     value = bitcast2tc(get_uint_type(value->type->get_width()), value);
-
+  
   expr2tc *bytes =
     extract_bytes_from_scalar(value, type_byte_size(type).to_uint64(), offset);
   stitch_together_from_byte_array(value, type, bytes);
@@ -1877,8 +1879,9 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     // Only encode a bounds check if we're directly accessing an array symbol:
     // if it isn't, then it's a member of some other struct. If it's the wrong
     // size, a higher level check will encode relevant assertions.
+    // Offset is converted to bits for the bounds check.
     if(is_symbol2t(value))
-      bounds_check(value, offs, type, tmp);
+      bounds_check(value, mul2tc(offs->type, offs, gen_ulong(8)), type, tmp);
 
     // We are left with constructing a structure from a byte array. XXX, this
     // is duplicated from above, refactor?
@@ -2140,12 +2143,15 @@ void dereferencet::valid_check(
 
 void dereferencet::bounds_check(
   const expr2tc &expr,
-  const expr2tc &offset,
+  const expr2tc &offset_bits,
   const type2tc &type,
   const guardt &guard)
 {
   if(options.get_bool_option("no-bounds-check"))
     return;
+  
+  // Offset from bits to bytes
+  expr2tc offset = div2tc(offset_bits->type, offset_bits, gen_ulong(8));
 
   unsigned int access_size = type_byte_size(type).to_uint64();
 
@@ -2245,11 +2251,13 @@ void dereferencet::wrap_in_scalar_step_list(
 
 void dereferencet::check_code_access(
   expr2tc &value,
-  const expr2tc &offset,
+  const expr2tc &offset_bits,
   const type2tc &type,
   const guardt &guard,
   modet mode)
 {
+  // Transforming bits into bytes
+  expr2tc offset = mul2tc(offset_bits->type, offset_bits, gen_ulong(8));
   if(is_code_type(value) && !is_code_type(type))
   {
     dereference_failure(
@@ -2303,8 +2311,10 @@ void dereferencet::check_data_obj_access(
   const guardt &guard)
 {
   assert(!is_array_type(value));
-
-  expr2tc offset = typecast2tc(pointer_type2(), src_offset);
+  
+  // Transforming offset in bits into bytes as well
+  expr2tc offset = typecast2tc(pointer_type2(), 
+		  div2tc(src_offset->type, src_offset, gen_ulong(8)));
   unsigned int data_sz = type_byte_size(value->type).to_uint64();
   unsigned int access_sz = type_byte_size(type).to_uint64();
   expr2tc data_sz_e = gen_ulong(data_sz);
