@@ -76,14 +76,51 @@ exprt jimple_label::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
-  code_skipt skip;
-  return skip;
+  exprt skip = code_skipt();
+  // TODO: DRY (clang-c-converter)
+  code_labelt c_label;
+  c_label.set_label(label);
+
+  code_blockt block;
+  for(auto x : members)
+  {
+    block.operands().push_back(x->to_exprt(ctx, class_name, function_name));
+  }
+  block.dump();
+  c_label.code() = to_code(block);
+
+  //skip = c_label;
+  return c_label;
+}
+
+void jimple_goto::from_json(const json &j)
+{
+  j.get_to(label);
+}
+
+std::string jimple_goto::to_string() const
+{
+  std::ostringstream oss;
+  oss << "Goto: " << this->label;
+  return oss.str();
+}
+
+exprt jimple_goto::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  code_gotot code_goto;
+  code_goto.set_destination(label);
+  return code_goto;
 }
 
 void jimple_label::from_json(const json &j)
 {
   j.get_to(label);
 }
+
+
 std::string jimple_assignment::to_string() const
 {
   std::ostringstream oss;
@@ -110,6 +147,48 @@ exprt jimple_assignment::to_exprt(
   return assign;
 }
 
+std::string jimple_if::to_string() const
+{
+  std::ostringstream oss;
+  oss << "If: " << variable << " = " << value
+      << " then goto " << label;
+  return oss.str();
+}
+
+void jimple_if::from_json(const json &j)
+{
+  j.at("cond").at("equals").at("symbol").get_to(variable);
+  j.at("cond").at("equals").at("value").get_to(value);
+  j.at("goto").get_to(label);
+}
+
+exprt jimple_if::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+  {
+    this->dump();
+    std::ostringstream oss;
+    oss << class_name << ":" << function_name << "@" << variable;
+
+    symbolt &test = *ctx.find_symbol(oss.str());
+    int as_number = std::stoi(value);
+    exprt value_operand = from_integer(as_number, int_type());
+
+    equality_exprt ge(symbol_expr(test), value_operand);
+
+    code_gotot code_goto;
+    code_goto.set_destination(label);
+
+    //    exprt else_expr = code_skipt();
+
+    codet if_expr("ifthenelse");
+    if_expr.copy_to_operands(ge, code_goto);
+
+    return if_expr;
+  }
+
+
 std::string jimple_assertion::to_string() const
 {
   std::ostringstream oss;
@@ -121,6 +200,8 @@ void jimple_assertion::from_json(const json &j)
 {
   j.at("equals").at("symbol").get_to(variable);
   j.at("equals").at("value").get_to(value);
+  
+  
 }
 
 exprt jimple_assertion::to_exprt(

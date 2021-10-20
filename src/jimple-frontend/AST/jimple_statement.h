@@ -59,6 +59,26 @@ class jimple_return : public jimple_statement
 
 class jimple_label : public jimple_statement
 {
+public:
+  virtual std::string to_string() const override;
+  virtual void from_json(const json &j) override;
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
+  virtual void push_into_label(std::shared_ptr<jimple_method_field> &f)
+  {
+    members.push_back(std::move(f));
+  }
+
+protected:
+  std::string label;
+  std::vector<std::shared_ptr<jimple_method_field>> members;
+};
+
+class jimple_goto : public jimple_statement
+{
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
   virtual exprt to_exprt(
@@ -96,6 +116,21 @@ class jimple_assertion : public jimple_statement
 protected:
   std::string variable;
   std::string value;
+};
+
+class jimple_if : public jimple_statement
+{
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+  virtual std::string to_string() const override;
+  virtual void from_json(const json &j) override;
+
+protected:
+  std::string variable;
+  std::string value;
+  std::string label;
 };
 
 #endif //ESBMC_JIMPLE_STATEMENT_H
