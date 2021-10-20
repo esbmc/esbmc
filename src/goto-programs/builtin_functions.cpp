@@ -577,7 +577,7 @@ void goto_convertt::do_function_call_symbol(
   }
   else if(base_name == "__ESBMC_assert")
   {
-    if(arguments.size() != 2)
+    if(arguments.size() > 2)
     {
       err_location(function);
       throw "`" + id2string(base_name) + "' expected to have two arguments";
@@ -589,7 +589,7 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t = dest.add_instruction(ASSERT);
     migrate_expr(arguments[0], t->guard);
 
-    const std::string &description =
+    const std::string &description = arguments.size() == 1 ? "jimple assertion" :
       get_string_constant(arguments[1], message_handler);
     t->location = function.location();
     t->location.user_provided(true);
