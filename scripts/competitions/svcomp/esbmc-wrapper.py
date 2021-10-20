@@ -291,7 +291,7 @@ strategy = args.strategy
 concurrency = args.concurrency
 
 if version:
-  print(os.popen(esbmc_path + "--version").read()[6:] + SVCOMP_EXTRA_VERSION),
+  print(os.popen(esbmc_path + "--version").read()[6:].strip()),
   exit(0)
 
 if property_file is None:
