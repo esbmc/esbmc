@@ -29,6 +29,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
+#include <iostream>
+
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
@@ -427,6 +429,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
     const type2tc &to_type = scalar_step_list.back()->type;
 
+    /*
     // Checking if it's a struct and it has bitfields
     bool has_bitfields = false;
     if(is_struct_type(expr))
@@ -453,6 +456,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
           expr, to_type, guard, mode, offset_to_scalar);
       }
     }
+    */
     
     expr2tc result =
       dereference(deref.value, to_type, guard, mode, offset_to_scalar);
@@ -840,10 +844,14 @@ expr2tc dereferencet::build_reference_to(
     check_data_obj_access(value, final_offset, type, tmp_guard);
   }
 
+  // Fedor: everything should be in bits now
   // Converting final_offset to bytes
-  final_offset = div2tc(final_offset->type, final_offset, gen_ulong(8));
+  //final_offset = div2tc(final_offset->type, final_offset, gen_ulong(8));
   simplify(final_offset);
-  
+ 
+  // Converting alignment to bits here
+  alignment *= 8;
+
   // Call reference building methods. For the given data object in value,
   // an expression of type type will be constructed that reads from it.
   build_reference_rec(value, final_offset, type, tmp_guard, mode, alignment);
@@ -909,6 +917,7 @@ enum target_flags
   flag_is_dyn_offs = 0,
 };
 
+// Offset and alignment are in bits
 void dereferencet::build_reference_rec(
   expr2tc &value,
   const expr2tc &offset,
@@ -968,12 +977,18 @@ void dereferencet::build_reference_rec(
     abort();
   }
 
+  //expr2tc new_offset;
   // Consider the myriad of reference construction cases here
   switch(flags)
   {
   case flag_src_scalar | flag_dst_scalar | flag_is_const_offs:
     // Access a scalar from a scalar.
     construct_from_const_offset(value, offset, type);
+    // Fedor: everything should be in bits now
+    // Converting offset to "bits here"
+    //new_offset = mul2tc(offset->type, offset, gen_ulong(8));
+    //simplify(new_offset);
+    //construct_from_const_offset(value, new_offset, type);
     break;
   case flag_src_struct | flag_dst_scalar | flag_is_const_offs:
     // Extract a scalar from within a structure
@@ -1019,6 +1034,11 @@ void dereferencet::build_reference_rec(
   case flag_src_scalar | flag_dst_scalar | flag_is_dyn_offs:
     // Access a scalar within a scalar (dyn offset)
     construct_from_dyn_offset(value, offset, type);
+    // Fedor: everything should be in bits now
+    // Converting offset into "bits" here
+    //new_offset = mul2tc(offset->type, offset, gen_ulong(8));
+    //simplify(new_offset);
+    //construct_from_dyn_offset(value, new_offset, type);
     break;
   case flag_src_struct | flag_dst_scalar | flag_is_dyn_offs:
     // Extract a scalar from within a structure (dyn offset)
@@ -1063,6 +1083,8 @@ void dereferencet::build_reference_rec(
   }
 }
 
+// Fedor: offsets and sizes are in bits up to the recursive and extraction methods
+// Fedor: all bits now!
 void dereferencet::construct_from_array(
   expr2tc &value,
   const expr2tc &offset,
@@ -1071,6 +1093,12 @@ void dereferencet::construct_from_array(
   modet mode,
   unsigned long alignment)
 {
+  // Fedor: at this point offset and alignment are in bits
+  // Converting offset and alignment into "bits" here
+  //expr2tc offset = mul2tc(offset_bytes->type, offset_bytes, gen_ulong(8));
+  //simplify(offset);
+  //alignment *= 8;
+  
   assert(is_array_type(value) || is_string_type(value));
 
   const array_type2t arr_type = get_arr_type(value);
@@ -1082,17 +1110,29 @@ void dereferencet::construct_from_array(
     return;
   }
 
-  unsigned int subtype_size = type_byte_size(arr_subtype).to_uint64();
+  //unsigned int subtype_size = type_byte_size(arr_subtype).to_uint64();
+  unsigned int subtype_size = type_byte_size_bits(arr_subtype).to_uint64();
   constant_int2tc subtype_sz_expr(offset->type, BigInt(subtype_size));
+  // The value of "div" does not depend on the offset units (i.e., bits or bytes)
   div2tc div(pointer_type2(), offset, subtype_sz_expr);
   simplify(div);
 
   modulus2tc mod(offset->type, offset, subtype_sz_expr);
   simplify(mod);
-
+  
   if(is_structure_type(arr_subtype))
   {
     value = index2tc(arr_subtype, value, div);
+    //build_reference_rec(value, mod, type, guard, mode, alignment);
+    // "mod" and "alignment" are converted back into bytes here
+    // I had to introduce a new "new_mod" as it does not
+    // work without simplification. Hopefully this will go away
+    // as soon as we completely move ty bits
+    // Fedor: at this point offset and alignment are in bits
+    // Converting offset to "bytes" before recursion
+    //expr2tc new_mod = div2tc(mod->type, mod, gen_ulong(8));
+    //simplify(new_mod);
+    //build_reference_rec(value, new_mod, type, guard, mode, alignment/8);
     build_reference_rec(value, mod, type, guard, mode, alignment);
     return;
   }
@@ -1119,10 +1159,12 @@ void dereferencet::construct_from_array(
   }
 
   // Additional complexity occurs if it's aligned but overflows boundaries
-  unsigned int deref_size = type->get_width() / 8;
-  if(config.options.get_bool_option("use-bit-precision"))
-    deref_size = type->get_width();
+  //unsigned int deref_size = type->get_width() / 8;
+  //if(config.options.get_bool_option("use-bit-precision"))
+  //  deref_size = type->get_width();
 
+  unsigned int deref_size = type->get_width();
+  
   bool overflows_boundaries = (deref_size > subtype_size);
 
   // No alignment guarantee: assert that it's correct.
@@ -1134,6 +1176,12 @@ void dereferencet::construct_from_array(
     // Just extract an element and apply other standard extraction stuff.
     // No scope for stitching being required.
     value = index2tc(arr_subtype, value, div);
+    //build_reference_rec(value, mod, type, guard, mode, alignment);
+    // "mod" and "alignment" are converted bacn into bytes before recursion
+    // Fedor: everyting should be in bits now at this point
+    //expr2tc new_mod = div2tc(mod->type, mod, gen_ulong(8));
+    //simplify(new_mod);
+    //build_reference_rec(value, new_mod, type, guard, mode, alignment/8);
     build_reference_rec(value, mod, type, guard, mode, alignment);
   }
   else
@@ -1148,6 +1196,8 @@ void dereferencet::construct_from_array(
   }
 }
 
+// Fedor: offsets and sizes are in bits up to the recursive and extraction methods
+// Fedor: all bits up to extraction
 void dereferencet::construct_from_const_offset(
   expr2tc &value,
   const expr2tc &offset,
@@ -1182,13 +1232,18 @@ void dereferencet::construct_from_const_offset(
     value = get_base_object(value);
   }
 
+  // Converting offset to bytes before extraction
+  expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
+  simplify(offset_bytes);
   // Either nonzero offset, or a smaller / bigger read.
   expr2tc *bytes =
-    extract_bytes_from_scalar(value, type_byte_size(type).to_uint64(), offset);
+    extract_bytes_from_scalar(value, type_byte_size(type).to_uint64(), offset_bytes);
   stitch_together_from_byte_array(value, type, bytes);
   delete[] bytes;
 }
 
+// Fedor: offsets and sizes are in bits up to the recursive and extraction methods
+// Fedor: all bits now
 void dereferencet::construct_from_const_struct_offset(
   expr2tc &value,
   const expr2tc &offset,
@@ -1198,8 +1253,10 @@ void dereferencet::construct_from_const_struct_offset(
 {
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
-  const BigInt int_offset =
-    to_constant_int2t(offset).value * config.ansi_c.char_width;
+  // The offset is converted to bits here
+  //const BigInt int_offset =
+  //  to_constant_int2t(offset).value * config.ansi_c.char_width;
+  const BigInt int_offset = to_constant_int2t(offset).value;
   BigInt access_size = type_byte_size_bits(type);
 
   unsigned int i = 0;
@@ -1261,6 +1318,7 @@ void dereferencet::construct_from_const_struct_offset(
 
       // This is a valid access to this field. Extract it, recurse.
       value = member2tc(it, value, struct_type.member_names[i]);
+      // The offset is 0 here. So does not matter bytes or bits
       build_reference_rec(value, gen_ulong(0), type, guard, mode);
 
       return;
@@ -1271,8 +1329,12 @@ void dereferencet::construct_from_const_struct_offset(
       // This access is in the bounds of this member, but isn't at the start.
       // XXX that might be an alignment error.
       expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
-      constant_int2tc new_offs(
-        pointer_type2(), (int_offset - m_offs) / config.ansi_c.char_width);
+      // New offset will be in "bytes" for the upcoming recursion
+      //constant_int2tc new_offs(
+      //  pointer_type2(), (int_offset - m_offs) / config.ansi_c.char_width);
+      constant_int2tc new_offs(pointer_type2(), int_offset - m_offs);
+      // Probably not needed as new_offs is pretty "simple" already
+      simplify(new_offs);
 
       // Extract.
       build_reference_rec(memb, new_offs, type, guard, mode);
@@ -1299,6 +1361,7 @@ void dereferencet::construct_from_const_struct_offset(
   value = expr2tc();
 }
 
+// Fedor: hopefully this method will not be used in the future!!!
 void dereferencet::construct_from_bit_struct_offset(
   expr2tc &value,
   const expr2tc &offset,
@@ -1408,6 +1471,8 @@ void dereferencet::construct_from_bit_struct_offset(
   value = expr2tc();
 }
 
+// Fedor: offsets and sizes are in bits up to the recursive and extraction methods
+// Fedor: all bits up to the extraction methods
 void dereferencet::construct_from_dyn_struct_offset(
   expr2tc &value,
   const expr2tc &offset,
@@ -1417,6 +1482,11 @@ void dereferencet::construct_from_dyn_struct_offset(
   modet mode,
   const expr2tc *failed_symbol)
 {
+  // Converting offset and alignment into "bits" here
+  //expr2tc offset = mul2tc(offset_bytes->type, offset_bytes, gen_ulong(8));
+  //simplify(offset);
+  //alignment *= 8;
+
   // if we are accessing the struct using a byte, we can ignore alignment
   // rules, so convert the struct to bv and dispatch it to
   // construct_from_dyn_offset
@@ -1431,10 +1501,11 @@ void dereferencet::construct_from_dyn_struct_offset(
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
   unsigned int access_sz = type_byte_size_bits(type).to_uint64();
-  expr2tc bits_offset = mul2tc(
-    offset->type,
-    offset,
-    constant_int2tc(offset->type, config.ansi_c.char_width));
+  //expr2tc bits_offset = mul2tc(
+  //  offset->type,
+  //  offset,
+  //  constant_int2tc(offset->type, config.ansi_c.char_width));
+  expr2tc bits_offset = offset;
 
   expr2tc failed_container;
   if(failed_symbol == nullptr)
@@ -1464,22 +1535,52 @@ void dereferencet::construct_from_dyn_struct_offset(
     if(is_struct_type(it))
     {
       // Handle recursive structs in bytes
-      expr2tc field_offs_byte = constant_int2tc(
-        offset->type, member_offset(value->type, struct_type.member_names[i]));
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
+      //expr2tc field_offs_byte = constant_int2tc(
+      //  offset->type, member_offset(value->type, struct_type.member_names[i]));
+      //expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
+      //expr2tc field = member2tc(it, value, struct_type.member_names[i]);
+      //construct_from_dyn_struct_offset(
+      //  field, new_offset, type, guard, alignment, mode, &failed_container);
+      //extract_list.emplace_back(field_guard, field);
+      
+      // Fedor: changing it to bits to be consistent
+      expr2tc field_offset = constant_int2tc(
+        offset->type, member_offset_bits(value->type, struct_type.member_names[i]));
+      expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
+      
+      // Converting offset alignment to "bytes" before recursion back
+      //new_offset = div2tc(new_offset->type, new_offset, gen_ulong(8));
+      //simplify(new_offset);
+      //construct_from_dyn_struct_offset(
+      //  field, new_offset, type, guard, alignment/8, mode, &failed_container);
+      simplify(new_offset);
       construct_from_dyn_struct_offset(
         field, new_offset, type, guard, alignment, mode, &failed_container);
       extract_list.emplace_back(field_guard, field);
     }
     else if(is_array_type(it))
     {
-      expr2tc field_offs_byte = constant_int2tc(
-        offset->type, member_offset(value->type, struct_type.member_names[i]));
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
+      //expr2tc field_offs_byte = constant_int2tc(
+      //  offset->type, member_offset(value->type, struct_type.member_names[i]));
+      //expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
+      //expr2tc field = member2tc(it, value, struct_type.member_names[i]);
+      //build_reference_rec(field, new_offset, type, guard, mode, alignment);
+      //extract_list.emplace_back(field_guard, field);
+
+      expr2tc field_offset = constant_int2tc(
+        offset->type, member_offset_bits(value->type, struct_type.member_names[i]));
+      expr2tc new_offset = sub2tc(offset->type, offset, field_offset);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
+      
+      // Converting offset into "bytes" before recursion
+      //new_offset = div2tc(new_offset->type, new_offset, gen_ulong(8));
+      //simplify(new_offset);
+      //build_reference_rec(field, new_offset, type, guard, mode, alignment/8);
+      simplify(new_offset);
       build_reference_rec(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
+
     }
     else if((access_sz > it->get_width()) && (type->get_width() != 8))
     {
@@ -1490,7 +1591,8 @@ void dereferencet::construct_from_dyn_struct_offset(
       // Push nothing back, allow fall-through of the if-then-else chain to
       // resolve to a failed deref symbol.
     }
-    else if(alignment >= (config.ansi_c.word_size / 8))
+    //else if(alignment >= (config.ansi_c.word_size / 8))
+    else if(alignment >= config.ansi_c.word_size)
     {
       // This is fully aligned, just pull it out and possibly cast,
       // XXX endian?
@@ -1502,10 +1604,19 @@ void dereferencet::construct_from_dyn_struct_offset(
     else
     {
       // Not fully aligned; devolve to byte extract.
-      expr2tc field_offs_byte = constant_int2tc(
-        offset->type, member_offset(value->type, struct_type.member_names[i]));
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
+      //expr2tc field_offs_byte = constant_int2tc(
+      //  offset->type, member_offset(value->type, struct_type.member_names[i]));
+      //expr2tc new_offset = sub2tc(offset->type, offset, field_offs_byte);
+      //expr2tc field = member2tc(it, value, struct_type.member_names[i]);
+ 
+      expr2tc field_offset = constant_int2tc(
+        offset->type, member_offset_bits(value->type, struct_type.member_names[i]));
+      expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
+      
+      // Converting offset into "bytes" before extraction
+      new_offset = div2tc(new_offset->type, new_offset, gen_ulong(8));
+      simplify(new_offset);
 
       expr2tc *bytes = extract_bytes_from_scalar(
         field, type_byte_size(type).to_uint64(), new_offset);
@@ -1532,6 +1643,9 @@ void dereferencet::construct_from_dyn_struct_offset(
   value = new_value;
 }
 
+// Fedor: offsets and sizes are in bits up to the extraction methods
+// This method expects to receive "offset" in bits
+// Fedor: all bit up to the extraction methods
 void dereferencet::construct_from_dyn_offset(
   expr2tc &value,
   const expr2tc &offset,
@@ -1562,12 +1676,18 @@ void dereferencet::construct_from_dyn_offset(
   if(!is_bv_type(value->type) && !is_fixedbv_type(value->type))
     value = bitcast2tc(get_uint_type(value->type->get_width()), value);
   
+  // Converting offset into "bytes" just before the extraction methods
+  expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
+  simplify(offset_bytes);
+  
   expr2tc *bytes =
-    extract_bytes_from_scalar(value, type_byte_size(type).to_uint64(), offset);
+    extract_bytes_from_scalar(value, type_byte_size(type).to_uint64(), offset_bytes);
   stitch_together_from_byte_array(value, type, bytes);
   delete[] bytes;
 }
 
+// Fedor: offsets and sizes are in bits up to the recursive methods
+// This method expects to receive "offset" in bits
 void dereferencet::construct_from_multidir_array(
   expr2tc &value,
   const expr2tc &offset,
@@ -1583,7 +1703,8 @@ void dereferencet::construct_from_multidir_array(
   // is an alignment violation as that can posess extra padding.
   // So, divide the offset by size of the inner dimention, make an index2t, and
   // construct a reference to that.
-  BigInt subtype_sz = type_byte_size(arr_type.subtype);
+  //BigInt subtype_sz = type_byte_size(arr_type.subtype);
+  BigInt subtype_sz = type_byte_size_bits(arr_type.subtype);
   constant_int2tc subtype_sz_expr(pointer_type2(), subtype_sz);
   div2tc div(pointer_type2(), offset, subtype_sz_expr);
   simplify(div);
@@ -1594,9 +1715,16 @@ void dereferencet::construct_from_multidir_array(
   modulus2tc mod(pointer_type2(), offset, subtype_sz_expr);
   simplify(mod);
 
+  //expr2tc new_mod = div2tc(mod->type, mod, gen_ulong(8));
+  //simplify(new_mod);
+
+  // Calculate "new_mod" in bytes and converting "alignment" for the recursion
+  //build_reference_rec(value, new_mod, type, guard, mode, alignment/8);
   build_reference_rec(value, mod, type, guard, mode, alignment);
 }
 
+// Fedor: offsets and sizes are in bits up to the recursive methods
+// Fedor: all bits now
 void dereferencet::construct_struct_ref_from_const_offset_array(
   expr2tc &value,
   const expr2tc &offset,
@@ -1605,6 +1733,11 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   modet mode,
   unsigned long alignment)
 {
+  // Converting offset and alignment into "bits" here
+  //expr2tc offset = mul2tc(offset_bytes->type, offset_bytes, gen_ulong(8));
+  //simplify(offset);
+  //alignment *= 8;
+
   const constant_int2t &intref = to_constant_int2t(offset);
 
   assert(is_array_type(value->type));
@@ -1617,6 +1750,11 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   // reference from the base subtype, through the correct recursive handler.
   if(base_subtype->get_width() != 8)
   {
+    //construct_from_array(value, offset, type, guard, mode, alignment);
+    // Converting offset and alignment back to bytes before recursion
+    //expr2tc new_offset = div2tc(offset->type, offset, gen_ulong(8));
+    //simplify(new_offset);
+    //construct_from_array(value, new_offset, type, guard, mode, alignment/8);
     construct_from_array(value, offset, type, guard, mode, alignment);
     return;
   }
@@ -1632,26 +1770,40 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   {
     const type2tc &target_type = it;
     expr2tc target = value; // The byte array;
+    //build_reference_rec(
+    //  target, gen_ulong(struct_offset), target_type, guard, mode);
+    // Converting offset into "bytes" for recursion. Surprisingly,
+    // this does not cause any issues with the offset in "bits"
+    //build_reference_rec(
+    //  target, gen_ulong(struct_offset/8), target_type, guard, mode);
     build_reference_rec(
       target, gen_ulong(struct_offset), target_type, guard, mode);
     fields.push_back(target);
-    struct_offset += type_byte_size(target_type).to_uint64();
+    //struct_offset += type_byte_size(target_type).to_uint64();
+    struct_offset += type_byte_size_bits(target_type).to_uint64();
   }
 
   // We now have a vector of fields reconstructed from the byte array
   value = constant_struct2tc(type, fields);
 }
 
+// Fedor: offsets and sizes are in bits up to the recursive methods
+// Fedor: all bits now
 void dereferencet::construct_struct_ref_from_const_offset(
   expr2tc &value,
   const expr2tc &offs,
   const type2tc &type,
   const guardt &guard)
 {
+  // Converting offset and alignment into "bits" here
+  //expr2tc offs = mul2tc(offs_bytes->type, offs_bytes, gen_ulong(8));
+  //simplify(offs);
+
   // Minimal effort: the moment that we can throw this object out due to an
   // incompatible type, we do.
   const constant_int2t &intref = to_constant_int2t(offs);
-  BigInt type_size = type_byte_size(type);
+  //BigInt type_size = type_byte_size(type);
+  BigInt type_size = type_byte_size_bits(type);
 
   if(is_struct_type(value->type))
   {
@@ -1675,8 +1827,10 @@ void dereferencet::construct_struct_ref_from_const_offset(
     unsigned int i = 0;
     for(auto const &it : struct_type.members)
     {
-      BigInt offs = member_offset(value->type, struct_type.member_names[i]);
-      BigInt size = type_byte_size(it);
+      //BigInt offs = member_offset(value->type, struct_type.member_names[i]);
+      //BigInt size = type_byte_size(it);
+      BigInt offs = member_offset_bits(value->type, struct_type.member_names[i]);
+      BigInt size = type_byte_size_bits(it);
 
       if(
         !is_scalar_type(it) && intref.value >= offs &&
@@ -1700,6 +1854,11 @@ void dereferencet::construct_struct_ref_from_const_offset(
         BigInt new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs.to_uint64());
         value = member2tc(it, value, struct_type.member_names[i]);
+
+        // Converting offset into "bytes" before the recursion
+        //offs_expr = div2tc(offs_expr->type, offs_expr, gen_ulong(8));
+        //simplify(offs_expr);
+  
         construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
         return;
       }
@@ -1721,6 +1880,8 @@ void dereferencet::construct_struct_ref_from_const_offset(
   abort();
 }
 
+// This method calls for another method straight away before using the offset.
+// So it should probably be fine with any type of offset
 void dereferencet::construct_struct_ref_from_dyn_offset(
   expr2tc &value,
   const expr2tc &offs,
@@ -1774,6 +1935,7 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   bad_base_type_failure(tmp_guard, "legal dynamic offset", "illegal offset");
 }
 
+// Fedor: offsets and sizes are in bits up to the recursive methods
 void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   const expr2tc &value,
   const expr2tc &offs,
@@ -1782,6 +1944,10 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   modet mode,
   std::list<std::pair<expr2tc, expr2tc>> &output)
 {
+  // Converting offset and alignment into "bits" here
+  //expr2tc offs = mul2tc(offs_bytes->type, offs_bytes, gen_ulong(8));
+  //simplify(offs);
+
   // Look for all the possible offsets that could result in a legitimate access
   // to the given (struct?) type. Insert into the output list, with a guard
   // based on the 'offs' argument, that identifies when this field is legally
@@ -1797,8 +1963,11 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     // and recurse. The complicated part is the new offset and guard: we need
     // to guard for offsets that are inside this array, and modulus the offset
     // by the array size.
-    BigInt subtype_size = type_byte_size(arr_type.subtype);
+    
+    //BigInt subtype_size = type_byte_size(arr_type.subtype);
+    BigInt subtype_size = type_byte_size_bits(arr_type.subtype);
     expr2tc sub_size = gen_ulong(subtype_size.to_uint64());
+    // "mod" is in bits and "div" does not matter
     expr2tc div = div2tc(offs->type, offs, sub_size);
     expr2tc mod = modulus2tc(offs->type, offs, sub_size);
     expr2tc index = index2tc(arr_type.subtype, value, div);
@@ -1807,11 +1976,17 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     // (offs >= 0 && offs < size_of_this_array)
     expr2tc new_offset = mod;
     expr2tc gte = greaterthanequal2tc(offs, gen_ulong(0));
-    expr2tc arr_size_in_bytes =
+    // Fedor: this is in bits now
+    //expr2tc arr_size_in_bytes =
+    expr2tc arr_size_in_bits =
       mul2tc(sub_size->type, arr_type.array_size, sub_size);
-    expr2tc lt = lessthan2tc(offs, arr_size_in_bytes);
+    expr2tc lt = lessthan2tc(offs, arr_size_in_bits);
     expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
     simplify(range_guard);
+
+    // Converting offset into bytes before recursion
+    //new_offset = div2tc(new_offset->type, new_offset, gen_ulong(8));
+    //simplify(new_offset);
 
     construct_struct_ref_from_dyn_offs_rec(
       index, new_offset, type, range_guard, mode, output);
@@ -1845,9 +2020,12 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
         continue;
       }
 
+      //BigInt memb_offs =
+      //  member_offset(value->type, struct_type.member_names[i]);
+      //BigInt size = type_byte_size(it);
       BigInt memb_offs =
-        member_offset(value->type, struct_type.member_names[i]);
-      BigInt size = type_byte_size(it);
+        member_offset_bits(value->type, struct_type.member_names[i]);
+      BigInt size = type_byte_size_bits(it);
       expr2tc memb_offs_expr = gen_ulong(memb_offs.to_uint64());
       expr2tc limit_expr = gen_ulong(memb_offs.to_uint64() + size.to_uint64());
       expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
@@ -1860,6 +2038,10 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       expr2tc lt = lessthan2tc(offs, limit_expr);
       expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
 
+      // Converting offset into bytes before recursion
+      //new_offset = div2tc(new_offset->type, new_offset, gen_ulong(8));
+
+      simplify(new_offset);
       construct_struct_ref_from_dyn_offs_rec(
         memb, new_offset, type, range_guard, mode, output);
       i++;
@@ -1881,7 +2063,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     // size, a higher level check will encode relevant assertions.
     // Offset is converted to bits for the bounds check.
     if(is_symbol2t(value))
-      bounds_check(value, mul2tc(offs->type, offs, gen_ulong(8)), type, tmp);
+      //bounds_check(value, mul2tc(offs->type, offs, gen_ulong(8)), type, tmp);
+      bounds_check(value, offs, type, tmp);
 
     // We are left with constructing a structure from a byte array. XXX, this
     // is duplicated from above, refactor?
@@ -1893,6 +2076,13 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     {
       const type2tc &target_type = it;
       expr2tc target = value; // The byte array;
+
+      // Converting offset into bytes before recursion
+      //expr2tc new_offset = div2tc(array_offset->type, array_offset, gen_ulong(8));
+      //simplify(new_offset);
+      //build_reference_rec(target, new_offset, target_type, tmp, mode);
+      
+      simplify(array_offset);
       build_reference_rec(target, array_offset, target_type, tmp, mode);
       fields.push_back(target);
 
@@ -1900,7 +2090,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       array_offset = add2tc(
         array_offset->type,
         array_offset,
-        gen_ulong(type_byte_size(target_type).to_uint64()));
+        //gen_ulong(type_byte_size(target_type).to_uint64()));
+        gen_ulong(type_byte_size_bits(target_type).to_uint64()));
     }
 
     // We now have a vector of fields reconstructed from the byte array
@@ -2143,16 +2334,13 @@ void dereferencet::valid_check(
 
 void dereferencet::bounds_check(
   const expr2tc &expr,
-  const expr2tc &offset_bits,
+  const expr2tc &offset,
   const type2tc &type,
   const guardt &guard)
 {
   if(options.get_bool_option("no-bounds-check"))
     return;
   
-  // Offset from bits to bytes
-  expr2tc offset = div2tc(offset_bits->type, offset_bits, gen_ulong(8));
-
   unsigned int access_size = type_byte_size(type).to_uint64();
 
   assert(is_array_type(expr) || is_string_type(expr));
@@ -2195,8 +2383,9 @@ void dereferencet::bounds_check(
     expr2tc array_size = typecast2tc(uint_type2(), arr_type.array_size);
     arrsize = mul2tc(uint_type2(), array_size, subtype_size);
   }
-
-  typecast2tc unsigned_offset(uint_type2(), offset);
+  
+  // Transforming offset to bytes  
+  typecast2tc unsigned_offset(uint_type2(), div2tc(offset->type, offset, gen_ulong(8)));
 
   // Then, expressions as to whether the access is over or under the array
   // size.
@@ -2251,13 +2440,11 @@ void dereferencet::wrap_in_scalar_step_list(
 
 void dereferencet::check_code_access(
   expr2tc &value,
-  const expr2tc &offset_bits,
+  const expr2tc &offset,
   const type2tc &type,
   const guardt &guard,
   modet mode)
 {
-  // Transforming bits into bytes
-  expr2tc offset = mul2tc(offset_bits->type, offset_bits, gen_ulong(8));
   if(is_code_type(value) && !is_code_type(type))
   {
     dereference_failure(
@@ -2312,11 +2499,9 @@ void dereferencet::check_data_obj_access(
 {
   assert(!is_array_type(value));
   
-  // Transforming offset in bits into bytes as well
-  expr2tc offset = typecast2tc(pointer_type2(), 
-		  div2tc(src_offset->type, src_offset, gen_ulong(8)));
-  unsigned int data_sz = type_byte_size(value->type).to_uint64();
-  unsigned int access_sz = type_byte_size(type).to_uint64();
+  expr2tc offset = typecast2tc(pointer_type2(), src_offset);
+  unsigned int data_sz = type_byte_size_bits(value->type).to_uint64();
+  unsigned int access_sz = type_byte_size_bits(type).to_uint64();
   expr2tc data_sz_e = gen_ulong(data_sz);
   expr2tc access_sz_e = gen_ulong(access_sz);
 
@@ -2341,11 +2526,19 @@ void dereferencet::check_data_obj_access(
     check_alignment(access_sz, std::move(offset), guard);
 }
 
+// Fedor: double-check this one and decide what to do with bitfields.
+// For now it is essentially ignored for bitfields.
 void dereferencet::check_alignment(
   unsigned long minwidth,
-  const expr2tc &&offset,
+  const expr2tc &&offset_bits,
   const guardt &guard)
 {
+  // Fedor: quick conversion to bytes here before we figure out what
+  // to do with bitfields.
+  minwidth = (minwidth + 7) / 8;
+  expr2tc offset = div2tc(offset_bits->type, offset_bits, gen_ulong(8));
+  simplify(offset);
+
   expr2tc mask_expr = gen_ulong(minwidth - 1);
   expr2tc neq;
 
