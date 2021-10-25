@@ -444,12 +444,6 @@ private:
     const type2tc &type,
     const guardt &guard,
     modet mode);
-  void construct_from_bit_struct_offset(
-    expr2tc &value,
-    const expr2tc &offset,
-    const type2tc &type,
-    const guardt &guard,
-    modet mode);
   void construct_from_dyn_struct_offset(
     expr2tc &value,
     const expr2tc &offset,
