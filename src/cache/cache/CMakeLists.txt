@@ -7,3 +7,5 @@ set_target_properties(cache_methods PROPERTIES
 # Boost is needed by anything that touches irep2
 target_include_directories(cache_methods
         PRIVATE ${Boost_INCLUDE_DIRS})
+
+target_link_libraries(cache_methods fmt::fmt)

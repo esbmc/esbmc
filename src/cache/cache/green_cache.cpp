@@ -19,14 +19,49 @@ void green_cache::canonize_expr(expr2tc &expr)
   }
 }
 
+#include <iostream>
+
 void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
 {
   expr2tc &cond = step.cond;
-  
+
+  std::cout << "Found an Assert\n";
   // First assert irep should begin with an implies
-  if(cond->expr_id != expr2t::expr_ids::implies_id)
+  if(cond->expr_id == expr2t::expr_ids::not_id)
   {
+    step.dump();
+    cond->dump();
     // TODO: Fix this, a condition may be !guard
+    crc_expr guard_items;
+
+    auto not_expr = not2tc(cond);
+    guard_items.insert(hash_value(not_expr));
+    this->to_add_container.emplace(guard_items);
+    if(unsat_container.check(guard_items))
+      {
+    /**
+     * An assertion is in the format of
+     *
+     * a. assertion_guard -> !expr
+     * b. assertion_guard -> guards && ... && guard -> !expr.
+     *
+     * For 'a' the is the trivial case, if expr is known to be false
+     * then we mark it's negation as true.
+     *
+     * In 'b', using basic logic equivalence:
+     *
+     * A -> B <-> ¬A OR B
+     *
+     * Where A would be the set of guards and B the !expr. Since A if false
+     * it's negation is true, so we can simplify to:
+     *
+     * assertion_guard -> 1 (true)
+     *
+     */
+    constant_bool2tc false_value(true);
+    step.cond = false_value;
+  }
+    //abort();
     return;
   }
 
@@ -36,6 +71,8 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
     if(function == "reach_error")
       return;
   }
+
+  std::cout << "Enumerating assertion\n";
 
   std::shared_ptr<logic_2ops> implies;
   implies = std::dynamic_pointer_cast<logic_2ops>(cond);
@@ -87,6 +124,7 @@ void green_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
       std::string rhs_name = rhs_symbol->get_symbol_name();
       if(rhs_name.find("@F@assert") != std::string::npos)
       {
+        
         return;
       }
     }
