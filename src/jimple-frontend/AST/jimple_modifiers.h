@@ -35,24 +35,26 @@ public:
   virtual modifier from_string(const std::string &name) const;
   virtual std::string to_string(const modifier &ft) const;
 
+  modifier at(const int i) const { return m[i]; } 
+
 protected:
   std::vector<modifier> m;
 
 private:
   std::map<std::string, modifier> from_map = {
-    {"Abstract", modifier::Abstract},
-    {"Final", modifier::Final},
-    {"Native", modifier::Native},
-    {"Public", modifier::Public},
-    {"Protected", modifier::Protected},
-    {"Private", modifier::Private},
-    {"Static", modifier::Static},
-    {"Synchronized", modifier::Synchronized},
-    {"Transient", modifier::Transient},
-    {"Volatile", modifier::Volatile},
-    {"StrictFp", modifier::StrictFp},
-    {"Enum", modifier::Enum},
-    {"Annotation", modifier::Annotation}};
+    {"abstract", modifier::Abstract},
+    {"final", modifier::Final},
+    {"native", modifier::Native},
+    {"public", modifier::Public},
+    {"protected", modifier::Protected},
+    {"private", modifier::Private},
+    {"static", modifier::Static},
+    {"synchronized", modifier::Synchronized},
+    {"transient", modifier::Transient},
+    {"volatile", modifier::Volatile},
+    {"strictFp", modifier::StrictFp},
+    {"enum", modifier::Enum},
+    {"annotation", modifier::Annotation}};
 
   std::map<modifier, std::string> to_map = {
     {modifier::Abstract, "Abstract"},
