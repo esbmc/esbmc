@@ -365,7 +365,7 @@ expr2tc dereferencet::dereference_struct_bitfield(
     // Statically allocated struct
     if(is_struct_type(value->type))
     {
-      construct_from_bit_struct_offset(
+      construct_from_const_struct_offset(
         value, offset_to_scalar, to_type, guard, mode);
       return value;
     }
@@ -1349,116 +1349,6 @@ void dereferencet::construct_from_const_struct_offset(
     i++;
   }
 
-  // Fell out of that struct -- means we've accessed out of bounds. Code at
-  // a higher level will encode an assertion to this effect.
-  value = expr2tc();
-}
-
-// Fedor: hopefully this method will not be used in the future!!!
-void dereferencet::construct_from_bit_struct_offset(
-  expr2tc &value,
-  const expr2tc &offset,
-  const type2tc &type,
-  const guardt &guard,
-  modet mode)
-{
-  assert(is_struct_type(value->type));
-  const struct_type2t &struct_type = to_struct_type(value->type);
-  const BigInt int_offset = to_constant_int2t(offset).value;
-  BigInt access_size = type_byte_size_bits(type);
-
-  unsigned int i = 0;
-  for(auto const &it : struct_type.members)
-  {
-    BigInt m_offs =
-      member_offset_bits(value->type, struct_type.member_names[i]);
-    BigInt m_size = type_byte_size_bits(it);
-
-    if(m_size == 0)
-    {
-      // This field has no size: it's most likely a struct that has no members.
-      // Just skip over it: we can never correctly build a reference to a field
-      // in that struct, because there are no fields. The next field in the
-      // current struct lies at the same offset and is probably what the pointer
-      // is supposed to point at.
-      // If user is seeking a reference to this substruct, a different method
-      // should have been called (construct_struct_ref_from_const_offset).
-      assert(is_struct_type(it));
-      assert(!is_struct_type(type));
-      i++;
-      continue;
-    }
-
-    if(int_offset < m_offs)
-    {
-      // The offset is behind this field, but wasn't accepted by the previous
-      // member. That means that the offset falls in the undefined gap in the
-      // middle. Which might be an error -- reading from it definitely is,
-      // but we might write to it in the course of memset.
-      value = expr2tc();
-      if(mode == WRITE)
-      {
-        // This write goes to an invalid symbol, but no assertion is encoded,
-        // so it's entirely safe.
-      }
-      else
-      {
-        assert(mode == READ);
-        // Oh dear. Encode a failure assertion.
-        dereference_failure(
-          "pointer dereference",
-          "Dereference reads between struct fields",
-          guard);
-      }
-      return;
-    }
-
-    if(int_offset == m_offs)
-    {
-      // Does this over-read?
-      if(access_size > m_size)
-      {
-        dereference_failure(
-          "pointer dereference", "Over-sized read of struct field", guard);
-        value = expr2tc();
-        return;
-      }
-      // This is a valid access to this field. Extract it, recurse.
-      value = member2tc(it, value, struct_type.member_names[i]);
-      build_reference_rec(value, gen_ulong(0), type, guard, mode);
-      return;
-    }
-
-    /*
-    // Fedor: TODO
-    if(int_offset > m_offs && (int_offset - m_offs + access_size <= m_size))
-    {
-      // This access is in the bounds of this member, but isn't at the start.
-      // XXX that might be an alignment error.
-      expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
-      constant_int2tc new_offs(
-        pointer_type2(), (int_offset - m_offs) / config.ansi_c.char_width);
-
-      // Extract.
-      build_reference_rec(memb, new_offs, type, guard, mode);
-      value = memb;
-      return;
-    }
-    */
-
-    if(int_offset < (m_offs + m_size))
-    {
-      // This access starts in this field, but by process of elimination,
-      // doesn't end in it. Which means reading padding data (or an alignment
-      // error), which are both bad.
-      alignment_failure("Misaligned access to struct field", guard);
-      value = expr2tc();
-      return;
-    }
-
-    // Wasn't that field.
-    i++;
-  }
   // Fell out of that struct -- means we've accessed out of bounds. Code at
   // a higher level will encode an assertion to this effect.
   value = expr2tc();
