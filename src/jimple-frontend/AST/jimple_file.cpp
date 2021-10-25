@@ -36,14 +36,15 @@ std::string jimple_file::to_string() const
 }
 
 void jimple_file::from_json(const json &j)
-{
+{  
   // Get ClassName
-  j.at("classname").get_to(this->class_name);
+  j.at("name").get_to(this->class_name);
+
 
   std::string t;
-  j.at("filetype").get_to(t);
+  j.at("object").get_to(t);
   this->mode = from_string(t);
-
+    
   try
   {
     j.at("implements").get_to(this->implements);
@@ -64,8 +65,8 @@ void jimple_file::from_json(const json &j)
 
   auto modifiers = j.at("modifiers");
   m = modifiers.get<jimple_modifiers>();
-
-  auto filebody = j.at("filebody");
+  
+  auto filebody = j.at("content");  
   for(auto &x : filebody)
   {
     // TODO: Here is where to add support for signatures
