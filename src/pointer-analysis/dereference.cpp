@@ -29,8 +29,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-#include <iostream>
-
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
@@ -429,7 +427,6 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
     const type2tc &to_type = scalar_step_list.back()->type;
 
-    /*
     // Checking if it's a struct and it has bitfields
     bool has_bitfields = false;
     if(is_struct_type(expr))
@@ -456,8 +453,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
           expr, to_type, guard, mode, offset_to_scalar);
       }
     }
-    */
-    
+        
     expr2tc result =
       dereference(deref.value, to_type, guard, mode, offset_to_scalar);
     return result;
@@ -800,21 +796,16 @@ expr2tc dereferencet::build_reference_to(
       alignment = 1;
     }
     final_offset = pointer_offset2tc(pointer_type2(), deref_expr);
-    simplify(final_offset);
   }
 
   // Converting final_offset from bytes to bits!
   final_offset = mul2tc(final_offset->type, final_offset, gen_ulong(8));
-  simplify(final_offset);
   
   // Add any offset introduced lexically at the dereference site, i.e. member
   // or index exprs, like foo->bar[3]. If bar is of integer type, we translate
   // that to be a dereference of foo + extra_offset, resulting in an integer.
   if(!is_nil_expr(lexical_offset))
-  {
     final_offset = add2tc(final_offset->type, final_offset, lexical_offset);
-    simplify(final_offset);
-  }
   
   // If we're in internal mode, collect all of our data into one struct, insert
   // it into the list of internal data, and then bail. The caller does not want
@@ -1098,7 +1089,7 @@ void dereferencet::construct_from_array(
   //expr2tc offset = mul2tc(offset_bytes->type, offset_bytes, gen_ulong(8));
   //simplify(offset);
   //alignment *= 8;
-  
+ 
   assert(is_array_type(value) || is_string_type(value));
 
   const array_type2t arr_type = get_arr_type(value);
@@ -1189,8 +1180,10 @@ void dereferencet::construct_from_array(
     // Might read from more than one element, legitimately. Requires stitching.
     // Alignment assertion / guarantee ensures we don't do something silly.
     // This will construct from whatever the subtype is...
+    //expr2tc *bytes =
+    //  extract_bytes_from_array(value, type_byte_size(type).to_uint64(), div);
     expr2tc *bytes =
-      extract_bytes_from_array(value, type_byte_size(type).to_uint64(), div);
+      extract_bytes_from_array(value, type_byte_size_bits(type).to_uint64(), offset);
     stitch_together_from_byte_array(value, type, bytes);
     delete[] bytes;
   }
@@ -1233,11 +1226,11 @@ void dereferencet::construct_from_const_offset(
   }
 
   // Converting offset to bytes before extraction
-  expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
-  simplify(offset_bytes);
+  //expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
+  //simplify(offset_bytes);
   // Either nonzero offset, or a smaller / bigger read.
   expr2tc *bytes =
-    extract_bytes_from_scalar(value, type_byte_size(type).to_uint64(), offset_bytes);
+    extract_bytes_from_scalar(value, type_byte_size_bits(type).to_uint64(), offset);
   stitch_together_from_byte_array(value, type, bytes);
   delete[] bytes;
 }
@@ -1615,11 +1608,11 @@ void dereferencet::construct_from_dyn_struct_offset(
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       
       // Converting offset into "bytes" before extraction
-      new_offset = div2tc(new_offset->type, new_offset, gen_ulong(8));
-      simplify(new_offset);
+      //new_offset = div2tc(new_offset->type, new_offset, gen_ulong(8));
+      //simplify(new_offset);
 
       expr2tc *bytes = extract_bytes_from_scalar(
-        field, type_byte_size(type).to_uint64(), new_offset);
+        field, type_byte_size_bits(type).to_uint64(), new_offset);
       stitch_together_from_byte_array(field, type, bytes);
       delete[] bytes;
 
@@ -1677,11 +1670,11 @@ void dereferencet::construct_from_dyn_offset(
     value = bitcast2tc(get_uint_type(value->type->get_width()), value);
   
   // Converting offset into "bytes" just before the extraction methods
-  expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
-  simplify(offset_bytes);
+  //expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
+  //simplify(offset_bytes);
   
   expr2tc *bytes =
-    extract_bytes_from_scalar(value, type_byte_size(type).to_uint64(), offset_bytes);
+    extract_bytes_from_scalar(value, type_byte_size_bits(type).to_uint64(), offset);
   stitch_together_from_byte_array(value, type, bytes);
   delete[] bytes;
 }
@@ -2136,7 +2129,7 @@ void dereferencet::alignment_failure(
 expr2tc *dereferencet::extract_bytes_from_array(
   const expr2tc &array,
   unsigned int bytes,
-  const expr2tc &offset)
+  const expr2tc &offset_bits)
 {
   type2tc subtype;
   assert(bytes != 0);
@@ -2160,10 +2153,18 @@ expr2tc *dereferencet::extract_bytes_from_array(
   {
     subtype = get_uint8_type(); //XXX signedness of chars
   }
+  
+  // Converting "offset_bits" and "bytes" to bytes 
+  //expr2tc offset = offset_bits;
+  expr2tc offset = div2tc(offset_bits->type, 
+    offset_bits, gen_ulong(type_byte_size_bits(subtype).to_uint64()));
+  simplify(offset);
+  bytes = (bytes + 7) / 8;
 
   // XXX -- this doesn't allow for scenarios where we read, say, a uint32 from
   // an array of uint16s.
 
+  // Here we are just going through a byte array
   expr2tc accuml_offs = offset;
   for(unsigned int i = 0; i < bytes; i++)
   {
@@ -2177,8 +2178,13 @@ expr2tc *dereferencet::extract_bytes_from_array(
 expr2tc *dereferencet::extract_bytes_from_scalar(
   const expr2tc &object,
   unsigned int num_bytes,
-  const expr2tc &offset)
+  const expr2tc &offset_bits)
 {
+  // Converting "num_bytes" and "offset" into bytes
+  num_bytes = (num_bytes + 7) / 8;
+  expr2tc offset = div2tc(offset_bits->type, offset_bits, gen_ulong(8));
+  simplify(offset);
+  
   assert(num_bytes != 0);
 
   const type2tc &bytetype = get_uint8_type();
