@@ -31,6 +31,14 @@ void gen_typecast_arithmetic(const namespacet &ns, exprt &expr)
 
 void clang_c_convertert::gen_typecast_to_union(exprt &e, const typet &t)
 {
+  clang_c_convertert::gen_typecast_to_union(e, t, msg);
+}
+
+void clang_c_convertert::gen_typecast_to_union(
+  exprt &e,
+  const typet &t,
+  const messaget &msg)
+{
   // If RHS is already of same union type, don't do anything
   if(e.type() == t.type())
     return;

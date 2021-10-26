@@ -1,5 +1,12 @@
 Release Notes of the ESBMC model checker
 
+*** Version 6.8
+* ARM Release!
+* Solidity Support!
+* Value set analysis
+* New message system
+* Bounded goto unroll algorithm
+
 *** Version 6.7
 * Memory Model allignment improvements
 * Added a new option for compact-trace (--compact-trace)

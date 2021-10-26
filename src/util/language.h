@@ -82,7 +82,14 @@ public:
   }
   virtual ~languaget() = default;
 
+  inline void set_func_name(const std::string _path)
+  {
+    func_name = _path;
+  };
+
 protected:
   const messaget &msg;
+  // function name for verification that requires this information before GOTO conversion phase.
+  std::string func_name = "";
 };
 #endif

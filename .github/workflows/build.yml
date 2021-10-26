@@ -1,6 +1,6 @@
 name: Build All Solvers
 
-on: [push, pull_request]
+on: [push]
 
 jobs:
 
@@ -29,4 +29,3 @@ jobs:
       with:
         name: release-linux
         path: ./release
-   

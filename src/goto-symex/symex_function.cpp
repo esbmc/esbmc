@@ -405,7 +405,9 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
       return true;
 
     const code_type2t &ct = to_code_type(sym->type);
-    if(ct.arguments.size() != call.operands.size())
+
+    // Passing a list of arguments for a (void) function is legal
+    if(ct.arguments.size() && ct.arguments.size() != call.operands.size())
       return true;
 
     // At this point we could (should) do more: for example ensuring that the
