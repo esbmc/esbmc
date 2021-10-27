@@ -544,6 +544,11 @@ void goto_symext::run_intrinsic(
     // Already modelled in builtin_libs
     return;
   }
+  else if(has_prefix(symname, "c:@F@__ESBMC_atexit"))
+  {
+    // Already modelled in builtin_libs
+    return;
+  }
   else
   {
     std::ostringstream oss;

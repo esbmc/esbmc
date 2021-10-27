@@ -259,8 +259,13 @@ bool clang_main(contextt &context, const messaget &message_handler)
   thread_end_call.location() = symbol.location;
   thread_end_call.function() = symbol_exprt("c:@F@pthread_end_main_hook");
 
+  code_function_callt atexit_call;
+  atexit_call.location() = symbol.location;
+  atexit_call.function() = symbol_exprt("c:@F@__ESBMC_atexit");
+
   init_code.move_to_operands(thread_start_call);
   init_code.move_to_operands(call);
+  init_code.move_to_operands(atexit_call);
   init_code.move_to_operands(thread_end_call);
 
   // add "main"
