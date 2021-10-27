@@ -8,15 +8,54 @@
 #undef atol
 #undef getenv
 
+unsigned short atexit_index = 0;
+void (*atexit_func[32])();
+_Bool atexit_enabled = 1;
+
+void __ESBMC_atexit()
+{
+__ESBMC_HIDE:;
+  if(!atexit_enabled)
+    return;
+
+  for(; atexit_index > 0; --atexit_index)
+    atexit_func[atexit_index - 1]();
+  __ESBMC_assume(0);
+}
+
+int atexit(void (*func)(void))
+{
+__ESBMC_HIDE:;
+  // Max of 32 functions can be registered
+  if(atexit_index == 32)
+    return 1;
+
+  atexit_func[atexit_index] = func;
+  ++atexit_index;
+
+  // Hack so we can pull the __ESBMC_atexit symbol
+  void *hax = &__ESBMC_atexit;
+  (void)hax;
+  return 0;
+}
+
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void exit(int status)
 {
+  __ESBMC_atexit();
   __ESBMC_assume(0);
 }
 
 void abort(void)
 {
+  __ESBMC_atexit();
+  __ESBMC_assume(0);
+}
+
+void _Exit(int exit_code)
+{
+  atexit_enabled = 0;
   __ESBMC_assume(0);
 }
 #pragma clang diagnostic pop
