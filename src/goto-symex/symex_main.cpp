@@ -126,6 +126,12 @@ void goto_symext::assume(const expr2tc &the_assumption)
   if(is_true(assumption))
     return;
 
+  // FIXME: We need to take in consideration if this is actually an assume(0) to
+  // call finish formula (maybe we can pass the assumption and add to the guard of
+  // the assertion?). It is not a big problem right now, because it only checks for
+  // memory leaks
+  finish_formula();
+
   cur_state->guard.guard_expr(assumption);
 
   // Irritatingly, assumption destroys its expr argument
