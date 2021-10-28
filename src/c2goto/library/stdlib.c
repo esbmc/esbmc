@@ -32,10 +32,6 @@ __ESBMC_HIDE:;
 
   atexit_func[atexit_index] = func;
   ++atexit_index;
-
-  // Hack so we can pull the __ESBMC_atexit symbol
-  void *hax = &__ESBMC_atexit;
-  (void)hax;
   return 0;
 }
 
