@@ -1,6 +1,22 @@
 #include <util/filesystem.h>
 #include <boost/filesystem.hpp>
 
+using namespace file_operations;
+
+tmp_dir::tmp_dir(std::string path, bool keep)
+  : _path(std::move(path)), _keep(keep)
+{
+  assert(boost::filesystem::is_directory(_path));
+}
+
+tmp_dir::~tmp_dir()
+{
+  if(_keep)
+    return;
+  [[maybe_unused]] uintmax_t removed = boost::filesystem::remove_all({_path});
+  assert(removed >= 1 && "expected to remove temp dir");
+}
+
 const std::string
 file_operations::get_unique_tmp_path(const std::string &format)
 {
