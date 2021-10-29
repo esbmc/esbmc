@@ -1,12 +1,12 @@
 #include <memory>
-#include <ac_config.h>
+//#include <ac_config.h>
 #include <boost/functional/hash.hpp>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
 #include <util/ieee_float.h>
-#include <util/irep2_type.h>
-#include <util/irep2_expr.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_type.h>
+#include <irep2/irep2_expr.h>
+#include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
 #include <util/message/format.h>

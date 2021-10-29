@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <sstream>
 #include <util/expr_util.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 
 goto_symex_statet::goto_symex_statet(

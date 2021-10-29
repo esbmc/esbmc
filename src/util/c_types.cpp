@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/std_types.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 
 typet build_float_type(unsigned width)
 {

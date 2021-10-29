@@ -3,7 +3,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <fstream>
 #include <langapi/languages.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <boost/version.hpp>

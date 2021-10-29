@@ -4,7 +4,7 @@
 #include <util/c_types.h>
 #include <util/fixedbv.h>
 #include <util/ieee_float.h>
-#include <util/irep2_type.h>
+#include <irep2/irep2_type.h>
 
 // So - make some type definitions for the different types we're going to be
 // working with. This is to avoid the repeated use of template names in later

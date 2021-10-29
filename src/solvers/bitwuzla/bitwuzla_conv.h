@@ -3,7 +3,7 @@
 
 #include <cstdio>
 #include <solvers/smt/smt_conv.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/namespace.h>
 
 extern "C"

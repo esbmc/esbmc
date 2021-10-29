@@ -1,9 +1,10 @@
 add_executable(c2goto c2goto.cpp cprover_blank_library.cpp)
 target_include_directories(c2goto
     PRIVATE ${Boost_INCLUDE_DIRS}
-)
+    )
+  
 target_link_libraries(c2goto 
-  clangcfrontend gotoprograms langapi util_esbmc 
+  clangcfrontend gotoprograms langapi util_esbmc irep2
   default_message ${Boost_LIBRARIES})
 add_subdirectory (headers)
 

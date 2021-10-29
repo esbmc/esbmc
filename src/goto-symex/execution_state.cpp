@@ -17,7 +17,7 @@
 #include <util/config.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>

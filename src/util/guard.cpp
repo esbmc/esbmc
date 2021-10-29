@@ -8,7 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <algorithm>
 #include <util/guard.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/std_expr.h>
 
 expr2tc guardt::as_expr() const

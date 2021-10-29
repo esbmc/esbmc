@@ -7,7 +7,7 @@
 #ifndef _WIN32
 #include <unistd.h>
 #endif
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 
 /** Identifiers for SMT functions.
  *  Each SMT function gets a unique identifier, representing its interpretation

@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_IEEE_FLOAT_H
 
 #include <util/format_spec.h>
-#include <util/irep2_type.h>
+#include <irep2/irep2_type.h>
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>

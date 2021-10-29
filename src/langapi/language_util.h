@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_LANGUAGE_UTIL_H
 #define CPROVER_LANGUAGE_UTIL_H
 
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/language.h>
 #include <util/migrate.h>
 #include <util/namespace.h>

@@ -14,6 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 #include <unordered_map>
 #include <vector>
+#include <cstddef>
 
 template <typename T>
 class numbering

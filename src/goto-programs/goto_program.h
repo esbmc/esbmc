@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cassert>
 #include <ostream>
 #include <set>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/location.h>
 #include <util/namespace.h>
 #include <util/std_code.h>

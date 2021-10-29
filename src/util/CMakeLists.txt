@@ -9,7 +9,11 @@ target_include_directories(filesystem
     )
 target_link_libraries(filesystem PUBLIC ${Boost_LIBRARIES})
 
-add_library(util_esbmc irep2.cpp xml_irep.cpp xml.cpp
+add_library(crypto_hash crypto_hash.cpp)
+target_include_directories(crypto_hash PUBLIC ${Boost_INCLUDE_DIRS})
+target_link_libraries(crypto_hash PUBLIC ${Boost_LIBRARIES})
+  
+add_library(util_esbmc xml_irep.cpp xml.cpp
         arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp
         expr_util.cpp i2string.cpp location.cpp
         language_file.cpp mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp
@@ -21,7 +25,7 @@ add_library(util_esbmc irep2.cpp xml_irep.cpp xml.cpp
         std_types.cpp std_code.cpp format_constant.cpp
         irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp
         signal_catcher.cpp migrate.cpp show_symbol_table.cpp
-        crypto_hash.cpp type_byte_size.cpp
+        type_byte_size.cpp
         string_constant.cpp c_types.cpp ieee_float.cpp c_qualifiers.cpp
         c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp
         )
@@ -32,7 +36,7 @@ target_include_directories(util_esbmc
         PRIVATE ${Boost_INCLUDE_DIRS}
         )
 
-target_link_libraries(util_esbmc default_message fmt::fmt ${Boost_LIBRARIES})
+target_link_libraries(util_esbmc irep2 default_message fmt::fmt ${Boost_LIBRARIES})
 
 add_subdirectory(message)
 target_link_libraries(algorithms gotoprograms)

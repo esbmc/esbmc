@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <pointer-analysis/value_sets.h>
 #include <set>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/mp_arith.h>
 #include <util/namespace.h>
 #include <util/numbering.h>

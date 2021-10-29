@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/arith_tools.h>
 #include <util/c_sizeof.h>
 #include <util/c_types.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/simplify_expr.h>
 #include <util/type_byte_size.h>

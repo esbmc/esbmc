@@ -1,6 +1,6 @@
 #include <boost/property_tree/xml_parser.hpp>
 #include <util/namespace.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <langapi/language_util.h>
 #include <goto_trace.h>
 #include <string>

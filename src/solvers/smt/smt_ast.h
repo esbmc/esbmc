@@ -3,7 +3,7 @@
 
 #include <solvers/smt/smt_sort.h>
 #include <util/message/default_message.h>
-#include <util/irep2_expr.h>
+#include <irep2/irep2_expr.h>
 
 class smt_convt;
 
