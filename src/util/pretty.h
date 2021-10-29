@@ -11,8 +11,8 @@ Author: Lucas Cordeiro, lucas.cordeiro@manchester.ac.uk
 
 #include <string>
 
-#include <util/irep2.h>
-#include <util/irep2_expr.h>
+#include <irep2/irep2.h>
+#include <irep2/irep2_expr.h>
 
 inline std::string get_pretty_name(const std::string &name)
 {
@@ -20,3 +20,4 @@ inline std::string get_pretty_name(const std::string &name)
 }
 
 #endif // CPROVER_UTIL_PRETTY_H
+

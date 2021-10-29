@@ -11,7 +11,7 @@ Date: April 2020
 #include <cassert>
 #include <goto-symex/goto_symex.h>
 #include <util/expr_util.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 
 lessthanequal2tc goto_symex_statet::framet::process_stack_size(
   const expr2tc &expr,

@@ -3,7 +3,7 @@
 
 #include <util/c_types.h>
 #include <util/message/format.h>
-#include <util/irep2_expr.h>
+#include <irep2/irep2_expr.h>
 #include <util/migrate.h>
 
 /** Test whether type is an integer. */

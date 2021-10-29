@@ -1,7 +1,7 @@
 #ifndef IREP2_TYPE_H_
 #define IREP2_TYPE_H_
 
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/type.h>
 
 // Start with forward class definitions

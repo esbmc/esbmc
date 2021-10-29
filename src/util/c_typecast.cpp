@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/simplify_expr_class.h>
 #include <util/std_expr.h>
 #include <util/string2array.h>

@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_POINTER_OFFSET_SIZE_H
 
 #include <util/expr.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/mp_arith.h>
 #include <util/namespace.h>
 #include <util/std_types.h>

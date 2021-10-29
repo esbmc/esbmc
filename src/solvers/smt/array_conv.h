@@ -18,7 +18,7 @@
 
 #include <set>
 #include <solvers/smt/smt_conv.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/message/default_message.h>
 
 static inline bool is_unbounded_array(const smt_sort *s)

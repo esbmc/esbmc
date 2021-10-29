@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/c_types.h>
 #include <util/cprover_prefix.h>
 #include <util/i2string.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/prefix.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>

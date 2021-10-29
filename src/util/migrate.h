@@ -5,7 +5,7 @@
 // string-based internal representation to the newer typed representation.
 // There's a full mapping in both directions.
 
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
 

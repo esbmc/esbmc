@@ -4,8 +4,8 @@
 #include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <util/irep2.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/type_byte_size.h>
 #include <util/message/default_message.h>
 

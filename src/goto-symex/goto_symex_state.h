@@ -24,7 +24,7 @@
 #include <util/crypto_hash.h>
 #include <util/guard.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <vector>
 
 class execution_statet; // foward dec

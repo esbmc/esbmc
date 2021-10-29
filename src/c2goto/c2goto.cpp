@@ -6,7 +6,7 @@
 #include <langapi/mode.h>
 #include <util/cmdline.h>
 #include <util/config.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/parseoptions.h>
 #include <util/message/default_message.h>
 

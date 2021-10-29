@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <pointer-analysis/dereference.h>
 #include <stack>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/options.h>
 #include <util/std_types.h>
 

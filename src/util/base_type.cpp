@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/base_type.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/std_types.h>
 #include <util/union_find.h>
 

@@ -6,7 +6,7 @@
 #endif
 
 // expr2t Specialization
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 template <>
 struct fmt::formatter<expr2t>
 {

@@ -17,7 +17,7 @@
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/pretty.h>

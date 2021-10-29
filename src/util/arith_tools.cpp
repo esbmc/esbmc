@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cassert>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 
 bool to_integer(const exprt &expr, BigInt &int_value)
 {

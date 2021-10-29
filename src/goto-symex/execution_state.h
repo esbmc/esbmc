@@ -20,7 +20,7 @@
 #include <list>
 #include <map>
 #include <set>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/message/message.h>
 #include <util/std_expr.h>
 
