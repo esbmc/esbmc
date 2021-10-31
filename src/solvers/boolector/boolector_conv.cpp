@@ -790,24 +790,24 @@ boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 void boolector_convt::dump_smt()
 {
-  FILE *f = msg.get_temp_file();
-  boolector_dump_smt2(btor, f);
-  msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);
+  auto f = msg.get_temp_file();
+  boolector_dump_smt2(btor, f.file());
+  msg.insert_file_contents(VerbosityLevel::Debug, f.file());
 }
 
 void btor_smt_ast::dump() const
 {
   default_message msg;
-  FILE *f = msg.get_temp_file();
-  boolector_dump_smt2_node(boolector_get_btor(a), f, a);
-  msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);
+  auto f = msg.get_temp_file();
+  boolector_dump_smt2_node(boolector_get_btor(a), f.file(), a);
+  msg.insert_file_contents(VerbosityLevel::Debug, f.file());
 }
 
 void boolector_convt::print_model()
 {
-  FILE *f = msg.get_temp_file();
-  boolector_print_model(btor, const_cast<char *>("smt2"), f);
-  msg.insert_and_close_file_contents(VerbosityLevel::Status, f);
+  auto f = msg.get_temp_file();
+  boolector_print_model(btor, const_cast<char *>("smt2"), f.file());
+  msg.insert_file_contents(VerbosityLevel::Status, f.file());
 }
 
 smt_sortt boolector_convt::mk_bool_sort()

@@ -823,24 +823,24 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 void bitwuzla_convt::dump_smt()
 {
-  FILE *f = msg.get_temp_file();
-  bitwuzla_dump_formula(bitw, "smt2", f);
-  msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);
+  auto f = msg.get_temp_file();
+  bitwuzla_dump_formula(bitw, "smt2", f.file());
+  msg.insert_file_contents(VerbosityLevel::Debug, f.file());
 }
 
 void bitw_smt_ast::dump() const
 {
   default_message msg;
-  FILE *f = msg.get_temp_file();
-  bitwuzla_term_dump(a, "smt2", f);
-  msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);
+  auto f = msg.get_temp_file();
+  bitwuzla_term_dump(a, "smt2", f.file());
+  msg.insert_file_contents(VerbosityLevel::Debug, f.file());
 }
 
 void bitwuzla_convt::print_model()
 {
-  FILE *f = msg.get_temp_file();
-  bitwuzla_print_model(bitw, "smt2", f);
-  msg.insert_and_close_file_contents(VerbosityLevel::Status, f);
+  auto f = msg.get_temp_file();
+  bitwuzla_print_model(bitw, "smt2", f.file());
+  msg.insert_file_contents(VerbosityLevel::Status, f.file());
 }
 
 smt_sortt bitwuzla_convt::mk_bool_sort()
