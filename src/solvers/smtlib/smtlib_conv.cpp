@@ -214,7 +214,7 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     close(inpipe[1]);
 
     // Voila
-    execlp(cmd.c_str(), cmd.c_str(), NULL);
+    execlp("sh", "sh", "-c", cmd.c_str(), NULL);
     log_error("Exec of smtlib solver failed");
     abort();
   }
