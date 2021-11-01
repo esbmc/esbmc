@@ -12,6 +12,10 @@ add_subdirectory (ansi-c)
 add_subdirectory (cpp)
 endif()
 
+if(ENABLE_SOLIDITY_FRONTEND)
+add_subdirectory (solidity-frontend)
+endif()
+
 add_subdirectory (clang-c-frontend)
 add_subdirectory (pointer-analysis)
 add_subdirectory (langapi)

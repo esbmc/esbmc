@@ -13,11 +13,21 @@
 
 #define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
+#include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/type.h>
 #include <util/expr_util.h>
-
+#include <util/message/default_message.h>
 // ******************** TESTS ********************
+
+namespace
+{
+void gen_typecast_to_union(exprt &dest, const typet &type)
+{
+  default_message msg;
+  clang_c_convertert::gen_typecast_to_union(dest, type, msg);
+}
+} // namespace
 
 SCENARIO("ToUnion typecast construction", "[core][clang-c-frontend][typecast]")
 {
@@ -41,13 +51,6 @@ SCENARIO("ToUnion typecast construction", "[core][clang-c-frontend][typecast]")
         CHECK_NOTHROW(gen_typecast_to_union(e, t));
         CHECK(to_union_expr(e).get_component_name() == "var_1");
         CHECK(to_union_expr(e).op0().type() == component1.type());
-      }
-
-      THEN("t shouldn't contain an Uint")
-      {
-        gen_builtin_type(builtin, Builtin_Type::UInt);
-        exprt e = gen_zero(builtin);
-        CHECK_THROWS_AS(gen_typecast_to_union(e, t), std::domain_error);
       }
     }
 
