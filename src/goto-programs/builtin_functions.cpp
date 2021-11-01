@@ -676,10 +676,6 @@ void goto_convertt::do_function_call_symbol(
   {
     do_exit(lhs, function, arguments, dest);
   }
-  else if(base_name == "abort")
-  {
-    do_abort(lhs, function, arguments, dest);
-  }
   else if(base_name == "malloc")
   {
     do_malloc(lhs, function, arguments, dest);
