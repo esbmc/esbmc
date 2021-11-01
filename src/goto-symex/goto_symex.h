@@ -705,6 +705,25 @@ protected:
     guardt &guard,
     const bool hidden);
 
+  /**
+   *  This method is used when we need to assign a value
+   *  to a struct bitfield which is obtained via
+   *  applying a bit-mask and bit-shifting. Such "masking"
+   *  is typically applied to 'index', 'byte_extract' or 'concat'.
+   *  @param lhs Bitfield to assign to
+   *  @param full_lhs The original assignment symbol
+   *  @param rhs Value to assign to lhs
+   *  @param guard Assignment guard.
+   */
+  void symex_assign_bitfield(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guardt &guard,
+    const bool hidden);
+
+
   /** Symbolic implementation of malloc. */
   expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
   /** Implementation of realloc. */
