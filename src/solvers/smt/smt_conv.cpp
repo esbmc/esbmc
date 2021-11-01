@@ -1693,16 +1693,6 @@ unsigned long smt_convt::size_to_bit_width(unsigned long sz)
 
 unsigned long smt_convt::calculate_array_domain_width(const array_type2t &arr)
 {
-  // The proposed here approach has a significant issue with the current memory model: 
-  // when memory is allocated dynamically
-  // for a struct with bitfields, the symex will create an element for
-  // every field of the struct regardless of its size (even if it is smaller than 8 bits).
-  // But we might end up not using enough bits to address each element of said array, 
-  // as the calculation of the index size is based on the size of the struct in bits, and 
-  // not on the number of its elements. So I'm changing it to the largest possible number
-  // for the time being (does not seem to cause any performance issues).
-  return 64;
-
   // Index arrays by the smallest integer required to represent its size.
   // Unless it's either infinite or dynamic in size, in which case use the
   // machine word size.
