@@ -1785,7 +1785,7 @@ expr2tc *dereferencet::extract_bytes_from_array(
   const expr2tc &offset)
 {
   type2tc subtype;
-  assert(num_bits != 0);
+  assert(num_bytes != 0);
 
   assert(
     (is_array_type(array) || is_string_type(array)) &&
