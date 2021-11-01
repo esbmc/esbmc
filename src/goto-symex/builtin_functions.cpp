@@ -947,28 +947,22 @@ void goto_symext::intrinsic_memset(
           {
             // Build a reference to the first elem.
             const array_type2t &arrtype = to_array_type(cur_type.first);
-	    // Fedor: later offset must be converted to bits here
-	    // Converting offset into bits here
-	    expr2tc new_offset = mul2tc(this_offs->type, this_offs, gen_ulong(8));
+            // Converting offset into bits here
+            expr2tc new_offset =
+              mul2tc(this_offs->type, this_offs, gen_ulong(8));
             simplify(new_offset);
 
-       	    //dereference.build_reference_rec(
-            //  value, this_offs, arrtype.subtype, curguard, dereferencet::READ);
-	    //  Fedor: everything should be in bits now
-       	    dereference.build_reference_rec(
+            dereference.build_reference_rec(
               value, new_offset, arrtype.subtype, curguard, dereferencet::READ);
           }
           else
           {
-            // Fedor: later offset must be converted to bits here
-	    // Converting offset into bits here
-	    expr2tc new_offset = mul2tc(this_offs->type, this_offs, gen_ulong(8));
+            // Converting offset into bits here
+            expr2tc new_offset =
+              mul2tc(this_offs->type, this_offs, gen_ulong(8));
             simplify(new_offset);
 
-            //dereference.build_reference_rec(
-            //  value, this_offs, cur_type.first, curguard, dereferencet::READ);
-	    //  Fedor: everything should be in bits now
-       	    dereference.build_reference_rec(
+            dereference.build_reference_rec(
               value, new_offset, cur_type.first, curguard, dereferencet::READ);
           }
 
