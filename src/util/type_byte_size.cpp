@@ -56,7 +56,7 @@ BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval)
 BigInt type_byte_size(const type2tc &type)
 {
   BigInt bits = type_byte_size_bits(type);
-  
+
   return (bits + 7) / 8;
 }
 
@@ -256,7 +256,7 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr)
 expr2tc compute_pointer_offset(const expr2tc &expr)
 {
   expr2tc pointer_offset_bits = compute_pointer_offset_bits(expr);
-  
+
   expr2tc result =
     div2tc(pointer_offset_bits->type, pointer_offset_bits, gen_ulong(8));
   return result;

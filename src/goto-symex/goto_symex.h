@@ -723,7 +723,6 @@ protected:
     guardt &guard,
     const bool hidden);
 
-
   /** Symbolic implementation of malloc. */
   expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
   /** Implementation of realloc. */

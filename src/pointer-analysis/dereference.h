@@ -414,9 +414,8 @@ private:
     unsigned long minwidth,
     const expr2tc &&offset,
     const guardt &guard);
-  unsigned int compute_num_bytes_to_extract(
-    const expr2tc offset,
-    unsigned long num_bits);
+  unsigned int
+  compute_num_bytes_to_extract(const expr2tc offset, unsigned long num_bits);
   void extract_bits_from_byte_array(
     expr2tc &value,
     expr2tc offset,
