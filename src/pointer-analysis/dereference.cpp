@@ -1868,14 +1868,7 @@ void dereferencet::stitch_together_from_byte_array(
     for(unsigned int i = 1; i < num_bytes; i++)
     {
       type2tc res_type;
-      if(config.options.get_bool_option("use-bit-precision"))
-      {
-        res_type = get_uint_type(accuml->type->get_width() + 1);
-      }
-      else
-      {
-        res_type = get_uint_type(accuml->type->get_width() + 8);
-      }
+      res_type = get_uint_type(accuml->type->get_width() + 8);
       accuml = concat2tc(res_type, accuml, bytes[i]);
     }
   }
@@ -1886,14 +1879,7 @@ void dereferencet::stitch_together_from_byte_array(
     for(int i = num_bytes - 2; i >= 0; i--)
     {
       type2tc res_type;
-      if(config.options.get_bool_option("use-bit-precision"))
-      {
-        res_type = get_uint_type(accuml->type->get_width() + 1);
-      }
-      else
-      {
-        res_type = get_uint_type(accuml->type->get_width() + 8);
-      }
+      res_type = get_uint_type(accuml->type->get_width() + 8);
       accuml = concat2tc(res_type, accuml, bytes[i]);
     }
   }
