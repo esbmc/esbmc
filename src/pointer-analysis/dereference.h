@@ -379,12 +379,6 @@ private:
     const expr2tc &object,
     unsigned int bytes,
     const expr2tc &offset);
-  expr2tc dereference_struct_bitfield(
-    expr2tc &expr,
-    type2tc to_type,
-    guardt &guard,
-    modet mode,
-    expr2tc offset_to_scalar);
   void stitch_together_from_byte_array(
     expr2tc &value,
     const type2tc &type,
