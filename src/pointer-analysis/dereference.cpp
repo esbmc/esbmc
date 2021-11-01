@@ -29,6 +29,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
+#include <iostream>
+
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
@@ -387,7 +389,7 @@ expr2tc dereferencet::dereference_struct_bitfield(
             value,
             type_byte_size(target_type).to_uint64(),
             gen_ulong(array_offset));
-          stitch_together_from_byte_array(value, to_type, bytes);
+          //stitch_together_from_byte_array(value, to_type, bytes);
           delete[] bytes;
           return value;
         }
@@ -427,6 +429,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
     const type2tc &to_type = scalar_step_list.back()->type;
 
+    /*
     // Checking if it's a struct and it has bitfields
     bool has_bitfields = false;
     if(is_struct_type(expr))
@@ -453,6 +456,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
           expr, to_type, guard, mode, offset_to_scalar);
       }
     }
+    */
         
     expr2tc result =
       dereference(deref.value, to_type, guard, mode, offset_to_scalar);
@@ -1137,10 +1141,21 @@ void dereferencet::construct_from_array(
     // Might read from more than one element, legitimately. Requires stitching.
     // Alignment assertion / guarantee ensures we don't do something silly.
     // This will construct from whatever the subtype is...
+    unsigned int num_bytes = compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
+
+    // Converting offset to bytes for byte extracting
+    expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
+    simplify(offset_bytes);
+
+    // Extracting and stitching bytes together
     expr2tc *bytes =
-      extract_bytes_from_array(value, type_byte_size_bits(type).to_uint64(), offset);
-    stitch_together_from_byte_array(value, type, bytes);
+      extract_bytes_from_array(value, num_bytes, offset_bytes);
+    stitch_together_from_byte_array(value, type, num_bytes, bytes);
     delete[] bytes;
+
+    // Extracting bits from the produced bv
+    extract_bits_from_byte_array(value, offset, type_byte_size_bits(type).to_uint64());
+    value = bitcast2tc(type, value);
   }
 }
 
@@ -1171,18 +1186,28 @@ void dereferencet::construct_from_const_offset(
     {
       // give up, rely on dereference failure
       value = expr2tc();
-      return;
+     return;
     }
 
     // Try to handle unaligned write by writting directly to the base_object
     value = get_base_object(value);
   }
 
-  // Either nonzero offset, or a smaller / bigger read.
+  unsigned int num_bytes = compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
+
+  // Converting offset to bytes before bytes extraction
+  expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
+  simplify(offset_bytes);
+
+  // Extracting and stitching bytes together
   expr2tc *bytes =
-    extract_bytes_from_scalar(value, type_byte_size_bits(type).to_uint64(), offset);
-  stitch_together_from_byte_array(value, type, bytes);
+    extract_bytes_from_scalar(value, num_bytes, offset_bytes);
+  stitch_together_from_byte_array(value, type, num_bytes, bytes);
   delete[] bytes;
+
+  // Extracting bits from the produced bv
+  extract_bits_from_byte_array(value, offset, type_byte_size_bits(type).to_uint64());
+  value = bitcast2tc(type, value);
 }
 
 void dereferencet::construct_from_const_struct_offset(
@@ -1395,11 +1420,20 @@ void dereferencet::construct_from_dyn_struct_offset(
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       
-      expr2tc *bytes = extract_bytes_from_scalar(
-        field, type_byte_size_bits(type).to_uint64(), new_offset);
-      stitch_together_from_byte_array(field, type, bytes);
-      delete[] bytes;
+      unsigned int num_bytes = compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
+      // Converting offset to bytes before bytes extraction
+      expr2tc new_offset_bytes = div2tc(new_offset->type, new_offset, gen_ulong(8));
+      simplify(new_offset_bytes);
 
+      // Extracting and stitching bytes together
+      expr2tc *bytes = extract_bytes_from_scalar(field, num_bytes, new_offset_bytes);
+      stitch_together_from_byte_array(field, type, num_bytes, bytes);
+      delete[] bytes;
+      
+      // Extracting bits from the produced bv
+      extract_bits_from_byte_array(field, offset, type_byte_size_bits(type).to_uint64());
+
+      field = bitcast2tc(type, field);
       extract_list.emplace_back(field_guard, field);
     }
 
@@ -1450,10 +1484,20 @@ void dereferencet::construct_from_dyn_offset(
   if(!is_bv_type(value->type) && !is_fixedbv_type(value->type))
     value = bitcast2tc(get_uint_type(value->type->get_width()), value);
   
+  unsigned int num_bytes = compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
+  // Converting offset to bytes before bytes extraction
+  expr2tc offset_bytes = div2tc(offset->type, offset, gen_ulong(8));
+  simplify(offset_bytes);
+
+  // Extracting and stitching bytes together
   expr2tc *bytes =
-    extract_bytes_from_scalar(value, type_byte_size_bits(type).to_uint64(), offset);
-  stitch_together_from_byte_array(value, type, bytes);
+    extract_bytes_from_scalar(value, num_bytes, offset_bytes);
+  stitch_together_from_byte_array(value, type, num_bytes, bytes);
   delete[] bytes;
+  
+  // Extracting bits from the produced bv
+  extract_bits_from_byte_array(value, offset, type_byte_size_bits(type).to_uint64());
+  value = bitcast2tc(type, value);
 }
 
 void dereferencet::construct_from_multidir_array(
@@ -1837,13 +1881,11 @@ void dereferencet::alignment_failure(
 
 expr2tc *dereferencet::extract_bytes_from_array(
   const expr2tc &array,
-  unsigned int bytes,
-  const expr2tc &offset_bits)
+  unsigned int num_bytes,
+  const expr2tc &offset)
 {
   type2tc subtype;
-  assert(bytes != 0);
-
-  expr2tc *exprs = new expr2tc[bytes];
+  assert(num_bits != 0);
 
   assert(
     (is_array_type(array) || is_string_type(array)) &&
@@ -1863,19 +1905,14 @@ expr2tc *dereferencet::extract_bytes_from_array(
     subtype = get_uint8_type(); //XXX signedness of chars
   }
   
-  // Converting "offset_bits" and "bytes" to bytes as we are dealing with multiples
-  // of a byte below 
-  expr2tc offset = div2tc(offset_bits->type, 
-    offset_bits, gen_ulong(type_byte_size_bits(subtype).to_uint64()));
-  simplify(offset);
-  bytes = (bytes + 7) / 8;
-
   // XXX -- this doesn't allow for scenarios where we read, say, a uint32 from
   // an array of uint16s.
+  
+  expr2tc *exprs = new expr2tc[num_bytes];
 
   // Here we are just going through a byte array
   expr2tc accuml_offs = offset;
-  for(unsigned int i = 0; i < bytes; i++)
+  for(unsigned int i = 0; i < num_bytes; i++)
   {
     exprs[i] = index2tc(subtype, array, accuml_offs);
     accuml_offs = add2tc(offset->type, accuml_offs, gen_ulong(1));
@@ -1887,13 +1924,8 @@ expr2tc *dereferencet::extract_bytes_from_array(
 expr2tc *dereferencet::extract_bytes_from_scalar(
   const expr2tc &object,
   unsigned int num_bytes,
-  const expr2tc &offset_bits)
+  const expr2tc &offset)
 {
-  // Converting "num_bytes" and "offset" into bytes as we use byte extracts here
-  num_bytes = (num_bytes + 7) / 8;
-  expr2tc offset = div2tc(offset_bits->type, offset_bits, gen_ulong(8));
-  simplify(offset);
-  
   assert(num_bytes != 0);
 
   const type2tc &bytetype = get_uint8_type();
@@ -1907,10 +1939,21 @@ expr2tc *dereferencet::extract_bytes_from_scalar(
     return bytes;
   }
 
+  // Get the source_object and update the index. This is so that
+  // the extraction provess does not get stuck on the same index.
+  expr2tc new_object = object;
   expr2tc accuml_offs = offset;
+  if(is_index2t(object))
+  {
+    index2tc new_index = to_index2t(object);
+    new_object = new_index->source_value;
+    accuml_offs = add2tc(accuml_offs->type, accuml_offs, new_index->index);
+    simplify(accuml_offs);
+  }
+
   for(unsigned int i = 0; i < num_bytes; i++)
   {
-    bytes[i] = byte_extract2tc(bytetype, object, accuml_offs, is_big_endian);
+    bytes[i] = byte_extract2tc(bytetype, new_object, accuml_offs, is_big_endian);
     accuml_offs = add2tc(offset->type, accuml_offs, gen_ulong(1));
   }
 
@@ -1920,9 +1963,9 @@ expr2tc *dereferencet::extract_bytes_from_scalar(
 void dereferencet::stitch_together_from_byte_array(
   expr2tc &value,
   const type2tc &type,
+  unsigned int num_bytes,
   const expr2tc *bytes)
 {
-  unsigned int num_bytes = type_byte_size(type).to_uint64();
   assert(num_bytes != 0);
 
   // We are composing a larger data type out of bytes -- we must consider
@@ -1963,13 +2006,6 @@ void dereferencet::stitch_together_from_byte_array(
       }
       accuml = concat2tc(res_type, accuml, bytes[i]);
     }
-  }
-
-  // That's going to come out as a bitvector; cast by bit-representation
-  if(type != accuml->type)
-  {
-    //assert(type->get_width() == accuml->type->get_width());
-    accuml = bitcast2tc(type, accuml);
   }
 
   value = accuml;
@@ -2271,4 +2307,62 @@ void dereferencet::check_alignment(
   tmp_guard2.add(neq);
   alignment_failure(
     "Incorrect alignment when accessing data object", tmp_guard2);
+}
+
+unsigned int dereferencet::compute_num_bytes_to_extract(
+  const expr2tc offset,
+  unsigned long num_bits)
+{
+  // We need to calculate the correct number of bytes to extract.
+  // This is so that we do not miss any bits in case there are
+  // bitfields lying on the border of two neighbouring bytes
+  // (e.g., |ooooooox|xooooooo|).
+  //
+  // By default we assume that the "offset" is aligned to 8 bits.
+  unsigned int num_bytes = (num_bits + 7) / 8;
+
+  // If "offset" is known (i.e., constant), we can calculate
+  // the correct number of bytes to extract.
+  if(is_constant_int2t(offset))
+  {
+    unsigned long offset_int = to_constant_int2t(offset).value.to_uint64();
+    unsigned int bits_in_first_byte = offset_int % 8;
+    num_bytes = (bits_in_first_byte + num_bits + 7) / 8 - (bits_in_first_byte / 8);
+  }
+  return num_bytes;
+}
+
+void dereferencet::extract_bits_from_byte_array(
+  expr2tc &value,
+  expr2tc offset,
+  unsigned long num_bits)
+{
+  // Extract the target bits using bitwise AND
+  // and bit-shifting as follows:
+  //  
+  //   value := (value & mask) >> shft;
+  //
+  // where 
+  //   mask - is a bitvector with 1's starting at 'offset' and
+  //          for as long as 'type->width', and 0's everywhere else
+  //   shft = offset - (offset / 8) * 8 (i.e., offset in bits minus 
+  //          the number of full bytes converted to bits)
+
+  // If everything is aligned to 8 bits, we can just return the initial value
+  if(num_bits % 8 == 0 && to_constant_int2t(offset).value.to_uint64() % 8 == 0)
+    return;
+  
+  expr2tc shft_expr = modulus2tc(offset->type, offset, gen_ulong(8));
+  shft_expr = bitcast2tc(value->type, shft_expr);
+  simplify(shft_expr);
+
+  expr2tc mask_expr = gen_ulong(1);
+  mask_expr = shl2tc(mask_expr->type, mask_expr, gen_ulong(num_bits));
+  mask_expr = sub2tc(mask_expr->type, mask_expr, gen_ulong(1));
+  mask_expr = shl2tc(mask_expr->type, mask_expr, shft_expr);
+  mask_expr = bitcast2tc(value->type, mask_expr);
+  simplify(mask_expr);
+    
+  value = bitand2tc(value->type, value, mask_expr);
+  value = lshr2tc(value->type, value, shft_expr);
 }
