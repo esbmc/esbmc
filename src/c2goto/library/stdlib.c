@@ -10,16 +10,12 @@
 
 unsigned short atexit_index = 0;
 void (*atexit_func[32])();
-_Bool atexit_enabled = 1;
 
 void __ESBMC_atexit()
 {
 __ESBMC_HIDE:;
-  if(!atexit_enabled)
-    return;
-
-  for(; atexit_index > 0; --atexit_index)
-    atexit_func[atexit_index - 1]();
+  for(unsigned short i = atexit_index; i > 0; --i)
+    atexit_func[i - 1]();
   __ESBMC_assume(0);
 }
 
@@ -40,18 +36,15 @@ __ESBMC_HIDE:;
 void exit(int status)
 {
   __ESBMC_atexit();
-  __ESBMC_assume(0);
 }
 
 void abort(void)
 {
   __ESBMC_atexit();
-  __ESBMC_assume(0);
 }
 
 void _Exit(int exit_code)
 {
-  atexit_enabled = 0;
   __ESBMC_assume(0);
 }
 #pragma clang diagnostic pop
