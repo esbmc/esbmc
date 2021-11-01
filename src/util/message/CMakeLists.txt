@@ -12,6 +12,6 @@ target_include_directories(message
         PRIVATE ${Boost_INCLUDE_DIRS}
         )
 
-target_link_libraries(message ${Boost_LIBRARIES})
+target_link_libraries(message filesystem ${Boost_LIBRARIES})
 target_link_libraries(fmt_message_handler fmt::fmt message_handler)
 target_link_libraries(default_message message fmt_message_handler)

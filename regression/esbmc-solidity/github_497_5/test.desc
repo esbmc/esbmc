@@ -1,0 +1,4 @@
+CORE
+MyContract_array.solast
+--function func_array --falsification
+^VERIFICATION FAILED$

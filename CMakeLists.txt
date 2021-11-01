@@ -5,7 +5,7 @@ cmake_minimum_required (VERSION 3.7)
 project (ESBMC)
 
 set (ESBMC_VERSION_MAJOR 6)
-set (ESBMC_VERSION_MINOR 7)
+set (ESBMC_VERSION_MINOR 8)
 set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
@@ -89,6 +89,10 @@ include(WError)
 
 if(ENABLE_OLD_FRONTEND)
   add_definitions(-DENABLE_OLD_FRONTEND)
+endif()
+
+if(ENABLE_SOLIDITY_FRONTEND)
+  add_definitions(-DENABLE_SOLIDITY_FRONTEND)
 endif()
 
 add_subdirectory(src)

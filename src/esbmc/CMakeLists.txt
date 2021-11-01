@@ -1,7 +1,9 @@
 if(ENABLE_OLD_FRONTEND)
   set(OLD_FRONTEND_TARGETS ansicfrontend cppfrontend)
-else()
-  set(OLD_FRONTEND_TARGETS "")
+endif()
+
+if(ENABLE_SOLIDITY_FRONTEND)
+  set(SOLIDITY_FRONTEND_TARGETS solidityfrontend)
 endif()
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
@@ -26,8 +28,8 @@ target_include_directories(esbmc
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} clangcfrontend 
-  clangcppfrontend symex pointeranalysis langapi util_esbmc bigint 
+target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} clangcfrontend
+  clangcppfrontend symex pointeranalysis langapi util_esbmc bigint
   solvers clibs default_message gotoalgorithms ${Boost_LIBRARIES})
 
 install(TARGETS esbmc DESTINATION bin)
