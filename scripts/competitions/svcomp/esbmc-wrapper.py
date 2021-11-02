@@ -211,8 +211,7 @@ import re
 def check_if_benchmark_contains_pthread(benchmark):
   with open(benchmark, "r") as f:
     for line in f:
-      if re.search("pthread_create", line.strip()):
-        print("Found pthread benchmark!")
+      if re.search("pthread_create", line.strip()):        
         return True
   return False
 
@@ -228,10 +227,11 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   else:
     command_line += "--64 "
 
-  concurrency = check_if_benchmark_contains_pthread(benchmark)
+  concurrency = (prop == Property.reach) and check_if_benchmark_contains_pthread(benchmark)
 
   if concurrency:
     command_line += "--unwind 8 --context-bound 3 --no-por "
+    print("Found pthread benchmark!") # For debugging
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
