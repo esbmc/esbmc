@@ -130,7 +130,8 @@ void goto_symext::assume(const expr2tc &the_assumption)
   // call finish formula (maybe we can pass the assumption and add to the guard of
   // the assertion?). It is not a big problem right now, because it only checks for
   // memory leaks
-  finish_formula();
+  if(options.get_bool_option("memory-cleanup-check"))
+    finish_formula();
 
   cur_state->guard.guard_expr(assumption);
 
