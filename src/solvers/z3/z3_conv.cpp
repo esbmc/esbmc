@@ -1256,7 +1256,7 @@ void z3_convt::dump_smt()
   Z3_ast_vector __z3_assertions = Z3_solver_get_assertions(z3_ctx, solver);
   default_message msg;
   std::ostringstream oss;
-  oss << "Assertions Size : " << Z3_ast_vector_size(z3_ctx, __z3_assertions);
+  oss << "Assertions Size : " << solver;
   msg.debug(oss.str());
 }
 
