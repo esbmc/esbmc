@@ -13,12 +13,14 @@ void (*atexit_func[32])();
 
 void __atexit_handler()
 {
+__ESBMC_HIDE:;
   for(short i = atexit_index - 1; i >= 0; --i)
     atexit_func[i]();
 }
 
 int atexit(void (*func)(void))
 {
+__ESBMC_HIDE:;
   // Max of 32 functions can be registered
   if(atexit_index == 32)
     return 1;
