@@ -24,3 +24,5 @@ add_subdirectory (solvers)
 add_subdirectory (clang-cpp-frontend)
 add_subdirectory (goto-symex)
 add_subdirectory (esbmc)
+
+set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS}" PARENT_SCOPE)
