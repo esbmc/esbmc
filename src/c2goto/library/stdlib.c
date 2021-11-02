@@ -38,7 +38,6 @@ void exit(int status)
 
 void abort(void)
 {
-  __atexit_handler();
   __ESBMC_assume(0);
 }
 
