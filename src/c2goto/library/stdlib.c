@@ -8,20 +8,17 @@
 #undef atol
 #undef getenv
 
-unsigned short atexit_index = 0;
+short atexit_index = 0;
 void (*atexit_func[32])();
 
-void __ESBMC_atexit()
+void __atexit_handler()
 {
-__ESBMC_HIDE:;
-  for(unsigned short i = atexit_index; i > 0; --i)
-    atexit_func[i - 1]();
-  __ESBMC_assume(0);
+  for(short i = atexit_index - 1; i >= 0; --i)
+    atexit_func[i]();
 }
 
 int atexit(void (*func)(void))
 {
-__ESBMC_HIDE:;
   // Max of 32 functions can be registered
   if(atexit_index == 32)
     return 1;
@@ -35,12 +32,14 @@ __ESBMC_HIDE:;
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void exit(int status)
 {
-  __ESBMC_atexit();
+  __atexit_handler();
+  __ESBMC_assume(0);
 }
 
 void abort(void)
 {
-  __ESBMC_atexit();
+  __atexit_handler();
+  __ESBMC_assume(0);
 }
 
 void _Exit(int exit_code)
