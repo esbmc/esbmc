@@ -220,20 +220,6 @@ void execution_statet::symex_step(reachability_treet &art)
   last_insn = &instruction;
 
   merge_gotos();
-  if(break_insn != 0 && break_insn == instruction.location_number)
-  {
-#ifndef _WIN32
-#ifndef __aarch64__
-    __asm__("int $3");
-#else
-    msg.error("Can't trap on ARM, sorry");
-    abort();
-#endif
-#else
-    msg.error("Can't trap on windows, sorry");
-    abort();
-#endif
-  }
 
   // Don't convert if it's a inductive instruction and we are running the base
   // case or forward condition
@@ -258,6 +244,21 @@ void execution_statet::symex_step(reachability_treet &art)
     std::ostringstream oss;
     state.source.pc->output_instruction(ns, "", oss, msg, false);
     msg.result(oss.str());
+  }
+
+  if(break_insn != 0 && break_insn == instruction.location_number)
+  {
+#ifndef _WIN32
+#ifndef __aarch64__
+    __asm__("int $3");
+#else
+    msg.error("Can't trap on ARM, sorry");
+    abort();
+#endif
+#else
+    msg.error("Can't trap on windows, sorry");
+    abort();
+#endif
   }
 
   switch(instruction.type)

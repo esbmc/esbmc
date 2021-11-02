@@ -249,7 +249,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
     command_line += "--memory-leak-check --no-assertions "
     strat = "incr"
   elif prop == Property.memcleanup:
-    command_line += "--memory-leak-check --no-assertions "
+    command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --memory-cleanup-check --no-assertions "
     strat = "incr"
   elif prop == Property.reach:
     command_line += "--no-pointer-check --no-bounds-check --interval-analysis "
@@ -328,6 +328,8 @@ elif "CHECK( init(main()), LTL(G ! call(reach_error())) )" in property_file_cont
   category_property = Property.reach
 elif "CHECK( init(main()), LTL(F end) )" in property_file_content:
   category_property = Property.termination
+elif "CHECK( init(main()), LTL(G valid-memcleanup) )" in property_file_content:
+  category_property = Property.memcleanup
 else:
   print("Unsupported Property")
   exit(1)
