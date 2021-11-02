@@ -207,6 +207,15 @@ esbmc_path = "./esbmc "
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --state-hashing "
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 
+import re
+def check_if_benchmark_contains_pthread(benchmark):
+  with open(benchmark, "r") as f:
+    for line in f:
+      if re.search("pthread_create", line.strip()):
+        print("Found pthread benchmark!")
+        return True
+  return False
+
 def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   command_line = esbmc_path + dargs
 
@@ -219,9 +228,11 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   else:
     command_line += "--64 "
 
+  concurrency = check_if_benchmark_contains_pthread(benchmark)
+
   if concurrency:
-    command_line += "--unwind 8 --no-por "
-    command_line += "--no-slice " # TODO: Witness validation is only working without slicing
+    command_line += "--unwind 8 --context-bound 3 --no-por "
+    #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
   command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
@@ -247,7 +258,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
     exit(1)
 
   # Add strategy
-  if strat == "fixed":
+  if concurrency: # Concurrency only works with incremental
+    command_line += "--incremental-bmc "
+  elif strat == "fixed":
     command_line += "--k-induction --max-inductive-step 3 "
   elif strat == "kinduction":
     command_line += "--k-induction --max-inductive-step 3 "
