@@ -34,7 +34,8 @@ static inline void get_symbols(
 
 void instrument_intervals(
   const ait<interval_domaint> &interval_analysis,
-  goto_functiont &goto_function)
+  goto_functiont &goto_function,
+  bool is_kind)
 {
   std::unordered_set<expr2tc, irep2_hash> symbols;
 
@@ -84,7 +85,7 @@ void instrument_intervals(
     {
       goto_programt::targett t = goto_function.body.insert(i_it);
       t->make_assumption(conjunction(assertion));
-      t->inductive_step_instruction = true;
+      t->inductive_step_instruction = is_kind;
 #if 0
       // TODO: This is crashing cases like
       // email_spec11_productSimulator_false-unreach-call_true-termination.cil.c
@@ -96,14 +97,17 @@ void instrument_intervals(
   }
 }
 
-void interval_analysis(goto_functionst &goto_functions, const namespacet &ns)
+void interval_analysis(
+  goto_functionst &goto_functions,
+  const namespacet &ns,
+  bool is_kind)
 {
   ait<interval_domaint> interval_analysis;
 
   interval_analysis(goto_functions, ns);
 
   Forall_goto_functions(f_it, goto_functions)
-    instrument_intervals(interval_analysis, f_it->second);
+    instrument_intervals(interval_analysis, f_it->second, is_kind);
 
   goto_functions.update();
 }
