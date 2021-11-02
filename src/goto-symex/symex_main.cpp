@@ -569,13 +569,6 @@ void goto_symext::run_intrinsic(
     // Already modelled in builtin_libs
     return;
   }
-  else if(has_prefix(symname, "c:@F@__ESBMC_atexit"))
-  {
-    // Already modelled in builtin_libs
-    expr2tc newcall = func_call.clone();
-    symex_function_call(newcall);
-    return;
-  }
   else
   {
     std::ostringstream oss;
