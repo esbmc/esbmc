@@ -239,6 +239,10 @@ void execution_statet::symex_step(reachability_treet &art)
   // case or forward condition
   if((base_case || forward_condition) && instruction.inductive_step_instruction)
   {
+    // This assertion will prevent us of having weird side-effects (issue #538)
+    assert(
+      k_induction &&
+      "Inductive step instructions should be setted only for k-induction");
     cur_state->source.pc++;
     return;
   }
