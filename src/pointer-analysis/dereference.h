@@ -381,7 +381,6 @@ private:
     const expr2tc &offset);
   void stitch_together_from_byte_array(
     expr2tc &value,
-    const type2tc &type,
     unsigned int num_bytes,
     const expr2tc *bytes);
   void wrap_in_scalar_step_list(

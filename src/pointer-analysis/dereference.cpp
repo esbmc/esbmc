@@ -1040,7 +1040,7 @@ void dereferencet::construct_from_array(
 
     // Extracting and stitching bytes together
     expr2tc *bytes = extract_bytes_from_array(value, num_bytes, offset_bytes);
-    stitch_together_from_byte_array(value, type, num_bytes, bytes);
+    stitch_together_from_byte_array(value, num_bytes, bytes);
     delete[] bytes;
 
     // Extracting bits from the produced bv
@@ -1093,7 +1093,7 @@ void dereferencet::construct_from_const_offset(
 
   // Extracting and stitching bytes together
   expr2tc *bytes = extract_bytes_from_scalar(value, num_bytes, offset_bytes);
-  stitch_together_from_byte_array(value, type, num_bytes, bytes);
+  stitch_together_from_byte_array(value, num_bytes, bytes);
   delete[] bytes;
 
   // Extracting bits from the produced bv
@@ -1324,7 +1324,7 @@ void dereferencet::construct_from_dyn_struct_offset(
       // Extracting and stitching bytes together
       expr2tc *bytes =
         extract_bytes_from_scalar(field, num_bytes, new_offset_bytes);
-      stitch_together_from_byte_array(field, type, num_bytes, bytes);
+      stitch_together_from_byte_array(field, num_bytes, bytes);
       delete[] bytes;
 
       // Extracting bits from the produced bv
@@ -1390,7 +1390,7 @@ void dereferencet::construct_from_dyn_offset(
 
   // Extracting and stitching bytes together
   expr2tc *bytes = extract_bytes_from_scalar(value, num_bytes, offset_bytes);
-  stitch_together_from_byte_array(value, type, num_bytes, bytes);
+  stitch_together_from_byte_array(value, num_bytes, bytes);
   delete[] bytes;
 
   // Extracting bits from the produced bv
@@ -1863,7 +1863,6 @@ expr2tc *dereferencet::extract_bytes_from_scalar(
 
 void dereferencet::stitch_together_from_byte_array(
   expr2tc &value,
-  const type2tc &type,
   unsigned int num_bytes,
   const expr2tc *bytes)
 {
