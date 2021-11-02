@@ -2236,9 +2236,21 @@ void dereferencet::extract_bits_from_byte_array(
   //   shft = offset - (offset / 8) * 8 (i.e., offset in bits minus
   //          the number of full bytes converted to bits)
 
-  // If everything is aligned to 8 bits, we can just return the initial value
-  if(num_bits % 8 == 0 && to_constant_int2t(offset).value.to_uint64() % 8 == 0)
-    return;
+  if(is_constant_int2t(offset))
+  {
+    // If everything is aligned to 8 bits, we can just return the initial value
+    if(
+      num_bits % 8 == 0 && to_constant_int2t(offset).value.to_uint64() % 8 == 0)
+      return;
+  }
+  else
+  {
+    // If the offset is not known (i.e., just some pointer_offset2t)
+    // but the number of bits to be extracted is a multiple of 8,
+    // we are just going to return the value
+    if(num_bits % 8 == 0)
+      return;
+  }
 
   expr2tc shft_expr = modulus2tc(offset->type, offset, gen_ulong(8));
   shft_expr = bitcast2tc(value->type, shft_expr);
