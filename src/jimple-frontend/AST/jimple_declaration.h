@@ -19,7 +19,7 @@ class jimple_declaration : public jimple_method_field
 
 protected:
   jimple_type t;
-  std::vector<std::string> names;
+  std::string name;
 };
 
 #endif //ESBMC_JIMPLE_DECLARATION_H

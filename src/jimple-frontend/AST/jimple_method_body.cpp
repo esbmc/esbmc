@@ -26,84 +26,77 @@ void jimple_full_method_body::from_json(const json &j)
 {
   std::shared_ptr<jimple_label> label;
   for(auto &x : j)
-  {
-    std::shared_ptr<jimple_method_field> to_add;
+    {
+      std::shared_ptr<jimple_method_field> to_add;
     
-    /* NOTE: Since its only one condition I don't think
-     * that a HashMap is needed */
-
-    // Declaration Parsing
-    if(x.contains("declaration"))
-    {
-      jimple_declaration d;
-      x.at("declaration").get_to(d);
-      to_add = std::make_shared<jimple_declaration>(d);
-    }
-    // Statement Parsing
-    else
-    {
       // TODO: Remove this and add a HashMap
-      auto stmt = x.at("statement").at("stmt").get<std::string>();
-      if(stmt == "identity")
-      {
-        jimple_identity s;
-        x.at("statement").at("identity").get_to(s);
-        to_add = std::make_shared<jimple_identity>(s);
-      }
-      else if(stmt == "invoke")
-      {
-        jimple_invoke s;
-        x.at("statement").at("invoke").get_to(s);
-        to_add = std::make_shared<jimple_invoke>(s);
-      }
+      auto stmt = x.at("object").get<std::string>();
+      if(stmt == "Variable")
+        {
+          jimple_declaration d;
+          x.get_to(d);
+          to_add = std::make_shared<jimple_declaration>(d);
+        }
+      else if(stmt == "identity")
+        {
+          jimple_identity s;
+          x.at("statement").at("identity").get_to(s);
+          to_add = std::make_shared<jimple_identity>(s);
+        }
+      else if(stmt == "StaticInvoke")
+        {
+          jimple_invoke s;
+          x.get_to(s);
+          to_add = std::make_shared<jimple_invoke>(s);
+        }
       else if(stmt == "return")
-      {
-        jimple_return s;
-        x.at("statement").at("return").get_to(s);
-        to_add = std::make_shared<jimple_return>(s);
-      }
+        {
+          jimple_return s;
+          x.at("statement").at("return").get_to(s);
+          to_add = std::make_shared<jimple_return>(s);
+        }
       else if(stmt == "label")
-      {
-        jimple_label s;
-        x.at("statement").at("label_id").get_to(s);
-        if(label)
-          members.push_back(std::move(label));
-        label = std::make_shared<jimple_label>(s);
-        continue;
-      }
+        {
+          jimple_label s;
+          x.at("statement").at("label_id").get_to(s);
+          if(label)
+            members.push_back(std::move(label));
+          label = std::make_shared<jimple_label>(s);
+          continue;
+        }
       else if(stmt == "goto")
-      {
-        jimple_goto s;
-        x.at("statement").at("goto").get_to(s);
-        to_add = std::make_shared<jimple_goto>(s);
-      }
-      else if(stmt == "assignment")
-      {
-        jimple_assignment s;
-        x.at("statement").at("assignment").get_to(s);
-        to_add = std::make_shared<jimple_assignment>(s);
-      }
-      else if(stmt == "assertion")
-      {
-        jimple_assertion s;
-        x.at("statement").at("assertion").get_to(s);
-        to_add = std::make_shared<jimple_assertion>(s);
-      }
+        {
+          jimple_goto s;
+          x.at("statement").at("goto").get_to(s);
+          to_add = std::make_shared<jimple_goto>(s);
+        }
+      else if(stmt == "SetVariable")
+        {
+          jimple_assignment s;
+          x.get_to(s);
+          to_add = std::make_shared<jimple_assignment>(s);
+        }
+      else if(stmt == "Assert")
+        {
+          jimple_assertion s;
+          x.get_to(s);
+          to_add = std::make_shared<jimple_assertion>(s);
+        }
       else if(stmt == "if")
-      {
-        jimple_if s;
-        x.at("statement").at("if").get_to(s);
-        to_add = std::make_shared<jimple_if>(s);
-      }
+        {
+          jimple_if s;
+          x.at("statement").at("if").get_to(s);
+          to_add = std::make_shared<jimple_if>(s);
+        }
       else {
         throw fmt::format("Unknown type {}", stmt);
       }
+    
+      if(label)
+        label->push_into_label(to_add);
+      else
+        members.push_back(std::move(to_add));
     }
-    if(label)
-      label->push_into_label(to_add);
-    else
-      members.push_back(std::move(to_add));
-  }
   if(label)
     members.push_back(std::move(label));
 }

@@ -70,9 +70,10 @@ void jimple_file::from_json(const json &j)
   for(auto &x : filebody)
   {
     // TODO: Here is where to add support for signatures
-    if(x.contains("method"))
+    auto content_type = x.at("object").get<std::string>();
+    if(content_type == "Method")
     {
-      auto member = x.at("method").get<jimple_class_method>();
+      auto member = x.get<jimple_class_method>();
       body.push_back(member);
     }
   }
