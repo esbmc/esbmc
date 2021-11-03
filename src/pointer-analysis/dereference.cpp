@@ -29,8 +29,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-#include <iostream>
-
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
@@ -1840,7 +1838,7 @@ expr2tc *dereferencet::extract_bytes_from_scalar(
   }
 
   // Get the source_object and update the index. This is so that
-  // the extraction provess does not get stuck on the same index.
+  // the extraction process does not get stuck on the same index.
   expr2tc new_object = object;
   expr2tc accuml_offs = offset;
   if(is_index2t(object))
@@ -2169,8 +2167,9 @@ void dereferencet::check_alignment(
   const expr2tc &&offset_bits,
   const guardt &guard)
 {
-  // Perform conversion to bytes here until we figure out
-  // how to check alignment for bitfields.
+  // Perform conversion to bytes here. Adding 7 to get
+  // the upper bound of integer division when
+  // "minwidth" is not a multiple of 8.
   minwidth = (minwidth + 7) / 8;
   expr2tc offset = div2tc(offset_bits->type, offset_bits, gen_ulong(8));
   simplify(offset);
@@ -2206,14 +2205,18 @@ unsigned int dereferencet::compute_num_bytes_to_extract(
   // (e.g., |ooooooox|xooooooo|).
   //
   // By default we assume that the "offset" is aligned to 8 bits.
+  // So we just compute the number of bytes that completely contain
+  // the target bits (hence, adding 7 before division).
   unsigned int num_bytes = (num_bits + 7) / 8;
 
-  // If "offset" is known (i.e., constant), we can calculate
-  // the correct number of bytes to extract.
+  // If "offset" is known (i.e., constant), we should take this into
+  // account when calculating the number of bytes to extract.
   if(is_constant_int2t(offset))
   {
     unsigned long offset_int = to_constant_int2t(offset).value.to_uint64();
     unsigned int bits_in_first_byte = offset_int % 8;
+    // Again, adding 7 here to make sure that we do not "cut off"
+    // any bits from the last byte.
     num_bytes =
       (bits_in_first_byte + num_bits + 7) / 8 - (bits_in_first_byte / 8);
   }
@@ -2240,7 +2243,8 @@ void dereferencet::extract_bits_from_byte_array(
   {
     // If everything is aligned to 8 bits, we can just return the initial value
     if(
-      num_bits % 8 == 0 && to_constant_int2t(offset).value.to_uint64() % 8 == 0)
+      (num_bits % 8 == 0) &&
+      (to_constant_int2t(offset).value.to_uint64() % 8 == 0))
       return;
   }
   else
