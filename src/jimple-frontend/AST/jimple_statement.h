@@ -44,6 +44,14 @@ class jimple_invoke : public jimple_statement
 {
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+protected:
+  std::string base_class;
+  std::string method;
+  std::string parameters;
 };
 
 // TODO: Add return statement

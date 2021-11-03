@@ -35,14 +35,6 @@ std::string jimple_identity::to_string() const
       << t.to_string();
   return oss.str();
 }
-std::string jimple_invoke::to_string() const
-{
-  return "Invoke: (Not implemented)";
-}
-void jimple_invoke::from_json(const json &j)
-{
-  // TODO
-}
 
 exprt jimple_return::to_exprt(
   contextt &ctx,
@@ -254,4 +246,43 @@ std::shared_ptr<jimple_expr> jimple_statement::get_expression(const json &j)
 
   jimple_constant d;
   return std::make_shared<jimple_constant>(d);
+}
+
+
+
+std::string jimple_invoke::to_string() const
+{
+  std::ostringstream oss;
+  oss << "Invoke: " << method;
+  return oss.str();
+}
+
+void jimple_invoke::from_json(const json &j)
+{
+  j.at("base_class").get_to(base_class);
+  j.at("method").get_to(method);
+  j.at("parameters").get_to(parameters);  
+}
+
+exprt jimple_invoke::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  code_function_callt call;
+
+  std::ostringstream oss;
+  oss << base_class << ":" << method;
+
+  // TODO: move this from here
+  std::string id, name;
+  id = "__ESBMC_assert";
+  name = "__ESBMC_assert";
+
+  auto symbol = ctx.find_symbol(oss.str());  
+  call.function() = symbol_expr(*symbol);
+
+  array_of_exprt arr;
+  // TODO: Create binop operation between symbol and value
+  return call;
 }
