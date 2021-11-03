@@ -123,7 +123,7 @@ std::string jimple_assignment::to_string() const
 void jimple_assignment::from_json(const json &j)
 {
   j.at("name").get_to(variable);
-  expr = get_expression(j.at("expression"));
+  expr = get_expression(j.at("valueo"));
 }
 
 exprt jimple_assignment::to_exprt(
@@ -279,6 +279,7 @@ exprt jimple_invoke::to_exprt(
   id = "__ESBMC_assert";
   name = "__ESBMC_assert";
 
+  
   auto symbol = ctx.find_symbol(oss.str());  
   call.function() = symbol_expr(*symbol);
 

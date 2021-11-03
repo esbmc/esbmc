@@ -67,7 +67,7 @@ void jimple_class_method::from_json(const json &j)
   }
 
   // TODO: Empty body
-  auto j_body = j.at("body");
+  auto j_body = j.at("content");
   // this is a little hacky...
   auto values = j_body.get<jimple_full_method_body>();
   this->body = std::make_shared<jimple_full_method_body>(values);
