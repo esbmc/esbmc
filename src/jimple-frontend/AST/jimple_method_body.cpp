@@ -53,7 +53,7 @@ void jimple_full_method_body::from_json(const json &j)
       else if(stmt == "invoke")
       {
         jimple_invoke s;
-        x.at("statement").get_to(s);
+        x.at("statement").at("invoke").get_to(s);
         to_add = std::make_shared<jimple_invoke>(s);
       }
       else if(stmt == "return")
