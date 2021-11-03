@@ -2,14 +2,14 @@
 #include <string.h>
 #include <assert.h>
 
-struct str 
+struct str
 {
-  unsigned char a:3;
-  int b:31;
-  unsigned char c:7;
+  unsigned char a : 3;
+  int b : 31;
+  unsigned char c : 7;
 } var;
 
-int main() 
+int main()
 {
   var.a = 0;
   var.b = 78324;
@@ -28,6 +28,3 @@ int main()
   assert(ptr->c == 1);
   return 0;
 }
-
-
-

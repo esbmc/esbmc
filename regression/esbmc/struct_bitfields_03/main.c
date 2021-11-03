@@ -2,32 +2,31 @@
 #include <string.h>
 #include <assert.h>
 
-struct str 
+struct str
 {
-    char a:1;
-    int b:5;
+  char a : 1;
+  int b : 5;
 } var;
 
-int main() 
+int main()
 {
   var.a = 0;
   var.b = 1;
   struct str *ptr;
   ptr = malloc(10);
-  *ptr = var; 
+  *ptr = var;
   printf("ptr->a = %d\n", ptr->a);
   printf("ptr->b = %d\n", ptr->b);
   assert(ptr->a == 0);
   assert(ptr->b == 1);
-  if (ptr->a) 
+  if(ptr->a)
   {
     free(ptr);
   }
-  if (!ptr->b) 
+  if(!ptr->b)
   {
     free(ptr);
   }
   free(ptr);
   return 0;
 }
-
