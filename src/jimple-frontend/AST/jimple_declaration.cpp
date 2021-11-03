@@ -13,9 +13,9 @@ exprt jimple_declaration::to_exprt(
 
   std::string id, name;
   std::ostringstream oss;
-  oss << class_name << ":" << function_name << "@" << this->names[0];
+  oss << class_name << ":" << function_name << "@" << this->name;
   id = oss.str();
-  name = this->names[0];
+  name = this->name;
 
   auto symbol = create_jimple_symbolt(t, class_name, name, id, function_name);
 
@@ -36,14 +36,13 @@ std::string jimple_declaration::to_string() const
 {
   std::ostringstream oss;
   oss << "Declaration: ";
-  for(auto &x : this->names)
-    oss << " " << x;
+  oss << " " << this->name;
   oss << " | " << t.to_string();
 
   return oss.str();
 }
 void jimple_declaration::from_json(const json &j)
 {
-  j.at("names").get_to(this->names);
+  j.at("name").get_to(this->name);
   j.at("type").get_to(this->t);
 }
