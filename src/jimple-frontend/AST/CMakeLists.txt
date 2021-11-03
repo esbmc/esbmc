@@ -8,4 +8,4 @@ add_library(jimple_ast
         jimple_statement.cpp
         jimple_expr.cpp)
 
-target_link_libraries(jimple_ast nlohmann_json::nlohmann_json fmt::fmt )
+target_link_libraries(jimple_ast nlohmann_json::nlohmann_json fmt::fmt)
