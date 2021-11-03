@@ -1,5 +1,10 @@
 #include <clang-c-frontend/clang_c_language.h>
 #include <fstream>
+#include <ac_config.h>
+
+#ifdef ESBMC_CLANG_HEADER_DIR
+#  include <boost/filesystem.hpp>
+#else
 
 struct hooked_header
 {
@@ -615,6 +620,7 @@ extern "C"
     {"xtestintrin.h", xtestintrin_buf, &xtestintrin_buf_size},
     {nullptr, nullptr, nullptr}};
 }
+#endif
 
 void clang_c_languaget::dump_clang_headers(const std::string &tmp_dir)
 {
@@ -623,6 +629,30 @@ void clang_c_languaget::dump_clang_headers(const std::string &tmp_dir)
     return;
   dumped = true;
 
+#ifdef ESBMC_CLANG_HEADER_DIR
+  using namespace boost::filesystem;
+  path header_dir(ESBMC_CLANG_HEADER_DIR);
+  if(!is_directory(header_dir))
+  {
+    fprintf(
+      stderr,
+      "error copying clang headers: %s: not a directory\n",
+      header_dir.string().c_str());
+    abort();
+  }
+  path tgt(tmp_dir);
+  for(const directory_entry &e : directory_iterator(header_dir))
+  {
+    /* skip everything not looking like a header */
+    path p = e.path();
+    if(p.extension().string() != ".h")
+      continue;
+    if(is_regular_file(p))
+      copy_file(p, tgt / p.filename());
+    else if(is_symlink(p))
+      create_symlink(absolute(p), tgt / p.filename());
+  }
+#else
   for(struct hooked_header *h = &clang_headers[0]; h->basename != nullptr; h++)
   {
     std::ofstream header;
@@ -630,4 +660,5 @@ void clang_c_languaget::dump_clang_headers(const std::string &tmp_dir)
     header << std::string(h->textstart, *h->textsize);
     header.close();
   }
+#endif
 }
