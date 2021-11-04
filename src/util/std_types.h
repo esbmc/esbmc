@@ -175,6 +175,16 @@ public:
     {
       return set("is_padding", is_padding);
     }
+
+    bool get_is_unnamed_bitfield() const
+    {
+      return get_bool("is_unnamed_bitfield");
+    }
+
+    void set_is_unnamed_bitfield(bool is_unnamed_bitfield)
+    {
+      return set("is_unnamed_bitfield", is_unnamed_bitfield);
+    }
   };
 
   typedef std::vector<componentt> componentst;
