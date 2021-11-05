@@ -705,10 +705,6 @@ void goto_symext::symex_assign_bitfield(
   // (3) Updating the RHS with the remaining bits
   new_rhs = bitor2tc(new_rhs->type, new_rhs, new_value_expr);
 
-  // Simplify both expression before the recursive call
-  simplify(new_rhs);
-  simplify(value_expr);
-
   symex_assign_rec(value_expr, full_lhs, new_rhs, full_rhs, guard, hidden);
 }
 
