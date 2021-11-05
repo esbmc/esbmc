@@ -112,13 +112,21 @@ int delete_key(__ESBMC_thread_key *l)
 }
 
 /************************** Thread creation and exit **************************/
+pthread_t __ESBMC_main_thread;
 
+extern int main(int argc, char *argv[]);
+void *__ESBMC_starter(void *arg)
+{
+  main(0, NULL);
+}
 void pthread_start_main_hook(void)
 {
   __ESBMC_atomic_begin();
   __ESBMC_num_total_threads++;
   __ESBMC_num_threads_running++;
   __ESBMC_atomic_end();
+  pthread_create(&__ESBMC_main_thread, NULL, __ESBMC_starter, 0);
+
 }
 
 void pthread_end_main_hook(void)
@@ -129,6 +137,7 @@ void pthread_end_main_hook(void)
   // atomic state, which will prevent everything but the final from-main switch.
   __ESBMC_atomic_begin();
   __ESBMC_num_threads_running--;
+  pthread_join(&__ESBMC_main_thread, 0);
 }
 
 void pthread_exec_key_destructors(void)
