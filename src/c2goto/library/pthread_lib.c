@@ -121,10 +121,6 @@ void *__ESBMC_starter(void *arg)
 }
 void pthread_start_main_hook(void)
 {
-  __ESBMC_atomic_begin();
-  __ESBMC_num_total_threads++;
-  __ESBMC_num_threads_running++;
-  __ESBMC_atomic_end();
   pthread_create(&__ESBMC_main_thread, NULL, __ESBMC_starter, 0);
 
 }
@@ -135,8 +131,6 @@ void pthread_end_main_hook(void)
   // but that'll never be permitted by POR, which will see the access and try
   // to generate context switches as a result. So, end the main thread in an
   // atomic state, which will prevent everything but the final from-main switch.
-  __ESBMC_atomic_begin();
-  __ESBMC_num_threads_running--;
   pthread_join(&__ESBMC_main_thread, 0);
 }
 
