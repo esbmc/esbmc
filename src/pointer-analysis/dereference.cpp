@@ -2171,7 +2171,7 @@ void dereferencet::check_alignment(
   // skip the alignment check
   if(minwidth % 8 != 0)
     return;
-  
+
   if(is_constant_int2t(offset_bits))
   {
     if(to_constant_int2t(offset_bits).value.to_uint64() % 8 != 0)
