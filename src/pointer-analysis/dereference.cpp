@@ -2167,10 +2167,19 @@ void dereferencet::check_alignment(
   const expr2tc &&offset_bits,
   const guardt &guard)
 {
-  // Perform conversion to bytes here. Adding 7 to get
-  // the upper bound of integer division when
-  // "minwidth" is not a multiple of 8.
-  minwidth = (minwidth + 7) / 8;
+  // If we are dealing with a bitfield, then
+  // skip the alignment check
+  if(minwidth % 8 != 0)
+    return;
+  
+  if(is_constant_int2t(offset_bits))
+  {
+    if(to_constant_int2t(offset_bits).value.to_uint64() % 8 != 0)
+      return;
+  }
+
+  // Perform conversion to bytes here
+  minwidth = minwidth / 8;
   expr2tc offset = div2tc(offset_bits->type, offset_bits, gen_ulong(8));
   simplify(offset);
 
