@@ -14,8 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/goto_functions.h>
 
-void interval_analysis(
-  goto_functionst &goto_functions,
-  const namespacet &ns);
+void interval_analysis(goto_functionst &goto_functions, const namespacet &ns);
 
 #endif // CPROVER_ANALYSES_INTERVAL_ANALYSIS_H

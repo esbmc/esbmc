@@ -96,9 +96,7 @@ void instrument_intervals(
   }
 }
 
-void interval_analysis(
-  goto_functionst &goto_functions,
-  const namespacet &ns)
+void interval_analysis(goto_functionst &goto_functions, const namespacet &ns)
 {
   ait<interval_domaint> interval_analysis;
 
