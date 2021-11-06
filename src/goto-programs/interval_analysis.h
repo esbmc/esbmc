@@ -16,7 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void interval_analysis(
   goto_functionst &goto_functions,
-  const namespacet &ns,
-  bool is_kind);
+  const namespacet &ns);
 
 #endif // CPROVER_ANALYSES_INTERVAL_ANALYSIS_H
