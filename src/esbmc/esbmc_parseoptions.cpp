@@ -1534,7 +1534,7 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     if(cmdline.isset("interval-analysis"))
-      interval_analysis(goto_functions, ns, options.is_kind());
+      interval_analysis(goto_functions, ns);
 
     if(
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
