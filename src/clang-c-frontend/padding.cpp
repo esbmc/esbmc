@@ -270,7 +270,7 @@ void add_padding(union_typet &type, const namespacet &ns)
   for(const auto &c : type.components())
   {
     type2tc thetype = migrate_type(c.type());
-    size_bits = std::max(size_bits, type_byte_size(thetype));
+    size_bits = std::max(size_bits, type_byte_size_bits(thetype));
   }
 
   // Is the union packed?
