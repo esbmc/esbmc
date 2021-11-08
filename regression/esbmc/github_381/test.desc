@@ -1,4 +1,4 @@
 CORE
 main.c
 --overflow-check
-^file main.c line 7 function main$
+file main.c line 7 function main$
