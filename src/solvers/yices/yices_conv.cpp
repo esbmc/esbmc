@@ -68,9 +68,11 @@ void yices_convt::push_ctx()
 
   if(res != 0)
   {
-    FILE *f = msg.get_temp_file();
-    yices_print_error(f);
-    msg.insert_and_close_file_contents(VerbosityLevel::Error, f);
+    {
+      auto f = msg.get_temp_file();
+      yices_print_error(f.file());
+      msg.insert_file_contents(VerbosityLevel::Error, f.file());
+    }
     msg.error("Error pushing yices context");
     abort();
   }
@@ -82,9 +84,11 @@ void yices_convt::pop_ctx()
 
   if(res != 0)
   {
-    FILE *f = msg.get_temp_file();
-    yices_print_error(f);
-    msg.insert_and_close_file_contents(VerbosityLevel::Error, f);
+    {
+      auto f = msg.get_temp_file();
+      yices_print_error(f.file());
+      msg.insert_file_contents(VerbosityLevel::Error, f.file());
+    }
     msg.error("Error poping yices context");
     abort();
   }
@@ -1066,9 +1070,9 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
 
 void yices_convt::print_model()
 {
-  FILE *f = msg.get_temp_file();
-  yices_print_model(f, yices_get_model(yices_ctx, 1));
-  msg.insert_and_close_file_contents(VerbosityLevel::Status, f);
+  auto f = msg.get_temp_file();
+  yices_print_model(f.file(), yices_get_model(yices_ctx, 1));
+  msg.insert_file_contents(VerbosityLevel::Status, f.file());
 }
 
 smt_sortt yices_convt::mk_bool_sort()
@@ -1121,8 +1125,8 @@ smt_sortt yices_convt::mk_bvfp_rm_sort()
 void yices_smt_ast::dump() const
 {
   default_message msg;
-  FILE *f = msg.get_temp_file();
-  yices_pp_term(f, a, 80, 10, 0);
-  yices_pp_type(f, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
-  msg.insert_and_close_file_contents(VerbosityLevel::Debug, f);
+  auto f = msg.get_temp_file();
+  yices_pp_term(f.file(), a, 80, 10, 0);
+  yices_pp_type(f.file(), to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
+  msg.insert_file_contents(VerbosityLevel::Debug, f.file());
 }

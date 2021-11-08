@@ -13,6 +13,7 @@ Maintainers:
 #include <memory>
 #include <util/message/message_handler.h>
 #include <util/location.h>
+#include <util/filesystem.h>
 
 /**
  * @brief messaget is used to send messages that
@@ -183,7 +184,7 @@ public:
    *
    * @return
    */
-  static FILE *get_temp_file();
+  static file_operations::tmp_file get_temp_file();
 
   /**
    * @brief Insert all contents of the file into all message handlers
@@ -192,7 +193,7 @@ public:
    * @param l verbosity level of the file
    * @param f file pointer with the file contents.
    */
-  void insert_and_close_file_contents(VerbosityLevel l, FILE *f) const;
+  void insert_file_contents(VerbosityLevel l, FILE *f) const;
 
 protected:
   // Current verbosity level
