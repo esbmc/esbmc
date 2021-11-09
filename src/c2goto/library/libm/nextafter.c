@@ -12,7 +12,7 @@ Author: Franz Brauße, <franz.brausse@manchester.ac.uk>
 #include <errno.h>
 
 #undef errno
-extern int errno;
+extern _Thread_local int errno;
 
 #define NEXTAFTER(suff, dbl, ui)                                               \
   dbl nextafter##suff(dbl x, dbl y)                                            \
@@ -45,7 +45,7 @@ extern int errno;
       v.u += dir;                                                              \
       break;                                                                   \
     default:                                                                   \
-      assert(0);                                                               \
+      __ESBMC_assert(0, "invalid fpclassify value");                           \
     }                                                                          \
     if(isfinite(x) && !isfinite(v.d))                                          \
     {                                                                          \
