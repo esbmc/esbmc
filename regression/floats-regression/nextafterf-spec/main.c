@@ -37,16 +37,25 @@ int main()
   }
   if(isfinite(x) && !isfinite(z))
   {
-    // assert(fetestexcept(FE_OVERFLOW));
+    /* This is part of nextafter's behaviour, but w/o a model of
+     * feraiseexcept() and fetestexcept() we cannot prove it, yet.
+    assert(fetestexcept(FE_OVERFLOW));
+     */
     assert(errno == ERANGE);
   }
   if(islessgreater(x, y) && isfinite(z) && !isnormal(z))
   {
-    // assert(fetestexcept(FE_UNDERFLOW));
+    /* This is part of nextafter's behaviour, but w/o a model of
+     * feraiseexcept() and fetestexcept() we cannot prove it, yet.
+    assert(fetestexcept(FE_UNDERFLOW));
+     */
     assert(errno == ERANGE);
   }
   if(isinf(x))
     assert(isinf(z) == isinf(x));
 
-  // assert(!fetestexcept(FE_UNDERFLOW) || !fetestexcept(FE_OVERFLOW));
+  /* This is part of nextafter's behaviour, but w/o a model of
+   * feraiseexcept() and fetestexcept() we cannot prove it, yet.
+  assert(!fetestexcept(FE_UNDERFLOW) || !fetestexcept(FE_OVERFLOW));
+   */
 }
