@@ -1,3 +1,10 @@
+/*******************************************************************\
+
+Module: ANSI-C nextafter(x,y).
+
+Author: Franz Brauße, <franz.brausse@manchester.ac.uk>
+
+\*******************************************************************/
 
 #include <stdint.h>
 #include <fenv.h>
