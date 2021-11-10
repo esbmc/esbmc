@@ -9,7 +9,6 @@
    - Initialize ast from json string
  \*******************************************************************/
 
-
 #define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 
 #include <catch2/catch.hpp>
@@ -21,8 +20,8 @@
 SCENARIO("AST initialization from JSON (basic constructs)", "[jimple-frontend]")
 {
   GIVEN("A Main class")
-    {
-      std::istringstream file(R"json({
+  {
+    std::istringstream file(R"json({
     "object": "Class",
     "modifiers": [
         "public"
@@ -31,18 +30,17 @@ SCENARIO("AST initialization from JSON (basic constructs)", "[jimple-frontend]")
     "extends": "java.lang.Object",
     "content": []
 })json");
-      nlohmann::json j;
-      file >> j;
+    nlohmann::json j;
+    file >> j;
 
-      jimple_file f;
-      j.get_to(f);
+    jimple_file f;
+    j.get_to(f);
 
-      REQUIRE(f.getClassName() == "Main");
-      REQUIRE(!f.is_interface());
-      REQUIRE(f.getExtends() == "java.lang.Object");
-      REQUIRE(f.getImplements() == "(No implements)");
-      REQUIRE(f.getM().at(0) == jimple_modifiers::modifier::Public);
-      REQUIRE(f.getBody().size() == 0);
-    }
- 
+    REQUIRE(f.getClassName() == "Main");
+    REQUIRE(!f.is_interface());
+    REQUIRE(f.getExtends() == "java.lang.Object");
+    REQUIRE(f.getImplements() == "(No implements)");
+    REQUIRE(f.getM().at(0) == jimple_modifiers::modifier::Public);
+    REQUIRE(f.getBody().size() == 0);
+  }
 }

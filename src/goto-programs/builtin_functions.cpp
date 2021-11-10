@@ -599,8 +599,10 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t = dest.add_instruction(ASSERT);
     migrate_expr(arguments[0], t->guard);
 
-    const std::string &description = arguments.size() == 1 ? "jimple assertion" :
-      get_string_constant(arguments[1], message_handler);
+    const std::string &description =
+      arguments.size() == 1
+        ? "jimple assertion"
+        : get_string_constant(arguments[1], message_handler);
     t->location = function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
