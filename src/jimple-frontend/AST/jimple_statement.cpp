@@ -123,7 +123,7 @@ std::string jimple_assignment::to_string() const
 void jimple_assignment::from_json(const json &j)
 {
   j.at("name").get_to(variable);
-  expr = get_expression(j.at("valueo"));
+  expr = get_expression(j.at("value"));
 }
 
 exprt jimple_assignment::to_exprt(
@@ -135,7 +135,7 @@ exprt jimple_assignment::to_exprt(
   oss << class_name << ":" << function_name << "@" << variable;
 
   symbolt &added_symbol = *ctx.find_symbol(oss.str());
-  code_assignt assign(symbol_expr(added_symbol), expr->to_exprt());
+  code_assignt assign(symbol_expr(added_symbol), expr->to_exprt(ctx,class_name,function_name));
   return assign;
 }
 
