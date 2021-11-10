@@ -159,7 +159,7 @@ exprt jimple_if::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
   {
-    this->dump();
+    //this->dump();
     std::ostringstream oss;
     oss << class_name << ":" << function_name << "@" << variable;
 
@@ -244,6 +244,20 @@ std::shared_ptr<jimple_expr> jimple_statement::get_expression(const json &j)
     return std::make_shared<jimple_constant>(c);
   }
 
+  if(expr_type == "symbol")
+  {
+    jimple_symbol c;
+    c.from_json(j);
+    return std::make_shared<jimple_symbol>(c);
+  }
+
+  if(expr_type == "add")
+  {
+    jimple_add c;
+    c.from_json(j);
+    return std::make_shared<jimple_add>(c);
+  }
+  
   jimple_constant d;
   return std::make_shared<jimple_constant>(d);
 }
