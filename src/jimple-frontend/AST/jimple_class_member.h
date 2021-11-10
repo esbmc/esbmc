@@ -21,6 +21,15 @@ class jimple_class_member : public jimple_ast
 
 /**
  * @brief A class (or interface) method of a Jimple file
+ * 
+ * example:
+ * 
+ * class Foo {
+ *   public void jimple_class_method {
+ *      do_stuff();
+ *   }
+ * }
+ * 
  */
 class jimple_class_method : public jimple_class_member
 {
