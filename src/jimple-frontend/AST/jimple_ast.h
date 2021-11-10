@@ -52,6 +52,9 @@ protected:
   /**
    * @brief creates a symbol with the default characteristics
    *
+   * TODO: Right now, we are setting it as C mode. In time, we
+   * should convert it to Jimple
+   * 
    * @return an initialized symbolt
    */
   static symbolt create_jimple_symbolt(
@@ -71,6 +74,27 @@ protected:
     return symbol;
   }
 
+  static std::string
+  get_method_name(std::string class_name, std::string function_name)
+  {
+    std::ostringstream oss;
+    oss << class_name << ":" << function_name;
+
+    return oss.str();
+  }
+
+  // Note: Jimple is already is SSA form
+  static std::string get_symbol_name(
+    std::string class_name,
+    std::string function_name,
+    std::string symbol)
+  {
+    std::ostringstream oss;
+    oss << get_method_name(class_name, function_name) << "@" << symbol;
+
+    return oss.str();
+  }
+
   /**
    * @brief initialize a location for the symbol
    *
@@ -88,7 +112,7 @@ protected:
 };
 
 // These functions are used by nlohmann::json. Making it easier to
-// parse the JSON file. You shouldn't use them directly.
+// parse the JSON file. Avoid using them directly.
 void from_json(const json &j, jimple_ast &p);
 void to_json(json &, const jimple_ast &);
 #endif //ESBMC_JIMPLE_AST_H

@@ -14,11 +14,7 @@ exprt jimple_class_method::to_exprt(
   inner_type = t.to_typet();
   method_type.return_type() = inner_type;
 
-  std::string id;
-  std::ostringstream oss;
-  oss << class_name << ":" << name;
-  id = oss.str();
-
+  auto id = get_method_name(class_name, name);
   auto symbol = create_jimple_symbolt(method_type, class_name, name, id);
 
   std::string symbol_name = symbol.id.as_string();
