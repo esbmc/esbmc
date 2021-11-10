@@ -7,6 +7,7 @@
 #include <util/std_types.h>
 #include <jimple-frontend/AST/jimple_statement.h>
 #include <util/arith_tools.h>
+
 void jimple_identity::from_json(const json &j)
 {
   j.at("identifier").get_to(at_identifier);
@@ -112,7 +113,6 @@ void jimple_label::from_json(const json &j)
   j.get_to(label);
 }
 
-
 std::string jimple_assignment::to_string() const
 {
   std::ostringstream oss;
@@ -123,7 +123,7 @@ std::string jimple_assignment::to_string() const
 void jimple_assignment::from_json(const json &j)
 {
   j.at("name").get_to(variable);
-  expr = get_expression(j.at("value"));
+  expr = jimple_expr::get_expression(j.at("value"));
 }
 
 exprt jimple_assignment::to_exprt(
@@ -135,22 +135,21 @@ exprt jimple_assignment::to_exprt(
   oss << class_name << ":" << function_name << "@" << variable;
 
   symbolt &added_symbol = *ctx.find_symbol(oss.str());
-  code_assignt assign(symbol_expr(added_symbol), expr->to_exprt(ctx,class_name,function_name));
+  code_assignt assign(
+    symbol_expr(added_symbol), expr->to_exprt(ctx, class_name, function_name));
   return assign;
 }
 
 std::string jimple_if::to_string() const
 {
   std::ostringstream oss;
-  oss << "If: " << variable << " = " << value
-      << " then goto " << label;
+  oss << "If: " << cond->to_string() << " then goto " << label;
   return oss.str();
 }
 
 void jimple_if::from_json(const json &j)
 {
-  j.at("cond").at("lhs").get_to(variable);
-  j.at("cond").at("rhs").get_to(value);
+  cond = jimple_expr::get_expression(j.at("cond"));
   j.at("goto").get_to(label);
 }
 
@@ -158,28 +157,18 @@ exprt jimple_if::to_exprt(
   contextt &ctx,
   const std::string &class_name,
   const std::string &function_name) const
-  {
-    //this->dump();
-    std::ostringstream oss;
-    oss << class_name << ":" << function_name << "@" << variable;
+{
+  code_gotot code_goto;
+  code_goto.set_destination(label);
 
-    symbolt &test = *ctx.find_symbol(oss.str());
-    int as_number = std::stoi(value);
-    exprt value_operand = from_integer(as_number, int_type());
+  //    exprt else_expr = code_skipt();
 
-    equality_exprt ge(symbol_expr(test), value_operand);
+  codet if_expr("ifthenelse");
+  if_expr.copy_to_operands(
+    not_exprt(cond->to_exprt(ctx, class_name, function_name)), code_goto);
 
-    code_gotot code_goto;
-    code_goto.set_destination(label);
-
-    //    exprt else_expr = code_skipt();
-
-    codet if_expr("ifthenelse");
-    if_expr.copy_to_operands(ge, code_goto);
-
-    return if_expr;
-  }
-
+  return if_expr;
+}
 
 std::string jimple_assertion::to_string() const
 {
@@ -192,8 +181,6 @@ void jimple_assertion::from_json(const json &j)
 {
   j.at("equals").at("symbol").get_to(variable);
   j.at("equals").at("value").get_to(value);
-  
-  
 }
 
 exprt jimple_assertion::to_exprt(
@@ -231,39 +218,6 @@ exprt jimple_assertion::to_exprt(
   return call;
 }
 
-std::shared_ptr<jimple_expr> jimple_statement::get_expression(const json &j)
-{
-  std::string expr_type;
-  j.at("expr_type").get_to(expr_type);
-
-  // TODO: hashmap
-  if(expr_type == "constant")
-  {
-    jimple_constant c;
-    c.from_json(j);
-    return std::make_shared<jimple_constant>(c);
-  }
-
-  if(expr_type == "symbol")
-  {
-    jimple_symbol c;
-    c.from_json(j);
-    return std::make_shared<jimple_symbol>(c);
-  }
-
-  if(expr_type == "add")
-  {
-    jimple_add c;
-    c.from_json(j);
-    return std::make_shared<jimple_add>(c);
-  }
-  
-  jimple_constant d;
-  return std::make_shared<jimple_constant>(d);
-}
-
-
-
 std::string jimple_invoke::to_string() const
 {
   std::ostringstream oss;
@@ -275,7 +229,7 @@ void jimple_invoke::from_json(const json &j)
 {
   j.at("base_class").get_to(base_class);
   j.at("method").get_to(method);
-  j.at("parameters").get_to(parameters);  
+  j.at("parameters").get_to(parameters);
 }
 
 exprt jimple_invoke::to_exprt(
@@ -293,8 +247,7 @@ exprt jimple_invoke::to_exprt(
   id = "__ESBMC_assert";
   name = "__ESBMC_assert";
 
-  
-  auto symbol = ctx.find_symbol(oss.str());  
+  auto symbol = ctx.find_symbol(oss.str());
   call.function() = symbol_expr(*symbol);
 
   array_of_exprt arr;
