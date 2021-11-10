@@ -26,77 +26,88 @@ void jimple_full_method_body::from_json(const json &j)
 {
   std::shared_ptr<jimple_label> label;
   for(auto &x : j)
+  {
+    std::shared_ptr<jimple_method_field> to_add;
+
+    auto stmt = x.at("object").get<std::string>();
+    // I think that this is the best way without
+    // adding some crazy function pointer.
+    switch(from_map[stmt])
     {
-      std::shared_ptr<jimple_method_field> to_add;
-    
-      // TODO: Remove this and add a HashMap
-      auto stmt = x.at("object").get<std::string>();
-      if(stmt == "Variable")
-        {
-          jimple_declaration d;
-          x.get_to(d);
-          to_add = std::make_shared<jimple_declaration>(d);
-        }
-      else if(stmt == "identity")
-        {
-          jimple_identity s;
-          x.at("statement").at("identity").get_to(s);
-          to_add = std::make_shared<jimple_identity>(s);
-        }
-      else if(stmt == "StaticInvoke")
-        {
-          jimple_invoke s;
-          x.get_to(s);
-          to_add = std::make_shared<jimple_invoke>(s);
-        }
-      else if(stmt == "return")
-        {
-          jimple_return s;
-          x.at("statement").at("return").get_to(s);
-          to_add = std::make_shared<jimple_return>(s);
-        }
-      else if(stmt == "label")
-        {
-          jimple_label s;
-          x.at("label").get_to(s);
-          if(label)
-            members.push_back(std::move(label));
-          label = std::make_shared<jimple_label>(s);
-          continue;
-        }
-      else if(stmt == "goto")
-        {
-          jimple_goto s;
-          x.at("goto").get_to(s);
-          to_add = std::make_shared<jimple_goto>(s);
-        }
-      else if(stmt == "SetVariable")
-        {
-          jimple_assignment s;
-          x.get_to(s);
-          to_add = std::make_shared<jimple_assignment>(s);
-        }
-      else if(stmt == "Assert")
-        {
-          jimple_assertion s;
-          x.get_to(s);
-          to_add = std::make_shared<jimple_assertion>(s);
-        }
-      else if(stmt == "if")
-        {
-          jimple_if s;
-          x.get_to(s);
-          to_add = std::make_shared<jimple_if>(s);
-        }
-      else {
-        throw fmt::format("Unknown type {}", stmt);
-      }
-    
-      if(label)
-        label->push_into_label(to_add);
-      else
-        members.push_back(std::move(to_add));
+    case statement::Declaration:
+    {
+      jimple_declaration d;
+      x.get_to(d);
+      to_add = std::make_shared<jimple_declaration>(d);
+      break;
     }
+    case statement::Identity:
+    {
+      jimple_identity s;
+      x.at("statement").at("identity").get_to(s);
+      to_add = std::make_shared<jimple_identity>(s);
+      break;
+    }
+    case statement::StaticInvoke:
+    {
+      jimple_invoke s;
+      x.get_to(s);
+      to_add = std::make_shared<jimple_invoke>(s);
+      break;
+    }
+    case statement::Return:
+    {
+      jimple_return s;
+      x.at("statement").at("return").get_to(s);
+      to_add = std::make_shared<jimple_return>(s);
+      break;
+    }
+    case statement::Label:
+    {
+      jimple_label s;
+      x.at("label").get_to(s);
+      if(label)
+        members.push_back(std::move(label));
+      label = std::make_shared<jimple_label>(s);
+      continue;
+    }
+    case statement::Goto:
+    {
+      jimple_goto s;
+      x.at("goto").get_to(s);
+      to_add = std::make_shared<jimple_goto>(s);
+      break;
+    }
+    case statement::Assignment:
+    {
+      jimple_assignment s;
+      x.get_to(s);
+      to_add = std::make_shared<jimple_assignment>(s);
+      break;
+    }
+    case statement::Assertion:
+    {
+      jimple_assertion s;
+      x.get_to(s);
+      to_add = std::make_shared<jimple_assertion>(s);
+      break;
+    }
+    case statement::If:
+    {
+      jimple_if s;
+      x.get_to(s);
+      to_add = std::make_shared<jimple_if>(s);
+      break;
+    }
+    default:
+      throw fmt::format("Unknown type {}", stmt);
+    }
+
+    if(label)
+      label->push_into_label(to_add);
+    else
+      members.push_back(std::move(to_add));
+  }
   if(label)
     members.push_back(std::move(label));
 }

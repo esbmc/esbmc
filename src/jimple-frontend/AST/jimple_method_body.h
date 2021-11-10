@@ -68,8 +68,44 @@ class jimple_full_method_body : public jimple_method_body
     const std::string &class_name,
     const std::string &function_name) const override;
 
+  enum class statement
+  {
+    Assertion, // TODO: This will be removed eventually
+    Assignment,
+    Identity,
+    StaticInvoke,
+    Return,
+    Label,
+    Goto,
+    If,
+    Declaration
+  };
+
 protected:
   std::vector<std::shared_ptr<jimple_method_field>> members;
+
+private:
+  std::map<std::string, statement> from_map = {
+    {"Variable", statement::Declaration},
+    {"identity", statement::Identity},
+    {"StaticInvoke", statement::StaticInvoke},
+    {"return", statement::Return},
+    {"label", statement::Label},
+    {"goto", statement::Goto},
+    {"SetVariable", statement::Assignment},
+    {"Assert", statement::Assertion},
+    {"if", statement::If}};
+
+  std::map<statement, std::string> to_map = {
+    {statement::Identity, "Identity"},
+    {statement::StaticInvoke, "StaticInvoke"},
+    {statement::Return, "Return"},
+    {statement::Label, "Label"},
+    {statement::Goto, "Goto"},
+    {statement::Assignment, "Assignment"},
+    {statement::Assertion, "Assertion"},
+    {statement::If, "If"},
+    {statement::Declaration, "Declaration"}};
 };
 
 #endif //ESBMC_JIMPLE_METHOD_BODY_H
