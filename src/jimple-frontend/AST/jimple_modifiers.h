@@ -35,7 +35,10 @@ public:
   virtual modifier from_string(const std::string &name) const;
   virtual std::string to_string(const modifier &ft) const;
 
-  modifier at(const int i) const { return m[i]; } 
+  modifier at(const int i) const
+  {
+    return m[i];
+  }
 
 protected:
   std::vector<modifier> m;
