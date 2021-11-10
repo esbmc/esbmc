@@ -13,6 +13,9 @@ public:
     exprt val("at_identifier");
     return val;
   };
+
+  // Expressions parsing can be recursive
+  static std::shared_ptr<jimple_expr> get_expression(const json &j);
 };
 
 class jimple_constant : public jimple_expr
@@ -49,28 +52,22 @@ protected:
   std::string var_name;
 };
 
-class jimple_add : public jimple_expr
+class jimple_binop : public jimple_expr
 {
 public:
   virtual void from_json(const json &j) override;
   virtual std::string to_string() const override
   {
-    return var_name;
+    return "Jimple BinOP\n";
   }
+
   virtual exprt to_exprt(
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;
 
 protected:
-  std::string var_name;
-  std::string value;
+  std::string binop;
+  std::shared_ptr<jimple_expr> lhs;
+  std::shared_ptr<jimple_expr> rhs;
 };
-
-/*
-class jimple_new_expr : public jimple_expr {
-    protected:
-    std::vector<std::string> args;
-    jimple_type t;
-};
-*/
