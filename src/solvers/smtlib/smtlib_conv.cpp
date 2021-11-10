@@ -213,9 +213,17 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     close(outpipe[0]);
     close(inpipe[1]);
 
+    const char *shell = getenv("SHELL");
+    if(!shell || !*shell)
+      shell = "sh";
+
     // Voila
-    execlp("sh", "sh", "-c", cmd.c_str(), NULL);
-    log_error("Exec of smtlib solver failed");
+    execlp(shell, shell, "-c", cmd.c_str(), NULL);
+    log_error(
+      "Exec of smtlib solver failed: {} -c {}: {}",
+      shell,
+      cmd,
+      strerror(errno));
     abort();
   }
   else
