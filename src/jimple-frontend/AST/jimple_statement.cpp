@@ -149,8 +149,8 @@ std::string jimple_if::to_string() const
 
 void jimple_if::from_json(const json &j)
 {
-  j.at("cond").at("equals").at("symbol").get_to(variable);
-  j.at("cond").at("equals").at("value").get_to(value);
+  j.at("cond").at("lhs").get_to(variable);
+  j.at("cond").at("rhs").get_to(value);
   j.at("goto").get_to(label);
 }
 
