@@ -58,7 +58,7 @@ void jimple_full_method_body::from_json(const json &j)
       else if(stmt == "label")
         {
           jimple_label s;
-          x.at("statement").at("label_id").get_to(s);
+          x.at("label").get_to(s);
           if(label)
             members.push_back(std::move(label));
           label = std::make_shared<jimple_label>(s);
@@ -67,7 +67,7 @@ void jimple_full_method_body::from_json(const json &j)
       else if(stmt == "goto")
         {
           jimple_goto s;
-          x.at("statement").at("goto").get_to(s);
+          x.at("goto").get_to(s);
           to_add = std::make_shared<jimple_goto>(s);
         }
       else if(stmt == "SetVariable")
@@ -85,7 +85,7 @@ void jimple_full_method_body::from_json(const json &j)
       else if(stmt == "if")
         {
           jimple_if s;
-          x.at("statement").at("if").get_to(s);
+          x.get_to(s);
           to_add = std::make_shared<jimple_if>(s);
         }
       else {
