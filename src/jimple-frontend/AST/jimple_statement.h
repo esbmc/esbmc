@@ -17,8 +17,6 @@
  */
 class jimple_statement : public jimple_method_field
 {
-protected:
-  std::shared_ptr<jimple_expr> get_expression(const json &j);
 };
 
 // THIS IS STILL A TODO FROM THE STANDARD
@@ -39,7 +37,6 @@ protected:
   jimple_type t;
 };
 
-// TODO: Fix the parser
 class jimple_invoke : public jimple_statement
 {
   virtual std::string to_string() const override;
@@ -48,13 +45,13 @@ class jimple_invoke : public jimple_statement
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;
+
 protected:
   std::string base_class;
   std::string method;
   std::string parameters;
 };
 
-// TODO: Add return statement
 class jimple_return : public jimple_statement
 {
   virtual exprt to_exprt(
@@ -136,8 +133,7 @@ class jimple_if : public jimple_statement
   virtual void from_json(const json &j) override;
 
 protected:
-  std::string variable;
-  std::string value;
+  std::shared_ptr<jimple_expr> cond;
   std::string label;
 };
 
