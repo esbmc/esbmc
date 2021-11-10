@@ -5,7 +5,10 @@
 class jimple_expr : public jimple_ast
 {
 public:
-  virtual exprt to_exprt() const
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const
   {
     exprt val("at_identifier");
     return val;
@@ -15,7 +18,24 @@ public:
 class jimple_constant : public jimple_expr
 {
 public:
-  //virtual std::string to_string() const override;
+  virtual void from_json(const json &j) override;
+  virtual std::string to_string() const override
+  {
+    return value;
+  }
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
+protected:
+  std::string value;
+};
+
+/*
+class jimple_symbol : public jimple_expr
+{
+public:
   virtual void from_json(const json &j) override;
   virtual std::string to_string() const override
   {
@@ -24,8 +44,10 @@ public:
   virtual exprt to_exprt() const override;
 
 protected:
-  std::string value;
+  std::string var_name;
 };
+
+*/
 /*
 class jimple_new_expr : public jimple_expr {
     protected:

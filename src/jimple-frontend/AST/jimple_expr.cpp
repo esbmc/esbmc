@@ -7,7 +7,10 @@ void jimple_constant::from_json(const json &j)
   j.at("value").get_to(value);
 }
 
-exprt jimple_constant::to_exprt() const
+exprt jimple_constant::to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const
 {
   auto as_number = std::stoi(value);
   return constant_exprt(
