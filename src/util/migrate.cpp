@@ -1838,6 +1838,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else
   {
+    expr.dump();
     assert(0 && fmt::format("{}\nmigrate expr failed", expr).c_str());
   }
 }
