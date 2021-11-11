@@ -137,4 +137,17 @@ protected:
   std::string label;
 };
 
+class jimple_throw : public jimple_statement
+{
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+  virtual std::string to_string() const override;
+  virtual void from_json(const json &j) override;
+
+protected:
+  std::shared_ptr<jimple_expr> expr;
+};
+
 #endif //ESBMC_JIMPLE_STATEMENT_H

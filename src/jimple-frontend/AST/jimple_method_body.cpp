@@ -92,6 +92,13 @@ void jimple_full_method_body::from_json(const json &j)
       to_add = std::make_shared<jimple_assertion>(s);
       break;
     }
+    case statement::Throw:
+    {
+      jimple_throw s;
+      x.get_to(s);
+      to_add = std::make_shared<jimple_throw>(s);
+      break;
+    }
     case statement::If:
     {
       jimple_if s;
@@ -102,7 +109,6 @@ void jimple_full_method_body::from_json(const json &j)
     default:
       throw fmt::format("Unknown type {}", stmt);
     }
-
     if(label)
       label->push_into_label(to_add);
     else

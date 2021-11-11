@@ -78,7 +78,8 @@ class jimple_full_method_body : public jimple_method_body
     Label,
     Goto,
     If,
-    Declaration
+    Declaration,
+    Throw
   };
 
 protected:
@@ -94,7 +95,8 @@ private:
     {"goto", statement::Goto},
     {"SetVariable", statement::Assignment},
     {"Assert", statement::Assertion},
-    {"if", statement::If}};
+    {"if", statement::If},
+    {"throw", statement::Throw}};
 
   std::map<statement, std::string> to_map = {
     {statement::Identity, "Identity"},
@@ -105,7 +107,8 @@ private:
     {statement::Assignment, "Assignment"},
     {statement::Assertion, "Assertion"},
     {statement::If, "If"},
-    {statement::Declaration, "Declaration"}};
+    {statement::Declaration, "Declaration"},
+    {statement::Throw, "Throw"}};
 };
 
 #endif //ESBMC_JIMPLE_METHOD_BODY_H
