@@ -277,6 +277,8 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
     convert_cpp_delete(code, dest);
   else if(statement == "cpp-catch")
     convert_catch(code, dest);
+  else if(statement == "cpp-throw")
+    convert_throw(code, dest);
   else if(statement == "throw_decl")
     convert_throw_decl(code, dest);
   else if(statement == "throw_decl_end")
@@ -328,6 +330,29 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   throw_decl_instruction->make_throw_decl();
   throw_decl_instruction->location = expr.location();
   migrate_expr(c, throw_decl_instruction->code);
+}
+
+void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
+{
+  // add the THROW_DECL instruction to 'dest'
+  goto_programt::targett throw_instruction = dest.add_instruction();
+  codet c("code");
+  c.set_statement("cpp-throw");
+
+  // the THROW instruction is annotated with a list of IDs,
+  // one per target
+  irept::subt &throw_list = c.add("throw_list").get_sub();
+  for(const auto &block : expr.operands())
+  {
+    irept type = irept(block.get("throw_decl_id"));
+
+    // grab the ID and add to THROW_DECL instruction
+    throw_list.emplace_back(type);
+  }
+
+  throw_instruction->make_throw();
+  throw_instruction->location = expr.location();
+  migrate_expr(c, throw_instruction->code);
 }
 
 void goto_convertt::convert_catch(const codet &code, goto_programt &dest)

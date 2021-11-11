@@ -205,6 +205,7 @@ protected:
   //
 
   void convert_catch(const codet &code, goto_programt &dest);
+  void convert_throw(const exprt &expr, goto_programt &dest);
   void convert_throw_decl(const exprt &expr, goto_programt &dest);
   void convert_throw_decl_end(const exprt &expr, goto_programt &dest);
 
