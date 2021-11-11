@@ -78,8 +78,7 @@ exprt jimple_label::to_exprt(
   for(auto x : members)
   {
     block.operands().push_back(x->to_exprt(ctx, class_name, function_name));
-  }
-  block.dump();
+  }  
   c_label.code() = to_code(block);
 
   //skip = c_label;
@@ -253,4 +252,28 @@ exprt jimple_invoke::to_exprt(
   array_of_exprt arr;
   // TODO: Create binop operation between symbol and value
   return call;
+}
+
+
+std::string jimple_throw::to_string() const
+{
+  std::ostringstream oss;
+  oss << "Throw: " << expr->to_string();
+  return oss.str();
+}
+
+void jimple_throw::from_json(const json &j)
+{
+  expr = jimple_expr::get_expression(j.at("expr"));
+}
+
+exprt jimple_throw::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{  
+  codet p = codet("throw_decl");
+  auto to_add = expr->to_exprt(ctx,class_name,function_name);
+  p.move_to_operands(to_add);
+  return p;
 }
