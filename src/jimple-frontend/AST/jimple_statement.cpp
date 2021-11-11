@@ -272,7 +272,7 @@ exprt jimple_throw::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {  
-  codet p = codet("throw_decl");
+  codet p = codet("cpp-throw");
   auto to_add = expr->to_exprt(ctx,class_name,function_name);
   p.move_to_operands(to_add);
   return p;
