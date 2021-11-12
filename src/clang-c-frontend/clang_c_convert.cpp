@@ -2906,8 +2906,8 @@ void clang_c_convertert::get_presumed_location(
   if(!sm)
     return;
 
-  clang::SourceLocation SpellingLoc = sm->getSpellingLoc(loc);
-  PLoc = sm->getPresumedLoc(SpellingLoc);
+  clang::SourceLocation FileLoc = sm->getFileLoc(loc);
+  PLoc = sm->getPresumedLoc(FileLoc);
 }
 
 void clang_c_convertert::set_location(

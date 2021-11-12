@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--smt-model --yices
+^VERIFICATION FAILED$

@@ -1165,7 +1165,14 @@ BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
     return string2integer(Z3_get_numeral_string(z3_ctx, e));
 
   // Not a numeral? Let's not try to convert it
-  return binary2integer(Z3_get_numeral_binary_string(z3_ctx, e), is_signed);
+  std::string bin;
+  bool is_numeral [[gnu::unused]] = e.as_binary(bin);
+  assert(is_numeral);
+  /* 'bin' contains the ascii representation of the bit-vector, msb-first,
+   * no leading zeroes; zero-extend if possible */
+  if(bin.size() < e.get_sort().bv_size())
+    bin.insert(bin.begin(), '0');
+  return binary2integer(bin, is_signed);
 }
 
 ieee_floatt z3_convt::get_fpbv(smt_astt a)
