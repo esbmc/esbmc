@@ -581,6 +581,8 @@ void _create_graph_node(
   pDataSpecification.add("<xmlattr>.key", "specification");
   if(options.get_bool_option("overflow-check"))
     pDataSpecification.put_value("CHECK( init(main()), LTL(G ! overflow) )");
+  else if(options.get_bool_option("memory-cleanup-check"))
+    pDataSpecification.put_value("CHECK( init(main()), LTL(G valid-memcleanup) )");
   else if(options.get_bool_option("memory-leak-check"))
     pDataSpecification.put_value(
       "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
