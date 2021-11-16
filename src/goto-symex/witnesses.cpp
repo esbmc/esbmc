@@ -683,7 +683,7 @@ void reformat_assignment_structs(
 }
 
 /* */
-void check_replace_invalid_assignment(std::string &assignment)
+bool check_replace_invalid_assignment(const std::string &assignment)
 {
   /* replace: SAME-OBJECT(&var1, &var2) into &var1 == &var2 (XXX check if should stay) */
   //std::regex e ("SAME-OBJECT\\((&([a-zA-Z_0-9]+)), (&([a-zA-Z_0-9]+))\\)");
@@ -695,7 +695,6 @@ void check_replace_invalid_assignment(std::string &assignment)
     std::regex_search(assignment, m, std::regex("dynamic_([0-9]+)_array")) ||
     std::regex_search(assignment, m, std::regex("anonymous at")) ||
     std::regex_search(assignment, m, std::regex("Union")) ||
-    std::regex_search(assignment, m, std::regex("&")) ||
     std::regex_search(assignment, m, std::regex("@")) ||
     std::regex_search(assignment, m, std::regex("POINTER_OFFSET")) ||
     std::regex_search(assignment, m, std::regex("SAME-OBJECT")) ||
@@ -703,7 +702,10 @@ void check_replace_invalid_assignment(std::string &assignment)
     std::regex_search(assignment, m, std::regex("BITCAST:")) ||
     std::regex_search(assignment, m, std::regex("byte_extract")) ||
     std::regex_search(assignment, m, std::regex("byte_update")))
-    assignment.clear();
+  {
+    return true;
+  }
+  return false;
 }
 
 /* */
@@ -712,24 +714,44 @@ std::string get_formated_assignment(
   const goto_trace_stept &step,
   const messaget &msg)
 {
-  std::string assignment = "";
-  if(
-    !is_nil_expr(step.value) && is_constant_expr(step.value) &&
-    is_valid_witness_step(ns, step, msg))
-  {
-    assignment += from_expr(ns, "", step.lhs, msg);
-    assignment += " = ";
-    assignment += from_expr(ns, "", step.value, msg);
-    assignment += ";";
+  if(is_nil_expr(step.value))
+    return "";
 
-    std::replace(assignment.begin(), assignment.end(), '$', '_');
-    if(std::regex_match(assignment, regex_array))
-      reformat_assignment_array(ns, step, assignment, msg);
-    else if(std::regex_match(assignment, regex_structs))
-      reformat_assignment_structs(ns, step, assignment, msg);
-    check_replace_invalid_assignment(assignment);
+  if(!(is_constant_expr(step.value) ||
+       (is_symbol2t(step.value) && to_symbol2t(step.value).thename == "NULL")))
+    return "";
+
+  if(!is_valid_witness_step(ns, step, msg))
+    return "";
+
+  auto reformat = [&](std::string &s)
+  {
+    std::replace(s.begin(), s.end(), '$', '_');
+    if(std::regex_match(s, regex_array))
+      reformat_assignment_array(ns, step, s, msg);
+    else if(std::regex_match(s, regex_structs))
+      reformat_assignment_structs(ns, step, s, msg);
+  };
+
+  std::string lhs = from_expr(ns, "", step.lhs, msg);
+  reformat(lhs);
+  if(check_replace_invalid_assignment(lhs))
+    return "";
+
+  std::string rhs = from_expr(ns, "", step.value, msg);
+  reformat(rhs);
+  if(check_replace_invalid_assignment(rhs))
+  {
+    if(is_nil_expr(step.rhs))
+      return "";
+
+    rhs = from_expr(ns, "", step.rhs, msg);
+    reformat(rhs);
+    if(check_replace_invalid_assignment(rhs))
+      return "";
   }
-  return assignment;
+
+  return lhs.append(" = ").append(rhs).append(";");
 }
 
 /* */
