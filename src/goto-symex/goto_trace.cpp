@@ -274,6 +274,7 @@ void violation_graphml_goto_trace(
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
 
+  std::string prev_assignment;
   for(const auto &step : goto_trace.steps)
   {
     switch(step.type)
@@ -309,6 +310,11 @@ void violation_graphml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)))
       {
         std::string assignment = get_formated_assignment(ns, step, msg);
+
+        // Let's not repeat ourselves
+        if(assignment == prev_assignment)
+          continue;
+        prev_assignment = assignment;
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
