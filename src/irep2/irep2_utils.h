@@ -6,13 +6,11 @@
 #include <irep2/irep2_expr.h>
 #include <util/migrate.h>
 
-
 std::string indent_str_irep2(unsigned int indent);
 
 // Map a base type to it's list of names
 template <typename T>
 class base_to_names;
-
 
 template <class T>
 std::string pretty_print_func(unsigned int indent, std::string ident, T obj)
@@ -30,7 +28,6 @@ std::string pretty_print_func(unsigned int indent, std::string ident, T obj)
 
   return exprstr;
 }
-
 
 /** Test whether type is an integer. */
 inline bool is_bv_type(const type2tc &t)

@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <memory>
 //#include <ac_config.h>
 #include <boost/functional/hash.hpp>
@@ -16,8 +15,6 @@
 #include <util/std_types.h>
 #include <util/message/format.h>
 #include <util/message/default_message.h>
-
-
 
 namespace esbmct
 {
@@ -58,7 +55,6 @@ auto expr2t_traits_always_construct<Args...>::make_contained(
   return irep_container<base2t>(new derived(args...));
 }
 } // namespace esbmct
-
 
 /************************ Second attempt at irep templates ********************/
 
@@ -500,7 +496,7 @@ template <class Reg, class targfield>
 struct magical_mystery_modifier
 {
 public:
-  void operator()(Reg &, const char *, targfield )
+  void operator()(Reg &, const char *, targfield)
   {
   }
 };

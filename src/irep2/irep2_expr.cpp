@@ -120,7 +120,6 @@ static_assert(
   sizeof(expr_names) == (expr2t::end_expr_id * sizeof(char *)),
   "Missing expr name");
 
-
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc &_type, expr_ids id)
@@ -263,7 +262,6 @@ void expr2t::dump() const
   default_message msg;
   msg.debug(pretty(0));
 }
-
 
 template <>
 class base_to_names<expr2t>

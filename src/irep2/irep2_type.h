@@ -4,7 +4,6 @@
 #include <irep2/irep2.h>
 #include <util/type.h>
 
-
 // Start with forward class definitions
 
 class bool_type2t;

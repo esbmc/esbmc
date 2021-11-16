@@ -243,7 +243,6 @@ std::string extract2t::field_names[esbmct::num_type_fields] =
 static_assert(type2t::end_type_id <= 256, "Type id overflow");
 static_assert(expr2t::end_expr_id <= 256, "Expr id overflow");
 
-
 template <>
 void do_type2string<type2t::type_ids>(
   const type2t::type_ids &,
@@ -265,7 +264,6 @@ void do_type2string<const expr2t::expr_ids>(
 {
   // Do nothing; this is a dummy member.
 }
-
 
 template <>
 bool do_get_sub_expr<expr2tc>(
@@ -344,7 +342,6 @@ bool do_get_sub_expr_nc<std::vector<expr2tc>>(
   }
 }
 
-
 template <>
 unsigned int do_count_sub_exprs<const expr2tc>(const expr2tc &)
 {
@@ -392,7 +389,6 @@ void call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>(
     f(r);
 }
 
-
 template <>
 void call_type_delegate<const type2tc, type2t::const_subtype_delegate>(
   const type2tc &ref,
@@ -428,4 +424,3 @@ void call_type_delegate<std::vector<type2tc>, type2t::subtype_delegate>(
   for(type2tc &r : ref)
     f(r);
 }
-
