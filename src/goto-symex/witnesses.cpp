@@ -582,7 +582,8 @@ void _create_graph_node(
   if(options.get_bool_option("overflow-check"))
     pDataSpecification.put_value("CHECK( init(main()), LTL(G ! overflow) )");
   else if(options.get_bool_option("memory-cleanup-check"))
-    pDataSpecification.put_value("CHECK( init(main()), LTL(G valid-memcleanup) )");
+    pDataSpecification.put_value(
+      "CHECK( init(main()), LTL(G valid-memcleanup) )");
   else if(options.get_bool_option("memory-leak-check"))
     pDataSpecification.put_value(
       "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
@@ -691,6 +692,7 @@ bool check_replace_invalid_assignment(const std::string &assignment)
   //std::regex e ("SAME-OBJECT\\((&([a-zA-Z_0-9]+)), (&([a-zA-Z_0-9]+))\\)");
   //assignment = std::regex_replace(assignment, e ,"$1 == $3");
   std::smatch m;
+
   /* looking for undesired in the assignment */
   if(
     std::regex_search(assignment, m, std::regex("&dynamic_([0-9]+)_value")) ||
