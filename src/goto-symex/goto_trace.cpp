@@ -281,6 +281,9 @@ void violation_graphml_goto_trace(
 
   for(const auto &step : goto_trace.steps)
   {
+    if(step.pc->location.is_nil())
+      continue;
+
     switch(step.type)
     {
     case goto_trace_stept::ASSERT:
