@@ -20,4 +20,3 @@ inline std::string get_pretty_name(const std::string &name)
 }
 
 #endif // CPROVER_UTIL_PRETTY_H
-

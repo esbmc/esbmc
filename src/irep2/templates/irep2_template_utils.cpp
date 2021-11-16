@@ -4,8 +4,7 @@ std::string type_to_string(const bool &thebool, int)
   return (thebool) ? "true" : "false";
 }
 
-std::string
-type_to_string(const sideeffect_data::allockind &data, int)
+std::string type_to_string(const sideeffect_data::allockind &data, int)
 {
   return (data == sideeffect_data::allockind::malloc)          ? "malloc"
          : (data == sideeffect_data::allockind::realloc)       ? "realloc"
@@ -25,8 +24,7 @@ std::string type_to_string(const unsigned int &theval, int)
   return std::string(buffer);
 }
 
-std::string
-type_to_string(const symbol_data::renaming_level &theval, int)
+std::string type_to_string(const symbol_data::renaming_level &theval, int)
 {
   switch(theval)
   {
@@ -64,8 +62,7 @@ std::string type_to_string(const ieee_floatt &theval, int)
   return theval.to_ansi_c_string();
 }
 
-std::string
-type_to_string(const std::vector<expr2tc> &theval, int indent)
+std::string type_to_string(const std::vector<expr2tc> &theval, int indent)
 {
   char buffer[64];
   std::string astring = "\n";
@@ -84,8 +81,7 @@ type_to_string(const std::vector<expr2tc> &theval, int indent)
   return astring;
 }
 
-std::string
-type_to_string(const std::vector<type2tc> &theval, int indent)
+std::string type_to_string(const std::vector<type2tc> &theval, int indent)
 {
   char buffer[64];
   std::string astring = "\n";
@@ -104,8 +100,7 @@ type_to_string(const std::vector<type2tc> &theval, int indent)
   return astring;
 }
 
-std::string
-type_to_string(const std::vector<irep_idt> &theval, int indent)
+std::string type_to_string(const std::vector<irep_idt> &theval, int indent)
 {
   char buffer[64];
   std::string astring = "\n";
@@ -116,8 +111,8 @@ type_to_string(const std::vector<irep_idt> &theval, int indent)
   {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring +=
-      indent_str_irep2(indent) + std::string(buffer) + ": " + it.as_string() + "\n";
+    astring += indent_str_irep2(indent) + std::string(buffer) + ": " +
+               it.as_string() + "\n";
     i++;
   }
 
@@ -149,8 +144,7 @@ bool do_type_cmp(const bool &side1, const bool &side2)
   return (side1 == side2) ? true : false;
 }
 
-bool
-do_type_cmp(const unsigned int &side1, const unsigned int &side2)
+bool do_type_cmp(const unsigned int &side1, const unsigned int &side2)
 {
   return (side1 == side2) ? true : false;
 }
@@ -180,8 +174,7 @@ bool do_type_cmp(const fixedbvt &side1, const fixedbvt &side2)
   return (side1 == side2) ? true : false;
 }
 
-bool
-do_type_cmp(const ieee_floatt &side1, const ieee_floatt &side2)
+bool do_type_cmp(const ieee_floatt &side1, const ieee_floatt &side2)
 {
   return (side1 == side2) ? true : false;
 }
@@ -231,14 +224,12 @@ bool do_type_cmp(const irep_idt &side1, const irep_idt &side2)
   return (side1 == side2);
 }
 
-bool
-do_type_cmp(const type2t::type_ids &, const type2t::type_ids &)
+bool do_type_cmp(const type2t::type_ids &, const type2t::type_ids &)
 {
   return true; // Dummy field comparison.
 }
 
-bool
-do_type_cmp(const expr2t::expr_ids &, const expr2t::expr_ids &)
+bool do_type_cmp(const expr2t::expr_ids &, const expr2t::expr_ids &)
 {
   return true; // Dummy field comparison.
 }
@@ -253,8 +244,7 @@ int do_type_lt(const bool &side1, const bool &side2)
     return 0;
 }
 
-int
-do_type_lt(const unsigned int &side1, const unsigned int &side2)
+int do_type_lt(const unsigned int &side1, const unsigned int &side2)
 {
   if(side1 < side2)
     return -1;
@@ -312,8 +302,9 @@ int do_type_lt(const ieee_floatt &side1, const ieee_floatt &side2)
   return 0;
 }
 
-int
-do_type_lt(const std::vector<expr2tc> &side1, const std::vector<expr2tc> &side2)
+int do_type_lt(
+  const std::vector<expr2tc> &side1,
+  const std::vector<expr2tc> &side2)
 {
   int tmp = 0;
   std::vector<expr2tc>::const_iterator it2 = side2.begin();
@@ -327,8 +318,9 @@ do_type_lt(const std::vector<expr2tc> &side1, const std::vector<expr2tc> &side2)
   return 0;
 }
 
-int
-do_type_lt(const std::vector<type2tc> &side1, const std::vector<type2tc> &side2)
+int do_type_lt(
+  const std::vector<type2tc> &side1,
+  const std::vector<type2tc> &side2)
 {
   if(side1.size() < side2.size())
     return -1;
@@ -435,8 +427,7 @@ size_t do_type_crc(const sideeffect_data::allockind &theval)
   return boost::hash<uint8_t>()(theval);
 }
 
-void
-do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
+void do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
 {
   hash.ingest((void *)&theval, sizeof(theval));
 }
@@ -446,8 +437,7 @@ size_t do_type_crc(const symbol_data::renaming_level &theval)
   return boost::hash<uint8_t>()(theval);
 }
 
-void
-do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
+void do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
 {
   hash.ingest((void *)&theval, sizeof(theval));
 }
@@ -527,8 +517,7 @@ size_t do_type_crc(const std::vector<expr2tc> &theval)
   return crc;
 }
 
-void
-do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash)
+void do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash)
 {
   for(auto const &it : theval)
     it->hash(hash);
@@ -543,8 +532,7 @@ size_t do_type_crc(const std::vector<type2tc> &theval)
   return crc;
 }
 
-void
-do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
+void do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
 {
   for(auto const &it : theval)
     it->hash(hash);
@@ -559,8 +547,7 @@ size_t do_type_crc(const std::vector<irep_idt> &theval)
   return crc;
 }
 
-void
-do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
+void do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
 {
   for(auto const &it : theval)
     hash.ingest((void *)it.as_string().c_str(), it.as_string().size());

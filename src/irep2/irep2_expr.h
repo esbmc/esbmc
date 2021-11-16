@@ -11,8 +11,6 @@
 // definitions. If you'd like to add another type - don't. Vast tracts of code
 // only expect the types below, it's be extremely difficult to hack new ones in.
 
-
-
 // Start of definitions for expressions. Forward decs,
 
 // Iterate, in the preprocessor, over all expr ids and produce a forward
