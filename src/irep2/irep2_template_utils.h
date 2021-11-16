@@ -1,6 +1,5 @@
 #pragma once
 #include <memory>
-//#include <ac_config.h>
 #include <boost/functional/hash.hpp>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
