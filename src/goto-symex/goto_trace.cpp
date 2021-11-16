@@ -272,42 +272,6 @@ void violation_graphml_goto_trace(
       std::string::npos)
       continue;
 
-    // Stack size changed, either we entered a function or we exited it
-    if(step.stack_trace.size() != prev_stack_size)
-    {
-      // If we didn't see main yet, force the creation of the main node
-      bool duplicate_main = false;
-      if(!saw_main)
-      {
-        assert(step.stack_trace.size() > prev_stack_size);
-        graph.create_initial_edge(prev_node);
-        saw_main = true;
-        prev_node = graph.edges.back().to_node;
-        prev_scope = "main";
-        duplicate_main = true;
-      }
-
-      std::string cur_scope = step.pc->location.function().as_string();
-      if(!(cur_scope == "main" && duplicate_main))
-      {
-        nodet *func_node = new nodet();
-        edget func_edge(prev_node, func_node);
-
-        // We entered a function, create a enter_function node
-        if(step.stack_trace.size() > prev_stack_size)
-          func_edge.enter_function = cur_scope;
-        else
-          // We exited a function, create a return_from_function node
-          func_edge.return_from_function = prev_scope;
-
-        graph.edges.push_back(func_edge);
-
-        prev_scope = cur_scope;
-        prev_stack_size = step.stack_trace.size();
-        prev_node = graph.edges.back().to_node;
-      }
-    }
-
     switch(step.type)
     {
     case goto_trace_stept::ASSERT:
@@ -345,6 +309,42 @@ void violation_graphml_goto_trace(
         if(assignment == prev_assignment)
           continue;
         prev_assignment = assignment;
+
+        // Stack size changed, either we entered a function or we exited it
+        if(step.stack_trace.size() != prev_stack_size)
+        {
+          // If we didn't see main yet, force the creation of the main node
+          bool duplicate_main = false;
+          if(!saw_main)
+          {
+            assert(step.stack_trace.size() > prev_stack_size);
+            graph.create_initial_edge(prev_node);
+            saw_main = true;
+            prev_node = graph.edges.back().to_node;
+            prev_scope = "main";
+            duplicate_main = true;
+          }
+
+          std::string cur_scope = step.pc->location.function().as_string();
+          if(!(cur_scope == "main" && duplicate_main))
+          {
+            nodet *func_node = new nodet();
+            edget func_edge(prev_node, func_node);
+
+            // We entered a function, create a enter_function node
+            if(step.stack_trace.size() > prev_stack_size)
+              func_edge.enter_function = cur_scope;
+            else
+              // We exited a function, create a return_from_function node
+              func_edge.return_from_function = prev_scope;
+
+            graph.edges.push_back(func_edge);
+
+            prev_scope = cur_scope;
+            prev_stack_size = step.stack_trace.size();
+            prev_node = graph.edges.back().to_node;
+          }
+        }
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
