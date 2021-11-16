@@ -70,9 +70,6 @@ public:
 
 class grapht
 {
-private:
-  std::vector<BigInt> threads;
-  void create_initial_edge();
 
 public:
   enum typet
@@ -82,12 +79,10 @@ public:
   };
   typet witness_type;
   std::string verified_file;
+  std::vector<BigInt> threads;
   std::vector<edget> edges;
-  grapht(typet t)
-  {
-    witness_type = t;
-    create_initial_edge();
-  }
+  grapht(typet t) : witness_type(t) {}
+  void create_initial_edge(nodet *prev_node);
   void generate_graphml(optionst &options);
   void check_create_new_thread(BigInt thread_id, nodet *prev_node);
 };

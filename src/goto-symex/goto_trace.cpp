@@ -248,14 +248,66 @@ void violation_graphml_goto_trace(
 
   log_status("Generating Violation Witness for: {}", graph.verified_file);
 
-  edget *first_edge = &graph.edges.at(0);
-  nodet *prev_node = first_edge->to_node;
-
   std::string prev_assignment;
   std::string program_file = options.get_option("input-file");
+  size_t prev_stack_size = 0;
+  std::string prev_scope;
+
+  // Our first node always has to start with calling main (after the globals),
+  // however, esbmc could've sliced the initial calls in main and will start
+  // by calling other fuctions, this flag prevents that by always forcing
+  // the creation of a node calling main after the globals
+  bool saw_main = false;
+
+  // Create the entry node
+  nodet *first_node = new nodet();
+  first_node->entry = true;
+  nodet *prev_node = first_node;
 
   for(const auto &step : goto_trace.steps)
   {
+    // We only care about assignments in the file under verification
+    if(
+      program_file.find(step.pc->location.get_file().as_string()) ==
+      std::string::npos)
+      continue;
+
+    // Stack size changed, either we entered a function or we exited it
+    if(step.stack_trace.size() != prev_stack_size)
+    {
+      // If we didn't see main yet, force the creation of the main node
+      bool duplicate_main = false;
+      if(!saw_main)
+      {
+        assert(step.stack_trace.size() > prev_stack_size);
+        graph.create_initial_edge(prev_node);
+        saw_main = true;
+        prev_node = graph.edges.back().to_node;
+        prev_scope = "main";
+        duplicate_main = true;
+      }
+
+      std::string cur_scope = step.pc->location.function().as_string();
+      if(!(cur_scope == "main" && duplicate_main))
+      {
+        nodet *func_node = new nodet();
+        edget func_edge(prev_node, func_node);
+
+        // We entered a function, create a enter_function node
+        if(step.stack_trace.size() > prev_stack_size)
+          func_edge.enter_function = cur_scope;
+        else
+          // We exited a function, create a return_from_function node
+          func_edge.return_from_function = prev_scope;
+
+        graph.edges.push_back(func_edge);
+
+        prev_scope = cur_scope;
+        prev_stack_size = step.stack_trace.size();
+        prev_node = graph.edges.back().to_node;
+      }
+    }
+
     switch(step.type)
     {
     case goto_trace_stept::ASSERT:
@@ -277,7 +329,6 @@ void violation_graphml_goto_trace(
         graph.edges.push_back(violation_edge);
 
         /* having printed a property violation, don't print more steps. */
-
         graph.generate_graphml(options);
         return;
       }
@@ -294,9 +345,6 @@ void violation_graphml_goto_trace(
         if(assignment == prev_assignment)
           continue;
         prev_assignment = assignment;
-
-        if(program_file.find(step.pc->location.get_file().as_string()) == std::string::npos)
-          continue;
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;

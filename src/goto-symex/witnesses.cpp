@@ -73,13 +73,11 @@ void grapht::check_create_new_thread(BigInt thread_id, nodet *prev_node)
   }
 }
 /* */
-void grapht::create_initial_edge()
+void grapht::create_initial_edge(nodet *prev_node)
 {
-  nodet *first_node = new nodet();
-  first_node->entry = true;
   nodet *initial_node = new nodet();
-  ;
-  edget first_edge(first_node, initial_node);
+
+  edget first_edge(prev_node, initial_node);
   first_edge.enter_function = "main";
   first_edge.create_thread = std::to_string(0);
   this->threads.push_back(0);
@@ -214,7 +212,7 @@ void create_edge_node(edget &edge, xmlnodet &edgenode)
   if(!edge.return_from_function.empty())
   {
     xmlnodet data_returnFromFunction;
-    data_returnFromFunction.add("<xmlattr>.key", "returnFromFunction");
+    data_returnFromFunction.add("<xmlattr>.key", "returnFrom");
     data_returnFromFunction.put_value(edge.return_from_function);
     edgenode.add_child("data", data_returnFromFunction);
   }
@@ -469,9 +467,9 @@ void create_graphml(xmlnodet &graphml)
   graphml.add_child("graphml.key", enter_function_node);
 
   xmlnodet return_from_function_node;
-  return_from_function_node.add("<xmlattr>.id", "returnFromFunction");
+  return_from_function_node.add("<xmlattr>.id", "returnFrom");
   return_from_function_node.put(
-    xmlnodet::path_type("<xmlattr>|attr.name", '|'), "returnFromFunction");
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'), "returnFrom");
   return_from_function_node.put(
     xmlnodet::path_type("<xmlattr>|attr.type", '|'), "string");
   return_from_function_node.add("<xmlattr>.for", "edge");
