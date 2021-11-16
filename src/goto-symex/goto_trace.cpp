@@ -252,6 +252,8 @@ void violation_graphml_goto_trace(
   nodet *prev_node = first_edge->to_node;
 
   std::string prev_assignment;
+  std::string program_file = options.get_option("input-file");
+
   for(const auto &step : goto_trace.steps)
   {
     switch(step.type)
@@ -292,6 +294,9 @@ void violation_graphml_goto_trace(
         if(assignment == prev_assignment)
           continue;
         prev_assignment = assignment;
+
+        if(program_file.find(step.pc->location.get_file().as_string()) == std::string::npos)
+          continue;
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
