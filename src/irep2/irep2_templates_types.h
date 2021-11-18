@@ -1,5 +1,5 @@
 #pragma once
-#include <irep2/irep2_crazy_templates.h>
+#include <irep2/irep2_meta_templates.h>
 
 /********************** Constants and explicit instantiations *****************/
 
