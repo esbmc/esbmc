@@ -281,7 +281,15 @@ void violation_graphml_goto_trace(
 
   for(const auto &step : goto_trace.steps)
   {
+    // Skip nodes with empty location (sometimes we generate some of those)
     if(step.pc->location.is_nil())
+      continue;
+
+    // We only care about nodes that represent statements in the file under
+    // verification
+    if(
+      program_file.find(step.pc->location.get_file().as_string()) ==
+      std::string::npos)
       continue;
 
     switch(step.type)
@@ -349,11 +357,6 @@ void violation_graphml_goto_trace(
           prev_stack_size = step.stack_trace.size();
           prev_node = graph.edges.back().to_node;
         }
-
-        if(
-          program_file.find(step.pc->location.get_file().as_string()) ==
-          std::string::npos)
-          continue;
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
