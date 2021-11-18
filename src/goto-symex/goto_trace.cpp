@@ -313,6 +313,12 @@ void violation_graphml_goto_trace(
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)))
       {
+        // An empty scope means global scope, we can skip them since witness
+        // validators don't understand it
+        std::string cur_scope = step.pc->location.function().as_string();
+        if(cur_scope.empty())
+          continue;
+
         std::string assignment = get_formated_assignment(ns, step, msg);
 
         // Let's not repeat ourselves
