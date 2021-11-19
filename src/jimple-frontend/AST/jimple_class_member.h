@@ -40,6 +40,35 @@ public:
     contextt &ctx,
     const std::string &class_name,
     const std::string &file_name) const;
+  
+  const std::string &getName() const
+  {
+    return name;
+  }
+
+  const std::string &getThrows() const
+  {
+    return throws;
+  }
+  const jimple_modifiers &getM() const
+  {
+    return m;
+  }
+
+  const jimple_type &getT() const
+  {
+    return t;
+  }
+
+  const std::shared_ptr<jimple_method_body> &getBody() const
+  {
+    return body;
+  }
+
+  const std::string &getParameters() const
+  {
+    return parameters;
+  }
 
 protected:
   std::string name;
