@@ -23,6 +23,21 @@ public:
     return dimensions > 0;
   }
 
+  const std::string &getTName() const
+  {
+    return name;
+  }
+
+  const std::string &getTMode() const
+  {
+    return mode;
+  }
+
+  const short &getTDim() const
+  {
+    return dimensions;
+  }
+
 protected:
   std::string name; // e.g. int[][][][][] => name = int
   std::string mode;
