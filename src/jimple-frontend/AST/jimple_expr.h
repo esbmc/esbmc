@@ -30,6 +30,11 @@ public:
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;
+  
+  const std::string &getValue() const
+  {
+    return value;
+  }
 
 protected:
   std::string value;
@@ -48,6 +53,11 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
+  const std::string &getVarName() const
+  {
+    return var_name;
+  }
+
 protected:
   std::string var_name;
 };
@@ -65,6 +75,21 @@ public:
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;
+
+  const std::string &getBinop() const
+  {
+    return binop;
+  }
+
+  std::shared_ptr<jimple_expr> &getLhs()
+  {
+    return lhs;
+  }
+
+  std::shared_ptr<jimple_expr> &getRhs()
+  {
+    return rhs;
+  }
 
 protected:
   std::string binop;
