@@ -65,7 +65,7 @@ void jimple_full_method_body::from_json(const json &j)
     case statement::Label:
     {
       jimple_label s;
-      x.at("label").get_to(s);
+      x.get_to(s);
       if(label)
         members.push_back(std::move(label));
       label = std::make_shared<jimple_label>(s);
@@ -74,7 +74,7 @@ void jimple_full_method_body::from_json(const json &j)
     case statement::Goto:
     {
       jimple_goto s;
-      x.at("goto").get_to(s);
+      x.get_to(s);
       to_add = std::make_shared<jimple_goto>(s);
       break;
     }
