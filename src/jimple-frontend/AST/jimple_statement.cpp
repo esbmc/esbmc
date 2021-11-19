@@ -87,7 +87,7 @@ exprt jimple_label::to_exprt(
 
 void jimple_goto::from_json(const json &j)
 {
-  j.get_to(label);
+  j.at("goto").get_to(label);
 }
 
 std::string jimple_goto::to_string() const
@@ -109,7 +109,7 @@ exprt jimple_goto::to_exprt(
 
 void jimple_label::from_json(const json &j)
 {
-  j.get_to(label);
+  j.at("label").get_to(label);
 }
 
 std::string jimple_assignment::to_string() const
