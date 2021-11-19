@@ -293,7 +293,7 @@ void violation_graphml_goto_trace(
         // Due to we reporting the memory leak happening at the end of main's
         // scope, CPA is not able to validate our witness, so let's not add the
         // start_line attribute
-        if(options.get_bool_option("memory-cleanup-check"))
+        if(!options.get_bool_option("memory-cleanup-check"))
           violation_edge.start_line = get_line_number(
             verification_file,
             std::atoi(step.pc->location.get_line().c_str()),
