@@ -214,7 +214,7 @@ void create_edge_node(edget &edge, xmlnodet &edgenode)
   if(!edge.return_from_function.empty())
   {
     xmlnodet data_returnFromFunction;
-    data_returnFromFunction.add("<xmlattr>.key", "returnFrom");
+    data_returnFromFunction.add("<xmlattr>.key", "returnFromFunction");
     data_returnFromFunction.put_value(edge.return_from_function);
     edgenode.add_child("data", data_returnFromFunction);
   }
@@ -469,9 +469,9 @@ void create_graphml(xmlnodet &graphml)
   graphml.add_child("graphml.key", enter_function_node);
 
   xmlnodet return_from_function_node;
-  return_from_function_node.add("<xmlattr>.id", "returnFrom");
+  return_from_function_node.add("<xmlattr>.id", "returnFromFunction");
   return_from_function_node.put(
-    xmlnodet::path_type("<xmlattr>|attr.name", '|'), "returnFrom");
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'), "returnFromFunction");
   return_from_function_node.put(
     xmlnodet::path_type("<xmlattr>|attr.type", '|'), "string");
   return_from_function_node.add("<xmlattr>.for", "edge");
