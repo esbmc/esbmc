@@ -9,4 +9,7 @@ add_library(jimple
 target_include_directories(jimple
         PUBLIC ${Boost_INCLUDE_DIRS})
 
+target_include_directories(jimple_ast
+        PUBLIC ${Boost_INCLUDE_DIRS})
+
 target_link_libraries(jimple clibs jimple_ast ${Boost_LIBRARIES} fmt::fmt nlohmann_json::nlohmann_json)
