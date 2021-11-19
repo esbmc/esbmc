@@ -278,6 +278,7 @@ void violation_graphml_goto_trace(
   std::string program_file = options.get_option("input-file");
   size_t prev_stack_size = 0;
   std::string prev_scope;
+  locationt last_file_loc;
 
   for(const auto &step : goto_trace.steps)
   {
@@ -285,12 +286,9 @@ void violation_graphml_goto_trace(
     if(step.pc->location.is_nil())
       continue;
 
-    // We only care about nodes that represent statements in the file under
-    // verification
-    if(
-      program_file.find(step.pc->location.get_file().as_string()) ==
-      std::string::npos)
-      continue;
+    bool is_file_under_verification =
+      program_file.find(step.pc->location.get_file().as_string()) !=
+      std::string::npos;
 
     switch(step.type)
     {
@@ -306,14 +304,19 @@ void violation_graphml_goto_trace(
         edget violation_edge(prev_node, violation_node);
         violation_edge.thread_id = std::to_string(step.thread_nr);
 
+        // There are cases where we generate the violation node but it happened
+        // inside a lib model, so we report the wrong line of code. To prevent
+        // that, we keep the last location we passed in file under verification
+        // before to get the expected line of error.
+        locationt loc =
+          is_file_under_verification ? step.pc->location : last_file_loc;
+
         // Due to we reporting the memory leak happening at the end of main's
         // scope, CPA is not able to validate our witness, so let's not add the
         // start_line attribute
         if(!options.get_bool_option("memory-cleanup-check"))
           violation_edge.start_line = get_line_number(
-            verification_file,
-            std::atoi(step.pc->location.get_line().c_str()),
-            options);
+            verification_file, std::atoi(loc.get_line().c_str()), options);
 
         graph.edges.push_back(violation_edge);
 
@@ -333,14 +336,18 @@ void violation_graphml_goto_trace(
         // validators don't understand it
         std::string cur_scope = step.pc->location.function().as_string();
         if(cur_scope.empty())
-          continue;
-
-        std::string assignment = get_formated_assignment(ns, step, msg);
+          break;
 
         // Let's not repeat ourselves
+        std::string assignment = get_formated_assignment(ns, step, msg);
         if(assignment == prev_assignment)
-          continue;
+          break;
         prev_assignment = assignment;
+
+        // We only care about assignments that represent statements in the file
+        // under verification
+        if(!is_file_under_verification)
+          break;
 
         // Stack size changed, either we entered a function or we exited it
         if(step.stack_trace.size() != prev_stack_size)
@@ -383,8 +390,12 @@ void violation_graphml_goto_trace(
       break;
 
     default:
-      continue;
+      break;
     }
+
+    // Save last location in the file under verification
+    if(is_file_under_verification)
+      last_file_loc = step.pc->location;
   }
 }
 
