@@ -192,8 +192,20 @@ bool solidity_convertert::get_var_decl(
   // to improve the re-usability of get_type* function, when dealing with non-array var decls.
   // For array, do NOT use ["typeName"]. Otherwise, it will cause problem
   // when populating typet in get_cast
-  if(get_type_description(ast_node["typeName"]["typeDescriptions"], t))
-    return true;
+  bool dyn_array = is_dyn_array(ast_node["typeDescriptions"]);
+  if (dyn_array)
+  {
+    // append size expr in typeDescription JSON object
+    const nlohmann::json &type_descriptor = add_dyn_array_size_expr(
+        ast_node["typeName"]["typeDescriptions"], ast_node);
+    if(get_type_description(type_descriptor, t))
+      return true;
+  }
+  else
+  {
+    if(get_type_description(ast_node["typeName"]["typeDescriptions"], t))
+      return true;
+  }
 
   // 2. populate id and name
   std::string name, id;
@@ -243,7 +255,7 @@ bool solidity_convertert::get_var_decl(
   // For state var decl, we look for "value".
   // For local var decl, we look for "initialValue"
   bool has_init =
-    ast_node.contains("value") || ast_node.contains("initialValue");
+    (ast_node.contains("value") || ast_node.contains("initialValue")) && !dyn_array;
   if(symbol.static_lifetime && !symbol.is_extern && !has_init)
   {
     symbol.value = gen_zero(t, true);
@@ -314,6 +326,10 @@ bool solidity_convertert::get_function_definition(
   // 7. Populate "std::string id, name"
   std::string name, id;
   get_function_definition_name(ast_node, name, id);
+
+  // TODO: debug remove before commit
+  if (name == "func_dynamic")
+    printf("@@ found func_dynamic\n");
 
   // 8. populate "std::string debug_modulename"
   std::string debug_modulename =
@@ -1233,6 +1249,34 @@ bool solidity_convertert::get_type_description(
 
     break;
   }
+  case SolidityGrammar::TypeNameT::DynArrayTypeName:
+  {
+    // Deal with dynamic array
+    exprt size_expr;
+    if (type_name.contains("sizeExpr"))
+    {
+      const nlohmann::json &rtn_expr = type_name["sizeExpr"];
+      // wrap it in an ImplicitCastExpr to convert LValue to RValue
+      nlohmann::json implicit_cast_expr =
+        make_implicit_cast_expr(rtn_expr, "LValueToRValue");
+      if(get_expr(implicit_cast_expr, size_expr))
+        return true;
+    }
+    else
+    {
+      new_type = empty_typet();
+    }
+
+    typet subtype;
+    nlohmann::json array_elementary_type =
+      make_array_elementary_type(type_name);
+    if(get_type_description(array_elementary_type, subtype))
+      return true;
+
+    new_type = array_typet(subtype, size_expr);
+
+    break;
+  }
   default:
   {
     msg.debug(fmt::format(
@@ -1541,6 +1585,7 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
   {
     if(current_func["body"].contains("statements"))
     {
+      // var declaration in local statements
       for(const auto &body_stmt : current_func["body"]["statements"].items())
       {
         const nlohmann::json &stmt = body_stmt.value();
@@ -1560,6 +1605,22 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
   }
   else
     assert(!"Unable to find the corresponding local variable decl. Current function does not have a function body.");
+
+  // Search function parameter
+  if (current_func.contains("parameters"))
+  {
+    if (current_func["parameters"]["parameters"].size())
+    {
+      // var decl in function parameter array
+      for(const auto &param_decl : current_func["parameters"]["parameters"].items())
+      {
+        const nlohmann::json &param = param_decl.value();
+        assert(param["nodeType"] == "VariableDeclaration");
+        if(param["id"] == ref_decl_id)
+          return param;
+      }
+    }
+  }
 
   // if no matching state or local var decl, search decl in current_forStmt
   const nlohmann::json &current_for = *current_forStmt;
@@ -1845,6 +1906,19 @@ nlohmann::json solidity_convertert::make_array_to_pointer_type(
   return adjusted_type;
 }
 
+nlohmann::json
+solidity_convertert::add_dyn_array_size_expr(
+    const nlohmann::json &type_descriptor, const nlohmann::json &dyn_array_node)
+{
+  nlohmann::json adjusted_descriptor;
+  adjusted_descriptor = type_descriptor;
+  // get the JSON object for size expr and merge it with the original type descriptor
+  assert(dyn_array_node.contains("initialValue"));
+  adjusted_descriptor.push_back(
+      nlohmann::json::object_t::value_type("sizeExpr", dyn_array_node["initialValue"]["arguments"][0]));
+  return adjusted_descriptor;
+}
+
 std::string
 solidity_convertert::get_array_size(const nlohmann::json &type_descrpt)
 {
@@ -1862,4 +1936,24 @@ solidity_convertert::get_array_size(const nlohmann::json &type_descrpt)
     assert(!"Unsupported - Missing array size in type descriptor. Detected dynamic array?");
 
   return the_size;
+}
+
+bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
+{
+  if (json_in.contains("typeIdentifier"))
+  {
+    if(json_in["typeIdentifier"].get<std::string>().find("dyn") != std::string::npos)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+// @@ DEBUG: remove before commit
+void solidity_convertert::print_json(const nlohmann::json &json_in)
+{
+  printf("### JSON: ###\n");
+  std::cout << std::setw(2) << json_in << '\n'; // '2' means 2x indentations in front of each line
+  printf("\n");
 }

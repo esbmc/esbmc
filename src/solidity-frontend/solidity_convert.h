@@ -11,6 +11,8 @@
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
 
+#include <iostream> // @@ DEBUG: remove before commit
+
 class solidity_convertert
 {
 public:
@@ -22,6 +24,8 @@ public:
   virtual ~solidity_convertert() = default;
 
   bool convert();
+
+  void print_json(const nlohmann::json &json_in);
 
 protected:
   contextt &context;
@@ -102,6 +106,8 @@ protected:
   nlohmann::json make_array_elementary_type(const nlohmann::json &type_descrpt);
   nlohmann::json make_array_to_pointer_type(const nlohmann::json &type_descrpt);
   std::string get_array_size(const nlohmann::json &type_descrpt);
+  bool is_dyn_array(const nlohmann::json &json_in);
+  nlohmann::json add_dyn_array_size_expr(const nlohmann::json &type_descriptor, const nlohmann::json &dyn_array_node);
 
   void get_default_symbol(
     symbolt &symbol,
