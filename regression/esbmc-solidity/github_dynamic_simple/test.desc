@@ -1,0 +1,4 @@
+CORE
+dynamic_array_oob_simple.solast
+--function dyn_array_oob_simple
+^VERIFICATION FAILED$
