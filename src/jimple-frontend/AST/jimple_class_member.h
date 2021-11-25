@@ -65,7 +65,7 @@ public:
     return body;
   }
 
-  const std::string &getParameters() const
+  const std::vector<std::string> &getParameters() const
   {
     return parameters;
   }
@@ -76,7 +76,7 @@ protected:
   std::string throws;
   jimple_type t;
   std::shared_ptr<jimple_method_body> body;
-  std::string parameters;
+  std::vector<std::string> parameters;
 };
 
 // TODO: Class Field
