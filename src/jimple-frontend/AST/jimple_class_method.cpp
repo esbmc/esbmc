@@ -50,7 +50,6 @@ void jimple_class_method::from_json(const json &j)
   // Method type
   j.at("type").get_to(t);
 
-  // TODO: List of Parameters
   j.at("parameters").get_to(parameters);
   // Throws?
   try
@@ -73,7 +72,7 @@ std::string jimple_class_method::to_string() const
   std::ostringstream oss;
   oss << "Class Method"
       << "\n\tName: " << this->name << "\n\t" << this->t.to_string() << "\n\t"
-      << this->m.to_string() << "\n\tParameters: " << this->parameters
+      << this->m.to_string() << "\n\tParameters: " << "[]" //TODO: this->parameters
       << "\n\tThrows: " << this->throws
       << "\n\tBody : " << this->body->to_string();
 
