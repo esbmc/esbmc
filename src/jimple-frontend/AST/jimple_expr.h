@@ -96,3 +96,38 @@ protected:
   std::shared_ptr<jimple_expr> lhs;
   std::shared_ptr<jimple_expr> rhs;
 };
+
+class jimple_cast : public jimple_expr
+{
+public:
+  virtual void from_json(const json &j) override;
+  virtual std::string to_string() const override
+  {
+    return "Jimple Cast\n";
+  }
+
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
+  const std::string &getVarName() const
+  {
+    return var_name;
+  }
+
+  std::shared_ptr<jimple_expr> &getFrom()
+  {
+    return from;
+  }
+
+  std::shared_ptr<jimple_type> &getType()
+  {
+    return to;
+  }
+
+protected:
+  std::string var_name;
+  std::shared_ptr<jimple_expr> from;
+  std::shared_ptr<jimple_type> to;
+};

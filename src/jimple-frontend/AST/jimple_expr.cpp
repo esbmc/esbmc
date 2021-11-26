@@ -1,6 +1,8 @@
 #include <jimple-frontend/AST/jimple_expr.h>
 #include <util/std_code.h>
 #include <util/expr_util.h>
+#include <util/c_typecast.h>
+#include <util/c_types.h>
 
 void jimple_constant::from_json(const json &j)
 {
@@ -65,6 +67,13 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
     return std::make_shared<jimple_binop>(c);
   }
 
+  if(expr_type == "cast")
+  {
+    jimple_cast c;
+    c.from_json(j);
+    return std::make_shared<jimple_cast>(c);
+  }
+
   throw "Invalid expr type";
 }
 
@@ -86,4 +95,25 @@ exprt jimple_binop::to_exprt(
     lhs_expr.type(),
     lhs_expr,
     rhs->to_exprt(ctx, class_name, function_name));
+};
+
+void jimple_cast::from_json(const json &j)
+{
+  jimple_type t;
+  j.at("to").get_to(t);
+  to = std::make_shared<jimple_type>(t);
+  from = get_expression(j.at("from"));
+  
+}
+
+exprt jimple_cast::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  auto from_expr = from->to_exprt(ctx, class_name, function_name);
+  c_typecastt c_typecast(ctx);
+  
+  c_typecast.implicit_typecast(from_expr, to->to_typet());
+  return from_expr;
 };
