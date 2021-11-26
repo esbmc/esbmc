@@ -67,7 +67,7 @@ SCENARIO("AST initialization from JSON (methods)", "[jimple-frontend]")
     "body":[],
     "name": "method",
     "throws": "(No throw)",
-    "parameters": [""],
+    "parameters": [], [jimple] fixed test-case (parameters is a list now)
     "content": []
 })json");
       nlohmann::json j;
@@ -80,10 +80,9 @@ SCENARIO("AST initialization from JSON (methods)", "[jimple-frontend]")
       REQUIRE_FALSE(f.getName() == "WrongMethodName");
       REQUIRE(f.getThrows() == "(No throw)");
       REQUIRE_FALSE(f.getThrows() == "exception");
-      REQUIRE(f.getT().getTName() == "int");
-      REQUIRE_FALSE(f.getT().getTName() == "void");
-      REQUIRE(f.getParameters()[0] == "");
-      REQUIRE_FALSE(f.getParameters()[0] == "1");
+      REQUIRE(f.getT().is_array() == false);
+      REQUIRE_FALSE(f.getT().is_array());
+      REQUIRE(f.getParameters().size() == 0);
       REQUIRE(f.getM().at(0) == jimple_modifiers::modifier::Public);
       REQUIRE_FALSE(f.getM().at(0) == jimple_modifiers::modifier::Private);
     }
