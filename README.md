@@ -136,6 +136,6 @@ A limited number of classes have been marked up with doxygen documentation heade
 
 Output will be in docs/html, open index.html to get started.
 
-### Acknowledgements
+### Acknowledgments
 
-The ESBMC development was supported by various research funding agencies, including CNPq (Brazil), CAPES (Brazil), FAPEAM (Brazil), EPSRC (UK), Royal Society (UK), British Council (UK), European Comission (Horizon 2020), and companies including Intel, Nokia Institute of Technology and Samsung.
+The ESBMC development was supported by various research funding agencies, including CNPq (Brazil), CAPES (Brazil), FAPEAM (Brazil), EPSRC (UK), Royal Society (UK), British Council (UK), European Commission (Horizon 2020), and companies including Intel, Nokia Institute of Technology and Samsung.
