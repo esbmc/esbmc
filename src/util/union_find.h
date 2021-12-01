@@ -102,7 +102,7 @@ protected:
 };
 
 template <typename T>
-class union_find : public numbering<T>
+class union_find : protected numbering<T>
 {
 public:
   // true == already in same set
@@ -149,6 +149,12 @@ public:
     assert(uuf.size() == this->size());
 
     return n;
+  }
+
+  void clear()
+  {
+    uuf.clear();
+    subt::clear();
   }
 
 protected:
