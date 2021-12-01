@@ -330,6 +330,11 @@ void value_sett::get_value_set_rec(
           insert(dest, unknown2tc(original_type), BigInt(0));
       }
     }
+    else
+    {
+      // Constant numbers aren't pointers. Null check is in the value set code
+      // for symbols.
+    }
     return;
   }
 
