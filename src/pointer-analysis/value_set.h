@@ -581,12 +581,15 @@ protected:
    *  @param original_type Type of the top level expression. If any part of the
    *         interpreted expression isn't recognized, then an unknown2t expr is
    *         put in the value tracking set to represent the fact that
-   *         interpretation failed, and it might point at something crazy. */
+   *         interpretation failed, and it might point at something crazy.
+   *  @param under_deref
+   */
   void get_value_set_rec(
     const expr2tc &expr,
     object_mapt &dest,
     const std::string &suffix,
-    const type2tc &original_type) const;
+    const type2tc &original_type,
+    bool under_deref = true) const;
 
   // Like get_value_set_rec, but dedicated to walking through the ireps that
   // are produced by pointer deref byte stitching

@@ -214,7 +214,8 @@ void value_sett::get_value_set_rec(
   const expr2tc &expr,
   object_mapt &dest,
   const std::string &suffix,
-  const type2tc &original_type) const
+  const type2tc &original_type,
+  bool under_deref) const
 {
   if(is_unknown2t(expr) || is_invalid2t(expr))
   {
@@ -312,23 +313,23 @@ void value_sett::get_value_set_rec(
 
   if(is_constant_expr(expr))
   {
-    if(is_constant_int2t(expr))
+    if(under_deref)
     {
-      constant_int2t ci = to_constant_int2t(expr);
-      if(ci.value.is_zero())
+      if(is_constant_int2t(expr))
       {
-        expr2tc tmp = null_object2tc(expr->type);
-        insert(dest, tmp, BigInt(0));
-        return;
+        constant_int2t ci = to_constant_int2t(expr);
+        if(ci.value.is_zero())
+        {
+          expr2tc tmp = null_object2tc(expr->type);
+          insert(dest, tmp, BigInt(0));
+          return;
+        }
+        else if(is_signedbv_type(expr->type) || is_unsignedbv_type(expr->type))
+          insert(dest, invalid2tc(original_type), BigInt(0));
+        else
+          insert(dest, unknown2tc(original_type), BigInt(0));
       }
-      else if(is_signedbv_type(expr->type) || is_unsignedbv_type(expr->type))
-      {
-        // TODO: an integer constant got turned into a pointer
-      }
-      else
-        insert(dest, unknown2tc(original_type), BigInt(0));
     }
-
     return;
   }
 
@@ -541,11 +542,11 @@ void value_sett::get_value_set_rec(
     // new object maps.
     object_mapt op0_set;
     if(!is_pointer_type(op1))
-      get_value_set_rec(op0, op0_set, "", op0->type);
+      get_value_set_rec(op0, op0_set, "", op0->type, false);
 
     object_mapt op1_set;
     if(!is_pointer_type(op0))
-      get_value_set_rec(op1, op1_set, "", op1->type);
+      get_value_set_rec(op1, op1_set, "", op1->type, false);
 
     /* TODO: The case that both, op0_set and op1_set, are non-empty is not
      *       handled, yet. */
