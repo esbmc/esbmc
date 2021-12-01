@@ -535,7 +535,8 @@ void value_sett::get_value_set_rec(
       (is_add2t(expr)) ? to_add2t(expr).side_2 : to_sub2t(expr).side_2;
 
     assert(
-      !(is_pointer_type(op0) && is_pointer_type(op1)) &&
+      (!is_pointer_type(expr) ||
+       !(is_pointer_type(op0) && is_pointer_type(op1))) &&
       "Cannot have pointer arithmetic with two pointers as operands");
 
     // Find out what the pointer operand points at, and suck that data into
