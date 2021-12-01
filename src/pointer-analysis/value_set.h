@@ -582,7 +582,13 @@ protected:
    *         interpreted expression isn't recognized, then an unknown2t expr is
    *         put in the value tracking set to represent the fact that
    *         interpretation failed, and it might point at something crazy.
-   *  @param under_deref
+   *  @param under_deref If true, treat the expression as occuring under a
+   *         dereference operation. Otherwise treat it at free-standing.
+   *         This only affects how constants are interpreted: if enabled, the
+   *         expression 0 becomes a null_object2t reference in the value-set,
+   *         while other constants are invalid2t/unknown2t; when disabled,
+   *         constant expressions do not generate any references in the
+   *         value-set.
    */
   void get_value_set_rec(
     const expr2tc &expr,
