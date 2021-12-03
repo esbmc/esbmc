@@ -134,6 +134,30 @@ class CTest4(ParseTest):
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
+class ToolTest1(CTest4):
+    """Added testcase with multiple white spaces in description"""
+
+    def _argument_list_checks(self, test_obj: BaseTest):
+        argument_list = self.test_case.generate_run_argument_list(
+            "__tool_contains_spaces__ --param 1 __test__")
+        expected = ['__tool_contains_spaces__ --param 1 __test__',
+                    './nonz3/29_exStbHwAcc/main.c', '--overflow-check',
+                    '--unwind', '3', '--32']
+        self.assertEqual(argument_list, expected, str(argument_list))
+
+
+class ToolTest2(CTest4):
+    """Added testcase with multiple white spaces in description"""
+
+    def _argument_list_checks(self, test_obj: BaseTest):
+        argument_list = self.test_case.generate_run_argument_list(
+            '__tool_contains_no_spaces__', '--param', '1', '__test__')
+        expected = ['__tool_contains_no_spaces__', '--param', '1', '__test__',
+                    './nonz3/29_exStbHwAcc/main.c', '--overflow-check',
+                    '--unwind', '3', '--32']
+        self.assertEqual(argument_list, expected, str(argument_list))
+
+
 class XMLTest1(ParseTest):
     """Added testcase with multiple white spaces in description"""
 
