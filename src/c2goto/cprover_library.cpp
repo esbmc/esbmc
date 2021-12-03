@@ -23,14 +23,26 @@ extern "C"
   extern const uint8_t clib64_fp_buf[];
   extern const unsigned int clib32_fp_buf_size;
   extern const unsigned int clib64_fp_buf_size;
-
-  const uint8_t *clib_ptrs[4][4] = {
-    {&clib32_buf[0], ((&clib32_buf[0]) + clib32_buf_size)},
-    {&clib64_buf[0], ((&clib64_buf[0]) + clib64_buf_size)},
-    {&clib32_fp_buf[0], ((&clib32_fp_buf[0]) + clib32_fp_buf_size)},
-    {&clib64_fp_buf[0], ((&clib64_fp_buf[0]) + clib64_fp_buf_size)},
-  };
 }
+
+namespace
+{
+/* [floatbv ? 1 : 0][wordsz == 64 ? 1 : 0] */
+static const struct buffer
+{
+  const uint8_t *start;
+  size_t size;
+} clibs[2][2] = {
+  {
+    {&clib32_buf[0], clib32_buf_size},
+    {&clib64_buf[0], clib64_buf_size},
+  },
+  {
+    {&clib32_fp_buf[0], clib32_fp_buf_size},
+    {&clib64_fp_buf[0], clib64_fp_buf_size},
+  },
+};
+} // namespace
 
 static void generate_symbol_deps(
   irep_idt name,
@@ -115,55 +127,36 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   goto_functionst goto_functions;
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
-  const uint8_t **this_clib_ptrs;
-  uint64_t size;
+  const buffer *clib;
   int fd;
 
-  if(config.ansi_c.word_size == 32)
+  switch(config.ansi_c.word_size)
   {
-    if(config.ansi_c.use_fixed_for_float)
-    {
-      this_clib_ptrs = &clib_ptrs[0][0];
-    }
-    else
-    {
-      this_clib_ptrs = &clib_ptrs[2][0];
-    }
-  }
-  else if(config.ansi_c.word_size == 64)
-  {
-    if(config.ansi_c.use_fixed_for_float)
-    {
-      this_clib_ptrs = &clib_ptrs[1][0];
-    }
-    else
-    {
-      this_clib_ptrs = &clib_ptrs[3][0];
-    }
-  }
-  else
-  {
-    if(config.ansi_c.word_size == 16)
-    {
-      message_handler.warning(
-        "Warning: this version of ESBMC does not have a C library "
-        "for 16 bit machines");
-      return;
-    }
+  case 16:
+    message_handler.warning(
+      "Warning: this version of ESBMC does not have a C library "
+      "for 16 bit machines");
+    return;
+  case 32:
+  case 64:
+    break;
+  default:
     message_handler.error(
       fmt::format("No c library for bitwidth {}", config.ansi_c.int_width));
     abort();
   }
 
-  size = this_clib_ptrs[1] - this_clib_ptrs[0];
-  if(size == 0)
+  clib =
+    &clibs[!config.ansi_c.use_fixed_for_float][config.ansi_c.word_size == 64];
+
+  if(clib->size == 0)
   {
     message_handler.error("error: Zero-lengthed internal C library");
     abort();
   }
 
   if(read_goto_binary_array(
-       this_clib_ptrs[0], size, new_ctx, goto_functions, message_handler))
+       clib->start, clib->size, new_ctx, goto_functions, message_handler))
     abort();
 
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
