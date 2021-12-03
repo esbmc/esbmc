@@ -87,6 +87,8 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
   if(cmdline.isset("64"))
     ansi_c.set_64();
 
+  ansi_c.cheri = cmdline.isset("cheri");
+
   if(cmdline.isset("function"))
     main = cmdline.getval("function");
 

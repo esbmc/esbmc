@@ -38,13 +38,46 @@ extern "C"
   extern unsigned int clib32_fp_buf_size;
   extern unsigned int clib64_fp_buf_size;
 
-  uint8_t *clib_ptrs[4][4] = {
-    {&clib32_buf[0], ((&clib32_buf[0]) + clib32_buf_size)},
-    {&clib64_buf[0], ((&clib64_buf[0]) + clib64_buf_size)},
-    {&clib32_fp_buf[0], ((&clib32_fp_buf[0]) + clib32_fp_buf_size)},
-    {&clib64_fp_buf[0], ((&clib64_fp_buf[0]) + clib64_fp_buf_size)},
-  };
+  extern uint8_t clib32_cheri_buf[1];
+  extern uint8_t clib64_cheri_buf[1];
+  extern unsigned int clib32_cheri_buf_size;
+  extern unsigned int clib64_cheri_buf_size;
+
+  extern uint8_t clib32_fp_cheri_buf[1];
+  extern uint8_t clib64_fp_cheri_buf[1];
+  extern unsigned int clib32_fp_cheri_buf_size;
+  extern unsigned int clib64_fp_cheri_buf_size;
 }
+
+namespace
+{
+/* [cheri ? 1 : 0][floatbv ? 1 : 0][wordsz == 64 ? 1 : 0] */
+static const struct buffer
+{
+  const uint8_t *start;
+  size_t size;
+} clib_ptrs[2][2][2] = {
+  {
+    {
+      {&clib32_buf[0], clib32_buf_size},
+      {&clib64_buf[0], clib64_buf_size},
+    },
+    {
+      {&clib32_fp_buf[0], clib32_fp_buf_size},
+      {&clib64_fp_buf[0], clib64_fp_buf_size},
+    },
+  },
+  {
+    {
+      {&clib32_cheri_buf[0], clib32_cheri_buf_size},
+      {&clib64_cheri_buf[0], clib64_cheri_buf_size},
+    },
+    {
+      {&clib32_fp_cheri_buf[0], clib32_fp_cheri_buf_size},
+      {&clib64_fp_cheri_buf[0], clib64_fp_cheri_buf_size},
+    },
+  }};
+} // namespace
 
 #undef p
 #endif
@@ -150,49 +183,31 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
   char symname_buffer[288];
+  const buffer *this_clib_ptrs;
   FILE *f;
-  uint8_t **this_clib_ptrs;
-  uint64_t size;
   int fd;
 
-  if(config.ansi_c.word_size == 32)
+  switch(config.ansi_c.word_size)
   {
-    if(config.ansi_c.use_fixed_for_float)
-    {
-      this_clib_ptrs = &clib_ptrs[0][0];
-    }
-    else
-    {
-      this_clib_ptrs = &clib_ptrs[2][0];
-    }
-  }
-  else if(config.ansi_c.word_size == 64)
-  {
-    if(config.ansi_c.use_fixed_for_float)
-    {
-      this_clib_ptrs = &clib_ptrs[1][0];
-    }
-    else
-    {
-      this_clib_ptrs = &clib_ptrs[3][0];
-    }
-  }
-  else
-  {
-    if(config.ansi_c.word_size == 16)
-    {
-      message_handler.warning(
-        "Warning: this version of ESBMC does not have a C library "
-        "for 16 bit machines");
-      return;
-    }
+  case 16:
+    message_handler.warning(
+      "Warning: this version of ESBMC does not have a C library "
+      "for 16 bit machines");
+    return;
+  case 32:
+  case 64:
+    break;
+  default:
     message_handler.error(
       fmt::format("No c library for bitwidth {}", config.ansi_c.int_width));
     abort();
   }
 
-  size = this_clib_ptrs[1] - this_clib_ptrs[0];
-  if(size == 0)
+  this_clib_ptrs =
+    &clib_ptrs[config.ansi_c.cheri][!config.ansi_c.use_fixed_for_float]
+              [config.ansi_c.word_size == 64];
+
+  if(this_clib_ptrs->size == 0)
   {
     message_handler.error("error: Zero-lengthed internal C library");
     abort();
@@ -208,7 +223,7 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   GetTempFileName(tmpdir, "bmc", 0, symname_buffer);
 #endif
   f = fopen(symname_buffer, "wb");
-  if(fwrite(this_clib_ptrs[0], size, 1, f) != 1)
+  if(fwrite(this_clib_ptrs->start, this_clib_ptrs->size, 1, f) != 1)
   {
     message_handler.error("Couldn't manipulate internal C library");
     abort();

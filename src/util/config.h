@@ -67,6 +67,7 @@ public:
 
     bool char_is_unsigned;
     bool use_fixed_for_float;
+    bool cheri;
 
     void set_16();
     void set_32();
