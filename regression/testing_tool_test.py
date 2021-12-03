@@ -64,7 +64,7 @@ class CTest1(ParseTest):
     def _argument_list_checks(self, test_obj):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         self.assertEqual(argument_list[0], "__test__")
-        self.assertEqual(argument_list[1], "main.c")
+        self.assertEqual(argument_list[1], "./esbmc-unix/00_bbuf_02/main.c")
         self.assertEqual(argument_list[2], "--unwind")
 
 
@@ -105,8 +105,9 @@ class CTest3(ParseTest):
 
     def _argument_list_checks(self, test_obj: BaseTest):
         argument_list = self.test_case.generate_run_argument_list("__test__")
-        expected = ['__test__', 'test.c', 'account.c', '--no-slice', '--context-bound',
-                    '1', '--depth', '150']
+        expected = ['__test__', './esbmc-unix/00_account_02/test.c',
+                    './esbmc-unix/00_account_02/account.c',
+                    '--no-slice', '--context-bound', '1', '--depth', '150']
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
@@ -128,7 +129,7 @@ class CTest4(ParseTest):
 
     def _argument_list_checks(self, test_obj: BaseTest):
         argument_list = self.test_case.generate_run_argument_list("__test__")
-        expected = ['__test__', 'main.c',
+        expected = ['__test__', './nonz3/29_exStbHwAcc/main.c',
                     '--overflow-check', '--unwind', '3', '--32']
         self.assertEqual(argument_list, expected, str(argument_list))
 
@@ -151,7 +152,7 @@ class XMLTest1(ParseTest):
 
     def _argument_list_checks(self, test_obj: BaseTest):
         argument_list = self.test_case.generate_run_argument_list("__test__")
-        expected = ['__test__', 'main.cpp', '--unwind',
+        expected = ['__test__', './esbmc-cpp/cpp/ch1_0/main.cpp', '--unwind',
                     '10', '--no-unwinding-assertions']
         self.assertEqual(argument_list, expected, str(argument_list))
 
