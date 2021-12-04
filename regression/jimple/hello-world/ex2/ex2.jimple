@@ -1,0 +1,54 @@
+{
+	{"object": "Variable",
+	"name": "a",
+	"type": {"identifier": "int",
+		 "dimensions": 0,
+		 "mode": "basic"
+		},
+	{"object": "SetVariable",
+	 "name": "a",
+	 "value": {"expr_type": "constant",
+		   "value": "42"}
+	},
+
+	{"object": "label",
+	 "label": "exitMethod"
+	},
+
+	{"object": "goto",
+	 "goto": "exitMethod"
+	},
+
+	{"object": "Method",
+    	 "modifiers": [
+         "public"
+    ],
+    	 "type": {"identifier": "void",
+             	  "dimensions": 0,
+             	  "mode": "basic"
+            },
+    	"body":[],
+    	"name": "exitMethod",
+    	"throws": "(No throw)",
+    	"parameters": "",
+    	"content": []
+	},
+
+	{"object": "if",
+	 "goto": "exitMethod",
+	 "cond": {"expr_type": "binop",
+		  "operator": "!=",
+		  "lhs": {"expr_type": "symbol",
+			  "value": "a"
+			 },
+		  "rhs": {"expr_type": "constant",
+			  "value": 42
+			 }
+		 }
+	},
+	
+	{"object": "throw",
+	 "expr": "a"
+	},
+
+}
