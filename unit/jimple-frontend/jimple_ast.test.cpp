@@ -67,7 +67,7 @@ SCENARIO("AST initialization from JSON (methods)", "[jimple-frontend]")
     "body":[],
     "name": "method",
     "throws": "(No throw)",
-    "parameters": "",
+    "parameters": [""],
     "content": []
 })json");
       nlohmann::json j;
@@ -80,10 +80,10 @@ SCENARIO("AST initialization from JSON (methods)", "[jimple-frontend]")
       REQUIRE_FALSE(f.getName() == "WrongMethodName");
       REQUIRE(f.getThrows() == "(No throw)");
       REQUIRE_FALSE(f.getThrows() == "exception");
-      REQUIRE(f.getT().is_array() == false);
-      REQUIRE_FALSE(f.getT().is_array());
-      REQUIRE(f.getParameters() == "");
-      REQUIRE_FALSE(f.getParameters() == "1");
+      REQUIRE(f.getT().getTName() == "int");
+      REQUIRE_FALSE(f.getT().getTName() == "void");
+      REQUIRE(f.getParameters()[0] == "");
+      REQUIRE_FALSE(f.getParameters()[0] == "1");
       REQUIRE(f.getM().at(0) == jimple_modifiers::modifier::Public);
       REQUIRE_FALSE(f.getM().at(0) == jimple_modifiers::modifier::Private);
     }
@@ -97,7 +97,7 @@ SCENARIO("AST initialization from JSON (declarations)", "[jimple-frontend]")
     "object": "Variable",
     "name": "a",
     "type": {"identifier": "int",
-             "dimensions": 1,
+             "dimensions": 0,
              "mode": "basic"
             }
 })json");
@@ -112,8 +112,8 @@ SCENARIO("AST initialization from JSON (declarations)", "[jimple-frontend]")
       REQUIRE(f.getT().getTName() == "int");
       REQUIRE_FALSE(f.getT().getTName() == "void");
       REQUIRE(f.getT().getTMode() == "basic");
-      REQUIRE(f.getT().getTDim() == 1);
-      REQUIRE_FALSE(f.getT().getTDim() == 0);
+      REQUIRE(f.getT().getTDim() == 0);
+      REQUIRE_FALSE(f.getT().getTDim() == 1);
     }
  
 }
@@ -175,7 +175,7 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
   GIVEN("An invoke statement")
     {
       std::istringstream file(R"json({
-    "object": "Invoke",
+    "object": "StaticInvoke",
     "base_class": "URI1495",
     "method": "foo",
     "parameters": ""
@@ -222,7 +222,52 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
       REQUIRE_FALSE(f.getLabel() == "label");
     
     }
-  
+
+  GIVEN("An assignment statement")
+    {
+      std::istringstream file(R"json({
+    "object": "SetVariable",
+    "name": "x",
+    "value": {"expr_type": "constant",
+              "value": "10"}
+})json");
+      nlohmann::json j;
+      file >> j;
+
+      jimple_assignment f;
+      j.get_to(f);
+
+      REQUIRE(f.getVariable() == "x");
+      REQUIRE_FALSE(f.getVariable() == "y");
+    }
+
+  GIVEN("An identity statement")
+    {
+      std::istringstream file(R"json({
+    "object": "identity",
+    "identifier": "this",
+    "name": "r0",
+    "type": {"identifier": "int",
+             "dimensions": 0,
+             "mode": "basic"}
+})json");
+      nlohmann::json j;
+      file >> j;
+
+      jimple_identity f;
+      j.get_to(f);
+
+      REQUIRE(f.getLocalName() == "r0");
+      REQUIRE_FALSE(f.getLocalName() == "r1");
+      REQUIRE(f.getAtIdentifier() == "this");
+      REQUIRE_FALSE(f.getAtIdentifier() == "");
+      REQUIRE(f.getT().getTName() == "int");
+      REQUIRE_FALSE(f.getT().getTName() == "void");
+      REQUIRE(f.getT().getTMode() == "basic");
+      REQUIRE(f.getT().getTDim() == 0);
+      REQUIRE_FALSE(f.getT().getTDim() == 1);
+    }
+
 }
 
 SCENARIO("AST initialization from JSON (expressions)", "[jimple-frontend]")
