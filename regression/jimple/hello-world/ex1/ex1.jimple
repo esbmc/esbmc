@@ -1,0 +1,76 @@
+{
+    "object": "Class",
+    "modifiers": [
+        "public"
+    ],
+    "name": "URI1495",
+    "extends": "java.lang.Object",
+    "content": [
+        {
+        "object": "Method",
+        "modifiers": [
+            "public",
+            "static"
+        ],
+        "type": {
+            "identifier": "int",
+            "dimensions": 0,
+            "mode": "basic"
+        },
+        "name": "foo",
+        "parameters": [""],
+        "content": [
+            {
+            "object": "Variable",
+            "name": "var0",
+            "type": {
+                "identifier": "int",
+                "dimensions": 0,
+                "mode": "basic"
+
+            }
+        },
+            {
+                "object": "SetVariable",
+                "name": "var0",
+                "value": {
+                    "expr_type": "constant",
+                    "value": "42"
+                }
+        },
+            {
+                "object": "Assert",
+                "equals": {
+                            "value": "42",
+                            "symbol": "var0"
+                        }
+        }
+        
+        ]
+    },
+
+        {
+        "object": "Method",
+        "modifiers": [
+            "public",
+            "static"
+        ],
+        "type": {
+            "identifier": "void",
+            "dimensions": 0,
+            "mode": "basic"
+        },
+        "name": "main",
+        "parameters": [""],
+        "content": [
+            {
+            "object": "StaticInvoke",
+            "variable": "",
+            "base_class": "URI1495",
+            "method": "foo",
+            "parameters": ""
+        }
+        ]
+    }
+    ]
+}
