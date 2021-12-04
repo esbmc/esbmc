@@ -36,7 +36,7 @@ public:
     return local_name;
   }
 
-  const std::string &getAtIdentfier() const
+  const std::string &getAtIdentifier() const
   {
     return at_identifier;
   }
