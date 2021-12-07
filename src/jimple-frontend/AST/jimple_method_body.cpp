@@ -24,7 +24,6 @@ exprt jimple_full_method_body::to_exprt(
 
 void jimple_full_method_body::from_json(const json &j)
 {
-  std::shared_ptr<jimple_label> label;
   for(auto &x : j)
   {
     std::shared_ptr<jimple_method_field> to_add;
@@ -55,10 +54,14 @@ void jimple_full_method_body::from_json(const json &j)
       to_add = std::make_shared<jimple_invoke>(s);
       break;
     }
+    case statement::SpecialInvoke:
+    {
+      continue;
+    }
     case statement::Return:
     {
       jimple_return s;
-      x.at("statement").at("return").get_to(s);
+      x.get_to(s);
       to_add = std::make_shared<jimple_return>(s);
       break;
     }
@@ -66,10 +69,8 @@ void jimple_full_method_body::from_json(const json &j)
     {
       jimple_label s;
       x.get_to(s);
-      if(label)
-        members.push_back(std::move(label));
-      label = std::make_shared<jimple_label>(s);
-      continue;
+      to_add = std::make_shared<jimple_label>(s);      
+      break;
     }
     case statement::Goto:
     {
@@ -85,12 +86,16 @@ void jimple_full_method_body::from_json(const json &j)
       to_add = std::make_shared<jimple_assignment>(s);
       break;
     }
+    case statement::AssignmentDeref:
+    {
+      jimple_assignment_deref s;
+      x.get_to(s);
+      to_add = std::make_shared<jimple_assignment_deref>(s);
+      break;
+    }
     case statement::Assertion:
     {
-      jimple_assertion s;
-      x.get_to(s);
-      to_add = std::make_shared<jimple_assertion>(s);
-      break;
+      throw fmt::format("Assertion type {}", stmt);
     }
     case statement::Throw:
     {
@@ -109,13 +114,8 @@ void jimple_full_method_body::from_json(const json &j)
     default:
       throw fmt::format("Unknown type {}", stmt);
     }
-    if(label)
-      label->push_into_label(to_add);
-    else
-      members.push_back(std::move(to_add));
+    members.push_back(std::move(to_add));      
   }
-  if(label)
-    members.push_back(std::move(label));
 }
 std::string jimple_full_method_body::to_string() const
 {
