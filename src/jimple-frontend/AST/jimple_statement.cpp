@@ -61,6 +61,8 @@ std::string jimple_label::to_string() const
 {
   std::ostringstream oss;
   oss << "Label: " << this->label;
+  for(auto x : this->members->members)
+    oss << "\n\t\t\t" << x->to_string();
   return oss.str();
 }
 
@@ -75,10 +77,11 @@ exprt jimple_label::to_exprt(
   c_label.set_label(label);
 
   code_blockt block;
-  for(auto x : members)
+  for(auto x : members->members)
   {
-    block.operands().push_back(x->to_exprt(ctx, class_name, function_name));
+    block.operands().push_back(std::move(x->to_exprt(ctx, class_name, function_name)));
   }  
+  block.dump();
   c_label.code() = to_code(block);
 
   //skip = c_label;
@@ -109,7 +112,10 @@ exprt jimple_goto::to_exprt(
 
 void jimple_label::from_json(const json &j)
 {
-  j.at("label").get_to(label);
+  j.at("label_id").get_to(label);
+  jimple_full_method_body b;
+  b.from_json(j.at("content"));
+  members = std::make_shared<jimple_full_method_body>(b);
 }
 
 std::string jimple_assignment::to_string() const
@@ -139,16 +145,44 @@ exprt jimple_assignment::to_exprt(
   return assign;
 }
 
+std::string jimple_assignment_deref::to_string() const
+{
+  std::ostringstream oss;
+  oss << "Assignment: " << variable << "[" << pos->to_string() << "]  = " << expr->to_string();
+  return oss.str();
+}
+
+void jimple_assignment_deref::from_json(const json &j)
+{
+  j.at("name").get_to(variable);
+  expr = jimple_expr::get_expression(j.at("value"));
+  pos = jimple_expr::get_expression(j.at("pos"));
+}
+
+exprt jimple_assignment_deref::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  jimple_symbol s(variable);
+
+  jimple_deref d(pos, std::make_shared<jimple_symbol>(s));
+  code_assignt assign(
+    d.to_exprt(ctx,class_name, function_name), expr->to_exprt(ctx, class_name, function_name));
+  return assign;
+}
+
+
 std::string jimple_if::to_string() const
 {
   std::ostringstream oss;
-  oss << "If: " << cond->to_string() << " then goto " << label;
+  oss << "If: " << cond->to_string() << " THEN GOTO " << label;
   return oss.str();
 }
 
 void jimple_if::from_json(const json &j)
 {
-  cond = jimple_expr::get_expression(j.at("cond"));
+  cond = jimple_expr::get_expression(j.at("expression"));
   j.at("goto").get_to(label);
 }
 

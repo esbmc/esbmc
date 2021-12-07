@@ -103,10 +103,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  virtual void push_into_label(std::shared_ptr<jimple_method_field> &f)
-  {
-    members.push_back(std::move(f));
-  }
 
   const std::string &getLabel() const
   {
@@ -115,7 +111,7 @@ public:
 
 protected:
   std::string label;
-  std::vector<std::shared_ptr<jimple_method_field>> members;
+  std::shared_ptr<jimple_full_method_body> members;
 };
 
 class jimple_goto : public jimple_statement
@@ -160,6 +156,25 @@ public:
 protected:
   std::string variable;
   std::shared_ptr<jimple_expr> expr;
+};
+
+class jimple_assignment_deref : public jimple_assignment
+{
+public:
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+  virtual std::string to_string() const override;
+  virtual void from_json(const json &j) override;
+
+  const std::shared_ptr<jimple_expr> &getPos() const
+  {
+    return pos;
+  }
+
+protected:
+  std::shared_ptr<jimple_expr> pos;
 };
 
 class jimple_assertion : public jimple_statement
