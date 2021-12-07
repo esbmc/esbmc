@@ -61,6 +61,7 @@ class jimple_empty_method_body : public jimple_method_body
  */
 class jimple_full_method_body : public jimple_method_body
 {
+  public:
   virtual void from_json(const json &j) override;
   virtual std::string to_string() const override;
   virtual exprt to_exprt(
@@ -72,8 +73,10 @@ class jimple_full_method_body : public jimple_method_body
   {
     Assertion, // TODO: This will be removed eventually
     Assignment,
+    AssignmentDeref, // e.g. A[2] = 3
     Identity,
     StaticInvoke,
+    SpecialInvoke,
     Return,
     Label,
     Goto,
@@ -82,7 +85,7 @@ class jimple_full_method_body : public jimple_method_body
     Throw
   };
 
-protected:
+
   std::vector<std::shared_ptr<jimple_method_field>> members;
 
 private:
@@ -90,21 +93,25 @@ private:
     {"Variable", statement::Declaration},
     {"identity", statement::Identity},
     {"StaticInvoke", statement::StaticInvoke},
-    {"return", statement::Return},
-    {"label", statement::Label},
+    {"SpecialInvoke", statement::SpecialInvoke},
+    {"Return", statement::Return},
+    {"Label", statement::Label},
     {"goto", statement::Goto},
     {"SetVariable", statement::Assignment},
+    {"SetVariableDeref", statement::AssignmentDeref},
     {"Assert", statement::Assertion},
-    {"if", statement::If},
-    {"throw", statement::Throw}};
+    {"If", statement::If},
+    {"Throw", statement::Throw}};
 
   std::map<statement, std::string> to_map = {
     {statement::Identity, "Identity"},
     {statement::StaticInvoke, "StaticInvoke"},
+    {statement::SpecialInvoke, "SpecialInvoke"},
     {statement::Return, "Return"},
     {statement::Label, "Label"},
     {statement::Goto, "Goto"},
     {statement::Assignment, "Assignment"},
+    {statement::AssignmentDeref, "AssignmentDeref"},
     {statement::Assertion, "Assertion"},
     {statement::If, "If"},
     {statement::Declaration, "Declaration"},
