@@ -50,7 +50,7 @@ void jimple_class_method::from_json(const json &j)
   // Method type
   j.at("type").get_to(t);
 
-  j.at("parameters").get_to(parameters);
+  //TODO: j.at("parameters").get_to(parameters);
   // Throws?
   try
   {
