@@ -6,32 +6,27 @@
 
 void jimple_type::from_json(const json &j)
 {
-  // Non-void type
-  // TODO: j.at_to("mode")
   j.at("identifier").get_to(name);
   j.at("dimensions").get_to(dimensions);
-  j.at("mode").get_to(mode);
+
+  bt = from_map.count(name) != 0 ? from_map[name] : BASE_TYPES::OTHER;
 }
 
 typet jimple_type::get_base_type() const
 {
-  // TODO: Hash-Table
-  // TODO: Type table
-  if(mode != "basic")
-    return struct_union_typet(name);
+  switch(bt)
+  {
+    case BASE_TYPES::INT:
+      return int_type();
 
-  // This is the equivalent to C
-  if(name == "void")
-  {
-    return empty_typet();
-  }
-  else if(name == "int")
-  {
-    return int_type();
-  }
-  else
-  {
-    return typet(name);
+    case BASE_TYPES::VOID:
+      return empty_typet();
+
+    case BASE_TYPES::OTHER:
+      return struct_union_typet(name);
+
+    default:
+      return typet(name);
   }
 }
 
