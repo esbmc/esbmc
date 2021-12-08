@@ -320,13 +320,13 @@ def _arg_parsing():
     XMLTestCase.CPP_INCLUDE_DIR = main_args.library
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
+    regression_path = os.path.join(os.path.dirname(os.path.relpath(__file__)),
+                                   main_args.regression)
+
     if main_args.file:
-        gen_one_test(main_args.regression, main_args.file, main_args.tool, main_args.modes)
+        gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
     else:
-        create_tests(main_args.tool,
-                     os.path.join(os.path.dirname(os.path.relpath(__file__)),
-                                  main_args.regression),
-                     main_args.mode)
+        create_tests(main_args.tool, regression_path, main_args.mode)
 
 def main():
     _arg_parsing()
