@@ -11,8 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/string_container.h>
 
-string_containert string_container [[gnu::init_priority(101)]];
-
 string_ptrt::string_ptrt(const char *_s) : s(_s), len(strlen(_s))
 {
 }
