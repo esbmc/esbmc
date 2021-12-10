@@ -160,7 +160,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     type2tc inttype = machine_ptr;
     constant_int2tc constant(inttype, type_size);
 
-    if(non_ptr_op->type->get_width() < config.ansi_c.pointer_width)
+    if(non_ptr_op->type->get_width() < config.ansi_c.pointer_width())
       non_ptr_op = typecast2tc(machine_ptr, non_ptr_op);
 
     expr2tc mul = mul2tc(inttype, non_ptr_op, constant);
@@ -266,7 +266,7 @@ smt_astt smt_convt::convert_identifier_pointer(
   address_of2tc new_addr_of(expr->type, expr);
   smt_cachet::const_iterator cache_result = smt_cache.find(new_addr_of);
   if(cache_result != smt_cache.end())
-    return (cache_result->ast);
+    return cache_result->ast;
 
   // Has this been touched by realloc / been re-numbered?
   renumber_mapt::iterator it = renumber_map.back().find(symbol);
@@ -452,6 +452,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
 
     address_of2tc addrof(obj.type, base);
     smt_astt a = convert_ast(addrof);
+    /* constant 1 refers to member 'pointer_offset' of 'pointer_struct' */
     return a->update(this, convert_ast(offs), 1);
   }
 
@@ -528,6 +529,13 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   abort();
 }
 
+static BigInt ones(unsigned n_bits)
+{
+  BigInt r;
+  r.setPower2(n_bits);
+  return r -= 1;
+}
+
 void smt_convt::init_addr_space_array()
 {
   addr_space_sym_num.back() = 1;
@@ -535,9 +543,8 @@ void smt_convt::init_addr_space_array()
   type2tc ptr_int_type = machine_ptr;
   constant_int2tc zero_ptr_int(ptr_int_type, BigInt(0));
   constant_int2tc one_ptr_int(ptr_int_type, BigInt(1));
-  BigInt allones(
-    (config.ansi_c.pointer_width == 32) ? 0xFFFFFFFF : 0xFFFFFFFFFFFFFFFFULL);
-  constant_int2tc obj1_end_const(ptr_int_type, allones);
+  constant_int2tc obj1_end_const(
+    ptr_int_type, ones(config.ansi_c.pointer_width())); /* CHERI-TODO */
 
   symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");
   symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_end_0");
