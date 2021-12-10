@@ -75,8 +75,8 @@ smt_convt::smt_convt(
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
+  members.push_back(get_uint_type(config.ansi_c.pointer_width())); /* CHERI-TODO */
+  members.push_back(get_uint_type(config.ansi_c.pointer_width())); /* CHERI-TODO */
   names.emplace_back("pointer_object");
   names.emplace_back("pointer_offset");
 
@@ -90,8 +90,8 @@ smt_convt::smt_convt(
 
   members.clear();
   names.clear();
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
-  members.push_back(get_uint_type(config.ansi_c.pointer_width));
+  members.push_back(get_uint_type(config.ansi_c.pointer_width())); /* CHERI-TODO */
+  members.push_back(get_uint_type(config.ansi_c.pointer_width())); /* CHERI-TODO */
   names.emplace_back("start");
   names.emplace_back("end");
   addr_space_type = {members, names, names, "addr_space_type"};
@@ -100,7 +100,7 @@ smt_convt::smt_convt(
 
   addr_space_data.emplace_back();
 
-  machine_ptr = type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
+  machine_ptr = type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width())); /* CHERI-TODO */
 
   // Pick a modelling array to shoehorn initialization data into. Because
   // we don't yet have complete data for whether pointers are dynamic or not,
