@@ -8,6 +8,7 @@ target_include_directories(clangcfrontend_stuff
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CLANG_INCLUDE_DIRS}
     PRIVATE ${Boost_INCLUDE_DIRS}
+    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
 target_link_libraries(clangcfrontend_stuff gotoprograms ${ESBMC_CLANG_LIBS})
 
