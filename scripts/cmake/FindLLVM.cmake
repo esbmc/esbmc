@@ -21,4 +21,12 @@ if (${LLVM_VERSION_MAJOR} EQUAL 11)
 else()
   message(FATAL_ERROR "Could not find LLVM/Clang 11.0 at all: please specify with -DLLVM_DIR")
 endif()
-# BUG: For some reason, ESBMC is not linking with Systems LLVM
+# BUG: For some reason, ESBMC is not linking with Systems LLVM [fb: is this still the case?]
+
+if (CLANG_LINK_CLANG_DYLIB AND NOT BUILD_STATIC)
+  set(ESBMC_CLANG_LIBS clang-cpp LLVM)
+  message(STATUS "Linking libclang: shared")
+else()
+  set(ESBMC_CLANG_LIBS clangTooling clangAST clangIndex)
+  message(STATUS "Linking libclang: static")
+endif()
