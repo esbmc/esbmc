@@ -7,6 +7,7 @@ import subprocess
 import sys
 import re
 import argparse
+import os
 
 
 class Flail:
@@ -104,15 +105,28 @@ class Flail:
             return content + ',\n'
         return content + '\n'
 
-    def _step_6(self, content, output):
+    def _step_6(self, content, output, header : str, macro : str):
         name = self.obtain_var_name()
         with open(output, 'w') as f:
             f.write('char %s[] = {\n' % name)
             f.writelines(content)
             f.write('};\n')
             f.write('unsigned int %s_size = sizeof(%s);\n' % (name, name))
+        if header is not None:
+            with open(header, 'w') as f:
+                if macro is None:
+                    f.write('extern char %s[];\n' % name)
+                    f.write('extern unsigned int %s_size;\n' % name)
+                else:
+                    f.write('#ifndef %s\n' % macro)
+                    f.write('# define %s(body, size, ...)'
+                            ' extern char body[];'
+                            ' extern unsigned int size;\n' % macro)
+                    f.write('#endif\n')
+                    f.write('%s(%s, %s_size, %s)\n' % (macro, name, name,
+                                                       os.path.basename(self.filepath)))
 
-    def run(self, output_file: str):
+    def run(self, output_file: str, header : str = None, macro : str = None):
         ps = subprocess.Popen(self.cat_cli_command().split(),
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -124,13 +138,18 @@ class Flail:
         step_3_4 = [self._step_3_4(x) for x in step_2]
         step_5 = [self._step_5(x) for x in step_3_4]
 
-        self._step_6(step_5, output_file)
+        self._step_6(step_5, output_file, header, macro)
 
 
 def parse_args(argv):
     p = argparse.ArgumentParser(prog=argv[0])
     p.add_argument('-p', '--prefix', type=str, default='',
                    help='prefix for C symbols (default: empty)')
+    p.add_argument('--macro', type=str, default=None,
+                   help='print MACRO invocation to stdout')
+    p.add_argument('--header', type=str, default=None,
+                   help='write header file containing "extern" declarations of '
+                        'generated symbols')
     p.add_argument('input')
     p.add_argument('output')
     return p.parse_args(argv[1:])
@@ -139,7 +158,7 @@ def parse_args(argv):
 def main():
     args = parse_args(sys.argv)
     obj = Flail(args.input, args.prefix)
-    obj.run(args.output)
+    obj.run(args.output, args.header, args.macro)
 
 
 if __name__ == "__main__":
