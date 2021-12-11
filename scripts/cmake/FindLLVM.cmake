@@ -86,8 +86,6 @@ if (CLANG_HEADERS_BUNDLED)
 
   if (ESBMC_CLANG_HEADER_DIR)
     message(STATUS "Using bundled header files from: ${ESBMC_CLANG_HEADER_DIR}")
-    message(FATAL_ERROR "Bundling external headers is not implemented")
-    # TODO: re-generate src/clang-c-frontend/clang_headers.cpp and unset ESBMC_CLANG_HEADER_DIR
   else()
     message(STATUS "Using bundled header files from ESBMC")
   endif()
