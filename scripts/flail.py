@@ -108,20 +108,20 @@ class Flail:
     def _step_6(self, content, output, header : str, macro : str):
         name = self.obtain_var_name()
         with open(output, 'w') as f:
-            f.write('char %s[] = {\n' % name)
+            f.write('const char %s[] = {\n' % name)
             f.writelines(content)
             f.write('};\n')
-            f.write('unsigned int %s_size = sizeof(%s);\n' % (name, name))
+            f.write('const unsigned int %s_size = sizeof(%s);\n' % (name, name))
         if header is not None:
             with open(header, 'w') as f:
                 if macro is None:
-                    f.write('extern char %s[];\n' % name)
-                    f.write('extern unsigned int %s_size;\n' % name)
+                    f.write('extern const char %s[];\n' % name)
+                    f.write('extern const unsigned int %s_size;\n' % name)
                 else:
                     f.write('#ifndef %s\n' % macro)
                     f.write('# define %s(body, size, ...)'
-                            ' extern char body[];'
-                            ' extern unsigned int size;\n' % macro)
+                            ' extern const char body[];'
+                            ' extern const unsigned int size;\n' % macro)
                     f.write('#endif\n')
                     f.write('%s(%s, %s_size, %s)\n' % (macro, name, name,
                                                        os.path.basename(self.filepath)))
