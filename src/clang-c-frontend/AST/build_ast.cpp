@@ -27,12 +27,24 @@ static clang::driver::Driver *newDriver(
   const char *BinaryName,
   llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS)
 {
-  clang::driver::Driver *CompilerDriver = new clang::driver::Driver(
+  clang::driver::Driver *CompilerDriver;
+/* Clang's API changed between version 11 and 13 in that it now requires a name
+ * to construct a Driver. */
+#if CLANG_VERSION_MAJOR >= 13
+  CompilerDriver = new clang::driver::Driver(
+    BinaryName,
+    llvm::sys::getDefaultTargetTriple(),
+    *Diagnostics,
+    "clang_based_tool",
+    std::move(VFS));
+#else
+  CompilerDriver = new clang::driver::Driver(
     BinaryName,
     llvm::sys::getDefaultTargetTriple(),
     *Diagnostics,
     std::move(VFS));
   CompilerDriver->setTitle("clang_based_tool");
+#endif
   return CompilerDriver;
 }
 

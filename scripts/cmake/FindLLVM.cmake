@@ -16,10 +16,10 @@ else()
   find_package(Clang REQUIRED CONFIG)
 endif()
 
-if (${LLVM_VERSION_MAJOR} EQUAL 11)
-  message(STATUS "LLVM version: ${LLVM_VERSION}")
+if (${LLVM_VERSION_MAJOR} LESS 11)
+  message(FATAL_ERROR "Could not find LLVM/Clang >= 11.0 at all: please specify with -DLLVM_DIR/-DClang_DIR")
 else()
-  message(FATAL_ERROR "Could not find LLVM/Clang 11.0 at all: please specify with -DLLVM_DIR")
+  message(STATUS "LLVM version: ${LLVM_VERSION}")
 endif()
 # BUG: For some reason, ESBMC is not linking with Systems LLVM [fb: is this still the case?]
 
