@@ -55,8 +55,6 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 {
   compiler_args.emplace_back("clang-tool");
 
-  compiler_args.push_back("-I" + tmp_dir);
-
   // Append mode arg
   switch(config.ansi_c.word_size)
   {
@@ -104,8 +102,15 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   for(auto const &def : config.ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
+  if (config.ansi_c.cheri) {
+    compiler_args.emplace_back("-D__ESBMC_CHERI__");
+    compiler_args.emplace_back("-cheri");
+  }
+
   for(auto const &inc : config.ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
+
+  compiler_args.push_back("-I" + tmp_dir);
 
   for(auto const &inc : config.ansi_c.forces)
     compiler_args.push_back("-f" + inc);
