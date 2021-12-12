@@ -6,6 +6,8 @@ from pathlib import Path
 import subprocess
 import sys
 import re
+import argparse
+import os
 
 
 class Flail:
@@ -70,11 +72,12 @@ class Flail:
     REGEX_MULTI_SPACE = re.compile(r' +')
     REGEX_ADD_COMMA_END = re.compile(r'.*[0-9]$')
 
-    def __init__(self, filepath: str):
+    def __init__(self, filepath: str, prefix : str = ''):
         WINDOWS = platform.system() == 'Windows'
         self._cat = 'cat.exe' if WINDOWS else 'cat'
         self._od = 'od.exe' if WINDOWS else 'od'
         self.filepath = filepath
+        self.prefix = prefix
 
     def od_cli_command(self):
         return f'{self._od} -v -t u1 {self.filepath}'
@@ -84,7 +87,12 @@ class Flail:
 
     def obtain_var_name(self):
         obj = Path(self.filepath)
-        return obj.name.replace('.hs', '_buf').replace('.h', '_buf').replace('.goto', '_buf').replace('.txt', '_buf').replace('buildidobj', 'buildidstring')
+        return self.prefix + (obj.name.replace('.hs', '_buf')
+                                      .replace('.h', '_buf')
+                                      .replace('.goto', '_buf')
+                                      .replace('.txt', '_buf')
+                                      .replace('buildidobj', 'buildidstring')
+                                      .replace('-', '_'))
 
     def _step_2(self, content: str):
         return Flail.REGEX_REMOVE_ADDR.sub('', content)
@@ -97,39 +105,60 @@ class Flail:
             return content + ',\n'
         return content + '\n'
 
-    def _step_6(self, content, output):
-        # its hard to use '{' '}' in F-Strings
-        left_curly = '{'
-        right_curly = '}'
+    def _step_6(self, content, output, header : str, macro : str):
+        name = self.obtain_var_name()
         with open(output, 'w') as f:
-            f.write(f'char {self.obtain_var_name()} [] = {left_curly}\n')
+            f.write('const char %s[] = {\n' % name)
             f.writelines(content)
-            f.write(f'{right_curly};\n')
-            f.write(
-                f'unsigned int {self.obtain_var_name()}_size = sizeof({self.obtain_var_name()});\n')
+            f.write('};\n')
+            f.write('const unsigned int %s_size = sizeof(%s);\n' % (name, name))
+        if header is not None:
+            with open(header, 'w') as f:
+                if macro is None:
+                    f.write('extern const char %s[];\n' % name)
+                    f.write('extern const unsigned int %s_size;\n' % name)
+                else:
+                    f.write('#ifndef %s\n' % macro)
+                    f.write('# define %s(body, size, ...)'
+                            ' extern const char body[];'
+                            ' extern const unsigned int size;\n' % macro)
+                    f.write('#endif\n')
+                    f.write('%s(%s, %s_size, %s)\n' % (macro, name, name,
+                                                       os.path.basename(self.filepath)))
 
-    def run(self, output_file: str):
-        ps = subprocess.Popen(self.cat_cli_command().split(
-        ), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    def run(self, output_file: str, header : str = None, macro : str = None):
+        ps = subprocess.Popen(self.cat_cli_command().split(),
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        output = subprocess.check_output(
-            self.od_cli_command().split(), stdin=ps.stdout).decode().splitlines()
+        output = subprocess.check_output(self.od_cli_command().split(),
+                                         stdin=ps.stdout
+                                        ).decode().splitlines()
 
         step_2 = [self._step_2(x) for x in output]
         step_3_4 = [self._step_3_4(x) for x in step_2]
         step_5 = [self._step_5(x) for x in step_3_4]
 
-        self._step_6(step_5, output_file)
+        self._step_6(step_5, output_file, header, macro)
+
+
+def parse_args(argv):
+    p = argparse.ArgumentParser(prog=argv[0])
+    p.add_argument('-p', '--prefix', type=str, default='',
+                   help='prefix for C symbols (default: empty)')
+    p.add_argument('--macro', type=str, default=None,
+                   help='print MACRO invocation to stdout')
+    p.add_argument('--header', type=str, default=None,
+                   help='write header file containing "extern" declarations of '
+                        'generated symbols')
+    p.add_argument('input')
+    p.add_argument('output')
+    return p.parse_args(argv[1:])
 
 
 def main():
-    if len(sys.argv) < 3:
-        raise ValueError("Program expects <input> <output> arguments")
-
-    filepath = sys.argv[1]
-    output = sys.argv[2]
-    obj = Flail(filepath)
-    obj.run(output)
+    args = parse_args(sys.argv)
+    obj = Flail(args.input, args.prefix)
+    obj.run(args.output, args.header, args.macro)
 
 
 if __name__ == "__main__":
@@ -155,9 +184,9 @@ class TestFlail(unittest.TestCase):
                          "72,69,65,68,69,82,83,95,83,84,68,65,82,71,95,72",
                          "95,13,10,35,100,101,102,105,110,101,32,95,95,69,83,66"]
 
-    STEP_5_EXPECTED = ["35,105,102,110,100,101,102,32,95,95,69,83,66,77,67,95,",
-                       "72,69,65,68,69,82,83,95,83,84,68,65,82,71,95,72,",
-                       "95,13,10,35,100,101,102,105,110,101,32,95,95,69,83,66,"]
+    STEP_5_EXPECTED = ["35,105,102,110,100,101,102,32,95,95,69,83,66,77,67,95,\n",
+                       "72,69,65,68,69,82,83,95,83,84,68,65,82,71,95,72,\n",
+                       "95,13,10,35,100,101,102,105,110,101,32,95,95,69,83,66,\n"]
 
     def setUp(self):
         obj = Flail("")
@@ -192,4 +221,24 @@ class TestFlail(unittest.TestCase):
     def test_variable_name_4(self):
         obj = Flail("buildidobj")
         expected = "buildidstring"
+        self.assertEqual(obj.obtain_var_name(), expected)
+
+    def test_variable_name_1_prefix(self):
+        obj = Flail("a.h", 'prefix_')
+        expected = "prefix_a_buf"
+        self.assertEqual(obj.obtain_var_name(), expected)
+
+    def test_variable_name_2_prefix(self):
+        obj = Flail("b.goto", 'prefix_')
+        expected = "prefix_b_buf"
+        self.assertEqual(obj.obtain_var_name(), expected)
+
+    def test_variable_name_3_prefix(self):
+        obj = Flail("c.txt", 'prefix_')
+        expected = "prefix_c_buf"
+        self.assertEqual(obj.obtain_var_name(), expected)
+
+    def test_variable_name_4_prefix(self):
+        obj = Flail("buildidobj", 'prefix_')
+        expected = "prefix_buildidstring"
         self.assertEqual(obj.obtain_var_name(), expected)
