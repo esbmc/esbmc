@@ -435,7 +435,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   smt_astt id = convert_terminal(
     constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
 
-  smt_astt one = convert_terminal(gen_ulong(1));
+  smt_astt one = convert_terminal(constant_int2tc(int_type, BigInt(1)));
   smt_astt offs = int_encoding ? mk_sub(target, one) : mk_bvsub(target, one);
   smt_astt inv_obj = id;
   smt_astt inv_offs = offs;
