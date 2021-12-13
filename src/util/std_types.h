@@ -649,4 +649,20 @@ public:
 
 const string_typet &to_string_type(const typet &type);
 
+class intcap_typet : public typet
+{
+public:
+  intcap_typet() : typet(t_intcap)
+  {
+  }
+};
+
+class uintcap_typet : public typet
+{
+public:
+  uintcap_typet() : typet(t_uintcap)
+  {
+  }
+};
+
 #endif

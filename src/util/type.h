@@ -99,6 +99,9 @@ public:
   static irep_idt t_bv;
   static irep_idt t_string;
 
+  static irep_idt t_intcap;
+  static irep_idt t_uintcap;
+
   static irep_idt a_identifier;
   static irep_idt a_name;
   static irep_idt a_components;
