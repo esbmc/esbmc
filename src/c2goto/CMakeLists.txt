@@ -23,10 +23,14 @@ set (clib64_cheri_config clib64.c clib64_cheri.c --64 --fixedbv -D__ESBMC_FIXEDB
 set (clib32f_cheri_config clib32_fp.c clib32_fp_cheri.c --32 --floatbv --cheri)
 set (clib64f_cheri_config clib64_fp.c clib64_fp_cheri.c --64 --floatbv --cheri)
 
-set (inputs clib32_config clib64_config
-            clib32f_config clib64f_config
-            clib32_cheri_config clib64_cheri_config
-            clib32f_cheri_config clib64f_cheri_config
+set (inputs clib32_config
+            clib64_config
+            clib32f_config
+            clib64f_config
+            #clib32_cheri_config
+            clib64_cheri_config
+            #clib32f_cheri_config
+            clib64f_cheri_config
     )
 
 function(mangle_clib output)
