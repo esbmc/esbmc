@@ -55,7 +55,7 @@ function(mangle_clib output)
     else()
       set(inputs_c ${c2goto_library_files})
     endif()
-    set(CMD c2goto -I ${multiarch} ${OS_C2GOTO_FLAGS} ${inputs_c} ${in_flags} --output ${out_goto})
+    set(CMD c2goto -I ${multiarch} -I "${cheri_compressed_cap_SOURCE_DIR}" ${OS_C2GOTO_FLAGS} ${inputs_c} ${in_flags} --output ${out_goto})
     add_custom_command(OUTPUT ${out_goto}
       COMMAND ${CMD}
       DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files}
