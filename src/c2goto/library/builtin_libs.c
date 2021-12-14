@@ -26,7 +26,7 @@ int __ESBMC_sync_fetch_and_add(int *ptr, int value)
 
 #if !defined(cheri_debug_assert)
 /* Disable cheri-compressed-cap's debug assertions since they assert that
- * base <= top in compute_base_top, which the comment above admits is not
+ * base <= top in compute_base_top, which the comment above it admits is not
  * always true. */
 #if 1
 #define cheri_debug_assert(...)

@@ -102,13 +102,15 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   for(auto const &def : config.ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
-  if (config.ansi_c.cheri) {
+  if(config.ansi_c.cheri)
+  {
     compiler_args.emplace_back("-D__ESBMC_CHERI__");
     compiler_args.emplace_back("-cheri=128");
     compiler_args.emplace_back("-target");
     compiler_args.emplace_back("mips64c128-unknown-linux");
     compiler_args.emplace_back("--sysroot=/usr/mips64-unknown-linux-gnu");
-    compiler_args.emplace_back("-D__builtin_cheri_length_get(p)=__esbmc_cheri_length_get(p)");
+    compiler_args.emplace_back(
+      "-D__builtin_cheri_length_get(p)=__esbmc_cheri_length_get(p)");
   }
 
   for(auto const &inc : config.ansi_c.include_paths)
