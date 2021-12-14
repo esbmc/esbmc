@@ -28,25 +28,25 @@ extern "C"
 
 extern "C"
 {
-  extern uint8_t clib32_buf[1];
-  extern uint8_t clib64_buf[1];
-  extern unsigned int clib32_buf_size;
-  extern unsigned int clib64_buf_size;
+  extern const uint8_t clib32_buf[];
+  extern const uint8_t clib64_buf[];
+  extern const unsigned int clib32_buf_size;
+  extern const unsigned int clib64_buf_size;
 
-  extern uint8_t clib32_fp_buf[1];
-  extern uint8_t clib64_fp_buf[1];
-  extern unsigned int clib32_fp_buf_size;
-  extern unsigned int clib64_fp_buf_size;
+  extern const uint8_t clib32_fp_buf[];
+  extern const uint8_t clib64_fp_buf[];
+  extern const unsigned int clib32_fp_buf_size;
+  extern const unsigned int clib64_fp_buf_size;
 
-  extern uint8_t clib32_cheri_buf[1];
-  extern uint8_t clib64_cheri_buf[1];
-  extern unsigned int clib32_cheri_buf_size;
-  extern unsigned int clib64_cheri_buf_size;
+  extern const uint8_t clib32_cheri_buf[];
+  extern const uint8_t clib64_cheri_buf[];
+  extern const unsigned int clib32_cheri_buf_size;
+  extern const unsigned int clib64_cheri_buf_size;
 
-  extern uint8_t clib32_fp_cheri_buf[1];
-  extern uint8_t clib64_fp_cheri_buf[1];
-  extern unsigned int clib32_fp_cheri_buf_size;
-  extern unsigned int clib64_fp_cheri_buf_size;
+  extern const uint8_t clib32_fp_cheri_buf[];
+  extern const uint8_t clib64_fp_cheri_buf[];
+  extern const unsigned int clib32_fp_cheri_buf_size;
+  extern const unsigned int clib64_fp_cheri_buf_size;
 }
 
 namespace
