@@ -156,6 +156,7 @@ public:
 protected:
   std::string variable;
   std::shared_ptr<jimple_expr> expr;
+  bool is_skip = false;
 };
 
 class jimple_assignment_deref : public jimple_assignment
