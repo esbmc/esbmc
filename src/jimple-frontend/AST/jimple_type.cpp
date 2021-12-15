@@ -19,7 +19,7 @@ typet jimple_type::get_base_type() const
     case BASE_TYPES::INT:
       return int_type();
 
-    case BASE_TYPES::VOID:
+    case BASE_TYPES::_VOID:
       return empty_typet();
 
     case BASE_TYPES::OTHER:
