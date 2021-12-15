@@ -128,7 +128,11 @@ std::string jimple_assignment::to_string() const
 void jimple_assignment::from_json(const json &j)
 {
   j.at("name").get_to(variable);
-  expr = jimple_expr::get_expression(j.at("value"));
+  //TODO: Remove this hack
+  if(!j.at("value").contains("expr_type"))
+    is_skip = true;
+  else
+    expr = jimple_expr::get_expression(j.at("value"));
 }
 
 exprt jimple_assignment::to_exprt(
@@ -136,6 +140,12 @@ exprt jimple_assignment::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
+  //TODO: Remove this hack
+  if(is_skip)
+  {
+    code_skipt skip;
+    return skip;
+  }
   std::ostringstream oss;
   oss << class_name << ":" << function_name << "@" << variable;
 
