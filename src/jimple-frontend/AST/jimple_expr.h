@@ -26,6 +26,11 @@ public:
   {
     return value;
   }
+
+  virtual void setValue(const std::string &v)
+  {
+    value = v;
+  }
   virtual exprt to_exprt(
     contextt &ctx,
     const std::string &class_name,
