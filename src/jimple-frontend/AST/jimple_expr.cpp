@@ -43,6 +43,13 @@ exprt jimple_symbol::to_exprt(
 std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
 {
   std::string expr_type;
+  if(!j.contains("expr_type"))
+  {
+    jimple_constant c;
+    c.setValue("0");
+    return std::make_shared<jimple_constant>(c);
+  }
+
   j.at("expr_type").get_to(expr_type);
 
   // TODO: hashmap, the standard is not stable enough yet
