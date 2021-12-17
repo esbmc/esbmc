@@ -76,8 +76,6 @@ endif()
 
 if (${CLANG_HEADERS_BUNDLED} STREQUAL "detect")
   set(CLANG_HEADERS_BUNDLED ${CLANG_HEADERS_SHOULD_BUNDLE})
-elseif(${CLANG_HEADERS_BUNDLED} STREQUAL "esbmc")
-  unset(ESBMC_CLANG_HEADER_DIR)
 endif()
 
 if (CLANG_HEADERS_BUNDLED AND NOT CLANG_HEADERS_SHOULD_BUNDLE)
@@ -86,20 +84,12 @@ elseif(NOT CLANG_HEADERS_BUNDLED AND CLANG_HEADERS_SHOULD_BUNDLE)
   message(WARNING "Not bundling headers can lead to inconsistencies when they are updated independently from ESBMC")
 endif()
 
+if (NOT ESBMC_CLANG_HEADER_DIR)
+  message(FATAL_ERROR "Cannot find path to Clang headers, please specify it using -DOVERRIDE_CLANG_HEADER_DIR=<path>")
+endif()
+
 if (CLANG_HEADERS_BUNDLED)
-
-  if (ESBMC_CLANG_HEADER_DIR)
-    message(STATUS "Using bundled header files from: ${ESBMC_CLANG_HEADER_DIR}")
-  else()
-    message(STATUS "Using bundled header files from ESBMC")
-  endif()
-
+  message(STATUS "Using bundled header files from: ${ESBMC_CLANG_HEADER_DIR}")
 else()
-
-  if (ESBMC_CLANG_HEADER_DIR)
-    message(STATUS "Hard-coding path to clang's header files: ${ESBMC_CLANG_HEADER_DIR}")
-  else()
-    message(FATAL_ERROR "Cannot find path to Clang headers, please specify it using -DOVERRIDE_CLANG_HEADER_DIR=<path> or enable the bundled headers by -DCLANG_HEADERS_BUNDLED=esbmc")
-  endif()
-
+  message(STATUS "Hard-coding path to clang's header files: ${ESBMC_CLANG_HEADER_DIR}")
 endif()

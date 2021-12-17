@@ -1,10 +1,4 @@
 
-if (ESBMC_CLANG_HEADER_DIR)
-  set(dir ${ESBMC_CLANG_HEADER_DIR})
-else()
-  set(dir ${CMAKE_CURRENT_SOURCE_DIR})
-endif()
-
 function(mangle_hs output_c output_h dir)
   set(result_c "")
   set(result_h "")
@@ -34,9 +28,9 @@ endfunction()
 if (ESBMC_CLANG_HEADER_DIR AND NOT CLANG_HEADERS_BUNDLED)
   set(cheaders_lib "" PARENT_SCOPE)
 else()
+  message(STATUS "Bundling clang headers from: ${ESBMC_CLANG_HEADER_DIR}")
+  mangle_hs(mangled_c mangled_h ${ESBMC_CLANG_HEADER_DIR})
   unset(ESBMC_CLANG_HEADER_DIR)
-  message(STATUS "Bundling clang headers from: ${dir}")
-  mangle_hs(mangled_c mangled_h ${dir})
 
   list(TRANSFORM mangled_h REPLACE "(.+)" "#include \"\\1\"" OUTPUT_VARIABLE includes)
   list(JOIN includes "\n" includes)
