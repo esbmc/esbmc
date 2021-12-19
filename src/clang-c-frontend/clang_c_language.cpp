@@ -104,6 +104,9 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   for(auto const &def : config.ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
+  compiler_args.emplace_back("-target");
+  compiler_args.emplace_back(config.ansi_c.target.to_string());
+
   for(auto const &inc : config.ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
 
