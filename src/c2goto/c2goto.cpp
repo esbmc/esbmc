@@ -34,7 +34,10 @@ const struct group_opt_templ c2goto_options[] = {
     {"define,D",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "macro"),
-     "define preprocessor macro"}
+     "define preprocessor macro"},
+    {"sysroot",
+     boost::program_options::value<std::string>()->value_name("<path>"),
+     "set the sysroot for the frontend"}
 
    }},
   {"end", {{"", NULL, "end of options"}}},
