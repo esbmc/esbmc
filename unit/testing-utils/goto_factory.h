@@ -42,7 +42,8 @@ private:
   static bool parse(language_uit &l);
   static void
   create_file_from_istream(std::istream &c_inputstream, std::string filename);
-  static void config_environment(goto_factory::Architecture arch, optionst o);
+  static void
+  config_environment(goto_factory::Architecture arch, cmdlinet c, optionst o);
 
   static goto_functionst get_goto_functions(cmdlinet &cmd, optionst &opts);
 };

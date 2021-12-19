@@ -5,7 +5,7 @@
 
 void gen_builtin_type(typet &new_type, Builtin_Type bt)
 {
-  config.ansi_c.set_32();
+  config.ansi_c.set_data_model(configt::ILP32);
   std::string c_type;
   switch(bt)
   {

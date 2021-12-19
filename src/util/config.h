@@ -48,6 +48,37 @@ Author: Daniel Kroening, kroening@kroening.com
 class configt
 {
 public:
+  struct triple
+  {
+    std::string arch = "none";
+    std::string vendor = "unknown";
+    std::string os = "elf";
+    std::string flavor;
+
+    bool is_windows_abi() const;
+    std::string to_string() const;
+  };
+
+#define dm(char, short, int, long, addr, word, long_dbl)                       \
+  ((uint64_t)(char) | (uint64_t)(short) << 8 | (uint64_t)(int) << 16 |         \
+   (uint64_t)(long) << 24 | (uint64_t)(addr) << 32 | (uint64_t)(word) << 40 |  \
+   (uint64_t)(long_dbl) << 48)
+
+  enum data_model : uint64_t {
+    /* 16-bit */
+    IP16 = dm(8, 16, 16, 32, 16, 16, 64), /* unsegmented 16-bit */
+    LP32 = dm(8, 16, 16, 32, 32, 16, 64), /* segmented 16-bit DOS, Win16 */
+    /* 32-bit */
+    IP32 = dm(8, 16, 32, 64, 32, 32, 96), /* Ultrix '82-'95 */
+    ILP32 = dm(8, 16, 32, 32, 32, 32, 96), /* Win32 || other 32-bit Unix */
+    /* 64-bit */
+    LLP64 = dm(8, 16, 32, 32, 64, 64, 128), /* Win64 */
+    ILP64 = dm(8, 16, 64, 64, 64, 64, 128), /* Unicos for Cray PVP systems */
+    LP64 = dm(8, 16, 32, 64, 64, 64, 128),  /* other 64-bit Unix */
+  };
+
+#undef dm
+
   struct ansi_ct
   {
     // for ANSI-C
@@ -68,10 +99,6 @@ public:
     bool char_is_unsigned;
     bool use_fixed_for_float;
 
-    void set_16();
-    void set_32();
-    void set_64();
-
     // alignment (in structs) measured in bytes
     unsigned alignment;
 
@@ -82,6 +109,8 @@ public:
       IS_BIG_ENDIAN
     } endianesst;
     endianesst endianess;
+
+    triple target;
 
     std::list<std::string> defines;
     std::list<std::string> include_paths;
@@ -94,6 +123,8 @@ public:
       LIB_FULL
     } libt;
     libt lib;
+
+    void set_data_model(enum data_model dm);
   } ansi_c;
 
   std::string main;
@@ -104,6 +135,8 @@ public:
 
   static std::string this_architecture();
   static std::string this_operating_system();
+
+  static triple host();
 };
 
 extern configt config;
