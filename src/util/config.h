@@ -83,16 +83,6 @@ public:
     } endianesst;
     endianesst endianess;
 
-    typedef enum
-    {
-      NO_OS,
-      OS_I386_LINUX,
-      OS_I386_MACOS,
-      OS_PPC_MACOS,
-      OS_WIN32
-    } ost;
-    ost os;
-
     std::list<std::string> defines;
     std::list<std::string> include_paths;
     std::list<std::string> forces;
