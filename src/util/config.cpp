@@ -75,7 +75,6 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
   ansi_c.set_64();
   ansi_c.use_fixed_for_float = false;
   ansi_c.endianess = ansi_ct::NO_ENDIANESS;
-  ansi_c.os = ansi_ct::NO_OS;
   ansi_c.lib = configt::ansi_ct::LIB_NONE;
 
   if(cmdline.isset("16"))
@@ -116,56 +115,38 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 
   if(cmdline.isset("i386-linux"))
   {
-    ansi_c.os = configt::ansi_ct::OS_I386_LINUX;
     ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
     ansi_c.lib = configt::ansi_ct::LIB_FULL;
   }
 
   if(cmdline.isset("i386-win32"))
   {
-    ansi_c.os = configt::ansi_ct::OS_WIN32;
     ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
     ansi_c.lib = configt::ansi_ct::LIB_FULL;
   }
 
   if(cmdline.isset("i386-macos"))
   {
-    ansi_c.os = configt::ansi_ct::OS_I386_MACOS;
     ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
     ansi_c.lib = configt::ansi_ct::LIB_FULL;
   }
 
   if(cmdline.isset("ppc-macos"))
   {
-    ansi_c.os = configt::ansi_ct::OS_PPC_MACOS;
     ansi_c.endianess = configt::ansi_ct::IS_BIG_ENDIAN;
     ansi_c.lib = configt::ansi_ct::LIB_FULL;
   }
 
   if(cmdline.isset("no-arch"))
   {
-    ansi_c.os = configt::ansi_ct::NO_OS;
     ansi_c.endianess = configt::ansi_ct::NO_ENDIANESS;
     ansi_c.lib = configt::ansi_ct::LIB_NONE;
   }
-  else if(ansi_c.os == configt::ansi_ct::NO_OS)
+  else
   {
-// this is the default
-#ifdef _WIN32
-    ansi_c.os = configt::ansi_ct::OS_WIN32;
+    // this is the default
     ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
     ansi_c.lib = configt::ansi_ct::LIB_FULL;
-#else
-#ifdef __APPLE__
-    ansi_c.os = configt::ansi_ct::OS_I386_MACOS;
-    ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
-    ansi_c.lib = configt::ansi_ct::LIB_FULL;
-#else
-    ansi_c.os = configt::ansi_ct::OS_I386_LINUX;
-    ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
-    ansi_c.lib = configt::ansi_ct::LIB_FULL;
-#endif
-#endif
   }
 
   if(cmdline.isset("no-library"))
