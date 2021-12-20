@@ -1408,8 +1408,8 @@ void dereferencet::construct_from_multidir_array(
   assert(is_array_type(value) || is_string_type(value));
   const array_type2t arr_type = get_arr_type(value);
 
-  // Right: any access across the boundry of the outer dimension of this array
-  // is an alignment violation as that can posess extra padding.
+  // Right: any access across the boundary of the outer dimension of this array
+  // is an alignment violation as that can possess extra padding.
   // So, divide the offset by size of the inner dimention, make an index2t, and
   // construct a reference to that.
   BigInt subtype_sz = type_byte_size_bits(arr_type.subtype);

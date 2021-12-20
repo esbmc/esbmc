@@ -834,7 +834,7 @@ static inline std::string get_expr_id(const expr2tc &expr)
  *  inheriting from this template, telling it what class it'll end up with,
  *  and what to subclass from, and what the fields in the class being derived
  *  from look like. This means we can construct a type hierarchy with whatever
- *  inheretence we like and whatever fields we like, then latch irep_methods2
+ *  inheritance we like and whatever fields we like, then latch irep_methods2
  *  on top of that to implement all the anoying boring boilerplate code.
  *
  *  ----
@@ -877,10 +877,10 @@ static inline std::string get_expr_id(const expr2tc &expr)
 namespace esbmct
 {
 /** Maximum number of fields to support in expr2t subclasses. This value
-   *  controls the types of any arrays that need to consider the number of
-   *  fields.
-   *  I've yet to find a way of making this play nice with the new variardic
-   *  way of defining ireps. */
+ *  controls the types of any arrays that need to consider the number of
+ *  fields.
+ *  I've yet to find a way of making this play nice with the new variardic
+ *  way of defining ireps. */
 const unsigned int num_type_fields = 6;
 
 // Dummy type tag - exists to be an arbitary, local class, for use in some
@@ -892,12 +892,12 @@ public:
 };
 
 /** Record for properties of an irep field.
-   *  This type records, for any particular field:
-   *    * It's type
-   *    * The class that it's a member of
-   *    * A class pointer to this field
-   *  The aim being that we have enough information about the field to
-   *  manipulate it without any further traits. */
+ *  This type records, for any particular field:
+ *    * It's type
+ *    * The class that it's a member of
+ *    * A class pointer to this field
+ *  The aim being that we have enough information about the field to
+ *  manipulate it without any further traits. */
 template <typename R, typename C, R C::*v>
 class field_traits
 {
@@ -913,8 +913,8 @@ constexpr
   typename field_traits<R, C, v>::membr_ptr field_traits<R, C, v>::value;
 
 /** Trait class for type2t ireps.
-   *  This takes a list of field traits and puts it in a vector, with the record
-   *  for the type_id field (common to all type2t's) put that the front. */
+ *  This takes a list of field traits and puts it in a vector, with the record
+ *  for the type_id field (common to all type2t's) put that the front. */
 template <typename... Args>
 class type2t_traits
 {
@@ -931,10 +931,10 @@ public:
 };
 
 /** Trait class for expr2t ireps.
-   *  This takes a list of field traits and puts it in a vector, with the record
-   *  for the expr_id field (common to all expr2t's) put that the front. Records
-   *  some additional flags about the usage of the expression -- specifically
-   *  what a unary constructor will do (@see something2tc::something2tc) */
+ *  This takes a list of field traits and puts it in a vector, with the record
+ *  for the expr_id field (common to all expr2t's) put that the front. Records
+ *  some additional flags about the usage of the expression -- specifically
+ *  what a unary constructor will do (@see something2tc::something2tc) */
 template <typename... Args>
 class expr2t_traits
 {
@@ -1027,36 +1027,36 @@ template <
 class type_methods2;
 
 /** Definition of irep methods template.
-   *
-   *  @param derived The inheritor class, like add2t
-   *  @param baseclass Class containing fields for methods to be defined over
-   *  @param traits Type traits for baseclass
-   *
-   *  A typical irep inheritance looks like this, descending from the base
-   *  irep class to the most derived class:
-   *
-   *    b          Base class, such as type2t or expr2t
-   *    d          Data class, containing storage fields for ireps
-   *    m          Terminal methods class (see below)
-   *    M
-   *    M            Recursive chain of irep_methods2 classes. Each one
-   *    M            implements methods for one field, and calls to a superclass
-   *    M            to handle remaining fields
-   *    M
-   *    t          Top level class such as add2t
-   *
-   *  The effect is thus: one takes a base class containing storage fields,
-   *  instantiate irep_methods2 on top of it which unrolls to one template
-   *  instance per field (plus a specialized terminal when there are no more
-   *  fields). Then, have the top level class inherit from the chain of
-   *  irep_methods classes. This avoids the writing of certain boilerplate
-   *  methods at the expense of writing type trait information.
-   *
-   *  Technically one could typedef the top level irep_methods class to be the
-   *  top level class itself; however putting a 'cap' on it (as it were) avoids
-   *  decades worth of template errors if a programmer uses the irep
-   *  incorrectly.
-   */
+ *
+ *  @param derived The inheritor class, like add2t
+ *  @param baseclass Class containing fields for methods to be defined over
+ *  @param traits Type traits for baseclass
+ *
+ *  A typical irep inheritance looks like this, descending from the base
+ *  irep class to the most derived class:
+ *
+ *    b          Base class, such as type2t or expr2t
+ *    d          Data class, containing storage fields for ireps
+ *    m          Terminal methods class (see below)
+ *    M
+ *    M            Recursive chain of irep_methods2 classes. Each one
+ *    M            implements methods for one field, and calls to a superclass
+ *    M            to handle remaining fields
+ *    M
+ *    t          Top level class such as add2t
+ *
+ *  The effect is thus: one takes a base class containing storage fields,
+ *  instantiate irep_methods2 on top of it which unrolls to one template
+ *  instance per field (plus a specialized terminal when there are no more
+ *  fields). Then, have the top level class inherit from the chain of
+ *  irep_methods classes. This avoids the writing of certain boilerplate
+ *  methods at the expense of writing type trait information.
+ *
+ *  Technically one could typedef the top level irep_methods class to be the
+ *  top level class itself; however putting a 'cap' on it (as it were) avoids
+ *  decades worth of template errors if a programmer uses the irep
+ *  incorrectly.
+ */
 template <
   class derived,
   class baseclass,
@@ -1251,13 +1251,13 @@ protected:
 };
 
 /** Expression methods template for expr ireps.
-   *  This class works on the same principle as @irep_methods2 but provides
-   *  head methods for get_sub_expr and so forth, which are
-   *  specific to expression ireps. The actual implementation of these methods
-   *  are provided in irep_methods to avoid un-necessary recursion but are
-   *  protected; here we provide the head methods publically to allow the
-   *  programmer to call in.
-   *  */
+ *  This class works on the same principle as @irep_methods2 but provides
+ *  head methods for get_sub_expr and so forth, which are
+ *  specific to expression ireps. The actual implementation of these methods
+ *  are provided in irep_methods to avoid un-necessary recursion but are
+ *  protected; here we provide the head methods publically to allow the
+ *  programmer to call in.
+ *  */
 template <
   class derived,
   class baseclass,
@@ -1292,8 +1292,8 @@ public:
 };
 
 /** Type methods template for type ireps.
-   *  Like @expr_methods2, but for types. Also; written on the quick.
-   *  */
+ *  Like @expr_methods2, but for types. Also; written on the quick.
+ *  */
 template <
   class derived,
   class baseclass,
