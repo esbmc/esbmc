@@ -125,8 +125,27 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 
   ansi_c.use_fixed_for_float = cmdline.isset("fixedbv");
 
+  ansi_c.cheri = ansi_ct::CHERI_OFF;
+  if(cmdline.isset("cheri"))
+  {
+    std::string mode = cmdline.getval("cheri");
+    if(mode == "hybrid")
+      ansi_c.cheri = ansi_ct::CHERI_HYBRID;
+    else if(mode == "purecap")
+      ansi_c.cheri = ansi_ct::CHERI_PURECAP;
+    else if(mode != "off")
+    {
+      msg.error(
+        "error: only 'hybrid' and 'purecap' modes supported for --cheri, "
+        "argument was: " +
+        mode);
+      abort();
+    }
+  }
+  ansi_c.cheri_concentrate = !cmdline.isset("cheri-uncompressed");
+
   // this is the default
-  std::string arch = this_architecture(), os = this_operating_system();
+  std::string arch = this_architecture(), os = this_operating_system(), flavor;
   int req_target = 0;
 
   if(cmdline.isset("i386-linux"))
@@ -164,16 +183,25 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
     req_target++;
   }
 
+  if(ansi_c.cheri)
+  {
+    arch = "mips64";
+    os = "freebsd";
+    flavor = "purecap";
+    req_target++;
+  }
+
   if(req_target > 1)
   {
     msg.error(
       "only at most one target can be specified via "
-      "--i386-{win32,macos,linux}, --ppc-macos and --no-arch\n");
+      "--i386-{win32,macos,linux}, --ppc-macos, --cheri and --no-arch\n");
     return true;
   }
 
   ansi_c.target.arch = arch;
   ansi_c.target.os = os;
+  ansi_c.target.flavor = flavor;
 
   bool have_16 = cmdline.isset("16");
   bool have_32 = cmdline.isset("32");
@@ -193,8 +221,6 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
   else
     dm = ansi_c.target.is_windows_abi() ? LLP64 : LP64;
   ansi_c.set_data_model(dm);
-
-  ansi_c.cheri = cmdline.isset("cheri");
 
   if(ansi_c.cheri && ansi_c.word_size != 64)
   {
