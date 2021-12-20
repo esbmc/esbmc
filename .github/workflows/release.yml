@@ -41,7 +41,7 @@ jobs:
     steps:
      - name: cleanup old files
        run: pwd && rm -rf ./*
-     - uses: actions/checkout@v1
+     - uses: actions/checkout@v2
      - name: Install Dependencies
        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y gperf libgmp-dev cmake bison flex linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev libtinfo5 git curl build-essential gcc wget
      - name: Configure Boolector
@@ -65,7 +65,7 @@ jobs:
     name: Build Darwin Release
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install Dependencies
         run: brew install gmp csmith cmake boost ninja python3 automake bison flex && pip3 install PySMT toml
       - name: Download Clang 11
@@ -101,7 +101,7 @@ jobs:
       run: |
         git config --system core.autocrlf false
         git config --system core.eol lf
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Instal gnu tools (od)
       run: choco install -y gnuwin32-coreutils.portable nsis.portable
     - name: Check if od is on path
