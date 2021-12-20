@@ -29,7 +29,7 @@ jobs:
     name: Check C/C++ code-style
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install libtinfo-dev
     - name: Download Clang 11
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-20.04
     continue-on-error: true # TODO: Eventually this will be removed
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Set up Python 3.8
       uses: actions/setup-python@v2
       with:

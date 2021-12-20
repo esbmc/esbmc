@@ -8,7 +8,7 @@ jobs:
   testing-tool:
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Runs testing tool unit test
       run: cd regression && python3 testing_tool_test.py
 
@@ -16,7 +16,7 @@ jobs:
     name: Run unit and fuzz targets
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev
     - name: Download Clang 11
@@ -36,7 +36,7 @@ jobs:
     name: Run clang-tidy
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install clang-tidy gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev
     - name: Download Clang 11
@@ -54,7 +54,7 @@ jobs:
     name: Check if Windows users can checkout this version
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
 
   build-arm:
     name: Build ESBMC with Boolector (ARM64)
@@ -63,7 +63,7 @@ jobs:
     steps:
      - name: cleanup old files
        run: pwd && rm -rf ./*
-     - uses: actions/checkout@v1
+     - uses: actions/checkout@v2
      - name: Install Dependencies
        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y gperf libgmp-dev cmake bison flex linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev libtinfo5 git curl build-essential gcc wget
      - name: Configure Boolector
@@ -90,7 +90,7 @@ jobs:
     name: Build ESBMC with all Solvers (Linux)
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install csmith libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev && pip install toml
     - name: Download Clang 11
@@ -131,7 +131,7 @@ jobs:
     name: Build ESBMC with all Solvers (macOS)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - uses: actions/setup-java@v1
         with:
           java-version: '9.0.4'
@@ -183,7 +183,7 @@ jobs:
       run: |
         git config --system core.autocrlf false
         git config --system core.eol lf
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Instal gnu tools (od)
       run: choco install -y gnuwin32-coreutils.portable nsis.portable
     - name: Check if od is on path
