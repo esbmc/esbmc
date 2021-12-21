@@ -5,12 +5,12 @@ int main()
 {
   // this should work
   FILE *f;
-  char buffer[100];
+  char buffer[10];
   unsigned int i;
   
   f=fopen("asd", "xzy");
 
-  if(fgets(buffer, 100, f)!=0)
+  if(fgets(buffer, 10, f)!=0)
   {
     i=strlen(buffer);
   }
