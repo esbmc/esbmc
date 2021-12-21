@@ -1,0 +1,4 @@
+CORE
+main.c
+-I ../../../src/c2goto/library/cheri/
+^VERIFICATION SUCCESSFUL$
