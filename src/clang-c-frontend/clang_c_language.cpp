@@ -148,6 +148,8 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   compiler_args.emplace_back(
     "-D__sync_fetch_and_add=__ESBMC_sync_fetch_and_add");
 
+  compiler_args.emplace_back("-D__builtin_memcpy=memcpy");
+
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
 
