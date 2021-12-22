@@ -12,6 +12,7 @@
 #include <llvm/Support/raw_os_ostream.h>
 #pragma GCC diagnostic pop
 
+#include <ac_config.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
@@ -667,8 +668,10 @@ bool clang_c_convertert::get_type(
   if(q_type.isRestrictQualified())
     new_type.restricted(true);
 
+#ifdef ESBMC_CHERI_CLANG
   if(the_type.canCarryProvenance(*ASTContext))
     new_type.can_carry_provenance(true);
+#endif
 
   return false;
 }
@@ -1173,6 +1176,7 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "__uint128";
     break;
 
+#ifdef ESBMC_CHERI_CLANG
   case clang::BuiltinType::IntCap:
     new_type = intcap_typet();
     c_type = "__intcap";
@@ -1182,6 +1186,7 @@ bool clang_c_convertert::get_builtin_type(
     new_type = uintcap_typet();
     c_type = "unsigned __intcap";
     break;
+#endif
 
   default:
   {
