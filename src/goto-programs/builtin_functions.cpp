@@ -722,6 +722,31 @@ void goto_convertt::do_function_call_symbol(
     t->location.comment(description);
     // we ignore any LHS
   }
+  else if(config.ansi_c.target.is_freebsd() && base_name == "__assert")
+  {
+    /* This is FreeBSD, taking 4 arguments: __func__, __FILE__, __LINE__, #e */
+
+    if(arguments.size() != 4)
+    {
+      err_location(function);
+      throw "`" + id2string(base_name) + "' expected to have four arguments";
+    }
+
+    const irep_idt description =
+      "assertion " +
+      id2string(get_string_constant(arguments[3], message_handler));
+
+    if(options.get_bool_option("no-assertions"))
+      return;
+
+    goto_programt::targett t = dest.add_instruction(ASSERT);
+    t->guard = gen_false_expr();
+    t->location = function.location();
+    t->location.user_provided(true);
+    t->location.property("assertion");
+    t->location.comment(description);
+    // we ignore any LHS
+  }
   else if(base_name == "_wassert")
   {
     // this is Windows
