@@ -566,7 +566,9 @@ void goto_symext::intrinsic_spawn_thread(
   }
 
   // As an argument, we expect the address of a symbol.
-  const expr2tc &addr = call.operands[0];
+  expr2tc addr = call.operands[0];
+  simplify(addr); /* simplification is not needed for clang-11, but clang-13
+                   * inserts a no-op typecast here. */
   assert(is_address_of2t(addr));
   const address_of2t &addrof = to_address_of2t(addr);
   assert(is_symbol2t(addrof.ptr_obj));
