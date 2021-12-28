@@ -105,8 +105,6 @@ smt_convt::smt_convt(
 
   addr_space_data.emplace_back();
 
-  machine_int = type2tc(new signedbv_type2t(config.ansi_c.int_width));
-  machine_uint = type2tc(new unsignedbv_type2t(config.ansi_c.int_width));
   machine_ptr = type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
 
   // Pick a modelling array to shoehorn initialization data into. Because
@@ -147,9 +145,6 @@ void smt_convt::delete_all_asts()
 
 void smt_convt::smt_post_init()
 {
-  machine_int_sort = mk_int_bv_sort(config.ansi_c.int_width);
-  machine_uint_sort = mk_int_bv_sort(config.ansi_c.int_width);
-
   boolean_sort = mk_bool_sort();
 
   init_addr_space_array();
@@ -337,9 +332,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if(is_struct_type(arr.subtype) || is_pointer_type(arr.subtype))
     {
       // Domain sort may be mesed with:
-      smt_sortt domain = int_encoding
-                           ? machine_int_sort
-                           : mk_int_bv_sort(calculate_array_domain_width(arr));
+      smt_sortt domain = mk_int_bv_sort(
+        int_encoding ? config.ansi_c.int_width
+                     : calculate_array_domain_width(arr));
 
       a = tuple_array_create_despatch(flat_expr, domain);
     }
