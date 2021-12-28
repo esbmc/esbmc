@@ -79,10 +79,7 @@ smt_convt::smt_convt(
   names.emplace_back("pointer_object");
   names.emplace_back("pointer_offset");
 
-  struct_type2t *tmp =
-    new struct_type2t(members, names, names, "pointer_struct");
-  pointer_type_data = tmp;
-  pointer_struct = type2tc(tmp);
+  pointer_struct = { members, names, names, "pointer_struct" };
 
   pointer_logic.emplace_back();
 
@@ -96,12 +93,9 @@ smt_convt::smt_convt(
   members.push_back(get_uint_type(config.ansi_c.pointer_width));
   names.emplace_back("start");
   names.emplace_back("end");
-  tmp = new struct_type2t(members, names, names, "addr_space_type");
-  addr_space_type_data = tmp;
-  addr_space_type = type2tc(tmp);
+  addr_space_type = { members, names, names, "addr_space_type" };
 
-  addr_space_arr_type =
-    type2tc(new array_type2t(addr_space_type, expr2tc(), true));
+  addr_space_arr_type = { addr_space_type, expr2tc(), true };
 
   addr_space_data.emplace_back();
 
@@ -2240,7 +2234,7 @@ expr2tc smt_convt::get_array(const expr2tc &expr)
 const struct_union_data &smt_convt::get_type_def(const type2tc &type) const
 {
   return (is_pointer_type(type))
-           ? *pointer_type_data
+           ? *pointer_struct
            : dynamic_cast<const struct_union_data &>(*type.get());
 }
 

@@ -464,7 +464,7 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 
   // We've now grabbed the pointer struct, now get first element. Represent
   // as fetching the first element of the struct representation.
-  member2tc memb(int_type, idx, addr_space_type_data->member_names[0]);
+  member2tc memb(int_type, idx, addr_space_type->member_names[0]);
 
   pointer_offset2tc ptr_offs(int_type, cast.from);
   add2tc add(int_type, memb, ptr_offs);
