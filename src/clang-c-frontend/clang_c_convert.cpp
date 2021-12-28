@@ -2258,6 +2258,14 @@ bool clang_c_convertert::get_cast_expr(
     gen_typecast_to_union(expr, type);
     break;
 
+#ifdef ESBMC_CHERI_CLANG
+  case clang::CK_PointerToCHERICapability:
+    /* An explicit __cheri_tocap means this value might be tagged. */
+  case clang::CK_CHERICapabilityToPointer:
+    /* both should not be generated in purecap mode */
+    ;
+#endif
+
   default:
   {
     std::ostringstream oss;

@@ -18,7 +18,8 @@ static void error_handler(Z3_context c, Z3_error_code e)
   oss << "Z3 error " << e << " encountered"
       << "\n";
   oss << Z3_get_error_msg(c, e);
-  assert(0 && oss.str().c_str());
+  fprintf(stderr, "%s\n", oss.str().c_str());
+  abort();
 }
 
 smt_convt *create_new_z3_solver(
