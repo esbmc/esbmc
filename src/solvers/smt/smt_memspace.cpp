@@ -396,7 +396,8 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
 
   type2tc arrtype(new array_type2t(get_bool_type(), expr2tc(), true));
   symbol2tc allocarr(arrtype, dyn_info_arr_name);
-  constant_int2tc objid(machine_uint, BigInt(obj_num));
+  constant_int2tc objid(
+    get_uint_type(config.ansi_c.int_width), BigInt(obj_num));
   index2tc idx(get_bool_type(), allocarr, objid);
   equality2tc dyn_eq(idx, gen_false_expr());
   assert_expr(dyn_eq);

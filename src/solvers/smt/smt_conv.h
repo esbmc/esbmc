@@ -806,16 +806,8 @@ public:
   type2tc pointer_struct;
   /** Raw pointer to the type2t in pointer_struct, for convenience. */
   const struct_type2t *pointer_type_data; // ptr of pointer_struct
-  /** The type of the machine integer type. */
-  type2tc machine_int;
-  /** The type of the machine unsigned integer type. */
-  type2tc machine_uint;
   /** The type of the machine integer that can store a pointer. */
   type2tc machine_ptr;
-  /** The SMT sort of this machines integer type. */
-  smt_sortt machine_int_sort;
-  /** The SMT sort of this machines unsigned integer type. */
-  smt_sortt machine_uint_sort;
   /** Sort for booleans. For fast access. */
   smt_sortt boolean_sort;
   /** Whether we are encoding expressions in integer mode or not. */

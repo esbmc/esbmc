@@ -26,8 +26,8 @@ static inline bool is_unbounded_array(const smt_sort *s)
   if(s->id != SMT_SORT_ARRAY)
     return false;
 
-  // This is either really large, or unbounded thus leading to a machine_int
-  // sized domain. Either way, not a normal one.
+  // This is either really large, or unbounded thus leading to a
+  // config.ansi_c.int_width sized domain. Either way, not a normal one.
   if(s->get_domain_width() > 10)
     return true;
 
