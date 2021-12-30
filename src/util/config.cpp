@@ -31,7 +31,6 @@ void configt::ansi_ct::set_data_model(enum data_model dm)
   single_width = 32;
   double_width = 64;
   char_is_unsigned = false;
-  alignment = 1;
 }
 
 static const std::regex

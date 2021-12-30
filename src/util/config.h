@@ -99,9 +99,6 @@ public:
     bool char_is_unsigned;
     bool use_fixed_for_float;
 
-    // alignment (in structs) measured in bytes
-    unsigned alignment;
-
     typedef enum
     {
       NO_ENDIANESS,
