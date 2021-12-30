@@ -21,19 +21,16 @@ public:
 
   option_mapt option_map; // input
 
-  virtual const std::string get_option(const std::string &option) const;
-  virtual bool get_bool_option(const std::string &option) const;
-  virtual void set_option(const std::string &option, const bool value);
-  virtual void set_option(const std::string &option, const char *value);
-  virtual void set_option(const std::string &option, const int value);
-  virtual void set_option(const std::string &option, const std::string &value);
+  const std::string get_option(const std::string &option) const;
+  bool get_bool_option(const std::string &option) const;
+  void set_option(const std::string &option, const bool value);
+  void set_option(const std::string &option, const char *value);
+  void set_option(const std::string &option, const int value);
+  void set_option(const std::string &option, const std::string &value);
 
-  virtual void cmdline(cmdlinet &cmds);
+  void cmdline(cmdlinet &cmds);
 
-  optionst() = default;
-  virtual ~optionst() = default;
-
-  virtual bool is_kind() const;
+  bool is_kind() const;
 };
 
 #endif
