@@ -141,7 +141,7 @@ bool goto_factory::parse(language_uit &l)
 
 goto_functionst goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
 {
-  const messaget msg;
+  messaget msg;
   goto_functionst goto_functions;
   language_uit lui(cmd, msg);
   if(!goto_factory::parse(lui))
