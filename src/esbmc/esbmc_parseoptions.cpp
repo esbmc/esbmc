@@ -96,7 +96,7 @@ void timeout_handler(int)
 
 void esbmc_parseoptionst::set_verbosity_msg(messaget &message)
 {
-  VerbosityLevel v = VerbosityLevel::Debug;
+  VerbosityLevel v = VerbosityLevel::Status;
 
   if(cmdline.isset("verbosity"))
   {
@@ -226,6 +226,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   msg.status(fmt::format("Target: {}", format_target()));
 
   options.cmdline(cmdline);
+  set_verbosity_msg(msg);
 
   /* graphML generation options check */
   if(cmdline.isset("witness-output"))
