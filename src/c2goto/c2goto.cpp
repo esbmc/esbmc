@@ -43,7 +43,7 @@ const struct group_opt_templ c2goto_options[] = {
 class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
 public:
-  c2goto_parseopt(int argc, const char **argv, const messaget &msg)
+  c2goto_parseopt(int argc, const char **argv, messaget &msg)
     : parseoptions_baset(c2goto_options, argc, argv, msg),
       language_uit(cmdline, msg)
   {

@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/i2string.h>
 #include <util/show_symbol_table.h>
 
-language_uit::language_uit(const cmdlinet &__cmdline, const messaget &msg)
+language_uit::language_uit(const cmdlinet &__cmdline, messaget &msg)
   : language_files(msg), context(msg), _cmdline(__cmdline), msg(msg)
 {
 }
