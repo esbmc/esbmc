@@ -153,7 +153,7 @@ std::string expr2cppt::convert_rec(
       return new_qualifiers.as_string() + "char" + d;
     else if(cpp_type == "signed_short_int")
       return new_qualifiers.as_string() + "short" + d;
-    else if(cpp_type == "signed_short_int")
+    else if(cpp_type == "unsigned_short_int")
       return new_qualifiers.as_string() + "unsigned short" + d;
     else if(cpp_type == "signed_int")
       return new_qualifiers.as_string() + "int" + d;
