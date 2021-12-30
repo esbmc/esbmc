@@ -53,7 +53,10 @@ public:
   {
     goto_functionst goto_functions;
 
-    config.set(cmdline, msg);
+    if(config.set(cmdline, msg))
+      return 1;
+    config.options.cmdline(cmdline);
+    msg.set_verbosity(VerbosityLevel::Result);
 
     if(!cmdline.isset("output"))
     {
