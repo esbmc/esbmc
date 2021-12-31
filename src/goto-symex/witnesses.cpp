@@ -3,7 +3,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <fstream>
 #include <langapi/languages.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <boost/version.hpp>
@@ -639,12 +639,13 @@ const std::regex
 void reformat_assignment_array(
   const namespacet &ns,
   const goto_trace_stept &step,
-  std::string &assignment)
+  std::string &assignment,
+  const messaget &msg)
 {
   std::regex re{R"(((-?[0-9]+(.[0-9]+)?)))"};
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
   BigInt pos = 0;
-  std::string lhs = from_expr(ns, "", step.lhs);
+  std::string lhs = from_expr(ns, "", step.lhs, msg);
   std::string assignment_array = "";
   for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
       it != end;)
@@ -664,11 +665,12 @@ const std::regex regex_structs(
 void reformat_assignment_structs(
   const namespacet &ns,
   const goto_trace_stept &step,
-  std::string &assignment)
+  std::string &assignment,
+  const messaget &msg)
 {
   std::regex re{R"((((.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?))+)))"};
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
-  std::string lhs = from_expr(ns, "", step.lhs);
+  std::string lhs = from_expr(ns, "", step.lhs, msg);
   std::string assignment_struct = "";
   for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
       it != end;)
@@ -705,33 +707,38 @@ void check_replace_invalid_assignment(std::string &assignment)
 }
 
 /* */
-std::string
-get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
+std::string get_formated_assignment(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  const messaget &msg)
 {
   std::string assignment = "";
   if(
     !is_nil_expr(step.value) && is_constant_expr(step.value) &&
-    is_valid_witness_step(ns, step))
+    is_valid_witness_step(ns, step, msg))
   {
-    assignment += from_expr(ns, "", step.lhs);
+    assignment += from_expr(ns, "", step.lhs, msg);
     assignment += " = ";
-    assignment += from_expr(ns, "", step.value);
+    assignment += from_expr(ns, "", step.value, msg);
     assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
     if(std::regex_match(assignment, regex_array))
-      reformat_assignment_array(ns, step, assignment);
+      reformat_assignment_array(ns, step, assignment, msg);
     else if(std::regex_match(assignment, regex_structs))
-      reformat_assignment_structs(ns, step, assignment);
+      reformat_assignment_structs(ns, step, assignment, msg);
     check_replace_invalid_assignment(assignment);
   }
   return assignment;
 }
 
 /* */
-bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
+bool is_valid_witness_step(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  const messaget &msg)
 {
-  languagest languages(ns, "C");
+  languagest languages(ns, "C", msg);
   std::string lhsexpr;
   languages.from_expr(migrate_expr_back(step.lhs), lhsexpr);
   std::string location = step.pc->location.to_string();
@@ -744,9 +751,10 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
 /* */
 bool is_valid_witness_expr(
   const namespacet &ns,
-  const irep_container<expr2t> &exp)
+  const irep_container<expr2t> &exp,
+  const messaget &msg)
 {
-  languagest languages(ns, "C");
+  languagest languages(ns, "C", msg);
   std::string value;
   languages.from_expr(migrate_expr_back(exp), value);
   return (value.find("__ESBMC") & value.find("stdin") & value.find("stdout") &

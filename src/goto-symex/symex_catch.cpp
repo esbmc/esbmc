@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <goto-symex/goto_symex.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/simplify_expr.h>
 
@@ -73,11 +73,12 @@ bool goto_symext::symex_throw()
   last_throw = const_cast<goto_programt::instructiont *>(&instruction);
 
   // Log
-  std::cout << "*** Exception thrown of type "
-            << exceptions_thrown.begin()->as_string() << " at file "
-            << instruction.location.file() << " line "
-            << instruction.location.line() << std::endl;
-
+  std::ostringstream oss;
+  oss << "*** Exception thrown of type "
+      << exceptions_thrown.begin()->as_string() << " at file "
+      << instruction.location.file() << " line " << instruction.location.line()
+      << "\n";
+  msg.error(oss.str());
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
   if(!stack_catch.size())
@@ -199,9 +200,13 @@ bool goto_symext::symex_throw()
   }
 
   // Log
-  std::cout << "*** Caught by catch(" << catch_name << ") at file "
-            << (*catch_insn)->location.file() << " line "
-            << (*catch_insn)->location.line() << std::endl;
+  {
+    std::ostringstream oss;
+    oss << "*** Caught by catch(" << catch_name << ") at file "
+        << (*catch_insn)->location.file() << " line "
+        << (*catch_insn)->location.line() << "\n";
+    msg.status(oss.str());
+  }
 
   return true;
 }
@@ -316,7 +321,7 @@ void goto_symext::update_throw_target(
       {
         statet::goto_state_listt &goto_state_list = i->goto_state_map[target];
 
-        goto_state_list.emplace_back(*cur_state);
+        goto_state_list.emplace_back(*cur_state, msg);
         cur_state->guard.make_false();
         break;
       }

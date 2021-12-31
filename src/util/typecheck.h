@@ -10,12 +10,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_TYPECHECK_H
 
 #include <util/expr.h>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 
 class typecheckt : public message_streamt
 {
 public:
-  typecheckt(message_handlert &_message_handler)
+  typecheckt(const messaget &_message_handler)
     : message_streamt(_message_handler)
   {
   }

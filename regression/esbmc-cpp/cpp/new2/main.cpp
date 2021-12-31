@@ -1,4 +1,4 @@
-#include <assert.h>
+#include <cassert>
 
 #define NULL 0
 #define TYPE int

@@ -56,8 +56,6 @@ struct_union_typet::get_component(const irep_idt &component_name) const
 
   for(const auto &it : c)
   {
-    //std::cout << "it->get_name(): " << it->get_name() << std::endl;
-    //std::cout << "component_name: " << component_name << std::endl;
     if(it.get_name() == component_name)
       return it;
   }

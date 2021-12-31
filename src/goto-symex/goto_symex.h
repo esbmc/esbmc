@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <pointer-analysis/dereference.h>
 #include <stack>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/options.h>
 #include <util/std_types.h>
 
@@ -49,7 +49,8 @@ public:
     contextt &_new_context,
     const goto_functionst &goto_functions,
     std::shared_ptr<symex_targett> _target,
-    optionst &opts);
+    optionst &opts,
+    const messaget &msg);
   goto_symext(const goto_symext &sym);
   goto_symext &operator=(const goto_symext &sym);
 
@@ -117,7 +118,7 @@ public:
   symbol2tc guard_identifier()
   {
     return symbol2tc(
-      type_pool.get_bool(),
+      get_bool_type(),
       id2string(guard_identifier_s),
       symbol2t::level1,
       0,
@@ -224,6 +225,14 @@ protected:
   void symex_assert();
 
   /**
+   *  Perform incremental SMT solving for assert and assume statements.
+   *  @param expr Expression that must be checked.
+   *  @param msg Textual message explaining assertion.
+   *  @return Return whether verification succeeded.
+   */
+  bool check_incremental(const expr2tc &expr, const std::string &msg);
+
+  /**
    *  Perform an assertion.
    *  Encodes an assertion that the expression claimed is always true. This
    *  adds the requirement that the current state guard is true as well.
@@ -231,6 +240,14 @@ protected:
    *  @param msg Textual message explaining assertion.
    */
   virtual void claim(const expr2tc &expr, const std::string &msg);
+
+  /**
+   *  Perform an assertion.
+   *  Adds to target an assertion that must be checked.
+   *  @param assertion Assertion that must be checked.
+   *  @param msg Textual message explaining assertion.
+   */
+  virtual void assertion(const expr2tc &assertion, const std::string &msg);
 
   /**
    *  Perform an assumption.
@@ -688,6 +705,24 @@ protected:
     guardt &guard,
     const bool hidden);
 
+  /**
+   *  This method is used when we need to assign a value
+   *  to a struct bitfield which is obtained via
+   *  applying a bit-mask and bit-shifting. Such "masking"
+   *  is typically applied to 'index', 'byte_extract' or 'concat'.
+   *  @param lhs Bitfield to assign to
+   *  @param full_lhs The original assignment symbol
+   *  @param rhs Value to assign to lhs
+   *  @param guard Assignment guard.
+   */
+  void symex_assign_bitfield(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guardt &guard,
+    const bool hidden);
+
   /** Symbolic implementation of malloc. */
   expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
   /** Implementation of realloc. */
@@ -840,6 +875,8 @@ protected:
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
+
+  const messaget &msg;
 
   friend void build_goto_symex_classes();
 };

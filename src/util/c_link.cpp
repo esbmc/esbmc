@@ -23,7 +23,7 @@ public:
     contextt &_context,
     contextt &_new_context,
     std::string _module,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : typecheckt(_message_handler),
       context(_context),
       new_context(_new_context),
@@ -150,10 +150,11 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
   {
     err_location(new_symbol.location);
     str << "error: conflicting definition for symbol \"" << in_context.name
-        << "\"" << std::endl;
-    str << "old definition: " << to_string(in_context.type) << std::endl;
-    str << "Module: " << in_context.module << std::endl;
-    str << "new definition: " << to_string(new_symbol.type) << std::endl;
+        << "\""
+        << "\n";
+    str << "old definition: " << to_string(in_context.type) << "\n";
+    str << "Module: " << in_context.module << "\n";
+    str << "new definition: " << to_string(new_symbol.type) << "\n";
     str << "Module: " << new_symbol.module;
     throw 0;
   }
@@ -190,7 +191,8 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       {
         err_location(new_symbol.value);
         str << "error: duplicate definition of function `" << in_context.name
-            << "'" << std::endl;
+            << "'"
+            << "\n";
         str << "In module `" << in_context.module << "' and module `"
             << new_symbol.module << "'";
         throw 0;
@@ -248,10 +250,11 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       {
         err_location(new_symbol.location);
         str << "error: conflicting definition for variable `" << in_context.name
-            << "'" << std::endl;
-        str << "old definition: " << to_string(in_context.type) << std::endl;
-        str << "Module: " << in_context.module << std::endl;
-        str << "new definition: " << to_string(new_symbol.type) << std::endl;
+            << "'"
+            << "\n";
+        str << "old definition: " << to_string(in_context.type) << "\n";
+        str << "Module: " << in_context.module << "\n";
+        str << "new definition: " << to_string(new_symbol.type) << "\n";
         str << "Module: " << new_symbol.module;
         throw 0;
       }
@@ -269,10 +272,11 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       {
         err_location(new_symbol.value);
         str << "error: conflicting initializers for variable `"
-            << in_context.name << "'" << std::endl;
-        str << "old value: " << to_string(in_context.value) << std::endl;
-        str << "Module: " << in_context.module << std::endl;
-        str << "new value: " << to_string(new_symbol.value) << std::endl;
+            << in_context.name << "'"
+            << "\n";
+        str << "old value: " << to_string(in_context.value) << "\n";
+        str << "Module: " << in_context.module << "\n";
+        str << "new value: " << to_string(new_symbol.value) << "\n";
         str << "Module: " << new_symbol.module;
         throw 0;
       }
@@ -330,7 +334,7 @@ void c_linkt::move(symbolt &new_symbol)
 bool c_link(
   contextt &context,
   contextt &new_context,
-  message_handlert &message_handler,
+  const messaget &message_handler,
   const std::string &module)
 {
   c_linkt c_link(context, new_context, module, message_handler);

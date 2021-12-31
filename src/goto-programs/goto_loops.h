@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 #include <util/std_types.h>
 
 class goto_loopst : public message_streamt
@@ -35,7 +35,7 @@ public:
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
     goto_functiont &_goto_function,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : message_streamt(_message_handler),
       function_name(_function_name),
       goto_functions(_goto_functions),

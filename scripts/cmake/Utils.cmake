@@ -18,3 +18,16 @@ function(assert_variable_is_defined VAR)
         message(FATAL_ERROR "${VAR} must be defined")
     endif()
 endfunction()
+
+# Get all subdirectories of a folder
+# https://stackoverflow.com/a/7788165/7483927
+macro(SUBDIRLIST result curdir)
+  file(GLOB children RELATIVE ${curdir} ${curdir}/*)
+  set(dirlist "")
+  foreach(child ${children})
+    if(IS_DIRECTORY ${curdir}/${child})
+      list(APPEND dirlist ${child})
+    endif()
+  endforeach()
+  set(${result} ${dirlist})
+endmacro()

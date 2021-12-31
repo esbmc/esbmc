@@ -1,0 +1,4 @@
+THOROUGH
+mem_leak.c
+--bitwuzla --memory-leak-check
+^VERIFICATION FAILED$

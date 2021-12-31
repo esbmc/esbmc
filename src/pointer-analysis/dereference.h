@@ -183,12 +183,14 @@ public:
     const namespacet &_ns,
     contextt &_new_context,
     const optionst &_options,
-    dereference_callbackt &_dereference_callback)
+    dereference_callbackt &_dereference_callback,
+    const messaget &msg)
     : ns(_ns),
       new_context(_new_context),
       options(_options),
       dereference_callback(_dereference_callback),
-      block_assertions(false)
+      block_assertions(false),
+      msg(msg)
   {
     is_big_endian =
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
@@ -255,6 +257,7 @@ private:
   std::list<dereference_callbackt::internal_item> internal_items;
   /** Flag for discarding all assertions encoded. */
   bool block_assertions;
+  const messaget &msg;
 
   /** Interpret an expression that modifies the guard. i.e., an 'if' or a
    *  piece of logic that can be short-circuited.
@@ -378,7 +381,7 @@ private:
     const expr2tc &offset);
   void stitch_together_from_byte_array(
     expr2tc &value,
-    const type2tc &type,
+    unsigned int num_bytes,
     const expr2tc *bytes);
   void wrap_in_scalar_step_list(
     expr2tc &value,
@@ -410,6 +413,12 @@ private:
     unsigned long minwidth,
     const expr2tc &&offset,
     const guardt &guard);
+  unsigned int
+  compute_num_bytes_to_extract(const expr2tc offset, unsigned long num_bits);
+  void extract_bits_from_byte_array(
+    expr2tc &value,
+    expr2tc offset,
+    unsigned long num_bits);
 
 public:
   void build_reference_rec(

@@ -17,6 +17,8 @@ const char *extensions_cpp[] = {"cpp", "cc", "ipp", "cxx", NULL};
 const char *extensions_cpp[] = {"cpp", "cc", "ipp", "C", "cxx", nullptr};
 #endif
 
+const char *extensions_sol_ast[] = {"solast", nullptr};
+
 int get_mode(const std::string &str)
 {
   unsigned i;
@@ -49,7 +51,7 @@ int get_mode_filename(const std::string &filename)
   return -1;
 }
 
-languaget *new_language(const char *mode)
+languaget *new_language(const char *mode, const messaget &msg)
 {
-  return (*mode_table[get_mode(mode)].new_language)();
+  return (*mode_table[get_mode(mode)].new_language)(msg);
 }

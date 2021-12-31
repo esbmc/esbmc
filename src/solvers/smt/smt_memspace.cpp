@@ -1,6 +1,7 @@
 #include <algorithm>
-#include <solvers/smt/smt_conv.h>
 #include <sstream>
+#include <solvers/smt/smt_conv.h>
+#include <util/type_byte_size.h>
 
 /** @file smt_memspace.cpp
  *  Modelling the memory address space of C isn't something that is handled
@@ -122,15 +123,14 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     }
     else
     {
-      std::cerr << "Pointer arithmetic with two pointer operands" << std::endl;
+      msg.error("Pointer arithmetic with two pointer operands");
       abort();
     }
     break;
   case 4:
     // Artithmetic operation that has the result type of ptr.
     // Should have been handled at a higher level
-    std::cerr << "Non-pointer op being interpreted as pointer without cast"
-              << std::endl;
+    msg.error("Non-pointer op being interpreted as pointer without cast");
     abort();
     break;
   case 1:
@@ -153,13 +153,8 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     // Actually perform some pointer arith
     const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
     typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
-    type2tc followed_type;
-    migrate_type(followed_type_old, followed_type);
-    BigInt type_size;
-    if(is_empty_type(followed_type))
-      type_size = 1;
-    else
-      type_size = type_byte_size(followed_type);
+    type2tc followed_type = migrate_type(followed_type_old);
+    BigInt type_size = type_byte_size(followed_type);
 
     // Generate nonptr * constant.
     type2tc inttype = machine_ptr;
@@ -196,7 +191,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
   }
   }
 
-  std::cerr << "Fell through convert_pointer_logic" << std::endl;
+  msg.error("Fell through convert_pointer_logic");
   abort();
 }
 
@@ -246,8 +241,8 @@ smt_astt smt_convt::convert_identifier_pointer(
 
   if(!ptr_foo_inited)
   {
-    std::cerr << "SMT solver must call smt_post_init immediately after "
-              << "construction" << std::endl;
+    msg.error(
+      "SMT solver must call smt_post_init immediately after construction");
     abort();
   }
 
@@ -399,8 +394,7 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   // is initialized for this ptr to false. That way, only pointers created
   // through malloc will be marked dynamic.
 
-  type2tc arrtype(new array_type2t(
-    type2tc(new bool_type2t()), expr2tc((expr2t *)nullptr), true));
+  type2tc arrtype(new array_type2t(get_bool_type(), expr2tc(), true));
   symbol2tc allocarr(arrtype, dyn_info_arr_name);
   constant_int2tc objid(machine_uint, BigInt(obj_num));
   index2tc idx(get_bool_type(), allocarr, objid);
@@ -530,8 +524,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     return convert_ast(tmp);
   }
 
-  std::cerr << "Unrecognized address_of operand:" << std::endl;
-  expr->dump();
+  msg.error(fmt::format("Unrecognized address_of operand:\n{}", *expr));
   abort();
 }
 

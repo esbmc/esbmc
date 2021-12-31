@@ -9,9 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/printf_formatter.h>
 #include <sstream>
 #include <util/c_types.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/format_constant.h>
-#include <util/type_byte_size.h>
 
 const expr2tc
 printf_formattert::make_type(const expr2tc &src, const type2tc &dest)

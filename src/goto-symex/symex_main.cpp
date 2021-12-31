@@ -13,17 +13,52 @@
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
-#include <iostream>
+
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/pretty.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <vector>
+
+bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
+{
+  auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
+  equality2tc question(gen_true_expr(), expr);
+  try
+  {
+    // check whether the assertion holds
+    tvt res = rte->ask_solver_question(question);
+    // we don't add this assertion to the resulting logical formula
+    if(res.is_true())
+      // incremental verification succeeded
+      return true;
+    // this assertion evaluates to false via incremental SMT solving
+    if(res.is_false())
+    {
+      // check assertion to produce a counterexample
+      assertion(gen_false_expr(), msg);
+      // eliminate subsequent execution paths
+      assume(gen_false_expr());
+      // incremental verification succeeded
+      return true;
+    }
+    this->msg.status("Incremental verification returned unknown");
+    // incremental verification returned unknown
+    return false;
+  }
+  catch(runtime_encoded_equationt::dual_unsat_exception &e)
+  {
+    this->msg.error(
+      "This solver was unable to check this expression. Please try it with "
+      "another solver");
+  }
+  return false;
+}
 
 void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
@@ -54,12 +89,28 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   if(is_true(new_expr))
     return;
 
-  cur_state->guard.guard_expr(new_expr);
-  cur_state->global_guard.guard_expr(new_expr);
+  if(options.get_bool_option("smt-symex-assert"))
+  {
+    if(check_incremental(new_expr, msg))
+      // incremental verification has succeeded
+      return;
+  }
+
+  // add assertion to the target equation
+  assertion(new_expr, msg);
+}
+
+void goto_symext::assertion(
+  const expr2tc &the_assertion,
+  const std::string &msg)
+{
+  expr2tc expr = the_assertion;
+  cur_state->guard.guard_expr(expr);
+  cur_state->global_guard.guard_expr(expr);
   remaining_claims++;
   target->assertion(
     cur_state->guard.as_expr(),
-    new_expr,
+    expr,
     msg,
     cur_state->gen_stack_trace(),
     cur_state->source,
@@ -100,9 +151,9 @@ void goto_symext::symex_step(reachability_treet &art)
 
   // depth exceeded?
   {
-    if(depth_limit != 0 && cur_state->depth > depth_limit)
+    if(depth_limit != 0 && cur_state->num_instructions > depth_limit)
       cur_state->guard.add(gen_false_expr());
-    cur_state->depth++;
+    cur_state->num_instructions++;
   }
 
   // Remember the first loop we're entering
@@ -293,8 +344,11 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   default:
-    std::cerr << "GOTO instruction type " << instruction.type;
-    std::cerr << " not handled in goto_symext::symex_step" << std::endl;
+    std::ostringstream oss;
+    oss << "GOTO instruction type " << instruction.type;
+    oss << " not handled in goto_symext::symex_step"
+        << "\n";
+    msg.error(oss.str());
     abort();
   }
 }
@@ -492,10 +546,13 @@ void goto_symext::run_intrinsic(
   }
   else
   {
-    std::cerr << "Function call to non-intrinsic prefixed with __ESBMC";
-    std::cerr << " (fatal)\nThe name in question: " << symname;
-    std::cerr << "\n(NB: the C spec reserves the __ prefix for the compiler"
-                 " and environment)\n";
+    std::ostringstream oss;
+    oss << "Function call to non-intrinsic prefixed with __ESBMC";
+    oss << " (fatal)\nThe name in question: " << symname;
+    oss << "\n(NB: the C spec reserves the __ prefix for the compiler"
+           " and environment)\n";
+
+    msg.error(oss.str());
     abort();
   }
 }

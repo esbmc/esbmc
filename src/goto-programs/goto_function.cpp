@@ -15,6 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/location.h>
 #include <util/prefix.h>
+#include <util/message/default_message.h>
 
 void goto_convertt::convert_function_call(
   const code_function_callt &function_call,
@@ -71,8 +72,8 @@ void goto_convertt::do_function_call(
   else
   {
     err_location(function);
-    std::cerr << "unexpected function argument: " + new_function.id_string()
-              << std::endl;
+    message_handler.error(fmt::format(
+      "unexpected function argument: {}", new_function.id_string()));
     abort();
   }
 }
@@ -100,20 +101,20 @@ void goto_convertt::do_function_call_if(
   // z: ;
 
   // do the v label
-  goto_programt tmp_v;
+  goto_programt tmp_v(get_message_handler());
   goto_programt::targett v = tmp_v.add_instruction();
 
   // do the x label
-  goto_programt tmp_x;
+  goto_programt tmp_x(get_message_handler());
   goto_programt::targett x = tmp_x.add_instruction();
 
   // do the z label
-  goto_programt tmp_z;
+  goto_programt tmp_z(get_message_handler());
   goto_programt::targett z = tmp_z.add_instruction();
   z->make_skip();
 
   // y: g();
-  goto_programt tmp_y;
+  goto_programt tmp_y(get_message_handler());
   goto_programt::targett y;
 
   do_function_call(lhs, function.op2(), arguments, tmp_y);
@@ -137,7 +138,7 @@ void goto_convertt::do_function_call_if(
   }
 
   // w: f();
-  goto_programt tmp_w;
+  goto_programt tmp_w(get_message_handler());
 
   do_function_call(lhs, function.op1(), arguments, tmp_w);
 
@@ -174,7 +175,10 @@ void goto_convertt::do_function_call_dereference(
 
 void goto_functionst::dump() const
 {
-  output(*migrate_namespace_lookup, std::cout);
+  default_message msg;
+  std::ostringstream oss;
+  output(*migrate_namespace_lookup, oss);
+  msg.debug(oss.str());
 }
 
 void goto_functionst::output(const namespacet &ns, std::ostream &out) const
@@ -183,11 +187,13 @@ void goto_functionst::output(const namespacet &ns, std::ostream &out) const
   {
     if(it.second.body_available)
     {
-      out << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
-      out << std::endl;
+      out << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+          << "\n";
+      out << "\n";
 
       const symbolt &symbol = ns.lookup(it.first);
-      out << symbol.name << " (" << symbol.id << "):" << std::endl;
+      out << symbol.name << " (" << symbol.id << "):"
+          << "\n";
       it.second.body.output(ns, symbol.id, out);
     }
   }

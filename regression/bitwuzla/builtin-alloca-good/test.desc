@@ -1,0 +1,4 @@
+THOROUGH
+builtin_alloca_test.c
+--bitwuzla
+^VERIFICATION SUCCESSFUL$

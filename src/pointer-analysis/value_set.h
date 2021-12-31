@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <pointer-analysis/value_sets.h>
 #include <set>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/mp_arith.h>
 #include <util/namespace.h>
 #include <util/numbering.h>
@@ -58,18 +58,20 @@ class value_sett
 {
 public:
   /** Primary constructor. Does approximately nothing non-standard. */
-  value_sett(const namespacet &_ns)
+  value_sett(const namespacet &_ns, const messaget &msg)
     : location_number(0),
       ns(_ns),
+      msg(msg),
       xchg_name("value_sett::__ESBMC_xchg_ptr"),
       xchg_num(0)
   {
   }
 
-  value_sett(const value_sett &ref)
+  explicit value_sett(const value_sett &ref)
     : location_number(ref.location_number),
       values(ref.values),
       ns(ref.ns),
+      msg(ref.msg),
       xchg_name("value_sett::__ESBMC_xchg_ptr"),
       xchg_num(0)
   {
@@ -82,6 +84,7 @@ public:
     xchg_name = ref.xchg_name;
     xchg_num = ref.xchg_num;
     // No need to copy ns, it should be the same in all contexts.
+    // Msg will not change as well
     return *this;
   }
 
@@ -578,12 +581,21 @@ protected:
    *  @param original_type Type of the top level expression. If any part of the
    *         interpreted expression isn't recognized, then an unknown2t expr is
    *         put in the value tracking set to represent the fact that
-   *         interpretation failed, and it might point at something crazy. */
+   *         interpretation failed, and it might point at something crazy.
+   *  @param under_deref If true, treat the expression as occuring under a
+   *         dereference operation. Otherwise treat it at free-standing.
+   *         This only affects how constants are interpreted: if enabled, the
+   *         expression 0 becomes a null_object2t reference in the value-set,
+   *         while other constants are invalid2t/unknown2t; when disabled,
+   *         constant expressions do not generate any references in the
+   *         value-set.
+   */
   void get_value_set_rec(
     const expr2tc &expr,
     object_mapt &dest,
     const std::string &suffix,
-    const type2tc &original_type) const;
+    const type2tc &original_type,
+    bool under_deref = true) const;
 
   // Like get_value_set_rec, but dedicated to walking through the ireps that
   // are produced by pointer deref byte stitching
@@ -662,6 +674,7 @@ public:
 
   /** Namespace for looking up types against. */
   const namespacet &ns;
+  const messaget &msg;
 
   irep_idt xchg_name;
   unsigned long xchg_num;

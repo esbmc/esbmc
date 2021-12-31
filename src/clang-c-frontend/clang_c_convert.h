@@ -8,8 +8,6 @@
 #include <util/namespace.h>
 #include <util/std_types.h>
 
-#define BITFIELD_MAX_FIELD 64
-
 // Forward dec, to avoid bringing in clang headers
 namespace clang
 {
@@ -45,16 +43,31 @@ class clang_c_convertert
 public:
   clang_c_convertert(
     contextt &_context,
-    std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs);
+    std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
+    const messaget &msg);
   virtual ~clang_c_convertert() = default;
 
   bool convert();
+
+  /**
+ * @brief Perform the typecast by creating a tmp variable on RHS
+ *
+ * The idea is to look for all components of the union and match
+ * the type. If not found, throws an error
+ *
+ * @param dest RHS dest
+ * @param type Union type
+ * @param msg  Message object
+ */
+  static void
+  gen_typecast_to_union(exprt &dest, const typet &type, const messaget &msg);
 
 protected:
   clang::ASTContext *ASTContext;
   contextt &context;
   namespacet ns;
   std::vector<std::unique_ptr<clang::ASTUnit>> &ASTs;
+  const messaget &msg;
 
   unsigned int current_scope_var_num;
 
@@ -162,21 +175,7 @@ protected:
 
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
 
-  // Bitfield mangling
-  bool has_bitfields(const typet &type, typet *converted = NULL);
-  typet fix_bitfields(const typet &type);
-
-  std::map<typet, typet> bitfield_fixed_type_map;
-  std::map<typet, typet> bitfield_orig_type_map;
-
-  typedef struct bitfield_map
-  {
-    unsigned int bitloc;
-    unsigned int blobloc;
-  } bitfield_map;
-  std::map<typet, std::map<irep_idt, bitfield_map>> bitfield_mappings;
-  void rewrite_bitfield_member(exprt &expr, const bitfield_map &bm);
-  void fix_constant_bitfields(exprt &expr);
+  void gen_typecast_to_union(exprt &dest, const typet &type);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

@@ -1,0 +1,4 @@
+CORE
+main.c
+--smt-during-symex --add-symex-value-sets
+^VERIFICATION FAILED$

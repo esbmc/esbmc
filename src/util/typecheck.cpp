@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/typecheck.h>
+#include <util/message/format.h>
 
 bool typecheckt::typecheck_main()
 {
@@ -17,7 +18,7 @@ bool typecheckt::typecheck_main()
 
   catch(int e)
   {
-    error();
+    error(fmt::format("{}", e));
   }
 
   catch(const char *e)

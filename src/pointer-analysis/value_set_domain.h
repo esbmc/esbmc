@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/static_analysis.h>
 #include <pointer-analysis/value_set.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 
 class value_set_domaint : public abstract_domain_baset
@@ -50,9 +50,10 @@ public:
     value_set->output(out);
   }
 
-  void initialize(const namespacet &ns, locationt l) override
+  void
+  initialize(const namespacet &ns, locationt l, const messaget &msg) override
   {
-    value_set = new value_sett(ns);
+    value_set = new value_sett(ns, msg);
     value_set->clear();
     value_set->location_number = l->location_number;
   }

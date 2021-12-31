@@ -130,7 +130,7 @@ smt_astt tuple_sym_smt_ast::update(
   const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
 
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
-  tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, sort, name);
+  tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, sort, name, _msg);
 
   // Iterate over all members, deciding what to do with them.
   for(unsigned int j = 0; j < data.members.size(); j++)
@@ -161,7 +161,7 @@ smt_astt tuple_sym_smt_ast::select(
   smt_convt *ctx [[gnu::unused]],
   const expr2tc &idx [[gnu::unused]]) const
 {
-  std::cerr << "Select operation applied to tuple" << std::endl;
+  _msg.error("Select operation applied to tuple");
   abort();
 }
 
@@ -188,9 +188,9 @@ smt_astt tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
     // the internal struct being projected.
     sym_name = sym_name + ".";
     if(is_tuple_array_ast_type(restype))
-      return new array_sym_smt_ast(ctx, s, sym_name);
+      return new array_sym_smt_ast(ctx, s, sym_name, _msg);
 
-    return new tuple_sym_smt_ast(ctx, s, sym_name);
+    return new tuple_sym_smt_ast(ctx, s, sym_name, _msg);
   }
   else
   {

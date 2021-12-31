@@ -7,6 +7,7 @@ struct MixedData
 };
 
 int main() {
-  struct MixedData a; // total: 64
+  struct MixedData a; // total: 96
+  assert(sizeof(a) == 12);
   return 0;
 }

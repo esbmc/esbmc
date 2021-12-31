@@ -134,18 +134,18 @@ void ingest_symbol(
 }
 
 #ifdef NO_CPROVER_LIBRARY
-void add_cprover_library(contextt &, message_handlert &)
+void add_cprover_library(contextt &, const messaget &)
 {
 }
 
 #else
 
-void add_cprover_library(contextt &context, message_handlert &message_handler)
+void add_cprover_library(contextt &context, const messaget &message_handler)
 {
   if(config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
     return;
 
-  contextt new_ctx, store_ctx;
+  contextt new_ctx(message_handler), store_ctx(message_handler);
   goto_functionst goto_functions;
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
@@ -181,20 +181,20 @@ void add_cprover_library(contextt &context, message_handlert &message_handler)
   {
     if(config.ansi_c.word_size == 16)
     {
-      std::cerr << "Warning: this version of ESBMC does not have a C library ";
-      std::cerr << "for 16 bit machines";
+      message_handler.warning(
+        "Warning: this version of ESBMC does not have a C library "
+        "for 16 bit machines");
       return;
     }
-
-    std::cerr << "No c library for bitwidth " << config.ansi_c.int_width
-              << std::endl;
+    message_handler.error(
+      fmt::format("No c library for bitwidth {}", config.ansi_c.int_width));
     abort();
   }
 
   size = this_clib_ptrs[1] - this_clib_ptrs[0];
   if(size == 0)
   {
-    std::cerr << "error: Zero-lengthed internal C library" << std::endl;
+    message_handler.error("error: Zero-lengthed internal C library");
     abort();
   }
 
@@ -210,11 +210,10 @@ void add_cprover_library(contextt &context, message_handlert &message_handler)
   f = fopen(symname_buffer, "wb");
   if(fwrite(this_clib_ptrs[0], size, 1, f) != 1)
   {
-    std::cerr << "Couldn't manipulate internal C library" << std::endl;
+    message_handler.error("Couldn't manipulate internal C library");
     abort();
   }
   fclose(f);
-
   std::ifstream infile(symname_buffer, std::ios::in | std::ios::binary);
   read_goto_binary(infile, new_ctx, goto_functions, message_handler);
   infile.close();
@@ -273,7 +272,7 @@ void add_cprover_library(contextt &context, message_handlert &message_handler)
   if(c_link(context, store_ctx, message_handler, "<built-in-library>"))
   {
     // Merging failed
-    std::cerr << "Failed to merge C library" << std::endl;
+    message_handler.error("Failed to merge C library");
     abort();
   }
 }

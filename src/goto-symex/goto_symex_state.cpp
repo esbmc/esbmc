@@ -16,17 +16,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <sstream>
 #include <util/expr_util.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 
 goto_symex_statet::goto_symex_statet(
   renaming::level2t &l2,
   value_sett &vs,
-  const namespacet &_ns)
-  : level2(l2), value_set(vs), ns(_ns)
+  const namespacet &_ns,
+  const messaget &msg)
+  : level2(l2), value_set(vs), ns(_ns), msg(msg)
 {
   use_value_set = true;
-  depth = 0;
+  num_instructions = 0;
   thread_ended = false;
   guard.make_true();
 }
@@ -34,15 +35,16 @@ goto_symex_statet::goto_symex_statet(
 goto_symex_statet::goto_symex_statet(
   const goto_symex_statet &state,
   renaming::level2t &l2,
-  value_sett &vs)
-  : level2(l2), value_set(vs), ns(state.ns)
+  value_sett &vs,
+  const messaget &msg)
+  : level2(l2), value_set(vs), ns(state.ns), msg(msg)
 {
   *this = state;
 }
 
 goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
 {
-  depth = state.depth;
+  num_instructions = state.num_instructions;
   thread_ended = state.thread_ended;
   guard = state.guard;
   global_guard = state.global_guard;
@@ -204,7 +206,7 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
   {
     // update value sets
     expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
-    level2.get_original_name(l1_rhs);
+    level2.get_original_name(l1_rhs, msg);
 
     value_set.assign(l1_lhs, l1_rhs);
   }
@@ -384,12 +386,13 @@ void goto_symex_statet::get_original_name(expr2tc &expr) const
 
   if(is_symbol2t(expr))
   {
-    level2.get_original_name(expr);
-    top().level1.get_original_name(expr);
+    level2.get_original_name(expr, msg);
+    top().level1.get_original_name(expr, msg);
   }
 }
 
-void goto_symex_statet::print_stack_trace(unsigned int indent) const
+void goto_symex_statet::print_stack_trace(unsigned int indent, std::ostream &os)
+  const
 {
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
@@ -405,14 +408,15 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
   {
     if(it->function_identifier == "")
     { // Top level call
-      std::cout << spaces << "init" << std::endl;
+      os << spaces << "init"
+         << "\n";
     }
     else
     {
-      std::cout << spaces << it->function_identifier.as_string();
-      std::cout << " at " << src.pc->location.get_file();
-      std::cout << " line " << src.pc->location.get_line();
-      std::cout << std::endl;
+      os << spaces << it->function_identifier.as_string();
+      os << " at " << src.pc->location.get_file();
+      os << " line " << src.pc->location.get_line();
+      os << "\n";
     }
 
     src = it->calling_location;
@@ -420,8 +424,9 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
 
   if(!thread_ended)
   {
-    std::cout << spaces << "Next instruction to be executed:" << std::endl;
-    source.pc->output_instruction(ns, "", std::cout);
+    os << spaces << "Next instruction to be executed:"
+       << "\n";
+    source.pc->output_instruction(ns, "", os, msg);
   }
 }
 

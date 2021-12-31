@@ -15,11 +15,11 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_target_equation.h>
-#include <iostream>
+
 #include <unordered_map>
 #include <unordered_set>
 #include <util/crypto_hash.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/options.h>
 
 /**
@@ -77,7 +77,7 @@ public:
     optionst &opts,
     std::shared_ptr<symex_targett> target,
     contextt &context,
-    message_handlert &message_handler);
+    const messaget &message_handler);
 
   /**
    *  Default destructor.
@@ -261,11 +261,11 @@ public:
   {
   public:
     dfs_position(const reachability_treet &rt);
-    dfs_position(const std::string &&filename);
-    bool write_to_file(const std::string &&filename) const;
+    dfs_position(const std::string &&filename, const messaget &msg);
+    bool write_to_file(const std::string &&filename, const messaget &msg) const;
 
   protected:
-    bool read_from_file(const std::string &&filename);
+    bool read_from_file(const std::string &&filename, const messaget &msg);
 
   public:
     struct dfs_state
@@ -369,7 +369,7 @@ protected:
   /** Set of state hashes we've discovered */
   std::set<crypto_hash> hit_hashes;
   /** Message handler reference. */
-  message_handlert &message_handler;
+  const messaget &message_handler;
   /** Flag as to whether we're picking interleaving directions explicitly.
    *  Corresponds to the --interactive-ileaves option. */
   bool interactive_ileaves;

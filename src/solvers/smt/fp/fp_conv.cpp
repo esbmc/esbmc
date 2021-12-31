@@ -42,7 +42,7 @@ static BigInt power2m1(std::size_t n, bool negated)
   return b;
 }
 
-fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
+fp_convt::fp_convt(smt_convt *_ctx, const messaget &msg) : ctx(_ctx), _msg(msg)
 {
 }
 
@@ -2133,7 +2133,7 @@ smt_astt fp_convt::mk_is_rm(smt_astt &rme, ieee_floatt::rounding_modet rm)
     break;
   }
 
-  std::cerr << "Unknown rounding mode\n";
+  _msg.error("Unknown rounding mode");
   abort();
 }
 

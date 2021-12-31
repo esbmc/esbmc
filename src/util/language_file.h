@@ -9,10 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_LANGUAGE_FILE_H
 #define CPROVER_LANGUAGE_FILE_H
 
-#include <iostream>
 #include <set>
 #include <util/context.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 class language_modulet
 {
@@ -44,7 +43,7 @@ public:
   ~language_filet();
 };
 
-class language_filest : public messaget
+class language_filest
 {
 public:
   typedef std::map<std::string, language_filet> filemapt;
@@ -52,6 +51,10 @@ public:
 
   typedef std::map<std::string, language_modulet> modulemapt;
   modulemapt modulemap;
+
+  explicit language_filest(const messaget &msg) : msg(msg)
+  {
+  }
 
   void clear_files()
   {
@@ -75,6 +78,7 @@ public:
   }
 
 protected:
+  const messaget &msg;
   bool typecheck_module(contextt &context, language_modulet &module);
 
   bool typecheck_module(contextt &context, const std::string &module);

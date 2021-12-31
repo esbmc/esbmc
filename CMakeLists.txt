@@ -5,7 +5,7 @@ cmake_minimum_required (VERSION 3.7)
 project (ESBMC)
 
 set (ESBMC_VERSION_MAJOR 6)
-set (ESBMC_VERSION_MINOR 6)
+set (ESBMC_VERSION_MINOR 8)
 set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
@@ -47,7 +47,7 @@ if(BUILD_STATIC)
   include(BuildStatic)
 endif()
 
-include(DefineLibM)
+include(ExternalDependencies)
 
 # Copied from https://stackoverflow.com/questions/53877344/cannot-configure-cmake-to-look-for-homebrew-installed-version-of-bison
 # On macOS, search Homebrew for keg-only versions of Bison and Flex. Xcode does
@@ -80,7 +80,7 @@ find_package(BISON 2.6.1 REQUIRED)
 find_package(FLEX 2.6.1 REQUIRED)
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
-find_package(Boost REQUIRED COMPONENTS filesystem system date_time)
+find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options)
 include(FindLLVM)
 
 # Optimization
@@ -89,6 +89,10 @@ include(WError)
 
 if(ENABLE_OLD_FRONTEND)
   add_definitions(-DENABLE_OLD_FRONTEND)
+endif()
+
+if(ENABLE_SOLIDITY_FRONTEND)
+  add_definitions(-DENABLE_SOLIDITY_FRONTEND)
 endif()
 
 add_subdirectory(src)

@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_ARITH_TOOLS_H
 
 #include <util/expr.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/mp_arith.h>
 
 bool to_integer(const exprt &expr, BigInt &int_value);

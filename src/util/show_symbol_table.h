@@ -11,6 +11,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/namespace.h>
 
-void show_symbol_table_plain(const namespacet &ns, std::ostream &out);
+void show_symbol_table_plain(
+  const namespacet &ns,
+  std::ostream &out,
+  const messaget &msg);
 
 #endif // CPROVER_SHOW_SYMBOL_TABLE_H

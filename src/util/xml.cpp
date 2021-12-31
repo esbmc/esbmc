@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdlib>
 #include <util/i2string.h>
 #include <util/xml.h>
+#include <ostream>
 
 void xmlt::clear()
 {
@@ -41,7 +42,7 @@ void xmlt::output(std::ostream &out, unsigned indent) const
     out << data;
   else
   {
-    out << std::endl;
+    out << "\n";
 
     for(const auto &element : elements)
       element.output(out, indent + 2);
@@ -49,7 +50,7 @@ void xmlt::output(std::ostream &out, unsigned indent) const
     do_indent(out, indent);
   }
 
-  out << '<' << '/' << name << '>' << std::endl;
+  out << '<' << '/' << name << '>' << "\n";
 }
 
 std::string xmlt::escape(const std::string &s)
@@ -194,4 +195,14 @@ std::string xmlt::unescape(const std::string &str)
   }
 
   return result;
+}
+
+bool operator==(const xmlt &a, const xmlt &b)
+{
+  return a.name == b.name && a.data == b.data && a.elements == b.elements &&
+         a.attributes == b.attributes;
+}
+bool operator!=(const xmlt &a, const xmlt &b)
+{
+  return !(a == b);
 }

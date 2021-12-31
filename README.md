@@ -1,7 +1,6 @@
 # The ESBMC model checker
 
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d14d06e975644907a2eb9521e09ccfe4)](https://app.codacy.com/gh/esbmc/esbmc?utm_source=github.com&utm_medium=referral&utm_content=esbmc/esbmc&utm_campaign=Badge_Grade_Dashboard)
-[![Build Status](https://travis-ci.com/esbmc/esbmc.svg?branch=master)](https://travis-ci.com/esbmc/esbmc)
 ![Lint Code Base](https://github.com/esbmc/esbmc/workflows/Lint%20Code%20Base/badge.svg)
 ![Health Checks](https://github.com/esbmc/esbmc/workflows/Health%20Checks/badge.svg)
 ![Build All Solvers](https://github.com/esbmc/esbmc/workflows/Build%20All%20Solvers/badge.svg)
@@ -10,7 +9,7 @@
 
 
 
-ESBMC (the Efficient SMT-based Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++ programs. It can verify both predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions automatically. ESBMC supports the Clang compiler as its C/C++ frontend, IEEE floating-point arithmetic for a variety of SMT solvers, and implements a state-of-the-art k-induction algorithm.
+ESBMC (the Efficient SMT-based Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++ programs. It can verify both predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions automatically. ESBMC supports the Clang compiler as its C/C++ frontend, IEEE floating-point arithmetic for various SMT solvers, implements the Solidity grammar production rules as its Solidity frontend and state-of-the-art incremental BMC and k-induction algorithms.
 
 To build ESBMC, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. For getting started, we recommend first reading some of the background material / publications, to understand exactly what this technique can provide, for example our SV-COMP tool papers, which are available at [online](https://ssvlab.github.io/esbmc/publications.html).
 
@@ -42,6 +41,7 @@ By default ESBMC performs a "lazy" depth first search of interleavings -- it can
 
 A number of SMT solvers are currently supported:
  * Z3 4.8+
+ * Bitwuzla
  * Boolector 3.0+
  * MathSAT
  * CVC4
@@ -55,9 +55,10 @@ A limited subset of C++98 is supported too -- a library modelling the STL is als
 
 ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary differences between the two are:
 
-* CBMC focuses on SAT-based encodings of unrolled programs while ESBMC targets SMT-based encodings. 
+* CBMC focuses on SAT-based encodings of unrolled programs while ESBMC targets SMT-based encodings.
 * CBMC's concurrency support is an entirely symbolic encoding of a concurrent program in one SAT formulae, while ESBMC explores each interleaving individually.
 * CBMC uses a modified C parser written by James Roskind and a C++ parser based on OpenC++, while ESBMC relies on the Clang front-end.
+* ESBMC implements the Solidity grammar production rules as its Solidity frontend, while CBMC does not implement a Solidity frontend.
 * CBMC implements k-induction, requiring three different calls: to generate the CFG, to annotate the program, and to verify it, whereas ESBMC handles the whole process in a single call. Additionally, CBMC does not have a forward condition to check if all states were reached and relies on a limited loop unwinding.
 * ESBMC adds some additional types to the program's internal representation.
 
@@ -84,7 +85,7 @@ Here are some steps to contributing to the code base:
   1. Push your changes to your branch
   1. Create a Pull Request targeting the master branch
 
-Here is an example to prepare a pull request (PR) 
+Here is an example to prepare a pull request (PR)
 
 
 A) Make sure that you are in the `master` branch and your fork is updated.
@@ -92,7 +93,7 @@ A) Make sure that you are in the `master` branch and your fork is updated.
 ```
 git checkout master
 git fetch upstream
-git pull --rebase upstream master    
+git pull --rebase upstream master
 git push origin HEAD:master
 ```
 
@@ -115,8 +116,8 @@ git add path-to-file/file.cpp
 git commit -sm "added opertational model for pthread_equal"
 ```
 
-Note that you can check your changes via `git status`. 
-Note also that every PR should contain at least two test cases 
+Note that you can check your changes via `git status`.
+Note also that every PR should contain at least two test cases
 to check your implementation: one successful and one failed test case.
 
 D) Push your changes in the local branch to the ESBMC repository:
@@ -133,4 +134,8 @@ A limited number of classes have been marked up with doxygen documentation heade
 
     doxygen .doxygen
 
-Output will be in docs/html, open index.html to get started. 
+Output will be in docs/html, open index.html to get started.
+
+### Acknowledgments
+
+The ESBMC development was supported by various research funding agencies, including CNPq (Brazil), CAPES (Brazil), FAPEAM (Brazil), EPSRC (UK), Royal Society (UK), British Council (UK), European Commission (Horizon 2020), and companies including Intel, Nokia Institute of Technology and Samsung. ESBMC is currently funded by Intel, EPSRC grants [EP/T026995/1](https://enncore.github.io), [EP/V000497/1](https://scorch-project.github.io), [EU H2020 ELEGANT 957286](https://www.elegant-h2020.eu) and [Soteria project](https://soteriaresearch.org) awarded by the UK Research and Innovation for the Digital Security by Design (DSbD) Programme.

@@ -23,7 +23,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
 
   if(is_pointer_type(cast.from))
   {
-    std::cerr << "Converting pointer to a float is unsupported" << std::endl;
+    msg.error("Converting pointer to a float is unsupported");
     abort();
   }
 
@@ -34,7 +34,7 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
   else if(is_fixedbv_type(cast.from))
     return convert_typecast_to_fixedbv_nonint_from_fixedbv(expr);
 
-  std::cerr << "unexpected typecast to fixedbv" << std::endl;
+  msg.error("unexpected typecast to fixedbv");
   abort();
 }
 
@@ -181,7 +181,7 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
-  std::cerr << "Unexpected type in typecast to fpbv\n";
+  msg.error("Unexpected type in typecast to fpbv");
   abort();
 }
 
@@ -201,7 +201,7 @@ smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
-  std::cerr << "Unexpected type in typecast from fpbv\n";
+  msg.error("Unexpected type in typecast from fpbv");
   abort();
 }
 
@@ -222,7 +222,7 @@ smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
   if(is_bool_type(cast.from))
     return convert_typecast_to_ints_from_bool(cast);
 
-  std::cerr << "Unexpected type in int/ptr typecast" << std::endl;
+  msg.error("Unexpected type in int/ptr typecast");
   abort();
 }
 
@@ -296,8 +296,7 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
       // Operands have differing signs (and same width). Just return.
       return convert_ast(cast.from);
 
-    std::cerr << "Unrecognized equal-width int typecast format" << std::endl;
-    abort();
+    std::runtime_error("Unrecognized equal-width int typecast format");
   }
 
   if(from_width < to_width)
@@ -306,7 +305,7 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
   if(from_width > to_width)
     return mk_extract(a, to_width - 1, 0);
 
-  std::cerr << "Malformed cast from signedbv/fixedbv" << std::endl;
+  msg.error("Malformed cast from signedbv/fixedbv");
   abort();
 }
 
@@ -509,7 +508,7 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
     {
       if(!base_type_eq(struct_type_from.members[i], it, ns))
       {
-        std::cerr << "Incompatible struct in cast-to-struct" << std::endl;
+        msg.error("Incompatible struct in cast-to-struct");
         abort();
       }
 
@@ -573,12 +572,28 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
 smt_astt smt_convt::convert_typecast(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
+
   if(cast.type == cast.from->type)
     return convert_ast(cast.from);
 
   // Casts to and from pointers need to be addressed all as one
   if(is_pointer_type(cast.type))
     return convert_typecast_to_ptr(cast);
+
+  // FAM Initialization?
+  /*
+   * The frontend does not handle 0-sized arrays
+   * properly, making that FAM static direct initialization
+   * such as: FAM f = {1, {}}
+   * creates a typecast from an ADD into an ARRAY.
+   * In future we should properly handle this case in the
+   * frontend */
+  if(is_add2t(cast.from) && is_array_type(cast.type))
+  {
+    // Should be an empty array;
+    const expr2tc &zero = gen_zero(cast.type);
+    return convert_ast(zero);
+  }
 
   if(is_pointer_type(cast.from))
     return convert_typecast_from_ptr(cast);
@@ -604,11 +619,10 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     if(base_type_eq(cast.type, cast.from->type, ns))
       return convert_ast(cast.from); // No additional conversion required
 
-    std::cerr << "Can't typecast between unions" << std::endl;
+    msg.error("Can't typecast between unions\n{}");
     abort();
   }
 
-  std::cerr << "Typecast for unexpected type" << std::endl;
-  expr->dump();
+  msg.error(fmt::format("Typecast for unexpected type\n{}", *expr));
   abort();
 }

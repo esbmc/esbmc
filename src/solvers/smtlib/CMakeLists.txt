@@ -8,6 +8,7 @@ configure_file(smtlib.ypp  ${CMAKE_BINARY_DIR}/smtlib.ypp COPYONLY)
 configure_file(smtlib_tok.lpp  ${CMAKE_BINARY_DIR}/smtlib_tok.lpp COPYONLY)
 
 add_library(smtlib smtlib_conv.cpp ${CMAKE_CURRENT_BINARY_DIR}/smtlib.cpp ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp)
+target_link_libraries(smtlib fmt::fmt)
 target_include_directories(smtlib     
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}

@@ -16,12 +16,12 @@
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_target.h>
-#include <iostream>
+
 #include <list>
 #include <map>
 #include <set>
-#include <util/irep2.h>
-#include <util/message.h>
+#include <irep2/irep2.h>
+#include <util/message/message.h>
 #include <util/std_expr.h>
 
 class reachability_treet;
@@ -81,7 +81,7 @@ public:
     contextt &context,
     std::shared_ptr<ex_state_level2t> l2init,
     optionst &options,
-    message_handlert &message_handler);
+    const messaget &message_handler);
 
   /**
    *  Default copy constructor.
@@ -187,7 +187,8 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      std::cerr << "Setting thread data for nonexistant thread " << tid << '\n';
+      msg.error(
+        fmt::format("Setting thread data for nonexistant thread {}", tid));
       abort();
     }
 
@@ -199,7 +200,8 @@ public:
   {
     if(tid >= thread_start_data.size())
     {
-      std::cerr << "Getting thread data for nonexistant thread " << tid << '\n';
+      msg.error(
+        fmt::format("Setting thread data for nonexistant thread {}", tid));
       abort();
     }
 
@@ -580,7 +582,7 @@ public:
   /** Have we warned of an ended monitor thread already?. */
   bool mon_thread_warning;
   /** Message handler object */
-  message_handlert &message_handler;
+  const messaget &message_handler;
   /** Minimum number of threads to exist to consider a context switch.
    *  In certain special cases, such as LTL checking, various pieces of
    *  code and information are bunged into seperate threads which aren't
@@ -649,7 +651,7 @@ public:
     std::shared_ptr<symex_targett> _target,
     contextt &context,
     optionst &options,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : execution_statet(
         goto_functions,
         ns,
@@ -686,7 +688,7 @@ public:
     optionst &options,
     unsigned int *ptotal_claims,
     unsigned int *premaining_claims,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : execution_statet(
         goto_functions,
         ns,

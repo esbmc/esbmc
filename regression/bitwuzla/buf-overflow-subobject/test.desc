@@ -1,0 +1,4 @@
+THOROUGH
+buf_over_subobject.c
+--bitwuzla
+^VERIFICATION FAILED$

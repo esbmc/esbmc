@@ -22,7 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/std_types.h>
@@ -169,24 +169,22 @@ expr2tc goto_symext::symex_mem(
 
   new_context.add(symbol);
 
-  type2tc new_type;
-  migrate_type(symbol.type, new_type);
+  type2tc new_type = migrate_type(symbol.type);
 
   address_of2tc rhs_addrof(get_empty_type(), expr2tc());
 
   if(size_is_one)
   {
-    rhs_addrof->type = get_pointer_type(pointer_typet(symbol.type));
+    rhs_addrof->type = migrate_type(pointer_typet(symbol.type));
     rhs_addrof->ptr_obj = symbol2tc(new_type, symbol.id);
   }
   else
   {
-    type2tc subtype;
-    migrate_type(symbol.type.subtype(), subtype);
+    type2tc subtype = migrate_type(symbol.type.subtype());
     expr2tc sym = symbol2tc(new_type, symbol.id);
     expr2tc idx_val = gen_ulong(0);
     expr2tc idx = index2tc(subtype, sym, idx_val);
-    rhs_addrof->type = get_pointer_type(pointer_typet(symbol.type.subtype()));
+    rhs_addrof->type = migrate_type(pointer_typet(symbol.type.subtype()));
     rhs_addrof->ptr_obj = idx;
   }
 
@@ -399,16 +397,12 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   symbol.mode = "C++";
 
   const pointer_type2t &ptr_ref = to_pointer_type(code.type);
-  typet renamedtype = ns.follow(migrate_type_back(ptr_ref.subtype));
-  type2tc newtype, renamedtype2;
-  migrate_type(renamedtype, renamedtype2);
+  type2tc renamedtype2 =
+    migrate_type(ns.follow(migrate_type_back(ptr_ref.subtype)));
 
-  if(do_array)
-  {
-    newtype = type2tc(new array_type2t(renamedtype2, code.size, false));
-  }
-  else
-    newtype = renamedtype2;
+  type2tc newtype =
+    do_array ? type2tc(new array_type2t(renamedtype2, code.size, false))
+             : renamedtype2;
 
   symbol.type = migrate_type_back(newtype);
 
@@ -468,7 +462,8 @@ void goto_symext::intrinsic_switch_to(
   const expr2tc &num = call.operands[0];
   if(!is_constant_int2t(num))
   {
-    std::cerr << "Can't switch to non-constant thread id no";
+    msg.error(
+      fmt::format("Can't switch to non-constant thread id no\n{}", *num));
     abort();
   }
 
@@ -520,11 +515,9 @@ void goto_symext::intrinsic_set_thread_data(
 
   if(!is_constant_int2t(threadid))
   {
-    std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
-    std::cerr << std::endl;
+    msg.error("__ESBMC_set_start_data received nonconstant thread id");
     abort();
   }
-
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
   art.get_cur_state().set_thread_start_data(tid, startdata);
 }
@@ -543,8 +536,7 @@ void goto_symext::intrinsic_get_thread_data(
 
   if(!is_constant_int2t(threadid))
   {
-    std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
-    std::cerr << std::endl;
+    msg.error("__ESBMC_get_start_data received nonconstant thread id");
     abort();
   }
 
@@ -565,8 +557,9 @@ void goto_symext::intrinsic_spawn_thread(
     (k_induction || inductive_step) &&
     !options.get_bool_option("disable-inductive-step"))
   {
-    std::cout << "**** WARNING: k-induction does not support concurrency yet. "
-              << "Disabling inductive step\n";
+    msg.warning(
+      "WARNING: k-induction does not support concurrency yet. "
+      "Disabling inductive step");
 
     // Disable inductive step on multi threaded code
     options.set_option("disable-inductive-step", true);
@@ -583,14 +576,14 @@ void goto_symext::intrinsic_spawn_thread(
     art.goto_functions.function_map.find(symname);
   if(it == art.goto_functions.function_map.end())
   {
-    std::cerr << "Spawning thread \"" << symname << "\": symbol not found";
-    std::cerr << std::endl;
+    msg.error(
+      fmt::format("Spawning thread \"{}{}", symname, "\": symbol not found"));
     abort();
   }
 
   if(!it->second.body_available)
   {
-    std::cerr << "Spawning thread \"" << symname << "\": no body" << std::endl;
+    msg.error(fmt::format("Spawning thread \"{}{}", symname, "\": no body"));
     abort();
   }
 
@@ -633,8 +626,7 @@ void goto_symext::intrinsic_get_thread_state(
 
   if(!is_constant_int2t(threadid))
   {
-    std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
-    std::cerr << std::endl;
+    msg.error("__ESBMC_get_thread_state received nonconstant thread id");
     abort();
   }
 
@@ -697,8 +689,7 @@ void goto_symext::intrinsic_register_monitor(
 
   if(!is_constant_int2t(threadid))
   {
-    std::cerr << "__ESBMC_register_monitor received nonconstant thread id";
-    std::cerr << std::endl;
+    msg.error("__ESBMC_register_monitor received nonconstant thread id");
     abort();
   }
 
@@ -743,8 +734,7 @@ void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
   const symbolt *s = new_context.find_symbol(id);
   if(s != nullptr)
   {
-    type2tc symbol_type;
-    migrate_type(s->type, symbol_type);
+    type2tc symbol_type = migrate_type(s->type);
 
     va_rhs = symbol2tc(symbol_type, s->id);
     cur_state->top().level1.get_ident_name(va_rhs);
@@ -946,7 +936,7 @@ void goto_symext::intrinsic_memset(
 
         // We now have a list of types and offsets we might resolve to.
         symex_dereference_statet sds(*this, *cur_state);
-        dereferencet dereference(ns, new_context, options, sds);
+        dereferencet dereference(ns, new_context, options, sds, msg);
         dereference.set_block_assertions();
         for(const auto &cur_type : in_list)
         {
@@ -957,13 +947,23 @@ void goto_symext::intrinsic_memset(
           {
             // Build a reference to the first elem.
             const array_type2t &arrtype = to_array_type(cur_type.first);
+            // Converting offset into bits here
+            expr2tc new_offset =
+              mul2tc(this_offs->type, this_offs, gen_ulong(8));
+            simplify(new_offset);
+
             dereference.build_reference_rec(
-              value, this_offs, arrtype.subtype, curguard, dereferencet::READ);
+              value, new_offset, arrtype.subtype, curguard, dereferencet::READ);
           }
           else
           {
+            // Converting offset into bits here
+            expr2tc new_offset =
+              mul2tc(this_offs->type, this_offs, gen_ulong(8));
+            simplify(new_offset);
+
             dereference.build_reference_rec(
-              value, this_offs, cur_type.first, curguard, dereferencet::READ);
+              value, new_offset, cur_type.first, curguard, dereferencet::READ);
           }
 
           out_list.push_back(std::make_tuple(cur_type.first, value, this_offs));
@@ -1008,7 +1008,7 @@ void goto_symext::intrinsic_memset(
       }
       else
       {
-        std::cerr << "Logic mismatch in memset intrinsic\n";
+        msg.error("Logic mismatch in memset intrinsic");
         abort();
       }
     }

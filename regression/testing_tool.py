@@ -9,7 +9,7 @@ from subprocess import Popen, PIPE
 import argparse
 import re
 import xml.etree.ElementTree as ET
-
+import time
 #####################
 # Testing Tool
 #####################
@@ -32,8 +32,6 @@ import xml.etree.ElementTree as ET
 # ALL -> Run all tests
 SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
 FAIL_MODES = ["KNOWNBUG"]
-
-
 
 class BaseTest:
     """This class is responsible to:
@@ -154,7 +152,7 @@ class XMLTestCase(BaseTest):
                 result.pop(index-1)
                 result.pop(index-1)
             else:
-                result[index] = CPP_INCLUDE_DIR
+                result[index] = XMLTestCase.CPP_INCLUDE_DIR
         except ValueError:
             pass
 
@@ -196,12 +194,20 @@ class TestParser:
 class Executor:
     def __init__(self, tool="esbmc"):
         self.tool = tool
+        self.timeout = RegressionBase.TIMEOUT
 
     def run(self, test_case: BaseTest):
         """Execute the test case with `executable`"""
         process = Popen(test_case.generate_run_argument_list(self.tool), stdout=PIPE, stderr=PIPE,
                         cwd=test_case.test_dir)
-        stdout, stderr = process.communicate()
+        try:
+            stdout, stderr = process.communicate(timeout=self.timeout)
+        except:
+            process.stdout.close()
+            process.stderr.close()
+            process.kill()
+            process.wait()
+            return None, None
         return stdout, stderr
 
 
@@ -217,19 +223,31 @@ def get_test_objects(base_dir: str):
     assert len(tests) > 5
     return tests
 
-
 class RegressionBase(unittest.TestCase):
     """Base class to use for test generation"""
     longMessage = True
 
     FAIL_WITH_WORD: str = None
+    TIMEOUT = None
 
+    def setUp(self):
+        self.startTime = time.time()
+
+    def tearDown(self):
+        t = time.time() - self.startTime
+        if RegressionBase.TIMEOUT and t >= RegressionBase.TIMEOUT:
+            print('TIMEOUT')
+        else:
+            print('%.3f' %  t)
 
 def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
         stdout, stderr = executor.run(test_case)
+        if stdout == None:
+            timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
+            self.fail(timeout_message)
         output_to_validate = stdout.decode() + stderr.decode()
         error_message_prefix = "\nTEST: " + \
             str(test_case.test_dir) + "\nEXPECTED TO FIND: " + \
@@ -266,32 +284,49 @@ def create_tests(executor_path: str, base_dir: str, mode: str):
     for test_case in test_cases:
         if test_case.test_mode == mode or mode == "ALL":
             test_func = _add_test(test_case, executor)
-            # Add test case into RegressionBase class
-            # FUTURE: Maybe change the class name for better report
             setattr(RegressionBase, 'test_{0}'.format(
                 test_case.name), test_func)
 
 
+def gen_one_test(base_dir: str, test: str, executor_path: str, modes):
+    executor = Executor(executor_path)
+    test_case = TestParser.from_file(os.path.join(base_dir, test), test)
+    if test_case.test_mode not in modes:
+        exit(10)
+    test_func = _add_test(test_case, executor)
+    setattr(RegressionBase, 'test_{0}'.format(test_case.name), test_func)
+
+
 def _arg_parsing():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tool", required=True, help="tool executable path")
-    parser.add_argument("--regression", required=True,
+    parser.add_argument("--tool", required=False, help="tool executable path")
+    parser.add_argument("--timeout", required=False, help="timeout value")
+    parser.add_argument('--modes', nargs='+', help="a list of modes that are supported")
+    parser.add_argument("--regression", required=False,
                         help="regression suite path")
-    parser.add_argument("--mode", required=True, help="tests to be executed [CORE, "
+    parser.add_argument("--mode", required=False, help="tests to be executed [CORE, "
                                                       "KNOWNBUG, FUTURE, THOROUGH")
+    parser.add_argument("--file", required=False, help="specific test to be executed")
     parser.add_argument("--library", required=False,
                         help="Path for the Standard C++ Libraries abstractions")
     parser.add_argument("--mark_knownbug_with_word", required=False,
                         help="If test fails with word then mark it as a knownbug")
 
     main_args = parser.parse_args()
-
+    if main_args.timeout:
+        RegressionBase.TIMEOUT = int(main_args.timeout)
     XMLTestCase.CPP_INCLUDE_DIR = main_args.library
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
-    return main_args.tool, main_args.regression, main_args.mode
 
+    if main_args.file:
+        gen_one_test(main_args.regression, main_args.file, main_args.tool, main_args.modes)
+    else:
+        create_tests(main_args.tool, main_args.regression, main_args.mode)
+
+def main():
+    _arg_parsing()
+    suite = unittest.TestLoader().loadTestsFromTestCase(RegressionBase)
+    unittest.main(argv=[sys.argv[0], "-v"])
 
 if __name__ == "__main__":
-    tool, regression, mode = _arg_parsing()
-    create_tests(tool, regression, mode)
-    unittest.main(argv=[sys.argv[0]])
+    main()

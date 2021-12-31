@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-programs/ai.h>
 #include <goto-programs/interval_template.h>
 #include <util/ieee_float.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/mp_arith.h>
 
 typedef interval_templatet<BigInt> integer_intervalt;
@@ -39,10 +39,7 @@ public:
 
   void output(std::ostream &out) const override;
 
-  void dump() const
-  {
-    output(std::cout);
-  }
+  void dump() const;
 
 protected:
   bool join(const interval_domaint &b);

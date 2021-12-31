@@ -10,10 +10,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/xml.h>
 #include <util/xml_irep.h>
+#include <util/message/format.h>
 
-void show_loop_numbers(
-  ui_message_handlert::uit ui,
-  const goto_programt &goto_program)
+void show_loop_numbers(const goto_programt &goto_program, const messaget &msg)
 {
   for(const auto &instruction : goto_program.instructions)
   {
@@ -21,34 +20,15 @@ void show_loop_numbers(
     {
       unsigned loop_id = instruction.loop_number;
 
-      if(ui == ui_message_handlert::XML_UI)
-      {
-        xmlt xml("loop");
-        xml.new_element("loop-id").data = i2string(loop_id);
-
-        xmlt &l = xml.new_element();
-        convert(instruction.location, l);
-        l.name = "location";
-
-        std::cout << xml << std::endl;
-      }
-      else if(ui == ui_message_handlert::PLAIN)
-      {
-        std::cout << "Loop " << loop_id << ":" << std::endl;
-
-        std::cout << "  " << instruction.location << std::endl;
-        std::cout << std::endl;
-      }
-      else
-        assert(false);
+      msg.debug(fmt::format("Loop {}:\n {}\n", loop_id, instruction.location));
     }
   }
 }
 
 void show_loop_numbers(
-  ui_message_handlert::uit ui,
-  const goto_functionst &goto_functions)
+  const goto_functionst &goto_functions,
+  const messaget &msg)
 {
   for(const auto &it : goto_functions.function_map)
-    show_loop_numbers(ui, it.second.body);
+    show_loop_numbers(it.second.body, msg);
 }

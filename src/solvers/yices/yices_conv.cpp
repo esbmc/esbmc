@@ -4,6 +4,7 @@
 #include <sstream>
 #include <yices_conv.h>
 #include <assert.h>
+#include <util/message/default_message.h>
 // From yices 2.3 (I think) various API calls have had new non-binary
 // operand versions added. The maintainers have chosen to break backwards
 // compatibility in the process by moving the old functions to new names, and
@@ -19,28 +20,32 @@
 #define new_ast new_solver_ast<yices_smt_ast>
 
 smt_convt *create_new_yices_solver(
-  bool int_encoding,
+  const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
-  fp_convt **fp_api)
+  fp_convt **fp_api,
+  const messaget &msg)
 {
-  yices_convt *conv = new yices_convt(int_encoding, ns);
+  yices_convt *conv = new yices_convt(ns, options, msg);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   *tuple_api = static_cast<tuple_iface *>(conv);
   return conv;
 }
 
-yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
+yices_convt::yices_convt(
+  const namespacet &ns,
+  const optionst &options,
+  const messaget &msg)
+  : smt_convt(ns, options, msg), array_iface(false, false), fp_convt(this, msg)
 {
   yices_init();
 
   yices_clear_error();
 
   ctx_config_t *config = yices_new_config();
-  if(int_encoding)
+  if(options.get_bool_option("int-encoding"))
     yices_default_config_for_logic(config, "QF_AUFLIRA");
   else
     yices_default_config_for_logic(config, "QF_AUFBV");
@@ -63,8 +68,12 @@ void yices_convt::push_ctx()
 
   if(res != 0)
   {
-    std::cerr << "Error pushing yices context" << std::endl;
-    yices_print_error(stderr);
+    {
+      auto f = msg.get_temp_file();
+      yices_print_error(f.file());
+      msg.insert_file_contents(VerbosityLevel::Error, f.file());
+    }
+    msg.error("Error pushing yices context");
     abort();
   }
 }
@@ -75,8 +84,12 @@ void yices_convt::pop_ctx()
 
   if(res != 0)
   {
-    std::cerr << "Error poping yices context" << std::endl;
-    yices_print_error(stderr);
+    {
+      auto f = msg.get_temp_file();
+      yices_print_error(f.file());
+      msg.insert_file_contents(VerbosityLevel::Error, f.file());
+    }
+    msg.error("Error poping yices context");
     abort();
   }
 
@@ -657,8 +670,9 @@ smt_astt yices_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt yices_convt::mk_isint(smt_astt)
 {
-  std::cerr << "Yices does not support an is-integer operation on reals, "
-            << "therefore certain casts and operations don't work, sorry\n";
+  msg.error(
+    "Yices does not support an is-integer operation on reals, "
+    "therefore certain casts and operations don't work, sorry");
   abort();
 }
 
@@ -784,9 +798,10 @@ bool yices_convt::get_bool(smt_astt a)
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   if(yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val))
   {
-    std::cerr << "Can't get boolean value from Yices\n";
+    msg.error("Can't get boolean value from Yices");
     abort();
   }
+
   return val ? true : false;
 }
 
@@ -1055,7 +1070,9 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
 
 void yices_convt::print_model()
 {
-  yices_print_model(stdout, yices_get_model(yices_ctx, 1));
+  auto f = msg.get_temp_file();
+  yices_print_model(f.file(), yices_get_model(yices_ctx, 1));
+  msg.insert_file_contents(VerbosityLevel::Status, f.file());
 }
 
 smt_sortt yices_convt::mk_bool_sort()
@@ -1107,6 +1124,9 @@ smt_sortt yices_convt::mk_bvfp_rm_sort()
 
 void yices_smt_ast::dump() const
 {
-  yices_pp_term(stdout, a, 80, 10, 0);
-  yices_pp_type(stdout, to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
+  default_message msg;
+  auto f = msg.get_temp_file();
+  yices_pp_term(f.file(), a, 80, 10, 0);
+  yices_pp_type(f.file(), to_solver_smt_sort<type_t>(sort)->s, 80, 10, 0);
+  msg.insert_file_contents(VerbosityLevel::Debug, f.file());
 }

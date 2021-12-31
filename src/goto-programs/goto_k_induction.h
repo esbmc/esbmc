@@ -4,16 +4,16 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_loops.h>
 #include <util/guard.h>
-#include <util/message_stream.h>
-#include <util/irep2_expr.h>
+#include <util/message/message_stream.h>
+#include <irep2/irep2_expr.h>
 
 void goto_k_induction(
   goto_functionst &goto_functions,
-  message_handlert &message_handler);
+  const messaget &message_handler);
 
 void goto_termination(
   goto_functionst &goto_functions,
-  message_handlert &message_handler);
+  const messaget &message_handler);
 
 class goto_k_inductiont : public goto_loopst
 {
@@ -22,7 +22,7 @@ public:
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
     goto_functiont &_goto_function,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : goto_loopst(
         _function_name,
         _goto_functions,

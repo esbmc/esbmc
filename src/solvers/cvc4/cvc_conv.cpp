@@ -1,25 +1,30 @@
 #include <util/c_types.h>
 #include <cvc_conv.h>
+#include <util/message/default_message.h>
 
 #define new_ast new_solver_ast<cvc_smt_ast>
 
 smt_convt *create_new_cvc_solver(
-  bool int_encoding,
+  const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[gnu::unused]],
   array_iface **array_api,
-  fp_convt **fp_api)
+  fp_convt **fp_api,
+  const messaget &msg)
 {
-  cvc_convt *conv = new cvc_convt(int_encoding, ns);
+  cvc_convt *conv = new cvc_convt(ns, options, msg);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
-cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns),
+cvc_convt::cvc_convt(
+  const namespacet &ns,
+  const optionst &options,
+  const messaget &msg)
+  : smt_convt(ns, options, msg),
     array_iface(false, false),
-    fp_convt(this),
+    fp_convt(this, msg),
     to_bv_counter(0),
     em(),
     smt(&em),
@@ -1268,16 +1273,18 @@ smt_sortt cvc_convt::mk_fpbv_rm_sort()
 
 void cvc_convt::dump_smt()
 {
+  default_message msg;
+  std::ostringstream oss;
   auto const &assertions = smt.getAssertions();
   for(auto const &a : assertions)
-  {
-    a.printAst(std::cout, 0);
-    std::cout << std::flush;
-  }
+    a.printAst(oss, 0);
+  msg.debug(oss.str());
 }
 
 void cvc_smt_ast::dump() const
 {
-  a.printAst(std::cout, 0);
-  std::cout << std::flush;
+  default_message msg;
+  std::ostringstream oss;
+  a.printAst(oss, 0);
+  msg.debug(oss.str());
 }

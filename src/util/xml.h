@@ -1,15 +1,14 @@
 /*******************************************************************\
- 
+
 Module:
- 
+
 Author: Daniel Kroening, kroening@kroening.com
- 
+
 \*******************************************************************/
 
 #ifndef XML_H
 #define XML_H
 
-#include <iostream>
 #include <list>
 #include <map>
 #include <string>
@@ -99,4 +98,6 @@ protected:
   static void do_indent(std::ostream &out, unsigned indent);
 };
 
+bool operator==(const xmlt &a, const xmlt &b);
+bool operator!=(const xmlt &a, const xmlt &b);
 #endif

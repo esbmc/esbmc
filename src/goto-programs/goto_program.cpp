@@ -9,16 +9,21 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-programs/goto_program.h>
 #include <iomanip>
 #include <langapi/language_util.h>
+#include <util/message/default_message.h>
 
 void goto_programt::instructiont::dump() const
 {
-  output_instruction(*migrate_namespace_lookup, "", std::cout);
+  default_message msg;
+  std::ostringstream oss;
+  output_instruction(*migrate_namespace_lookup, "", oss, msg);
+  msg.debug(oss.str());
 }
 
 void goto_programt::instructiont::output_instruction(
   const class namespacet &ns,
   const irep_idt &identifier,
   std::ostream &out,
+  const messaget &msg,
   bool show_location) const
 {
   if(show_location)
@@ -41,7 +46,7 @@ void goto_programt::instructiont::output_instruction(
       out << " " << label;
     }
 
-    out << std::endl;
+    out << "\n";
   }
 
   if(is_target())
@@ -52,13 +57,14 @@ void goto_programt::instructiont::output_instruction(
   switch(type)
   {
   case NO_INSTRUCTION_TYPE:
-    out << "NO INSTRUCTION TYPE SET" << std::endl;
+    out << "NO INSTRUCTION TYPE SET"
+        << "\n";
     break;
 
   case GOTO:
     if(!is_true(guard))
     {
-      out << "IF " << from_expr(ns, identifier, guard) << " THEN ";
+      out << "IF " << from_expr(ns, identifier, guard, msg) << " THEN ";
     }
 
     out << "GOTO ";
@@ -72,12 +78,12 @@ void goto_programt::instructiont::output_instruction(
       out << (*gt_it)->target_number;
     }
 
-    out << std::endl;
+    out << "\n";
     break;
 
   case FUNCTION_CALL:
-    out << "FUNCTION_CALL:  " << from_expr(ns, "", migrate_expr_back(code))
-        << std::endl;
+    out << "FUNCTION_CALL:  " << from_expr(ns, "", migrate_expr_back(code), msg)
+        << "\n";
     break;
 
   case RETURN:
@@ -85,8 +91,8 @@ void goto_programt::instructiont::output_instruction(
     std::string arg;
     const code_return2t &ref = to_code_return2t(code);
     if(!is_nil_expr(ref.operand))
-      arg = from_expr(ns, "", ref.operand);
-    out << "RETURN: " << arg << std::endl;
+      arg = from_expr(ns, "", ref.operand, msg);
+    out << "RETURN: " << arg << "\n";
   }
   break;
 
@@ -94,7 +100,7 @@ void goto_programt::instructiont::output_instruction(
   case DEAD:
   case OTHER:
   case ASSIGN:
-    out << from_expr(ns, identifier, code) << std::endl;
+    out << from_expr(ns, identifier, code, msg) << "\n";
     break;
 
   case ASSUME:
@@ -105,18 +111,19 @@ void goto_programt::instructiont::output_instruction(
       out << "ASSERT ";
 
     {
-      out << from_expr(ns, identifier, guard);
+      out << from_expr(ns, identifier, guard, msg);
 
       const irep_idt &comment = location.comment();
       if(comment != "")
         out << " // " << comment;
     }
 
-    out << std::endl;
+    out << "\n";
     break;
 
   case SKIP:
-    out << "SKIP" << std::endl;
+    out << "SKIP"
+        << "\n";
     break;
 
   case END_FUNCTION:
@@ -126,11 +133,12 @@ void goto_programt::instructiont::output_instruction(
       if(function != "")
         out << " // " << function;
     }
-    out << std::endl;
+    out << "\n";
     break;
 
   case LOCATION:
-    out << "LOCATION" << std::endl;
+    out << "LOCATION"
+        << "\n";
     break;
 
   case THROW:
@@ -146,10 +154,10 @@ void goto_programt::instructiont::output_instruction(
       }
 
       if(!is_nil_expr(throw_ref.operand))
-        out << ": " << from_expr(ns, identifier, throw_ref.operand);
+        out << ": " << from_expr(ns, identifier, throw_ref.operand, msg);
     }
 
-    out << std::endl;
+    out << "\n";
     break;
 
   case CATCH:
@@ -170,15 +178,17 @@ void goto_programt::instructiont::output_instruction(
       }
     }
 
-    out << std::endl;
+    out << "\n";
     break;
 
   case ATOMIC_BEGIN:
-    out << "ATOMIC_BEGIN" << std::endl;
+    out << "ATOMIC_BEGIN"
+        << "\n";
     break;
 
   case ATOMIC_END:
-    out << "ATOMIC_END" << std::endl;
+    out << "ATOMIC_END"
+        << "\n";
     break;
 
   case THROW_DECL:
@@ -196,7 +206,7 @@ void goto_programt::instructiont::output_instruction(
       out << ")";
     }
 
-    out << std::endl;
+    out << "\n";
     break;
 
   case THROW_DECL_END:
@@ -217,7 +227,7 @@ void goto_programt::instructiont::output_instruction(
 
     out << ")";
 
-    out << std::endl;
+    out << "\n";
     break;
 
   default:
@@ -329,7 +339,7 @@ std::ostream &goto_programt::output(
   // output program
 
   for(const auto &instruction : instructions)
-    instruction.output_instruction(ns, identifier, out);
+    instruction.output_instruction(ns, identifier, out, msg);
 
   return out;
 }
@@ -487,7 +497,10 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
 
 void goto_programt::dump() const
 {
-  output(*migrate_namespace_lookup, "", std::cout);
+  default_message msg;
+  std::ostringstream oss;
+  output(*migrate_namespace_lookup, "", oss);
+  msg.debug(oss.str());
 }
 
 void goto_programt::get_decl_identifiers(

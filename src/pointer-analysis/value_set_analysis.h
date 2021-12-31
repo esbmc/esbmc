@@ -18,8 +18,8 @@ class value_set_analysist : public value_setst,
                             public static_analysist<value_set_domaint>
 {
 public:
-  value_set_analysist(const namespacet &_ns)
-    : static_analysist<value_set_domaint>(_ns)
+  value_set_analysist(const namespacet &_ns, const messaget &msg)
+    : static_analysist<value_set_domaint>(_ns, msg)
   {
   }
 

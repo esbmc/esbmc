@@ -364,17 +364,17 @@ term: spec_constant
          }
        | TOK_LPAREN TOK_KW_FORALL TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
          {
-           std::cerr << "Not handling forall in smtlib output" << std::endl;
+           assert(0 && "Not handling forall in smtlib output");
            abort();
          }
        | TOK_LPAREN TOK_KW_EXISTS TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
-         {
-           std::cerr << "Not handling exists in smtlib output" << std::endl;
+         {           
+           assert(0 && "Not handling exists in smtlib output");
            abort();
          }
        | TOK_LPAREN TOK_KW_EXCL term attr_list TOK_RPAREN
-         {
-           std::cerr << "Not handling '!' in smtlib output" << std::endl;
+         {           
+           assert(0 && "Not handling '!' in smtlib output");
            abort();
          }
 

@@ -21,8 +21,20 @@
 #include <clang-c-frontend/typecast.h>
 #include <util/type.h>
 #include <util/expr_util.h>
-#include "util.h"
+#include "../testing-utils/util_irep.h"
 #include <sstream>
+#include <stddef.h>
+#include <util/message/default_message.h>
+#include <clang-c-frontend/clang_c_convert.h>
+
+namespace
+{
+void gen_typecast_to_union(exprt &dest, const typet &type)
+{
+  default_message msg;
+  clang_c_convertert::gen_typecast_to_union(dest, type, msg);
+}
+} // namespace
 
 void test_to_union(const int *Data, size_t Size)
 {
@@ -87,7 +99,7 @@ void test_to_union(const int *Data, size_t Size)
 
 extern "C" int LLVMFuzzerTestOneInput(const int *Data, size_t Size)
 {
-  if(Size < 5 && (Data[0] == Data[1]))
+  if(Size < 5 || Size > 100 || (Data[0] == Data[1]))
     return 0;
   for(size_t i = 0; i < Size; i++)
   {

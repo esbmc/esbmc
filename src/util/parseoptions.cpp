@@ -13,17 +13,19 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <sysexits.h>
 #endif
 
-#include <iostream>
 #include <util/cmdline.h>
 #include <util/parseoptions.h>
 #include <util/signal_catcher.h>
+#include <boost/program_options.hpp>
 
 parseoptions_baset::parseoptions_baset(
-  const struct opt_templ *opts,
+  const struct group_opt_templ *opts,
   int argc,
-  const char **argv)
+  const char **argv,
+  const messaget &msg)
+  : cmdline(msg)
 {
-  parse_result = cmdline.parse(argc, argv, opts);
+  exception_occured = cmdline.parse(argc, argv, opts);
 }
 
 void parseoptions_baset::help()
@@ -32,21 +34,16 @@ void parseoptions_baset::help()
 
 int parseoptions_baset::main()
 {
-  if(parse_result)
+  if(exception_occured)
   {
-    std::cerr << "Unrecognized option \"" << cmdline.failing_option << "\"";
-    std::cerr << std::endl;
     return EX_USAGE;
   }
-
-  if(cmdline.isset('?') || cmdline.isset('h') || cmdline.isset("help"))
+  if(cmdline.isset("help") || cmdline.isset("explain"))
   {
     help();
     return EX_OK;
   }
-
   // install signal catcher
   install_signal_catcher();
-
   return doit();
 }

@@ -18,8 +18,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-void ai_baset::output(const goto_functionst &goto_functions, std::ostream &out)
-  const
+void ai_baset::output(
+  const goto_functionst &goto_functions,
+  std::ostream &out,
+  const messaget &msg) const
 {
   forall_goto_functions(f_it, goto_functions)
   {
@@ -37,7 +39,7 @@ void ai_baset::output(const goto_functionst &goto_functions, std::ostream &out)
 
         abstract_state_before(i_it)->output(out);
         out << "\n";
-        i_it->dump();
+        i_it->output_instruction(*migrate_namespace_lookup, "", out, msg);
         out << "\n";
       }
     }

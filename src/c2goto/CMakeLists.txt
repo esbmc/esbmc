@@ -1,8 +1,11 @@
 add_executable(c2goto c2goto.cpp cprover_blank_library.cpp)
 target_include_directories(c2goto
     PRIVATE ${Boost_INCLUDE_DIRS}
-)
-target_link_libraries(c2goto clangcfrontend gotoprograms langapi ${Boost_LIBRARIES})
+    )
+  
+target_link_libraries(c2goto 
+  clangcfrontend gotoprograms langapi util_esbmc irep2
+  default_message ${Boost_LIBRARIES})
 add_subdirectory (headers)
 
 if(DEFINED C2GOTO_INCLUDE_DIR)
@@ -33,7 +36,13 @@ function(mangle_clib output)
     string(REGEX REPLACE .c "" barename "${in_file}")
     set(out_goto "${CMAKE_CURRENT_BINARY_DIR}/${out_goto}")
     set(out_file "${CMAKE_CURRENT_BINARY_DIR}/${out_file}")
-    set(CMD c2goto -I ${multiarch} ${OS_C2GOTO_FLAGS} ${c2goto_library_files} ${c2goto_libm_files} ${in_flags} --output ${out_goto})
+
+    if(ENABLE_LIBM)
+      set(inputs_c ${c2goto_library_files} ${c2goto_libm_files})
+    else()
+      set(inputs_c ${c2goto_library_files})
+    endif()
+    set(CMD c2goto -I ${multiarch} ${OS_C2GOTO_FLAGS} ${inputs_c} ${in_flags} --output ${out_goto})
     add_custom_command(OUTPUT ${out_goto}
       COMMAND ${CMD}
       DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files}
@@ -61,3 +70,4 @@ add_library(clibs ${mangled_files} cprover_library.cpp)
 target_include_directories(clibs
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
+target_link_libraries(clibs fmt::fmt)

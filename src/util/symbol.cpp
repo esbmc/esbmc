@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/location.h>
 #include <util/symbol.h>
+#include <util/message/default_message.h>
 
 symbolt::symbolt()
 {
@@ -48,19 +49,23 @@ void symbolt::swap(symbolt &b)
 
 void symbolt::dump() const
 {
-  show(std::cout);
+  default_message msg;
+  std::ostringstream oss;
+  show(oss);
+  msg.debug(oss.str());
 }
 
 void symbolt::show(std::ostream &out) const
 {
-  out << "Symbol......: " << id << std::endl;
-  out << "Base name...: " << name << std::endl;
-  out << "Module......: " << module << std::endl;
-  out << "Mode........: " << mode << " (" << mode << ")" << std::endl;
+  out << "Symbol......: " << id << "\n";
+  out << "Base name...: " << name << "\n";
+  out << "Module......: " << module << "\n";
+  out << "Mode........: " << mode << " (" << mode << ")"
+      << "\n";
   if(type.is_not_nil())
-    out << "Type........: " << type.pretty(4) << std::endl;
+    out << "Type........: " << type.pretty(4) << "\n";
   if(value.is_not_nil())
-    out << "Value.......: " << value.pretty(4) << std::endl;
+    out << "Value.......: " << value.pretty(4) << "\n";
 
   out << "Flags.......:";
 
@@ -77,10 +82,10 @@ void symbolt::show(std::ostream &out) const
   if(is_macro)
     out << " macro";
 
-  out << std::endl;
-  out << "Location....: " << location << std::endl;
+  out << "\n";
+  out << "Location....: " << location << "\n";
 
-  out << std::endl;
+  out << "\n";
 }
 
 std::ostream &operator<<(std::ostream &out, const symbolt &symbol)

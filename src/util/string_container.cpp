@@ -8,7 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <cstring>
-#include <iostream>
+
 #include <util/string_container.h>
 
 string_containert string_container [[gnu::init_priority(101)]];

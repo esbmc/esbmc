@@ -26,17 +26,16 @@ public:
   virtual bool preprocess(
     const std::string &path,
     std::ostream &outstream,
-    message_handlert &message_handler);
+    const messaget &msg);
 
-  bool
-  parse(const std::string &path, message_handlert &message_handler) override;
+  bool parse(const std::string &path, const messaget &msg) override;
 
-  bool final(contextt &context, message_handlert &message_handler) override;
+  bool final(contextt &context, const messaget &msg) override;
 
   bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler) override;
+    const messaget &msg) override;
 
   std::string id() const override
   {
@@ -53,26 +52,26 @@ public:
   bool from_type(const typet &type, std::string &code, const namespacet &ns)
     override;
 
-  languaget *new_language() override
+  languaget *new_language(const messaget &msg) override
   {
-    return new clang_c_languaget;
+    return new clang_c_languaget(msg);
   }
 
   // constructor, destructor
   ~clang_c_languaget() override = default;
-  clang_c_languaget();
+  explicit clang_c_languaget(const messaget &msg);
 
 protected:
   virtual std::string internal_additions();
   virtual void force_file_type();
 
   void dump_clang_headers(const std::string &tmp_dir);
-  void build_compiler_args(const std::string &&tmp_dir);
+  void build_compiler_args(const std::string &tmp_dir);
 
   std::vector<std::string> compiler_args;
   std::vector<std::unique_ptr<clang::ASTUnit>> ASTs;
 };
 
-languaget *new_clang_c_language();
+languaget *new_clang_c_language(const messaget &msg);
 
 #endif

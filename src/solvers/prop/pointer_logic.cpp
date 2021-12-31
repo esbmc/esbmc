@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/arith_tools.h>
 #include <util/config.h>
 #include <util/i2string.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/prefix.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
@@ -51,7 +51,7 @@ expr2tc pointer_logict::pointer_expr(unsigned object, const type2tc &type) const
 expr2tc
 pointer_logict::pointer_expr(const pointert &pointer, const type2tc &type) const
 {
-  type2tc pointer_type(new pointer_type2t(type2tc(new empty_type2t())));
+  type2tc pointer_type(new pointer_type2t(get_empty_type()));
 
   if(pointer.object == null_object) // NULL?
   {
@@ -146,7 +146,7 @@ pointer_logict::pointer_logict()
 {
   obj_num_offset = 0;
 
-  type2tc type(new pointer_type2t(type2tc(new empty_type2t())));
+  type2tc type(new pointer_type2t(get_empty_type()));
   symbol2tc sym(type, "NULL");
 
   // add NULL

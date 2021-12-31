@@ -8,11 +8,10 @@
 #include <cstdint>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
-#include <util/irep2_utils.h>
-#include <util/message.h>
+#include <irep2/irep2_utils.h>
+#include <util/message/message.h>
 #include <util/namespace.h>
 #include <util/threeval.h>
-#include <util/type_byte_size.h>
 
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
@@ -129,9 +128,13 @@ class smt_convt;
  *
  *  @see smt_conv.h
  *  @see smt_func_kind */
-class smt_convt : public messaget
+class smt_convt
 {
 public:
+  /* NOTE: I've made this horrible so we remember that there is an
+   * even uglier implementation that just returns an empty 
+   * look at where this variable is used for more info :) */
+  bool extracting_from_array_tuple_is_error = false;
   /** Shorthand for a vector of smt_ast's */
   typedef std::vector<smt_astt> ast_vec;
 
@@ -139,16 +142,20 @@ public:
   smt_astt
   new_solver_ast(typename the_solver_ast::solver_ast_type ast, smt_sortt sort)
   {
-    return new the_solver_ast(this, ast, sort);
+    return new the_solver_ast(this, ast, sort, msg);
   }
 
   /** Primary constructor. After construction, smt_post_init must be called
    *  before the object is used as a solver converter.
    *
-   *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
-   *  @param _ns Namespace for looking up the type of certain symbols. */
-  smt_convt(bool int_encoding, const namespacet &_ns);
-  ~smt_convt() override = default;
+   *  @param _ns Namespace for looking up the type of certain symbols. 
+   *  @param _options Provide all the needed parameters to configure the solver. */
+  smt_convt(
+    const namespacet &_ns,
+    const optionst &_options,
+    const messaget &msg);
+
+  virtual ~smt_convt() = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
    *  model data for tracking, however can't do it from the constructor because
@@ -633,6 +640,8 @@ public:
   /** Convert a byte_update2tc, inserting a byte into the byte representation
    *  of some piece of data. */
   smt_astt convert_byte_update(const expr2tc &expr);
+  /** Convert a bitcast2tc, converting an expr to its bit representation. */
+  smt_astt convert_bitcast(const expr2tc &expr);
   /** Convert the given expr to AST, then assert that AST */
   void assert_expr(const expr2tc &e);
   /** Convert constant_array2tc's and constant_array_of2tc's */
@@ -815,6 +824,9 @@ public:
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
   const namespacet &ns;
+  /* Options contain all the parameters set by the user to run ESBMC */
+  const optionst &options;
+  const messaget &msg;
 
   bool ptr_foo_inited;
   /** Full name of the '__ESBMC_is_dynamic' modelling array. The memory space
@@ -870,7 +882,8 @@ public:
 };
 
 // Define here to enable inlining
-inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)
+inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s, const messaget &msg)
+  : sort(s), context(ctx), _msg(msg)
 {
   assert(sort != nullptr);
   ctx->live_asts.push_back(this);

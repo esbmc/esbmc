@@ -9,6 +9,7 @@ Author: Daniel Kroening
 \*******************************************************************/
 
 #include <util/xml_irep.h>
+#include <util/message/format.h>
 
 void convert(const irept &irep, xmlt &xml)
 {
@@ -36,7 +37,7 @@ void convert(const irept &irep, xmlt &xml)
   }
 }
 
-void convert(const xmlt &xml, irept &irep)
+void convert(const xmlt &xml, irept &irep, const messaget &msg)
 {
   irep.id("nil");
   xmlt::elementst::const_iterator it = xml.elements.begin();
@@ -49,28 +50,26 @@ void convert(const xmlt &xml, irept &irep)
     else if(it->name == "named_sub")
     {
       irept r;
-      convert(*it, r);
+      convert(*it, r, msg);
       std::string named_name = it->get_attribute("name");
       irep.move_to_named_sub(named_name, r);
     }
     else if(it->name == "sub")
     {
       irept r;
-      convert(*it, r);
+      convert(*it, r, msg);
       irep.move_to_sub(r);
     }
     else if(it->name == "comment")
     {
       irept r;
-      convert(*it, r);
+      convert(*it, r, msg);
       std::string named_name = it->get_attribute("name");
       irep.move_to_named_sub(named_name, r);
     }
     else
-    {
       // Should not happen
-      std::cout << "Unknown sub found (" << it->name << "); malformed xml?";
-      std::cout << std::endl;
-    }
+      msg.error(
+        fmt::format("Unknown sub found ({}); malformed xml?", it->name));
   }
 }

@@ -1,0 +1,4 @@
+CORE
+MyContract_TxOrigin.solast
+--function transferTo
+.*Found vulnerability SWC-115.*

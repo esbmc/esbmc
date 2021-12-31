@@ -1,0 +1,4 @@
+THOROUGH
+buf_overflow.c
+--bitwuzla
+^VERIFICATION FAILED$

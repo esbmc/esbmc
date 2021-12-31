@@ -1,7 +1,7 @@
 #ifndef SOLVERS_SMT_SMT_SORT_H_
 #define SOLVERS_SMT_SMT_SORT_H_
 
-#include <util/irep2_type.h>
+#include <irep2/irep2_type.h>
 
 /** Identifier for SMT sort kinds
  *  Each different kind of sort (i.e. arrays, bv's, bools, etc) gets its own

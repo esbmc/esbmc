@@ -1,13 +1,13 @@
 #ifndef CPROVER_PARSER_H
 #define CPROVER_PARSER_H
 
-#include <iostream>
 #include <string>
 #include <util/expr.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <vector>
+#include <istream>
 
-class parsert : public messaget
+class parsert
 {
 public:
   std::istream *in;
@@ -26,12 +26,12 @@ public:
     char_buffer.clear();
   }
 
-  parsert()
+  explicit parsert(const messaget &msg) : msg(msg)
   {
     clear();
   }
 
-  ~parsert() override = default;
+  virtual ~parsert() = default;
 
   virtual bool read(char &ch)
   {
@@ -87,6 +87,7 @@ public:
   }
 
 private:
+  const messaget &msg;
   virtual bool read2(char &ch)
   {
     if(!char_buffer.empty())

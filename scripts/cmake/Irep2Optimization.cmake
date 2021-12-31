@@ -11,7 +11,7 @@ if(${CMAKE_VERSION} VERSION_LESS "3.16.0")
     return()
 endif()
 
-target_precompile_headers(util_esbmc PRIVATE ${CMAKE_SOURCE_DIR}/src/util/irep2.h ${CMAKE_SOURCE_DIR}/src/util/irep2_expr.h)
+target_precompile_headers(util_esbmc PRIVATE ${CMAKE_SOURCE_DIR}/src/irep2/irep2.h ${CMAKE_SOURCE_DIR}/src/irep2/irep2_expr.h)
 target_precompile_headers(clangcfrontend_stuff REUSE_FROM util_esbmc)
 target_precompile_headers(clangcppfrontend REUSE_FROM util_esbmc)
 target_precompile_headers(gotoprograms REUSE_FROM util_esbmc)

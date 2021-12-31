@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_SYMBOL_H
 
 #include <algorithm>
-#include <iostream>
+
 #include <list>
 #include <util/config.h>
 #include <util/expr.h>
@@ -39,7 +39,7 @@ public:
 
   void swap(symbolt &b);
 
-  void show(std::ostream &out = std::cout) const;
+  void show(std::ostream &out) const;
   DUMP_METHOD void dump() const;
 
   void to_irep(irept &dest) const;

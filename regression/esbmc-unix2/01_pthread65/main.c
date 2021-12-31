@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#define size 100
+#define size 5
 char Message[size];
 int key, key1;
 pthread_mutex_t mutex;

@@ -1,0 +1,4 @@
+THOROUGH
+builtin_alloca_test_bad.c
+--bitwuzla
+^VERIFICATION FAILED$

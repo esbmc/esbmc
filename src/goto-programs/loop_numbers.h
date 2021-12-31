@@ -10,14 +10,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_CBMC_LOOP_IDS_H
 
 #include <goto-programs/goto_functions.h>
-#include <util/ui_message.h>
 
 void show_loop_numbers(
-  ui_message_handlert::uit ui,
-  const goto_functionst &goto_functions);
+  const goto_functionst &goto_functions,
+  const messaget &msg);
 
-void show_loop_numbers(
-  ui_message_handlert::uit ui,
-  const goto_programt &goto_program);
+void show_loop_numbers(const goto_programt &goto_program, const messaget &msg);
 
 #endif

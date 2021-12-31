@@ -12,11 +12,11 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/symex_target_equation.h>
-#include <iostream>
+
 #include <langapi/language_ui.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <util/expr_util.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/std_expr.h>
@@ -154,7 +154,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   statet::goto_state_listt &goto_state_list =
     cur_state->top().goto_state_map[new_state_pc];
 
-  goto_state_list.emplace_back(*cur_state);
+  goto_state_list.emplace_back(*cur_state, msg);
 
   // adjust guards
   if(new_guard_true)
@@ -283,7 +283,8 @@ void goto_symext::merge_gotos()
       merge_value_sets(goto_state);
 
       // adjust depth
-      cur_state->depth = std::min(cur_state->depth, goto_state.depth);
+      cur_state->num_instructions =
+        std::min(cur_state->num_instructions, goto_state.num_instructions);
     }
 
     cur_state->guard = std::move(new_guard);
@@ -360,9 +361,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     // changed!
     const symbolt &symbol = ns.lookup(variable.base_name);
 
-    type2tc type;
-    typet old_type = symbol.type;
-    migrate_type(symbol.type, type);
+    type2tc type = migrate_type(symbol.type);
 
     expr2tc cur_state_rhs = symbol2tc(type, symbol.id);
     renaming::level2t::rename_to_record(cur_state_rhs, variable);
@@ -454,10 +453,15 @@ bool goto_symext::get_unwind(
     this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
   if(!options.get_bool_option("quiet"))
   {
-    std::cout << (stop_unwind ? "Not unwinding " : "Unwinding ")
-              << "loop " + i2string(cur_state->source.pc->loop_number)
-              << " iteration " + integer2string(unwind) + " "
-              << cur_state->source.pc->location.as_string() << '\n';
+    msg.status(fmt::format(
+      stop_unwind ? "Not unwinding "
+                  : "Unwinding "
+                    "loop {} {} {} {} {}",
+      i2string(cur_state->source.pc->loop_number),
+      " iteration ",
+      integer2string(unwind),
+      " ",
+      cur_state->source.pc->location.as_string()));
   }
 
   return stop_unwind;

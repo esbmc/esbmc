@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_NAMESPACE_H
 
 #include <util/context.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 
 // second: true <=> not found
@@ -18,17 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class namespacet
 {
 public:
-  const symbolt &lookup(const irep_idt &name) const
-  {
-    const symbolt *symbol;
-    if(lookup(name, symbol))
-    {
-      std::cerr << "Failed to find symbol " + id2string(name) + " not found"
-                << std::endl;
-      abort();
-    }
-    return *symbol;
-  }
+  const symbolt &lookup(const irep_idt &name) const;
 
   const symbolt &lookup(const irept &irep) const
   {
@@ -45,8 +35,7 @@ public:
   {
     typet back = migrate_type_back(src);
     typet followed = follow(back);
-    type2tc tmp;
-    migrate_type(followed, tmp);
+    type2tc tmp = migrate_type(followed);
     return tmp;
   }
 

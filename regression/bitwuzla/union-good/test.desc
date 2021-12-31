@@ -1,0 +1,4 @@
+THOROUGH
+union-good.c
+--bitwuzla
+^VERIFICATION SUCCESSFUL$

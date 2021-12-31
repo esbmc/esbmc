@@ -38,9 +38,9 @@ typedef dstring_hash irep_id_hash;
 #define Forall_named_irep(it, irep)                                            \
   for(irept::named_subt::iterator it = (irep).begin(); it != (irep).end(); it++)
 
-#include <iostream>
-
 class typet;
+class
+  messaget; // This forward decl is needed because locationt (which is an irep) is used inside messaget
 
 class irept
 {
@@ -75,9 +75,6 @@ public:
     {
       assert(data->ref_count != 0);
       data->ref_count++;
-#ifdef IREP_DEBUG
-      std::cout << "COPY " << data << " " << data->ref_count << std::endl;
-#endif
     }
   }
 
@@ -85,11 +82,6 @@ public:
   {
     dt *tmp;
     assert(&irep != this); // check if we assign to ourselves
-
-#ifdef IREP_DEBUG
-    std::cout << "ASSIGN\n";
-#endif
-
     tmp = data;
     data = irep.data;
     if(data != nullptr)

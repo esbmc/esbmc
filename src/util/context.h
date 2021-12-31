@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_CONTEXT_H
 
 #include <functional>
-#include <iostream>
+
 #include <map>
 #include <util/config.h>
 #include <util/symbol.h>
@@ -35,6 +35,9 @@ class contextt
 public:
   typedef ::symbolst symbolst;
   typedef ::ordered_symbolst ordered_symbolst;
+  explicit contextt(const messaget &msg) : msg(msg)
+  {
+  }
 
   symbol_base_mapt symbol_base_map;
 
@@ -100,6 +103,9 @@ public:
   {
     return symbols.size();
   }
+
+protected:
+  const messaget &msg;
 
 private:
   symbolst symbols;

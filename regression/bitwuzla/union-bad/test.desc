@@ -1,0 +1,4 @@
+THOROUGH
+union-bad.c
+--bitwuzla
+^VERIFICATION FAILED$

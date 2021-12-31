@@ -1,4 +1,6 @@
 build
+cmake-*
+.idea
 .DS_Store
 __pycache__
 release
@@ -6,3 +8,5 @@ release
 .vs
 out
 .vscode
+
+tags

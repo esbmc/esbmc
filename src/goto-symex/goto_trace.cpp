@@ -13,27 +13,38 @@
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/printf_formatter.h>
 #include <goto-symex/witnesses.h>
-#include <iostream>
+
 #include <regex>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <util/arith_tools.h>
 #include <util/std_types.h>
+#include <ostream>
+#include <util/message/default_message.h>
 
 extern std::string verification_file;
 
-void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
+void goto_tracet::output(
+  const class namespacet &ns,
+  std::ostream &out,
+  const messaget &msg) const
 {
   for(const auto &step : steps)
-    step.output(ns, out);
+    step.output(ns, out, msg);
 }
 
 void goto_trace_stept::dump() const
 {
-  output(*migrate_namespace_lookup, std::cout);
+  default_message msg;
+  std::ostringstream oss;
+  output(*migrate_namespace_lookup, oss, msg);
+  msg.debug(oss.str());
 }
 
-void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
+void goto_trace_stept::output(
+  const namespacet &ns,
+  std::ostream &out,
+  const messaget &msg) const
 {
   out << "*** ";
 
@@ -58,10 +69,10 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
   if(type == ASSERT || type == ASSUME)
     out << " (" << guard << ")";
 
-  out << std::endl;
+  out << "\n";
 
   if(!pc->location.is_nil())
-    out << pc->location << std::endl;
+    out << pc->location << "\n";
 
   if(pc->is_goto())
     out << "GOTO   ";
@@ -78,7 +89,7 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
   else
     out << "(?)    ";
 
-  out << std::endl;
+  out << "\n";
 
   if(pc->is_other() || pc->is_assign())
   {
@@ -89,39 +100,41 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
     else
       identifier = to_symbol2t(lhs).get_symbol_name();
 
-    out << "  " << identifier << " = " << from_expr(ns, identifier, value)
-        << std::endl;
+    out << "  " << identifier << " = " << from_expr(ns, identifier, value, msg)
+        << "\n";
   }
   else if(pc->is_assert())
   {
     if(!guard)
     {
-      out << "Violated property:" << std::endl;
+      out << "Violated property:"
+          << "\n";
       if(pc->location.is_nil())
-        out << "  " << pc->location << std::endl;
+        out << "  " << pc->location << "\n";
 
       if(!comment.empty())
-        out << "  " << comment << std::endl;
-      out << "  " << from_expr(ns, "", pc->guard) << std::endl;
-      out << std::endl;
+        out << "  " << comment << "\n";
+      out << "  " << from_expr(ns, "", pc->guard, msg) << "\n";
+      out << "\n";
     }
   }
 
-  out << std::endl;
+  out << "\n";
 }
 
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
   const expr2tc &lhs,
-  const expr2tc &value)
+  const expr2tc &value,
+  const messaget &msg)
 {
-  out << "  " << from_expr(ns, "", lhs);
+  out << "  " << from_expr(ns, "", lhs, msg);
   if(is_nil_expr(value))
     out << "(assignment removed)";
   else
   {
-    out << " = " << from_expr(ns, "", value);
+    out << " = " << from_expr(ns, "", value, msg);
 
     // Don't print the bit-vector if we're running on integer/real mode
     if(is_constant_expr(value) && !config.options.get_bool_option("ir"))
@@ -159,14 +172,15 @@ void counterexample_value(
       }
     }
 
-    out << std::endl;
+    out << "\n";
   }
 }
 
 void show_goto_trace_gui(
   std::ostream &out,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const messaget &msg)
 {
   locationt previous_location;
 
@@ -176,12 +190,13 @@ void show_goto_trace_gui(
 
     if((step.type == goto_trace_stept::ASSERT) && !step.guard)
     {
-      out << "FAILED" << std::endl
-          << step.comment << std::endl // value
-          << std::endl                 // PC
-          << location.file() << std::endl
-          << location.line() << std::endl
-          << location.column() << std::endl;
+      out << "FAILED"
+          << "\n"
+          << step.comment << "\n" // value
+          << "\n"                 // PC
+          << location.file() << "\n"
+          << location.line() << "\n"
+          << location.column() << "\n";
     }
     else if(step.type == goto_trace_stept::ASSIGNMENT)
     {
@@ -192,21 +207,22 @@ void show_goto_trace_gui(
       else
         identifier = to_symbol2t(step.lhs).get_symbol_name();
 
-      std::string value_string = from_expr(ns, identifier, step.value);
+      std::string value_string = from_expr(ns, identifier, step.value, msg);
 
       const symbolt *symbol;
       irep_idt base_name;
       if(!ns.lookup(identifier, symbol))
         base_name = symbol->name;
 
-      out << "TRACE" << std::endl;
+      out << "TRACE"
+          << "\n";
 
       out << identifier << "," << base_name << ","
-          << get_type_id(step.value->type) << "," << value_string << std::endl
-          << step.step_nr << std::endl
-          << step.pc->location.file() << std::endl
-          << step.pc->location.line() << std::endl
-          << step.pc->location.column() << std::endl;
+          << get_type_id(step.value->type) << "," << value_string << "\n"
+          << step.step_nr << "\n"
+          << step.pc->location.file() << "\n"
+          << step.pc->location.line() << "\n"
+          << step.pc->location.column() << "\n";
     }
     else if(location != previous_location)
     {
@@ -214,16 +230,18 @@ void show_goto_trace_gui(
 
       if(!location.file().empty())
       {
-        out << "TRACE" << std::endl;
+        out << "TRACE"
+            << "\n";
 
-        out << ","             // identifier
-            << ","             // base_name
-            << ","             // type
-            << "" << std::endl // value
-            << step.step_nr << std::endl
-            << location.file() << std::endl
-            << location.line() << std::endl
-            << location.column() << std::endl;
+        out << "," // identifier
+            << "," // base_name
+            << "," // type
+            << ""
+            << "\n" // value
+            << step.step_nr << "\n"
+            << location.file() << "\n"
+            << location.line() << "\n"
+            << location.column() << "\n";
       }
     }
 
@@ -237,16 +255,18 @@ void show_state_header(
   const locationt &location,
   unsigned step_nr)
 {
-  out << std::endl;
+  out << "\n";
   out << "State " << step_nr;
-  out << " " << location << " thread " << state.thread_nr << std::endl;
-  out << "----------------------------------------------------" << std::endl;
+  out << " " << location << " thread " << state.thread_nr << "\n";
+  out << "----------------------------------------------------"
+      << "\n";
 }
 
 void violation_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const messaget &msg)
 {
   grapht graph(grapht::VIOLATION);
   graph.verified_file = verification_file;
@@ -288,7 +308,7 @@ void violation_graphml_goto_trace(
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)))
       {
-        std::string assignment = get_formated_assignment(ns, step);
+        std::string assignment = get_formated_assignment(ns, step, msg);
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
@@ -318,7 +338,8 @@ void violation_graphml_goto_trace(
 void correctness_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const messaget &msg)
 {
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = verification_file;
@@ -330,7 +351,7 @@ void correctness_graphml_goto_trace(
   {
     /* checking restrictions for correctness GraphML */
     if(
-      (!(is_valid_witness_step(ns, step))) ||
+      (!(is_valid_witness_step(ns, step, msg))) ||
       (!(step.is_assume() || step.is_assert())))
       continue;
 
@@ -364,7 +385,8 @@ void correctness_graphml_goto_trace(
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const messaget &msg)
 {
   unsigned prev_step_nr = 0;
   bool first_step = true;
@@ -377,13 +399,14 @@ void show_goto_trace(
       if(!step.guard)
       {
         show_state_header(out, step, step.pc->location, step.step_nr);
-        out << "Violated property:" << std::endl;
+        out << "Violated property:"
+            << "\n";
         if(!step.pc->location.is_nil())
-          out << "  " << step.pc->location << std::endl;
-        out << "  " << step.comment << std::endl;
+          out << "  " << step.pc->location << "\n";
+        out << "  " << step.comment << "\n";
 
         if(step.pc->is_assert())
-          out << "  " << from_expr(ns, "", step.pc->guard) << std::endl;
+          out << "  " << from_expr(ns, "", step.pc->guard, msg) << "\n";
 
         // Having printed a property violation, don't print more steps.
         return;
@@ -401,7 +424,7 @@ void show_goto_trace(
           prev_step_nr = step.step_nr;
           show_state_header(out, step, step.pc->location, step.step_nr);
         }
-        counterexample_value(out, ns, step.lhs, step.value);
+        counterexample_value(out, ns, step.lhs, step.value, msg);
       }
       break;
 
@@ -410,13 +433,13 @@ void show_goto_trace(
       printf_formattert printf_formatter;
       printf_formatter(step.format_string, step.output_args);
       printf_formatter.print(out);
-      out << std::endl;
+      out << "\n";
       break;
     }
 
     case goto_trace_stept::RENUMBER:
       out << "Renumbered pointer to ";
-      counterexample_value(out, ns, step.lhs, step.value);
+      counterexample_value(out, ns, step.lhs, step.value, msg);
       break;
 
     case goto_trace_stept::ASSUME:

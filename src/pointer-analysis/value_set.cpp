@@ -16,13 +16,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/context.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/simplify_expr.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
+#include <util/message/format.h>
+#include <util/message/default_message.h>
 
 object_numberingt value_sett::object_numbering;
 object_number_numberingt value_sett::obj_numbering_refset;
@@ -75,18 +77,18 @@ void value_sett::output(std::ostream &out) const
 
       // Display invalid / unknown objects as just that,
       if(is_invalid2t(o) || is_unknown2t(o))
-        result = from_expr(ns, identifier, o);
+        result = from_expr(ns, identifier, o, msg);
       else
       {
         // Everything else, display as a triple of <object, offset, type>.
-        result = "<" + from_expr(ns, identifier, o) + ", ";
+        result = "<" + from_expr(ns, identifier, o, msg) + ", ";
 
         if(o_it->second.offset_is_set)
           result += integer2string(o_it->second.offset) + "";
         else
           result += "*";
 
-        result += ", " + from_type(ns, identifier, o->type);
+        result += ", " + from_type(ns, identifier, o->type, msg);
 
         result += ">";
       }
@@ -107,7 +109,8 @@ void value_sett::output(std::ostream &out) const
       }
     }
 
-    out << " } " << std::endl;
+    out << " } "
+        << "\n";
   }
 }
 
@@ -211,7 +214,8 @@ void value_sett::get_value_set_rec(
   const expr2tc &expr,
   object_mapt &dest,
   const std::string &suffix,
-  const type2tc &original_type) const
+  const type2tc &original_type,
+  bool under_deref) const
 {
   if(is_unknown2t(expr) || is_invalid2t(expr))
   {
@@ -309,8 +313,28 @@ void value_sett::get_value_set_rec(
 
   if(is_constant_expr(expr))
   {
-    // Constant numbers aren't pointers. Null check is in the value set code
-    // for symbols.
+    if(under_deref)
+    {
+      if(is_constant_int2t(expr))
+      {
+        constant_int2t ci = to_constant_int2t(expr);
+        if(ci.value.is_zero())
+        {
+          expr2tc tmp = null_object2tc(expr->type);
+          insert(dest, tmp, BigInt(0));
+          return;
+        }
+        else if(is_signedbv_type(expr->type) || is_unsignedbv_type(expr->type))
+          insert(dest, invalid2tc(original_type), BigInt(0));
+        else
+          insert(dest, unknown2tc(original_type), BigInt(0));
+      }
+    }
+    else
+    {
+      // Constant numbers aren't pointers. Null check is in the value set code
+      // for symbols.
+    }
     return;
   }
 
@@ -374,7 +398,7 @@ void value_sett::get_value_set_rec(
       return;
 
     default:
-      std::cerr << "Unexpected side-effect: " << expr->pretty(0) << std::endl;
+      msg.error(fmt::format("Unexpected side-effect: {}", *expr));
       abort();
     }
   }
@@ -505,31 +529,49 @@ void value_sett::get_value_set_rec(
     // Consider pointer arithmetic. This takes takes the form of finding the
     // value sets of the operands, then speculating on how the addition /
     // subtraction affects the offset.
-    if(is_pointer_type(expr))
+    // In order to facilitate value-set tracking through integer -> pointer
+    // casts, all arithmetic add/sub expressions are analyzed.
+
+    // find the pointer operand
+    // XXXjmorse - polymorphism.
+    const expr2tc &op0 =
+      (is_add2t(expr)) ? to_add2t(expr).side_1 : to_sub2t(expr).side_1;
+    const expr2tc &op1 =
+      (is_add2t(expr)) ? to_add2t(expr).side_2 : to_sub2t(expr).side_2;
+
+    assert(
+      (!is_pointer_type(expr) ||
+       !(is_pointer_type(op0) && is_pointer_type(op1))) &&
+      "Cannot have pointer arithmetic with two pointers as operands");
+
+    // Find out what the pointer operand points at, and suck that data into
+    // new object maps.
+    object_mapt op0_set;
+    if(!is_pointer_type(op1))
+      get_value_set_rec(op0, op0_set, "", op0->type, false);
+
+    object_mapt op1_set;
+    if(!is_pointer_type(op0))
+      get_value_set_rec(op1, op1_set, "", op1->type, false);
+
+    /* TODO: The case that both, op0_set and op1_set, are non-empty is not
+     *       handled, yet. */
+
+    if(op0_set.empty() != op1_set.empty())
     {
-      // find the pointer operand
-      // XXXjmorse - polymorphism.
-      const expr2tc &op0 =
-        (is_add2t(expr)) ? to_add2t(expr).side_1 : to_sub2t(expr).side_1;
-      const expr2tc &op1 =
-        (is_add2t(expr)) ? to_add2t(expr).side_2 : to_sub2t(expr).side_2;
+      bool op0_is_ptr = !op0_set.empty();
 
-      assert(
-        !(is_pointer_type(op0) && is_pointer_type(op1)) &&
-        "Cannot have pointer arithmetic with two pointers as operands");
+      const expr2tc &ptr_op = op0_is_ptr ? op0 : op1;
+      const expr2tc &non_ptr_op = op0_is_ptr ? op1 : op0;
+      const object_mapt &pointer_expr_set = op0_is_ptr ? op0_set : op1_set;
 
-      const expr2tc &ptr_op = (is_pointer_type(op0)) ? op0 : op1;
-      const expr2tc &non_ptr_op = (is_pointer_type(op0)) ? op1 : op0;
-
-      // Find out what the pointer operand points at, and suck that data into
-      // a new object map.
-      object_mapt pointer_expr_set;
-      get_value_set_rec(ptr_op, pointer_expr_set, "", ptr_op->type);
+      type2tc subtype;
+      if(is_pointer_type(ptr_op))
+        subtype = to_pointer_type(ptr_op->type).subtype;
 
       // Calculate the offset caused by this addition, in _bytes_. Involves
       // pointer arithmetic. We also use the _perceived_ type of what we're
       // adding or subtracting from/to, it might be being typecasted.
-      const type2tc &subtype = to_pointer_type(ptr_op->type).subtype;
       BigInt total_offs(0);
       bool is_const = false;
       try
@@ -542,12 +584,16 @@ void value_sett::get_value_set_rec(
           }
           else
           {
-            if(is_empty_type(subtype))
-              throw new type2t::symbolic_type_excp();
+            BigInt elem_size = 1;
+            if(!is_nil_type(subtype))
+            {
+              if(is_empty_type(subtype))
+                throw new type2t::symbolic_type_excp();
 
-            // Potentially rename,
-            const type2tc renamed = ns.follow(subtype);
-            BigInt elem_size = type_byte_size(renamed);
+              // Potentially rename,
+              const type2tc renamed = ns.follow(subtype);
+              elem_size = type_byte_size(renamed);
+            }
             const BigInt &val = to_constant_int2t(non_ptr_op).value;
             total_offs = val * elem_size;
             if(is_sub2t(expr))
@@ -578,9 +624,9 @@ void value_sett::get_value_set_rec(
         }
         else
         {
-          std::cerr << "Pointer arithmetic on type where we can't determine ";
-          std::cerr << "size:" << std::endl;
-          std::cerr << subtype->pretty(0) << std::endl;
+          msg.error(fmt::format(
+            "Pointer arithmetic on type where we can't determine size\n{}",
+            *subtype));
           abort();
         }
       }
@@ -622,7 +668,7 @@ void value_sett::get_value_set_rec(
             // data object we're pointing at.
             offset_align = ptr_align;
             if(object.offset % ptr_align != 0)
-              // To complex to calculate; clamp to bytes.
+              // Too complex to calculate; clamp to bytes.
               offset_align = 1;
           }
           else
@@ -1204,8 +1250,7 @@ void value_sett::assign_rec(
   }
   else
   {
-    std::cerr << "assign NYI: `" + get_expr_id(lhs) + "'\n";
-    abort();
+    throw std::runtime_error(fmt::format("assign NYI: `{}'", get_expr_id(lhs)));
   }
 }
 
@@ -1215,8 +1260,7 @@ void value_sett::do_function_call(
 {
   const code_typet &type = to_code_type(symbol.type);
 
-  type2tc tmp_migrated_type;
-  migrate_type(type, tmp_migrated_type);
+  type2tc tmp_migrated_type = migrate_type(type);
   const code_type2t &migrated_type =
     dynamic_cast<const code_type2t &>(*tmp_migrated_type.get());
 
@@ -1351,9 +1395,8 @@ void value_sett::apply_code(const expr2tc &code)
   }
   else
   {
-    std::cerr << code->pretty() << std::endl;
-    std::cerr << "value_sett: unexpected statement" << std::endl;
-    abort();
+    throw std::runtime_error(
+      fmt::format("{}\nvalue_sett: unexpected statement", *code));
   }
 }
 
@@ -1403,7 +1446,10 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
 
 void value_sett::dump() const
 {
-  output(std::cout);
+  default_message msg;
+  std::ostringstream oss;
+  output(oss);
+  msg.debug(oss.str());
 }
 
 void value_sett::obj_numbering_ref(unsigned int num)

@@ -1,4 +1,5 @@
 #include <goto-programs/loopst.h>
+#include <util/message/default_message.h>
 
 const loopst::loop_varst &loopst::get_modified_loop_vars() const
 {
@@ -39,31 +40,45 @@ void loopst::add_unmodified_var_to_loop(const expr2tc &expr)
 {
   unmodified_loop_vars.insert(expr);
 }
-
-void loopst::dump() const
+void loopst::output_to(std::ostream &oss) const
 {
   unsigned n = get_original_loop_head()->location_number;
 
-  std::cout << n << " is head of (size: ";
-  std::cout << size;
-  std::cout << ") { ";
+  oss << n << " is head of (size: ";
+  oss << size;
+  oss << ") { ";
 
   for(goto_programt::instructionst::iterator l_it = get_original_loop_head();
       l_it != get_original_loop_exit();
       ++l_it)
-    std::cout << (*l_it).location_number << ", ";
-  std::cout << get_original_loop_exit()->location_number;
+    oss << (*l_it).location_number << ", ";
+  oss << get_original_loop_exit()->location_number;
 
-  std::cout << " }" << std::endl;
-
-  dump_loop_vars();
+  oss << " }"
+      << "\n";
 }
 
-void loopst::dump_loop_vars() const
+void loopst::output_loop_vars_to(std::ostream &oss) const
 {
-  std::cout << "Loop variables:\n";
+  oss << "Loop variables:\n";
   unsigned int i = 0;
   for(auto var : modified_loop_vars)
-    std::cout << ++i << ". \t" << to_symbol2t(var).thename << '\n';
-  std::cout << '\n';
+    oss << ++i << ". \t" << to_symbol2t(var).thename << '\n';
+  oss << '\n';
+}
+
+void loopst::dump() const
+{
+  default_message msg;
+  std::ostringstream oss;
+  output_to(oss);
+  msg.debug(oss.str());
+  dump_loop_vars(msg);
+}
+
+void loopst::dump_loop_vars(const messaget &msg) const
+{
+  std::ostringstream oss;
+  output_loop_vars_to(oss);
+  msg.debug(oss.str());
 }

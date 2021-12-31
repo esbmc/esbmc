@@ -1,0 +1,4 @@
+CORE
+MyContract_satisfiability_4.solast
+--function func_sat
+^VERIFICATION SUCCESSFUL$

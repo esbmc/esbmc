@@ -16,7 +16,7 @@ smt_astt smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
   name += ".";
 
   smt_astt result =
-    new tuple_sym_smt_ast(ctx, ctx->convert_sort(structdef->type), name);
+    new tuple_sym_smt_ast(ctx, ctx->convert_sort(structdef->type), name, msg);
 
   for(unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
   {
@@ -34,9 +34,9 @@ smt_astt smt_tuple_sym_flattener::tuple_fresh(smt_sortt s, std::string name)
     (name == "") ? ctx->mk_fresh_name("tuple_fresh::") + "." : name;
 
   if(s->id == SMT_SORT_ARRAY)
-    return new array_sym_smt_ast(ctx, s, n);
+    return new array_sym_smt_ast(ctx, s, n, msg);
 
-  return new tuple_sym_smt_ast(ctx, s, n);
+  return new tuple_sym_smt_ast(ctx, s, n, msg);
 }
 
 smt_astt
@@ -50,7 +50,7 @@ smt_tuple_sym_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
     name2 += ".";
 
   assert(s->id != SMT_SORT_ARRAY);
-  return new tuple_sym_smt_ast(ctx, s, name2);
+  return new tuple_sym_smt_ast(ctx, s, name2, msg);
 }
 
 smt_astt smt_tuple_sym_flattener::mk_tuple_array_symbol(const expr2tc &expr)
@@ -59,7 +59,7 @@ smt_astt smt_tuple_sym_flattener::mk_tuple_array_symbol(const expr2tc &expr)
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + "[]";
   smt_sortt sort = ctx->convert_sort(sym.type);
-  return new array_sym_smt_ast(ctx, sort, name);
+  return new array_sym_smt_ast(ctx, sort, name, msg);
 }
 
 smt_astt smt_tuple_sym_flattener::tuple_array_create(
@@ -75,7 +75,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
   // XXX - probably more efficient to update each member array, but not now.
   smt_sortt sort = ctx->convert_sort(array_type);
   std::string name = ctx->mk_fresh_name("tuple_array_create::") + ".";
-  smt_astt newsym = new array_sym_smt_ast(ctx, sort, name);
+  smt_astt newsym = new array_sym_smt_ast(ctx, sort, name, msg);
 
   // Check size
   const array_type2t &arr_type = to_array_type(array_type);
@@ -86,8 +86,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
   }
   if(!is_constant_int2t(arr_type.array_size))
   {
-    std::cerr << "Non-constant sized array of type constant_array_of2t"
-              << std::endl;
+    msg.error("Non-constant sized array of type constant_array_of2t");
     abort();
   }
 
@@ -174,7 +173,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_of(
   symbol2tc tuple_arr_of_sym(arrtype, irep_idt(name));
 
   smt_sortt sort = ctx->convert_sort(arrtype);
-  smt_astt newsym = new array_sym_smt_ast(ctx, sort, name);
+  smt_astt newsym = new array_sym_smt_ast(ctx, sort, name, msg);
 
   assert(subtype.members.size() == data.datatype_members.size());
   for(unsigned long i = 0; i < subtype.members.size(); i++)

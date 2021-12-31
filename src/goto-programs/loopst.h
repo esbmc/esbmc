@@ -26,7 +26,9 @@ public:
   void add_unmodified_var_to_loop(const expr2tc &expr);
 
   void dump() const;
-  void dump_loop_vars() const;
+  void dump_loop_vars(const messaget &msg) const;
+  void output_to(std::ostream &oss) const;
+  void output_loop_vars_to(std::ostream &oss) const;
 
   void set_size(std::size_t size)
   {

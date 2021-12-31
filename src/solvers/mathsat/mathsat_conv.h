@@ -8,7 +8,11 @@
 class mathsat_smt_ast : public solver_smt_ast<msat_term>
 {
 public:
-  mathsat_smt_ast(smt_convt *ctx, msat_term _t, const smt_sort *_s);
+  mathsat_smt_ast(
+    smt_convt *ctx,
+    msat_term _t,
+    const smt_sort *_s,
+    const messaget &msg);
   ~mathsat_smt_ast() override = default;
 
   void dump() const override;
@@ -17,7 +21,10 @@ public:
 class mathsat_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  mathsat_convt(bool int_encoding, const namespacet &ns);
+  mathsat_convt(
+    const namespacet &ns,
+    const optionst &options,
+    const messaget &msg);
   ~mathsat_convt() override;
 
   resultt dec_solve() override;

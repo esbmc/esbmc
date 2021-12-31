@@ -24,7 +24,7 @@
 #include <util/crypto_hash.h>
 #include <util/guard.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <vector>
 
 class execution_statet; // foward dec
@@ -55,7 +55,8 @@ public:
   goto_symex_statet(
     renaming::level2t &l2,
     value_sett &vs,
-    const namespacet &_ns);
+    const namespacet &_ns,
+    const messaget &msg);
 
   /**
    *  Copy constructor.
@@ -70,7 +71,8 @@ public:
   goto_symex_statet(
     const goto_symex_statet &state,
     renaming::level2t &l2,
-    value_sett &vs);
+    value_sett &vs,
+    const messaget &msg);
 
   goto_symex_statet(goto_symex_statet const &) = default;
 
@@ -99,7 +101,7 @@ public:
   class goto_statet
   {
   public:
-    unsigned depth;
+    unsigned num_instructions;
     std::shared_ptr<renaming::level2t> level2_ptr;
     renaming::level2t &level2;
     value_sett value_set;
@@ -107,25 +109,27 @@ public:
     unsigned int thread_id;
     variable_name_sett local_variables;
 
-    explicit goto_statet(const goto_symex_statet &s)
-      : depth(s.depth),
+    explicit goto_statet(const goto_symex_statet &s, const messaget &msg)
+      : num_instructions(s.num_instructions),
         level2_ptr(s.level2.clone()),
         level2(*level2_ptr),
         value_set(s.value_set),
         guard(s.guard),
         thread_id(s.source.thread_nr),
-        local_variables(s.top().local_variables)
+        local_variables(s.top().local_variables),
+        msg(msg)
     {
     }
 
-    goto_statet(const goto_statet &s)
-      : depth(s.depth),
+    explicit goto_statet(const goto_statet &s)
+      : num_instructions(s.num_instructions),
         level2_ptr(s.level2_ptr->clone()),
         level2(*level2_ptr),
         value_set(s.value_set),
         guard(s.guard),
         thread_id(s.thread_id),
-        local_variables(s.local_variables)
+        local_variables(s.local_variables),
+        msg(s.msg)
     {
     }
 
@@ -136,6 +140,9 @@ public:
 
   public:
     ~goto_statet() = default;
+
+  protected:
+    const messaget &msg;
   };
 
   /**
@@ -221,7 +228,7 @@ public:
     bool hidden;
 
     /** The stack size of the frame. */
-    unsigned stack_frame_total;
+    BigInt stack_frame_total;
 
     framet(unsigned int thread_id)
       : return_value(expr2tc()), hidden(false), stack_frame_total(0)
@@ -402,12 +409,13 @@ public:
   void get_original_name(expr2tc &expr) const;
 
   /**
-   *  Print stack trace of state to stdout.
+   *  Print stack trace of state to osstream.
    *  Takes all the current function calls and produces an indented stack
    *  trace, then prints it to stdout.
    *  @param indent Number of spaces to indent contents by.
+   *  @param oss output stream to output
    */
-  void print_stack_trace(unsigned int indent) const;
+  void print_stack_trace(unsigned int indent, std::ostream &os) const;
 
   /**
    *  Generate set of strings making up a stack trace.
@@ -434,7 +442,7 @@ public:
   // Members
 
   /** Number of instructions executed in this thread. */
-  unsigned depth;
+  unsigned num_instructions;
 
   /** Flag indicating this thread has stopped executing. */
   bool thread_ended;
@@ -470,6 +478,7 @@ public:
 
   /** Namespace to work with. */
   const namespacet &ns;
+  const messaget &msg;
 
   /** Map of what pointer values have been realloc'd, and what their new
    *  realloc number is. No need for special consideration when merging states

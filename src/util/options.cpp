@@ -53,37 +53,23 @@ const std::string optionst::get_option(const std::string &option) const
 void optionst::cmdline(cmdlinet &cmds)
 {
   // Pump command line options into options list
-
-  for(std::vector<cmdlinet::optiont>::const_iterator it = cmds.options.begin();
-      it != cmds.options.end();
-      it++)
+  for(auto &it : cmds.vm)
   {
-    if(it->isset)
+    std::string option_name = it.first;
+    if(cmds.isset(option_name.c_str()) && !it.second.defaulted())
     {
-      if(it->hasval)
-      {
-        if(it->islong)
-        {
-          set_option(it->optstring, cmds.getval(it->optstring.c_str()));
-        }
-        else
-        {
-          std::string str(&it->optchar, 1);
-          set_option(str, cmds.getval(it->optchar));
-        }
-      }
+      const char *value = cmds.getval(option_name.c_str());
+      bool hasArgument = *value != 0;
+      if(hasArgument)
+        set_option(option_name, value);
       else
-      {
-        if(it->islong)
-        {
-          set_option(it->optstring, true);
-        }
-        else
-        {
-          std::string str(&it->optchar, 1);
-          set_option(str, true);
-        }
-      }
+        set_option(option_name, true);
     }
   }
+}
+
+bool optionst::is_kind() const
+{
+  return get_bool_option("k-induction") ||
+         get_bool_option("k-induction-parallel");
 }

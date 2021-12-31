@@ -5,20 +5,23 @@
 #include <string>
 #include <util/config.h>
 #include <util/namespace.h>
+#include <util/message/message.h>
 
 typedef smt_convt *(solver_creator)(
-  bool int_encoding,
+  const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
-  fp_convt **fp_api);
+  fp_convt **fp_api,
+  const messaget &msg);
 
 typedef smt_convt *(*solver_creator_ptr)(
-  bool int_encoding,
+  const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
-  fp_convt **fp_api);
+  fp_convt **fp_api,
+  const messaget &msg);
 
 struct esbmc_solver_config
 {
@@ -31,8 +34,8 @@ extern const unsigned int esbmc_num_solvers;
 
 smt_convt *create_solver_factory(
   const std::string &solver_name,
-  bool int_encoding,
   const namespacet &ns,
-  const optionst &options);
+  const optionst &options,
+  const messaget &msg);
 
 #endif

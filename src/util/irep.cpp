@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdlib>
 #include <util/i2string.h>
 #include <util/irep.h>
+#include <util/message/default_message.h>
 
 irept nil_rep_storage;
 
@@ -19,7 +20,8 @@ const irept::dt empty_d;
 
 void irept::dump() const
 {
-  std::cout << pretty(0) << std::endl;
+  default_message msg;
+  msg.debug(pretty(0));
 }
 
 const irept &get_nil_irep()
@@ -33,10 +35,6 @@ const irept &get_nil_irep()
 irept::irept(const irep_idt &_id) : data(new dt)
 {
   id(_id);
-
-#ifdef IREP_DEBUG
-  std::cout << "CREATED " << data << " " << _id << std::endl;
-#endif
 }
 #else
 irept::irept(const irep_idt &_id)
@@ -48,54 +46,32 @@ irept::irept(const irep_idt &_id)
 #ifdef SHARING
 void irept::detatch()
 {
-#ifdef IREP_DEBUG
-  std::cout << "DETATCH1: " << data << std::endl;
-#endif
-
   if(data == nullptr)
   {
     data = new dt;
-
-#ifdef IREP_DEBUG
-    std::cout << "ALLOCATED " << data << std::endl;
-#endif
   }
   else if(data->ref_count > 1)
   {
     dt *old_data(data);
     data = new dt(*old_data);
 
-#ifdef IREP_DEBUG
-    std::cout << "ALLOCATED " << data << std::endl;
-#endif
-
     data->ref_count = 1;
     remove_ref(old_data);
   }
 
   assert(data->ref_count == 1);
-
-#ifdef IREP_DEBUG
-  std::cout << "DETATCH2: " << data << std::endl;
-#endif
 }
 #endif
 
 #ifdef SHARING
 const irept::dt &irept::read() const
 {
-#ifdef IREP_DEBUG
-  std::cout << "READ: " << data << std::endl;
-#endif
-
   if(data == nullptr)
     return empty_d;
 
   return *data;
 }
 #endif
-
-#include <iostream>
 
 #ifdef SHARING
 void irept::remove_ref(dt *old_data)
@@ -105,25 +81,10 @@ void irept::remove_ref(dt *old_data)
 
   assert(old_data->ref_count != 0);
 
-#ifdef IREP_DEBUG
-  std::cout << "R: " << old_data << " " << old_data->ref_count << std::endl;
-#endif
-
   old_data->ref_count--;
   if(old_data->ref_count == 0)
   {
-#ifdef IREP_DEBUG
-    std::cout << "D: " << pretty() << std::endl;
-    std::cout << "DELETING " << old_data->data << " " << old_data << std::endl;
-    old_data->clear();
-    std::cout << "DEALLOCATING " << old_data << "\n";
-#endif
-
     delete old_data;
-
-#ifdef IREP_DEBUG
-    std::cout << "DONE\n";
-#endif
   }
 }
 #endif

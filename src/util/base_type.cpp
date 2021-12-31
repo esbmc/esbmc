@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/base_type.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/std_types.h>
 #include <util/union_find.h>
 
@@ -21,7 +21,7 @@ void base_type(type2tc &type, const namespacet &ns)
       !ns.lookup(to_symbol_type(type).symbol_name, symbol) && symbol->is_type &&
       !symbol->type.is_nil())
     {
-      migrate_type(symbol->type, type);
+      type = migrate_type(symbol->type);
       base_type(type, ns); // recursive call
       return;
     }
@@ -121,8 +121,7 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
     if(!symbol.is_type)
       throw "symbol " + id2string(symbol.name) + " is not a type";
 
-    type2tc tmp;
-    migrate_type(symbol.type, tmp);
+    type2tc tmp = migrate_type(symbol.type);
     return base_type_eq_rec(tmp, type2);
   }
 
@@ -133,8 +132,7 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
     if(!symbol.is_type)
       throw "symbol " + id2string(symbol.name) + " is not a type";
 
-    type2tc tmp;
-    migrate_type(symbol.type, tmp);
+    type2tc tmp = migrate_type(symbol.type);
     return base_type_eq_rec(type1, tmp);
   }
 
@@ -243,11 +241,6 @@ bool base_type_eqt::base_type_eq_rec(const typet &type1, const typet &type2)
 {
   if(type1 == type2)
     return true;
-
-#if 0
-  std::cout << "T1: " << type1.pretty() << std::endl;
-  std::cout << "T2: " << type2.pretty() << std::endl;
-#endif
 
   // loop avoidance
   if(type1.id() == "symbol" && type2.id() == "symbol")

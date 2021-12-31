@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/array_name.h>
-#include <util/irep2_expr.h>
+#include <irep2/irep2_expr.h>
 
 std::string array_name(const namespacet &ns, const expr2tc &expr)
 {

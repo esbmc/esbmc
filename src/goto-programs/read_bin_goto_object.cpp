@@ -14,7 +14,7 @@ Date: June 2006
 #include <langapi/mode.h>
 #include <util/base_type.h>
 #include <util/irep_serialization.h>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 #include <util/namespace.h>
 #include <util/symbol_serialization.h>
 
@@ -25,7 +25,7 @@ bool read_bin_goto_object(
   const std::string &filename,
   contextt &context,
   goto_functionst &functions,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   message_streamt message_stream(message_handler);
 
@@ -49,7 +49,7 @@ bool read_bin_goto_object(
       }
       else
         message_stream.str << "`" << filename << "' is not a goto-binary."
-                           << std::endl;
+                           << "\n";
 
       message_stream.error();
 
@@ -89,7 +89,10 @@ bool read_bin_goto_object(
       // makes sure there is an empty function
       // for every function symbol and fixes
       // the function types.
-      functions.function_map[symbol.id].type = to_code_type(symbol.type);
+      auto it = functions.function_map.find(symbol.id);
+      if(it == functions.function_map.end())
+        functions.function_map.emplace(symbol.id, message_handler);
+      functions.function_map.at(symbol.id).type = to_code_type(symbol.type);
     }
     context.add(symbol);
   }
@@ -100,7 +103,10 @@ bool read_bin_goto_object(
     irept t;
     dstring fname = irepconverter.read_string(in);
     gfconverter.convert(in, t);
-    goto_functiont &f = functions.function_map[fname];
+    auto it = functions.function_map.find(fname);
+    if(it == functions.function_map.end())
+      functions.function_map.emplace(fname, message_handler);
+    goto_functiont &f = functions.function_map.at(fname);
     convert(t, f.body);
     f.body_available = f.body.instructions.size() > 0;
   }

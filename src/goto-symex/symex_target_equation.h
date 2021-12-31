@@ -19,7 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 #include <solvers/smt/smt_conv.h>
 #include <util/config.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/namespace.h>
 #include <vector>
 
@@ -28,7 +28,8 @@ class symex_target_equationt : public symex_targett
 public:
   class SSA_stept;
 
-  symex_target_equationt(const namespacet &_ns) : ns(_ns)
+  symex_target_equationt(const namespacet &_ns, const messaget &msg)
+    : ns(_ns), msg(msg)
   {
     debug_print = config.options.get_bool_option("symex-ssa-trace");
     ssa_trace = config.options.get_bool_option("ssa-trace");
@@ -153,10 +154,12 @@ public:
     {
     }
 
-    void output(const namespacet &ns, std::ostream &out) const;
+    void
+    output(const namespacet &ns, std::ostream &out, const messaget &msg) const;
     void short_output(
       const namespacet &ns,
       std::ostream &out,
+      const messaget &msg,
       bool show_ignored = false) const;
     void dump() const;
   };
@@ -208,9 +211,13 @@ public:
 
 protected:
   const namespacet &ns;
+  const messaget &msg;
   bool debug_print;
   bool ssa_trace;
   bool ssa_smt_trace;
+
+private:
+  void debug_print_step(const SSA_stept &step) const;
 };
 
 class runtime_encoded_equationt : public symex_target_equationt
@@ -220,7 +227,10 @@ public:
   {
   };
 
-  runtime_encoded_equationt(const namespacet &_ns, smt_convt &conv);
+  runtime_encoded_equationt(
+    const namespacet &_ns,
+    smt_convt &conv,
+    const messaget &msg);
 
   void push_ctx() override;
   void pop_ctx() override;

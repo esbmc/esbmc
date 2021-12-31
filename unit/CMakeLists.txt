@@ -1,8 +1,9 @@
 message(STATUS "Testing enabled")
-find_package(Boost COMPONENTS unit_test_framework REQUIRED)
+include(TestConfiguration)
 
-include_directories(${Boost_INCLUDE_DIRS})
-
+add_subdirectory(testing-utils)
+add_subdirectory(goto-programs)
 add_subdirectory(big-int)
 add_subdirectory(clang-c-frontend)
+add_subdirectory(util)
 add_subdirectory(c2goto)

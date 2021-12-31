@@ -7,8 +7,9 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <esbmc/bmc.h>
+#include <fmt/format.h>
 #include <fstream>
-#include <iostream>
+
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -18,23 +19,9 @@ void bmct::show_vcc(
   std::ostream &out,
   std::shared_ptr<symex_target_equationt> &eq)
 {
-  switch(ui)
-  {
-  case ui_message_handlert::OLD_GUI:
-  case ui_message_handlert::XML_UI:
-    error("not supported");
-    return;
+  out << "\nVERIFICATION CONDITIONS:\n\n";
 
-  case ui_message_handlert::PLAIN:
-    break;
-
-  default:
-    assert(false);
-  }
-
-  out << std::endl << "VERIFICATION CONDITIONS:" << std::endl << std::endl;
-
-  languagest languages(ns, MODE_C);
+  languagest languages(ns, MODE_C, msg);
 
   for(symex_target_equationt::SSA_stepst::iterator it = eq->SSA_steps.begin();
       it != eq->SSA_steps.end();
@@ -44,10 +31,10 @@ void bmct::show_vcc(
       continue;
 
     if(it->source.pc->location.is_not_nil())
-      out << it->source.pc->location << std::endl;
+      out << it->source.pc->location << "\n";
 
     if(it->comment != "")
-      out << it->comment << std::endl;
+      out << it->comment << "\n";
 
     symex_target_equationt::SSA_stepst::const_iterator p_it =
       eq->SSA_steps.begin();
@@ -58,17 +45,18 @@ void bmct::show_vcc(
         {
           std::string string_value;
           languages.from_expr(migrate_expr_back(p_it->cond), string_value);
-          out << "{-" << count << "} " << string_value << std::endl;
+          out << "{-" << count << "} " << string_value << "\n";
           count++;
         }
 
-    out << "|--------------------------" << std::endl;
+    out << "|--------------------------"
+        << "\n";
 
     std::string string_value;
     languages.from_expr(migrate_expr_back(it->cond), string_value);
-    out << "{" << 1 << "} " << string_value << std::endl;
+    out << "{" << 1 << "} " << string_value << "\n";
 
-    out << std::endl;
+    out << "\n";
   }
 }
 
@@ -77,12 +65,17 @@ void bmct::show_vcc(std::shared_ptr<symex_target_equationt> &eq)
   const std::string &filename = options.get_option("output");
 
   if(filename.empty() || filename == "-")
-    show_vcc(std::cout, eq);
+  {
+    std::ostringstream oss;
+    show_vcc(oss, eq);
+    msg.status(oss.str());
+  }
+
   else
   {
     std::ofstream out(filename.c_str());
     if(!out)
-      std::cerr << "failed to open " << filename << std::endl;
+      msg.error(fmt::format("failed to open {}", filename));
     else
       show_vcc(out, eq);
   }

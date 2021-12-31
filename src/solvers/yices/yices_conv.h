@@ -7,14 +7,18 @@
 class yices_smt_ast : public solver_smt_ast<term_t>
 {
 public:
-  yices_smt_ast(smt_convt *ctx, term_t _t, const smt_sort *_s)
-    : solver_smt_ast<term_t>(ctx, _t, _s)
+  yices_smt_ast(
+    smt_convt *ctx,
+    term_t _t,
+    const smt_sort *_s,
+    const messaget &msg)
+    : solver_smt_ast<term_t>(ctx, _t, _s, msg)
   {
     // Detect term errors
     if(a == NULL_TERM)
     {
-      std::cerr << "Error creating yices term" << std::endl;
       yices_print_error(stderr);
+      msg.error("Error creating yices term");
       abort();
     }
   }
@@ -43,7 +47,10 @@ class yices_convt : public smt_convt,
                     public fp_convt
 {
 public:
-  yices_convt(bool int_encoding, const namespacet &ns);
+  yices_convt(
+    const namespacet &ns,
+    const optionst &options,
+    const messaget &msg);
   ~yices_convt() override;
 
   resultt dec_solve() override;

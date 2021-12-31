@@ -3,7 +3,7 @@
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
@@ -47,7 +47,7 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-bool clang_main(contextt &context, message_handlert &message_handler)
+bool clang_main(contextt &context, const messaget &message_handler)
 {
   irep_idt main_symbol;
 
@@ -79,8 +79,7 @@ bool clang_main(contextt &context, message_handlert &message_handler)
   {
     messaget message(message_handler);
     if(matches.size() == 2)
-      std::cerr << "warning: main symbol `" << main << "' is ambiguous"
-                << std::endl;
+      message.error("warning: main symbol `" + main + "' is ambiguous");
     else
     {
       message.error("main symbol `" + main + "' is ambiguous");
@@ -277,9 +276,7 @@ bool clang_main(contextt &context, message_handlert &message_handler)
 
   if(context.move(new_symbol))
   {
-    messaget message;
-    message.set_message_handler(&message_handler);
-    message.error("main already defined by another language module");
+    message_handler.error("main already defined by another language module");
     return true;
   }
 
