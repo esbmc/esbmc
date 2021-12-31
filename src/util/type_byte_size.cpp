@@ -87,10 +87,8 @@ BigInt type_byte_size_bits(const type2tc &type)
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
-    return type->get_width();
-
   case type2t::pointer_id:
-    return config.ansi_c.pointer_width;
+    return type->get_width();
 
   case type2t::string_id:
     // TODO: Strings of wchar will return the wrong result here
