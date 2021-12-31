@@ -55,6 +55,7 @@ public:
     std::string os = "elf";
     std::string flavor;
 
+    bool is_riscv() const;
     bool is_windows_abi() const;
     bool is_freebsd() const;
     bool is_macos() const;
@@ -101,8 +102,6 @@ public:
 
     unsigned pointer_width() const noexcept
     {
-      /* TODO: should only return capability_width() when
-       *       cheri == CHERI_PURECAP */
       return cheri == CHERI_PURECAP ? capability_width() : address_width;
     }
 
@@ -120,7 +119,7 @@ public:
       CHERI_HYBRID,
       CHERI_PURECAP,
     } cheri;
-    /* otherwise, uncompressed encoding quadruple the size */
+    /* otherwise, uncompressed encoding to quadruple the size of addresses */
     bool cheri_concentrate;
 
     typedef enum
