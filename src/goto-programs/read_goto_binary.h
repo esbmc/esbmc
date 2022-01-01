@@ -14,12 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/message/message.h>
 #include <util/options.h>
 
-void read_goto_binary(
-  std::istream &in,
-  contextt &context,
-  goto_functionst &dest,
-  const messaget &message_handler);
-
 bool read_goto_binary(
   const std::string &path,
   contextt &context,
