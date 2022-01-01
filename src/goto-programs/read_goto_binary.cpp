@@ -15,5 +15,7 @@ void read_goto_binary(
   goto_functionst &dest,
   const messaget &message_handler)
 {
-  read_bin_goto_object(in, "", context, dest, message_handler);
+  bool fail [[gnu::unused]] =
+    read_bin_goto_object(in, "", context, dest, message_handler);
+  assert(!fail);
 }

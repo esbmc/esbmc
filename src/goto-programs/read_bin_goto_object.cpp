@@ -53,7 +53,7 @@ bool read_bin_goto_object(
 
       message_stream.error();
 
-      return false;
+      return true;
     }
   }
 
@@ -71,7 +71,7 @@ bool read_bin_goto_object(
         << "The input was compiled with a different version of "
         << "goto-cc, please recompile";
       message_stream.warning();
-      return false;
+      return true;
     }
   }
 
