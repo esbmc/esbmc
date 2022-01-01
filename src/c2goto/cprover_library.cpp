@@ -36,7 +36,6 @@ extern "C"
   };
 }
 
-#undef p
 #endif
 
 bool is_in_list(std::list<irep_idt> &list, irep_idt item)
