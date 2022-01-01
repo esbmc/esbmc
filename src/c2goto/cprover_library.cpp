@@ -6,23 +6,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-extern "C"
-{
-#ifdef _WIN32
-#include <windows.h>
-#include <io.h>
-#undef small // MinGW header workaround
-#else
-#include <unistd.h>
-#endif
-}
-
 #include <c2goto/cprover_library.h>
 #include <cstdlib>
-#include <fstream>
+#include <cerrno>
 #include <goto-programs/read_goto_binary.h>
 #include <util/c_link.h>
 #include <util/config.h>
+#include <util/filesystem.h>
 
 #ifndef NO_CPROVER_LIBRARY
 
@@ -140,6 +130,30 @@ void add_cprover_library(contextt &, const messaget &)
 
 #else
 
+static file_operations::tmp_path
+dump_to_temp_file(const void *data, size_t size, const messaget &msg)
+{
+  using namespace file_operations;
+  tmp_file tmp = create_tmp_file();
+  if(fwrite(data, size, 1, tmp.file()) != 1)
+  {
+    msg.error(fmt::format(
+      "Error writing internal C library to {}: {}",
+      tmp.path(),
+      strerror(errno)));
+    abort();
+  }
+  /* Normally, ~tmp_file() would close the file, but move-constructing the
+   * public base class tmp_path from it sets tmp.keep(true), which does not
+   * close the file. Thus, do it here. */
+  if(fclose(tmp.file()))
+  {
+    msg.error(fmt::format("Error closing {}: {}", tmp.path(), strerror(errno)));
+    abort();
+  }
+  return std::move(tmp);
+}
+
 void add_cprover_library(contextt &context, const messaget &message_handler)
 {
   if(config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
@@ -149,8 +163,6 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   goto_functionst goto_functions;
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
-  char symname_buffer[288];
-  FILE *f;
   uint8_t **this_clib_ptrs;
   uint64_t size;
   int fd;
@@ -198,30 +210,12 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
     abort();
   }
 
-#ifndef _WIN32
-  sprintf(symname_buffer, "/tmp/ESBMC_XXXXXX");
-  fd = mkstemp(symname_buffer);
-  close(fd);
-#else
-  char tmpdir[256];
-  GetTempPath(sizeof(tmpdir), tmpdir);
-  GetTempFileName(tmpdir, "bmc", 0, symname_buffer);
-#endif
-  f = fopen(symname_buffer, "wb");
-  if(fwrite(this_clib_ptrs[0], size, 1, f) != 1)
-  {
-    message_handler.error("Couldn't manipulate internal C library");
+  if(read_goto_binary(
+       dump_to_temp_file(this_clib_ptrs[0], size, message_handler).path(),
+       new_ctx,
+       goto_functions,
+       message_handler))
     abort();
-  }
-  fclose(f);
-  std::ifstream infile(symname_buffer, std::ios::in | std::ios::binary);
-  read_goto_binary(infile, new_ctx, goto_functions, message_handler);
-  infile.close();
-#ifndef _WIN32
-  unlink(symname_buffer);
-#else
-  DeleteFile(symname_buffer);
-#endif
 
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
     generate_symbol_deps(s.id, s.value, symbol_deps);
