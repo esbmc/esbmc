@@ -16,6 +16,14 @@
 #undef ferror
 #endif
 
+#undef putchar
+#undef puts
+#undef getc
+#undef feof
+#undef ferror
+#undef fileno
+#undef getchar
+
 int putchar(int c)
 {
 __ESBMC_HIDE:;
