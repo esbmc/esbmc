@@ -20,4 +20,10 @@ void read_goto_binary(
   goto_functionst &dest,
   const messaget &message_handler);
 
+bool read_goto_binary(
+  const std::string &path,
+  contextt &context,
+  goto_functionst &dest,
+  const messaget &msg);
+
 #endif
