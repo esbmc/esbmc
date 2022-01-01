@@ -1494,15 +1494,11 @@ void esbmc_parseoptionst::preprocessing()
 
 bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 {
-  std::ifstream in(cmdline.getval("binary"), std::ios::binary);
-
-  if(!in)
+  if(::read_goto_binary(cmdline.getval("binary"), context, goto_functions, msg))
   {
     msg.error(std::string("Failed to open `") + cmdline.getval("binary") + "'");
     return true;
   }
-
-  ::read_goto_binary(in, context, goto_functions, msg);
 
   return false;
 }
