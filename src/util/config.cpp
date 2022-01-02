@@ -185,7 +185,7 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 
   if(ansi_c.cheri)
   {
-    arch = "mips64";
+    arch = "mips64el"; /* CHERI-TODO: either big-endian MIPS or maybe RISC-V */
     os = "freebsd";
     flavor = "purecap";
     req_target++;
@@ -195,7 +195,7 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
   {
     msg.error(
       "only at most one target can be specified via "
-      "--i386-{win32,macos,linux}, --ppc-macos, --cheri and --no-arch\n");
+      "--i386-{win32,macos,linux}, --ppc-macos, --cheri and --no-arch");
     return true;
   }
 
