@@ -101,6 +101,7 @@ public:
 
     bool char_is_unsigned;
     bool use_fixed_for_float;
+    bool cheri;
 
     typedef enum
     {
