@@ -156,19 +156,21 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
 
-#ifdef __APPLE__
-  compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
-  compiler_args.push_back("-D_SECURE__STRING_H_");
-  compiler_args.push_back("-U__BLOCKS__");
-  compiler_args.push_back("-Wno-nullability-completeness");
-  compiler_args.push_back("-Wno-deprecated-register");
-#endif
+  if(config.ansi_c.target.is_macos())
+  {
+    compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
+    compiler_args.push_back("-D_SECURE__STRING_H_");
+    compiler_args.push_back("-U__BLOCKS__");
+    compiler_args.push_back("-Wno-nullability-completeness");
+    compiler_args.push_back("-Wno-deprecated-register");
+  }
 
-#ifdef _WIN32
-  compiler_args.push_back("-D_INC_TIME_INL");
-  compiler_args.push_back("-D__CRT__NO_INLINE");
-  compiler_args.push_back("-D_USE_MATH_DEFINES");
-#endif
+  if(config.ansi_c.target.is_windows_abi())
+  {
+    compiler_args.push_back("-D_INC_TIME_INL");
+    compiler_args.push_back("-D__CRT__NO_INLINE");
+    compiler_args.push_back("-D_USE_MATH_DEFINES");
+  }
 
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
