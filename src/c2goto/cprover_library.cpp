@@ -12,8 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/c_link.h>
 #include <util/config.h>
 
-#ifndef NO_CPROVER_LIBRARY
-
 extern "C"
 {
   extern uint8_t clib32_buf[1];
@@ -34,9 +32,7 @@ extern "C"
   };
 }
 
-#endif
-
-bool is_in_list(std::list<irep_idt> &list, irep_idt item)
+static bool is_in_list(std::list<irep_idt> &list, irep_idt item)
 {
   for(std::list<irep_idt>::const_iterator it = list.begin(); it != list.end();
       it++)
@@ -46,7 +42,7 @@ bool is_in_list(std::list<irep_idt> &list, irep_idt item)
   return false;
 }
 
-void generate_symbol_deps(
+static void generate_symbol_deps(
   irep_idt name,
   irept irep,
   std::multimap<irep_idt, irep_idt> &deps)
@@ -99,7 +95,7 @@ void generate_symbol_deps(
   }
 }
 
-void ingest_symbol(
+static void ingest_symbol(
   irep_idt name,
   std::multimap<irep_idt, irep_idt> &deps,
   std::list<irep_idt> &to_include)
@@ -119,13 +115,6 @@ void ingest_symbol(
 
   deps.erase(name);
 }
-
-#ifdef NO_CPROVER_LIBRARY
-void add_cprover_library(contextt &, const messaget &)
-{
-}
-
-#else
 
 void add_cprover_library(contextt &context, const messaget &message_handler)
 {
@@ -240,4 +229,3 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
     abort();
   }
 }
-#endif
