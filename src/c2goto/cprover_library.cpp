@@ -8,11 +8,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <c2goto/cprover_library.h>
 #include <cstdlib>
-#include <cerrno>
 #include <goto-programs/read_goto_binary.h>
 #include <util/c_link.h>
 #include <util/config.h>
-#include <util/filesystem.h>
 
 #ifndef NO_CPROVER_LIBRARY
 
@@ -129,30 +127,6 @@ void add_cprover_library(contextt &, const messaget &)
 
 #else
 
-static file_operations::tmp_path
-dump_to_temp_file(const void *data, size_t size, const messaget &msg)
-{
-  using namespace file_operations;
-  tmp_file tmp = create_tmp_file();
-  if(fwrite(data, size, 1, tmp.file()) != 1)
-  {
-    msg.error(fmt::format(
-      "Error writing internal C library to {}: {}",
-      tmp.path(),
-      strerror(errno)));
-    abort();
-  }
-  /* Normally, ~tmp_file() would close the file, but move-constructing the
-   * public base class tmp_path from it sets tmp.keep(true), which does not
-   * close the file. Thus, do it here. */
-  if(fclose(tmp.file()))
-  {
-    msg.error(fmt::format("Error closing {}: {}", tmp.path(), strerror(errno)));
-    abort();
-  }
-  return std::move(tmp);
-}
-
 void add_cprover_library(contextt &context, const messaget &message_handler)
 {
   if(config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
@@ -209,11 +183,8 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
     abort();
   }
 
-  if(read_goto_binary(
-       dump_to_temp_file(this_clib_ptrs[0], size, message_handler).path(),
-       new_ctx,
-       goto_functions,
-       message_handler))
+  if(read_goto_binary_array(
+       this_clib_ptrs[0], size, new_ctx, goto_functions, message_handler))
     abort();
 
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {

@@ -14,6 +14,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/message/message.h>
 #include <util/options.h>
 
+bool read_goto_binary_array(
+  const void *data,
+  size_t size,
+  contextt &context,
+  goto_functionst &dest,
+  const messaget &msg);
+
 bool read_goto_binary(
   const std::string &path,
   contextt &context,
