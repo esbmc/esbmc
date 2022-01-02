@@ -56,6 +56,7 @@ public:
     std::string flavor;
 
     bool is_windows_abi() const;
+    bool is_macos() const;
     std::string to_string() const;
   };
 
@@ -131,7 +132,7 @@ public:
   optionst options;
 
   static std::string this_architecture();
-  static std::string this_operating_system();
+  static const char *this_operating_system();
 
   static triple host();
 };

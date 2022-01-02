@@ -33,13 +33,22 @@ void configt::ansi_ct::set_data_model(enum data_model dm)
   char_is_unsigned = false;
 }
 
-static const std::regex
-  WINDOWS_ABI("mingw.*|win[0-9]{2}", std::regex_constants::extended);
+namespace
+{
+struct eregex : std::regex
+{
+  eregex(std::string pat)
+    : std::regex(std::move(pat), std::regex_constants::extended)
+  {
+  }
+};
+} // namespace
 
-static const std::regex X86("i[3456]86|x86_64", std::regex_constants::extended);
-
-static const std::regex
-  MIPS("mips(64)?(r[0-9]+)?(el|le)?.*", std::regex_constants::extended);
+static const eregex WINDOWS_ABI("mingw.*|win[0-9]{2}|windows|msys");
+static const eregex MACOS("macos|osx.*");
+static const eregex X86("i[3456]86|x86_64|x64");
+static const eregex MIPS("mips(64|isa64|isa64sb1)?(r[0-9]+)?(el|le)?.*");
+static const eregex POWERPC("(ppc|powerpc)(64)?(le)?");
 
 static configt::ansi_ct::endianesst
 arch_endianness(const std::string &arch, const messaget &msg)
@@ -47,9 +56,10 @@ arch_endianness(const std::string &arch, const messaget &msg)
   std::smatch r;
   if(std::regex_match(arch, r, X86) || arch == "riscv32" || arch == "riscv64")
     return configt::ansi_ct::IS_LITTLE_ENDIAN;
-  if(arch == "ppc")
-    return configt::ansi_ct::IS_BIG_ENDIAN;
   if(std::regex_match(arch, r, MIPS))
+    return r.length(3) > 0 ? configt::ansi_ct::IS_LITTLE_ENDIAN
+                           : configt::ansi_ct::IS_BIG_ENDIAN;
+  if(std::regex_match(arch, r, POWERPC))
     return r.length(3) > 0 ? configt::ansi_ct::IS_LITTLE_ENDIAN
                            : configt::ansi_ct::IS_BIG_ENDIAN;
   if(arch == "none")
@@ -62,6 +72,12 @@ bool configt::triple::is_windows_abi() const
 {
   std::smatch r;
   return std::regex_match(os, r, WINDOWS_ABI);
+}
+
+bool configt::triple::is_macos() const
+{
+  std::smatch r;
+  return std::regex_match(os, r, MACOS);
 }
 
 std::string configt::triple::to_string() const
@@ -124,7 +140,7 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
     ansi_c.use_fixed_for_float = true;
 
   // this is the default
-  const char *arch = "x86_64", *os = "linux";
+  const char *arch = "x86_64", *os = this_operating_system();
   int req_target = 0;
 
   if(cmdline.isset("i386-linux"))
@@ -276,9 +292,9 @@ std::string configt::this_architecture()
   return this_arch;
 }
 
-std::string configt::this_operating_system()
+const char *configt::this_operating_system()
 {
-  std::string this_os;
+  const char *this_os = nullptr;
 
 #ifdef _WIN32
   this_os = "windows";
