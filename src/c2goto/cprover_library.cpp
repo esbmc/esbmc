@@ -32,16 +32,6 @@ extern "C"
   };
 }
 
-static bool is_in_list(std::list<irep_idt> &list, irep_idt item)
-{
-  for(std::list<irep_idt>::const_iterator it = list.begin(); it != list.end();
-      it++)
-    if(*it == item)
-      return true;
-
-  return false;
-}
-
 static void generate_symbol_deps(
   irep_idt name,
   irept irep,
