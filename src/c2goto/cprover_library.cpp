@@ -128,7 +128,6 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
   const buffer *clib;
-  int fd;
 
   switch(config.ansi_c.word_size)
   {
