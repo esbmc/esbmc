@@ -80,7 +80,7 @@ find_package(BISON 2.6.1 REQUIRED)
 find_package(FLEX 2.6.1 REQUIRED)
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
-find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options)
+find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options iostreams)
 include(FindLLVM)
 
 # Optimization
