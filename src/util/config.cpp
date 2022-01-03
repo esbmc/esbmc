@@ -96,25 +96,6 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
   ansi_c.endianess = ansi_ct::NO_ENDIANESS;
   ansi_c.lib = configt::ansi_ct::LIB_NONE;
 
-  bool have_16 = cmdline.isset("16");
-  bool have_32 = cmdline.isset("32");
-  bool have_64 = cmdline.isset("64");
-
-  if(have_16 + have_32 + have_64 > 1)
-  {
-    msg.error("Only one of --16, --32 and --64 is supported");
-    return true;
-  }
-
-  enum data_model dm;
-  if(have_16)
-    dm = LP32;
-  else if(have_32)
-    dm = ILP32;
-  else
-    dm = LP64;
-  ansi_c.set_data_model(dm);
-
   if(cmdline.isset("function"))
     main = cmdline.getval("function");
 
@@ -191,6 +172,25 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 
   ansi_c.target.arch = arch;
   ansi_c.target.os = os;
+
+  bool have_16 = cmdline.isset("16");
+  bool have_32 = cmdline.isset("32");
+  bool have_64 = cmdline.isset("64");
+
+  if(have_16 + have_32 + have_64 > 1)
+  {
+    msg.error("Only one of --16, --32 and --64 is supported");
+    return true;
+  }
+
+  enum data_model dm;
+  if(have_16)
+    dm = LP32;
+  else if(have_32)
+    dm = ILP32;
+  else
+    dm = ansi_c.target.is_windows_abi() ? LLP64 : LP64;
+  ansi_c.set_data_model(dm);
 
   if(cmdline.isset("little-endian") && cmdline.isset("big-endian"))
   {
