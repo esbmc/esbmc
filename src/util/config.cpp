@@ -45,6 +45,7 @@ struct eregex : std::regex
 } // namespace
 
 static const eregex WINDOWS_ABI("mingw.*|win[0-9]{2}|windows|msys");
+static const eregex FREEBSD("k?freebsd.*");
 static const eregex MACOS("macos|osx.*");
 static const eregex X86("i[3456]86|x86_64|x64");
 static const eregex MIPS("mips(64|isa64|isa64sb1)?(r[0-9]+)?(el|le)?.*");
@@ -72,6 +73,12 @@ bool configt::triple::is_windows_abi() const
 {
   std::smatch r;
   return std::regex_match(os, r, WINDOWS_ABI);
+}
+
+bool configt::triple::is_freebsd() const
+{
+  std::smatch r;
+  return std::regex_match(os, r, FREEBSD);
 }
 
 bool configt::triple::is_macos() const
