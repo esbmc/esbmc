@@ -177,9 +177,6 @@ void add_padding(struct_typet &type, const namespacet &ns)
     const typet it_type = it->type();
     BigInt a = 1;
 
-    const bool packed =
-      it_type.get_bool("packed") || ns.follow(it_type).get_bool("packed");
-
     if(it_type.get_bool("#bitfield"))
     {
       a = alignment(it_type, ns);
