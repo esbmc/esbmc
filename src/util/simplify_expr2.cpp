@@ -1213,6 +1213,13 @@ expr2tc implies2t::do_simplify() const
   return simplify_logic_2ops<Impliestor, implies2t>(type, side_1, side_2);
 }
 
+static BigInt produce_ones(unsigned n_bits)
+{
+  BigInt r;
+  r.setPower2(n_bits);
+  return r -= 1;
+}
+
 template <typename constructor>
 static expr2tc do_bit_munge_operation(
   const std::function<int64_t(int64_t, int64_t)> &opfunc,
@@ -1286,10 +1293,15 @@ static expr2tc do_bit_munge_operation(
   // And now, restore, paying attention to whether this is supposed to be
   // signed or not.
   constant_int2t *theint;
+
   if(is_signedbv_type(type))
     theint = new constant_int2t(type, BigInt(val1));
   else
-    theint = new constant_int2t(type, BigInt((uint64_t)val1));
+  {
+    // we should perform a mask to truncate the numbers
+    int64_t ones = produce_ones(type->get_width()).to_int64();
+    theint = new constant_int2t(type, BigInt(val1 & ones));
+  }
 
   return expr2tc(theint);
 }
