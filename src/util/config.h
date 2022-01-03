@@ -134,7 +134,7 @@ public:
   optionst options;
 
   static std::string this_architecture();
-  static const char *this_operating_system();
+  static std::string this_operating_system();
 
   static triple host();
 };

@@ -124,7 +124,7 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
     ansi_c.use_fixed_for_float = true;
 
   // this is the default
-  const char *arch = "x86_64", *os = this_operating_system();
+  std::string arch = "x86_64", os = this_operating_system();
   int req_target = 0;
 
   if(cmdline.isset("i386-linux"))
@@ -199,8 +199,9 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
   }
 
   ansi_c.endianess = cmdline.isset("little-endian") ? ansi_ct::IS_LITTLE_ENDIAN
-                     : cmdline.isset("big-endian")  ? ansi_ct::IS_BIG_ENDIAN
-                                                   : arch_endianness(arch, msg);
+                     : cmdline.isset("big-endian")
+                       ? ansi_ct::IS_BIG_ENDIAN
+                       : arch_endianness(ansi_c.target.arch, msg);
 
   ansi_c.lib = ansi_c.target.arch == "none" || cmdline.isset("no-library")
                  ? ansi_ct::LIB_NONE
@@ -295,9 +296,9 @@ std::string configt::this_architecture()
   return this_arch;
 }
 
-const char *configt::this_operating_system()
+std::string configt::this_operating_system()
 {
-  const char *this_os = nullptr;
+  std::string this_os;
 
 #ifdef _WIN32
   this_os = "windows";
