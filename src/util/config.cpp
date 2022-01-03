@@ -99,7 +99,6 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
   ansi_c.endianess = ansi_ct::NO_ENDIANESS;
   ansi_c.lib = configt::ansi_ct::LIB_NONE;
 
-
   bool have_16 = cmdline.isset("16");
   bool have_32 = cmdline.isset("32");
   bool have_64 = cmdline.isset("64");
@@ -322,5 +321,5 @@ const char *configt::this_operating_system()
 
 configt::triple configt::host()
 {
-  return { this_architecture(), "unknown", this_operating_system(), "" };
+  return {this_architecture(), "unknown", this_operating_system(), ""};
 }

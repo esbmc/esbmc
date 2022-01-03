@@ -66,12 +66,13 @@ public:
    (uint64_t)(long) << 24 | (uint64_t)(addr) << 32 | (uint64_t)(word) << 40 |  \
    (uint64_t)(long_dbl) << 48)
 
-  enum data_model : uint64_t {
+  enum data_model : uint64_t
+  {
     /* 16-bit */
     IP16 = dm(8, 16, 16, 32, 16, 16, 64), /* unsegmented 16-bit */
     LP32 = dm(8, 16, 16, 32, 32, 16, 64), /* segmented 16-bit DOS, Win16 */
     /* 32-bit */
-    IP32 = dm(8, 16, 32, 64, 32, 32, 96), /* Ultrix '82-'95 */
+    IP32 = dm(8, 16, 32, 64, 32, 32, 96),  /* Ultrix '82-'95 */
     ILP32 = dm(8, 16, 32, 32, 32, 32, 96), /* Win32 || other 32-bit Unix */
     /* 64-bit */
     LLP64 = dm(8, 16, 32, 32, 64, 64, 128), /* Win64 */
