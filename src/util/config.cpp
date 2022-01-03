@@ -54,9 +54,9 @@ static const eregex POWERPC("(ppc|powerpc)(64)?(le)?");
 static configt::ansi_ct::endianesst
 arch_endianness(const std::string &arch, const messaget &msg)
 {
-  std::smatch r;
-  if(std::regex_match(arch, r, X86) || arch == "riscv32" || arch == "riscv64")
+  if(std::regex_match(arch, X86) || arch == "riscv32" || arch == "riscv64")
     return configt::ansi_ct::IS_LITTLE_ENDIAN;
+  std::smatch r;
   if(std::regex_match(arch, r, MIPS))
     return r.length(3) > 0 ? configt::ansi_ct::IS_LITTLE_ENDIAN
                            : configt::ansi_ct::IS_BIG_ENDIAN;
@@ -71,20 +71,17 @@ arch_endianness(const std::string &arch, const messaget &msg)
 
 bool configt::triple::is_windows_abi() const
 {
-  std::smatch r;
-  return std::regex_match(os, r, WINDOWS_ABI);
+  return std::regex_match(os, WINDOWS_ABI);
 }
 
 bool configt::triple::is_freebsd() const
 {
-  std::smatch r;
-  return std::regex_match(os, r, FREEBSD);
+  return std::regex_match(os, FREEBSD);
 }
 
 bool configt::triple::is_macos() const
 {
-  std::smatch r;
-  return std::regex_match(os, r, MACOS);
+  return std::regex_match(os, MACOS);
 }
 
 std::string configt::triple::to_string() const
