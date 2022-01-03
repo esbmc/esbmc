@@ -56,6 +56,7 @@ public:
     std::string flavor;
 
     bool is_windows_abi() const;
+    bool is_freebsd() const;
     bool is_macos() const;
     std::string to_string() const;
   };
