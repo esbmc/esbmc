@@ -72,7 +72,7 @@ public:
     return method;
   }
 
-  const std::string &getParameters() const
+  const std::vector<std::shared_ptr<jimple_expr>> &getParameters() const
   {
     return parameters;
   }
@@ -80,7 +80,7 @@ public:
 protected:
   std::string base_class;
   std::string method;
-  std::string parameters;
+  std::vector<std::shared_ptr<jimple_expr>> parameters;
 };
 
 class jimple_return : public jimple_statement

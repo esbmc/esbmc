@@ -176,6 +176,7 @@ void jimple_newarray::from_json(const json &j)
   type = std::make_shared<jimple_type>(t);
 }
 
+#include <util/std_expr.h>
 exprt jimple_newarray::to_exprt(
   contextt &ctx,
   const std::string &class_name,

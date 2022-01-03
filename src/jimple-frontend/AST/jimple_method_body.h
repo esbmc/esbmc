@@ -96,7 +96,7 @@ private:
     {"SpecialInvoke", statement::SpecialInvoke},
     {"Return", statement::Return},
     {"Label", statement::Label},
-    {"goto", statement::Goto},
+    {"Goto", statement::Goto},
     {"SetVariable", statement::Assignment},
     {"SetVariableDeref", statement::AssignmentDeref},
     {"Assert", statement::Assertion},

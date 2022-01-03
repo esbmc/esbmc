@@ -81,7 +81,6 @@ exprt jimple_label::to_exprt(
   {
     block.operands().push_back(std::move(x->to_exprt(ctx, class_name, function_name)));
   }  
-  block.dump();
   c_label.code() = to_code(block);
 
   //skip = c_label;
@@ -208,7 +207,8 @@ exprt jimple_if::to_exprt(
 
   codet if_expr("ifthenelse");
   if_expr.copy_to_operands(
-    not_exprt(cond->to_exprt(ctx, class_name, function_name)), code_goto);
+		   not_exprt(cond->to_exprt(ctx, class_name, function_name)), code_goto);
+//    (cond->to_exprt(ctx, class_name, function_name), code_goto);
 
   return if_expr;
 }
@@ -272,7 +272,9 @@ void jimple_invoke::from_json(const json &j)
 {
   j.at("base_class").get_to(base_class);
   j.at("method").get_to(method);
-  j.at("parameters").get_to(parameters);
+  for(auto x : j.at("parameters")) {
+    parameters.push_back(std::move(jimple_expr::get_expression(x)));
+  }
 }
 
 exprt jimple_invoke::to_exprt(
@@ -285,16 +287,12 @@ exprt jimple_invoke::to_exprt(
   std::ostringstream oss;
   oss << base_class << ":" << method;
 
-  // TODO: move this from here
-  std::string id, name;
-  id = "__ESBMC_assert";
-  name = "__ESBMC_assert";
 
   auto symbol = ctx.find_symbol(oss.str());
   call.function() = symbol_expr(*symbol);
 
-  array_of_exprt arr;
-  // TODO: Create binop operation between symbol and value
+  for(auto x: parameters)
+    call.arguments().push_back(x->to_exprt(ctx,class_name,function_name));
   return call;
 }
 

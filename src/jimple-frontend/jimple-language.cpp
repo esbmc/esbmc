@@ -124,9 +124,11 @@ void jimple_languaget::setup_main(contextt &context)
   //call.location() = symbol.location;
   call.function() = symbol_expr(symbol);
 
-  //const code_typet::argumentst &arguments =
-  // to_code_type(symbol.type).arguments();
+  const code_typet::argumentst &arguments =
+   to_code_type(symbol.type).arguments();
 
+  call.arguments().resize(
+      arguments.size(), static_cast<const exprt &>(get_nil_irep()));
   // Call to main symbol is now in "call"; construct calls to thread library
   // hooks for main thread start and main thread end.
 

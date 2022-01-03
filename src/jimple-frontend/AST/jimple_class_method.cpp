@@ -26,7 +26,32 @@ exprt jimple_class_method::to_exprt(
   ctx.move_symbol_to_context(symbol);
   symbolt &added_symbol = *ctx.find_symbol(symbol_name);
 
-  //TODO: parameters
+  for(auto i = 0; i < parameters.size(); i++)
+  {
+    auto param_type = parameters[i]->to_typet();
+
+    code_typet::argumentt param;
+    
+    std::string param_id, param_name;
+    
+    std::ostringstream oss;
+    oss << "@parameter" << i;
+    auto temp = get_symbol_name(class_name, name, oss.str());
+    param_id = temp;
+    param_name = oss.str();
+    param = code_typet::argumentt();
+    param.type() = param_type;
+    param.cmt_base_name(param_name);
+    param.cmt_identifier(param_id);
+
+    auto param_symbol = create_jimple_symbolt(param_type, class_name, param_name, param_id, id);
+    param_symbol.lvalue = true;
+    param_symbol.is_parameter = true;
+    param_symbol.file_local = true;
+
+     ctx.move_symbol_to_context(param_symbol);
+    method_type.arguments().push_back(param);
+  }
 
   // Apparently, if the type has no arguments, we assume ellipsis
   if(!method_type.arguments().size())
@@ -50,8 +75,12 @@ void jimple_class_method::from_json(const json &j)
   // Method type
   j.at("type").get_to(t);
 
-  //TODO: j.at("parameters").get_to(parameters);
-  // Throws?
+  for(auto x : j.at("parameters"))
+  {
+    jimple_type t;
+    x.get_to(t);
+    parameters.push_back(std::make_shared<jimple_type>(t));
+  }
   try
   {
     j.at("throws").get_to(this->throws);

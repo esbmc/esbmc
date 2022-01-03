@@ -48,11 +48,12 @@ protected:
   typet get_builtin_type() const;
 
   // TODO: Support for matrix
-  typet get_arr_type() const
+  typet get_arr_type(short ) const
   {
     typet base = get_base_type();
     return array_typet(base, gen_one(index_type()));
   }
+
 
   private:  
   enum class BASE_TYPES {
