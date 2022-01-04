@@ -67,7 +67,7 @@ SCENARIO("AST initialization from JSON (methods)", "[jimple-frontend]")
     "body":[],
     "name": "method",
     "throws": "(No throw)",
-    "parameters": [], [jimple] fixed test-case (parameters is a list now)
+    "parameters": [],
     "content": []
 })json");
       nlohmann::json j;
@@ -110,7 +110,6 @@ SCENARIO("AST initialization from JSON (declarations)", "[jimple-frontend]")
       REQUIRE_FALSE(f.getName() == "b");
       REQUIRE(f.getT().getTName() == "int");
       REQUIRE_FALSE(f.getT().getTName() == "void");
-      REQUIRE(f.getT().getTMode() == "basic");
       REQUIRE(f.getT().getTDim() == 0);
       REQUIRE_FALSE(f.getT().getTDim() == 1);
     }
@@ -139,7 +138,8 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     {
       std::istringstream file(R"json({
     "object": "label",
-    "label": "label2"
+    "label_id": "label2",
+    "content": []
 })json");
       nlohmann::json j;
       file >> j;
@@ -177,7 +177,7 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     "object": "StaticInvoke",
     "base_class": "URI1495",
     "method": "foo",
-    "parameters": ""
+    "parameters": []
 })json");
       nlohmann::json j;
       file >> j;
@@ -189,8 +189,8 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
       REQUIRE_FALSE(f.getBaseClass() == "BaseClass");
       REQUIRE(f.getMethod() == "foo");
       REQUIRE_FALSE(f.getMethod() == "bar");
-      REQUIRE(f.getParameters() == "");
-      REQUIRE_FALSE(f.getParameters() == "1");
+      REQUIRE(f.getParameters().size() == 0);
+      REQUIRE_FALSE(f.getParameters().size() == 1);
     }
 
   GIVEN("An if statement")
@@ -198,7 +198,7 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
       std::istringstream file(R"json({
     "object": "if",
     "goto": "label2",
-    "cond": {
+    "expression": {
             "expr_type": "binop",
             "operator": "<=",
             "lhs": {
@@ -262,7 +262,6 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
       REQUIRE_FALSE(f.getAtIdentifier() == "");
       REQUIRE(f.getT().getTName() == "int");
       REQUIRE_FALSE(f.getT().getTName() == "void");
-      REQUIRE(f.getT().getTMode() == "basic");
       REQUIRE(f.getT().getTDim() == 0);
       REQUIRE_FALSE(f.getT().getTDim() == 1);
     }
