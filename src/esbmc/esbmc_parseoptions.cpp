@@ -182,12 +182,48 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
   return size;
 }
 
+static std::string format_target()
+{
+  const char *endian = nullptr;
+  switch(config.ansi_c.endianess)
+  {
+  case configt::ansi_ct::IS_LITTLE_ENDIAN:
+    endian = "little";
+    break;
+  case configt::ansi_ct::IS_BIG_ENDIAN:
+    endian = "big";
+    break;
+  case configt::ansi_ct::NO_ENDIANESS:
+    endian = "no";
+    break;
+  }
+  assert(endian);
+  const char *lib = nullptr;
+  switch(config.ansi_c.lib)
+  {
+  case configt::ansi_ct::LIB_NONE:
+    lib = "system";
+    break;
+  case configt::ansi_ct::LIB_FULL:
+    lib = "esbmc";
+    break;
+  }
+  assert(lib);
+  return fmt::format(
+    "{}-bit {}-endian {} with {} libc",
+    config.ansi_c.word_size,
+    endian,
+    config.ansi_c.target.to_string(),
+    lib);
+}
+
 void esbmc_parseoptionst::get_command_line_options(optionst &options)
 {
   if(config.set(cmdline, msg))
   {
     exit(1);
   }
+  msg.status(fmt::format("Target: {}", format_target()));
 
   options.cmdline(cmdline);
 
