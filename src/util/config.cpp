@@ -223,17 +223,30 @@ std::string configt::this_architecture()
 {
   std::string this_arch;
 
-  // following http://wiki.debian.org/ArchitectureSpecificsMemo
+  /* We're passing this down to clang via -target */
+
+  /* References:
+   * http://wiki.debian.org/ArchitectureSpecificsMemo
+   * https://sourceforge.net/p/predef/wiki/Architectures/
+   */
 
 #ifdef __alpha__
   this_arch = "alpha";
-#elif __armel__
-  this_arch = "armel";
+#elif __thumb__
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  this_arch = "thumbeb"
+#else
+  this_arch = "thumb";
+#endif
 #elif __aarch64__
-  this_arch = "arm64";
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  this_arch = "aarch64_be"
+#else
+  this_arch = "aarch64";
+#endif
 #elif __arm__
-#ifdef __ARM_PCS_VFP
-  this_arch = "armhf"; // variant of arm with hard float
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  this_arch = "armeb";
 #else
   this_arch = "arm";
 #endif
