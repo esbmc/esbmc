@@ -124,7 +124,7 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
     ansi_c.use_fixed_for_float = true;
 
   // this is the default
-  std::string arch = "x86_64", os = this_operating_system();
+  std::string arch = this_architecture(), os = this_operating_system();
   int req_target = 0;
 
   if(cmdline.isset("i386-linux"))
