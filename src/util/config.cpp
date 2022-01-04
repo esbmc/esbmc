@@ -91,11 +91,6 @@ std::string configt::triple::to_string() const
 
 bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 {
-  // defaults
-  ansi_c.use_fixed_for_float = false;
-  ansi_c.endianess = ansi_ct::NO_ENDIANESS;
-  ansi_c.lib = configt::ansi_ct::LIB_NONE;
-
   if(cmdline.isset("function"))
     main = cmdline.getval("function");
 
@@ -117,11 +112,7 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
     return true;
   }
 
-  if(cmdline.isset("floatbv"))
-    ansi_c.use_fixed_for_float = false;
-
-  if(cmdline.isset("fixedbv"))
-    ansi_c.use_fixed_for_float = true;
+  ansi_c.use_fixed_for_float = cmdline.isset("fixedbv");
 
   // this is the default
   std::string arch = this_architecture(), os = this_operating_system();
