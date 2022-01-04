@@ -29,11 +29,6 @@ public:
     return name;
   }
 
-  const std::string &getTMode() const
-  {
-    return mode;
-  }
-
   const short &getTDim() const
   {
     return dimensions;
@@ -41,14 +36,13 @@ public:
 
 protected:
   std::string name; // e.g. int[][][][][] => name = int
-  std::string mode;
   short dimensions; // e.g. int[][][][][] => dimensions = 5
 
   typet get_base_type() const;
   typet get_builtin_type() const;
 
   // TODO: Support for matrix
-  typet get_arr_type(short ) const
+  typet get_arr_type() const
   {
     typet base = get_base_type();
     return array_typet(base, gen_one(index_type()));
