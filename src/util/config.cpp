@@ -15,15 +15,19 @@ configt config;
 
 void configt::ansi_ct::set_data_model(enum data_model dm)
 {
-  uint64_t m = dm;
+  auto next = [m = static_cast<uint64_t>(dm)]() mutable {
+    unsigned r = m & 0xff;
+    m >>= 8;
+    return r;
+  };
 
-  char_width = m & 0xff, m >>= 8;
-  short_int_width = m & 0xff, m >>= 8;
-  int_width = m & 0xff, m >>= 8;
-  long_int_width = m & 0xff, m >>= 8;
-  pointer_width = m & 0xff, m >>= 8;
-  word_size = m & 0xff, m >>= 8;
-  long_double_width = m & 0xff, m >>= 8;
+  char_width = next();
+  short_int_width = next();
+  int_width = next();
+  long_int_width = next();
+  pointer_width = next();
+  word_size = next();
+  long_double_width = next();
 
   long_long_int_width = 64;
   bool_width = char_width;
