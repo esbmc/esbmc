@@ -21,7 +21,7 @@ While our main website is [esbmc.org](http://esbmc.org)
 
 ### Publications
 
-* Felipe R. Monteiro, Mikhail R. Gadelha, Lucas C. Cordeiro.[Model checking C++ programs.](https://ssvlab.github.io/lucasccordeiro/papers/stvr2021.pdf) In Softw. Test. Verification Reliab. 32(1), 2022. [DOI](https://doi.org/10.1002/stvr.1793)
+* Felipe R. Monteiro, Mikhail R. Gadelha, Lucas C. Cordeiro.[Model checking C++ programs.](https://onlinelibrary.wiley.com/doi/epdf/10.1002/stvr.1793) In Softw. Test. Verification Reliab. 32(1), 2022. [DOI](https://doi.org/10.1002/stvr.1793) **Open access**.
 
 * Mikhail Y. R. Gadelha, Felipe R. Monteiro, Jeremy Morse, Lucas C. Cordeiro, Bernd Fischer, Denis A. Nicole. [ESBMC 5.0: an industrial-strength C model checker.](https://ssvlab.github.io/lucasccordeiro/papers/ase2018.pdf) In ASE, pp. 888-891, 2018. [DOI](https://doi.org/10.1145/3238147.3240481) 
 
