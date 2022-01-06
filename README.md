@@ -19,6 +19,10 @@ The cannonical public location of ESBMCs source is on github:
 
 While our main website is esbmc.org
 
+### Publications
+
+* [Mikhail Y. R. Gadelha, Felipe R. Monteiro, Jeremy Morse, Lucas C. Cordeiro, Bernd Fischer, Denis A. Nicole. 2018. ESBMC 5.0: an industrial-strength C model checker. ASE 2018: 888-891](https://ssvlab.github.io/lucasccordeiro/papers/ase2018.pdf). 
+
 ### Features
 
 ESBMC aims to support all of C99/C11, and detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of problems that can be detected include:
