@@ -71,7 +71,6 @@ exprt jimple_label::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
-  exprt skip = code_skipt();
   // TODO: DRY (clang-c-converter)
   code_labelt c_label;
   c_label.set_label(label);
@@ -83,7 +82,6 @@ exprt jimple_label::to_exprt(
   }  
   c_label.code() = to_code(block);
 
-  //skip = c_label;
   return c_label;
 }
 
@@ -149,8 +147,9 @@ exprt jimple_assignment::to_exprt(
   oss << class_name << ":" << function_name << "@" << variable;
 
   symbolt &added_symbol = *ctx.find_symbol(oss.str());
+  auto from_expr = expr->to_exprt(ctx, class_name, function_name);
   code_assignt assign(
-    symbol_expr(added_symbol), expr->to_exprt(ctx, class_name, function_name));
+    symbol_expr(added_symbol), from_expr);
   return assign;
 }
 
@@ -176,6 +175,7 @@ exprt jimple_assignment_deref::to_exprt(
   jimple_symbol s(variable);
 
   jimple_deref d(pos, std::make_shared<jimple_symbol>(s));
+
   code_assignt assign(
     d.to_exprt(ctx,class_name, function_name), expr->to_exprt(ctx, class_name, function_name));
   return assign;
@@ -207,7 +207,7 @@ exprt jimple_if::to_exprt(
 
   codet if_expr("ifthenelse");
   if_expr.copy_to_operands(
-		   not_exprt(cond->to_exprt(ctx, class_name, function_name)), code_goto);
+		   cond->to_exprt(ctx, class_name, function_name), code_goto);
 //    (cond->to_exprt(ctx, class_name, function_name), code_goto);
 
   return if_expr;
