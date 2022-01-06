@@ -45,7 +45,7 @@ protected:
   typet get_arr_type() const
   {
     typet base = get_base_type();
-    return array_typet(base, gen_one(index_type()));
+    return pointer_typet(base);
   }
 
 
