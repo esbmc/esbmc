@@ -49,7 +49,7 @@ ESBMC aims to support all of C99/C11, and detects errors in software by simulati
  * Divide by zero
  * Memory leaks
 
-Concurrent software (using the pthread api) is verified by explicit exploration of interleavings, producing one symbolic execution per interleaving. By default only normal errors will be checked for; one can also specify options to check concurrent programs for:
+Concurrent software (using the pthread api) is verified by explicit exploration of interleavings, producing one symbolic execution per interleaving. By default, pointer-safety, array-out-of-bounds, division-by-zero, and user-specified assertions will be checked for; one can also specify options to check concurrent programs for:
  * Deadlock (only on pthread mutexes and convars)
  * Data races (i.e. competing writes)
  * Atomicity violations at visible assignments
