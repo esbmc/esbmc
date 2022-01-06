@@ -10,6 +10,8 @@ bool jimple_languaget::final(contextt &context, const messaget &msg)
 {
   msg.status("Adding cprover library");
   add_cprover_library(context, msg);
+
+  add_intrinsics(context);
   msg.status("Adding __ESBMC_main");
   setup_main(context);
   return false;
@@ -70,6 +72,40 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
+static void add_global_static_variable(contextt &ctx, const typet t, std::string name)
+{
+  // TODO: Maybe they should be part of Jimple context?
+  std::string id = fmt::format("c:@{}", name);
+  symbolt symbol;
+    symbol.mode = "C";
+    symbol.type = std::move(t);
+    symbol.name = name;
+    symbol.id = id;
+
+
+  symbol.lvalue = true;
+  symbol.static_lifetime = true;
+  symbol.is_extern = false;
+  symbol.file_local = false;
+  symbol.value = gen_zero(t, true);
+  symbol.value.zero_initializer(true);
+
+  symbolt &added_symbol = *ctx.move_symbol_to_context(symbol);
+  code_declt decl(symbol_expr(added_symbol));
+}
+
+void jimple_languaget::add_intrinsics(contextt &context) {
+  auto alloc_type = array_typet(bool_type(), exprt("infinity"));
+  add_global_static_variable(context, alloc_type, "__ESBMC_alloc");
+  add_global_static_variable(context, alloc_type, "__ESBMC_deallocated");
+  add_global_static_variable(context, alloc_type, "__ESBMC_is_dynamic");
+
+  auto alloc_size_type = array_typet(uint_type(), exprt("infinity"));
+  add_global_static_variable(context, alloc_size_type, "__ESBMC_alloc_size");
+  add_global_static_variable(context, int_type(), "__ESBMC_rounding_mode");
+}
+
+
 void jimple_languaget::setup_main(contextt &context)
 {
   irep_idt main_symbol;
@@ -118,6 +154,18 @@ void jimple_languaget::setup_main(contextt &context)
   init_code.make_block();
   //init_code.end_location(symbol.value.end_location());
 
+  /** ADD INTRISICS
+   * // 28 file esbmc_intrinsics.h line 16
+        __ESBMC_alloc=ARRAY_OF(0);
+        // 29 file esbmc_intrinsics.h line 19
+        __ESBMC_deallocated=ARRAY_OF(0);
+        // 30 file esbmc_intrinsics.h line 22
+        __ESBMC_is_dynamic=ARRAY_OF(0);
+        // 31 file esbmc_intrinsics.h line 25
+        __ESBMC_alloc_size=ARRAY_OF(0);
+        // 32 file esbmc_intrinsics.h line 30
+        __ESBMC_rounding_mode=0;
+  */
   // build call to function
 
   code_function_callt call;
