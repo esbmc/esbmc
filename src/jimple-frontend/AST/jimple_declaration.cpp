@@ -21,8 +21,6 @@ exprt jimple_declaration::to_exprt(
   symbol.static_lifetime = false;
   symbol.is_extern = false;
   symbol.file_local = true;
-  symbol.value = gen_zero(t, true);
-  symbol.value.zero_initializer(true);
 
   symbolt &added_symbol = *ctx.move_symbol_to_context(symbol);
   code_declt decl(symbol_expr(added_symbol));
