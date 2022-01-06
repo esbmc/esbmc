@@ -21,9 +21,11 @@ While our main website is esbmc.org
 
 ### Publications
 
-* [Mikhail Y. R. Gadelha, Felipe R. Monteiro, Jeremy Morse, Lucas C. Cordeiro, Bernd Fischer, Denis A. Nicole. 2018. ESBMC 5.0: an industrial-strength C model checker. ASE 2018: 888-891](https://ssvlab.github.io/lucasccordeiro/papers/ase2018.pdf). 
+* Mikhail Y. R. Gadelha, Felipe R. Monteiro, Jeremy Morse, Lucas C. Cordeiro, Bernd Fischer, Denis A. Nicole. [ESBMC 5.0: an industrial-strength C model checker.](https://ssvlab.github.io/lucasccordeiro/papers/ase2018.pdf) In ASE, pp. 888-891, 2018. [DOI](https://doi.org/10.1145/3238147.3240481) 
 
-* [Jeremy Morse, Lucas C. Cordeiro, Denis A. Nicole, Bernd Fischer: Model checking LTL properties over ANSI-C programs with bounded traces. Softw. Syst. Model. 14(1): 65-81 (2015)] (https://ssvlab.github.io/lucasccordeiro/papers/sosym2013.pdf)
+* Jeremy Morse, Lucas C. Cordeiro, Denis A. Nicole, Bernd Fischer. [Model checking LTL properties over ANSI-C programs with bounded traces.](https://ssvlab.github.io/lucasccordeiro/papers/sosym2013.pdf) In Softw. Syst. Model. 14(1), pp. 65-81, 2015. [DOI](https://doi.org/10.1007/s10270-013-0366-0)
+
+* Mikhail Y. R. Gadelha, Hussama Ibrahim Ismail, Lucas C. Cordeiro. [Handling loops in bounded model checking of C programs via k-induction.](https://ssvlab.github.io/lucasccordeiro/papers/sttt2017.pdf) In Int. J. Softw. Tools Technol. Transf. 19(1), pp. 97-114, 2017. [DOI](https://doi.org/10.1007/s10009-015-0407-9)
 
 ### Features
 
