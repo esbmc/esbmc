@@ -17,7 +17,7 @@ The cannonical public location of ESBMCs source is on github:
 
     https://github.com/esbmc/esbmc
 
-While our main website is esbmc.org
+While our main website is [esbmc.org](http://esbmc.org)
 
 ### Publications
 
