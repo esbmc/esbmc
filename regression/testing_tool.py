@@ -10,6 +10,7 @@ import argparse
 import re
 import xml.etree.ElementTree as ET
 import time
+import shlex
 #####################
 # Testing Tool
 #####################
@@ -42,13 +43,14 @@ class BaseTest:
         """Reads test description and initialize this object"""
         raise NotImplementedError
 
-    def generate_run_argument_list(self, executable: str):
+    def generate_run_argument_list(self, *tool):
         """Generates run command list to be used in Popen"""
-        result = [executable]
-        result.append(self.test_file)
-        for x in self.test_args.split(" "):
+        result = list(tool)
+        result.append(os.path.join(self.test_dir, self.test_file))
+        for x in shlex.split(self.test_args):
             if x != "":
-                result.append(x)
+                p = os.path.join(self.test_dir, x)
+                result.append(p if os.path.exists(p) else x)
         return result
 
     def mark_test_as_knownbug(self, issue: str):
@@ -143,8 +145,8 @@ class XMLTestCase(BaseTest):
                 self.test_mode) + " is not supported"
         assert os.path.exists(os.path.join(self.test_dir, self.test_file))
 
-    def generate_run_argument_list(self, executable: str):
-        result = super().generate_run_argument_list(executable)
+    def generate_run_argument_list(self, *tool):
+        result = super().generate_run_argument_list(*tool)
         # Some sins were committed into test.desc hack them here
         try:
             index = result.index("~/libraries/")
@@ -193,13 +195,13 @@ class TestParser:
 
 class Executor:
     def __init__(self, tool="esbmc"):
-        self.tool = tool
+        self.tool = shlex.split(tool)
         self.timeout = RegressionBase.TIMEOUT
 
     def run(self, test_case: BaseTest):
         """Execute the test case with `executable`"""
-        process = Popen(test_case.generate_run_argument_list(self.tool), stdout=PIPE, stderr=PIPE,
-                        cwd=test_case.test_dir)
+        process = Popen(test_case.generate_run_argument_list(*self.tool),
+                        stdout=PIPE, stderr=PIPE)
         try:
             stdout, stderr = process.communicate(timeout=self.timeout)
         except:
@@ -253,7 +255,7 @@ def _add_test(test_case, executor):
             str(test_case.test_dir) + "\nEXPECTED TO FIND: " + \
             str(test_case.test_regex) + "\n\nPROGRAM OUTPUT\n"
         error_message = output_to_validate + "\n\nARGUMENTS: " + \
-            str(test_case.generate_run_argument_list(executor.tool))
+            str(test_case.generate_run_argument_list(*executor.tool))
 
         matches_regex = True
         for regex in test_case.test_regex:
@@ -299,7 +301,7 @@ def gen_one_test(base_dir: str, test: str, executor_path: str, modes):
 
 def _arg_parsing():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tool", required=False, help="tool executable path")
+    parser.add_argument("--tool", required=False, help="tool executable path + optional args")
     parser.add_argument("--timeout", required=False, help="timeout value")
     parser.add_argument('--modes', nargs='+', help="a list of modes that are supported")
     parser.add_argument("--regression", required=False,
@@ -318,10 +320,13 @@ def _arg_parsing():
     XMLTestCase.CPP_INCLUDE_DIR = main_args.library
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
+    regression_path = os.path.join(os.path.dirname(os.path.relpath(__file__)),
+                                   main_args.regression)
+
     if main_args.file:
-        gen_one_test(main_args.regression, main_args.file, main_args.tool, main_args.modes)
+        gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
     else:
-        create_tests(main_args.tool, main_args.regression, main_args.mode)
+        create_tests(main_args.tool, regression_path, main_args.mode)
 
 def main():
     _arg_parsing()

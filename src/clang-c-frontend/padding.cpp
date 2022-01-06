@@ -177,9 +177,6 @@ void add_padding(struct_typet &type, const namespacet &ns)
     const typet it_type = it->type();
     BigInt a = 1;
 
-    const bool packed =
-      it_type.get_bool("packed") || ns.follow(it_type).get_bool("packed");
-
     if(it_type.get_bool("#bitfield"))
     {
       a = alignment(it_type, ns);
@@ -207,10 +204,7 @@ void add_padding(struct_typet &type, const namespacet &ns)
       a = alignment(it_type, ns);
 
     assert(bit_field_bits == 0);
-
-    // check minimum alignment
-    if(a < config.ansi_c.alignment && !packed)
-      a = config.ansi_c.alignment;
+    assert(a > 0);
 
     if(max_alignment < a)
       max_alignment = a;

@@ -1243,8 +1243,9 @@ static expr2tc do_bit_munge_operation(
   if(!is_constant_int2t(side_1) || !is_constant_int2t(side_2))
     return expr2tc();
 
-  // So - we can't make BigInt by itself do an and operation. But we can dump
-  // it to a binary representation, and then and that.
+  assert(type->get_width() <= 64);
+  // So - we can't make BigInt by itself do the operation. But we can map it
+  // to the corresponding operation on our native types.
   const constant_int2t &int1 = to_constant_int2t(side_1);
   const constant_int2t &int2 = to_constant_int2t(side_2);
 
@@ -1252,48 +1253,18 @@ static expr2tc do_bit_munge_operation(
   int64_t val1 = int1.value.to_int64();
   int64_t val2 = int2.value.to_int64();
 
-  if(int1.value.is_negative())
+  uint64_t r = opfunc(val1, val2);
+
+  if(type->get_width() < 64)
   {
-    if(val1 & 0x8000000000000000ULL)
-    {
-      // Too large to fit, negative, in an int64_t.
-      return expr2tc();
-    }
-
-    val1 = -val1;
+    // truncate the result to the type's width
+    uint64_t trunc_mask = ~(uint64_t)0 << type->get_width();
+    r &= ~trunc_mask;
+    // if the type is signed and r's sign-bit is set, sign-extend it
+    if(is_signedbv_type(type) && r >> (type->get_width() - 1))
+      r |= trunc_mask;
   }
-
-  if(int2.value.is_negative())
-  {
-    if(val2 & 0x8000000000000000ULL)
-    {
-      // Too large to fit, negative, in an int64_t.
-      return expr2tc();
-    }
-
-    val2 = -val2;
-  }
-
-  val1 = opfunc(val1, val2);
-
-  // This has potentially become negative. Check the top bit.
-  __uint128_t upper_bit = 1;
-  upper_bit <<= (type->get_width() - 1);
-  if(val1 & upper_bit && is_signedbv_type(type))
-  {
-    // Sign extend.
-    val1 |= ULLONG_MAX << (type->get_width());
-  }
-
-  // And now, restore, paying attention to whether this is supposed to be
-  // signed or not.
-  constant_int2t *theint;
-  if(is_signedbv_type(type))
-    theint = new constant_int2t(type, BigInt(val1));
-  else
-    theint = new constant_int2t(type, BigInt((uint64_t)val1));
-
-  return expr2tc(theint);
+  return constant_int2tc(type, BigInt((int64_t)r));
 }
 
 expr2tc bitand2t::do_simplify() const
@@ -1362,7 +1333,7 @@ expr2tc bitnot2t::do_simplify() const
 expr2tc shl2t::do_simplify() const
 {
   std::function<int64_t(int64_t, int64_t)> op = [](int64_t op1, int64_t op2) {
-    return (op1 << op2);
+    return ((uint64_t)op1 << op2);
   };
 
   return do_bit_munge_operation<shl2t>(op, type, side_1, side_2);

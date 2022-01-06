@@ -6,60 +6,45 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-extern "C"
-{
-#ifdef _WIN32
-#include <windows.h>
-#include <io.h>
-#undef small // MinGW header workaround
-#else
-#include <unistd.h>
-#endif
-}
-
 #include <c2goto/cprover_library.h>
 #include <cstdlib>
-#include <fstream>
 #include <goto-programs/read_goto_binary.h>
 #include <util/c_link.h>
 #include <util/config.h>
 
-#ifndef NO_CPROVER_LIBRARY
-
 extern "C"
 {
-  extern uint8_t clib32_buf[1];
-  extern uint8_t clib64_buf[1];
-  extern unsigned int clib32_buf_size;
-  extern unsigned int clib64_buf_size;
+  extern const uint8_t clib32_buf[];
+  extern const uint8_t clib64_buf[];
+  extern const unsigned int clib32_buf_size;
+  extern const unsigned int clib64_buf_size;
 
-  extern uint8_t clib32_fp_buf[1];
-  extern uint8_t clib64_fp_buf[1];
-  extern unsigned int clib32_fp_buf_size;
-  extern unsigned int clib64_fp_buf_size;
-
-  uint8_t *clib_ptrs[4][4] = {
-    {&clib32_buf[0], ((&clib32_buf[0]) + clib32_buf_size)},
-    {&clib64_buf[0], ((&clib64_buf[0]) + clib64_buf_size)},
-    {&clib32_fp_buf[0], ((&clib32_fp_buf[0]) + clib32_fp_buf_size)},
-    {&clib64_fp_buf[0], ((&clib64_fp_buf[0]) + clib64_fp_buf_size)},
-  };
+  extern const uint8_t clib32_fp_buf[];
+  extern const uint8_t clib64_fp_buf[];
+  extern const unsigned int clib32_fp_buf_size;
+  extern const unsigned int clib64_fp_buf_size;
 }
 
-#undef p
-#endif
-
-bool is_in_list(std::list<irep_idt> &list, irep_idt item)
+namespace
 {
-  for(std::list<irep_idt>::const_iterator it = list.begin(); it != list.end();
-      it++)
-    if(*it == item)
-      return true;
+/* [floatbv ? 1 : 0][wordsz == 64 ? 1 : 0] */
+static const struct buffer
+{
+  const uint8_t *start;
+  size_t size;
+} clibs[2][2] = {
+  {
+    {&clib32_buf[0], clib32_buf_size},
+    {&clib64_buf[0], clib64_buf_size},
+  },
+  {
+    {&clib32_fp_buf[0], clib32_fp_buf_size},
+    {&clib64_fp_buf[0], clib64_fp_buf_size},
+  },
+};
+} // namespace
 
-  return false;
-}
-
-void generate_symbol_deps(
+static void generate_symbol_deps(
   irep_idt name,
   irept irep,
   std::multimap<irep_idt, irep_idt> &deps)
@@ -112,7 +97,7 @@ void generate_symbol_deps(
   }
 }
 
-void ingest_symbol(
+static void ingest_symbol(
   irep_idt name,
   std::multimap<irep_idt, irep_idt> &deps,
   std::list<irep_idt> &to_include)
@@ -133,13 +118,6 @@ void ingest_symbol(
   deps.erase(name);
 }
 
-#ifdef NO_CPROVER_LIBRARY
-void add_cprover_library(contextt &, const messaget &)
-{
-}
-
-#else
-
 void add_cprover_library(contextt &context, const messaget &message_handler)
 {
   if(config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
@@ -149,79 +127,36 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
   goto_functionst goto_functions;
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
-  char symname_buffer[288];
-  FILE *f;
-  uint8_t **this_clib_ptrs;
-  uint64_t size;
-  int fd;
+  const buffer *clib;
 
-  if(config.ansi_c.word_size == 32)
+  switch(config.ansi_c.word_size)
   {
-    if(config.ansi_c.use_fixed_for_float)
-    {
-      this_clib_ptrs = &clib_ptrs[0][0];
-    }
-    else
-    {
-      this_clib_ptrs = &clib_ptrs[2][0];
-    }
-  }
-  else if(config.ansi_c.word_size == 64)
-  {
-    if(config.ansi_c.use_fixed_for_float)
-    {
-      this_clib_ptrs = &clib_ptrs[1][0];
-    }
-    else
-    {
-      this_clib_ptrs = &clib_ptrs[3][0];
-    }
-  }
-  else
-  {
-    if(config.ansi_c.word_size == 16)
-    {
-      message_handler.warning(
-        "Warning: this version of ESBMC does not have a C library "
-        "for 16 bit machines");
-      return;
-    }
+  case 16:
+    message_handler.warning(
+      "Warning: this version of ESBMC does not have a C library "
+      "for 16 bit machines");
+    return;
+  case 32:
+  case 64:
+    break;
+  default:
     message_handler.error(
       fmt::format("No c library for bitwidth {}", config.ansi_c.int_width));
     abort();
   }
 
-  size = this_clib_ptrs[1] - this_clib_ptrs[0];
-  if(size == 0)
+  clib =
+    &clibs[!config.ansi_c.use_fixed_for_float][config.ansi_c.word_size == 64];
+
+  if(clib->size == 0)
   {
     message_handler.error("error: Zero-lengthed internal C library");
     abort();
   }
 
-#ifndef _WIN32
-  sprintf(symname_buffer, "/tmp/ESBMC_XXXXXX");
-  fd = mkstemp(symname_buffer);
-  close(fd);
-#else
-  char tmpdir[256];
-  GetTempPath(sizeof(tmpdir), tmpdir);
-  GetTempFileName(tmpdir, "bmc", 0, symname_buffer);
-#endif
-  f = fopen(symname_buffer, "wb");
-  if(fwrite(this_clib_ptrs[0], size, 1, f) != 1)
-  {
-    message_handler.error("Couldn't manipulate internal C library");
+  if(read_goto_binary_array(
+       clib->start, clib->size, new_ctx, goto_functions, message_handler))
     abort();
-  }
-  fclose(f);
-  std::ifstream infile(symname_buffer, std::ios::in | std::ios::binary);
-  read_goto_binary(infile, new_ctx, goto_functions, message_handler);
-  infile.close();
-#ifndef _WIN32
-  unlink(symname_buffer);
-#else
-  DeleteFile(symname_buffer);
-#endif
 
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
     generate_symbol_deps(s.id, s.value, symbol_deps);
@@ -276,4 +211,3 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
     abort();
   }
 }
-#endif

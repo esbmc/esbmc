@@ -15,6 +15,8 @@ Date: May 2007
 #include <util/context.h>
 #include <util/message/message.h>
 
+/** Parses `in`. If failing to do so, a message is printed to `msg_hndlr`.
+ *  @return true on error, false on success */
 bool read_bin_goto_object(
   std::istream &in,
   const std::string &filename,

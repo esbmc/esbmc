@@ -7,86 +7,94 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <algorithm>
+#include <regex>
 
 #include <util/config.h>
 
 configt config;
 
-void configt::ansi_ct::set_16()
+void configt::ansi_ct::set_data_model(enum data_model dm)
 {
-  bool_width = 1 * 8;
-  int_width = 2 * 8;
-  long_int_width = 4 * 8;
-  char_width = 1 * 8;
-  short_int_width = 2 * 8;
-  long_long_int_width = 8 * 8;
-  pointer_width = 4 * 8;
-  pointer_diff_width = 4 * 8;
-  single_width = 4 * 8;
-  double_width = 8 * 8;
-  long_double_width = 8 * 8;
+  auto next = [m = static_cast<uint64_t>(dm)]() mutable {
+    unsigned r = m & 0xff;
+    m >>= 8;
+    return r;
+  };
+
+  char_width = next();
+  short_int_width = next();
+  int_width = next();
+  long_int_width = next();
+  pointer_width = next();
+  word_size = next();
+  long_double_width = next();
+
+  long_long_int_width = 64;
+  bool_width = char_width;
+  pointer_diff_width = pointer_width;
+  single_width = 32;
+  double_width = 64;
   char_is_unsigned = false;
-  word_size = 16;
-  wchar_t_width = 2 * 8;
-  alignment = 1;
 }
 
-void configt::ansi_ct::set_32()
+namespace
 {
-  bool_width = 1 * 8;
-  int_width = 4 * 8;
-  long_int_width = 4 * 8;
-  char_width = 1 * 8;
-  short_int_width = 2 * 8;
-  long_long_int_width = 8 * 8;
-  pointer_width = 4 * 8;
-  pointer_diff_width = 4 * 8;
-  single_width = 4 * 8;
-  double_width = 8 * 8;
-  long_double_width = 12 * 8;
-  char_is_unsigned = false;
-  word_size = 32;
-  wchar_t_width = 4 * 8;
-  alignment = 1;
+struct eregex : std::regex
+{
+  eregex(std::string pat)
+    : std::regex(std::move(pat), std::regex_constants::extended)
+  {
+  }
+};
+} // namespace
+
+static const eregex WINDOWS_ABI("mingw.*|win[0-9]{2}|windows|msys");
+static const eregex FREEBSD("k?freebsd.*");
+static const eregex MACOS("macos|osx.*");
+static const eregex X86("i[3456]86|x86_64|x64");
+static const eregex MIPS("mips(64|isa64|isa64sb1)?(r[0-9]+)?(el|le)?.*");
+static const eregex POWERPC("(ppc|powerpc)(64)?(le)?");
+
+static configt::ansi_ct::endianesst
+arch_endianness(const std::string &arch, const messaget &msg)
+{
+  if(std::regex_match(arch, X86) || arch == "riscv32" || arch == "riscv64")
+    return configt::ansi_ct::IS_LITTLE_ENDIAN;
+  std::smatch r;
+  if(std::regex_match(arch, r, MIPS))
+    return r.length(3) > 0 ? configt::ansi_ct::IS_LITTLE_ENDIAN
+                           : configt::ansi_ct::IS_BIG_ENDIAN;
+  if(std::regex_match(arch, r, POWERPC))
+    return r.length(3) > 0 ? configt::ansi_ct::IS_LITTLE_ENDIAN
+                           : configt::ansi_ct::IS_BIG_ENDIAN;
+  if(arch == "none")
+    return configt::ansi_ct::NO_ENDIANESS;
+  msg.error("unknown arch '" + arch + "', cannot determine endianness\n");
+  abort();
 }
 
-void configt::ansi_ct::set_64()
+bool configt::triple::is_windows_abi() const
 {
-  bool_width = 1 * 8;
-  int_width = 4 * 8;
-  long_int_width = 8 * 8;
-  char_width = 1 * 8;
-  short_int_width = 2 * 8;
-  long_long_int_width = 8 * 8;
-  pointer_width = 8 * 8;
-  pointer_diff_width = 8 * 8;
-  single_width = 4 * 8;
-  double_width = 8 * 8;
-  long_double_width = 16 * 8;
-  char_is_unsigned = false;
-  word_size = 64;
-  wchar_t_width = 4 * 8;
-  alignment = 1;
+  return std::regex_match(os, WINDOWS_ABI);
+}
+
+bool configt::triple::is_freebsd() const
+{
+  return std::regex_match(os, FREEBSD);
+}
+
+bool configt::triple::is_macos() const
+{
+  return std::regex_match(os, MACOS);
+}
+
+std::string configt::triple::to_string() const
+{
+  return arch + "-" + vendor + "-" + os + (flavor.empty() ? "" : "-" + flavor);
 }
 
 bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 {
-  // defaults
-  ansi_c.set_64();
-  ansi_c.use_fixed_for_float = false;
-  ansi_c.endianess = ansi_ct::NO_ENDIANESS;
-  ansi_c.os = ansi_ct::NO_OS;
-  ansi_c.lib = configt::ansi_ct::LIB_NONE;
-
-  if(cmdline.isset("16"))
-    ansi_c.set_16();
-
-  if(cmdline.isset("32"))
-    ansi_c.set_32();
-
-  if(cmdline.isset("64"))
-    ansi_c.set_64();
-
   if(cmdline.isset("function"))
     main = cmdline.getval("function");
 
@@ -108,80 +116,94 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
     return true;
   }
 
-  if(cmdline.isset("floatbv"))
-    ansi_c.use_fixed_for_float = false;
+  ansi_c.use_fixed_for_float = cmdline.isset("fixedbv");
 
-  if(cmdline.isset("fixedbv"))
-    ansi_c.use_fixed_for_float = true;
+  // this is the default
+  std::string arch = this_architecture(), os = this_operating_system();
+  int req_target = 0;
 
   if(cmdline.isset("i386-linux"))
   {
-    ansi_c.os = configt::ansi_ct::OS_I386_LINUX;
-    ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
-    ansi_c.lib = configt::ansi_ct::LIB_FULL;
+    arch = "i386";
+    os = "linux";
+    req_target++;
   }
 
   if(cmdline.isset("i386-win32"))
   {
-    ansi_c.os = configt::ansi_ct::OS_WIN32;
-    ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
-    ansi_c.lib = configt::ansi_ct::LIB_FULL;
+    arch = "i386";
+    os = "win32";
+    req_target++;
   }
 
   if(cmdline.isset("i386-macos"))
   {
-    ansi_c.os = configt::ansi_ct::OS_I386_MACOS;
-    ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
-    ansi_c.lib = configt::ansi_ct::LIB_FULL;
+    arch = "i386";
+    os = "macos";
+    req_target++;
   }
 
   if(cmdline.isset("ppc-macos"))
   {
-    ansi_c.os = configt::ansi_ct::OS_PPC_MACOS;
-    ansi_c.endianess = configt::ansi_ct::IS_BIG_ENDIAN;
-    ansi_c.lib = configt::ansi_ct::LIB_FULL;
+    arch = "ppc";
+    os = "macos";
+    req_target++;
   }
 
   if(cmdline.isset("no-arch"))
   {
-    ansi_c.os = configt::ansi_ct::NO_OS;
-    ansi_c.endianess = configt::ansi_ct::NO_ENDIANESS;
-    ansi_c.lib = configt::ansi_ct::LIB_NONE;
+    arch = "none";
+    os = "elf";
+    req_target++;
   }
-  else if(ansi_c.os == configt::ansi_ct::NO_OS)
+
+  if(req_target > 1)
   {
-// this is the default
-#ifdef _WIN32
-    ansi_c.os = configt::ansi_ct::OS_WIN32;
-    ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
-    ansi_c.lib = configt::ansi_ct::LIB_FULL;
-#else
-#ifdef __APPLE__
-    ansi_c.os = configt::ansi_ct::OS_I386_MACOS;
-    ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
-    ansi_c.lib = configt::ansi_ct::LIB_FULL;
-#else
-    ansi_c.os = configt::ansi_ct::OS_I386_LINUX;
-    ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
-    ansi_c.lib = configt::ansi_ct::LIB_FULL;
-#endif
-#endif
+    msg.error(
+      "only at most one target can be specified via "
+      "--i386-{win32,macos,linux}, --ppc-macos and --no-arch\n");
+    return true;
   }
 
-  if(cmdline.isset("no-library"))
-    ansi_c.lib = configt::ansi_ct::LIB_NONE;
+  ansi_c.target.arch = arch;
+  ansi_c.target.os = os;
 
-  if(cmdline.isset("little-endian"))
-    ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
+  bool have_16 = cmdline.isset("16");
+  bool have_32 = cmdline.isset("32");
+  bool have_64 = cmdline.isset("64");
 
-  if(cmdline.isset("big-endian"))
-    ansi_c.endianess = configt::ansi_ct::IS_BIG_ENDIAN;
+  if(have_16 + have_32 + have_64 > 1)
+  {
+    msg.error("Only one of --16, --32 and --64 is supported");
+    return true;
+  }
+
+  enum data_model dm;
+  if(have_16)
+    dm = LP32;
+  else if(have_32)
+    dm = ILP32;
+  else
+    dm = ansi_c.target.is_windows_abi() ? LLP64 : LP64;
+  ansi_c.set_data_model(dm);
 
   if(cmdline.isset("little-endian") && cmdline.isset("big-endian"))
   {
     msg.error("Can't set both little and big endian modes");
     return true;
   }
+
+  ansi_c.endianess = cmdline.isset("little-endian") ? ansi_ct::IS_LITTLE_ENDIAN
+                     : cmdline.isset("big-endian")
+                       ? ansi_ct::IS_BIG_ENDIAN
+                       : arch_endianness(ansi_c.target.arch, msg);
+
+  ansi_c.lib = ansi_c.target.arch == "none" || cmdline.isset("no-library")
+                 ? ansi_ct::LIB_NONE
+                 : ansi_ct::LIB_FULL;
+
+  /* wchar_t is ABI-dependent: Windows: 16, other: 32 */
+  ansi_c.wchar_t_width = ansi_c.target.is_windows_abi() ? 16 : 32;
 
   ansi_c.char_is_unsigned =
     (std::find(
@@ -196,17 +218,30 @@ std::string configt::this_architecture()
 {
   std::string this_arch;
 
-  // following http://wiki.debian.org/ArchitectureSpecificsMemo
+  /* We're passing this down to clang via -target */
+
+  /* References:
+   * http://wiki.debian.org/ArchitectureSpecificsMemo
+   * https://sourceforge.net/p/predef/wiki/Architectures/
+   */
 
 #ifdef __alpha__
   this_arch = "alpha";
-#elif __armel__
-  this_arch = "armel";
+#elif __thumb__
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  this_arch = "thumbeb"
+#else
+  this_arch = "thumb";
+#endif
 #elif __aarch64__
-  this_arch = "arm64";
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  this_arch = "aarch64_be"
+#else
+  this_arch = "aarch64";
+#endif
 #elif __arm__
-#ifdef __ARM_PCS_VFP
-  this_arch = "armhf"; // variant of arm with hard float
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  this_arch = "armeb";
 #else
   this_arch = "arm";
 #endif
@@ -288,4 +323,9 @@ std::string configt::this_operating_system()
 #endif
 
   return this_os;
+}
+
+configt::triple configt::host()
+{
+  return {this_architecture(), "unknown", this_operating_system(), ""};
 }
