@@ -33,6 +33,8 @@ public:
     return "jimple_lang";
   }
 
+  void add_intrinsics(contextt &context);
+
   void setup_main(contextt &context);
 
   void show_parse(std::ostream &out) override;
