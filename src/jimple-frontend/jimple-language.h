@@ -52,6 +52,5 @@ public:
     return new jimple_languaget(msg);
   }
 
-  // TODO: this should be a list
   jimple_file root;
 };
