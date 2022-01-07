@@ -76,7 +76,7 @@ jobs:
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_YICES=On -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DBitwuzla_DIR=$PWD/../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_OLD_FRONTEND=On
+      run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_YICES=On -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DBitwuzla_DIR=$PWD/../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_OLD_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On
     - name: Build ESBMC
       run: cd build && cmake --build . && ninja install
     - uses: actions/upload-artifact@v1
@@ -118,7 +118,7 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_YICES=ON -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DBitwuzla_DIR=$PWD/../bitwuzla-release -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On
+        run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_YICES=ON -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DBitwuzla_DIR=$PWD/../bitwuzla-release -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On
       - name: Build ESBMC
         run: cd build && cmake --build . && cmake --install .
       - uses: actions/upload-artifact@v1
@@ -174,7 +174,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc143-mt-x64-1_78.dll;C:/deps/boost_program_options-vc143-mt-x64-1_78.dll" -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On
+        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc143-mt-x64-1_78.dll;C:/deps/boost_program_options-vc143-mt-x64-1_78.dll" -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On
     - name: Build ESBMC
       run: |
         cd build
