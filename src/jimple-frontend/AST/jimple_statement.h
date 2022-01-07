@@ -103,7 +103,6 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-
   const std::string &getLabel() const
   {
     return label;

@@ -78,8 +78,9 @@ exprt jimple_label::to_exprt(
   code_blockt block;
   for(auto x : members->members)
   {
-    block.operands().push_back(std::move(x->to_exprt(ctx, class_name, function_name)));
-  }  
+    block.operands().push_back(
+      std::move(x->to_exprt(ctx, class_name, function_name)));
+  }
   c_label.code() = to_code(block);
 
   return c_label;
@@ -148,15 +149,15 @@ exprt jimple_assignment::to_exprt(
 
   symbolt &added_symbol = *ctx.find_symbol(oss.str());
   auto from_expr = expr->to_exprt(ctx, class_name, function_name);
-  code_assignt assign(
-    symbol_expr(added_symbol), from_expr);
+  code_assignt assign(symbol_expr(added_symbol), from_expr);
   return assign;
 }
 
 std::string jimple_assignment_deref::to_string() const
 {
   std::ostringstream oss;
-  oss << "Assignment: " << variable << "[" << pos->to_string() << "]  = " << expr->to_string();
+  oss << "Assignment: " << variable << "[" << pos->to_string()
+      << "]  = " << expr->to_string();
   return oss.str();
 }
 
@@ -177,10 +178,10 @@ exprt jimple_assignment_deref::to_exprt(
   jimple_deref d(pos, std::make_shared<jimple_symbol>(s));
 
   code_assignt assign(
-    d.to_exprt(ctx,class_name, function_name), expr->to_exprt(ctx, class_name, function_name));
+    d.to_exprt(ctx, class_name, function_name),
+    expr->to_exprt(ctx, class_name, function_name));
   return assign;
 }
-
 
 std::string jimple_if::to_string() const
 {
@@ -207,8 +208,8 @@ exprt jimple_if::to_exprt(
 
   codet if_expr("ifthenelse");
   if_expr.copy_to_operands(
-		   cond->to_exprt(ctx, class_name, function_name), code_goto);
-//    (cond->to_exprt(ctx, class_name, function_name), code_goto);
+    cond->to_exprt(ctx, class_name, function_name), code_goto);
+  //    (cond->to_exprt(ctx, class_name, function_name), code_goto);
 
   return if_expr;
 }
@@ -272,7 +273,8 @@ void jimple_invoke::from_json(const json &j)
 {
   j.at("base_class").get_to(base_class);
   j.at("method").get_to(method);
-  for(auto x : j.at("parameters")) {
+  for(auto x : j.at("parameters"))
+  {
     parameters.push_back(std::move(jimple_expr::get_expression(x)));
   }
 }
@@ -287,15 +289,13 @@ exprt jimple_invoke::to_exprt(
   std::ostringstream oss;
   oss << base_class << ":" << method;
 
-
   auto symbol = ctx.find_symbol(oss.str());
   call.function() = symbol_expr(*symbol);
 
-  for(auto x: parameters)
-    call.arguments().push_back(x->to_exprt(ctx,class_name,function_name));
+  for(auto x : parameters)
+    call.arguments().push_back(x->to_exprt(ctx, class_name, function_name));
   return call;
 }
-
 
 std::string jimple_throw::to_string() const
 {
@@ -313,9 +313,9 @@ exprt jimple_throw::to_exprt(
   contextt &ctx,
   const std::string &class_name,
   const std::string &function_name) const
-{  
+{
   codet p = codet("cpp-throw");
-  auto to_add = expr->to_exprt(ctx,class_name,function_name);
+  auto to_add = expr->to_exprt(ctx, class_name, function_name);
   p.move_to_operands(to_add);
   return p;
 }

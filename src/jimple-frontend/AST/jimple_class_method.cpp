@@ -31,9 +31,9 @@ exprt jimple_class_method::to_exprt(
     auto param_type = parameters[i]->to_typet();
 
     code_typet::argumentt param;
-    
+
     std::string param_id, param_name;
-    
+
     std::ostringstream oss;
     oss << "@parameter" << i;
     auto temp = get_symbol_name(class_name, name, oss.str());
@@ -44,12 +44,13 @@ exprt jimple_class_method::to_exprt(
     param.cmt_base_name(param_name);
     param.cmt_identifier(param_id);
 
-    auto param_symbol = create_jimple_symbolt(param_type, class_name, param_name, param_id, id);
+    auto param_symbol =
+      create_jimple_symbolt(param_type, class_name, param_name, param_id, id);
     param_symbol.lvalue = true;
     param_symbol.is_parameter = true;
     param_symbol.file_local = true;
 
-     ctx.move_symbol_to_context(param_symbol);
+    ctx.move_symbol_to_context(param_symbol);
     method_type.arguments().push_back(param);
   }
 
@@ -101,7 +102,8 @@ std::string jimple_class_method::to_string() const
   std::ostringstream oss;
   oss << "Class Method"
       << "\n\tName: " << this->name << "\n\t" << this->t.to_string() << "\n\t"
-      << this->m.to_string() << "\n\tParameters: " << "[]" //TODO: this->parameters
+      << this->m.to_string() << "\n\tParameters: "
+      << "[]" //TODO: this->parameters
       << "\n\tThrows: " << this->throws
       << "\n\tBody : " << this->body->to_string();
 
