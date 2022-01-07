@@ -18,7 +18,6 @@ public:
   virtual std::string to_string() const override;
   virtual typet to_typet() const;
 
-
   bool is_array() const
   {
     return dimensions > 0;
@@ -48,9 +47,9 @@ protected:
     return pointer_typet(base);
   }
 
-
-  private:  
-  enum class BASE_TYPES {
+private:
+  enum class BASE_TYPES
+  {
     INT,
     _VOID,
     OTHER
@@ -60,7 +59,7 @@ protected:
     {"int", BASE_TYPES::INT},
     {"void", BASE_TYPES::_VOID},
     {"Main", BASE_TYPES::INT}, // TODO: handle this properly
-    
+
     {"java.lang.String", BASE_TYPES::INT}, // TODO: handle this properly
     {"__other", BASE_TYPES::OTHER}};
 };

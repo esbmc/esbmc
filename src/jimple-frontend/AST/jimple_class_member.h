@@ -40,7 +40,7 @@ public:
     contextt &ctx,
     const std::string &class_name,
     const std::string &file_name) const;
-  
+
   const std::string &getName() const
   {
     return name;
