@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <regex>
 
 #include <util/config.h>
+#include <ac_config.h>
 
 configt config;
 
@@ -195,7 +196,11 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 
   if(ansi_c.cheri) /* CHERI-TODO: remove, either determine through sysroot or leave to user to specify */
   {
+#ifdef ESBMC_CHERI_CLANG_MORELLO
+    arch = "aarch64c";
+#else
     arch = "mips64el"; /* CHERI-TODO: either big-endian MIPS or maybe RISC-V */
+#endif
     os = "freebsd";
     if(!flavor.empty())
       msg.warning(
@@ -253,6 +258,9 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
                        : arch_endianness(ansi_c.target.arch, msg);
 
   ansi_c.lib = ansi_c.target.arch == "none" || cmdline.isset("no-library")
+#ifdef ESBMC_CHERI_CLANG_MORELLO
+                   || ansi_c.cheri /* Morello is hard-float, which has incompatible <fenv.h> */
+#endif
                  ? ansi_ct::LIB_NONE
                  : ansi_ct::LIB_FULL;
 
