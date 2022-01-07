@@ -177,42 +177,6 @@ void jimple_newarray::from_json(const json &j)
   type = std::make_shared<jimple_type>(t);
 }
 
-symbolt jimple_newarray::get_allocation_function() const
-{
-  code_typet code_type;
-  code_type.return_type() = pointer_typet(empty_typet());
-  code_type.arguments().push_back(uint_type());
-  symbolt symbol;
-  symbol.mode = "C";
-  symbol.type = code_type;
-  symbol.name = allocation_function;
-  symbol.id = allocation_function;
-  symbol.is_extern = false;
-  symbol.file_local = false;
-  return symbol;
-}
-
-symbolt jimple_newarray::get_temp_symbol(
-  const typet &t,
-  const std::string &class_name,
-  const std::string &function_name)
-{
-  static unsigned int counter = 0;
-
-  std::string id, name;
-  id = get_symbol_name(
-    class_name, function_name, "return_value$_alloca$" + counter++);
-  name = "return_value$_alloca$";
-  name += counter;
-  auto tmp_symbol =
-    create_jimple_symbolt(t, class_name, name, id, function_name);
-
-  tmp_symbol.lvalue = true;
-  tmp_symbol.static_lifetime = false;
-  tmp_symbol.is_extern = false;
-  tmp_symbol.file_local = true;
-  return tmp_symbol;
-}
 exprt jimple_newarray::to_exprt(
   contextt &ctx,
   const std::string &class_name,
@@ -235,9 +199,14 @@ exprt jimple_newarray::to_exprt(
 
   // LHS of call is the tmp var
   call.lhs() = symbol_expr(tmp_added_symbol);
+  auto as_number = std::stoi(base_type.width().as_string()) / 8;
+  auto value_operand = gen_binary(
+    "*",
+    uint_type(),
+    size->to_exprt(ctx, class_name, function_name),
+    constant_exprt(
+      integer2binary(as_number, 10), integer2string(as_number), int_type()));
 
-  // Add size to be allocated
-  exprt value_operand = size->to_exprt(ctx, class_name, function_name);
   // Define the base type to be used as primitive in allocation
   //value_operand.set("#c_sizeof_type", base_type);
   call.arguments().push_back(value_operand);
@@ -250,31 +219,6 @@ exprt jimple_newarray::to_exprt(
   sideeffect.type() =
     static_cast<const typet &>(call.function().type().return_type());
   return sideeffect;
-
-  /*
-  auto alloc_type = type->to_typet();
-  exprt alloc_size = size->to_exprt(ctx,class_name,function_name);
-
-  //if(alloc_size.type() != uint_type())
-  //{
-  //  alloc_size.make_typecast(uint_type());
-    //simplify(alloc_size);
-  //}
-
-  //auto tmp_symbol = get_temp_symbol(pointer_typet(alloc_type), class_name, function_name);
-  //symbolt &tmp_added_symbol = *ctx.move_symbol_to_context(tmp_symbol);
- 
-  exprt new_expr("sideeffect", alloc_type);
-  new_expr.statement("alloca");
-  new_expr.copy_to_operands(alloc_size);
-  new_expr.cmt_size(alloc_size);
-  new_expr.cmt_type(alloc_type);
-  //new_expr.location() = location;
-
-  //exprt new_assign = code_assignt(lhs, new_expr);
-
-  return new_expr;
-  */
 };
 
 void jimple_deref::from_json(const json &j)

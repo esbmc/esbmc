@@ -189,14 +189,8 @@ public:
   }
 
 protected:
-  symbolt get_allocation_function() const;
-  static symbolt get_temp_symbol(
-    const typet &t,
-    const std::string &class_name,
-    const std::string &function_name);
   std::shared_ptr<jimple_type> type;
   std::shared_ptr<jimple_expr> size;
-  const std::string allocation_function = "malloc";
 };
 
 class jimple_deref : public jimple_expr

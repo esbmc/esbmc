@@ -12,6 +12,8 @@ Description: This interface will define every method that needs to
 #include <util/message/default_message.h>
 #include <util/expr.h>
 #include <util/context.h>
+#include <util/std_types.h>
+#include <util/c_types.h>
 #include <nlohmann/json.hpp>
 
 // For json parsing
@@ -74,12 +76,49 @@ protected:
     return symbol;
   }
 
+  static symbolt get_temp_symbol(
+    const typet &t,
+    const std::string &class_name,
+    const std::string &function_name)
+  {
+    static unsigned int counter = 0;
+
+    std::string id, name;
+    id = get_symbol_name(
+      class_name, function_name, "return_value$tmp$" + counter++);
+    name = "return_value$tmp$";
+    name += counter;
+    auto tmp_symbol =
+      create_jimple_symbolt(t, class_name, name, id, function_name);
+
+    tmp_symbol.lvalue = true;
+    tmp_symbol.static_lifetime = false;
+    tmp_symbol.is_extern = false;
+    tmp_symbol.file_local = true;
+    return tmp_symbol;
+  }
+
+  static symbolt get_allocation_function()
+  {
+    std::string allocation_function = "malloc";
+    code_typet code_type;
+    code_type.return_type() = pointer_typet(empty_typet());
+    code_type.arguments().push_back(uint_type());
+    symbolt symbol;
+    symbol.mode = "C";
+    symbol.type = code_type;
+    symbol.name = allocation_function;
+    symbol.id = allocation_function;
+    symbol.is_extern = false;
+    symbol.file_local = false;
+    return symbol;
+  }
+
   static std::string
   get_method_name(std::string class_name, std::string function_name)
   {
     std::ostringstream oss;
     oss << class_name << ":" << function_name;
-
     return oss.str();
   }
 
