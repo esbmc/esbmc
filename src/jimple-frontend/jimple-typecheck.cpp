@@ -11,7 +11,7 @@ bool jimple_languaget::typecheck(
   const std::string &,
   const messaget &msg)
 {
-  msg.debug(
+  msg.status(
     fmt::format("Converting Jimple module {} to GOTO", root.getClassName()));
 
   contextt new_context(msg);

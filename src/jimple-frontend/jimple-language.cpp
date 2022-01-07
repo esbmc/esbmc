@@ -21,7 +21,7 @@ bool jimple_languaget::from_type(
   std::string &code,
   const namespacet &ns)
 {
-  //code = expr2c(expr, ns);
+  // TODO
   return false;
 }
 bool jimple_languaget::from_expr(
@@ -29,7 +29,7 @@ bool jimple_languaget::from_expr(
   std::string &code,
   const namespacet &ns)
 {
-  //code = expr2c(expr, ns);
+  // TODO
   return false;
 }
 
@@ -96,13 +96,14 @@ add_global_static_variable(contextt &ctx, const typet t, std::string name)
 
 void jimple_languaget::add_intrinsics(contextt &context)
 {
-  auto alloc_type = array_typet(bool_type(), exprt("infinity"));
-  add_global_static_variable(context, alloc_type, "__ESBMC_alloc");
-  add_global_static_variable(context, alloc_type, "__ESBMC_deallocated");
-  add_global_static_variable(context, alloc_type, "__ESBMC_is_dynamic");
+  auto type1 = array_typet(bool_type(), exprt("infinity"));
+  add_global_static_variable(context, type1, "__ESBMC_alloc");
+  add_global_static_variable(context, type1, "__ESBMC_deallocated");
+  add_global_static_variable(context, type1, "__ESBMC_is_dynamic");
 
-  auto alloc_size_type = array_typet(uint_type(), exprt("infinity"));
-  add_global_static_variable(context, alloc_size_type, "__ESBMC_alloc_size");
+  auto type2 = array_typet(uint_type(), exprt("infinity"));
+  add_global_static_variable(context, type2, "__ESBMC_alloc_size");
+
   add_global_static_variable(context, int_type(), "__ESBMC_rounding_mode");
 }
 
@@ -135,7 +136,7 @@ void jimple_languaget::setup_main(contextt &context)
   symbolt *s = context.find_symbol(main_symbol);
   if(s == nullptr)
   {
-    msg.error("No main asdf");
+    msg.error("No main method");
     abort();
     return; // give up, no main
   }
@@ -154,18 +155,6 @@ void jimple_languaget::setup_main(contextt &context)
   init_code.make_block();
   //init_code.end_location(symbol.value.end_location());
 
-  /** ADD INTRISICS
-   * // 28 file esbmc_intrinsics.h line 16
-        __ESBMC_alloc=ARRAY_OF(0);
-        // 29 file esbmc_intrinsics.h line 19
-        __ESBMC_deallocated=ARRAY_OF(0);
-        // 30 file esbmc_intrinsics.h line 22
-        __ESBMC_is_dynamic=ARRAY_OF(0);
-        // 31 file esbmc_intrinsics.h line 25
-        __ESBMC_alloc_size=ARRAY_OF(0);
-        // 32 file esbmc_intrinsics.h line 30
-        __ESBMC_rounding_mode=0;
-  */
   // build call to function
 
   code_function_callt call;
@@ -177,19 +166,9 @@ void jimple_languaget::setup_main(contextt &context)
 
   call.arguments().resize(
     arguments.size(), static_cast<const exprt &>(get_nil_irep()));
-  // Call to main symbol is now in "call"; construct calls to thread library
-  // hooks for main thread start and main thread end.
 
-  //code_function_callt thread_start_call;
-  //thread_start_call.location() = symbol.location;
-  //thread_start_call.function() = symbol_exprt("c:@F@pthread_start_main_hook");
-  //code_function_callt thread_end_call;
-  //thread_end_call.location() = symbol.location;
-  //thread_end_call.function() = symbol_exprt("c:@F@pthread_end_main_hook");
-
-  //init_code.move_to_operands(thread_start_call);
+  // TODO: Add Threads?
   init_code.move_to_operands(call);
-  //init_code.move_to_operands(thread_end_call);
 
   // add "main"
   symbolt new_symbol;
