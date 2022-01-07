@@ -72,16 +72,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-static void add_global_static_variable(contextt &ctx, const typet t, std::string name)
+static void
+add_global_static_variable(contextt &ctx, const typet t, std::string name)
 {
   // TODO: Maybe they should be part of Jimple context?
   std::string id = fmt::format("c:@{}", name);
   symbolt symbol;
-    symbol.mode = "C";
-    symbol.type = std::move(t);
-    symbol.name = name;
-    symbol.id = id;
-
+  symbol.mode = "C";
+  symbol.type = std::move(t);
+  symbol.name = name;
+  symbol.id = id;
 
   symbol.lvalue = true;
   symbol.static_lifetime = true;
@@ -94,7 +94,8 @@ static void add_global_static_variable(contextt &ctx, const typet t, std::string
   code_declt decl(symbol_expr(added_symbol));
 }
 
-void jimple_languaget::add_intrinsics(contextt &context) {
+void jimple_languaget::add_intrinsics(contextt &context)
+{
   auto alloc_type = array_typet(bool_type(), exprt("infinity"));
   add_global_static_variable(context, alloc_type, "__ESBMC_alloc");
   add_global_static_variable(context, alloc_type, "__ESBMC_deallocated");
@@ -104,7 +105,6 @@ void jimple_languaget::add_intrinsics(contextt &context) {
   add_global_static_variable(context, alloc_size_type, "__ESBMC_alloc_size");
   add_global_static_variable(context, int_type(), "__ESBMC_rounding_mode");
 }
-
 
 void jimple_languaget::setup_main(contextt &context)
 {
@@ -173,10 +173,10 @@ void jimple_languaget::setup_main(contextt &context)
   call.function() = symbol_expr(symbol);
 
   const code_typet::argumentst &arguments =
-   to_code_type(symbol.type).arguments();
+    to_code_type(symbol.type).arguments();
 
   call.arguments().resize(
-      arguments.size(), static_cast<const exprt &>(get_nil_irep()));
+    arguments.size(), static_cast<const exprt &>(get_nil_irep()));
   // Call to main symbol is now in "call"; construct calls to thread library
   // hooks for main thread start and main thread end.
 

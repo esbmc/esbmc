@@ -16,17 +16,17 @@ typet jimple_type::get_base_type() const
 {
   switch(bt)
   {
-    case BASE_TYPES::INT:
-      return int_type();
+  case BASE_TYPES::INT:
+    return int_type();
 
-    case BASE_TYPES::_VOID:
-      return empty_typet();
+  case BASE_TYPES::_VOID:
+    return empty_typet();
 
-    case BASE_TYPES::OTHER:
-      return struct_union_typet(name);
+  case BASE_TYPES::OTHER:
+    return struct_union_typet(name);
 
-    default:
-      return typet(name);
+  default:
+    return typet(name);
   }
 }
 

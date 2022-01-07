@@ -69,7 +69,7 @@ void jimple_full_method_body::from_json(const json &j)
     {
       jimple_label s;
       x.get_to(s);
-      to_add = std::make_shared<jimple_label>(s);      
+      to_add = std::make_shared<jimple_label>(s);
       break;
     }
     case statement::Goto:
@@ -114,7 +114,7 @@ void jimple_full_method_body::from_json(const json &j)
     default:
       throw fmt::format("Unknown type {}", stmt);
     }
-    members.push_back(std::move(to_add));      
+    members.push_back(std::move(to_add));
   }
 }
 std::string jimple_full_method_body::to_string() const
