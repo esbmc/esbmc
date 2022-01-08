@@ -21,6 +21,10 @@ public:
 class jimple_constant : public jimple_expr
 {
 public:
+  jimple_constant() = default;
+  explicit jimple_constant(const std::string &value) : value(value)
+  {
+  }
   virtual void from_json(const json &j) override;
   virtual std::string to_string() const override
   {
@@ -193,6 +197,16 @@ protected:
   std::shared_ptr<jimple_expr> size;
 };
 
+class jimple_new : public jimple_newarray
+{
+public:
+  virtual void from_json(const json &j) override;
+  virtual std::string to_string() const override
+  {
+    return "Jimple New";
+  }
+};
+
 class jimple_deref : public jimple_expr
 {
 public:
@@ -245,4 +259,23 @@ public:
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;
+};
+
+class jimple_field_access : public jimple_expr
+{
+public:
+  virtual std::string to_string() const override
+  {
+    return "Jimple Field Access";
+  }
+  virtual void from_json(const json &j) override;
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
+protected:
+  std::string from;
+  std::string field;
+  std::shared_ptr<jimple_type> type;
 };
