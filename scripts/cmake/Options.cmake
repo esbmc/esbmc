@@ -44,8 +44,8 @@ option(ENABLE_CSMITH "Add csmith Tests (default: OFF) (depends: ENABLE_REGRESSIO
 #############################
 # CMake extra Vars
 #############################
-# CLANG_HEADERS_BUNDLED: 'detect', On, Off
-set(CLANG_HEADERS_BUNDLED "detect" CACHE STRING "Bundle the Clang resource-dir headers (default: detect)")
+# ESBMC_CLANG_HEADERS_BUNDLED: 'detect', On, Off
+set(ESBMC_CLANG_HEADERS_BUNDLED "detect" CACHE STRING "Bundle the Clang resource-dir headers (default: detect)")
 set(OVERRIDE_CLANG_HEADER_DIR "")
 set(Clang_DIR "${LLVM_DIR}" CACHE STRING "Clang Directory (if not set, this will be set to the LLVM_DIR")
 
