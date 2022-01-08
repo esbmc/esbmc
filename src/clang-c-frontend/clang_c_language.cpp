@@ -255,7 +255,7 @@ bool clang_c_languaget::preprocess(
 
 bool clang_c_languaget::final(contextt &context, const messaget &msg)
 {
-  add_cprover_library(context, msg);
+  add_cprover_library(context, msg, this);
   return clang_main(context, msg);
 }
 

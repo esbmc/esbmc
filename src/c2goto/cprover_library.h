@@ -12,6 +12,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/context.h>
 #include <util/message/message.h>
 
-void add_cprover_library(contextt &context, const messaget &message_handler);
+class languaget;
+
+void add_cprover_library(
+  contextt &context,
+  const messaget &message_handler,
+  const languaget *c_language = nullptr);
 
 #endif
