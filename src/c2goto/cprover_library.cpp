@@ -211,7 +211,7 @@ void add_cprover_library(
     break;
   default:
     message_handler.error(
-      fmt::format("No c library for bitwidth {}", config.ansi_c.int_width));
+      fmt::format("No C library for bitwidth {}", config.ansi_c.word_size));
     abort();
   }
 
@@ -235,7 +235,7 @@ void add_cprover_library(
     generate_symbol_deps(s.id, s.type, symbol_deps);
   });
 
-  // Add two hacks; we migth use either pthread_mutex_lock or the checked
+  // Add two hacks; we might use either pthread_mutex_lock or the checked
   // variety; so if one version is used, pull in the other too.
   std::pair<irep_idt, irep_idt> lockcheck(
     dstring("pthread_mutex_lock"), dstring("pthread_mutex_lock_check"));
