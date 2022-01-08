@@ -51,16 +51,19 @@ private:
   enum class BASE_TYPES
   {
     INT,
+    BOOLEAN,
     _VOID,
     OTHER
   };
   BASE_TYPES bt;
   std::map<std::string, BASE_TYPES> from_map = {
     {"int", BASE_TYPES::INT},
+    {"boolean", BASE_TYPES::INT},
     {"void", BASE_TYPES::_VOID},
     {"Main", BASE_TYPES::INT}, // TODO: handle this properly
 
-    {"java.lang.String", BASE_TYPES::INT}, // TODO: handle this properly
+    {"java.lang.String", BASE_TYPES::INT},         // TODO: handle this properly
+    {"java.lang.AssertionError", BASE_TYPES::INT}, // TODO: handle this properly
     {"__other", BASE_TYPES::OTHER}};
 };
 
