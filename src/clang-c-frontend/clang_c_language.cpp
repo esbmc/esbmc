@@ -35,20 +35,8 @@ languaget *new_clang_c_language(const messaget &msg)
 
 clang_c_languaget::clang_c_languaget(const messaget &msg) : languaget(msg)
 {
-#ifdef ESBMC_CLANG_HEADER_DIR
-  build_compiler_args(ESBMC_CLANG_HEADER_DIR);
-#else
-  /* About the path being static:
-   * the function dump_clang_headers has a static member checking if it was
-   * ever extracted before. This will guarantee that the same path will be used
-   * during a run. And no more than one is required anyway */
-  static auto p =
-    file_operations::create_tmp_dir("esbmc-headers-%%%%-%%%%-%%%%");
   // Build the compile arguments
-  build_compiler_args(p.path());
-  // Dump clang headers on the temporary folder
-  dump_clang_headers(p.path());
-#endif
+  build_compiler_args(clang_headers_path());
 }
 
 void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
