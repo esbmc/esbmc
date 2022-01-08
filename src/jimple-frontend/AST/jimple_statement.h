@@ -78,6 +78,13 @@ public:
   }
 
 protected:
+  // We need an unique name for each function
+  std::string get_hash_name() const
+  {
+    // TODO: use some hashing to also use the types
+    // TODO: DRY
+    return std::to_string(parameters.size());
+  }
   std::string base_class;
   std::string method;
   std::vector<std::shared_ptr<jimple_expr>> parameters;
