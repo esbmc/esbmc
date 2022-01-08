@@ -273,6 +273,7 @@ void jimple_invoke::from_json(const json &j)
 {
   j.at("base_class").get_to(base_class);
   j.at("method").get_to(method);
+  method += "_" + get_hash_name();
   for(auto x : j.at("parameters"))
   {
     parameters.push_back(std::move(jimple_expr::get_expression(x)));
@@ -315,7 +316,9 @@ exprt jimple_throw::to_exprt(
   const std::string &function_name) const
 {
   codet p = codet("cpp-throw");
+  //TODO: throw
   auto to_add = expr->to_exprt(ctx, class_name, function_name);
+  //auto to_add = gen_zero(int_type());
   p.move_to_operands(to_add);
   return p;
 }
