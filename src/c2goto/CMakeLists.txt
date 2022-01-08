@@ -23,9 +23,9 @@ set (inputs clib32_config clib64_config clib32f_config clib64f_config)
 
 function(mangle_clib output)
   set(result "")
-   file(GLOB c2goto_library_files
+   file(GLOB c2goto_library_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/library/*.c")
-  file(GLOB c2goto_libm_files
+  file(GLOB c2goto_libm_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/library/libm/*.c")
   foreach(in_f ${ARGN})
     set (in_f "${${in_f}}")
@@ -52,7 +52,7 @@ function(mangle_clib output)
       )
 
     add_custom_command(OUTPUT ${out_file}
-      COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py ${out_goto} ${out_file}
+      COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py -o ${out_file} ${out_goto}
       DEPENDS ${out_goto} ${CMAKE_SOURCE_DIR}/scripts/flail.py
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Converting libc model ${out_goto} to data"
