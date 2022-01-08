@@ -405,8 +405,18 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
       return true;
 
     const code_type2t &ct = to_code_type(sym->type);
+
+    // check whether the number of arguments matches
     if(ct.arguments.size() != call.operands.size())
-      return true;
+    {
+      // C allows function calls as func()
+      // This happens in some multi-threaded C programs from SV-COMP
+      // i.e. void* func() instead of void* func(void *arg)
+      if(
+        !has_prefix(to_symbol2t(sym).thename.as_string(), "c:@") &&
+        !ct.arguments.size())
+        return true;
+    }
 
     // At this point we could (should) do more: for example ensuring that the
     // arguments and return values are compatible. Skip for now.
