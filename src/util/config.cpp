@@ -258,9 +258,6 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
                        : arch_endianness(ansi_c.target.arch, msg);
 
   ansi_c.lib = ansi_c.target.arch == "none" || cmdline.isset("no-library")
-#ifdef ESBMC_CHERI_CLANG_MORELLO
-                   || ansi_c.cheri /* Morello is hard-float, which has incompatible <fenv.h> */
-#endif
                  ? ansi_ct::LIB_NONE
                  : ansi_ct::LIB_FULL;
 
