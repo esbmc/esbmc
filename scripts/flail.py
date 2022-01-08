@@ -89,6 +89,7 @@ class Flail:
         obj = Path(self.filepath)
         return self.prefix + (obj.name.replace('.hs', '_buf')
                                       .replace('.h', '_buf')
+                                      .replace('.c', '_buf')
                                       .replace('.goto', '_buf')
                                       .replace('.txt', '_buf')
                                       .replace('buildidobj', 'buildidstring')
