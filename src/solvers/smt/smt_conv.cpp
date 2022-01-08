@@ -79,7 +79,7 @@ smt_convt::smt_convt(
   names.emplace_back("pointer_object");
   names.emplace_back("pointer_offset");
 
-  pointer_struct = { members, names, names, "pointer_struct" };
+  pointer_struct = {members, names, names, "pointer_struct"};
 
   pointer_logic.emplace_back();
 
@@ -93,9 +93,9 @@ smt_convt::smt_convt(
   members.push_back(get_uint_type(config.ansi_c.pointer_width));
   names.emplace_back("start");
   names.emplace_back("end");
-  addr_space_type = { members, names, names, "addr_space_type" };
+  addr_space_type = {members, names, names, "addr_space_type"};
 
-  addr_space_arr_type = { addr_space_type, expr2tc(), true };
+  addr_space_arr_type = {addr_space_type, expr2tc(), true};
 
   addr_space_data.emplace_back();
 
@@ -2458,8 +2458,8 @@ void smt_convt::rewrite_ptrs_to_structs(type2tc &type)
   // Ideally the real solver will never see pointer types.
   // Create a delegate that recurses over all subtypes, replacing pointers
   // as we go.
-  struct {
-
+  struct
+  {
     const struct_type2tc &pointer_struct;
 
     void operator()(type2tc &e) const
@@ -2475,7 +2475,7 @@ void smt_convt::rewrite_ptrs_to_structs(type2tc &type)
         e->Foreach_subtype(*this);
       }
     }
-  } delegate = { pointer_struct };
+  } delegate = {pointer_struct};
 
   type->Foreach_subtype(delegate);
 }

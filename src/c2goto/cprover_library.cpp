@@ -158,9 +158,7 @@ static void add_bundled_library_sources(
 #include <headers/libc_hdr.h>
 #undef ESBMC_FLAIL
 
-  auto process =
-    [&](const char *body, size_t size, std::string path)
-  {
+  auto process = [&](const char *body, size_t size, std::string path) {
     std::ofstream(path).write(body, size);
     languaget *l = c_language.new_language(message_handler);
     message_handler.status("file " + path + ": Parsing");
