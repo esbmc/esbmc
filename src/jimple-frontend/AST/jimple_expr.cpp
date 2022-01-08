@@ -97,6 +97,13 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
     return std::make_shared<jimple_newarray>(c);
   }
 
+  if(expr_type == "new")
+  {
+    jimple_new c;
+    c.from_json(j);
+    return std::make_shared<jimple_new>(c);
+  }
+
   if(expr_type == "deref")
   {
     jimple_deref c;
@@ -110,12 +117,22 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
     return std::make_shared<jimple_nondet>(c);
   }
 
+  if(expr_type == "field_access")
+  {
+    jimple_field_access c;
+    c.from_json(j);
+    return std::make_shared<jimple_field_access>(c);
+  }
+
   throw "Invalid expr type";
 }
 
 void jimple_binop::from_json(const json &j)
 {
   j.at("operator").get_to(binop);
+  // TODO, make hashmap for each operator
+  if(binop == "==")
+    binop = "=";
   lhs = get_expression(j.at("lhs"));
   rhs = get_expression(j.at("rhs"));
 }
@@ -172,6 +189,14 @@ exprt jimple_lenghof::to_exprt(
 void jimple_newarray::from_json(const json &j)
 {
   size = get_expression(j.at("size"));
+  jimple_type t;
+  j.at("type").get_to(t);
+  type = std::make_shared<jimple_type>(t);
+}
+
+void jimple_new::from_json(const json &j)
+{
+  size = std::make_shared<jimple_constant>("1");
   jimple_type t;
   j.at("type").get_to(t);
   type = std::make_shared<jimple_type>(t);
@@ -255,4 +280,26 @@ exprt jimple_nondet::to_exprt(
 {
   exprt nondet_expr("nondet", int_type());
   return nondet_expr;
+};
+
+void jimple_field_access::from_json(const json &j)
+{
+  j.at("from").get_to(from);
+  j.at("field").get_to(field);
+  jimple_type t;
+  j.at("type").get_to(t);
+  type = std::make_shared<jimple_type>(t);
+}
+
+exprt jimple_field_access::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  auto result = gen_zero(type->to_typet());
+  // HACK: For now I will set some intrinsics directly (this should go to SYMEX)
+  if(from == "kotlin._Assertions" && field == "ENABLED")
+    result.make_true();
+  // TODO: Needs OOP members
+  return result;
 };
