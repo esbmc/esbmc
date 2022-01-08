@@ -51,7 +51,7 @@ public:
   bool from_type(const typet &type, std::string &code, const namespacet &ns)
     override;
 
-  languaget *new_language() override
+  languaget *new_language() const override
   {
     return new cpp_languaget;
   }

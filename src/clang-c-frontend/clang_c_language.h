@@ -52,7 +52,7 @@ public:
   bool from_type(const typet &type, std::string &code, const namespacet &ns)
     override;
 
-  languaget *new_language(const messaget &msg) override
+  languaget *new_language(const messaget &msg) const override
   {
     return new clang_c_languaget(msg);
   }

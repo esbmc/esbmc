@@ -73,7 +73,7 @@ public:
   virtual bool
   from_type(const typet &type, std::string &code, const namespacet &ns) = 0;
 
-  virtual languaget *new_language(const messaget &msg) = 0;
+  virtual languaget *new_language(const messaget &msg) const = 0;
 
   // constructor / destructor
 
