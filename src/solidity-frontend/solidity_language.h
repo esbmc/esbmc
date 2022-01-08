@@ -42,7 +42,7 @@ public:
   std::string get_temp_file(const messaget &msg);
   std::string temp_c_file();
 
-  languaget *new_language(const messaget &msg) override
+  languaget *new_language(const messaget &msg) const override
   {
     return new solidity_languaget(msg);
   }
