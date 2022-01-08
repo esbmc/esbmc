@@ -1,0 +1,164 @@
+{
+    "object": "Class",
+    "modifiers": [
+        "public"
+    ],
+    "name": "MainKt",
+    "extends": "java.lang.Object",
+    "content": [
+        {
+            "object": "Method",
+            "modifiers": [
+                "public",
+                "static",
+                "final"
+            ],
+            "type": {
+                "identifier": "void",
+                "dimensions": 0
+            },
+            "name": "main",
+            "parameters": [],
+            "content": [
+                {
+                    "object": "Variable",
+                    "name": "$r0",
+                    "type": {
+                        "identifier": "java.lang.AssertionError",
+                        "dimensions": 0
+                    }
+                },                
+                {
+                    "object": "Variable",
+                    "name": "$z0",
+                    "type": {
+                        "identifier": "boolean",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "$z0",
+                    "value": {
+                        "expr_type": "field_access",
+                        "from": "kotlin._Assertions",
+                        "field": "ENABLED",
+                        "type": {
+                            "identifier": "boolean",
+                            "dimensions": 0
+                        }
+                    }
+                },
+                
+                {
+                    "object": "If",
+                    "goto": "label1",
+                    "expression": {
+                        "expr_type": "binop",
+                        "operator": "=",
+                        "lhs": {
+                            "expr_type": "symbol",
+                            "value": "$z0"
+                        },
+                        "rhs": {
+                            "expr_type": "constant",
+                            "value": "0"
+                        }
+                    }
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "$r0",
+                    "value": {
+                        "expr_type": "new",
+                        "type": {
+                            "identifier": "java.lang.AssertionError",
+                            "dimensions": 0
+                        }
+                    }
+                },
+                {
+                    "object": "SpecialInvoke",
+                    "variable": "$r0",
+                    "base_class": "java.lang.AssertionError",
+                    "method": "<init>",
+                    "parameter_type": [
+                        {
+                        "type": {
+                            "identifier": "java.lang.Object",
+                            "dimensions": 0
+                        }
+                        }
+                    ],
+                    "parameters": [
+                        {
+                            "expr_type": "string_constant",
+                            "value": "Assertion failed"
+                        }
+                    ]
+                },
+                {
+                    "object": "Throw",
+                    "expr": {
+                       "expr_type": "symbol",
+                       "value": "$z0"
+                    }
+                 },
+                {
+                    "object": "Label",
+                    "label_id": "label1",
+                    "content": []
+                }
+            ]
+        },
+        {
+            "object": "Method",
+            "modifiers": [
+                "public",
+                "static"
+            ],
+            "type": {
+                "identifier": "void",
+                "dimensions": 0
+            },
+            "name": "main",
+            "parameters": [
+                {
+                    "identifier": "java.lang.String",
+                    "dimensions": 1
+                }
+            ],
+            "content": [
+                {
+                    "object": "Variable",
+                    "name": "r0",
+                    "type": {
+                        "identifier": "java.lang.String",
+                        "dimensions": 1
+                    }
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "r0",
+                    "value": {
+                        "expr_type": "cast",
+                        "from": {
+                            "expr_type": "symbol",
+                            "value": "@parameter0"
+                        },
+                        "to": {
+                            "identifier": "java.lang.String",
+                            "dimensions": 1
+                        }
+                    }
+                },
+                {
+                    "object": "StaticInvoke",
+                    "base_class": "MainKt",
+                    "method": "main",
+                    "parameters": []
+                }
+            ]
+        }
+    ]
+}
