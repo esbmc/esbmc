@@ -65,7 +65,7 @@ protected:
   virtual std::string internal_additions();
   virtual void force_file_type();
 
-  void dump_clang_headers(const std::string &tmp_dir);
+  static const std::string &clang_headers_path();
   void build_compiler_args(const std::string &tmp_dir);
 
   std::vector<std::string> compiler_args;
