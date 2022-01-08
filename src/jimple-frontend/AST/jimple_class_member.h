@@ -10,6 +10,8 @@
 #include <jimple-frontend/AST/jimple_type.h>
 #include <jimple-frontend/AST/jimple_method_body.h>
 
+#include <string>
+
 /**
  * @brief This class will hold any member of a Jimple File
  *
@@ -71,6 +73,13 @@ public:
   }
 
 protected:
+  // We need an unique name for each function
+  std::string get_hash_name() const
+  {
+    // TODO: use some hashing to also use the types
+    // TODO: DRY
+    return std::to_string(parameters.size());
+  }
   std::string name;
   jimple_modifiers m;
   std::string throws;

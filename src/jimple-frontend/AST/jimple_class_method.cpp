@@ -66,9 +66,6 @@ exprt jimple_class_method::to_exprt(
 
 void jimple_class_method::from_json(const json &j)
 {
-  // Method Name
-  j.at("name").get_to(this->name);
-
   // Method modifiers
   auto modifiers = j.at("modifiers");
   m = modifiers.get<jimple_modifiers>();
@@ -82,6 +79,10 @@ void jimple_class_method::from_json(const json &j)
     x.get_to(t);
     parameters.push_back(std::make_shared<jimple_type>(t));
   }
+
+  // Method Name
+  j.at("name").get_to(this->name);
+  name += "_" + get_hash_name();
   try
   {
     j.at("throws").get_to(this->throws);
