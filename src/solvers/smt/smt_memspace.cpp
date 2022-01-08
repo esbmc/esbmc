@@ -553,12 +553,12 @@ void smt_convt::init_addr_space_array()
   assert_expr(equality2tc(obj1_end, obj1_end_const));
 
   constant_struct2tc addr0_tuple(
-    addr_space_type, std::vector<expr2tc>{obj0_start,obj0_end});
+    addr_space_type, std::vector<expr2tc>{obj0_start, obj0_end});
   assert_expr(equality2tc(
     symbol2tc(addr_space_type, "__ESBMC_ptr_addr_range_0"), addr0_tuple));
 
   constant_struct2tc addr1_tuple(
-    addr_space_type, std::vector<expr2tc>{obj1_start,obj1_end});
+    addr_space_type, std::vector<expr2tc>{obj1_start, obj1_end});
   assert_expr(equality2tc(
     symbol2tc(addr_space_type, "__ESBMC_ptr_addr_range_1"), addr1_tuple));
 
