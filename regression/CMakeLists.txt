@@ -39,23 +39,27 @@ endif()
 if(ENABLE_OLD_FRONTEND)
     set(REGRESSIONS_OLD_FRONTEND esbmc-old)
 endif()
+if(ENABLE_JIMPLE_FRONTEND)
+    set(REGRESSIONS_JIMPLE jimple)
+endif()
 
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
     set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc ${REGRESSIONS_SOLIDITY}
-                    cbmc cstd llvm floats floats-regression
+                    cbmc cstd llvm floats floats-regression ${REGRESSIONS_JIMPLE}
                     k-induction k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
                     incremental-smt)
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
-    set(REGRESSIONS esbmc cbmc cstd llvm floats k-induction)
+    set(REGRESSIONS esbmc cbmc cstd llvm floats k-induction ${REGRESSIONS_JIMPLE})
 else()
     set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc ${REGRESSIONS_SOLIDITY}
                     ${REGRESSIONS_OLD_FRONTEND}
                     cbmc cstd llvm floats floats-regression
                     k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith
                     k-induction-parallel nonz3 ${REGRESSIONS_BITWUZLA}
-                    incremental-smt esbmc-cpp11/cpp esbmc-cpp11/constructors ${REGRESSIONS_GOTO_CONTRACTOR})
+                    incremental-smt esbmc-cpp11/cpp esbmc-cpp11/cbmc-constructors 
+                    ${REGRESSIONS_GOTO_CONTRACTOR} ${REGRESSIONS_JIMPLE})
 endif()
 
 foreach(regression IN LISTS REGRESSIONS)
