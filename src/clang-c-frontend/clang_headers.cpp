@@ -16,8 +16,8 @@ const std::string &clang_c_languaget::clang_headers_path()
   // Dump clang headers into a temporary directory
   static bool dumped = false;
   /* About the path being static:
-   * the function dump_clang_headers has a static member checking if it was
-   * ever extracted before. This will guarantee that the same path will be used
+   * The static member 'dumped' above is used to check whether the headers were
+   * ever extracted before. This guarantees that the same path is used
    * during a run. And no more than one is required anyway */
   static auto p =
     file_operations::create_tmp_dir("esbmc-headers-%%%%-%%%%-%%%%");
@@ -25,7 +25,7 @@ const std::string &clang_c_languaget::clang_headers_path()
   {
     dumped = true;
 #define ESBMC_FLAIL(body, size, ...)                                           \
-  std::ofstream(p.path() + "/" + #__VA_ARGS__).write(body, size);
+  std::ofstream(p.path() + "/" #__VA_ARGS__).write(body, size);
 #include <headers/cheaders.h>
 #undef ESBMC_FLAIL
   }
