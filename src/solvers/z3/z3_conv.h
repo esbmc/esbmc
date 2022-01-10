@@ -174,6 +174,7 @@ public:
   smt_astt tuple_create(const expr2tc &structdef) override;
   smt_astt tuple_fresh(const smt_sort *s, std::string name = "") override;
   expr2tc tuple_get(const expr2tc &expr) override;
+  expr2tc tuple_get(const type2tc &type, smt_astt sym) override;
 
   smt_astt tuple_array_create(
     const type2tc &array_type,

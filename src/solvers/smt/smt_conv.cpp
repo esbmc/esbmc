@@ -2174,6 +2174,10 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   case type2t::floatbv_id:
     return constant_floatbv2tc(fp_api->get_fpbv(a));
 
+  case type2t::struct_id:
+  case type2t::pointer_id:
+    return tuple_api->tuple_get(type, a);
+
   default:
     msg.error(fmt::format(
       "Unimplemented type'd expression ({}) in smt get", type->type_id));

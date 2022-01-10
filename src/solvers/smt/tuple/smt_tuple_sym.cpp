@@ -115,6 +115,14 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
   return newsym;
 }
 
+expr2tc smt_tuple_sym_flattener::tuple_get(const type2tc &, smt_astt)
+{
+  msg.error(
+    "Fetching tuples from tuple-sym-flattener without the concrete symbol "
+    "is currently not implemented, returning empty expression...");
+  return expr2tc();
+}
+
 expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
 {
   assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");

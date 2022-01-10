@@ -149,6 +149,7 @@ public:
   smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override;
   smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
   expr2tc tuple_get(const expr2tc &expr) override;
+  expr2tc tuple_get(const type2tc &type, smt_astt a) override;
 
   bool get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;
