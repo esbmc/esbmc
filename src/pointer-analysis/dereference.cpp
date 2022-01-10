@@ -496,18 +496,18 @@ expr2tc dereferencet::dereference(
     }
   }
 
-  if(is_nil_expr(value) && mode != INTERNAL)
+  if(mode == INTERNAL)
+  {
+    // Deposit internal values with the caller, then clear.
+    dereference_callback.dump_internal_state(internal_items);
+    internal_items.clear();
+  }
+  else if(is_nil_expr(value))
   {
     // Dereference failed entirely; various assertions will explode later down
     // the line. To make this a valid formula though, return a failed symbol,
     // so that this assignment gets a well typed free value.
     value = make_failed_symbol(type);
-  }
-  else if(mode == INTERNAL)
-  {
-    // Deposit internal values with the caller, then clear.
-    dereference_callback.dump_internal_state(internal_items);
-    internal_items.clear();
   }
 
   return value;
@@ -713,14 +713,15 @@ expr2tc dereferencet::build_reference_to(
     return expr2tc();
   }
 
-  // Encode some access bounds checks.
-  if(is_array_type(value))
+  if(is_code_type(value) || is_code_type(type))
+  {
+    if(!check_code_access(value, final_offset, type, tmp_guard, mode))
+      return expr2tc();
+    /* here, both of them are code */
+  }
+  else if(is_array_type(value)) // Encode some access bounds checks.
   {
     bounds_check(value, final_offset, type, tmp_guard);
-  }
-  else if(is_code_type(value) || is_code_type(type))
-  {
-    check_code_access(value, final_offset, type, tmp_guard, mode);
   }
   else
   {
@@ -2079,7 +2080,7 @@ void dereferencet::wrap_in_scalar_step_list(
   }
 }
 
-void dereferencet::check_code_access(
+bool dereferencet::check_code_access(
   expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
@@ -2093,6 +2094,7 @@ void dereferencet::check_code_access(
       "Program code accessed with non-code"
       " type",
       guard);
+    return false;
   }
   else if(!is_code_type(value) && is_code_type(type))
   {
@@ -2101,6 +2103,7 @@ void dereferencet::check_code_access(
       "Data object accessed with code "
       "type",
       guard);
+    return false;
   }
   else
   {
@@ -2130,6 +2133,8 @@ void dereferencet::check_code_access(
   // As for setting the 'value', it's currently already set to the base code
   // object. There's nothing we can actually change it to mean anything, so
   // don't fiddle with it.
+
+  return true;
 }
 
 void dereferencet::check_data_obj_access(
