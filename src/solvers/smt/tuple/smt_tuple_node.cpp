@@ -124,6 +124,11 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   return newsym;
 }
 
+expr2tc smt_tuple_node_flattener::tuple_get(const type2tc &, smt_astt sym)
+{
+  return tuple_get_rec(to_tuple_node_ast(sym));
+}
+
 expr2tc smt_tuple_node_flattener::tuple_get(const expr2tc &expr)
 {
   assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");

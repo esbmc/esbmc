@@ -1087,6 +1087,47 @@ z3_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
   return convert_array_of(convert_ast(init), domain_width);
 }
 
+expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
+{
+  const struct_union_data &strct = get_type_def(type);
+
+  assert(is_pointer_type(type));
+  {
+    // Pointer have two fields, a base address and an offset, so we just
+    // need to get the two numbers and call the pointer API
+
+    smt_astt object = new_ast(
+      mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 0),
+      convert_sort(strct.members[0]));
+
+    smt_astt offset = new_ast(
+      mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
+      convert_sort(strct.members[1]));
+
+    unsigned int num =
+      get_bv(object, is_signedbv_type(strct.members[0])).to_uint64();
+    unsigned int offs =
+      get_bv(offset, is_signedbv_type(strct.members[1])).to_uint64();
+    pointer_logict::pointert p(num, BigInt(offs));
+    return pointer_logic.back().pointer_expr(p, type);
+  }
+
+  // Otherwise, run through all fields and dispatch to 'get_by_ast' again.
+  constant_struct2tc outstruct(type, std::vector<expr2tc>());
+  unsigned int i = 0;
+  for(auto const &it : strct.members)
+  {
+    outstruct->datatype_members.push_back(get_by_ast(
+      it,
+      new_ast(
+        mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, i),
+        convert_sort(it))));
+    i++;
+  }
+
+  return outstruct;
+}
+
 expr2tc z3_convt::tuple_get(const expr2tc &expr)
 {
   const struct_union_data &strct = get_type_def(expr->type);
