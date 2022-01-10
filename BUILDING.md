@@ -1,4 +1,4 @@
-# ESBMC Build Guide
+# ESBMC Static Build Guide
 
 This is a guide on how to build ESBMC and its supported solvers.
 
@@ -222,3 +222,31 @@ cmake --build . && ninja install
 ```
 
 Once it is finished, ESBMC should be available in the _release_ folder.
+
+
+# ESBMC Shared Builds
+
+It is also possible to build a non-static version of ESBMC that links to
+system libraries and/or solvers installed system-wide.
+
+Shared linking is the default when __cmake__ is invoked with
+`-DBUILD_STATIC=Off` or the variable is not set.
+
+## Notes on shared Clang
+
+When __clang__ has been built with the __cmake__ setting
+`CLANG_LINK_CLANG_DYLIB=On`, the default is to link against the dynamic library
+`libclang-cpp` and also to not bundle __clang__'s header files.
+This bundling can be controlled by setting the __cmake__ variable
+`CLANG_HEADERS_BUNDLED` to `On` or `Off` instead of its default `detect`.
+
+`On` means that the headers are always bundled in ESBMC's executables, and
+`Off` never bundles the headers, but hard-codes their path. Not bundling headers
+when linking shared against a system installation of __clang__ speeds up ESBMC's
+translation of source files by avoiding the creation of a temporary directory
+and extracting the bundled headers to it. As is common with runtime dependencies
+on shared libraries, when __clang__ is updated to a new version, ESBMC will need
+to be recompiled.
+
+It is advised to keep the default setting `detect` for `CLANG_HEADERS_BUNDLED`,
+which decides to bundle headers only when linking statically against __clang__.

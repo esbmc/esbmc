@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cassert>
 #include <goto-symex/goto_symex.h>
 #include <util/expr_util.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/pretty.h>
 
 void goto_symext::symex_other(const expr2tc code)

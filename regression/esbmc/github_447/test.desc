@@ -1,0 +1,4 @@
+CORE
+main.c
+--function loop_init --k-induction
+\n\s*res = ([^ ]+) .*\n.*\n.*\n.*\s*a = \1 

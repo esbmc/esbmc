@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <pointer-analysis/value_set_domain.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/std_code.h>
 

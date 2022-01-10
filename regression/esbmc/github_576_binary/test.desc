@@ -1,0 +1,4 @@
+CORE
+input.goto
+--binary --goto-functions-only
+^GOTO program creation time

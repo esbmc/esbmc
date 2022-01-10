@@ -50,11 +50,12 @@ bool language_uit::parse(const std::string &filename)
     return true;
   }
 
-  language_filet language_file;
-
   std::pair<language_filest::filemapt::iterator, bool> result =
-    language_files.filemap.insert(
-      std::pair<std::string, language_filet>(filename, language_file));
+    language_files.filemap.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(filename),
+      std::tuple<>{});
+  assert(result.second);
 
   language_filet &lf = result.first->second;
   lf.filename = filename;
@@ -62,6 +63,9 @@ bool language_uit::parse(const std::string &filename)
   languaget &language = *lf.language;
 
   msg.status("Parsing", filename);
+
+  if(mode == 2) // 0 for clang-c, 2 for Solidity
+    language.set_func_name(_cmdline.vm["function"].as<std::string>());
 
   if(language.parse(filename, msg))
   {

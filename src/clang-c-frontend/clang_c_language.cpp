@@ -24,6 +24,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <sstream>
 #include <util/c_link.h>
 #include <util/message/format.h>
+#include <util/filesystem.h>
+
+#include <ac_config.h>
 
 languaget *new_clang_c_language(const messaget &msg)
 {
@@ -32,32 +35,23 @@ languaget *new_clang_c_language(const messaget &msg)
 
 clang_c_languaget::clang_c_languaget(const messaget &msg) : languaget(msg)
 {
-  // Create a temporary directory, to dump clang's headers
-  auto p = boost::filesystem::temp_directory_path();
-  if(!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
-  {
-    msg.error("Can't find temporary directory (needed to dump clang headers)");
-    abort();
-  }
-
-  // Create temporary directory
-  p += "/esbmc_clang_headers";
-  boost::filesystem::create_directory(p);
-  if(!boost::filesystem::is_directory(p))
-  {
-    msg.error(
-      "Can't create temporary directory (needed to dump clang headers)");
-    abort();
-  }
-
+#ifdef ESBMC_CLANG_HEADER_DIR
+  build_compiler_args(ESBMC_CLANG_HEADER_DIR);
+#else
+  /* About the path being static:
+   * the function dump_clang_headers has a static member checking if it was
+   * ever extracted before. This will guarantee that the same path will be used
+   * during a run. And no more than one is required anyway */
+  static auto p =
+    file_operations::create_tmp_dir("esbmc-headers-%%%%-%%%%-%%%%");
   // Build the compile arguments
-  build_compiler_args(std::move(p.string()));
-
+  build_compiler_args(p.path());
   // Dump clang headers on the temporary folder
-  dump_clang_headers(p.string());
+  dump_clang_headers(p.path());
+#endif
 }
 
-void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
+void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 {
   compiler_args.emplace_back("clang-tool");
 
@@ -110,6 +104,9 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
   for(auto const &def : config.ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
+  compiler_args.emplace_back("-target");
+  compiler_args.emplace_back(config.ansi_c.target.to_string());
+
   for(auto const &inc : config.ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
 
@@ -154,22 +151,26 @@ void clang_c_languaget::build_compiler_args(const std::string &&tmp_dir)
   compiler_args.emplace_back(
     "-D__sync_fetch_and_add=__ESBMC_sync_fetch_and_add");
 
+  compiler_args.emplace_back("-D__builtin_memcpy=memcpy");
+
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
 
-#ifdef __APPLE__
-  compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
-  compiler_args.push_back("-D_SECURE__STRING_H_");
-  compiler_args.push_back("-U__BLOCKS__");
-  compiler_args.push_back("-Wno-nullability-completeness");
-  compiler_args.push_back("-Wno-deprecated-register");
-#endif
+  if(config.ansi_c.target.is_macos())
+  {
+    compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
+    compiler_args.push_back("-D_SECURE__STRING_H_");
+    compiler_args.push_back("-U__BLOCKS__");
+    compiler_args.push_back("-Wno-nullability-completeness");
+    compiler_args.push_back("-Wno-deprecated-register");
+  }
 
-#ifdef _WIN32
-  compiler_args.push_back("-D_INC_TIME_INL");
-  compiler_args.push_back("-D__CRT__NO_INLINE");
-  compiler_args.push_back("-D_USE_MATH_DEFINES");
-#endif
+  if(config.ansi_c.target.is_windows_abi())
+  {
+    compiler_args.push_back("-D_INC_TIME_INL");
+    compiler_args.push_back("-D__CRT__NO_INLINE");
+    compiler_args.push_back("-D_USE_MATH_DEFINES");
+  }
 
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");

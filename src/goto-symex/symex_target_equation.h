@@ -19,7 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 #include <solvers/smt/smt_conv.h>
 #include <util/config.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/namespace.h>
 #include <vector>
 

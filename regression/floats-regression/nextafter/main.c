@@ -1,35 +1,23 @@
 #include <stdio.h>
 #include <math.h>
 //#include <fenv.h>
-//#include <float.h>
+#include <float.h>
 #include <assert.h>
 
 extern void __VERIFIER_error() { assert(0); };
 void __VERIFIER_assert(int cond) { if (!(cond)) { ERROR: __VERIFIER_error(); } return; }
 
-float my_nextafterf( float from, float to )
-{
-  int from_int = *(unsigned long int*)(&from);
-
-  if(from < to)
-    from_int++;
-  else
-    from_int--;
-
-  return *(float*)(&from_int);
-}
-
 int main(void)
 {
-//    float from1 = 0, to1 = nextafterf(from1, 1);
-//    assert(to1 == 0x1p-149);
+    float from1 = 0, to1 = nextafterf(from1, 1);
+    assert(to1 == 0x1p-149);
  
     float from2 = 1;
-//    float to21 = nextafterf(from2, 2);
-//    printf("%.64f (%a)\n", to21, to21);
-//    assert(to21 == 0x1.000002p+0);
+    float to21 = nextafterf(from2, 2);
+    printf("%.64f (%a)\n", to21, to21);
+    assert(to21 == 0x1.000002p+0);
 
-    float to22 = my_nextafterf(from2, 2);
+    float to22 = nextafterf(from2, 2);
     printf("%.64f (%a)\n", to22, to22);
     assert(to22 == 0x1.000002p+0);
 
@@ -40,7 +28,7 @@ int main(void)
 //    a = *(float*)(&x);
 //    printf("%.20f (%a)\n", a, a);
 //    assert(0 == a);
-/*
+
  
     double from3 = nextafter(0.1, 0), to3 = 0.1;
     printf("The number 0.1 lies between two valid doubles:\n"
@@ -64,5 +52,4 @@ int main(void)
 
     printf ("first representable value greater than zero: %e\n", nextafter(0.0,1.0));
     printf ("first representable value less than zero: %e\n", nextafter(0.0,-1.0));
-*/
 }

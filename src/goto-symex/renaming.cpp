@@ -1,6 +1,6 @@
 #include <goto-symex/renaming.h>
 #include <langapi/language_util.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/message/format.h>

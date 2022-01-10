@@ -9,7 +9,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/std_types.h>
 #include <util/type_byte_size.h>
 #include <util/message/format.h>
@@ -56,6 +56,7 @@ BigInt type_byte_size_default(const type2tc &type, const BigInt &defaultval)
 BigInt type_byte_size(const type2tc &type)
 {
   BigInt bits = type_byte_size_bits(type);
+
   return (bits + 7) / 8;
 }
 
@@ -146,7 +147,7 @@ BigInt type_byte_size_bits(const type2tc &type)
   }
 }
 
-expr2tc compute_pointer_offset(const expr2tc &expr)
+expr2tc compute_pointer_offset_bits(const expr2tc &expr)
 {
   if(is_symbol2t(expr))
     return gen_ulong(0);
@@ -159,11 +160,11 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
     if(is_array_type(index.source_value))
     {
       const array_type2t &arr_type = to_array_type(index.source_value->type);
-      sub_size = type_byte_size(arr_type.subtype);
+      sub_size = type_byte_size_bits(arr_type.subtype);
     }
     else if(is_string_type(index.source_value))
     {
-      sub_size = 8;
+      sub_size = 64;
     }
     else
     {
@@ -191,8 +192,8 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
     }
 
     // Also accumulate any pointer offset in the source object.
-    result =
-      add2tc(result->type, result, compute_pointer_offset(index.source_value));
+    result = add2tc(
+      result->type, result, compute_pointer_offset_bits(index.source_value));
 
     return result;
   }
@@ -204,7 +205,7 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
     BigInt result;
     if(is_struct_type(memb.source_value->type))
     {
-      result = member_offset(memb.source_value->type, memb.member);
+      result = member_offset_bits(memb.source_value->type, memb.member);
     }
     else
     {
@@ -214,7 +215,7 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
     // Also accumulate any pointer offset in the source object.
     expr2tc res_expr = gen_ulong(result.to_uint64());
     res_expr = add2tc(
-      res_expr->type, res_expr, compute_pointer_offset(memb.source_value));
+      res_expr->type, res_expr, compute_pointer_offset_bits(memb.source_value));
 
     return res_expr;
   }
@@ -229,7 +230,7 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
   if(is_typecast2t(expr))
   {
     // Blast straight through.
-    return compute_pointer_offset(to_typecast2t(expr).from);
+    return compute_pointer_offset_bits(to_typecast2t(expr).from);
   }
 
   if(is_dynamic_object2t(expr))
@@ -250,6 +251,15 @@ expr2tc compute_pointer_offset(const expr2tc &expr)
 
   throw std::runtime_error(fmt::format(
     "compute_pointer_offset, unexpected irep:\n{}", expr->pretty()));
+}
+
+expr2tc compute_pointer_offset(const expr2tc &expr)
+{
+  expr2tc pointer_offset_bits = compute_pointer_offset_bits(expr);
+
+  expr2tc result =
+    div2tc(pointer_offset_bits->type, pointer_offset_bits, gen_ulong(8));
+  return result;
 }
 
 const expr2tc &get_base_object(const expr2tc &expr)

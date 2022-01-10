@@ -405,7 +405,14 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
       return true;
 
     const code_type2t &ct = to_code_type(sym->type);
-    if(ct.arguments.size() != call.operands.size())
+
+    // We check whether the number of arguments matches to filer illegal calls
+    // C allow passing a list of arguments for a void function, e.g.,
+    // function declarations such as `void* func()` (instead of `void* func(void *arg)`)
+    // and then call func(NULL). Our C++ frontend detects this a failure during the parsing
+    // C++ does not allow declarations without prototypes
+    // TODO: see GitHub issues #584 and #585
+    if(ct.arguments.size() && ct.arguments.size() != call.operands.size())
       return true;
 
     // At this point we could (should) do more: for example ensuring that the

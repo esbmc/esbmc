@@ -26,7 +26,7 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_SOLIDITY_FRONTEND=On
       - name: Build ESBMC
         run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Linux.sh
       - uses: actions/upload-artifact@v1
@@ -41,7 +41,7 @@ jobs:
     steps:
      - name: cleanup old files
        run: pwd && rm -rf ./*
-     - uses: actions/checkout@v1
+     - uses: actions/checkout@v2
      - name: Install Dependencies
        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y gperf libgmp-dev cmake bison flex linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev libtinfo5 git curl build-essential gcc wget
      - name: Configure Boolector
@@ -53,7 +53,7 @@ jobs:
      - name: Get current folder and files
        run: pwd && ls
      - name: Configure CMake
-       run: mkdir build && cd build && cmake .. -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DCMAKE_BUILD_TYPE=RelWithDebInfo
+       run: mkdir build && cd build && cmake .. -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_SOLIDITY_FRONTEND=On
      - name: Build ESBMC
        run: cd build && make -j3 && cpack  && mv ESBMC-*.sh ESBMC-aarch64.sh
      - uses: actions/upload-artifact@v1
@@ -65,7 +65,7 @@ jobs:
     name: Build Darwin Release
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install Dependencies
         run: brew install gmp csmith cmake boost ninja python3 automake bison flex && pip3 install PySMT toml
       - name: Download Clang 11
@@ -79,7 +79,7 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DENABLE_SOLIDITY_FRONTEND=On
       - name: Build ESBMC
         run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Darwin.sh
       - uses: actions/upload-artifact@v1
@@ -101,7 +101,7 @@ jobs:
       run: |
         git config --system core.autocrlf false
         git config --system core.eol lf
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Instal gnu tools (od)
       run: choco install -y gnuwin32-coreutils.portable nsis.portable
     - name: Check if od is on path
@@ -115,7 +115,7 @@ jobs:
     - name: vcpkg integrate
       run: vcpkg.exe integrate install
     - name: Install Boost
-      run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows boost-program-options:x64-windows
+      run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows boost-program-options:x64-windows boost-iostreams:x64-windows
     - name: Install Bison/Flex
       run: choco install -y winflexbison
     - name: Prepare Environment
@@ -128,7 +128,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc142-mt-x64-1_75.dll;C:/deps/boost_program_options-vc142-mt-x64-1_75.dll"
+        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc142-mt-x64-1_77.dll;C:/deps/boost_program_options-vc142-mt-x64-1_77.dll" -DENABLE_SOLIDITY_FRONTEND=On    
     - name: Build ESBMC
       run: |
         cd build

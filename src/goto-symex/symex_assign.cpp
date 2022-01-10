@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
@@ -49,7 +49,7 @@ goto_symext::goto_symext(
     no_simplify(options.get_bool_option("no-simplify")),
     no_unwinding_assertions(options.get_bool_option("no-unwinding-assertions")),
     partial_loops(options.get_bool_option("partial-loops")),
-    k_induction(options.get_bool_option("k-induction")),
+    k_induction(options.is_kind()),
     base_case(options.get_bool_option("base-case")),
     forward_condition(options.get_bool_option("forward-condition")),
     inductive_step(options.get_bool_option("inductive-step")),
@@ -270,6 +270,10 @@ void goto_symext::symex_assign_rec(
   else if(is_extract2t(lhs))
   {
     symex_assign_extract(lhs, full_lhs, rhs, full_rhs, guard, hidden);
+  }
+  else if(is_lshr2t(lhs))
+  {
+    symex_assign_bitfield(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
   else
   {
@@ -656,6 +660,52 @@ void goto_symext::symex_assign_extract(
   // OK: accuml now has a bitblob sized expression that can be assigned into
   // the relevant field.
   symex_assign_rec(ex.from, full_lhs, accuml, full_rhs, guard, hidden);
+}
+
+void goto_symext::symex_assign_bitfield(
+  const expr2tc &lhs,
+  const expr2tc &full_lhs,
+  expr2tc &rhs,
+  expr2tc &full_rhs,
+  guardt &guard,
+  const bool hidden)
+{
+  // Here we expect the LHS to be an expression of the form
+  //   (expr_1 & expr_2) >> expr_3
+  //
+  // Here we basically convert an assignment of the form:
+  //   (val & mask) >> shft := rhs;
+  //
+  // to the form:
+  //   val := new_rhs;
+  //
+  // performing the following 3 steps:
+  //   (1) val := val & not(mask);
+  //   (2) new_val := new_val << shft;
+  //   (3) val := val | new_val;
+  //
+  // where the new LHS is either an index, a byte_extract or
+  // a concat which can be handled recursively
+
+  expr2tc left_side = to_lshr2t(lhs).side_1;
+  expr2tc shft_expr = to_lshr2t(lhs).side_2;
+
+  assert(is_bitand2t(left_side));
+
+  expr2tc value_expr = to_bitand2t(left_side).side_1;
+  expr2tc mask_expr = to_bitand2t(left_side).side_2;
+  expr2tc not_mask_expr = bitnot2tc(mask_expr->type, mask_expr);
+
+  // (1) Resetting the target bits first
+  expr2tc new_value_expr =
+    bitand2tc(value_expr->type, value_expr, not_mask_expr);
+  // (2) Aligning the RHS value with the target bits
+  expr2tc new_rhs = bitcast2tc(shft_expr->type, rhs);
+  new_rhs = shl2tc(new_rhs->type, new_rhs, shft_expr);
+  // (3) Updating the RHS with the remaining bits
+  new_rhs = bitor2tc(new_rhs->type, new_rhs, new_value_expr);
+
+  symex_assign_rec(value_expr, full_lhs, new_rhs, full_rhs, guard, hidden);
 }
 
 void goto_symext::replace_nondet(expr2tc &expr)

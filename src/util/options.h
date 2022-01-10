@@ -32,6 +32,8 @@ public:
 
   optionst() = default;
   virtual ~optionst() = default;
+
+  virtual bool is_kind() const;
 };
 
 #endif

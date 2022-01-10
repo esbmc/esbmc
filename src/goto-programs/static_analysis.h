@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-programs/goto_functions.h>
 
 #include <map>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 
 // don't use me -- I am just a base class
 // please derive from me

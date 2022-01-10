@@ -16,7 +16,7 @@ Date: July 2005
 #include <goto-symex/symex_target.h>
 
 #include <map>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <vector>
 

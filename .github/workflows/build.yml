@@ -1,13 +1,60 @@
 name: Build All Solvers
 
-on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
+on: [push, pull_request]
+
 jobs:
+
+  # Check testing tool suite
+  testing-tool:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Runs testing tool unit test
+      run: cd regression && python3 testing_tool_test.py
+
+  fast-tests:
+    name: Run unit and fuzz targets
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev
+    - name: Download Clang 11
+      run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+    - name: Extract Clang 11
+      run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
+    - name: Get current folder and files
+      run: pwd && ls
+    - name: Configure CMake
+      run: mkdir build && cd build && CC=../clang/bin/clang CXX=../clang/bin/clang++ cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_FUZZER=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang
+    - name: Build ESBMC without solvers
+      run: cd build && ninja
+    - name: Run tests
+      run: cd build && ninja test
+
+  clang-tidy:
+    name: Run clang-tidy
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install clang-tidy gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev
+    - name: Download Clang 11
+      run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+    - name: Extract Clang 11
+      run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
+    - name: Get current folder and files
+      run: pwd && ls
+    - name: Configure CMake
+      run: mkdir build && cd build && CC=../clang/bin/clang CXX=../clang/bin/clang++ cmake .. -GNinja -DENABLE_CLANG_TIDY=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang
+    - name: Run tests
+      run: cd build && ninja || echo "fail" # TODO: Eventually this will be removed
+
+  windows-clone:
+    name: Check if Windows users can checkout this version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
 
   build-arm:
     name: Build ESBMC with Boolector (ARM64)
@@ -16,7 +63,7 @@ jobs:
     steps:
      - name: cleanup old files
        run: pwd && rm -rf ./*
-     - uses: actions/checkout@v1
+     - uses: actions/checkout@v2
      - name: Install Dependencies
        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y gperf libgmp-dev cmake bison flex linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev libtinfo5 git curl build-essential gcc wget
      - name: Configure Boolector
@@ -28,7 +75,7 @@ jobs:
      - name: Get current folder and files
        run: pwd && ls
      - name: Configure CMake
-       run: mkdir build && cd build && cmake .. -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
+       run: mkdir build && cd build && cmake .. -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DENABLE_SOLIDITY_FRONTEND=On
      - name: Build ESBMC
        run: cd build && make -j3 && cmake --install .
      - uses: actions/upload-artifact@v1
@@ -37,13 +84,13 @@ jobs:
          path: ./release
      - name: Run tests
        continue-on-error: true
-       run: cd build/ && ctest -j3 --output-on-failure --progress . 
+       run: cd build/ && ctest -j3 --output-on-failure --progress .
 
   build-linux:
     name: Build ESBMC with all Solvers (Linux)
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install csmith libcsmith-dev gperf libgmp-dev cmake bison flex gcc-multilib linux-libc-dev libboost-all-dev ninja-build python3-setuptools libtinfo-dev && pip install toml
     - name: Download Clang 11
@@ -65,7 +112,7 @@ jobs:
     - name: Get current folder and files
       run: pwd && ls
     - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_YICES=On -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DBitwuzla_DIR=$PWD/../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug
+      run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBUILD_STATIC=On -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_YICES=On -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DGMP_DIR=$PWD/../gmp -DBitwuzla_DIR=$PWD/../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On
     - name: Build ESBMC
       run: cd build && cmake --build . && ninja install
     - uses: actions/upload-artifact@v1
@@ -84,7 +131,7 @@ jobs:
     name: Build ESBMC with all Solvers (macOS)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - uses: actions/setup-java@v1
         with:
           java-version: '9.0.4'
@@ -107,7 +154,7 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_YICES=ON -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DBitwuzla_DIR=$PWD/../bitwuzla-release -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug
+        run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DENABLE_YICES=ON -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 -DBitwuzla_DIR=$PWD/../bitwuzla-release -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On
       - name: Build ESBMC
         run: cd build && cmake --build . && cmake --install .
       - uses: actions/upload-artifact@v1
@@ -136,7 +183,7 @@ jobs:
       run: |
         git config --system core.autocrlf false
         git config --system core.eol lf
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Instal gnu tools (od)
       run: choco install -y gnuwin32-coreutils.portable nsis.portable
     - name: Check if od is on path
@@ -150,7 +197,7 @@ jobs:
     - name: vcpkg integrate
       run: vcpkg.exe integrate install
     - name: Install Boost
-      run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows boost-program-options:x64-windows
+      run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows boost-program-options:x64-windows boost-iostreams:x64-windows
     - name: Install Bison/Flex
       run: choco install -y winflexbison
     - name: Prepare Environment
@@ -163,17 +210,15 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc142-mt-x64-1_76.dll;C:/deps/boost_program_options-vc142-mt-x64-1_76.dll"
+        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_DIR=C:/deps/clang/clang -DClang_DIR=C:/deps/clang/clang -DZ3_DIR=C:/deps/z3-4.8.9-x64-win -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc142-mt-x64-1_77.dll;C:/deps/boost_program_options-vc142-mt-x64-1_77.dll" -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On
     - name: Build ESBMC
       run: |
         cd build
         cmake --build . --target INSTALL  --config RelWithDebInfo
-        cpack -G ZIP -C RelWithDebInfo
-        mv ESBMC-*.zip ESBMC-Windows.zip
     - uses: actions/upload-artifact@v1
       with:
           name: release-windows
-          path: ./build/ESBMC-Windows.zip
+          path: C:/deps/esbmc
     - name: Run Tests
       run: |
         cd build

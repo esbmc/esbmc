@@ -1,0 +1,4 @@
+CORE
+MyContract_satisfiability_VERIFIER.solast
+--function func_sat
+^VERIFICATION FAILED$

@@ -35,7 +35,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <langapi/mode.h>
 #include <sstream>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/location.h>
 #include <util/message/message_stream.h>
 #include <util/message/format.h>

@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_PRINTF_FORMATTER
 #define CPROVER_PRINTF_FORMATTER
 
-#include <util/irep2_expr.h>
+#include <irep2/irep2_expr.h>
 
 class printf_formattert
 {

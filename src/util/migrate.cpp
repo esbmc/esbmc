@@ -1,6 +1,6 @@
 #include <util/c_types.h>
 #include <util/config.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/namespace.h>
 #include <util/prefix.h>
@@ -566,11 +566,67 @@ static void flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
   {
     // Iterate over each field.
     const struct_type2t &structtype = to_struct_type(new_expr->type);
+    BigInt member_offset_bits = 0;
+    bool been_inside_bits_region = false;
+    BigInt bitfields_first_byte = 0;
     for(unsigned long i = 0; i < structtype.members.size(); i++)
     {
-      member2tc memb(
-        structtype.members[i], new_expr, structtype.member_names[i]);
-      flatten_to_bytes(migrate_expr_back(memb), bytes);
+      BigInt member_size_bits = type_byte_size_bits(structtype.members[i]);
+      // If this member is a bitfield, extract everything as it is until
+      // the next member aligned to a byte as all such members can only
+      // be of scalar type
+      if(member_size_bits % 8 != 0 || member_offset_bits % 8 != 0)
+      {
+        // This is the first bit-field within the region.
+        // So we update its first byte
+        if(!been_inside_bits_region)
+        {
+          bitfields_first_byte = member_offset_bits / 8;
+          been_inside_bits_region = true;
+        }
+      }
+      else
+      {
+        // This means that we just came out of the region comprised by
+        // bit-fields and we need to extract this region as it is
+        // before we try extract current member
+        if(been_inside_bits_region)
+        {
+          bool is_big_endian =
+            config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+          for(unsigned long j = bitfields_first_byte.to_uint64();
+              j < (member_offset_bits / 8).to_uint64();
+              j++)
+          {
+            byte_extract2tc struct_byte(
+              get_uint8_type(), new_expr, gen_ulong(j), is_big_endian);
+            bytes.push_back(struct_byte);
+          }
+          been_inside_bits_region = false;
+        }
+        // Now we can flatten to bytes this member as most likely it is not a bit-field.
+        // And even if it is a bit-field it is aligned to a byte and its
+        // size
+        member2tc memb(
+          structtype.members[i], new_expr, structtype.member_names[i]);
+        flatten_to_bytes(migrate_expr_back(memb), bytes);
+      }
+      member_offset_bits += member_size_bits;
+    }
+    // This means that the struct ended on a bitfield.
+    // Hence, we need to do some final extractions.
+    if(been_inside_bits_region)
+    {
+      bool is_big_endian =
+        config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+      for(unsigned long j = bitfields_first_byte.to_uint64();
+          j < (member_offset_bits / 8).to_uint64();
+          j++)
+      {
+        byte_extract2tc struct_byte(
+          get_uint8_type(), new_expr, gen_ulong(j), is_big_endian);
+        bytes.push_back(struct_byte);
+      }
     }
   }
   else if(is_union_type(new_expr))

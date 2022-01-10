@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_FORMAT_CONSTANT_H
 #define CPROVER_FORMAT_CONSTANT_H
 
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 
 class format_constantt : public format_spect
 {

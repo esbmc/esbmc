@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <pointer-analysis/dereference.h>
 #include <stack>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/options.h>
 #include <util/std_types.h>
 
@@ -698,6 +698,24 @@ protected:
    *  @param guard Assignment guard.
    */
   void symex_assign_concat(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guardt &guard,
+    const bool hidden);
+
+  /**
+   *  This method is used when we need to assign a value
+   *  to a struct bitfield which is obtained via
+   *  applying a bit-mask and bit-shifting. Such "masking"
+   *  is typically applied to 'index', 'byte_extract' or 'concat'.
+   *  @param lhs Bitfield to assign to
+   *  @param full_lhs The original assignment symbol
+   *  @param rhs Value to assign to lhs
+   *  @param guard Assignment guard.
+   */
+  void symex_assign_bitfield(
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,

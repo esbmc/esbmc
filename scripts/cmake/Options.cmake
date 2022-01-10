@@ -22,6 +22,7 @@ option(BUILD_DOC "Build ESBMC documentation" OFF)
 option(ENABLE_REGRESSION "Add Regressions Tests (default: OFF)" OFF)
 option(ENABLE_COVERAGE "Generate Coverage Report (default: OFF)" OFF)
 option(ENABLE_OLD_FRONTEND "Enable flex/bison language frontend (default: OFF)" OFF)
+option(ENABLE_SOLIDITY_FRONTEND "Enable Solidity language frontend (default: OFF)" OFF)
 
 #############################
 # SOLVERS
@@ -43,6 +44,9 @@ option(ENABLE_CSMITH "Add csmith Tests (default: OFF) (depends: ENABLE_REGRESSIO
 #############################
 # CMake extra Vars
 #############################
+# CLANG_HEADERS_BUNDLED: 'detect', On, Off
+set(CLANG_HEADERS_BUNDLED "detect" CACHE STRING "Bundle the Clang resource-dir headers (default: detect)")
+set(OVERRIDE_CLANG_HEADER_DIR "")
 set(Clang_DIR "${LLVM_DIR}" CACHE STRING "Clang Directory (if not set, this will be set to the LLVM_DIR")
 
 # Demand C++14

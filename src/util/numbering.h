@@ -10,9 +10,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_NUMBERING_H
 
 #include <cassert>
+#include <cstddef>
 #include <map>
 #include <unordered_map>
 #include <vector>
+#include <cstddef>
 
 template <typename T>
 class numbering
@@ -25,12 +27,13 @@ public:
 
   unsigned number(const T &a)
   {
-    unsigned int num = next_obj_num++;
+    unsigned int num = next_obj_num;
     std::pair<typename numberst::const_iterator, bool> result =
       numbers.insert(std::pair<T, unsigned>(a, num));
 
     if(result.second) // inserted?
     {
+      next_obj_num++;
       vec[num] = a;
       assert(vec.size() == numbers.size());
     }

@@ -40,20 +40,24 @@ void goto_factory::create_file_from_istream(
 
 void goto_factory::config_environment(
   goto_factory::Architecture arch,
+  cmdlinet c,
   optionst o)
 {
+  messaget msg;
+  config.set(c, msg);
+
   switch(arch)
   {
   case goto_factory::Architecture::BIT_16:
-    config.ansi_c.set_16();
+    config.ansi_c.set_data_model(configt::LP32);
     break;
 
   case goto_factory::Architecture::BIT_32:
-    config.ansi_c.set_32();
+    config.ansi_c.set_data_model(configt::ILP32);
     break;
 
   case goto_factory::Architecture::BIT_64:
-    config.ansi_c.set_64();
+    config.ansi_c.set_data_model(configt::LP64);
     break;
   default:
     break;
@@ -80,7 +84,7 @@ goto_functionst goto_factory::get_goto_functions(
   cmdlinet cmd = goto_factory::get_default_cmdline(filename);
   optionst opts = goto_factory::get_default_options(cmd);
 
-  goto_factory::config_environment(arch, opts);
+  goto_factory::config_environment(arch, cmd, opts);
   return goto_factory::get_goto_functions(cmd, opts);
 }
 
@@ -100,7 +104,7 @@ goto_functionst goto_factory::get_goto_functions(
   std::string filename(
     "tmp.c"); // TODO: Make this unique and add support for CPP
   goto_factory::create_file_from_istream(c_file, filename);
-  goto_factory::config_environment(arch, opts);
+  goto_factory::config_environment(arch, cmd, opts);
   return goto_factory::get_goto_functions(cmd, opts);
 }
 

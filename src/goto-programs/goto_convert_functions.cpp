@@ -151,7 +151,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   // and atomic_end
   if(
     !f.body.instructions.empty() &&
-    has_prefix(id2string(identifier), "__VERIFIER_atomic_"))
+    has_prefix(id2string(identifier), "c:@F@__VERIFIER_atomic_"))
   {
     goto_programt::instructiont a_begin;
     a_begin.make_atomic_begin();

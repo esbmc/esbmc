@@ -22,7 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/std_types.h>
@@ -947,13 +947,23 @@ void goto_symext::intrinsic_memset(
           {
             // Build a reference to the first elem.
             const array_type2t &arrtype = to_array_type(cur_type.first);
+            // Converting offset into bits here
+            expr2tc new_offset =
+              mul2tc(this_offs->type, this_offs, gen_ulong(8));
+            simplify(new_offset);
+
             dereference.build_reference_rec(
-              value, this_offs, arrtype.subtype, curguard, dereferencet::READ);
+              value, new_offset, arrtype.subtype, curguard, dereferencet::READ);
           }
           else
           {
+            // Converting offset into bits here
+            expr2tc new_offset =
+              mul2tc(this_offs->type, this_offs, gen_ulong(8));
+            simplify(new_offset);
+
             dereference.build_reference_rec(
-              value, this_offs, cur_type.first, curguard, dereferencet::READ);
+              value, new_offset, cur_type.first, curguard, dereferencet::READ);
           }
 
           out_list.push_back(std::make_tuple(cur_type.first, value, this_offs));

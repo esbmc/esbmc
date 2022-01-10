@@ -5,7 +5,7 @@
 #include <goto-programs/goto_loops.h>
 #include <util/guard.h>
 #include <util/message/message_stream.h>
-#include <util/irep2_expr.h>
+#include <irep2/irep2_expr.h>
 
 void goto_k_induction(
   goto_functionst &goto_functions,

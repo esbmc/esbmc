@@ -15,6 +15,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 #include <boost/program_options.hpp>
 #include <util/message/message.h>
+
+/* WORKAROUND: On *BSD macOS the include of some system headers
+ * makes the definition of isset as a macro, which conflicts with
+ * the member */
+#ifdef isset
+#undef isset
+#endif
 struct opt_templ
 {
   const char *optstring;

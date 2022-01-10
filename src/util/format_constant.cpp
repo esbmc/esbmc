@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/fixedbv.h>
 #include <util/format_constant.h>
 #include <util/ieee_float.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/i2string.h>
 
 std::string format_constantt::operator()(const expr2tc &expr)

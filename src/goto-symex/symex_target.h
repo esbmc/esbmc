@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-programs/goto_program.h>
 #include <util/expr.h>
 #include <util/guard.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/symbol.h>
 #include <vector>
 

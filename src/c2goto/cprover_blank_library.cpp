@@ -1,2 +1,7 @@
-#define NO_CPROVER_LIBRARY
-#include "cprover_library.cpp"
+
+class contextt;
+class messaget;
+
+void add_cprover_library(contextt &, const messaget &)
+{
+}

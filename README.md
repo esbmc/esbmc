@@ -9,7 +9,7 @@
 
 
 
-ESBMC (the Efficient SMT-based Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++ programs. It can verify both predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions automatically. ESBMC supports the Clang compiler as its C/C++ frontend, IEEE floating-point arithmetic for a variety of SMT solvers, and implements a state-of-the-art k-induction algorithm.
+ESBMC (the Efficient SMT-based Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++ programs. It can verify both predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions automatically. ESBMC supports the Clang compiler as its C/C++ frontend, IEEE floating-point arithmetic for various SMT solvers, implements the Solidity grammar production rules as its Solidity frontend and state-of-the-art incremental BMC and k-induction algorithms.
 
 To build ESBMC, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. For getting started, we recommend first reading some of the background material / publications, to understand exactly what this technique can provide, for example our SV-COMP tool papers, which are available at [online](https://ssvlab.github.io/esbmc/publications.html).
 
@@ -17,7 +17,25 @@ The cannonical public location of ESBMCs source is on github:
 
     https://github.com/esbmc/esbmc
 
-While our main website is esbmc.org
+While our main website is [esbmc.org](http://esbmc.org)
+
+### Publications
+
+* Felipe R. Monteiro, Mikhail R. Gadelha, Lucas C. Cordeiro. [Model checking C++ programs.](https://onlinelibrary.wiley.com/doi/epdf/10.1002/stvr.1793) In Softw. Test. Verification Reliab. 32(1), 2022. [DOI](https://doi.org/10.1002/stvr.1793) **Open access**.
+
+* Mikhail R. Gadelha, Lucas C. Cordeiro, Denis A. Nicole. [An Efficient Floating-Point Bit-Blasting API for Verifying C Programs.](https://ssvlab.github.io/lucasccordeiro/papers/nsv2020.pdf) In VSTTE, pp. 178-195, 2020. [DOI](https://doi.org/10.1007/978-3-030-63618-0_11)
+
+* Mikhail Y. R. Gadelha, Felipe R. Monteiro, Jeremy Morse, Lucas C. Cordeiro, Bernd Fischer, Denis A. Nicole. [ESBMC 5.0: an industrial-strength C model checker.](https://ssvlab.github.io/lucasccordeiro/papers/ase2018.pdf) In ASE, pp. 888-891, 2018. [DOI](https://doi.org/10.1145/3238147.3240481) 
+
+* Jeremy Morse, Lucas C. Cordeiro, Denis A. Nicole, Bernd Fischer. [Model checking LTL properties over ANSI-C programs with bounded traces.](https://ssvlab.github.io/lucasccordeiro/papers/sosym2013.pdf) In Softw. Syst. Model. 14(1), pp. 65-81, 2015. [DOI](https://doi.org/10.1007/s10270-013-0366-0)
+
+* Mikhail Y. R. Gadelha, Hussama Ibrahim Ismail, Lucas C. Cordeiro. [Handling loops in bounded model checking of C programs via k-induction.](https://ssvlab.github.io/lucasccordeiro/papers/sttt2017.pdf) In Int. J. Softw. Tools Technol. Transf. 19(1), pp. 97-114, 2017. [DOI](https://doi.org/10.1007/s10009-015-0407-9)
+
+* Phillipe A. Pereira, Higo F. Albuquerque, Isabela da Silva, Hendrio Marques, Felipe R. Monteiro, Ricardo Ferreira, Lucas C. Cordeiro. [SMT-based context-bounded model checking for CUDA programs.](https://ssvlab.github.io/lucasccordeiro/papers/cppe2017.pdf) In Concurr. Comput. Pract. Exp. 29(22), 2017. [DOI](https://doi.org/10.1002/cpe.3934)
+
+* Lucas C. Cordeiro, Bernd Fischer, João Marques-Silva. [SMT-Based Bounded Model Checking for Embedded ANSI-C Software.](https://ssvlab.github.io/lucasccordeiro/papers/tse2012.pdf) In IEEE Trans. Software Eng. 38(4), pp. 957-974, 2012. [DOI](https://doi.org/10.1109/TSE.2011.59)
+
+* Lucas C. Cordeiro, Bernd Fischer. [Verifying multi-threaded software using smt-based context-bounded model checking.](https://ssvlab.github.io/lucasccordeiro/papers/icse2011.pdf) In ICSE, pp. 331-340, 2011. [DOI](https://doi.org/10.1145/1985793.1985839)
 
 ### Features
 
@@ -33,9 +51,11 @@ ESBMC aims to support all of C99/C11, and detects errors in software by simulati
  * Divide by zero
  * Memory leaks
 
-Concurrent software (using the pthread api) is verified by explicit exploration of interleavings, producing one symbolic execution per interleaving. By default only normal errors will be checked for; one can also specify options to check concurrent programs for:
+Concurrent software (using the pthread api) is verified by explicit exploration of interleavings, producing one symbolic execution per interleaving. By default, pointer-safety, array-out-of-bounds, division-by-zero, and user-specified assertions will be checked for; one can also specify options to check concurrent programs for:
  * Deadlock (only on pthread mutexes and convars)
  * Data races (i.e. competing writes)
+ * Atomicity violations at visible assignments
+ * Lock acquisition ordering
 
 By default ESBMC performs a "lazy" depth first search of interleavings -- it can also encode (explicitly) all interleavings into a single SMT formula.
 
@@ -58,6 +78,7 @@ ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary di
 * CBMC focuses on SAT-based encodings of unrolled programs while ESBMC targets SMT-based encodings.
 * CBMC's concurrency support is an entirely symbolic encoding of a concurrent program in one SAT formulae, while ESBMC explores each interleaving individually.
 * CBMC uses a modified C parser written by James Roskind and a C++ parser based on OpenC++, while ESBMC relies on the Clang front-end.
+* ESBMC implements the Solidity grammar production rules as its Solidity frontend, while CBMC does not implement a Solidity frontend.
 * CBMC implements k-induction, requiring three different calls: to generate the CFG, to annotate the program, and to verify it, whereas ESBMC handles the whole process in a single call. Additionally, CBMC does not have a forward condition to check if all states were reached and relies on a limited loop unwinding.
 * ESBMC adds some additional types to the program's internal representation.
 
@@ -134,3 +155,7 @@ A limited number of classes have been marked up with doxygen documentation heade
     doxygen .doxygen
 
 Output will be in docs/html, open index.html to get started.
+
+### Acknowledgments
+
+The ESBMC development was supported by various research funding agencies, including CNPq (Brazil), CAPES (Brazil), FAPEAM (Brazil), EPSRC (UK), Royal Society (UK), British Council (UK), European Commission (Horizon 2020), and companies including Intel, Nokia Institute of Technology and Samsung. ESBMC is currently funded by Intel, EPSRC grants [EP/T026995/1](https://enncore.github.io), [EP/V000497/1](https://scorch-project.github.io), [EU H2020 ELEGANT 957286](https://www.elegant-h2020.eu) and [Soteria project](https://soteriaresearch.org) awarded by the UK Research and Innovation for the Digital Security by Design (DSbD) Programme.

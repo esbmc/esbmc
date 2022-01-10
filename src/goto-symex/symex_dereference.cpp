@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/reachability_tree.h>
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
-#include <util/irep2.h>
+#include <irep2/irep2.h>
 #include <util/migrate.h>
 
 void symex_dereference_statet::dereference_failure(

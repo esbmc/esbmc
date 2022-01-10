@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 32 --overflow-check
+^VERIFICATION FAILED$

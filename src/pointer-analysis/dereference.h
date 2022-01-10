@@ -381,7 +381,7 @@ private:
     const expr2tc &offset);
   void stitch_together_from_byte_array(
     expr2tc &value,
-    const type2tc &type,
+    unsigned int num_bytes,
     const expr2tc *bytes);
   void wrap_in_scalar_step_list(
     expr2tc &value,
@@ -413,6 +413,12 @@ private:
     unsigned long minwidth,
     const expr2tc &&offset,
     const guardt &guard);
+  unsigned int
+  compute_num_bytes_to_extract(const expr2tc offset, unsigned long num_bits);
+  void extract_bits_from_byte_array(
+    expr2tc &value,
+    expr2tc offset,
+    unsigned long num_bits);
 
 public:
   void build_reference_rec(

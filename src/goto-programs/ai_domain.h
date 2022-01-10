@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_ANALYSES_AI_DOMAIN_H
 
 #include <goto-programs/goto_program.h>
-#include <util/irep2_utils.h>
+#include <irep2/irep2_utils.h>
 
 // forward reference the abstract interpreter interface
 class ai_baset;
