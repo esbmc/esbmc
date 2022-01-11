@@ -1410,8 +1410,7 @@ bool esbmc_parseoptionst::get_goto_program(
       // Parsing
       if(parse())
         return true;
-      //msg.status("Done!");
-#if 0 // start of operation flow
+
       if(cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
       {
         assert(language_files.filemap.size());
@@ -1466,7 +1465,6 @@ bool esbmc_parseoptionst::get_goto_program(
     output_time(process_stop - process_start, str2);
     str2 << "s";
     msg.status(str2.str());
-#endif // end of operation flow
   }
 
   catch(const char *e)
