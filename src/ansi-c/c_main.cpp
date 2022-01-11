@@ -81,7 +81,7 @@ bool c_main(
 
   if(matches.empty())
   {
-    message_handler.error(fmt::format("main symbol `{}' not found", themain));
+    std::cout << "main symbol `" << themain << "' not found" << std::endl;
     return true; // give up
   }
 
@@ -93,7 +93,7 @@ bool c_main(
                 << std::endl;
     else
     {
-      message_handler.error(fmt::format("main symbol `{}' is ambiguous", themain));
+      std::cout << "main symbol `" << themain << " is ambiguous" << std::endl;
       return true;
     }
   }

@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/context.h>
 #include <util/message/message.h>
 #include <util/std_code.h>
-#include <util/message/format.h>
 #include <iostream>
 
 bool c_main(
