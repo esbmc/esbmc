@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <cassert>
 #include <cpp/cpp_declarator.h>
+#include <iostream>
 
 void cpp_declaratort::output(std::ostream &out) const
 {

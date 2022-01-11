@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_storage_spec.h>
 #include <util/c_qualifiers.h>
 #include <util/c_types.h>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 
 class ansi_c_convert_typet : public message_streamt
 {
@@ -34,7 +34,7 @@ public:
 
   std::list<typet> other;
 
-  ansi_c_convert_typet(message_handlert &_message_handler)
+  ansi_c_convert_typet(const messaget &_message_handler)
     : message_streamt(_message_handler)
   {
   }

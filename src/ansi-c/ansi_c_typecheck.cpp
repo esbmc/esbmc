@@ -22,7 +22,7 @@ bool ansi_c_typecheck(
   ansi_c_parse_treet &ansi_c_parse_tree,
   contextt &context,
   const std::string &module,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   ansi_c_typecheckt ansi_c_typecheck(
     ansi_c_parse_tree, context, module, message_handler);
@@ -31,10 +31,10 @@ bool ansi_c_typecheck(
 
 bool ansi_c_typecheck(
   exprt &expr,
-  message_handlert &message_handler,
+  const messaget &message_handler,
   const namespacet &ns)
 {
-  contextt context1, context2;
+  contextt context1(message_handler), context2(message_handler);
   ansi_c_parse_treet ansi_c_parse_tree;
 
   context1 = ns.get_context();

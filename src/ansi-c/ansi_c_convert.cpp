@@ -367,7 +367,7 @@ void ansi_c_convertt::convert_type(typet &type, c_storage_spect &c_storage_spec)
 bool ansi_c_convert(
   ansi_c_parse_treet &ansi_c_parse_tree,
   const std::string &module,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   ansi_c_convertt ansi_c_convert(module, message_handler);
 
@@ -397,7 +397,7 @@ bool ansi_c_convert(
 bool ansi_c_convert(
   exprt &expr,
   const std::string &module,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   ansi_c_convertt ansi_c_convert(module, message_handler);
 

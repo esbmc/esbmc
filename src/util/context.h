@@ -38,6 +38,11 @@ public:
   explicit contextt(const messaget &msg) : msg(msg)
   {
   }
+  contextt& operator=(const contextt& t)
+  {
+    // copy assignment operator for old frontend typechecking
+    return *this;
+  }
 
   symbol_base_mapt symbol_base_map;
 
