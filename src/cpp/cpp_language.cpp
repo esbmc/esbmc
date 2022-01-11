@@ -47,6 +47,10 @@ bool cpp_languaget::preprocess(
   return c_preprocess(path, outstream, true, message_handler);
 }
 
+cpp_languaget::cpp_languaget(const messaget &msg) : languaget(msg)
+{
+}
+
 void cpp_languaget::internal_additions(std::ostream &out)
 {
   out << "# 1 \"esbmc_intrinsics.h" << std::endl;

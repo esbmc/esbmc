@@ -1509,8 +1509,8 @@ void esbmc_parseoptionst::preprocessing()
     }
 #ifdef ENABLE_OLD_FRONTEND
     std::ostringstream oss;
-    if(c_preprocess(filename, oss, false, *get_message_handler()))
-      error("PREPROCESSING ERROR");
+    if(c_preprocess(filename, oss, false, msg))
+      msg.error("PREPROCESSING ERROR");
     msg.status(oss.str());
 #endif
   }
