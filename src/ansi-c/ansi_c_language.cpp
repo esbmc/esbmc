@@ -96,6 +96,10 @@ static void internal_additions(std::string &code)
     "\n";
 }
 
+ansi_c_languaget::ansi_c_languaget(const messaget &msg) : languaget(msg)
+{
+}
+
 bool ansi_c_languaget::preprocess(
   const std::string &path,
   std::ostream &outstream,
