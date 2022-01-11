@@ -21,6 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/std_types.h>
 #include <util/string_constant.h>
+#include <iostream>
 
 void c_typecheck_baset::typecheck_expr(exprt &expr)
 {

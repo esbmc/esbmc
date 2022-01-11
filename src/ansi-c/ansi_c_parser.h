@@ -14,6 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/expr.h>
 #include <util/i2string.h>
 #include <util/parser.h>
+#include <iostream>
 
 typedef enum
 {

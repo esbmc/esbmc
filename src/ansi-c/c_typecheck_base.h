@@ -21,7 +21,7 @@ public:
   c_typecheck_baset(
     contextt &_context,
     const std::string &_module,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : typecheckt(_message_handler),
       namespacet(_context),
       context(_context),
@@ -34,7 +34,7 @@ public:
     contextt &_context1,
     const contextt &_context2,
     const std::string &_module,
-    message_handlert &_message_handler)
+    const messaget &_message_handler)
     : typecheckt(_message_handler),
       namespacet(_context1, _context2),
       context(_context1),
