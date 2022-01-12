@@ -1746,32 +1746,7 @@ void solidity_convertert::get_default_symbol(
 
 symbolt *solidity_convertert::move_symbol_to_context(symbolt &symbol)
 {
-  symbolt *s = context.find_symbol(symbol.id);
-  if(s == nullptr)
-  {
-    if(context.move(symbol, s))
-    {
-      msg.error(fmt::format(
-        "Couldn't add symbol {} to symbol table\n{}", symbol.name, symbol));
-      abort();
-    }
-  }
-  else
-  {
-    // types that are code means functions
-    if(s->type.is_code())
-    {
-      if(symbol.value.is_not_nil() && !s->value.is_not_nil())
-        s->swap(symbol);
-    }
-    else if(s->is_type)
-    {
-      if(symbol.type.is_not_nil() && !s->type.is_not_nil())
-        s->swap(symbol);
-    }
-  }
-
-  return s;
+  return context.move_symbol_to_context(symbol);
 }
 
 void solidity_convertert::convert_expression_to_code(exprt &expr)
