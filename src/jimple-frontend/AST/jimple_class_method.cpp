@@ -27,7 +27,8 @@ exprt jimple_class_method::to_exprt(
   symbolt &added_symbol = *ctx.find_symbol(symbol_name);
 
   // TODO: check for static
-  if(1) {
+  if(1)
+  {
     auto this_type = int_type();
     std::string param_id, param_name;
 
