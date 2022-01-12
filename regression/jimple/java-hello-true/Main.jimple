@@ -1,0 +1,101 @@
+{
+    "object": "Class",
+    "name": "Main",
+    "modifiers": [
+        "public"
+    ],
+    "extends": "java.lang.Object",
+    "content": [
+        {
+            "object": "Method",
+            "name": "<init>",
+            "modifiers": [],
+            "type": {
+                "identifier": "void",
+                "dimensions": 0
+            },
+            "parameters": [],
+            "content": [
+                {
+                    "object": "Variable",
+                    "name": "r0",
+                    "type": {
+                        "identifier": "Main",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "r0",
+                    "value": {
+                        "expr_type": "cast",
+                        "from": {
+                            "expr_type": "symbol",
+                            "value": "@this"
+                        },
+                        "to": {
+                            "identifier": "Main",
+                            "dimensions": 0
+                        }
+                    }
+                },
+                {
+                    "object": "SpecialInvoke",
+                    "base_class": "java.lang.Object",
+                    "method": "<init>",
+                    "parameters": [],
+                    "name": "r0"
+                },
+                {
+                    "object": "Return"
+                }
+            ]
+        },
+        {
+            "object": "Method",
+            "modifiers": [
+                "public",
+                "static"
+            ],
+            "type": {
+                "identifier": "void",
+                "dimensions": 0
+            },
+            "name": "main",
+            "parameters": [
+                {
+                    "identifier": "java.lang.String",
+                    "dimensions": 1
+                }
+            ],
+            "content": [
+                {
+                    "object": "Variable",
+                    "name": "r0",
+                    "type": {
+                        "identifier": "java.lang.String",
+                        "dimensions": 1
+                    }
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "r0",
+                    "value": {
+                        "expr_type": "cast",
+                        "from": {
+                            "expr_type": "symbol",
+                            "value": "@parameter0"
+                        },
+                        "to": {
+                            "identifier": "java.lang.String",
+                            "dimensions": 1
+                        }
+                    }
+                },
+                {
+                    "object": "Return"
+                }
+            ]
+        }
+    ]
+}
