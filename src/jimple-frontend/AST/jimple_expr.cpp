@@ -62,11 +62,24 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
     return std::make_shared<jimple_constant>(c);
   }
 
+  if(expr_type == "string_constant")
+  {
+    jimple_constant c;
+    return std::make_shared<jimple_constant>(c);
+  }
+
   if(expr_type == "symbol")
   {
     jimple_symbol c;
     c.from_json(j);
     return std::make_shared<jimple_symbol>(c);
+  }
+
+  if(expr_type == "static_invoke")
+  {
+    jimple_expr_invoke c;
+    c.from_json(j);
+    return std::make_shared<jimple_expr_invoke>(c);
   }
 
   if(expr_type == "binop")
@@ -200,6 +213,70 @@ void jimple_new::from_json(const json &j)
   jimple_type t;
   j.at("type").get_to(t);
   type = std::make_shared<jimple_type>(t);
+}
+
+
+void jimple_expr_invoke::from_json(const json &j)
+{
+  lhs = nil_exprt();
+  j.at("base_class").get_to(base_class);
+  j.at("method").get_to(method);
+  for(auto x : j.at("parameters"))
+  {
+    parameters.push_back(std::move(jimple_expr::get_expression(x)));
+  }
+  method += "_" + get_hash_name();
+}
+
+
+exprt jimple_expr_invoke::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // TODO: Move intrinsics to backend
+  if(base_class == "kotlin.jvm.internal.Intrinsics")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  code_blockt block;
+  code_function_callt call;
+
+  std::ostringstream oss;
+  oss << base_class << ":" << method;
+
+  auto symbol = ctx.find_symbol(oss.str());
+  call.function() = symbol_expr(*symbol);
+  if(!lhs.is_nil()) call.lhs() = lhs;
+
+  for(auto i = 0; i < parameters.size(); i++)
+  {
+    // Just adding the arguments should be enough to set the parameters
+    auto parameter_expr = parameters[i]->to_exprt(ctx, class_name, function_name);
+    call.arguments().push_back(parameter_expr);
+    // Hack, manually adding parameters
+    std::ostringstream oss;
+    oss << "@parameter" << i;
+    auto temp = get_symbol_name(base_class, method, oss.str());
+    symbolt &added_symbol = *ctx.find_symbol(temp);
+    code_assignt assign(symbol_expr(added_symbol), parameter_expr);
+    block.operands().push_back(assign);
+    
+  }
+  block.operands().push_back(call);
+/*
+   // Create a sideffect call to represent the allocation
+  side_effect_expr_function_callt sideeffect;
+  sideeffect.function() = call.function();
+  sideeffect.arguments() = call.arguments();
+  sideeffect.location() = call.location();
+  sideeffect.type() =
+    static_cast<const typet &>(call.function().type().return_type());
+  
+  block.operands().push_back(sideeffect); */
+  return block;
 }
 
 exprt jimple_newarray::to_exprt(
