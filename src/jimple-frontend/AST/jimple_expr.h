@@ -19,9 +19,9 @@ class jimple_expr : public jimple_ast
 {
 public:
   virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const
+    contextt &,
+    const std::string &,
+    const std::string &) const
   {
     exprt val("at_identifier");
     return val;
@@ -411,7 +411,7 @@ public:
   {
     return "Jimple Nondet";
   }
-  virtual void from_json(const json &j) override
+  virtual void from_json(const json &) override
   {
   }
 
