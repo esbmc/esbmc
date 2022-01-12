@@ -18,10 +18,8 @@ arithmetic, comparation and allocation
 class jimple_expr : public jimple_ast
 {
 public:
-  virtual exprt to_exprt(
-    contextt &,
-    const std::string &,
-    const std::string &) const
+  virtual exprt
+  to_exprt(contextt &, const std::string &, const std::string &) const
   {
     exprt val("at_identifier");
     return val;
