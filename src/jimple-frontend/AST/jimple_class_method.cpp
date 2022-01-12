@@ -26,6 +26,25 @@ exprt jimple_class_method::to_exprt(
   ctx.move_symbol_to_context(symbol);
   symbolt &added_symbol = *ctx.find_symbol(symbol_name);
 
+  // TODO: check for static
+  if(1) {
+    auto this_type = int_type();
+    std::string param_id, param_name;
+
+    std::ostringstream oss;
+    oss << "@this";
+    auto temp = get_symbol_name(class_name, name, oss.str());
+    param_id = temp;
+    param_name = oss.str();
+
+    auto param_symbol =
+      create_jimple_symbolt(this_type, class_name, param_name, param_id, id);
+    param_symbol.lvalue = true;
+    param_symbol.is_parameter = true;
+    param_symbol.file_local = true;
+
+    ctx.move_symbol_to_context(param_symbol);
+  }
   for(auto i = 0; i < parameters.size(); i++)
   {
     auto param_type = parameters[i]->to_typet();
