@@ -2087,48 +2087,43 @@ bool dereferencet::check_code_access(
   const guardt &guard,
   modet mode)
 {
-  if(is_code_type(value) && !is_code_type(type))
+  assert(is_code_type(value) || is_code_type(type));
+
+  if(!is_code_type(type))
   {
     dereference_failure(
       "Code separation",
-      "Program code accessed with non-code"
-      " type",
+      "Program code accessed with non-code type",
       guard);
     return false;
   }
-  else if(!is_code_type(value) && is_code_type(type))
+
+  if(!is_code_type(value))
   {
     dereference_failure(
       "Code separation",
-      "Data object accessed with code "
-      "type",
+      "Data object accessed with code type",
       guard);
     return false;
   }
-  else
+
+  if(mode != READ)
   {
-    assert(is_code_type(value) && is_code_type(type));
-
-    if(mode != READ)
-    {
-      dereference_failure(
-        "Code separation",
-        "Program code accessed in write or"
-        " free mode",
-        guard);
-    }
-
-    // Only other constraint is that the offset has to be zero; there are no
-    // other rules about what code objects look like.
-    notequal2tc neq(offset, gen_zero(offset->type));
-    guardt tmp_guard = guard;
-    tmp_guard.add(neq);
     dereference_failure(
       "Code separation",
-      "Program code accessed with non-zero"
-      " offset",
-      tmp_guard);
+      "Program code accessed in write or free mode",
+      guard);
   }
+
+  // Only other constraint is that the offset has to be zero; there are no
+  // other rules about what code objects look like.
+  notequal2tc neq(offset, gen_zero(offset->type));
+  guardt tmp_guard = guard;
+  tmp_guard.add(neq);
+  dereference_failure(
+    "Code separation",
+    "Program code accessed with non-zero offset",
+    tmp_guard);
 
   // As for setting the 'value', it's currently already set to the base code
   // object. There's nothing we can actually change it to mean anything, so
