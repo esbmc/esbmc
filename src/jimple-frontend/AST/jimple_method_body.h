@@ -16,10 +16,8 @@
 class jimple_method_body : public jimple_ast
 {
 public:
-  virtual exprt to_exprt(
-    contextt &,
-    const std::string &,
-    const std::string &) const
+  virtual exprt
+  to_exprt(contextt &, const std::string &, const std::string &) const
   {
     exprt dummy;
     return dummy;
@@ -34,10 +32,8 @@ public:
 class jimple_method_field : public jimple_ast
 {
 public:
-  virtual exprt to_exprt(
-    contextt &,
-    const std::string &,
-    const std::string &) const
+  virtual exprt
+  to_exprt(contextt &, const std::string &, const std::string &) const
   {
     dump();
     code_skipt dummy;
