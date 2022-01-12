@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys
+import sys, os
 import shutil  # For git
 import subprocess  # For git
 from datetime import datetime  # For date
@@ -29,7 +29,9 @@ class BuildObj:
         if git is None:
             return BuildObj.STR_NOT_GIT
 
-        return subprocess.check_output([git, "rev-parse", "HEAD"]).decode().strip()
+        return subprocess.check_output([git, "rev-parse", "HEAD"],
+                                       cwd=os.path.dirname(__file__)
+                                      ).decode().strip()
 
     @staticmethod
     def get_datetime() -> str:
@@ -52,7 +54,7 @@ class BuildObj:
             return True
 
         output = subprocess.check_output(
-            [git, "status", "-s"]).decode().splitlines()
+            [git, "status", "-s"],cwd=os.path.dirname(__file__)).decode().splitlines()
 
         for x in output:
             if '??' not in x:
