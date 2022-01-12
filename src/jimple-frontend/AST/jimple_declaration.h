@@ -1,6 +1,9 @@
-//
-// Created by rafaelsamenezes on 21/09/2021.
-//
+/*******************************************************************\
+Module: Jimple Declaration class
+Author: Rafael Sá Menezes
+Date: September 2021
+Description: This class will hold any declaration statements
+\*******************************************************************/
 
 #ifndef ESBMC_JIMPLE_DECLARATION_H
 #define ESBMC_JIMPLE_DECLARATION_H
@@ -8,6 +11,14 @@
 #include <jimple-frontend/AST/jimple_method_body.h>
 #include <jimple-frontend/AST/jimple_type.h>
 
+/**
+ * @brief Class to hold declaration statements in Jimple
+ * 
+ * - int foo; 
+ * - java.lang.String r0; 
+ * - etc...
+ * 
+ */
 class jimple_declaration : public jimple_method_field
 {
 public:

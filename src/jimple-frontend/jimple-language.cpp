@@ -111,7 +111,8 @@ void jimple_languaget::setup_main(contextt &context)
 {
   irep_idt main_symbol;
 
-  std::string main = (config.main != "") ? config.main : "main_1";
+  std::string main =
+    (config.main != "") ? config.main : "main_1"; // main(String[])
 
   // find main symbol
   std::list<irep_idt> matches;

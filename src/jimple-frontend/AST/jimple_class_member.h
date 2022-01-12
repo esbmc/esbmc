@@ -1,6 +1,10 @@
-//
-// Created by rafaelsamenezes on 21/09/2021.
-//
+/*******************************************************************\
+Module: Jimple Class Member Interface
+Author: Rafael Sá Menezes
+Date: September 2021
+Description: This interface will hold anything 
+  that belongs to a Jimple class
+\*******************************************************************/
 
 #ifndef ESBMC_JIMPLE_CLASS_MEMBER_H
 #define ESBMC_JIMPLE_CLASS_MEMBER_H
@@ -20,6 +24,9 @@
 class jimple_class_member : public jimple_ast
 {
 };
+
+// TODO: class_field
+// TODO: class_definition
 
 /**
  * @brief A class (or interface) method of a Jimple file
