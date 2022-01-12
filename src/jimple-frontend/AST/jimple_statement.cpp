@@ -45,8 +45,9 @@ exprt jimple_return::to_exprt(
   // TODO: jimple return with support to other returns
   typet return_type = empty_typet();
   code_returnt ret_expr;
-  if(expr) {
-    auto return_value = expr->to_exprt(ctx,class_name, function_name);
+  if(expr)
+  {
+    auto return_value = expr->to_exprt(ctx, class_name, function_name);
     ret_expr.op0() = return_value;
   }
   // TODO: jimple return should support values
@@ -59,7 +60,8 @@ std::string jimple_return::to_string() const
 }
 void jimple_return::from_json(const json &j)
 {
-  if(j.contains("value")) expr = jimple_expr::get_expression(j.at("value"));
+  if(j.contains("value"))
+    expr = jimple_expr::get_expression(j.at("value"));
 }
 std::string jimple_label::to_string() const
 {
@@ -154,11 +156,12 @@ exprt jimple_assignment::to_exprt(
   symbolt &added_symbol = *ctx.find_symbol(oss.str());
 
   auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(expr);
-  if(dyn_expr) {
+  if(dyn_expr)
+  {
     dyn_expr->set_lhs(symbol_expr(added_symbol));
     return expr->to_exprt(ctx, class_name, function_name);
   }
-  auto from_expr = expr->to_exprt(ctx, class_name, function_name);  
+  auto from_expr = expr->to_exprt(ctx, class_name, function_name);
   code_assignt assign(symbol_expr(added_symbol), from_expr);
   return assign;
 }
@@ -314,7 +317,8 @@ exprt jimple_invoke::to_exprt(
   for(auto i = 0; i < parameters.size(); i++)
   {
     // Just adding the arguments should be enough to set the parameters
-    auto parameter_expr = parameters[i]->to_exprt(ctx, class_name, function_name);
+    auto parameter_expr =
+      parameters[i]->to_exprt(ctx, class_name, function_name);
     call.arguments().push_back(parameter_expr);
     // Hack, manually adding parameters
     std::ostringstream oss;
@@ -323,7 +327,6 @@ exprt jimple_invoke::to_exprt(
     symbolt &added_symbol = *ctx.find_symbol(temp);
     code_assignt assign(symbol_expr(added_symbol), parameter_expr);
     block.operands().push_back(assign);
-    
   }
   block.operands().push_back(call);
   return block;
