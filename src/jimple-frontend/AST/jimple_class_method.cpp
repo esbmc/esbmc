@@ -8,6 +8,7 @@ exprt jimple_class_method::to_exprt(
   const std::string &class_name,
   const std::string &file_name) const
 {
+  // Dummy will be the base to be returned
   exprt dummy;
   code_typet method_type;
   typet inner_type;
@@ -26,10 +27,11 @@ exprt jimple_class_method::to_exprt(
   ctx.move_symbol_to_context(symbol);
   symbolt &added_symbol = *ctx.find_symbol(symbol_name);
 
-  // TODO: check for static
-  if(1)
+  // In jimple, every non-static method has access to @this
+  // In future, I will add this as a paremeter to the function call
+  if(!m.is_static())
   {
-    auto this_type = int_type();
+    auto this_type = int_type(); // TODO: support the struct type
     std::string param_id, param_name;
 
     std::ostringstream oss;
@@ -46,6 +48,8 @@ exprt jimple_class_method::to_exprt(
 
     ctx.move_symbol_to_context(param_symbol);
   }
+
+  // In Jimple, every parameter is named as @parameter#
   for(auto i = 0; i < parameters.size(); i++)
   {
     auto param_type = parameters[i]->to_typet();
@@ -102,7 +106,7 @@ void jimple_class_method::from_json(const json &j)
 
   // Method Name
   j.at("name").get_to(this->name);
-  name += "_" + get_hash_name();
+  name += "_" + get_hash_name(); // to handle polimorphism
   try
   {
     j.at("throws").get_to(this->throws);

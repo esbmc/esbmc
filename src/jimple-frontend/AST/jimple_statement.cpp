@@ -217,12 +217,9 @@ exprt jimple_if::to_exprt(
   code_gotot code_goto;
   code_goto.set_destination(label);
 
-  //    exprt else_expr = code_skipt();
-
   codet if_expr("ifthenelse");
   if_expr.copy_to_operands(
     cond->to_exprt(ctx, class_name, function_name), code_goto);
-  //    (cond->to_exprt(ctx, class_name, function_name), code_goto);
 
   return if_expr;
 }
@@ -352,7 +349,6 @@ exprt jimple_throw::to_exprt(
   codet p = codet("cpp-throw");
   //TODO: throw
   auto to_add = expr->to_exprt(ctx, class_name, function_name);
-  //auto to_add = gen_zero(int_type());
   p.move_to_operands(to_add);
   return p;
 }

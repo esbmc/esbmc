@@ -1,7 +1,20 @@
+/*******************************************************************\
+Module: Jimple Expr Interface
+Author: Rafael Sá Menezes
+Date: September 2021
+Description: This interface will hold jimple expressions such as
+arithmetic, comparation and allocation
+\*******************************************************************/
+
 #include <jimple-frontend/AST/jimple_ast.h>
 #include <jimple-frontend/AST/jimple_type.h>
 
 #pragma once
+
+/**
+ * @brief Base interface to hold jimple expressions
+ * 
+ */
 class jimple_expr : public jimple_ast
 {
 public:
@@ -14,10 +27,34 @@ public:
     return val;
   };
 
-  // Expressions parsing can be recursive
+  /**
+   * @brief Recursively explores and initializes a jimple_expression
+   * 
+   * Jimple expressions can be unary (e.g. cast) or binary (e.g. addition),
+   * however, the operands can be other expressions. For example, it is valid
+   * to do a cast over a math operation: `(int) 1 + 1` in Jimple, this should be
+   * parsed as:
+   * 
+   * - cast:
+   *   - to: int
+   *   - from:
+   *     - binop: +
+   *       - op1: 1
+   *       - op2: 1
+   * 
+   * This function will do that
+   * @param j 
+   * @return std::shared_ptr<jimple_expr> 
+   */
   static std::shared_ptr<jimple_expr> get_expression(const json &j);
 };
 
+/**
+ * @brief A number constant (in decimal)
+ * 
+ * Example: 3, 42, 1, -1, etc...
+ * 
+ */
 class jimple_constant : public jimple_expr
 {
 public:
@@ -49,6 +86,17 @@ protected:
   std::string value;
 };
 
+/**
+ * @brief The value of a symbol (variable)
+ * 
+ * E.g
+ * 
+ * int a = 3;
+ * 
+ * When an expression such as: `1 + a`, it should
+ * evaluate to 4
+ * 
+ */
 class jimple_symbol : public jimple_expr
 {
 public:
@@ -75,6 +123,12 @@ protected:
   std::string var_name;
 };
 
+/**
+ * @brief A binary operation
+ * 
+ * E.g. +, -, *, /, ==, !=, etc
+ * 
+ */
 class jimple_binop : public jimple_expr
 {
 public:
@@ -110,6 +164,11 @@ protected:
   std::shared_ptr<jimple_expr> rhs;
 };
 
+/**
+ * @brief A cast operation
+ * 
+ * E.g. (int)
+ */
 class jimple_cast : public jimple_expr
 {
 public:
@@ -145,6 +204,12 @@ protected:
   std::shared_ptr<jimple_type> to;
 };
 
+/**
+ * @brief Get the number of elements of an array (not bits/bytes)
+ * 
+ * int arr[3];
+ * lengthof(arr) = 3
+ */
 class jimple_lenghof : public jimple_expr
 {
 public:
@@ -168,6 +233,14 @@ protected:
   std::shared_ptr<jimple_expr> from;
 };
 
+/**
+ * @brief Allocates a new array (dynamic)
+ * 
+ * e.g.
+ * 
+ * int arr[];
+ * arr = new int(3);
+ */
 class jimple_newarray : public jimple_expr
 {
 public:
@@ -197,6 +270,12 @@ protected:
   std::shared_ptr<jimple_expr> size;
 };
 
+/**
+ * @brief The result of a function call
+ * 
+ * int a = foo();
+ * 
+ */
 class jimple_expr_invoke : public jimple_expr
 {
 public:
@@ -245,6 +324,24 @@ protected:
   std::vector<std::shared_ptr<jimple_expr>> parameters;
 };
 
+/**
+ * @brief Allocates a type
+ * 
+ * Note: this is not a constructor! The constructor is called through
+ * an invoke_stmt.
+ * 
+ * Example: 
+ * 
+ * CustomClass c;
+ * c = new CustomClass()
+ * 
+ * v v v v v
+ * 
+ * CustomClass *c;
+ * c = alloca(sizeof(CustomClass)) // JIMPLE_NEW
+ * c.<init>() // the inner constructor
+ * 
+ */
 class jimple_new : public jimple_newarray
 {
 public:
@@ -255,6 +352,15 @@ public:
   }
 };
 
+/**
+ * @brief Access of arrays
+ * 
+ * Since in Jimple arrays are treated as pointers
+ * this is a pointer arithmetic expression
+ * 
+ * arr[4] // JIMPLE_DEREF
+ * 
+ */
 class jimple_deref : public jimple_expr
 {
 public:
@@ -291,6 +397,12 @@ protected:
   std::shared_ptr<jimple_expr> base;
 };
 
+/**
+ * @brief Nondet call
+ * 
+ * // TODO: implement this
+ * 
+ */
 class jimple_nondet : public jimple_expr
 {
 public:
@@ -309,6 +421,15 @@ public:
     const std::string &function_name) const override;
 };
 
+/**
+ * @brief A field member of object
+ * 
+ * class Foo { int a; }
+ * 
+ * Foo f = ...;
+ * int a = F.a; // F.a is a field access
+ * 
+ */
 class jimple_field_access : public jimple_expr
 {
 public:
