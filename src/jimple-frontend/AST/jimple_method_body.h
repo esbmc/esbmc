@@ -71,18 +71,18 @@ public:
 
   enum class statement
   {
-    Assertion, // TODO: This will be removed eventually
-    Assignment,
-    AssignmentDeref, // e.g. A[2] = 3
-    Identity,
-    StaticInvoke,
-    SpecialInvoke,
-    Return,
-    Label,
-    Goto,
-    If,
-    Declaration,
-    Throw
+    Assertion,       // TODO: This will be removed eventually (for debugging)
+    Assignment,      // A = 42
+    AssignmentDeref, // A[2] = 3
+    Identity, // @this, @parameter0, @parameter1, ...; This will be removed as it can solved directly in the frontend
+    StaticInvoke,  // foo() (where foo is a static function)
+    SpecialInvoke, // A.foo() (where A is an object)
+    Return,        // return; return 42;
+    Label,         // 1:, 2:; (GOTO labels)
+    Goto,          // goto 1;
+    If,            // if <expr> goto <Label>
+    Declaration,   // int a;
+    Throw          // throw <expr>
   };
 
   std::vector<std::shared_ptr<jimple_method_field>> members;

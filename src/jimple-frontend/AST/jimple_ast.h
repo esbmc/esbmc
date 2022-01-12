@@ -76,6 +76,14 @@ protected:
     return symbol;
   }
 
+  /**
+   * @brief Create a temporary variable to be used
+   * 
+   * @param t type of the variable
+   * @param class_name class package to the variable
+   * @param function_name function where the variable is going to be created
+   * @return symbolt 
+   */
   static symbolt get_temp_symbol(
     const typet &t,
     const std::string &class_name,
@@ -98,6 +106,14 @@ protected:
     return tmp_symbol;
   }
 
+  /**
+   * @brief Get the allocation function symbol
+   * 
+   * This is going to be the function to be called
+   * for `new` and `newarray` calls
+   * 
+   * @return symbolt 
+   */
   static symbolt get_allocation_function()
   {
     std::string allocation_function = "malloc";
@@ -114,6 +130,17 @@ protected:
     return symbol;
   }
 
+  /**
+   * @brief Get the unique method name
+   * 
+   * This is the full id for the method,
+   * 
+   * In jimple this will mean `class_name:function_name`
+   * 
+   * @param class_name 
+   * @param function_name 
+   * @return std::string 
+   */
   static std::string
   get_method_name(std::string class_name, std::string function_name)
   {
@@ -122,7 +149,16 @@ protected:
     return oss.str();
   }
 
-  // Note: Jimple is already is SSA form
+  /**
+   * @brief Get the symbol name id
+   * 
+   * Note: Jimple is already is SSA form
+   * 
+   * @param class_name 
+   * @param function_name 
+   * @param symbol 
+   * @return std::string 
+   */
   static std::string get_symbol_name(
     std::string class_name,
     std::string function_name,

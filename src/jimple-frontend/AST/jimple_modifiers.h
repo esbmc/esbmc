@@ -1,3 +1,10 @@
+/*******************************************************************\
+Module: Jimple Modifier AST
+Author: Rafael Sá Menezes
+Date: September 2021
+Description: Jimple Modifiers holder
+\*******************************************************************/
+
 #ifndef ESBMC_JIMPLE_MODIFIERS_H
 #define ESBMC_JIMPLE_MODIFIERS_H
 
@@ -8,6 +15,8 @@
  * 
  * This should hold every modifier e.g. final, private
  * and etc...
+ * 
+ * We will probably only care for Static and Native thought
  */
 class jimple_modifiers : public jimple_ast
 {
@@ -20,7 +29,7 @@ public:
   {
     Abstract,
     Final,
-    Native,
+    Native, // C/C++?
     Public,
     Protected,
     Private,
@@ -34,6 +43,16 @@ public:
   };
   virtual modifier from_string(const std::string &name) const;
   virtual std::string to_string(const modifier &ft) const;
+
+  bool contains(modifier other) const
+  {
+    return std::find(m.begin(), m.end(), other) != m.end();
+  }
+
+  bool is_static() const
+  {
+    return contains(modifier::Static);
+  }
 
   modifier at(const int i) const
   {

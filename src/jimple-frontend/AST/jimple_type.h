@@ -1,6 +1,9 @@
-//
-// Created by rafaelsamenezes on 21/09/2021.
-//
+/*******************************************************************\
+Module: Jimple Types AST
+Author: Rafael Sá Menezes
+Date: September 2021
+Description: Jimple Types definitions
+\*******************************************************************/
 
 #ifndef ESBMC_JIMPLE_TYPE_H
 #define ESBMC_JIMPLE_TYPE_H

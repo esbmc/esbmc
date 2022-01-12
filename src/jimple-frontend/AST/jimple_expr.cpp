@@ -265,16 +265,6 @@ exprt jimple_expr_invoke::to_exprt(
     block.operands().push_back(assign);
   }
   block.operands().push_back(call);
-  /*
-   // Create a sideffect call to represent the allocation
-  side_effect_expr_function_callt sideeffect;
-  sideeffect.function() = call.function();
-  sideeffect.arguments() = call.arguments();
-  sideeffect.location() = call.location();
-  sideeffect.type() =
-    static_cast<const typet &>(call.function().type().return_type());
-  
-  block.operands().push_back(sideeffect); */
   return block;
 }
 
@@ -308,8 +298,6 @@ exprt jimple_newarray::to_exprt(
     constant_exprt(
       integer2binary(as_number, 10), integer2string(as_number), int_type()));
 
-  // Define the base type to be used as primitive in allocation
-  //value_operand.set("#c_sizeof_type", base_type);
   call.arguments().push_back(value_operand);
 
   // Create a sideffect call to represent the allocation
