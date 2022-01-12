@@ -17,8 +17,8 @@ void jimple_identity::from_json(const json &j)
 
 exprt jimple_identity::to_exprt(
   contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
+  const std::string &,
+  const std::string &) const
 {
   // TODO: Symbol-table / Typecast
   exprt val("at_identifier");
@@ -105,9 +105,9 @@ std::string jimple_goto::to_string() const
 }
 
 exprt jimple_goto::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
+  contextt &,
+  const std::string &,
+  const std::string &) const
 {
   code_gotot code_goto;
   code_goto.set_destination(label);
@@ -311,7 +311,7 @@ exprt jimple_invoke::to_exprt(
   auto symbol = ctx.find_symbol(oss.str());
   call.function() = symbol_expr(*symbol);
 
-  for(auto i = 0; i < parameters.size(); i++)
+  for(unsigned long int i = 0; i < parameters.size(); i++)
   {
     // Just adding the arguments should be enough to set the parameters
     auto parameter_expr =
