@@ -1,0 +1,744 @@
+{
+    "object": "Class",
+    "modifiers": [
+        "public"
+    ],
+    "name": "MainKt",
+    "extends": "java.lang.Object",
+    "content": [
+        {
+            "object": "Method",
+            "modifiers": [
+                "public",
+                "static",
+                "final"
+            ],
+            "type": {
+                "identifier": "void",
+                "dimensions": 0
+            },
+            "name": "sort",
+            "parameters": [
+                {
+                    "identifier": "int",
+                    "dimensions": 1
+                },
+                {
+                    "identifier": "int",
+                    "dimensions": 0
+                }
+            ],
+            "content": [
+                {
+                    "object": "Variable",
+                    "name": "r0",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 1
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "i0",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "i1",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "i2",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "$i3",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "i4",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "r0",
+                    "value": {
+                        "expr_type": "cast",
+                        "from": {
+                            "expr_type": "symbol",
+                            "value": "@parameter0"
+                        },
+                        "to": {
+                            "identifier": "int",
+                            "dimensions": 1
+                        }
+                    }
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "i0",
+                    "value": {
+                        "expr_type": "cast",
+                        "from": {
+                            "expr_type": "symbol",
+                            "value": "@parameter1"
+                        },
+                        "to": {
+                            "identifier": "int",
+                            "dimensions": 0
+                        }
+                    }
+                },
+                {
+                    "object": "StaticInvoke",
+                    "base_class": "kotlin.jvm.internal.Intrinsics",
+                    "method": "checkNotNullParameter", 
+                    "parameters": [
+                        {
+                            "expr_type": "symbol",
+                            "value": "r0"
+                        },
+                        {
+                            "expr_type": "string_constant",
+                            "value": "arr"
+                        }
+                    ]
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "i4",
+                    "value": {
+                        "expr_type": "constant",
+                        "value": "0"
+                    }
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "i1",
+                    "value": {
+                        "expr_type": "binop",
+                        "operator": "-",
+                        "lhs": {
+                            "expr_type": "symbol",
+                            "value": "i0"
+                        },
+                        "rhs": {
+                            "expr_type": "constant",
+                            "value": "1"
+                        }
+                    }
+                },
+                {
+                    "object": "If",
+                    "goto": "label2",
+                    "expression": {
+                        "expr_type": "binop",
+                        "operator": ">",
+                        "lhs": {
+                            "expr_type": "constant",
+                            "value": "0"
+                        },
+                        "rhs": {
+                            "expr_type": "symbol",
+                            "value": "i1"
+                        }
+                    }
+                },
+                {
+                    "object": "Label",
+                    "label_id": "label1",
+                    "content": [
+                        {
+                            "object": "SetVariable",
+                            "name": "i2",
+                            "value": {
+                                "expr_type": "symbol",
+                                "value": "i4"
+                            }
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "i4",
+                            "value": {
+                                "expr_type": "binop",
+                                "operator": "+",
+                                "lhs": {
+                                    "expr_type": "symbol",
+                                    "value": "i4"
+                                },
+                                "rhs": {
+                                    "expr_type": "constant",
+                                    "value": "1"
+                                }
+                            }
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "$i3",
+                            "value": {
+                                "expr_type": "binop",
+                                "operator": "+",
+                                "lhs": {
+                                    "expr_type": "symbol",
+                                    "value": "i2"
+                                },
+                                "rhs": {
+                                    "expr_type": "constant",
+                                    "value": "1"
+                                }
+                            }
+                        },
+                        {
+                            "object": "SetVariableDeref",
+                            "name": "r0",
+                            "pos": {
+                                "expr_type": "symbol",
+                                "value": "i2"
+                            },
+                            "value": {
+                                "expr_type": "symbol",
+                                "value": "$i3"
+                            }
+                        },
+                        {
+                            "object": "If",
+                            "goto": "label1",
+                            "expression": {
+                                "expr_type": "binop",
+                                "operator": "notequal",
+                                "lhs": {
+                                    "expr_type": "symbol",
+                                    "value": "i2"
+                                },
+                                "rhs": {
+                                    "expr_type": "symbol",
+                                    "value": "i1"
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "object": "Label",
+                    "label_id": "label2",
+                    "content": []
+                }
+            ]
+        },
+        {
+            "object": "Method",
+            "modifiers": [
+                "public",
+                "static",
+                "final"
+            ],
+            "type": {
+                "identifier": "void",
+                "dimensions": 0
+            },
+            "name": "main",
+            "parameters": [],
+            "content": [
+                {
+                    "object": "Variable",
+                    "name": "$r1",
+                    "type": {
+                        "identifier": "java.lang.AssertionError",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "r0",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 1
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "$i0",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "$i1",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "$i2",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "i3",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "i4",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "i5",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "i6",
+                    "type": {
+                        "identifier": "int",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "$z0",
+                    "type": {
+                        "identifier": "boolean",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "Variable",
+                    "name": "$z1",
+                    "type": {
+                        "identifier": "boolean",
+                        "dimensions": 0
+                    }
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "r0",
+                    "value": {
+                        "expr_type": "newarray",
+                        "type": {
+                            "identifier": "int",
+                            "dimensions": 0,
+                            "mode": "basic"
+                        },
+                        "size": {
+                            "expr_type": "constant",
+                            "value": "20"
+                        }
+                    }
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "i3",
+                    "value": {
+                        "expr_type": "constant",
+                        "value": "0"
+                    }
+                },
+                {
+                    "object": "Label",
+                    "label_id": "label1",
+                    "content": [
+                        {
+                            "object": "If",
+                            "goto": "label2",
+                            "expression": {
+                                "expr_type": "binop",
+                                "operator": ">=",
+                                "lhs": {
+                                    "expr_type": "symbol",
+                                    "value": "i3"
+                                },
+                                "rhs": {
+                                    "expr_type": "constant",
+                                    "value": "20"
+                                }
+                            }
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "i4",
+                            "value": {
+                                "expr_type": "symbol",
+                                "value": "i3"
+                            }
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "i3",
+                            "value": {
+                                "expr_type": "binop",
+                                "operator": "+",
+                                "lhs": {
+                                    "expr_type": "symbol",
+                                    "value": "i3"
+                                },
+                                "rhs": {
+                                    "expr_type": "constant",
+                                    "value": "1"
+                                }
+                            }
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "$i2",
+                            "value": {
+                                "expr_type": "binop",
+                                "operator": "-",
+                                "lhs": {
+                                    "expr_type": "constant",
+                                    "value": "20"
+                                },
+                                "rhs": {
+                                    "expr_type": "symbol",
+                                    "value": "i4"
+                                }
+                            }
+                        },
+                        {
+                            "object": "SetVariableDeref",
+                            "name": "r0",
+                            "pos": {
+                                "expr_type": "symbol",
+                                "value": "i4"
+                            },
+                            "value": {
+                                "expr_type": "symbol",
+                                "value": "$i2"
+                            }
+                        },
+                        {
+                            "object": "Goto",
+                            "goto": "label1"
+                        }
+                    ]
+                },
+                {
+                    "object": "Label",
+                    "label_id": "label2",
+                    "content": [
+                        {
+                            "object": "StaticInvoke",
+                            "base_class": "MainKt",
+                            "method": "sort",
+                            "parameters": [
+                                {
+                                    "expr_type": "symbol",
+                                    "value": "r0"
+                                },
+                                {
+                                    "expr_type": "constant",
+                                    "value": "20"
+                                }
+                            ]
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "i5",
+                            "value": {
+                                "expr_type": "constant",
+                                "value": "0"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "object": "Label",
+                    "label_id": "label3",
+                    "content": [
+                        {
+                            "object": "If",
+                            "goto": "label6",
+                            "expression": {
+                                "expr_type": "binop",
+                                "operator": ">=",
+                                "lhs": {
+                                    "expr_type": "symbol",
+                                    "value": "i5"
+                                },
+                                "rhs": {
+                                    "expr_type": "constant",
+                                    "value": "20"
+                                }
+                            }
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "i6",
+                            "value": {
+                                "expr_type": "symbol",
+                                "value": "i5"
+                            }
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "i5",
+                            "value": {
+                                "expr_type": "binop",
+                                "operator": "+",
+                                "lhs": {
+                                    "expr_type": "symbol",
+                                    "value": "i5"
+                                },
+                                "rhs": {
+                                    "expr_type": "constant",
+                                    "value": "1"
+                                }
+                            }
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "$i1",
+                            "value": {
+                                "expr_type": "deref",
+                                "base": {
+                                    "expr_type": "symbol",
+                                    "value": "r0"
+                                },
+                                "index": {
+                                    "expr_type": "symbol",
+                                    "value": "i6"
+                                }
+                            }
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "$i0",
+                            "value": {
+                                "expr_type": "binop",
+                                "operator": "+",
+                                "lhs": {
+                                    "expr_type": "symbol",
+                                    "value": "i6"
+                                },
+                                "rhs": {
+                                    "expr_type": "constant",
+                                    "value": "1"
+                                }
+                            }
+                        },
+                        {
+                            "object": "If",
+                            "goto": "label4",
+                            "expression": {
+                                "expr_type": "binop",
+                                "operator": "notequal",
+                                "lhs": {
+                                    "expr_type": "symbol",
+                                    "value": "$i1"
+                                },
+                                "rhs": {
+                                    "expr_type": "symbol",
+                                    "value": "$i0"
+                                }
+                            }
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "$z1",
+                            "value": {
+                                "expr_type": "constant",
+                                "value": "1"
+                            }
+                        },
+                        {
+                            "object": "Goto",
+                            "goto": "label5"
+                        }
+                    ]
+                },
+                {
+                    "object": "Label",
+                    "label_id": "label4",
+                    "content": [
+                        {
+                            "object": "SetVariable",
+                            "name": "$z1",
+                            "value": {
+                                "expr_type": "constant",
+                                "value": "0"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "object": "Label",
+                    "label_id": "label5",
+                    "content": [
+                        {
+                            "object": "SetVariable",
+                            "name": "$z0",
+                            "value": {
+                                "expr_type": "field_access",
+                                "from": "kotlin._Assertions",
+                                "field": "ENABLED",
+                                "type": {
+                                    "identifier": "boolean",
+                                    "dimensions": 0
+                                }
+                            }
+                        },
+                        {
+                            "object": "If",
+                            "goto": "label3",
+                            "expression": {
+                                "expr_type": "binop",
+                                "operator": "=",
+                                "lhs": {
+                                    "expr_type": "symbol",
+                                    "value": "$z0"
+                                },
+                                "rhs": {
+                                    "expr_type": "constant",
+                                    "value": "0"
+                                }
+                            }
+                        },
+                        {
+                            "object": "If",
+                            "goto": "label3",
+                            "expression": {
+                                "expr_type": "binop",
+                                "operator": "notequal",
+                                "lhs": {
+                                    "expr_type": "symbol",
+                                    "value": "$z1"
+                                },
+                                "rhs": {
+                                    "expr_type": "constant",
+                                    "value": "0"
+                                }
+                            }
+                        },
+                        {
+                            "object": "SetVariable",
+                            "name": "$r1",
+                            "value": {
+                                "expr_type": "new",
+                                "type": {
+                                    "identifier": "java.lang.AssertionError",
+                                    "dimensions": 0
+                                }
+                            }
+                        },
+                        {
+                            "object": "SpecialInvoke",
+                            "variable": "$r1",
+                            "base_class": "java.lang.AssertionError",
+                            "method": "<init>",
+                            "parameter_type": [
+                                {
+                                    "type": {
+                                        "identifier": "java.lang.Object",
+                                        "dimensions": 0
+                                    }
+                                }
+                            ],
+                            "parameters": [
+                                {
+                                    "expr_type": "string_constant",
+                                    "value": "Assertion failed"
+                                }
+                            ]
+                        },
+                        {
+                            "object": "Throw",
+                            "expr": {
+                                "expr_type": "symbol",
+                                "value": "$r1"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "object": "Label",
+                    "label_id": "label6",
+                    "content": []
+                }
+            ]
+        },
+        {
+            "object": "Method",
+            "modifiers": [
+                "public",
+                "static"
+            ],
+            "type": {
+                "identifier": "void",
+                "dimensions": 0
+            },
+            "name": "main",
+            "parameters": [
+                {
+                    "identifier": "java.lang.String",
+                    "dimensions": 1
+                }
+            ],
+            "content": [
+                {
+                    "object": "Variable",
+                    "name": "r0",
+                    "type": {
+                        "identifier": "java.lang.String",
+                        "dimensions": 1
+                    }
+                },
+                {
+                    "object": "SetVariable",
+                    "name": "r0",
+                    "value": {
+                        "expr_type": "cast",
+                        "from": {
+                            "expr_type": "symbol",
+                            "value": "@parameter0"
+                        },
+                        "to": {
+                            "identifier": "java.lang.String",
+                            "dimensions": 1
+                        }
+                    }
+                },
+                {
+                    "object": "StaticInvoke",
+                    "base_class": "MainKt",
+                    "method": "main",
+                    "parameters": []
+                }
+            ]
+        }
+    ]
+}
