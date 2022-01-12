@@ -59,7 +59,7 @@ std::string jimple_return::to_string() const
 }
 void jimple_return::from_json(const json &j)
 {
-  expr = jimple_expr::get_expression(j.at("value"));
+  if(j.contains("value")) expr = jimple_expr::get_expression(j.at("value"));
 }
 std::string jimple_label::to_string() const
 {
