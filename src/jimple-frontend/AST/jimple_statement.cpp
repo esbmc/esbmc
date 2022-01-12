@@ -45,6 +45,10 @@ exprt jimple_return::to_exprt(
   // TODO: jimple return with support to other returns
   typet return_type = empty_typet();
   code_returnt ret_expr;
+  if(expr) {
+    auto return_value = expr->to_exprt(ctx,class_name, function_name);
+    ret_expr.op0() = return_value;
+  }
   // TODO: jimple return should support values
   return ret_expr;
 }
@@ -55,7 +59,7 @@ std::string jimple_return::to_string() const
 }
 void jimple_return::from_json(const json &j)
 {
-  // TODO
+  expr = jimple_expr::get_expression(j.at("value"));
 }
 std::string jimple_label::to_string() const
 {
@@ -148,7 +152,13 @@ exprt jimple_assignment::to_exprt(
   oss << class_name << ":" << function_name << "@" << variable;
 
   symbolt &added_symbol = *ctx.find_symbol(oss.str());
-  auto from_expr = expr->to_exprt(ctx, class_name, function_name);
+
+  auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(expr);
+  if(dyn_expr) {
+    dyn_expr->set_lhs(symbol_expr(added_symbol));
+    return expr->to_exprt(ctx, class_name, function_name);
+  }
+  auto from_expr = expr->to_exprt(ctx, class_name, function_name);  
   code_assignt assign(symbol_expr(added_symbol), from_expr);
   return assign;
 }
@@ -273,11 +283,11 @@ void jimple_invoke::from_json(const json &j)
 {
   j.at("base_class").get_to(base_class);
   j.at("method").get_to(method);
-  method += "_" + get_hash_name();
   for(auto x : j.at("parameters"))
   {
     parameters.push_back(std::move(jimple_expr::get_expression(x)));
   }
+  method += "_" + get_hash_name();
 }
 
 exprt jimple_invoke::to_exprt(
@@ -285,6 +295,14 @@ exprt jimple_invoke::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
+  // TODO: Move intrinsics to backend
+  if(base_class == "kotlin.jvm.internal.Intrinsics")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  code_blockt block;
   code_function_callt call;
 
   std::ostringstream oss;
@@ -293,9 +311,22 @@ exprt jimple_invoke::to_exprt(
   auto symbol = ctx.find_symbol(oss.str());
   call.function() = symbol_expr(*symbol);
 
-  for(auto x : parameters)
-    call.arguments().push_back(x->to_exprt(ctx, class_name, function_name));
-  return call;
+  for(auto i = 0; i < parameters.size(); i++)
+  {
+    // Just adding the arguments should be enough to set the parameters
+    auto parameter_expr = parameters[i]->to_exprt(ctx, class_name, function_name);
+    call.arguments().push_back(parameter_expr);
+    // Hack, manually adding parameters
+    std::ostringstream oss;
+    oss << "@parameter" << i;
+    auto temp = get_symbol_name(base_class, method, oss.str());
+    symbolt &added_symbol = *ctx.find_symbol(temp);
+    code_assignt assign(symbol_expr(added_symbol), parameter_expr);
+    block.operands().push_back(assign);
+    
+  }
+  block.operands().push_back(call);
+  return block;
 }
 
 std::string jimple_throw::to_string() const

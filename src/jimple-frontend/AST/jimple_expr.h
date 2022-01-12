@@ -197,6 +197,55 @@ protected:
   std::shared_ptr<jimple_expr> size;
 };
 
+
+class jimple_expr_invoke : public jimple_expr
+{
+public:
+  virtual void from_json(const json &j) override;
+   virtual std::string to_string() const override
+  {
+    return "Jimple Invoke";
+  }
+  
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
+  const std::string &getBaseClass() const
+  {
+    return base_class;
+  }
+
+  const std::string &getMethod() const
+  {
+    return method;
+  }
+
+  const std::vector<std::shared_ptr<jimple_expr>> &getParameters() const
+  {
+    return parameters;
+  }
+
+  void set_lhs(exprt expr) {
+    lhs = expr;
+  }
+
+protected:
+  // We need an unique name for each function
+  std::string get_hash_name() const
+  {
+    // TODO: use some hashing to also use the types
+    // TODO: DRY
+    return std::to_string(parameters.size());
+  }
+  std::string base_class;
+  std::string method;
+  exprt lhs;
+  std::vector<std::shared_ptr<jimple_expr>> parameters;
+};
+
+
 class jimple_new : public jimple_newarray
 {
 public:

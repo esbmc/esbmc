@@ -98,6 +98,7 @@ class jimple_return : public jimple_statement
     const std::string &function_name) const override;
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
+  std::shared_ptr<jimple_expr> expr;
 };
 
 class jimple_label : public jimple_statement
