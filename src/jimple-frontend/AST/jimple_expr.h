@@ -197,16 +197,15 @@ protected:
   std::shared_ptr<jimple_expr> size;
 };
 
-
 class jimple_expr_invoke : public jimple_expr
 {
 public:
   virtual void from_json(const json &j) override;
-   virtual std::string to_string() const override
+  virtual std::string to_string() const override
   {
     return "Jimple Invoke";
   }
-  
+
   virtual exprt to_exprt(
     contextt &ctx,
     const std::string &class_name,
@@ -227,7 +226,8 @@ public:
     return parameters;
   }
 
-  void set_lhs(exprt expr) {
+  void set_lhs(exprt expr)
+  {
     lhs = expr;
   }
 
@@ -244,7 +244,6 @@ protected:
   exprt lhs;
   std::vector<std::shared_ptr<jimple_expr>> parameters;
 };
-
 
 class jimple_new : public jimple_newarray
 {

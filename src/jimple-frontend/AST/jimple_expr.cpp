@@ -215,7 +215,6 @@ void jimple_new::from_json(const json &j)
   type = std::make_shared<jimple_type>(t);
 }
 
-
 void jimple_expr_invoke::from_json(const json &j)
 {
   lhs = nil_exprt();
@@ -227,7 +226,6 @@ void jimple_expr_invoke::from_json(const json &j)
   }
   method += "_" + get_hash_name();
 }
-
 
 exprt jimple_expr_invoke::to_exprt(
   contextt &ctx,
@@ -249,12 +247,14 @@ exprt jimple_expr_invoke::to_exprt(
 
   auto symbol = ctx.find_symbol(oss.str());
   call.function() = symbol_expr(*symbol);
-  if(!lhs.is_nil()) call.lhs() = lhs;
+  if(!lhs.is_nil())
+    call.lhs() = lhs;
 
   for(auto i = 0; i < parameters.size(); i++)
   {
     // Just adding the arguments should be enough to set the parameters
-    auto parameter_expr = parameters[i]->to_exprt(ctx, class_name, function_name);
+    auto parameter_expr =
+      parameters[i]->to_exprt(ctx, class_name, function_name);
     call.arguments().push_back(parameter_expr);
     // Hack, manually adding parameters
     std::ostringstream oss;
@@ -263,10 +263,9 @@ exprt jimple_expr_invoke::to_exprt(
     symbolt &added_symbol = *ctx.find_symbol(temp);
     code_assignt assign(symbol_expr(added_symbol), parameter_expr);
     block.operands().push_back(assign);
-    
   }
   block.operands().push_back(call);
-/*
+  /*
    // Create a sideffect call to represent the allocation
   side_effect_expr_function_callt sideeffect;
   sideeffect.function() = call.function();
