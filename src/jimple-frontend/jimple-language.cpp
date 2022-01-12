@@ -17,17 +17,17 @@ bool jimple_languaget::final(contextt &context, const messaget &msg)
   return false;
 }
 bool jimple_languaget::from_type(
-  const typet &type,
-  std::string &code,
-  const namespacet &ns)
+  const typet &,
+  std::string &,
+  const namespacet &)
 {
   // TODO
   return false;
 }
 bool jimple_languaget::from_expr(
-  const exprt &expr,
-  std::string &code,
-  const namespacet &ns)
+  const exprt &,
+  std::string &,
+  const namespacet &)
 {
   // TODO
   return false;

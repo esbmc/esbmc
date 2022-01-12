@@ -12,9 +12,9 @@ void jimple_constant::from_json(const json &j)
 }
 
 exprt jimple_constant::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
+  contextt &,
+  const std::string &,
+  const std::string &) const
 {
   auto as_number = std::stoi(value);
   return constant_exprt(
@@ -250,7 +250,7 @@ exprt jimple_expr_invoke::to_exprt(
   if(!lhs.is_nil())
     call.lhs() = lhs;
 
-  for(auto i = 0; i < parameters.size(); i++)
+  for(long unsigned int i = 0; i < parameters.size(); i++)
   {
     // Just adding the arguments should be enough to set the parameters
     auto parameter_expr =
@@ -325,7 +325,6 @@ exprt jimple_deref::to_exprt(
   auto i = index->to_exprt(ctx, class_name, function_name);
   auto index = index_exprt(arr, i, arr.type().subtype());
   exprt &array_expr = index.op0();
-  exprt &index_expr = index.op1();
 
   exprt addition("+", array_expr.type());
   addition.operands().swap(index.operands());
@@ -338,9 +337,9 @@ exprt jimple_deref::to_exprt(
 };
 
 exprt jimple_nondet::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
+  contextt &,
+  const std::string &,
+  const std::string &) const
 {
   exprt nondet_expr("nondet", int_type());
   return nondet_expr;
@@ -356,9 +355,9 @@ void jimple_field_access::from_json(const json &j)
 }
 
 exprt jimple_field_access::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
+  contextt &,
+  const std::string &,
+  const std::string &) const
 {
   auto result = gen_zero(type->to_typet());
   // HACK: For now I will set some intrinsics directly (this should go to SYMEX)

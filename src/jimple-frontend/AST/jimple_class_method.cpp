@@ -6,7 +6,7 @@
 exprt jimple_class_method::to_exprt(
   contextt &ctx,
   const std::string &class_name,
-  const std::string &file_name) const
+  const std::string &) const
 {
   // Dummy will be the base to be returned
   exprt dummy;
@@ -50,7 +50,7 @@ exprt jimple_class_method::to_exprt(
   }
 
   // In Jimple, every parameter is named as @parameter#
-  for(auto i = 0; i < parameters.size(); i++)
+  for(long unsigned int i = 0; i < parameters.size(); i++)
   {
     auto param_type = parameters[i]->to_typet();
 

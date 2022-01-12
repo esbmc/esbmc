@@ -82,7 +82,7 @@ public:
     return body;
   }
 
-  const bool is_interface() const
+  bool is_interface() const
   {
     return getMode() == file_type::Interface;
   }
