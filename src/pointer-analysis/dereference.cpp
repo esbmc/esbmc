@@ -2115,27 +2115,21 @@ bool dereferencet::check_code_access(
   if(!is_code_type(type))
   {
     dereference_failure(
-      "Code separation",
-      "Program code accessed with non-code type",
-      guard);
+      "Code separation", "Program code accessed with non-code type", guard);
     return false;
   }
 
   if(!is_code_type(value))
   {
     dereference_failure(
-      "Code separation",
-      "Data object accessed with code type",
-      guard);
+      "Code separation", "Data object accessed with code type", guard);
     return false;
   }
 
   if(mode != READ)
   {
     dereference_failure(
-      "Code separation",
-      "Program code accessed in write or free mode",
-      guard);
+      "Code separation", "Program code accessed in write or free mode", guard);
   }
 
   // Only other constraint is that the offset has to be zero; there are no
@@ -2144,9 +2138,7 @@ bool dereferencet::check_code_access(
   guardt tmp_guard = guard;
   tmp_guard.add(neq);
   dereference_failure(
-    "Code separation",
-    "Program code accessed with non-zero offset",
-    tmp_guard);
+    "Code separation", "Program code accessed with non-zero offset", tmp_guard);
 
   // As for setting the 'value', it's currently already set to the base code
   // object. There's nothing we can actually change it to mean anything, so
