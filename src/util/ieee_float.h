@@ -225,7 +225,15 @@ public:
   void from_integer(const BigInt &i);
   void from_base10(const BigInt &exp, const BigInt &frac);
   void build(const BigInt &exp, const BigInt &frac);
+
+  /* Given i non-negative, this method replaces the contents of this instance
+   * by interpreting it according to the IEEE-754 in-memory representation.
+   * In particular, the low-order spec.f bits are taken as the fraction, the
+   * following spec.e bits as the exponent and the sign_flag is determined
+   * based on the remaining bits being zero or not. Afterwards adjustments for
+   * bias, denormalized numbers and NaNs are performed. */
   void unpack(const BigInt &i);
+
   void from_double(const double d);
   void from_float(const float f);
   double to_double() const;
