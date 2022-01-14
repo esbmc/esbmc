@@ -22,35 +22,35 @@ exprt jimple_full_method_body::to_exprt(
   return block;
 }
 
-void jimple_full_method_body::from_json(const json &j)
+void jimple_full_method_body::from_json(const json &stmts)
 {
-  for(auto &x : j)
+  for(auto &stmt : stmts)
   {
     std::shared_ptr<jimple_method_field> to_add;
 
-    auto stmt = x.at("object").get<std::string>();
+    auto mode = stmt.at("object").get<std::string>();
     // I think that this is the best way without
     // adding some crazy function pointer.
-    switch(from_map[stmt])
+    switch(from_map[mode])
     {
     case statement::Declaration:
     {
       jimple_declaration d;
-      x.get_to(d);
+      stmt.get_to(d);
       to_add = std::make_shared<jimple_declaration>(d);
       break;
     }
     case statement::Identity:
     {
       jimple_identity s;
-      x.at("statement").at("identity").get_to(s);
+      stmt.at("statement").at("identity").get_to(s);
       to_add = std::make_shared<jimple_identity>(s);
       break;
     }
     case statement::StaticInvoke:
     {
       jimple_invoke s;
-      x.get_to(s);
+      stmt.get_to(s);
       to_add = std::make_shared<jimple_invoke>(s);
       break;
     }
@@ -61,35 +61,35 @@ void jimple_full_method_body::from_json(const json &j)
     case statement::Return:
     {
       jimple_return s;
-      x.get_to(s);
+      stmt.get_to(s);
       to_add = std::make_shared<jimple_return>(s);
       break;
     }
     case statement::Label:
     {
       jimple_label s;
-      x.get_to(s);
+      stmt.get_to(s);
       to_add = std::make_shared<jimple_label>(s);
       break;
     }
     case statement::Goto:
     {
       jimple_goto s;
-      x.get_to(s);
+      stmt.get_to(s);
       to_add = std::make_shared<jimple_goto>(s);
       break;
     }
     case statement::Assignment:
     {
       jimple_assignment s;
-      x.get_to(s);
+      stmt.get_to(s);
       to_add = std::make_shared<jimple_assignment>(s);
       break;
     }
     case statement::AssignmentDeref:
     {
       jimple_assignment_deref s;
-      x.get_to(s);
+      stmt.get_to(s);
       to_add = std::make_shared<jimple_assignment_deref>(s);
       break;
     }
@@ -100,14 +100,14 @@ void jimple_full_method_body::from_json(const json &j)
     case statement::Throw:
     {
       jimple_throw s;
-      x.get_to(s);
+      stmt.get_to(s);
       to_add = std::make_shared<jimple_throw>(s);
       break;
     }
     case statement::If:
     {
       jimple_if s;
-      x.get_to(s);
+      stmt.get_to(s);
       to_add = std::make_shared<jimple_if>(s);
       break;
     }

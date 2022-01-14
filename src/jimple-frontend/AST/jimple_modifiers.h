@@ -29,7 +29,7 @@ public:
   {
     Abstract,
     Final,
-    Native, // C/C++?
+    Native, // C/C++ calls through JNI
     Public,
     Protected,
     Private,
@@ -46,7 +46,7 @@ public:
 
   bool contains(modifier other) const
   {
-    return std::find(m.begin(), m.end(), other) != m.end();
+    return std::find(modifiers.begin(), modifiers.end(), other) != modifiers.end();
   }
 
   bool is_static() const
@@ -56,11 +56,11 @@ public:
 
   modifier at(const int i) const
   {
-    return m[i];
+    return modifiers[i];
   }
 
 protected:
-  std::vector<modifier> m;
+  std::vector<modifier> modifiers;
 
 private:
   std::map<std::string, modifier> from_map = {

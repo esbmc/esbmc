@@ -32,25 +32,25 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  const std::string &getLocalName() const
+  const std::string &get_local_name() const
   {
     return local_name;
   }
 
-  const std::string &getAtIdentifier() const
+  const std::string &get_at_identifier() const
   {
     return at_identifier;
   }
 
-  const jimple_type &getT() const
+  const jimple_type &get_type() const
   {
-    return t;
+    return type;
   }
 
 protected:
   std::string local_name;
   std::string at_identifier;
-  jimple_type t;
+  jimple_type type;
 };
 
 /**

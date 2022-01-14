@@ -57,6 +57,8 @@ protected:
    * TODO: Right now, we are setting it as C mode. In time, we
    * should convert it to Jimple
    * 
+   * We still need to create every intrinsic type and variable for JVM
+   * 
    * @return an initialized symbolt
    */
   static symbolt create_jimple_symbolt(
