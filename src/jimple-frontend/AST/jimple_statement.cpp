@@ -12,7 +12,7 @@ void jimple_identity::from_json(const json &j)
 {
   j.at("identifier").get_to(at_identifier);
   j.at("name").get_to(local_name);
-  j.at("type").get_to(t);
+  j.at("type").get_to(type);
 }
 
 exprt jimple_identity::to_exprt(
@@ -33,7 +33,7 @@ std::string jimple_identity::to_string() const
 {
   std::ostringstream oss;
   oss << "Identity:  " << this->local_name << " = @" << at_identifier << " | "
-      << t.to_string();
+      << type.to_string();
   return oss.str();
 }
 
@@ -67,8 +67,8 @@ std::string jimple_label::to_string() const
 {
   std::ostringstream oss;
   oss << "Label: " << this->label;
-  for(auto x : this->members->members)
-    oss << "\n\t\t\t" << x->to_string();
+  for(auto member : this->members->members)
+    oss << "\n\t\t\t" << member->to_string();
   return oss.str();
 }
 
@@ -82,10 +82,10 @@ exprt jimple_label::to_exprt(
   c_label.set_label(label);
 
   code_blockt block;
-  for(auto x : members->members)
+  for(auto member : members->members)
   {
     block.operands().push_back(
-      std::move(x->to_exprt(ctx, class_name, function_name)));
+      std::move(member->to_exprt(ctx, class_name, function_name)));
   }
   c_label.code() = to_code(block);
 

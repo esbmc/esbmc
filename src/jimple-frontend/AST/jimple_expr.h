@@ -398,8 +398,6 @@ protected:
 /**
  * @brief Nondet call
  * 
- * // TODO: implement this
- * 
  */
 class jimple_nondet : public jimple_expr
 {

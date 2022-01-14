@@ -23,7 +23,7 @@ std::string jimple_file::to_string() const
       << "Name: " << this->class_name << "\n\t"
       << "Mode: " << to_string(this->mode) << "\n\t"
       << "Extends: " << this->extends << "\n\t"
-      << "Implements: " << this->implements << "\n\t" << this->m.to_string();
+      << "Implements: " << this->implements << "\n\t" << this->modifiers.to_string();
 
   oss << "\n\n";
   for(auto &x : body)
@@ -44,26 +44,19 @@ void jimple_file::from_json(const json &j)
   j.at("object").get_to(t);
   this->mode = from_string(t);
 
-  try
-  {
+  if(j.contains("implements"))
     j.at("implements").get_to(this->implements);
-  }
-  catch(std::exception &e)
-  {
+  else
     this->implements = "(No implements)";
-  }
+  
 
-  try
-  {
+  if(j.contains("extends"))
     j.at("extends").get_to(this->extends);
-  }
-  catch(std::exception &e)
-  {
+  else
     this->implements = "(No extends)";
-  }
 
   auto modifiers = j.at("modifiers");
-  m = modifiers.get<jimple_modifiers>();
+  modifiers = modifiers.get<jimple_modifiers>();
 
   auto filebody = j.at("content");
   for(auto &x : filebody)
@@ -116,8 +109,8 @@ exprt jimple_file::to_exprt(contextt &ctx) const
   }
 
   std::string id, name;
-  id = "tag-" + this->getClassName();
-  name = this->getClassName();
+  id = "tag-" + this->get_class_name();
+  name = this->get_class_name();
 
   // Check if class already exists
   if(ctx.find_symbol(id) != nullptr)

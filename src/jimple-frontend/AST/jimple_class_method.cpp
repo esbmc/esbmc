@@ -8,11 +8,11 @@ exprt jimple_class_method::to_exprt(
   const std::string &class_name,
   const std::string &) const
 {
-  // Dummy will be the base to be returned
+  // Dummy will be return expression. It will just hold the type
   exprt dummy;
   code_typet method_type;
   typet inner_type;
-  inner_type = t.to_typet();
+  inner_type = type.to_typet();
   method_type.return_type() = inner_type;
 
   auto id = get_method_name(class_name, name);
@@ -29,7 +29,7 @@ exprt jimple_class_method::to_exprt(
 
   // In jimple, every non-static method has access to @this
   // In future, I will add this as a paremeter to the function call
-  if(!m.is_static())
+  if(!modifiers.is_static())
   {
     auto this_type = int_type(); // TODO: support the struct type
     std::string param_id, param_name;
@@ -92,10 +92,10 @@ void jimple_class_method::from_json(const json &j)
 {
   // Method modifiers
   auto modifiers = j.at("modifiers");
-  m = modifiers.get<jimple_modifiers>();
+  modifiers = modifiers.get<jimple_modifiers>();
 
   // Method type
-  j.at("type").get_to(t);
+  j.at("type").get_to(type);
 
   for(auto x : j.at("parameters"))
   {
@@ -106,7 +106,7 @@ void jimple_class_method::from_json(const json &j)
 
   // Method Name
   j.at("name").get_to(this->name);
-  name += "_" + get_hash_name(); // to handle polimorphism
+  name += "_" + get_hash_name(); // to handle polimorphism, the method will have an uuid based on its type and arguments
   try
   {
     j.at("throws").get_to(this->throws);
@@ -118,7 +118,6 @@ void jimple_class_method::from_json(const json &j)
 
   // TODO: Empty body
   auto j_body = j.at("content");
-  // this is a little hacky...
   auto values = j_body.get<jimple_full_method_body>();
   this->body = std::make_shared<jimple_full_method_body>(values);
 }
@@ -126,8 +125,8 @@ std::string jimple_class_method::to_string() const
 {
   std::ostringstream oss;
   oss << "Class Method"
-      << "\n\tName: " << this->name << "\n\t" << this->t.to_string() << "\n\t"
-      << this->m.to_string() << "\n\tParameters: "
+      << "\n\tName: " << this->name << "\n\t" << this->type.to_string() << "\n\t"
+      << this->modifiers.to_string() << "\n\tParameters: "
       << "[]" //TODO: this->parameters
       << "\n\tThrows: " << this->throws
       << "\n\tBody : " << this->body->to_string();
