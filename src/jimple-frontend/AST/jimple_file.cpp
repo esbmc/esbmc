@@ -55,8 +55,7 @@ void jimple_file::from_json(const json &j)
   else
     this->implements = "(No extends)";
 
-  auto modifiers = j.at("modifiers");
-  modifiers = modifiers.get<jimple_modifiers>();
+  modifiers = j.at("modifiers").get<jimple_modifiers>();
 
   auto filebody = j.at("content");
   for(auto &x : filebody)

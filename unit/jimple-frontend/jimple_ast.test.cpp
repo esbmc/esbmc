@@ -30,7 +30,7 @@ SCENARIO("AST initialization from JSON (basic constructs)", "[jimple-frontend]")
     "modifiers": [
         "public"
     ],
-    "name": "Main",
+    "name": "MainKt",
     "extends": "java.lang.Object",
     "content": []
 })json");
@@ -40,13 +40,14 @@ SCENARIO("AST initialization from JSON (basic constructs)", "[jimple-frontend]")
     jimple_file f;
     j.get_to(f);
 
-    REQUIRE(f.get_class_name() == "Main");
+    REQUIRE(f.get_class_name() == "MainKt");
     REQUIRE_FALSE(f.get_class_name() == "FalseClassName");
     REQUIRE(!f.is_interface());
     REQUIRE_FALSE(f.is_interface());
     REQUIRE(f.get_extends() == "java.lang.Object");
+    
     REQUIRE(f.get_implements() == "(No implements)");
-    REQUIRE(f.get_modifiers().at(0) == jimple_modifiers::modifier::Public);
+    REQUIRE(f.get_modifiers().is_public());
     REQUIRE(f.get_body().size() == 0);
   }
 }
@@ -58,7 +59,7 @@ SCENARIO("AST initialization from JSON (methods)", "[jimple-frontend]")
     std::istringstream file(R"json({
     "object": "Method",
     "modifiers": [
-        "public"
+        "static", "public"
     ],
     "type": {"identifier": "int",
              "dimensions": 0,
@@ -76,15 +77,15 @@ SCENARIO("AST initialization from JSON (methods)", "[jimple-frontend]")
     jimple_class_method f;
     j.get_to(f);
 
-    REQUIRE(f.get_name() == "method");
+    REQUIRE(f.get_name() == "method_0");
     REQUIRE_FALSE(f.get_name() == "WrongMethodName");
     REQUIRE(f.get_throws() == "(No throw)");
     REQUIRE_FALSE(f.get_throws() == "exception");
     REQUIRE(f.get_type().is_array() == false);
     REQUIRE_FALSE(f.get_type().is_array());
     REQUIRE(f.get_parameters().size() == 0);
-    REQUIRE(f.get_modifiers().at(0) == jimple_modifiers::modifier::Public);
-    REQUIRE_FALSE(f.get_modifiers().at(0) == jimple_modifiers::modifier::Private);
+    REQUIRE(f.get_modifiers().is_public());
+    REQUIRE_FALSE(f.get_modifiers().is_private());
   }
 }
 
@@ -186,7 +187,7 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
 
     REQUIRE(f.getBaseClass() == "URI1495");
     REQUIRE_FALSE(f.getBaseClass() == "BaseClass");
-    REQUIRE(f.getMethod() == "foo");
+    REQUIRE(f.getMethod() == "foo_0");
     REQUIRE_FALSE(f.getMethod() == "bar");
     REQUIRE(f.getParameters().size() == 0);
     REQUIRE_FALSE(f.getParameters().size() == 1);
