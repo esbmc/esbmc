@@ -587,6 +587,8 @@ void goto_convertt::do_function_call_symbol(
   }
   else if(base_name == "__ESBMC_assert")
   {
+    // 1 argument --> Jimple assertion
+    // 2 arguments --> Normal assertion + MSG
     if(arguments.size() > 2)
     {
       err_location(function);

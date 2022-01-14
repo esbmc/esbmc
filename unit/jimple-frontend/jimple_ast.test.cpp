@@ -40,14 +40,14 @@ SCENARIO("AST initialization from JSON (basic constructs)", "[jimple-frontend]")
     jimple_file f;
     j.get_to(f);
 
-    REQUIRE(f.getClassName() == "Main");
-    REQUIRE_FALSE(f.getClassName() == "FalseClassName");
+    REQUIRE(f.get_class_name() == "Main");
+    REQUIRE_FALSE(f.get_class_name() == "FalseClassName");
     REQUIRE(!f.is_interface());
     REQUIRE_FALSE(f.is_interface());
-    REQUIRE(f.getExtends() == "java.lang.Object");
-    REQUIRE(f.getImplements() == "(No implements)");
-    REQUIRE(f.getM().at(0) == jimple_modifiers::modifier::Public);
-    REQUIRE(f.getBody().size() == 0);
+    REQUIRE(f.get_extends() == "java.lang.Object");
+    REQUIRE(f.get_implements() == "(No implements)");
+    REQUIRE(f.get_modifiers().at(0) == jimple_modifiers::modifier::Public);
+    REQUIRE(f.get_body().size() == 0);
   }
 }
 
@@ -76,15 +76,15 @@ SCENARIO("AST initialization from JSON (methods)", "[jimple-frontend]")
     jimple_class_method f;
     j.get_to(f);
 
-    REQUIRE(f.getName() == "method");
-    REQUIRE_FALSE(f.getName() == "WrongMethodName");
-    REQUIRE(f.getThrows() == "(No throw)");
-    REQUIRE_FALSE(f.getThrows() == "exception");
-    REQUIRE(f.getT().is_array() == false);
-    REQUIRE_FALSE(f.getT().is_array());
-    REQUIRE(f.getParameters().size() == 0);
-    REQUIRE(f.getM().at(0) == jimple_modifiers::modifier::Public);
-    REQUIRE_FALSE(f.getM().at(0) == jimple_modifiers::modifier::Private);
+    REQUIRE(f.get_name() == "method");
+    REQUIRE_FALSE(f.get_name() == "WrongMethodName");
+    REQUIRE(f.get_throws() == "(No throw)");
+    REQUIRE_FALSE(f.get_throws() == "exception");
+    REQUIRE(f.get_type().is_array() == false);
+    REQUIRE_FALSE(f.get_type().is_array());
+    REQUIRE(f.get_parameters().size() == 0);
+    REQUIRE(f.get_modifiers().at(0) == jimple_modifiers::modifier::Public);
+    REQUIRE_FALSE(f.get_modifiers().at(0) == jimple_modifiers::modifier::Private);
   }
 }
 
@@ -106,12 +106,12 @@ SCENARIO("AST initialization from JSON (declarations)", "[jimple-frontend]")
     jimple_declaration f;
     j.get_to(f);
 
-    REQUIRE(f.getName() == "a");
-    REQUIRE_FALSE(f.getName() == "b");
-    REQUIRE(f.getT().getTName() == "int");
-    REQUIRE_FALSE(f.getT().getTName() == "void");
-    REQUIRE(f.getT().getTDim() == 0);
-    REQUIRE_FALSE(f.getT().getTDim() == 1);
+    REQUIRE(f.get_name() == "a");
+    REQUIRE_FALSE(f.get_name() == "b");
+    REQUIRE(f.get_type().getTName() == "int");
+    REQUIRE_FALSE(f.get_type().getTName() == "void");
+    REQUIRE(f.get_type().getTDim() == 0);
+    REQUIRE_FALSE(f.get_type().getTDim() == 1);
   }
 }
 
@@ -254,14 +254,14 @@ SCENARIO("AST initialization from JSON (statements)", "[jimple-frontend]")
     jimple_identity f;
     j.get_to(f);
 
-    REQUIRE(f.getLocalName() == "r0");
-    REQUIRE_FALSE(f.getLocalName() == "r1");
-    REQUIRE(f.getAtIdentifier() == "this");
-    REQUIRE_FALSE(f.getAtIdentifier() == "");
-    REQUIRE(f.getT().getTName() == "int");
-    REQUIRE_FALSE(f.getT().getTName() == "void");
-    REQUIRE(f.getT().getTDim() == 0);
-    REQUIRE_FALSE(f.getT().getTDim() == 1);
+    REQUIRE(f.get_local_name() == "r0");
+    REQUIRE_FALSE(f.get_local_name() == "r1");
+    REQUIRE(f.get_at_identifier() == "this");
+    REQUIRE_FALSE(f.get_at_identifier() == "");
+    REQUIRE(f.get_type().getTName() == "int");
+    REQUIRE_FALSE(f.get_type().getTName() == "void");
+    REQUIRE(f.get_type().getTDim() == 0);
+    REQUIRE_FALSE(f.get_type().getTDim() == 1);
   }
 }
 

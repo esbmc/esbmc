@@ -29,18 +29,18 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
-  const jimple_type &getT() const
+  const jimple_type &get_type() const
   {
-    return t;
+    return type;
   }
 
-  const std::string &getName() const
+  const std::string &get_name() const
   {
     return name;
   }
 
 protected:
-  jimple_type t;
+  jimple_type type;
   std::string name;
 };
 

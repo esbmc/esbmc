@@ -9,7 +9,7 @@ exprt jimple_declaration::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
-  typet t = this->t.to_typet();
+  typet t = this->type.to_typet();
 
   std::string id, name;
   id = get_symbol_name(class_name, function_name, this->name);
@@ -33,12 +33,12 @@ std::string jimple_declaration::to_string() const
   std::ostringstream oss;
   oss << "Declaration: ";
   oss << " " << this->name;
-  oss << " | " << t.to_string();
+  oss << " | " << type.to_string();
 
   return oss.str();
 }
 void jimple_declaration::from_json(const json &j)
 {
   j.at("name").get_to(this->name);
-  j.at("type").get_to(this->t);
+  j.at("type").get_to(this->type);
 }

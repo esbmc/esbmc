@@ -5,10 +5,10 @@
 #include <jimple-frontend/AST/jimple_modifiers.h>
 void jimple_modifiers::from_json(const json &j)
 {
-  auto p = j.get<std::vector<std::string>>();
-  for(auto &x : p)
+  auto modifiers_list = j.get<std::vector<std::string>>();
+  for(auto &modifier : modifiers_list)
   {
-    this->m.push_back(from_string(x));
+    this->modifiers.push_back(from_string(modifier));
   }
 }
 
@@ -27,9 +27,9 @@ std::string jimple_modifiers::to_string() const
   std::ostringstream oss;
 
   oss << "Modifiers: ||";
-  for(auto &x : this->m)
+  for(auto &modifier : this->modifiers)
   {
-    oss << " " << to_string(x) << " |";
+    oss << " " << to_string(modifier) << " |";
   }
   oss << "|";
 

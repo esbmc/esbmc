@@ -165,9 +165,9 @@ exprt jimple_binop::to_exprt(
 
 void jimple_cast::from_json(const json &j)
 {
-  jimple_type t;
-  j.at("to").get_to(t);
-  to = std::make_shared<jimple_type>(t);
+  jimple_type type;
+  j.at("to").get_to(type);
+  to = std::make_shared<jimple_type>(type);
   from = get_expression(j.at("from"));
 }
 
@@ -256,7 +256,7 @@ exprt jimple_expr_invoke::to_exprt(
     auto parameter_expr =
       parameters[i]->to_exprt(ctx, class_name, function_name);
     call.arguments().push_back(parameter_expr);
-    // Hack, manually adding parameters
+    // Hack, manually adding parameters, this should be done at symex
     std::ostringstream oss;
     oss << "@parameter" << i;
     auto temp = get_symbol_name(base_class, method, oss.str());
