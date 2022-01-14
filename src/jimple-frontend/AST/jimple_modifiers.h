@@ -54,6 +54,16 @@ public:
     return contains(modifier::Static);
   }
 
+  bool is_public() const
+  {
+    return contains(modifier::Public);
+  }
+
+  bool is_private() const
+  {
+    return contains(modifier::Private);
+  }
+
   modifier at(const int i) const
   {
     return modifiers[i];

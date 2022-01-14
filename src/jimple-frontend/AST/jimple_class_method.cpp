@@ -91,8 +91,7 @@ exprt jimple_class_method::to_exprt(
 void jimple_class_method::from_json(const json &j)
 {
   // Method modifiers
-  auto modifiers = j.at("modifiers");
-  modifiers = modifiers.get<jimple_modifiers>();
+  modifiers = j.at("modifiers").get<jimple_modifiers>();
 
   // Method type
   j.at("type").get_to(type);
