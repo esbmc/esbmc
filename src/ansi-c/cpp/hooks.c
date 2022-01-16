@@ -10,11 +10,16 @@ extern int inclevel; // Good grief
 
 struct hooked_header {
 	const char *basename;
-	char *textstart;
-	unsigned int *textsize;
+	const char *textstart;
+	const unsigned int *textsize;
 };
 
+#define ESBMC_FLAIL(body, size, ...) { #__VA_ARGS__, body, &size },
+
 struct hooked_header headers[] = {
+#include <c2goto/headers/libc_hdr.h>
+#undef ESBMC_FLAIL
+#if 0
 /* stddef.h contains a variety of compiler-specific functions */
 { "stddef.h",		stddef_buf,	&stddef_buf_size},
 /* contains va_start and similar functionality */
@@ -29,6 +34,7 @@ struct hooked_header headers[] = {
 { "pthreadtypes.h",	pthreadtypes_buf, &pthreadtypes_buf_size},
  /* Integer limits */
 { "limits.h",		limits_buf, &limits_buf_size},
+#endif
 { NULL, NULL, NULL}
 };
 
@@ -39,7 +45,7 @@ handle_hooked_header(const usch *name)
 {
 	struct includ buf;
 	struct hooked_header *h;
-	int otrulvl, c;
+	int otrulvl;
 
 	for (h = &headers[0]; h->basename != NULL; h++) {
 		if (!strcmp((char *)name, h->basename)) {

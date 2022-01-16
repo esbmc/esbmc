@@ -38,6 +38,28 @@ public:
   explicit contextt(const messaget &msg) : msg(msg)
   {
   }
+  ~contextt() = default;
+  contextt(const contextt &obj) = delete;
+
+#ifdef ENABLE_OLD_FRONTEND
+  contextt &operator=(const contextt &rhs)
+  {
+    // copy assignment operator for old frontend typechecking
+    if(&rhs == this) // check self assignment
+    {
+      msg.error("Context is copying itself");
+    }
+
+    // Since the const messaget& member breaks default copy assignment operation in this class,
+    // this no-op copy assignment operator aims to restore the functionality
+    // of ansic_c_typecheck function in src/ansi-c/ansi_c_typecheck.cpp prior to commit 4dc8478.
+    // However, using a no-op copy assignment operator is quite hacky. We do not recomment it
+    // in other places of ESBMC.
+    return *this;
+  }
+#else
+  contextt &operator=(const contextt &rhs) = delete;
+#endif
 
   symbol_base_mapt symbol_base_map;
 

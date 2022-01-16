@@ -10,13 +10,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_C_MAIN_H
 
 #include <util/context.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/std_code.h>
+#include <iostream>
 
 bool c_main(
   contextt &context,
   const std::string &standard_main,
-  message_handlert &message_handler);
+  const messaget &message_handler);
 
 void static_lifetime_init(const contextt &context, codet &dest);
 

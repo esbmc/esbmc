@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/i2string.h>
 #include <util/show_symbol_table.h>
 
-language_uit::language_uit(const cmdlinet &__cmdline, const messaget &msg)
+language_uit::language_uit(const cmdlinet &__cmdline, messaget &msg)
   : language_files(msg), context(msg), _cmdline(__cmdline), msg(msg)
 {
 }
@@ -40,7 +40,14 @@ bool language_uit::parse(const std::string &filename)
   }
 
   if(config.options.get_bool_option("old-frontend"))
-    mode++;
+  {
+    mode = get_old_frontend_mode(mode);
+    if(mode == -1)
+    {
+      msg.error("old-frontend was not built on this version of ESBMC");
+      return true;
+    }
+  }
 
   // Check that it opens
   std::ifstream infile(filename.c_str());
@@ -64,8 +71,22 @@ bool language_uit::parse(const std::string &filename)
 
   msg.status("Parsing", filename);
 
-  if(mode == 2) // 0 for clang-c, 2 for Solidity
+#ifdef ENABLE_SOLIDITY_FRONTEND
+  if(mode == get_mode("Solidity AST"))
+  {
     language.set_func_name(_cmdline.vm["function"].as<std::string>());
+
+    if(config.options.get_option("contract") == "")
+    {
+      msg.error("Please set the smart contract source file.");
+      return true;
+    }
+    else
+    {
+      language.set_smart_contract_source(config.options.get_option("contract"));
+    }
+  }
+#endif
 
   if(language.parse(filename, msg))
   {

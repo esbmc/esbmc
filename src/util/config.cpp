@@ -52,6 +52,7 @@ static const eregex WINDOWS_ABI("mingw.*|win[0-9]{2}|windows|msys");
 static const eregex FREEBSD("k?freebsd.*");
 static const eregex MACOS("macos|osx.*");
 static const eregex X86("i[3456]86|x86_64|x64");
+static const eregex ARM("(arm|thumb|aarch64c?)(eb|_be)?");
 static const eregex MIPS("mips(64|isa64|isa64sb1)?(r[0-9]+)?(el|le)?.*");
 static const eregex POWERPC("(ppc|powerpc)(64)?(le)?");
 
@@ -61,6 +62,9 @@ arch_endianness(const std::string &arch, const messaget &msg)
   if(std::regex_match(arch, X86) || arch == "riscv32" || arch == "riscv64")
     return configt::ansi_ct::IS_LITTLE_ENDIAN;
   std::smatch r;
+  if(std::regex_match(arch, r, ARM))
+    return r.length(2) > 0 ? configt::ansi_ct::IS_BIG_ENDIAN
+                           : configt::ansi_ct::IS_LITTLE_ENDIAN;
   if(std::regex_match(arch, r, MIPS))
     return r.length(3) > 0 ? configt::ansi_ct::IS_LITTLE_ENDIAN
                            : configt::ansi_ct::IS_BIG_ENDIAN;
@@ -103,6 +107,9 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
 
   if(cmdline.isset("include"))
     ansi_c.include_paths = cmdline.get_values("include");
+
+  if(cmdline.isset("idirafter"))
+    ansi_c.idirafter_paths = cmdline.get_values("idirafter");
 
   if(cmdline.isset("force"))
     ansi_c.forces = cmdline.get_values("force");

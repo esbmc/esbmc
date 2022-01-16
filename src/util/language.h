@@ -73,7 +73,7 @@ public:
   virtual bool
   from_type(const typet &type, std::string &code, const namespacet &ns) = 0;
 
-  virtual languaget *new_language(const messaget &msg) = 0;
+  virtual languaget *new_language(const messaget &msg) const = 0;
 
   // constructor / destructor
 
@@ -87,9 +87,20 @@ public:
     func_name = _path;
   };
 
+#ifdef ENABLE_SOLIDITY_FRONTEND
+  inline void set_smart_contract_source(const std::string _path)
+  {
+    smart_contract = _path;
+  };
+#endif
+
 protected:
   const messaget &msg;
   // function name for verification that requires this information before GOTO conversion phase.
   std::string func_name = "";
+#ifdef ENABLE_SOLIDITY_FRONTEND
+  // smart contract source
+  std::string smart_contract = "";
+#endif
 };
 #endif

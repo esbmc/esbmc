@@ -1028,6 +1028,47 @@ smt_astt yices_convt::mk_tuple_array_symbol(const expr2tc &expr)
   return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
 }
 
+expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
+{
+  const struct_union_data &strct = get_type_def(type);
+
+  if(is_pointer_type(type))
+  {
+    // Pointer have two fields, a base address and an offset, so we just
+    // need to get the two numbers and call the pointer API
+
+    auto s1 = convert_sort(strct.members[0]);
+    smt_astt object =
+      new_ast(yices_select(1, to_solver_smt_ast<yices_smt_ast>(sym)->a), s1);
+
+    auto s2 = convert_sort(strct.members[1]);
+    smt_astt offset =
+      new_ast(yices_select(2, to_solver_smt_ast<yices_smt_ast>(sym)->a), s2);
+
+    unsigned int num =
+      get_bv(object, is_signedbv_type(strct.members[0])).to_uint64();
+    unsigned int offs =
+      get_bv(offset, is_signedbv_type(strct.members[1])).to_uint64();
+    pointer_logict::pointert p(num, BigInt(offs));
+    return pointer_logic.back().pointer_expr(p, type);
+  }
+
+  // Otherwise, run through all fields and despatch to 'get_by_ast' again.
+  constant_struct2tc outstruct(type, std::vector<expr2tc>());
+  unsigned int i = 0;
+  for(auto const &it : strct.members)
+  {
+    outstruct->datatype_members.push_back(smt_convt::get_by_ast(
+      it,
+      new_ast(
+        yices_select(1 + i, to_solver_smt_ast<yices_smt_ast>(sym)->a),
+        convert_sort(it))));
+    i++;
+  }
+
+  return outstruct;
+}
+
 expr2tc yices_convt::tuple_get(const expr2tc &expr)
 {
   const struct_union_data &strct = get_type_def(expr->type);

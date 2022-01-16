@@ -31,8 +31,8 @@ extern const char *extensions_sol_ast[];
 
 languaget *new_clang_c_language(const messaget &msg);
 languaget *new_clang_cpp_language(const messaget &msg);
-languaget *new_ansi_c_language();
-languaget *new_cpp_language();
+languaget *new_ansi_c_language(const messaget &msg);
+languaget *new_cpp_language(const messaget &msg);
 languaget *new_solidity_language(const messaget &msg);
 
 // List of language entries, one can put in the mode table:
@@ -63,6 +63,7 @@ languaget *new_solidity_language(const messaget &msg);
 
 int get_mode(const std::string &str);
 int get_mode_filename(const std::string &filename);
+int get_old_frontend_mode(int current_mode);
 
 languaget *new_language(const char *mode, const messaget &msg);
 

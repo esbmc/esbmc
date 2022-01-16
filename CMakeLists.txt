@@ -30,6 +30,10 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer")
 endif()
 
+if(CMAKE_COMPILER_IS_GNUCXX)
+  add_compile_options(-Wall -Wextra)
+endif()
+
 include(CheckIncludeFile)
 check_include_file(unistd.h HAVE_UNISTD)
 

@@ -329,7 +329,7 @@ public:
    *  --smt-thread-guard is enabled, we ask the solver.
    *  @return True when state guard is false
    */
-  bool is_cur_state_guard_false();
+  bool is_cur_state_guard_false(const expr2tc &guard);
 
   /**
    *  Generates execution guard that's true if this interleaving can be reached.
@@ -381,7 +381,6 @@ public:
    *  Updates internal records to say that the thread has ended. The thread
    *  itself can continue executing until the next context switch point, when
    *  the scheduler notices it's unschedulable. So, always ensure end_thread is
-   *  followed by forcing a context switch So, always ensure end_thread is
    *  followed by forcing a context switch.
    */
   void end_thread();
@@ -426,7 +425,7 @@ public:
     std::set<expr2tc> &global_list);
 
   /**
-   *  Check for scheduling dependancies. Whether it exists between the variables
+   *  Check for scheduling dependencies. Whether it exists between the variables
    *  accessed by the last transition of thread j and the last transition of
    *  thread l.
    *  @param j Most recently executed thread id
@@ -455,7 +454,7 @@ public:
   }
 
   /**
-   *  Has a context switch point occured.
+   *  Has a context switch point occurred.
    *  Four things can justify this:
    *   1. cswitch forced by atomic end or yield.
    *   2. Global data read/written.
@@ -611,8 +610,8 @@ protected:
    *  rejects, this becomes true. For various reasons, we can't tell whether or
    *  not MPOR rejects a transition in advance. */
   bool mpor_says_no;
-  /** Indicates a manatory context switch should occur. Can happen when an
-   *  atomic_end instruction has occured, or when a __ESBMC_yield(); runs */
+  /** Indicates a mandatory context switch should occur. Can happen when an
+   *  atomic_end instruction has occurred, or when a __ESBMC_yield(); runs */
   bool cswitch_forced;
 
   /** Are we tracing / printing symex instructions? */

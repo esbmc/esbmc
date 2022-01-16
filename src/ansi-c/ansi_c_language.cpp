@@ -96,10 +96,14 @@ static void internal_additions(std::string &code)
     "\n";
 }
 
+ansi_c_languaget::ansi_c_languaget(const messaget &msg) : languaget(msg)
+{
+}
+
 bool ansi_c_languaget::preprocess(
   const std::string &path,
   std::ostream &outstream,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
 // check extensions
 
@@ -127,7 +131,7 @@ bool ansi_c_languaget::preprocess(
 
 bool ansi_c_languaget::parse(
   const std::string &path,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   // store the path
 
@@ -151,10 +155,10 @@ bool ansi_c_languaget::parse(
   ansi_c_parser.clear();
   ansi_c_parser.filename = "<built-in>";
   ansi_c_parser.in = &codestr;
-  ansi_c_parser.set_message_handler(&message_handler);
+  //ansi_c_parser.set_message_handler(&message_handler);
   ansi_c_parser.grammar = ansi_c_parsert::LANGUAGE;
 
-  if(config.ansi_c.os == configt::ansi_ct::OS_WIN32)
+  if(config.ansi_c.target.is_windows_abi())
     ansi_c_parser.mode = ansi_c_parsert::MSC;
   else
     ansi_c_parser.mode = ansi_c_parsert::GCC;
@@ -184,12 +188,12 @@ bool ansi_c_languaget::parse(
 bool ansi_c_languaget::typecheck(
   contextt &context,
   const std::string &module,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   if(ansi_c_convert(parse_tree, module, message_handler))
     return true;
 
-  contextt new_context;
+  contextt new_context(message_handler);
 
   if(ansi_c_typecheck(parse_tree, new_context, module, message_handler))
     return true;
@@ -200,9 +204,7 @@ bool ansi_c_languaget::typecheck(
   return false;
 }
 
-bool ansi_c_languaget::final(
-  contextt &context,
-  message_handlert &message_handler)
+bool ansi_c_languaget::final(contextt &context, const messaget &message_handler)
 {
   if(c_final(context, message_handler))
     return true;
@@ -217,9 +219,9 @@ void ansi_c_languaget::show_parse(std::ostream &out)
   parse_tree.output(out);
 }
 
-languaget *new_ansi_c_language()
+languaget *new_ansi_c_language(const messaget &msg)
 {
-  return new ansi_c_languaget;
+  return new ansi_c_languaget(msg);
 }
 
 bool ansi_c_languaget::from_expr(
@@ -243,7 +245,7 @@ bool ansi_c_languaget::from_type(
 bool ansi_c_languaget::merge_context(
   contextt &dest,
   contextt &src,
-  message_handlert &message_handler,
+  const messaget &message_handler,
   const std::string &module) const
 {
   return c_link(dest, src, message_handler, module);

@@ -24,7 +24,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 bool cpp_languaget::preprocess(
   const std::string &path,
   std::ostream &outstream,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   if(path == "")
     return c_preprocess("", outstream, true, message_handler);
@@ -45,6 +45,10 @@ bool cpp_languaget::preprocess(
   }
 
   return c_preprocess(path, outstream, true, message_handler);
+}
+
+cpp_languaget::cpp_languaget(const messaget &msg) : languaget(msg)
+{
 }
 
 void cpp_languaget::internal_additions(std::ostream &out)
@@ -130,7 +134,7 @@ void cpp_languaget::internal_additions(std::ostream &out)
 
 bool cpp_languaget::parse(
   const std::string &path,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   // store the path
 
@@ -152,10 +156,9 @@ bool cpp_languaget::parse(
   cpp_parser.clear();
   cpp_parser.filename = path;
   cpp_parser.in = &i_preprocessed;
-  cpp_parser.set_message_handler(&message_handler);
   cpp_parser.grammar = cpp_parsert::LANGUAGE;
 
-  if(config.ansi_c.os == configt::ansi_ct::OS_WIN32)
+  if(config.ansi_c.target.is_windows_abi())
     cpp_parser.mode = cpp_parsert::MSC;
   else
     cpp_parser.mode = cpp_parsert::GCC;
@@ -176,9 +179,9 @@ bool cpp_languaget::parse(
 bool cpp_languaget::typecheck(
   contextt &context,
   const std::string &module,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
-  contextt new_context;
+  contextt new_context(message_handler);
 
   if(cpp_typecheck(cpp_parse_tree, new_context, module, message_handler))
     return true;
@@ -186,7 +189,7 @@ bool cpp_languaget::typecheck(
   return c_link(context, new_context, message_handler, module);
 }
 
-bool cpp_languaget::final(contextt &context, message_handlert &message_handler)
+bool cpp_languaget::final(contextt &context, const messaget &message_handler)
 {
   if(cpp_final(context, message_handler))
     return true;
@@ -244,9 +247,9 @@ void cpp_languaget::show_parse(std::ostream &out, const cpp_itemt &item)
     out << "UNKNOWN: " << item << std::endl;
 }
 
-languaget *new_cpp_language()
+languaget *new_cpp_language(const messaget &msg)
 {
-  return new cpp_languaget;
+  return new cpp_languaget(msg);
 }
 
 bool cpp_languaget::from_expr(

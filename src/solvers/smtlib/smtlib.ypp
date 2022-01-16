@@ -431,7 +431,7 @@ info_response: attribute
            free($1);
            $$->token = 0;
            $$->sexpr_list.push_front(*s);
-           free(s);
+           delete s;
            s = new sexpr();
            s->token = TOK_KEYWORD;
            s->data = std::string($2);

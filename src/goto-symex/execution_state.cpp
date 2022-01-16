@@ -223,7 +223,7 @@ void execution_statet::symex_step(reachability_treet &art)
   if(break_insn != 0 && break_insn == instruction.location_number)
   {
 #ifndef _WIN32
-#ifndef __aarch64__
+#if !(defined(__arm__) || defined(__aarch64__))
     __asm__("int $3");
 #else
     msg.error("Can't trap on ARM, sorry");
@@ -267,7 +267,19 @@ void execution_statet::symex_step(reachability_treet &art)
     if(instruction.function == "__ESBMC_main")
     {
       end_thread();
-      force_cswitch();
+    }
+    else if(
+      instruction.function == "c:@F@main" &&
+      !options.get_bool_option("deadlock-check") &&
+      !options.get_bool_option("memory-leak-check"))
+    {
+      // check whether we reached the end of the main function and
+      // whether we are not checking for (local and global) deadlocks and memory leaks.
+      // We should end the main thread to avoid exploring further interleavings
+      // TODO: once we support at_exit, we should check this code
+      // TODO: we should support verifying memory leaks in multi-threaded C programs.
+      assume(gen_false_expr());
+      end_thread();
     }
     else
     {
@@ -282,17 +294,11 @@ void execution_statet::symex_step(reachability_treet &art)
   case ATOMIC_END:
     decrement_active_atomic_number();
     state.source.pc++;
-
-    // Don't context switch if the guard is false. This instruction hasn't
-    // actually been executed, so context switching achieves nothing. (We
-    // don't do this for the active_atomic_number though, because it's cheap,
-    // and should be balanced under all circumstances anyway).
-    if(!state.guard.is_false())
-      force_cswitch();
-
     break;
   case RETURN:
-    if(!state.guard.is_false())
+    if(
+      !state.guard.is_false() ||
+      !is_cur_state_guard_false(state.guard.as_expr()))
     {
       expr2tc thecode = instruction.code, assign;
       if(make_return_assignment(assign, thecode))
@@ -336,7 +342,7 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
 
   goto_symext::symex_goto(old_guard);
 
-  if(!pre_goto_guard.is_false() && !is_nil_expr(old_guard))
+  if(!pre_goto_guard.is_false())
   {
     if(threads_state.size() >= thread_cswitch_threshold)
     {
@@ -498,7 +504,7 @@ void execution_statet::preserve_last_paths()
 
   // Add the current path to the set of paths to be preserved. Don't do this
   // if the current guard is false, though.
-  if(!ls.guard.is_false())
+  if(!ls.guard.is_false() || !is_cur_state_guard_false(ls.guard.as_expr()))
     pp.push_back(std::make_pair(ls.source.pc, goto_statet(ls, msg)));
 
   // Now then -- was it a goto? And did we actually branch to it? Detect this
@@ -584,6 +590,14 @@ void execution_statet::preserve_last_paths()
 
 void execution_statet::cull_all_paths()
 {
+  // check whether the guard is enabled before culling all execution paths.
+  // this check should prevent us from removing execution paths that are needed
+  // to verifying a given safety property (cf. GitHub issue #608).
+  if(
+    is_false(cur_state->guard.as_expr()) ||
+    is_cur_state_guard_false(cur_state->guard.as_expr()))
+    return;
+
   // Walk through _all_ symbolic paths in the program and wipe them out.
   // Current path is easy: set the guard to false. phi_function will overwrite
   // any different valuation left in the l2 map.
@@ -612,8 +626,17 @@ void execution_statet::restore_last_paths()
     const auto &loc = p.first;
     const auto &gs = p.second;
 
+    // This is an experimental option to stop the verification process
+    // if we have more than one state at a given location to merge.
+    if(
+      options.get_bool_option("no-goto-merge") &&
+      cur_state->top().goto_state_map[loc].size() != 0)
+    {
+      msg.error(
+        "There are goto statements that shouldn't be merged at this point");
+      abort();
+    }
     // Create a fresh new goto_statet to be merged in at the target insn
-    assert(cur_state->top().goto_state_map[loc].size() == 0);
     cur_state->top().goto_state_map[loc].emplace_back(*cur_state, msg);
     // Get ref to it
     auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
@@ -629,12 +652,12 @@ void execution_statet::restore_last_paths()
   list.clear();
 }
 
-bool execution_statet::is_cur_state_guard_false()
+bool execution_statet::is_cur_state_guard_false(const expr2tc &guard)
 {
   // So, can the assumption actually be true? If enabled, ask the solver.
   if(smt_thread_guard)
   {
-    expr2tc parent_guard = threads_state[active_thread].guard.as_expr();
+    expr2tc parent_guard = guard;
 
     runtime_encoded_equationt *rte =
       dynamic_cast<runtime_encoded_equationt *>(target.get());
@@ -675,6 +698,15 @@ void execution_statet::execute_guard()
   else
     parent_guard = threads_state[last_active_thread].guard.as_expr();
 
+  // If we simplified the global guard expr to false, write that to thread
+  // guards, not the symbolic guard name. This is the only way to bail out of
+  // evaluating a particular interleaving early right now.
+  if(is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
+  {
+    cur_state->guard.make_false();
+    return;
+  }
+
   // Rename value, allows its use in other renamed exprs
   state_level2->make_assignment(guard_expr, expr2tc(), expr2tc());
 
@@ -686,21 +718,14 @@ void execution_statet::execute_guard()
   target->assumption(
     guardt().as_expr(), assumpt, get_active_state().source, first_loop);
 
-  guardt old_guard;
-  old_guard.add(threads_state[last_active_thread].guard.as_expr());
-
-  // If we simplified the global guard expr to false, write that to thread
-  // guards, not the symbolic guard name. This is the only way to bail out of
-  // evaulating a particular interleaving early right now.
-  if(is_false(parent_guard))
-    guard_expr = parent_guard;
-
   // Check to see whether or not the state guard is false, indicating we've
   // found an unviable interleaving. However don't do this if we didn't
   // /actually/ switch between threads, because it's acceptable to have a
   // context switch point in a branch where the guard is false (it just isn't
   // acceptable to permit switching).
-  if(last_active_thread != active_thread && is_cur_state_guard_false())
+  if(
+    last_active_thread != active_thread &&
+    is_cur_state_guard_false(threads_state[active_thread].guard.as_expr()))
     interleaving_unviable = true;
 }
 
@@ -780,12 +805,15 @@ void execution_statet::analyze_assign(const expr2tc &code)
 
 void execution_statet::analyze_read(const expr2tc &code)
 {
-  std::set<expr2tc> global_reads, global_writes;
+  if(is_nil_expr(code))
+    return;
+
+  std::set<expr2tc> global_reads;
   get_expr_globals(ns, code, global_reads);
 
   if(global_reads.size() > 0)
   {
-    // Record read/written data
+    // Record read data
     thread_last_reads[active_thread].insert(
       global_reads.begin(), global_reads.end());
   }
@@ -928,9 +956,9 @@ bool execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l)
 void execution_statet::calculate_mpor_constraints()
 {
   // Primary bit of MPOR logic - to be executed at the end of a transition to
-  // update dependancy tracking and suchlike.
+  // update dependency tracking and such like.
 
-  // MPOR paper, page 12, create new dependancy chain record for this time step.
+  // MPOR paper, page 12, create new dependency chain record for this time step.
 
   // 2D Vector of relations, T x T, i.e. threads on each axis:
   //    -1 signifies that no relation exists.
@@ -942,7 +970,7 @@ void execution_statet::calculate_mpor_constraints()
   //  about progress later.
   std::vector<std::vector<int>> new_dep_chain = dependancy_chain;
 
-  // Start new dependancy chain for this thread. Default to there being no
+  // Start new dependency chain for this thread. Default to there being no
   // relation.
   for(unsigned int i = 0; i < new_dep_chain.size(); i++)
     new_dep_chain[active_thread][i] = -1;
@@ -951,7 +979,7 @@ void execution_statet::calculate_mpor_constraints()
   new_dep_chain[active_thread][active_thread] = 1;
 
   // Mark un-run threads as continuing to be un-run. Otherwise, look for a
-  // dependancy chain from each thread to the run thread.
+  // dependency chain from each thread to the run thread.
   for(unsigned int j = 0; j < new_dep_chain.size(); j++)
   {
     if(j == active_thread)
@@ -966,17 +994,17 @@ void execution_statet::calculate_mpor_constraints()
     {
       // This is where the beef is. If there is any other thread (including
       // the active thread) that we depend on, that depends on the active
-      // thread, then record a dependancy.
-      // A direct dependancy occurs when l = j, as DCjj always = 1, and DEPji
+      // thread, then record a dependency.
+      // A direct dependency occurs when l = j, as DCjj always = 1, and DEPji
       // is true.
       int res = 0;
 
       for(unsigned int l = 0; l < new_dep_chain.size(); l++)
       {
         if(dependancy_chain[j][l] != 1)
-          continue; // No dependancy relation here
+          continue; // No dependency relation here
 
-        // Now check for variable dependancy.
+        // Now check for variable dependency.
         if(!check_mpor_dependancy(active_thread, l))
           continue;
 
@@ -990,10 +1018,10 @@ void execution_statet::calculate_mpor_constraints()
     }
   }
 
-  // For /all other relations/, just propagate the dependancy it already has.
+  // For /all other relations/, just propagate the dependency it already has.
   // Achieved by initial duplication of dependancy_chain.
 
-  // Voila, new dependancy chain.
+  // Voila, new dependency chain.
 
   // Calculate whether or not the transition we just took, in active_thread,
   // was in fact schedulable. We can't tell whether or not a transition is
@@ -1004,11 +1032,11 @@ void execution_statet::calculate_mpor_constraints()
   for(unsigned int j = active_thread + 1; j < threads_state.size(); j++)
   {
     if(new_dep_chain[j][active_thread] != -1)
-      // Either no higher threads have been run, or a dependancy relation in
+      // Either no higher threads have been run, or a dependency relation in
       // a higher thread justifies our out-of-order execution.
       continue;
 
-    // Search for a dependancy chain in a lower thread that links us back to
+    // Search for a dependency chain in a lower thread that links us back to
     // a higher thread, justifying this order.
     bool dep_exists = false;
     for(unsigned int l = 0; l < active_thread; l++)

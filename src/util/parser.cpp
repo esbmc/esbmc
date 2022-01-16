@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/i2string.h>
 #include <util/parser.h>
+#include <util/message/verbosity.h>
 
 #ifdef _WIN32
 int isatty(int f)
@@ -35,5 +36,5 @@ void parsert::parse_error(const std::string &message, const std::string &before)
   std::string tmp = message;
   if(before != "")
     tmp += " before `" + before + "'";
-  msg.print(VerbosityLevel::Error, tmp, location);
+  print(VerbosityLevel::Error, tmp, location);
 }

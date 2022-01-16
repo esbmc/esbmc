@@ -19,7 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <util/config.h>
 #include <util/i2string.h>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 
 extern "C"
 {
@@ -187,7 +187,7 @@ bool c_preprocess(
   const std::string &path,
   std::ostream &outstream,
   bool is_cpp,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   char out_file_buf[32], stderr_file_buf[32];
   pid_t pid;

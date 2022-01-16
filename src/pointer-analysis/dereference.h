@@ -279,7 +279,7 @@ private:
 
   /** Interpret an actual dereference (or pointer-index) expression. First
    *  dereferences the pointer expression, then dereferences the pointer itself,
-   *  and stores the result in the 'expr' reference.
+   *  and stores the result in 'expr'.
    *  @param expr The expression we're going to be dereferencing.
    *  @param guard Guard of this expression being evaluated.
    *  @param mode The manner iin which the result of this deref is accessed.
@@ -371,18 +371,22 @@ private:
     const type2tc &type,
     const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
-  expr2tc *extract_bytes_from_array(
+  std::vector<expr2tc> extract_bytes_from_array(
     const expr2tc &array,
     unsigned int bytes,
     const expr2tc &offset);
-  expr2tc *extract_bytes_from_scalar(
+  std::vector<expr2tc> extract_bytes_from_scalar(
     const expr2tc &object,
     unsigned int bytes,
     const expr2tc &offset);
-  void stitch_together_from_byte_array(
-    expr2tc &value,
+  expr2tc stitch_together_from_byte_array(
     unsigned int num_bytes,
-    const expr2tc *bytes);
+    const std::vector<expr2tc> &bytes);
+  expr2tc stitch_together_from_byte_array(
+    const type2tc &type,
+    const expr2tc &byte_array,
+    expr2tc offset_bits,
+    const guardt &guard);
   void wrap_in_scalar_step_list(
     expr2tc &value,
     std::list<expr2tc> *scalar_step_list,
@@ -398,7 +402,7 @@ private:
     const std::string &wants,
     const std::string &have);
 
-  void check_code_access(
+  bool check_code_access(
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
@@ -413,11 +417,12 @@ private:
     unsigned long minwidth,
     const expr2tc &&offset,
     const guardt &guard);
-  unsigned int
-  compute_num_bytes_to_extract(const expr2tc offset, unsigned long num_bits);
-  void extract_bits_from_byte_array(
-    expr2tc &value,
-    expr2tc offset,
+  unsigned int static compute_num_bytes_to_extract(
+    const expr2tc offset,
+    unsigned long num_bits);
+  static expr2tc extract_bits_from_byte_array(
+    const expr2tc &value,
+    const expr2tc &offset,
     unsigned long num_bits);
 
 public:

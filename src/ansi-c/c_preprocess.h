@@ -17,6 +17,6 @@ bool c_preprocess(
   const std::string &path,
   std::ostream &outstream,
   bool is_cpp,
-  message_handlert &message_handler);
+  const messaget &message_handler);
 
 #endif

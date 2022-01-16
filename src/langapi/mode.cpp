@@ -30,6 +30,17 @@ int get_mode(const std::string &str)
   return -1;
 }
 
+int get_old_frontend_mode(int current_mode)
+{
+  unsigned i;
+  std::string expected(mode_table[current_mode++].name);
+  for(i = current_mode; mode_table[i].name != nullptr; i++)
+    if(expected == mode_table[i].name)
+      return i;
+
+  return -1;
+}
+
 int get_mode_filename(const std::string &filename)
 {
   const char *ext = strrchr(filename.c_str(), '.');

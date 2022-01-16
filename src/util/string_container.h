@@ -91,8 +91,6 @@ protected:
   string_vectort string_vector;
 };
 
-extern string_containert string_container;
-
 inline string_containert &get_string_container()
 {
   static string_containert ret;

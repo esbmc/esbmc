@@ -7,7 +7,7 @@
 #include <vector>
 #include <istream>
 
-class parsert
+class parsert : public messaget
 {
 public:
   std::istream *in;
@@ -26,12 +26,14 @@ public:
     char_buffer.clear();
   }
 
-  explicit parsert(const messaget &msg) : msg(msg)
+  parsert()
   {
     clear();
   }
 
-  virtual ~parsert() = default;
+  ~parsert() override = default;
+  parsert(const parsert &obj) = delete;
+  parsert &operator=(const parsert &rhs) = delete;
 
   virtual bool read(char &ch)
   {
@@ -87,7 +89,6 @@ public:
   }
 
 private:
-  const messaget &msg;
   virtual bool read2(char &ch)
   {
     if(!char_buffer.empty())

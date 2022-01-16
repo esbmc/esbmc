@@ -1,0 +1,4 @@
+CORE
+main.c
+--function func_overflow --old-frontend
+^VERIFICATION FAILED$

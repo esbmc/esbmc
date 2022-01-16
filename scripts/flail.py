@@ -89,6 +89,7 @@ class Flail:
         obj = Path(self.filepath)
         return self.prefix + (obj.name.replace('.hs', '_buf')
                                       .replace('.h', '_buf')
+                                      .replace('.c', '_buf')
                                       .replace('.goto', '_buf')
                                       .replace('.txt', '_buf')
                                       .replace('buildidobj', 'buildidstring')
@@ -105,28 +106,21 @@ class Flail:
             return content + ',\n'
         return content + '\n'
 
-    def _step_6(self, content, output, header : str, macro : str):
+    def _step_6(self, content, output, header, macro : str):
         name = self.obtain_var_name()
-        with open(output, 'w') as f:
-            f.write('const char %s[] = {\n' % name)
-            f.writelines(content)
-            f.write('};\n')
-            f.write('const unsigned int %s_size = sizeof(%s);\n' % (name, name))
+        output.write('const char %s[] = {\n' % name)
+        output.writelines(content)
+        output.write('};\n')
+        output.write('const unsigned int %s_size = sizeof(%s);\n' % (name, name))
         if header is not None:
-            with open(header, 'w') as f:
-                if macro is None:
-                    f.write('extern const char %s[];\n' % name)
-                    f.write('extern const unsigned int %s_size;\n' % name)
-                else:
-                    f.write('#ifndef %s\n' % macro)
-                    f.write('# define %s(body, size, ...)'
-                            ' extern const char body[];'
-                            ' extern const unsigned int size;\n' % macro)
-                    f.write('#endif\n')
-                    f.write('%s(%s, %s_size, %s)\n' % (macro, name, name,
-                                                       os.path.basename(self.filepath)))
+            if macro is None:
+                header.write('extern const char %s[];\n' % name)
+                header.write('extern const unsigned int %s_size;\n' % name)
+            else:
+                header.write('%s(%s, %s_size, %s)\n' % (macro, name, name,
+                                                        self.filepath))
 
-    def run(self, output_file: str, header : str = None, macro : str = None):
+    def run(self, output_file, header = None, macro : str = None):
         ps = subprocess.Popen(self.cat_cli_command().split(),
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -150,15 +144,28 @@ def parse_args(argv):
     p.add_argument('--header', type=str, default=None,
                    help='write header file containing "extern" declarations of '
                         'generated symbols')
-    p.add_argument('input')
-    p.add_argument('output')
+    p.add_argument('-o', '--output', type=str, required=True)
+    p.add_argument('input', type=str, nargs='+')
     return p.parse_args(argv[1:])
 
 
 def main():
     args = parse_args(sys.argv)
-    obj = Flail(args.input, args.prefix)
-    obj.run(args.output, args.header, args.macro)
+    with open(args.output, 'w') as output:
+        header = None
+        if args.header:
+            header = open(args.header, 'w')
+            if args.macro:
+                header.write('#ifndef %s\n' % args.macro)
+                header.write('# define %s(body, size, ...)'
+                             ' extern const char body[];'
+                             ' extern const unsigned int size;\n' % args.macro)
+                header.write('#endif\n')
+        for infile in args.input:
+            obj = Flail(infile, args.prefix)
+            obj.run(output, header, args.macro)
+        if header is not None:
+            header.close()
 
 
 if __name__ == "__main__":

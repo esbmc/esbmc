@@ -133,12 +133,6 @@ expr2tc goto_symext::symex_mem(
 
   if(is_nil_type(type))
     type = char_type2();
-  else if(is_union_type(type))
-  {
-    // Filter out creation of instantiated unions. They're now all byte arrays.
-    size_is_one = false;
-    type = char_type2();
-  }
 
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
@@ -451,7 +445,9 @@ void goto_symext::symex_cpp_delete(const expr2tc &)
 
 void goto_symext::intrinsic_yield(reachability_treet &art)
 {
-  art.get_cur_state().force_cswitch();
+  // Don't context switch if the guard is false.
+  if(!cur_state->guard.is_false())
+    art.get_cur_state().force_cswitch();
 }
 
 void goto_symext::intrinsic_switch_to(
@@ -566,7 +562,9 @@ void goto_symext::intrinsic_spawn_thread(
   }
 
   // As an argument, we expect the address of a symbol.
-  const expr2tc &addr = call.operands[0];
+  expr2tc addr = call.operands[0];
+  simplify(addr); /* simplification is not needed for clang-11, but clang-13
+                   * inserts a no-op typecast here. */
   assert(is_address_of2t(addr));
   const address_of2t &addrof = to_address_of2t(addr);
   assert(is_symbol2t(addrof.ptr_obj));
@@ -1022,4 +1020,25 @@ void goto_symext::intrinsic_memset(
   {
     bump_call();
   }
+}
+
+void goto_symext::intrinsic_get_object_size(
+  const code_function_call2t &func_call,
+  reachability_treet &)
+{
+  assert(func_call.operands.size() == 1 && "Wrong get_object_size signature");
+  auto ptr = func_call.operands[0];
+
+  // Work out what the ptr points at.
+  internal_deref_items.clear();
+  dereference2tc deref(get_empty_type(), ptr);
+  dereference(deref, dereferencet::INTERNAL);
+
+  assert(is_array_type(internal_deref_items.front().object->type));
+  auto obj_size =
+    to_array_type(internal_deref_items.front().object->type).array_size;
+
+  expr2tc ret_ref = func_call.ret;
+  dereference(ret_ref, dereferencet::READ);
+  symex_assign(code_assign2tc(ret_ref, obj_size), false, cur_state->guard);
 }

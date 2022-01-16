@@ -124,6 +124,11 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   return newsym;
 }
 
+expr2tc smt_tuple_node_flattener::tuple_get(const type2tc &, smt_astt sym)
+{
+  return tuple_get_rec(to_tuple_node_ast(sym));
+}
+
 expr2tc smt_tuple_node_flattener::tuple_get(const expr2tc &expr)
 {
   assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");
@@ -169,10 +174,9 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
       res =
         ctx->get_bool(tuple->elements[i]) ? gen_true_expr() : gen_false_expr();
     }
-    else if(is_number_type(it))
+    else if(is_number_type(it) || is_union_type(it))
     {
-      res = ctx->get_by_value(
-        it, ctx->get_bv(tuple->elements[i], is_signedbv_type(it)));
+      res = ctx->get_by_ast(it, tuple->elements[i]);
     }
     else if(is_array_type(it))
     {
@@ -209,11 +213,11 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 
     unsigned int num =
       to_constant_int2t(outstruct->datatype_members[0]).value.to_uint64();
-    unsigned int offs =
-      to_constant_int2t(outstruct->datatype_members[1]).value.to_uint64();
-    pointer_logict::pointert p(num, BigInt(offs));
+    const BigInt &offs =
+      to_constant_int2t(outstruct->datatype_members[1]).value;
     return ctx->pointer_logic.back().pointer_expr(
-      p, type2tc(new pointer_type2t(get_empty_type())));
+      pointer_logict::pointert(num, offs),
+      type2tc(new pointer_type2t(get_empty_type())));
   }
 
   return outstruct;

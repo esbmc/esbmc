@@ -86,6 +86,26 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
   const byte_update2t &data = to_byte_update2t(expr);
   assert(data.type == data.source_value->type);
 
+  if(is_array_type(data.type))
+  {
+    type2tc subtype = to_array_type(data.type).subtype;
+    BigInt sub_size_int = type_byte_size(subtype);
+    assert(
+      !sub_size_int.is_zero() &&
+      "Unimplemented byte_update on array of zero-width elements");
+    expr2tc sub_size = constant_int2tc(data.source_offset->type, sub_size_int);
+    expr2tc index = div2tc(sub_size->type, data.source_offset, sub_size);
+    expr2tc new_offs = modulus2tc(sub_size->type, data.source_offset, sub_size);
+    expr2tc new_bu = byte_update2tc(
+      subtype,
+      index2tc(subtype, data.source_value, index),
+      new_offs,
+      data.update_value,
+      data.big_endian);
+    expr2tc with = with2tc(data.type, data.source_value, index, new_bu);
+    return convert_ast(with);
+  }
+
   if(!is_bv_type(data.type) && !is_fixedbv_type(data.type))
   {
     // This is a pointer or a bool, or something. We don't want to handle

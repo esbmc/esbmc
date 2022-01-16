@@ -8,12 +8,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/c_final.h>
 #include <c2goto/cprover_library.h>
-#include <util/message_stream.h>
+#include <util/message/message_stream.h>
 
 void c_finalize_expression(
   const contextt &context,
   exprt &expr,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   if(expr.id() == "symbol")
   {
@@ -59,7 +59,7 @@ void c_finalize_expression(
       c_finalize_expression(context, *it, message_handler);
 }
 
-bool c_final(contextt &context, message_handlert &message_handler)
+bool c_final(contextt &context, const messaget &message_handler)
 {
   add_cprover_library(context, message_handler);
 

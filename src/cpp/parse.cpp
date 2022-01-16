@@ -34,6 +34,7 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
+#include <util/message/verbosity.h>
 
 //#define DEBUG
 
@@ -296,7 +297,7 @@ bool Parser::SyntaxError()
 
     message += "'";
 
-    parser->print(1, message, location);
+    parser->print(VerbosityLevel::Error, message, location);
   }
 
   return bool(++number_of_errors < MaxErrors);
@@ -6118,7 +6119,7 @@ bool Parser::rTryStatement(codet &statement)
         location.set_file(op.filename);
         location.set_line(i2string(op.line_no));
 
-        parser->print(1, message, location);
+        parser->print(VerbosityLevel::Error, message, location);
         return false;
       }
 

@@ -74,8 +74,8 @@ unsigned goto_symext::argument_assignments(
     // if you run out of actual arguments there was a mismatch
     if(it1 == arguments.end())
     {
-      msg.error("function call: not enough arguments");
-      abort();
+      claim(gen_false_expr(), "function call: not enough arguments");
+      return UINT_MAX;
     }
 
     const irep_idt &identifier = function_type.argument_names[name_idx];
@@ -238,6 +238,10 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
       "**** WARNING: no body for function {}",
       get_pretty_name(identifier.as_string())));
 
+    /* TODO: if it is a C function with no prototype, assert/claim that all
+     *       calls to this function have the same number of parameters and that
+     *       they - after type promotion - are compatible. */
+
     if(!is_nil_expr(call.ret))
     {
       unsigned int &nondet_count = get_nondet_counter();
@@ -281,19 +285,6 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 
   // assign arguments
   type2tc tmp_type = migrate_type(goto_function.type);
-
-  if(
-    to_code_type(tmp_type).arguments.size() != arguments.size() &&
-    !to_code_type(tmp_type).ellipsis)
-  {
-    std::ostringstream oss;
-    oss << "Function call to \"" << identifier << "\": number of "
-        << "arguments doesn't match type definition; some inconsistent "
-        << "rewriting occured"
-        << "\n";
-    msg.error(oss.str());
-    abort();
-  }
 
   frame.va_index =
     argument_assignments(identifier, to_code_type(tmp_type), arguments);
@@ -397,30 +388,25 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
   std::list<std::pair<guardt, symbol2tc>> l = get_function_list(func_ptr, msg);
 
-  // Filter out illegal calls
-  auto illegal_filter = [&call](const decltype(l)::value_type &it) -> bool {
-    expr2tc sym = it.second;
-    assert(is_symbol2t(sym));
-    if(!is_code_type(sym))
-      return true;
-
-    const code_type2t &ct = to_code_type(sym->type);
-
-    // We check whether the number of arguments matches to filer illegal calls
-    // C allow passing a list of arguments for a void function, e.g.,
-    // function declarations such as `void* func()` (instead of `void* func(void *arg)`)
-    // and then call func(NULL). Our C++ frontend detects this a failure during the parsing
-    // C++ does not allow declarations without prototypes
-    // TODO: see GitHub issues #584 and #585
-    if(ct.arguments.size() && ct.arguments.size() != call.operands.size())
-      return true;
-
-    // At this point we could (should) do more: for example ensuring that the
-    // arguments and return values are compatible. Skip for now.
-    return false;
+  /* Internal check that all symbols are actually of 'code' type (modulo the
+   * guard) */
+  auto maybe_called_symbol_is_code [[gnu::unused]] = [this](const auto &elem) {
+    const guardt &guard = elem.first;
+    const symbol2tc &sym = elem.second;
+    if(!guard.is_false() && !is_code_type(sym))
+    {
+      bool known_called = guard.is_true();
+      msg.print(
+        known_called ? VerbosityLevel::Error : VerbosityLevel::Status,
+        fmt::format(
+          "non-code call target '{}' generated at {}",
+          sym->thename.as_string()));
+      if(known_called)
+        return false;
+    }
+    return true;
   };
-  // Remove if returns an iterator for the new end of list.
-  l.erase(std::remove_if(l.begin(), l.end(), illegal_filter), l.end());
+  assert(std::all_of(l.begin(), l.end(), maybe_called_symbol_is_code));
 
   // Store.
   for(auto &it : l)

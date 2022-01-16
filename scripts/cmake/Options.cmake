@@ -36,6 +36,7 @@ option(ENABLE_CVC4 "Use CVC4 solver (default: OFF)" OFF)
 #############################
 # OTHERS
 #############################
+option(ESBMC_BUNDLE_LIBC "Use libc from c2goto (default: ON)" ON)
 option(ENABLE_LIBM "Use libm from c2goto (default: ON)" ON)
 option(ENABLE_FUZZER "Add fuzzing targets (default: OFF)" OFF)
 option(ENABLE_CLANG_TIDY "Activate clang tidy analysis (default: OFF)" OFF)
@@ -44,8 +45,8 @@ option(ENABLE_CSMITH "Add csmith Tests (default: OFF) (depends: ENABLE_REGRESSIO
 #############################
 # CMake extra Vars
 #############################
-# CLANG_HEADERS_BUNDLED: 'detect', On, Off
-set(CLANG_HEADERS_BUNDLED "detect" CACHE STRING "Bundle the Clang resource-dir headers (default: detect)")
+# ESBMC_CLANG_HEADERS_BUNDLED: 'detect', On, Off
+set(ESBMC_CLANG_HEADERS_BUNDLED "detect" CACHE STRING "Bundle the Clang resource-dir headers (default: detect)")
 set(OVERRIDE_CLANG_HEADER_DIR "")
 set(Clang_DIR "${LLVM_DIR}" CACHE STRING "Clang Directory (if not set, this will be set to the LLVM_DIR")
 

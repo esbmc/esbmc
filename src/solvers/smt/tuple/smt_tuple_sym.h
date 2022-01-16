@@ -28,6 +28,7 @@ public:
   smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override;
   smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
   expr2tc tuple_get(const expr2tc &expr) override;
+  expr2tc tuple_get(const type2tc &type, smt_astt a) override;
 
   expr2tc tuple_get_rec(tuple_sym_smt_astt tuple);
   smt_astt tuple_array_create(

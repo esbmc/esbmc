@@ -18,28 +18,27 @@ public:
   virtual bool preprocess(
     const std::string &path,
     std::ostream &outstream,
-    message_handlert &message_handler);
+    const messaget &message_handler);
 
-  bool
-  parse(const std::string &path, message_handlert &message_handler) override;
+  bool parse(const std::string &path, const messaget &message_handler) override;
 
   bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler) override;
+    const messaget &message_handler) override;
 
-  bool final(contextt &context, message_handlert &message_handler) override;
+  bool final(contextt &context, const messaget &message_handler) override;
 
   virtual bool merge_context(
     contextt &dest,
     contextt &src,
-    message_handlert &message_handler,
+    const messaget &message_handler,
     const std::string &module) const;
 
   void show_parse(std::ostream &out) override;
 
   ~ansi_c_languaget() override = default;
-  ansi_c_languaget() = default;
+  explicit ansi_c_languaget(const messaget &msg);
 
   // conversion from expression into string
   bool from_expr(const exprt &expr, std::string &code, const namespacet &ns)
@@ -49,9 +48,9 @@ public:
   bool from_type(const typet &type, std::string &code, const namespacet &ns)
     override;
 
-  languaget *new_language() override
+  languaget *new_language(const messaget &msg) const override
   {
-    return new ansi_c_languaget;
+    return new ansi_c_languaget(msg);
   }
 
   std::string id() const override
@@ -64,6 +63,6 @@ protected:
   std::string parse_path;
 };
 
-languaget *new_ansi_c_language();
+languaget *new_ansi_c_language(const messaget &msg);
 
 #endif

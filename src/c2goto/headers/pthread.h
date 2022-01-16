@@ -21,13 +21,105 @@
 #define _PTHREAD_H	1
 
 #include <stddef.h>
+#include <stdint.h>
 
-#include <pthreadtypes.h>
+#ifndef _MSVC
+#define NULL 0
+#endif
+
+typedef int32_t __clockid_t;
+
+typedef unsigned long int pthread_t;
+
+typedef union pthread_attr_t
+{
+  long int __align;
+} pthread_attr_t;
+
+
+typedef struct
+{
+  int __lock;
+  unsigned int __count;
+  int __owner;
+} pthread_mutex_t;
+
+/* Mutex initializer. */
+#define PTHREAD_MUTEX_INITIALIZER { 0, 0, 0, }
+
+typedef union
+{
+  int __align;
+} pthread_mutexattr_t;
+
+
+typedef struct
+{
+  int __lock;
+  unsigned int __futex;
+  unsigned int __nwaiters;
+} pthread_cond_t;
+
+/* Conditional variable handling. */
+#define PTHREAD_COND_INITIALIZER { 0, 0, 0, }
+
+typedef union
+{
+  int __align;
+} pthread_condattr_t;
+
+
+/* Keys for thread-specific data */
+typedef unsigned int pthread_key_t;
+
+
+/* Once-only execution */
+typedef int pthread_once_t;
+
+
+//#if defined __USE_UNIX98 || defined __USE_XOPEN2K
+//jmorse - we always want this, regardless of feature flags.
+typedef struct
+{
+  int __lock;
+} pthread_rwlock_t;
+
+/* Read-write lock initializer. */
+#define PTHREAD_RWLOCK_INITIALIZER { 0, }
+
+typedef union
+{
+  long int __align;
+} pthread_rwlockattr_t;
+//#endif
+
+
+#ifdef __USE_XOPEN2K
+/* POSIX spinlock data type.  */
+typedef volatile int pthread_spinlock_t;
+
+
+/* POSIX barriers data type.  The structure of the type is
+   deliberately not exposed.  */
+typedef union
+{
+  long int __align;
+} pthread_barrier_t;
+
+typedef union
+{
+  int __align;
+} pthread_barrierattr_t;
+#endif
+
+
+#if __WORDSIZE == 32
+/* Extra attributes for the cleanup functions.  */
+# define __cleanup_fct_attribute __attribute__ ((__regparm__ (1)))
+#endif
 
 #ifdef __cplusplus
-
 extern "C" {
-
 #endif
 
 /* Detach state.  */
@@ -47,13 +139,11 @@ enum
   PTHREAD_MUTEX_RECURSIVE_NP,
   PTHREAD_MUTEX_ERRORCHECK_NP,
   PTHREAD_MUTEX_ADAPTIVE_NP
-#if defined __USE_UNIX98 || defined __USE_XOPEN2K8
   ,
   PTHREAD_MUTEX_NORMAL = PTHREAD_MUTEX_TIMED_NP,
   PTHREAD_MUTEX_RECURSIVE = PTHREAD_MUTEX_RECURSIVE_NP,
   PTHREAD_MUTEX_ERRORCHECK = PTHREAD_MUTEX_ERRORCHECK_NP,
   PTHREAD_MUTEX_DEFAULT = PTHREAD_MUTEX_NORMAL
-#endif
 };
 
 
@@ -79,17 +169,6 @@ enum
 };
 #endif
 
-
-/* Mutex initializers.  */
-#if __WORDSIZE == 64
-# define PTHREAD_MUTEX_INITIALIZER \
-  { { 0, 0, 0, 0, 0, 0, { 0, 0 } } }
-#else
-# define PTHREAD_MUTEX_INITIALIZER \
-  { { 0, 0, 0, 0, 0, { 0 } } }
-#endif
-
-
 /* Read-write lock types.  */
 #if defined __USE_UNIX98 || defined __USE_XOPEN2K
 enum
@@ -99,10 +178,6 @@ enum
   PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP,
   PTHREAD_RWLOCK_DEFAULT_NP = PTHREAD_RWLOCK_PREFER_READER_NP
 };
-
-/* Read-write lock initializers.  */
-# define PTHREAD_RWLOCK_INITIALIZER \
-  { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }
 #endif  /* Unix98 or XOpen2K */
 
 
@@ -136,9 +211,6 @@ enum
 };
 
 
-
-/* Conditional variable handling.  */
-#define PTHREAD_COND_INITIALIZER { { 0, 0, 0, 0, 0, (void *) 0, 0, 0 } }
 
 
 /* Cleanup buffers */
@@ -435,7 +507,8 @@ extern int pthread_mutexattr_getpshared (__const pthread_mutexattr_t *
 extern int pthread_mutexattr_setpshared (pthread_mutexattr_t *__attr,
 					 int __pshared);
 
-#if defined __USE_UNIX98 || defined __USE_XOPEN2K8
+// #if defined __USE_UNIX98 || defined __USE_XOPEN2K8
+// fbrausse: always expose, no harm done
 /* Return in *KIND the mutex kind attribute in *ATTR.  */
 extern int pthread_mutexattr_gettype (__const pthread_mutexattr_t *__restrict
 				      __attr, int *__restrict __kind);
@@ -444,7 +517,7 @@ extern int pthread_mutexattr_gettype (__const pthread_mutexattr_t *__restrict
    PTHREAD_MUTEX_RECURSIVE, PTHREAD_MUTEX_ERRORCHECK, or
    PTHREAD_MUTEX_DEFAULT).  */
 extern int pthread_mutexattr_settype (pthread_mutexattr_t *__attr, int __kind);
-#endif
+// #endif
 
 /* Return in *PROTOCOL the mutex protocol attribute in *ATTR.  */
 extern int pthread_mutexattr_getprotocol (__const pthread_mutexattr_t *
@@ -719,9 +792,7 @@ __NTH (pthread_equal (pthread_t __thread1, pthread_t __thread2))
 #endif
 
 #ifdef __cplusplus
-
 }
-
 #endif
 
 #endif	/* pthread.h */

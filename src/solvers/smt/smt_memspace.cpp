@@ -396,7 +396,8 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
 
   type2tc arrtype(new array_type2t(get_bool_type(), expr2tc(), true));
   symbol2tc allocarr(arrtype, dyn_info_arr_name);
-  constant_int2tc objid(machine_uint, BigInt(obj_num));
+  constant_int2tc objid(
+    get_uint_type(config.ansi_c.int_width), BigInt(obj_num));
   index2tc idx(get_bool_type(), allocarr, objid);
   equality2tc dyn_eq(idx, gen_false_expr());
   assert_expr(dyn_eq);
@@ -541,63 +542,42 @@ void smt_convt::init_addr_space_array()
 
   symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");
   symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_end_0");
-  equality2tc obj0_start_eq(obj0_start, zero_ptr_int);
-  equality2tc obj0_end_eq(obj0_end, zero_ptr_int);
 
-  assert_expr(obj0_start_eq);
-  assert_expr(obj0_end_eq);
+  assert_expr(equality2tc(obj0_start, zero_ptr_int));
+  assert_expr(equality2tc(obj0_end, zero_ptr_int));
 
   symbol2tc obj1_start(ptr_int_type, "__ESBMC_ptr_obj_start_1");
   symbol2tc obj1_end(ptr_int_type, "__ESBMC_ptr_obj_end_1");
-  equality2tc obj1_start_eq(obj1_start, one_ptr_int);
-  equality2tc obj1_end_eq(obj1_end, obj1_end_const);
 
-  assert_expr(obj1_start_eq);
-  assert_expr(obj1_end_eq);
+  assert_expr(equality2tc(obj1_start, one_ptr_int));
+  assert_expr(equality2tc(obj1_end, obj1_end_const));
 
-  std::vector<expr2tc> membs;
-  membs.push_back(obj0_start);
-  membs.push_back(obj0_end);
-  constant_struct2tc addr0_tuple(addr_space_type, membs);
-  symbol2tc addr0_range(addr_space_type, "__ESBMC_ptr_addr_range_0");
-  equality2tc addr0_range_eq(addr0_range, addr0_tuple);
-  assert_expr(addr0_range_eq);
+  constant_struct2tc addr0_tuple(
+    addr_space_type, std::vector<expr2tc>{obj0_start, obj0_end});
+  assert_expr(equality2tc(
+    symbol2tc(addr_space_type, "__ESBMC_ptr_addr_range_0"), addr0_tuple));
 
-  membs.clear();
-  membs.push_back(obj1_start);
-  membs.push_back(obj1_end);
-  constant_struct2tc addr1_tuple(addr_space_type, membs);
-  symbol2tc addr1_range(addr_space_type, "__ESBMC_ptr_addr_range_1");
-  equality2tc addr1_range_eq(addr1_range, addr1_tuple);
-  assert_expr(addr1_range_eq);
+  constant_struct2tc addr1_tuple(
+    addr_space_type, std::vector<expr2tc>{obj1_start, obj1_end});
+  assert_expr(equality2tc(
+    symbol2tc(addr_space_type, "__ESBMC_ptr_addr_range_1"), addr1_tuple));
 
   bump_addrspace_array(pointer_logic.back().get_null_object(), addr0_tuple);
   bump_addrspace_array(pointer_logic.back().get_invalid_object(), addr1_tuple);
 
-  // Give value to '0', 'NULL', 'INVALID' symbols
-  symbol2tc zero_ptr(pointer_struct, "0");
-  symbol2tc null_ptr(pointer_struct, "NULL");
-  symbol2tc invalid_ptr(pointer_struct, "INVALID");
-
-  membs.clear();
-  membs.push_back(zero_ptr_int);
-  membs.push_back(zero_ptr_int);
-  constant_struct2tc null_ptr_tuple(pointer_struct, membs);
-  membs.clear();
-  membs.push_back(one_ptr_int);
-  membs.push_back(zero_ptr_int);
-  constant_struct2tc invalid_ptr_tuple(pointer_struct, membs);
-
-  equality2tc zero_eq(zero_ptr, null_ptr_tuple);
-  equality2tc null_eq(null_ptr, null_ptr_tuple);
-  equality2tc invalid_eq(invalid_ptr, invalid_ptr_tuple);
+  constant_struct2tc null_ptr_tuple(
+    pointer_struct, std::vector<expr2tc>{zero_ptr_int, zero_ptr_int});
+  constant_struct2tc invalid_ptr_tuple(
+    pointer_struct, std::vector<expr2tc>{one_ptr_int, zero_ptr_int});
 
   null_ptr_ast = convert_ast(null_ptr_tuple);
   invalid_ptr_ast = convert_ast(invalid_ptr_tuple);
 
-  assert_expr(zero_eq);
-  assert_expr(null_eq);
-  assert_expr(invalid_eq);
+  // Give value to '0', 'NULL', 'INVALID' symbols
+  assert_expr(equality2tc(symbol2tc(pointer_struct, "0"), null_ptr_tuple));
+  assert_expr(equality2tc(symbol2tc(pointer_struct, "NULL"), null_ptr_tuple));
+  assert_expr(
+    equality2tc(symbol2tc(pointer_struct, "INVALID"), invalid_ptr_tuple));
 
   addr_space_data.back()[0] = 0;
   addr_space_data.back()[1] = 0;
@@ -605,19 +585,18 @@ void smt_convt::init_addr_space_array()
 
 void smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
 {
-  std::stringstream ss, ss2;
-  std::string str, new_str;
-  type2tc ptr_int_type = machine_ptr;
-
-  ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back()++;
-  symbol2tc oldname(addr_space_arr_type, ss.str());
-  constant_int2tc ptr_idx(ptr_int_type, BigInt(idx));
-
-  with2tc store(addr_space_arr_type, oldname, ptr_idx, val);
-  ss2 << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();
-  symbol2tc newname(addr_space_arr_type, ss2.str());
-  equality2tc eq(newname, store);
-  convert_assign(eq);
+  symbol2tc oldname(
+    addr_space_arr_type,
+    "__ESBMC_addrspace_arr_" + std::to_string(addr_space_sym_num.back()++));
+  with2tc store(
+    addr_space_arr_type,
+    oldname,
+    constant_int2tc(machine_ptr, BigInt(idx)),
+    val);
+  symbol2tc newname(
+    addr_space_arr_type,
+    "__ESBMC_addrspace_arr_" + std::to_string(addr_space_sym_num.back()));
+  convert_assign(equality2tc(newname, store));
 }
 
 std::string smt_convt::get_cur_addrspace_ident()

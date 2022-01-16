@@ -75,7 +75,7 @@ bool cpp_typecheck(
   cpp_parse_treet &cpp_parse_tree,
   contextt &context,
   const std::string &module,
-  message_handlert &message_handler)
+  const messaget &message_handler)
 {
   cpp_typecheckt cpp_typecheck(
     cpp_parse_tree, context, module, message_handler);
@@ -84,10 +84,10 @@ bool cpp_typecheck(
 
 bool cpp_typecheck(
   exprt &expr,
-  message_handlert &message_handler,
+  const messaget &message_handler,
   const namespacet &ns)
 {
-  contextt context;
+  contextt context(message_handler);
   cpp_parse_treet cpp_parse_tree;
 
   cpp_typecheckt cpp_typecheck(

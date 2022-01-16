@@ -14,7 +14,9 @@
 #define HAVE_SENDFILE_ESBMC "@HAVE_SENDFILE_ESBMC@"
 #endif
 
+#cmakedefine ESBMC_BUNDLE_LIBC 1
 #cmakedefine ESBMC_CLANG_HEADER_DIR "@ESBMC_CLANG_HEADER_DIR@"
+#cmakedefine ESBMC_CLANG_HEADERS_BUNDLED 1
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #cmakedefine HAVE_UNISTD 1

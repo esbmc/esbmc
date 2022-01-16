@@ -1,7 +1,5 @@
 #include <errno.h>
-
-#include "../headers/pthreadtypes.hs"
-
+#include <pthread.h>
 #include <stddef.h>
 
 void *malloc(size_t size);
@@ -22,14 +20,13 @@ void __ESBMC_set_thread_internal_data(
   pthread_t tid,
   struct __pthread_start_data data);
 
-#define __ESBMC_mutex_lock_field(a) ((a).__data.__lock)
-#define __ESBMC_mutex_count_field(a) ((a).__data.__count)
-#define __ESBMC_mutex_owner_field(a) ((a).__data.__owner)
-#define __ESBMC_cond_lock_field(a) ((a).__data.__lock)
-#define __ESBMC_cond_futex_field(a) ((a).__data.__futex)
-#define __ESBMC_cond_nwaiters_field(a) ((a).__data.__nwaiters)
-#define __ESBMC_cond_broadcast_seq_field(a) ((a).__data.__broadcast_seq)
-#define __ESBMC_rwlock_field(a) ((a).__data.__lock)
+#define __ESBMC_mutex_lock_field(a) ((a).__lock)
+#define __ESBMC_mutex_count_field(a) ((a).__count)
+#define __ESBMC_mutex_owner_field(a) ((a).__owner)
+#define __ESBMC_cond_lock_field(a) ((a).__lock)
+#define __ESBMC_cond_futex_field(a) ((a).__futex)
+#define __ESBMC_cond_nwaiters_field(a) ((a).__nwaiters)
+#define __ESBMC_rwlock_field(a) ((a).__lock)
 
 /* Global tracking data. Should all initialize to 0 / false */
 __attribute__((annotate("__ESBMC_inf_size")))
@@ -48,6 +45,7 @@ void(
   __attribute__((annotate("__ESBMC_inf_size"))) *
   __ESBMC_thread_key_destructors[1])(void *);
 
+/* TODO: these should be 'static', right? */
 pthread_key_t __ESBMC_next_thread_key = 0;
 
 unsigned int __ESBMC_num_total_threads = 0;
@@ -69,7 +67,7 @@ typedef struct thread_key
   struct thread_key *next;
 } __ESBMC_thread_key;
 
-__ESBMC_thread_key *head = NULL;
+static __ESBMC_thread_key *head = NULL;
 
 int insert_key_value(pthread_key_t key, const void *value)
 {
@@ -87,14 +85,19 @@ int insert_key_value(pthread_key_t key, const void *value)
 
 __ESBMC_thread_key *search_key(pthread_key_t key)
 {
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_thread_key *l = head;
   while(l != NULL && l->thread != __ESBMC_get_thread_id())
     l = l->next;
   return ((l == NULL) ? 0 : l);
+  __ESBMC_atomic_end();
 }
 
 int delete_key(__ESBMC_thread_key *l)
 {
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_thread_key *tmp;
   if(head == NULL)
     return -1;
@@ -109,6 +112,7 @@ int delete_key(__ESBMC_thread_key *l)
     head = l->next;
   free(l);
   return 0;
+  __ESBMC_atomic_end();
 }
 
 /************************** Thread creation and exit **************************/
@@ -273,7 +277,7 @@ __ESBMC_HIDE:;
   if(retval != NULL)
     *retval = __ESBMC_pthread_end_values[(int)thread];
 
-  __ESBMC_really_atomic_end();
+  __ESBMC_atomic_end();
 
   return 0;
 }
@@ -285,9 +289,22 @@ int pthread_mutex_init(
   const pthread_mutexattr_t *mutexattr)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
   __ESBMC_mutex_count_field(*mutex) = 0;
   __ESBMC_mutex_owner_field(*mutex) = 0;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_mutex_initializer(pthread_mutex_t *mutex)
+{
+  // check whether this mutex has been initialized via
+  // PTHREAD_MUTEX_INITIALIZER
+  __ESBMC_atomic_begin();
+  if(__ESBMC_mutex_lock_field(*mutex) == 0)
+    pthread_mutex_init(mutex, NULL);
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -295,6 +312,7 @@ int pthread_mutex_lock_noassert(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+  pthread_mutex_initializer(mutex);
   __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
   __ESBMC_mutex_lock_field(*mutex) = 1;
   __ESBMC_atomic_end();
@@ -305,6 +323,7 @@ int pthread_mutex_lock_nocheck(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+  pthread_mutex_initializer(mutex);
   __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
   __ESBMC_mutex_lock_field(*mutex) = 1;
   __ESBMC_atomic_end();
@@ -335,6 +354,9 @@ __ESBMC_HIDE:;
   _Bool unlocked = 1;
 
   __ESBMC_atomic_begin();
+
+  pthread_mutex_initializer(mutex);
+
   unlocked = (__ESBMC_mutex_lock_field(*mutex) == 0);
 
   if(unlocked)
@@ -488,11 +510,7 @@ int pthread_cond_broadcast(pthread_cond_t *cond)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-#ifdef __APPLE__
-  *((unsigned *)cond) = (unsigned)0;
-#else
   __ESBMC_cond_lock_field(*cond) = 0;
-#endif
   __ESBMC_atomic_end();
 
   return 0;
@@ -504,12 +522,7 @@ int pthread_cond_init(
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-#ifdef __APPLE__
-  *((unsigned *)cond) = (unsigned)0;
-#else
   __ESBMC_cond_lock_field(*cond) = 0;
-  __ESBMC_cond_broadcast_seq_field(*cond) = 0;
-#endif
   __ESBMC_atomic_end();
   return 0;
 }
@@ -517,22 +530,14 @@ __ESBMC_HIDE:;
 int pthread_cond_destroy(pthread_cond_t *__cond)
 {
 __ESBMC_HIDE:;
-#ifdef __APPLE__
-  *((unsigned *)__cond) = (unsigned)0;
-#else
   __ESBMC_cond_lock_field(*__cond) = 0;
-#endif
   return 0;
 }
 
 extern int pthread_cond_signal(pthread_cond_t *__cond)
 {
 __ESBMC_HIDE:;
-#ifdef __APPLE__
-  *((unsigned *)__cond) = (unsigned)0;
-#else
   __ESBMC_cond_lock_field(*__cond) = 0;
-#endif
   return 0;
 }
 
@@ -549,11 +554,7 @@ __ESBMC_HIDE:;
 
   // Unlock mutex; register us as waiting on condvar; context switch
   __ESBMC_mutex_lock_field(*mutex) = 0;
-#ifdef __APPLE__
-  *((unsigned *)cond) = (unsigned)1;
-#else
   __ESBMC_cond_lock_field(*cond) = 1;
-#endif
 
   // Technically in the gap below, we are blocked. So mark ourselves thus. If
   // all other threads are (or become) blocked, then deadlock occurred, which
@@ -571,12 +572,8 @@ __ESBMC_HIDE:;
 
   __ESBMC_atomic_begin();
 
-// Have we been signalled?
-#ifdef __APPLE__
-  _Bool signalled = *((unsigned *)cond) == 0;
-#else
+  // Have we been signalled?
   _Bool signalled = __ESBMC_cond_lock_field(*cond) == 0;
-#endif
 
   /**
   * NOTE:

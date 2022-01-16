@@ -1,0 +1,24 @@
+#define bool int
+#define PRFileDesc int
+#define PRInt32 int
+#define PRUint32 int
+#define IOOperation int
+#define OSErr int
+#define PRThread int
+#define _PRCPU int
+#define IOCompletionUPP int
+#define ExtendedParamBlock int
+#define NULL 0
+#define PRBool int
+#define paramErr -1
+#define PR_TRUE 1
+#define PR_FALSE 0
+#define noErr 0
+#define eofErr -1
+#define fsAtMark 0
+#define READ_ASYNC 1
+#define True 1
+#define False 0
+#define PR_INTERVAL_NO_TIMEOUT 1000
+#define _PR_MISSED_IO 0
+

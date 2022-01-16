@@ -197,7 +197,7 @@ public:
 
 protected:
   // Current verbosity level
-  VerbosityLevel verbosity = VerbosityLevel::Debug;
+  VerbosityLevel verbosity = VerbosityLevel::Status;
   // All message_handlers used
   std::vector<std::shared_ptr<message_handlert>> handlers;
 };

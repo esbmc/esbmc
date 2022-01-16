@@ -6,11 +6,15 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <ac_config.h>
+#include <boost/filesystem.hpp>
 #include <c2goto/cprover_library.h>
 #include <cstdlib>
+#include <fstream>
 #include <goto-programs/read_goto_binary.h>
 #include <util/c_link.h>
 #include <util/config.h>
+#include <util/language.h>
 
 extern "C"
 {
@@ -33,6 +37,7 @@ static const struct buffer
   const uint8_t *start;
   size_t size;
 } clibs[2][2] = {
+#ifdef ESBMC_BUNDLE_LIBC
   {
     {&clib32_buf[0], clib32_buf_size},
     {&clib64_buf[0], clib64_buf_size},
@@ -41,6 +46,7 @@ static const struct buffer
     {&clib32_fp_buf[0], clib32_fp_buf_size},
     {&clib64_fp_buf[0], clib64_fp_buf_size},
   },
+#endif
 };
 } // namespace
 
@@ -118,7 +124,10 @@ static void ingest_symbol(
   deps.erase(name);
 }
 
-void add_cprover_library(contextt &context, const messaget &message_handler)
+void add_cprover_library(
+  contextt &context,
+  const messaget &message_handler,
+  const languaget *c_language)
 {
   if(config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
     return;
@@ -141,7 +150,7 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
     break;
   default:
     message_handler.error(
-      fmt::format("No c library for bitwidth {}", config.ansi_c.int_width));
+      fmt::format("No C library for bitwidth {}", config.ansi_c.word_size));
     abort();
   }
 
@@ -150,6 +159,8 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
 
   if(clib->size == 0)
   {
+    if(c_language)
+      return add_bundled_library_sources(context, message_handler, *c_language);
     message_handler.error("error: Zero-lengthed internal C library");
     abort();
   }
@@ -163,8 +174,8 @@ void add_cprover_library(contextt &context, const messaget &message_handler)
     generate_symbol_deps(s.id, s.type, symbol_deps);
   });
 
-  // Add two hacks; we migth use either pthread_mutex_lock or the checked
-  // variety; so if one version is used, pull in the other too.
+  // Add two hacks; we might use either pthread_mutex_lock or the checked
+  // variant; so if one version is used, pull in the other too.
   std::pair<irep_idt, irep_idt> lockcheck(
     dstring("pthread_mutex_lock"), dstring("pthread_mutex_lock_check"));
   symbol_deps.insert(lockcheck);

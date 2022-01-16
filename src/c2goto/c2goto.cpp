@@ -31,10 +31,17 @@ const struct group_opt_templ c2goto_options[] = {
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "path"),
      "set include path"},
+    {"idirafter",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "path"),
+     "append system include path to search after system headers"},
     {"define,D",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "macro"),
-     "define preprocessor macro"}
+     "define preprocessor macro"},
+    {"sysroot",
+     boost::program_options::value<std::string>()->value_name("<path>"),
+     "set the sysroot for the frontend"}
 
    }},
   {"end", {{"", NULL, "end of options"}}},
@@ -43,7 +50,7 @@ const struct group_opt_templ c2goto_options[] = {
 class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
 public:
-  c2goto_parseopt(int argc, const char **argv, const messaget &msg)
+  c2goto_parseopt(int argc, const char **argv, messaget &msg)
     : parseoptions_baset(c2goto_options, argc, argv, msg),
       language_uit(cmdline, msg)
   {
@@ -53,7 +60,10 @@ public:
   {
     goto_functionst goto_functions;
 
-    config.set(cmdline, msg);
+    if(config.set(cmdline, msg))
+      return 1;
+    config.options.cmdline(cmdline);
+    msg.set_verbosity(VerbosityLevel::Result);
 
     if(!cmdline.isset("output"))
     {

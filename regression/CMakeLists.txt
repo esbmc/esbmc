@@ -8,7 +8,7 @@ find_package(Python)
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 
 function(add_esbmc_regression_test folder modes test)
-    set(test_name "regression-${folder}-${test}")
+    set(test_name "regression/${folder}/${test}")
     add_test(NAME ${test_name}
             COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
             --tool=${ESBMC_BIN} --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder} --modes ${modes} --file=${test})
@@ -31,7 +31,7 @@ elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
     set(REGRESSIONS esbmc cbmc cstd llvm floats  k-induction )
 else()
-    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc esbmc-solidity cbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith k-induction-parallel nonz3 bitwuzla incremental-smt)
+    set(REGRESSIONS esbmc-unix esbmc-unix2 esbmc esbmc-solidity esbmc-old cbmc cstd llvm floats floats-regression k-induction esbmc-cpp/cpp esbmc-cpp/cbmc csmith k-induction-parallel nonz3 bitwuzla incremental-smt)
 endif()
 
 foreach(regression IN LISTS REGRESSIONS)

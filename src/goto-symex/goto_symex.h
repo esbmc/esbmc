@@ -450,6 +450,13 @@ protected:
   void intrinsic_memset(
     reachability_treet &art,
     const code_function_call2t &func_call);
+  /** Returns the size of the object
+   * 
+   * If the object is invalid, then this function will return 0
+   */
+  void intrinsic_get_object_size(
+    const code_function_call2t &func_call,
+    reachability_treet &art);
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();

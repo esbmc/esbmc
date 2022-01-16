@@ -35,27 +35,23 @@ languaget *new_clang_c_language(const messaget &msg)
 
 clang_c_languaget::clang_c_languaget(const messaget &msg) : languaget(msg)
 {
-#ifdef ESBMC_CLANG_HEADER_DIR
-  build_compiler_args(ESBMC_CLANG_HEADER_DIR);
-#else
-  /* About the path being static:
-   * the function dump_clang_headers has a static member checking if it was
-   * ever extracted before. This will guarantee that the same path will be used
-   * during a run. And no more than one is required anyway */
-  static auto p =
-    file_operations::create_tmp_dir("esbmc-headers-%%%%-%%%%-%%%%");
   // Build the compile arguments
-  build_compiler_args(p.path());
-  // Dump clang headers on the temporary folder
-  dump_clang_headers(p.path());
-#endif
+  build_compiler_args(clang_headers_path());
 }
 
 void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 {
   compiler_args.emplace_back("clang-tool");
 
-  compiler_args.push_back("-I" + tmp_dir);
+  const std::string *libc_headers = internal_libc_header_dir();
+  if(libc_headers)
+  {
+    compiler_args.push_back("-isystem");
+    compiler_args.push_back(*libc_headers);
+  }
+
+  compiler_args.push_back("-isystem");
+  compiler_args.push_back(tmp_dir);
 
   // Append mode arg
   switch(config.ansi_c.word_size)
@@ -104,8 +100,21 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   for(auto const &def : config.ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
+  if(msg.get_verbosity() >= VerbosityLevel::Debug)
+    compiler_args.emplace_back("-v");
+
   compiler_args.emplace_back("-target");
   compiler_args.emplace_back(config.ansi_c.target.to_string());
+
+  std::string sysroot = config.options.get_option("sysroot");
+  if(!sysroot.empty())
+    compiler_args.push_back("--sysroot=" + sysroot);
+
+  for(const auto &dir : config.ansi_c.idirafter_paths)
+  {
+    compiler_args.push_back("-idirafter");
+    compiler_args.push_back(dir);
+  }
 
   for(auto const &inc : config.ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
@@ -264,7 +273,7 @@ bool clang_c_languaget::preprocess(
 
 bool clang_c_languaget::final(contextt &context, const messaget &msg)
 {
-  add_cprover_library(context, msg);
+  add_cprover_library(context, msg, this);
   return clang_main(context, msg);
 }
 
@@ -276,6 +285,7 @@ std::string clang_c_languaget::internal_additions()
 void __ESBMC_assume(_Bool);
 void __ESBMC_assert(_Bool, const char *);
 _Bool __ESBMC_same_object(const void *, const void *);
+void __ESBMC_yield();
 void __ESBMC_atomic_begin();
 void __ESBMC_atomic_end();
 
@@ -299,6 +309,10 @@ _Bool __ESBMC_is_dynamic[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
 unsigned __ESBMC_alloc_size[1];
+
+// Get object size
+unsigned __ESBMC_get_object_size(const void *);
+
 
 _Bool __ESBMC_is_little_endian();
 
