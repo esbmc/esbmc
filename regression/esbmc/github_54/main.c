@@ -100,7 +100,6 @@ typedef struct
 
 # 1 "c:\\tools\\mingw\\mingw-0.6.2\\lib\\gcc\\mingw32\\4.9.3\\include\\stddef.h" 1 3 4
 # 212 "c:\\tools\\mingw\\mingw-0.6.2\\lib\\gcc\\mingw32\\4.9.3\\include\\stddef.h" 3 4
-typedef unsigned int size_t;
 # 324 "c:\\tools\\mingw\\mingw-0.6.2\\lib\\gcc\\mingw32\\4.9.3\\include\\stddef.h" 3 4
 typedef short unsigned int wchar_t;
 # 23 "c:\\tools\\mingw\\mingw-0.6.2\\include\\stdlib.h" 2 3
