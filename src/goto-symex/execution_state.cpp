@@ -269,19 +269,13 @@ void execution_statet::symex_step(reachability_treet &art)
       end_thread();
       force_cswitch();
     }
-    // check whether we reached the end of the main function and
-    // whether we are not checking for local and global deadlocks.
-    // see our ICSE 2011 paper for further information about the
-    // deadlock checks: "Lucas C. Cordeiro, Bernd Fischer: Verifying
-    // multi-threaded software using smt-based context-bounded model checking.
-    // ICSE 2011: 331-340."
     else if(
       instruction.function == "c:@F@main" &&
       !options.get_bool_option("deadlock-check"))
     {
-      // allow a context switch and end the main thread
-      // to avoid exploring further interleavings
-      force_cswitch();
+      // check whether we reached the end of the main function and
+      // whether we are not checking for local and global deadlocks.
+      // We should end the main thread to avoid exploring further interleavings
       end_thread();
     }
     else
