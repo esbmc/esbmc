@@ -276,6 +276,7 @@ void execution_statet::symex_step(reachability_treet &art)
       // check whether we reached the end of the main function and
       // whether we are not checking for local and global deadlocks.
       // We should end the main thread to avoid exploring further interleavings
+      // TODO: once we support at_exit, we should check this code
       end_thread();
     }
     else
