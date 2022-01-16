@@ -1161,7 +1161,7 @@ void dereferencet::construct_from_const_struct_offset(
     if(int_offset == m_offs)
     {
       // Does this over-read?
-      if(access_size > m_size)
+      if(access_size > m_size && options.get_bool_option("struct-fields-check"))
       {
         dereference_failure(
           "pointer dereference", "Over-sized read of struct field", guard);

@@ -578,6 +578,22 @@ __ESBMC_HIDE:;
   _Bool signalled = __ESBMC_cond_lock_field(*cond) == 0;
 #endif
 
+  /**
+  * NOTE:
+  *
+  * When using condition variables there is always a boolean predicate
+  * involving shared variables associated with each condition wait that
+  * is true if the thread should proceed.
+  *
+  * Spurious wakeups from the pthread_cond_wait() or pthread_cond_timedwait()
+  * functions may occur. Since the return from pthread_cond_wait() or pthread_cond_timedwait()
+  * does not imply anything about the value of this predicate, the predicate should be re-evaluated
+  * upon such return.
+  *
+  */
+  _Bool spurious_wakeup = nondet_bool();
+  signalled |= spurious_wakeup;
+
   // Don't consider any other interleavings aside from the ones where we've
   // been signalled. As with mutexes, we should discard this trace and look
   // for one where we /have/ been signalled instead. There's no use in
