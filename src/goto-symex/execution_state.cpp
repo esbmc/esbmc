@@ -269,6 +269,13 @@ void execution_statet::symex_step(reachability_treet &art)
       end_thread();
       force_cswitch();
     }
+    else if(
+      instruction.function == "c:@F@main" &&
+      !options.get_bool_option("deadlock-check"))
+    {
+      force_cswitch();
+      end_thread();
+    }
     else
     {
       // Fall through to base class
