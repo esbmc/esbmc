@@ -3,7 +3,10 @@
 #include "../headers/pthreadtypes.hs"
 
 #include <stddef.h>
+
+#ifdef __APPLE__
 #include <pthread_impl.h>
+#endif
 
 void *malloc(size_t size);
 void free(void *ptr);
@@ -296,9 +299,13 @@ int pthread_mutex_initializer(pthread_mutex_t *mutex)
 {
   // check whether this mutex has been initialized via
   // PTHREAD_MUTEX_INITIALIZER
-  if(mutex->__align == _PTHREAD_MUTEX_SIG_init)
+#ifdef __APPLE__
+  if(mutex->__data.__lock == _PTHREAD_MUTEX_SIG_init)
     pthread_mutex_init(mutex, NULL);
-
+#else
+  if(mutex->__data.__lock == 0)
+    pthread_mutex_init(mutex, NULL);
+#endif
   return 0;
 }
 
