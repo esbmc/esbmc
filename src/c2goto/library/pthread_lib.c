@@ -3,6 +3,7 @@
 #include "../headers/pthreadtypes.hs"
 
 #include <stddef.h>
+#include <pthread_impl.h>
 
 void *malloc(size_t size);
 void free(void *ptr);
@@ -291,10 +292,21 @@ __ESBMC_HIDE:;
   return 0;
 }
 
+int pthread_mutex_initializer(pthread_mutex_t *mutex)
+{
+  // check whether this mutex has been initialized via
+  // PTHREAD_MUTEX_INITIALIZER
+  if(mutex->__align == _PTHREAD_MUTEX_SIG_init)
+    pthread_mutex_init(mutex, NULL);
+
+  return 0;
+}
+
 int pthread_mutex_lock_noassert(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+  pthread_mutex_initializer(mutex);
   __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
   __ESBMC_mutex_lock_field(*mutex) = 1;
   __ESBMC_atomic_end();
@@ -305,6 +317,7 @@ int pthread_mutex_lock_nocheck(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+  pthread_mutex_initializer(mutex);
   __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
   __ESBMC_mutex_lock_field(*mutex) = 1;
   __ESBMC_atomic_end();
@@ -335,6 +348,9 @@ __ESBMC_HIDE:;
   _Bool unlocked = 1;
 
   __ESBMC_atomic_begin();
+
+  pthread_mutex_initializer(mutex);
+
   unlocked = (__ESBMC_mutex_lock_field(*mutex) == 0);
 
   if(unlocked)
