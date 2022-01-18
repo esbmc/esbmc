@@ -300,11 +300,15 @@ int pthread_mutex_initializer(pthread_mutex_t *mutex)
   // check whether this mutex has been initialized via
   // PTHREAD_MUTEX_INITIALIZER
 #ifdef __APPLE__
+  __ESBMC_atomic_begin();
   if(mutex->__data.__lock == _PTHREAD_MUTEX_SIG_init)
     pthread_mutex_init(mutex, NULL);
+  __ESBMC_atomic_end();
 #else
+  __ESBMC_atomic_begin();
   if(mutex->__data.__lock == 0)
     pthread_mutex_init(mutex, NULL);
+  __ESBMC_atomic_end();
 #endif
   return 0;
 }
