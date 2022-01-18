@@ -381,7 +381,6 @@ public:
    *  Updates internal records to say that the thread has ended. The thread
    *  itself can continue executing until the next context switch point, when
    *  the scheduler notices it's unschedulable. So, always ensure end_thread is
-   *  followed by forcing a context switch So, always ensure end_thread is
    *  followed by forcing a context switch.
    */
   void end_thread();
