@@ -271,10 +271,11 @@ void execution_statet::symex_step(reachability_treet &art)
     }
     else if(
       instruction.function == "c:@F@main" &&
-      !options.get_bool_option("deadlock-check"))
+      !options.get_bool_option("deadlock-check") &&
+      !options.get_bool_option("memory-leak-check"))
     {
       // check whether we reached the end of the main function and
-      // whether we are not checking for local and global deadlocks.
+      // whether we are not checking for (local and global) deadlocks and memory leaks.
       // We should end the main thread to avoid exploring further interleavings
       // TODO: once we support at_exit, we should check this code
       end_thread();
