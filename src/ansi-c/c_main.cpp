@@ -81,7 +81,7 @@ bool c_main(
 
   if(matches.empty())
   {
-    std::cout << "main symbol `" << themain << "' not found" << std::endl;
+    message_handler.status("main symbol `" + themain + "' not found");
     return true; // give up
   }
 
@@ -89,11 +89,10 @@ bool c_main(
   {
     messaget message(message_handler);
     if(matches.size() == 2)
-      std::cerr << "warning: main symbol `" + themain + "' is ambiguous"
-                << std::endl;
+      message_handler.error("warning: main symbol `" + themain + "' is ambiguous");
     else
     {
-      std::cout << "main symbol `" << themain << " is ambiguous" << std::endl;
+      message_handler.status("main symbol `" + themain + " is ambiguous");
       return true;
     }
   }

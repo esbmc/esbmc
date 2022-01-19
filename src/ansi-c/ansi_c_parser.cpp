@@ -123,7 +123,8 @@ void ansi_c_parsert::convert_declarator(
     }
     if(t.id() == "")
     {
-      std::cout << "D: " << declarator.pretty() << std::endl;
+      default_message msg;
+      msg.status("D: " + declarator.pretty());
       assert(0);
     }
     else if(t.is_nil())
