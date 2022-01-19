@@ -1,14 +1,33 @@
 #include <pthread.h> 
+#include <stdlib.h>
+#include <assert.h>
+
 int mThread=0;
 int start_main=0;
 int mStartLock=0;
 int __COUNT__ =0;
 
+void assume_abort_if_not(int cond) {
+  if(!cond) {abort();}
+}
+
+void acquire(void) {
+    __VERIFIER_atomic_begin();
+    assume_abort_if_not(mStartLock == 0);
+    mStartLock = 1;
+    __VERIFIER_atomic_end();
+}
+void release() {
+    __VERIFIER_atomic_begin();
+    assume_abort_if_not(mStartLock == 1);
+    mStartLock = 0;
+    __VERIFIER_atomic_end();
+}
 
 int thr1() { //nsThread::Init (mozilla/xpcom/threads/nsThread.cpp 1.31)
 
   int PR_CreateThread__RES = 1;
-  acquire(mStartLock);
+  acquire();
   start_main=1;
   { __VERIFIER_atomic_begin();
       if( __COUNT__ == 0 ) { // atomic check(0);
@@ -17,7 +36,7 @@ int thr1() { //nsThread::Init (mozilla/xpcom/threads/nsThread.cpp 1.31)
     __VERIFIER_atomic_end();
       } else { assert(0); } 
   }
-  release(mStartLock);
+  release();
   if (mThread == 0) { return -1; }
   else { return 0; }
 
@@ -27,8 +46,8 @@ void thr2() { //nsThread::Main (mozilla/xpcom/threads/nsThread.cpp 1.31)
 
   int self = mThread;
   while (start_main==0);
-  acquire(mStartLock);
-  release(mStartLock);
+  acquire();
+  release();
   { __VERIFIER_atomic_begin();
       if( __COUNT__ == 1 ) { // atomic check(1);
 	    int rv = self; // self->RegisterThreadSelf();
