@@ -110,6 +110,12 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   if(!sysroot.empty())
     compiler_args.push_back("--sysroot=" + sysroot);
 
+  for(const auto &dir : config.ansi_c.idirafter_paths)
+  {
+    compiler_args.push_back("-idirafter");
+    compiler_args.push_back(dir);
+  }
+
   for(auto const &inc : config.ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
 
