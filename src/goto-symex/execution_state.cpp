@@ -278,8 +278,9 @@ void execution_statet::symex_step(reachability_treet &art)
       // whether we are not checking for (local and global) deadlocks and memory leaks.
       // We should end the main thread to avoid exploring further interleavings
       // TODO: once we support at_exit, we should check this code
-      end_thread();
+      // TODO: we should support verifying memory leaks in multi-threaded C programs.
       assume(gen_false_expr());
+      end_thread();
     }
     else
     {
