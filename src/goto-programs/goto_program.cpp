@@ -181,6 +181,11 @@ void goto_programt::instructiont::output_instruction(
     out << "\n";
     break;
 
+  case YIELD:
+    out << "YIELD"
+        << "\n";
+    break;
+
   case ATOMIC_BEGIN:
     out << "ATOMIC_BEGIN"
         << "\n";

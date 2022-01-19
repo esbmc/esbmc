@@ -24,6 +24,8 @@
 #include <util/string2array.h>
 #include <vector>
 
+#include <iostream>
+
 unsigned int execution_statet::node_count = 0;
 unsigned int execution_statet::dynamic_counter = 0;
 
@@ -286,6 +288,10 @@ void execution_statet::symex_step(reachability_treet &art)
       // Fall through to base class
       goto_symext::symex_step(art);
     }
+    break;
+  case YIELD:
+    force_cswitch();
+    state.source.pc++;
     break;
   case ATOMIC_BEGIN:
     state.source.pc++;
