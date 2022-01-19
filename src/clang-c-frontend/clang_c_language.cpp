@@ -112,6 +112,12 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   if(!sysroot.empty())
     compiler_args.push_back("--sysroot=" + sysroot);
 
+  if(config.options.get_bool_option("nostdinc"))
+  {
+    compiler_args.push_back("-nostdinc");
+    compiler_args.push_back("-ibuiltininc");
+  }
+
   for(const auto &dir : config.ansi_c.idirafter_paths)
   {
     compiler_args.push_back("-idirafter");
