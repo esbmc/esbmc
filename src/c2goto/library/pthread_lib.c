@@ -1,6 +1,6 @@
 #include <errno.h>
 
-#include "../headers/pthreadtypes.hs"
+#include <bits/pthreadtypes.h>
 
 #include <stddef.h>
 

@@ -32,6 +32,8 @@ function(mangle_clib output)
     "${CMAKE_CURRENT_SOURCE_DIR}/library/*.c")
   file(GLOB c2goto_libm_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/library/libm/*.c")
+  file(GLOB_RECURSE c2goto_header_files CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/headers/*.h")
   foreach(in_f ${ARGN})
     set (in_f "${${in_f}}")
     list(GET in_f 0 in_file)
@@ -47,10 +49,10 @@ function(mangle_clib output)
     else()
       set(inputs_c ${c2goto_library_files})
     endif()
-    set(CMD c2goto -I ${multiarch} ${OS_C2GOTO_FLAGS} ${inputs_c} ${in_flags} --output ${out_goto})
+    set(CMD c2goto -I ${CMAKE_CURRENT_SOURCE_DIR}/headers -I ${multiarch} ${OS_C2GOTO_FLAGS} ${inputs_c} ${in_flags} --output ${out_goto})
     add_custom_command(OUTPUT ${out_goto}
       COMMAND ${CMD}
-      DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files}
+      DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files} ${c2goto_header_files}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generating libc model ${out_goto}"
       VERBATIM

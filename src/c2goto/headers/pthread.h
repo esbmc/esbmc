@@ -22,7 +22,7 @@
 
 #include <stddef.h>
 
-#include <pthreadtypes.h>
+#include <bits/pthreadtypes.h>
 
 #ifdef __cplusplus
 
