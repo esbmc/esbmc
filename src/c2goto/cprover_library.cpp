@@ -234,7 +234,7 @@ void add_cprover_library(
   });
 
   // Add two hacks; we might use either pthread_mutex_lock or the checked
-  // variety; so if one version is used, pull in the other too.
+  // variant; so if one version is used, pull in the other too.
   std::pair<irep_idt, irep_idt> lockcheck(
     dstring("pthread_mutex_lock"), dstring("pthread_mutex_lock_check"));
   symbol_deps.insert(lockcheck);
