@@ -43,7 +43,15 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
 {
   compiler_args.emplace_back("clang-tool");
 
-  compiler_args.push_back("-I" + tmp_dir);
+  const std::string *libc_headers = internal_libc_header_dir();
+  if(libc_headers)
+  {
+    compiler_args.push_back("-isystem");
+    compiler_args.push_back(*libc_headers);
+  }
+
+  compiler_args.push_back("-isystem");
+  compiler_args.push_back(tmp_dir);
 
   // Append mode arg
   switch(config.ansi_c.word_size)
