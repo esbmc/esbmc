@@ -267,6 +267,7 @@ std::string clang_c_languaget::internal_additions()
 void __ESBMC_assume(_Bool);
 void __ESBMC_assert(_Bool, const char *);
 _Bool __ESBMC_same_object(const void *, const void *);
+void __ESBMC_yield();
 void __ESBMC_atomic_begin();
 void __ESBMC_atomic_end();
 

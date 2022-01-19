@@ -132,8 +132,12 @@ void goto_convertt::do_atomic_begin(
     throw "atomic_begin takes zero argument";
   }
 
-  goto_programt::targett t = dest.add_instruction(YIELD);
-  t = dest.add_instruction(ATOMIC_BEGIN);
+  code_function_callt call;
+  symbolt &added_symbol = *context.find_symbol("c:@F@__ESBMC_yield");
+  call.function() = symbol_expr(added_symbol);
+  do_function_call(call.lhs(), call.function(), call.arguments(), dest);
+
+  goto_programt::targett t = dest.add_instruction(ATOMIC_BEGIN);
   t->location = function.location();
 }
 
