@@ -104,6 +104,9 @@ bool configt::set(const cmdlinet &cmdline, const messaget &msg)
   if(cmdline.isset("include"))
     ansi_c.include_paths = cmdline.get_values("include");
 
+  if(cmdline.isset("idirafter"))
+    ansi_c.idirafter_paths = cmdline.get_values("idirafter");
+
   if(cmdline.isset("force"))
     ansi_c.forces = cmdline.get_values("force");
 
