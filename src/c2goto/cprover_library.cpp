@@ -166,6 +166,7 @@ public:
       using namespace boost::filesystem;
       headers = base_path() + "/headers";
       create_directory(headers);
+      create_directory(headers + "/bits");
 #define ESBMC_FLAIL(body, size, ...)                                           \
   std::ofstream(headers + "/" #__VA_ARGS__).write(body, size);
 #include <headers/libc_hdr.h>

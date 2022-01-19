@@ -118,7 +118,7 @@ class Flail:
                 header.write('extern const unsigned int %s_size;\n' % name)
             else:
                 header.write('%s(%s, %s_size, %s)\n' % (macro, name, name,
-                                                        os.path.basename(self.filepath)))
+                                                        self.filepath))
 
     def run(self, output_file, header = None, macro : str = None):
         ps = subprocess.Popen(self.cat_cli_command().split(),
