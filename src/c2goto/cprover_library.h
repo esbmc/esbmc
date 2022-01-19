@@ -19,6 +19,15 @@ class languaget;
  * build time). */
 const std::string *internal_libc_header_dir();
 
+/* Adds the internal libc to `context` by parsing and linking all C sources.
+ *
+ * Note that parsing the entire ESBMC standard library is a slow process.
+ */
+void add_bundled_library_sources(
+  contextt &context,
+  const messaget &message_handler,
+  const languaget &c_language);
+
 void add_cprover_library(
   contextt &context,
   const messaget &message_handler,
