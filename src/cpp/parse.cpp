@@ -297,7 +297,7 @@ bool Parser::SyntaxError()
 
     message += "'";
 
-    parser->print((VerbosityLevel)1, message, location);
+    parser->print(VerbosityLevel::Error, message, location);
   }
 
   return bool(++number_of_errors < MaxErrors);
@@ -6119,7 +6119,7 @@ bool Parser::rTryStatement(codet &statement)
         location.set_file(op.filename);
         location.set_line(i2string(op.line_no));
 
-        parser->print((VerbosityLevel)1, message, location);
+        parser->print(VerbosityLevel::Error, message, location);
         return false;
       }
 

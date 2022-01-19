@@ -159,15 +159,10 @@ bool cpp_languaget::parse(
   //cpp_parser.set_message_handler(&message_handler);
   cpp_parser.grammar = cpp_parsert::LANGUAGE;
 
-#if 0
-  if(config.ansi_c.os == configt::ansi_ct::OS_WIN32)
+  if(config.ansi_c.target.is_windows_abi())
     cpp_parser.mode = cpp_parsert::MSC;
   else
     cpp_parser.mode = cpp_parsert::GCC;
-#endif
-  // Restore the old_frontend to a working state in Liunx OS.
-  // set parser mode to GCC by default.
-  cpp_parser.mode = cpp_parsert::GCC;
 
   cpp_scanner_init();
 

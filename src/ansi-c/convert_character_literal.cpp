@@ -36,7 +36,7 @@ void convert_character_literal(const std::string &src, exprt &dest)
   //std::cout << "value.size(): " << value.size() << std::endl;
 
   typet type;
-  //irep_idt cpp_type;
+  irep_idt cpp_type;
 
   type = typet("unsignedbv");
 
