@@ -62,7 +62,6 @@ pthread_t __ESBMC_get_thread_id(void);
 
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
-void __ESBMC_yield(void);
 
 /************************** Linked List Implementation **************************/
 
@@ -317,7 +316,6 @@ int pthread_mutex_initializer(pthread_mutex_t *mutex)
 int pthread_mutex_lock_noassert(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
-  __ESBMC_yield();
   __ESBMC_atomic_begin();
   pthread_mutex_initializer(mutex);
   __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
@@ -329,7 +327,6 @@ __ESBMC_HIDE:;
 int pthread_mutex_lock_nocheck(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
-  __ESBMC_yield();
   __ESBMC_atomic_begin();
   pthread_mutex_initializer(mutex);
   __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
@@ -348,7 +345,6 @@ __ESBMC_HIDE:;
 int pthread_mutex_unlock_nocheck(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
-  __ESBMC_yield();
   __ESBMC_atomic_begin();
   __ESBMC_assert(
     __ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
@@ -360,7 +356,6 @@ __ESBMC_HIDE:;
 int pthread_mutex_lock_check(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
-  __ESBMC_yield();
   _Bool unlocked = 1;
 
   __ESBMC_atomic_begin();

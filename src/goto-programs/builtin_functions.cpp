@@ -132,7 +132,8 @@ void goto_convertt::do_atomic_begin(
     throw "atomic_begin takes zero argument";
   }
 
-  goto_programt::targett t = dest.add_instruction(ATOMIC_BEGIN);
+  goto_programt::targett t = dest.add_instruction(YIELD);
+  t = dest.add_instruction(ATOMIC_BEGIN);
   t->location = function.location();
 }
 
