@@ -81,7 +81,7 @@ bool c_main(
 
   if(matches.empty())
   {
-    message_handler.status("main symbol `" + themain + "' not found");
+    message_handler.error("main symbol `" + themain + "' not found");
     return true; // give up
   }
 
@@ -92,7 +92,7 @@ bool c_main(
       message_handler.error("warning: main symbol `" + themain + "' is ambiguous");
     else
     {
-      message_handler.status("main symbol `" + themain + " is ambiguous");
+      message_handler.error("main symbol `" + themain + " is ambiguous");
       return true;
     }
   }
