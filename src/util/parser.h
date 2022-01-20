@@ -32,8 +32,8 @@ public:
   }
 
   ~parsert() override = default;
-  parsert(const parsert& obj) = delete;
-  parsert &operator=(const parsert& rhs) = delete;
+  parsert(const parsert &obj) = delete;
+  parsert &operator=(const parsert &rhs) = delete;
 
   virtual bool read(char &ch)
   {

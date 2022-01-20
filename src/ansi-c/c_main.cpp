@@ -89,7 +89,8 @@ bool c_main(
   {
     messaget message(message_handler);
     if(matches.size() == 2)
-      message_handler.error("warning: main symbol `" + themain + "' is ambiguous");
+      message_handler.error(
+        "warning: main symbol `" + themain + "' is ambiguous");
     else
     {
       message_handler.error("main symbol `" + themain + " is ambiguous");
