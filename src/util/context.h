@@ -42,10 +42,10 @@ public:
   contextt(const contextt &obj) = delete;
 
 #ifdef ENABLE_OLD_FRONTEND
-  contextt& operator=(const contextt& rhs)
+  contextt &operator=(const contextt &rhs)
   {
     // copy assignment operator for old frontend typechecking
-    if (&rhs == this) // check self assignment
+    if(&rhs == this) // check self assignment
     {
       msg.error("Context is copying itself");
     }
@@ -53,9 +53,8 @@ public:
     return *this;
   }
 #else
-  contextt& operator=(const contextt& rhs) = delete;
+  contextt &operator=(const contextt &rhs) = delete;
 #endif
-
 
   symbol_base_mapt symbol_base_map;
 

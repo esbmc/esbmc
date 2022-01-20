@@ -20,8 +20,7 @@ public:
     std::ostream &outstream,
     const messaget &message_handler);
 
-  bool
-  parse(const std::string &path, const messaget &message_handler) override;
+  bool parse(const std::string &path, const messaget &message_handler) override;
 
   bool typecheck(
     contextt &context,

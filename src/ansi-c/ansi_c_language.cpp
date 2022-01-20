@@ -204,9 +204,7 @@ bool ansi_c_languaget::typecheck(
   return false;
 }
 
-bool ansi_c_languaget::final(
-  contextt &context,
-  const messaget &message_handler)
+bool ansi_c_languaget::final(contextt &context, const messaget &message_handler)
 {
   if(c_final(context, message_handler))
     return true;
