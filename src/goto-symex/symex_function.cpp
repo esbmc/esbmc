@@ -283,8 +283,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   type2tc tmp_type = migrate_type(goto_function.type);
 
   if(
-    to_code_type(tmp_type).arguments.size() != arguments.size() &&
-    !to_code_type(tmp_type).ellipsis)
+    to_code_type(tmp_type).arguments.size() > arguments.size() ||
+    (0 && to_code_type(tmp_type).arguments.size() < arguments.size() && !to_code_type(tmp_type).ellipsis))
   {
     std::ostringstream oss;
     oss << "Function call to \"" << identifier << "\": number of "
@@ -412,7 +412,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     // and then call func(NULL). Our C++ frontend detects this a failure during the parsing
     // C++ does not allow declarations without prototypes
     // TODO: see GitHub issues #584 and #585
-    if(ct.arguments.size() && ct.arguments.size() != call.operands.size())
+    if(0 && ct.arguments.size() && ct.arguments.size() != call.operands.size())
       return true;
 
     // At this point we could (should) do more: for example ensuring that the
