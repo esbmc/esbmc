@@ -284,7 +284,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 
   if(
     to_code_type(tmp_type).arguments.size() > arguments.size() ||
-    (0 && to_code_type(tmp_type).arguments.size() < arguments.size() && !to_code_type(tmp_type).ellipsis))
+    (0 && to_code_type(tmp_type).arguments.size() < arguments.size() &&
+     !to_code_type(tmp_type).ellipsis))
   {
     std::ostringstream oss;
     oss << "Function call to \"" << identifier << "\": number of "
