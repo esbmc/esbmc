@@ -1,7 +1,6 @@
-#define bool int
-#define uint16_t int
+#include <stdbool.h>
+#include <stdint.h>
 #define result_t int
-#define uint8_t int
 #define SUCCESS 0
 #define FAIL 0
 
@@ -99,7 +98,7 @@ void runtime(){
   assert(x < 2);
 }
 */
-void main(){
+int main(){
   int port, data;
   startGet( SINGLE_CONVERSION, port);
   dataReady( data);
