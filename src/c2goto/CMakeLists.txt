@@ -20,8 +20,8 @@ set_target_properties(c2goto PROPERTIES
   PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libc.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libm.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers/libc_hdr.h")
 
 
-if(DEFINED C2GOTO_INCLUDE_DIR)
-  set(multiarch "${C2GOTO_INCLUDE_DIR}")
+if(DEFINED C2GOTO_SYSROOT)
+  set(multiarch_flags --sysroot "${C2GOTO_SYSROOT}")
 else()
   set(multiarch "/usr/include/${CMAKE_LIBRARY_ARCHITECTURE}")
 endif()
@@ -61,7 +61,8 @@ function(mangle_clib output)
     else()
       set(inputs_c ${c2goto_library_files})
     endif()
-    set(CMD c2goto -I ${multiarch} ${OS_C2GOTO_FLAGS} ${inputs_c} ${in_flags} --output ${out_goto})
+    set(CMD c2goto ${multiarch_flags} ${OS_C2GOTO_FLAGS}
+                   ${inputs_c} ${in_flags} --output ${out_goto})
     add_custom_command(OUTPUT ${out_goto}
       COMMAND ${CMD}
       DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files} ${c2goto_header_files}
@@ -91,7 +92,7 @@ function(mangle_clib output)
   set(${output} "${result}" PARENT_SCOPE)
 endfunction()
 
-message(STATUS "Multiarch include for c2goto: ${multiarch}. You may want to override C2GOTO_INCLUDE_DIR")
+message(STATUS "Multiarch flags for c2goto: ${multiarch_flags}. You may want to override C2GOTO_SYSROOT")
 mangle_clib(mangled_files ${inputs})
 add_library(clibs ${mangled_files} cprover_library.cpp cprover_libc_sources.cpp)
 target_include_directories(clibs

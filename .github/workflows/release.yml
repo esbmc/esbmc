@@ -53,7 +53,7 @@ jobs:
       - name: Get current folder and files
         run: pwd && ls
       - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DC2GOTO_INCLUDE_DIR=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ -DENABLE_SOLIDITY_FRONTEND=On
+        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DBUILD_STATIC=On -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DENABLE_SOLIDITY_FRONTEND=On
       - name: Build ESBMC
         run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Darwin.sh
       - uses: actions/upload-artifact@v1
