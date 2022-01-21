@@ -1464,7 +1464,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
     expr2tc target;
     if(is_array_type(target_type))
       target = stitch_together_from_byte_array(
-        target_type, (n_bits+7)/8, value, gen_ulong(struct_offset), guard);
+        target_type, (n_bits + 7) / 8, value, gen_ulong(struct_offset), guard);
     else
     {
       target = value; // The byte array;
@@ -1906,7 +1906,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   unsigned int num_bytes,
   const expr2tc &byte_array,
   const expr2tc &offset,
-  const guardt &guard)
+  const guardt & /* guard */)
 {
   assert(num_bytes != 0);
 
