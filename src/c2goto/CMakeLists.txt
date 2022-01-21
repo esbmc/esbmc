@@ -22,8 +22,6 @@ set_target_properties(c2goto PROPERTIES
 
 if(DEFINED C2GOTO_SYSROOT)
   set(multiarch_flags --sysroot "${C2GOTO_SYSROOT}")
-else()
-  set(multiarch "/usr/include/${CMAKE_LIBRARY_ARCHITECTURE}")
 endif()
 
 if (ESBMC_BUNDLE_LIBC)
