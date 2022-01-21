@@ -156,7 +156,6 @@ bool cpp_languaget::parse(
   cpp_parser.clear();
   cpp_parser.filename = path;
   cpp_parser.in = &i_preprocessed;
-  //cpp_parser.set_message_handler(&message_handler);
   cpp_parser.grammar = cpp_parsert::LANGUAGE;
 
   if(config.ansi_c.target.is_windows_abi())
