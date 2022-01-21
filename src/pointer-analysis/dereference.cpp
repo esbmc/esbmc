@@ -1458,14 +1458,21 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   assert(is_struct_type(type));
   const struct_type2t &structtype = to_struct_type(type);
   unsigned int struct_offset = intref.value.to_uint64();
-  for(auto const &it : structtype.members)
+  for(const type2tc &target_type : structtype.members)
   {
-    const type2tc &target_type = it;
-    expr2tc target = value; // The byte array;
-    build_reference_rec(
-      target, gen_ulong(struct_offset), target_type, guard, mode);
+    unsigned n_bits = type_byte_size_bits(target_type).to_uint64();
+    expr2tc target;
+    if(is_array_type(target_type))
+      target = stitch_together_from_byte_array(
+        target_type, (n_bits+7)/8, value, gen_ulong(struct_offset), guard);
+    else
+    {
+      target = value; // The byte array;
+      build_reference_rec(
+        target, gen_ulong(struct_offset), target_type, guard, mode);
+    }
     fields.push_back(target);
-    struct_offset += type_byte_size_bits(target_type).to_uint64();
+    struct_offset += n_bits;
   }
 
   // We now have a vector of fields reconstructed from the byte array
@@ -1876,8 +1883,7 @@ void dereferencet::stitch_together_from_byte_array(
     accuml = bytes[0];
     for(unsigned int i = 1; i < num_bytes; i++)
     {
-      type2tc res_type;
-      res_type = get_uint_type(accuml->type->get_width() + 8);
+      type2tc res_type = get_uint_type(accuml->type->get_width() + 8);
       accuml = concat2tc(res_type, accuml, bytes[i]);
     }
   }
@@ -1887,13 +1893,30 @@ void dereferencet::stitch_together_from_byte_array(
     accuml = bytes[num_bytes - 1];
     for(int i = num_bytes - 2; i >= 0; i--)
     {
-      type2tc res_type;
-      res_type = get_uint_type(accuml->type->get_width() + 8);
+      type2tc res_type = get_uint_type(accuml->type->get_width() + 8);
       accuml = concat2tc(res_type, accuml, bytes[i]);
     }
   }
 
   value = accuml;
+}
+
+expr2tc dereferencet::stitch_together_from_byte_array(
+  const type2tc &type,
+  unsigned int num_bytes,
+  const expr2tc &byte_array,
+  const expr2tc &offset,
+  const guardt &guard)
+{
+  assert(num_bytes != 0);
+
+  /* TODO: check array bounds, (alignment?) */
+
+  expr2tc *bytes = extract_bytes_from_array(byte_array, num_bytes, offset);
+  expr2tc result;
+  stitch_together_from_byte_array(result, num_bytes, bytes);
+  delete[] bytes;
+  return bitcast2tc(type, result);
 }
 
 void dereferencet::valid_check(
