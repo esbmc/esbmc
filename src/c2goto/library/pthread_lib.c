@@ -277,7 +277,7 @@ __ESBMC_HIDE:;
   if(retval != NULL)
     *retval = __ESBMC_pthread_end_values[(int)thread];
 
-  __ESBMC_really_atomic_end();
+  __ESBMC_atomic_end();
 
   return 0;
 }
