@@ -45,7 +45,7 @@ handle_hooked_header(const usch *name)
 {
 	struct includ buf;
 	struct hooked_header *h;
-	int otrulvl, c;
+	int otrulvl;
 
 	for (h = &headers[0]; h->basename != NULL; h++) {
 		if (!strcmp((char *)name, h->basename)) {
