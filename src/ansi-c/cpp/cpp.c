@@ -60,7 +60,10 @@
 
 #define	SBSIZE	1000000
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-const-variable"
 static const char versstr[] = "PCC preprocessor version " VERSSTR "\n";
+#pragma GCC diagnostic pop
 
 static usch	sbf[SBSIZE];
 /* C command */
@@ -160,6 +163,9 @@ static void usage(void);
 static usch *xstrdup(const usch *str);
 static void addidir(char *idir, struct incs **ww);
 static void vsheap(const char *, va_list);
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wchar-subscripts"
 
 void
 record_define(const char *value)
@@ -470,6 +476,8 @@ main(int argc, char **argv)
 }
 #endif
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 static void
 addidir(char *idir, struct incs **ww)
 {
@@ -504,6 +512,7 @@ addidir(char *idir, struct incs **ww)
 	w->ino = st.st_ino;
 	*ww = w;
 }
+#pragma GCC diagnostic pop
 
 void
 line(void)
@@ -1003,6 +1012,7 @@ in2:			if (narg < 0) {
 
 		case 0:
 			prem();
+      break;
 
 		default:
 id:			savstr(yytext);
@@ -2125,11 +2135,14 @@ sheap(const char *fmt, ...)
 	return op;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 static void
 usage(void)
 {
 	error("Usage: cpp [-Cdt] [-Dvar=val] [-Uvar] [-Ipath] [-Spath]");
 }
+#pragma GCC diagnostic pop
 
 #ifdef notyet
 /*
@@ -2330,3 +2343,5 @@ cpp_clear(void)
 
   return;
 }
+
+#pragma GCC diagnostic pop
