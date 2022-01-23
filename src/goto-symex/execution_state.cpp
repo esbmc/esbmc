@@ -706,7 +706,7 @@ void execution_statet::execute_guard()
   // guards, not the symbolic guard name. This is the only way to bail out of
   // evaulating a particular interleaving early right now.
   if(is_false(parent_guard))
-    guard_expr = parent_guard;
+    cur_state->guard.make_false();
 
   // Check to see whether or not the state guard is false, indicating we've
   // found an unviable interleaving. However don't do this if we didn't
