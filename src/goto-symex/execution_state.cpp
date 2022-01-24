@@ -699,9 +699,6 @@ void execution_statet::execute_guard()
   target->assumption(
     guardt().as_expr(), assumpt, get_active_state().source, first_loop);
 
-  guardt old_guard;
-  old_guard.add(threads_state[last_active_thread].guard.as_expr());
-
   // If we simplified the global guard expr to false, write that to thread
   // guards, not the symbolic guard name. This is the only way to bail out of
   // evaluating a particular interleaving early right now.
