@@ -996,11 +996,23 @@ void dereferencet::build_reference_rec(
   case flag_src_union | flag_dst_scalar | flag_is_dyn_offs:
   case flag_src_union | flag_dst_struct | flag_is_dyn_offs:
   {
-    // Just perform an access to the first element thing.
     const union_type2t &uni_type = to_union_type(value->type);
     assert(uni_type.members.size() != 0);
-    value = member2tc(uni_type.members[0], value, uni_type.member_names[0]);
+    auto union_total_size = type_byte_size(value->type).to_uint64();
+    // Let's find a member with the biggest size
+    int selected_member_index;
+    for(auto i = 0; i < to_union_type(value->type).members.size(); i++)
+    {
+      if(
+        type_byte_size(to_union_type(value->type).members[i]).to_uint64() ==
+        union_total_size)
+      {
+        selected_member_index = i;
+        break;
+      }
+    }
 
+    value = member2tc(uni_type.members[selected_member_index], value, uni_type.member_names[selected_member_index]);
     build_reference_rec(value, offset, type, guard, mode, alignment);
     break;
   }
