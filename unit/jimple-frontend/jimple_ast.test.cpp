@@ -45,7 +45,7 @@ SCENARIO("AST initialization from JSON (basic constructs)", "[jimple-frontend]")
     REQUIRE(!f.is_interface());
     REQUIRE_FALSE(f.is_interface());
     REQUIRE(f.get_extends() == "java.lang.Object");
-    
+
     REQUIRE(f.get_implements() == "(No implements)");
     REQUIRE(f.get_modifiers().is_public());
     REQUIRE(f.get_body().size() == 0);
