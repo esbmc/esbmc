@@ -55,6 +55,7 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
   j.at("expr_type").get_to(expr_type);
 
   // TODO: hashmap, the standard is not stable enough yet
+  // It is still a work in progress in the parser: https://github.com/rafaelsamenezes/jimple_parser
   if(expr_type == "constant")
   {
     jimple_constant c;
