@@ -1,4 +1,0 @@
-CORE
-functions_sort.jimple main.jimple
---force-malloc-success
-^VERIFICATION SUCCESSFUL$
