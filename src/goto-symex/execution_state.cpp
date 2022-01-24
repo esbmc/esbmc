@@ -964,7 +964,7 @@ void execution_statet::calculate_mpor_constraints()
   new_dep_chain[active_thread][active_thread] = 1;
 
   // Mark un-run threads as continuing to be un-run. Otherwise, look for a
-  // Dependency chain from each thread to the run thread.
+  // dependency chain from each thread to the run thread.
   for(unsigned int j = 0; j < new_dep_chain.size(); j++)
   {
     if(j == active_thread)
