@@ -587,7 +587,7 @@ void goto_convertt::do_function_call_symbol(
   }
   else if(base_name == "__ESBMC_assert")
   {
-    // 1 argument --> Jimple assertion
+    // 1 argument --> Default assertion
     // 2 arguments --> Normal assertion + MSG
     if(arguments.size() > 2)
     {
@@ -603,7 +603,7 @@ void goto_convertt::do_function_call_symbol(
 
     const std::string &description =
       arguments.size() == 1
-        ? "jimple assertion"
+        ? "ESBMC assertion"
         : get_string_constant(arguments[1], message_handler);
     t->location = function.location();
     t->location.user_provided(true);
