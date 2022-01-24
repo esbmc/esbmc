@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
---no-unwinding-assertions --unwind 2
+--incremental-bmc --context-bound 2
 ^VERIFICATION FAILED$
