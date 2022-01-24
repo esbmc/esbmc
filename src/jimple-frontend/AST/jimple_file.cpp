@@ -23,7 +23,8 @@ std::string jimple_file::to_string() const
       << "Name: " << this->class_name << "\n\t"
       << "Mode: " << to_string(this->mode) << "\n\t"
       << "Extends: " << this->extends << "\n\t"
-      << "Implements: " << this->implements << "\n\t" << this->modifiers.to_string();
+      << "Implements: " << this->implements << "\n\t"
+      << this->modifiers.to_string();
 
   oss << "\n\n";
   for(auto &x : body)
@@ -48,7 +49,6 @@ void jimple_file::from_json(const json &j)
     j.at("implements").get_to(this->implements);
   else
     this->implements = "(No implements)";
-  
 
   if(j.contains("extends"))
     j.at("extends").get_to(this->extends);
