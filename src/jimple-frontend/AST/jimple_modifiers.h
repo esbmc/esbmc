@@ -46,7 +46,8 @@ public:
 
   bool contains(modifier other) const
   {
-    return std::find(modifiers.begin(), modifiers.end(), other) != modifiers.end();
+    return std::find(modifiers.begin(), modifiers.end(), other) !=
+           modifiers.end();
   }
 
   bool is_static() const
