@@ -862,6 +862,8 @@ void goto_convertt::remove_gcc_conditional_expression(
 
   if(!if_expr.op0().type().is_bool())
     if_expr.op0().make_typecast(bool_typet());
+  if(if_expr.true_case().type() != expr.type())
+    if_expr.true_case().make_typecast(expr.type());
 
   expr.swap(if_expr);
 
